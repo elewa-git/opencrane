@@ -17,6 +17,10 @@ Use focused project tasks while editing and the affected graph at a slice gate. 
 changes also require the matching contract scripts under `apps/*/tests` or
 `apps/_infra/deploy-k8s/platform/tests`.
 
+Read [`versioning.md`](./versioning.md) before changing a chart or deploy path. A chart change must
+carry its new app/chart stamp, immutable release-manifest entry, and one-way transition record; an
+explicit no-op is required when upgrade impact was reviewed and no transformation is needed.
+
 ## Infrastructure layout
 
 | Path | What it owns |
@@ -57,7 +61,8 @@ For infrastructure changes:
 2. run its Helm contract tests;
 3. run `helm lint` for the owning chart;
 4. run `git diff --check`;
-5. use the repository deploy script for live mutations; and
-6. record live deployment evidence in [`deploy-ledger.md`](./deploy-ledger.md).
+5. run `npm run check:release-versioning -- --base <base-ref>`;
+6. use the repository deploy or teardown script for live mutations; and
+7. record live deployment evidence in [`deploy-ledger.md`](./deploy-ledger.md).
 
 See [`k8s.md`](./k8s.md) for service-account, RBAC, route, and NetworkPolicy requirements.

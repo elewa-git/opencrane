@@ -2,7 +2,7 @@ import type { PrismaClient } from "@prisma/client";
 import type { AuthenticationV1Api } from "@kubernetes/client-node";
 import { describe, expect, it, vi } from "vitest";
 
-import { __UnavailableMemoryGatewayClient } from "@opencrane/backend/_server/memory-gateway-client";
+import { __UnavailableMemoryGatewayClient } from "@opencrane/backend/server/infra/memory-gateway-client";
 
 import { _CreateInternalRuntimeComposition } from "../runtime-composition.js";
 import type { InternalRuntimeConfig } from "../config.types.js";

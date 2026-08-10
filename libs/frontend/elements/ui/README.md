@@ -26,9 +26,10 @@ detection as the application.
 
 ## Story organisation
 
-Every catalogue story lives beside the contract it verifies, under that component's `__tests__/`
-directory. This keeps the visual, interaction, accessibility, and unit-test fixtures together and
-prevents a component implementation from accumulating a second, detached story tree.
+Element stories live beside the contract they verify under that component's `__tests__/` directory.
+A feature may keep one aggregate state catalogue in its own `src/lib/__tests__/` directory when the
+story deliberately composes several feature-local components. This keeps visual, interaction,
+accessibility, and unit-test fixtures with their owning package without creating a detached story tree.
 
 Each story must document three things in its Storybook description: the user-facing state it
 represents, the component contract it verifies, and the authority it deliberately does **not**
@@ -49,8 +50,8 @@ The package's index file (barrel) re-exports the components directly:
 - `LedgerCardComponent` and `LedgerCardKinds` — one finite semantic card in an agent
   action/observation ledger.
 - `SectionHeadingComponent` — the existing feature-section heading.
-- `JourneyShellComponent` and `JourneyShellLayouts` — the responsive paper frame shared by bounded
-  sign-in and onboarding journeys.
+- `JourneyShellComponent` and `JourneyShellLayouts` — the full-viewport responsive paper frame
+  shared by bounded sign-in and onboarding journeys.
 - `ChoiceCardGroupComponent`, `ChoiceCardOption`, and `ChoiceCardLayouts` — an accessible
   single-choice fieldset rendered as selectable paper cards.
 - `JourneyProgressComponent` — an accessible finite progress summary for resumable interviews and
@@ -84,6 +85,8 @@ package.
 
 Stories tagged `visual-test-narrow` are captured at the supported 390-pixel viewport instead of the
 default desktop viewport, so responsive contracts remain explicit and reproducible.
+Stories tagged `visual-test-full-viewport` must render exactly one journey canvas whose height is at
+least the selected browser viewport, so short routes cannot expose the body below their surface.
 
 ## See also
 

@@ -6,9 +6,9 @@ import express, { type Express } from "express";
 import { pinoHttp } from "pino-http";
 
 import { ___GetContext, ___RequestContext } from "@opencrane/backend/observability";
-import { _ErrorHandler } from "@opencrane/backend/_server/http";
-import type { MemoryGatewayClient } from "@opencrane/backend/_server/memory-gateway-client";
-import type { ObotAttemptKeyIssuer } from "@opencrane/backend/_server/obot-custody";
+import { _ErrorHandler } from "@opencrane/backend/server/infra/http";
+import type { MemoryGatewayClient } from "@opencrane/backend/server/infra/memory-gateway-client";
+import type { ObotAttemptKeyIssuer } from "@opencrane/backend/server/infra/obot-custody";
 
 import type { InternalRuntimeConfig } from "./config.types.js";
 import { _log } from "./log.js";

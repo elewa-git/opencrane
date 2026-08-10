@@ -3,7 +3,7 @@ import type { Router } from "express";
 import type { Logger } from "pino";
 
 import type { AgentRevision, AgentService } from "@opencrane/models/agents";
-import { _ResolveRequestPrincipal } from "@opencrane/backend/_server/auth";
+import { _ResolveRequestPrincipal } from "@opencrane/backend/server/infra/auth";
 import type { AuditDecisionRecord } from "@opencrane/backend/server/iam/audit";
 import { __DigestCanonicalJson } from "@opencrane/backend/server/iam/authorization";
 

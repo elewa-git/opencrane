@@ -27,12 +27,16 @@ bootstrap exchange.
 [state/persona/adapter](../../state/persona/adapter/README.md)
 
 Each state component receives read-only evidence and emits typed intents. The component-scoped
-`PersonaOnboardingStore` owns loading, single-flight command admission, errors, and adoption of the
-returned projection. Refreshing, changing device, or retrying resumes the server-confirmed position;
-a failed save never advances the screen. The first-chat page is a thin route composition over its
+`PersonaOnboardingStore` owns loading, single-flight command admission, errors, adoption of the
+returned projection, and the post-activation route read. The shell owns only the resulting browser
+navigation. Refreshing, changing device, or retrying resumes the server-confirmed position;
+a failed save never advances the screen. The survey and first-chat composer hold only the unsaved
+input currently visible. Starting an interrupted review draft, the first conversation, and its final
+conclusion are explicit owner commands. The first-chat page is a thin route composition over its
 component-scoped store and a pure snapshot-to-view mapper. The store owns its read, explicit command
 sequencing, retry identity, conflicts, and question-keyed draft; the routed page owns only typed
-intent delegation and authority-derived navigation.
+intent delegation and authority-derived navigation. A failed answer retains its exact text and
+idempotency key while the browser can neither select the next question nor assert completion.
 
 ## Public surface
 

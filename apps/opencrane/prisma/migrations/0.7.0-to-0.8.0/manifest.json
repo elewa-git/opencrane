@@ -1,0 +1,11 @@
+{
+  "fromSchemaVersion": "0.7.0",
+  "toSchemaVersion": "0.8.0",
+  "sqlSha256": "bc72811ff4d9e3758c17dd0a7b176d824f3c39ca2a12827525e4818ebc0c37ef",
+  "owner": "apps/opencrane",
+  "rollback": "backup-restore-or-forward-repair",
+  "executionMode": "automatic-when-legacy-persona-empty-otherwise-manual-data-mapping-required",
+  "sourceTargetBaselineSha256": "bc346c1e5894cc491c7ef4e4cf925ef9861e77df1c3f1e5835029e49022c95ca",
+  "sourceProtectedBaselineSha256": "25bfc5d31c4966ee697ae5aaa47edc855d25120d0829c241f213353f69e0358d",
+  "targetBaselineSha256": "8cdceadf2be51d2b70f68e504e62b5bf89b9215e959264f0606cd678c5d15102"
+}

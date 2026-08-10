@@ -69,12 +69,30 @@ case "$command_name" in
       if [[ "${MOCK_FOREIGN_COMPUTE_CLASS:-0}" != "1" && ! -e "$MOCK_MUTATED" ]]; then
         exit 1
       fi
+      if [[ "$*" == *"--output=json"* ]]; then
+        machine_type_json=""
+        [[ -z "${MOCK_COMPUTE_CLASS_MACHINE_TYPE:-}" ]] || \
+          machine_type_json=",\"machineType\":\"$MOCK_COMPUTE_CLASS_MACHINE_TYPE\""
+        storage_json=""
+        [[ "${MOCK_COMPUTE_CLASS_STORAGE_PRESENT:-0}" == "0" ]] || \
+          storage_json=',"storage":{"bootDiskType":"pd-balanced","bootDiskSize":10}'
+        extra_priority_json=""
+        [[ "${MOCK_COMPUTE_CLASS_PRIORITY_MARKERS:-x}" == "x" ]] || \
+          extra_priority_json=',{"podFamily":"general-purpose"}'
+        printf '{"spec":{"autopilot":{"enabled":%s},"whenUnsatisfiable":"%s","priorities":[{"podFamily":"%s"%s%s}%s]},"status":{"conditions":[{"type":"Health","status":"%s"},{"type":"CrdMisconfigured","status":"%s"}]}}\n' \
+          "${MOCK_COMPUTE_CLASS_AUTOPILOT_ENABLED:-true}" \
+          "${MOCK_COMPUTE_CLASS_SCALE_POLICY:-ScaleUpAnyway}" \
+          "${MOCK_COMPUTE_CLASS_POD_FAMILY:-general-purpose}" \
+          "$machine_type_json" \
+          "$storage_json" \
+          "$extra_priority_json" \
+          "${MOCK_COMPUTE_CLASS_HEALTH_STATUS:-True}" \
+          "${MOCK_COMPUTE_CLASS_MISCONFIGURED_STATUS:-False}"
+        exit
+      fi
       case "$*" in
         *"managed-by}"*) printf '%s' "${MOCK_COMPUTE_CLASS_MANAGED_BY:-foreign-manager}" ;;
         *"prerequisite-profile}"*) printf '%s' "${MOCK_COMPUTE_CLASS_PROFILE:-foreign-profile}" ;;
-        *"whenUnsatisfiable}"*) printf '%s' "${MOCK_COMPUTE_CLASS_SCALE_POLICY:-ScaleUpAnyway}" ;;
-        *"bootDiskSize}"*) printf '%s' "${MOCK_COMPUTE_CLASS_BOOT_DISK_SIZE:-10}" ;;
-        *"machineType}"*) printf '%s' "${MOCK_COMPUTE_CLASS_MACHINE_TYPE:-e2-small}" ;;
       esac
       exit
     fi
@@ -121,7 +139,8 @@ case "$command_name" in
       exit
     fi
     if [[ "$*" == *" wait --for=condition=Health computeclass/opencrane-database-proof"* ]]; then
-      [[ "${MOCK_COMPUTE_CLASS_HEALTH_FAIL:-0}" == "0" ]]
+      [[ "${MOCK_COMPUTE_CLASS_HEALTH_FAIL:-0}" == "0" \
+        && "${MOCK_COMPUTE_CLASS_HEALTH_STATUS:-True}" == "True" ]]
       exit
     fi
     if [[ "$*" == *" get ingressclass/nginx"* || "$*" == *" get crd/"* ]]; then
@@ -223,13 +242,34 @@ if run_case foreign-compute-class MOCK_FOREIGN_COMPUTE_CLASS=1; then
 fi
 ! grep -Fq 'helm upgrade' "$TEST_DIR/foreign-compute-class.calls"
 
-if run_case compute-class-disk-drift MOCK_COMPUTE_CLASS_BOOT_DISK_SIZE=20; then
-  echo 'ComputeClass boot-disk drift unexpectedly succeeded' >&2
+if run_case compute-class-storage-present MOCK_COMPUTE_CLASS_STORAGE_PRESENT=1; then
+  echo 'ComputeClass storage residue unexpectedly succeeded' >&2
   exit 1
 fi
 
-if run_case compute-class-machine-drift MOCK_COMPUTE_CLASS_MACHINE_TYPE=e2-medium; then
-  echo 'ComputeClass machine-type drift unexpectedly succeeded' >&2
+if run_case compute-class-pod-family-drift MOCK_COMPUTE_CLASS_POD_FAMILY=general-purpose-arm; then
+  echo 'ComputeClass pod-family drift unexpectedly succeeded' >&2
+  exit 1
+fi
+
+if run_case compute-class-extra-priority MOCK_COMPUTE_CLASS_PRIORITY_MARKERS=xx; then
+  echo 'ComputeClass extra priority unexpectedly succeeded' >&2
+  exit 1
+fi
+
+if run_case compute-class-machine-type-present MOCK_COMPUTE_CLASS_MACHINE_TYPE=e2-small; then
+  echo 'ComputeClass machineType residue unexpectedly succeeded' >&2
+  exit 1
+fi
+
+if run_case compute-class-health-failure MOCK_COMPUTE_CLASS_HEALTH_STATUS=False; then
+  echo 'unhealthy ComputeClass unexpectedly succeeded' >&2
+  exit 1
+fi
+
+if run_case compute-class-misconfigured \
+  MOCK_COMPUTE_CLASS_MISCONFIGURED_STATUS=True; then
+  echo 'misconfigured ComputeClass unexpectedly succeeded' >&2
   exit 1
 fi
 

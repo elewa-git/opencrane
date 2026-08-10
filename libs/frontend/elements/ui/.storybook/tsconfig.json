@@ -21,6 +21,7 @@
     "../src/**/__tests__/*.stories.tsx",
     "../src/**/__tests__/*.stories.mdx",
     "../../../features/onboarding/src/**/__tests__/*.stories.ts",
+	"../../../features/context/src/**/__tests__/*.stories.ts",
     "preview.ts"
   ]
 }

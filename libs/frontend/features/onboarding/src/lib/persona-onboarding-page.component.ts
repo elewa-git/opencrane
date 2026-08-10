@@ -1,11 +1,11 @@
-import { ChangeDetectionStrategy, Component, computed, effect, inject, signal } from "@angular/core";
+import { ChangeDetectionStrategy, Component, effect, inject, untracked } from "@angular/core";
 import { Router } from "@angular/router";
 import { ButtonModule } from "primeng/button";
 import { MessageModule } from "primeng/message";
 import { ProgressSpinnerModule } from "primeng/progressspinner";
 
 import { JourneyShellComponent, JourneyShellLayouts } from "@opencrane/elements/ui";
-import { PersonaFirstChatService, PersonaOnboardingSnapshot, PersonaOnboardingStates, PersonaOnboardingStore, UserOnboardingRouteSnapshot, UserOnboardingRouteStates } from "@opencrane/state/onboarding";
+import { PersonaOnboardingSnapshot, PersonaOnboardingStates, PersonaOnboardingStore, UserOnboardingRouteStates } from "@opencrane/state/onboarding";
 
 import { PersonaInterviewStateComponent } from "./states/interview/persona-interview-state.component";
 import { PersonaReadyStateComponent } from "./states/ready/persona-ready-state.component";
@@ -28,14 +28,8 @@ export class PersonaOnboardingPageComponent
 	/** Component-scoped browser state owner for authoritative reads and commands. */
 	private readonly _store = inject(PersonaOnboardingStore);
 
-	/** Server-owned route projection consulted only after persona activation. */
-	private readonly _firstChat = inject(PersonaFirstChatService);
-
 	/** Router used only for transitions selected from durable onboarding state. */
 	private readonly _router = inject(Router);
-
-	/** Bounded failure while resolving the route after persona activation. */
-	private readonly _readyRouteError = signal<string | null>(null);
 
 	/** Shared journey layout enum exposed for loading and failure envelopes. */
 	public readonly layouts = JourneyShellLayouts;
@@ -50,12 +44,13 @@ export class PersonaOnboardingPageComponent
 	public readonly saving = this._store.busy;
 
 	/** Bounded command or ready-route failure that leaves authoritative state unchanged. */
-	public readonly actionError = computed(this._actionError.bind(this));
+	public readonly actionError = this._store.actionError;
 
 	/** Observe only the durable ready transition and route from its separate authority projection. */
 	constructor()
 	{
-		effect(this._routeWhenReady.bind(this));
+		effect(this._resolveRouteWhenReady.bind(this));
+		effect(this._navigateFromReadyRoute.bind(this));
 	}
 
 	/** Retry the authoritative projection read after a blocking load failure. */
@@ -63,8 +58,7 @@ export class PersonaOnboardingPageComponent
 	{
 		if (this.onboarding.hasValue() && this.onboarding.value().state === PersonaOnboardingStates.Ready)
 		{
-			this._readyRouteError.set(null);
-			void this._continueFromReady();
+			void this._store.retryReadyRoute();
 			return;
 		}
 		this._store.retry();
@@ -114,29 +108,17 @@ export class PersonaOnboardingPageComponent
 	}
 
 	/** Trigger route resolution exactly when the persona authority enters its ready state. */
-	private _routeWhenReady(): void
+	private _resolveRouteWhenReady(): void
 	{
 		if (!this.onboarding.hasValue() || this.onboarding.value().state !== PersonaOnboardingStates.Ready) return;
-		void this._continueFromReady();
+		void untracked(this._store.resolveReadyRoute.bind(this._store));
 	}
 
-	/** Route from the durable onboarding projection without inferring a later browser state. */
-	private async _continueFromReady(): Promise<void>
+	/** Navigate only as an external effect of the route projection owned by the store. */
+	private _navigateFromReadyRoute(): void
 	{
-		try
-		{
-			this._readyRouteError.set(null);
-			this._routeFromOnboarding(await this._firstChat.loadRouteState());
-		}
-		catch
-		{
-			this._readyRouteError.set("OpenCrane could not resolve the saved first-conversation route.");
-		}
-	}
-
-	/** Select one route for every durable post-persona onboarding state. */
-	private _routeFromOnboarding(onboarding: UserOnboardingRouteSnapshot): void
-	{
+		const onboarding = this._store.readyRoute();
+		if (onboarding === null) return;
 		switch (onboarding.state)
 		{
 			case UserOnboardingRouteStates.BootstrapChatPending:
@@ -150,11 +132,5 @@ export class PersonaOnboardingPageComponent
 			case UserOnboardingRouteStates.SurveyInProgress:
 				return;
 		}
-	}
-
-	/** Prefer the command failure owned by the store, then the post-activation route failure. */
-	private _actionError(): string | null
-	{
-		return this._store.actionError() ?? this._readyRouteError();
 	}
 }

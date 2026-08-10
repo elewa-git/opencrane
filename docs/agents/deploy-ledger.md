@@ -198,3 +198,17 @@ Full run reports belong in the corresponding pull request or issue.
 - open: refresh an already-open browser tab to load the pinned UI bundle. The first-user
   callback/membership gate is complete; personal-agent/workspace creation and Phase E runtime
   qualification remain separate live gates.
+
+## 2026-08-10 · dev · testv2 silo retirement · 2004e2a4 · LIVE
+
+- findings: infra: the testv2 DNS record and Zitadel callback/origin/logout entries were removed,
+  then a reviewed app-owned retirement script accepted the frozen UID and complete namespaced-API
+  inventory for `opencrane-testv2`, `opencrane-artifacts`, `opencrane-skill-authoring`, and
+  `opencrane-tools` before deleting those four namespaces. The disjoint testv3 application and
+  PostgreSQL releases remain deployed; every testv3 deployment and pod is Ready/Running.
+- friction: the legacy testv2 chart used non-prefixed auxiliary namespaces and co-owned shared
+  cluster-scoped infrastructure, so its retirement could not safely reuse the current tenant-prefixed
+  Helm uninstall path. The one-time exact-inventory script was removed immediately after execution.
+- lesson: every future silo must use tenant-prefixed auxiliary namespaces and the reusable teardown
+  entrypoint with an explicit protected-tenant input; never retain environment-specific retirement
+  code after its live evidence is recorded.

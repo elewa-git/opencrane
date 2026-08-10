@@ -6,7 +6,7 @@ import type { CompiledMessage, CompiledModelRoute, CompiledRunInput, CompiledToo
 import type { JsonValue } from "@opencrane/util";
 import { __CompileRunInput } from "@opencrane/backend/agents/execution/inputs";
 import type { PromptCompilerRepositories } from "@opencrane/backend/agents/execution/inputs";
-import type { MemoryGatewayClient } from "@opencrane/backend/_server/memory-gateway-client";
+import type { MemoryGatewayClient } from "@opencrane/backend/server/infra/memory-gateway-client";
 import type { IntegrationAuthorityRepository } from "@opencrane/backend/server/gateways/integrations";
 
 import { ExternalActionRevisionKinds } from "./external-action-executor.types.js";

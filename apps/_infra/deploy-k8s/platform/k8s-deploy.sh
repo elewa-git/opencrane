@@ -13,7 +13,8 @@
 # Usage (normally invoked via a profile — the fleet-platform chart's deploy.sh (now in the
 # WeOwnAI repo, elewa-git/opencrane#150) or apps/_infra/deploy-k8s/deploy.sh — which preset
 # the value flags and exec this core):
-#   apps/_infra/deploy-k8s/platform/k8s-deploy.sh [--base-domain DOMAIN] [--namespace NS] [--release NAME]
+#   apps/_infra/deploy-k8s/platform/k8s-deploy.sh --release-version VERSION
+#     --from-release-version fresh|VERSION [--base-domain DOMAIN] [--namespace NS] [--release NAME]
 #                            [--image-tag TAG] [--storage-class SC]
 #                            [--opencrane-server-tag TAG]
 #                            [--registry-pull-secret NAME --registry-pull-config-file FILE]
@@ -97,6 +98,7 @@ source "$SCRIPT_DIR/postgres-connection.sh"
 source "$SCRIPT_DIR/registry-pull-secret.sh"
 source "$SCRIPT_DIR/current-chart-sources.sh"
 source "$SCRIPT_DIR/initial-model-provider.sh"
+source "$SCRIPT_DIR/database-migration-orchestrator.sh"
 CHART_DIR="${OPENCRANE_CHART_DIR:-}"
 if [[ -z "$CHART_DIR" ]]; then
   echo "[k8s-deploy] OPENCRANE_CHART_DIR is unset. Run a role wrapper deploy.sh — the fleet-platform chart's deploy.sh (now in WeOwnAI) or apps/_infra/deploy-k8s/deploy.sh — not k8s-deploy.sh directly." >&2
@@ -116,9 +118,15 @@ if [[ ! -f "$POSTGRES_CONNECTION_PUBLISHER" ]]; then
   exit 1
 fi
 POSTGRES_BASELINE_PUBLISHER="$SCRIPT_DIR/../../../postgres/scripts/publish-initdb-baseline-config-map.sh"
+POSTGRES_MIGRATION_PUBLISHER="$SCRIPT_DIR/../../../postgres/scripts/publish-database-migration-config-map.sh"
+DATABASE_TRANSITION_RESOLVER="$SCRIPT_DIR/../../../../scripts/release-versioning/database-transition.mjs"
+POSTGRES_MIGRATION_BACKUP="$SCRIPT_DIR/../../../postgres/scripts/create-pre-migration-backup.sh"
 POSTGRES_BASELINE_FILE="$SCRIPT_DIR/../../../opencrane/prisma/bootstrap/target-baseline.sql"
-if [[ ! -f "$POSTGRES_BASELINE_PUBLISHER" || ! -s "$POSTGRES_BASELINE_FILE" ]]; then
-  echo "[k8s-deploy] OpenCrane database baseline publisher or target SQL is missing." >&2
+REPOSITORY_ROOT="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
+if [[ ! -f "$POSTGRES_BASELINE_PUBLISHER" || ! -f "$POSTGRES_MIGRATION_PUBLISHER" \
+  || ! -f "$DATABASE_TRANSITION_RESOLVER" || ! -f "$POSTGRES_MIGRATION_BACKUP" \
+  || ! -s "$POSTGRES_BASELINE_FILE" ]]; then
+  echo "[k8s-deploy] OpenCrane database baseline or migration deployment helpers are missing." >&2
   exit 1
 fi
 NAMESPACE="opencrane-system"
@@ -180,6 +188,7 @@ LITELLM_POSTGRES_CREDENTIALS_SECRET="${OPENCRANE_LITELLM_POSTGRES_CREDENTIALS_SE
 LITELLM_POSTGRES_OWNER="${OPENCRANE_LITELLM_POSTGRES_OWNER:-litellm}"
 POSTGRES_ADMIN_CREDENTIALS_SECRET="${OPENCRANE_POSTGRES_ADMIN_CREDENTIALS_SECRET:-}"
 POSTGRES_ADMIN_NAME="${OPENCRANE_POSTGRES_ADMIN_NAME:-opencrane_database_admin}"
+POSTGRES_MIGRATION_IMAGE="${OPENCRANE_POSTGRES_MIGRATION_IMAGE:-ghcr.io/cloudnative-pg/postgresql@sha256:b1deeed2aa998b2f381e39c5cadb9ec06127708c8bd62965743af19abf21628f}"
 # --preflight runs a fail-FAST environment check BEFORE any cluster mutation and exits 0/1
 # without installing. It catches the failures that otherwise surface as a half-installed,
 # crash-looping cluster: no default StorageClass (every PVC pends), a CNI that silently
@@ -205,6 +214,8 @@ VERIFY="${OPENCRANE_VERIFY:-0}"
 VERIFY_INSECURE="${OPENCRANE_VERIFY_INSECURE:-0}"
 
 POSTGRES_RELEASE=""
+RELEASE_VERSION="${OPENCRANE_RELEASE_VERSION:-}"
+FROM_RELEASE_VERSION="${OPENCRANE_FROM_RELEASE_VERSION:-}"
 TIMEOUT="${TIMEOUT_SECONDS:-300}"
 
 log()  { echo -e "\033[0;32m[k8s-deploy]\033[0m $1"; }
@@ -242,7 +253,10 @@ while [[ $# -gt 0 ]]; do
     --litellm-postgres-owner) LITELLM_POSTGRES_OWNER="$2"; shift 2 ;;
     --postgres-admin-credentials-secret) POSTGRES_ADMIN_CREDENTIALS_SECRET="$2"; shift 2 ;;
     --postgres-admin-name) POSTGRES_ADMIN_NAME="$2"; shift 2 ;;
+    --postgres-migration-image) POSTGRES_MIGRATION_IMAGE="$2"; shift 2 ;;
     --postgres-values) POSTGRES_VALUES_FILE="$2"; shift 2 ;;
+    --release-version) RELEASE_VERSION="$2"; shift 2 ;;
+    --from-release-version) FROM_RELEASE_VERSION="$2"; shift 2 ;;
     --values)        VALUES_FILE="$2"; shift 2 ;;
     --reuse-values)  REUSE_VALUES="1"; shift ;;
     --reset-values)  RESET_VALUES="1"; shift ;;
@@ -253,7 +267,26 @@ while [[ $# -gt 0 ]]; do
     *)               err "Unknown flag: $1"; exit 1 ;;
   esac
 done
-for c in kubectl helm; do command -v "$c" >/dev/null 2>&1 || { err "Missing required command: $c"; exit 1; }; done
+for c in kubectl helm jq; do command -v "$c" >/dev/null 2>&1 || { err "Missing required command: $c"; exit 1; }; done
+if [[ ! "$TIMEOUT" =~ ^[1-9][0-9]{0,3}$ ]] || (( TIMEOUT > 3600 )); then
+  err "TIMEOUT_SECONDS must be an integer from 1 through 3600."
+  exit 1
+fi
+if [[ -z "$RELEASE_VERSION" || -z "$FROM_RELEASE_VERSION" ]]; then
+  err "--release-version and --from-release-version are required. Use --from-release-version fresh only for an empty initdb install."
+  exit 1
+fi
+DATABASE_RELEASE_TRANSITION="$(node "$DATABASE_TRANSITION_RESOLVER" "$REPOSITORY_ROOT" "$RELEASE_VERSION" "$FROM_RELEASE_VERSION")"
+DATABASE_TRANSITION_KIND="$(jq -r '.kind' <<<"$DATABASE_RELEASE_TRANSITION")"
+DATABASE_TARGET_SCHEMA_VERSION="$(jq -r '.targetSchemaVersion' <<<"$DATABASE_RELEASE_TRANSITION")"
+DATABASE_TARGET_BASELINE_SHA256="$(jq -r '.targetBaselineSha256' <<<"$DATABASE_RELEASE_TRANSITION")"
+DATABASE_CONVERGENCE_MIGRATION="$(jq '.migration' <<<"$DATABASE_RELEASE_TRANSITION")"
+if [[ "$DATABASE_CONVERGENCE_MIGRATION" == "null" ]]; then
+  previous_release_version="$(jq -r '.previousRepositoryVersion // empty' "$REPOSITORY_ROOT/releases/$RELEASE_VERSION.json")"
+  if [[ -n "$previous_release_version" ]]; then
+    DATABASE_CONVERGENCE_MIGRATION="$(node "$DATABASE_TRANSITION_RESOLVER" "$REPOSITORY_ROOT" "$RELEASE_VERSION" "$previous_release_version" | jq '.migration')"
+  fi
+fi
 kubectl cluster-info >/dev/null 2>&1 || { err "kubectl can't reach a cluster. Point your context at the target cluster first."; exit 1; }
 # --base-domain validation. When supplied it must be a syntactically valid, lowercase
 # FQDN (≥2 labels, no scheme/port/path, no trailing dot) so it can stand in for
@@ -469,14 +502,63 @@ _require_postgres_bootstrap database-admin "$POSTGRES_ADMIN_CREDENTIALS_SECRET" 
 
 POSTGRES_RELEASE="${RELEASE}-postgres"
 if kubectl get "cluster/$POSTGRES_RELEASE" -n "$NAMESPACE" >/dev/null 2>&1; then
-  POSTGRES_BASELINE_CONFIG_MAP="$(bash "$POSTGRES_BASELINE_PUBLISHER" "$NAMESPACE" "$POSTGRES_OWNER" "$POSTGRES_BASELINE_FILE" --verify-only)"
+  POSTGRES_CLUSTER_EXISTS="1"
 else
-  POSTGRES_BASELINE_CONFIG_MAP="$(bash "$POSTGRES_BASELINE_PUBLISHER" "$NAMESPACE" "$POSTGRES_OWNER" "$POSTGRES_BASELINE_FILE")"
+  POSTGRES_CLUSTER_EXISTS="0"
 fi
+POSTGRES_BASELINE_CONFIG_MAP="$(bash "$POSTGRES_BASELINE_PUBLISHER" "$NAMESPACE" "$POSTGRES_OWNER" "$POSTGRES_BASELINE_FILE")"
 POSTGRES_BASELINE_SHA256="$(kubectl get configmap "$POSTGRES_BASELINE_CONFIG_MAP" -n "$NAMESPACE" -o jsonpath='{.metadata.annotations.opencrane\.ai/baseline-sha256}')"
 if [[ ! "$POSTGRES_BASELINE_SHA256" =~ ^[0-9a-f]{64}$ ]]; then
   err "PostgreSQL target baseline '$POSTGRES_BASELINE_CONFIG_MAP' has no valid full SHA-256 identity."
   exit 1
+fi
+POSTGRES_BOOTSTRAP_BASELINE_CONFIG_MAP="$POSTGRES_BASELINE_CONFIG_MAP"
+POSTGRES_BOOTSTRAP_BASELINE_CONFIG_MAP_KEY="target-baseline.sql"
+POSTGRES_BOOTSTRAP_BASELINE_SHA256="$POSTGRES_BASELINE_SHA256"
+if [[ "$POSTGRES_CLUSTER_EXISTS" == "1" ]]; then
+  existing_postgres_values="$(helm get values "$POSTGRES_RELEASE" -n "$NAMESPACE" -o json)"
+  POSTGRES_BOOTSTRAP_BASELINE_SHA256="$(jq -r '.bootstrap.targetBaseline.sha256 // empty' <<<"$existing_postgres_values")"
+  POSTGRES_BOOTSTRAP_BASELINE_CONFIG_MAP="$(jq -r '.bootstrap.initdb.postInitApplicationSQLRefs.configMapRefs[0].name // empty' <<<"$existing_postgres_values")"
+  POSTGRES_BOOTSTRAP_BASELINE_CONFIG_MAP_KEY="$(jq -r '.bootstrap.initdb.postInitApplicationSQLRefs.configMapRefs[0].key // empty' <<<"$existing_postgres_values")"
+  if [[ ! "$POSTGRES_BOOTSTRAP_BASELINE_SHA256" =~ ^[0-9a-f]{64}$ \
+    || -z "$POSTGRES_BOOTSTRAP_BASELINE_CONFIG_MAP" \
+    || "$POSTGRES_BOOTSTRAP_BASELINE_CONFIG_MAP_KEY" != "target-baseline.sql" ]]; then
+    err "Existing PostgreSQL release does not retain an exact immutable bootstrap identity; refusing to rewrite Cluster bootstrap provenance."
+    exit 1
+  fi
+fi
+
+if [[ "$DATABASE_TRANSITION_KIND" == "fresh" && "$POSTGRES_CLUSTER_EXISTS" == "1" ]]; then
+  err "--from-release-version fresh is invalid because PostgreSQL Cluster '$POSTGRES_RELEASE' already exists."
+  exit 1
+fi
+if [[ "$DATABASE_TRANSITION_KIND" != "fresh" && "$POSTGRES_CLUSTER_EXISTS" == "0" && -z "$POSTGRES_VALUES_FILE" ]]; then
+  err "A non-fresh database with no live Cluster requires --postgres-values selecting an explicit physical recovery source."
+  exit 1
+fi
+
+DATABASE_PREVIOUS_MIGRATION_AVAILABLE="false"
+DATABASE_PREVIOUS_MIGRATION_ID=""
+DATABASE_PREVIOUS_SCHEMA_VERSION=""
+DATABASE_PREVIOUS_PROTECTED_BASELINE_SHA256=""
+DATABASE_PREVIOUS_MIGRATION_SQL_SHA256=""
+if [[ "$DATABASE_CONVERGENCE_MIGRATION" != "null" ]]; then
+  DATABASE_PREVIOUS_MIGRATION_AVAILABLE="true"
+  DATABASE_PREVIOUS_MIGRATION_ID="$(jq -r '.id' <<<"$DATABASE_CONVERGENCE_MIGRATION")"
+  DATABASE_PREVIOUS_SCHEMA_VERSION="$(jq -r '.fromSchemaVersion' <<<"$DATABASE_CONVERGENCE_MIGRATION")"
+  DATABASE_PREVIOUS_PROTECTED_BASELINE_SHA256="$(jq -r '.sourceProtectedBaselineSha256' <<<"$DATABASE_CONVERGENCE_MIGRATION")"
+  DATABASE_PREVIOUS_MIGRATION_SQL_SHA256="$(jq -r '.sqlSha256' <<<"$DATABASE_CONVERGENCE_MIGRATION")"
+fi
+
+DATABASE_MIGRATION_CONFIG_MAP=""
+if [[ "$DATABASE_TRANSITION_KIND" == "migration" ]]; then
+  if [[ ! "$POSTGRES_MIGRATION_IMAGE" =~ ^[^[:space:]@]+@sha256:[0-9a-f]{64}$ ]]; then
+    err "Automatic database migration requires --postgres-migration-image with an exact sha256 OCI digest."
+    exit 1
+  fi
+  DATABASE_MIGRATION_SQL_FILE="$(jq -r '.migration.sqlFile' <<<"$DATABASE_RELEASE_TRANSITION")"
+  DATABASE_MIGRATION_CONFIG_MAP="$(bash "$POSTGRES_MIGRATION_PUBLISHER" \
+    "$NAMESPACE" "$DATABASE_PREVIOUS_MIGRATION_ID" "$DATABASE_MIGRATION_SQL_FILE" "$DATABASE_PREVIOUS_MIGRATION_SQL_SHA256")"
 fi
 
 _load_kubernetes_api_helm_args networkPolicy "PostgreSQL pooler"
@@ -484,36 +566,6 @@ POSTGRES_KUBERNETES_API_ARGS=("${KUBERNETES_API_HELM_ARGS[@]}")
 _load_kubernetes_api_helm_args memoryGateway "memory gateway"
 MEMORY_GATEWAY_KUBERNETES_API_ARGS=("${KUBERNETES_API_HELM_ARGS[@]}")
 
-_install_postgres_server() {
-  local pooler_client_selectors_json='[{"matchLabels":{"app.kubernetes.io/component":"opencrane-server"}},{"matchLabels":{"app.kubernetes.io/component":"mcp-gateway"}},{"matchLabels":{"app.kubernetes.io/component":"litellm"}}]'
-  local databases_json="[{\"name\":\"opencrane\",\"owner\":\"$POSTGRES_OWNER\",\"credentialsSecret\":\"$POSTGRES_CREDENTIALS_SECRET\"},{\"name\":\"obot\",\"owner\":\"$OBOT_POSTGRES_OWNER\",\"credentialsSecret\":\"$OBOT_POSTGRES_CREDENTIALS_SECRET\"},{\"name\":\"litellm\",\"owner\":\"$LITELLM_POSTGRES_OWNER\",\"credentialsSecret\":\"$LITELLM_POSTGRES_CREDENTIALS_SECRET\"}]"
-  local postgres_args=(upgrade --install "$POSTGRES_RELEASE" "$POSTGRES_CHART_DIR"
-    --namespace "$NAMESPACE"
-    --set-json "databases=$databases_json"
-    --set-string "databaseAdmin.name=$POSTGRES_ADMIN_NAME"
-    --set-string "databaseAdmin.credentialsSecret=$POSTGRES_ADMIN_CREDENTIALS_SECRET"
-    --set-string "bootstrap.targetBaseline.sha256=$POSTGRES_BASELINE_SHA256"
-    --set-string "bootstrap.initdb.postInitApplicationSQLRefs.configMapRefs[0].name=$POSTGRES_BASELINE_CONFIG_MAP"
-    --set-string "bootstrap.initdb.postInitApplicationSQLRefs.configMapRefs[0].key=target-baseline.sql"
-    --set-json "pooler.clientPodSelectors=$pooler_client_selectors_json"
-    "${POSTGRES_KUBERNETES_API_ARGS[@]}")
-  [[ -n "$POSTGRES_VALUES_FILE" ]] && postgres_args+=(--values "$POSTGRES_VALUES_FILE")
-  [[ -n "$STORAGE_CLASS" ]] && postgres_args+=(--set-string "storage.storageClass=$STORAGE_CLASS")
-  if helm status "$POSTGRES_RELEASE" -n "$NAMESPACE" >/dev/null 2>&1; then
-    postgres_args+=(--reset-then-reuse-values)
-  fi
-
-  log "Reconciling PostgreSQL server against target baseline '$POSTGRES_BASELINE_CONFIG_MAP'…"
-  helm "${postgres_args[@]}"
-  kubectl wait --for=condition=Ready "cluster/${POSTGRES_RELEASE}" -n "$NAMESPACE" --timeout="${TIMEOUT}s"
-  # CNPG Pooler resources do not publish a Kubernetes Ready condition; the managed Deployment does.
-  kubectl wait --for=create "deployment/${POSTGRES_RELEASE}-pooler" -n "$NAMESPACE" --timeout="${TIMEOUT}s"
-  kubectl wait --for=condition=available "deployment/${POSTGRES_RELEASE}-pooler" -n "$NAMESPACE" --timeout="${TIMEOUT}s"
-  for database_resource in "${POSTGRES_RELEASE}-obot" "${POSTGRES_RELEASE}-litellm"; do
-    kubectl wait --for=jsonpath='{.status.applied}'=true "database/${database_resource}" -n "$NAMESPACE" --timeout="${TIMEOUT}s"
-  done
-  kubectl wait --for=condition=complete "job/${POSTGRES_RELEASE}-database-privileges" -n "$NAMESPACE" --timeout="${TIMEOUT}s"
-}
 _copy_cnpg_uri_secret() {
   local source_secret="$1"
   local target_secret="$2"
@@ -524,9 +576,11 @@ _copy_cnpg_uri_secret() {
     | base64 -d \
     | kubectl create secret generic "$target_secret" -n "$NAMESPACE" \
         --from-file="${target_key}=/dev/stdin" --dry-run=client -o yaml \
-    | kubectl apply -f -
+        | kubectl apply -f -
 }
-_install_postgres_server
+
+DATABASE_FENCE_PRIOR_REPLICAS=""
+run_database_release_transition
 POSTGRES_APP_SECRET="${POSTGRES_RELEASE}-opencrane-app"
 OBOT_POSTGRES_APP_SECRET="${POSTGRES_RELEASE}-obot-app"
 LITELLM_POSTGRES_APP_SECRET="${POSTGRES_RELEASE}-litellm-app"
@@ -856,11 +910,19 @@ elif helm status "$RELEASE" -n "$NAMESPACE" >/dev/null 2>&1; then
   log "Existing release '$RELEASE' — using --reset-then-reuse-values so prior overrides are not silently dropped (pass --reset-values to start from chart defaults instead)."
   helm_args+=(--reset-then-reuse-values)
 fi
+if [[ -n "$DATABASE_FENCE_PRIOR_REPLICAS" ]]; then
+  helm_args+=(
+    --set "clustertenantManager.replicas=$DATABASE_FENCE_PRIOR_REPLICAS"
+    --set migrationFence.active=false
+    --set "migrationFence.previousReplicas=$DATABASE_FENCE_PRIOR_REPLICAS"
+    --set-string "migrationFence.fromReleaseVersion=$FROM_RELEASE_VERSION"
+    --set-string "migrationFence.toReleaseVersion=$RELEASE_VERSION")
+fi
 helm "${helm_args[@]}"
 restart_postgres_connection_consumers "$NAMESPACE" "$TIMEOUT" "${RELEASE}-opencrane-server" "${RELEASE}-litellm" "${RELEASE}-mcp-gateway"
 
-# 4. Wait for the core workloads. The database schema was fixed during CNPG initdb;
-# application startup never mutates it. A changed baseline requires a clean database.
+# 4. Wait for the core workloads. The database schema was created by CNPG initdb or converged by
+# the bounded deployment-owned migration Job; application startup never mutates it.
 # Wait only on the deployment(s) this chart actually rendered: the fleet chart ships
 # the fleet-manager, the silo chart the clustertenant-manager. A fleet-only (or silo-only)
 # install has just one, so guard each wait on the deployment existing rather than waiting

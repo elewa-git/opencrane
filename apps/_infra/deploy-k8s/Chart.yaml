@@ -8,8 +8,8 @@ description: >-
   `crds.install` defaults true, while a release that uses a separately managed shared CRD
   bundle sets it false. Still depends on the cert-manager issuer.
 type: application
-version: 0.1.0
-appVersion: "0.1.0"
+version: 0.8.0
+appVersion: "0.8.0"
 keywords:
   - governed-agents
   - cluster-tenant
@@ -19,48 +19,48 @@ maintainers:
 dependencies:
   # Shared named-template substrate (labels, fullname, RBAC rule sets, env helpers).
   - name: k8s-platform
-    version: 0.1.0
+    version: 0.8.0
     repository: "file://platform"
   # App-owned workload units export named templates; this umbrella only includes them
   # with the unchanged parent release context.
   - name: opencrane-server
-    version: 0.1.0
+    version: 0.8.0
     repository: "file://../../opencrane/helm"
   - name: opencrane-ui
-    version: 0.1.0
+    version: 0.8.0
     repository: "file://../../opencrane-ui/helm"
   - name: opencrane-channel-proxy
-    version: 0.1.0
+    version: 0.8.0
     repository: "file://../../channel-proxy/helm"
   - name: opencrane-memory-gateway
-    version: 0.1.0
+    version: 0.8.0
     repository: "file://../../memory-gateway/helm"
   - name: opencrane-artifact-service
-    version: 0.1.0
+    version: 0.8.0
     repository: "file://../../artifact-service/helm"
   - name: opencrane-artifact-preprocessor
-    version: 0.1.0
+    version: 0.8.0
     repository: "file://../../artifact-preprocessor/helm"
   - name: opencrane-agent-controller
-    version: 0.1.0
+    version: 0.8.0
     repository: "file://../../agent-controller/helm"
   - name: opencrane-managed-agent-runtime
     alias: managedAgentRuntimePlane
-    version: 0.1.0
+    version: 0.8.0
     repository: "file://../../managed-agent-runtime/helm"
     condition: agentController.enabled
   - name: opencrane-skill-authoring
-    version: 0.1.0
+    version: 0.8.0
     repository: "file://../../skill-authoring/helm"
   - name: opencrane-tool-runner
-    version: 0.1.0
+    version: 0.8.0
     repository: "file://../../tool-runner/helm"
   - name: opencrane-cognee
-    version: 0.1.0
+    version: 0.8.0
     repository: "file://../cognee/helm"
   - name: opencrane-litellm
-    version: 0.1.0
+    version: 0.8.0
     repository: "file://../litellm/helm"
   - name: opencrane-obot
-    version: 0.1.0
+    version: 0.8.0
     repository: "file://../obot/helm"

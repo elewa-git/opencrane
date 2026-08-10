@@ -163,6 +163,7 @@ test("uses the validated promotion base only for diff-scoped policy guards", fun
 	assert.match(workflow, /GUARD_BASE: \$\{\{ needs\.prepare\.outputs\.guard_base \}\}/u);
 	assert.match(workflow, /agent-style-check\.sh --diff "\$GUARD_BASE"/u);
 	assert.match(workflow, /check:module-growth -- --diff "\$GUARD_BASE"/u);
+	assert.match(workflow, /check:release-versioning -- --base "\$GUARD_BASE"/u);
 	assert.match(workflow, /check:prisma-boundaries -- --diff "\$GUARD_BASE"/u);
 	assert.match(workflow, /npx nx affected -t build test lint/u);
 });

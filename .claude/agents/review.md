@@ -45,6 +45,8 @@ fresh context — do not assume the author's intent was correct.
 4. **Grounding reads — only what the change touches:**
    - `.ts` changed → the style script covers mechanics; read `docs/agents/typescript.md`
      only if you need to confirm a convention the script flagged as WARN.
+   - changed Angular component, template, or state code → `docs/agents/angular.md`; for
+     non-trivial package work, also read the changed package README named by `docs/agents/app-specific.md`.
    - any production module-growth candidate → `docs/agents/maintainability.md`.
    - auth/routes/tokens changed → `docs/agents/architecture.md` (IAM-first policy).
    - RBAC/NetworkPolicy/service accounts changed → `docs/agents/k8s.md`.
@@ -73,6 +75,16 @@ fresh context — do not assume the author's intent was correct.
   is a finding. Expected/benign early returns need no log.
 - Tests exist for changed behaviour and for the regression being fixed. When in
   doubt run them: `npx nx run <project>:test`.
+- **Angular reactive state and commands.** For changed Angular reactive code, trace every displayed
+  value to an authoritative resource/store, explicit local control state, or a `computed(...)`
+  projection. Flag a writable mirror only when it duplicates a wholly derivable value and can drift;
+  do not flag drafts, dialog state, retry coordinates, optimistic intent, or command lifecycle merely
+  because they are writable. A changed `resource(...)` must have a read-only loader; trace initial
+  load, retained-value refresh, failure, retry, and authoritative mutation adoption as applicable.
+  For a changed command, verify duplicate admission is guarded before its first `await` at the server
+  conflict scope; a disabled template state alone does not prove this. Trace failure and late
+  completion so they cannot replace newer state or discard retryable input. Tests cover relevant
+  initial, refresh, error/retry, and duplicate/stale-completion paths without requiring inapplicable states.
 - **Operational correctness** (these cost real live-deploy iterations when missed —
   flag them at PR time):
   - *Persistence.* A workload that stores state it must not lose (database, vector/graph
@@ -91,6 +103,11 @@ fresh context — do not assume the author's intent was correct.
     `secretKeyRef` reads it once at start and does not hot-reload; if that value's meaning
     can change at runtime, there must be a pod-roll trigger (a checksum/identity annotation
     on the pod template).
+  - *Release and migration truth.* Read `docs/agents/versioning.md`. Every directly changed or
+    dependency-adapted Nx application must be stamped to the root version with matching
+    package/chart mirrors. A chart
+    or schema change without its immutable manifest update, exact previous-to-current transition,
+    and previous-version upgrade proof is a finding; a chart transition may be an explicit no-op.
 
 ### DIMENSION: security
 - **IAM-first**: federated identity / OIDC / Workload Identity over static bearer
@@ -100,6 +117,14 @@ fresh context — do not assume the author's intent was correct.
 - Secrets: never logged, hard-coded, or returned in responses.
 
 ### DIMENSION: maintainability
+- **Angular routed-page ownership.** For every materially changed routed page, build the
+  responsibility ledger required by `docs/agents/angular.md` even if module growth is silent. Trace
+  reads, mutations, concurrency/retry coordinates, authoritative adoption, navigation,
+  presentation mapping, controlled interaction state, and visual composition to their owners. Flag
+  a page that retains several independently changing concerns and name the exact
+  store/mapper/presentational boundaries. Generic `_run`, `_execute`, `withLoading`, callback
+  wrappers, and helper-only extractions do not change ownership when the page still decides every
+  step.
 - **Model-adjacent runtime validation.** When untrusted data becomes a named TypeScript model,
   require a Zod validator beside the model in the same folder/package (`a.types.ts` plus
   `a.validator.ts`), typed against that model and introduced by a clarifying trust-boundary comment.

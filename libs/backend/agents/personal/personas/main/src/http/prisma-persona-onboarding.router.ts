@@ -2,7 +2,7 @@ import type { PrismaClient } from "@prisma/client";
 import type { Router } from "express";
 import type { Logger } from "@opencrane/backend/observability";
 
-import { _ResolveRequestPrincipal } from "@opencrane/backend/_server/auth";
+import { _ResolveRequestPrincipal } from "@opencrane/backend/server/infra/auth";
 import { __CreatePersonaOnboardingRouter } from "./persona-onboarding.router.js";
 import type { PersonaOnboardingCaller, PersonaOnboardingWorkflowPort } from "./persona-onboarding.router.types.js";
 import { PrismaPersonaPersistenceUnitOfWork } from "../profile/prisma-persona-persistence-unit-of-work.js";

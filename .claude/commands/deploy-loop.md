@@ -16,8 +16,10 @@ Target from the caller: **$ARGUMENTS** (env defaults to `dev`, profile to `fleet
 
 1. Read `docs/agents/deploy-ledger.md` § Standing lessons and § Simplification
    counters — they steer everything below.
-2. Working tree must be clean and on a known sha (record it). If dirty, stop and ask.
-3. Confirm `kubectl config current-context` plausibly matches the target env. **If
+2. Read `docs/agents/versioning.md` and resolve the exact immutable release manifest, app/chart
+   versions, source release, and database transition before mutation.
+3. Working tree must be clean and on a known sha (record it). If dirty, stop and ask.
+4. Confirm `kubectl config current-context` plausibly matches the target env. **If
    ambiguous, ask the user — a wrong-context deploy is the one unrecoverable
    mistake.** This is the only mandatory question; everything else proceeds
    autonomously.

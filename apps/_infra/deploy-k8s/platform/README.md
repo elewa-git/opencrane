@@ -9,7 +9,8 @@ local source consumer.
 | Path | Responsibility |
 |---|---|
 | `Chart.yaml`, `templates/` | Helm library chart providing labels, names, RBAC, endpoint, database, identity, and observability helpers to the parent release. It renders no workload by itself. |
-| `k8s-deploy.sh` | Provider-neutral install and upgrade engine used by the release wrapper. It republishes each database consumer's URI and waits for the exact server, LiteLLM, and Obot workloads to restart, because Kubernetes environment variables do not reload Secret changes. Its optional `--verify` check reports pod readiness, DNS resolution, and public server/database health without changing deployment success. |
+| `k8s-deploy.sh` | Provider-neutral install and upgrade engine used by the release wrapper. It requires exact repository and source release versions, fences the old server, proves a CNPG recovery backup, and runs the app-owned bounded database Job for an eligible adjacent minor before restoring the server. It republishes each database consumer's URI and waits for the exact server, LiteLLM, and Obot workloads to restart, because Kubernetes environment variables do not reload Secret changes. Its optional `--verify` check reports pod readiness, DNS resolution, and public server/database health without changing deployment success. |
+| `database-migration-orchestrator.sh` | Deploy-owned Helm sequencing for PostgreSQL reconciliation, previous-version recovery, server fencing, backup evidence, migration, and convergence. It consumes a manifest-resolved transition and never selects or edits migration SQL. |
 | `bootstrap-prerequisites.sh` | Explicit operator bootstrap for the pinned ingress-nginx, cert-manager, and CloudNativePG cluster-wide controllers, plus the narrowly selected GKE Autopilot database-proof ComputeClass. It validates the exact Kubernetes context and reserved regional address before mutation, fails closed around existing foreign resources, and installs resource-bounded development profiles from `values/prerequisites/`. It is not invoked by a silo deployment. |
 | `prerequisite-chart-lock.sh` | Immutable upstream chart coordinates, SHA-256 archive identities, and complete rendered cluster-scoped resource inventories consumed by the bootstrap and render contract. |
 | `configure-oidc.sh` | Surgical OIDC configuration for an existing installation. |
@@ -25,9 +26,26 @@ database-isolation, Certificate, or TLS `/healthz` failure. Set `KEEP_CLUSTER=1`
 It is intentionally a smoke gate: backup/restore and production storage, DNS, and transport remain
 separate live qualifications.
 
-Business logic does not belong here. Server-process infrastructure belongs in `libs/backend/_server`;
+Business logic does not belong here. Server-process infrastructure belongs in `libs/backend/server/infra`;
 backend capabilities belong in `libs/backend/server`; independently owned third-party workloads
 belong in sibling `apps/_infra/<service>` projects.
+
+## Versioned database deployment
+
+Every invocation supplies `--release-version <current-root-version>` and an exact
+`--from-release-version` (`fresh`, the same current version, or the immediately preceding minor).
+The engine resolves both immutable release manifests before cluster mutation. Fresh installs skip
+migration. A current physical restore proves current convergence. A previous-version physical
+restore is first recovered with migration and privileges disabled, backed up again through CNPG, and
+then advanced by the same bounded Job as an in-place upgrade. Unsupported version shapes fail closed.
+
+An automatic migration additionally requires the PostgreSQL chart's plugin-backed `ScheduledBackup`.
+The engine creates a dedicated on-demand `Backup` and waits for completed controller evidence; a
+flag, annotation, or operator acknowledgement is not recovery evidence. It preserves an existing
+Cluster's original initdb ConfigMap and protected origin digest while publishing the current baseline
+separately for convergence proof. The Helm-owned `migrationFence` records source/target versions and
+the previous replica count. It stays active when backup, migration, convergence, or the final app
+upgrade fails.
 
 ## OIDC upgrades
 
@@ -71,12 +89,11 @@ ingress Service reports the reserved address.
 The bootstrap also owns `opencrane-database-proof`, a GKE Autopilot ComputeClass used only by the
 short-lived PostgreSQL privilege-proof Job through `values/postgres-gke-autopilot.yaml`. Its explicit
 `ScaleUpAnyway` policy allows the proof to receive capacity when GKE system balloon Pods reserve all
-otherwise idle capacity. Its ten-GiB boot disk is the GKE minimum, sufficient for the Job's three
-one-GiB ephemeral-storage requests and small enough for the development SSD quota. It uses the
-two-vCPU, two-GiB `e2-small` machine type because GKE only permits an explicit boot disk with a
-machine type or family, not with a `podFamily`; this makes the node-based cost bounded to the
-short-lived proof Job. It does not change the Job's database grants, credentials, network path, or
-completion requirement.
+otherwise idle capacity. Its `general-purpose` pod family uses GKE's Autopilot container-optimized
+compute platform and pod-based billing; GKE manages the node shape and boot disk because explicit
+storage cannot be combined with this pod family. The Job retains its three one-GiB
+ephemeral-storage requests. The class does not change the Job's database grants, credentials,
+network path, or completion requirement.
 
 The pinned ingress-nginx release is accepted only for this single-silo development qualification.
 The upstream project is archived, so a supported ingress controller must replace it before a

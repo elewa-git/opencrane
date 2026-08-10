@@ -1,45 +1,45 @@
 dependencies:
 - name: k8s-platform
   repository: file://platform
-  version: 0.1.0
+  version: 0.8.0
 - name: opencrane-server
   repository: file://../../opencrane/helm
-  version: 0.1.0
+  version: 0.8.0
 - name: opencrane-ui
   repository: file://../../opencrane-ui/helm
-  version: 0.1.0
+  version: 0.8.0
 - name: opencrane-channel-proxy
   repository: file://../../channel-proxy/helm
-  version: 0.1.0
+  version: 0.8.0
 - name: opencrane-memory-gateway
   repository: file://../../memory-gateway/helm
-  version: 0.1.0
+  version: 0.8.0
 - name: opencrane-artifact-service
   repository: file://../../artifact-service/helm
-  version: 0.1.0
+  version: 0.8.0
 - name: opencrane-artifact-preprocessor
   repository: file://../../artifact-preprocessor/helm
-  version: 0.1.0
+  version: 0.8.0
 - name: opencrane-agent-controller
   repository: file://../../agent-controller/helm
-  version: 0.1.0
+  version: 0.8.0
 - name: opencrane-managed-agent-runtime
   repository: file://../../managed-agent-runtime/helm
-  version: 0.1.0
+  version: 0.8.0
 - name: opencrane-skill-authoring
   repository: file://../../skill-authoring/helm
-  version: 0.1.0
+  version: 0.8.0
 - name: opencrane-tool-runner
   repository: file://../../tool-runner/helm
-  version: 0.1.0
+  version: 0.8.0
 - name: opencrane-cognee
   repository: file://../cognee/helm
-  version: 0.1.0
+  version: 0.8.0
 - name: opencrane-litellm
   repository: file://../litellm/helm
-  version: 0.1.0
+  version: 0.8.0
 - name: opencrane-obot
   repository: file://../obot/helm
-  version: 0.1.0
-digest: sha256:2506751f3c23273fef126076c113d9daabe8d12108d5b02efc56ee3ec4ad55dc
-generated: "2026-08-03T10:26:57.139312+03:00"
+  version: 0.8.0
+digest: sha256:016aa6f4286d1c35f1f46cfa93189072222395fdd0c553ef1530807780ad16de
+generated: "2026-08-10T13:41:28.091187+03:00"

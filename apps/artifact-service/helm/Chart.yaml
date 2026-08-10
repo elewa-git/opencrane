@@ -2,5 +2,5 @@ apiVersion: v2
 name: opencrane-artifact-service
 description: App-owned named-template library for canonical artifact bytes.
 type: library
-version: 0.1.0
-appVersion: "0.1.0"
+version: 0.8.0
+appVersion: "0.8.0"

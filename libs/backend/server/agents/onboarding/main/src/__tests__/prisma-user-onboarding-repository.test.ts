@@ -66,7 +66,7 @@ describe("PrismaUserOnboardingRepository", function _PrismaUserOnboardingReposit
 
 		expect(upsert).toHaveBeenCalledWith({
 			where: { siloId_userId: { siloId: "silo-a", userId: "subject-a" } },
-			create: { siloId: "silo-a", userId: "subject-a", workflowVersion: 3 },
+			create: { id: expect.stringMatching(/^[0-9a-f-]{36}$/u), siloId: "silo-a", userId: "subject-a", workflowVersion: 3 },
 			update: {},
 		});
 		expect(result).toMatchObject({ subjectId: "subject-a", workflowVersion: 3, state: UserOnboardingStates.SurveyPending });

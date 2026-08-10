@@ -3,7 +3,7 @@ import type { PrismaClient } from "@prisma/client";
 
 import { addMcpServerCredential, createMcpServer, deleteMcpServer, deleteMcpServerCredential, getMcpServer, listMcpServerCredentials, listMcpServers, updateMcpServer } from "../core/mcp-servers.logic.js";
 import { PrismaMcpServerMutationUnitOfWork } from "../core/prisma-mcp-server-mutation-unit-of-work.js";
-import { _RequireOrgAdmin } from "@opencrane/backend/_server/auth";
+import { _RequireOrgAdmin } from "@opencrane/backend/server/infra/auth";
 import type { McpServerCredentialInput, McpServerWriteRequest } from "./mcp-servers.types.js";
 
 /**

@@ -1,4 +1,4 @@
-import { __CreateHttpObotAttemptKeyIssuer, __CreateHttpObotCustodyAdapter, __CreateObotSession, __UnavailableObotCustodyAdapter } from "@opencrane/backend/_server/obot-custody";
+import { __CreateHttpObotAttemptKeyIssuer, __CreateHttpObotCustodyAdapter, __CreateObotSession, __UnavailableObotCustodyAdapter } from "@opencrane/backend/server/infra/obot-custody";
 
 import type { OpenCraneObotConfig } from "../../app/config.types.js";
 import type { ObotAdapters } from "./obot-adapters.factory.types.js";

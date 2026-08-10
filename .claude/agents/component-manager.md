@@ -59,6 +59,14 @@ and the path that owns it. When APPLY completes that work, hand control back to 
 implementer to compose the screen. In POST-DIFF, check the integration rather than reimplementing
 the feature.
 
+For every routed screen, PLAN and POST-DIFF must also apply the responsibility inventory in
+`docs/agents/angular.md`. Record which owner holds reads, mutations, concurrency/retry coordinates,
+authoritative adoption, navigation, presentation mapping, controlled interaction state, and visual
+composition. BLOCK a page that combines those state and presentation responsibilities, even below
+the module-growth threshold. A generic `_run`/`_execute` callback wrapper does not satisfy the split.
+The component manager does not implement the state store; it gives the frontend implementer the
+exact ownership handoff and owns only the presentational extractions and contracts.
+
 ## Component discovery is mandatory
 
 Before adding markup or proposing a component, search:
@@ -235,7 +243,8 @@ Return, in order:
 
 1. **Mode and scope** — target screen/feature and exact files inspected;
 2. **Catalogue evidence** — searches, candidates, existing states, and real usages;
-3. **Screen component map** — screen region -> decision -> component/state -> owning path;
+3. **Screen component and responsibility map** — screen region -> decision -> component/state ->
+   owning path, plus reads/mutations/navigation/mapping/interaction ownership for routed pages;
 4. **Extension/extraction decisions** — public contract, ownership, and why reuse alone is
    insufficient;
 5. **State inventory** — states added, retained, or removed and the representative test matrix;

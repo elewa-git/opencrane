@@ -29,7 +29,7 @@ call, and never any credential material.
  agent runtime resolves the revision's assignment → reference + allowed tools
 ```
 
-**In this flow:** Obot [(vendored app)](../../../../../../apps/_infra/obot/README.md) via the `@opencrane/backend/_server/obot-custody` port · [agent-services](../../../agents/agent-services/main/README.md) *(a revision assigns an integration)*
+**In this flow:** Obot [(vendored app)](../../../../../../apps/_infra/obot/README.md) via the `@opencrane/backend/server/infra/obot-custody` port · [agent-services](../../../agents/agent-services/main/README.md) *(a revision assigns an integration)*
 
 Invariant: Postgres is only ever a *projection* of Obot's truth. This process never invents a
 custody reference — it stores only coordinates Obot confirmed, and it verifies the returned

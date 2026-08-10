@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import request from "supertest";
-import type { FixedServiceAccountTokenReviewer } from "@opencrane/backend/_server/workload-identity";
+import type { FixedServiceAccountTokenReviewer } from "@opencrane/backend/server/infra/workload-identity";
 
 import { _CreateServer } from "../server.js";
 

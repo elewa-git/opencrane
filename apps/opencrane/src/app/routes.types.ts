@@ -1,6 +1,6 @@
 import type { RequestHandler, Router } from "express";
 
-import type { RateLimitOptions } from "@opencrane/backend/_server/http";
+import type { RateLimitOptions } from "@opencrane/backend/server/infra/http";
 import type { PersonaOnboardingWorkflowPort } from "@opencrane/backend/agents/personal/personas";
 
 /** One Express mount shown in the app's route catalogue. */

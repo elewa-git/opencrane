@@ -5,5 +5,5 @@ description: >-
   bounded connector-scoped ServiceAccount, and default-deny + explicit-egress NetworkPolicies. It
   reuses the shared agent-runtime image (see apps/agent-runtime); it ships no application source.
 type: application
-version: 0.1.0
-appVersion: "0.1.0"
+version: 0.8.0
+appVersion: "0.8.0"

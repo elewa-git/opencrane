@@ -42,8 +42,8 @@ consume it.
 
 - `PersonaOnboardingService` — read, start, answer, complete, resolve, `ensureDraft`, approve, and restart
   application commands over the narrow persona gateway.
-- `PersonaOnboardingStore` — read resource, single-flight command admission, bounded errors, and
-  authoritative projection adoption for one mounted onboarding shell.
+- `PersonaOnboardingStore` — read resources, single-flight command and ready-route admission,
+  bounded errors, and authoritative projection adoption for one mounted onboarding shell.
 - `PERSONA_GATEWAY` and `PersonaGateway` — transport-neutral dependency-injection port.
 - `_ParsePersonaOnboardingSnapshot` plus persona lifecycle models — bounded response validation and
   the feature-facing projection.

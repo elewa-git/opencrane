@@ -50,7 +50,7 @@ Before building the dependency DAG:
    `apps/_infra/<name>` root is a blocker.
 2. Place reusable logic under a functional-first library root (`libs/models`, `libs/util`,
    `libs/backend`, `libs/frontend`) and then its bounded capability. Server-only runtime adapters
-   belong under `libs/backend/_server`. Apps contain only
+   belong under `libs/backend/server/infra`. Apps contain only
    entrypoint/composition/configuration/build/deployment wiring. Models remain dependency-light and
    cannot import databases, HTTP, Kubernetes, filesystems, frameworks, or apps.
 3. Require reuse discovery before adding a new app, library, route, event/topic, chart template, or
@@ -145,30 +145,34 @@ blocker; do not hide it behind an interface.
    design/ADR completely. Extract only accepted, unblocked acceptance criteria.
 2. Run the architecture and reaper preflight above. Build the deployable/dependency ledger and the
    survivor/drop classification; stop on any BLOCK.
-3. Pick the smallest high-impact slice, build its dependency DAG/wave, state the direct target in
+3. Read `docs/agents/versioning.md`. Add each directly touched Nx app, its current adapted/chart
+   versions, and database-schema impact to the wave ledger. Plan the immutable release-manifest
+   update and any previous-to-current Helm/DB transition before editing.
+4. Pick the smallest high-impact slice, build its dependency DAG/wave, state the direct target in
    one sentence, record `WAVE_BASE=$(git rev-parse HEAD)`, then implement it without compatibility
    scaffolding. Also record the intended integration target (`origin/main` or the explicitly chosen
    protected feature integration branch) and its fetched SHA.
-4. Implement the selected slice(s), including tests and any required docs/config
+5. Implement the selected slice(s), including tests and any required docs/config
    updates, following AGENTS.md conventions as you write — not as a cleanup pass. When a slice
    changes a package's public surface, boundary, invariant, owned models, or config, update that
    package's `README.md` in the same slice; when it adds a package, create the README from
    `docs/agents/README-TEMPLATE.md` and add it to the parent index (see `docs/agents/package-docs.md`).
-5. **Reap before validation or commit.** Delegate `POST-SLICE DIRECT-REPLACEMENT`, apply every
+6. **Reap before validation or commit.** Delegate `POST-SLICE DIRECT-REPLACEMENT`, apply every
    proven DELETE/REWRITE and resolve every `FORBIDDEN-REPLACEMENT` item. Run the resulting
    diff through `architecture` and resolve every BLOCK.
-6. Run `scripts/agent-style-check.sh`, the relevant NX project build/test/lint targets, and any
+7. Run `scripts/agent-style-check.sh`, `npm run check:release-versioning -- --base "$WAVE_BASE"`,
+   the relevant NX project build/test/lint targets, and any
    manifest-rendering ownership/security checks. Use `npm run build|test -w <package>` or
    `npx nx run <project>:<target>` for a slice, then `npm run lint:boundaries` and
    `npx nx affected -t build test lint --base="$WAVE_BASE"` at the wave gate. Omitting `--head`
    includes the wave's uncommitted changes without revalidating all accumulated green history. One
    cycle per gate.
-7. If a blocker is hit, record it in plan.md and move to the next unblocked item.
-8. Update the `plan.md` checklist/state to reflect exactly what changed this cycle.
-9. **Commit each slice only after reaper PASS, architecture PASS, and validation are green** —
+8. If a blocker is hit, record it in plan.md and move to the next unblocked item.
+9. Update the `plan.md` checklist/state to reflect exactly what changed this cycle.
+10. **Commit each slice only after reaper PASS, architecture PASS, and validation are green** —
    feature branch only, gitmoji +
    imperative subject, **no Claude/AI co-author trailer** (see Commit cadence).
-10. **Delegate a review pass to the `review` subagent** with the exact `WAVE_BASE` and current
+11. **Delegate a review pass to the `review` subagent** with the exact `WAVE_BASE` and current
    `HEAD` SHAs plus separate staged, unstaged, and untracked manifests. Never default to
    `git diff HEAD` after committing: that hides the slice being reviewed. Resolve Critical/High
    findings. If review fixes change replacement/deletion boundaries, rerun reaper and architecture,

@@ -12,12 +12,12 @@ vi.mock("@opencrane/models/authorization", async () =>
 	return { ...actual, __DecideAuthorization: vi.fn().mockReturnValue({ outcome: "deny", reason: "no_matching_grant" }) };
 });
 
-vi.mock("@opencrane/backend/_server/auth", () => ({
+vi.mock("@opencrane/backend/server/infra/auth", () => ({
 	_ResolveRequestPrincipal: vi.fn().mockReturnValue(null),
 }));
 
 import { __DecideAuthorization } from "@opencrane/models/authorization";
-import { _ResolveRequestPrincipal } from "@opencrane/backend/_server/auth";
+import { _ResolveRequestPrincipal } from "@opencrane/backend/server/infra/auth";
 
 /** A captured authorizationGrant.create call's data, for assertions. */
 let _lastCreate: Record<string, unknown> | null = null;

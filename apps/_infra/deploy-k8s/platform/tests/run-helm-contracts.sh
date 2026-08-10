@@ -10,11 +10,13 @@ for contract in \
   provision-contract.sh \
   kubernetes-api-helm-args-contract.sh \
   pooler-deploy-contract.sh \
+  database-migration-deploy-contract.sh \
   server-key-permissions-contract.sh \
   server-runtime-cleanup-rbac-contract.sh \
   server-network-policy-contract.sh \
   platform-network-policy-contract.sh \
   post-deploy-health-contract.sh \
+  silo-teardown-contract.sh \
   skill-workload-contract.sh; do
   bash "$ROOT_DIR/apps/_infra/deploy-k8s/platform/tests/$contract"
 done

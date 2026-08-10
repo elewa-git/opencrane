@@ -333,6 +333,8 @@ export TIMEOUT_SECONDS
   --first-user-email "$SMOKE_FIRST_USER_EMAIL" \
   --namespace "$NAMESPACE" \
   --release "$RELEASE_NAME" \
+  --release-version "$(jq -r '.version' "$ROOT_DIR/package.json")" \
+  --from-release-version fresh \
   --image-tag develop-smoke \
   --storage-class csi-hostpath-sc \
   --postgres-credentials-secret "$POSTGRES_CREDENTIALS_SECRET" \

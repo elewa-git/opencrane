@@ -3,12 +3,12 @@ import type { PrismaClient } from "@prisma/client";
 
 import { __DecideAuthorization, AuthorizationDecisionOutcomes, type AuthorizationRequest, type AuthorizationScope } from "@opencrane/models/authorization";
 import { __DigestCanonicalJson, PrismaShareAuthorizationUnitOfWork, ShareAuthorizationScopeKinds, type ShareAuthorizationGrant, type ShareAuthorizationRepository } from "@opencrane/backend/server/iam/authorization";
-import { _ResolveRequestPrincipal } from "@opencrane/backend/_server/auth";
+import { _ResolveRequestPrincipal } from "@opencrane/backend/server/infra/auth";
 import type { JsonValue } from "@opencrane/util";
 import { _log } from "../log.js";
 import type { CreateShareBody, SharePayloadType, ShareRecipientType, ShareScope } from "./shares.types.js";
 // Side-effect import: loads the express-session `SessionData.authUser` augmentation.
-import "@opencrane/backend/_server/auth";
+import "@opencrane/backend/server/infra/auth";
 
 /** Payload families a user may share (the entitlement surfaces the runtime contract carries). */
 const _PAYLOAD_TYPES: readonly SharePayloadType[] = ["mcp-server"];

@@ -1,7 +1,7 @@
 @if (onboarding.isLoading()) {
 	<wo-journey-shell title="Loading your saved onboarding position" description="OpenCrane is resolving the exact durable persona state." [layout]="layouts.Compact" [busy]="true">
 		<div class="wo-onboarding__loading" role="status">
-			<p-progressspinner ariaLabel="Loading saved persona onboarding" [style]="{ width: '24px', height: '24px' }" strokeWidth="5" />
+			<p-progressspinner ariaLabel="Loading saved persona onboarding" />
 			<span>Checking your onboarding position…</span>
 		</div>
 	</wo-journey-shell>

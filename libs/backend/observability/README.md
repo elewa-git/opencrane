@@ -54,4 +54,4 @@ server-side packages may import. It never depends on apps, backend domains, or m
 ## See also
 
 - Parent index: [backend](../README.md)
-- Siblings: [_server](../_server/README.md) · [server capabilities](../server/README.md)
+- Siblings: [server infrastructure](../server/infra/README.md) · [server capabilities](../server/README.md)

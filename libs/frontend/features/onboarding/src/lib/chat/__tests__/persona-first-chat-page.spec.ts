@@ -121,7 +121,7 @@ describe("persona first-chat route shell", function _PersonaFirstChatPageSuite()
 
 		_snapshot.set(_Snapshot(UserOnboardingRouteStates.SurveyInProgress));
 		TestBed.flushEffects();
-		expect(_navigateByUrl).toHaveBeenLastCalledWith("/onboarding/survey");
+		expect(_navigateByUrl).toHaveBeenLastCalledWith("/onboarding");
 
 		_snapshot.set(_Snapshot(UserOnboardingRouteStates.Completed));
 		TestBed.flushEffects();

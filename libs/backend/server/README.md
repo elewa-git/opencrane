@@ -1,9 +1,10 @@
-# OpenCrane server capabilities
+# OpenCrane server capabilities and infrastructure
 
 > [backend](../README.md) › server
 
-The OpenCrane server composes these backend capabilities. Directories group related authorities
-without changing any NX project, scope tag, or dependency contract.
+The OpenCrane server composes these backend capabilities and its process-specific infrastructure.
+Directories group related packages without changing any NX project, scope tag, or dependency
+contract.
 
 | Group | Shared concern | Members |
 | --- | --- | --- |
@@ -13,6 +14,7 @@ without changing any NX project, scope tag, or dependency contract.
 | [`knowledge`](./knowledge/) | Organisational retrieval and memory access. | retrieval |
 | [`tenancy`](./tenancy/) | The organisation boundary used by server capabilities. | cluster-tenants |
 | [`reporting`](./reporting/) | Agent and model economics. | spend |
+| [`infra`](./infra/) | Process-specific transport, identity, and external-I/O seams. | api, auth, agent-runtime-stream, workload-identity, http, memory-gateway-client, obot-custody, sandbox-execution |
 
 [`api-spec`](./api-spec/main/) remains flat because it aggregates public paths from every group;
 placing it in one group would imply ownership of those capabilities.

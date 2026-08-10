@@ -52,6 +52,14 @@ build definition. The Docker workflow selects affected `container` targets from 
 descriptors from their app projects, and fails closed if either field is absent. A `container`
 target therefore runs the actual image build; an image smoke check is a distinct app target.
 
+## Release compatibility
+
+Every Nx application records `metadata.release.adaptedVersion`, the root repository version in
+which that deployable was last directly adapted. App package and Helm chart versions mirror that
+stamp. Unchanged apps intentionally retain older stamps; [`releases`](../releases/README.md) records
+the exact app/chart/database combination for each repository train. Directly touching an app means
+updating its stamp and any required Helm or database transition in the same slice.
+
 ## See also
 
 - Parent front door: [OpenCrane](../README.md)

@@ -64,11 +64,11 @@ add a new one only when its dependency policy is meaningfully different.
 | `libs/utils/` or `libs/util/` | Small dependency-light helpers with no domain authority | Models/other dependency-light shared code only |
 | `libs/backend/` | Server-side domain capabilities, use cases, ports, and adapters | Models, utils, infra abstractions, and explicit backend peers allowed by tags |
 | `libs/frontend/` | UI elements, features, state, and gateways | Models/contracts, utils, and frontend peers; never backend implementations |
-| `libs/backend/_server/` | Runtime, transport, auth, and external-I/O adapters owned by the OpenCrane server | Infra/runtime peers, models/contracts, and utils; no backend-domain or app imports |
+| `libs/backend/server/infra/` | Runtime, transport, auth, and external-I/O adapters owned by the OpenCrane server | Infra/runtime peers, models/contracts, and utils; no backend-domain or app imports |
 
 Within the functional root, group by bounded capability and then by technical role only when needed,
 for example `libs/backend/agents/main`, `libs/frontend/features/agents`, or
-`libs/backend/_server/http`. Do not create a broad `shared`, `common`, or `core` dumping ground.
+`libs/backend/server/infra/http`. Do not create a broad `shared`, `common`, or `core` dumping ground.
 Promote code to a wider library only when at least two consumers need the same contract or the code
 is independently coherent and testable.
 
@@ -102,6 +102,11 @@ create `libs/utils/` beside it just to satisfy this document.
   an explicit version from that immutable artifact. Helm values must resolve a digest or immutable
   version tag, never a moving `latest` tag. Do not retrofit release machinery into apps being
   deleted; establish it on their direct replacements.
+- Every Nx application records `metadata.release.adaptedVersion`, the root repository version in
+  which its production or deployment contract was last changed directly or through a project it
+  depends on. Release composition is independent: an application that is only affected through
+  shared Nx inputs keeps its previous stamp. The immutable `releases/<root-version>.json` manifest
+  records the compatible app, chart, and database versions; see [`versioning.md`](./versioning.md).
 - Delete replaced projects with their exports, tags, path aliases, targets, chart values, tests, and
   docs. Git history is the compatibility archive.
 

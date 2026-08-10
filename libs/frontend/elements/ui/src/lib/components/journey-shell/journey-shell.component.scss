@@ -7,7 +7,7 @@
 	position: relative;
 	display: grid;
 	place-items: center;
-	min-height: 100%;
+	min-height: 100dvh;
 	padding: var(--oc-space-8) var(--oc-space-5);
 	background: var(--oc-surface-canvas);
 	overflow: hidden;

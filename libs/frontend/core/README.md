@@ -26,6 +26,7 @@ a feature never calls `fetch` directly and never guesses a request or response s
 
 - `lib/models/*.types.ts` — shared data models (DTOs), enums, and colour/label maps (`scope`, `session`, `thread`,
   `context`, `notification`, `settings`, `mcp`, `plan`).
+- `CanvasDocument` — the owner-supplied content and action-state contract for context-panel canvas documents.
 - `lib/data/*.data.ts` — demo fixtures, temporary until the live API replaces them.
 - `ControlPlaneApiService` — the typed HTTP client and its `CONTROL_PLANE_BASE_URL` injection token.
 - `OpenCraneApiError` — the browser-safe failed-request model. It preserves the public status/code

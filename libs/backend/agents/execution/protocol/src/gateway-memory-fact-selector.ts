@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 
 import type { PersonalMemoryFactSelector, SelectPersonalMemoryFactsInput, SelectedMemoryFactReference } from "@opencrane/backend/agents/execution/inputs";
-import type { MemoryGatewayClient } from "@opencrane/backend/_server/memory-gateway-client";
+import type { MemoryGatewayClient } from "@opencrane/backend/server/infra/memory-gateway-client";
 
 /**
  * Admission-time fact selector over the authenticated memory-gateway client.

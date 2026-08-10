@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+
 import { PersonaQuestionSetState, Prisma } from "@prisma/client";
 
 import { PERSONA_INTERPOLATION_MAP_ID, PERSONA_INTERPOLATION_MAP_VERSION, PERSONA_ONBOARDING_QUESTION_SET_ID, PERSONA_ONBOARDING_QUESTION_SET_VERSION, PERSONA_SCORING_POLICY_ID, PERSONA_SCORING_POLICY_VERSION } from "./persona-onboarding-catalogue.js";
@@ -35,7 +37,7 @@ export class PrismaPersonaOnboardingRepository implements PersonaOnboardingRepos
 
 		// 2. Provision the authenticated owner's profile exactly once after catalogue validation.
 		const provisionedAt = new Date(command.provisionedAt);
-		const profile = await this.transaction.personaProfile.upsert({ where: { siloId_userId: { siloId: command.siloId, userId: command.userId } }, create: { siloId: command.siloId, userId: command.userId, createdAt: provisionedAt, updatedAt: provisionedAt }, update: {}, select: { id: true } });
+		const profile = await this.transaction.personaProfile.upsert({ where: { siloId_userId: { siloId: command.siloId, userId: command.userId } }, create: { id: randomUUID(), siloId: command.siloId, userId: command.userId, createdAt: provisionedAt, updatedAt: provisionedAt }, update: {}, select: { id: true } });
 		return { outcome: PersonaLifecycleOutcomes.Ready, personaProfileId: profile.id, questionSet: { id: PERSONA_ONBOARDING_QUESTION_SET_ID, version: PERSONA_ONBOARDING_QUESTION_SET_VERSION }, derivation: { scoringPolicyId: PERSONA_SCORING_POLICY_ID, scoringPolicyVersion: PERSONA_SCORING_POLICY_VERSION, interpolationMapId: PERSONA_INTERPOLATION_MAP_ID, interpolationMapVersion: PERSONA_INTERPOLATION_MAP_VERSION } };
 	}
 }

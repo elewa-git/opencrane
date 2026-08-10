@@ -73,4 +73,4 @@ governed external actions subject to the same approval, receipt and audit bounda
 
 Source: [`libs/backend/agents/memory/main`](https://github.com/elewa-git/opencrane/blob/main/libs/backend/agents/memory/main/README.md),
 [`libs/backend/agents/personal/memory/main`](https://github.com/elewa-git/opencrane/blob/main/libs/backend/agents/personal/memory/main/README.md),
-and [`libs/backend/_server/memory-gateway-client`](https://github.com/elewa-git/opencrane/blob/main/libs/backend/_server/memory-gateway-client/README.md).
+and [`libs/backend/server/infra/memory-gateway-client`](https://github.com/elewa-git/opencrane/blob/main/libs/backend/server/infra/memory-gateway-client/README.md).

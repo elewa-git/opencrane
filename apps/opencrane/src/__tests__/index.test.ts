@@ -6,9 +6,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import request from "supertest";
 
 import { AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, AGENT_RUNTIME_PROTOCOL_V1, MANAGED_AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, type RuntimeCandidate } from "@opencrane/contracts";
-import { ___AuthMiddleware } from "@opencrane/backend/_server/auth";
-import { _RateLimit } from "@opencrane/backend/_server/http";
-import { __UnavailableMemoryGatewayClient } from "@opencrane/backend/_server/memory-gateway-client";
+import { ___AuthMiddleware } from "@opencrane/backend/server/infra/auth";
+import { _RateLimit } from "@opencrane/backend/server/infra/http";
+import { __UnavailableMemoryGatewayClient } from "@opencrane/backend/server/infra/memory-gateway-client";
 import { _ReadProcessConfig } from "../app/config.js";
 
 /**

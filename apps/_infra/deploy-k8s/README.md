@@ -72,6 +72,17 @@ row directly. A new silo can also pass `--initial-model-provider` with
 `OPENCRANE_INITIAL_MODEL_API_KEY` in its environment; the key never enters Helm values and is
 registered through the release-local LiteLLM before the server becomes ready.
 
+`Entrypoint: teardown.sh` — retires one exact standalone silo after checking the kubectl context,
+tenant, namespace, exact chart identities from `releases/<version>.json`, retained CloudNativePG
+data ownership, and a tenant-name confirmation. It requires explicit evidence that the matching DNS host and Zitadel callback have
+already been retired; it never guesses which external record or identity-provider application to
+change. The caller must also name the currently protected tenant explicitly; environment-specific
+tenant policy is never hard-coded in the reusable teardown engine. The retry-safe cleanup uninstalls only the tenant and PostgreSQL releases, then removes the
+exact keep-marked database resources, their doubly-labelled data volumes, release-derived auxiliary
+namespaces, and exact tenant-suffixed cluster role bindings. Shared controllers, custom resource
+definitions, ingress, certificate management, ComputeClass, and the protected active tenant remain
+outside its deletion surface.
+
 ## Boundary
 
 The umbrella renders no business logic and installs no cluster-wide controller. It composes app-owned
@@ -110,6 +121,11 @@ package imports it.
 - `--initial-model-provider` plus `OPENCRANE_INITIAL_MODEL_API_KEY` — optional bootstrap of the first
   supported model provider. The engine writes the key to the release-local provider-custody Secret;
   the server then registers its encrypted LiteLLM credential and catalogue before accepting work.
+- `teardown.sh --release-version <version> --confirm-retire <tenant>` — destructive retirement; the repository-owned `protected-cluster-tenants.json` registry blocks active tenants independently of caller input
+  requires the exact installed repository version, tenant text, kubectl context, and external
+  retirement acknowledgements for the derived DNS host and Zitadel callback. The release manifest
+  binds both expected chart identities exactly; a prefix match is never accepted. Run it with
+  `--preflight` first to inventory ownership without changing the cluster.
 - Reusable environment/multi-instance profiles live under `values/` and `platform/values/`.
 - `npx nx run deploy-k8s:test` and `npx nx run deploy-k8s:helm-lint` build a disposable copy from
   the committed `Chart.lock`, linked to the current app-owned chart sources. They therefore validate

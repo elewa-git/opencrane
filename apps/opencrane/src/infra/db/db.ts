@@ -1,5 +1,44 @@
-import { PrismaClient } from "@prisma/client";
+import { Prisma, PrismaClient } from "@prisma/client";
 import type { Logger } from "pino";
+
+import type { DbHealthProbeRepository, DbHealthProbeUnitOfWork } from "@opencrane/backend/server/infra/http";
+
+/** Application-owned typed database probe used by process readiness. */
+class _PrismaDbHealthProbeRepository implements DbHealthProbeRepository
+{
+  public constructor(private readonly _prisma: Prisma.TransactionClient) {}
+
+  /** Perform request-bearing database I/O without raw Prisma access. */
+  public async check(): Promise<void>
+  {
+    await this._prisma.auditEntry.findFirst({ select: { id: true } });
+  }
+}
+
+/** Selects an exact transaction for each database readiness check. */
+class _PrismaDbHealthProbeUnitOfWork implements DbHealthProbeUnitOfWork
+{
+  public constructor(private readonly _prisma: PrismaClient) {}
+
+  /** @inheritdoc */
+  public async check(): Promise<void>
+  {
+    await this._prisma.$transaction(async function _check(transaction: Prisma.TransactionClient)
+    {
+      await new _PrismaDbHealthProbeRepository(transaction).check();
+    });
+  }
+}
+
+/**
+ * Compose the typed, request-bearing database readiness probe.
+ * @param prisma - Canonical product-authority database client.
+ * @returns Database health port used by the public health route.
+ */
+export function ___CreateDbHealthProbe(prisma: PrismaClient): DbHealthProbeUnitOfWork
+{
+  return new _PrismaDbHealthProbeUnitOfWork(prisma);
+}
 
 /**
  * Creates and returns a configured PrismaClient instance.

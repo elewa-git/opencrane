@@ -5,9 +5,9 @@ import request from "supertest";
 import { describe, expect, it } from "vitest";
 
 // Side-effect import: loads the express-session SessionData.authUser augmentation.
-import "@opencrane/backend/_server/auth";
-import { _ErrorHandler } from "@opencrane/backend/_server/http";
-import type { AuthUser } from "@opencrane/backend/_server/auth";
+import "@opencrane/backend/server/infra/auth";
+import { _ErrorHandler } from "@opencrane/backend/server/infra/http";
+import type { AuthUser } from "@opencrane/backend/server/infra/auth";
 import { modelRoutingDefaultsRouter } from "../routes/model-routing-defaults.js";
 
 /** In-memory model_routing_defaults store backing the mock Prisma client. */

@@ -4,7 +4,9 @@
 
 Read the package's own `README.md` before non-trivial work. General TypeScript rules
 ([`typescript.md`](./typescript.md)), identity rules ([`architecture.md`](./architecture.md)), and
-Kubernetes rules ([`k8s.md`](./k8s.md)) apply throughout.
+Kubernetes rules ([`k8s.md`](./k8s.md)) apply throughout. Before changing an app's production or
+deployment contract, also read [`versioning.md`](./versioning.md) and stamp the app to the current
+root version in the same slice. Documentation-only changes do not advance an app stamp.
 
 ## Apps
 
@@ -40,7 +42,7 @@ app's source.
 | [`libs/backend/channel-proxy`](../../libs/backend/channel-proxy/main/README.md) | Reusable inbound-channel trust-boundary logic. |
 | [`libs/backend/server`](../../libs/backend/server/README.md) | API capabilities grouped by agents, IAM, gateways, knowledge, reporting, and organisation scope. |
 | [`libs/backend/server/agents/onboarding`](../../libs/backend/server/agents/onboarding/main/README.md) | Durable, session-owner-bound onboarding route state and exact persona/bootstrap references. |
-| [`libs/backend/_server`](../../libs/backend/_server/README.md) | OpenCrane server runtime, transport, identity, and external-I/O seams. |
+| [`libs/backend/server/infra`](../../libs/backend/server/infra/README.md) | OpenCrane server runtime, transport, identity, and external-I/O seams. |
 | [`libs/backend/observability`](../../libs/backend/observability/README.md) | Cross-cutting structured logging and execution tracing. |
 
 The durable execution authority is `Thread -> AgentRun -> ordered RunEvent`. A runtime receives one
@@ -49,7 +51,7 @@ authority.
 
 ## Server infrastructure
 
-[`libs/backend/_server`](../../libs/backend/_server/README.md) contains process-specific seams for HTTP,
+[`libs/backend/server/infra`](../../libs/backend/server/infra/README.md) contains process-specific seams for HTTP,
 authentication, Kubernetes access, projected workload identity, the runtime stream, memory,
 credential custody, and sandbox execution. These packages contain no business-domain authority.
 

@@ -44,7 +44,7 @@ the next deploy cannot reproduce, which defeats your purpose.
 
 ## Before deploying (every run)
 
-1. Read `docs/agents/infra.md` (build/deploy rules) and the header comment of the
+1. Read `docs/agents/infra.md`, `docs/agents/versioning.md`, and the header comment of the
    deploy script you are about to run — flags drift; the header is the contract.
 2. Read `docs/agents/deploy-ledger.md` — the fleet's memory. Check whether the
    failure you are about to hit is already known, and which flags/values past runs
@@ -66,6 +66,10 @@ the next deploy cannot reproduce, which defeats your purpose.
    template nulls it, and a resource created out-of-band has no Helm ownership so the
    upgrade errors "cannot be imported into the current release". Flag the hazard as a
    `chart` finding BEFORE applying — it has cost this fleet multiple failed revisions.
+7. Verify the requested immutable release manifest names the exact app, chart, and database
+   versions being deployed. An upgrade has exactly one previous-to-current Helm transition and,
+   when the schema changes, completes the bounded database migration before server rollout. Never
+   use a moving tag as a substitute for the manifest.
 
 ## Single-silo input contract
 

@@ -60,7 +60,7 @@ under the functional-first library tree:
 - `libs/util/*`: dependency-light helpers without domain authority;
 - `libs/backend/*`: server-side capabilities/use cases/ports/adapters;
 - `libs/frontend/*`: UI, state, features, and client gateways;
-- `libs/backend/_server/*`: OpenCrane-server runtime and external-I/O adapters.
+- `libs/backend/server/infra/*`: OpenCrane-server runtime and external-I/O adapters.
 
 Within that first functional pass, group by bounded capability and then technical role. Do not create
 new `shared`, `common`, or `core` dumping grounds. Libraries never import apps; frontend never imports
@@ -129,6 +129,12 @@ preserves the old implementation, so no compatibility or operational-retention g
 
 ## Other architecture checks
 
+- For every materially changed routed Angular page, apply the responsibility inventory in
+  `docs/agents/angular.md` even when the language-neutral growth checker is silent. BLOCK a page that
+  owns server reads, mutation sequencing/concurrency/retry, authoritative adoption, navigation,
+  substantial presentation mapping, and interactive visual regions together. Require a thin page,
+  component-scoped state store, pure feature mapper, and cohesive presentational owners as needed.
+  A generic async callback wrapper or cosmetic helper extraction does not change ownership.
 - Treat `scripts/module-growth-check.mjs` findings as mandatory responsibility-inventory triggers
   across every supported production language. For each candidate, classify configuration/identity,
   external I/O, orchestration, domain policy, protocol translation, persistence, retry/cancellation,
@@ -155,6 +161,10 @@ preserves the old implementation, so no compatibility or operational-retention g
   matrix must derive from affected `container` targets, build/push only those images, and fail if an
   affected container project lacks its publish descriptor. Do not make a moving `latest` tag a
   deployment input or retrofit release machinery into an app already classified for deletion.
+- Require each surviving Nx application in the slice to carry the root version at which it was
+  directly adapted. Every changed chart/database schema carries its one-way transition from the
+  previous immutable release manifest. Read `docs/agents/versioning.md`; the fresh baseline,
+  upgrade migration, and cross-app compatibility manifest are distinct authorities.
 - Require the initial foundation slice to add a manifest-rendering workload-ownership check; once
   it exists, every structural wave runs it and includes its output in the gate evidence.
 - Require the deployable inventory to include reuse evidence and a communication matrix; render/check

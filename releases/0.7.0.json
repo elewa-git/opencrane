@@ -1,0 +1,118 @@
+{
+  "$schema": "./release-manifest.schema.json",
+  "repositoryVersion": "0.7.0",
+  "previousRepositoryVersion": null,
+  "adoptionBaseline": true,
+  "database": {
+    "schemaVersion": "0.7.0",
+    "baselinePath": "apps/opencrane/prisma/bootstrap/target-baseline.sql",
+    "baselineSha256": "bc346c1e5894cc491c7ef4e4cf925ef9861e77df1c3f1e5835029e49022c95ca"
+  },
+  "projects": {
+    "@opencrane/website": {
+      "root": "website",
+      "adaptedVersion": "0.7.0",
+      "packageVersion": "0.4.0"
+    },
+    "agent-controller": {
+      "root": "apps/agent-controller",
+      "adaptedVersion": "0.7.0",
+      "packageVersion": "0.1.0",
+      "chartVersion": "0.1.0",
+      "chartAppVersion": "0.1.0"
+    },
+    "agent-runtime": {
+      "root": "apps/agent-runtime",
+      "adaptedVersion": "0.7.0"
+    },
+    "artifact-preprocessor": {
+      "root": "apps/artifact-preprocessor",
+      "adaptedVersion": "0.7.0",
+      "packageVersion": "0.1.0",
+      "chartVersion": "0.1.0",
+      "chartAppVersion": "0.1.0"
+    },
+    "artifact-service": {
+      "root": "apps/artifact-service",
+      "adaptedVersion": "0.7.0",
+      "packageVersion": "0.1.0",
+      "chartVersion": "0.1.0",
+      "chartAppVersion": "0.1.0"
+    },
+    "channel-proxy": {
+      "root": "apps/channel-proxy",
+      "adaptedVersion": "0.7.0",
+      "packageVersion": "0.1.0",
+      "chartVersion": "0.1.0",
+      "chartAppVersion": "0.1.0"
+    },
+    "cognee": {
+      "root": "apps/_infra/cognee",
+      "adaptedVersion": "0.7.0",
+      "chartVersion": "0.1.0",
+      "chartAppVersion": "0.1.0"
+    },
+    "deploy-k8s": {
+      "root": "apps/_infra/deploy-k8s",
+      "adaptedVersion": "0.7.0",
+      "chartVersion": "0.1.0",
+      "chartAppVersion": "0.1.0"
+    },
+    "litellm": {
+      "root": "apps/_infra/litellm",
+      "adaptedVersion": "0.7.0",
+      "chartVersion": "0.1.0",
+      "chartAppVersion": "0.1.0"
+    },
+    "managed-agent-runtime": {
+      "root": "apps/managed-agent-runtime",
+      "adaptedVersion": "0.7.0",
+      "chartVersion": "0.1.0",
+      "chartAppVersion": "0.1.0"
+    },
+    "memory-gateway": {
+      "root": "apps/memory-gateway",
+      "adaptedVersion": "0.7.0",
+      "packageVersion": "0.1.0",
+      "chartVersion": "0.1.0",
+      "chartAppVersion": "0.1.0"
+    },
+    "obot": {
+      "root": "apps/_infra/obot",
+      "adaptedVersion": "0.7.0",
+      "chartVersion": "0.1.0",
+      "chartAppVersion": "0.1.0"
+    },
+    "opencrane": {
+      "root": "apps/opencrane",
+      "adaptedVersion": "0.7.0",
+      "packageVersion": "0.1.0",
+      "chartVersion": "0.1.0",
+      "chartAppVersion": "0.1.0"
+    },
+    "opencrane-ui": {
+      "root": "apps/opencrane-ui",
+      "adaptedVersion": "0.7.0",
+      "chartVersion": "0.1.0",
+      "chartAppVersion": "0.1.0"
+    },
+    "postgres": {
+      "root": "apps/postgres",
+      "adaptedVersion": "0.7.0",
+      "chartVersion": "0.1.0",
+      "externalAppVersion": "17"
+    },
+    "skill-authoring": {
+      "root": "apps/skill-authoring",
+      "adaptedVersion": "0.7.0",
+      "chartVersion": "0.1.0",
+      "chartAppVersion": "0.1.0"
+    },
+    "tool-runner": {
+      "root": "apps/tool-runner",
+      "adaptedVersion": "0.7.0",
+      "chartVersion": "0.1.0",
+      "chartAppVersion": "0.1.0"
+    }
+  }
+}
