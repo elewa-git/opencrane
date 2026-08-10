@@ -311,11 +311,13 @@ The accepted product contract is:
 
 The accepted paper/origami workspace language remains the visual source. The repository-owned
 [canonical design context target](./docs/ui-design/README.md) contains the current workspace, A2UI,
-and Agent-thread boards plus stable issue-specific screenshot extracts. It is not yet an
-implementation-ready handoff: dedicated Agent-thread boards remain for queued admission,
-unauthorized or revoked access, deep-linked ask landing, and reconnect; the A2UI catalogue count and
-protocol names must be reconciled with the current sink and the open #319 retain/re-pin-versus-delete
-decision. F1.1 closes only after those gaps are resolved and component-manager returns `PASS`.
+and Agent-thread boards plus stable issue-specific screenshot extracts. Its finite-state supplement
+now resolves queued admission, unauthorized or revoked access, deep-linked ask landing, reconnect,
+asset removal/availability, bounded elicitation, immutable route coordinates, orthogonal summary
+state, production focus, and the A2UI count/protocol decision. The retained A2UI sink is re-pinned
+directly to supported upstream A2UI packages and loses its OpenClaw lockstep. F1.1 is closed: the
+component-manager validated the supplement against the live catalogue and returned `PASS` on
+2026-08-10.
 
 | Step | Outcome | Owning GitHub issues | Exit gate |
 |---|---|---|---|
