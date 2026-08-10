@@ -41,7 +41,8 @@ model Conversation {
   contextRevisionId    String?                       @map("context_revision_id")
   closedAt             DateTime?                     @map("closed_at")
   createdAt            DateTime                      @default(now()) @map("created_at")
-  updatedAt            DateTime                      @updatedAt @map("updated_at")
+  /// Database-owned latest canonical timeline coordinate. Lifecycle or context updates do not advance it.
+  updatedAt            DateTime                      @default(now()) @map("updated_at")
   participants         ConversationParticipant[]
   messages             ConversationMessage[]
   runEvents            ConversationRunEvent[]

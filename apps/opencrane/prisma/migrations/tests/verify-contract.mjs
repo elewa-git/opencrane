@@ -10,6 +10,7 @@ const transitionRoot = join(migrationRoot, "0.7.0-to-0.8.0");
 const sql = readFileSync(join(transitionRoot, "migration.sql"), "utf8");
 const manifest = JSON.parse(readFileSync(join(transitionRoot, "manifest.json"), "utf8"));
 const targetBaseline = readFileSync(join(migrationRoot, "../bootstrap/target-baseline.sql"), "utf8");
+const conversationSchema = readFileSync(join(migrationRoot, "../schema/conversations.prisma"), "utf8");
 const digest = createHash("sha256").update(sql).digest("hex");
 const targetDigest = createHash("sha256").update(targetBaseline).digest("hex");
 
@@ -64,6 +65,19 @@ requireContract(sql.includes("IF legacy_conversations_count + conversation_parti
 requireContract(sql.includes('DROP TYPE "ConversationThreadState"'), "migration must remove the retired ConversationThread model");
 requireContract(sql.includes('CREATE TYPE "ConversationMode"'), "migration must create immutable Conversation modes");
 requireContract(sql.includes('CREATE TABLE "conversation_timeline_entries"'), "migration must create the canonical mixed timeline");
+requireContract(
+	conversationSchema.includes('updatedAt            DateTime                      @default(now()) @map("updated_at")'),
+	"Conversation activity coordinate must be database-defaulted rather than Prisma-managed",
+);
+requireContract(!conversationSchema.includes('updatedAt            DateTime                      @updatedAt'), "Conversation activity coordinate must not be Prisma-managed");
+requireContract(
+	targetBaseline.includes('"updated_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP'),
+	"target Conversation activity coordinate must retain its database default",
+);
+requireContract(
+	sql.includes('"updated_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP'),
+	"migrated Conversation activity coordinate must retain its database default",
+);
 requireContract(sql.includes('CREATE SCHEMA "opencrane_migrations"'), "successful migration must create schema history authority");
 requireContract(sql.includes("'0.8.0', '0.7.0'"), "schema history must bind the exact transition");
 requireContract(sql.includes("migration_history_exists"), "migration must detect a prior completed transition");
@@ -77,6 +91,8 @@ requireContract(sql.includes("COMMIT;\nSELECT pg_advisory_unlock"), "migration m
 requireContract(sql.trimEnd().endsWith("\\endif"), "migration retry branch must remain explicit");
 
 const authorityFunctions = [
+	"enforce_conversation_lifecycle",
+	"enforce_conversation_timeline_entry",
 	"enforce_persona_question_set_lifecycle",
 	"enforce_persona_question_mutation",
 	"enforce_persona_interview_lifecycle",

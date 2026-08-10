@@ -364,7 +364,7 @@ CREATE TABLE "conversations" (
     "context_revision_id" TEXT,
     "closed_at" TIMESTAMP(3),
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updated_at" TIMESTAMP(3) NOT NULL,
+    "updated_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "conversations_pkey" PRIMARY KEY ("id")
 );
@@ -669,6 +669,7 @@ BEGIN
         IF NEW."lifecycle" <> 'open' OR NEW."closed_at" IS NOT NULL THEN
             RAISE EXCEPTION 'Conversation must begin open without closure evidence';
         END IF;
+        NEW."updated_at" := date_trunc('milliseconds', clock_timestamp())::TIMESTAMP(3);
         RETURN NEW;
     END IF;
     IF NEW."id" IS DISTINCT FROM OLD."id"
@@ -677,6 +678,9 @@ BEGIN
         OR NEW."agent_service_id" IS DISTINCT FROM OLD."agent_service_id"
         OR NEW."created_at" IS DISTINCT FROM OLD."created_at" THEN
         RAISE EXCEPTION 'Conversation identity, mode, and agent binding are immutable';
+    END IF;
+    IF NEW."updated_at" IS DISTINCT FROM OLD."updated_at" AND pg_trigger_depth() < 2 THEN
+        RAISE EXCEPTION 'Conversation activity coordinate is database-owned by canonical timeline appends';
     END IF;
     IF OLD."lifecycle" = 'closed' THEN
         RAISE EXCEPTION 'closed Conversation is read-only';
@@ -919,6 +923,7 @@ END;
 $$;
 CREATE OR REPLACE FUNCTION "enforce_conversation_timeline_entry"() RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE
+    conversation_activity_at TIMESTAMP(3);
     conversation_lifecycle "ConversationLifecycle";
 BEGIN
     IF TG_OP <> 'INSERT' THEN
@@ -979,7 +984,7 @@ BEGIN
     ELSE
         RAISE EXCEPTION 'unsupported ConversationTimelineEntry kind';
     END IF;
-    SELECT "lifecycle" INTO conversation_lifecycle
+    SELECT "lifecycle", "updated_at" INTO conversation_lifecycle, conversation_activity_at
     FROM "conversations"
     WHERE "id" = NEW."conversation_id"
     FOR UPDATE;
@@ -989,7 +994,13 @@ BEGIN
     SELECT COALESCE(max("position"), 0) + 1 INTO NEW."position"
     FROM "conversation_timeline_entries"
     WHERE "conversation_id" = NEW."conversation_id";
-    NEW."occurred_at" := date_trunc('milliseconds', clock_timestamp())::TIMESTAMP(3);
+    NEW."occurred_at" := GREATEST(
+        date_trunc('milliseconds', clock_timestamp())::TIMESTAMP(3),
+        conversation_activity_at + INTERVAL '1 millisecond'
+    );
+    UPDATE "conversations"
+    SET "updated_at" = NEW."occurred_at"
+    WHERE "id" = NEW."conversation_id";
     RETURN NEW;
 END;
 $$;
