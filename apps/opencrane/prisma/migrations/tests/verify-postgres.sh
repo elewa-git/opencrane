@@ -68,7 +68,9 @@ for database in migrated fresh; do
 	docker exec "$CONTAINER" pg_dump --username postgres --dbname "$database" \
 		--schema-only --no-owner --no-privileges \
 		--exclude-schema opencrane_bootstrap --exclude-schema opencrane_migrations \
-		| sed -E '/^\\(un)?restrict /d' >"$WORK_DIR/$database-schema.sql"
+		| sed -E '/^\\(un)?restrict /d' \
+		| node "$ROOT/apps/opencrane/prisma/migrations/tests/normalize-schema-dump.mjs" \
+		>"$WORK_DIR/$database-schema.sql"
 done
 diff --unified "$WORK_DIR/fresh-schema.sql" "$WORK_DIR/migrated-schema.sql"
 
