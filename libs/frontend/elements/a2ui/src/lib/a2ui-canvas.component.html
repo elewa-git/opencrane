@@ -1,0 +1,42 @@
+<section
+	class="a2ui-canvas"
+	[attr.data-state]="presentation().state"
+	[attr.aria-busy]="busy()"
+	aria-label="Interactive agent surface"
+>
+	<header class="a2ui-canvas__state" role="status" aria-live="polite">
+		<span class="a2ui-canvas__state-dot" aria-hidden="true"></span>
+		<span>{{ stateLabel() }}</span>
+	</header>
+
+	<div
+		class="a2ui-canvas__surface"
+		[class.a2ui-canvas__surface--disabled]="!interactive()"
+		[attr.inert]="interactive() ? null : ''"
+		[attr.aria-disabled]="!interactive()"
+	>
+		@if (showUnsupported())
+		{
+			<div class="a2ui-canvas__placeholder" role="note">
+				<strong>This interactive surface is not supported.</strong>
+				<span>Update the client or ask for the information as plain text.</span>
+			</div>
+		}
+		@else if (showSurface())
+		{
+			<a2ui-surface [surfaceId]="presentation().surfaceId" />
+		}
+		@else
+		{
+			<div class="a2ui-canvas__placeholder" role="status">
+				<strong>Preparing interactive surface…</strong>
+				<span>Validated updates will appear here in order.</span>
+			</div>
+		}
+	</div>
+
+	@if (visibleReason(); as reason)
+	{
+		<p class="a2ui-canvas__reason" role="status">{{ reason }}</p>
+	}
+</section>

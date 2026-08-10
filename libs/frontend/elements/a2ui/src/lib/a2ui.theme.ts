@@ -1,17 +1,15 @@
 import type { Types } from "@a2ui/angular/v0_8";
 
 /**
- * The OpenCrane A2UI theme — brings agent-authored canvas surfaces onto our design tokens.
+ * The OpenCrane A2UI theme brings projected canvas surfaces onto shared design tokens.
  *
  * A2UI applies `additionalStyles.<Component>` as inline styles on each rendered component, so
  * that channel is the bridge to our CSS variables (no A2UI-named CSS classes exist to target, so
- * the class-map fields stay empty). Markdown inside A2UI Text is NOT themed here — it flows
- * through our vendored pipeline via `provideMarkdownRenderer`, so it already carries our classes.
+ * the class-map fields stay empty). Markdown inside A2UI Text is not themed here; the browser
+ * composition root supplies the package's required safe HTML sanitizer port.
  *
- * This is the incremental "custom themed catalog" step from #41 §4: it themes the standard
- * catalog rather than swapping in bespoke components. Fine-grained element theming (e.g. input
- * borders, which need per-element class-maps A2UI doesn't expose via additionalStyles) is a
- * further refinement on top of this.
+ * The catalogue is constrained separately; this complete upstream theme shape is required by the
+ * A2UI renderer even though unsupported component entries can never be selected.
  */
 export function _OpenCraneA2uiTheme(): Types.Theme
 {

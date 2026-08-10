@@ -1,0 +1,85 @@
+:host {
+	display: block;
+	min-width: 0;
+}
+
+.a2ui-canvas {
+	display: grid;
+	gap: 0.625rem;
+	padding: 0.875rem;
+	color: var(--oc-ink-strong);
+	background: var(--oc-surface-subtle);
+	border: 1px solid var(--oc-border-default);
+	border-radius: var(--oc-radius-chip);
+}
+
+.a2ui-canvas__state {
+	display: flex;
+	align-items: center;
+	gap: 0.4rem;
+	font-size: 0.75rem;
+	font-weight: 600;
+	letter-spacing: 0.02em;
+	color: var(--oc-ink-muted);
+}
+
+.a2ui-canvas__state-dot {
+	width: 0.45rem;
+	height: 0.45rem;
+	background: var(--oc-ink-muted);
+	border-radius: 50%;
+}
+
+.a2ui-canvas[data-state="ready"] .a2ui-canvas__state-dot,
+.a2ui-canvas[data-state="submitted"] .a2ui-canvas__state-dot {
+	background: var(--oc-accent);
+}
+
+.a2ui-canvas[data-state="validation_error"] .a2ui-canvas__state-dot,
+.a2ui-canvas[data-state="action_failed"] .a2ui-canvas__state-dot,
+.a2ui-canvas[data-state="unauthorized"] .a2ui-canvas__state-dot {
+	background: var(--oc-danger, #a23838);
+}
+
+.a2ui-canvas__surface {
+	min-width: 0;
+}
+
+.a2ui-canvas__surface--disabled {
+	pointer-events: none;
+	opacity: 0.72;
+}
+
+.a2ui-canvas__placeholder {
+	display: grid;
+	gap: 0.25rem;
+	padding: 0.875rem;
+	font-size: 0.8125rem;
+	line-height: 1.5;
+	color: var(--oc-ink-muted);
+	background: var(--oc-surface-default, #fff);
+	border: 1px dashed var(--oc-border-default);
+	border-radius: var(--oc-radius-chip);
+}
+
+.a2ui-canvas__placeholder strong {
+	color: var(--oc-ink-strong);
+}
+
+.a2ui-canvas__reason {
+	margin: 0;
+	padding-top: 0.625rem;
+	font-size: 0.8125rem;
+	line-height: 1.5;
+	color: var(--oc-ink-muted);
+	border-top: 1px solid var(--oc-border-default);
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.a2ui-canvas,
+	.a2ui-canvas * {
+		scroll-behavior: auto;
+		transition-duration: 0.01ms !important;
+		animation-duration: 0.01ms !important;
+	}
+}

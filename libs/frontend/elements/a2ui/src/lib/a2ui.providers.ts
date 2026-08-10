@@ -1,22 +1,40 @@
-import { EnvironmentProviders, Provider } from "@angular/core";
-import { DEFAULT_CATALOG, provideA2UI, provideMarkdownRenderer } from "@a2ui/angular/v0_8";
+import { InjectionToken, type EnvironmentProviders, type Provider } from "@angular/core";
+import { MarkdownRenderer, provideA2UI } from "@a2ui/angular/v0_8";
 
-import { toSanitizedMarkdownHtml } from "@opencrane/state/conversation/render";
-
-import { _OpenCraneA2uiTheme } from "./a2ui.theme";
+import { _OpenCraneA2uiCatalog } from "./a2ui.catalog.js";
+import { _OpenCraneA2uiTheme } from "./a2ui.theme.js";
+import type { A2uiMarkdownSanitizer } from "./a2ui.types.js";
 
 /**
- * App-level providers for in-process A2UI rendering (the v0.8 dialect OpenClaw ships at the
- * pinned tag). Registers the standard component catalog + the OpenCrane theme, and routes A2UI's
- * Text markdown through the SAME vendored pipeline the transcript uses — one renderer, one
- * sanitization posture. Include once in an app's `providers` (spread the returned array).
+ * Neutral sanitizer port used for agent-authored A2UI text.
+ *
+ * The browser composition root supplies an implementation. This elements package deliberately
+ * does not depend on a conversation store, transcript renderer, or other feature/state package.
  */
-export function provideOpenCraneA2ui(): (Provider | EnvironmentProviders)[]
+export const A2UI_MARKDOWN_SANITIZER = new InjectionToken<A2uiMarkdownSanitizer>("A2UI_MARKDOWN_SANITIZER");
+
+/** Create the renderer shape required by the upstream A2UI markdown provider. */
+function _createMarkdownRenderer(sanitizer: A2uiMarkdownSanitizer): Pick<MarkdownRenderer, "render">
+{
+	return {
+		render: function _Render(markdown: string): Promise<string>
+		{
+			return Promise.resolve(sanitizer(markdown));
+		}
+	};
+}
+
+/**
+ * Provide the constrained OpenCrane A2UI catalogue, theme, and injected sanitizer.
+ *
+ * @param sanitizer - Browser-owned markdown-to-safe-HTML implementation. Callers must not pass a
+ * markdown renderer that returns unsanitized agent-authored HTML.
+ */
+export function provideOpenCraneA2ui(sanitizer: A2uiMarkdownSanitizer): (Provider | EnvironmentProviders)[]
 {
 	return [
-		provideA2UI({ catalog: DEFAULT_CATALOG, theme: _OpenCraneA2uiTheme() }),
-		// A2UI's MarkdownRenderer is `(markdown, options?) => Promise<string>`; hand it our
-		// already-DOMPurify-sanitized output so agent-authored canvas text is safe + consistent.
-		provideMarkdownRenderer(async (markdown: string) => toSanitizedMarkdownHtml(markdown)),
+		{ provide: A2UI_MARKDOWN_SANITIZER, useValue: sanitizer },
+		provideA2UI({ catalog: _OpenCraneA2uiCatalog(), theme: _OpenCraneA2uiTheme() }),
+		{ provide: MarkdownRenderer, useFactory: _createMarkdownRenderer, deps: [A2UI_MARKDOWN_SANITIZER] }
 	];
 }
