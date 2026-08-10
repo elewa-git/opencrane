@@ -1,4 +1,4 @@
-import { AgentRunState, ConversationLifecycle, ConversationMessageState, ConversationMode, Prisma } from "@prisma/client";
+import { AgentRunState, ConversationLifecycle, ConversationMessageState, ConversationMode, OrgMemberStatus, Prisma } from "@prisma/client";
 
 import { RunAdmissionDenialReasons, type InitialRunAuthority } from "@opencrane/backend/agents/execution/runs";
 
@@ -23,7 +23,11 @@ export class PrismaConversationContextRepository implements ConversationContextR
 		if (command.conversationId === null) return { outcome: "loaded", value: { messageIds: [], pendingUserMessage: null } };
 		if (command.identityKind !== "user") return { outcome: "denied", reason: "conversation_unavailable" };
 
-		// 2. Bind the conversation to its silo, service, mode, open lifecycle, and participant.
+		// 2. Recheck current organization membership in the final-admission snapshot before revealing conversation or run state.
+		const membership = await this.transaction.orgMembership.findFirst({ where: { clusterTenant: command.siloId, subject: command.executionSubjectId, status: OrgMemberStatus.Active }, select: { clusterTenant: true } });
+		if (membership === null) return { outcome: "denied", reason: "conversation_unavailable" };
+
+		// 3. Bind the conversation to its silo, service, mode, open lifecycle, and participant.
 		const conversation = await this.transaction.conversation.findFirst({
 			where: { id: command.conversationId, siloId: command.siloId, agentServiceId: run.agentServiceId, mode: ConversationMode.AgentSession, lifecycle: ConversationLifecycle.Open, participants: { some: { userId: command.executionSubjectId, accessEndedPosition: null } } },
 			select: { id: true, runs: { where: { state: { notIn: [AgentRunState.Completed, AgentRunState.Failed, AgentRunState.Cancelled] } }, take: 1, select: { id: true } } },
@@ -31,7 +35,7 @@ export class PrismaConversationContextRepository implements ConversationContextR
 		if (conversation === null) return { outcome: "denied", reason: "conversation_unavailable" };
 		if (conversation.runs.length > 0) return { outcome: "denied", reason: RunAdmissionDenialReasons.ActiveRun };
 
-		// 3. Seal only terminal message identifiers in their deterministic transcript order; mutable turns remain outside the snapshot.
+		// 4. Seal only terminal message identifiers in their deterministic transcript order; mutable turns remain outside the snapshot.
 		const entries = await this.transaction.conversationTimelineEntry.findMany({
 			where: { conversationId: conversation.id, message: { is: { state: ConversationMessageState.Completed } } },
 			orderBy: { position: "asc" },

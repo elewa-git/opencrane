@@ -1,4 +1,4 @@
-import { AgentRunState, AgentServiceKind, ConversationLifecycle, ConversationMode, type Prisma } from "@prisma/client";
+import { AgentRunState, AgentServiceKind, ConversationLifecycle, ConversationMode, OrgMemberStatus, type Prisma } from "@prisma/client";
 
 import { PersonalRunIdempotencyOutcomes } from "./personal-run-admission.types.js";
 import type { PersonalRunAdmissionCommand, PersonalRunAdmissionReadRepository, PersonalRunIdempotencyResult, PersonalRunConversationAuthority } from "./personal-run-admission.types.js";
@@ -42,6 +42,8 @@ export class PrismaPersonalRunAdmissionRepository implements PersonalRunAdmissio
 	/** Reclassifies only an active-run conflict on the exact still-authorized personal conversation. */
 	async hasActiveConversationRun(command: PersonalRunAdmissionCommand): Promise<boolean>
 	{
+		const membership = await this.prisma.orgMembership.findFirst({ where: { clusterTenant: command.siloId, subject: command.executionSubjectId, status: OrgMemberStatus.Active }, select: { clusterTenant: true } });
+		if (membership === null) return false;
 		const conversation = await this.prisma.conversation.findFirst({
 			where: {
 				id: command.conversationId,

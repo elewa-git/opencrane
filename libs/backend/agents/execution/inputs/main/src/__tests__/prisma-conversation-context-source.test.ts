@@ -1,4 +1,4 @@
-import { AgentRunState, ConversationMessageState, ConversationLifecycle, ConversationMode } from "@prisma/client";
+import { AgentRunState, ConversationMessageState, ConversationLifecycle, ConversationMode, OrgMemberStatus } from "@prisma/client";
 import { RunAdmissionDenialReasons, type InitialRunAuthority, type RunAdmissionTransaction } from "@opencrane/backend/agents/execution/runs";
 import { describe, expect, it, vi } from "vitest";
 import { AgentServiceKinds } from "@opencrane/models/agents";
@@ -19,9 +19,9 @@ function _Command(conversationId: string | null = "conversation-1")
 }
 
 /** Creates the narrow transaction facade used by the transcript authority. */
-function _Transaction(conversation: unknown, entries: readonly unknown[] = []): RunAdmissionTransaction
+function _Transaction(conversation: unknown, entries: readonly unknown[] = [], membership: unknown = { clusterTenant: "silo-1" }): RunAdmissionTransaction
 {
-	return { prisma: { conversation: { findFirst: vi.fn().mockResolvedValue(conversation) }, conversationTimelineEntry: { findMany: vi.fn().mockResolvedValue(entries) } } as never, admittedAt: "2026-07-26T00:00:00.000Z", admittedAtEpochMs: Date.parse("2026-07-26T00:00:00.000Z") };
+	return { prisma: { orgMembership: { findFirst: vi.fn().mockResolvedValue(membership) }, conversation: { findFirst: vi.fn().mockResolvedValue(conversation) }, conversationTimelineEntry: { findMany: vi.fn().mockResolvedValue(entries) } } as never, admittedAt: "2026-07-26T00:00:00.000Z", admittedAtEpochMs: Date.parse("2026-07-26T00:00:00.000Z") };
 }
 
 describe("TransactionBoundConversationContextSource", function _DescribeTransactionBoundConversationContextSource()
@@ -30,8 +30,18 @@ describe("TransactionBoundConversationContextSource", function _DescribeTransact
 	{
 		const transaction = _Transaction({ id: "conversation-1", runs: [] }, [{ messageId: "message-1" }, { messageId: "message-2" }]);
 		await expect(_Source().load(_Command(), _Run(), transaction)).resolves.toEqual({ outcome: "loaded", value: { messageIds: ["message-1", "message-2", "message-current"], pendingUserMessage: { id: "message-current", blocks: [{ id: "block-1", kind: "text", value: "Hello" }] } } });
+		expect(transaction.prisma.orgMembership.findFirst).toHaveBeenCalledWith({ where: { clusterTenant: "silo-1", subject: "user-1", status: OrgMemberStatus.Active }, select: { clusterTenant: true } });
 		expect(transaction.prisma.conversation.findFirst).toHaveBeenCalledWith({ where: { id: "conversation-1", siloId: "silo-1", agentServiceId: "service-1", mode: ConversationMode.AgentSession, lifecycle: ConversationLifecycle.Open, participants: { some: { userId: "user-1", accessEndedPosition: null } } }, select: { id: true, runs: { where: { state: { notIn: [AgentRunState.Completed, AgentRunState.Failed, AgentRunState.Cancelled] } }, take: 1, select: { id: true } } } });
 		expect(transaction.prisma.conversationTimelineEntry.findMany).toHaveBeenCalledWith({ where: { conversationId: "conversation-1", message: { is: { state: ConversationMessageState.Completed } } }, orderBy: { position: "asc" }, select: { messageId: true } });
+	});
+
+	it("denies before revealing foreground-run state when membership is revoked inside final admission", async function _DeniesRevokedMembership()
+	{
+		const transaction = _Transaction({ id: "conversation-1", runs: [{ id: "run-active" }] }, [], null);
+
+		await expect(_Source().load(_Command(), _Run(), transaction)).resolves.toEqual({ outcome: "denied", reason: "conversation_unavailable" });
+		expect(transaction.prisma.conversation.findFirst).not.toHaveBeenCalled();
+		expect(transaction.prisma.conversationTimelineEntry.findMany).not.toHaveBeenCalled();
 	});
 
 	it("returns active_run from the final participant-authorized transaction before compiling another foreground snapshot", async function _deniesActiveRun()

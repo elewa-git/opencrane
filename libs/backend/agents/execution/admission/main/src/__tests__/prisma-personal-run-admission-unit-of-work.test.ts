@@ -1,4 +1,4 @@
-import { AgentRunState, ConversationLifecycle, ConversationMode, Prisma } from "@prisma/client";
+import { AgentRunState, ConversationLifecycle, ConversationMode, OrgMemberStatus, Prisma } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
 import { MessageContentBlockKinds } from "@opencrane/models/conversations";
 
@@ -54,9 +54,11 @@ describe("PrismaPersonalRunAdmissionUnitOfWork", function _DescribePrismaPersona
 	it("reclassifies only a fresh participant-authorized active conversation run", async function _reclassifiesActiveRun()
 	{
 		const findFirst = vi.fn().mockResolvedValue({ id: "conversation-1" });
-		const unitOfWork = new PrismaPersonalRunAdmissionUnitOfWork(_Client({ conversation: { findFirst } }));
+		const membership = vi.fn().mockResolvedValue({ clusterTenant: "silo-1" });
+		const unitOfWork = new PrismaPersonalRunAdmissionUnitOfWork(_Client({ orgMembership: { findFirst: membership }, conversation: { findFirst } }));
 
 		await expect(unitOfWork.hasActiveConversationRun(_Command())).resolves.toBe(true);
+		expect(membership).toHaveBeenCalledWith({ where: { clusterTenant: "silo-1", subject: "user-1", status: OrgMemberStatus.Active }, select: { clusterTenant: true } });
 		expect(findFirst).toHaveBeenCalledWith({
 			where: {
 				id: "conversation-1",
@@ -68,5 +70,14 @@ describe("PrismaPersonalRunAdmissionUnitOfWork", function _DescribePrismaPersona
 			},
 			select: { id: true },
 		});
+	});
+
+	it("does not disclose an active conversation run after current membership is revoked", async function _DeniesRevokedMembership()
+	{
+		const findFirst = vi.fn().mockResolvedValue({ id: "conversation-1" });
+		const unitOfWork = new PrismaPersonalRunAdmissionUnitOfWork(_Client({ orgMembership: { findFirst: vi.fn().mockResolvedValue(null) }, conversation: { findFirst } }));
+
+		await expect(unitOfWork.hasActiveConversationRun(_Command())).resolves.toBe(false);
+		expect(findFirst).not.toHaveBeenCalled();
 	});
 });
