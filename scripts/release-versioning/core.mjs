@@ -201,6 +201,7 @@ export async function validateWorkspace(
 	suppliedStampOnlyFiles = [],
 	suppliedNewFiles = [],
 	releasedVersionTag = null,
+	suppliedDirectChangedFiles = changedFiles,
 )
 {
 	const rootVersion = readJson(join(repositoryRoot, "package.json")).version;
@@ -213,6 +214,7 @@ export async function validateWorkspace(
 	errors.push(...validateReleaseManifest(manifest));
 	const stampOnlyFiles = new Set(suppliedStampOnlyFiles);
 	const newFiles = new Set(suppliedNewFiles);
+	const directChangedFiles = new Set(suppliedDirectChangedFiles);
 	if (releasedVersionTag)
 	{
 		const compositionChanged = changedFiles.some((file) =>
@@ -227,6 +229,7 @@ export async function validateWorkspace(
 	{
 		const changedManifestVersion = /^releases\/(?<version>\d+\.\d+\.\d+)\.json$/u.exec(file)?.groups?.version;
 		if (!changedManifestVersion || changedManifestVersion === rootVersion) continue;
+		if (!directChangedFiles.has(file)) continue;
 		if (!newFiles.has(file))
 		{
 			errors.push(`release manifest '${changedManifestVersion}' is immutable; create '${rootVersion}' instead`);

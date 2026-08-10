@@ -438,6 +438,25 @@ test("allows a newly introduced historical adoption manifest", async () =>
 	assert.deepEqual(await validateWorkspace(fixture.root, [file], fixture.graph, [], [file]), []);
 });
 
+test("accepts an unchanged adoption manifest from the cumulative release-train diff", async () =>
+{
+	const fixture = _Fixture({
+		repositoryVersion: "0.8.0",
+		previousRepositoryVersion: "0.7.0",
+		adaptedVersion: "0.8.0",
+	});
+	_WriteDatabaseMigration(fixture.root, "0.7.0", "0.8.0");
+	assert.deepEqual(await validateWorkspace(
+		fixture.root,
+		["releases/0.7.0.json"],
+		fixture.graph,
+		[],
+		[],
+		null,
+		[],
+	), []);
+});
+
 test("rejects an unrelated newly introduced historical manifest", async () =>
 {
 	const fixture = _Fixture({

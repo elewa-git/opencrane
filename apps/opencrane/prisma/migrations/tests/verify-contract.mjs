@@ -1,7 +1,9 @@
+import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { normalizeSchemaDump } from "./normalize-schema-dump.mjs";
 
 const migrationRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const transitionRoot = join(migrationRoot, "0.7.0-to-0.8.0");
@@ -15,6 +17,28 @@ function requireContract(condition, message)
 {
 	if (!condition) throw new Error(message);
 }
+
+const reorderedTable = String.raw`CREATE TABLE public.example (
+    "second" text NOT NULL,
+    "first" text DEFAULT $value$a,b$value$ NOT NULL,
+    "regular_backslash" text DEFAULT '\'::text,
+    "escaped_quote" text DEFAULT E'one\'two,three'::text,
+    CONSTRAINT example_check CHECK (("second" <> ','::text))
+);
+`;
+const canonicalTable = String.raw`CREATE TABLE public.example (
+    CONSTRAINT example_check CHECK (("second" <> ','::text)),
+    "escaped_quote" text DEFAULT E'one\'two,three'::text,
+    "first" text DEFAULT $value$a,b$value$ NOT NULL,
+    "regular_backslash" text DEFAULT '\'::text,
+    "second" text NOT NULL
+);
+`;
+assert.equal(normalizeSchemaDump(reorderedTable), normalizeSchemaDump(canonicalTable));
+assert.notEqual(
+	normalizeSchemaDump(reorderedTable),
+	normalizeSchemaDump(canonicalTable.replace("DEFAULT $value$a,b$value$", "DEFAULT $value$a,c$value$")),
+);
 
 requireContract(manifest.fromSchemaVersion === "0.7.0", "migration source version must remain exact");
 requireContract(manifest.toSchemaVersion === "0.8.0", "migration target version must remain exact");
