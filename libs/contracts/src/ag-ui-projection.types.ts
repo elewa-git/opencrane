@@ -1,159 +1,113 @@
+import type {
+	CustomEvent,
+	Interrupt,
+	RunErrorEvent,
+	RunFinishedEvent,
+	RunStartedEvent,
+	TextMessageContentEvent,
+	TextMessageEndEvent,
+	TextMessageStartEvent,
+	ToolCallArgsEvent,
+	ToolCallEndEvent,
+	ToolCallResultEvent,
+	ToolCallStartEvent,
+} from "@ag-ui/core";
+import type { DataModelUpdate, SurfaceUpdateMessage } from "@a2ui/web_core/v0_8";
+
 import type { RunEventType } from "@opencrane/models/agents";
 import type { ConversationId } from "@opencrane/models/conversations";
+
+/** Exact AG-UI package release supported by this projection. */
+export const AG_UI_PROTOCOL_VERSION = "0.0.57";
 
 /** Version of OpenCrane's intentionally small AG-UI event projection. */
 export const AG_UI_PROJECTION_VERSION = "opencrane.ag-ui.v1";
 
+/** Version of the governed A2UI payload carried inside an AG-UI CUSTOM event. */
+export const AG_UI_A2UI_ENVELOPE_VERSION = "opencrane.a2ui.v1";
+
+/** Version of the lossy governed-child update carried inside a parent run stream. */
+export const AG_UI_CHILD_RUN_ENVELOPE_VERSION = "opencrane.child_run.v1";
+
+/** One strictly admitted A2UI surface operation. */
+export type AgUiA2uiOperation = { readonly surfaceUpdate: SurfaceUpdateMessage } | { readonly dataModelUpdate: DataModelUpdate };
+
+/** Browser-safe A2UI projection. It carries presentation coordinates, never action authority. */
+export interface AgUiA2uiEnvelope
+{
+	readonly version: typeof AG_UI_A2UI_ENVELOPE_VERSION;
+	readonly conversationId: string;
+	readonly runId: string;
+	readonly messageId: string;
+	readonly surfaceId: string;
+	readonly sequence: number;
+	readonly operations: readonly AgUiA2uiOperation[];
+}
+
+/** Terminal state of one governed child as observed by its immediate parent. */
+export type AgUiChildRunState = "completed" | "failed" | "cancelled";
+
+/** Lossy child update that deliberately excludes child context and sibling data. */
+export interface AgUiChildRunEnvelope
+{
+	readonly version: typeof AG_UI_CHILD_RUN_ENVELOPE_VERSION;
+	readonly parentRunId: string;
+	readonly childRunId: string;
+	readonly attempt: number;
+	readonly state: AgUiChildRunState;
+	readonly terminalReason?: string;
+	readonly finishedAt: string;
+}
+
 /** Safe, user-facing fragments selected by the server-owned event reader. */
 export interface AgUiPublicEventPayload
 {
-	/** Assistant message identifier, when the canonical event addresses one. */
 	readonly messageId?: string;
-	/** Assistant text delta, when the canonical event exposes one for this audience. */
 	readonly delta?: string;
-	/** Tool-call identifier, when the canonical event addresses one. */
 	readonly toolCallId?: string;
-	/** Display-safe tool name, when the canonical event exposes one. */
 	readonly toolCallName?: string;
-	/** Display-safe, already-redacted tool result text. */
 	readonly toolResult?: string;
+	readonly terminalReason?: string;
+	readonly failureCode?: string;
+	readonly interrupt?: Interrupt;
+	readonly a2ui?: AgUiA2uiEnvelope;
+	readonly childRun?: AgUiChildRunEnvelope;
 }
 
 /** One already-authorized canonical event made safe for protocol projection. */
 export interface AgUiProjectionSourceEvent
 {
-	/** Durable cursor selected by the server-owned replay reader. */
-	readonly cursor: string;
-	/** Conversation selected by the authorized server-side replay reader. */
+	/** Durable cursor selected by the server-owned replay reader; overlays intentionally omit it. */
+	readonly cursor?: string;
 	readonly conversationId: ConversationId;
-	/** Run that owns the canonical event. */
 	readonly runId: string;
-	/** Canonical positive decimal timeline position, preserving database BigInt precision. */
 	readonly position: string;
-	/** Canonical event vocabulary, retaining unknown strings for fail-safe rendering. */
 	readonly eventType: RunEventType | (string & {});
-	/** ISO-8601 time at which the canonical event occurred. */
 	readonly occurredAt: string;
-	/** Explicitly selected safe payload fields; raw canonical payloads never cross this contract. */
 	readonly payload: AgUiPublicEventPayload;
 }
 
-/** Minimal standard AG-UI run-start event. */
-export interface AgUiRunStartedEvent
-{
-	/** AG-UI discriminator. */
-	readonly type: "RUN_STARTED";
-	/** AG-UI-standard thread field populated with the canonical conversation identifier. */
-	readonly threadId: string;
-	/** Run represented by this event. */
-	readonly runId: string;
-}
-
-/** Minimal standard AG-UI run-finished event. */
-export interface AgUiRunFinishedEvent
-{
-	/** AG-UI discriminator. */
-	readonly type: "RUN_FINISHED";
-	/** AG-UI-standard thread field populated with the canonical conversation identifier. */
-	readonly threadId: string;
-	/** Run represented by this event. */
-	readonly runId: string;
-}
-
-/** Minimal standard AG-UI text-message start event. */
-export interface AgUiTextMessageStartEvent
-{
-	/** AG-UI discriminator. */
-	readonly type: "TEXT_MESSAGE_START";
-	/** Message being assembled. */
-	readonly messageId: string;
-	/** Assistant role for canonical model-output messages. */
-	readonly role: "assistant";
-}
-
-/** Minimal standard AG-UI text-message delta event. */
-export interface AgUiTextMessageContentEvent
-{
-	/** AG-UI discriminator. */
-	readonly type: "TEXT_MESSAGE_CONTENT";
-	/** Message being assembled. */
-	readonly messageId: string;
-	/** Display-safe text delta. */
-	readonly delta: string;
-}
-
-/** Minimal standard AG-UI text-message completion event. */
-export interface AgUiTextMessageEndEvent
-{
-	/** AG-UI discriminator. */
-	readonly type: "TEXT_MESSAGE_END";
-	/** Message that is no longer streaming. */
-	readonly messageId: string;
-}
-
-/** Minimal standard AG-UI tool-call start event. */
-export interface AgUiToolCallStartEvent
-{
-	/** AG-UI discriminator. */
-	readonly type: "TOOL_CALL_START";
-	/** Tool call being assembled. */
-	readonly toolCallId: string;
-	/** Display-safe tool name. */
-	readonly toolCallName: string;
-}
-
-/** Minimal standard AG-UI tool-call argument delta event. */
-export interface AgUiToolCallArgsEvent
-{
-	/** AG-UI discriminator. */
-	readonly type: "TOOL_CALL_ARGS";
-	/** Tool call being assembled. */
-	readonly toolCallId: string;
-	/** Display-safe argument delta. */
-	readonly delta: string;
-}
-
-/** Minimal standard AG-UI tool-call completion event. */
-export interface AgUiToolCallEndEvent
-{
-	/** AG-UI discriminator. */
-	readonly type: "TOOL_CALL_END";
-	/** Tool call that is no longer streaming. */
-	readonly toolCallId: string;
-}
-
-/** Minimal standard AG-UI tool-result event. */
-export interface AgUiToolCallResultEvent
-{
-	/** AG-UI discriminator. */
-	readonly type: "TOOL_CALL_RESULT";
-	/** Tool call producing the result. */
-	readonly toolCallId: string;
-	/** Display-safe tool result text. */
-	readonly content: string;
-}
-
-/** Vendor-namespaced signal for an event that has no stable standard mapping yet. */
-export interface AgUiCustomEvent
-{
-	/** AG-UI discriminator. */
-	readonly type: "CUSTOM";
-	/** OpenCrane event name that clients may display but must not treat as a command. */
-	readonly name: string;
-	/** Non-sensitive canonical classification only. */
-	readonly value: { readonly eventType: string };
-}
-
-/** One protocol event the offline projection can encode without an AG-UI runtime dependency. */
-export type AgUiProjectionEvent = AgUiRunStartedEvent | AgUiRunFinishedEvent | AgUiTextMessageStartEvent | AgUiTextMessageContentEvent | AgUiTextMessageEndEvent | AgUiToolCallStartEvent | AgUiToolCallArgsEvent | AgUiToolCallEndEvent | AgUiToolCallResultEvent | AgUiCustomEvent;
+/** Standard events admitted by OpenCrane from the exact-pinned upstream vocabulary. */
+export type AgUiProjectionEvent = RunStartedEvent | RunFinishedEvent | RunErrorEvent | TextMessageStartEvent | TextMessageContentEvent | TextMessageEndEvent | ToolCallStartEvent | ToolCallArgsEvent | ToolCallEndEvent | ToolCallResultEvent | CustomEvent;
 
 /** One SSE record ready for a server-owned authorized replay source to write. */
 export interface AgUiSseRecord
 {
-	/** Durable canonical cursor used as the SSE event identifier. */
-	readonly id: string;
-	/** Fixed event name that distinguishes this versioned projection from canonical SSE. */
+	/** Durable cursor. Open-interrupt overlays omit it so Last-Event-ID never advances. */
+	readonly id?: string;
 	readonly event: "ag-ui";
-	/** Versioned, display-safe AG-UI event. */
 	readonly data: AgUiProjectionEvent;
 }
+
+/** Backward-compatible names now alias the exact upstream AG-UI types. */
+export type AgUiRunStartedEvent = RunStartedEvent;
+export type AgUiRunFinishedEvent = RunFinishedEvent;
+export type AgUiRunErrorEvent = RunErrorEvent;
+export type AgUiTextMessageStartEvent = TextMessageStartEvent;
+export type AgUiTextMessageContentEvent = TextMessageContentEvent;
+export type AgUiTextMessageEndEvent = TextMessageEndEvent;
+export type AgUiToolCallStartEvent = ToolCallStartEvent;
+export type AgUiToolCallArgsEvent = ToolCallArgsEvent;
+export type AgUiToolCallEndEvent = ToolCallEndEvent;
+export type AgUiToolCallResultEvent = ToolCallResultEvent;
+export type AgUiCustomEvent = CustomEvent;
