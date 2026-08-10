@@ -75,16 +75,9 @@ fresh context — do not assume the author's intent was correct.
   is a finding. Expected/benign early returns need no log.
 - Tests exist for changed behaviour and for the regression being fixed. When in
   doubt run them: `npx nx run <project>:test`.
-- **Angular reactive state and commands.** For changed Angular reactive code, trace every displayed
-  value to an authoritative resource/store, explicit local control state, or a `computed(...)`
-  projection. Flag a writable mirror only when it duplicates a wholly derivable value and can drift;
-  do not flag drafts, dialog state, retry coordinates, optimistic intent, or command lifecycle merely
-  because they are writable. A changed `resource(...)` must have a read-only loader; trace initial
-  load, retained-value refresh, failure, retry, and authoritative mutation adoption as applicable.
-  For a changed command, verify duplicate admission is guarded before its first `await` at the server
-  conflict scope; a disabled template state alone does not prove this. Trace failure and late
-  completion so they cannot replace newer state or discard retryable input. Tests cover relevant
-  initial, refresh, error/retry, and duplicate/stale-completion paths without requiring inapplicable states.
+- **Angular reactive state and commands.** Apply the canonical reactive-state, resource, effect,
+  command-concurrency, and test checklist in `docs/agents/angular.md`; report concrete deviations in
+  correctness rather than restating that policy here.
 - **Operational correctness** (these cost real live-deploy iterations when missed —
   flag them at PR time):
   - *Persistence.* A workload that stores state it must not lose (database, vector/graph
@@ -113,13 +106,9 @@ fresh context — do not assume the author's intent was correct.
 
 ### DIMENSION: maintainability
 - **Angular routed-page ownership.** For every materially changed routed page, build the
-  responsibility ledger required by `docs/agents/angular.md` even if module growth is silent. Trace
-  reads, mutations, concurrency/retry coordinates, authoritative adoption, navigation,
-  presentation mapping, controlled interaction state, and visual composition to their owners. Flag
-  a page that retains several independently changing concerns and name the exact
-  store/mapper/presentational boundaries. Generic `_run`, `_execute`, `withLoading`, callback
-  wrappers, and helper-only extractions do not change ownership when the page still decides every
-  step.
+  canonical responsibility table in `docs/agents/angular.md` even if module growth is silent. Trace
+  every owner through the actual page, store, mapper, and component tree; include the completed table
+  in review evidence and do not return PASS with an ambiguous, duplicated, or canonically blocked row.
 - **Model-adjacent runtime validation.** When untrusted data becomes a named TypeScript model,
   require a Zod validator beside the model in the same folder/package (`a.types.ts` plus
   `a.validator.ts`), typed against that model and introduced by a clarifying trust-boundary comment.
@@ -227,7 +216,8 @@ Three verified findings beat ten that include a wrong one.
 Sections in order: **1. Findings** (Critical, High, Medium, Low), **2. Open
 questions / assumptions**, **3. Residual risks / testing gaps**, **4. Brief summary**,
 **5. Evidence** (exact base/head SHAs, incremental and cumulative ranges, live PR SHAs, and dirty
-overlays reviewed).
+overlays reviewed; for a routed Angular change, include every row of the canonical responsibility
+table with its owning path and symbol even when there is no finding).
 State explicitly when a severity level is empty, e.g. "No critical or high-severity
 findings detected."
 

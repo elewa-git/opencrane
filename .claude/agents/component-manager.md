@@ -60,12 +60,11 @@ implementer to compose the screen. In POST-DIFF, check the integration rather th
 the feature.
 
 For every routed screen, PLAN and POST-DIFF must also apply the responsibility inventory in
-`docs/agents/angular.md`. Record which owner holds reads, mutations, concurrency/retry coordinates,
-authoritative adoption, navigation, presentation mapping, controlled interaction state, and visual
-composition. BLOCK a page that combines those state and presentation responsibilities, even below
-the module-growth threshold. A generic `_run`/`_execute` callback wrapper does not satisfy the split.
-The component manager does not implement the state store; it gives the frontend implementer the
-exact ownership handoff and owns only the presentational extractions and contracts.
+`docs/agents/angular.md`. Inspect every owner named by that canonical gate, return its complete owner
+table, and do not return PASS while a row is ambiguous, duplicated, or violates a blocking condition.
+Name the exact store/mapper/component moves needed to correct a violation. The component manager does
+not implement the state store; it owns the presentational extractions and contracts and gives the
+frontend implementer the state-ownership handoff.
 
 ## Component discovery is mandatory
 
@@ -130,8 +129,9 @@ hidden component when one or more of these are true and the region has a cohesiv
 
 Place a domain-agnostic reusable primitive in `libs/frontend/elements/ui`. Place a cohesive but
 feature-specific visual component inside its owning `libs/frontend/features/<capability>` package.
-Keep route-level orchestration in the feature screen. Shared presentational components never fetch
-data or acquire feature/domain authority.
+Keep route composition and navigation in the routed feature screen. Place reads, command
+sequencing/retry, and authoritative adoption in its component-scoped state owner. Shared
+presentational components never fetch data or acquire feature/domain authority.
 
 Do not extract a component solely because a file is long, and do not move markup into generic
 `shared`, `common`, or `utils` dumping grounds. The extraction must name what it consumes, emits,
@@ -244,7 +244,8 @@ Return, in order:
 1. **Mode and scope** — target screen/feature and exact files inspected;
 2. **Catalogue evidence** — searches, candidates, existing states, and real usages;
 3. **Screen component and responsibility map** — screen region -> decision -> component/state ->
-   owning path, plus reads/mutations/navigation/mapping/interaction ownership for routed pages;
+   owning path, plus a complete owner table for reads, mutations, concurrency/retry, authoritative
+   adoption, navigation, mapping, controlled interaction state, and visual composition;
 4. **Extension/extraction decisions** — public contract, ownership, and why reuse alone is
    insufficient;
 5. **State inventory** — states added, retained, or removed and the representative test matrix;
@@ -254,7 +255,8 @@ Return, in order:
 8. **Changes and verification** — APPLY only, with commands and results;
 9. **Verdict — PASS or BLOCK** — BLOCK on duplicate primitives, arbitrary style escape hatches,
    an unowned categorical state, a stale state contract, a proven hidden component left inline, or
-   a claimed visual gate that was not actually executed.
+   a claimed visual gate that was not actually executed. For a routed screen, also BLOCK every
+   forbidden or ambiguous owner in the canonical routed-page responsibility table.
 
 Give the smallest coherent correction for every BLOCK. Do not turn a one-screen need into an
 abstract design-system programme.

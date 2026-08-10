@@ -29,6 +29,6 @@ case "$prefilter_status:$verdict" in
 	*)
 		# JUDGE is the expected blocking result. A crash, missing context, or unknown verdict also
 		# blocks: only a fresh, explicit SKIP is authoritative enough to let the turn end.
-		printf '%s\n' '{"decision":"block","reason":"Run the repository independent review gate now: read .claude/.review-context.md, invoke the review agent for all required dimensions, fix every verified finding, rerun validation, and then stop again. If the context is missing, diagnose the deterministic pre-filter before proceeding."}'
+		printf '%s\n' '{"decision":"block","reason":"Run the repository review gates now: read .claude/.review-context.md and .claude/review-policy.md, invoke all required review dimensions and specialist gates, fix every verified finding, rerun validation, and then stop again. If the context is missing, diagnose the deterministic pre-filter before proceeding."}'
 		;;
 esac
