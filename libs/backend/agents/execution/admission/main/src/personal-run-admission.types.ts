@@ -1,5 +1,6 @@
-import type { AssembleRunInputSnapshotResult } from "@opencrane/backend/agents/execution/inputs";
-import type { RunAdmissionCommit } from "@opencrane/backend/agents/execution/runs";
+import type { AssembleRunInputSnapshotResult, SessionAssemblyRefusalReason } from "@opencrane/backend/agents/execution/inputs";
+import type { Logger } from "@opencrane/backend/observability";
+import type { RunAdmissionCommit, RunAdmissionConcurrencyDenialReasons } from "@opencrane/backend/agents/execution/runs";
 import type { MessageContentBlock } from "@opencrane/models/conversations";
 import type { RunAdmissionCapacityGate } from "./managed-run-admission.types.js";
 
@@ -94,10 +95,13 @@ export enum PersonalRunAdmissionDenialReasons
 	PersistenceUnavailable = "persistence_unavailable",
 }
 
+/** Complete denial vocabulary propagated by personal run admission. */
+export type PersonalRunAdmissionDenialReason = PersonalRunAdmissionDenialReasons | RunAdmissionConcurrencyDenialReasons | SessionAssemblyRefusalReason;
+
 /** Result returned by the personal run admission port without exposing private authority detail. */
 export type PersonalRunAdmissionResult =
 	| { readonly outcome: PersonalRunAdmissionOutcomes.Accepted | PersonalRunAdmissionOutcomes.Idempotent; readonly runId: string }
-	| { readonly outcome: PersonalRunAdmissionOutcomes.Denied; readonly reason: string };
+	| { readonly outcome: PersonalRunAdmissionOutcomes.Denied; readonly reason: PersonalRunAdmissionDenialReason };
 
 /** Server-owned port for starting a caller's personal run from an existing conversation. */
 export interface PersonalRunAdmissionPort
@@ -115,4 +119,6 @@ export interface PersonalRunAdmissionDependencies
 	readonly assemble: PersonalRunSnapshotAssembler;
 	/** One app-owned gate shared with managed admissions in this server process. */
 	readonly capacityGate: RunAdmissionCapacityGate;
+	/** Structured redacting logger for a failed post-transaction recovery read. */
+	readonly logger: Logger;
 }

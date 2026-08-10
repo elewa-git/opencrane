@@ -73,8 +73,9 @@ export function __CreatePersonalRunAdmissionPortWithGate(dependencies: PersonalR
 					{
 						if (await dependencies.repository.hasActiveConversationRun(scopedCommand)) return { outcome: SessionAssemblyOutcomes.Denied, reason: RunAdmissionDenialReasons.ActiveRun };
 					}
-					catch
+					catch (err)
 					{
+						dependencies.logger.warn({ err, siloId: scopedCommand.siloId, agentServiceId, failureKind: "active_run_recovery_failed" }, "Personal run admission recovery failed");
 						return assembled;
 					}
 					return assembled;

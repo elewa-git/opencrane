@@ -20,6 +20,7 @@ function _Dependencies(overrides: Partial<PersonalRunAdmissionDependencies> = {}
 		repository: { resolve: vi.fn(async function _resolve() { return { outcome: PersonalRunIdempotencyOutcomes.NotFound } as const; }), resolveConversation: vi.fn(async function _resolveConversation() { return { agentServiceId: "service-1" }; }), hasActiveConversationRun: vi.fn(async function _hasActiveConversationRun() { return false; }) },
 		assemble: vi.fn(async function _assemble() { return { outcome: "accepted", admissionOutcome: "accepted", snapshot: { runId: "run-1" } } as never; }),
 		capacityGate: new RunAdmissionConcurrencyGate({ maxConcurrentAdmissions: 2, maxQueuedAdmissions: 0 }),
+		logger: { warn: vi.fn() } as never,
 		...overrides,
 	};
 }
@@ -147,10 +148,13 @@ describe("personal run admission", function _describePersonalRunAdmission()
 
 	it("keeps the original persistence denial when active-run recovery is unavailable", async function _keepsRecoveryFailureUnavailable()
 	{
-		const hasActiveConversationRun = vi.fn(async function _hasActiveConversationRun(): Promise<boolean> { throw new Error("recovery unavailable"); });
+		const recoveryError = new Error("recovery unavailable");
+		const warn = vi.fn();
+		const hasActiveConversationRun = vi.fn(async function _hasActiveConversationRun(): Promise<boolean> { throw recoveryError; });
 		const assemble = vi.fn(async function _assemble() { return { outcome: "denied", reason: RunAdmissionDenialReasons.PersistenceUnavailable } as const; });
-		const port = __CreatePersonalRunAdmissionPortWithGate(_Dependencies({ assemble: assemble as never, repository: { ..._Dependencies().repository, hasActiveConversationRun } }));
+		const port = __CreatePersonalRunAdmissionPortWithGate(_Dependencies({ assemble: assemble as never, repository: { ..._Dependencies().repository, hasActiveConversationRun }, logger: { warn } as never }));
 
 		await expect(port.admitPersonalRun(_Command())).resolves.toEqual({ outcome: PersonalRunAdmissionOutcomes.Denied, reason: RunAdmissionDenialReasons.PersistenceUnavailable });
+		expect(warn).toHaveBeenCalledWith({ err: recoveryError, siloId: "silo-1", agentServiceId: "service-1", failureKind: "active_run_recovery_failed" }, "Personal run admission recovery failed");
 	});
 });
