@@ -1,11 +1,9 @@
 import { AG_UI_A2UI_ENVELOPE_VERSION, AgUiA2uiSurfaceStates, type AgUiA2uiOperation } from "@opencrane/contracts";
 
 /**
- * Exactly eleven component names admitted by the OpenCrane presentation catalogue.
+ * Exact component names admitted by both the pinned upstream schema and OpenCrane's catalogue.
  *
- * The three choice contracts deliberately share upstream MultipleChoice rendering while retaining
- * distinct server-visible names. Adding a value is a display-contract change, not a local styling
- * decision.
+ * Adding a value is a protocol-boundary change, not a local styling decision.
  */
 export enum A2uiComponentNames
 {
@@ -15,12 +13,8 @@ export enum A2uiComponentNames
 	Button = "Button",
 	/** A bounded text entry control. */
 	TextField = "TextField",
-	/** A one-value choice rendered with the upstream MultipleChoice shape. */
-	SingleChoice = "SingleChoice",
 	/** A many-value choice rendered with the upstream MultipleChoice shape. */
 	MultipleChoice = "MultipleChoice",
-	/** A compact selector rendered with the upstream MultipleChoice shape. */
-	Select = "Select",
 	/** A bounded numeric input. */
 	Slider = "Slider",
 	/** A date, time, or combined date-time input. */

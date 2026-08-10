@@ -6,7 +6,6 @@ import { AgUiA2uiSurfaceStates } from "@opencrane/contracts";
 
 import { _ToA2uiDisplayedActionIntent } from "./a2ui-action-intent.js";
 import { _AdmitA2uiSurfacePresentation } from "./a2ui-admission.js";
-import { _MapA2uiOperationsToUpstream } from "./a2ui-operation-mapper.js";
 import type { A2uiDisplayedActionIntent, A2uiSurfacePresentation } from "./a2ui.types.js";
 
 /** Human-readable labels for every finite presentation lifecycle. */
@@ -176,7 +175,7 @@ export class A2uiCanvasComponent
 		// rejection becomes the same non-disclosing unsupported state instead of an Angular error.
 		try
 		{
-			this._processor.processMessages(_MapA2uiOperationsToUpstream(presentation.operations));
+			this._processor.processMessages([...presentation.operations]);
 			this._adoptedPresentation.set(presentation);
 			this._rejected.set(false);
 		}

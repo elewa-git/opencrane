@@ -71,7 +71,7 @@ const meta: Meta<A2uiCanvasComponent> =
 		{
 			description:
 			{
-				component: "Display-only A2UI sink with an exact eleven-component catalogue. Actions leave this component as full-coordinate intent and remain subject to authenticated server authorization."
+				component: "Display-only A2UI sink with the exact pinned nine-component catalogue. Actions leave this component as full-coordinate intent and remain subject to authenticated server authorization."
 			}
 		}
 	},

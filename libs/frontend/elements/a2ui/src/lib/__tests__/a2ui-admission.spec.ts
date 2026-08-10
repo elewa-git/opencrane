@@ -7,7 +7,6 @@ import { AG_UI_A2UI_ENVELOPE_VERSION, AgUiA2uiSurfaceStates, type AgUiA2uiOperat
 import { _ToA2uiDisplayedActionIntent } from "../a2ui-action-intent.js";
 import { _AdmitA2uiSurfacePresentation } from "../a2ui-admission.js";
 import { _OpenCraneA2uiCatalog } from "../a2ui.catalog.js";
-import { _MapA2uiOperationsToUpstream } from "../a2ui-operation-mapper.js";
 import { A2uiComponentNames, type A2uiSurfacePresentation } from "../a2ui.types.js";
 
 /** Stable text operation used by admission and action-intent tests. */
@@ -84,37 +83,15 @@ describe("A2UI display admission", function _A2uiDisplayAdmission()
 		expect(_AdmitA2uiSurfacePresentation(_presentation({ operations: [operation] }))).toBe(false);
 	});
 
-	it("maps SingleChoice and Select onto upstream MultipleChoice wrappers in order", function _MapsChoiceContracts()
-	{
-		const operations =
-		[
-			{
-				surfaceUpdate:
-				{
-					surfaceId: "surface-pricing",
-					components:
-					[
-						{ id: "single", component: { SingleChoice: { selections: { literalArray: [] }, options: [] } } },
-						{ id: "select", component: { Select: { selections: { literalArray: [] }, options: [] } } }
-					]
-				}
-			}
-		] as unknown as AgUiA2uiOperation[];
-		const mapped = _MapA2uiOperationsToUpstream(operations);
-		const components = mapped[0].surfaceUpdate?.components ?? [];
-		expect(Object.keys(components[0].component)).toEqual([A2uiComponentNames.MultipleChoice]);
-		expect(Object.keys(components[1].component)).toEqual([A2uiComponentNames.MultipleChoice]);
-		expect(components.map(function _Id(component): string { return component.id; })).toEqual(["single", "select"]);
-	});
 });
 
 describe("A2UI catalogue", function _A2uiCatalogue()
 {
-	it("contains exactly the eleven reviewed visual contracts", function _ContainsExactCatalogue()
+	it("contains exactly the nine pinned upstream visual contracts", function _ContainsExactCatalogue()
 	{
 		const names = Object.keys(_OpenCraneA2uiCatalog()).sort();
 		expect(names).toEqual(Object.values(A2uiComponentNames).sort());
-		expect(names).toHaveLength(11);
+		expect(names).toHaveLength(9);
 	});
 });
 
