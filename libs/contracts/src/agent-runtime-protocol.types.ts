@@ -110,12 +110,17 @@ export interface StartAttemptCommand
 }
 
 /** Resumes an attempt only with control-plane-authorized deferred results and steering. */
+export type DeferredToolResumeResult =
+	| { readonly approvalRequestId: string; readonly decision: "approved"; readonly toolInvocationId: string; readonly arguments: JsonValue; readonly argumentsDigest: string }
+	| { readonly approvalRequestId: string; readonly decision: "denied" | "expired"; readonly toolInvocationId: string; readonly failureCode: "approval_denied" | "approval_expired" };
+
+/** Resumes an attempt only with control-plane-authorized deferred results and steering. */
 export interface ResumeAttemptCommand
 {
 	/** Monotonic input generation that must still be current at resume. */
 	readonly inputGeneration: number;
-	/** Opaque canonical result payloads for previously deferred actions. */
-	readonly deferredToolResults: JsonValue;
+	/** Exact ordered decisions for the approval batch whose markers were atomically consumed. */
+	readonly deferredToolResults: readonly DeferredToolResumeResult[];
 	/** Owner-authored steering consumed at this server-fenced command boundary. */
 	readonly steeringRequests: JsonValue;
 }

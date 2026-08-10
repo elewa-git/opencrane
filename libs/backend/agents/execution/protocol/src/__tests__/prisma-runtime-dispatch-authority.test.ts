@@ -367,6 +367,15 @@ describe("PrismaRuntimeDispatchAuthority", function _describeDispatchAuthority()
 		expect(redelivered).toEqual(resume);
 	});
 
+	it("rejects redelivery when a persisted resume payload is not an exact result array", async function _rejectsMalformedResumeRedelivery()
+	{
+		const context = _authority({ runState: "Running" });
+		await context.authority.__NextCommand(_identity, _open, 0);
+		context.commands.push({ runId: "run-1", attempt: 1, sequence: 2, commandId: "malformed-resume", kind: "ResumeAttempt", fence: 1, payload: { inputGeneration: 0, deferredToolResults: { approvalRequestId: "approval-1" }, steeringRequests: [] }, issuedAt: new Date("2026-07-20T00:01:00.000Z"), expiresAt: new Date("2026-07-20T00:02:00.000Z") });
+
+		await expect(context.authority.__NextCommand(_identity, _open, 1)).resolves.toBeNull();
+	});
+
 	it("dispatches an admitted external-action candidate through the injected runner", async function _runsExternalAction()
 	{
 		let ran = 0;

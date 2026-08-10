@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 
 import { AgentRunState as PrismaAgentRunState, AgentRunTerminalReason, ApprovalRequestState, Prisma, RuntimeCommandKind, WorkloadAssignmentState, type PrismaClient } from "@prisma/client";
 
-import { AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, AGENT_RUNTIME_PROTOCOL_V1, MANAGED_AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, ___IsAgentRuntimeServiceAccountName, ___IsManagedAgentRuntimeServiceAccountName, type CancelAttemptCommand, type CompiledRunInput, type ResumeAttemptCommand, type RunInputSnapshot, type RuntimeAssignment, type RuntimeAssignmentIdentity, type RuntimeCandidate, type RuntimeCommand, type RuntimeCommandEnvelope, type RuntimeExternalActionCandidate, type RuntimeStreamOpen } from "@opencrane/contracts";
+import { AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, AGENT_RUNTIME_PROTOCOL_V1, MANAGED_AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, ___IsAgentRuntimeServiceAccountName, ___IsManagedAgentRuntimeServiceAccountName, type CancelAttemptCommand, type CompiledRunInput, type DeferredToolResumeResult, type ResumeAttemptCommand, type RunInputSnapshot, type RuntimeAssignment, type RuntimeAssignmentIdentity, type RuntimeCandidate, type RuntimeCommand, type RuntimeCommandEnvelope, type RuntimeExternalActionCandidate, type RuntimeStreamOpen } from "@opencrane/contracts";
 import type { JsonValue } from "@opencrane/util";
 import { ___CreateLogger, ___DoWithTrace, type Logger } from "@opencrane/backend/observability";
 
@@ -551,7 +551,36 @@ function _resumeFromPayload(payload: Prisma.JsonValue | null): ResumeAttemptComm
 	if (payload === null || typeof payload !== "object" || Array.isArray(payload)) return null;
 	const record = payload as { readonly [key: string]: JsonValue };
 	if (typeof record["inputGeneration"] !== "number" || !("deferredToolResults" in record) || !("steeringRequests" in record)) return null;
-	return { inputGeneration: record["inputGeneration"], deferredToolResults: record["deferredToolResults"], steeringRequests: record["steeringRequests"] };
+	const deferredToolResults = _deferredToolResults(record["deferredToolResults"]);
+	if (deferredToolResults === null) return null;
+	return { inputGeneration: record["inputGeneration"], deferredToolResults, steeringRequests: record["steeringRequests"] };
+}
+
+/** Parse one persisted array into the sole exact deferred-result wire contract. */
+function _deferredToolResults(value: JsonValue): readonly DeferredToolResumeResult[] | null
+{
+	if (!Array.isArray(value)) return null;
+	const results: DeferredToolResumeResult[] = [];
+	for (const item of value)
+	{
+		if (item === null || typeof item !== "object" || Array.isArray(item)) return null;
+		const record = item as { readonly [key: string]: JsonValue };
+		const approvalRequestId = record["approvalRequestId"];
+		const decision = record["decision"];
+		const toolInvocationId = record["toolInvocationId"];
+		if (typeof approvalRequestId !== "string" || typeof decision !== "string" || typeof toolInvocationId !== "string") return null;
+		if (decision === "approved")
+		{
+			if (Object.keys(record).length !== 5 || !("arguments" in record) || typeof record["argumentsDigest"] !== "string") return null;
+			results.push({ approvalRequestId, decision, toolInvocationId, arguments: record["arguments"], argumentsDigest: record["argumentsDigest"] });
+			continue;
+		}
+		if (Object.keys(record).length !== 4 || typeof record["failureCode"] !== "string") return null;
+		if (decision === "denied" && record["failureCode"] === "approval_denied") results.push({ approvalRequestId, decision, toolInvocationId, failureCode: record["failureCode"] });
+		else if (decision === "expired" && record["failureCode"] === "approval_expired") results.push({ approvalRequestId, decision, toolInvocationId, failureCode: record["failureCode"] });
+		else return null;
+	}
+	return results;
 }
 
 /** Map a durable run terminal reason to the server-defined cancellation reason the runtime receives. */
@@ -568,7 +597,7 @@ async function _loadResume(transaction: Prisma.TransactionClient, context: Runti
 	const approvals = await transaction.approvalRequest.findMany({ where: { runId: context.runId, attempt: context.attempt, state: ApprovalRequestState.Approved, toolInvocationRowId: { not: null }, resumeTokenHash: { not: null } }, orderBy: { id: "asc" }, include: { toolInvocation: { select: { toolInvocationId: true } } } });
 	const steering = await transaction.runtimeSteeringRequest.findMany({ where: { runId: context.runId, attempt: context.attempt, state: "Pending" }, orderBy: { submittedAt: "asc" } });
 	if (approvals.length === 0 && steering.length === 0) return null;
-	const deferredToolResults = approvals.map(function _result(row): JsonValue
+	const deferredToolResults = approvals.map(function _result(row): DeferredToolResumeResult
 	{
 		if (row.toolInvocation === null || row.finalArguments === null || typeof row.finalArgumentsDigest !== "string") throw new Error("approved deferred tool request has incomplete resume authority");
 		return { approvalRequestId: row.id, decision: "approved", toolInvocationId: row.toolInvocation.toolInvocationId, arguments: row.finalArguments as JsonValue, argumentsDigest: row.finalArgumentsDigest };
