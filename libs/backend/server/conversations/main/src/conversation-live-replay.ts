@@ -31,9 +31,7 @@ async function _streamConversationLiveReplay(dependencies: ConversationLiveRepla
 	while (!command.signal.aborted && dependencies.clock.now() - startedAt < dependencies.limits.maximumDurationMilliseconds)
 	{
 		const readCommand = { conversationId: command.conversationId, siloId: command.siloId, subjectId: command.subjectId, cursor, limit: dependencies.limits.pageSize };
-		const result = dependencies.repository.readAuthorized === undefined
-			? { status: ConversationReplayReadStatuses.Authorized, rows: await dependencies.repository.read(readCommand) }
-			: await dependencies.repository.readAuthorized(readCommand);
+		const result = await dependencies.repository.readAuthorized(readCommand);
 		if (result.status === ConversationReplayReadStatuses.RevokedOrMissing)
 		{
 			if (opened) sink.write(_RevokedRecord());

@@ -1,8 +1,6 @@
-import type { Types } from "@a2ui/angular/v0_8";
+import { AG_UI_A2UI_ENVELOPE_VERSION, AgUiA2uiSurfaceStates, type AgUiA2uiOperation } from "@opencrane/contracts";
 
-import { AgUiA2uiSurfaceStates } from "@opencrane/contracts";
-
-import { A2uiComponentNames, A2uiEnvelopeVersions, type A2uiSurfacePresentation } from "./a2ui.types.js";
+import { A2uiComponentNames, type A2uiSurfacePresentation } from "./a2ui.types.js";
 
 /** Maximum number of ordered protocol operations admitted in one display envelope. */
 const _MAX_OPERATIONS = 256;
@@ -32,7 +30,7 @@ export function _AdmitA2uiSurfacePresentation(presentation: A2uiSurfacePresentat
 {
 	// 1. Check the fixed envelope vocabulary and coordinates so a malformed projection cannot
 	// select another surface or an unowned lifecycle branch.
-	if (presentation.version !== A2uiEnvelopeVersions.OpenCraneV1 || !_ADMITTED_SURFACE_STATES.has(presentation.state))
+	if (presentation.version !== AG_UI_A2UI_ENVELOPE_VERSION || !_ADMITTED_SURFACE_STATES.has(presentation.state))
 	{
 		return false;
 	}
@@ -65,26 +63,22 @@ export function _AdmitA2uiSurfacePresentation(presentation: A2uiSurfacePresentat
 }
 
 /** Whether a protocol operation is singular, surface-bound, bounded, and catalogue-safe. */
-function _isAdmittedOperation(operation: Types.ServerToClientMessage, surfaceId: string): boolean
+function _isAdmittedOperation(operation: AgUiA2uiOperation, surfaceId: string): boolean
 {
 	const keys = Object.keys(operation);
 	if (keys.length !== 1)
 	{
 		return false;
 	}
-	if (operation.beginRendering)
+	if ("beginRendering" in operation)
 	{
 		return operation.beginRendering.surfaceId === surfaceId;
 	}
-	if (operation.dataModelUpdate)
+	if ("dataModelUpdate" in operation)
 	{
 		return operation.dataModelUpdate.surfaceId === surfaceId;
 	}
-	if (operation.deleteSurface)
-	{
-		return operation.deleteSurface.surfaceId === surfaceId;
-	}
-	if (!operation.surfaceUpdate || operation.surfaceUpdate.surfaceId !== surfaceId)
+	if (!("surfaceUpdate" in operation) || operation.surfaceUpdate.surfaceId !== surfaceId)
 	{
 		return false;
 	}

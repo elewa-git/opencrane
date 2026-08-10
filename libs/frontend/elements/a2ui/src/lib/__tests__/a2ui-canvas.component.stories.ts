@@ -1,15 +1,14 @@
 import { applicationConfig } from "@storybook/angular";
 import type { Meta, StoryObj } from "@storybook/angular";
-import type { Types } from "@a2ui/angular/v0_8";
 
-import { AgUiA2uiSurfaceStates } from "@opencrane/contracts";
+import { AG_UI_A2UI_ENVELOPE_VERSION, AgUiA2uiSurfaceStates, type AgUiA2uiOperation } from "@opencrane/contracts";
 
 import { A2uiCanvasComponent } from "../a2ui-canvas.component.js";
 import { provideOpenCraneA2ui } from "../a2ui.providers.js";
-import { A2uiEnvelopeVersions, type A2uiSurfacePresentation } from "../a2ui.types.js";
+import { type A2uiSurfacePresentation } from "../a2ui.types.js";
 
 /** Reviewed interactive form used by every canonical lifecycle visual contract. */
-const _SURFACE_OPERATIONS: readonly Types.ServerToClientMessage[] =
+const _SURFACE_OPERATIONS: readonly AgUiA2uiOperation[] =
 [
 	{
 		surfaceUpdate:
@@ -38,7 +37,7 @@ function _sanitizeStoryMarkdown(markdown: string): string
 function _storyPresentation(state: AgUiA2uiSurfaceStates, reason?: string): A2uiSurfacePresentation
 {
 	return {
-		version: A2uiEnvelopeVersions.OpenCraneV1,
+		version: AG_UI_A2UI_ENVELOPE_VERSION,
 		conversationId: "conversation-story",
 		runId: "run-story",
 		messageId: "message-story",

@@ -34,9 +34,9 @@ echoing payload data. Stable component ids preserve focus during progressive upd
   `A2uiDisplayedActionIntent` without exposing upstream completion subjects or raw events.
 - `provideOpenCraneA2ui(sanitizer)` — registers the constrained catalogue, theme, and browser-owned
   safe markdown-to-HTML port.
-- `A2uiEnvelopeVersions` and the presentation/action types — the finite display contract shared
-  with the host. Lifecycle state uses the canonical `AgUiA2uiSurfaceStates` contract exported by
-  `@opencrane/contracts`.
+- `A2uiSurfacePresentation` and `A2uiDisplayedActionIntent` — the finite display contract shared
+  with the host. Envelope version, operations, and lifecycle state use the canonical
+  `AG_UI_A2UI_ENVELOPE_VERSION`, `AgUiA2uiOperation`, and `AgUiA2uiSurfaceStates` contracts.
 
 ## Boundary
 

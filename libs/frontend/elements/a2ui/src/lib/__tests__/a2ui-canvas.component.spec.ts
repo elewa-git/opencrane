@@ -6,14 +6,13 @@ import { join } from "node:path";
 import { PLATFORM_ID, Component, signal, ɵresolveComponentResources as resolveComponentResources } from "@angular/core";
 import { TestBed, type ComponentFixture } from "@angular/core/testing";
 import { BrowserDynamicTestingModule, platformBrowserDynamicTesting } from "@angular/platform-browser-dynamic/testing";
-import type { Types } from "@a2ui/angular/v0_8";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 
-import { AgUiA2uiSurfaceStates } from "@opencrane/contracts";
+import { AG_UI_A2UI_ENVELOPE_VERSION, AgUiA2uiSurfaceStates, type AgUiA2uiOperation } from "@opencrane/contracts";
 
 import { A2uiCanvasComponent } from "../a2ui-canvas.component.js";
 import { provideOpenCraneA2ui } from "../a2ui.providers.js";
-import { A2uiEnvelopeVersions, type A2uiDisplayedActionIntent, type A2uiSurfacePresentation } from "../a2ui.types.js";
+import { type A2uiDisplayedActionIntent, type A2uiSurfacePresentation } from "../a2ui.types.js";
 
 /** Real component template compiled by Angular TestBed for DOM and accessibility contracts. */
 const _CANVAS_TEMPLATE = readFileSync(join(process.cwd(), "src/lib/a2ui-canvas.component.html"), "utf8");
@@ -64,9 +63,9 @@ class _A2uiCanvasTestHostComponent
 }
 
 /** Produce the reviewed interactive surface while retaining stable component ids across updates. */
-function _surfaceOperations(copy: string, includeBeginRendering = true): readonly Types.ServerToClientMessage[]
+function _surfaceOperations(copy: string, includeBeginRendering = true): readonly AgUiA2uiOperation[]
 {
-	const operations: Types.ServerToClientMessage[] =
+	const operations: AgUiA2uiOperation[] =
 	[
 		{
 			surfaceUpdate:
@@ -94,7 +93,7 @@ function _surfaceOperations(copy: string, includeBeginRendering = true): readonl
 function _presentation(overrides: Partial<A2uiSurfacePresentation> = {}): A2uiSurfacePresentation
 {
 	return {
-		version: A2uiEnvelopeVersions.OpenCraneV1,
+		version: AG_UI_A2UI_ENVELOPE_VERSION,
 		conversationId: "conversation-1",
 		runId: "run-1",
 		messageId: "message-1",
@@ -226,7 +225,7 @@ describe("A2UI canvas DOM contract", function _A2uiCanvasDomContract()
 		expect(fixture.componentInstance.intents).toEqual(
 		[
 			{
-				version: A2uiEnvelopeVersions.OpenCraneV1,
+				version: AG_UI_A2UI_ENVELOPE_VERSION,
 				conversationId: "conversation-1",
 				runId: "run-1",
 				messageId: "message-1",
@@ -275,7 +274,7 @@ describe("A2UI canvas DOM contract", function _A2uiCanvasDomContract()
 				surfaceId: "surface-pricing",
 				components: [{ id: "unsafe", component: { RawHtml: { html: "TOP SECRET PROVIDER PAYLOAD" } } }]
 			}
-		} as Types.ServerToClientMessage;
+		} as unknown as AgUiA2uiOperation;
 		const fixture = await _createFixture(_presentation({ state: AgUiA2uiSurfaceStates.Unsupported, operations: [secretOperation], reason: "TOP SECRET REASON" }));
 		let text = (fixture.nativeElement as HTMLElement).textContent ?? "";
 		expect(text).toContain("This interactive surface is not supported.");

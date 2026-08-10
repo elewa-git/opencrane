@@ -7,8 +7,8 @@ and group chats. The conversation and its ordered timeline are server-authoritat
 the browser is a client, not the conversation ledger.
 
 Current status: `API ready` for participant-scoped list, create, open, message, archive, close, and
-bounded event replay. The ordinary workspace user interface and live tail remain missing; child
-agent sessions, attachments, approvals, and interactive agent-rendered UI are later slices.
+bounded snapshot-to-live event streaming. The ordinary workspace user interface and its reconnect
+restoration remain unfinished; child agent sessions and attachments are later slices.
 
 ## Onboarding-chat boundary
 
@@ -96,7 +96,10 @@ Acceptance criteria:
 - Reconnect does not duplicate or reorder events.
 - The interface distinguishes connected, reconnecting, caught up, and terminal states.
 
-Status: `API blocked`; the existing SSE endpoint is a finite bounded replay, not a live tail.
+Status: `API ready; UI restoration unfinished`. Each server-sent events (SSE) response drains a
+finite durable snapshot, recovery-polls a bounded live tail, emits heartbeats, and ends after five
+minutes so the client can reconnect from its exact last subframe cursor. The ordinary workspace UI
+does not yet restore and present its connected, reconnecting, caught-up, and terminal states.
 
 ## CON-06 — Act on agent-rendered UI safely
 

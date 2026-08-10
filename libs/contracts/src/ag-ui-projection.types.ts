@@ -4,9 +4,6 @@ import type { BeginRenderingMessage, DataModelUpdate, SurfaceUpdateMessage } fro
 import type { RunEventType } from "@opencrane/models/agents";
 import type { ConversationId } from "@opencrane/models/conversations";
 
-/** Exact AG-UI package release supported by this projection. */
-export const AG_UI_PROTOCOL_VERSION = "0.0.57";
-
 /** Version of OpenCrane's intentionally small AG-UI event projection. */
 export const AG_UI_PROJECTION_VERSION = "opencrane.ag-ui.v1";
 
@@ -120,26 +117,3 @@ export interface AgUiSseRecord
 	readonly event: "ag-ui";
 	readonly data: AgUiProjectionEvent;
 }
-
-/** Backward-compatible names now alias the exact upstream AG-UI types. */
-export type AgUiRunStartedEvent = RunStartedEvent;
-/** Exact upstream run-finished event. */
-export type AgUiRunFinishedEvent = RunFinishedEvent;
-/** Exact upstream run-error event. */
-export type AgUiRunErrorEvent = RunErrorEvent;
-/** Exact upstream text-start event. */
-export type AgUiTextMessageStartEvent = TextMessageStartEvent;
-/** Exact upstream text-content event. */
-export type AgUiTextMessageContentEvent = TextMessageContentEvent;
-/** Exact upstream text-end event. */
-export type AgUiTextMessageEndEvent = TextMessageEndEvent;
-/** Exact upstream tool-call-start event. */
-export type AgUiToolCallStartEvent = ToolCallStartEvent;
-/** Exact upstream tool-call-arguments event. */
-export type AgUiToolCallArgsEvent = ToolCallArgsEvent;
-/** Exact upstream tool-call-end event. */
-export type AgUiToolCallEndEvent = ToolCallEndEvent;
-/** Exact upstream tool-result event. */
-export type AgUiToolCallResultEvent = ToolCallResultEvent;
-/** Exact upstream custom event. */
-export type AgUiCustomEvent = CustomEvent;

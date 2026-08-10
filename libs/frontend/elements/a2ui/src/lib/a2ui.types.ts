@@ -1,18 +1,4 @@
-import type { Types } from "@a2ui/angular/v0_8";
-
-import { AgUiA2uiSurfaceStates } from "@opencrane/contracts";
-
-/**
- * Stable OpenCrane envelope versions accepted by the browser A2UI sink.
- *
- * The string is carried across the display boundary. It describes presentation data only and
- * grants no permission to execute an action.
- */
-export enum A2uiEnvelopeVersions
-{
-	/** First display-safe OpenCrane A2UI envelope. */
-	OpenCraneV1 = "opencrane.a2ui.v1"
-}
+import { AG_UI_A2UI_ENVELOPE_VERSION, AgUiA2uiSurfaceStates, type AgUiA2uiOperation } from "@opencrane/contracts";
 
 /**
  * Exactly eleven component names admitted by the OpenCrane presentation catalogue.
@@ -60,7 +46,7 @@ export type A2uiMarkdownSanitizer = (markdown: string) => string | Promise<strin
 export interface A2uiSurfacePresentation
 {
 	/** Version of the OpenCrane display envelope. */
-	readonly version: A2uiEnvelopeVersions.OpenCraneV1;
+	readonly version: typeof AG_UI_A2UI_ENVELOPE_VERSION;
 	/** Conversation coordinate used by the server to reconstruct command authority. */
 	readonly conversationId: string;
 	/** Run coordinate that fenced the projected surface. */
@@ -74,7 +60,7 @@ export interface A2uiSurfacePresentation
 	/** Current display lifecycle supplied by the authoritative projection. */
 	readonly state: AgUiA2uiSurfaceStates;
 	/** Ordered, already-decoded upstream A2UI operations for this sequence. */
-	readonly operations: readonly Types.ServerToClientMessage[];
+	readonly operations: readonly AgUiA2uiOperation[];
 	/** Optional display-safe explanation for a non-ready lifecycle. */
 	readonly reason?: string;
 }
@@ -83,7 +69,7 @@ export interface A2uiSurfacePresentation
 export interface A2uiDisplayedActionIntent
 {
 	/** Version of the OpenCrane display envelope that produced the intent. */
-	readonly version: A2uiEnvelopeVersions.OpenCraneV1;
+	readonly version: typeof AG_UI_A2UI_ENVELOPE_VERSION;
 	/** Conversation coordinate copied from the admitted presentation. */
 	readonly conversationId: string;
 	/** Run coordinate copied from the admitted presentation. */

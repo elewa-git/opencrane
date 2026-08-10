@@ -65,7 +65,7 @@ runtime from silently interpreting a frozen snapshot with different assembly rul
   to map authorized request failures back to frontend fields without trusting arbitrary responses.
 - `___ModelRoutingDefaultWriteSchema` — the model-adjacent Zod schema shared by the public routing
   defaults boundary; it enforces known fields while deliberately preserving auto-config extensions.
-- `AG_UI_PROTOCOL_VERSION`, `AG_UI_PROJECTION_VERSION`, `AgUiProjectionSourceEvent`,
+- `AG_UI_PROJECTION_VERSION`, `AG_UI_A2UI_ENVELOPE_VERSION`, `AgUiProjectionSourceEvent`,
   `AgUiSseRecord`, `__ProjectAgUiEvents`, and `__EncodeAgUiSseRecord` — the exact-pinned upstream
   AG-UI vocabulary and display-safe projection used by server-owned live replay. Deterministic
   subframes support ordinary messages; open interrupt overlays deliberately omit SSE ids.

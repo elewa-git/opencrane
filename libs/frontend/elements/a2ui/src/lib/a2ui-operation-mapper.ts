@@ -1,5 +1,7 @@
 import type { Types } from "@a2ui/angular/v0_8";
 
+import type { AgUiA2uiOperation } from "@opencrane/contracts";
+
 import { A2uiComponentNames } from "./a2ui.types.js";
 
 /**
@@ -8,12 +10,12 @@ import { A2uiComponentNames } from "./a2ui.types.js";
  * Component order and ids are retained exactly. Rewriting the wrapper name lets the upstream v0.8
  * schema and model processor validate all three contracts through its owned MultipleChoice path.
  */
-export function _MapA2uiOperationsToUpstream(operations: readonly Types.ServerToClientMessage[]): Types.ServerToClientMessage[]
+export function _MapA2uiOperationsToUpstream(operations: readonly AgUiA2uiOperation[]): Types.ServerToClientMessage[]
 {
 	const mapped: Types.ServerToClientMessage[] = [];
 	for (const operation of operations)
 	{
-		if (!operation.surfaceUpdate)
+		if (!("surfaceUpdate" in operation))
 		{
 			mapped.push(operation);
 			continue;

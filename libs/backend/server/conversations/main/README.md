@@ -83,11 +83,12 @@ does not assemble inputs, dispatch workloads, or execute agents. The channel rep
 requires a consumed one-use context and the exact controller-selected route identifier.
 
 Missing, foreign, closed, access-ended, wrong-mode, duplicate-body, and active-run writes fail
-closed through stable denials. Replay likewise returns no rows when participant, silo, cursor, or
-visibility bounds do not match. Every self-service read and write also rechecks active organisation
-membership inside its own database snapshot, so revocation closes list, open, retry, archive, close,
-message, and replay authority immediately. Admission overload is returned as `capacity_limited`
-rather than being misreported as a persistence outage.
+closed through stable denials. The replay persistence port always returns an explicit authorised or
+revoked-or-missing outcome from the same snapshot as its rows; it has no rows-only fallback that
+could turn authority loss into an empty successful page. Every self-service read and write also
+rechecks active organisation membership inside its own database snapshot, so revocation closes
+list, open, retry, archive, close, message, and replay authority immediately. Admission overload is
+returned as `capacity_limited` rather than being misreported as a persistence outage.
 
 ## Dependency direction
 

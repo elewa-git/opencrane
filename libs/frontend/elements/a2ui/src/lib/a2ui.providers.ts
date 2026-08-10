@@ -11,7 +11,7 @@ import type { A2uiMarkdownSanitizer } from "./a2ui.types.js";
  * The browser composition root supplies an implementation. This elements package deliberately
  * does not depend on a conversation store, transcript renderer, or other feature/state package.
  */
-export const A2UI_MARKDOWN_SANITIZER = new InjectionToken<A2uiMarkdownSanitizer>("A2UI_MARKDOWN_SANITIZER");
+const _A2UI_MARKDOWN_SANITIZER = new InjectionToken<A2uiMarkdownSanitizer>("A2UI_MARKDOWN_SANITIZER");
 
 /** Create the renderer shape required by the upstream A2UI markdown provider. */
 function _createMarkdownRenderer(sanitizer: A2uiMarkdownSanitizer): Pick<MarkdownRenderer, "render">
@@ -33,8 +33,8 @@ function _createMarkdownRenderer(sanitizer: A2uiMarkdownSanitizer): Pick<Markdow
 export function provideOpenCraneA2ui(sanitizer: A2uiMarkdownSanitizer): (Provider | EnvironmentProviders)[]
 {
 	return [
-		{ provide: A2UI_MARKDOWN_SANITIZER, useValue: sanitizer },
+		{ provide: _A2UI_MARKDOWN_SANITIZER, useValue: sanitizer },
 		provideA2UI({ catalog: _OpenCraneA2uiCatalog(), theme: _OpenCraneA2uiTheme() }),
-		{ provide: MarkdownRenderer, useFactory: _createMarkdownRenderer, deps: [A2UI_MARKDOWN_SANITIZER] }
+		{ provide: MarkdownRenderer, useFactory: _createMarkdownRenderer, deps: [_A2UI_MARKDOWN_SANITIZER] }
 	];
 }

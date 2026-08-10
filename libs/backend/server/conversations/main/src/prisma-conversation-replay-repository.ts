@@ -16,12 +16,6 @@ export class PrismaConversationReplayRepository implements ConversationReplayRep
 		this.prisma = prisma;
 	}
 
-	/** Read a bounded snapshot through explicit participant, silo, conversation, and position fences. */
-	async read(command: ReadConversationReplayCommand): Promise<readonly ConversationReplayEventRow[]>
-	{
-		return (await this.readAuthorized(command)).rows;
-	}
-
 	/** Read a bounded page and retain the same-snapshot authority result for live streams. */
 	async readAuthorized(command: ReadConversationReplayCommand): Promise<ConversationReplayReadResult>
 	{

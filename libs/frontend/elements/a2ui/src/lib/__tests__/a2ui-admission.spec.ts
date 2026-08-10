@@ -2,16 +2,16 @@ import { Subject } from "rxjs";
 import { describe, expect, it } from "vitest";
 import type { A2UIClientEvent, Types } from "@a2ui/angular/v0_8";
 
-import { AgUiA2uiSurfaceStates } from "@opencrane/contracts";
+import { AG_UI_A2UI_ENVELOPE_VERSION, AgUiA2uiSurfaceStates, type AgUiA2uiOperation } from "@opencrane/contracts";
 
 import { _ToA2uiDisplayedActionIntent } from "../a2ui-action-intent.js";
 import { _AdmitA2uiSurfacePresentation } from "../a2ui-admission.js";
 import { _OpenCraneA2uiCatalog } from "../a2ui.catalog.js";
 import { _MapA2uiOperationsToUpstream } from "../a2ui-operation-mapper.js";
-import { A2uiComponentNames, A2uiEnvelopeVersions, type A2uiSurfacePresentation } from "../a2ui.types.js";
+import { A2uiComponentNames, type A2uiSurfacePresentation } from "../a2ui.types.js";
 
 /** Stable text operation used by admission and action-intent tests. */
-const _TEXT_OPERATION: Types.ServerToClientMessage =
+const _TEXT_OPERATION: AgUiA2uiOperation =
 {
 	surfaceUpdate:
 	{
@@ -27,7 +27,7 @@ const _TEXT_OPERATION: Types.ServerToClientMessage =
 function _presentation(overrides: Partial<A2uiSurfacePresentation> = {}): A2uiSurfacePresentation
 {
 	return {
-		version: A2uiEnvelopeVersions.OpenCraneV1,
+		version: AG_UI_A2UI_ENVELOPE_VERSION,
 		conversationId: "conversation-1",
 		runId: "run-1",
 		messageId: "message-1",
@@ -67,7 +67,7 @@ describe("A2UI display admission", function _A2uiDisplayAdmission()
 
 	it("rejects a foreign surface operation", function _RejectsForeignSurface()
 	{
-		const operation: Types.ServerToClientMessage = { beginRendering: { surfaceId: "surface-other", root: "heading" } };
+		const operation: AgUiA2uiOperation = { beginRendering: { surfaceId: "surface-other", root: "heading" } };
 		expect(_AdmitA2uiSurfacePresentation(_presentation({ operations: [operation] }))).toBe(false);
 	});
 
@@ -80,7 +80,7 @@ describe("A2UI display admission", function _A2uiDisplayAdmission()
 				surfaceId: "surface-pricing",
 				components: [{ id: "unknown", component: { RawHtml: { html: "<script>bad()</script>" } } }]
 			}
-		} as Types.ServerToClientMessage;
+		} as unknown as AgUiA2uiOperation;
 		expect(_AdmitA2uiSurfacePresentation(_presentation({ operations: [operation] }))).toBe(false);
 	});
 
@@ -99,7 +99,7 @@ describe("A2UI display admission", function _A2uiDisplayAdmission()
 					]
 				}
 			}
-		] as Types.ServerToClientMessage[];
+		] as unknown as AgUiA2uiOperation[];
 		const mapped = _MapA2uiOperationsToUpstream(operations);
 		const components = mapped[0].surfaceUpdate?.components ?? [];
 		expect(Object.keys(components[0].component)).toEqual([A2uiComponentNames.MultipleChoice]);
@@ -125,7 +125,7 @@ describe("displayed A2UI action intent", function _DisplayedA2uiActionIntent()
 		const upstreamEvent = _event("apply-pricing", { decision: "apply", revisions: [1, 2], confirmed: true });
 		const intent = _ToA2uiDisplayedActionIntent(_presentation(), upstreamEvent);
 		expect(intent).toEqual({
-			version: A2uiEnvelopeVersions.OpenCraneV1,
+			version: AG_UI_A2UI_ENVELOPE_VERSION,
 			conversationId: "conversation-1",
 			runId: "run-1",
 			messageId: "message-1",
