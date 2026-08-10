@@ -41,7 +41,8 @@ function _CancellationTransaction(run: ReturnType<typeof _Run>, event: ReturnTyp
 		workloadAssignment: { findUnique: vi.fn().mockResolvedValue(assignment), updateMany: vi.fn().mockResolvedValue({ count: assignment ? 1 : 0 }) },
 		workloadBootstrap: { findUnique: vi.fn().mockResolvedValue(assignment ? { id: "bootstrap-v1_exact" } : null) },
 		runProofKey: { updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
-		approvalRequest: { updateMany: vi.fn().mockResolvedValue({ count: 2 }) },
+		approvalRequest: { findMany: vi.fn().mockResolvedValue([{ toolInvocationRowId: "invocation-1" }, { toolInvocationRowId: "invocation-2" }]), updateMany: vi.fn().mockResolvedValue({ count: 2 }) },
+		toolInvocation: { updateMany: vi.fn().mockResolvedValue({ count: 2 }) },
 		outboxEvent: {
 			findUnique: vi.fn().mockResolvedValue(event),
 			updateMany: vi.fn().mockResolvedValue({ count: 1 }),
@@ -70,6 +71,7 @@ describe("PrismaRunCancellationRepository", function _DescribeCancellationReposi
 		expect(transaction.agentRun.updateMany).toHaveBeenNthCalledWith(1, { where: expect.objectContaining({ state: AgentRunState.Queued }), data: { state: AgentRunState.Cancelling } });
 		expect(transaction.agentRun.updateMany).toHaveBeenNthCalledWith(2, { where: { id: "run-1", attempt: 1, state: AgentRunState.Cancelling }, data: expect.objectContaining({ state: AgentRunState.Cancelled }) });
 		expect(transaction.approvalRequest.updateMany).toHaveBeenCalledWith({ where: { runId: "run-1", attempt: 1, state: "Pending" }, data: { state: "Cancelled", decidedAt: new Date("2026-07-20T00:01:00.000Z"), decidedBy: null, resumeTokenHash: null } });
+		expect(transaction.toolInvocation.updateMany).toHaveBeenCalledWith({ where: { id: { in: ["invocation-1", "invocation-2"] }, runId: "run-1", attempt: 1, state: "Reserved" }, data: { state: "Failed", failureCode: "approval_cancelled", completedAt: new Date("2026-07-20T00:01:00.000Z") } });
 		expect(transaction.outboxEvent.create).toHaveBeenCalledTimes(1);
 		expect(transaction.conversationRunEvent.create).toHaveBeenCalledWith({ data: expect.objectContaining({ conversationId: "conversation-1", runId: "run-1", type: "run.cancelled" }) });
 	});

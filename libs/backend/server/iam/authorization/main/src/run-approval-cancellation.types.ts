@@ -14,4 +14,6 @@ export interface CancelPendingRunApprovalAuthorityResult
 {
 	/** Number of Pending approvals transitioned to Cancelled. */
 	readonly cancelledCount: number;
+	/** Number of linked Reserved invocations terminalised without creating resume authority. */
+	readonly failedInvocationCount: number;
 }
