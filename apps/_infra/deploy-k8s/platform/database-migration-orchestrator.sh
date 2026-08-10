@@ -76,63 +76,70 @@ install_postgres_release()
   build_postgres_release_args "$migration_enabled" "$privileges_enabled"
 
   log "Reconciling PostgreSQL server while preserving bootstrap origin '$POSTGRES_BOOTSTRAP_BASELINE_CONFIG_MAP'…"
-  set +e
-  helm "${POSTGRES_ARGS[@]}"
-  command_status=$?
-  set -e
+  if helm "${POSTGRES_ARGS[@]}"; then
+    command_status=0
+  else
+    command_status=$?
+  fi
   if (( command_status != 0 )); then
     err "PostgreSQL Helm reconciliation failed."
     return "$command_status"
   fi
-  set +e
-  kubectl wait --for=condition=Ready "cluster/${POSTGRES_RELEASE}" -n "$NAMESPACE" --timeout="${TIMEOUT}s"
-  command_status=$?
-  set -e
+  if kubectl wait --for=condition=Ready "cluster/${POSTGRES_RELEASE}" -n "$NAMESPACE" --timeout="${TIMEOUT}s"; then
+    command_status=0
+  else
+    command_status=$?
+  fi
   if (( command_status != 0 )); then
     err "PostgreSQL Cluster did not become Ready."
     return "$command_status"
   fi
-  set +e
-  kubectl wait --for=create "deployment/${POSTGRES_RELEASE}-pooler" -n "$NAMESPACE" --timeout="${TIMEOUT}s"
-  command_status=$?
-  set -e
+  if kubectl wait --for=create "deployment/${POSTGRES_RELEASE}-pooler" -n "$NAMESPACE" --timeout="${TIMEOUT}s"; then
+    command_status=0
+  else
+    command_status=$?
+  fi
   if (( command_status != 0 )); then
     err "PostgreSQL pooler Deployment was not created."
     return "$command_status"
   fi
-  set +e
-  kubectl wait --for=condition=available "deployment/${POSTGRES_RELEASE}-pooler" -n "$NAMESPACE" --timeout="${TIMEOUT}s"
-  command_status=$?
-  set -e
+  if kubectl wait --for=condition=available "deployment/${POSTGRES_RELEASE}-pooler" -n "$NAMESPACE" --timeout="${TIMEOUT}s"; then
+    command_status=0
+  else
+    command_status=$?
+  fi
   if (( command_status != 0 )); then
     err "PostgreSQL pooler Deployment did not become Available."
     return "$command_status"
   fi
   for database_resource in "${POSTGRES_RELEASE}-obot" "${POSTGRES_RELEASE}-litellm"; do
-    set +e
-    kubectl wait --for=jsonpath='{.status.applied}'=true "database/${database_resource}" -n "$NAMESPACE" --timeout="${TIMEOUT}s"
-    command_status=$?
-    set -e
+    if kubectl wait --for=jsonpath='{.status.applied}'=true "database/${database_resource}" -n "$NAMESPACE" --timeout="${TIMEOUT}s"; then
+      command_status=0
+    else
+      command_status=$?
+    fi
     if (( command_status != 0 )); then
       err "Database resource '$database_resource' was not applied."
       return "$command_status"
     fi
   done
   if [[ "$migration_enabled" == "true" ]]; then
-    set +e
-    kubectl wait --for=condition=complete "job/${POSTGRES_RELEASE}-database-migration" -n "$NAMESPACE" --timeout="${TIMEOUT}s"
-    command_status=$?
-    set -e
+    if kubectl wait --for=condition=complete "job/${POSTGRES_RELEASE}-database-migration" -n "$NAMESPACE" --timeout="${TIMEOUT}s"; then
+      command_status=0
+    else
+      command_status=$?
+    fi
     if (( command_status != 0 )); then
       err "Database migration Job did not complete."
       return "$command_status"
     fi
   fi
   if [[ "$privileges_enabled" == "true" ]]; then
-    set +e
-    kubectl wait --for=condition=complete "job/${POSTGRES_RELEASE}-database-privileges" -n "$NAMESPACE" --timeout="${TIMEOUT}s"
-    command_status=$?
-    set -e
+    if kubectl wait --for=condition=complete "job/${POSTGRES_RELEASE}-database-privileges" -n "$NAMESPACE" --timeout="${TIMEOUT}s"; then
+      command_status=0
+    else
+      command_status=$?
+    fi
     if (( command_status != 0 )); then
       err "Database privilege Job did not complete."
       return "$command_status"
@@ -143,10 +150,11 @@ install_postgres_release()
 classify_database_convergence_state()
 {
   local classification_status classification_output
-  set +e
-  classification_output="$(set -e; classify_live_database_convergence)"
-  classification_status=$?
-  set -e
+  if classification_output="$(classify_live_database_convergence)"; then
+    classification_status=0
+  else
+    classification_status=$?
+  fi
   if (( classification_status != 0 )); then
     err "Unable to read unambiguous live database convergence evidence."
     return "$classification_status"
@@ -162,12 +170,13 @@ publish_database_migration_config_map()
 {
   local publisher_status
   local published_config_map
-  set +e
-  published_config_map="$(bash "$POSTGRES_MIGRATION_PUBLISHER" \
+  if published_config_map="$(bash "$POSTGRES_MIGRATION_PUBLISHER" \
     "$NAMESPACE" "$DATABASE_PREVIOUS_MIGRATION_ID" "$DATABASE_MIGRATION_SQL_FILE" \
-    "$DATABASE_PREVIOUS_MIGRATION_SQL_SHA256")"
-  publisher_status=$?
-  set -e
+    "$DATABASE_PREVIOUS_MIGRATION_SQL_SHA256")"; then
+    publisher_status=0
+  else
+    publisher_status=$?
+  fi
   if (( publisher_status != 0 )); then
     err "Unable to publish the exact reviewed database migration SQL."
     return "$publisher_status"
@@ -186,15 +195,17 @@ adopt_matching_existing_database_fence()
   local listed_releases
   local release_values
   local release_status
-  set +e
-  release_status="$(helm status "$RELEASE" -n "$NAMESPACE" -o json)"
-  command_status=$?
-  set -e
-  if (( command_status != 0 )); then
-    set +e
-    listed_releases="$(helm list --namespace "$NAMESPACE" --filter "^${RELEASE}$" --output json)"
+  if release_status="$(helm status "$RELEASE" -n "$NAMESPACE" -o json)"; then
+    command_status=0
+  else
     command_status=$?
-    set -e
+  fi
+  if (( command_status != 0 )); then
+    if listed_releases="$(helm list --namespace "$NAMESPACE" --filter "^${RELEASE}$" --output json)"; then
+      command_status=0
+    else
+      command_status=$?
+    fi
     if (( command_status != 0 )); then
       err "Unable to determine whether a persisted database migration fence exists."
       return "$command_status"
@@ -205,10 +216,11 @@ adopt_matching_existing_database_fence()
     fi
     return 0
   fi
-  set +e
-  release_values="$(helm get values "$RELEASE" -n "$NAMESPACE" -o json)"
-  command_status=$?
-  set -e
+  if release_values="$(helm get values "$RELEASE" -n "$NAMESPACE" -o json)"; then
+    command_status=0
+  else
+    command_status=$?
+  fi
   if (( command_status != 0 )); then
     err "Unable to read a possible persisted database migration fence."
     return "$command_status"
@@ -253,18 +265,20 @@ run_database_release_transition()
   fi
 
   if [[ "$POSTGRES_CLUSTER_EXISTS" == "1" ]]; then
-    set +e
-    classify_database_convergence_state
-    classification_status=$?
-    set -e
+    if classify_database_convergence_state; then
+      classification_status=0
+    else
+      classification_status=$?
+    fi
     if (( classification_status != 0 )); then
       return "$classification_status"
     fi
-    set +e
-    convergence_outcome="$(resolve_database_convergence_outcome live_transition \
-      "$DATABASE_LIVE_CONVERGENCE_STATE")"
-    policy_status=$?
-    set -e
+    if convergence_outcome="$(resolve_database_convergence_outcome live_transition \
+      "$DATABASE_LIVE_CONVERGENCE_STATE")"; then
+      policy_status=0
+    else
+      policy_status=$?
+    fi
     if (( policy_status != 0 )); then
       err "Database convergence policy rejected the live transition state."
       return "$policy_status"
@@ -296,19 +310,21 @@ run_database_release_transition()
     log "Restoring the previous-version database before its bounded migration…"
     run_guarded_post_fence_stage install_postgres_release false false || return $?
     POSTGRES_CLUSTER_EXISTS="1"
-    set +e
-    classify_database_convergence_state
-    classification_status=$?
-    set -e
+    if classify_database_convergence_state; then
+      classification_status=0
+    else
+      classification_status=$?
+    fi
     if (( classification_status != 0 )); then
       recover_failed_database_transition "$classification_status"
       return $?
     fi
-    set +e
-    convergence_outcome="$(resolve_database_convergence_outcome recovered_transition \
-      "$DATABASE_LIVE_CONVERGENCE_STATE")"
-    policy_status=$?
-    set -e
+    if convergence_outcome="$(resolve_database_convergence_outcome recovered_transition \
+      "$DATABASE_LIVE_CONVERGENCE_STATE")"; then
+      policy_status=0
+    else
+      policy_status=$?
+    fi
     if (( policy_status != 0 )); then
       err "Database convergence policy rejected the recovered transition state."
       return "$policy_status"
@@ -332,16 +348,18 @@ run_database_release_transition()
         ;;
     esac
   fi
-  set +e
-  backup_evidence="$(bash "$POSTGRES_MIGRATION_BACKUP" \
-    "$NAMESPACE" "$POSTGRES_RELEASE" "$TIMEOUT")"
-  backup_status=$?
-  set -e
-  if (( backup_status != 0 )); then
-    set +e
-    recover_failed_database_transition "$backup_status"
+  if backup_evidence="$(bash "$POSTGRES_MIGRATION_BACKUP" \
+    "$NAMESPACE" "$POSTGRES_RELEASE" "$TIMEOUT")"; then
+    backup_status=0
+  else
     backup_status=$?
-    set -e
+  fi
+  if (( backup_status != 0 )); then
+    if recover_failed_database_transition "$backup_status"; then
+      backup_status=0
+    else
+      backup_status=$?
+    fi
     return "$backup_status"
   fi
   log "CNPG recovery evidence completed before migration: $backup_evidence"
