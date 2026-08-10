@@ -85,6 +85,16 @@ export default meta;
 /** Local Storybook story type for onboarding feature states. */
 type Story = StoryObj<PersonaInterviewStateComponent>;
 
+/** Short introduction keeps the shared journey canvas at least as tall as the desktop viewport. */
+export const Introduction: Story = {
+	parameters: { docs: { description: { story: "Persona sorting has not started. This short Compact journey must fill the 1705×813 viewport. The component emits a start intent but does not provision, persist, or advance onboarding." } } },
+	tags: ["visual-test", "visual-test-full-viewport"],
+	render: function render()
+	{
+		return { props: { snapshot: _Snapshot({ interviewId: null, answeredQuestionCount: 0, questionCount: 0, questions: [] }), busy: false, actionError: null }, template: `<wo-persona-interview-state [snapshot]="snapshot" [busy]="busy" [actionError]="actionError" />` };
+	}
+};
+
 /** Active interview with long reviewed content and resumed durable progress. */
 export const Interview: Story = {
 	tags: ["visual-test"],

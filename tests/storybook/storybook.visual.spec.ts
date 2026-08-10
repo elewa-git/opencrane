@@ -8,6 +8,9 @@ const VISUAL_TEST_TAG = "visual-test";
 /** Opt-in tag that captures a visual contract at the supported narrow viewport. */
 const VISUAL_NARROW_TAG = "visual-test-narrow";
 
+/** Opt-in tag that requires the shared journey canvas to cover the browser viewport. */
+const VISUAL_FULL_VIEWPORT_TAG = "visual-test-full-viewport";
+
 /** Supported narrow browser viewport used for responsive state contracts. */
 const VISUAL_NARROW_VIEWPORT = { width: 390, height: 844 } as const;
 
@@ -19,6 +22,7 @@ const STORY_MAX_DIFF_PIXEL_RATIO = 0.005;
 
 /** Story-specific viewport overrides for canonical responsive contracts. */
 const STORY_VIEWPORTS: ReadonlyMap<string, { readonly width: number; readonly height: number }> = new Map([
+	["features-persona-onboarding-states--introduction", { width: 1705, height: 813 }],
 	["onboarding-persona-first-chat--narrow-long-content", { width: 390, height: 844 }],
 ]);
 
@@ -67,6 +71,7 @@ async function _CaptureStory(context: BrowserContext, story: StorybookIndexEntry
 
 		// 2. Wait for the shared stable-render prerequisites before any pixel comparison.
 		await _OpenStableStory(page, story.id);
+		if (story.tags?.includes(VISUAL_FULL_VIEWPORT_TAG)) await _AssertFullViewportJourney(page);
 		// 3. Capture the complete feature composition against this platform's reviewed baseline.
 		await expect.soft(page.locator("#storybook-root")).toHaveScreenshot(`${story.id}.png`,
 		{
@@ -80,6 +85,16 @@ async function _CaptureStory(context: BrowserContext, story: StorybookIndexEntry
 	{
 		await page.close();
 	}
+}
+
+/** Prove a short journey owns at least the full visible viewport without fixing its content height. */
+async function _AssertFullViewportJourney(page: Page): Promise<void>
+{
+	const journey = page.locator(".wo-journey");
+	await expect(journey).toHaveCount(1);
+	const journeyHeight = await journey.evaluate(function _JourneyHeight(element) { return element.getBoundingClientRect().height; });
+	const viewportHeight = await page.evaluate(function _ViewportHeight() { return window.innerHeight; });
+	expect(journeyHeight, "Journey canvas must cover the full browser viewport").toBeGreaterThanOrEqual(viewportHeight);
 }
 
 /**
