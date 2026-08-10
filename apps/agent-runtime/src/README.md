@@ -68,8 +68,9 @@ config.py · constants.py · observability.py support the components above.
 
 ## Authority and failure rules
 
-- The control plane owns `Thread -> AgentRun -> ordered RunEvent`, approval, budgets, cancellation,
-  tool execution, and durable terminal state. The runtime proposes; it does not author authority.
+- The control plane owns the conditional `Conversation (agent_session) -> AgentRun -> ordered RunEvent`
+  relationship, approval, budgets, cancellation, tool execution, and durable terminal state. The
+  runtime proposes; it does not author authority.
 - Every candidate echoes the runtime instance, command, run, attempt, and fence that admitted it.
 - The local checkpoint is encrypted, replaceable, and bound to run coordinates. Missing, corrupt,
   foreign, or stale checkpoint data is discarded; it never overrides server state.

@@ -33,12 +33,12 @@ but it cannot approve or execute external actions by itself.
 ## Durable run model
 
 ```text
-Thread
+Conversation (`agent_session`; optional run parent)
 └── AgentRun
     ├── immutable AgentRevision
     ├── one RunInputSnapshot
     ├── attempt 1..n
-    ├── ordered conversation events
+    ├── ordered RunEvent records
     ├── workload and proof evidence
     ├── approvals and action receipts
     └── terminal outcome and cost
@@ -53,9 +53,9 @@ The architecture treats *personal* and *managed* as two distinct admission and i
 happen to share the same runtime and execution machinery, not as one code path with a boolean on
 it:
 
-- **Personal admission** derives its `AgentService` from the caller's own participant-owned
-  thread and verifies exactly one signed personal membership assertion — the caller can only ever
-  admit a run as themselves.
+- **Personal admission** derives its `AgentService` through the caller's own participant-bound
+  conversation admission and verifies exactly one signed personal membership assertion — the
+  caller can only ever admit a run as themselves.
 - **Managed admission** derives the canonical `agent-service:<id>` principal, verifies its current
   Ed25519-signed fleet membership, and intersects the active revision's exact knowledge and tool
   attachments with effective grants — it never resolves a human caller's identity at all.

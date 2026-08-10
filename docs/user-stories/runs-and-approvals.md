@@ -6,22 +6,28 @@ Make execution understandable and controllable without exposing workload credent
 coordinates, proof keys, or internal retry machinery.
 
 Current status: `API partial`, `UI missing`, `Design ready` for list/status/steering and the approval
-inbox. Public cancellation and retry are blocked; production approval activation is incomplete.
+inbox. Interactive runs now start only through agent-session messages. Public cancellation and retry
+are blocked; production approval activation is incomplete.
 
-## RUN-01 — Start a run from an authoritative thread
+## RUN-01 — Start a run from an authoritative agent session
 
 **As a** conversation participant, **I want** to start one idempotent run **so that** duplicate clicks
 or retries do not create duplicate work.
 
 Acceptance criteria:
 
-- The client supplies only `threadId` and `requestIdempotencyKey`.
+- The client submits bounded message blocks and an idempotency key to a conversation it participates
+  in; the server derives silo, subject, agent service, and run coordinates.
 - Fresh and idempotent responses lead to the same canonical run.
+- The user message, immutable input snapshot, run, and first dispatch intent commit together or not
+  at all.
 - Authority refusal, concurrency limit, queue saturation, and dependency unavailability are distinct.
 - The UI never asks the user to choose a silo, dataset, membership proof, persona revision, or
   workload identity.
 
-API: `POST /api/v1/me/runs`.
+API: `POST /api/v1/me/conversations/{conversationId}/messages`. The former public
+`POST /api/v1/me/runs` entrypoint is deleted; managed schedules and invocations still use the
+internal run-admission port.
 
 ## RUN-02 — See my run history and status
 
@@ -32,8 +38,9 @@ Acceptance criteria:
 
 - Canonical states are `accepted`, `queued`, `assigned`, `running`, `waiting_for_approval`,
   `cancelling`, `completed`, `failed`, and `cancelled`.
-- Terminal reason text is stable and user-safe; raw internal errors and infrastructure identities
-  are never rendered.
+- Terminal reason text is stable and user-safe. Safe technical context, such as an authentication
+  failure or a failed tool call, may be disclosed behind details controls; credentials, tokens,
+  proofs, raw tool arguments, and infrastructure secrets are never rendered.
 - List, detail, empty, stale, unavailable, and not-found states are designed.
 
 APIs: `GET /api/v1/me/runs`, `GET /api/v1/me/runs/{runId}`.

@@ -6,14 +6,14 @@ Provide the workspace where participants start, resume, and understand agent ses
 and group chats. The conversation and its ordered timeline are server-authoritative and recoverable;
 the browser is a client, not the conversation ledger.
 
-Current status: `API blocked` for the ordinary workspace journey. The onboarding-owned guided
-exchange and bounded event replay are `API ready`; ordinary thread discovery, creation, prompt
-submission, and live tail are missing.
+Current status: `API ready` for participant-scoped list, create, open, message, archive, close, and
+bounded event replay. The ordinary workspace user interface and live tail remain missing; child
+agent sessions, attachments, approvals, and interactive agent-rendered UI are later slices.
 
 ## Onboarding-chat boundary
 
 The `bootstrap.md` onboarding chat is a bounded pre-main-app exchange owned by the onboarding
-workflow, not a browser-local demo thread and not ordinary workspace access. Its implemented
+workflow, not a browser-local demo conversation and not ordinary workspace access. Its implemented
 deterministic form pins the reviewed bootstrap source and approved persona, remains resumable, and
 records ordered owner answers without minting AgentService, workspace, run, model, membership, or
 memory authority. Its conclusion advances `UserOnboarding`; ordinary conversation events cannot
@@ -32,7 +32,8 @@ Acceptance criteria:
 - Empty, loading, pagination, unavailable, and long-title states are defined.
 - Conversation metadata does not rely on browser-local cache for authority.
 
-Status: `API blocked`; there is no public conversation-list endpoint.
+API: `GET /api/v1/me/conversations`. Archived conversations are excluded unless the participant
+explicitly requests them.
 
 ## CON-02 — Start a mode-bound conversation
 
@@ -41,30 +42,30 @@ authoritative before the first message or run.
 
 Acceptance criteria:
 
-- Conversation creation is idempotent or returns a single canonical conversation ID.
+- A successful creation returns the server-generated canonical conversation ID.
 - The server derives the participant and silo.
 - The immutable mode is `agent_session`, `direct`, or `group`; only an agent session binds an agent.
 - Creation failure does not leave a local-only conversation that appears durable.
 
-Status: `API blocked`; there is no public conversation-create endpoint.
+API: `POST /api/v1/me/conversations`.
 
 ## CON-03 — Send input to an agent session
 
-**As a** user, **I want** to submit a message in a conversation **so that** my personal agent can
+**As a** user, **I want** to submit a message in an agent session **so that** my personal agent can
 perform a governed run.
 
 Acceptance criteria:
 
 - The user sees queued, accepted, denied, capacity-limited, and unavailable outcomes.
-- The admitted user message and its run commit atomically, and duplicate submission resolves to the
-  same canonical result.
+- The admitted user message, immutable run snapshot, run, and dispatch intent commit atomically;
+  duplicate submission resolves to the same canonical result.
 - A later ordinary question starts the next serial run; steering or elicitation answers target the
   active run and cannot bypass run authority.
 - Attachments are included only after an authoritative upload/attachment contract exists.
 - The browser never supplies silo, membership, persona, memory dataset, or tool authority.
 
-Status: `API blocked`; current run admission accepts an existing coordinate named `threadId`, which
-#600 directly replaces with `conversationId`; no public prompt/message submission endpoint exists.
+API: `POST /api/v1/me/conversations/{conversationId}/messages`. This participant-owned message API
+is the only public way to start an interactive run; there is no public `POST /api/v1/me/runs`.
 
 ## CON-04 — Replay the canonical transcript
 
@@ -80,9 +81,9 @@ Acceptance criteria:
 - Rendering supports typical, long, tool-related, approval-related, terminal, and malformed-safe
   display states.
 
-Target API: `GET /api/v1/me/conversations/{conversationId}/events`. The current implementation names
-that route coordinate `threadId`; #600 replaces the parameter vocabulary without a compatibility
-alias.
+API: `GET /api/v1/me/conversations/{conversationId}/events`. Its opaque cursor binds the immutable
+conversation ID and canonical decimal timeline position; a cursor from another conversation is
+refused without a compatibility alias or existence disclosure.
 
 ## CON-05 — Follow new events live
 
@@ -126,7 +127,8 @@ Acceptance criteria:
   without deriving order from browser clocks.
 - Unsupported mode commands fail closed.
 
-Status: `API blocked`; no public ordinary-message admission or mixed conversation timeline exists.
+Status: `API ready`. The database allocates one monotonically increasing position for messages and
+linked run events; a timeline entry stores a typed reference rather than a copy of its payload.
 
 ## CON-08 — Join, read, close, and archive independently
 
@@ -135,7 +137,9 @@ Status: `API blocked`; no public ordinary-message admission or mixed conversatio
 
 Acceptance criteria:
 
-- Join visibility and unread position are durable participant-specific timeline coordinates.
+- Join visibility, unread position, and access-ended position are durable participant-specific
+  timeline coordinates. A participant cannot write after access ends and can read no event beyond
+  the recorded end position.
 - Close is monotonic and makes the conversation read-only; archive is a reversible participant-local
   list state.
 - Completed onboarding appears as a closed/read-only conversation and can be archived independently.
@@ -144,11 +148,13 @@ Acceptance criteria:
 - Missing, foreign, guessed, and never-authorized child IDs return the same unavailable response and
   view, revealing no conversation kind, parent, participants, runs, assets, or prior access.
 
-Status: `API blocked`; current persistence conflates conversation lifecycle and archive visibility.
+Status: `API partial`. List/open, reversible participant-local archive, permanent close, and the
+three participant positions are implemented. Moving the completed onboarding exchange into a
+closed normal-workspace conversation and the access-changed client purge remain to be wired.
 
-## CON-09 — Open a group Agent thread
+## CON-09 — Open a child agent session from a group
 
-**As a** group participant, **I want** an explicit `@agent` message to open a child Agent thread
+**As a** group participant, **I want** an explicit `@agent` message to open a child agent session
 **so that** governed agent work stays separate while useful outcomes can return to the group.
 
 Acceptance criteria:

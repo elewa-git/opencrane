@@ -10,8 +10,9 @@ The control plane remains authoritative for identity, inputs, events, approvals 
 ## One runtime, two admission authorities
 
 Personal and managed runs share every mechanism below, but never share an admission path.
-Personal admission derives its `AgentService` from the caller's own thread and verifies one signed
-personal membership assertion; managed admission derives the `agent-service:<id>` principal,
+Personal admission derives its `AgentService` from the caller's own participant-bound
+`agent_session` conversation and verifies one signed personal membership assertion; managed
+admission derives the `agent-service:<id>` principal,
 verifies its current Ed25519-signed fleet membership, and intersects the active revision's exact
 knowledge/tool attachments with effective grants. A personal run's frozen input always names an
 approved `PersonaRevision`; a managed run's never does, because its published revision is already

@@ -39,7 +39,7 @@ evidence to the owning file. Do not silently change a blocked story into fronten
 |---|---|---|
 | Identity and onboarding | [identity-and-onboarding.md](identity-and-onboarding.md) | OIDC works; the server-tracked survey and bootstrap-chat workflow is a required API gap. |
 | Persona | [persona.md](persona.md) | Governed interview lifecycle exists; UI and mutation contract generation are missing. |
-| Workspace and conversations | [workspace-and-conversations.md](workspace-and-conversations.md) | Replay exists; thread and prompt creation do not. |
+| Workspace and conversations | [workspace-and-conversations.md](workspace-and-conversations.md) | Participant list/create/open/message/archive/close and replay APIs exist; the routed workspace UI follows in later tracks. |
 | Runs and approvals | [runs-and-approvals.md](runs-and-approvals.md) | Admission, status and steering exist; cancellation and production approval resume are incomplete. |
 | Personal configuration | [personal-configuration.md](personal-configuration.md) | Proposal consent and future-run materialization exist without a UI. |
 | Managed agents | [managed-agents.md](managed-agents.md) | Revision, lifecycle, run-now, history and schedule APIs exist. |
@@ -79,7 +79,9 @@ implements their states. Before implementing any feature:
    the route-level screen.
 5. Run the component-manager `POST-DIFF` pass after implementation.
 
-The current repository has no shared Storybook/state renderer, screenshot baselines, axe setup, or
-CDK component harnesses. Existing context and notification components are unmounted/demo-state
-surfaces, not approved target behaviour. Shared chips, collapsible sections, ledger cards, settings
-rows, save buttons, and avatars also require typed-state or accessibility work before broader reuse.
+The shared Storybook foundation includes deterministic Chromium screenshots and axe checks for its
+current catalogue, but conversation and A2UI compositions still need canonical stories, rendered
+state baselines, keyboard/focus evidence, and route-level journey coverage. Existing context and
+notification components remain unmounted/demo-state surfaces rather than approved conversation
+behaviour. Shared chips, collapsible sections, ledger cards, settings rows, save buttons, and avatars
+still require a component-manager state/accessibility pass before broader reuse.
