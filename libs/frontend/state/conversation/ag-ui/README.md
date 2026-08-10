@@ -4,12 +4,13 @@
 
 ## What it owns
 
-This pure browser-state package turns the small, display-safe AG-UI event projection into message,
-tool, run, and reconnect-cursor state. A future OpenCrane-authorised replay reader supplies the
-events; this package never opens a connection, reads browser storage, or invents a conversation.
+This pure browser-state package turns the exact-pinned, display-safe AG-UI event projection into
+message, tool, run, interrupt, and reconnect-cursor state. The OpenCrane conversation event adapter
+supplies complete SSE records incrementally; this package never opens a connection, reads browser
+storage, or invents conversation authority.
 
 ```
- server-authorised replay reader
+ server-authorised event stream
              │ safe SSE records
              ▼
  ┌───────────────────────┐
@@ -22,14 +23,18 @@ events; this package never opens a connection, reads browser storage, or invents
 
 **In this flow:** a future authorised replay reader · the green workspace feature.
 
-Malformed records fail closed. Exact replay cursors are ignored, while cursor ordering remains the
-server reader's responsibility because SSE identifiers are opaque.
+Malformed records and invalid lifecycle sequences fail closed. Exact duplicate cursors are ignored;
+a duplicate cursor carrying different data is rejected. Cursorless open-interrupt overlays replace
+the current interrupt set without advancing the durable cursor. An access-revoked overlay purges all
+projected content and reconnect coordinates immediately.
 
 ## Public surface
 
-- `__DecodeAgUiSseRecord` — validates one complete projected SSE record.
-- `__ReduceAgUiStream` / `__CreateAgUiStreamState` — builds immutable browser view state.
-- `__AgUiResumeCursor` — returns the cursor for a future authorised reconnect.
+- `__DecodeAgUiSseRecord` — validates one complete record with pinned `@ag-ui/core` schemas.
+- `__ReduceAgUiStream` / `__CreateAgUiStreamState` — builds immutable browser view state while
+  preserving truthful success, interruption, failure, and cancellation terminals.
+- `__AgUiResumeCursor` — returns only the latest durable server cursor for reconnect.
+- `AgUiRunStatuses` / `AgUiMessageStatuses` — the browser's explicit projection lifecycle.
 
 ## Boundary
 
