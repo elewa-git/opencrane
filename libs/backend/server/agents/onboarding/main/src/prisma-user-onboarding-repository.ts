@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+
 import { PersonaColour, Prisma, type PrismaClient, UserOnboardingBootstrapArchetype, UserOnboardingCompletionProvenance, UserOnboardingState } from "@prisma/client";
 
 import { UserOnboardingAnswerStatuses, UserOnboardingBootstrapArchetypes, UserOnboardingCompletionProvenances, UserOnboardingPersonaColours, UserOnboardingStates } from "./user-onboarding.enums.js";
@@ -27,7 +29,7 @@ export class PrismaUserOnboardingRepository implements UserOnboardingRepository,
 	{
 		const row = await this.prisma.userOnboarding.upsert({
 			where: { siloId_userId: _OwnerKey(owner) },
-			create: { siloId: owner.siloId, userId: owner.subjectId, workflowVersion: currentWorkflowVersion },
+			create: { id: randomUUID(), siloId: owner.siloId, userId: owner.subjectId, workflowVersion: currentWorkflowVersion },
 			update: {},
 		});
 		return _ProjectUserOnboarding(row);
