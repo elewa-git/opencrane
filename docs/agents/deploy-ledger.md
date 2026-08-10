@@ -212,3 +212,9 @@ Full run reports belong in the corresponding pull request or issue.
 - lesson: every future silo must use tenant-prefixed auxiliary namespaces and the reusable teardown
   entrypoint with an explicit protected-tenant input; never retain environment-specific retirement
   code after its live evidence is recorded.
+
+## 2026-08-10 · dev · testv3 latest preflight · 7860505e8227597ce17cc7809b64d9b9489478f4 · FAILED
+
+- findings: data: testv3 records protected baseline `22cd09a95a1b8dc2ac2fff0b91053dfe8cc7fdc7021f8dc922350d35254f7d6f`, has no `opencrane_migrations.schema_history`, and already has the 0.8-only `public.user_onboardings` table; the declared 0.7-to-0.8 path requires source digest `25bfc5d31c4966ee697ae5aaa47edc855d25120d0829c241f213353f69e0358d` and would fail `OC705` after fencing the server.
+- friction: the deploy preflight does not prove database transition compatibility before its mutation phase, and the migration sequence has no automatic release-fence restoration on failure.
+- lesson: add a reviewed, app-owned adoption transition for the exact pre-ledger `22cd09a9` testv3 baseline (or an approved rebuild path) and prove migration compatibility before fencing; testv3 remained unchanged at Helm revision 1 on `sha-2004e2a` and healthy.

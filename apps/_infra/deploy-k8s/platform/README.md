@@ -9,8 +9,12 @@ local source consumer.
 | Path | Responsibility |
 |---|---|
 | `Chart.yaml`, `templates/` | Helm library chart providing labels, names, RBAC, endpoint, database, identity, and observability helpers to the parent release. It renders no workload by itself. |
-| `k8s-deploy.sh` | Provider-neutral install and upgrade engine used by the release wrapper. It requires exact repository and source release versions, fences the old server, proves a CNPG recovery backup, and runs the app-owned bounded database Job for an eligible adjacent minor before restoring the server. It republishes each database consumer's URI and waits for the exact server, LiteLLM, and Obot workloads to restart, because Kubernetes environment variables do not reload Secret changes. Its optional `--verify` check reports pod readiness, DNS resolution, and public server/database health without changing deployment success. |
-| `database-migration-orchestrator.sh` | Deploy-owned Helm sequencing for PostgreSQL reconciliation, previous-version recovery, server fencing, backup evidence, migration, and convergence. It consumes a manifest-resolved transition and never selects or edits migration SQL. |
+| `k8s-deploy.sh` | Provider-neutral install and upgrade engine used by the release wrapper. It requires exact repository and source release versions, classifies live database evidence, and runs the state-appropriate PostgreSQL and application transitions. It republishes each database consumer's URI and waits for the exact server, LiteLLM, and Obot workloads to restart, because Kubernetes environment variables do not reload Secret changes. Its optional `--verify` check reports pod readiness, DNS resolution, and public server/database health without changing deployment success. |
+| `database-convergence-classifier.sh` | Read-only classifier for exact bootstrap and migration-history evidence. It reports `current`, `completed`, `source`, or `incompatible`; unreadable or ambiguous evidence is an error. |
+| `database-convergence-policy.sh` | Pure owner of the twelve State × Event lifecycle outcomes across four convergence states and three transition events. Unknown states, events, and outcomes fail closed. |
+| `database-migration-recovery.sh` | Server-fence and failure-recovery owner. It captures the pre-fence Helm revision, proves the write fence, and restores that exact revision only while the migration Job is terminal and the database still proves the source state. |
+| `database-migration-orchestrator.sh` | State-dependent PostgreSQL sequencing for current adoption, previous-version recovery, exact SQL publication, backup evidence, migration, and privilege reconciliation. It consumes a manifest-resolved transition and never selects or edits migration SQL. |
+| `database-release-finalization.sh` | Application finalization owner after the database release transition. It strictly inventories and restarts database consumers, waits for final rollouts, and restores the exact fenced Helm revision if un-fencing or readiness fails. |
 | `bootstrap-prerequisites.sh` | Explicit operator bootstrap for the pinned ingress-nginx, cert-manager, and CloudNativePG cluster-wide controllers, plus the narrowly selected GKE Autopilot database-proof ComputeClass. It validates the exact Kubernetes context and reserved regional address before mutation, fails closed around existing foreign resources, and installs resource-bounded development profiles from `values/prerequisites/`. It is not invoked by a silo deployment. |
 | `prerequisite-chart-lock.sh` | Immutable upstream chart coordinates, SHA-256 archive identities, and complete rendered cluster-scoped resource inventories consumed by the bootstrap and render contract. |
 | `configure-oidc.sh` | Surgical OIDC configuration for an existing installation. |
@@ -35,17 +39,32 @@ belong in sibling `apps/_infra/<service>` projects.
 Every invocation supplies `--release-version <current-root-version>` and an exact
 `--from-release-version` (`fresh`, the same current version, or the immediately preceding minor).
 The engine resolves both immutable release manifests before cluster mutation. Fresh installs skip
-migration. A current physical restore proves current convergence. A previous-version physical
-restore is first recovered with migration and privileges disabled, backed up again through CNPG, and
-then advanced by the same bounded Job as an in-place upgrade. Unsupported version shapes fail closed.
+migration. For an eligible migration transition with a live database, a read-only query classifies
+its protected bootstrap origin and complete history tuple before any SQL publication or server
+fence. `current` covers a current baseline created before the release ledger existed; `completed`
+covers an already-applied exact migration. Both reconcile privileges with migration disabled and
+continue the normal application Helm transition without fencing. Incompatible, unreadable, extra,
+or ambiguous evidence stops before fencing.
 
-An automatic migration additionally requires the PostgreSQL chart's plugin-backed `ScheduledBackup`.
+Only `source` publishes the manifest-selected SQL, captures the exact current application Helm
+revision, and then fences the old server. It proves a CloudNativePG (CNPG) backup before running the
+bounded migration Job. If a post-fence stage fails, recovery first proves that Job is absent or
+terminal and reclassifies the database. It rolls back the application to the captured revision only
+when the database remains exactly `source`; an active or unknown Job, advanced database, unreadable
+evidence, or failed rollback leaves the fence active and the original failure status unchanged. A
+previous-version physical restore remains fail-closed: recovery configuration must render before the
+fence, and the restored database must pass the same classifier before SQL can be published.
+If a process stops after migration but before un-fencing, a rerun adopts only the exact persisted
+source/target fence and its positive previous replica count. Final application failure restores that
+fenced revision, never the now-incompatible running source application.
+
+An automatic source migration additionally requires the PostgreSQL chart's plugin-backed `ScheduledBackup`.
 The engine creates a dedicated on-demand `Backup` and waits for completed controller evidence; a
 flag, annotation, or operator acknowledgement is not recovery evidence. It preserves an existing
 Cluster's original initdb ConfigMap and protected origin digest while publishing the current baseline
 separately for convergence proof. The Helm-owned `migrationFence` records source/target versions and
-the previous replica count. It stays active when backup, migration, convergence, or the final app
-upgrade fails.
+the previous replica count. It stays active whenever failure evidence does not safely permit the
+exact pre-fence rollback, or when the final application upgrade fails.
 
 ## OIDC upgrades
 

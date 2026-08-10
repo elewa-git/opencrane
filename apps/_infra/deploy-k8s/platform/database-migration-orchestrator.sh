@@ -71,150 +71,179 @@ install_postgres_release()
 {
   local migration_enabled="$1"
   local privileges_enabled="$2"
+  local command_status
   local database_resource
   build_postgres_release_args "$migration_enabled" "$privileges_enabled"
 
   log "Reconciling PostgreSQL server while preserving bootstrap origin '$POSTGRES_BOOTSTRAP_BASELINE_CONFIG_MAP'…"
+  set +e
   helm "${POSTGRES_ARGS[@]}"
+  command_status=$?
+  set -e
+  if (( command_status != 0 )); then
+    err "PostgreSQL Helm reconciliation failed."
+    return "$command_status"
+  fi
+  set +e
   kubectl wait --for=condition=Ready "cluster/${POSTGRES_RELEASE}" -n "$NAMESPACE" --timeout="${TIMEOUT}s"
+  command_status=$?
+  set -e
+  if (( command_status != 0 )); then
+    err "PostgreSQL Cluster did not become Ready."
+    return "$command_status"
+  fi
+  set +e
   kubectl wait --for=create "deployment/${POSTGRES_RELEASE}-pooler" -n "$NAMESPACE" --timeout="${TIMEOUT}s"
+  command_status=$?
+  set -e
+  if (( command_status != 0 )); then
+    err "PostgreSQL pooler Deployment was not created."
+    return "$command_status"
+  fi
+  set +e
   kubectl wait --for=condition=available "deployment/${POSTGRES_RELEASE}-pooler" -n "$NAMESPACE" --timeout="${TIMEOUT}s"
+  command_status=$?
+  set -e
+  if (( command_status != 0 )); then
+    err "PostgreSQL pooler Deployment did not become Available."
+    return "$command_status"
+  fi
   for database_resource in "${POSTGRES_RELEASE}-obot" "${POSTGRES_RELEASE}-litellm"; do
+    set +e
     kubectl wait --for=jsonpath='{.status.applied}'=true "database/${database_resource}" -n "$NAMESPACE" --timeout="${TIMEOUT}s"
+    command_status=$?
+    set -e
+    if (( command_status != 0 )); then
+      err "Database resource '$database_resource' was not applied."
+      return "$command_status"
+    fi
   done
   if [[ "$migration_enabled" == "true" ]]; then
+    set +e
     kubectl wait --for=condition=complete "job/${POSTGRES_RELEASE}-database-migration" -n "$NAMESPACE" --timeout="${TIMEOUT}s"
+    command_status=$?
+    set -e
+    if (( command_status != 0 )); then
+      err "Database migration Job did not complete."
+      return "$command_status"
+    fi
   fi
   if [[ "$privileges_enabled" == "true" ]]; then
+    set +e
     kubectl wait --for=condition=complete "job/${POSTGRES_RELEASE}-database-privileges" -n "$NAMESPACE" --timeout="${TIMEOUT}s"
+    command_status=$?
+    set -e
+    if (( command_status != 0 )); then
+      err "Database privilege Job did not complete."
+      return "$command_status"
+    fi
   fi
 }
 
-fence_existing_opencrane_server()
+classify_database_convergence_state()
 {
-  local prior_release_values
-  local server_deployment
-  local server_deployment_inventory
-  local server_job_inventory
-  local server_pod_inventory
-  local server_replica_set_inventory
-  local fence_deadline
-  local desired_replicas
-  local deployment_uid
-  local live_replicas
-  local active_pod_count
-  local nonterminal_job_count
-  server_deployment="${RELEASE}-opencrane-server"
-  if ! helm status "$RELEASE" -n "$NAMESPACE" >/dev/null 2>&1; then
-    if ! server_deployment_inventory="$(kubectl get deployment "$server_deployment" -n "$NAMESPACE" --ignore-not-found -o name)"; then
-      err "Unable to prove whether an orphan OpenCrane server deployment exists before database migration."
-      exit 1
-    fi
-    if ! server_pod_inventory="$(kubectl get pods -n "$NAMESPACE" \
-      --selector "app.kubernetes.io/instance=${RELEASE},app.kubernetes.io/component=opencrane-server" \
-      -o name)"; then
-      err "Unable to prove whether orphan OpenCrane server pods exist before database migration."
-      exit 1
-    fi
-    if ! server_replica_set_inventory="$(kubectl get replicasets -n "$NAMESPACE" \
-      --selector "app.kubernetes.io/instance=${RELEASE},app.kubernetes.io/component=opencrane-server" \
-      -o name)"; then
-      err "Unable to prove whether orphan OpenCrane server replica sets exist before database migration."
-      exit 1
-    fi
-    if ! server_job_inventory="$(kubectl get jobs -n "$NAMESPACE" \
-      --selector "app.kubernetes.io/instance=${RELEASE},app.kubernetes.io/component=opencrane-server" \
-      -o name)"; then
-      err "Unable to prove whether orphan OpenCrane server jobs exist before database migration."
-      exit 1
-    fi
-    if [[ -n "$server_deployment_inventory" || -n "$server_pod_inventory" \
-      || -n "$server_replica_set_inventory" || -n "$server_job_inventory" ]]; then
-      err "OpenCrane server workload exists without its Helm release; database migration cannot prove a write fence."
-      exit 1
-    fi
-    return
+  local classification_status classification_output
+  set +e
+  classification_output="$(set -e; classify_live_database_convergence)"
+  classification_status=$?
+  set -e
+  if (( classification_status != 0 )); then
+    err "Unable to read unambiguous live database convergence evidence."
+    return "$classification_status"
   fi
-  prior_release_values="$(helm get values "$RELEASE" -n "$NAMESPACE" -o json)"
-  DATABASE_FENCE_PRIOR_REPLICAS="$(jq -r '.migrationFence.previousReplicas // .clustertenantManager.replicas // 1' <<<"$prior_release_values")"
-  if [[ ! "$DATABASE_FENCE_PRIOR_REPLICAS" =~ ^[0-9]+$ || "$DATABASE_FENCE_PRIOR_REPLICAS" == "0" ]]; then
-    err "Existing release '$RELEASE' has no recoverable positive server replica count for the database migration fence."
-    exit 1
+  if ! database_convergence_state_is_valid "$classification_output"; then
+    err "Database convergence classifier returned an invalid or ambiguous state."
+    return 1
   fi
-  log "Fencing the existing OpenCrane server through its Helm release before database mutation…"
-  helm upgrade "$RELEASE" "$CHART_DIR" \
-    --namespace "$NAMESPACE" \
-    --force-conflicts \
-    --reuse-values \
-    --set clustertenantManager.replicas=0 \
-    --set migrationFence.active=true \
-    --set migrationFence.previousReplicas="$DATABASE_FENCE_PRIOR_REPLICAS" \
-    --set-string migrationFence.fromReleaseVersion="$FROM_RELEASE_VERSION" \
-    --set-string migrationFence.toReleaseVersion="$RELEASE_VERSION" \
-    --wait \
-    --timeout "${TIMEOUT}s"
-  if ! server_deployment_inventory="$(kubectl get deployment "$server_deployment" -n "$NAMESPACE" --ignore-not-found -o name)"; then
-    err "Unable to read the fenced OpenCrane server deployment."
-    exit 1
+  DATABASE_LIVE_CONVERGENCE_STATE="$classification_output"
+}
+
+publish_database_migration_config_map()
+{
+  local publisher_status
+  local published_config_map
+  set +e
+  published_config_map="$(bash "$POSTGRES_MIGRATION_PUBLISHER" \
+    "$NAMESPACE" "$DATABASE_PREVIOUS_MIGRATION_ID" "$DATABASE_MIGRATION_SQL_FILE" \
+    "$DATABASE_PREVIOUS_MIGRATION_SQL_SHA256")"
+  publisher_status=$?
+  set -e
+  if (( publisher_status != 0 )); then
+    err "Unable to publish the exact reviewed database migration SQL."
+    return "$publisher_status"
   fi
-  if [[ -z "$server_deployment_inventory" ]]; then
-    err "Helm release '$RELEASE' exists but its server deployment is absent after fencing."
-    exit 1
+  if [[ -z "$published_config_map" ]]; then
+    err "Database migration SQL publisher returned no immutable ConfigMap name."
+    return 1
   fi
-  deployment_uid="$(kubectl get deployment "$server_deployment" -n "$NAMESPACE" -o jsonpath='{.metadata.uid}')"
-  [[ -n "$deployment_uid" ]] || { err "Fenced OpenCrane server deployment has no readable UID."; exit 1; }
-  fence_deadline="$(( $(date +%s) + TIMEOUT ))"
-  while true; do
-    desired_replicas="$(kubectl get deployment "$server_deployment" -n "$NAMESPACE" -o jsonpath='{.spec.replicas}')"
-    live_replicas="$(kubectl get deployment "$server_deployment" -n "$NAMESPACE" -o jsonpath='{.status.replicas}' 2>/dev/null || true)"
-    if ! server_pod_inventory="$(kubectl get pods -n "$NAMESPACE" \
-      --selector "app.kubernetes.io/instance=${RELEASE},app.kubernetes.io/component=opencrane-server" \
-      -o json)"; then
-      err "Unable to inventory OpenCrane server pods after fencing."
-      exit 1
+  DATABASE_MIGRATION_CONFIG_MAP="$published_config_map"
+}
+
+adopt_matching_existing_database_fence()
+{
+  local active_fence
+  local command_status
+  local listed_releases
+  local release_values
+  local release_status
+  set +e
+  release_status="$(helm status "$RELEASE" -n "$NAMESPACE" -o json)"
+  command_status=$?
+  set -e
+  if (( command_status != 0 )); then
+    set +e
+    listed_releases="$(helm list --namespace "$NAMESPACE" --filter "^${RELEASE}$" --output json)"
+    command_status=$?
+    set -e
+    if (( command_status != 0 )); then
+      err "Unable to determine whether a persisted database migration fence exists."
+      return "$command_status"
     fi
-    if ! server_replica_set_inventory="$(kubectl get replicasets -n "$NAMESPACE" \
-      --selector "app.kubernetes.io/instance=${RELEASE},app.kubernetes.io/component=opencrane-server" \
-      -o json)"; then
-      err "Unable to inventory OpenCrane server replica sets after fencing."
-      exit 1
+    if ! jq -e 'type == "array" and length == 0' <<<"$listed_releases" >/dev/null; then
+      err "OpenCrane Helm release exists but its persisted migration fence is unreadable."
+      return 1
     fi
-    if ! server_job_inventory="$(kubectl get jobs -n "$NAMESPACE" \
-      --selector "app.kubernetes.io/instance=${RELEASE},app.kubernetes.io/component=opencrane-server" \
-      -o json)"; then
-      err "Unable to inventory OpenCrane server jobs after fencing."
-      exit 1
-    fi
-    if ! jq -e --arg deployment_uid "$deployment_uid" '
-      .items | all(
-        (.spec.replicas // 0) == 0
-        and any(.metadata.ownerReferences[]?; .kind == "Deployment" and .uid == $deployment_uid)
-      )
-    ' <<<"$server_replica_set_inventory" >/dev/null; then
-      err "A server replica set is foreign-owned or remains scaled above zero after fencing."
-      exit 1
-    fi
-    active_pod_count="$(jq '[.items[] | select(.status.phase == "Pending" or .status.phase == "Running" or .status.phase == "Unknown")] | length' <<<"$server_pod_inventory")"
-    nonterminal_job_count="$(jq '[.items[] | select(all(.status.conditions[]?; .type != "Complete" and .type != "Failed"))] | length' <<<"$server_job_inventory")"
-    if [[ "$desired_replicas" == "0" && "${live_replicas:-0}" == "0" \
-      && "$active_pod_count" == "0" && "$nonterminal_job_count" == "0" ]]; then
-      return
-    fi
-    if [[ "$(date +%s)" -ge "$fence_deadline" ]]; then
-      err "OpenCrane server migration fence did not reach zero replicas; database mutation is blocked."
-      exit 1
-    fi
-    sleep 2
-  done
+    return 0
+  fi
+  set +e
+  release_values="$(helm get values "$RELEASE" -n "$NAMESPACE" -o json)"
+  command_status=$?
+  set -e
+  if (( command_status != 0 )); then
+    err "Unable to read a possible persisted database migration fence."
+    return "$command_status"
+  fi
+  if ! active_fence="$(jq -er '.migrationFence.active // false' <<<"$release_values")"; then
+    err "Unable to classify the persisted database migration fence."
+    return 1
+  fi
+  if [[ "$active_fence" == "false" ]]; then
+    return 0
+  fi
+  if ! DATABASE_FENCE_PRIOR_REPLICAS="$(jq -er --arg from "$FROM_RELEASE_VERSION" --arg to "$RELEASE_VERSION" '
+    select(
+      .migrationFence.active == true
+      and .migrationFence.fromReleaseVersion == $from
+      and .migrationFence.toReleaseVersion == $to
+      and (.clustertenantManager.replicas // 0) == 0
+    )
+    | .migrationFence.previousReplicas
+    | select(type == "number" and . > 0 and floor == .)
+    | tostring
+  ' <<<"$release_values")"; then
+    err "Existing active migration fence does not exactly match this release transition."
+    return 1
+  fi
+  log "Adopted the exact persisted migration fence for completed-transition finalization."
 }
 
 run_database_release_transition()
 {
-  local backup_evidence
+  local backup_evidence backup_status classification_status convergence_outcome policy_status
   if [[ "$POSTGRES_CLUSTER_EXISTS" == "0" && "$DATABASE_TRANSITION_KIND" != "fresh" ]]; then
     if ! postgres_release_render_has_recovery; then
       err "A non-fresh database with no live Cluster must render spec.bootstrap.recovery from --postgres-values."
-      exit 1
+      return 1
     fi
   fi
 
@@ -223,13 +252,98 @@ run_database_release_transition()
     return
   fi
 
-  fence_existing_opencrane_server
+  if [[ "$POSTGRES_CLUSTER_EXISTS" == "1" ]]; then
+    set +e
+    classify_database_convergence_state
+    classification_status=$?
+    set -e
+    if (( classification_status != 0 )); then
+      return "$classification_status"
+    fi
+    set +e
+    convergence_outcome="$(resolve_database_convergence_outcome live_transition \
+      "$DATABASE_LIVE_CONVERGENCE_STATE")"
+    policy_status=$?
+    set -e
+    if (( policy_status != 0 )); then
+      err "Database convergence policy rejected the live transition state."
+      return "$policy_status"
+    fi
+    case "$convergence_outcome" in
+      reconcile_without_fence)
+        log "Database is already '$DATABASE_LIVE_CONVERGENCE_STATE'; skipping migration and server fencing."
+        adopt_matching_existing_database_fence || return $?
+        install_postgres_release false true
+        return
+        ;;
+      reject_before_fence)
+        err "Live database evidence is incompatible with this release transition; refusing to fence the server."
+        return 1
+        ;;
+      migrate_source)
+        publish_database_migration_config_map || return $?
+        ;;
+      *)
+        err "Database convergence policy returned an unknown live-transition outcome."
+        return 1
+        ;;
+    esac
+  fi
+
+  capture_pre_fence_main_release_revision || return $?
+  run_guarded_post_fence_stage fence_existing_opencrane_server || return $?
   if [[ "$POSTGRES_CLUSTER_EXISTS" == "0" ]]; then
     log "Restoring the previous-version database before its bounded migration…"
-    install_postgres_release false false
+    run_guarded_post_fence_stage install_postgres_release false false || return $?
     POSTGRES_CLUSTER_EXISTS="1"
+    set +e
+    classify_database_convergence_state
+    classification_status=$?
+    set -e
+    if (( classification_status != 0 )); then
+      recover_failed_database_transition "$classification_status"
+      return $?
+    fi
+    set +e
+    convergence_outcome="$(resolve_database_convergence_outcome recovered_transition \
+      "$DATABASE_LIVE_CONVERGENCE_STATE")"
+    policy_status=$?
+    set -e
+    if (( policy_status != 0 )); then
+      err "Database convergence policy rejected the recovered transition state."
+      return "$policy_status"
+    fi
+    case "$convergence_outcome" in
+      reconcile_while_fenced)
+        log "Recovered database is already '$DATABASE_LIVE_CONVERGENCE_STATE'; skipping migration."
+        run_guarded_post_fence_stage install_postgres_release false true
+        return
+        ;;
+      reject_keep_fence)
+        err "Recovered database evidence is incompatible with this release transition; the server fence remains active."
+        return 1
+        ;;
+      migrate_recovered_source)
+        run_guarded_post_fence_stage publish_database_migration_config_map || return $?
+        ;;
+      *)
+        err "Database convergence policy returned an unknown recovered-transition outcome."
+        return 1
+        ;;
+    esac
   fi
-  backup_evidence="$(bash "$POSTGRES_MIGRATION_BACKUP" "$NAMESPACE" "$POSTGRES_RELEASE" "$TIMEOUT")"
+  set +e
+  backup_evidence="$(bash "$POSTGRES_MIGRATION_BACKUP" \
+    "$NAMESPACE" "$POSTGRES_RELEASE" "$TIMEOUT")"
+  backup_status=$?
+  set -e
+  if (( backup_status != 0 )); then
+    set +e
+    recover_failed_database_transition "$backup_status"
+    backup_status=$?
+    set -e
+    return "$backup_status"
+  fi
   log "CNPG recovery evidence completed before migration: $backup_evidence"
-  install_postgres_release true true
+  run_guarded_post_fence_stage install_postgres_release true true
 }
