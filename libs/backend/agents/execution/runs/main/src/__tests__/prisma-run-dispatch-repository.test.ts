@@ -2,10 +2,18 @@ import { createHash } from "node:crypto";
 
 import { AgentRunState, AgentRunTerminalReason, AgentServiceKind, AgentServiceState, RunOutboxEventKind, WorkloadAssignmentState, WorkloadKind, type PrismaClient } from "@prisma/client";
 import { ___GetContext } from "@opencrane/backend/observability";
+import { ___DigestCanonicalJson } from "@opencrane/util";
 import { describe, expect, it, vi } from "vitest";
 
 import { PrismaRunDispatchRepository } from "../prisma-run-dispatch-repository.js";
 import type { AttemptModelKeyIssuer, AttemptModelKeyMintRequest, MintedAttemptModelKey } from "../attempt-model-key.types.js";
+
+/** Build one reviewed tool definition. */
+function _Tool(name: string)
+{
+	const parametersSchema = { type: "object", additionalProperties: false } as const;
+	return { name, description: `${name} description`, parametersSchema, parametersSchemaDigest: ___DigestCanonicalJson(parametersSchema) };
+}
 
 /** A recording attempt-key issuer; non-claim tests never reach minting so its key is unused there. */
 function _Issuer(record?: (request: AttemptModelKeyMintRequest) => void): AttemptModelKeyIssuer
@@ -148,7 +156,7 @@ describe("PrismaRunDispatchRepository", function _DescribeDispatchRepository()
 			agentRun: { findUnique: vi.fn().mockResolvedValue(run), updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
 			outboxEvent: { findUnique: vi.fn().mockResolvedValue(event), updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
 			workloadAssignment: { findUnique: vi.fn().mockResolvedValue(null) },
-			runInputSnapshot: { findUnique: vi.fn().mockResolvedValue({ ..._Snapshot(), integrationAssignments: [{ integrationId: "int-1", allowedTools: ["read"] }, { integrationId: "int-2", allowedTools: ["write"] }] }) },
+			runInputSnapshot: { findUnique: vi.fn().mockResolvedValue({ ..._Snapshot(), integrationAssignments: [{ integrationId: "int-1", toolDefinitions: [_Tool("read")] }, { integrationId: "int-2", toolDefinitions: [_Tool("write")] }] }) },
 		};
 		const prisma = { $transaction: vi.fn(async function _Transaction(callback: (client: typeof transaction) => Promise<unknown>) { return callback(transaction); }) } as unknown as PrismaClient;
 		const obotRequests: unknown[] = [];
@@ -179,7 +187,7 @@ describe("PrismaRunDispatchRepository", function _DescribeDispatchRepository()
 		}
 
 		// 1. Assignments present but no issuer composed: the claim carries no Obot key at all.
-		const withAssignments = _buildTransaction({ ..._Snapshot(), integrationAssignments: [{ integrationId: "int-1", allowedTools: ["read"] }] });
+		const withAssignments = _buildTransaction({ ..._Snapshot(), integrationAssignments: [{ integrationId: "int-1", toolDefinitions: [_Tool("read")] }] });
 		const withoutIssuer = new PrismaRunDispatchRepository({ $transaction: vi.fn(async function _Transaction(callback: (client: unknown) => Promise<unknown>) { return callback(withAssignments); }) } as unknown as PrismaClient, { personalRuntimeNamespace: "silo-a", managedRuntimeNamespace: "silo-managed", claimLeaseMilliseconds: 30_000, assignmentTtlMilliseconds: 3_600_000 }, _Issuer());
 		const noIssuerResult = await withoutIssuer.claimNextAttemptAtomically();
 		expect(JSON.stringify(noIssuerResult)).not.toContain("obotKey");

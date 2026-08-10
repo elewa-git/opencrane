@@ -30,5 +30,5 @@ export class ObotMcpInvocationUnavailableError extends Error
  */
 export function __AssertToolAllowed(command: ObotMcpToolInvocationCommand): void
 {
-	if (!command.allowedTools.includes(command.toolName)) throw new ObotMcpToolNotAllowedError(command.toolName);
+	if (!command.allowedToolNames.includes(command.toolName)) throw new ObotMcpToolNotAllowedError(command.toolName);
 }

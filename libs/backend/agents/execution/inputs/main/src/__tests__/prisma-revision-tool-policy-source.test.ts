@@ -2,6 +2,7 @@ import { AgentRevisionState, ArtifactRevisionState, IntegrationCustodyState, Int
 import type { RunAdmissionCommand, RunAdmissionTransaction } from "@opencrane/backend/agents/execution/runs";
 import { describe, expect, it, vi } from "vitest";
 import { AgentServiceKinds } from "@opencrane/models/agents";
+import { ___DigestCanonicalJson } from "@opencrane/util";
 
 import { PrismaRevisionBudgetPolicySource, PrismaRevisionToolPolicySource } from "../prisma-revision-tool-policy-source.js";
 
@@ -9,6 +10,13 @@ import { PrismaRevisionBudgetPolicySource, PrismaRevisionToolPolicySource } from
 const _RUN = { agentServiceId: "service-1", agentRevisionId: "revision-1", agentKind: AgentServiceKinds.Managed, effectiveContractDigest: `sha256:${"a".repeat(64)}`, promptCompilerVersion: "v1", trigger: "managed_invocation", delegatedUserId: null, rootRunId: "run-1", parentRunId: null } as const;
 /** Fixed session-assembly command scoped to the active managed service. */
 const _COMMAND: RunAdmissionCommand = { runId: "run-1", siloId: "silo-1", agentServiceId: "service-1", conversationId: null, identityKind: "service", trigger: "managed_invocation", requestIdempotencyKey: "request-1" };
+
+/** Reviewed tool definition returned by the revision authority. */
+function _Tool(name = "calendar.read")
+{
+	const parametersSchema = { type: "object", additionalProperties: false } as const;
+	return { name, description: "Read a calendar", parametersSchema, parametersSchemaDigest: ___DigestCanonicalJson(parametersSchema) };
+}
 
 /** Creates a transaction facade around one revision and its directly referenced authorities. */
 function _Transaction(revision: unknown, skills: unknown[] = [], artifacts: unknown[] = []): RunAdmissionTransaction
@@ -19,7 +27,7 @@ function _Transaction(revision: unknown, skills: unknown[] = [], artifacts: unkn
 /** Creates a current revision with one live integration and one published skill artifact. */
 function _Revision(overrides: Record<string, unknown> = {})
 {
-	return { modelDefinition: { id: "model-definition-1", scope: ModelRoutingScope.ClusterTenant, clusterTenant: "silo-1", publicModelName: "tenant-model", litellmModelId: "litellm-deployment-1" }, integrationAssignments: [{ integrationId: "integration-1", siloId: "silo-1", allowedTools: ["calendar.read"], integration: { state: IntegrationState.Active }, custodyReference: { state: IntegrationCustodyState.Ready, expiresAt: new Date("2026-07-27T00:00:00.000Z") } }], skillAssignments: [{ skillRevisionId: "skill-revision-1" }], budget: { maxTurns: 4, maxTokens: 1024, maxDurationMs: 60_000 }, ...overrides };
+	return { modelDefinition: { id: "model-definition-1", scope: ModelRoutingScope.ClusterTenant, clusterTenant: "silo-1", publicModelName: "tenant-model", litellmModelId: "litellm-deployment-1" }, integrationAssignments: [{ integrationId: "integration-1", siloId: "silo-1", toolDefinitions: [_Tool()], integration: { state: IntegrationState.Active }, custodyReference: { state: IntegrationCustodyState.Ready, expiresAt: new Date("2026-07-27T00:00:00.000Z") } }], skillAssignments: [{ skillRevisionId: "skill-revision-1" }], budget: { maxTurns: 4, maxTokens: 1024, maxDurationMs: 60_000 }, ...overrides };
 }
 
 /** Creates one same-silo active skill whose selected revision is published. */
@@ -33,13 +41,13 @@ describe("PrismaRevisionToolPolicySource", function _DescribePrismaRevisionToolP
 	it("locks and freezes only live model, custody, skill, and artifact references", async function _LoadsLivePolicy()
 	{
 		const transaction = _Transaction(_Revision(), [_Skill()], [{ id: "artifact-revision-1", state: ArtifactRevisionState.Published }]);
-		await expect(new PrismaRevisionToolPolicySource().load(_COMMAND, _RUN, transaction)).resolves.toEqual({ outcome: "loaded", value: { modelRoute: { alias: "tenant-model", modelDefinitionId: "model-definition-1", litellmModelId: "litellm-deployment-1" }, integrationAssignments: [{ integrationId: "integration-1", allowedTools: ["calendar.read"] }], skillRevisionIds: ["skill-revision-1"], artifactRevisionIds: ["artifact-revision-1"] } });
+		await expect(new PrismaRevisionToolPolicySource().load(_COMMAND, _RUN, transaction)).resolves.toEqual({ outcome: "loaded", value: { modelRoute: { alias: "tenant-model", modelDefinitionId: "model-definition-1", litellmModelId: "litellm-deployment-1" }, integrationAssignments: [{ integrationId: "integration-1", toolDefinitions: [_Tool()] }], skillRevisionIds: ["skill-revision-1"], artifactRevisionIds: ["artifact-revision-1"] } });
 		expect(transaction.prisma.$queryRaw).toHaveBeenCalledTimes(2);
 	});
 
 	it("denies expired custody, a foreign model, and an unpublished skill", async function _DeniesUnavailablePolicy()
 	{
-		const expired = _Revision({ integrationAssignments: [{ integrationId: "integration-1", siloId: "silo-1", allowedTools: ["calendar.read"], integration: { state: IntegrationState.Active }, custodyReference: { state: IntegrationCustodyState.Ready, expiresAt: new Date("2026-07-25T00:00:00.000Z") } }] });
+		const expired = _Revision({ integrationAssignments: [{ integrationId: "integration-1", siloId: "silo-1", toolDefinitions: [_Tool()], integration: { state: IntegrationState.Active }, custodyReference: { state: IntegrationCustodyState.Ready, expiresAt: new Date("2026-07-25T00:00:00.000Z") } }] });
 		await expect(new PrismaRevisionToolPolicySource().load(_COMMAND, _RUN, _Transaction(expired))).resolves.toEqual({ outcome: "denied", reason: "tool_policy_unavailable" });
 		await expect(new PrismaRevisionToolPolicySource().load(_COMMAND, _RUN, _Transaction(_Revision({ modelDefinition: { id: "model-definition-1", scope: ModelRoutingScope.ClusterTenant, clusterTenant: "silo-other", publicModelName: "tenant-model", litellmModelId: "litellm-deployment-1" } }), [_Skill()], [{ id: "artifact-revision-1" }]))).resolves.toEqual({ outcome: "denied", reason: "tool_policy_unavailable" });
 		await expect(new PrismaRevisionToolPolicySource().load(_COMMAND, _RUN, _Transaction(_Revision(), [_Skill({ state: SkillRevisionState.Draft })], [{ id: "artifact-revision-1" }]))).resolves.toEqual({ outcome: "denied", reason: "tool_policy_unavailable" });

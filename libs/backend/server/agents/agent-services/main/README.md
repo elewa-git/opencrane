@@ -41,8 +41,9 @@ models, credentials, or a neighbouring scope.
 
 Invariant: a revision is only published when it belongs to the named service, is still a draft, and
 carries every executable field (a positive version, a digest, prompt and registered model definition,
-and positive turn/token/duration budgets). Every assigned integration and allowed tool name must also
-be a non-empty, unambiguous identifier: colons are rejected because the runtime compiles the frozen
+and positive turn/token/duration budgets). Every assigned integration tool must carry a non-empty,
+unambiguous name, reviewed description, valid object input schema, and matching canonical digest:
+colons are rejected because the runtime compiles the frozen
 assignment into `integration:<integrationId>:<toolName>`. The model is a foreign-key reference to the
 gateway-owned catalogue, so an author cannot turn an arbitrary provider alias into executable
 behaviour. A model is available only when it is platform-global or belongs to the service's tenant

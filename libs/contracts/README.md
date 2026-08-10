@@ -42,8 +42,9 @@ Invariant: the client's types are a faithful projection of the server's publishe
 after any API change so the two never silently diverge. `RunInputSnapshot` is the cross-domain
 record of one run's frozen persona, transcript, memory references, tools, budgets, model route and
 verified identity provenance; it carries only immutable coordinates and canonical JSON, never
-provider credentials or mutable source objects. Its integration assignments record only an
-integration identifier and the revision-approved tool names; the custody reference never enters
+provider credentials or mutable source objects. Its integration assignments record an integration
+identifier plus each revision-reviewed tool name, description, exact input JSON Schema, and
+canonical schema digest; the custody reference never enters
 the snapshot. It reappears only as the server-compiled `CompiledToolDefinition.obotMcpServerId` —
 non-secret ADDRESSING, because the custody reference doubles as Obot's MCP server id. The runtime
 receives that id plus an attempt-scoped, server-scoped Obot key so it can execute an approved call

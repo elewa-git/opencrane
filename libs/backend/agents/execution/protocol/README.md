@@ -112,7 +112,10 @@ browser connection therefore cannot drop an instruction or force a model turn to
 
 Tagged `scope:execution-protocol` (`layer:backend`): it may depend on agent, execution-run,
 execution-input, and personal-configuration contracts, authentication, authorization, the
-integration authority, the three injected transport-port scopes, and shared contracts. The
+integration authority, the three injected transport-port scopes, and shared contracts. Tool
+descriptors are projected only from the immutable snapshot; no decision or resume path consults a
+live catalogue. Candidate arguments and the schema digest are validated before reservation, and the
+same frozen schema is propagated to deferred approval. The
 authentication edge resolves only the
 backend-type-free request principal. The integration edge is read-only: it resolves and rechecks the revision's live
 custody reference before the Obot invocation port executes an allowed tool. Its fail-closed

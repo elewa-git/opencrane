@@ -21,6 +21,9 @@ It owns two kinds of thing:
 - A **canonical revision digest** (`__DigestAgentRevisionContent`) over the complete
   `AgentRevisionContent`. Every revision-writing authority hashes the same domain value it persists,
   so managed and personal revision paths cannot silently disagree about executable content.
+- **Reviewed integration tool definitions**: revision authoring freezes each tool's name,
+  description, object input schema, and canonical schema digest. The shared validator rejects
+  missing, malformed, duplicate, or digest-mismatched definitions before publication.
 - **Pure decision functions** over those types:
   - `state-transitions` holds the small lookup tables of which state may legally follow which (for
     example a run may go `running → completed` but never `completed → running`), and answers a plain

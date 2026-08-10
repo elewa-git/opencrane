@@ -75,9 +75,8 @@ function _snapshot(identityKind: "user" | "service" = "user"): RunInputSnapshot
 }
 
 /** Build one upgrade-session candidate with its canonical arguments digest. */
-function _candidate(): RuntimeExternalActionCandidate
+function _candidate(args: JsonValue = { kind: "persona_refresh" }): RuntimeExternalActionCandidate
 {
-	const args: JsonValue = { kind: "persona_refresh" };
 	return { protocolVersion: "opencrane.agent-runtime/v1", runtimeInstanceId: "runtime-1", commandId: "command-1", candidateId: "candidate-1", runId: "run-1", attempt: 1, fence: 1, kind: "external_action", toolRevisionId: UPGRADE_SESSION_TOOL_REVISION, toolInvocationId: "invocation-1", argumentsDigest: __DigestCanonicalJson(args), arguments: args };
 }
 
@@ -124,6 +123,31 @@ describe("production external-action runner", function _suite()
 		expect(dependencies.approvals.open).not.toHaveBeenCalled();
 	});
 
+	it.each([
+		["required property", {}],
+		["property type", { kind: 42 }],
+		["additional property", { kind: "persona_refresh", unexpected: true }],
+	] satisfies readonly (readonly [string, JsonValue])[])("denies invalid %s before reservation", async function _DeniesInvalidArguments(_case, argumentsValue)
+	{
+		const repository = new _InvocationRepository();
+		const runner = _CreateProductionExternalActionRunnerWithDependencies(_dependencies(repository));
+
+		await expect(runner.run(_candidate(argumentsValue), _snapshot(), [UPGRADE_SESSION_TOOL])).resolves.toEqual({ outcome: "denied" });
+		expect(repository.intents).toHaveLength(0);
+	});
+
+	it("denies a missing or post-admission mutated schema before reservation", async function _DeniesSchemaDrift()
+	{
+		const repository = new _InvocationRepository();
+		const runner = _CreateProductionExternalActionRunnerWithDependencies(_dependencies(repository));
+		const missing = { ...UPGRADE_SESSION_TOOL, parametersSchema: undefined } as unknown as CompiledToolDefinition;
+		const mutated = { ...UPGRADE_SESSION_TOOL, parametersSchema: { type: "object", additionalProperties: true } };
+
+		await expect(runner.run(_candidate(), _snapshot(), [missing])).resolves.toEqual({ outcome: "denied" });
+		await expect(runner.run(_candidate(), _snapshot(), [mutated])).resolves.toEqual({ outcome: "denied" });
+		expect(repository.intents).toHaveLength(0);
+	});
+
 	it("opens approval only after reserving an approval-gated action", async function _opensDeferredApproval()
 	{
 		const effects: string[] = [];
@@ -150,6 +174,7 @@ describe("production external-action runner", function _suite()
 			arguments: _candidate().arguments,
 			argumentsDigest: _candidate().argumentsDigest,
 			parametersSchema: approvalTool.parametersSchema,
+			parametersSchemaDigest: approvalTool.parametersSchemaDigest,
 			capabilitySetDigest: "sha256:capabilities",
 			reservationId: "reservation-1",
 			now: NOW,

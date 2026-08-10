@@ -1,7 +1,8 @@
 import { AgentRevisionState, ArtifactRevisionState, IntegrationCustodyState, IntegrationState, ModelRoutingScope, Prisma, SkillRevisionState, SkillState } from "@prisma/client";
 
 import type { InitialRunAuthority, RunAdmissionTransaction } from "@opencrane/backend/agents/execution/runs";
-import type { JsonValue } from "@opencrane/util";
+import { __AreReviewedIntegrationToolDefinitionsValid, type ReviewedIntegrationToolDefinition } from "@opencrane/models/agents";
+import { ___CloneCanonicalJson, type JsonValue } from "@opencrane/util";
 
 import type { BudgetPolicyInput, BudgetPolicySource, SessionAssemblyCommand, SessionAssemblyLoad, ToolPolicyInput, ToolPolicySource } from "./session-assembly.types.js";
 
@@ -45,13 +46,13 @@ export class PrismaRevisionToolPolicySource implements ToolPolicySource
 		if (revision === null || !_IsModelAvailable(revision.modelDefinition, command.siloId)) return { outcome: "denied", reason: "tool_policy_unavailable" };
 		if (revision.integrationAssignments.some(function _IsIntegrationUnavailable(assignment): boolean
 		{
+			const toolDefinitions = assignment.toolDefinitions as unknown as readonly ReviewedIntegrationToolDefinition[];
 			return assignment.siloId !== command.siloId
 				|| assignment.integration.state !== IntegrationState.Active
 				|| assignment.custodyReference.state !== IntegrationCustodyState.Ready
 				|| assignment.custodyReference.expiresAt.getTime() <= transaction.admittedAtEpochMs
-				|| assignment.allowedTools.length === 0
-				|| assignment.allowedTools.some(function _IsBlankTool(tool): boolean { return tool.trim().length === 0; })
-				|| new Set(assignment.allowedTools).size !== assignment.allowedTools.length;
+				|| !Array.isArray(toolDefinitions)
+				|| !__AreReviewedIntegrationToolDefinitionsValid(toolDefinitions);
 		})) return { outcome: "denied", reason: "tool_policy_unavailable" };
 
 		// 3. Verify every assigned skill and artifact remains same-silo and published before naming it in immutable input.
@@ -65,7 +66,7 @@ export class PrismaRevisionToolPolicySource implements ToolPolicySource
 			outcome: "loaded",
 			value: {
 				modelRoute: { alias: revision.modelDefinition.publicModelName, modelDefinitionId: revision.modelDefinition.id, litellmModelId: revision.modelDefinition.litellmModelId },
-				integrationAssignments: revision.integrationAssignments.map(function _IntegrationAssignment(assignment) { return { integrationId: assignment.integrationId, allowedTools: [...assignment.allowedTools] }; }),
+				integrationAssignments: revision.integrationAssignments.map(function _IntegrationAssignment(assignment) { return { integrationId: assignment.integrationId, toolDefinitions: ___CloneCanonicalJson(assignment.toolDefinitions as unknown as JsonValue) as unknown as readonly ReviewedIntegrationToolDefinition[] }; }),
 				skillRevisionIds,
 				artifactRevisionIds,
 			},

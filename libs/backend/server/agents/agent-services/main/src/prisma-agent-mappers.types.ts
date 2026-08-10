@@ -33,7 +33,7 @@ export interface AgentRevisionRow
 	readonly createdAt: Date;
 	readonly publishedAt: Date | null;
 	readonly skillAssignments: ReadonlyArray<{ skillId: string; skillRevisionId: string }>;
-	readonly integrationAssignments: ReadonlyArray<{ integrationId: string; custodyReferenceId: string; allowedTools: string[] }>;
+	readonly integrationAssignments: ReadonlyArray<{ integrationId: string; custodyReferenceId: string; toolDefinitions: Prisma.JsonValue }>;
 	readonly scopeAttachments: ReadonlyArray<{ scope: string; subjectType: string; subjectId: string }>;
 }
 

@@ -51,6 +51,6 @@ export async function _ExecuteIntegrationExternalAction(candidate: RuntimeExtern
 	if (resolved.outcome !== _resolvedIntegrationAssignmentOutcome) throw new IntegrationAssignmentUnavailableError(integrationTool.integrationId, resolved.reason);
 
 	// 3. Hand the custody reference and its allow-list only to Obot's credential-owning port.
-	const result = await dependencies.obotMcpInvocation.invokeTool({ siloId: dependencies.siloId, integrationId: resolved.assignment.integrationId, obotCustodyReference: resolved.assignment.obotCustodyReference, toolName: integrationTool.toolName, arguments: candidate.arguments, allowedTools: resolved.assignment.allowedTools });
+	const result = await dependencies.obotMcpInvocation.invokeTool({ siloId: dependencies.siloId, integrationId: resolved.assignment.integrationId, obotCustodyReference: resolved.assignment.obotCustodyReference, toolName: integrationTool.toolName, arguments: candidate.arguments, allowedToolNames: resolved.assignment.toolDefinitions.map(function _Name(definition): string { return definition.name; }) });
 	return result.content;
 }

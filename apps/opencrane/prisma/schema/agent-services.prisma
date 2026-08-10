@@ -112,13 +112,13 @@ model AgentRevisionSkillAssignment {
   @@map("agent_revision_skill_assignments")
 }
 
-/// Immutable tool allow-list for one integration on one draft AgentRevision.
+/// Immutable reviewed tool definitions for one integration on one draft AgentRevision.
 model AgentRevisionIntegrationAssignment {
   agentRevisionId    String                      @map("agent_revision_id")
   integrationId      String                      @map("integration_id")
   siloId             String                      @map("silo_id")
   custodyReferenceId String                      @map("custody_reference_id")
-  allowedTools       String[]                    @map("allowed_tools")
+  toolDefinitions    Json                        @map("tool_definitions")
   agentRevision      AgentRevision               @relation(fields: [agentRevisionId], references: [id], onDelete: Restrict)
   integration        Integration                 @relation(fields: [integrationId, siloId], references: [id, siloId], onDelete: Restrict)
   custodyReference   IntegrationCustodyReference @relation(fields: [custodyReferenceId, integrationId, siloId], references: [id, integrationId, siloId], onDelete: Restrict)

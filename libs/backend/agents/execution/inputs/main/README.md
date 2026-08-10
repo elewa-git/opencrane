@@ -43,7 +43,8 @@ whole assembly with a single precise reason; a duplicate request (same idempoten
 previously admitted snapshot without recompiling anything.
 
 Third-party tools enter the snapshot as revision-selected integration assignments, each containing
-only an integration identifier and its allowed tool names. The assembler never receives a custody
+an integration identifier and exact reviewed definitions (name, description, input schema, and
+schema digest). Missing, malformed, or digest-mismatched schemas fail admission. The assembler never receives a custody
 credential or an old MCP grant: the later action boundary resolves the live custody reference and
 checks the same revision assignment again.
 

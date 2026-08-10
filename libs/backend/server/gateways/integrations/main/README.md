@@ -14,7 +14,7 @@ credential without being the credential.
 This package is the authority over the integration lifecycle and its custody. It runs two flows.
 The **provisioning** flow (write side) asks Obot to take custody, then records a projection of the
 result in Postgres. The **resolution** flow (read side) hands the runtime an active integration
-assignment for a given agent revision — a custody reference plus the exact tools that revision may
+assignment for a given agent revision — a custody reference plus the exact reviewed tool definitions that revision may
 call, and never any credential material.
 
 ```
@@ -26,7 +26,7 @@ call, and never any credential material.
  └────────────────────────────────────┘        └─ persistence fails? revoke the remote custody
         │  ready custody reference (never credential bytes)
         ▼
- agent runtime resolves the revision's assignment → reference + allowed tools
+ agent runtime resolves the revision's assignment → reference + reviewed schema-bound tools
 ```
 
 **In this flow:** Obot [(vendored app)](../../../../../../apps/_infra/obot/README.md) via the `@opencrane/backend/server/infra/obot-custody` port · [agent-services](../../../agents/agent-services/main/README.md) *(a revision assigns an integration)*

@@ -53,6 +53,8 @@ export interface CompiledToolDefinition
 	readonly requiresApproval: boolean;
 	/** JSON-Schema parameters object validated by the adapter, never by an implicit retry. */
 	readonly parametersSchema: JsonValue;
+	/** Canonical digest binding the exact parameters schema to revision and snapshot authority. */
+	readonly parametersSchemaDigest: string;
 	/**
 	 * Obot MCP server id the runtime addresses for an approved invocation of this integration tool.
 	 *

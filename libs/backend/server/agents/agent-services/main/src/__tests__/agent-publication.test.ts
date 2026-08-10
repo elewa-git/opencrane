@@ -1,4 +1,4 @@
-import { AgentServiceKinds, type AgentRevision, type AgentRevisionId, type AgentService, type AgentServiceId } from "@opencrane/models/agents";
+import { AgentServiceKinds, __DigestAgentRevisionContent, type AgentRevision, type AgentRevisionId, type AgentService, type AgentServiceId } from "@opencrane/models/agents";
 import { describe, expect, it } from "vitest";
 
 import { __PublishAgentRevision } from "../agent-publication.js";
@@ -23,7 +23,7 @@ function _service(): AgentService
 /** Creates one valid immutable draft revision fixture. */
 function _revision(): AgentRevision
 {
-	return {
+	const revision: AgentRevision = {
 		id: "revision-1",
 		agentServiceId: "service-1",
 		revision: 1,
@@ -31,7 +31,7 @@ function _revision(): AgentRevision
 		sourceRevisionId: null,
 		changeMessage: "initial",
 		state: "draft",
-		digest: "sha256:revision",
+		digest: "sha256:pending",
 		promptPolicyVersion: "prompt-v1",
 		personaRevisionId: "persona-1",
 		modelDefinitionId: "model-definition-1",
@@ -43,6 +43,7 @@ function _revision(): AgentRevision
 		createdAt: "2026-07-18T00:00:00.000Z",
 		publishedAt: null,
 	};
+	return { ...revision, digest: __DigestAgentRevisionContent(revision.agentServiceId, revision.revision, revision) };
 }
 
 /** In-memory compare-and-swap repository used to exercise concurrent publication. */

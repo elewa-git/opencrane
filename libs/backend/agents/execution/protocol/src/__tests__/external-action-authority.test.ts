@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 
 import type { CompiledToolDefinition, RunInputSnapshot, RuntimeExternalActionCandidate } from "@opencrane/contracts";
-import type { JsonValue } from "@opencrane/util";
+import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 import { __DigestCanonicalJson } from "@opencrane/backend/server/iam/authorization";
 import type { ToolInvocationIntent, ToolInvocationReceipt, ToolInvocationRepository, ToolInvocationReservationResult } from "@opencrane/backend/server/iam/authorization";
 import type { Logger } from "@opencrane/backend/observability";
@@ -12,7 +12,9 @@ import { IntegrationAssignmentUnavailableError } from "../external-action-errors
 import type { ExternalActionExecutor } from "../external-action-authority.types.js";
 
 /** One granted tool revision the compiled input offers to the run. */
-const TOOL: CompiledToolDefinition = { name: "integration:search:query", toolRevisionId: "integration:search:query", description: "search", requiresApproval: false, parametersSchema: { type: "object" } };
+const _TOOL_SCHEMA = { type: "object" } as const;
+/** One granted tool revision the compiled input offers to the run. */
+const TOOL: CompiledToolDefinition = { name: "integration:search:query", toolRevisionId: "integration:search:query", description: "search", requiresApproval: false, parametersSchema: _TOOL_SCHEMA, parametersSchemaDigest: ___DigestCanonicalJson(_TOOL_SCHEMA) };
 
 /** Immutable snapshot facts the authority binds a candidate to. */
 function _snapshot(): RunInputSnapshot

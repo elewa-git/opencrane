@@ -7,7 +7,7 @@ import { __UnavailableObotMcpInvocationAdapter } from "../unavailable-obot-mcp-i
 /** Builds an invocation command with an allow-list of one tool by default. */
 function _command(overrides: Partial<ObotMcpToolInvocationCommand> = {}): ObotMcpToolInvocationCommand
 {
-	return { siloId: "silo-1", integrationId: "integ-1", obotCustodyReference: "obot-ref-opaque", toolName: "slack.listChannels", arguments: {}, allowedTools: ["slack.listChannels", "slack.getMessages"], ...overrides };
+	return { siloId: "silo-1", integrationId: "integ-1", obotCustodyReference: "obot-ref-opaque", toolName: "slack.listChannels", arguments: {}, allowedToolNames: ["slack.listChannels", "slack.getMessages"], ...overrides };
 }
 
 describe("MCP tool allow-list enforcement", function _AllowListSuite()
@@ -24,7 +24,7 @@ describe("MCP tool allow-list enforcement", function _AllowListSuite()
 
 	it("rejects everything when the allow-list is empty", function _EmptyAllowList()
 	{
-		expect(() => __AssertToolAllowed(_command({ allowedTools: [] }))).toThrow(ObotMcpToolNotAllowedError);
+		expect(() => __AssertToolAllowed(_command({ allowedToolNames: [] }))).toThrow(ObotMcpToolNotAllowedError);
 	});
 });
 

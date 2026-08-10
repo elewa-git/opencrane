@@ -1,5 +1,5 @@
 import { MANAGED_AGENT_RUNTIME_PROFILE_NAME } from "@opencrane/contracts";
-import { AgentServiceKinds, AgentServiceStates, __DiffAgentRevisions, __IsAgentServiceTransitionAllowed, type AgentRevisionContent, type AgentRevisionId, type AgentServiceId, type AgentServiceState } from "@opencrane/models/agents";
+import { AgentServiceKinds, AgentServiceStates, __AreReviewedIntegrationToolDefinitionsValid, __DiffAgentRevisions, __IsAgentServiceTransitionAllowed, type AgentRevisionContent, type AgentRevisionId, type AgentServiceId, type AgentServiceState } from "@opencrane/models/agents";
 
 import { ManagedRunAdmissionOutcomes, type AgentRevisionLifecycleRepository, type AgentServiceHistory, type AgentServiceLifecycleAction, type ChangeAgentServiceStateCommand, type ChangeAgentServiceStateResult, type CompareAgentRevisionsResult, type CreateManagedAgentServiceCommand, type CreateManagedAgentServiceResult, type AppendAgentRevisionResult, type ManagedRunAdmissionPort, type ManagedRunAdmissionResult, type ManagedRunNowCommand, type RestoreAgentRevisionCommand, type ReviseAgentRevisionCommand } from "./agent-revision-lifecycle.types.js";
 
@@ -35,7 +35,7 @@ function _isContentValid(content: AgentRevisionContent): boolean
 		&& _isPositiveInteger(content.budget.maxTokens)
 		&& _isPositiveInteger(content.budget.maxDurationMs)
 		&& content.skills.every(skill => _isPresent(skill.skillId) && _isPresent(skill.revisionId))
-		&& content.integrationAssignments.every(assignment => _isPresent(assignment.integrationId) && _isPresent(assignment.custodyReferenceId) && assignment.allowedTools.every(_isPresent))
+		&& content.integrationAssignments.every(assignment => _isPresent(assignment.integrationId) && _isPresent(assignment.custodyReferenceId) && __AreReviewedIntegrationToolDefinitionsValid(assignment.toolDefinitions))
 		&& content.scopeAttachments.every(attachment => _isPresent(attachment.subjectId))
 		&& _isUniqueBy(content.skills, skill => skill.skillId)
 		&& _isUniqueBy(content.integrationAssignments, assignment => assignment.integrationId)

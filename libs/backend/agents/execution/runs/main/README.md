@@ -43,7 +43,7 @@ revalidate every input inside that transaction, and commits the `AgentRun`, its 
 For an agent-session message, the conversation authority supplies a transaction callback that also
 persists that canonical message in this same commit. The canonical digest covers every
 snapshot field except its own digest. The persisted snapshot stores revision-selected integration
-tool assignments as canonical JSON, not a mutable MCP-server grant or a custody reference; custody
+tool assignments, including exact input schemas and their digests, as canonical JSON, not a mutable MCP-server grant or a custody reference; custody
 is rechecked only when an action is actually attempted.
 
 The transaction-bound conversation input authority rejects a second non-terminal foreground run

@@ -1,10 +1,17 @@
 import { describe, expect, it } from "vitest";
 
 import { PROMPT_COMPILER_VERSION, RunInputSnapshotIdentityKinds, type CompiledModelRoute, type CompiledToolDefinition, type RunInputSnapshot } from "@opencrane/contracts";
-import type { JsonValue } from "@opencrane/util";
+import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 
 import { __AppendCompiledTool, __CompileRunInput } from "../prompt-compiler.js";
 import type { PromptCompilerRepositories } from "../prompt-compiler.types.js";
+
+/** Build one schema-bound snapshot tool definition. */
+function _snapshotTool(name: string)
+{
+	const parametersSchema = { type: "object", additionalProperties: false } as const;
+	return { name, description: `${name} description`, parametersSchema, parametersSchemaDigest: ___DigestCanonicalJson(parametersSchema) };
+}
 
 /** Build a snapshot fixture whose references the fake repositories can resolve. */
 function _snapshot(overrides: Partial<RunInputSnapshot> = {}): RunInputSnapshot
@@ -23,7 +30,7 @@ function _snapshot(overrides: Partial<RunInputSnapshot> = {}): RunInputSnapshot
 		skillRevisionIds: ["skill-1"],
 		memoryFacts: [{ datasetId: "d-1", factId: "fact-2", contentDigest: "sha256:a", provenance: [] }, { datasetId: "d-1", factId: "fact-1", contentDigest: "sha256:b", provenance: [] }],
 		memoryQueryPolicy: {},
-		integrationAssignments: [{ integrationId: "integration-b", allowedTools: ["write"] }, { integrationId: "integration-a", allowedTools: ["read"] }],
+		integrationAssignments: [{ integrationId: "integration-b", toolDefinitions: [_snapshotTool("write")] }, { integrationId: "integration-a", toolDefinitions: [_snapshotTool("read")] }],
 		modelRoute: { alias: "silo-default" },
 		budgetPolicy: { maxTotalTokens: 4096, maxCostUsdMicros: 500000, maxToolInvocations: 8, wallClockDeadlineEpochMs: 1_800_000_000_000 },
 		identitySnapshot: { kind: RunInputSnapshotIdentityKinds.User, executionSubjectId: "user-1", organizationId: "org-1", fleetMembershipRevision: 3, fleetMembershipIssuer: "fleet", fleetMembershipIssuerKeyId: "k1", fleetMembershipAssertionId: "a1", fleetMembershipPayloadDigest: "sha256:c", fleetMembershipTrustedUntil: "2026-07-21T00:00:00.000Z" },
@@ -40,8 +47,8 @@ function _snapshot(overrides: Partial<RunInputSnapshot> = {}): RunInputSnapshot
 function _tools(): readonly CompiledToolDefinition[]
 {
 	return [
-		{ name: "zulu", toolRevisionId: "tr-z", description: "last by name", requiresApproval: false, parametersSchema: { type: "object" } },
-		{ name: "alpha", toolRevisionId: "tr-a", description: "first by name", requiresApproval: true, parametersSchema: { type: "object" } },
+		{ name: "zulu", toolRevisionId: "tr-z", description: "last by name", requiresApproval: false, parametersSchema: _snapshotTool("zulu").parametersSchema, parametersSchemaDigest: _snapshotTool("zulu").parametersSchemaDigest },
+		{ name: "alpha", toolRevisionId: "tr-a", description: "first by name", requiresApproval: true, parametersSchema: _snapshotTool("alpha").parametersSchema, parametersSchemaDigest: _snapshotTool("alpha").parametersSchemaDigest },
 	];
 }
 
@@ -81,11 +88,11 @@ describe("__CompileRunInput", function _describeCompiler()
 	it("passes the exact immutable integration allowance to the tool-definition port", async function _passesIntegrationAllowance()
 	{
 		let received: RunInputSnapshot["integrationAssignments"] | null = null;
-		const snapshot = _snapshot({ integrationAssignments: [{ integrationId: "integration-z", allowedTools: ["write", "read"] }] });
+		const snapshot = _snapshot({ integrationAssignments: [{ integrationId: "integration-z", toolDefinitions: [_snapshotTool("write"), _snapshotTool("read")] }] });
 
 		await __CompileRunInput(snapshot, _repositories({ loadToolDefinitions: async function _toolDefinitions(assignments): Promise<readonly CompiledToolDefinition[]> { received = assignments; return []; } }));
 
-		expect(received).toEqual([{ integrationId: "integration-z", allowedTools: ["write", "read"] }]);
+		expect(received).toEqual(snapshot.integrationAssignments);
 	});
 
 	it("resolves literal budget numbers from the opaque budget policy", async function _resolvesBudget()
@@ -143,7 +150,8 @@ describe("__AppendCompiledTool", function _describeAppend()
 	it("orders the added first-party tool and reseals the changed payload", async function _Reseals()
 	{
 		const input = await __CompileRunInput(_snapshot(), _repositories());
-		const updated = __AppendCompiledTool(input, { name: "upgrade_session", toolRevisionId: "opencrane:personal:upgrade_session:v1", description: "future change", requiresApproval: false, parametersSchema: { type: "object" } });
+		const tool = _snapshotTool("upgrade_session");
+		const updated = __AppendCompiledTool(input, { name: "upgrade_session", toolRevisionId: "opencrane:personal:upgrade_session:v1", description: "future change", requiresApproval: false, parametersSchema: tool.parametersSchema, parametersSchemaDigest: tool.parametersSchemaDigest });
 
 		expect(updated.tools.map(function _name(tool): string { return tool.name; })).toEqual(["alpha", "upgrade_session", "zulu"]);
 		expect(updated.digest).not.toBe(input.digest);
@@ -152,6 +160,7 @@ describe("__AppendCompiledTool", function _describeAppend()
 	it("rejects a duplicate tool name so an MCP descriptor cannot shadow a first-party tool", async function _RejectsDuplicateName()
 	{
 		const input = await __CompileRunInput(_snapshot(), _repositories());
-		expect(function _appendDuplicateName(): void { __AppendCompiledTool(input, { name: "alpha", toolRevisionId: "opencrane:personal:upgrade_session:v1", description: "shadow", requiresApproval: false, parametersSchema: { type: "object" } }); }).toThrow(/already contains tool/);
+		const tool = _snapshotTool("alpha");
+		expect(function _appendDuplicateName(): void { __AppendCompiledTool(input, { name: "alpha", toolRevisionId: "opencrane:personal:upgrade_session:v1", description: "shadow", requiresApproval: false, parametersSchema: tool.parametersSchema, parametersSchemaDigest: tool.parametersSchemaDigest }); }).toThrow(/already contains tool/);
 	});
 });

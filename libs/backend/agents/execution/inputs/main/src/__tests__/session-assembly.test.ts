@@ -2,6 +2,7 @@ import { MemoryFactProvenanceSourceKinds, RunInputSnapshotIdentityKinds, type Ru
 import { AgentServiceKinds } from "@opencrane/models/agents";
 import { MessageContentBlockKinds } from "@opencrane/models/conversations";
 import { RunAdmissionDenialReasons, type UserRunAdmissionCommand } from "@opencrane/backend/agents/execution/runs";
+import { ___DigestCanonicalJson } from "@opencrane/util";
 import type { SessionAssemblyAuthorities } from "../session-assembly.types.js";
 import { describe, expect, it } from "vitest";
 
@@ -9,6 +10,13 @@ import { __AssembleRunInputSnapshot } from "../session-assembly.js";
 
 /** Fixed admission coordinates used to prove deterministic snapshot assembly. */
 const _COMMAND: UserRunAdmissionCommand = { runId: "run-1", siloId: "silo-1", agentServiceId: "service-1", conversationId: "conversation-1", identityKind: "user", trigger: "interactive", executionSubjectId: "user-1", requestIdempotencyKey: "request-1", inputMessageId: "message-current", inputMessageBlocks: [{ id: "block-1", kind: MessageContentBlockKinds.Text, value: "Hello" }] };
+
+/** Build one reviewed integration tool definition. */
+function _Tool(name: string)
+{
+	const parametersSchema = { type: "object", additionalProperties: false } as const;
+	return { name, description: `${name} description`, parametersSchema, parametersSchemaDigest: ___DigestCanonicalJson(parametersSchema) };
+}
 
 /** Builds independently fakeable authority ports with deliberately unsorted source outputs. */
 function _Authorities(onAdmission: (snapshot: RunInputSnapshot) => "accepted" | "idempotent" | "active_run" | "persistence_unavailable", personaRevisionId: string | null = "persona-1"): SessionAssemblyAuthorities
@@ -30,7 +38,7 @@ function _Authorities(onAdmission: (snapshot: RunInputSnapshot) => "accepted" | 
 		conversationContext: { load: async function _load() { return { outcome: "loaded", value: { messageIds: ["message-2", "message-1"], pendingUserMessage: { id: "message-1", blocks: [{ id: "block-1", kind: MessageContentBlockKinds.Text, value: "Hello" }] } } } as const; } },
 		preferenceFacts: { load: async function _load() { return { outcome: "loaded", value: [{ id: "preference-2" }, { id: "preference-1" }] } as const; } },
 		memoryScope: { load: async function _load() { return { outcome: "loaded", value: { memoryQueryPolicy: { scope: "personal" }, memoryFacts: [{ datasetId: "dataset-b", factId: "fact-2", contentDigest: `sha256:${"1".repeat(64)}`, provenance: [{ sourceKind: MemoryFactProvenanceSourceKinds.Message, sourceId: "message-2", capturedAt: "2026-07-19T11:59:00.000Z" }] }, { datasetId: "dataset-a", factId: "fact-1", contentDigest: `sha256:${"2".repeat(64)}`, provenance: [{ sourceKind: MemoryFactProvenanceSourceKinds.ExplicitUserFact, sourceId: "preference-1", sourceUserId: "user-1", capturedAt: "2026-07-19T11:58:00.000Z" }] }] } } as const; } },
-		toolPolicy: { load: async function _load() { return { outcome: "loaded", value: { modelRoute: { alias: "target-model" }, integrationAssignments: [{ integrationId: "integration-2", allowedTools: ["write", "read"] }, { integrationId: "integration-1", allowedTools: ["search"] }], skillRevisionIds: ["skill-2", "skill-1"], artifactRevisionIds: ["artifact-2", "artifact-1"] } } as const; } },
+		toolPolicy: { load: async function _load() { return { outcome: "loaded", value: { modelRoute: { alias: "target-model" }, integrationAssignments: [{ integrationId: "integration-2", toolDefinitions: [_Tool("write"), _Tool("read")] }, { integrationId: "integration-1", toolDefinitions: [_Tool("search")] }], skillRevisionIds: ["skill-2", "skill-1"], artifactRevisionIds: ["artifact-2", "artifact-1"] } } as const; } },
 		skillEligibility: { load: async function _load() { return { outcome: "loaded", value: null } as const; } },
 		budgetPolicy: { load: async function _load() { return { outcome: "loaded", value: { budgetPolicy: { maxTokens: 1000, maxTurns: 4 } } } as const; } },
 		identityEnvelope: { load: async function _load() { return { outcome: "loaded", value: { kind: RunInputSnapshotIdentityKinds.User, executionSubjectId: "user-1", organizationId: "org-1", fleetMembershipRevision: 8, fleetMembershipIssuer: "opencrane-fleet", fleetMembershipIssuerKeyId: "key-1", fleetMembershipAssertionId: "assertion-1", fleetMembershipPayloadDigest: `sha256:${"e".repeat(64)}`, fleetMembershipTrustedUntil: "2026-07-20T13:00:00.000Z", capabilitySetDigest: `sha256:${"f".repeat(64)}` } } as const; } },
@@ -52,7 +60,7 @@ describe("__AssembleRunInputSnapshot", function _describeSessionAssembly()
 		expect(firstSnapshots[0]?.messageIds).toEqual(["message-2", "message-1"]);
 		expect(firstSnapshots[0]?.preferenceFactIds).toEqual(["preference-1", "preference-2"]);
 		expect(firstSnapshots[0]?.memoryFacts.map(function _factId(fact) { return fact.factId; })).toEqual(["fact-1", "fact-2"]);
-		expect(firstSnapshots[0]?.integrationAssignments).toEqual([{ integrationId: "integration-1", allowedTools: ["search"] }, { integrationId: "integration-2", allowedTools: ["read", "write"] }]);
+		expect(firstSnapshots[0]?.integrationAssignments).toEqual([{ integrationId: "integration-1", toolDefinitions: [_Tool("search")] }, { integrationId: "integration-2", toolDefinitions: [_Tool("read"), _Tool("write")] }]);
 	});
 
 	it("fails closed before persistence when a personal service has no active approved persona", async function _deniesMissingPersona()
@@ -100,7 +108,7 @@ describe("__AssembleRunInputSnapshot", function _describeSessionAssembly()
 	{
 		let admitted = false;
 		const authorities = _Authorities(function _accept() { admitted = true; return "accepted"; });
-		authorities.toolPolicy = { load: async function _load() { return { outcome: "loaded", value: { modelRoute: {}, integrationAssignments: [{ integrationId: "calendar", allowedTools: ["calendar:read"] }], skillRevisionIds: [], artifactRevisionIds: [] } } as const; } };
+		authorities.toolPolicy = { load: async function _load() { return { outcome: "loaded", value: { modelRoute: {}, integrationAssignments: [{ integrationId: "calendar", toolDefinitions: [_Tool("calendar:read")] }], skillRevisionIds: [], artifactRevisionIds: [] } } as const; } };
 
 		await expect(__AssembleRunInputSnapshot(_COMMAND, authorities)).resolves.toEqual({ outcome: "denied", reason: "tool_policy_unavailable" });
 		expect(admitted).toBe(false);

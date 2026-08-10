@@ -36,7 +36,15 @@ export function __DigestAgentRevisionContent(agentServiceId: string, revision: n
 			return {
 				integrationId: assignment.integrationId,
 				custodyReferenceId: assignment.custodyReferenceId,
-				allowedTools: [...assignment.allowedTools],
+				toolDefinitions: assignment.toolDefinitions.map(function _MapTool(definition): JsonValue
+				{
+					return {
+						name: definition.name,
+						description: definition.description,
+						parametersSchema: definition.parametersSchema,
+						parametersSchemaDigest: definition.parametersSchemaDigest,
+					};
+				}),
 			};
 		}),
 		scopeAttachments: content.scopeAttachments.map(function _MapScope(attachment)

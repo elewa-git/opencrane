@@ -1,3 +1,5 @@
+import type { ReviewedIntegrationToolDefinition } from "@opencrane/models/agents";
+
 /** Request to resolve one immutable integration assignment for runtime preparation. */
 export interface ResolveIntegrationAssignmentCommand
 {
@@ -18,8 +20,8 @@ export interface ResolvedIntegrationAssignment
 	readonly obotCatalogEntryId: string;
 	/** Opaque Obot-issued custody handle; it is not credential material. */
 	readonly obotCustodyReference: string;
-	/** Explicit revision-scoped tool allow-list. */
-	readonly allowedTools: readonly string[];
+	/** Exact reviewed revision-scoped tool definitions. */
+	readonly toolDefinitions: readonly ReviewedIntegrationToolDefinition[];
 }
 
 /** Credential-free integration assignment resolution outcome. */

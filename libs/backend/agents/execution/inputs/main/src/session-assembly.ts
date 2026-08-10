@@ -1,6 +1,7 @@
 import { __DigestRunInputSnapshot } from "@opencrane/backend/agents/execution/runs";
 import type { InitialRunAuthority, RunAdmissionCommit } from "@opencrane/backend/agents/execution/runs";
 import type { RunInputSnapshot, RunInputSnapshotIntegrationAssignment } from "@opencrane/contracts";
+import { __AreReviewedIntegrationToolDefinitionsValid, type ReviewedIntegrationToolDefinition } from "@opencrane/models/agents";
 import { ___CloneCanonicalJson, ___SortBy } from "@opencrane/util";
 import type { JsonValue } from "@opencrane/util";
 
@@ -130,7 +131,12 @@ function _canonicalIntegrationAssignments(assignments: readonly RunInputSnapshot
 	return [...assignments]
 		.map(function _assignment(assignment): RunInputSnapshotIntegrationAssignment
 		{
-			return { integrationId: assignment.integrationId, allowedTools: ___SortBy([...new Set(assignment.allowedTools)]) };
+			return {
+				integrationId: assignment.integrationId,
+				toolDefinitions: [...assignment.toolDefinitions]
+					.map(function _tool(definition) { return { name: definition.name, description: definition.description, parametersSchema: ___CloneCanonicalJson(definition.parametersSchema), parametersSchemaDigest: definition.parametersSchemaDigest }; })
+					.sort(function _byTool(left, right): number { return left.name.localeCompare(right.name); }),
+			};
 		})
 		.sort(function _byIntegration(left, right): number { return left.integrationId.localeCompare(right.integrationId); });
 }
@@ -142,7 +148,6 @@ function _areIntegrationAssignmentsValid(assignments: readonly RunInputSnapshotI
 	{
 		return assignment.integrationId.trim().length > 0
 			&& !assignment.integrationId.includes(":")
-			&& assignment.allowedTools.length > 0
-			&& assignment.allowedTools.every(function _tool(tool): boolean { return tool.trim().length > 0 && !tool.includes(":"); });
+			&& __AreReviewedIntegrationToolDefinitionsValid(assignment.toolDefinitions as readonly ReviewedIntegrationToolDefinition[]);
 	});
 }

@@ -3,7 +3,8 @@ import { createHash } from "node:crypto";
 import type { Prisma } from "@prisma/client";
 
 import type { CompiledMessage, CompiledModelRoute, CompiledRunInput, CompiledToolDefinition, MemoryFactReference, RunInputSnapshot, RunInputSnapshotIntegrationAssignment } from "@opencrane/contracts";
-import type { JsonValue } from "@opencrane/util";
+import { __AreReviewedIntegrationToolDefinitionsValid, type ReviewedIntegrationToolDefinition } from "@opencrane/models/agents";
+import { ___CloneCanonicalJson, type JsonValue } from "@opencrane/util";
 import { __CompileRunInput } from "@opencrane/backend/agents/execution/inputs";
 import type { PromptCompilerRepositories } from "@opencrane/backend/agents/execution/inputs";
 import type { MemoryGatewayClient } from "@opencrane/backend/server/infra/memory-gateway-client";
@@ -28,7 +29,7 @@ const _MINIMUM_STATEMENT_RECALL_RESULTS = 32;
  * statement is verified against the digest frozen in the snapshot, so a redelivered frame either
  * carries byte-identical memory text or the compile fails closed.
  * Integration addressing is the other live read: the injected authority resolves each assignment's
- * current custody reference without broadening the snapshot's frozen tool allow-list.
+ * current custody reference without broadening the snapshot's frozen tool definitions.
  *
  * @param memoryGateway - Authenticated read-only memory-gateway client shared with the action runner.
  * @param integrationAuthority - Optional live custody resolver; null omits Obot addressing entirely.
@@ -145,8 +146,8 @@ function _messageContent(blocks: Prisma.JsonValue): string
  * Each tool is named with its integration and becomes an `integration:<id>:<tool>` revision id.
  * That exact revision id reaches the external-action boundary, which independently rechecks its
  * live custody reference and the revision's allow-list. Third-party actions require an approval
- * until an explicit per-tool approval policy exists. Per-argument JSON schemas are not modelled
- * server-side yet, so the compiled schema is a permissive object the adapter still validates.
+ * until an explicit per-tool approval policy exists. Schema and digest come only from the admitted
+ * snapshot; compilation never consults a mutable catalogue or synthesises a permissive fallback.
  *
  * When the injected integration authority is present, each assignment additionally resolves its
  * live custody reference into non-secret `obotMcpServerId` ADDRESSING for the runtime's direct
@@ -158,12 +159,14 @@ async function _loadToolDefinitions(integrationAssignments: readonly RunInputSna
 	const tools: CompiledToolDefinition[] = [];
 	for (const assignment of integrationAssignments)
 	{
+		if (!__AreReviewedIntegrationToolDefinitionsValid(assignment.toolDefinitions as readonly ReviewedIntegrationToolDefinition[])) throw new Error("snapshot integration tool definitions are invalid");
 		// 1. Resolve addressing once per assignment; the id is Obot's MCP server id, not a credential.
 		const obotMcpServerId = await _resolveObotMcpServerId(assignment.integrationId, snapshot, integrationAuthority);
-		for (const tool of assignment.allowedTools)
+		for (const tool of assignment.toolDefinitions)
 		{
 			// 2. Compile one definition per allowed tool with the frozen revision id and addressing.
-			tools.push({ name: `${ExternalActionRevisionKinds.Integration}:${assignment.integrationId}:${tool}`, toolRevisionId: `${ExternalActionRevisionKinds.Integration}:${assignment.integrationId}:${tool}`, description: `Tool ${tool} from integration ${assignment.integrationId}`, requiresApproval: true, parametersSchema: { type: "object" }, ...(obotMcpServerId === null ? {} : { obotMcpServerId }) });
+			const toolRevisionId = `${ExternalActionRevisionKinds.Integration}:${assignment.integrationId}:${tool.name}`;
+			tools.push({ name: toolRevisionId, toolRevisionId, description: tool.description, requiresApproval: true, parametersSchema: ___CloneCanonicalJson(tool.parametersSchema), parametersSchemaDigest: tool.parametersSchemaDigest, ...(obotMcpServerId === null ? {} : { obotMcpServerId }) });
 		}
 	}
 	return tools;

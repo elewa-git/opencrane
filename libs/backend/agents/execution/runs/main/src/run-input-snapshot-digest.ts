@@ -42,7 +42,13 @@ export function __DigestRunInputSnapshot(snapshot: Omit<RunInputSnapshot, "diges
 		memoryQueryPolicy: snapshot.memoryQueryPolicy,
 		integrationAssignments: snapshot.integrationAssignments.map(function _integration(assignment): JsonValue
 		{
-			return { integrationId: assignment.integrationId, allowedTools: assignment.allowedTools };
+			return {
+				integrationId: assignment.integrationId,
+				toolDefinitions: assignment.toolDefinitions.map(function _tool(definition): JsonValue
+				{
+					return { name: definition.name, description: definition.description, parametersSchema: definition.parametersSchema, parametersSchemaDigest: definition.parametersSchemaDigest };
+				}),
+			};
 		}),
 		modelRoute: snapshot.modelRoute,
 		budgetPolicy: snapshot.budgetPolicy,

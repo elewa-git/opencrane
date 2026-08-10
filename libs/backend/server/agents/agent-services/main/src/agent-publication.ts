@@ -1,4 +1,4 @@
-import type { AgentRevision } from "@opencrane/models/agents";
+import { __AreReviewedIntegrationToolDefinitionsValid, __DigestAgentRevisionContent, type AgentRevision } from "@opencrane/models/agents";
 
 import type { AgentServicePublicationRepository, PublishAgentRevisionCommand, PublishAgentRevisionFailureReason, PublishAgentRevisionResult } from "./agent-publication.types.js";
 
@@ -23,7 +23,9 @@ function _isPublishableRevision(revision: AgentRevision): boolean
 		&& Number.isSafeInteger(revision.budget.maxTokens)
 		&& revision.budget.maxTokens > 0
 		&& Number.isSafeInteger(revision.budget.maxDurationMs)
-		&& revision.budget.maxDurationMs > 0;
+		&& revision.budget.maxDurationMs > 0
+		&& revision.integrationAssignments.every(function _Assignment(assignment): boolean { return __AreReviewedIntegrationToolDefinitionsValid(assignment.toolDefinitions); })
+		&& revision.digest === __DigestAgentRevisionContent(revision.agentServiceId, revision.revision, revision);
 }
 
 /** Creates a denied publication result. */

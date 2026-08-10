@@ -1,5 +1,5 @@
 import { UPGRADE_SESSION_TOOL_REVISION } from "@opencrane/backend/agents/personal/configuration";
-import { __DigestCanonicalJson } from "@opencrane/backend/server/iam/authorization";
+import { __DigestCanonicalJson, __ValidateDeferredToolArguments } from "@opencrane/backend/server/iam/authorization";
 import type { CompiledToolDefinition, RunInputSnapshot, RuntimeExternalActionCandidate } from "@opencrane/contracts";
 import type { JsonValue } from "@opencrane/util";
 
@@ -26,7 +26,12 @@ export function _CreateProductionExternalActionRunnerWithDependencies(dependenci
 /** Reserve, execute, and complete one candidate without letting transport state become authority. */
 async function _runExternalAction(candidate: RuntimeExternalActionCandidate, snapshot: RunInputSnapshot, compiledTools: readonly CompiledToolDefinition[], dependencies: ProductionExternalActionRunnerDependencies): Promise<RuntimeExternalActionRunnerResult>
 {
-	// 1. Select an executor only from the compiler-issued revision and admitted identity.
+	// 1. Bind the candidate to one compiler-issued definition and reject schema drift or invalid
+	// arguments before reservation can create any durable invocation authority.
+	const tool = compiledTools.find(function _Match(definition) { return definition.toolRevisionId === candidate.toolRevisionId; });
+	if (tool === undefined || !_hasValidFrozenSchema(tool, candidate.arguments)) return { outcome: "denied" };
+
+	// 2. Select an executor only from the compiler-issued revision and admitted identity.
 	let executor: ExternalActionExecutor<JsonValue> | null;
 	try
 	{
@@ -38,14 +43,28 @@ async function _runExternalAction(candidate: RuntimeExternalActionCandidate, sna
 	}
 	if (executor === null) return { outcome: "denied" };
 
-	// 2. Reserve before I/O; only proven terminal post-reservation outcomes become denials.
-	const approvalRequired = _approvalRequired(candidate, compiledTools);
+	// 3. Reserve before I/O; only proven terminal post-reservation outcomes become denials.
+	const approvalRequired = tool.requiresApproval;
 	const result = await __ExecuteExternalAction(dependencies.invocations, { candidate, snapshot, compiledTools, approvalRequired }, executor, dependencies.log);
 	if (result.outcome === "denied") return { outcome: "denied" };
 
-	// 3. Open approval only for the exact deferred reservation; every other success is complete.
+	// 4. Open approval only for the exact deferred reservation; every other success is complete.
 	if (result.outcome !== "deferred") return { outcome: "completed" };
 	return _openDeferredApproval(candidate, snapshot, compiledTools, result.reservationId, dependencies);
+}
+
+/** Fail closed on a missing, malformed, mutated, or argument-incompatible frozen tool schema. */
+function _hasValidFrozenSchema(tool: CompiledToolDefinition, argumentsValue: JsonValue): boolean
+{
+	try
+	{
+		return __DigestCanonicalJson(tool.parametersSchema) === tool.parametersSchemaDigest
+			&& __ValidateDeferredToolArguments(tool.parametersSchema, argumentsValue);
+	}
+	catch
+	{
+		return false;
+	}
 }
 
 /** Select the first-party upgrade executor or the transport router admitted by the snapshot. */
@@ -70,12 +89,6 @@ function _createCandidateExecutor(candidate: RuntimeExternalActionCandidate, sna
 	});
 }
 
-/** Derive approval policy only from the exact compiler-issued tool descriptor. */
-function _approvalRequired(candidate: RuntimeExternalActionCandidate, compiledTools: readonly CompiledToolDefinition[]): boolean
-{
-	return compiledTools.find(function _match(definition) { return definition.toolRevisionId === candidate.toolRevisionId; })?.requiresApproval ?? false;
-}
-
 /** Open the deferred approval with one trusted instant shared by creation and expiry. */
 async function _openDeferredApproval(candidate: RuntimeExternalActionCandidate, snapshot: RunInputSnapshot, compiledTools: readonly CompiledToolDefinition[], reservationId: string, dependencies: ProductionExternalActionRunnerDependencies): Promise<RuntimeExternalActionRunnerResult>
 {
@@ -91,6 +104,7 @@ async function _openDeferredApproval(candidate: RuntimeExternalActionCandidate, 
 		arguments: candidate.arguments,
 		argumentsDigest: candidate.argumentsDigest,
 		parametersSchema: tool.parametersSchema,
+		parametersSchemaDigest: tool.parametersSchemaDigest,
 		capabilitySetDigest: snapshot.capabilitySetDigest,
 		reservationId,
 		now,

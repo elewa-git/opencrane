@@ -4,7 +4,7 @@ import type { JsonValue } from "@opencrane/util";
  * One request to invoke an MCP tool through an Obot custody reference.
  *
  * The runtime never holds the underlying credential: it names only the OPAQUE `obotCustodyReference`
- * Obot minted, the tool, and the (already validated) arguments. `allowedTools` is the immutable
+ * Obot minted, the tool, and the (already validated) arguments. `allowedToolNames` is the immutable
  * allow-list copied from the revision's `AgentRevisionIntegrationAssignment`; only a tool present in
  * it may be invoked.
  */
@@ -21,7 +21,7 @@ export interface ObotMcpToolInvocationCommand
 	/** Validated, bounded tool arguments. */
 	readonly arguments: JsonValue;
 	/** Immutable allow-list from the revision's integration assignment. */
-	readonly allowedTools: readonly string[];
+	readonly allowedToolNames: readonly string[];
 }
 
 /** Opaque, gateway-originated result of one MCP tool invocation. */
@@ -34,7 +34,7 @@ export interface ObotMcpToolResult
 /**
  * Runtime-neutral boundary for invoking an MCP tool through Obot custody.
  *
- * Every implementation MUST enforce the `allowedTools` allow-list before contacting any transport,
+ * Every implementation MUST enforce the `allowedToolNames` allow-list before contacting any transport,
  * so a tool outside the revision's assignment is rejected fail-closed regardless of transport state.
  */
 export interface ObotMcpInvocationPort

@@ -2,6 +2,14 @@ import { describe, expect, it } from "vitest";
 
 import { __DiffAgentRevisions } from "../agent-revision-diff.js";
 import type { AgentRevision } from "../agent-revision.types.js";
+import { ___DigestCanonicalJson } from "@opencrane/util";
+
+/** Build one reviewed tool definition fixture. */
+function _Tool(name: string)
+{
+	const parametersSchema = { type: "object", additionalProperties: false } as const;
+	return { name, description: `${name} description`, parametersSchema, parametersSchemaDigest: ___DigestCanonicalJson(parametersSchema) };
+}
 
 /** Builds a baseline immutable revision fixture. */
 function _revision(overrides: Partial<AgentRevision> = {}): AgentRevision
@@ -19,7 +27,7 @@ function _revision(overrides: Partial<AgentRevision> = {}): AgentRevision
 		personaRevisionId: null,
 	modelDefinitionId: "model-definition-a",
 		skills: [{ skillId: "skill-a", revisionId: "rev-1" }],
-		integrationAssignments: [{ integrationId: "int-a", custodyReferenceId: "cust-1", allowedTools: ["read"] }],
+		integrationAssignments: [{ integrationId: "int-a", custodyReferenceId: "cust-1", toolDefinitions: [_Tool("read")] }],
 		scopeAttachments: [{ scope: "project", subjectType: "group", subjectId: "proj-1" }],
 		budget: { maxTurns: 5, maxTokens: 1000, maxDurationMs: 30000 },
 		authoredBy: "user-1",
@@ -49,8 +57,8 @@ describe("agent revision diff", function _suite()
 			scopeAttachments: [{ scope: "project", subjectType: "group", subjectId: "proj-1" }, { scope: "org", subjectType: "tenant", subjectId: "org-1" }],
 			skills: [{ skillId: "skill-a", revisionId: "rev-1" }, { skillId: "skill-b", revisionId: "rev-1" }],
 			integrationAssignments: [
-				{ integrationId: "int-a", custodyReferenceId: "cust-1", allowedTools: ["read", "write"] },
-				{ integrationId: "int-b", custodyReferenceId: "cust-2", allowedTools: ["send"] },
+				{ integrationId: "int-a", custodyReferenceId: "cust-1", toolDefinitions: [_Tool("read"), _Tool("write")] },
+				{ integrationId: "int-b", custodyReferenceId: "cust-2", toolDefinitions: [_Tool("send")] },
 			],
 			budget: { maxTurns: 20, maxTokens: 1000, maxDurationMs: 30000 },
 		});

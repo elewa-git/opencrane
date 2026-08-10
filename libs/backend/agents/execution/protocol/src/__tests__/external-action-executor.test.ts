@@ -4,6 +4,7 @@ import type { ObotMcpInvocationPort, ObotMcpToolInvocationCommand } from "@openc
 import { __UnavailableSandboxJobExecutor } from "@opencrane/backend/server/infra/sandbox-execution";
 import { __UnavailableMemoryGatewayClient } from "@opencrane/backend/server/infra/memory-gateway-client";
 import { describe, expect, it, vi } from "vitest";
+import { ___DigestCanonicalJson } from "@opencrane/util";
 
 import { __CreateExternalActionExecutor, __PersonalMemoryDatasetId, MemoryScopeUnavailableError, UnsupportedExternalActionError } from "../external-action-executor.js";
 import type { IntegrationAssignmentUnavailableReason } from "../external-action-executor.types.js";
@@ -14,8 +15,15 @@ function _candidate(toolRevisionId: string): RuntimeExternalActionCandidate
 	return { protocolVersion: "opencrane.agent-runtime/v1", runtimeInstanceId: "instance-1", commandId: "command-1", candidateId: "candidate-1", runId: "run-1", attempt: 1, fence: 1, kind: "external_action", toolRevisionId, toolInvocationId: "invocation-1", argumentsDigest: "sha256:d", arguments: { query: "a" } };
 }
 
+/** Build one reviewed integration tool definition. */
+function _Tool(name = "calendar.read")
+{
+	const parametersSchema = { type: "object", additionalProperties: false } as const;
+	return { name, description: "Read a calendar", parametersSchema, parametersSchemaDigest: ___DigestCanonicalJson(parametersSchema) };
+}
+
 /** The composition root wires only fail-closed transports until a real one is verified. */
-const DEPENDENCIES = { siloId: "silo-1", subjectId: "user-1", cogneeDatasetId: "cognee-personal-1", agentRevisionId: "revision-1", integrations: { resolveAssignment: async function _resolve() { return { outcome: "resolved" as const, assignment: { integrationId: "calendar", obotCatalogEntryId: "calendar", obotCustodyReference: "obot:calendar", allowedTools: ["calendar.read"] } }; } }, obotMcpInvocation: new __UnavailableObotMcpInvocationAdapter(), sandboxExecutor: new __UnavailableSandboxJobExecutor(), memoryGateway: new __UnavailableMemoryGatewayClient() };
+const DEPENDENCIES = { siloId: "silo-1", subjectId: "user-1", cogneeDatasetId: "cognee-personal-1", agentRevisionId: "revision-1", integrations: { resolveAssignment: async function _resolve() { return { outcome: "resolved" as const, assignment: { integrationId: "calendar", obotCatalogEntryId: "calendar", obotCustodyReference: "obot:calendar", toolDefinitions: [_Tool()] } }; } }, obotMcpInvocation: new __UnavailableObotMcpInvocationAdapter(), sandboxExecutor: new __UnavailableSandboxJobExecutor(), memoryGateway: new __UnavailableMemoryGatewayClient() };
 
 /** Test-local successful Obot port; production exports only the fail-closed unavailable adapter. */
 class _RecordingObotInvocation implements ObotMcpInvocationPort
