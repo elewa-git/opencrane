@@ -18,7 +18,7 @@ export const APP_ROUTES: Routes =
 		}
 	},
 	{
-		// Server-authoritative persona survey and review journey.
+		// Server-authoritative persona lifecycle shell.
 		path: "onboarding",
 		canActivate: [___OperatorAccessGuard],
 		loadChildren: function loadOnboardingRoutes()
@@ -42,7 +42,7 @@ export const APP_ROUTES: Routes =
 			});
 		}
 	},
-	{ path: "", pathMatch: "full", redirectTo: "onboarding/survey" },
+	{ path: "", pathMatch: "full", redirectTo: "onboarding" },
 	{
 		path: "**",
 		redirectTo: ""

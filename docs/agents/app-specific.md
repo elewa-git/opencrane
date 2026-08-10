@@ -64,8 +64,8 @@ Angular libraries under `libs/frontend/*` feed `apps/opencrane-ui`:
 
 The governed persona onboarding path is split deliberately:
 
-- [`features/onboarding`](../../libs/frontend/features/onboarding/README.md) owns the routed survey,
-  tie-resolution, review, and explicit approval screens;
+- [`features/onboarding`](../../libs/frontend/features/onboarding/README.md) owns one routed shell
+  with interview, tie-resolution, review, and ready state components;
 - [`state/onboarding`](../../libs/frontend/state/onboarding/README.md) owns the transport-neutral
   port, validated projection, and resumable orchestration without becoming a persistence authority; and
 - [`state/persona/adapter`](../../libs/frontend/state/persona/adapter/README.md) is the typed adapter

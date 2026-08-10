@@ -86,9 +86,3 @@ function _Percentage(value: number, total: number): number
 	if (total <= 0) return 0;
 	return Math.round((value / total) * 100);
 }
-
-/** Return a bounded user-facing message without exposing an unknown error payload. */
-export function _OnboardingErrorMessage(error: unknown, fallback: string): string
-{
-	return error instanceof Error && error.message ? error.message : fallback;
-}

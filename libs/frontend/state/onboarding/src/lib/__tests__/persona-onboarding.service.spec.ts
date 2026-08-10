@@ -63,13 +63,22 @@ describe("PersonaOnboardingService", function _PersonaOnboardingServiceSuite()
 		expect(gateway.createDraft).toHaveBeenCalledWith("interview-1");
 	});
 
-	it("resumes an interrupted draft transition from the durable review state", async function _ResumeDraft()
+	it("reads durable review state without hiding a draft mutation in the loader", async function _ReadOnly()
+	{
+		const completed = _Snapshot({ state: PersonaOnboardingStates.Review, answeredQuestionCount: 10 });
+		vi.mocked(gateway.load).mockResolvedValue(completed);
+
+		await expect(service.read()).resolves.toBe(completed);
+		expect(gateway.createDraft).not.toHaveBeenCalled();
+	});
+
+	it("finishes an interrupted draft transition only through an explicit command", async function _EnsureDraft()
 	{
 		const completed = _Snapshot({ state: PersonaOnboardingStates.Review, answeredQuestionCount: 10 });
 		const drafted = _Snapshot({ state: PersonaOnboardingStates.Review, answeredQuestionCount: 10, personaRevisionId: "revision-1" });
-		vi.mocked(gateway.load).mockResolvedValueOnce(completed).mockResolvedValueOnce(drafted);
+		vi.mocked(gateway.load).mockResolvedValue(drafted);
 
-		await expect(service.load()).resolves.toBe(drafted);
+		await expect(service.ensureDraft(completed)).resolves.toBe(drafted);
 		expect(gateway.createDraft).toHaveBeenCalledWith("interview-1");
 	});
 

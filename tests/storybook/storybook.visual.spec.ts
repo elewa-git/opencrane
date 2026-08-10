@@ -5,6 +5,12 @@ import type { StorybookIndex, StorybookIndexEntry } from "./storybook.visual.typ
 /** Opt-in tag that marks a deterministic story as a committed visual contract. */
 const VISUAL_TEST_TAG = "visual-test";
 
+/** Opt-in tag that captures a visual contract at the supported narrow viewport. */
+const VISUAL_NARROW_TAG = "visual-test-narrow";
+
+/** Supported narrow browser viewport used for responsive state contracts. */
+const VISUAL_NARROW_VIEWPORT = { width: 390, height: 844 } as const;
+
 /** Attribute for small controls that need a strict local pixel budget. */
 const VISUAL_TARGET_ATTRIBUTE = "data-visual-target";
 
@@ -47,6 +53,7 @@ async function _CaptureStory(context: BrowserContext, story: StorybookIndexEntry
 
 	try
 	{
+		if (story.tags?.includes(VISUAL_NARROW_TAG)) await page.setViewportSize(VISUAL_NARROW_VIEWPORT);
 		await _OpenStableStory(page, story.id);
 		await expect.soft(page.locator("#storybook-root")).toHaveScreenshot(`${story.id}.png`,
 		{

@@ -78,9 +78,37 @@ directive. Class inheritance is reserved for a genuine stable non-visual behavio
 
 - Prefer `resource(...)` for async read/loading flows in components instead of imperative `ngOnInit` data-fetch logic.
 - Prefer `rxResource(...)` / `httpResource(...)` over ad-hoc Promise orchestration when data originates from observables or HTTP.
-- Prefer `computed(...)`/`effect(...)` orchestration over manual imperative state transitions when deriving UI state.
+- Prefer `computed(...)` for values derived wholly from signals, inputs, or resource state; do not mirror them in writable signals and synchronise them through handlers or an `effect(...)`.
+- Use `effect(...)` only to bridge reactive state to an external side effect with an explicit lifecycle. Never use it to copy one signal into another or to start a mutation that can rerun as dependencies change.
 - For new or refactored standalone components, prefer `input()` / `output()` over decorator-based `@Input()` / `@Output()` unless Angular requires the decorator form.
 - Use signal-driven forms only for new and refactored feature forms.
+
+### Reactive state ownership
+
+- Writable signals remain appropriate for controlled input, transient UI state, retry/idempotency coordinates, explicit optimistic state, and command lifecycle. Do not replace these independent states with `computed(...)`.
+- A `resource(...)` loader is a read/projection: it must not write server state, navigate, or otherwise cause an external side effect. Keep mutations as explicit commands and include every reactive identity that selects the read in its request/params.
+- Model initial load, refresh while retaining a previous value, initial failure, refresh failure, and retry where applicable. Retained data after a failed refresh is not known-fresh data.
+- After a mutation, adopt the authoritative returned projection or reload the resource. Do not maintain a second mutable copy of server state merely to predict the same result.
+
+### Lifecycle state components
+
+When one authoritative lifecycle enum selects materially different screens, use one thin routed shell
+with one explicit `@switch` and one feature-local component per state.
+
+- The shell owns the authoritative resource, command admission, and adoption of returned projections.
+- State components receive read-only state input and emit typed domain intents. They never inject the
+  gateway, navigate to simulate advancement, or choose their own next durable state.
+- Loading, refresh failure, and reconnecting remain resource/command conditions outside the durable
+  lifecycle switch unless the server persists them as domain states.
+- Each state component composes approved shared primitives. Extract shared presentation used by two
+  state components, but never merge distinct lifecycle components merely because their markup overlaps.
+- Unknown states fail visibly. Tests enumerate every owned enum member and prove that the shell renders
+  exactly one state component for each member.
+
+### Command concurrency
+
+- Choose concurrency at the authority-conflict scope: prevent duplicate admission of the same intent/target, while allowing independent targets where the server contract permits it. A disabled button alone is not an admission guard.
+- Commands that can retry or race across devices carry the server's idempotency, revision, or conflict coordinate. A late completion must not overwrite a newer target, clear another command's busy state, or discard retryable user input.
 
 ## Shared Component Size
 

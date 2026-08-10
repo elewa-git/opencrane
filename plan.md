@@ -252,7 +252,7 @@ health, model/cost/budget, and runtime versions
 
 **Current implementation status:** the Angular shell has same-origin OIDC/session guards and early
 operator screens for catalogue, access policy, and model keys. Persona sorting now runs through the
-target API and `/onboarding/survey` and `/onboarding/review` screens: an owner can answer the reviewed
+target API and authoritative `/onboarding` shell: an owner can answer the reviewed
 interview, resolve ties, inspect the derived immutable persona, and approve it into durable onboarding
 state. Bootstrap chat, main-app admission and fencing, conversation/thread/prompt streaming, memory,
 run history, schedules, membership, audit, assets, skills, and the remaining approval journeys are

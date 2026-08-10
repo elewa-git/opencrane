@@ -1,0 +1,17 @@
+.wo-persona-answer-list {
+	display: grid;
+	gap: var(--oc-space-3);
+	margin: 0;
+	padding: 0 var(--oc-space-6);
+	color: var(--oc-ink-muted);
+}
+
+.wo-persona-answer-list li,
+.wo-persona-answer-list span {
+	display: grid;
+	gap: var(--oc-space-1);
+}
+
+.wo-persona-answer-list strong {
+	color: var(--oc-ink-strong);
+}

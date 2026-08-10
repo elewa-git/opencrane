@@ -4,17 +4,17 @@
 
 ## What it owns
 
-This feature owns the signed-in person's routed persona survey and review screens. It is the visible
-part of a server-owned process: the persona authority supplies the reviewed questions, records each
-choice, computes any tie, creates the immutable draft, and activates only the exact revision the
-person approves.
+This feature owns the signed-in person's routed persona onboarding shell. One explicit lifecycle
+switch selects an interview, resolution, review, or ready component from the authoritative server
+projection. The persona authority supplies the reviewed questions, records each choice, computes any
+tie, creates the immutable draft, and activates only the exact revision the person approves.
 
 ```
  signed-in owner
        │ durable persona snapshot
        ▼
  ┌────────────────────────────────┐
- │ features/onboarding  ◄── HERE  │  survey · tie choice · review · approve
+ │ features/onboarding  ◄── HERE  │  shell → interview · resolution · review · ready
  └────────────────────────────────┘
        │ intent through state/onboarding
        ▼
@@ -24,18 +24,21 @@ person approves.
 **In this flow:** [state/onboarding](../../state/onboarding/README.md) ·
 [state/persona/adapter](../../state/persona/adapter/README.md)
 
-The survey holds only the unsaved choice currently visible on screen. Refreshing, changing device,
-or retrying resumes the server-confirmed position; a failed save never advances the progress shown.
+Each state component receives read-only evidence and emits typed intents. The component-scoped
+`PersonaOnboardingStore` owns loading, single-flight command admission, errors, and adoption of the
+returned projection. Refreshing, changing device, or retrying resumes the server-confirmed position;
+a failed save never advances the screen.
 
 ## Public surface
 
-- `ONBOARDING_ROUTES` — lazy `/survey` and `/review` route children mounted by `opencrane-ui`.
+- `ONBOARDING_ROUTES` — lazy `/onboarding` shell mounted by `opencrane-ui`.
 
 ## Boundary
 
-This package composes shared journey, progress, choice-card, and persona-summary elements. It does
-not call HTTP, calculate persona scores, persist browser flags, or activate a persona; those remain
-behind the state-layer port and authenticated server API.
+This package composes shared journey, progress, choice-card, and persona-summary elements. State
+components do not inject services, navigate between lifecycle screens, call HTTP, calculate persona
+scores, persist browser flags, or activate a persona; those remain behind the shell, state-layer port,
+and authenticated server API.
 
 ## Dependency direction
 

@@ -9,9 +9,11 @@ PrimeNG, the component library used by OpenCrane. They accept typed visual state
 paper-and-cyan language, and emit user intent. They never fetch data or decide onboarding, persona,
 conversation, or access-policy state.
 
-The package is also the isolated component-catalogue owner used by Storybook. Feature packages
-compose these elements with their own domain state, while stories render every approved state with
-the same fonts, global tokens, PrimeNG preset, and zoneless change detection as the application.
+The package is also the isolated component-catalogue owner used by Storybook. Its catalogue discovers
+both the element stories stored here and reviewed feature-state stories stored by their owning
+feature package. Feature packages compose these elements with their own domain state, while stories
+render every approved state with the same fonts, global tokens, PrimeNG preset, and zoneless change
+detection as the application.
 
 ```
  feature state  ──typed inputs──►  elements/ui  ◄──PrimeNG controls + OpenCrane tokens
@@ -67,6 +69,9 @@ package.
 - `npm run test:storybook:visual` — compare tagged canonical states with committed screenshots.
 - `npm run test:storybook:visual:update` — intentionally refresh those screenshot baselines after
   reviewing the rendered changes; committed baselines live in `tests/storybook/__screenshots__`.
+
+Stories tagged `visual-test-narrow` are captured at the supported 390-pixel viewport instead of the
+default desktop viewport, so responsive contracts remain explicit and reproducible.
 
 ## See also
 

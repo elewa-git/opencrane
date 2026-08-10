@@ -51,8 +51,8 @@ If the backend is unreachable the app refuses authenticated actions.
 ## Public surface
 
 `Entrypoint: src/main.ts` (bootstraps `AppComponent` with `appConfig` from `src/app/app.config.ts`).
-Route table `src/app/app.routes.ts`: `login`, `onboarding` (persona survey and review), and `admin`
-(MCP tool administration). The root route redirects to `/onboarding/survey`; protected routes use
+Route table `src/app/app.routes.ts`: `login`, `onboarding` (the server-authoritative persona state
+shell), and `admin` (MCP tool administration). The root route redirects to `/onboarding`; protected routes use
 `OperatorAccessGuard`.
 
 ## Boundary

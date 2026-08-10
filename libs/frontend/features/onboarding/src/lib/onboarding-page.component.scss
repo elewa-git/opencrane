@@ -67,24 +67,6 @@
 		word-break: break-word;
 	}
 
-	&__answers {
-		display: grid;
-		gap: var(--oc-space-3);
-		margin: 0;
-		padding: 0 var(--oc-space-6);
-		color: var(--oc-ink-muted);
-	}
-
-	&__answers li,
-	&__answers span {
-		display: grid;
-		gap: var(--oc-space-1);
-	}
-
-	&__answers strong {
-		color: var(--oc-ink-strong);
-	}
-
 	&__authority-note {
 		margin: 0;
 		font-size: var(--oc-text-sm);

@@ -1,0 +1,7 @@
+<ol class="wo-persona-answer-list">
+	@for (question of questions(); track question.id) {
+		@if (question.selectedChoiceId) {
+			<li><strong>{{ question.prompt }}</strong><span>{{ selectedChoiceLabel(question) }}</span></li>
+		}
+	}
+</ol>

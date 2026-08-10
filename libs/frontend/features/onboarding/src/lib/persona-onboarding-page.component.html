@@ -1,0 +1,35 @@
+@if (onboarding.isLoading()) {
+	<wo-journey-shell title="Loading your saved onboarding position" description="OpenCrane is resolving the exact durable persona state." [layout]="layouts.Compact" [busy]="true">
+		<div class="wo-onboarding__loading" role="status">
+			<p-progressspinner ariaLabel="Loading saved persona onboarding" [style]="{ width: '24px', height: '24px' }" strokeWidth="5" />
+			<span>Checking your onboarding position…</span>
+		</div>
+	</wo-journey-shell>
+} @else if (onboarding.error()) {
+	<wo-journey-shell title="We could not load your onboarding position" description="Your saved answers and current persona remain unchanged." [layout]="layouts.Compact">
+		<p-message journey-status severity="error" [closable]="false">The persona authority is unavailable. Retry when the service is ready.</p-message>
+		<p-button journey-actions label="Retry" icon="pi pi-refresh" (onClick)="retry()" />
+	</wo-journey-shell>
+} @else if (onboarding.hasValue()) {
+	@let snapshot = onboarding.value();
+	@switch (snapshot.state) {
+		@case (states.Interview) {
+			<wo-persona-interview-state [snapshot]="stateSnapshot(snapshot, states.Interview)" [busy]="saving()" [actionError]="actionError()" (startRequested)="start()" (answerSubmitted)="answer($event)" />
+		}
+		@case (states.Resolution) {
+			<wo-persona-resolution-state [snapshot]="stateSnapshot(snapshot, states.Resolution)" [busy]="saving()" [actionError]="actionError()" (retryRequested)="retry()" (resolutionSubmitted)="resolve($event)" />
+		}
+		@case (states.Review) {
+			<wo-persona-review-state [snapshot]="stateSnapshot(snapshot, states.Review)" [busy]="saving()" [actionError]="actionError()" (retryRequested)="retry()" (draftRequested)="prepareDraft()" (restartRequested)="restart()" (approvalRequested)="approve($event)" />
+		}
+		@case (states.Ready) {
+			<wo-persona-ready-state [snapshot]="stateSnapshot(snapshot, states.Ready)" (retryRequested)="retry()" />
+		}
+		@default {
+			<wo-journey-shell title="This onboarding state is unavailable" description="OpenCrane will not infer a later screen from an unknown lifecycle state." [layout]="layouts.Compact">
+				<p-message journey-status severity="error" [closable]="false">Reload the authoritative state after the server and web client versions are aligned.</p-message>
+				<p-button journey-actions label="Retry" icon="pi pi-refresh" (onClick)="retry()" />
+			</wo-journey-shell>
+		}
+	}
+}

@@ -4,9 +4,10 @@
 
 ## What it owns
 
-This package owns the transport-neutral persona gateway port, validated owner projection, and browser
-orchestration while keeping every durable fact on the server. After each intent it reloads the
-complete owner snapshot so the feature advances only from confirmed state.
+This package owns the transport-neutral persona gateway port, validated owner projection, and
+component-scoped browser store while keeping every durable fact on the server. After each explicit
+command it adopts or reloads the complete owner snapshot so the feature advances only from confirmed
+state.
 
 ```
  features/onboarding
@@ -23,17 +24,19 @@ complete owner snapshot so the feature advances only from confirmed state.
 **In this flow:** [features/onboarding](../../features/onboarding/README.md) ·
 [persona/adapter](../persona/adapter/README.md)
 
-The orchestrator creates a draft only after the completed snapshot proves no tie remains. Loading
-the durable review state resumes an interrupted draft transition. A failed mutation returns no
-optimistic state, so the current durable screen stays retryable.
+The orchestrator creates a draft only after the completed snapshot proves no tie remains. An
+explicit prepare-draft command resumes an interrupted durable review transition. A failed mutation
+returns no optimistic state, so the current durable screen stays retryable.
 
 The model-adjacent runtime validator strips unknown response extensions and rejects invalid lifecycle,
 question, score, revision, or tie evidence before feature state can consume it.
 
 ## Public surface
 
-- `PersonaOnboardingService` — load, start, answer, complete, resolve, approve, and restart
-  orchestration over the narrow persona gateway.
+- `PersonaOnboardingService` — read, start, answer, complete, resolve, `ensureDraft`, approve, and restart
+  application commands over the narrow persona gateway.
+- `PersonaOnboardingStore` — read resource, single-flight command admission, bounded errors, and
+  authoritative projection adoption for one mounted onboarding shell.
 - `PERSONA_GATEWAY` and `PersonaGateway` — transport-neutral dependency-injection port.
 - `_ParsePersonaOnboardingSnapshot` plus persona lifecycle models — bounded response validation and
   the feature-facing projection.

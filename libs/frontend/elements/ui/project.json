@@ -28,9 +28,10 @@
 		"storybook": {
 			"executor": "@storybook/angular:start-storybook",
 			"inputs": [
-				"default",
-				"^production",
-				"{workspaceRoot}/libs/frontend/core/src/lib/theme/opencrane-theme.scss"
+					"default",
+					"^production",
+					"{workspaceRoot}/libs/frontend/features/onboarding/src/**/*",
+					"{workspaceRoot}/libs/frontend/core/src/lib/theme/opencrane-theme.scss"
 			],
 			"options": {
 				"browserTarget": "frontend-elements-ui:build-storybook",
@@ -54,9 +55,10 @@
 		"build-storybook": {
 			"executor": "@storybook/angular:build-storybook",
 			"inputs": [
-				"default",
-				"^production",
-				"{workspaceRoot}/libs/frontend/core/src/lib/theme/opencrane-theme.scss"
+					"default",
+					"^production",
+					"{workspaceRoot}/libs/frontend/features/onboarding/src/**/*",
+					"{workspaceRoot}/libs/frontend/core/src/lib/theme/opencrane-theme.scss"
 			],
 			"outputs": [
 				"{options.outputDir}"

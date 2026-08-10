@@ -1,28 +1,18 @@
 import { Routes } from "@angular/router";
 
-/** Lazy routes for the server-authoritative persona survey and review journey. */
+/** Lazy route for the server-authoritative persona lifecycle shell. */
 export const ONBOARDING_ROUTES: Routes =
 [
 	{
-		path: "survey",
-		loadComponent: function loadSurvey()
+		path: "",
+		pathMatch: "full",
+		loadComponent: function loadOnboarding()
 		{
-			return import("./survey/persona-survey-page.component").then(function pickSurvey(module)
+			return import("./persona-onboarding-page.component").then(function pickOnboarding(module)
 			{
-				return module.PersonaSurveyPageComponent;
+				return module.PersonaOnboardingPageComponent;
 			});
 		}
 	},
-	{
-		path: "review",
-		loadComponent: function loadReview()
-		{
-			return import("./review/persona-review-page.component").then(function pickReview(module)
-			{
-				return module.PersonaReviewPageComponent;
-			});
-		}
-	},
-	{ path: "", pathMatch: "full", redirectTo: "survey" },
-	{ path: "**", redirectTo: "survey" }
+	{ path: "**", redirectTo: "" }
 ];

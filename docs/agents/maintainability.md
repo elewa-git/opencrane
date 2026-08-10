@@ -66,6 +66,29 @@ Each extracted component must name:
 - its failure, retry, and concurrency semantics; and
 - the public test seam that proves the boundary.
 
+## Lifecycle state-machine trigger
+
+Treat control flow as a state-machine candidate when a durable enum or discriminator:
+
+- selects behaviour for two or more commands or events;
+- is interpreted both before a write and after compare-and-set or conflict recovery;
+- produces lifecycle outcomes such as advance, resume, no-op, deny, retry, or terminal; or
+- is mixed with an independently changing dimension such as provider, patch kind, action, or transport.
+
+Before implementation, write a `State × Event` table naming the allowed outcome or next state, the
+guard/evidence required, and the authority that owns the atomic transition. Lifecycle dispatch uses
+State; the independent dimension uses Strategy. Validation, ownership, evidence, and concurrency
+checks remain visible guards rather than being hidden inside generic state machinery.
+
+Prefer an exhaustive enum-keyed state-handler registry so adding a state fails compilation until its
+behaviour is supplied. Tests cover every meaningful State×Event cell and prove that a losing atomic
+write re-dispatches the observed durable winner through the same state owner. A large `switch` or a set
+of helpers that merely relocates the same state conditionals does not satisfy this boundary.
+
+State-machine extraction does not justify one database model per state or automatic model merging.
+Remove a persisted model or projection only when it is fully derivable and owns no independent
+authorization, audit, retention, cardinality, provenance, query, or concurrency invariant.
+
 ## Agent flow
 
 ### Before implementation

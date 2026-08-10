@@ -14,7 +14,7 @@ its slot; the shell itself is `workspace`.
 | [`context`](./context/README.md) | The right-hand context pane. |
 | [`conversation`](./conversation/README.md) | The centre conversation pane. |
 | [`notifications`](./notifications/README.md) | The notification popover. |
-| [`onboarding`](./onboarding/README.md) | Resumable persona survey, review, and approval routes. |
+| [`onboarding`](./onboarding/README.md) | One resumable lifecycle shell with interview, resolution, review, and ready states. |
 | [`settings`](./settings/README.md) | The settings page. |
 | [`tools`](./tools/README.md) | Tools and tool-governance routes. |
 | [`workspace`](./workspace/README.md) | The workspace shell. |

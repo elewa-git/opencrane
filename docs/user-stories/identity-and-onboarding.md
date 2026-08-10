@@ -40,7 +40,7 @@ Initial routing is deterministic:
 | Session and onboarding state | Initial route |
 |---|---|
 | No authenticated session | `/login` |
-| `survey_pending` or `survey_in_progress` | `/onboarding/survey` |
+| `survey_pending` or `survey_in_progress` | `/onboarding` |
 | `bootstrap_chat_pending` or `bootstrap_chat_in_progress` | `/onboarding/chat` |
 | `completed` | Main application |
 | Onboarding authority unavailable or invalid | Blocking recovery state; never optimistic main-app access |
@@ -147,7 +147,7 @@ Acceptance criteria:
   Approve persona → Bootstrap first conversation → Workspace ready.
 - The sorting quiz (PER-02) is a mandatory onboarding step. A personal agent cannot be provisioned
   without an approved persona revision produced through the quiz.
-- Survey states route only to `/onboarding/survey`; bootstrap-chat states route only to
+- Survey states route only to `/onboarding`; bootstrap-chat states route only to
   `/onboarding/chat`; `completed` routes to the main application.
 - Refreshing or changing device resumes the same server-known position, including mid-quiz state.
 - Onboarding-state lookup failure renders a blocking recovery state rather than granting access or

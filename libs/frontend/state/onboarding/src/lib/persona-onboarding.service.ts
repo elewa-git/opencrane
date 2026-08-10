@@ -9,10 +9,10 @@ export class PersonaOnboardingService
 	/** Narrow persona API port supplied by the app composition root. */
 	private readonly _persona = inject<PersonaGateway>(PERSONA_GATEWAY);
 
-	/** Load the durable projection and resume draft creation after an interrupted transition. */
-	public async load(): Promise<PersonaOnboardingSnapshot>
+	/** Read the durable persona projection without creating or advancing lifecycle evidence. */
+	public read(): Promise<PersonaOnboardingSnapshot>
 	{
-		return this._prepareDraft(await this._persona.load());
+		return this._persona.load();
 	}
 
 	/** Start or resume the reviewed survey, then reload its authoritative position. */
@@ -36,6 +36,12 @@ export class PersonaOnboardingService
 		return this._prepareDraft(await this._persona.load());
 	}
 
+	/** Finish an interrupted review transition only when its durable snapshot still needs a draft. */
+	public async ensureDraft(snapshot: PersonaOnboardingSnapshot): Promise<PersonaOnboardingSnapshot>
+	{
+		return this._prepareDraft(snapshot);
+	}
+
 	/** Save one exact tie choice and create the draft after every tie has been resolved. */
 	public async resolve(interviewId: string, kind: PersonaResolutionKinds, selectedValue: string): Promise<PersonaOnboardingSnapshot>
 	{
@@ -50,14 +56,14 @@ export class PersonaOnboardingService
 		return this._persona.load();
 	}
 
-	/** Create a new or resumed survey from the review screen. */
+	/** Create a new or resumed survey from the review state. */
 	public async restart(): Promise<PersonaOnboardingSnapshot>
 	{
 		await this._persona.startInterview();
 		return this._persona.load();
 	}
 
-	/** Create a draft only when completion produced review evidence but no revision yet. */
+	/** Create a draft only when a completed command proves review evidence has no unresolved tie. */
 	private async _prepareDraft(snapshot: PersonaOnboardingSnapshot): Promise<PersonaOnboardingSnapshot>
 	{
 		if (snapshot.state !== PersonaOnboardingStates.Review || snapshot.personaRevisionId !== null || snapshot.interviewId === null)
@@ -66,6 +72,6 @@ export class PersonaOnboardingService
 		}
 
 		await this._persona.createDraft(snapshot.interviewId);
-		return this._persona.load();
+		return this.read();
 	}
 }

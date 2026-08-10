@@ -161,6 +161,13 @@ maintainability pass.
    - Hunt for duplicated domain algorithms such as digesting, hashing, normalization,
      revision construction, lifecycle transitions, and policy resolution. Verify the
      duplication and identify the authoritative owner.
+   - Treat a durable enum/discriminator as a lifecycle state-machine candidate when it selects two
+     or more commands/events, is reinterpreted after CAS/conflict recovery, produces advance/resume/
+     no-op/deny/terminal outcomes, or is mixed with an orthogonal kind/provider/action dimension.
+     Require a State×Event table, exhaustive enum-keyed state ownership, State versus Strategy
+     separation, and tests for meaningful cells plus durable-winner redispatch. A large `switch` or
+     helpers that merely relocate the same state branches do not satisfy the boundary. Keep
+     validation, ownership, evidence, and concurrency checks visible as guards.
    - Trace Prisma-model ownership across package boundaries. A package that writes
      another domain's models through a shared client can bypass the owning authority
      even when NX reports no import-boundary violation.
