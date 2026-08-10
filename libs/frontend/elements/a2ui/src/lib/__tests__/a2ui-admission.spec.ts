@@ -2,11 +2,13 @@ import { Subject } from "rxjs";
 import { describe, expect, it } from "vitest";
 import type { A2UIClientEvent, Types } from "@a2ui/angular/v0_8";
 
+import { AgUiA2uiSurfaceStates } from "@opencrane/contracts";
+
 import { _ToA2uiDisplayedActionIntent } from "../a2ui-action-intent.js";
 import { _AdmitA2uiSurfacePresentation } from "../a2ui-admission.js";
 import { _OpenCraneA2uiCatalog } from "../a2ui.catalog.js";
 import { _MapA2uiOperationsToUpstream } from "../a2ui-operation-mapper.js";
-import { A2uiComponentNames, A2uiEnvelopeVersions, A2uiSurfaceStates, type A2uiSurfacePresentation } from "../a2ui.types.js";
+import { A2uiComponentNames, A2uiEnvelopeVersions, type A2uiSurfacePresentation } from "../a2ui.types.js";
 
 /** Stable text operation used by admission and action-intent tests. */
 const _TEXT_OPERATION: Types.ServerToClientMessage =
@@ -31,7 +33,7 @@ function _presentation(overrides: Partial<A2uiSurfacePresentation> = {}): A2uiSu
 		messageId: "message-1",
 		surfaceId: "surface-pricing",
 		sequence: 4,
-		state: A2uiSurfaceStates.Ready,
+		state: AgUiA2uiSurfaceStates.Ready,
 		operations: [_TEXT_OPERATION],
 		...overrides
 	};
@@ -141,7 +143,7 @@ describe("displayed A2UI action intent", function _DisplayedA2uiActionIntent()
 	it("rejects local field-change events and non-ready surfaces", function _RejectsNonActions()
 	{
 		expect(_ToA2uiDisplayedActionIntent(_presentation(), _event("input", { value: "draft" }))).toBeNull();
-		expect(_ToA2uiDisplayedActionIntent(_presentation({ state: A2uiSurfaceStates.ActionPending }), _event())).toBeNull();
+		expect(_ToA2uiDisplayedActionIntent(_presentation({ state: AgUiA2uiSurfaceStates.ActionPending }), _event())).toBeNull();
 	});
 
 	it("rejects nested objects instead of forwarding arbitrary protocol context", function _RejectsNestedContext()

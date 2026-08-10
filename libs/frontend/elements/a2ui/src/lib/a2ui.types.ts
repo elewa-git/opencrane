@@ -1,5 +1,7 @@
 import type { Types } from "@a2ui/angular/v0_8";
 
+import { AgUiA2uiSurfaceStates } from "@opencrane/contracts";
+
 /**
  * Stable OpenCrane envelope versions accepted by the browser A2UI sink.
  *
@@ -10,36 +12,6 @@ export enum A2uiEnvelopeVersions
 {
 	/** First display-safe OpenCrane A2UI envelope. */
 	OpenCraneV1 = "opencrane.a2ui.v1"
-}
-
-/**
- * Finite presentation lifecycle for one server-projected A2UI surface.
- *
- * These values control browser presentation only. Canonical run and command state remains on the
- * server, and no member grants authority to submit an action.
- */
-export enum A2uiSurfaceStates
-{
-	/** Ordered surface operations are still arriving. */
-	Streaming = "streaming",
-	/** The projected surface is complete enough to accept a displayed action. */
-	Ready = "ready",
-	/** One displayed action is awaiting authoritative server admission. */
-	ActionPending = "action_pending",
-	/** The authoritative server accepted the displayed action. */
-	Submitted = "submitted",
-	/** The server rejected the submitted values as invalid. */
-	ValidationError = "validation_error",
-	/** The authoritative action path failed without claiming success. */
-	ActionFailed = "action_failed",
-	/** The server-declared action window has expired. */
-	Expired = "expired",
-	/** The server reports that the one-use action was already consumed. */
-	AlreadyUsed = "already_used",
-	/** The current actor is not authorized to use the displayed action. */
-	Unauthorized = "unauthorized",
-	/** The admitted envelope or component cannot be rendered by this client. */
-	Unsupported = "unsupported"
 }
 
 /**
@@ -100,7 +72,7 @@ export interface A2uiSurfacePresentation
 	/** Monotonic envelope sequence used to reject duplicate or stale projection updates. */
 	readonly sequence: number;
 	/** Current display lifecycle supplied by the authoritative projection. */
-	readonly state: A2uiSurfaceStates;
+	readonly state: AgUiA2uiSurfaceStates;
 	/** Ordered, already-decoded upstream A2UI operations for this sequence. */
 	readonly operations: readonly Types.ServerToClientMessage[];
 	/** Optional display-safe explanation for a non-ready lifecycle. */

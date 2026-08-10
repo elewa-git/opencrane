@@ -1,6 +1,8 @@
 import type { A2UIClientEvent } from "@a2ui/angular/v0_8";
 
-import { A2uiSurfaceStates, type A2uiDisplayedActionIntent, type A2uiDisplayedValue, type A2uiDisplayedValueScalar, type A2uiSurfacePresentation } from "./a2ui.types.js";
+import { AgUiA2uiSurfaceStates } from "@opencrane/contracts";
+
+import type { A2uiDisplayedActionIntent, A2uiDisplayedValue, A2uiDisplayedValueScalar, A2uiSurfacePresentation } from "./a2ui.types.js";
 
 /** Maximum length of a displayed action or source-component identifier. */
 const _MAX_IDENTIFIER_LENGTH = 256;
@@ -34,7 +36,7 @@ export function _ToA2uiDisplayedActionIntent(presentation: A2uiSurfacePresentati
 	// 1. Accept only explicit actions displayed on the exact ready presentation; input/change are
 	// local data-model events used to prepare a later displayed button action.
 	const action = event.message.userAction;
-	if (presentation.state !== A2uiSurfaceStates.Ready || !action || action.surfaceId !== presentation.surfaceId)
+	if (presentation.state !== AgUiA2uiSurfaceStates.Ready || !action || action.surfaceId !== presentation.surfaceId)
 	{
 		return null;
 	}

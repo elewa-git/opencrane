@@ -1,6 +1,8 @@
 import type { Types } from "@a2ui/angular/v0_8";
 
-import { A2uiComponentNames, A2uiEnvelopeVersions, A2uiSurfaceStates, type A2uiSurfacePresentation } from "./a2ui.types.js";
+import { AgUiA2uiSurfaceStates } from "@opencrane/contracts";
+
+import { A2uiComponentNames, A2uiEnvelopeVersions, type A2uiSurfacePresentation } from "./a2ui.types.js";
 
 /** Maximum number of ordered protocol operations admitted in one display envelope. */
 const _MAX_OPERATIONS = 256;
@@ -18,7 +20,7 @@ const _MAX_REASON_LENGTH = 2000;
 const _ADMITTED_COMPONENT_NAMES = new Set<string>(Object.values(A2uiComponentNames));
 
 /** Presentation states admitted at the element boundary. */
-const _ADMITTED_SURFACE_STATES = new Set<string>(Object.values(A2uiSurfaceStates));
+const _ADMITTED_SURFACE_STATES = new Set<string>(Object.values(AgUiA2uiSurfaceStates));
 
 /**
  * Verify the complete typed presentation before it reaches the vendor message processor.

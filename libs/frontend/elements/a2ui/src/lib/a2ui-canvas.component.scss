@@ -5,8 +5,8 @@
 
 .a2ui-canvas {
 	display: grid;
-	gap: 0.625rem;
-	padding: 0.875rem;
+	gap: var(--oc-space-2);
+	padding: var(--oc-space-3);
 	color: var(--oc-ink-strong);
 	background: var(--oc-surface-subtle);
 	border: 1px solid var(--oc-border-default);
@@ -16,16 +16,16 @@
 .a2ui-canvas__state {
 	display: flex;
 	align-items: center;
-	gap: 0.4rem;
-	font-size: 0.75rem;
-	font-weight: 600;
-	letter-spacing: 0.02em;
+	gap: var(--oc-space-2);
+	font-size: var(--oc-text-sm);
+	font-weight: var(--oc-font-weight-medium);
+	letter-spacing: var(--oc-tracking-label);
 	color: var(--oc-ink-muted);
 }
 
 .a2ui-canvas__state-dot {
-	width: 0.45rem;
-	height: 0.45rem;
+	width: var(--oc-space-2);
+	height: var(--oc-space-2);
 	background: var(--oc-ink-muted);
 	border-radius: 50%;
 }
@@ -38,7 +38,7 @@
 .a2ui-canvas[data-state="validation_error"] .a2ui-canvas__state-dot,
 .a2ui-canvas[data-state="action_failed"] .a2ui-canvas__state-dot,
 .a2ui-canvas[data-state="unauthorized"] .a2ui-canvas__state-dot {
-	background: var(--oc-danger, #a23838);
+	background: var(--oc-danger);
 }
 
 .a2ui-canvas__surface {
@@ -47,17 +47,17 @@
 
 .a2ui-canvas__surface--disabled {
 	pointer-events: none;
-	opacity: 0.72;
+	opacity: var(--oc-opacity-disabled);
 }
 
 .a2ui-canvas__placeholder {
 	display: grid;
-	gap: 0.25rem;
-	padding: 0.875rem;
-	font-size: 0.8125rem;
+	gap: var(--oc-space-1);
+	padding: var(--oc-space-3);
+	font-size: var(--oc-text-sm);
 	line-height: 1.5;
 	color: var(--oc-ink-muted);
-	background: var(--oc-surface-default, #fff);
+	background: var(--oc-surface-raised);
 	border: 1px dashed var(--oc-border-default);
 	border-radius: var(--oc-radius-chip);
 }
@@ -68,8 +68,8 @@
 
 .a2ui-canvas__reason {
 	margin: 0;
-	padding-top: 0.625rem;
-	font-size: 0.8125rem;
+	padding-top: var(--oc-space-2);
+	font-size: var(--oc-text-sm);
 	line-height: 1.5;
 	color: var(--oc-ink-muted);
 	border-top: 1px solid var(--oc-border-default);
