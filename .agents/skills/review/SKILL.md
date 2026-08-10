@@ -31,6 +31,8 @@ from the current version.
 - Review changed code for correctness, runtime risk, security, maintainability, and
   test adequacy.
 - Verify AGENTS.md alignment for TypeScript conventions and planning discipline.
+- For changed Angular component, template, or state code, read `docs/agents/angular.md`; for
+  non-trivial package work, also read the changed package README named by `docs/agents/app-specific.md`.
 - Validate that any roadmap status changes in `plan.md` are backed by real evidence.
 
 Require the caller to provide an exact base SHA and head SHA. Review `base...head` for committed
@@ -77,6 +79,16 @@ maintainability pass.
    - Unintended violations of the declared target contract. During direct replacement, legacy
      incompatibility is intentional, compatibility shims are defects, and superseded paths are
      deleted with their replacement.
+   - **Angular reactive state and commands.** Trace every changed displayed value to an authoritative
+     resource/store, explicit local control state, or a `computed(...)` projection. Flag a writable
+     mirror only when it duplicates a wholly derivable value and can drift; drafts, dialog state,
+     retry coordinates, optimistic intent, and command lifecycle remain valid writable state. A
+     changed `resource(...)` loader must be read-only; trace initial load, retained-value refresh,
+     failure, retry, and authoritative mutation adoption as applicable. For a changed command, verify
+     duplicate admission is guarded before its first `await` at the server conflict scope; a disabled
+     template state alone does not prove this. Trace failure and late completion so they cannot replace
+     newer state or discard retryable input. Tests cover relevant initial, refresh, error/retry, and
+     duplicate/stale-completion paths without requiring inapplicable states.
 2. **Reliability and operations**
    - Failure handling, retry/timeout behaviour, resource cleanup.
    - Observability: are failures logged with enough structured context?
@@ -130,6 +142,13 @@ maintainability pass.
      and in what order), not just "this looks unused." When the caller
      asks for fixes, perform the removal following that sequencing.
 8. **Maintainability and readability (a modeled design concern, not cosmetic style)**
+   - **Angular routed-page ownership.** For every materially changed routed page, build the
+     responsibility ledger required by `docs/agents/angular.md` even when module growth is silent.
+     Trace reads, mutations, concurrency/retry coordinates, authoritative adoption, navigation,
+     presentation mapping, controlled interaction state, and visual composition to their owners.
+     Flag a page that owns several of these independently changing concerns and name the exact
+     store/mapper/presentational boundaries. A generic `_run`, `_execute`, `withLoading`, callback
+     wrapper, or helper-only extraction is not a split when the page still decides every step.
    - **Model-adjacent runtime validation is mandatory.** When untrusted data becomes a named
      TypeScript model, require a Zod validator beside that model in the same folder/package
      (`a.types.ts` + `a.validator.ts`) with a clarifying trust-boundary comment and a schema typed

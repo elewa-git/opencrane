@@ -68,6 +68,31 @@ directive. Class inheritance is reserved for a genuine stable non-visual behavio
 - `platform/`: browser/desktop runtime-capability seam supplied by the app.
 - `apps/opencrane-ui`: thin browser composition and routing root.
 
+## Routed Page Responsibility Gate
+
+Before adding or materially changing a routed page, inventory these independently changing
+responsibilities across its component class, template, styles, state owner, and tests:
+
+1. route parameters and authority-derived navigation;
+2. asynchronous reads and refresh/retry state;
+3. mutation sequencing, concurrency, idempotency, and conflict recovery;
+4. authoritative projection adoption and error translation;
+5. server-model to presentation-model mapping;
+6. controlled form/interaction state; and
+7. visual composition, styling, accessibility, and component-state fixtures.
+
+A routed page may compose components, expose `computed(...)` presentation, delegate typed intents,
+and use an `effect(...)` for an external navigation side effect. It must not also own server gateway
+calls, mutation lifecycle, retry coordinates, conflict adoption, error translation, and substantial
+DTO-to-view mapping. Put those responsibilities in a component-scoped state store and pure feature
+mapper; keep cohesive interactive visual regions in feature or shared presentational components.
+
+Do not hide mixed ownership behind generic helpers such as `_run`, `_execute`, `withLoading`, or an
+async callback wrapper. Moving the wrapper to another file is not a responsibility split when the
+page still decides every command step. When one screen needs both a server read and mutations,
+require a store boundary before implementation even when the page remains below the mechanical
+module-growth threshold.
+
 ## Data Access
 
 - Features consume narrow ports from `state/`; they do not call the HTTP client directly.
