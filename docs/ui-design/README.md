@@ -57,6 +57,8 @@ target. Use only the screenshots relevant to the owning issue.
 | [#603](https://github.com/elewa-git/opencrane/issues/603) | `conversation-attachments.png`, `conversation-assets.png`, `conversation-files-activity.png` |
 | [#604](https://github.com/elewa-git/opencrane/issues/604) | `conversation-tool-calls.png`, `conversation-elicitation.png`, `conversation-a2ui.png`, `a2ui-component-catalog.png`, `conversation-files-activity.png` |
 | [#319](https://github.com/elewa-git/opencrane/issues/319) | `conversation-streaming-reconnect.png`, `conversation-elicitation.png`, `conversation-a2ui.png`, `a2ui-component-catalog.png` |
+| [#318](https://github.com/elewa-git/opencrane/issues/318) | `conversation-elicitation.png`, `conversation-a2ui.png`, `conversation-files-activity.png` |
+| [#243](https://github.com/elewa-git/opencrane/issues/243) | `conversation-elicitation.png`, `conversation-files-activity.png` |
 | [#351](https://github.com/elewa-git/opencrane/issues/351) | The complete workspace and Agent-thread set |
 
 ## Change control
