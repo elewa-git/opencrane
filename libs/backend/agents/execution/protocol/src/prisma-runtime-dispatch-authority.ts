@@ -1,13 +1,13 @@
 import { createHash } from "node:crypto";
 
-import { AgentRunState as PrismaAgentRunState, AgentRunTerminalReason, ApprovalRequestState, Prisma, RuntimeCommandKind, WorkloadAssignmentState, type PrismaClient } from "@prisma/client";
+import { AgentRunState as PrismaAgentRunState, AgentRunTerminalReason, Prisma, RuntimeCommandKind, WorkloadAssignmentState, type PrismaClient } from "@prisma/client";
 
-import { AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, AGENT_RUNTIME_PROTOCOL_V1, MANAGED_AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, ___IsAgentRuntimeServiceAccountName, ___IsManagedAgentRuntimeServiceAccountName, type CancelAttemptCommand, type CompiledRunInput, type DeferredToolResumeResult, type ResumeAttemptCommand, type RunInputSnapshot, type RuntimeAssignment, type RuntimeAssignmentIdentity, type RuntimeCandidate, type RuntimeCommand, type RuntimeCommandEnvelope, type RuntimeExternalActionCandidate, type RuntimeStreamOpen } from "@opencrane/contracts";
-import type { JsonValue } from "@opencrane/util";
+import { AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, AGENT_RUNTIME_PROTOCOL_V1, MANAGED_AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, ___IsAgentRuntimeServiceAccountName, ___IsManagedAgentRuntimeServiceAccountName, type CancelAttemptCommand, type CompiledRunInput, type ResumeAttemptCommand, type RunInputSnapshot, type RuntimeAssignment, type RuntimeAssignmentIdentity, type RuntimeCandidate, type RuntimeCommand, type RuntimeCommandEnvelope, type RuntimeExternalActionCandidate, type RuntimeStreamOpen } from "@opencrane/contracts";
 import { ___CreateLogger, ___DoWithTrace, type Logger } from "@opencrane/backend/observability";
 
 import { _ApplyRuntimeCandidateSideEffects, _RuntimeCandidateRequiresTerminalReporter } from "./prisma-runtime-candidate-side-effects.js";
 import { __ProjectRuntimeInputSnapshot } from "./runtime-input-snapshot-projector.js";
+import { _LoadDeferredResume, _ParseDeferredResumePayload } from "./runtime-deferred-resume.js";
 import { __AdmitRuntimeCandidate, __AdmitRuntimeCommand } from "./runtime-protocol-authority.js";
 import type { RuntimeAdmissionRunState, RuntimeAttemptAuthority, RuntimeProtocolClock } from "./runtime-protocol-authority.types.js";
 import type { RunInputCompiler, RuntimeCandidateDispatchResult, RuntimeDispatchAuthorityConfig, RuntimeExternalActionRunner, RuntimeStreamWorkloadIdentity, RuntimeTerminalReporter } from "./prisma-runtime-dispatch-authority.types.js";
@@ -526,7 +526,7 @@ async function _mintCommandExtras(transaction: Prisma.TransactionClient, context
 		return { compiledInput, resume: null, resumeApprovalIds: [], resumeSteeringRequestIds: [], cancelReason: "cancelled" };
 	}
 	if (kind === RuntimeCommandKind.CancelAttempt) return { compiledInput: null, resume: null, resumeApprovalIds: [], resumeSteeringRequestIds: [], cancelReason: _cancelReason(context.terminalReason) };
-	const loaded = await _loadResume(transaction, context, inputGeneration);
+	const loaded = await _LoadDeferredResume(transaction, context.runId, context.attempt, inputGeneration);
 	if (loaded === null) return null;
 	return { compiledInput: null, resume: loaded.resume, resumeApprovalIds: loaded.approvalIds, resumeSteeringRequestIds: loaded.steeringRequestIds, cancelReason: "cancelled" };
 }
@@ -540,47 +540,9 @@ async function _storedCommandExtras(transaction: Prisma.TransactionClient, conte
 		return { compiledInput, resume: null, resumeApprovalIds: [], resumeSteeringRequestIds: [], cancelReason: "cancelled" };
 	}
 	if (row.kind === RuntimeCommandKind.CancelAttempt) return { compiledInput: null, resume: null, resumeApprovalIds: [], resumeSteeringRequestIds: [], cancelReason: _cancelReason(context.terminalReason) };
-	const resume = _resumeFromPayload(row.payload);
+	const resume = _ParseDeferredResumePayload(row.payload);
 	if (resume === null) return null;
 	return { compiledInput: null, resume, resumeApprovalIds: [], resumeSteeringRequestIds: [], cancelReason: "cancelled" };
-}
-
-/** Parse a persisted resume payload back into the exact frame it was minted from. */
-function _resumeFromPayload(payload: Prisma.JsonValue | null): ResumeAttemptCommand | null
-{
-	if (payload === null || typeof payload !== "object" || Array.isArray(payload)) return null;
-	const record = payload as { readonly [key: string]: JsonValue };
-	if (typeof record["inputGeneration"] !== "number" || !("deferredToolResults" in record) || !("steeringRequests" in record)) return null;
-	const deferredToolResults = _deferredToolResults(record["deferredToolResults"]);
-	if (deferredToolResults === null) return null;
-	return { inputGeneration: record["inputGeneration"], deferredToolResults, steeringRequests: record["steeringRequests"] };
-}
-
-/** Parse one persisted array into the sole exact deferred-result wire contract. */
-function _deferredToolResults(value: JsonValue): readonly DeferredToolResumeResult[] | null
-{
-	if (!Array.isArray(value)) return null;
-	const results: DeferredToolResumeResult[] = [];
-	for (const item of value)
-	{
-		if (item === null || typeof item !== "object" || Array.isArray(item)) return null;
-		const record = item as { readonly [key: string]: JsonValue };
-		const approvalRequestId = record["approvalRequestId"];
-		const decision = record["decision"];
-		const toolInvocationId = record["toolInvocationId"];
-		if (typeof approvalRequestId !== "string" || typeof decision !== "string" || typeof toolInvocationId !== "string") return null;
-		if (decision === "approved")
-		{
-			if (Object.keys(record).length !== 5 || !("arguments" in record) || typeof record["argumentsDigest"] !== "string") return null;
-			results.push({ approvalRequestId, decision, toolInvocationId, arguments: record["arguments"], argumentsDigest: record["argumentsDigest"] });
-			continue;
-		}
-		if (Object.keys(record).length !== 4 || typeof record["failureCode"] !== "string") return null;
-		if (decision === "denied" && record["failureCode"] === "approval_denied") results.push({ approvalRequestId, decision, toolInvocationId, failureCode: record["failureCode"] });
-		else if (decision === "expired" && record["failureCode"] === "approval_expired") results.push({ approvalRequestId, decision, toolInvocationId, failureCode: record["failureCode"] });
-		else return null;
-	}
-	return results;
 }
 
 /** Map a durable run terminal reason to the server-defined cancellation reason the runtime receives. */
@@ -589,21 +551,6 @@ function _cancelReason(terminalReason: AgentRunTerminalReason | null): CancelAtt
 	if (terminalReason === AgentRunTerminalReason.BudgetExhausted) return "budget_exhausted";
 	if (terminalReason === AgentRunTerminalReason.PolicyDenied) return "capability_revoked";
 	return "cancelled";
-}
-
-/** Load pending approved results and steering requests for one atomic resume frame. */
-async function _loadResume(transaction: Prisma.TransactionClient, context: RuntimeDispatchContext, inputGeneration: number): Promise<{ resume: ResumeAttemptCommand; approvalIds: string[]; steeringRequestIds: string[] } | null>
-{
-	const approvals = await transaction.approvalRequest.findMany({ where: { runId: context.runId, attempt: context.attempt, state: ApprovalRequestState.Approved, toolInvocationRowId: { not: null }, resumeTokenHash: { not: null } }, orderBy: { id: "asc" }, include: { toolInvocation: { select: { toolInvocationId: true } } } });
-	const steering = await transaction.runtimeSteeringRequest.findMany({ where: { runId: context.runId, attempt: context.attempt, state: "Pending" }, orderBy: { submittedAt: "asc" } });
-	if (approvals.length === 0 && steering.length === 0) return null;
-	const deferredToolResults = approvals.map(function _result(row): DeferredToolResumeResult
-	{
-		if (row.toolInvocation === null || row.finalArguments === null || typeof row.finalArgumentsDigest !== "string") throw new Error("approved deferred tool request has incomplete resume authority");
-		return { approvalRequestId: row.id, decision: "approved", toolInvocationId: row.toolInvocation.toolInvocationId, arguments: row.finalArguments as JsonValue, argumentsDigest: row.finalArgumentsDigest };
-	});
-	const steeringRequests = steering.map(function _content(row): JsonValue { return row.content as JsonValue; });
-	return { resume: { inputGeneration, deferredToolResults, steeringRequests }, approvalIds: approvals.map(function _id(row) { return row.id; }), steeringRequestIds: steering.map(function _id(row) { return row.id; }) };
 }
 
 /** Derive a deterministic, attempt-scoped command id so retries reuse one idempotency key. */
@@ -633,7 +580,7 @@ async function _decideKind(transaction: Prisma.TransactionClient, context: Runti
 	if (runState === "running" && hasStart)
 	{
 		if (commands.some(function _isResume(row) { return row.kind === RuntimeCommandKind.ResumeAttempt; })) return null;
-		const loaded = await _loadResume(transaction, context, 0);
+		const loaded = await _LoadDeferredResume(transaction, context.runId, context.attempt, 0);
 		if (loaded !== null) return RuntimeCommandKind.ResumeAttempt;
 	}
 	return null;
