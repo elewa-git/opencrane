@@ -1,6 +1,6 @@
 import { EventType } from "@ag-ui/core";
 import { ___DoWithTrace, ___GetActiveSpan } from "@opencrane/backend/observability";
-import { __EncodeAgUiSseRecord, __ProjectAgUiEvent, __ProjectAgUiEvents } from "@opencrane/contracts";
+import { AG_UI_INTERRUPTS_CLEARED_EVENT, __EncodeAgUiSseRecord, __ProjectAgUiEvents } from "@opencrane/contracts";
 import type { ConversationReplayCursor } from "@opencrane/models/conversations";
 
 import { __EncodeConversationReplayCursor } from "./replay-cursor.js";
@@ -25,7 +25,7 @@ async function _streamConversationLiveReplay(dependencies: ConversationLiveRepla
 	_Validate(dependencies);
 	let cursor = command.cursor;
 	let opened = false;
-	let interruptFingerprint = "";
+	let interruptFingerprint: string | null = null;
 	const startedAt = dependencies.clock.now();
 	let heartbeatAt = startedAt;
 	while (!command.signal.aborted && dependencies.clock.now() - startedAt < dependencies.limits.maximumDurationMilliseconds)
@@ -47,7 +47,7 @@ async function _streamConversationLiveReplay(dependencies: ConversationLiveRepla
 			const fingerprint = JSON.stringify(overlays.map(event => event.payload.interrupt));
 			if (fingerprint !== interruptFingerprint)
 			{
-				for (const overlay of overlays) await _WriteSink(sink, __EncodeAgUiSseRecord(__ProjectAgUiEvent({ ...overlay, cursor: undefined })), command.signal);
+				await _WriteInterruptSnapshot(sink, command.conversationId, overlays, command.signal);
 				interruptFingerprint = fingerprint;
 			}
 		}
@@ -61,6 +61,24 @@ async function _streamConversationLiveReplay(dependencies: ConversationLiveRepla
 		}
 	}
 	return command.signal.aborted ? ConversationLiveReplayOutcomes.Disconnected : ConversationLiveReplayOutcomes.DurationReached;
+}
+
+/** Replace the complete cursorless interrupt overlay, including an explicit empty-set marker. */
+async function _WriteInterruptSnapshot(sink: ConversationLiveReplaySink, conversationId: string, overlays: readonly import("@opencrane/contracts").AgUiProjectionSourceEvent[], signal: AbortSignal): Promise<void>
+{
+	if (overlays.length === 0)
+	{
+		await _WriteSink(sink, __EncodeAgUiSseRecord({ event: "ag-ui", data: { type: EventType.CUSTOM, name: AG_UI_INTERRUPTS_CLEARED_EVENT, value: { eventType: AG_UI_INTERRUPTS_CLEARED_EVENT } } }), signal);
+		return;
+	}
+	const runId = overlays[0]?.runId;
+	const interrupts = overlays.map(function _Interrupt(overlay)
+	{
+		if (overlay.conversationId !== conversationId || overlay.runId === undefined || overlay.runId !== runId || overlay.payload.interrupt === undefined) throw new Error("open conversation interrupts have inconsistent coordinates");
+		return overlay.payload.interrupt;
+	});
+	if (runId === undefined) throw new Error("open conversation interrupts require a run coordinate");
+	await _WriteSink(sink, __EncodeAgUiSseRecord({ event: "ag-ui", data: { type: EventType.RUN_FINISHED, threadId: conversationId, runId, outcome: { type: "interrupt", interrupts } } }), signal);
 }
 
 /** Write deterministic subframes and return the last emitted replay coordinate. */

@@ -13,6 +13,9 @@ export const AG_UI_A2UI_ENVELOPE_VERSION = "opencrane.a2ui.v1";
 /** Version of the lossy governed-child update carried inside a parent run stream. */
 export const AG_UI_CHILD_RUN_ENVELOPE_VERSION = "opencrane.child_run.v1";
 
+/** Cursorless custom marker that authoritatively clears the current open-interrupt overlay. */
+export const AG_UI_INTERRUPTS_CLEARED_EVENT = "opencrane.interrupts_cleared";
+
 /**
  * Authoritative browser presentation lifecycle for one governed A2UI surface.
  *

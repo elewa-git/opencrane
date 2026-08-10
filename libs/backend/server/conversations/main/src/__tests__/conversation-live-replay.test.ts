@@ -52,6 +52,20 @@ describe("live conversation replay", function _Suite()
 		expect(body).not.toContain("id:");
 	});
 
+	it("publishes the complete open-interrupt set and explicitly clears it", async function _ReplacesInterruptSet()
+	{
+		const output: string[] = [];
+		let reads = 0;
+		const first = { cursor: undefined, conversationId: "conversation-1", runId: "run-1", position: "1", eventType: "tool.approval_required", occurredAt: "2026-08-11T00:00:00.000Z", payload: { interrupt: { id: "approval-1", reason: "tool_approval" } } } as const;
+		const second = { ...first, payload: { interrupt: { id: "approval-2", reason: "tool_approval" } } } as const;
+		await __StreamConversationLiveReplay({ repository: { readAuthorized: async function _Read() { return { status: ConversationReplayReadStatuses.Authorized, rows: [] }; } }, interrupts: { readOpen: async function _Open() { reads += 1; return reads === 1 ? [first, second] : []; } }, clock: _Clock(), limits: _Limits() }, { open: vi.fn(), write: function _Write(value): boolean { output.push(value); return true; }, drain: vi.fn() }, { conversationId: "conversation-1", siloId: "silo-1", subjectId: "user-1", cursor: null, signal: new AbortController().signal });
+
+		const body = output.join("");
+		expect(body.match(/approval-1/gu)).toHaveLength(1);
+		expect(body.match(/approval-2/gu)).toHaveLength(1);
+		expect(body).toContain("opencrane.interrupts_cleared");
+	});
+
 	it("signals proven revocation after the stream opened and stops", async function _PurgesOnRevocation()
 	{
 		let reads = 0;

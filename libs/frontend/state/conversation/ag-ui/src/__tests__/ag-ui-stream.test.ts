@@ -1,7 +1,7 @@
 import { EventType } from "@ag-ui/core";
 import { describe, expect, it } from "vitest";
 
-import { AG_UI_A2UI_ENVELOPE_VERSION, AgUiA2uiSurfaceStates } from "@opencrane/contracts";
+import { AG_UI_A2UI_ENVELOPE_VERSION, AG_UI_INTERRUPTS_CLEARED_EVENT, AgUiA2uiSurfaceStates } from "@opencrane/contracts";
 
 import { __DecodeAgUiSseRecord } from "../ag-ui-sse-decoder.js";
 import { AgUiMessageStatuses, AgUiRunStatuses, type AgUiStreamRecord } from "../ag-ui-stream.types.js";
@@ -60,13 +60,16 @@ describe("AG-UI stream state", function _Suite()
 		}).toThrow("cursor changed payload");
 	});
 
-	it("re-presents open interrupts without advancing the durable cursor", function _InterruptOverlay()
+	it("replaces and clears the complete open-interrupt set without advancing the durable cursor", function _InterruptOverlay()
 	{
 		let state = __ReduceAgUiStream(__CreateAgUiStreamState(), _Record("cursor-1", { type: EventType.RUN_STARTED, threadId: "conversation-1", runId: "run-1" }));
-		state = __ReduceAgUiStream(state, _Record(undefined, { type: EventType.RUN_FINISHED, threadId: "conversation-1", runId: "run-1", outcome: { type: "interrupt", interrupts: [{ id: "approval-1", reason: "tool_approval", toolCallId: "tool-1" }] } }));
+		state = __ReduceAgUiStream(state, _Record(undefined, { type: EventType.RUN_FINISHED, threadId: "conversation-1", runId: "run-1", outcome: { type: "interrupt", interrupts: [{ id: "approval-1", reason: "tool_approval", toolCallId: "tool-1" }, { id: "approval-2", reason: "tool_approval", toolCallId: "tool-2" }] } }));
 
 		expect(state.runStatus).toBe(AgUiRunStatuses.Interrupted);
-		expect(state.interrupts).toEqual([{ id: "approval-1", reason: "tool_approval", toolCallId: "tool-1" }]);
+		expect(state.interrupts.map(function _Id(interrupt): string { return interrupt.id; })).toEqual(["approval-1", "approval-2"]);
+		expect(state.cursor).toBe("cursor-1");
+		state = __ReduceAgUiStream(state, _Record(undefined, { type: EventType.CUSTOM, name: AG_UI_INTERRUPTS_CLEARED_EVENT, value: { eventType: AG_UI_INTERRUPTS_CLEARED_EVENT } }));
+		expect(state.interrupts).toEqual([]);
 		expect(state.cursor).toBe("cursor-1");
 	});
 

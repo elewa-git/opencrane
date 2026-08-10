@@ -1,5 +1,5 @@
 import { EventType } from "@ag-ui/core";
-import { AG_UI_A2UI_ENVELOPE_VERSION, ___ParseAgUiA2uiEnvelope, type AgUiA2uiEnvelope, type AgUiProjectionEvent } from "@opencrane/contracts";
+import { AG_UI_A2UI_ENVELOPE_VERSION, AG_UI_INTERRUPTS_CLEARED_EVENT, ___ParseAgUiA2uiEnvelope, type AgUiA2uiEnvelope, type AgUiProjectionEvent } from "@opencrane/contracts";
 
 import { AgUiMessageStatuses, AgUiRunStatuses, type AgUiMessageView, type AgUiStreamRecord, type AgUiStreamState } from "./ag-ui-stream.types.js";
 
@@ -123,6 +123,7 @@ function _ResultTool(state: AgUiStreamState, toolCallId: string, content: string
 function _Custom(state: AgUiStreamState, name: string, value: unknown): AgUiStreamState
 {
 	if (name === "opencrane.access_revoked") return __RevokeAgUiStreamAccess();
+	if (name === AG_UI_INTERRUPTS_CLEARED_EVENT) return { ...state, interrupts: [], customEvents: [...state.customEvents, name] };
 	if (name === "opencrane.message_terminal") return _MessageTerminal(state, value, name);
 	if (name === AG_UI_A2UI_ENVELOPE_VERSION) return _A2uiSurface(state, ___ParseAgUiA2uiEnvelope(value), name);
 	return { ...state, customEvents: [...state.customEvents, name] };
