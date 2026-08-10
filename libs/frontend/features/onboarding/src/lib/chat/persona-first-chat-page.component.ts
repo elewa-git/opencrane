@@ -7,7 +7,6 @@ import { ProgressSpinnerModule } from "primeng/progressspinner";
 import { JourneyShellComponent, JourneyShellLayouts, PersonaArchetypeTones } from "@opencrane/elements/ui";
 import { PersonaFirstChatArchetypes, PersonaFirstChatConflictError, PersonaFirstChatCurrentQuestion, PersonaFirstChatService, PersonaFirstChatSnapshot, PersonaFirstChatTranscriptEntry, PersonaFirstChatTranscriptRoles, UserOnboardingRouteStates } from "@opencrane/state/onboarding";
 
-import { _OnboardingErrorMessage } from "../onboarding-view.util.js";
 import { PersonaFirstChatComponent } from "./persona-first-chat.component.js";
 import { PersonaFirstChatAnswerIntent, PersonaFirstChatIdentity, PersonaFirstChatMessageRoles, PersonaFirstChatProvenance, PersonaFirstChatQuestion, PersonaFirstChatQuestionOrdinal, PersonaFirstChatStates, PersonaFirstChatTranscriptMessage } from "./persona-first-chat.types.js";
 
@@ -230,13 +229,19 @@ export class PersonaFirstChatPageComponent
 				this.chat.set(error.chat);
 				this._clearPendingAnswer();
 			}
-			this.actionError.set(_OnboardingErrorMessage(error, "OpenCrane could not continue the saved first conversation."));
+			this.actionError.set(_FirstChatErrorMessage(error));
 		}
 		finally
 		{
 			this.saving.set(false);
 		}
 	}
+}
+
+/** Return a bounded first-chat error without exposing an unknown transport payload. */
+function _FirstChatErrorMessage(error: unknown): string
+{
+	return error instanceof Error && error.message ? error.message : "OpenCrane could not continue the saved first conversation.";
 }
 
 /** Adapt one server transcript role without weakening the finite vocabulary. */
