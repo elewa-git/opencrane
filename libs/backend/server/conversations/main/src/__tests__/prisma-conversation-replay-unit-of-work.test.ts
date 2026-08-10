@@ -11,6 +11,7 @@ describe("Prisma conversation replay unit of work", function _Suite()
 		const liveTimeline = [...visibleAtTransactionStart];
 		let liveAccessEndedPosition: bigint | null = null;
 		const transaction = {
+			orgMembership: { findFirst: vi.fn().mockResolvedValue({ clusterTenant: "silo-1" }) },
 			conversationParticipant: { findUnique: vi.fn(async function _ReadParticipant()
 			{
 				const snapshotAccessEndedPosition = liveAccessEndedPosition;

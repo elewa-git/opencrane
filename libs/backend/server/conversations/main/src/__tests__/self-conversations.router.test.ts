@@ -54,6 +54,12 @@ describe("self conversations router", function _Suite()
 		await request(_App({ submitMessage })).post("/conversation-1/messages").send({ idempotencyKey: "request-1", blocks: [{ id: "block-1", kind: "text", value: "Later" }] }).expect(409, { error: "active_run" });
 	});
 
+	it("maps bounded admission capacity to retryable overload instead of persistence outage", async function _MapsCapacity()
+	{
+		const submitMessage = vi.fn().mockResolvedValue({ outcome: "denied", reason: "capacity_limited" });
+		await request(_App({ submitMessage })).post("/conversation-1/messages").send({ idempotencyKey: "request-1", blocks: [{ id: "block-1", kind: "text", value: "Later" }] }).expect(429, { error: "capacity_limited" });
+	});
+
 	it("converts an unexpected authority failure into a bounded persistence response", async function _BoundsFailure()
 	{
 		const open = vi.fn().mockRejectedValue(new Error("database connection contained private detail"));

@@ -1,4 +1,4 @@
-import { ConversationTimelineEntryKind, type Prisma } from "@prisma/client";
+import { ConversationTimelineEntryKind, OrgMemberStatus, type Prisma } from "@prisma/client";
 
 import { __EncodeConversationReplayCursor } from "./replay-cursor.js";
 import type { ConversationReplayRepository, ReadConversationReplayCommand } from "./replay-reader.types.js";
@@ -19,10 +19,16 @@ export class PrismaConversationReplayRepository implements ConversationReplayRep
 	/** Read a bounded snapshot through explicit participant, silo, conversation, and position fences. */
 	async read(command: ReadConversationReplayCommand): Promise<readonly ConversationReplayEventRow[]>
 	{
+		// 1. Reject a foreign cursor before consulting any durable authority.
 		if (command.cursor !== null && command.cursor.conversationId !== command.conversationId) return [];
+
+		// 2. Require current organisation membership and participant bounds in this repeatable snapshot.
+		const membership = await this.prisma.orgMembership.findFirst({ where: { clusterTenant: command.siloId, subject: command.subjectId, status: OrgMemberStatus.Active }, select: { clusterTenant: true } });
+		if (membership === null) return [];
 		const participant = await this.prisma.conversationParticipant.findUnique({ where: { conversationId_userId: { conversationId: command.conversationId, userId: command.subjectId } }, include: { conversation: { select: { siloId: true } } } });
 		if (participant === null || participant.conversation.siloId !== command.siloId) return [];
 
+		// 3. Read and project only canonical run events within the durable participant bounds.
 		const afterPosition = command.cursor === null ? BigInt(participant.visibleFromPosition) - 1n : BigInt(command.cursor.position);
 		if (afterPosition < BigInt(participant.visibleFromPosition) - 1n) return [];
 		const entries = await this.prisma.conversationTimelineEntry.findMany({

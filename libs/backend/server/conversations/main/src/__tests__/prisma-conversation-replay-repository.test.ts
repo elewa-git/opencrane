@@ -9,6 +9,7 @@ describe("Prisma conversation replay repository", function _Suite()
 	{
 		const findMany = vi.fn().mockResolvedValue([{ conversationId: "conversation-1", position: 3n, kind: ConversationTimelineEntryKind.RunEvent, runId: "run-1", occurredAt: new Date("2026-07-23T10:00:03.000Z"), runEvent: { type: "message.delta", payload: { messageId: "message-1", delta: "later" } } }]);
 		const prisma = {
+			orgMembership: { findFirst: vi.fn().mockResolvedValue({ clusterTenant: "silo-1" }) },
 			conversationParticipant: { findUnique: vi.fn().mockResolvedValue({ visibleFromPosition: 1n, accessEndedPosition: null, conversation: { siloId: "silo-1" } }) },
 			conversationTimelineEntry: { findMany },
 		};
@@ -34,11 +35,23 @@ describe("Prisma conversation replay repository", function _Suite()
 	{
 		const timeline = vi.fn().mockResolvedValue([]);
 		const prisma = {
+			orgMembership: { findFirst: vi.fn().mockResolvedValue({ clusterTenant: "silo-1" }) },
 			conversationParticipant: { findUnique: vi.fn().mockResolvedValue({ visibleFromPosition: 1n, accessEndedPosition: 3n, conversation: { siloId: "silo-1" } }) },
 			conversationTimelineEntry: { findMany: timeline },
 		};
 
 		await expect(new PrismaConversationReplayRepository(prisma as never).read({ conversationId: "conversation-1", siloId: "silo-1", subjectId: "user-1", cursor: null, limit: 10 })).resolves.toEqual([]);
 		expect(timeline).toHaveBeenCalledWith(expect.objectContaining({ where: { conversationId: "conversation-1", position: { gt: 0n, lte: 3n }, kind: ConversationTimelineEntryKind.RunEvent } }));
+	});
+
+	it("returns no replay rows after organisation membership revocation", async function _RejectsRevokedMembership()
+	{
+		const participant = vi.fn();
+		const timeline = vi.fn();
+		const prisma = { orgMembership: { findFirst: vi.fn().mockResolvedValue(null) }, conversationParticipant: { findUnique: participant }, conversationTimelineEntry: { findMany: timeline } };
+
+		await expect(new PrismaConversationReplayRepository(prisma as never).read({ conversationId: "conversation-1", siloId: "silo-1", subjectId: "user-1", cursor: null, limit: 10 })).resolves.toEqual([]);
+		expect(participant).not.toHaveBeenCalled();
+		expect(timeline).not.toHaveBeenCalled();
 	});
 });

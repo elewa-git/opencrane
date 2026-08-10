@@ -1,4 +1,4 @@
-import type { MessageContentBlock } from "@opencrane/models/conversations";
+import type { ConversationCreationRequest, MessageContentBlock } from "@opencrane/models/conversations";
 
 /** Browser-session identity derived by the server before conversation authority is consulted. */
 export interface ConversationCaller
@@ -9,10 +9,8 @@ export interface ConversationCaller
 	readonly subjectId: string;
 }
 
-/** Immutable-mode conversation creation request after transport validation. */
-export type CreateConversationRequest =
-	| { readonly mode: "agent_session"; readonly agentServiceId: string; readonly participantUserIds?: never }
-	| { readonly mode: "direct" | "group"; readonly participantUserIds: readonly string[]; readonly agentServiceId?: never };
+/** Immutable-mode conversation creation request after model-owned transport validation. */
+export type CreateConversationRequest = ConversationCreationRequest;
 
 /** Participant-authored message request after bounded block validation. */
 export interface SubmitConversationMessageRequest
@@ -59,17 +57,55 @@ export interface ConversationDetail extends ConversationSummary
 	readonly messages: readonly ConversationMessageView[];
 }
 
-/** Stable fail-closed write denials returned without exposing foreign authority facts. */
-export type ConversationWriteDenial = "conversation_unavailable" | "conversation_closed" | "command_not_supported" | "active_run" | "idempotency_conflict" | "participant_unavailable" | "agent_service_unavailable" | "persistence_unavailable";
+/** Stable fail-closed denials whose string values are preserved on the participant API wire. */
+export enum ConversationWriteDenialReasons
+{
+	/** The selected conversation or current caller authority is unavailable. */
+	ConversationUnavailable = "conversation_unavailable",
+	/** The monotonic lifecycle already prevents future writes. */
+	ConversationClosed = "conversation_closed",
+	/** The immutable mode does not own the requested command. */
+	CommandNotSupported = "command_not_supported",
+	/** A foreground run already owns the agent-session write lane. */
+	ActiveRun = "active_run",
+	/** A durable idempotency key was reused with different authority or content. */
+	IdempotencyConflict = "idempotency_conflict",
+	/** One or more requested participants lack active silo membership. */
+	ParticipantUnavailable = "participant_unavailable",
+	/** The requested personal agent service is unavailable for admission. */
+	AgentServiceUnavailable = "agent_service_unavailable",
+	/** The bounded admission lane is full and the caller may retry later. */
+	CapacityLimited = "capacity_limited",
+	/** The canonical persistence authority could not complete the operation. */
+	PersistenceUnavailable = "persistence_unavailable",
+}
+
+/** Stable fail-closed write denial returned without exposing foreign authority facts. */
+export type ConversationWriteDenial = ConversationWriteDenialReasons;
+
+/** Stable result discriminants whose readable values are preserved on the participant API wire. */
+export enum ConversationAuthorityOutcomes
+{
+	/** A new immutable conversation was committed. */
+	Created = "created",
+	/** A fail-closed authority decision prevented the operation. */
+	Denied = "denied",
+	/** A new canonical message was committed. */
+	Accepted = "accepted",
+	/** An exact retry returned its existing canonical message. */
+	Idempotent = "idempotent",
+	/** An existing conversation or participant coordinate changed. */
+	Changed = "changed",
+}
 
 /** Result from creating a conversation. */
-export type CreateConversationResult = { readonly outcome: "created"; readonly conversation: ConversationDetail } | { readonly outcome: "denied"; readonly reason: ConversationWriteDenial };
+export type CreateConversationResult = { readonly outcome: ConversationAuthorityOutcomes.Created; readonly conversation: ConversationDetail } | { readonly outcome: ConversationAuthorityOutcomes.Denied; readonly reason: ConversationWriteDenial };
 
 /** Result from admitting or deduplicating a participant message. */
-export type SubmitConversationMessageResult = { readonly outcome: "accepted" | "idempotent"; readonly message: ConversationMessageView } | { readonly outcome: "denied"; readonly reason: ConversationWriteDenial };
+export type SubmitConversationMessageResult = { readonly outcome: ConversationAuthorityOutcomes.Accepted | ConversationAuthorityOutcomes.Idempotent; readonly message: ConversationMessageView } | { readonly outcome: ConversationAuthorityOutcomes.Denied; readonly reason: ConversationWriteDenial };
 
 /** Result from one participant-owned conversation mutation. */
-export type MutateConversationResult = { readonly outcome: "changed"; readonly conversation: ConversationDetail } | { readonly outcome: "denied"; readonly reason: ConversationWriteDenial };
+export type MutateConversationResult = { readonly outcome: ConversationAuthorityOutcomes.Changed; readonly conversation: ConversationDetail } | { readonly outcome: ConversationAuthorityOutcomes.Denied; readonly reason: ConversationWriteDenial };
 
 /** Participant-bound application authority consumed by the self-service router. */
 export interface ConversationUnitOfWork

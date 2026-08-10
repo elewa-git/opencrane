@@ -2,17 +2,10 @@ import { Router, type Request, type Response } from "express";
 import type { Logger } from "pino";
 import { z } from "zod";
 
-import { ___ParticipantInputBlocksSchema } from "@opencrane/models/conversations";
+import { ___ConversationCreationRequestSchema, ___ParticipantInputBlocksSchema } from "@opencrane/models/conversations";
 
-import type { ConversationWriteDenial } from "./conversation-authority.types.js";
+import { ConversationAuthorityOutcomes, ConversationWriteDenialReasons, type ConversationWriteDenial } from "./conversation-authority.types.js";
 import type { SelfConversationsRouterDependencies } from "./self-conversations.router.types.js";
-
-/** Bounded immutable-mode creation body. */
-const _CreateSchema = z.discriminatedUnion("mode", [
-	z.object({ mode: z.literal("agent_session"), agentServiceId: z.string().trim().min(1) }).strict(),
-	z.object({ mode: z.literal("direct"), participantUserIds: z.array(z.string().trim().min(1)).length(1) }).strict(),
-	z.object({ mode: z.literal("group"), participantUserIds: z.array(z.string().trim().min(1)).min(1).max(99) }).strict(),
-]);
 
 /** Bounded idempotent participant message body. */
 const _MessageSchema = z.object({ idempotencyKey: z.string().trim().min(1).max(128), blocks: ___ParticipantInputBlocksSchema }).strict();
@@ -44,12 +37,12 @@ export function __CreateSelfConversationsRouter(dependencies: SelfConversationsR
 	{
 		const caller = dependencies.resolveCaller(request);
 		if (caller === null) { response.status(401).json({ error: "conversation_authentication_required" }); return; }
-		const parsed = _CreateSchema.safeParse(request.body);
+		const parsed = ___ConversationCreationRequestSchema.safeParse(request.body);
 		if (!parsed.success) { response.status(400).json({ error: "invalid_conversation_request" }); return; }
 		try
 		{
 			const result = await dependencies.authority.create(caller, parsed.data);
-			if (result.outcome === "denied") { _logUnavailable(dependencies.logger, result.reason, "conversation.create", caller.siloId); response.status(_denialStatus(result.reason)).json({ error: result.reason }); return; }
+			if (result.outcome === ConversationAuthorityOutcomes.Denied) { _logUnavailable(dependencies.logger, result.reason, "conversation.create", caller.siloId); response.status(_denialStatus(result.reason)).json({ error: result.reason }); return; }
 			response.status(201).json({ conversation: result.conversation });
 		}
 		catch (err)
@@ -88,8 +81,8 @@ export function __CreateSelfConversationsRouter(dependencies: SelfConversationsR
 		try
 		{
 			const result = await dependencies.authority.submitMessage(caller, conversationId, parsed.data);
-			if (result.outcome === "denied") { _logUnavailable(dependencies.logger, result.reason, "conversation.message.submit", caller.siloId); response.status(_denialStatus(result.reason)).json({ error: result.reason }); return; }
-			response.status(result.outcome === "accepted" ? 201 : 200).json({ outcome: result.outcome, message: result.message });
+			if (result.outcome === ConversationAuthorityOutcomes.Denied) { _logUnavailable(dependencies.logger, result.reason, "conversation.message.submit", caller.siloId); response.status(_denialStatus(result.reason)).json({ error: result.reason }); return; }
+			response.status(result.outcome === ConversationAuthorityOutcomes.Accepted ? 201 : 200).json({ outcome: result.outcome, message: result.message });
 		}
 		catch (err)
 		{
@@ -108,7 +101,7 @@ export function __CreateSelfConversationsRouter(dependencies: SelfConversationsR
 		try
 		{
 			const result = await dependencies.authority.setArchived(caller, conversationId, parsed.data.archived);
-			if (result.outcome === "denied") { _logUnavailable(dependencies.logger, result.reason, "conversation.archive", caller.siloId); response.status(_denialStatus(result.reason)).json({ error: result.reason }); return; }
+			if (result.outcome === ConversationAuthorityOutcomes.Denied) { _logUnavailable(dependencies.logger, result.reason, "conversation.archive", caller.siloId); response.status(_denialStatus(result.reason)).json({ error: result.reason }); return; }
 			response.status(200).json({ conversation: result.conversation });
 		}
 		catch (err)
@@ -127,7 +120,7 @@ export function __CreateSelfConversationsRouter(dependencies: SelfConversationsR
 		try
 		{
 			const result = await dependencies.authority.close(caller, conversationId);
-			if (result.outcome === "denied") { _logUnavailable(dependencies.logger, result.reason, "conversation.close", caller.siloId); response.status(_denialStatus(result.reason)).json({ error: result.reason }); return; }
+			if (result.outcome === ConversationAuthorityOutcomes.Denied) { _logUnavailable(dependencies.logger, result.reason, "conversation.close", caller.siloId); response.status(_denialStatus(result.reason)).json({ error: result.reason }); return; }
 			response.status(200).json({ conversation: result.conversation });
 		}
 		catch (err)
@@ -148,10 +141,21 @@ function _parameter(value: string | readonly string[] | undefined): string | nul
 /** Maps stable authority denials to non-disclosing HTTP classes. */
 function _denialStatus(reason: ConversationWriteDenial): number
 {
-	if (reason === "conversation_unavailable" || reason === "participant_unavailable" || reason === "agent_service_unavailable") return 404;
-	if (reason === "persistence_unavailable") return 503;
-	return 409;
+	return _STATUS_BY_DENIAL[reason];
 }
+
+/** Exhaustive HTTP mapping that keeps capacity refusal distinct from persistence failure. */
+const _STATUS_BY_DENIAL: Readonly<Record<ConversationWriteDenialReasons, number>> = {
+	[ConversationWriteDenialReasons.ConversationUnavailable]: 404,
+	[ConversationWriteDenialReasons.ConversationClosed]: 409,
+	[ConversationWriteDenialReasons.CommandNotSupported]: 409,
+	[ConversationWriteDenialReasons.ActiveRun]: 409,
+	[ConversationWriteDenialReasons.IdempotencyConflict]: 409,
+	[ConversationWriteDenialReasons.ParticipantUnavailable]: 404,
+	[ConversationWriteDenialReasons.AgentServiceUnavailable]: 404,
+	[ConversationWriteDenialReasons.CapacityLimited]: 429,
+	[ConversationWriteDenialReasons.PersistenceUnavailable]: 503,
+};
 
 /** Emits only bounded operation and silo metadata; body content and identity remain excluded. */
 function _log(logger: Logger, err: unknown, operation: string, siloId: string): void
@@ -162,5 +166,5 @@ function _log(logger: Logger, err: unknown, operation: string, siloId: string): 
 /** Records handled persistence degradation without logging message content or participant identity. */
 function _logUnavailable(logger: Logger, reason: ConversationWriteDenial, operation: string, siloId: string): void
 {
-	if (reason === "persistence_unavailable") logger.warn({ operation, reason, siloId }, "Conversation operation unavailable");
+	if (reason === ConversationWriteDenialReasons.PersistenceUnavailable) logger.warn({ operation, reason, siloId }, "Conversation operation unavailable");
 }

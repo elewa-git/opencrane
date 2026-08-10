@@ -2,13 +2,13 @@ import { randomUUID } from "node:crypto";
 
 import { Prisma, type PrismaClient } from "@prisma/client";
 
-import type { PersonalRunAdmissionPort } from "@opencrane/backend/agents/execution/admission";
-import { PersonalRunAdmissionOutcomes } from "@opencrane/backend/agents/execution/admission";
-import type { RunAdmissionBuild, RunAdmissionTransaction } from "@opencrane/backend/agents/execution/runs";
+import { PersonalRunAdmissionDenialReasons, PersonalRunAdmissionOutcomes, type PersonalRunAdmissionPort } from "@opencrane/backend/agents/execution/admission";
+import { RunAdmissionConcurrencyDenialReasons, RunAdmissionDenialReasons, type RunAdmissionBuild, type RunAdmissionTransaction } from "@opencrane/backend/agents/execution/runs";
 import { ___DoWithTrace } from "@opencrane/backend/observability";
-import { __DecideConversationCommand, ConversationCommandActions, ConversationCommandKinds, ConversationLifecycles, type MessageContentBlock } from "@opencrane/models/conversations";
+import { __DecideConversationCommand, ConversationCommandActions, ConversationCommandDenialReasons, ConversationCommandKinds, type MessageContentBlock } from "@opencrane/models/conversations";
 import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 
+import { ConversationAuthorityOutcomes, ConversationWriteDenialReasons } from "./conversation-authority.types.js";
 import type { ConversationCaller, ConversationDetail, ConversationMessageView, ConversationSummary, ConversationUnitOfWork, ConversationWriteDenial, CreateConversationRequest, CreateConversationResult, MutateConversationResult, SubmitConversationMessageRequest, SubmitConversationMessageResult } from "./conversation-authority.types.js";
 import { PrismaConversationMutationRepository } from "./prisma-conversation-mutation-repository.js";
 import type { ConversationMutationRepository, ConversationMutationRepositoryFactory } from "./prisma-conversation-mutation-repository.types.js";
@@ -48,10 +48,7 @@ export class PrismaConversationUnitOfWork implements ConversationUnitOfWork
 		return ___DoWithTrace("conversation.create", { siloId: caller.siloId, mode: request.mode }, async () =>
 		{
 			const conversationId = randomUUID();
-			const created = await this._mutate(function _Create(repository) { return repository.create(caller, conversationId, request); });
-			if (created.outcome === "denied") return created;
-			const detail = await this.open(caller, conversationId);
-			return detail === null ? { outcome: "denied", reason: "persistence_unavailable" } : { outcome: "created", conversation: detail };
+			return this._mutate(function _Create(repository) { return repository.create(caller, conversationId, request); });
 		});
 	}
 
@@ -62,12 +59,12 @@ export class PrismaConversationUnitOfWork implements ConversationUnitOfWork
 		{
 			const preflight = await this._readSubmissionPreflight(caller, conversationId, request.idempotencyKey);
 			if (preflight.duplicate !== null) return _duplicateResult(preflight.duplicate, request);
-			if (preflight.context === null) return { outcome: "denied", reason: "conversation_unavailable" };
+			if (preflight.context === null) return { outcome: ConversationAuthorityOutcomes.Denied, reason: ConversationWriteDenialReasons.ConversationUnavailable };
 			const decision = __DecideConversationCommand({ ...preflight.context, command: { kind: ConversationCommandKinds.SubmitMessage } });
-			if (!decision.allowed) return { outcome: "denied", reason: decision.reason === "conversation_closed" ? "conversation_closed" : "command_not_supported" };
+			if (!decision.allowed) return { outcome: ConversationAuthorityOutcomes.Denied, reason: decision.reason === ConversationCommandDenialReasons.ConversationClosed ? ConversationWriteDenialReasons.ConversationClosed : ConversationWriteDenialReasons.CommandNotSupported };
 			if (decision.action === ConversationCommandActions.AdmitOrdinaryMessage) return this._admitOrdinaryMessage(caller, conversationId, request);
-			if (decision.action !== ConversationCommandActions.AdmitAgentRun) return { outcome: "denied", reason: "command_not_supported" };
-			if (preflight.context.activeRunId !== null) return { outcome: "denied", reason: "active_run" };
+			if (decision.action !== ConversationCommandActions.AdmitAgentRun) return { outcome: ConversationAuthorityOutcomes.Denied, reason: ConversationWriteDenialReasons.CommandNotSupported };
+			if (preflight.context.activeRunId !== null) return { outcome: ConversationAuthorityOutcomes.Denied, reason: ConversationWriteDenialReasons.ActiveRun };
 			return this._admitAgentMessage(caller, conversationId, request);
 		});
 	}
@@ -75,26 +72,13 @@ export class PrismaConversationUnitOfWork implements ConversationUnitOfWork
 	/** Applies participant-local archive visibility without changing conversation lifecycle. */
 	async setArchived(caller: ConversationCaller, conversationId: string, archived: boolean): Promise<MutateConversationResult>
 	{
-		return ___DoWithTrace("conversation.archive", { siloId: caller.siloId, conversationId, archived }, async () =>
-		{
-			const changed = await this._mutate(function _Archive(repository) { return repository.setArchived(caller, conversationId, archived); });
-			if (changed !== "changed") return { outcome: "denied", reason: "conversation_unavailable" };
-			const conversation = await this.open(caller, conversationId);
-			return conversation === null ? { outcome: "denied", reason: "persistence_unavailable" } : { outcome: "changed", conversation };
-		});
+		return ___DoWithTrace("conversation.archive", { siloId: caller.siloId, conversationId, archived }, async () => this._mutate(function _Archive(repository) { return repository.setArchived(caller, conversationId, archived); }));
 	}
 
 	/** Permanently closes one caller-owned conversation after the database rechecks active-run state. */
 	async close(caller: ConversationCaller, conversationId: string): Promise<MutateConversationResult>
 	{
-		return ___DoWithTrace("conversation.close", { siloId: caller.siloId, conversationId }, async () =>
-		{
-			const changed = await this._mutate(function _Close(repository) { return repository.close(caller, conversationId); });
-			if (changed === "active_run") return { outcome: "denied", reason: "active_run" };
-			if (changed === "unavailable") return { outcome: "denied", reason: "conversation_unavailable" };
-			const conversation = await this.open(caller, conversationId);
-			return conversation === null ? { outcome: "denied", reason: "persistence_unavailable" } : { outcome: "changed", conversation };
-		});
+		return ___DoWithTrace("conversation.close", { siloId: caller.siloId, conversationId }, async () => this._mutate(function _Close(repository) { return repository.close(caller, conversationId); }));
 	}
 
 	/** Reads duplicate and mode-strategy facts from one participant-scoped snapshot. */
@@ -114,15 +98,15 @@ export class PrismaConversationUnitOfWork implements ConversationUnitOfWork
 		try
 		{
 			const admitted = await this._mutate(function _Admit(repository) { return repository.admitOrdinaryMessage(caller, conversationId, messageId, request); });
-			if (admitted.outcome === "denied") return admitted;
+			if (admitted.outcome === ConversationAuthorityOutcomes.Denied) return admitted;
 			const message = await this._findOwnMessage(caller, conversationId, request.idempotencyKey);
-			return message === null ? { outcome: "denied", reason: "persistence_unavailable" } : { outcome: "accepted", message };
+			return message === null ? { outcome: ConversationAuthorityOutcomes.Denied, reason: ConversationWriteDenialReasons.PersistenceUnavailable } : { outcome: ConversationAuthorityOutcomes.Accepted, message };
 		}
 		catch (error)
 		{
 			const conflict = await this._readIdempotencyConflict(caller, conversationId, request.idempotencyKey);
 			if (conflict.duplicate !== null) return _duplicateResult(conflict.duplicate, request);
-			if (conflict.exists) return { outcome: "denied", reason: "idempotency_conflict" };
+			if (conflict.exists) return { outcome: ConversationAuthorityOutcomes.Denied, reason: ConversationWriteDenialReasons.IdempotencyConflict };
 			throw error;
 		}
 	}
@@ -136,10 +120,10 @@ export class PrismaConversationUnitOfWork implements ConversationUnitOfWork
 		{
 			await createRepository(transaction).persistAgentMessage(caller, conversationId, messageId, value.snapshot.runId, request);
 		});
-		if (result.outcome === PersonalRunAdmissionOutcomes.Denied) return { outcome: "denied", reason: _runAdmissionDenial(result.reason) };
+		if (result.outcome === PersonalRunAdmissionOutcomes.Denied) return { outcome: ConversationAuthorityOutcomes.Denied, reason: _runAdmissionDenial(result.reason) };
 		const message = await this._findOwnMessage(caller, conversationId, request.idempotencyKey);
-		if (message === null) return { outcome: "denied", reason: "persistence_unavailable" };
-		return result.outcome === PersonalRunAdmissionOutcomes.Idempotent ? _duplicateResult(message, request) : { outcome: "accepted", message };
+		if (message === null) return { outcome: ConversationAuthorityOutcomes.Denied, reason: ConversationWriteDenialReasons.PersistenceUnavailable };
+		return result.outcome === PersonalRunAdmissionOutcomes.Idempotent ? _duplicateResult(message, request) : { outcome: ConversationAuthorityOutcomes.Accepted, message };
 	}
 
 	/** Reads one exact caller-owned message through a short transaction. */
@@ -180,16 +164,18 @@ export class PrismaConversationUnitOfWork implements ConversationUnitOfWork
 /** Maps an internal run-admission refusal without misreporting it as an active foreground run. */
 function _runAdmissionDenial(reason: string): ConversationWriteDenial
 {
-	if (reason === "conversation_unavailable") return "conversation_unavailable";
-	if (reason === "authority_conflict") return "idempotency_conflict";
-	if (reason === "run_not_admittable" || reason === "revision_unavailable" || reason === "persona_unavailable") return "agent_service_unavailable";
-	return "persistence_unavailable";
+	if (reason === PersonalRunAdmissionDenialReasons.ConversationUnavailable) return ConversationWriteDenialReasons.ConversationUnavailable;
+	if (reason === PersonalRunAdmissionDenialReasons.AuthorityConflict) return ConversationWriteDenialReasons.IdempotencyConflict;
+	if (reason === RunAdmissionConcurrencyDenialReasons.AdmissionConcurrencyLimited) return ConversationWriteDenialReasons.CapacityLimited;
+	if (reason === RunAdmissionDenialReasons.ActiveRun) return ConversationWriteDenialReasons.ActiveRun;
+	if (reason === "run_not_admittable" || reason === "revision_unavailable" || reason === "persona_unavailable") return ConversationWriteDenialReasons.AgentServiceUnavailable;
+	return ConversationWriteDenialReasons.PersistenceUnavailable;
 }
 
 /** Verifies a retry body against its durable canonical message. */
 function _duplicateResult(message: ConversationMessageView, request: SubmitConversationMessageRequest): SubmitConversationMessageResult
 {
-	return _blocksDigest(message.blocks) === _blocksDigest(request.blocks) ? { outcome: "idempotent", message } : { outcome: "denied", reason: "idempotency_conflict" };
+	return _blocksDigest(message.blocks) === _blocksDigest(request.blocks) ? { outcome: ConversationAuthorityOutcomes.Idempotent, message } : { outcome: ConversationAuthorityOutcomes.Denied, reason: ConversationWriteDenialReasons.IdempotencyConflict };
 }
 
 /** Canonical block digest used only to reject changed-body idempotency reuse. */

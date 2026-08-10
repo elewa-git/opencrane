@@ -1,7 +1,7 @@
 // This validator admits untrusted durable/API values into the conversation model; it stays beside the model so immutable mode and agent-binding rules cannot drift.
 import { z } from "zod";
 
-import { ConversationLifecycles, ConversationModes, type Conversation, type ConversationParticipant } from "./conversation.types.js";
+import { ConversationLifecycles, ConversationModes, type Conversation, type ConversationCreationRequest, type ConversationParticipant } from "./conversation.types.js";
 
 /** Non-empty OpenCrane-owned identifier accepted at the model boundary. */
 const _IdentifierSchema = z.string().trim().min(1);
@@ -35,6 +35,15 @@ const _DirectConversationSchema = z.object({ ..._ConversationBaseShape, mode: z.
 /** Exact group branch prohibiting an agent-service binding. */
 const _GroupConversationSchema = z.object({ ..._ConversationBaseShape, mode: z.literal(ConversationModes.Group) }).strict();
 
+/** Exact agent-session creation branch requiring one agent-service binding. */
+const _AgentSessionCreationSchema = z.object({ mode: z.literal(ConversationModes.AgentSession), agentServiceId: _IdentifierSchema }).strict();
+
+/** Exact direct creation branch requiring one other participant. */
+const _DirectCreationSchema = z.object({ mode: z.literal(ConversationModes.Direct), participantUserIds: z.array(_IdentifierSchema).length(1) }).strict();
+
+/** Exact group creation branch accepting one to ninety-nine other participants. */
+const _GroupCreationSchema = z.object({ mode: z.literal(ConversationModes.Group), participantUserIds: z.array(_IdentifierSchema).min(1).max(99) }).strict();
+
 /** Strict validator for the canonical immutable-mode conversation union. */
 export const ___ConversationSchema: z.ZodType<Conversation> = z.discriminatedUnion("mode", [_AgentSessionConversationSchema, _DirectConversationSchema, _GroupConversationSchema]).superRefine(function _ValidateClosedAt(conversation, context)
 {
@@ -45,6 +54,9 @@ export const ___ConversationSchema: z.ZodType<Conversation> = z.discriminatedUni
 		context.addIssue({ code: z.ZodIssueCode.custom, path: ["closedAt"], message: "must be present exactly when lifecycle is closed" });
 	}
 });
+
+/** Strict validator for the immutable-mode conversation creation request vocabulary. */
+export const ___ConversationCreationRequestSchema: z.ZodType<ConversationCreationRequest> = z.discriminatedUnion("mode", [_AgentSessionCreationSchema, _DirectCreationSchema, _GroupCreationSchema]);
 
 /** Strict validator for participant-local join, read, archive, and access coordinates. */
 export const ___ConversationParticipantSchema: z.ZodType<ConversationParticipant> = z.object({

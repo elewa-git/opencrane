@@ -70,7 +70,10 @@ requires a consumed one-use context and the exact controller-selected route iden
 
 Missing, foreign, closed, access-ended, wrong-mode, duplicate-body, and active-run writes fail
 closed through stable denials. Replay likewise returns no rows when participant, silo, cursor, or
-visibility bounds do not match.
+visibility bounds do not match. Every self-service read and write also rechecks active organisation
+membership inside its own database snapshot, so revocation closes list, open, retry, archive, close,
+message, and replay authority immediately. Admission overload is returned as `capacity_limited`
+rather than being misreported as a persistence outage.
 
 ## Dependency direction
 
@@ -82,8 +85,10 @@ only. It cannot import an app, frontend state, or deployment package.
 
 Owns participant-facing operations over `Conversation`, `ConversationParticipant`,
 `ConversationMessage`, and `ConversationTimelineEntry`. The write authority uses serialisable
-transactions. The replay adapter is read-only and joins timeline references to `RunEvent`; neither
-path reconstructs order from client or run timestamps.
+transactions and projects create, archive, and close results from the same authorised write
+snapshot. The replay adapter is read-only and joins timeline references to `RunEvent`; neither path
+reconstructs order from client or run timestamps. All paths depend on current active `OrgMembership`
+in the caller's host-selected silo; participant rows alone never preserve authority after revocation.
 
 ## See also
 

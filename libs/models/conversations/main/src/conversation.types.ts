@@ -77,6 +77,11 @@ export interface GroupConversation extends ConversationBase
 /** Canonical durable conversation with a compile-time exact agent-binding invariant. */
 export type Conversation = AgentSessionConversation | DirectConversation | GroupConversation;
 
+/** Request vocabulary for creating exactly one immutable-mode conversation. */
+export type ConversationCreationRequest =
+	| { readonly mode: ConversationModes.AgentSession; readonly agentServiceId: string; readonly participantUserIds?: never }
+	| { readonly mode: ConversationModes.Direct | ConversationModes.Group; readonly participantUserIds: readonly string[]; readonly agentServiceId?: never };
+
 /** Participant-specific coordinates that never alter conversation lifecycle or mode. */
 export interface ConversationParticipant
 {

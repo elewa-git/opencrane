@@ -3,8 +3,8 @@ export { ConversationCommandActions, ConversationCommandDenialReasons, Conversat
 export type { AllowedConversationCommandDecision, AnswerElicitationConversationCommand, CloseConversationCommand, ConversationCommand, ConversationCommandContext, ConversationCommandDecision, DeniedConversationCommandDecision, SteerRunConversationCommand, SubmitMessageConversationCommand } from "./conversation-command.types.js";
 export { __CanAppendConversationTimelineEntry, __HasValidConversationAgentBinding, __HasValidMessageCompletion, __IsConversationLifecycleTransitionAllowed, __IsMessageTransitionAllowed } from "./conversation-invariants.js";
 export { ConversationLifecycles, ConversationModes } from "./conversation.types.js";
-export type { AgentSessionConversation, Conversation, ConversationBase, ConversationParticipant, DirectConversation, GroupConversation } from "./conversation.types.js";
-export { ___ConversationParticipantSchema, ___ConversationSchema } from "./conversation.validator.js";
+export type { AgentSessionConversation, Conversation, ConversationBase, ConversationCreationRequest, ConversationParticipant, DirectConversation, GroupConversation } from "./conversation.types.js";
+export { ___ConversationCreationRequestSchema, ___ConversationParticipantSchema, ___ConversationSchema } from "./conversation.validator.js";
 export type { ConversationId, MessageId } from "./identifiers.types.js";
 export { MessageContentBlockKinds, MessageRoles, MessageSources, MessageStates } from "./message.types.js";
 export type { Message, MessageContentBlock } from "./message.types.js";

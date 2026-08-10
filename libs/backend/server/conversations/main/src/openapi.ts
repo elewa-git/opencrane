@@ -101,7 +101,7 @@ export const _SelfConversationsOpenapiPaths = {
 					},
 				},
 			},
-			responses: { 201: { description: "Message accepted." }, 200: { description: "Exact idempotent retry returned the canonical message." }, 400: { description: "Invalid message body." }, 401: { description: "Authentication required." }, 404: { description: "Conversation unavailable." }, 409: { description: "Closed, active-run, mode, or idempotency conflict." }, 503: { description: "Admission authority unavailable." } },
+			responses: { 201: { description: "Message accepted." }, 200: { description: "Exact idempotent retry returned the canonical message." }, 400: { description: "Invalid message body." }, 401: { description: "Authentication required." }, 404: { description: "Conversation unavailable." }, 409: { description: "Closed, active-run, mode, or idempotency conflict." }, 429: { description: "Conversation admission capacity is currently full; retry later." }, 503: { description: "Admission authority unavailable." } },
 		},
 	},
 	"/me/conversations/{conversationId}/archive": {

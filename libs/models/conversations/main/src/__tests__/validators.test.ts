@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { ___ConversationParticipantSchema, ___ConversationReplayCursorSchema, ___ConversationSchema, ___ConversationTimelineEntrySchema, ___MessageSchema, ___ParticipantInputBlocksSchema, ConversationLifecycles, ConversationModes, ConversationTimelineEntryKinds, MessageContentBlockKinds, MessageRoles, MessageSources, MessageStates } from "../index.js";
+import { ___ConversationCreationRequestSchema, ___ConversationParticipantSchema, ___ConversationReplayCursorSchema, ___ConversationSchema, ___ConversationTimelineEntrySchema, ___MessageSchema, ___ParticipantInputBlocksSchema, ConversationLifecycles, ConversationModes, ConversationTimelineEntryKinds, MessageContentBlockKinds, MessageRoles, MessageSources, MessageStates } from "../index.js";
 
 /** Builds one valid exact immutable-mode conversation value. */
 function _conversation(mode: ConversationModes): Record<string, unknown>
@@ -47,6 +47,15 @@ describe("conversation model validators", function _ConversationValidatorSuite()
 		expect(___ConversationSchema.safeParse({ ...direct, unexpected: true }).success).toBe(false);
 		expect(___ConversationSchema.safeParse({ ...direct, lifecycle: ConversationLifecycles.Closed, closedAt: null }).success).toBe(false);
 		expect(___ConversationSchema.safeParse({ ...direct, lifecycle: ConversationLifecycles.Closed, closedAt: "2026-08-10T09:00:00.000Z" }).success).toBe(true);
+	});
+
+	it("validates creation requests against the shared immutable-mode vocabulary", function _ValidatesCreationRequests()
+	{
+		expect(___ConversationCreationRequestSchema.safeParse({ mode: ConversationModes.AgentSession, agentServiceId: "agent-service-1" }).success).toBe(true);
+		expect(___ConversationCreationRequestSchema.safeParse({ mode: ConversationModes.Direct, participantUserIds: ["user-2"] }).success).toBe(true);
+		expect(___ConversationCreationRequestSchema.safeParse({ mode: ConversationModes.Group, participantUserIds: ["user-2", "user-3"] }).success).toBe(true);
+		expect(___ConversationCreationRequestSchema.safeParse({ mode: ConversationModes.Direct, participantUserIds: ["user-2", "user-3"] }).success).toBe(false);
+		expect(___ConversationCreationRequestSchema.safeParse({ mode: ConversationModes.AgentSession, agentServiceId: "agent-service-1", participantUserIds: ["user-2"] }).success).toBe(false);
 	});
 
 	it("keeps participant visibility positive while allowing canonical zero for unread", function _ParticipantCoordinates()

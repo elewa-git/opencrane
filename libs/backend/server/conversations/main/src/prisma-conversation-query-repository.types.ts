@@ -14,6 +14,8 @@ export interface ConversationCommandContext
 /** Participant-scoped durable conversation reads over one exact transaction snapshot. */
 export interface ConversationQueryRepository
 {
+	/** Proves the current caller still has active organisation membership in the selected silo. */
+	hasActiveCallerMembership(caller: ConversationCaller): Promise<boolean>;
 	list(caller: ConversationCaller, includeArchived: boolean): Promise<readonly ConversationSummary[]>;
 	open(caller: ConversationCaller, conversationId: string): Promise<ConversationDetail | null>;
 	loadCommandContext(caller: ConversationCaller, conversationId: string): Promise<ConversationCommandContext | null>;

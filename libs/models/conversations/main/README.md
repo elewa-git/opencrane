@@ -26,6 +26,8 @@ only checks deterministic model rules and never allocates a position itself.
 
 - `Conversation`, `ConversationModes`, and `ConversationLifecycles` — the exact immutable-mode and
   monotonic-lifecycle aggregate.
+- `ConversationCreationRequest` and `___ConversationCreationRequestSchema` — the shared strict
+  request vocabulary that keeps transport validation aligned with immutable modes.
 - `ConversationParticipant`, `Message`, `ConversationTimelineEntry`, and `ConversationReplayCursor`
   — canonical membership, message, ordering, and replay coordinates.
 - `__DecideConversationCommand` and the `ConversationCommand*` enums/types — the exhaustive

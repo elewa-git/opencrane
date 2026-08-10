@@ -1,17 +1,14 @@
 import type { RunAdmissionTransaction } from "@opencrane/backend/agents/execution/runs";
 
-import type { ConversationCaller, ConversationWriteDenial, CreateConversationRequest, SubmitConversationMessageRequest } from "./conversation-authority.types.js";
-
-/** Mutation outcomes that do not expose persistence implementation details. */
-export type ConversationMutationStatus = "changed" | "unavailable" | "active_run";
+import { ConversationAuthorityOutcomes, type ConversationCaller, type ConversationWriteDenial, type CreateConversationRequest, type CreateConversationResult, type MutateConversationResult, type SubmitConversationMessageRequest } from "./conversation-authority.types.js";
 
 /** Transaction-scoped durable conversation mutations. */
 export interface ConversationMutationRepository
 {
-	create(caller: ConversationCaller, conversationId: string, request: CreateConversationRequest): Promise<{ readonly outcome: "created" } | { readonly outcome: "denied"; readonly reason: ConversationWriteDenial }>;
-	setArchived(caller: ConversationCaller, conversationId: string, archived: boolean): Promise<ConversationMutationStatus>;
-	close(caller: ConversationCaller, conversationId: string): Promise<ConversationMutationStatus>;
-	admitOrdinaryMessage(caller: ConversationCaller, conversationId: string, messageId: string, request: SubmitConversationMessageRequest): Promise<{ readonly outcome: "accepted" } | { readonly outcome: "denied"; readonly reason: ConversationWriteDenial }>;
+	create(caller: ConversationCaller, conversationId: string, request: CreateConversationRequest): Promise<CreateConversationResult>;
+	setArchived(caller: ConversationCaller, conversationId: string, archived: boolean): Promise<MutateConversationResult>;
+	close(caller: ConversationCaller, conversationId: string): Promise<MutateConversationResult>;
+	admitOrdinaryMessage(caller: ConversationCaller, conversationId: string, messageId: string, request: SubmitConversationMessageRequest): Promise<{ readonly outcome: ConversationAuthorityOutcomes.Accepted } | { readonly outcome: ConversationAuthorityOutcomes.Denied; readonly reason: ConversationWriteDenial }>;
 	persistAgentMessage(caller: ConversationCaller, conversationId: string, messageId: string, runId: string, request: SubmitConversationMessageRequest): Promise<void>;
 }
 
