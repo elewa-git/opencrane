@@ -1,4 +1,4 @@
-import { PersonaColourValues, PersonaModifierValues, PersonaTieKinds, type PersonaAuthoritativeScoreResult, type PersonaScoreCandidateEvidence, type PersonaScoreReplayEvidence, type PersonaScoreResult, type PersonaSelectionValue, type PersonaTieChoice, type PersonaWeightedAnswer } from "./persona-scorer.types.js";
+import { PersonaColourValues, PersonaModifierValues, PersonaTieKinds, type PersonaAuthoritativeScoreResult, type PersonaScoreReplayEvidence, type PersonaScoreResult, type PersonaSelectionValue, type PersonaTieChoice, type PersonaWeightedAnswer } from "./persona-scorer.types.js";
 
 /** Stable product order used only to present equal candidates, never to resolve them. */
 const _COLOUR_ORDER: readonly PersonaColourValues[] = [PersonaColourValues.Red, PersonaColourValues.Yellow, PersonaColourValues.Green, PersonaColourValues.Blue];
@@ -28,29 +28,160 @@ export function _ReplayPersonaScore(evidence: PersonaScoreReplayEvidence): Perso
 {
 	const { orderedAnswerIds, orderedChoiceIds, colours, openness, tieResolutions: resolutions } = evidence;
 	if (!_ValidReplayEvidence(evidence)) return null;
+	const progress = new _PersonaScoreProgress();
 
-	// 1. Resolve the highest colour only from an exact persisted primary tie choice.
-	const primaryCandidates = _TopColours(colours, null);
-	if (primaryCandidates.length === 1 && _HasResolution(PersonaTieKinds.Primary, resolutions)) return null;
-	const primary = _ResolveColour(PersonaTieKinds.Primary, primaryCandidates, resolutions);
-	if (primary === null) return _Result(orderedAnswerIds, orderedChoiceIds, resolutions, colours, openness, { primary: primaryCandidates, secondary: [], modifier: [] }, null, null, null, { kind: PersonaTieKinds.Primary, candidates: primaryCandidates });
+	// 1. Advance the explicit Primary -> Secondary -> Modifier resolution lifecycle in reviewed order.
+	for (const state of _TIE_RESOLUTION_STATES)
+	{
+		const candidates = state.candidates(colours, openness, progress);
+		state.recordCandidates(progress, candidates);
+		if (candidates.length === 1 && _HasResolution(state.kind, resolutions)) return null;
+		const selected = state.resolve(candidates, resolutions);
+		if (selected === null) return _Result(orderedAnswerIds, orderedChoiceIds, resolutions, colours, openness, progress, { kind: state.kind, candidates });
+		state.recordSelection(progress, selected);
+	}
 
-	// 2. Resolve the highest remaining colour under the same fail-closed evidence rule.
-	const secondaryCandidates = _TopColours(colours, primary);
-	if (secondaryCandidates.length === 1 && _HasResolution(PersonaTieKinds.Secondary, resolutions)) return null;
-	const secondary = _ResolveColour(PersonaTieKinds.Secondary, secondaryCandidates, resolutions);
-	if (secondary === null) return _Result(orderedAnswerIds, orderedChoiceIds, resolutions, colours, openness, { primary: primaryCandidates, secondary: secondaryCandidates, modifier: [] }, primary, null, null, { kind: PersonaTieKinds.Secondary, candidates: secondaryCandidates });
-
-	// 3. Resolve the modifier last, keeping an exact tie out of draft creation.
-	const modifierCandidates = openness.explorer === openness.guardian
-		? [PersonaModifierValues.Explorer, PersonaModifierValues.Guardian]
-		: [openness.explorer > openness.guardian ? PersonaModifierValues.Explorer : PersonaModifierValues.Guardian];
-	if (modifierCandidates.length === 1 && _HasResolution(PersonaTieKinds.Modifier, resolutions)) return null;
-	const modifier = _ResolveModifier(modifierCandidates, resolutions);
-	return modifier === null
-		? _Result(orderedAnswerIds, orderedChoiceIds, resolutions, colours, openness, { primary: primaryCandidates, secondary: secondaryCandidates, modifier: modifierCandidates }, primary, secondary, null, { kind: PersonaTieKinds.Modifier, candidates: modifierCandidates })
-		: _Result(orderedAnswerIds, orderedChoiceIds, resolutions, colours, openness, { primary: primaryCandidates, secondary: secondaryCandidates, modifier: modifierCandidates }, primary, secondary, modifier, null);
+	return _Result(orderedAnswerIds, orderedChoiceIds, resolutions, colours, openness, progress, null);
 }
+
+/** Mutable progress carried only while replaying one immutable score evidence set. */
+class _PersonaScoreProgress
+{
+	/** Primary colour selected by the first resolution state. */
+	primary: PersonaColourValues | null = null;
+	/** Secondary colour selected by the second resolution state. */
+	secondary: PersonaColourValues | null = null;
+	/** Working-style modifier selected by the final resolution state. */
+	modifier: PersonaModifierValues | null = null;
+	/** Candidate sets reached in the governed state order. */
+	candidateEvidence: { primary: PersonaColourValues[]; secondary: PersonaColourValues[]; modifier: PersonaModifierValues[] } = { primary: [], secondary: [], modifier: [] };
+}
+
+/** Shared state contract for one ordered governed persona tie boundary. */
+abstract class _PersonaTieResolutionState<Value extends PersonaSelectionValue>
+{
+	/** Persisted boundary vocabulary owned by this state. */
+	abstract readonly kind: PersonaTieKinds;
+
+	/** Derive the candidates that may be selected at this exact lifecycle boundary. */
+	abstract candidates(colours: PersonaScoreResult["colours"], openness: PersonaScoreResult["openness"], progress: _PersonaScoreProgress): readonly Value[];
+
+	/** Retain this state's candidate evidence before any user selection is accepted. */
+	abstract recordCandidates(progress: _PersonaScoreProgress, candidates: readonly Value[]): void;
+
+	/** Retain one valid state-owned selection in the shared score progress. */
+	abstract recordSelection(progress: _PersonaScoreProgress, selection: Value): void;
+
+	/** Narrow a persisted selection to this state's own vocabulary. */
+	abstract accepts(value: PersonaSelectionValue): value is Value;
+
+	/** Resolve one unambiguous candidate or exact persisted owner choice. */
+	resolve(candidates: readonly Value[], resolutions: readonly PersonaTieChoice[]): Value | null
+	{
+		if (candidates.length === 1) return candidates[0] ?? null;
+		const kind = this.kind;
+		const resolution = resolutions.find(function _Matching(item) { return item.kind === kind; });
+		if (resolution === undefined || !this.accepts(resolution.selectedValue)) return null;
+		if (!_SameCandidates(resolution.candidates, candidates)) return null;
+		return candidates.includes(resolution.selectedValue) ? resolution.selectedValue : null;
+	}
+}
+
+/** First lifecycle state: select the highest colour without using a stale tie choice. */
+class _PrimaryTieResolutionState extends _PersonaTieResolutionState<PersonaColourValues>
+{
+	/** Persisted discriminator for the primary-colour boundary. */
+	readonly kind = PersonaTieKinds.Primary;
+
+	/** Derive all highest colour counters in stable display order. */
+	candidates(colours: PersonaScoreResult["colours"]): readonly PersonaColourValues[]
+	{
+		return _TopColours(colours, null);
+	}
+
+	/** Retain primary candidates for later durable evidence. */
+	recordCandidates(progress: _PersonaScoreProgress, candidates: readonly PersonaColourValues[]): void
+	{
+		progress.candidateEvidence.primary = [...candidates];
+	}
+
+	/** Retain the selected primary colour. */
+	recordSelection(progress: _PersonaScoreProgress, selection: PersonaColourValues): void
+	{
+		progress.primary = selection;
+	}
+
+	/** Accept only the colour vocabulary at the primary boundary. */
+	accepts(value: PersonaSelectionValue): value is PersonaColourValues
+	{
+		return _IsColour(value);
+	}
+}
+
+/** Second lifecycle state: select the highest colour remaining after primary selection. */
+class _SecondaryTieResolutionState extends _PersonaTieResolutionState<PersonaColourValues>
+{
+	/** Persisted discriminator for the secondary-colour boundary. */
+	readonly kind = PersonaTieKinds.Secondary;
+
+	/** Derive remaining highest colours only after primary has been selected. */
+	candidates(colours: PersonaScoreResult["colours"], openness: PersonaScoreResult["openness"], progress: _PersonaScoreProgress): readonly PersonaColourValues[]
+	{
+		return _TopColours(colours, progress.primary);
+	}
+
+	/** Retain secondary candidates for later durable evidence. */
+	recordCandidates(progress: _PersonaScoreProgress, candidates: readonly PersonaColourValues[]): void
+	{
+		progress.candidateEvidence.secondary = [...candidates];
+	}
+
+	/** Retain the selected secondary colour. */
+	recordSelection(progress: _PersonaScoreProgress, selection: PersonaColourValues): void
+	{
+		progress.secondary = selection;
+	}
+
+	/** Accept only the colour vocabulary at the secondary boundary. */
+	accepts(value: PersonaSelectionValue): value is PersonaColourValues
+	{
+		return _IsColour(value);
+	}
+}
+
+/** Final lifecycle state: select the Explorer or Guardian modifier after colours are fixed. */
+class _ModifierTieResolutionState extends _PersonaTieResolutionState<PersonaModifierValues>
+{
+	/** Persisted discriminator for the modifier boundary. */
+	readonly kind = PersonaTieKinds.Modifier;
+
+	/** Derive the modifier candidates without inventing an implicit tie breaker. */
+	candidates(colours: PersonaScoreResult["colours"], openness: PersonaScoreResult["openness"]): readonly PersonaModifierValues[]
+	{
+		return _ModifierCandidates(openness);
+	}
+
+	/** Retain modifier candidates for later durable evidence. */
+	recordCandidates(progress: _PersonaScoreProgress, candidates: readonly PersonaModifierValues[]): void
+	{
+		progress.candidateEvidence.modifier = [...candidates];
+	}
+
+	/** Retain the selected working-style modifier. */
+	recordSelection(progress: _PersonaScoreProgress, selection: PersonaModifierValues): void
+	{
+		progress.modifier = selection;
+	}
+
+	/** Accept only the modifier vocabulary at the final boundary. */
+	accepts(value: PersonaSelectionValue): value is PersonaModifierValues
+	{
+		return _IsModifier(value);
+	}
+}
+
+/** Ordered strategy dispatch for the only permitted persona tie-resolution lifecycle. */
+const _TIE_RESOLUTION_STATES: readonly _PersonaTieResolutionState<PersonaSelectionValue>[] = [new _PrimaryTieResolutionState(), new _SecondaryTieResolutionState(), new _ModifierTieResolutionState()];
 
 /** Validate persisted score inputs before selecting classifications from them. */
 function _ValidReplayEvidence(evidence: PersonaScoreReplayEvidence): boolean
@@ -102,24 +233,12 @@ function _TopColours(scores: { readonly red: number; readonly yellow: number; re
 	return available.filter(function _Highest(colour) { return scores[colour] === highest; });
 }
 
-/** Return an unambiguous colour or the matching exact resolution evidence. */
-function _ResolveColour(kind: PersonaTieKinds.Primary | PersonaTieKinds.Secondary, candidates: readonly PersonaColourValues[], resolutions: readonly PersonaTieChoice[]): PersonaColourValues | null
+/** Return one unambiguous modifier or both candidates when owner evidence must break a tie. */
+function _ModifierCandidates(openness: PersonaScoreResult["openness"]): readonly PersonaModifierValues[]
 {
-	if (candidates.length === 1) return candidates[0] ?? null;
-	const resolution = resolutions.find(function _Matching(item) { return item.kind === kind; });
-	return resolution !== undefined && _IsColour(resolution.selectedValue) && _SameCandidates(resolution.candidates, candidates) && candidates.includes(resolution.selectedValue)
-		? resolution.selectedValue
-		: null;
-}
-
-/** Return an unambiguous modifier or the matching exact resolution evidence. */
-function _ResolveModifier(candidates: readonly PersonaModifierValues[], resolutions: readonly PersonaTieChoice[]): PersonaModifierValues | null
-{
-	if (candidates.length === 1) return candidates[0] ?? null;
-	const resolution = resolutions.find(function _Matching(item) { return item.kind === PersonaTieKinds.Modifier; });
-	return resolution !== undefined && _IsModifier(resolution.selectedValue) && _SameCandidates(resolution.candidates, candidates) && candidates.includes(resolution.selectedValue)
-		? resolution.selectedValue
-		: null;
+	if (openness.explorer === openness.guardian) return [PersonaModifierValues.Explorer, PersonaModifierValues.Guardian];
+	if (openness.explorer > openness.guardian) return [PersonaModifierValues.Explorer];
+	return [PersonaModifierValues.Guardian];
 }
 
 /** Require byte-for-byte candidate-set equality so stale resolutions cannot be replayed. */
@@ -141,8 +260,8 @@ function _IsModifier(value: PersonaSelectionValue): value is PersonaModifierValu
 }
 
 /** Assemble one immutable score projection from ordered answer evidence. */
-function _Result(orderedAnswerIds: readonly string[], orderedChoiceIds: readonly string[], resolutions: readonly PersonaTieChoice[], colours: PersonaScoreResult["colours"], openness: PersonaScoreResult["openness"], candidateEvidence: PersonaScoreCandidateEvidence, primary: PersonaColourValues | null, secondary: PersonaColourValues | null, modifier: PersonaModifierValues | null, resolutionRequired: PersonaScoreResult["resolutionRequired"]): PersonaAuthoritativeScoreResult
+function _Result(orderedAnswerIds: readonly string[], orderedChoiceIds: readonly string[], resolutions: readonly PersonaTieChoice[], colours: PersonaScoreResult["colours"], openness: PersonaScoreResult["openness"], progress: _PersonaScoreProgress, resolutionRequired: PersonaScoreResult["resolutionRequired"]): PersonaAuthoritativeScoreResult
 {
 	const orderedResolutions = [...resolutions].sort(function _GovernedOrder(left, right) { return _TIE_KIND_ORDER[left.kind] - _TIE_KIND_ORDER[right.kind]; });
-	return { orderedAnswerIds: [...orderedAnswerIds], orderedChoiceIds: [...orderedChoiceIds], colours, openness, candidateEvidence: { primary: [...candidateEvidence.primary], secondary: [...candidateEvidence.secondary], modifier: [...candidateEvidence.modifier] }, tieResolutions: orderedResolutions.map(function _Resolution(resolution) { return { ...resolution, candidates: [...resolution.candidates] }; }), primary, secondary, modifier, resolutionRequired };
+	return { orderedAnswerIds: [...orderedAnswerIds], orderedChoiceIds: [...orderedChoiceIds], colours, openness, candidateEvidence: { primary: [...progress.candidateEvidence.primary], secondary: [...progress.candidateEvidence.secondary], modifier: [...progress.candidateEvidence.modifier] }, tieResolutions: orderedResolutions.map(function _Resolution(resolution) { return { ...resolution, candidates: [...resolution.candidates] }; }), primary: progress.primary, secondary: progress.secondary, modifier: progress.modifier, resolutionRequired };
 }

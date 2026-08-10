@@ -72,6 +72,16 @@ describe("persona authority", function ()
 		expect(getApprovalSnapshot).toHaveBeenCalledTimes(2);
 	});
 
+	it("retains conflict when a later approval replaced the active revision before the losing CAS re-read", async function _RetainsConflictAfterLaterWinner()
+	{
+		const approveAndActivateAtomically = vi.fn().mockResolvedValue({ status: PersonaApprovalPersistenceStatuses.Conflict });
+		const getApprovalSnapshot = vi.fn().mockResolvedValueOnce(_Snapshot()).mockResolvedValueOnce(_Snapshot({ revisionState: PersonaApprovalRevisionStates.Approved, activeRevisionId: "revision-later" }));
+
+		const result = await __ApprovePersona({ getApprovalSnapshot, approveAndActivateAtomically }, { personaProfileId: "profile-1", personaRevisionId: "revision-1", userId: "user-1", approvedAt: "2026-07-18T09:00:00.000Z" });
+
+		expect(result).toEqual({ outcome: "denied", reason: PersonaApprovalDenialReasons.Conflict });
+	});
+
 	it("rejects a persona with fewer than three explicit insights", async function ()
 	{
 		const approveAndActivateAtomically = vi.fn();
