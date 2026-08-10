@@ -16,7 +16,10 @@ export interface ConversationLiveReplayLimits
 export interface ConversationLiveReplaySink
 {
 	open(): void;
-	write(value: string): void;
+	/** Write one complete SSE frame and report whether the writable buffer remains below its limit. */
+	write(value: string): boolean;
+	/** Wait until a full writable buffer drains or the request is aborted. */
+	drain(signal: AbortSignal): Promise<void>;
 }
 
 /** Query for still-actionable approval interrupts. */

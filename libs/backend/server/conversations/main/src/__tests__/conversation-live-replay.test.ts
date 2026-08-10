@@ -31,7 +31,7 @@ describe("live conversation replay", function _Suite()
 			return { status: ConversationReplayReadStatuses.Authorized, rows: [_Row()] };
 		});
 		const abort = new AbortController();
-		const result = await __StreamConversationLiveReplay({ repository: { readAuthorized }, clock: _Clock(), limits: _Limits() }, { open: vi.fn(), write: value => output.push(value) }, { conversationId: "conversation-1", siloId: "silo-1", subjectId: "user-1", cursor: { conversationId: "conversation-1", position: "1", subframe: 0 }, signal: abort.signal });
+		const result = await __StreamConversationLiveReplay({ repository: { readAuthorized }, clock: _Clock(), limits: _Limits() }, { open: vi.fn(), write: function _Write(value): boolean { output.push(value); return true; }, drain: vi.fn() }, { conversationId: "conversation-1", siloId: "silo-1", subjectId: "user-1", cursor: { conversationId: "conversation-1", position: "1", subframe: 0 }, signal: abort.signal });
 
 		expect(result).toBe(ConversationLiveReplayOutcomes.DurationReached);
 		expect(output.join("")).not.toContain("TEXT_MESSAGE_START");
@@ -45,7 +45,7 @@ describe("live conversation replay", function _Suite()
 	{
 		const output: string[] = [];
 		const interrupt = { cursor: undefined, conversationId: "conversation-1", runId: "run-1", position: "1", eventType: "tool.approval_required", occurredAt: "2026-08-11T00:00:00.000Z", payload: { interrupt: { id: "approval-1", reason: "tool_approval", responseSchema: { type: "object" } } } } as const;
-		await __StreamConversationLiveReplay({ repository: { readAuthorized: async function _Read() { return { status: ConversationReplayReadStatuses.Authorized, rows: [] }; } }, interrupts: { readOpen: async function _Open() { return [interrupt]; } }, clock: _Clock(), limits: _Limits() }, { open: vi.fn(), write: value => output.push(value) }, { conversationId: "conversation-1", siloId: "silo-1", subjectId: "user-1", cursor: null, signal: new AbortController().signal });
+		await __StreamConversationLiveReplay({ repository: { readAuthorized: async function _Read() { return { status: ConversationReplayReadStatuses.Authorized, rows: [] }; } }, interrupts: { readOpen: async function _Open() { return [interrupt]; } }, clock: _Clock(), limits: _Limits() }, { open: vi.fn(), write: function _Write(value): boolean { output.push(value); return true; }, drain: vi.fn() }, { conversationId: "conversation-1", siloId: "silo-1", subjectId: "user-1", cursor: null, signal: new AbortController().signal });
 
 		const body = output.join("");
 		expect(body.match(/approval-1/gu)).toHaveLength(1);
@@ -61,7 +61,7 @@ describe("live conversation replay", function _Suite()
 			reads += 1;
 			return reads === 1 ? { status: ConversationReplayReadStatuses.Authorized, rows: [_Row()] } : { status: ConversationReplayReadStatuses.RevokedOrMissing, rows: [] };
 		});
-		const result = await __StreamConversationLiveReplay({ repository: { readAuthorized }, clock: _Clock(), limits: _Limits(1) }, { open: vi.fn(), write: value => output.push(value) }, { conversationId: "conversation-1", siloId: "silo-1", subjectId: "user-1", cursor: null, signal: new AbortController().signal });
+		const result = await __StreamConversationLiveReplay({ repository: { readAuthorized }, clock: _Clock(), limits: _Limits(1) }, { open: vi.fn(), write: function _Write(value): boolean { output.push(value); return true; }, drain: vi.fn() }, { conversationId: "conversation-1", siloId: "silo-1", subjectId: "user-1", cursor: null, signal: new AbortController().signal });
 
 		expect(result).toBe(ConversationLiveReplayOutcomes.RevokedOrMissing);
 		expect(output.join("")).toContain("opencrane.access_revoked");
@@ -71,7 +71,26 @@ describe("live conversation replay", function _Suite()
 	it("heartbeats below the proxy idle fence while recovery polling", async function _Heartbeats()
 	{
 		const output: string[] = [];
-		await __StreamConversationLiveReplay({ repository: { readAuthorized: async function _Read() { return { status: ConversationReplayReadStatuses.Authorized, rows: [] }; } }, clock: _Clock(), limits: _Limits() }, { open: vi.fn(), write: value => output.push(value) }, { conversationId: "conversation-1", siloId: "silo-1", subjectId: "user-1", cursor: null, signal: new AbortController().signal });
+		await __StreamConversationLiveReplay({ repository: { readAuthorized: async function _Read() { return { status: ConversationReplayReadStatuses.Authorized, rows: [] }; } }, clock: _Clock(), limits: _Limits() }, { open: vi.fn(), write: function _Write(value): boolean { output.push(value); return true; }, drain: vi.fn() }, { conversationId: "conversation-1", siloId: "silo-1", subjectId: "user-1", cursor: null, signal: new AbortController().signal });
 		expect(output).toContain(": heartbeat\n\n");
+	});
+
+	it("waits for a full response buffer before projecting the next frame", async function _AwaitsBackpressure()
+	{
+		const output: string[] = [];
+		const drain = vi.fn().mockResolvedValue(undefined);
+		let writes = 0;
+		await __StreamConversationLiveReplay({ repository: { readAuthorized: async function _Read() { return { status: ConversationReplayReadStatuses.Authorized, rows: [_Row()] }; } }, clock: _Clock(), limits: _Limits() }, { open: vi.fn(), write: function _Write(value): boolean { output.push(value); writes += 1; return writes !== 1; }, drain }, { conversationId: "conversation-1", siloId: "silo-1", subjectId: "user-1", cursor: null, signal: new AbortController().signal });
+
+		expect(drain).toHaveBeenCalledTimes(1);
+		expect(output.join("")).toContain("TEXT_MESSAGE_END");
+	});
+
+	it("fails closed without advancing past an invalid canonical row", async function _RejectsInvalidRow()
+	{
+		const invalid = { ..._Row(), occurredAt: "not-an-instant" };
+		const output: string[] = [];
+		await expect(__StreamConversationLiveReplay({ repository: { readAuthorized: async function _Read() { return { status: ConversationReplayReadStatuses.Authorized, rows: [invalid] }; } }, clock: _Clock(), limits: _Limits() }, { open: vi.fn(), write: function _Write(value): boolean { output.push(value); return true; }, drain: vi.fn() }, { conversationId: "conversation-1", siloId: "silo-1", subjectId: "user-1", cursor: null, signal: new AbortController().signal })).rejects.toThrow("canonical conversation replay row is invalid");
+		expect(output).toEqual([]);
 	});
 });

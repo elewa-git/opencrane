@@ -2,6 +2,7 @@ import { Router, type Request, type Response } from "express";
 
 import { __StreamConversationLiveReplay } from "./conversation-live-replay.js";
 import { ConversationLiveReplayOutcomes } from "./conversation-live-replay.types.js";
+import { _CreateExpressConversationLiveReplaySink } from "./express-conversation-live-replay-sink.js";
 import { __DecodeConversationReplayCursor } from "./replay-cursor.js";
 import type { SelfConversationReplayRouterDependencies } from "./self-conversation-replay.router.types.js";
 
@@ -23,10 +24,7 @@ export function __CreateSelfConversationReplayRouter(dependencies: SelfConversat
 		dependencies.shutdownSignal?.addEventListener("abort", _Abort, { once: true });
 		try
 		{
-			const outcome = await __StreamConversationLiveReplay({ repository: dependencies.repository, ...(dependencies.interrupts === undefined ? {} : { interrupts: dependencies.interrupts }), clock: dependencies.clock, limits: dependencies.limits }, {
-				open: function _Open(): void { response.status(200).set({ "cache-control": "no-store", connection: "keep-alive", "content-type": "text/event-stream", "x-accel-buffering": "no" }); response.flushHeaders(); },
-				write: function _Write(value): void { response.write(value); },
-			}, { conversationId, siloId: caller.siloId, subjectId: caller.subjectId, cursor, signal: abort.signal });
+			const outcome = await __StreamConversationLiveReplay({ repository: dependencies.repository, ...(dependencies.interrupts === undefined ? {} : { interrupts: dependencies.interrupts }), clock: dependencies.clock, limits: dependencies.limits }, _CreateExpressConversationLiveReplaySink(response), { conversationId, siloId: caller.siloId, subjectId: caller.subjectId, cursor, signal: abort.signal });
 			if (outcome === ConversationLiveReplayOutcomes.RevokedOrMissing && !response.headersSent) response.status(404).json({ error: "conversation_not_found" });
 			else if (!response.writableEnded) response.end();
 		}

@@ -2,6 +2,7 @@ import { Router, type Request, type Response } from "express";
 
 import { __StreamConversationLiveReplay } from "./conversation-live-replay.js";
 import { ConversationLiveReplayOutcomes } from "./conversation-live-replay.types.js";
+import { _CreateExpressConversationLiveReplaySink } from "./express-conversation-live-replay-sink.js";
 import { __DecodeConversationReplayCursor } from "./replay-cursor.js";
 import type { ConversationReplayRouterDependencies } from "./conversation-replay.router.types.js";
 
@@ -26,10 +27,7 @@ export function __CreateConversationReplayRouter(dependencies: ConversationRepla
 		dependencies.shutdownSignal?.addEventListener("abort", _Abort, { once: true });
 		try
 		{
-			const outcome = await __StreamConversationLiveReplay({ repository: dependencies.repository, clock: dependencies.clock, limits: dependencies.limits }, {
-				open: function _Open(): void { response.status(200).set({ "cache-control": "no-store", connection: "keep-alive", "content-type": "text/event-stream", "x-accel-buffering": "no" }); response.flushHeaders(); },
-				write: function _Write(value): void { response.write(value); },
-			}, { conversationId: consumed.context.conversationId, siloId: consumed.context.siloId, subjectId: consumed.context.subjectId, cursor, signal: abort.signal });
+			const outcome = await __StreamConversationLiveReplay({ repository: dependencies.repository, clock: dependencies.clock, limits: dependencies.limits }, _CreateExpressConversationLiveReplaySink(response), { conversationId: consumed.context.conversationId, siloId: consumed.context.siloId, subjectId: consumed.context.subjectId, cursor, signal: abort.signal });
 			if (outcome === ConversationLiveReplayOutcomes.RevokedOrMissing && !response.headersSent) response.status(403).json({ error: "replay_denied" });
 			else if (!response.writableEnded) response.end();
 		}

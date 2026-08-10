@@ -34,11 +34,11 @@ async function _streamConversationLiveReplay(dependencies: ConversationLiveRepla
 		const result = await dependencies.repository.readAuthorized(readCommand);
 		if (result.status === ConversationReplayReadStatuses.RevokedOrMissing)
 		{
-			if (opened) sink.write(_RevokedRecord());
+			if (opened) await _WriteSink(sink, _RevokedRecord(), command.signal);
 			return ConversationLiveReplayOutcomes.RevokedOrMissing;
 		}
 		if (!opened) { sink.open(); opened = true; }
-		cursor = _WriteRows(sink, command.conversationId, cursor, result.rows);
+		cursor = await _WriteRows(sink, command.conversationId, cursor, result.rows, command.signal);
 
 		// Open approvals are an overlay: reconnect restores them without changing Last-Event-ID.
 		if (dependencies.interrupts !== undefined)
@@ -47,7 +47,7 @@ async function _streamConversationLiveReplay(dependencies: ConversationLiveRepla
 			const fingerprint = JSON.stringify(overlays.map(event => event.payload.interrupt));
 			if (fingerprint !== interruptFingerprint)
 			{
-				for (const overlay of overlays) sink.write(__EncodeAgUiSseRecord(__ProjectAgUiEvent({ ...overlay, cursor: undefined })));
+				for (const overlay of overlays) await _WriteSink(sink, __EncodeAgUiSseRecord(__ProjectAgUiEvent({ ...overlay, cursor: undefined })), command.signal);
 				interruptFingerprint = fingerprint;
 			}
 		}
@@ -56,7 +56,7 @@ async function _streamConversationLiveReplay(dependencies: ConversationLiveRepla
 		if (command.signal.aborted) continue;
 		if (dependencies.clock.now() - heartbeatAt >= dependencies.limits.heartbeatMilliseconds)
 		{
-			sink.write(": heartbeat\n\n");
+			await _WriteSink(sink, ": heartbeat\n\n", command.signal);
 			heartbeatAt = dependencies.clock.now();
 		}
 	}
@@ -64,24 +64,30 @@ async function _streamConversationLiveReplay(dependencies: ConversationLiveRepla
 }
 
 /** Write deterministic subframes and return the last emitted replay coordinate. */
-function _WriteRows(sink: ConversationLiveReplaySink, conversationId: string, cursor: ConversationReplayCursor | null, rows: readonly import("./replay-projection.types.js").ConversationReplayEventRow[]): ConversationReplayCursor | null
+async function _WriteRows(sink: ConversationLiveReplaySink, conversationId: string, cursor: ConversationReplayCursor | null, rows: readonly import("./replay-projection.types.js").ConversationReplayEventRow[], signal: AbortSignal): Promise<ConversationReplayCursor | null>
 {
 	let next = cursor;
 	for (const row of rows)
 	{
 		const source = __ProjectConversationReplayEvent(row);
-		if (source === null) { next = { conversationId, position: row.position }; continue; }
+		if (source === null) throw new Error("canonical conversation replay row is invalid");
 		const events = __ProjectAgUiEvents({ ...source, cursor: undefined });
 		const resumeAfter = cursor?.position === row.position ? cursor.subframe : undefined;
 		for (let subframe = 0; subframe < events.length; subframe += 1)
 		{
 			if (resumeAfter !== undefined && subframe <= resumeAfter) continue;
 			const id = __EncodeConversationReplayCursor({ conversationId, position: row.position, subframe });
-			sink.write(__EncodeAgUiSseRecord({ id, event: "ag-ui", data: events[subframe]! }));
+			await _WriteSink(sink, __EncodeAgUiSseRecord({ id, event: "ag-ui", data: events[subframe]! }), signal);
 			next = { conversationId, position: row.position, subframe };
 		}
 	}
 	return next;
+}
+
+/** Respect Node writable backpressure before reading or projecting more authority rows. */
+async function _WriteSink(sink: ConversationLiveReplaySink, value: string, signal: AbortSignal): Promise<void>
+{
+	if (!sink.write(value)) await sink.drain(signal);
 }
 
 /** Signal proven authority loss without leaking whether conversation or membership disappeared. */
