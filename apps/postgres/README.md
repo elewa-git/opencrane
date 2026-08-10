@@ -187,20 +187,34 @@ migration Job; the server never migrates on startup.
 The deploy entrypoint requires `--release-version` and `--from-release-version`. Use `fresh` only for
 an empty initdb install; use the exact current version to restore or reconcile a current database, and
 the exact prior adjacent minor version to restore or upgrade that version. Patch, skipped-minor, major,
-and unknown paths fail before mutation. For an automatic prior-minor upgrade, the deploy owner:
+and unknown paths fail before mutation. Before an eligible prior-minor upgrade, the deploy owner reads
+the protected origin and complete migration-history tuple in one read-only transaction. A current
+baseline with no history is valid pre-ledger adoption, and an exact completed history is idempotent
+re-entry: both run privileges with migration disabled and continue the normal application upgrade
+without publishing SQL or fencing. Incompatible, unreadable, extra, or ambiguous evidence stops before
+the server is changed. Only an exact source state proceeds:
 
-1. scales the old server to zero through its Helm release and persists a visible migration fence;
-2. requires a chart-owned plugin-backed `ScheduledBackup`, creates an immediate CNPG `Backup`, and
+1. publishes the manifest-selected SQL as an immutable, content-addressed ConfigMap, then captures
+   the exact current application Helm revision;
+2. scales the old server to zero through its Helm release and persists a visible migration fence;
+3. requires a chart-owned plugin-backed `ScheduledBackup`, creates an immediate CNPG `Backup`, and
    waits for `status.phase=completed`;
-3. publishes the reviewed SQL as an immutable, content-addressed ConfigMap and verifies its bytes;
 4. runs the digest-pinned, zero-RBAC app-owner Job with deadline, no retry, read-only root, scratch,
    and egress limited to DNS plus the exact CNPG pods on TCP 5432; and
 5. runs schema convergence before database privilege reconciliation, then restores the previous
    replica count only after the whole migration succeeds.
 
-Failed migration or convergence leaves `migrationFence.active=true` and the server at zero replicas.
-Recovery is backup restore or a reviewed forward repair; do not clear the fence by scaling with
-`kubectl`. The executor image defaults to the reviewed digest-qualified CNPG PostgreSQL 17.5 image;
+After any post-fence failure, the deploy owner checks that the migration Job is absent or terminal and
+reclassifies the database. It restores the exact captured Helm revision only if the database is still
+the exact source state. A current, completed, incompatible, or unreadable state, an active or unknown
+Job, or a rollback failure leaves `migrationFence.active=true` and the server at zero replicas; the
+original deployment error remains the reported status. Recovery is then backup restore or a reviewed
+forward repair; do not clear the fence by scaling with `kubectl`. A missing live Cluster additionally
+requires an explicit physical-recovery profile before fencing, and the recovered database must pass
+the same state classification before SQL publication. If deployment stops after migration, completed
+re-entry adopts only an exact matching persisted fence; un-fencing, consumer restart, and rollout
+failures restore that fenced Helm revision while preserving the original failure. The executor image defaults to the reviewed
+digest-qualified CNPG PostgreSQL 17.5 image;
 `OPENCRANE_POSTGRES_MIGRATION_IMAGE` or `--postgres-migration-image` may override it only with another
 exact `@sha256:` identity.
 
