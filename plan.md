@@ -251,11 +251,14 @@ health, model/cost/budget, and runtime versions
 [#226](https://github.com/elewa-git/opencrane/issues/226)). Upstream consoles remain diagnostic.
 
 **Current implementation status:** the Angular shell has same-origin OIDC/session guards and early
-operator screens for catalogue, access policy, and model keys. It does not yet expose the Phase F
-conversation, thread, prompt/stream, approval, persona, memory, run-history, schedule, membership,
-audit, asset, or skill journeys. Onboarding currently returns to the welcome flow, tool/OAuth success
-is not backed by the real exchange, and there is no route-level end-to-end suite. The production
-Angular build is green, but that build proves packaging rather than the missing product journeys.
+operator screens for catalogue, access policy, and model keys. Persona sorting now runs through the
+target API and authoritative `/onboarding` shell: an owner can answer the reviewed
+interview, resolve ties, inspect the derived immutable persona, and approve it into durable onboarding
+state. Bootstrap chat, main-app admission and fencing, conversation/thread/prompt streaming, memory,
+run history, schedules, membership, audit, assets, skills, and the remaining approval journeys are
+still incomplete. Tool/OAuth success is not backed by the real exchange, and there is no full
+route-level browser end-to-end suite. The production Angular build, focused feature tests, and
+Storybook regression catalogue are green, but they do not qualify the remaining product journeys.
 
 Exit: named end-to-end user and operator journeys work only through the target APIs and UI;
 parallel legacy product surfaces are deleted.

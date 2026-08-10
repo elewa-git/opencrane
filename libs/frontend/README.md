@@ -13,7 +13,7 @@ directory hierarchy in the SPA.
 
 | Product vocabulary | Frontend entry points | Server group |
 | --- | --- | --- |
-| Managed personal agents | `state/onboarding` | personal agents and `server/agents` |
+| Managed personal agents | `features/onboarding`, `state/onboarding`, `state/persona/adapter` | personal agents and `server/agents` |
 | Gateway governance | `features/tools`, `state/mcp/adapter`, `state/provider-key/adapter` | `server/gateways` |
 | Governed skill catalogue | `state/skills/adapter` | `server/agents/skills` |
 | Personal asset catalogue | `state/assets/adapter` | server-side artifact authority |

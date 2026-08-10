@@ -1,0 +1,12 @@
+@let state = snapshot();
+@if (state.result; as result) {
+	<wo-journey-shell title="Your persona is active" description="This result describes how you asked your agent to collaborate. It is not a personality diagnosis." [layout]="layouts.Wide">
+		<p-message journey-status severity="success" [closable]="false">This exact persona revision is active for future admitted runs. Existing run snapshots are unchanged.</p-message>
+		<wo-persona-result-evidence [result]="result" [questions]="state.questions" />
+	</wo-journey-shell>
+} @else {
+	<wo-journey-shell title="Your active persona is unavailable" description="OpenCrane did not return the evidence required to display the approved persona." [layout]="layouts.Compact">
+		<p-message journey-status severity="error" [closable]="false">Reload the exact active revision before continuing.</p-message>
+		<p-button journey-actions label="Retry" icon="pi pi-refresh" (onClick)="retryRequested.emit()" />
+	</wo-journey-shell>
+}

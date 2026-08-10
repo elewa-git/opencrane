@@ -30,7 +30,7 @@ describe("PrismaPersonaPersistenceUnitOfWork", function _DescribePersonaPersiste
 		} as unknown as PrismaClient;
 		const unitOfWork = new PrismaPersonaPersistenceUnitOfWork(prisma, _Logger());
 
-		await expect(unitOfWork.readStatus("silo-1", "user-1")).resolves.toEqual({ state: "interview", interviewId: null, answeredQuestionCount: 0, questionCount: 0, personaRevisionId: null });
+		await expect(unitOfWork.readStatus("silo-1", "user-1")).resolves.toEqual({ state: "interview", interviewId: null, answeredQuestionCount: 0, questionCount: 0, personaRevisionId: null, questions: [], resolution: null, result: null });
 		expect(prisma.$transaction).toHaveBeenCalledWith(expect.any(Function), { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 		expect(transaction.personaProfile.findUnique).toHaveBeenCalledOnce();
 	});

@@ -28,6 +28,8 @@ export enum PersonaOnboardingApiStates
 	Interview = "interview",
 	/** A derived draft awaits the owner's review. */
 	Review = "review",
+	/** A completed weighted result requires an explicit tie choice. */
+	Resolution = "resolution",
 	/** An approved persona makes a personal session eligible. */
 	Ready = "ready",
 	/** The owner is answering the reviewed interview. */
@@ -57,6 +59,10 @@ export enum PersonaInterviewDenialReasons
 	AlreadyAnswered = "already_answered",
 	/** The requested question is absent from the reviewed revision frozen into the interview. */
 	QuestionUnavailable = "question_unavailable",
+	/** The submitted tie boundary or selected candidate does not match the frozen score. */
+	InvalidResolution = "invalid_resolution",
+	/** This exact tie boundary already has immutable owner evidence. */
+	AlreadyResolved = "already_resolved",
 	/** The interview has advanced beyond its mutable state. */
 	NotInProgress = "not_in_progress",
 	/** The required reviewed answers are incomplete. */

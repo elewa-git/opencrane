@@ -5,9 +5,10 @@
 	"sourceRoot": "libs/frontend/elements/ui/src",
 	"prefix": "wo",
 	"tags": [
-		"scope:web",
+		"scope:shared",
 		"type:lib",
-		"layer:frontend"
+		"layer:frontend",
+		"frontend-role:elements"
 	],
 	"targets": {
 		"lint": {
@@ -27,9 +28,10 @@
 		"storybook": {
 			"executor": "@storybook/angular:start-storybook",
 			"inputs": [
-				"default",
-				"^production",
-				"{workspaceRoot}/libs/frontend/core/src/lib/theme/opencrane-theme.scss"
+					"default",
+					"^production",
+					"{workspaceRoot}/libs/frontend/features/onboarding/src/**/*",
+					"{workspaceRoot}/libs/frontend/core/src/lib/theme/opencrane-theme.scss"
 			],
 			"options": {
 				"browserTarget": "frontend-elements-ui:build-storybook",
@@ -53,9 +55,10 @@
 		"build-storybook": {
 			"executor": "@storybook/angular:build-storybook",
 			"inputs": [
-				"default",
-				"^production",
-				"{workspaceRoot}/libs/frontend/core/src/lib/theme/opencrane-theme.scss"
+					"default",
+					"^production",
+					"{workspaceRoot}/libs/frontend/features/onboarding/src/**/*",
+					"{workspaceRoot}/libs/frontend/core/src/lib/theme/opencrane-theme.scss"
 			],
 			"outputs": [
 				"{options.outputDir}"
@@ -100,7 +103,7 @@
 				"static-storybook"
 			],
 			"options": {
-				"command": "test-storybook --config-dir libs/frontend/elements/ui/.storybook --url http://127.0.0.1:4400 --index-json --ci --failOnConsole --maxWorkers=1 --disable-telemetry"
+				"command": "wait-on --timeout 60000 http-get://127.0.0.1:4400/index.json && test-storybook --config-dir libs/frontend/elements/ui/.storybook --url http://127.0.0.1:4400 --index-json --ci --failOnConsole --maxWorkers=1 --disable-telemetry"
 			}
 		},
 		"test-storybook-visual": {
@@ -119,7 +122,7 @@
 				"{workspaceRoot}/.nx/test-results/storybook"
 			],
 			"options": {
-				"command": "playwright test --config playwright.storybook.config.ts"
+				"command": "wait-on --timeout 60000 http-get://127.0.0.1:4400/index.json && playwright test --config playwright.storybook.config.ts"
 			}
 		},
 		"update-storybook-visual": {
@@ -129,7 +132,7 @@
 				"static-storybook"
 			],
 			"options": {
-				"command": "playwright test --config playwright.storybook.config.ts --update-snapshots=all"
+				"command": "wait-on --timeout 60000 http-get://127.0.0.1:4400/index.json && playwright test --config playwright.storybook.config.ts --update-snapshots=all"
 			}
 		}
 	}

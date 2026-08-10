@@ -1,4 +1,4 @@
-import type { CompletePersonaInterviewCommand, CompletePersonaInterviewResult, PersonaInterviewRepository, RecordPersonaInterviewAnswerCommand, RecordPersonaInterviewAnswerResult, StartPersonaInterviewCommand, StartPersonaInterviewResult } from "./persona-interview-authority.types.js";
+import type { CompletePersonaInterviewCommand, CompletePersonaInterviewResult, PersonaInterviewRepository, RecordPersonaInterviewAnswerCommand, RecordPersonaInterviewAnswerResult, ResolvePersonaInterviewTieCommand, ResolvePersonaInterviewTieResult, StartPersonaInterviewCommand, StartPersonaInterviewResult } from "./persona-interview-authority.types.js";
 import { PersonaInterviewDenialReasons, PersonaLifecycleOutcomes } from "../profile/persona-lifecycle.types.js";
 
 /** Start one reviewed onboarding interview without exposing question-set authority to callers. */
@@ -22,25 +22,39 @@ export async function __CompletePersonaInterview(repository: PersonaInterviewRep
 {
 	if (!_validCompletion(command)) return { outcome: PersonaLifecycleOutcomes.Denied, reason: PersonaInterviewDenialReasons.InvalidCommand };
 	const result = await repository.completeAtomically(command);
-	return result.status === PersonaLifecycleOutcomes.Completed ? { outcome: PersonaLifecycleOutcomes.Completed } : { outcome: PersonaLifecycleOutcomes.Denied, reason: result.status };
+	return result.status === PersonaLifecycleOutcomes.Completed ? { outcome: PersonaLifecycleOutcomes.Completed, score: result.score } : { outcome: PersonaLifecycleOutcomes.Denied, reason: result.status };
+}
+
+/** Append one exact user choice for the score's current unresolved boundary. */
+export async function __ResolvePersonaInterviewTie(repository: PersonaInterviewRepository, command: ResolvePersonaInterviewTieCommand): Promise<ResolvePersonaInterviewTieResult>
+{
+	if (!_validResolution(command)) return { outcome: PersonaLifecycleOutcomes.Denied, reason: PersonaInterviewDenialReasons.InvalidCommand };
+	const result = await repository.resolveTieAtomically(command);
+	return result.status === PersonaLifecycleOutcomes.Recorded ? { outcome: PersonaLifecycleOutcomes.Recorded, score: result.score } : { outcome: PersonaLifecycleOutcomes.Denied, reason: result.status };
 }
 
 /** Return whether every start coordinate and instant is safely present. */
 function _validStart(command: StartPersonaInterviewCommand): boolean
 {
-	return _validIdentifier(command.siloId) && _validIdentifier(command.userId) && _validIdentifier(command.personaProfileId) && _validIdentifier(command.questionSetId) && (command.refreshConfigurationChangeId === null || _validIdentifier(command.refreshConfigurationChangeId)) && Number.isSafeInteger(command.questionSetVersion) && command.questionSetVersion > 0 && _validInstant(command.startedAt);
+	return _validIdentifier(command.siloId) && _validIdentifier(command.userId) && _validIdentifier(command.personaProfileId) && _validIdentifier(command.questionSetId) && _validIdentifier(command.scoringPolicyId) && _validIdentifier(command.interpolationMapId) && (command.refreshConfigurationChangeId === null || _validIdentifier(command.refreshConfigurationChangeId)) && [command.questionSetVersion, command.scoringPolicyVersion, command.interpolationMapVersion].every(function _ValidVersion(version) { return Number.isSafeInteger(version) && version > 0; }) && _validInstant(command.startedAt);
 }
 
 /** Return whether one answer remains bounded enough for durable interview evidence. */
 function _validAnswer(command: RecordPersonaInterviewAnswerCommand): boolean
 {
-	return _validIdentifier(command.userId) && _validIdentifier(command.personaProfileId) && _validIdentifier(command.interviewId) && _validIdentifier(command.questionId) && command.value.trim().length > 0 && command.value.length <= 4_000 && _validInstant(command.answeredAt);
+	return _validIdentifier(command.userId) && _validIdentifier(command.personaProfileId) && _validIdentifier(command.interviewId) && _validIdentifier(command.questionId) && _validIdentifier(command.choiceId) && _validInstant(command.answeredAt);
 }
 
 /** Return whether an owner completion request names one valid frozen instant. */
 function _validCompletion(command: CompletePersonaInterviewCommand): boolean
 {
 	return _validIdentifier(command.userId) && _validIdentifier(command.personaProfileId) && _validIdentifier(command.interviewId) && _validInstant(command.completedAt);
+}
+
+/** Validate a bounded explicit tie choice before persistence reads. */
+function _validResolution(command: ResolvePersonaInterviewTieCommand): boolean
+{
+	return _validIdentifier(command.userId) && _validIdentifier(command.personaProfileId) && _validIdentifier(command.interviewId) && _validIdentifier(command.kind) && _validIdentifier(command.selectedValue) && _validInstant(command.resolvedAt);
 }
 
 /** Validate a bounded opaque durable identifier without inventing its syntax. */

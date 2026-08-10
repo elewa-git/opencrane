@@ -1,0 +1,39 @@
+enum UserOnboardingState {
+  SurveyPending           @map("survey_pending")
+  SurveyInProgress        @map("survey_in_progress")
+  BootstrapChatPending    @map("bootstrap_chat_pending")
+  BootstrapChatInProgress @map("bootstrap_chat_in_progress")
+  Completed               @map("completed")
+}
+
+enum UserOnboardingCompletionProvenance {
+  BootstrapConcluded     @map("bootstrap_concluded")
+  ExistingUserMigration @map("existing_user_migration")
+}
+
+model UserOnboarding {
+  id                          String                              @id @default(cuid())
+  siloId                      String                              @map("silo_id")
+  userId                      String                              @map("user_id")
+  workflowVersion             Int                                 @map("workflow_version")
+  state                       UserOnboardingState                  @default(SurveyPending)
+  personaInterviewId          String?                              @map("persona_interview_id")
+  personaRevisionId           String?                              @map("persona_revision_id")
+  bootstrapConversationId     String?                              @map("bootstrap_conversation_id")
+  bootstrapContentRevisionId  String?                              @map("bootstrap_content_revision_id")
+  bootstrapContentDigest      String?                              @map("bootstrap_content_digest")
+  completionProvenance        UserOnboardingCompletionProvenance?  @map("completion_provenance")
+  completionMigrationRevision String?                              @map("completion_migration_revision")
+  completionMigrationBatch    String?                              @map("completion_migration_batch")
+  startedAt                   DateTime                             @default(now()) @map("started_at")
+  surveyStartedAt             DateTime?                            @map("survey_started_at")
+  completedAt                 DateTime?                            @map("completed_at")
+  updatedAt                   DateTime                             @updatedAt @map("updated_at")
+
+  @@unique([siloId, userId])
+  @@index([siloId, state])
+  @@index([personaInterviewId])
+  @@index([personaRevisionId])
+  @@index([bootstrapConversationId])
+  @@map("user_onboardings")
+}

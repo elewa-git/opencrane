@@ -9,9 +9,11 @@ PrimeNG, the component library used by OpenCrane. They accept typed visual state
 paper-and-cyan language, and emit user intent. They never fetch data or decide onboarding, persona,
 conversation, or access-policy state.
 
-The package is also the isolated component-catalogue owner used by Storybook. Feature packages
-compose these elements with their own domain state, while stories render every approved state with
-the same fonts, global tokens, PrimeNG preset, and zoneless change detection as the application.
+The package is also the isolated component-catalogue owner used by Storybook. Its catalogue discovers
+both the element stories stored here and reviewed feature-state stories stored by their owning
+feature package. Feature packages compose these elements with their own domain state, while stories
+render every approved state with the same fonts, global tokens, PrimeNG preset, and zoneless change
+detection as the application.
 
 ```
  feature state  ──typed inputs──►  elements/ui  ◄──PrimeNG controls + OpenCrane tokens
@@ -39,6 +41,11 @@ The package's index file (barrel) re-exports the components directly:
   sign-in and onboarding journeys.
 - `ChoiceCardGroupComponent`, `ChoiceCardOption`, and `ChoiceCardLayouts` — an accessible
   single-choice fieldset rendered as selectable paper cards.
+- `JourneyProgressComponent` — an accessible finite progress summary for resumable interviews and
+  other bounded journeys.
+- `PersonaSummaryComponent`, `PersonaArchetypeScore`, and `PersonaArchetypeTones` — a typed,
+  presentation-only persona result with primary, secondary, modifier, and complete score-vector
+  states.
 
 ## Boundary
 
@@ -49,10 +56,10 @@ loading, saving, routing, authorisation, and durable completion.
 
 ## Dependency direction
 
-Tagged `type:lib`, `layer:frontend`, and `scope:web` (the frontend dependency tier): it may import
-only other `scope:web` packages and `scope:shared` contracts. It uses PrimeNG for accessible
-controls and `@opencrane/core` only for shared visual-language infrastructure; feature/domain
-packages must never flow back into this package.
+Tagged `type:lib`, `layer:frontend`, `scope:shared`, and `frontend-role:elements`. It may depend only
+on `frontend-role:core`; it uses PrimeNG for accessible controls and `@opencrane/core` for shared
+visual-language infrastructure. Feature, state, and adapter packages must never flow back into this
+package.
 
 ## Commands
 
@@ -62,6 +69,9 @@ packages must never flow back into this package.
 - `npm run test:storybook:visual` — compare tagged canonical states with committed screenshots.
 - `npm run test:storybook:visual:update` — intentionally refresh those screenshot baselines after
   reviewing the rendered changes; committed baselines live in `tests/storybook/__screenshots__`.
+
+Stories tagged `visual-test-narrow` are captured at the supported 390-pixel viewport instead of the
+default desktop viewport, so responsive contracts remain explicit and reproducible.
 
 ## See also
 

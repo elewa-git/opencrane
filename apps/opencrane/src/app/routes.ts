@@ -15,7 +15,8 @@ import { thirdPartySourcesRouter } from "@opencrane/backend/server/knowledge/ret
 import { spec } from "@opencrane/backend/server/api-spec";
 import { _CreateAgentServicesRouter, type ManagedRunAdmissionPort } from "@opencrane/backend/server/agents/agent-services";
 import { _CreateDeferredToolApprovalRouter } from "@opencrane/backend/server/iam/authorization";
-import { _CreatePersonaOnboardingRouter } from "@opencrane/backend/agents/personal/personas";
+import { _CreatePersonaOnboardingRouter, _CreatePersonaWorkflowEvidenceRepository } from "@opencrane/backend/agents/personal/personas";
+import { __CreateUserOnboardingRouter, __UserOnboardingAuthority, _CreateUserOnboardingRepository, type UserOnboardingOwnerResolver } from "@opencrane/backend/server/agents/onboarding";
 import { _CreatePersonalArtifactCatalogueRouter } from "@opencrane/backend/server/agents/artifacts";
 import { _CreatePersonalConfigurationRouter } from "@opencrane/backend/agents/personal/configuration";
 import { _CreateSelfConversationReplayRouter } from "@opencrane/backend/server/agents/conversation-replay";
@@ -30,7 +31,8 @@ import type { MemoryGatewayClient } from "@opencrane/backend/_server/memory-gate
 import type { InternalRuntimeConfig } from "./config.types.js";
 import { _log } from "./log.js";
 import { _CreateInternalRuntimeComposition } from "./runtime-composition.js";
-import type { RouteMount, SharesRouteOptions } from "./routes.types.js";
+import type { RouteMount, SharesRouteOptions, UserOnboardingRouteComposition } from "./routes.types.js";
+import { _CreatePersonaOnboardingWorkflow } from "./user-onboarding-composition.js";
 
 /**
  * Register the authenticated product API from functional route lists.
@@ -46,6 +48,7 @@ import type { RouteMount, SharesRouteOptions } from "./routes.types.js";
  */
 export function _RegisterRoutes(app: Express, prisma: PrismaClient, coreApi: k8s.CoreV1Api, runAdmission: ManagedRunAdmissionPort, personalRunAdmission: PersonalRunAdmissionPort, serverNamespace: string, obotCustody: ObotCustodyPort): Express
 {
+	const onboarding = _CreateUserOnboardingComposition(prisma);
 	const identityAndAccessRoutes: readonly RouteMount[] = [
 		{ method: "use", path: "/api/v1/audit", handler: auditRouter(prisma) },
 		{ method: "use", path: "/api/v1/groups", handler: groupsRouter(prisma) },
@@ -57,8 +60,9 @@ export function _RegisterRoutes(app: Express, prisma: PrismaClient, coreApi: k8s
 		{ method: "use", path: "/api/v1/skills", handler: _CreateSkillCatalogueRouter(prisma, _log) },
 	];
 	const personalWorkspaceRoutes: readonly RouteMount[] = [
+		{ method: "use", path: "/api/v1/me/onboarding", handler: onboarding.router },
 		{ method: "use", path: "/api/v1/me/assets", handler: _CreatePersonalArtifactCatalogueRouter(prisma, _log) },
-		{ method: "use", path: "/api/v1/me/persona", handler: _CreatePersonaOnboardingRouter(prisma, _log) },
+		{ method: "use", path: "/api/v1/me/persona", handler: _CreatePersonaOnboardingRouter(prisma, _log, onboarding.personaWorkflow) },
 		{ method: "use", path: "/api/v1/me/approvals", handler: _CreateDeferredToolApprovalRouter(prisma, _log) },
 		{ method: "use", path: "/api/v1/me/runs", handler: __CreatePersonalRunAdmissionRouter({ resolveCaller: _ResolveRequestPrincipal, admission: personalRunAdmission, logger: _log }) },
 		{ method: "use", path: "/api/v1/me/runs", handler: _CreateSteeringIngestRouter(prisma, _log) },
@@ -97,6 +101,20 @@ export function _RegisterRoutes(app: Express, prisma: PrismaClient, coreApi: k8s
 	]);
 	return app;
 }
+
+/** Compose durable onboarding once and adapt persona caller naming without sharing persistence. */
+function _CreateUserOnboardingComposition(prisma: PrismaClient): UserOnboardingRouteComposition
+{
+	const authority = new __UserOnboardingAuthority(_CreateUserOnboardingRepository(prisma), _CreatePersonaWorkflowEvidenceRepository(prisma), 1);
+	return { router: __CreateUserOnboardingRouter({ authority, resolveOwner: _ResolveUserOnboardingOwner, logger: _log }), personaWorkflow: _CreatePersonaOnboardingWorkflow(authority) };
+}
+
+/** Resolve the durable-onboarding owner only from the verified request principal. */
+const _ResolveUserOnboardingOwner: UserOnboardingOwnerResolver = function _Owner(request)
+{
+	const principal = _ResolveRequestPrincipal(request);
+	return principal === null ? null : { siloId: principal.siloId, subjectId: principal.subjectId };
+};
 
 /**
  * Composes the share authority behind the shared per-IP limiter before identity or database work.

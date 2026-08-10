@@ -1,0 +1,31 @@
+@let state = snapshot();
+@if (state.interviewId === null) {
+	<wo-journey-shell title="Shape how your agent works with you" description="Ten short preference questions create a reviewable starting persona. This is collaboration setup, not a personality diagnosis." [layout]="layouts.Compact" [busy]="busy()">
+		<p-message journey-status severity="info" [closable]="false">No answer is right or wrong. Nothing becomes active until you review and approve the result.</p-message>
+		@if (actionError(); as error) { <p-message journey-status severity="error" [closable]="false">{{ error }}</p-message> }
+		<div class="wo-onboarding__intro">
+			<strong>About three minutes</strong>
+			<span>Your choices are saved by OpenCrane so you can resume after a refresh or on another device.</span>
+		</div>
+		<p-button journey-actions label="Start persona sorting" icon="pi pi-arrow-right" iconPos="right" [loading]="busy()" (onClick)="startRequested.emit()" />
+	</wo-journey-shell>
+} @else {
+	<wo-journey-shell title="How should your agent work with you?" description="Choose the preference that feels most natural. Your result will explain what OpenCrane inferred before anything becomes active." [layout]="layouts.Compact" [busy]="busy()">
+		<div journey-eyebrow class="wo-onboarding__eyebrow">Persona sorting</div>
+		<wo-journey-progress journey-progress label="Persona sorting progress" [statusLabel]="progressLabel()" [completed]="state.answeredQuestionCount" [total]="state.questionCount" />
+		@if (actionError(); as error) { <p-message journey-status severity="error" [closable]="false">{{ error }}</p-message> }
+		@if (currentQuestion(); as question) {
+			<wo-choice-card-group [controlId]="'persona-question-' + question.id" [legend]="question.prompt" [options]="questionOptions()" [selectedId]="selectedId()" [disabled]="busy()" [validationMessage]="validationMessage()" [layout]="choiceLayouts.Grid" (selectedIdChange)="select($event)" />
+			@if (state.answeredQuestionCount > 0) {
+				<wo-collapsible-section sectionId="saved-persona-answers" title="Saved answers" [defaultOpen]="false">
+					<wo-persona-answer-list [questions]="state.questions" />
+				</wo-collapsible-section>
+			}
+		} @else {
+			<p-message severity="error" [closable]="false">The reviewed question set is unavailable. Your recorded answers have not changed.</p-message>
+		}
+		@if (currentQuestion()) {
+			<p-button journey-actions [label]="state.answeredQuestionCount + 1 >= state.questionCount ? 'Save and review result' : 'Save and continue'" icon="pi pi-arrow-right" iconPos="right" [loading]="busy()" (onClick)="submitAnswer()" />
+		}
+	</wo-journey-shell>
+}

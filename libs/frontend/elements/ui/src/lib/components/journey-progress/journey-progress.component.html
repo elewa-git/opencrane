@@ -1,0 +1,16 @@
+<div
+	class="wo-journey-progress"
+	role="progressbar"
+	[attr.aria-label]="label()"
+	aria-valuemin="0"
+	[attr.aria-valuemax]="total()"
+	[attr.aria-valuenow]="valueNow()"
+>
+	<div class="wo-journey-progress__summary">
+		<span>{{ statusLabel() }}</span>
+		<span>{{ percentage() }}%</span>
+	</div>
+	<div class="wo-journey-progress__track" aria-hidden="true">
+		<span class="wo-journey-progress__value" [style.width.%]="percentage()"></span>
+	</div>
+</div>

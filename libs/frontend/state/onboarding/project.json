@@ -5,8 +5,10 @@
 	"sourceRoot": "libs/frontend/state/onboarding/src",
 	"prefix": "wo",
 	"tags": [
-		"scope:web",
-		"type:state"
+		"scope:persona-onboarding",
+		"type:lib",
+		"layer:frontend",
+		"frontend-role:state"
 	],
 	"targets": {
 		"lint": {

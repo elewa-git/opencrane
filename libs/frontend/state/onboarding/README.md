@@ -1,48 +1,61 @@
-# @opencrane/state/onboarding — shared onboarding persistence
+# @opencrane/state/onboarding — server-backed persona journey orchestration
 
 > [frontend](../../README.md) › [state](../README.md) › onboarding
 
 ## What it owns
 
-Part of the OpenCrane **frontend state layer** (the code between the browser UI and the backend). This
-package owns the small pieces of *persisted* state the onboarding journeys need — the bits that must
-survive a page reload or a redirect. It talks to the browser through the abstract `StorageGateway` from
-[`utils/storage`](../utils/storage/README.md) rather than touching `localStorage` directly, so it
-degrades gracefully where storage is unavailable.
+This package owns the transport-neutral persona gateway port, validated owner projection, and
+component-scoped browser store while keeping every durable fact on the server. After each explicit
+command it adopts or reloads the complete owner snapshot so the feature advances only from confirmed
+state.
 
-It owns two independent concerns:
+```
+ features/onboarding
+       │ start · answer · resolve · approve
+       ▼
+ ┌───────────────────────────────┐
+ │ state/onboarding  ◄── HERE    │  port · model · validate · orchestrate
+ └───────────────────────────────┘
+       │ PersonaGateway
+       ▼
+ persona/adapter ............... typed control-plane API
+```
 
-- **First-run flag** (`WelcomeOnboardingService`): a single persisted boolean recording whether the
-  user has finished the operator app's welcome flow. It lives here, not in `features/welcome`, because
-  both the welcome feature (which writes it) and the app's first-run route guard (which reads it) need
-  it — and a route guard must not statically import a lazy-loaded feature.
-- **Signup funnel cache** (`OnboardingCacheService`): saves the self-serve funnel's step + selections
-  so progress survives the Zitadel OIDC sign-in redirect (OIDC is the login standard; the user leaves
-  the app to authenticate and comes back). It also owns the funnel's step/state types.
+**In this flow:** [features/onboarding](../../features/onboarding/README.md) ·
+[persona/adapter](../persona/adapter/README.md)
 
-Invariant: all persistence is **best-effort** — a missing or throwing store means onboarding is simply
-treated as incomplete and writes silently no-op, never an error. The funnel cache is cleared once
-signup completes.
+The orchestrator creates a draft only after the completed snapshot proves no tie remains. An
+explicit prepare-draft command resumes an interrupted durable review transition. A failed mutation
+returns no optimistic state, so the current durable screen stays retryable.
+
+The model-adjacent runtime validator strips unknown response extensions and rejects invalid lifecycle,
+question, score, revision, or tie evidence before feature state can consume it.
 
 ## Public surface
 
-- `WelcomeOnboardingService` — the first-run completed flag as a signal (`completed`, `markComplete`, `reset`).
-- `OnboardingCacheService` — save/restore/clear the funnel step + selection across the OIDC redirect;
-  restored browser data is rebuilt only after its step, plan, and account fields pass domain validation.
-- `welcome-onboarding.util` — the pure completion-decision helper.
-- `onboarding.types` — the funnel step, account, selection, and payment/provision state types.
+- `PersonaOnboardingService` — read, start, answer, complete, resolve, `ensureDraft`, approve, and restart
+  application commands over the narrow persona gateway.
+- `PersonaOnboardingStore` — read resource, single-flight command admission, bounded errors, and
+  authoritative projection adoption for one mounted onboarding shell.
+- `PERSONA_GATEWAY` and `PersonaGateway` — transport-neutral dependency-injection port.
+- `_ParsePersonaOnboardingSnapshot` plus persona lifecycle models — bounded response validation and
+  the feature-facing projection.
 
 ## Boundary
 
-Consumed by `features/welcome` and `apps/opencrane-ui` (the first-run guard). It persists small state
-only; it makes no HTTP calls and defines no gateway port.
+Consumed by the onboarding feature and implemented by the persona adapter. It holds no browser-storage
+completion flag, owns no HTTP transport or score calculation, and cannot assert that an answer,
+draft, or approval succeeded.
 
 ## Dependency direction
 
-Tagged `scope:web` (`type:state`): it may depend only on other `scope:web` and `scope:shared`
-packages — here `state/utils/storage`, `@opencrane/core`, and Angular — never on apps or server domains.
+Tagged `scope:persona-onboarding`, `type:lib`, `layer:frontend`, and `frontend-role:state`. Its role
+constraint permits only frontend core and lower dependency-neutral model, contract, or utility
+layers. The persona adapter depends inward on this port and model; state cannot import the adapter,
+a feature, an app, or backend source.
 
 ## See also
 
 - Parent index: [state](../README.md)
-- Siblings: [utils/storage](../utils/storage/README.md) · [core](../core/README.md)
+- Adapter: [persona/adapter](../persona/adapter/README.md)
+- Feature: [features/onboarding](../../features/onboarding/README.md)

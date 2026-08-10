@@ -1,0 +1,278 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
+import { CUSTOM_ELEMENTS_SCHEMA, Component, input, output, ɵresolveComponentResources as resolveComponentResources } from "@angular/core";
+import { TestBed, type ComponentFixture } from "@angular/core/testing";
+import { BrowserDynamicTestingModule, platformBrowserDynamicTesting } from "@angular/platform-browser-dynamic/testing";
+import { By } from "@angular/platform-browser";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+
+import { PersonaColours, PersonaModifiers, PersonaOnboardingService, PersonaOnboardingSnapshot, PersonaOnboardingStates, PersonaOnboardingStore, PersonaResolutionKinds } from "@opencrane/state/onboarding";
+
+import { PersonaOnboardingPageComponent } from "../persona-onboarding-page.component";
+import type { PersonaAnswerIntent, PersonaApprovalIntent, PersonaResolutionIntent } from "../persona-onboarding-state.types";
+
+/** Exhaustive template contract for every durable state owned by the shell. */
+const _STATE_TEMPLATE_CASES: Readonly<Record<PersonaOnboardingStates, string>> = {
+	[PersonaOnboardingStates.Interview]: "wo-persona-interview-state",
+	[PersonaOnboardingStates.Resolution]: "wo-persona-resolution-state",
+	[PersonaOnboardingStates.Review]: "wo-persona-review-state",
+	[PersonaOnboardingStates.Ready]: "wo-persona-ready-state"
+};
+
+/** Real routed template compiled by the shallow fixture instead of inspected as source text. */
+const _SHELL_TEMPLATE = readFileSync(join(process.cwd(), "src/lib/persona-onboarding-page.component.html"), "utf8");
+
+/** Test-only interview state boundary used to execute the real shell template. */
+@Component({ selector: "wo-persona-interview-state", standalone: true, template: "" })
+class _PersonaInterviewStateStubComponent
+{
+	public readonly snapshot = input.required<PersonaOnboardingSnapshot>();
+	public readonly busy = input.required<boolean>();
+	public readonly actionError = input.required<string | null>();
+	public readonly startRequested = output<void>();
+	public readonly answerSubmitted = output<PersonaAnswerIntent>();
+}
+
+/** Test-only resolution state boundary used to execute the real shell template. */
+@Component({ selector: "wo-persona-resolution-state", standalone: true, template: "" })
+class _PersonaResolutionStateStubComponent
+{
+	public readonly snapshot = input.required<PersonaOnboardingSnapshot>();
+	public readonly busy = input.required<boolean>();
+	public readonly actionError = input.required<string | null>();
+	public readonly retryRequested = output<void>();
+	public readonly resolutionSubmitted = output<PersonaResolutionIntent>();
+}
+
+/** Test-only review state boundary used to execute the real shell template. */
+@Component({ selector: "wo-persona-review-state", standalone: true, template: "" })
+class _PersonaReviewStateStubComponent
+{
+	public readonly snapshot = input.required<PersonaOnboardingSnapshot>();
+	public readonly busy = input.required<boolean>();
+	public readonly actionError = input.required<string | null>();
+	public readonly retryRequested = output<void>();
+	public readonly draftRequested = output<void>();
+	public readonly restartRequested = output<void>();
+	public readonly approvalRequested = output<PersonaApprovalIntent>();
+}
+
+/** Test-only ready state boundary used to execute the real shell template. */
+@Component({ selector: "wo-persona-ready-state", standalone: true, template: "" })
+class _PersonaReadyStateStubComponent
+{
+	public readonly snapshot = input.required<PersonaOnboardingSnapshot>();
+	public readonly retryRequested = output<void>();
+}
+
+/** Build one complete authority projection for state-component orchestration tests. */
+function _Snapshot(overrides: Partial<PersonaOnboardingSnapshot> = {}): PersonaOnboardingSnapshot
+{
+	return {
+		state: PersonaOnboardingStates.Interview,
+		interviewId: "interview-1",
+		answeredQuestionCount: 0,
+		questionCount: 1,
+		personaRevisionId: null,
+		questions: [{ id: "q1", category: "pace", prompt: "Choose a pace", ordinal: 1, choices: [{ id: "fast", label: "Move directly", ordinal: 1 }], selectedChoiceId: null }],
+		resolution: null,
+		result: null,
+		...overrides
+	};
+}
+
+/** Build the immutable reviewed result shown before and after explicit activation. */
+function _ReviewSnapshot(personaRevisionId: string, state: PersonaOnboardingStates = PersonaOnboardingStates.Review): PersonaOnboardingSnapshot
+{
+	return _Snapshot({
+		state,
+		answeredQuestionCount: 1,
+		personaRevisionId,
+		questions: [{ id: "q1", category: "pace", prompt: "Choose a pace", ordinal: 1, choices: [{ id: "fast", label: "Move directly", ordinal: 1 }], selectedChoiceId: "fast" }],
+		result: {
+			displayName: "The Commander",
+			primaryColour: PersonaColours.Red,
+			secondaryColour: PersonaColours.Blue,
+			modifier: PersonaModifiers.Explorer,
+			colourScores: { red: 3, yellow: 0, green: 0, blue: 1, total: 4 },
+			opennessScores: { explorer: 1, guardian: 0, total: 1 },
+			insights: ["You prefer direct recommendations."],
+			instructionPreview: "Lead with a direct recommendation."
+		}
+	});
+}
+
+/** Build valid state evidence for every durable shell case. */
+function _StateSnapshot(state: PersonaOnboardingStates): PersonaOnboardingSnapshot
+{
+	switch (state)
+	{
+		case PersonaOnboardingStates.Interview: return _Snapshot();
+		case PersonaOnboardingStates.Resolution:
+			return _Snapshot({
+				state,
+				answeredQuestionCount: 1,
+				questions: [{ ..._Snapshot().questions[0], selectedChoiceId: "fast" }],
+				resolution: { kind: PersonaResolutionKinds.Primary, candidates: [PersonaColours.Red, PersonaColours.Blue] }
+			});
+		case PersonaOnboardingStates.Review: return _ReviewSnapshot("revision-1");
+		case PersonaOnboardingStates.Ready: return _ReviewSnapshot("revision-1", PersonaOnboardingStates.Ready);
+	}
+}
+
+/** Build the minimal service double consumed by the routed shell. */
+function _Service(snapshot: PersonaOnboardingSnapshot): PersonaOnboardingService
+{
+	return {
+		read: vi.fn().mockResolvedValue(snapshot),
+		start: vi.fn(),
+		answer: vi.fn(),
+		complete: vi.fn(),
+		resolve: vi.fn(),
+		ensureDraft: vi.fn(),
+		approve: vi.fn(),
+		restart: vi.fn()
+	} as unknown as PersonaOnboardingService;
+}
+
+/** Render the real shell template against test-only state boundaries and a controlled service. */
+async function _RenderShell(snapshot: PersonaOnboardingSnapshot, service: PersonaOnboardingService = _Service(snapshot)): Promise<ComponentFixture<PersonaOnboardingPageComponent>>
+{
+	TestBed.overrideComponent(PersonaOnboardingPageComponent,
+	{
+		set:
+		{
+			templateUrl: undefined,
+			template: _SHELL_TEMPLATE,
+			styleUrl: undefined,
+			styleUrls: [],
+			styles: [],
+			imports: [_PersonaInterviewStateStubComponent, _PersonaReadyStateStubComponent, _PersonaResolutionStateStubComponent, _PersonaReviewStateStubComponent],
+			schemas: [CUSTOM_ELEMENTS_SCHEMA]
+		}
+	});
+	TestBed.configureTestingModule({ imports: [PersonaOnboardingPageComponent], providers: [{ provide: PersonaOnboardingService, useValue: service }] });
+	const fixture = TestBed.createComponent(PersonaOnboardingPageComponent);
+	await vi.waitFor(function _Loaded() { expect(fixture.componentInstance.onboarding.hasValue()).toBe(true); });
+	fixture.detectChanges();
+	return fixture;
+}
+
+beforeAll(async function _InitializeAngularTesting()
+{
+	TestBed.initTestEnvironment(BrowserDynamicTestingModule, platformBrowserDynamicTesting());
+	await resolveComponentResources(async function _ResolveComponentResource(url)
+	{
+		return url.endsWith("persona-onboarding-page.component.html") ? _SHELL_TEMPLATE : "";
+	});
+});
+
+afterAll(function _ResetAngularTesting()
+{
+	TestBed.resetTestEnvironment();
+});
+
+afterEach(function _ResetTestBed()
+{
+	TestBed.resetTestingModule();
+});
+
+describe("persona onboarding shell orchestration", function _PersonaOnboardingShellSuite()
+{
+	it.each(Object.values(PersonaOnboardingStates))("routes %s through exactly one rendered state component", async function _RoutesState(state)
+	{
+		const fixture = await _RenderShell(_StateSnapshot(state));
+		for (const [candidate, selector] of Object.entries(_STATE_TEMPLATE_CASES))
+		{
+			const expectedCount = candidate === state ? 1 : 0;
+			expect(fixture.nativeElement.querySelectorAll(selector)).toHaveLength(expectedCount);
+		}
+	});
+
+	it("routes a rendered resolution intent to the confirmed review state", async function _ResolutionToReview()
+	{
+		const initial = _StateSnapshot(PersonaOnboardingStates.Resolution);
+		const review = _ReviewSnapshot("revision-1");
+		const service = _Service(initial);
+		vi.mocked(service.resolve).mockResolvedValue(review);
+		const fixture = await _RenderShell(initial, service);
+		const state = fixture.debugElement.query(By.directive(_PersonaResolutionStateStubComponent));
+
+		state.triggerEventHandler("resolutionSubmitted", { interviewId: "interview-1", kind: PersonaResolutionKinds.Primary, selectedValue: PersonaColours.Red });
+
+		await vi.waitFor(function _Resolved() { expect(fixture.componentInstance.onboarding.value()).toBe(review); });
+		fixture.detectChanges();
+		expect(service.resolve).toHaveBeenCalledWith("interview-1", PersonaResolutionKinds.Primary, PersonaColours.Red);
+		expect(fixture.nativeElement.querySelectorAll("wo-persona-review-state")).toHaveLength(1);
+	});
+
+	it("routes a rendered approval intent to the confirmed ready state", async function _ReviewToReady()
+	{
+		const review = _ReviewSnapshot("revision-1");
+		const ready = _ReviewSnapshot("revision-1", PersonaOnboardingStates.Ready);
+		const service = _Service(review);
+		vi.mocked(service.approve).mockResolvedValue(ready);
+		const fixture = await _RenderShell(review, service);
+		const state = fixture.debugElement.query(By.directive(_PersonaReviewStateStubComponent));
+
+		state.triggerEventHandler("approvalRequested", { personaRevisionId: "revision-1", instructionPreview: "Lead with a direct recommendation." });
+
+		await vi.waitFor(function _Approved() { expect(fixture.componentInstance.onboarding.value()).toBe(ready); });
+		fixture.detectChanges();
+		expect(service.approve).toHaveBeenCalledWith("revision-1");
+		expect(fixture.nativeElement.querySelectorAll("wo-persona-ready-state")).toHaveLength(1);
+	});
+
+	it("saves the final answer and adopts the confirmed review state", async function _SurveyCompletion()
+	{
+		const initial = _Snapshot();
+		const answered = _Snapshot({ answeredQuestionCount: 1, questions: [{ ...initial.questions[0], selectedChoiceId: "fast" }] });
+		const review = _ReviewSnapshot("revision-1");
+		const service = _Service(initial);
+		vi.mocked(service.answer).mockResolvedValue(answered);
+		vi.mocked(service.complete).mockResolvedValue(review);
+		TestBed.configureTestingModule({ providers: [PersonaOnboardingStore, { provide: PersonaOnboardingService, useValue: service }] });
+		const component = TestBed.runInInjectionContext(function _CreateShell() { return new PersonaOnboardingPageComponent(); });
+		await vi.waitFor(function _Loaded() { expect(component.onboarding.hasValue()).toBe(true); });
+
+		await component.answer({ interviewId: "interview-1", questionId: "q1", choiceId: "fast" });
+
+		expect(service.answer).toHaveBeenCalledWith("interview-1", "q1", "fast");
+		expect(service.complete).toHaveBeenCalledWith("interview-1");
+		expect(component.onboarding.value()).toBe(review);
+	});
+
+	it("guards duplicate command admission before the first authority await", async function _SingleFlight()
+	{
+		let finish: ((snapshot: PersonaOnboardingSnapshot) => void) | undefined;
+		const pending = new Promise<PersonaOnboardingSnapshot>(function _Pending(resolve) { finish = resolve; });
+		const initial = _Snapshot({ interviewId: null });
+		const service = _Service(initial);
+		vi.mocked(service.start).mockReturnValue(pending);
+		TestBed.configureTestingModule({ providers: [PersonaOnboardingStore, { provide: PersonaOnboardingService, useValue: service }] });
+		const component = TestBed.runInInjectionContext(function _CreateShell() { return new PersonaOnboardingPageComponent(); });
+		await vi.waitFor(function _Loaded() { expect(component.onboarding.hasValue()).toBe(true); });
+
+		const first = component.start();
+		const duplicate = component.start();
+		expect(service.start).toHaveBeenCalledTimes(1);
+		finish?.(_Snapshot());
+		await Promise.all([first, duplicate]);
+	});
+
+	it("revalidates immutable review material before calling the approval authority", async function _ApprovalFence()
+	{
+		const review = _ReviewSnapshot("revision-1");
+		const service = _Service(review);
+		TestBed.configureTestingModule({ providers: [PersonaOnboardingStore, { provide: PersonaOnboardingService, useValue: service }] });
+		const component = TestBed.runInInjectionContext(function _CreateShell() { return new PersonaOnboardingPageComponent(); });
+		await vi.waitFor(function _Loaded() { expect(component.onboarding.hasValue()).toBe(true); });
+
+		await component.approve({ personaRevisionId: "revision-2", instructionPreview: "Lead with a direct recommendation." });
+
+		expect(service.approve).not.toHaveBeenCalled();
+		expect(component.actionError()).toContain("changed before approval");
+	});
+
+});

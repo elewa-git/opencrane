@@ -31,8 +31,8 @@
             "importPath": "../profile/prisma-persona-aggregate-read-repository.js"
           },
           {
-            "adapter": "PrismaPersonaDraftTemplateSelectorRepository",
-            "importPath": "../drafting/prisma-persona-draft-template-selector.js"
+            "adapter": "PrismaPersonaScoringRepository",
+            "importPath": "../scoring/prisma-persona-scoring-repository.js"
           }
         ]
       },
@@ -47,16 +47,16 @@
             "importPath": "../profile/prisma-persona-aggregate-read-repository.js"
           },
           {
-            "adapter": "PrismaPersonaDraftTemplateSelectorRepository",
-            "importPath": "./prisma-persona-draft-template-selector.js"
+            "adapter": "PrismaPersonaScoringRepository",
+            "importPath": "../scoring/prisma-persona-scoring-repository.js"
           }
         ]
       },
       {
-        "path": "libs/backend/agents/personal/personas/main/src/drafting/prisma-persona-draft-template-selector.ts",
-        "adapter": "PrismaPersonaDraftTemplateSelectorRepository",
-        "contract": "PersonaDraftTemplateSelectorRepository",
-        "contractImportPath": "./persona-draft-template-selector.types.js",
+        "path": "libs/backend/agents/personal/personas/main/src/scoring/prisma-persona-scoring-repository.ts",
+        "adapter": "PrismaPersonaScoringRepository",
+        "contract": "PersonaScoringRepository",
+        "contractImportPath": "./persona-scoring-repository.types.js",
         "constructs": []
       },
       {
@@ -72,6 +72,10 @@
           {
             "adapter": "PrismaPersonaAggregateReadRepository",
             "importPath": "../profile/prisma-persona-aggregate-read-repository.js"
+          },
+          {
+            "adapter": "PrismaPersonaScoringRepository",
+            "importPath": "../scoring/prisma-persona-scoring-repository.js"
           }
         ]
       },
@@ -94,6 +98,18 @@
         "adapter": "PrismaPersonaOnboardingStatusRepository",
         "contract": "PersonaOnboardingStatusRepository",
         "contractImportPath": "./persona-onboarding-status.types.js",
+        "constructs": [
+          {
+            "adapter": "PrismaPersonaScoringRepository",
+            "importPath": "../scoring/prisma-persona-scoring-repository.js"
+          }
+        ]
+      },
+      {
+        "path": "libs/backend/agents/personal/personas/main/src/profile/prisma-persona-workflow-evidence.ts",
+        "adapter": "PrismaPersonaWorkflowEvidenceRepository",
+        "contract": "PersonaWorkflowEvidenceRepository",
+        "contractImportPath": "./persona-workflow-evidence.types.js",
         "constructs": []
       },
       {
@@ -190,6 +206,13 @@
         "adapter": "_PrismaConversationReplayRepository",
         "contract": "ConversationReplayRepository",
         "contractImportPath": "./replay-reader.types.js",
+        "constructs": []
+      },
+      {
+        "path": "libs/backend/server/agents/onboarding/main/src/prisma-user-onboarding-repository.ts",
+        "adapter": "PrismaUserOnboardingRepository",
+        "contract": "UserOnboardingRepository",
+        "contractImportPath": "./user-onboarding.types.js",
         "constructs": []
       },
       {
@@ -467,11 +490,13 @@
       "apps/opencrane/src/app/runtime-composition.ts",
       "libs/backend/agents/personal/configuration/main/src/prisma-personal-configuration.router.ts",
 		"libs/backend/agents/personal/personas/main/src/http/prisma-persona-onboarding.router.ts",
+		"libs/backend/agents/personal/personas/main/src/profile/prisma-persona-workflow-evidence.ts",
 		"libs/backend/agents/execution/inputs/main/src/personal-execution-identity-envelope-source.ts",
 		"libs/backend/agents/execution/inputs/main/src/prisma-session-assembly-authorities.ts",
 		"libs/backend/agents/execution/admission/main/src/personal-run-admission.composition.ts",
 		"libs/backend/server/agents/artifacts/main/src/prisma-artifact-authority.composition.ts",
 		"libs/backend/server/agents/conversation-replay/main/src/prisma-conversation-replay-repository.ts",
+		"libs/backend/server/agents/onboarding/main/src/prisma-user-onboarding-repository.ts",
 		"libs/backend/server/agents/skills/main/src/prisma-skill-catalogue.router.ts",
 		"libs/backend/server/iam/identity/main/src/oidc.service.ts",
 		"libs/backend/server/gateways/integrations/main/src/integration-custody.router.ts"

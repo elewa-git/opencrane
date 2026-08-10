@@ -7,7 +7,7 @@ import { PersonaApprovalPersistenceStatuses, type ApprovePersonaCommand, type At
 import { PersonaDraftDenialReasons, type CreatePersonaDraftCommand, type CreatePersonaDraftPersistenceResult } from "../drafting/persona-draft-authority.types.js";
 import { PrismaPersonaDraftRepository } from "../drafting/prisma-persona-draft-repository.js";
 import { PrismaPersonaInterviewRepository } from "../interview/prisma-persona-interview-repository.js";
-import type { CompletePersonaInterviewCommand, PersonaInterviewQuestionReader, RecordPersonaInterviewAnswerCommand, StartPersonaInterviewCommand } from "../interview/persona-interview-authority.types.js";
+import type { CompletePersonaInterviewCommand, PersonaInterviewQuestionReader, RecordPersonaInterviewAnswerCommand, ResolvePersonaInterviewTieCommand, StartPersonaInterviewCommand } from "../interview/persona-interview-authority.types.js";
 import { _DoPersonaPersistenceWithTrace } from "../persona-persistence-observability.js";
 import { PersonaInterviewDenialReasons, PersonaLifecycleOutcomes } from "./persona-lifecycle.types.js";
 import { PersonaOnboardingDenialReasons, type EnsurePersonaOnboardingCommand, type EnsurePersonaOnboardingResult } from "./persona-onboarding-authority.types.js";
@@ -101,6 +101,23 @@ export class PrismaPersonaPersistenceUnitOfWork implements PersonaPersistenceUni
 		}
 		catch (error)
 		{
+			return { status: _IsInterviewConflict(error) ? PersonaInterviewDenialReasons.Conflict : PersonaInterviewDenialReasons.PersistenceUnavailable };
+		}
+	}
+
+	/** Append one exact tie resolution inside the serializable persona transaction. */
+	async resolveTieAtomically(command: ResolvePersonaInterviewTieCommand): ReturnType<PrismaPersonaInterviewRepository["resolveTieAtomically"]>
+	{
+		try
+		{
+			return await _DoPersonaPersistenceWithTrace(this.logger, "persona.interview.resolve_tie", { userId: command.userId, personaProfileId: command.personaProfileId, interviewId: command.interviewId }, "Persona tie resolution persistence failed", () => this._runInterview(async function _Resolve(repository)
+			{
+				return repository.resolveTieAtomically(command);
+			}), _IsInterviewConflict);
+		}
+		catch (error)
+		{
+			if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") return { status: PersonaInterviewDenialReasons.AlreadyResolved };
 			return { status: _IsInterviewConflict(error) ? PersonaInterviewDenialReasons.Conflict : PersonaInterviewDenialReasons.PersistenceUnavailable };
 		}
 	}

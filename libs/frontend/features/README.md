@@ -14,9 +14,9 @@ its slot; the shell itself is `workspace`.
 | [`context`](./context/README.md) | The right-hand context pane. |
 | [`conversation`](./conversation/README.md) | The centre conversation pane. |
 | [`notifications`](./notifications/README.md) | The notification popover. |
+| [`onboarding`](./onboarding/README.md) | One resumable lifecycle shell with interview, resolution, review, and ready states. |
 | [`settings`](./settings/README.md) | The settings page. |
 | [`tools`](./tools/README.md) | Tools and tool-governance routes. |
-| [`welcome`](./welcome/README.md) | First-run onboarding. |
 | [`workspace`](./workspace/README.md) | The workspace shell. |
 
 ```
@@ -25,16 +25,17 @@ its slot; the shell itself is `workspace`.
    conversation      context        notifications
    (centre pane)   (right pane)      (bell popover)
          │
-   routed pages: settings · tools · welcome
+   routed pages: onboarding · settings · tools
 ```
 
 ## Dependency rule for this tier
 
-Features carry `scope:web` and `type:feature`. A feature may import presentational
-[`elements`](../elements/README.md) and the [`state`](../state/README.md) layer (gateway ports and
-adapters), plus shared contracts. It may **not** import a sibling feature — the one exception is
-`workspace`, the shell, which composes the others. Cross-feature sharing goes down into `elements`
-or `state`, never sideways. Never import a backend package or an app.
+Legacy features carry `scope:web`; new capability slices use a bounded `scope:<capability>`. Every
+feature is a `type:lib`. `features/onboarding` also carries `frontend-role:feature`, which admits
+only shared [`elements`](../elements/README.md) and its [`state`](../state/README.md) port. A feature
+may **not** import a sibling feature — the one exception is `workspace`, the shell, which composes
+the others. Cross-feature sharing goes down into `elements` or `state`, never sideways. Never import
+a backend package or an app.
 
 ## See also
 

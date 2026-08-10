@@ -9,9 +9,9 @@ instructions an agent runs with — who it is and how it should behave. A user b
 onboarding interview, producing a **draft**. An accepted persona-refresh proposal starts the same
 interview with its proposal identity permanently recorded; approving the resulting revision applies
 that exact proposal. This package owns the full durable lifecycle: it starts
-an interview from a reviewed question set, captures each answer once, freezes the completed evidence,
-derives a draft from selected-template evidence, and then approves a fully evidenced draft into the
-single live persona.
+an interview from a reviewed question set, captures each choice once, freezes the completed evidence,
+computes and resolves the weighted colour/modifier result, compiles the matching reviewed template,
+and then approves a fully evidenced draft into the single live persona.
 
 ```
 server-owned reviewed question set
@@ -22,10 +22,13 @@ server-owned reviewed question set
      │ 2. answer             append each answer once, with question provenance
      ▼
  completed interview
-     │ 3. derive draft       record 3–5 insights + exact SOUL template selection
+     │ 3. score + resolve    replay weights; append explicit choices for any ties
+     ▼
+ resolved result
+     │ 4. compile draft      pin source digests + 3–5 answer-linked insights
      ▼
  draft persona
-     │ 4. approve + activate atomically swap in the new persona
+     │ 5. approve + activate atomically swap in the new persona
      ▼
  active persona
 ```
@@ -36,7 +39,8 @@ The interview half runs every start inside one serializable transaction, so dupl
 requests reuse the one in-progress interview instead of discarding answers, and two racing starts
 resolve as one interview plus one retriable conflict. A retry of the same proposal-bound refresh
 returns that interview and its frozen questions again; a different refresh proposal receives a
-conflict instead of hijacking it. Each answer and the completion re-read the interview inside the
+conflict instead of hijacking it. A missing or wrong-owner refresh proposal returns the same
+non-disclosing `404`; the transport never reveals which condition applied. Each answer and the completion re-read the interview inside the
 same serializable boundary, so a late answer cannot race a completed record. Answers name the exact question-set
 revision and question they answered; completion is refused until every question in that reviewed
 revision has exactly one answer.
@@ -47,23 +51,39 @@ earlier interview as evidence instead of changing who answered which questions.
 
 The approval half takes one consistent database snapshot and confirms the caller owns the profile;
 the revision is still a `draft`; the interview is `completed`; there are between **three and five**
-provenance-linked insights; the reviewed template's fingerprint (digest) and selection rule still
-match the interview answers; and the policy forbidding a mutable runtime "SOUL" file holds. Any
-failure is a specific denial (`not_draft`, `interview_incomplete`, `invalid_insights`,
+provenance-linked insights; the immutable weighted score, explicit tie evidence, reviewed source
+digests, selected colour/modifier template, and interpolation inputs all replay exactly; and the
+policy forbidding a mutable runtime "SOUL" file holds. Any failure is a specific denial
+(`not_draft`, `interview_incomplete`, `invalid_insights`,
 `template_mismatch`, …).
+
+An interrupted HTTP response can be retried safely after approval commits: the authority accepts an
+already-approved revision only when it is still the exact active revision of the same owner profile.
+Status reads also re-emit the current owner-bound interview notification. Before accepting that
+notification, the workflow coordinator reconciles any already-approved persona for its durable
+pinned interview, so a newer interview cannot hide the only evidence that advances onboarding.
+Persona refreshes after initial onboarding remain persona-owned maintenance and do not rewind the
+separate `UserOnboarding` route state.
 
 Every lifecycle adapter returns the same serialized lifecycle outcome and denial values through
 documented string-backed enums. That keeps the API's readable response values stable while ensuring
 the profile, interview, drafting, and approval owners cannot silently drift into different control
-flow vocabularies. Reviewed templates require unique rule priorities within each template, so
-delegate-backed drafting never substitutes application collation for a database rule-ID tie-break.
+flow vocabularies. Ties never fall back to template order or application collation: the owner must
+append the exact required primary, secondary, or modifier choice before drafting can proceed.
+The status adapter parses the complete immutable scoring-evidence document before projecting a draft
+for review and rejects mismatched totals, classifications, tie categories, or insight bounds. The
+stored initial primary, secondary, and modifier candidate sets are replayed independently of later
+append-only tie choices, so persisted provenance cannot drift while a resolved score advances.
 
 Invariant: onboarding evidence is append-only until completion, and only a fully evidenced draft
 becomes active. The approval swap rebinds every precondition at commit time, so a concurrent edit
 fails closed and a crash leaves the previous active persona intact, never a half-approved one. When
-the interview was started by an accepted refresh proposal, the approval transaction must still find
-and apply that exact proposal; a missing or concurrently changed proposal rejects and rolls back the
-whole approval rather than activating the revision alone.
+the initial onboarding survey is still open, the database also requires the approving revision to
+come from its currently pinned interview. Conversely, that pin cannot be replaced after its persona
+became active; either ordering of an approval-versus-sort-again race therefore rejects the stale
+operation. When the interview was started by an accepted refresh proposal, the approval transaction
+must still find and apply that exact proposal; a missing or concurrently changed proposal rejects
+and rolls back the whole approval rather than activating the revision alone.
 
 ## Public surface
 
@@ -72,6 +92,10 @@ whole approval rather than activating the revision alone.
   session-and-host-derived ownership.
 - `_CreatePersonaOnboardingRouter` — the ready-to-mount Prisma composition. It maps the shared
   request principal to the persona caller and supplies one aggregate persistence unit of work and the clock.
+- `_CreatePersonaWorkflowEvidenceRepository` — the narrow owner-bound evidence reader used by the
+  server-tracked onboarding authority; the raw Prisma adapter remains internal.
+- `PersonaOnboardingWorkflowPort` — the narrow app-composed notification boundary that advances the
+  distinct durable onboarding authority after an owner starts an interview or approves a persona.
 - `_PersonaOnboardingOpenapiPaths` — the OpenAPI paths for that owner-only router.
 - `PersonaOnboardingCaller`, `PersonaOnboardingClock`, and
   `PersonaOnboardingRouterDependencies` — the three types needed to compose the router without
@@ -92,10 +116,12 @@ API. The route module composes these owners; it contains no persistence policy.
 operation it constructs the lifecycle repositories once with the exact callback transaction; the
 repositories cannot retain or receive the root Prisma client. The aggregate read repository in
 `profile/` owns shared lifecycle evidence reads and next-revision allocation. It takes no row locks,
-so a concurrent writer surfaces as an explicit conflict outcome instead of a blocked lock. Drafting
-owns the separate deterministic template selector and pure instruction
-compiler, so a reader can verify template priority and instruction content without tracing lifecycle
-transactions. Every selected template stores its source identity, digest, rule, and sorted answer IDs.
+so a concurrent writer surfaces as an explicit conflict outcome instead of a blocked lock. Scoring
+owns immutable weighted-vector replay and append-only tie choices. Drafting selects the reviewed
+template by resolved primary colour and modifier, applies only the pinned interpolation map, and
+stores the exact source identities, digests, score evidence, and answer provenance in the revision.
+Before drafting, the API exposes a generic result label; only the draft/status projection may expose
+the reviewed template's display name.
 
 The lifecycle functions, their command/result types, repository ports, Prisma repositories, local
 catalogue, persistence unit of work, and status adapter are internal cohesive owners. `profile/`
@@ -114,19 +140,22 @@ package imports no other sibling business domain and never depends on an app.
 
 ## Data & persistence
 
-Provisions one `PersonaProfile` for each authenticated `(silo, user)` pair and the initial immutable
-`PersonaQuestionSet` / `PersonaQuestion` / `PersonaSoulTemplate` catalogue in the canonical product
-database. It also starts, appends answers to, and completes `PersonaInterview` and
-`PersonaInterviewAnswer` rows; reads a joined approval snapshot (profile · revision · interview ·
-template · insights); and commits approval plus the active-persona pointer in one transaction. A
+Provisions one `PersonaProfile` for each authenticated `(silo, user)` pair and the reviewed
+`PersonaQuestionSet`, choices, scoring policy/weights, interpolation map, and `PersonaSoulTemplate`
+catalogue in the canonical product database. It starts, answers, and completes `PersonaInterview`
+rows; persists one immutable `PersonaInterviewScore` plus append-only `PersonaTieResolution`
+evidence; creates provenance-linked revisions and insights; and commits approval plus the
+active-persona pointer in one transaction. A
 configuration-owned repository joins a proposal-bound refresh to that same transaction: persona
 logic retains only the opaque change identifier and never accesses `PersonalConfigurationChange`
 through a Prisma delegate.
-Postgres-level lifecycle behaviour is exercised by the `test:sql` target
-(`src/approval/__tests__/persona-authority.sql`).
-On a clean database, the target baseline supplies one reviewed eight-question onboarding set and two
-reviewed `SOUL.md` templates. The relationship and challenge answers select the direct or supportive
-template deterministically; profiles and interview evidence remain user-owned runtime records.
+Postgres-level lifecycle behaviour is exercised by the `test:sql` target. Its authority assertions
+live in `src/approval/__tests__/persona-authority.sql`; a two-session race test also proves both
+approval-first and replacement-first outcomes complete without a deadlock and retain one winner.
+On a clean database, the target baseline supplies one reviewed ten-question choice catalogue, its
+weighted scoring and interpolation sources, and eight reviewed colour/modifier SOUL templates.
+Profiles, interviews, scores, tie choices, revisions, and approval evidence remain user-owned runtime
+records.
 
 ## See also
 

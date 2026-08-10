@@ -20,6 +20,7 @@
     "../src/**/*.stories.jsx",
     "../src/**/*.stories.tsx",
     "../src/**/*.stories.mdx",
+	"../../../features/onboarding/src/**/*.stories.ts",
     "preview.ts"
   ]
 }

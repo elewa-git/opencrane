@@ -5,16 +5,17 @@ import type { StorybookIndex, StorybookIndexEntry } from "./storybook.visual.typ
 /** Opt-in tag that marks a deterministic story as a committed visual contract. */
 const VISUAL_TEST_TAG = "visual-test";
 
+/** Opt-in tag that captures a visual contract at the supported narrow viewport. */
+const VISUAL_NARROW_TAG = "visual-test-narrow";
+
+/** Supported narrow browser viewport used for responsive state contracts. */
+const VISUAL_NARROW_VIEWPORT = { width: 390, height: 844 } as const;
+
 /** Attribute for small controls that need a strict local pixel budget. */
 const VISUAL_TARGET_ATTRIBUTE = "data-visual-target";
 
 /** Whole-story tolerance for platform-specific font rasterization. */
 const STORY_MAX_DIFF_PIXEL_RATIO = 0.005;
-
-/** Absolute budgets for story states whose opacity amplifies platform font rasterization. */
-const STORY_MAX_DIFF_PIXELS: ReadonlyMap<string, number> = new Map([
-	["foundation-choice-card-group--disabled", 4_096],
-]);
 
 /** Tight absolute budget for a deliberately isolated control screenshot. */
 const TARGET_MAX_DIFF_PIXELS = 25;
@@ -52,12 +53,11 @@ async function _CaptureStory(context: BrowserContext, story: StorybookIndexEntry
 
 	try
 	{
+		if (story.tags?.includes(VISUAL_NARROW_TAG)) await page.setViewportSize(VISUAL_NARROW_VIEWPORT);
 		await _OpenStableStory(page, story.id);
-		const maxDiffPixels = STORY_MAX_DIFF_PIXELS.get(story.id);
-		await expect(page.locator("#storybook-root")).toHaveScreenshot(`${story.id}.png`,
+		await expect.soft(page.locator("#storybook-root")).toHaveScreenshot(`${story.id}.png`,
 		{
-			maxDiffPixelRatio: maxDiffPixels === undefined ? STORY_MAX_DIFF_PIXEL_RATIO : undefined,
-			maxDiffPixels,
+			maxDiffPixelRatio: STORY_MAX_DIFF_PIXEL_RATIO
 		});
 		await _AssertVisualTargets(page, story.id);
 	}
@@ -82,7 +82,7 @@ async function _AssertVisualTargets(page: Page, storyId: string): Promise<void>
 		const target = targets.nth(index);
 		const targetName = await target.getAttribute(VISUAL_TARGET_ATTRIBUTE);
 		expect(targetName, `${VISUAL_TARGET_ATTRIBUTE} must name each strict contract`).toMatch(/^[a-z0-9-]+$/u);
-		await expect(target).toHaveScreenshot(`${storyId}--${targetName}.png`,
+		await expect.soft(target).toHaveScreenshot(`${storyId}--${targetName}.png`,
 		{
 			maxDiffPixels: TARGET_MAX_DIFF_PIXELS
 		});
@@ -113,10 +113,11 @@ async function _LoadVisualStories(request: APIRequestContext): Promise<readonly 
  */
 async function _OpenStableStory(page: Page, storyId: string): Promise<void>
 {
-	// 1. Load the isolated story canvas so Storybook manager chrome cannot affect the baseline.
+	// 1. Load only through DOM readiness; Storybook background requests make network-idle both slow
+	// and unrelated to visual stability. The root and local fonts below are the actual prerequisites.
 	const response = await page.goto(`/iframe.html?id=${encodeURIComponent(storyId)}&viewMode=story`,
 	{
-		waitUntil: "networkidle"
+		waitUntil: "domcontentloaded"
 	});
 	expect(response?.ok(), `Story ${storyId} failed to load`).toBe(true);
 

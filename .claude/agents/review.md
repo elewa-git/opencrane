@@ -126,6 +126,13 @@ fresh context — do not assume the author's intent was correct.
   normalization, revision construction, lifecycle-transition, or policy algorithms.
   Verify both implementations and identify the authoritative owner; do not flag
   harmless structural similarity.
+- **Lifecycle state-machine trigger.** Treat a durable enum/discriminator as a state-machine
+  candidate when it selects two or more commands/events, is reinterpreted after CAS/conflict
+  recovery, produces advance/resume/no-op/deny/terminal outcomes, or is mixed with an orthogonal
+  kind/provider/action dimension. Require a State×Event table, exhaustive enum-keyed state
+  ownership, State versus Strategy separation, and meaningful cell plus durable-winner redispatch
+  tests. A large `switch` or helpers that merely relocate the same branches do not satisfy the
+  boundary. Validation, ownership, evidence, and concurrency checks remain visible guards.
 - **Persistence authority.** Flag cross-package writes to Prisma models owned by
   another domain when they reimplement that owner's invariants or lifecycle. NX import
   boundaries alone cannot detect a package that bypasses another authority by sharing a
