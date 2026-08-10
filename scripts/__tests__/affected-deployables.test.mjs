@@ -69,12 +69,17 @@ test("runs the develop smoke for deployment surfaces and not ordinary applicatio
 test("keeps the blocking smoke on develop and ahead of image publication", function _ProtectsDevelopSmokeWiring()
 {
 	const workflow = _Workflow();
+	const smokeJob = workflow.match(/\n  develop_smoke:[\s\S]*?\n  build-and-push:/u);
+	assert.ok(smokeJob, "develop smoke job must remain independently inspectable");
 	assert.match(workflow, /github\.ref == 'refs\/heads\/develop'/u);
 	assert.match(workflow, /run: \.\/apps\/_infra\/deploy-k8s\/platform\/tests\/develop-smoke\.sh/u);
 	assert.match(workflow, /needs: \[prepare, test, develop_smoke\]/u);
 	assert.match(workflow, /needs\.develop_smoke\.result == 'success'/u);
 	assert.match(workflow, /K3D_LINUX_AMD64_SHA256: [0-9a-f]{64}/u);
 	assert.match(workflow, /sha256sum --check/u);
+	assert.match(smokeJob[0], /uses: actions\/setup-node@v6/u);
+	assert.match(smokeJob[0], /key: node-modules-\$\{\{ runner\.os \}\}-node24-\$\{\{ hashFiles\('package-lock\.json'\) \}\}/u);
+	assert.match(smokeJob[0], /name: Install deploy validation dependencies[\s\S]*?run: npm ci/u);
 });
 
 test("trusts only an exact develop-to-main promotion source", function _SelectsPromotionSource()

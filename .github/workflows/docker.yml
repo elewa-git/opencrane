@@ -302,6 +302,25 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      # The production deploy wrapper resolves and schema-validates the database transition before
+      # it mutates the cluster. The smoke job is a fresh checkout, so restore the same exact
+      # lockfile-bound runtime dependencies that the prepare and test jobs use.
+      - name: Restore node_modules
+        id: node-modules
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: node-modules-${{ runner.os }}-node24-${{ hashFiles('package-lock.json') }}
+
+      - name: Install deploy validation dependencies
+        if: steps.node-modules.outputs.cache-hit != 'true'
+        run: npm ci
+
       - name: Install k3d
         env:
           K3D_VERSION: v5.8.3
