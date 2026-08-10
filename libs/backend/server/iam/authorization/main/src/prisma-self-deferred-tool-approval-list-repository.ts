@@ -1,4 +1,4 @@
-import { ApprovalRequestState, type Prisma } from "@prisma/client";
+import { ApprovalRequestState, OrgMemberStatus, Prisma, type PrismaClient } from "@prisma/client";
 import { ___DoWithTrace } from "@opencrane/backend/observability";
 
 import type { JsonValue } from "@opencrane/util";
@@ -36,10 +36,10 @@ const _SAFE_SELECT = { id: true, runId: true, attempt: true, resourceId: true, s
 export class PrismaSelfDeferredToolApprovalListRepository implements SelfDeferredToolApprovalListRepository
 {
 	/** Canonical product authority used for owner-bound approval reads. */
-	private readonly _prisma: Prisma.TransactionClient;
+	private readonly _prisma: PrismaClient;
 
 	/** Construct the approval reader around the server-owned Prisma client. */
-	constructor(prisma: Prisma.TransactionClient)
+	constructor(prisma: PrismaClient)
 	{
 		this._prisma = prisma;
 	}
@@ -50,8 +50,13 @@ export class PrismaSelfDeferredToolApprovalListRepository implements SelfDeferre
 		const prisma = this._prisma;
 		return ___DoWithTrace("approval.list.db", { siloId, subjectId }, async function _traceListDb()
 		{
-			const approvals = await prisma.approvalRequest.findMany({ where: { siloId, subjectId, state: ApprovalRequestState.Pending, expiresAt: { gt: now }, toolInvocationRowId: { not: null } }, orderBy: [{ createdAt: "desc" }, { id: "desc" }], take: 50, select: _SAFE_SELECT });
-			return approvals.map(function _map(approval) { return _toSelfDeferredToolApproval(approval, now); });
+			return prisma.$transaction(async function _membershipSnapshot(transaction): Promise<readonly SelfDeferredToolApproval[]>
+			{
+				const membership = await transaction.orgMembership.findFirst({ where: { clusterTenant: siloId, subject: subjectId, status: OrgMemberStatus.Active }, select: { id: true } });
+				if (membership === null) return [];
+				const approvals = await transaction.approvalRequest.findMany({ where: { siloId, subjectId, state: ApprovalRequestState.Pending, expiresAt: { gt: now }, toolInvocationRowId: { not: null } }, orderBy: [{ createdAt: "desc" }, { id: "desc" }], take: 50, select: _SAFE_SELECT });
+				return approvals.map(function _map(approval) { return _toSelfDeferredToolApproval(approval, now); });
+			}, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 		});
 	}
 
@@ -61,8 +66,13 @@ export class PrismaSelfDeferredToolApprovalListRepository implements SelfDeferre
 		const prisma = this._prisma;
 		return ___DoWithTrace("approval.list_conversation.db", { siloId, subjectId, conversationId }, async function _traceConversationListDb()
 		{
-			const approvals = await prisma.approvalRequest.findMany({ where: { siloId, subjectId, state: ApprovalRequestState.Pending, expiresAt: { gt: now }, toolInvocationRowId: { not: null }, run: { conversationId } }, orderBy: [{ createdAt: "asc" }, { id: "asc" }], take: 50, select: _SAFE_SELECT });
-			return approvals.map(function _map(approval) { return _toSelfDeferredToolApproval(approval, now); });
+			return prisma.$transaction(async function _membershipSnapshot(transaction): Promise<readonly SelfDeferredToolApproval[]>
+			{
+				const membership = await transaction.orgMembership.findFirst({ where: { clusterTenant: siloId, subject: subjectId, status: OrgMemberStatus.Active }, select: { id: true } });
+				if (membership === null) return [];
+				const approvals = await transaction.approvalRequest.findMany({ where: { siloId, subjectId, state: ApprovalRequestState.Pending, expiresAt: { gt: now }, toolInvocationRowId: { not: null }, run: { conversationId } }, orderBy: [{ createdAt: "asc" }, { id: "asc" }], take: 50, select: _SAFE_SELECT });
+				return approvals.map(function _map(approval) { return _toSelfDeferredToolApproval(approval, now); });
+			}, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 		});
 	}
 
@@ -72,8 +82,13 @@ export class PrismaSelfDeferredToolApprovalListRepository implements SelfDeferre
 		const prisma = this._prisma;
 		return ___DoWithTrace("approval.read.db", { siloId, subjectId }, async function _traceReadDb()
 		{
-			const approval = await prisma.approvalRequest.findFirst({ where: { id: approvalRequestId, siloId, subjectId, toolInvocationRowId: { not: null } }, select: _SAFE_SELECT });
-			return approval === null ? null : _toSelfDeferredToolApproval(approval, now);
+			return prisma.$transaction(async function _membershipSnapshot(transaction): Promise<SelfDeferredToolApproval | null>
+			{
+				const membership = await transaction.orgMembership.findFirst({ where: { clusterTenant: siloId, subject: subjectId, status: OrgMemberStatus.Active }, select: { id: true } });
+				if (membership === null) return null;
+				const approval = await transaction.approvalRequest.findFirst({ where: { id: approvalRequestId, siloId, subjectId, toolInvocationRowId: { not: null } }, select: _SAFE_SELECT });
+				return approval === null ? null : _toSelfDeferredToolApproval(approval, now);
+			}, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 		});
 	}
 }

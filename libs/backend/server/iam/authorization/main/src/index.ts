@@ -8,9 +8,10 @@ export type { ActionReplayMode, CapabilityActionExecutor, CapabilityActionFailur
 export { __CancelPendingRunApprovalAuthority } from "./run-approval-cancellation.js";
 export type { CancelPendingRunApprovalAuthorityCommand, CancelPendingRunApprovalAuthorityResult } from "./run-approval-cancellation.types.js";
 export { __DecideDeferredToolRequest, __DeferToolRequest } from "./deferred-tool-approval.js";
+export { __PlanDeferredToolApprovalLifecycle } from "./deferred-tool-approval-lifecycle.js";
 export { __ProjectDeferredToolApproval, __ValidateDeferredToolArguments } from "./deferred-tool-approval-schema.js";
-export { DeferredToolApprovalStates, DeferredToolDecisionKinds } from "./deferred-tool-approval.types.js";
-export type { DecideDeferredToolRequestCommand, DecideDeferredToolRequestResult, DeferredToolApprovalDecisionRepository, DeferredToolApprovalInterruptReader, DeferredToolApprovalProjection, DeferToolRequestCommand, DeferToolRequestResult, OpenDeferredToolApprovalCommand, SelfDeferredToolApproval, SelfDeferredToolApprovalListRepository } from "./deferred-tool-approval.types.js";
+export { DeferredToolApprovalLifecycleActions, DeferredToolApprovalLifecycleEvents, DeferredToolApprovalRunStates, DeferredToolApprovalStates, DeferredToolDecisionKinds } from "./deferred-tool-approval.types.js";
+export type { DecideDeferredToolRequestCommand, DecideDeferredToolRequestResult, DeferredToolApprovalDecisionRepository, DeferredToolApprovalInterruptReader, DeferredToolApprovalLifecycleInput, DeferredToolApprovalProjection, DeferToolRequestCommand, DeferToolRequestResult, ExpireDeferredToolApprovalBatchCommand, ExpireDeferredToolApprovalBatchResult, OpenDeferredToolApprovalCommand, SelfDeferredToolApproval, SelfDeferredToolApprovalListRepository } from "./deferred-tool-approval.types.js";
 export { __OpenDeferredToolApproval } from "./prisma-deferred-tool-approval-opener.js";
 export { PrismaDeferredToolApprovalDecisionRepository } from "./prisma-deferred-tool-approval-decision-repository.js";
 export { PrismaSelfDeferredToolApprovalListRepository } from "./prisma-self-deferred-tool-approval-list-repository.js";

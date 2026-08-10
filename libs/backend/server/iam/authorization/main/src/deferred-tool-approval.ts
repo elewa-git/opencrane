@@ -1,4 +1,4 @@
-import { ApprovalRequestState, Prisma } from "@prisma/client";
+import { ApprovalRequestState, Prisma, WorkloadAssignmentState } from "@prisma/client";
 
 import { ___CloneCanonicalJson, type JsonValue } from "@opencrane/util";
 
@@ -27,7 +27,9 @@ export async function __DeferToolRequest(transaction: Prisma.TransactionClient, 
 	// 1. Bind the approval to the exact live workload and proof key executing the attempt.
 	const assignment = await transaction.workloadAssignment.findUnique({ where: { runId_attempt: { runId: command.runId, attempt: command.attempt } } });
 	const proofKey = await transaction.runProofKey.findUnique({ where: { runId_attempt: { runId: command.runId, attempt: command.attempt } } });
-	if (assignment === null || proofKey === null || assignment.podUid === null) return { outcome: "unavailable" };
+	if (assignment === null || proofKey === null || assignment.podUid === null || assignment.state !== WorkloadAssignmentState.Registered || assignment.expiresAt.getTime() <= command.now.getTime() || proofKey.revokedAt !== null || proofKey.expiresAt.getTime() <= command.now.getTime()) return { outcome: "unavailable" };
+	const expiresAt = new Date(Math.min(command.expiresAt.getTime(), assignment.expiresAt.getTime(), proofKey.expiresAt.getTime()));
+	if (expiresAt.getTime() <= command.now.getTime()) return { outcome: "unavailable" };
 
 	// 2. Open the pending approval; a duplicate defer for the same action replays the existing row.
 	try
@@ -57,7 +59,7 @@ export async function __DeferToolRequest(transaction: Prisma.TransactionClient, 
 				approverPolicyRevision: command.approverPolicyRevision,
 				effectivePolicyDigest: command.effectivePolicyDigest,
 				state: ApprovalRequestState.Pending,
-				expiresAt: command.expiresAt,
+				expiresAt,
 				toolInvocationRowId: command.toolInvocationRowId,
 				reviewedToolArguments: command.reviewedArguments as unknown as Prisma.InputJsonValue,
 				reviewedToolSchema: command.reviewedParametersSchema as unknown as Prisma.InputJsonValue,

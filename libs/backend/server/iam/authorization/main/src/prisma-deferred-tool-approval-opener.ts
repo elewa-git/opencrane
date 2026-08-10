@@ -101,7 +101,7 @@ async function _openDeferredToolApproval(command: OpenDeferredToolApprovalComman
 {
 	const argumentsDigest = __DigestCanonicalJson(command.arguments);
 	const parametersSchemaDigest = __DigestCanonicalJson(command.parametersSchema);
-	if (argumentsDigest !== command.argumentsDigest || !__ValidateDeferredToolArguments(command.parametersSchema, command.arguments))
+	if (argumentsDigest !== command.argumentsDigest || parametersSchemaDigest !== command.parametersSchemaDigest || !__ValidateDeferredToolArguments(command.parametersSchema, command.arguments))
 	{
 		await transaction(async function _invalid(repository)
 		{

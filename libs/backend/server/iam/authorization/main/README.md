@@ -51,7 +51,8 @@ tool schema before the actor sees the request. Actor reads select only a pre-red
 projection plus a decision schema derived from that frozen tool schema; schema-marked secret values,
 policy evidence, and resume material never cross the API. Approval requires one complete argument
 value, validates it server-side against the frozen schema, then atomically records the normalized
-value and digest. Denial records no arguments and creates no resume authority.
+value and digest. Denial records no arguments, but it does create one single-use refusal marker so
+the runtime receives the decision instead of silently losing the pending tool call.
 
 ## Public surface
 
@@ -127,6 +128,27 @@ Owns `AuthorizationGrant`, `CapabilityCatalogRevision`, `ApprovalRequest`, and
 precomputes a separate actor-safe projection, and stores the exact normalized final arguments and
 digest only when approved. Its single-use resume hash is consumption evidence, not a generic result
 payload or an alternative resume endpoint.
+
+### Deferred approval lifecycle
+
+The approval unit of work owns the run pause and approval rows in one transaction. Decision kind is
+a separate result strategy: approval carries complete validated replacement arguments, while denial
+and expiry carry an explicit refusal and never execute the reserved action.
+
+| Run state | Event | Pending after event | Action | Atomic owner |
+|---|---|---:|---|---|
+| `Running` | open | 0 before create | move to `WaitingForApproval`, then create | approval-open unit of work |
+| `WaitingForApproval` | open | one or more | add to the current batch | approval-open unit of work |
+| `WaitingForApproval` | decision or expiry | one or more | remain waiting | approval-decision or expiry unit of work |
+| `WaitingForApproval` | decision or expiry | 0 | move to `Running`; make the batch resumable | approval-decision or expiry unit of work |
+| `Running` or `WaitingForApproval` | cancellation | any | cancel pending rows without resume authority | caller-owned cancellation transaction |
+| any other state | open, decision, or expiry | any | reject | exhaustive lifecycle state registry |
+
+Multiple requests may share one pause. The dispatcher consumes all resolved rows in deterministic
+order, and a later pause creates a later `resume_attempt`; an earlier resume never strands a later
+approval batch. Inbox, detail, conversation overlays, and the decision transaction all recheck the
+current active local organisation membership, so a surviving browser session grants no authority
+after the Fleet projection suspends the member.
 
 ## See also
 

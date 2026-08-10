@@ -1,4 +1,4 @@
-import { ApprovalRequestState, Prisma } from "@prisma/client";
+import { ApprovalRequestState, Prisma, WorkloadAssignmentState } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
 
 import { __DecideDeferredToolRequest, __DeferToolRequest } from "../deferred-tool-approval.js";
@@ -103,8 +103,8 @@ describe("deferred tool approval authority", function _suite()
 });
 
 /** Live assignment + proof key the defer authority binds the approval to. */
-const ASSIGNMENT = { agentServiceId: "svc-1", agentRevisionId: "rev-1", siloId: "silo-1", subjectId: "user-1", audience: "opencrane-agent-runtime", serviceAccountName: "agent-runtime-1", namespace: "silo-1-runtime", workloadKind: "Job", workloadUid: "wl-1", podUid: "pod-1" };
-const PROOF_KEY = { id: "proof-1", keyThumbprint: "thumb-1" };
+const ASSIGNMENT = { agentServiceId: "svc-1", agentRevisionId: "rev-1", siloId: "silo-1", subjectId: "user-1", audience: "opencrane-agent-runtime", serviceAccountName: "agent-runtime-1", namespace: "silo-1-runtime", workloadKind: "Job", workloadUid: "wl-1", podUid: "pod-1", state: WorkloadAssignmentState.Registered, expiresAt: new Date("2026-07-21T10:00:00.000Z") };
+const PROOF_KEY = { id: "proof-1", keyThumbprint: "thumb-1", expiresAt: new Date("2026-07-21T09:30:00.000Z"), revokedAt: null };
 
 /** Command opening a pending deferred-tool approval for a reserved invocation. */
 function _deferCommand(): Parameters<typeof __DeferToolRequest>[1]
@@ -127,7 +127,7 @@ describe("defer tool request authority", function _deferSuite()
 		const result = await __DeferToolRequest(transaction, _deferCommand());
 
 		expect(result).toEqual({ outcome: "deferred", approvalRequestId: "approval-9" });
-		expect(create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ state: ApprovalRequestState.Pending, toolInvocationRowId: "tool-1", resourceKind: "tool", resourceId: "integration:search:query", proofKeyId: "proof-1" }) }));
+		expect(create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ state: ApprovalRequestState.Pending, toolInvocationRowId: "tool-1", resourceKind: "tool", resourceId: "integration:search:query", proofKeyId: "proof-1", expiresAt: PROOF_KEY.expiresAt }) }));
 	});
 
 	it("reports unavailable when the live workload or proof key is absent", async function _unavailable()

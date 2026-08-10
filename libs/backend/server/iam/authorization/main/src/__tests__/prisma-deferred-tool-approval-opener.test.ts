@@ -1,3 +1,4 @@
+import { WorkloadAssignmentState } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
 
 import { __OpenDeferredToolApproval } from "../prisma-deferred-tool-approval-opener.js";
@@ -14,15 +15,16 @@ function _Command()
 {
 	const now = new Date("2026-07-29T00:00:00.000Z");
 	const argumentsValue = { calendarId: "primary" };
-	return { interruptId: "interrupt-1", runId: "run-1", attempt: 1, toolInvocationId: "invoke-1", toolRevisionId: "integration:calendar:read", arguments: argumentsValue, argumentsDigest: __DigestCanonicalJson(argumentsValue), parametersSchema: { type: "object", additionalProperties: false, required: ["calendarId"], properties: { calendarId: { type: "string" } } }, capabilitySetDigest: "sha256:capabilities", reservationId: "reservation-1", now, expiresAt: new Date(now.getTime() + 60_000) };
+	const parametersSchema = { type: "object", additionalProperties: false, required: ["calendarId"], properties: { calendarId: { type: "string" } } };
+	return { interruptId: "interrupt-1", runId: "run-1", attempt: 1, toolInvocationId: "invoke-1", toolRevisionId: "integration:calendar:read", arguments: argumentsValue, argumentsDigest: __DigestCanonicalJson(argumentsValue), parametersSchema, parametersSchemaDigest: __DigestCanonicalJson(parametersSchema), capabilitySetDigest: "sha256:capabilities", reservationId: "reservation-1", now, expiresAt: new Date(now.getTime() + 60_000) };
 }
 
 /** Build a live workload transaction that can create one linked approval. */
 function _LiveTransaction()
 {
 	return {
-		workloadAssignment: { findUnique: vi.fn(async function _assignment() { return { agentRevisionId: "revision-1", agentServiceId: "service-1", siloId: "silo-1", subjectId: "subject-1", audience: "audience-1", serviceAccountName: "runtime-1", namespace: "runtime", workloadKind: "Job", workloadUid: "job-1", podUid: "pod-1" }; }) },
-		runProofKey: { findUnique: vi.fn(async function _proof() { return { id: "proof-1", keyThumbprint: "thumbprint-1" }; }) },
+		workloadAssignment: { findUnique: vi.fn(async function _assignment() { return { agentRevisionId: "revision-1", agentServiceId: "service-1", siloId: "silo-1", subjectId: "subject-1", audience: "audience-1", serviceAccountName: "runtime-1", namespace: "runtime", workloadKind: "Job", workloadUid: "job-1", podUid: "pod-1", state: WorkloadAssignmentState.Registered, expiresAt: new Date("2026-07-29T00:02:00.000Z") }; }) },
+		runProofKey: { findUnique: vi.fn(async function _proof() { return { id: "proof-1", keyThumbprint: "thumbprint-1", expiresAt: new Date("2026-07-29T00:01:30.000Z"), revokedAt: null }; }) },
 		approvalRequest: { create: vi.fn(async function _create() { return { id: "approval-1" }; }) },
 		toolInvocation: { updateMany: vi.fn() },
 	};
@@ -41,6 +43,17 @@ describe("Prisma deferred-tool approval opener", function _describeOpener()
 
 		await expect(__OpenDeferredToolApproval(prisma as never, _Command(), _Logger() as never)).resolves.toBe(true);
 		expect(transaction.approvalRequest.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ id: "interrupt-1", toolInvocationRowId: "reservation-1", reviewedToolArguments: { calendarId: "primary" }, reviewedToolSchema: expect.any(Object), actionDigest: expect.stringMatching(/^sha256:/) }) }));
+	});
+
+	it("fails closed before approval creation when the compiled schema digest is stale", async function _rejectsStaleSchemaDigest()
+	{
+		const transaction = _LiveTransaction();
+		transaction.toolInvocation.updateMany.mockResolvedValueOnce({ count: 1 } as never);
+		const prisma = { $transaction: vi.fn(async function _transaction(callback) { return callback(transaction); }) };
+
+		await expect(__OpenDeferredToolApproval(prisma as never, { ..._Command(), parametersSchemaDigest: "sha256:stale" }, _Logger() as never)).resolves.toBe(false);
+		expect(transaction.approvalRequest.create).not.toHaveBeenCalled();
+		expect(transaction.toolInvocation.updateMany).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ failureCode: "approval_arguments_invalid" }) }));
 	});
 
 	it("terminalises the reservation when no live workload can own the approval", async function _terminalisesUnavailable()

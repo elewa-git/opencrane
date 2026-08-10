@@ -1,6 +1,70 @@
 import type { JsonValue } from "@opencrane/util";
 import type { AgUiProjectionSourceEvent } from "@opencrane/contracts";
 
+/** Dependency-light run states interpreted by the approval lifecycle owner. */
+export enum DeferredToolApprovalRunStates
+{
+	/** Accepted but not yet queued. */
+	Accepted = "accepted",
+	/** Awaiting dispatch. */
+	Queued = "queued",
+	/** Bound to an attempt workload. */
+	Assigned = "assigned",
+	/** Executing and able to open an approval batch. */
+	Running = "running",
+	/** Paused while one or more approvals remain pending. */
+	WaitingForApproval = "waiting_for_approval",
+	/** Closing after server-authoritative cancellation. */
+	Cancelling = "cancelling",
+	/** Completed successfully. */
+	Completed = "completed",
+	/** Failed terminally. */
+	Failed = "failed",
+	/** Cancelled terminally. */
+	Cancelled = "cancelled",
+}
+
+/** Durable events interpreted by the deferred-tool approval run-state owner. */
+export enum DeferredToolApprovalLifecycleEvents
+{
+	/** Adds one approval to a running or already-waiting batch. */
+	Open = "open",
+	/** Resolves one approval by an authenticated actor decision. */
+	Decision = "decision",
+	/** Resolves every due approval at a trusted server instant. */
+	Expiry = "expiry",
+	/** Closes pending approvals because the owning run is cancelling. */
+	Cancellation = "cancellation",
+}
+
+/** Exhaustive persistence actions selected from run state, event, and pending cardinality. */
+export enum DeferredToolApprovalLifecycleActions
+{
+	/** Move Running to WaitingForApproval before creating the first approval. */
+	PauseAndOpen = "pause_and_open",
+	/** Keep WaitingForApproval while adding another approval to the current batch. */
+	OpenInBatch = "open_in_batch",
+	/** Keep WaitingForApproval because at least one request is still pending. */
+	KeepWaiting = "keep_waiting",
+	/** Move WaitingForApproval to Running because the batch is fully resolved. */
+	Resume = "resume",
+	/** Close pending rows under a cancellation transaction without resuming the run. */
+	Cancel = "cancel",
+	/** Reject an event that is invalid for the observed durable run state. */
+	Reject = "reject",
+}
+
+/** State x event input consumed by the pure approval lifecycle table. */
+export interface DeferredToolApprovalLifecycleInput
+{
+	/** Durable run state observed under the transaction owner's run fence. */
+	readonly runState: DeferredToolApprovalRunStates;
+	/** Lifecycle event being applied. */
+	readonly event: DeferredToolApprovalLifecycleEvents;
+	/** Number of requests still pending after the event's approval-row mutation. */
+	readonly pendingCount: number;
+}
+
 /** Safe projections persisted with an approval so reads never select server-only argument bytes. */
 export interface DeferredToolApprovalProjection
 {
@@ -68,6 +132,26 @@ export interface DecideDeferredToolRequestCommand
 	readonly now: Date;
 }
 
+/** Trusted attempt coordinates used by runtime dispatch to close due approvals. */
+export interface ExpireDeferredToolApprovalBatchCommand
+{
+	/** Exact run whose command poll owns the expiry sweep transaction. */
+	readonly runId: string;
+	/** Exact current attempt whose waiting state is fenced by the transaction. */
+	readonly attempt: number;
+	/** Trusted server instant used to select requests at or beyond their deadline. */
+	readonly now: Date;
+}
+
+/** Durable outcome of one expiry sweep under the run's approval fence. */
+export interface ExpireDeferredToolApprovalBatchResult
+{
+	/** Number of pending requests moved to Expired by this sweep. */
+	readonly expiredCount: number;
+	/** Whether the last pending request resolved and the run returned to Running. */
+	readonly resumed: boolean;
+}
+
 /** Exact reserved tool invocation to pause behind a new pending deferred-tool approval. */
 export interface DeferToolRequestCommand
 {
@@ -130,6 +214,8 @@ export interface OpenDeferredToolApprovalCommand
 	readonly argumentsDigest: string;
 	/** Exact parameters schema from the reviewed compiled tool definition. */
 	readonly parametersSchema: JsonValue;
+	/** Digest carried beside the frozen compiled parameters schema. */
+	readonly parametersSchemaDigest: string;
 	/** Digest of the effective capability set admitted for this attempt. */
 	readonly capabilitySetDigest: string;
 	/** Durable ToolInvocation row already reserved before approval creation. */

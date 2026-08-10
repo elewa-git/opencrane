@@ -20,12 +20,18 @@ function _ApprovalRow(responseSchema: unknown = { type: "object", required: ["de
 	};
 }
 
+/** Wrap one transaction double in the root-client callback boundary. */
+function _Prisma(transaction: unknown)
+{
+	return { $transaction: vi.fn(async function _transaction(operation) { return operation(transaction); }) };
+}
+
 describe("Deferred-tool approval interrupt reader", function _describeInterruptReader()
 {
 	it("projects a current owner-bound approval without argument or authority material", async function _projectsSafeInterrupt()
 	{
 		const findMany = vi.fn(async function _findMany() { return [_ApprovalRow()]; });
-		const reader = _CreateDeferredToolApprovalInterruptReader({ approvalRequest: { findMany } } as never);
+		const reader = _CreateDeferredToolApprovalInterruptReader(_Prisma({ orgMembership: { findFirst: vi.fn(async function _membership() { return { id: "membership-1" }; }) }, approvalRequest: { findMany } }) as never);
 
 		const events = await reader.readOpen({ conversationId: "conversation-1", siloId: "silo-1", subjectId: "subject-1" });
 
@@ -37,7 +43,7 @@ describe("Deferred-tool approval interrupt reader", function _describeInterruptR
 
 	it("fails closed when the durable response schema is not an object", async function _rejectsInvalidSchema()
 	{
-		const reader = _CreateDeferredToolApprovalInterruptReader({ approvalRequest: { findMany: vi.fn(async function _findMany() { return [_ApprovalRow("invalid")]; }) } } as never);
+		const reader = _CreateDeferredToolApprovalInterruptReader(_Prisma({ orgMembership: { findFirst: vi.fn(async function _membership() { return { id: "membership-1" }; }) }, approvalRequest: { findMany: vi.fn(async function _findMany() { return [_ApprovalRow("invalid")]; }) } }) as never);
 
 		await expect(reader.readOpen({ conversationId: "conversation-1", siloId: "silo-1", subjectId: "subject-1" })).rejects.toThrow("response schema is not an object");
 	});
