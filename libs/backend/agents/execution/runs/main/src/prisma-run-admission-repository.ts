@@ -5,6 +5,7 @@ import { ___CreateLogger, type Logger } from "@opencrane/backend/observability";
 import { ___CloneCanonicalJson } from "@opencrane/util";
 import type { JsonValue } from "@opencrane/util";
 
+import { RunAdmissionDenialReasons } from "./run-admission.types.js";
 import type { InitialRunAuthority, RunAdmissionBuild, RunAdmissionBuildResult, RunAdmissionClock, RunAdmissionCommand, RunAdmissionCommit, RunAdmissionRepository, RunAdmissionResult, RunAdmissionTransaction } from "./run-admission.types.js";
 
 /**
@@ -50,11 +51,11 @@ export class PrismaRunAdmissionRepository implements RunAdmissionRepository
 				const existing = await transaction.agentRun.findUnique({ where: { siloId_requestIdempotencyKey: { siloId: command.siloId, requestIdempotencyKey: command.requestIdempotencyKey } } });
 				if (existing !== null)
 				{
-					if (!_matchesIdempotencyScope(existing, command)) return { outcome: "denied", reason: "authority_conflict" };
+					if (!_matchesIdempotencyScope(existing, command)) return { outcome: "denied", reason: RunAdmissionDenialReasons.AuthorityConflict };
 					const existingSnapshot = await transaction.runInputSnapshot.findUnique({ where: { runId_digest: { runId: existing.id, digest: existing.inputSnapshotDigest } } });
 					if (existingSnapshot !== null)
 					{
-						if (!_matchesSnapshotScope(existingSnapshot, command)) return { outcome: "denied", reason: "authority_conflict" };
+						if (!_matchesSnapshotScope(existingSnapshot, command)) return { outcome: "denied", reason: RunAdmissionDenialReasons.AuthorityConflict };
 						return { outcome: "idempotent", snapshot: _snapshot(existingSnapshot) };
 					}
 				}
@@ -65,7 +66,7 @@ export class PrismaRunAdmissionRepository implements RunAdmissionRepository
 				const admittedAt = admittedAtDate.toISOString();
 				const compiled = await build({ prisma: transaction, admittedAt, admittedAtEpochMs: admittedAtDate.getTime() });
 				if (compiled.outcome === "denied") return compiled;
-				if (!_matchesCommand(compiled.value, command) || !_matchesExecutionIdentity(compiled.value.authority, compiled.value.snapshot, command)) return { outcome: "denied", reason: "authority_conflict" };
+				if (!_matchesCommand(compiled.value, command) || !_matchesExecutionIdentity(compiled.value.authority, compiled.value.snapshot, command)) return { outcome: "denied", reason: RunAdmissionDenialReasons.AuthorityConflict };
 
 				// 3. Insert both sides of the deferred snapshot relation plus ordered acceptance and dispatch events in one commit.
 				await _persistInitialAdmission(transaction, command, compiled.value, admittedAtDate);
@@ -82,11 +83,11 @@ export class PrismaRunAdmissionRepository implements RunAdmissionRepository
 					const existing = await this.prisma.agentRun.findUnique({ where: { siloId_requestIdempotencyKey: { siloId: command.siloId, requestIdempotencyKey: command.requestIdempotencyKey } } });
 					if (existing !== null)
 					{
-						if (!_matchesIdempotencyScope(existing, command)) return { outcome: "denied", reason: "authority_conflict" };
+						if (!_matchesIdempotencyScope(existing, command)) return { outcome: "denied", reason: RunAdmissionDenialReasons.AuthorityConflict };
 						const existingSnapshot = await this.prisma.runInputSnapshot.findUnique({ where: { runId_digest: { runId: existing.id, digest: existing.inputSnapshotDigest } } });
 						if (existingSnapshot !== null)
 						{
-							if (!_matchesSnapshotScope(existingSnapshot, command)) return { outcome: "denied", reason: "authority_conflict" };
+							if (!_matchesSnapshotScope(existingSnapshot, command)) return { outcome: "denied", reason: RunAdmissionDenialReasons.AuthorityConflict };
 							return { outcome: "idempotent", snapshot: _snapshot(existingSnapshot) };
 						}
 					}
@@ -94,11 +95,11 @@ export class PrismaRunAdmissionRepository implements RunAdmissionRepository
 				catch (recoveryError)
 				{
 					this.log.error({ err: recoveryError, runId: command.runId, siloId: command.siloId, agentServiceId: command.agentServiceId, failureKind: "duplicate_recovery_failed" }, "run admission persistence failed");
-					return { outcome: "denied", reason: "persistence_unavailable" };
+					return { outcome: "denied", reason: RunAdmissionDenialReasons.PersistenceUnavailable };
 				}
 			}
 			this.log.error({ err: error, runId: command.runId, siloId: command.siloId, agentServiceId: command.agentServiceId, failureKind: "transaction_failed" }, "run admission persistence failed");
-			return { outcome: "denied", reason: "persistence_unavailable" };
+			return { outcome: "denied", reason: RunAdmissionDenialReasons.PersistenceUnavailable };
 		}
 	}
 }

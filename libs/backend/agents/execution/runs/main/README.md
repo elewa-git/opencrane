@@ -46,6 +46,12 @@ snapshot field except its own digest. The persisted snapshot stores revision-sel
 tool assignments as canonical JSON, not a mutable MCP-server grant or a custody reference; custody
 is rechecked only when an action is actually attempted.
 
+The transaction-bound conversation input authority rejects a second non-terminal foreground run
+before returning a compiled snapshot. The generic run repository passes that typed source denial
+through unchanged while continuing to classify only its own same-key replay, authority-conflict, and
+unavailable-persistence outcomes. Non-conversation admissions retain their existing silo-global
+idempotency semantics.
+
 `RunAdmissionConcurrencyGate` is the upstream overload boundary used by the shared admission
 capacity boundary for live personal and managed entrypoints.
 It partitions capacity by `(siloId, AgentServiceId)`, starts only the configured number of admissions,

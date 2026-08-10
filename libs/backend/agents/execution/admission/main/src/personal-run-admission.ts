@@ -1,5 +1,7 @@
-import { RunInputSnapshotAdmissionOutcomes, SessionAssemblyOutcomes } from "@opencrane/backend/agents/execution/inputs";
-import { RunAdmissionConcurrencyOutcomes } from "@opencrane/backend/agents/execution/runs";
+import { createHash } from "node:crypto";
+
+import { RunInputSnapshotAdmissionOutcomes, SessionAssemblyOutcomes, type AssembleRunInputSnapshotResult } from "@opencrane/backend/agents/execution/inputs";
+import { RunAdmissionConcurrencyOutcomes, RunAdmissionDenialReasons } from "@opencrane/backend/agents/execution/runs";
 
 import type { PersonalRunAdmissionDependencies, PersonalRunAdmissionPort, PersonalRunAdmissionResult } from "./personal-run-admission.types.js";
 import { PersonalRunAdmissionDenialReasons, PersonalRunAdmissionOutcomes, PersonalRunIdempotencyOutcomes } from "./personal-run-admission.types.js";
@@ -38,15 +40,18 @@ export function __CreatePersonalRunAdmissionPortWithGate(dependencies: PersonalR
 	return {
 		async admitPersonalRun(command, commit): Promise<PersonalRunAdmissionResult>
 		{
-			// 1. Bound all duplicate/conversation reads before browser traffic can reach Prisma.
+			// 1. Domain-separate the conversation-local public key before any silo-global run lookup.
+			const scopedCommand = { ...command, requestIdempotencyKey: _conversationScopedIdempotencyKey(command.conversationId, command.requestIdempotencyKey) };
+
+			// 2. Bound all duplicate/conversation reads before browser traffic can reach Prisma.
 			const preflight = await dependencies.capacityGate.execute(
 				{ siloId: command.siloId, agentServiceId: _PERSONAL_ADMISSION_PREFLIGHT_SERVICE_ID },
 				async function _ResolvePreflight(): Promise<_PersonalRunPreflightResult>
 				{
-					const duplicate = await dependencies.repository.resolve(command);
+					const duplicate = await dependencies.repository.resolve(scopedCommand);
 					if (duplicate.outcome === PersonalRunIdempotencyOutcomes.Idempotent) return { outcome: _PersonalRunPreflightOutcomes.Idempotent, runId: duplicate.runId };
 					if (duplicate.outcome === PersonalRunIdempotencyOutcomes.Conflict) return { outcome: _PersonalRunPreflightOutcomes.Conflict };
-					const authority = await dependencies.repository.resolveConversation(command);
+					const authority = await dependencies.repository.resolveConversation(scopedCommand);
 					return authority === null ? { outcome: _PersonalRunPreflightOutcomes.ConversationUnavailable } : { outcome: _PersonalRunPreflightOutcomes.Resolved, agentServiceId: authority.agentServiceId };
 				},
 			);
@@ -57,12 +62,22 @@ export function __CreatePersonalRunAdmissionPortWithGate(dependencies: PersonalR
 			if (preflight.value.outcome !== _PersonalRunPreflightOutcomes.Resolved) return { outcome: PersonalRunAdmissionOutcomes.Denied, reason: PersonalRunAdmissionDenialReasons.AuthorityConflict };
 			const agentServiceId = preflight.value.agentServiceId;
 
-			// 2. Share personal-and-managed fairness before opening the expensive final assembly transaction.
+			// 3. Share personal-and-managed fairness before opening the expensive final assembly transaction.
 			const bounded = await dependencies.capacityGate.execute(
 				{ siloId: command.siloId, agentServiceId },
-				async function _assembleAfterCapacityGrant()
+				async function _assembleAfterCapacityGrant(): Promise<AssembleRunInputSnapshotResult>
 				{
-					return dependencies.assemble(command, { agentServiceId }, commit);
+					const assembled = await dependencies.assemble(scopedCommand, { agentServiceId }, commit);
+					if (assembled.outcome !== SessionAssemblyOutcomes.Denied || assembled.reason !== RunAdmissionDenialReasons.PersistenceUnavailable) return assembled;
+					try
+					{
+						if (await dependencies.repository.hasActiveConversationRun(scopedCommand)) return { outcome: SessionAssemblyOutcomes.Denied, reason: RunAdmissionDenialReasons.ActiveRun };
+					}
+					catch
+					{
+						return assembled;
+					}
+					return assembled;
 				},
 			);
 			if (bounded.outcome === RunAdmissionConcurrencyOutcomes.Rejected) return { outcome: PersonalRunAdmissionOutcomes.Denied, reason: bounded.reason };
@@ -73,4 +88,20 @@ export function __CreatePersonalRunAdmissionPortWithGate(dependencies: PersonalR
 			};
 		},
 	};
+}
+
+/**
+ * Namespaces a participant-visible message key before it enters the silo-global AgentRun keyspace.
+ * The digest keeps stored keys bounded and prevents identical keys in different conversations from
+ * conflicting while exact retries in one conversation still select the same durable run.
+ */
+function _conversationScopedIdempotencyKey(conversationId: string, requestIdempotencyKey: string): string
+{
+	const digest = createHash("sha256")
+		.update("personal-conversation-run\u0000")
+		.update(conversationId)
+		.update("\u0000")
+		.update(requestIdempotencyKey)
+		.digest("hex");
+	return `sha256:${digest}`;
 }

@@ -1,4 +1,4 @@
-import { AgentServiceKind, ConversationLifecycle, ConversationMode, type Prisma } from "@prisma/client";
+import { AgentRunState, AgentServiceKind, ConversationLifecycle, ConversationMode, type Prisma } from "@prisma/client";
 
 import { PersonalRunIdempotencyOutcomes } from "./personal-run-admission.types.js";
 import type { PersonalRunAdmissionCommand, PersonalRunAdmissionReadRepository, PersonalRunIdempotencyResult, PersonalRunConversationAuthority } from "./personal-run-admission.types.js";
@@ -37,5 +37,22 @@ export class PrismaPersonalRunAdmissionRepository implements PersonalRunAdmissio
 		if (conversation === null || conversation.agentServiceId === null) return null;
 		const service = await this.prisma.agentService.findFirst({ where: { id: conversation.agentServiceId, siloId: command.siloId, kind: AgentServiceKind.Personal }, select: { id: true } });
 		return service === null ? null : { agentServiceId: service.id };
+	}
+
+	/** Reclassifies only an active-run conflict on the exact still-authorized personal conversation. */
+	async hasActiveConversationRun(command: PersonalRunAdmissionCommand): Promise<boolean>
+	{
+		const conversation = await this.prisma.conversation.findFirst({
+			where: {
+				id: command.conversationId,
+				siloId: command.siloId,
+				mode: ConversationMode.AgentSession,
+				lifecycle: ConversationLifecycle.Open,
+				participants: { some: { userId: command.executionSubjectId, accessEndedPosition: null } },
+				runs: { some: { state: { notIn: [AgentRunState.Completed, AgentRunState.Failed, AgentRunState.Cancelled] } } },
+			},
+			select: { id: true },
+		});
+		return conversation !== null;
 	}
 }

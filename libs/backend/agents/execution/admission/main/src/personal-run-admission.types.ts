@@ -12,7 +12,7 @@ export interface PersonalRunAdmissionCommand
 	readonly executionSubjectId: string;
 	/** Existing conversation the caller asked the server to continue. */
 	readonly conversationId: string;
-	/** Caller-supplied transport key that makes retries return the original snapshot. */
+	/** Caller-supplied conversation-local transport key that makes retries return the original snapshot. */
 	readonly requestIdempotencyKey: string;
 	/** Server-allocated message that must be committed with the admitted run. */
 	readonly inputMessageId: string;
@@ -34,6 +34,8 @@ export interface PersonalRunAdmissionRepository
 	resolve(command: PersonalRunAdmissionCommand): Promise<PersonalRunIdempotencyResult>;
 	/** Resolves the only eligible personal AgentService for a conversation participant in the caller's silo. */
 	resolveConversation(command: PersonalRunAdmissionCommand): Promise<PersonalRunConversationAuthority | null>;
+	/** Reclassifies a failed final commit only when the exact authorized conversation now has a foreground run. */
+	hasActiveConversationRun(command: PersonalRunAdmissionCommand): Promise<boolean>;
 }
 
 /** Transaction-scoped persistence reader constructed only inside the admission Unit of Work. */
@@ -49,11 +51,11 @@ export interface PersonalRunAdmissionUnitOfWork extends PersonalRunAdmissionRepo
 /** Stable duplicate lookup outcomes before mutable conversation eligibility is evaluated. */
 export enum PersonalRunIdempotencyOutcomes
 {
-	/** No run has claimed this caller key in the selected silo. */
+	/** No run has claimed this conversation-scoped caller key in the selected silo. */
 	NotFound = "not_found",
 	/** The exact caller/conversation key already owns a persisted immutable snapshot. */
 	Idempotent = "idempotent",
-	/** The key belongs to a different subject, trigger, or conversation and cannot be reused. */
+	/** The internal key belongs to a different subject, trigger, or conversation and cannot be reused. */
 	Conflict = "conflict",
 }
 

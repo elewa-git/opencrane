@@ -1,6 +1,6 @@
-import { ConversationLifecycle, ConversationMessageState, ConversationMode, Prisma } from "@prisma/client";
+import { AgentRunState, ConversationLifecycle, ConversationMessageState, ConversationMode, Prisma } from "@prisma/client";
 
-import type { InitialRunAuthority } from "@opencrane/backend/agents/execution/runs";
+import { RunAdmissionDenialReasons, type InitialRunAuthority } from "@opencrane/backend/agents/execution/runs";
 
 import type { ConversationContextInput, ConversationContextRepository, SessionAssemblyCommand, SessionAssemblyLoad } from "./session-assembly.types.js";
 
@@ -26,9 +26,10 @@ export class PrismaConversationContextRepository implements ConversationContextR
 		// 2. Bind the conversation to its silo, service, mode, open lifecycle, and participant.
 		const conversation = await this.transaction.conversation.findFirst({
 			where: { id: command.conversationId, siloId: command.siloId, agentServiceId: run.agentServiceId, mode: ConversationMode.AgentSession, lifecycle: ConversationLifecycle.Open, participants: { some: { userId: command.executionSubjectId, accessEndedPosition: null } } },
-			select: { id: true },
+			select: { id: true, runs: { where: { state: { notIn: [AgentRunState.Completed, AgentRunState.Failed, AgentRunState.Cancelled] } }, take: 1, select: { id: true } } },
 		});
 		if (conversation === null) return { outcome: "denied", reason: "conversation_unavailable" };
+		if (conversation.runs.length > 0) return { outcome: "denied", reason: RunAdmissionDenialReasons.ActiveRun };
 
 		// 3. Seal only terminal message identifiers in their deterministic transcript order; mutable turns remain outside the snapshot.
 		const entries = await this.transaction.conversationTimelineEntry.findMany({

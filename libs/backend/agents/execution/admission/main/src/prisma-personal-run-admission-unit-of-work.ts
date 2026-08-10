@@ -33,6 +33,15 @@ export class PrismaPersonalRunAdmissionUnitOfWork implements PersonalRunAdmissio
 		});
 	}
 
+	/** Reclassifies a failed final commit from a fresh authorized conversation snapshot. */
+	async hasActiveConversationRun(command: PersonalRunAdmissionCommand): Promise<boolean>
+	{
+		return this._run(async function _HasActiveConversationRun(repository)
+		{
+			return repository.hasActiveConversationRun(command);
+		});
+	}
+
 	/** Construct the transaction-scoped read adapter once for any admission authority operation. */
 	private async _run<TResult>(work: (repository: PersonalRunAdmissionReadRepository) => Promise<TResult>): Promise<TResult>
 	{

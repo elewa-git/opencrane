@@ -1,7 +1,7 @@
 import { MemoryFactProvenanceSourceKinds, RunInputSnapshotIdentityKinds, type RunInputSnapshot } from "@opencrane/contracts";
 import { AgentServiceKinds } from "@opencrane/models/agents";
 import { MessageContentBlockKinds } from "@opencrane/models/conversations";
-import type { UserRunAdmissionCommand } from "@opencrane/backend/agents/execution/runs";
+import { RunAdmissionDenialReasons, type UserRunAdmissionCommand } from "@opencrane/backend/agents/execution/runs";
 import type { SessionAssemblyAuthorities } from "../session-assembly.types.js";
 import { describe, expect, it } from "vitest";
 
@@ -11,7 +11,7 @@ import { __AssembleRunInputSnapshot } from "../session-assembly.js";
 const _COMMAND: UserRunAdmissionCommand = { runId: "run-1", siloId: "silo-1", agentServiceId: "service-1", conversationId: "conversation-1", identityKind: "user", trigger: "interactive", executionSubjectId: "user-1", requestIdempotencyKey: "request-1", inputMessageId: "message-current", inputMessageBlocks: [{ id: "block-1", kind: MessageContentBlockKinds.Text, value: "Hello" }] };
 
 /** Builds independently fakeable authority ports with deliberately unsorted source outputs. */
-function _Authorities(onAdmission: (snapshot: RunInputSnapshot) => "accepted" | "idempotent" | "persistence_unavailable", personaRevisionId: string | null = "persona-1"): SessionAssemblyAuthorities
+function _Authorities(onAdmission: (snapshot: RunInputSnapshot) => "accepted" | "idempotent" | "active_run" | "persistence_unavailable", personaRevisionId: string | null = "persona-1"): SessionAssemblyAuthorities
 {
 	return {
 		admission: {
@@ -20,7 +20,9 @@ function _Authorities(onAdmission: (snapshot: RunInputSnapshot) => "accepted" | 
 				const compiled = await build({ prisma: {} as never, admittedAt: "2026-07-19T12:00:00.000Z", admittedAtEpochMs: Date.parse("2026-07-19T12:00:00.000Z") });
 				if (compiled.outcome === "denied") return { outcome: "denied", reason: compiled.reason };
 				const outcome = onAdmission(compiled.value.snapshot);
-				return outcome === "persistence_unavailable" ? { outcome: "denied", reason: outcome } as const : { outcome, snapshot: compiled.value.snapshot } as const;
+				if (outcome === "persistence_unavailable") return { outcome: "denied", reason: RunAdmissionDenialReasons.PersistenceUnavailable } as const;
+				if (outcome === "active_run") return { outcome: "denied", reason: RunAdmissionDenialReasons.ActiveRun } as const;
+				return { outcome, snapshot: compiled.value.snapshot } as const;
 			},
 		},
 		runAuthority: { load: async function _load() { return { outcome: "loaded", value: { agentServiceId: "service-1", agentRevisionId: "revision-1", agentKind: AgentServiceKinds.Personal, effectiveContractDigest: "sha256:contract", promptCompilerVersion: "prompt-v1", trigger: "interactive", delegatedUserId: "user-1", rootRunId: "run-1", parentRunId: null } } as const; } },
@@ -85,6 +87,13 @@ describe("__AssembleRunInputSnapshot", function _describeSessionAssembly()
 
 		expect(result).toEqual({ outcome: "denied", reason: "memory_scope_unavailable" });
 		expect(admitted).toBe(false);
+	});
+
+	it("preserves the durable active-run classification after final assembly", async function _preservesActiveRun()
+	{
+		const result = await __AssembleRunInputSnapshot(_COMMAND, _Authorities(function _denyActiveRun() { return "active_run"; }));
+
+		expect(result).toEqual({ outcome: "denied", reason: "active_run" });
 	});
 
 	it("fails closed when an integration assignment cannot form an unambiguous tool revision", async function _deniesAmbiguousIntegrationTool()

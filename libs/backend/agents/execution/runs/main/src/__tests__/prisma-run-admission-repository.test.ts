@@ -137,6 +137,22 @@ describe("PrismaRunAdmissionRepository", function _describeAdmissionRepository()
 		await expect(repository.admit(_command(), async function _unexpectedBuild() { throw new Error("unexpected build"); })).resolves.toEqual({ outcome: "idempotent", snapshot });
 	});
 
+	it("does not misclassify an unknown unique conflict when no same-key or active-conversation row exists", async function _keepsUnknownConflictUnavailable()
+	{
+		const duplicateError = new Prisma.PrismaClientKnownRequestError("another unique authority failed", { code: "P2002", clientVersion: "6.19.3" });
+		const error = vi.fn();
+		const log = { error } as unknown as Logger;
+		const prisma = {
+			$transaction: vi.fn().mockRejectedValue(duplicateError),
+			agentRun: { findUnique: vi.fn().mockResolvedValue(null) },
+			runInputSnapshot: { findUnique: vi.fn() },
+		} as unknown as PrismaClient;
+		const repository = new PrismaRunAdmissionRepository(prisma, undefined, log);
+
+		await expect(repository.admit(_command(), async function _unexpectedBuild() { throw new Error("unexpected build"); })).resolves.toEqual({ outcome: "denied", reason: "persistence_unavailable" });
+		expect(error).toHaveBeenCalledWith({ err: duplicateError, runId: "run-1", siloId: "silo-1", agentServiceId: "service-1", failureKind: "transaction_failed" }, "run admission persistence failed");
+	});
+
 	it("denies a recovered snapshot that names another execution subject", async function _deniesSnapshotSubjectMismatch()
 	{
 		const snapshot = { ..._snapshot(), identitySnapshot: { ..._snapshot().identitySnapshot, executionSubjectId: "user-2" } };

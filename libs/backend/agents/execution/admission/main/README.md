@@ -39,6 +39,17 @@ then persists the canonical input message beside the run, immutable snapshot, an
 intent in that same commit. The first lane does not grant product authority; it is overload
 protection for the read path.
 
+Message idempotency keys are public conversation-local coordinates. Before personal admission reads
+or writes the silo-global `AgentRun` keyspace, it hashes the conversation id and public key with a
+domain separator. The same key therefore deduplicates exact retries inside one conversation without
+conflicting with an independent message in another conversation; managed-run keys keep their existing
+server-owned semantics. If a different key races to start a second foreground run in the same agent
+session, the final durable fence returns `active_run` after revalidating that conversation instead of
+misreporting the partial-unique-index conflict as a persistence outage. If the database reports the
+unique loss before the final reader can classify it, the still-bounded personal recovery reader
+returns `active_run` only after a fresh participant, lifecycle, mode, and non-terminal-run check;
+unclassified failures remain `persistence_unavailable`.
+
 ## Public surface
 
 - `__CreateManagedRunAdmissionPort(prisma, capacityGate, evidenceAuthority)` composes the managed

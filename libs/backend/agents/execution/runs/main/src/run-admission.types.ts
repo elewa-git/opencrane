@@ -98,8 +98,19 @@ export interface RunAdmissionBuild
 /** Callback result for a transaction-fenced admission compilation. */
 export type RunAdmissionBuildResult<TDenial> = { readonly outcome: "ready"; readonly value: RunAdmissionBuild } | { readonly outcome: "denied"; readonly reason: TDenial };
 
+/** Stable run-owned denials emitted by the first durable admission fence. */
+export enum RunAdmissionDenialReasons
+{
+	/** A same-key row or recovered snapshot belongs to another durable authority scope. */
+	AuthorityConflict = "authority_conflict",
+	/** Another non-terminal foreground run already owns the command's exact conversation. */
+	ActiveRun = "active_run",
+	/** Persistence failed without a safely classifiable durable outcome. */
+	PersistenceUnavailable = "persistence_unavailable",
+}
+
 /** Durable outcome of either accepting or deduplicating one logical run. */
-export type RunAdmissionResult<TDenial> = { readonly outcome: "accepted" | "idempotent"; readonly snapshot: RunInputSnapshot } | { readonly outcome: "denied"; readonly reason: TDenial | "persistence_unavailable" | "authority_conflict" };
+export type RunAdmissionResult<TDenial> = { readonly outcome: "accepted" | "idempotent"; readonly snapshot: RunInputSnapshot } | { readonly outcome: "denied"; readonly reason: TDenial | RunAdmissionDenialReasons };
 
 /** Optional same-transaction persistence owned by the caller of initial run admission. */
 export type RunAdmissionCommit = (transaction: RunAdmissionTransaction, value: RunAdmissionBuild) => Promise<void>;

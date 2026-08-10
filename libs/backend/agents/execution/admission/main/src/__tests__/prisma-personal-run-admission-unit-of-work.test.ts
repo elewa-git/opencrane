@@ -1,5 +1,5 @@
-import { Prisma } from "@prisma/client";
-import { describe, expect, it } from "vitest";
+import { AgentRunState, ConversationLifecycle, ConversationMode, Prisma } from "@prisma/client";
+import { describe, expect, it, vi } from "vitest";
 import { MessageContentBlockKinds } from "@opencrane/models/conversations";
 
 import { PersonalRunIdempotencyOutcomes, type PersonalRunAdmissionCommand } from "../personal-run-admission.types.js";
@@ -49,5 +49,24 @@ describe("PrismaPersonalRunAdmissionUnitOfWork", function _DescribePrismaPersona
 		const unitOfWork = new PrismaPersonalRunAdmissionUnitOfWork(_Client(transaction));
 
 		await expect(unitOfWork.resolveConversation(_Command())).resolves.toEqual({ agentServiceId: "service-1" });
+	});
+
+	it("reclassifies only a fresh participant-authorized active conversation run", async function _reclassifiesActiveRun()
+	{
+		const findFirst = vi.fn().mockResolvedValue({ id: "conversation-1" });
+		const unitOfWork = new PrismaPersonalRunAdmissionUnitOfWork(_Client({ conversation: { findFirst } }));
+
+		await expect(unitOfWork.hasActiveConversationRun(_Command())).resolves.toBe(true);
+		expect(findFirst).toHaveBeenCalledWith({
+			where: {
+				id: "conversation-1",
+				siloId: "silo-1",
+				mode: ConversationMode.AgentSession,
+				lifecycle: ConversationLifecycle.Open,
+				participants: { some: { userId: "user-1", accessEndedPosition: null } },
+				runs: { some: { state: { notIn: [AgentRunState.Completed, AgentRunState.Failed, AgentRunState.Cancelled] } } },
+			},
+			select: { id: true },
+		});
 	});
 });
