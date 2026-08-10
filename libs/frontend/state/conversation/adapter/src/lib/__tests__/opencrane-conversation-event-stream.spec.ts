@@ -168,6 +168,29 @@ describe("OpenCraneConversationEventStream", function _Suite()
 		expect(updates.some(update => update.status === ConversationEventStreamStatuses.Reconnecting && update.lastHeartbeatAt !== null)).toBe(true);
 	});
 
+	it("resets consecutive failures when a later response accepts progress before failing", async function _ResetsFailuresAfterProgress()
+	{
+		const controller = new AbortController();
+		const accepted = _Frame("accepted-cursor", { type: EventType.RUN_STARTED, threadId: "conversation-1", runId: "run-1" });
+		const resumed = _Frame("resumed-cursor", { type: EventType.TEXT_MESSAGE_START, messageId: "message-1", role: "assistant" });
+		const get = vi.fn().mockRejectedValueOnce(new Error("connection refused")).mockResolvedValueOnce(_Success(_FailAfter(accepted))).mockResolvedValueOnce(_Success(_Stream(resumed)));
+		const stream = _EventStream(get);
+
+		const state = await stream.stream({ conversationId: "conversation-1", signal: controller.signal, maximumReconnectAttempts: 1, reconnectDelayMilliseconds: 0, onUpdate: function _Update(update): void
+		{
+			if (update.state.cursor === "resumed-cursor") controller.abort();
+		} });
+
+		expect(get).toHaveBeenCalledTimes(3);
+		expect(get).toHaveBeenNthCalledWith(3, "/me/conversations/{conversationId}/events", {
+			params: { path: { conversationId: "conversation-1" }, query: { cursor: "accepted-cursor" }, header: { "Last-Event-ID": "accepted-cursor" } },
+			parseAs: "stream",
+			signal: controller.signal
+		});
+		expect(state.cursor).toBe("resumed-cursor");
+		expect(state.runId).toBe("run-1");
+	});
+
 	it("purges state and terminates when the live stream reports authority loss", async function _PurgesRevoked()
 	{
 		const controller = new AbortController();

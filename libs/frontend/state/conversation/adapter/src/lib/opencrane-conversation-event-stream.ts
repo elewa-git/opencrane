@@ -60,6 +60,7 @@ export class OpenCraneConversationEventStream implements ConversationEventStream
 					_Fail(command, state, reconnectAttempt, lastHeartbeatAt, error);
 				}
 				if (state.accessRevoked || error instanceof _ConversationEventProtocolError || (error instanceof _ConversationEventHttpError && !_IsRetryableHttpStatus(error.status))) _Fail(command, state, reconnectAttempt, lastHeartbeatAt, error);
+				if (progress.receivedEvent) reconnectAttempt = 0;
 				reconnectAttempt += 1;
 				if (reconnectAttempt > (command.maximumReconnectAttempts ?? 3))
 				{
