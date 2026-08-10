@@ -1,6 +1,20 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+report_contract_failure()
+{
+  local failure_line="$1"
+  local failure_command="$2"
+  local failure_status="$3"
+  if [[ "$-" == *e* ]]; then
+    printf 'database migration deploy contract failed at line %s with status %s: %s\n' \
+      "$failure_line" "$failure_status" "$failure_command" >&2
+  fi
+  return "$failure_status"
+}
+
+trap 'report_contract_failure "$LINENO" "$BASH_COMMAND" "$?"' ERR
+
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../../.." && pwd)"
 DEPLOY_SCRIPT="$ROOT_DIR/apps/_infra/deploy-k8s/platform/k8s-deploy.sh"
 ORCHESTRATOR="$ROOT_DIR/apps/_infra/deploy-k8s/platform/database-migration-orchestrator.sh"
