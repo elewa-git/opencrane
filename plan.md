@@ -309,10 +309,12 @@ The accepted product contract is:
 - one recoverable elicitation contract renders approvals, single choice, multiple choice, and bounded
   free text. Consequential A2UI actions use that authority; rendered UI never grants permission.
 
-The accepted paper/origami workspace language remains the visual source. Before implementation, the
-final Agent-thread boards must join the repository-owned design handoff: group mention admission,
+The accepted paper/origami workspace language remains the visual source. The repository-owned
+[canonical design target](./docs/ui-design/README.md) now contains the accepted workspace, A2UI, and
+Agent-thread boards plus stable issue-specific screenshot extracts. Its group mention admission,
 starting/running/waiting/failed/completed parent summaries, breadcrumb child view, parent delivery,
-follow-up run, access loss, reconnect, and compact/mobile navigation.
+follow-up run, access loss, reconnect, and compact/mobile navigation are implementation contracts,
+not evidence that the corresponding route or authority has shipped.
 
 | Step | Outcome | Owning GitHub issues | Exit gate |
 |---|---|---|---|
@@ -325,6 +327,43 @@ follow-up run, access loss, reconnect, and compact/mobile navigation.
 | F1.7 — tools, elicitation, approvals, and A2UI | Render honest tool/retry state with sanitized disclosure; unify approval, single-choice, multiple-choice, and free-text requests; route A2UI actions through authenticated command authority | [#604](https://github.com/elewa-git/opencrane/issues/604), [#319](https://github.com/elewa-git/opencrane/issues/319), [#351](https://github.com/elewa-git/opencrane/issues/351) | Duplicate, foreign, expired, stale-run, and unauthorized responses fail closed; reconnect restores unresolved input; keyboard, focus, screen-reader, and reduced-motion contracts pass |
 | F1.8 — workspace composition | Mount the authenticated Chats rail, mode-aware transcript/composer, closed states, participant controls, Agent-thread summaries/routes, Files, and Activity through thin pages, a feature store, pure mappers, and approved components | [#351](https://github.com/elewa-git/opencrane/issues/351), [#600](https://github.com/elewa-git/opencrane/issues/600), [#601](https://github.com/elewa-git/opencrane/issues/601) | Production has no mock gateway or alternate renderer; desktop/compact layouts, empty/unavailable/no-agent states, long/hostile content, and mode-specific commands pass Storybook and route-level Playwright |
 | F1.9 — delivery and qualification | Publish the immutable SPA with the server/contracts it consumes and qualify login → onboarding → workspace, direct/group chat, Agent thread, live reconnect, assets, elicitation, A2UI, cancellation, and retry | [#351](https://github.com/elewa-git/opencrane/issues/351), [#162](https://github.com/elewa-git/opencrane/issues/162) | Reviewed version/migration evidence is complete; live desired/observed versions match; the named journeys pass against target APIs with no mock or legacy transport |
+
+##### Track F1 execution and PR order
+
+The implementation unit is one vertical, full-stack feature PR per owning issue. A PR can reference
+a dependency or consumer issue, but must not close or absorb another issue's feature slice. The
+review order follows the real branch ancestry and incremental diff, not merely this table:
+
+1. Land the design-target and planning preflight without claiming an implemented feature.
+2. **[#600](https://github.com/elewa-git/opencrane/issues/600)** — establish Conversation modes,
+   strategy ownership, canonical timeline, membership, and ordinary direct/group messaging.
+3. After #600, execute these independent branches in parallel when capacity permits:
+   - **[#602](https://github.com/elewa-git/opencrane/issues/602)** — onboarding handoff and the
+     immutable closed/read-only conversation;
+   - **[#319](https://github.com/elewa-git/opencrane/issues/319)** — snapshot-to-live delivery,
+     reconnect, truthful terminal projection, interrupts, and the versioned A2UI envelope.
+4. After #319, execute these independent branches in parallel when capacity permits:
+   - **[#603](https://github.com/elewa-git/opencrane/issues/603)** — governed attachments, finalized
+     outputs, transcript asset events, and Files;
+   - **[#604](https://github.com/elewa-git/opencrane/issues/604)** — tool disclosure, approvals,
+     choices, bounded free text, Activity, and authorized A2UI actions.
+5. **[#601](https://github.com/elewa-git/opencrane/issues/601)** — build group Agent threads after
+   #600, #319, #603, and #604 provide their reusable conversation, delivery, asset, and elicitation
+   contracts.
+6. **[#351](https://github.com/elewa-git/opencrane/issues/351)** — compose the authenticated
+   workspace and routes after the owning feature PRs expose their production contracts. This PR
+   contains integration and remaining shell work, not duplicate implementations of earlier issues.
+7. **[#162](https://github.com/elewa-git/opencrane/issues/162)** — qualify the immutable deployed
+   SPA and named live journeys after #351. Attach live-only evidence directly to #162; create a
+   separate #162 PR only when qualification reveals an owned chart, release, or status change.
+
+Every feature PR should contain several coherent green commits: model/contracts and version or
+migration intent; server authority and adapters; approved components and motion; route/store wiring;
+and Storybook, Playwright, negative, and accessibility tests. Commit the first validated slice before
+requesting independent review. Review findings are resolved in later `🐛` commits and revalidated;
+the branch is not kept uncommitted while waiting for a reviewer. Before publication, re-read the
+live PR graph, stack only on genuine dependencies, and prove that each `base...head` diff contains
+exactly one issue's incremental work.
 
 Track F1 closes [#351](https://github.com/elewa-git/opencrane/issues/351),
 [#600](https://github.com/elewa-git/opencrane/issues/600),
