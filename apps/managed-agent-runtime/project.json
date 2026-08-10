@@ -2,6 +2,7 @@
   "name": "managed-agent-runtime",
   "$schema": "../../node_modules/nx/schemas/project-schema.json",
   "projectType": "application",
+  "metadata": { "release": { "adaptedVersion": "0.8.0" } },
   "sourceRoot": "apps/managed-agent-runtime",
   "tags": ["type:app", "layer:entrypoint", "scope:agent-runtime"],
   "targets": {

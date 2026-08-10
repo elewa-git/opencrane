@@ -15,6 +15,21 @@ follows [Keep a Changelog](https://keepachangelog.com/); the project uses
 
 ### Added
 
+- **Operators can now identify an exact compatible release composition and perform fail-closed
+  adjacent-minor database upgrades.** Immutable release manifests bind the repository train to its
+  application, Helm chart, and database revisions; the deploy path accepts only the declared
+  adjacent-minor transition, fences the existing server against writes, completes a CloudNativePG
+  backup, verifies the migration bytes, and runs the bounded transactional migration before the new
+  server returns. The `0.7.0` to `0.8.0` path upgrades an exact source with empty legacy persona
+  state, but stops with `OC708` before mutation when populated persona data requires a reviewed
+  manual mapping; patch, skipped-minor, and major transitions remain manual.
+
+- **Operators can now retire one standalone silo without deleting an active tenant or foreign
+  resources.** The app-owned teardown requires an exact cluster context, release composition,
+  tenant confirmation, and acknowledged DNS and Zitadel cleanup, then proves Helm, PostgreSQL,
+  namespace, and cluster-RBAC ownership before deleting only the named silo resources. Protected
+  tenants and ambiguous inventories fail closed, while interrupted retirements can be retried.
+
 - **Operators can now admit managed agents through the immutable, fail-closed run authority.**
   Run-now and scheduled work derive a dedicated service principal, verify its current
   Ed25519-signed fleet membership, intersect the active revision's exact non-personal knowledge
@@ -133,6 +148,12 @@ follows [Keep a Changelog](https://keepachangelog.com/); the project uses
   field that caused it.
 
 ### Changed
+
+- **Maintainers now carry durable compatibility and transition evidence with every release-affecting
+  change.** Each directly changed or dependency-adapted Nx application records the immutable root
+  train where its production contract was last adapted; changed charts carry a reviewed Helm
+  transition, database changes carry a digest-bound SQL transition and convergence proof, and prior
+  release manifests cannot be rewritten.
 
 - **Maintainers can now navigate deployment and server ownership directly from the directory
   structure.** Deployment-only applications live under `apps/_infra`, the installation chart lives

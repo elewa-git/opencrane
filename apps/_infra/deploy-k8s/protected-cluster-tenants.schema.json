@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://opencrane.ai/schemas/protected-cluster-tenants.schema.json",
+  "title": "OpenCrane protected ClusterTenants",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["contexts"],
+  "properties": {
+    "contexts": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["protectedClusterTenants"],
+        "properties": {
+          "protectedClusterTenants": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "pattern": "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+            }
+          }
+        }
+      }
+    }
+  }
+}

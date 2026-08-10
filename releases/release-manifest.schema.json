@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://opencrane.ai/schemas/release-manifest.schema.json",
+  "title": "OpenCrane repository release manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["repositoryVersion", "previousRepositoryVersion", "adoptionBaseline", "database", "projects"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "repositoryVersion": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
+    "previousRepositoryVersion": { "type": ["string", "null"], "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
+    "adoptionBaseline": { "type": "boolean" },
+    "manualTransition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["approved", "reason"],
+      "properties": {
+        "approved": { "const": true },
+        "reason": { "type": "string", "minLength": 1 }
+      }
+    },
+    "database": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "baselinePath", "baselineSha256"],
+      "properties": {
+        "schemaVersion": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
+        "baselinePath": { "type": "string", "minLength": 1 },
+        "baselineSha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+      }
+    },
+    "projects": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["root", "adaptedVersion"],
+        "properties": {
+          "root": { "type": "string", "minLength": 1 },
+          "adaptedVersion": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
+          "packageVersion": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
+          "chartVersion": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
+          "chartAppVersion": { "type": "string", "minLength": 1 },
+          "externalAppVersion": { "type": "string", "minLength": 1 }
+        }
+      }
+    }
+  }
+}

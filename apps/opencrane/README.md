@@ -97,6 +97,9 @@ its resources to the lifecycle owner.
 - `prisma/bootstrap/target-baseline.sql` defines a clean OpenCrane database. Its focused source
   verifiers prove the seeded persona and onboarding-bootstrap content against the reviewed files in
   `docs/design/persona-archetypes/`.
+- `prisma/migrations/<from>-to-<to>/` owns reviewed, adjacent schema upgrades for existing databases.
+  The PostgreSQL deployment Job runs them before an incompatible server rollout; server startup
+  never becomes a schema-migration authority.
 
 ## Boundary
 

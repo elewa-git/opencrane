@@ -1,0 +1,8 @@
+{
+  "$schema": "./protected-cluster-tenants.schema.json",
+  "contexts": {
+    "gke_opencrane-dev": {
+      "protectedClusterTenants": ["testv3"]
+    }
+  }
+}

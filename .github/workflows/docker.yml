@@ -192,6 +192,18 @@ jobs:
       - name: Prove the module-growth classifier
         run: npm run test:module-growth
 
+      - name: Enforce release versions and migration history
+        run: npm run check:release-versioning -- --base "$GUARD_BASE"
+
+      - name: Prove the release-versioning classifier
+        run: npm run test:release-versioning
+
+      - name: Enforce version-to-version database migration contracts
+        run: npm run check:database-migrations
+
+      - name: Prove previous-to-current database convergence and rollback
+        run: npm run test:database-migrations
+
       - name: Prove the PR-stack integrity classifier
         run: npm run test:pr-stack-integrity
 

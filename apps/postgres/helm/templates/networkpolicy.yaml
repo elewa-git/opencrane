@@ -23,6 +23,9 @@ spec:
         - podSelector:
             matchLabels:
               cnpg.io/cluster: {{ include "opencrane.postgres.fullname" . }}
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: postgres-database-migration
       ports:
         - protocol: TCP
           port: 5432
@@ -91,4 +94,34 @@ spec:
       ports:
         - protocol: TCP
           port: {{ .Values.networkPolicy.kubernetesApiServerEndpointPort }}
+{{- if .Values.migration.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "opencrane.postgres.fullname" . }}-database-migration
+  labels:
+    {{- include "opencrane.postgres.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: postgres-database-migration
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress: []
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              cnpg.io/cluster: {{ include "opencrane.postgres.fullname" . }}
+      ports:
+        - protocol: TCP
+          port: 5432
+    - ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+{{- end }}
 {{- end }}

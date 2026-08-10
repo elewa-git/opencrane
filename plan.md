@@ -239,6 +239,22 @@ created the active `testv2` Owner row. Its first rendered `/no-tenant` page was 
 `opencrane-ui:sha-6a09541`. Personal-agent/workspace creation and Phase E runtime qualification remain
 open live gates.
 
+**Live silo update (2026-08-10):** `testv3` is now the active development silo. Its tenant-prefixed
+main, artifact, skill-authoring, and tool namespaces remain deployed and every application,
+PostgreSQL, pooler, and dynamic MCP workload is Ready/Running. The superseded `testv2` DNS and
+Zitadel callback/origin/logout entries were retired, then its four legacy namespaces were deleted
+through a reviewed, UID- and full-inventory-bound app-owned retirement path. The one-time legacy
+script was removed after its evidence was recorded in the deploy ledger.
+
+Repository train `0.8.0` also replaces the earlier fresh-database-only decision with explicit
+version-to-version authority. Every Nx application records the last root train that adapted its
+production contract, directly or through its dependency graph; immutable release manifests map the
+compatible app, chart, and database revisions. Adjacent minor trains carry reviewed Helm transitions
+and a bounded, backup-gated database migration Job. Patch, skipped-minor, and major transitions stay
+manual. The `0.7.0` to `0.8.0` SQL path migrates empty legacy persona state automatically and fails
+closed with `OC708` when semantic mapping of populated persona data requires an operator-reviewed
+manual plan.
+
 Exit: the canonical runtime and managed-agent lifecycle pass failure, replay, authorization,
 isolation, cancellation, provider, and artifact tests with no OpenClaw compatibility surface.
 

@@ -4,7 +4,9 @@
 
 Read the package's own `README.md` before non-trivial work. General TypeScript rules
 ([`typescript.md`](./typescript.md)), identity rules ([`architecture.md`](./architecture.md)), and
-Kubernetes rules ([`k8s.md`](./k8s.md)) apply throughout.
+Kubernetes rules ([`k8s.md`](./k8s.md)) apply throughout. Before changing an app's production or
+deployment contract, also read [`versioning.md`](./versioning.md) and stamp the app to the current
+root version in the same slice. Documentation-only changes do not advance an app stamp.
 
 ## Apps
 

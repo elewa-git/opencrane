@@ -7,9 +7,10 @@ OUTPUT="$(mktemp)"
 trap 'rm -f "$OUTPUT"' EXIT
 
 DATABASES_JSON='[{"name":"opencrane","owner":"opencrane","credentialsSecret":"postgres-opencrane-bootstrap"},{"name":"obot","owner":"obot","credentialsSecret":"postgres-obot-bootstrap"},{"name":"litellm","owner":"litellm","credentialsSecret":"postgres-litellm-bootstrap"}]'
-BASE_VALUES=(--set-json "databases=$DATABASES_JSON" --set-string databaseAdmin.name=opencrane_database_admin --set-string databaseAdmin.credentialsSecret=postgres-admin-bootstrap --set-string bootstrap.targetBaseline.sha256=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa --set-string bootstrap.initdb.postInitApplicationSQLRefs.configMapRefs[0].name=opencrane-database-baseline-deadbeef --set-string bootstrap.initdb.postInitApplicationSQLRefs.configMapRefs[0].key=target-baseline.sql)
+BASE_VALUES=(--set-json "databases=$DATABASES_JSON" --set-string databaseAdmin.name=opencrane_database_admin --set-string databaseAdmin.credentialsSecret=postgres-admin-bootstrap --set-string bootstrap.targetBaseline.sha256=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa --set-string bootstrap.initdb.postInitApplicationSQLRefs.configMapRefs[0].name=opencrane-database-baseline-deadbeef --set-string bootstrap.initdb.postInitApplicationSQLRefs.configMapRefs[0].key=target-baseline.sql --set-string convergence.targetSchemaVersion=0.8.0 --set-string convergence.targetBaselineSha256=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb --set-string convergence.currentProtectedBaselineSha256=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa)
 API_VALUES=(--set-string networkPolicy.kubernetesApiServerCidrs[0]=10.43.0.1/32 --set-string networkPolicy.kubernetesApiServerEndpointCidrs[0]=172.18.0.2/32 --set networkPolicy.kubernetesApiServerEndpointPort=6443)
 COMMON_VALUES=("${BASE_VALUES[@]}" "${API_VALUES[@]}")
+MIGRATION_VALUES=(--set migration.enabled=true --set convergence.previousMigration.available=true --set-string convergence.previousMigration.id=0.7.0-to-0.8.0 --set-string convergence.previousMigration.fromSchemaVersion=0.7.0 --set-string convergence.previousMigration.sourceProtectedBaselineSha256=cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc --set-string convergence.previousMigration.sqlSha256=dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd --set-string migration.configMap.name=opencrane-database-migration-0-7-0-to-0-8-0-deadbeef --set-string migration.configMap.key=migration.sql)
 GKE_AUTOPILOT_VALUES="$ROOT_DIR/apps/_infra/deploy-k8s/platform/values/postgres-gke-autopilot.yaml"
 
 helm lint "$CHART" "${COMMON_VALUES[@]}" >/dev/null
@@ -73,6 +74,10 @@ grep -q 'max_connections: "80"' "$OUTPUT"
 test "$(grep -c '^kind: Database$' "$OUTPUT")" -eq 2
 test "$(grep -c 'helm.sh/resource-policy: keep' "$OUTPUT")" -eq 3
 grep -q '^kind: Job$' "$OUTPUT"
+if grep -q 'name: opencrane-postgres-database-migration' "$OUTPUT"; then
+  echo "fresh/current render unexpectedly created a database migration workload" >&2
+  exit 1
+fi
 grep -q 'helm.sh/hook: post-install,post-upgrade' "$OUTPUT"
 grep -q 'activeDeadlineSeconds: 330' "$OUTPUT"
 test "$(grep -c 'app.kubernetes.io/component: postgres-database-privileges' "$OUTPUT")" -ge 2
@@ -82,8 +87,8 @@ grep -q -- '--single-transaction' "$OUTPUT"
 test "$(grep -c 'until psql' "$OUTPUT")" -eq 3
 test "$(grep -c 'cpu: 50m' "$OUTPUT")" -eq 3
 test "$(grep -c 'memory: 64Mi' "$OUTPUT")" -eq 3
-grep -q 'until recorded_baseline=' "$OUTPUT"
-grep -q "Timed out reading the target baseline from logical database" "$OUTPUT"
+grep -q 'until recorded_origin=' "$OUTPUT"
+grep -q "Timed out proving schema convergence for logical database" "$OUTPUT"
 grep -q "Timed out applying privileges for logical database" "$OUTPUT"
 grep -q 'name: "postgres-admin-bootstrap"' "$OUTPUT"
 grep -q 'name: "opencrane_database_admin"' "$OUTPUT"
@@ -119,15 +124,59 @@ grep -q 'method: plugin' "$OUTPUT"
 grep -q 'app.kubernetes.io/component: opencrane-server' "$OUTPUT"
 grep -q 'app.kubernetes.io/component: mcp-gateway' "$OUTPUT"
 grep -q 'app.kubernetes.io/component: litellm' "$OUTPUT"
-grep -q 'name: EXPECTED_BASELINE_SHA256' "$OUTPUT"
-grep -q 'value: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"' "$OUTPUT"
+grep -q 'name: CURRENT_SCHEMA_VERSION' "$OUTPUT"
+grep -q 'name: TARGET_BASELINE_SHA256' "$OUTPUT"
+grep -q 'name: CURRENT_PROTECTED_BASELINE_SHA256' "$OUTPUT"
 grep -q 'SELECT "baseline_sha256" FROM "opencrane_bootstrap"."target_baseline"' "$OUTPUT"
-grep -q 'records baseline.*but.*is required' "$OUTPUT"
+grep -q 'is not an exact fresh or migrated' "$OUTPUT"
 
 if grep -qE '^kind: (ServiceAccount|Role|RoleBinding|ClusterRole|ClusterRoleBinding)$' "$OUTPUT"; then
   echo "postgres chart must not duplicate the deterministic CloudNativePG runtime identity" >&2
   exit 1
 fi
+
+MIGRATION_OUTPUT="$(mktemp)"
+trap 'rm -f "$OUTPUT" "$MIGRATION_OUTPUT"' EXIT
+helm template opencrane-postgres "$CHART" --namespace opencrane \
+  "${COMMON_VALUES[@]}" "${MIGRATION_VALUES[@]}" >"$MIGRATION_OUTPUT"
+MIGRATION_JOB="$(awk 'BEGIN { RS="---" } /kind: Job/ && /name: opencrane-postgres-database-migration/ { print }' "$MIGRATION_OUTPUT")"
+MIGRATION_POLICY="$(awk 'BEGIN { RS="---" } /kind: NetworkPolicy/ && /name: opencrane-postgres-database-migration/ { print }' "$MIGRATION_OUTPUT")"
+[[ -n "$MIGRATION_JOB" && -n "$MIGRATION_POLICY" ]]
+grep -q 'helm.sh/hook: post-install,post-upgrade' <<<"$MIGRATION_JOB"
+grep -q 'helm.sh/hook-weight: "-20"' <<<"$MIGRATION_JOB"
+grep -q 'backoffLimit: 0' <<<"$MIGRATION_JOB"
+grep -q 'activeDeadlineSeconds: 930' <<<"$MIGRATION_JOB"
+grep -q 'ttlSecondsAfterFinished: 86400' <<<"$MIGRATION_JOB"
+grep -q 'automountServiceAccountToken: false' <<<"$MIGRATION_JOB"
+grep -q 'readOnlyRootFilesystem: true' <<<"$MIGRATION_JOB"
+grep -q 'runAsNonRoot: true' <<<"$MIGRATION_JOB"
+grep -q 'emptyDir:' <<<"$MIGRATION_JOB"
+grep -q 'sha256sum /migration/migration.sql' <<<"$MIGRATION_JOB"
+grep -q 'migration_sql_sha256=' <<<"$MIGRATION_JOB"
+grep -q 'ghcr.io/cloudnative-pg/postgresql@sha256:b1deeed2aa998b2f381e39c5cadb9ec06127708c8bd62965743af19abf21628f' <<<"$MIGRATION_JOB"
+grep -q 'ingress: \[\]' <<<"$MIGRATION_POLICY"
+grep -q 'cnpg.io/cluster: opencrane-postgres' <<<"$MIGRATION_POLICY"
+grep -q 'port: 5432' <<<"$MIGRATION_POLICY"
+grep -q 'port: 53' <<<"$MIGRATION_POLICY"
+if grep -qE '^kind: (Role|RoleBinding|ClusterRole|ClusterRoleBinding)$' "$MIGRATION_OUTPUT"; then
+  echo "database migration Job received Kubernetes RBAC" >&2
+  exit 1
+fi
+test "$(grep -c '^kind: ServiceAccount$' "$MIGRATION_OUTPUT")" -eq 1
+grep -q 'app.kubernetes.io/component: postgres-database-migration' <<<"$INSTANCE_POLICY$(cat "$MIGRATION_OUTPUT")"
+grep -q 'helm.sh/hook-weight: "-10"' "$MIGRATION_OUTPUT"
+grep -q 'sql_sha256' "$MIGRATION_OUTPUT"
+
+if helm template invalid-migration-image "$CHART" "${COMMON_VALUES[@]}" "${MIGRATION_VALUES[@]}" \
+  --set-string migration.image=ghcr.io/cloudnative-pg/postgresql:17.5 >/dev/null 2>&1; then
+  echo "postgres chart accepted a tag-only database migration image" >&2
+  exit 1
+fi
+
+RESTORE_MIGRATION_OUTPUT="$(helm template restored-previous "$CHART" "${COMMON_VALUES[@]}" "${MIGRATION_VALUES[@]}" \
+  --set restore.enabled=true --set-string restore.plugin.name=barman-cloud.cloudnative-pg.io)"
+grep -q '^    recovery:' <<<"$RESTORE_MIGRATION_OUTPUT"
+grep -q 'helm.sh/hook: post-install,post-upgrade' <<<"$RESTORE_MIGRATION_OUTPUT"
 
 if helm template invalid "$CHART" >/dev/null 2>&1; then
   echo "postgres chart accepted missing database credentials" >&2
@@ -224,7 +273,7 @@ helm template restored "$CHART" \
 grep -q 'source: "source"' "$OUTPUT"
 grep -q 'targetTime: "2026-07-18T00:00:00Z"' "$OUTPUT"
 grep -q 'barmanObjectName: opencrane-postgres' "$OUTPUT"
-grep -q 'name: EXPECTED_BASELINE_SHA256' "$OUTPUT"
+grep -q 'name: CURRENT_PROTECTED_BASELINE_SHA256' "$OUTPUT"
 if grep -q 'postInitApplicationSQLRefs:' "$OUTPUT"; then
   echo "postgres recovery must not attach the fresh-database baseline" >&2
   exit 1
@@ -248,7 +297,9 @@ if helm template restored-without-baseline-proof "$CHART" \
 fi
 
 deploy_script="$ROOT_DIR/apps/_infra/deploy-k8s/platform/k8s-deploy.sh"
+orchestrator="$ROOT_DIR/apps/_infra/deploy-k8s/platform/database-migration-orchestrator.sh"
 grep -q 'POSTGRES_BASELINE_SHA256=.*opencrane\\.ai/baseline-sha256' "$deploy_script"
-grep -q 'bootstrap.targetBaseline.sha256=$POSTGRES_BASELINE_SHA256' "$deploy_script"
+grep -q 'bootstrap.targetBaseline.sha256=$POSTGRES_BOOTSTRAP_BASELINE_SHA256' "$orchestrator"
+grep -q 'refusing to rewrite Cluster bootstrap provenance' "$deploy_script"
 
 echo "postgres Helm contract: PASS"

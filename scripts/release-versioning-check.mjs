@@ -1,0 +1,108 @@
+#!/usr/bin/env node
+import { execFileSync } from "node:child_process";
+import { existsSync, readFileSync } from "node:fs";
+import { join, resolve } from "node:path";
+import { releaseStampComparable, validateWorkspace } from "./release-versioning/core.mjs";
+
+function _Argument(name)
+{
+	const index = process.argv.indexOf(name);
+	return index >= 0 ? process.argv[index + 1] : null;
+}
+
+function _GitFiles(args)
+{
+	try
+	{
+		return execFileSync("git", args, { encoding: "utf8" }).trim().split("\n").filter(Boolean);
+	}
+	catch (error)
+	{
+		throw new Error(`git ${args.join(" ")} failed: ${error.message}`);
+	}
+}
+
+function _ChangedFiles(bases)
+{
+	const files = new Set([
+		..._GitFiles(["diff", "--name-only"]),
+		..._GitFiles(["diff", "--cached", "--name-only"]),
+		..._GitFiles(["ls-files", "--others", "--exclude-standard"]),
+	]);
+	for (const base of bases)
+		for (const file of _GitFiles(["diff", "--name-only", `${base}...HEAD`])) files.add(file);
+	return [...files];
+}
+
+function _BaseText(base, file)
+{
+	try
+	{
+		return execFileSync("git", ["show", `${base}:${file}`], {
+			encoding: "utf8",
+			stdio: ["ignore", "pipe", "ignore"],
+		});
+	}
+	catch
+	{
+		return null;
+	}
+}
+
+function _ExistingReleaseTag(version)
+{
+	for (const tag of [version, `v${version}`])
+	{
+		try
+		{
+			execFileSync("git", ["show-ref", "--verify", "--quiet", `refs/tags/${tag}`]);
+			return tag;
+		}
+		catch
+		{
+			// Try the other repository tag convention.
+		}
+	}
+	return null;
+}
+
+function _StampOnlyFiles(repositoryRoot, base, changedFiles)
+{
+	const files = [];
+	for (const file of changedFiles)
+	{
+		const currentPath = join(repositoryRoot, file);
+		if (!existsSync(currentPath)) continue;
+		const previous = _BaseText(base, file);
+		if (previous === null) continue;
+		const current = readFileSync(currentPath, "utf8");
+			if (releaseStampComparable(file, previous) === releaseStampComparable(file, current)) files.push(file);
+	}
+	return files;
+}
+
+const repositoryRoot = resolve(new URL(".", import.meta.url).pathname, "..");
+const base = _Argument("--base");
+if (!base) throw new Error("--base requires an exact Git commit or ref");
+_GitFiles(["rev-parse", "--verify", `${base}^{commit}`]);
+const rootVersion = JSON.parse(readFileSync(join(repositoryRoot, "package.json"), "utf8")).version;
+const releaseManifest = JSON.parse(readFileSync(join(repositoryRoot, "releases", `${rootVersion}.json`), "utf8"));
+const versionBase = releaseManifest.previousRepositoryVersion;
+if (versionBase) _GitFiles(["rev-parse", "--verify", `${versionBase}^{commit}`]);
+const releaseTag = _ExistingReleaseTag(rootVersion);
+const changedFiles = _ChangedFiles([...new Set([base, versionBase, releaseTag].filter(Boolean))]);
+const newFiles = changedFiles.filter((file) => _BaseText(base, file) === null);
+const errors = await validateWorkspace(
+	repositoryRoot,
+	changedFiles,
+	null,
+	_StampOnlyFiles(repositoryRoot, versionBase ?? base, changedFiles),
+	newFiles,
+	releaseTag,
+);
+if (errors.length > 0)
+{
+	for (const error of errors) console.error(`release-versioning: ${error}`);
+	process.exitCode = 1;
+}
+else console.log("release-versioning: PASS");

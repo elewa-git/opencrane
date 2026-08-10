@@ -2,6 +2,7 @@
   "name": "artifact-preprocessor",
   "$schema": "../../node_modules/nx/schemas/project-schema.json",
   "projectType": "application",
+  "metadata": { "release": { "adaptedVersion": "0.8.0" } },
   "sourceRoot": "apps/artifact-preprocessor/src",
   "tags": ["type:app", "layer:entrypoint", "scope:artifacts"],
   "targets": {

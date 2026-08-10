@@ -172,11 +172,39 @@ kubectl wait --for=condition=Ready cluster/opencrane-postgres \
   --namespace opencrane --timeout=5m
 ```
 
+For normal installs and upgrades, use `apps/_infra/deploy-k8s/deploy.sh` with the release-version
+flags rather than invoking this chart directly; the wrapper owns fencing, backup evidence, immutable
+SQL publication, migration ordering, and recovery.
+
 The chart requires exactly one target baseline for `initdb` and renders no SQL reference on
 `recovery`. Both paths require the full expected digest. A hook reads the protected marker restored
-inside the application database and fails when it differs, so a caller cannot relabel an incompatible
-backup as current. A changed baseline does not update a running Cluster: recreate an empty database
-or restore a compatible physical backup. The k3d acceptance path server-dry-runs both contracts against the pinned CNPG CRDs, installs a pinned
+inside the application database and accepts only a fresh current origin or the exact latest migration
+history row, including its reviewed SQL digest. A caller therefore cannot relabel an incompatible or
+partially migrated backup as current. Existing databases advance only through the exact reviewed
+adjacent migration bound by the immutable repository release manifest. The chart owns the bounded
+migration Job; the server never migrates on startup.
+
+The deploy entrypoint requires `--release-version` and `--from-release-version`. Use `fresh` only for
+an empty initdb install; use the exact current version to restore or reconcile a current database, and
+the exact prior adjacent minor version to restore or upgrade that version. Patch, skipped-minor, major,
+and unknown paths fail before mutation. For an automatic prior-minor upgrade, the deploy owner:
+
+1. scales the old server to zero through its Helm release and persists a visible migration fence;
+2. requires a chart-owned plugin-backed `ScheduledBackup`, creates an immediate CNPG `Backup`, and
+   waits for `status.phase=completed`;
+3. publishes the reviewed SQL as an immutable, content-addressed ConfigMap and verifies its bytes;
+4. runs the digest-pinned, zero-RBAC app-owner Job with deadline, no retry, read-only root, scratch,
+   and egress limited to DNS plus the exact CNPG pods on TCP 5432; and
+5. runs schema convergence before database privilege reconciliation, then restores the previous
+   replica count only after the whole migration succeeds.
+
+Failed migration or convergence leaves `migrationFence.active=true` and the server at zero replicas.
+Recovery is backup restore or a reviewed forward repair; do not clear the fence by scaling with
+`kubectl`. The executor image defaults to the reviewed digest-qualified CNPG PostgreSQL 17.5 image;
+`OPENCRANE_POSTGRES_MIGRATION_IMAGE` or `--postgres-migration-image` may override it only with another
+exact `@sha256:` identity.
+
+The k3d acceptance path server-dry-runs both contracts against the pinned CNPG CRDs, installs a pinned
 Barman Cloud plugin and MinIO test target, writes a marker, completes an on-demand physical backup,
 recovers a fresh Cluster, proves a false baseline claim is rejected, and verifies the data marker
 through the recovered application Secret.
