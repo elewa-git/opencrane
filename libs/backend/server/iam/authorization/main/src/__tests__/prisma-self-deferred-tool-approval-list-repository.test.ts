@@ -1,7 +1,7 @@
 import { ApprovalRequestState, type PrismaClient } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
 
-import { PrismaSelfDeferredToolApprovalListRepository } from "../prisma-self-deferred-tool-approval-list-repository.js";
+import { PrismaSelfDeferredToolApprovalReadUnitOfWork } from "../prisma-self-deferred-tool-approval-list-repository.js";
 
 /** Creates only the actor-safe persisted fields for one deferred tool interrupt. */
 function _approvalRow(state: ApprovalRequestState = ApprovalRequestState.Pending)
@@ -28,7 +28,7 @@ describe("Prisma self deferred tool approval list repository", function _suite()
 		const findMany = vi.fn().mockResolvedValue([_approvalRow()]);
 		const membership = vi.fn().mockResolvedValue({ id: "membership-1" });
 		const prisma = _prisma({ orgMembership: { findFirst: membership }, approvalRequest: { findMany } });
-		const repository = new PrismaSelfDeferredToolApprovalListRepository(prisma);
+		const repository = new PrismaSelfDeferredToolApprovalReadUnitOfWork(prisma);
 		const now = new Date("2026-07-26T12:00:00.000Z");
 
 		await expect(repository.listPendingOwned("silo-1", "user-1", now)).resolves.toEqual([_expected()]);
@@ -42,7 +42,7 @@ describe("Prisma self deferred tool approval list repository", function _suite()
 	it("reads one exact owner-bound interrupt and reports its durable state", async function _readsOwned()
 	{
 		const findFirst = vi.fn().mockResolvedValue(_approvalRow(ApprovalRequestState.Approved));
-		const repository = new PrismaSelfDeferredToolApprovalListRepository(_prisma({ orgMembership: { findFirst: vi.fn().mockResolvedValue({ id: "membership-1" }) }, approvalRequest: { findFirst } }));
+		const repository = new PrismaSelfDeferredToolApprovalReadUnitOfWork(_prisma({ orgMembership: { findFirst: vi.fn().mockResolvedValue({ id: "membership-1" }) }, approvalRequest: { findFirst } }));
 
 		await expect(repository.readOwned("interrupt-1", "silo-1", "user-1", new Date("2026-07-26T12:00:00.000Z"))).resolves.toEqual(_expected("approved"));
 		expect(findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: { id: "interrupt-1", siloId: "silo-1", subjectId: "user-1", toolInvocationRowId: { not: null } } }));
@@ -50,7 +50,7 @@ describe("Prisma self deferred tool approval list repository", function _suite()
 
 	it("derives an overdue still-pending row as expired without widening the query", async function _derivesExpiry()
 	{
-		const repository = new PrismaSelfDeferredToolApprovalListRepository(_prisma({ orgMembership: { findFirst: vi.fn().mockResolvedValue({ id: "membership-1" }) }, approvalRequest: { findFirst: vi.fn().mockResolvedValue(_approvalRow()) } }));
+		const repository = new PrismaSelfDeferredToolApprovalReadUnitOfWork(_prisma({ orgMembership: { findFirst: vi.fn().mockResolvedValue({ id: "membership-1" }) }, approvalRequest: { findFirst: vi.fn().mockResolvedValue(_approvalRow()) } }));
 		await expect(repository.readOwned("interrupt-1", "silo-1", "user-1", new Date("2026-07-26T14:00:00.000Z"))).resolves.toEqual(_expected("expired"));
 	});
 
@@ -58,7 +58,7 @@ describe("Prisma self deferred tool approval list repository", function _suite()
 	{
 		const findMany = vi.fn().mockResolvedValue([_approvalRow()]);
 		const findFirst = vi.fn().mockResolvedValue(_approvalRow());
-		const repository = new PrismaSelfDeferredToolApprovalListRepository(_prisma({ orgMembership: { findFirst: vi.fn().mockResolvedValue(null) }, approvalRequest: { findMany, findFirst } }));
+		const repository = new PrismaSelfDeferredToolApprovalReadUnitOfWork(_prisma({ orgMembership: { findFirst: vi.fn().mockResolvedValue(null) }, approvalRequest: { findMany, findFirst } }));
 
 		await expect(repository.listPendingOwned("silo-1", "user-1", new Date("2026-07-26T12:00:00.000Z"))).resolves.toEqual([]);
 		await expect(repository.readOwned("interrupt-1", "silo-1", "user-1", new Date("2026-07-26T12:00:00.000Z"))).resolves.toBeNull();

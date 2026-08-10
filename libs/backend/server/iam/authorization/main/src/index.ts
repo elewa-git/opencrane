@@ -11,10 +11,10 @@ export { __DecideDeferredToolRequest, __DeferToolRequest } from "./deferred-tool
 export { __PlanDeferredToolApprovalLifecycle } from "./deferred-tool-approval-lifecycle.js";
 export { __ProjectDeferredToolApproval, __ValidateDeferredToolArguments } from "./deferred-tool-approval-schema.js";
 export { DeferredToolApprovalLifecycleActions, DeferredToolApprovalLifecycleEvents, DeferredToolApprovalRunStates, DeferredToolApprovalStates, DeferredToolDecisionKinds } from "./deferred-tool-approval.types.js";
-export type { DecideDeferredToolRequestCommand, DecideDeferredToolRequestResult, DeferredToolApprovalDecisionRepository, DeferredToolApprovalInterruptReader, DeferredToolApprovalLifecycleInput, DeferredToolApprovalProjection, DeferToolRequestCommand, DeferToolRequestResult, ExpireDeferredToolApprovalBatchCommand, ExpireDeferredToolApprovalBatchResult, OpenDeferredToolApprovalCommand, SelfDeferredToolApproval, SelfDeferredToolApprovalListRepository } from "./deferred-tool-approval.types.js";
+export type { DecideDeferredToolRequestCommand, DecideDeferredToolRequestResult, DeferredToolApprovalDecisionRepository, DeferredToolApprovalInterruptReader, DeferredToolApprovalLifecycleInput, DeferredToolApprovalProjection, DeferToolRequestCommand, DeferToolRequestResult, ExpireDeferredToolApprovalBatchCommand, ExpireDeferredToolApprovalBatchResult, OpenDeferredToolApprovalCommand, SelfDeferredToolApproval, SelfDeferredToolApprovalListRepository, SelfDeferredToolApprovalReadUnitOfWork } from "./deferred-tool-approval.types.js";
 export { __OpenDeferredToolApproval } from "./prisma-deferred-tool-approval-opener.js";
 export { PrismaDeferredToolApprovalDecisionRepository } from "./prisma-deferred-tool-approval-decision-repository.js";
-export { PrismaSelfDeferredToolApprovalListRepository } from "./prisma-self-deferred-tool-approval-list-repository.js";
+export { PrismaSelfDeferredToolApprovalListRepository, PrismaSelfDeferredToolApprovalReadUnitOfWork } from "./prisma-self-deferred-tool-approval-list-repository.js";
 export { _CreateDeferredToolApprovalInterruptReader } from "./prisma-deferred-tool-approval-interrupt-reader.js";
 export { __CreateDeferredToolApprovalRouter } from "./deferred-tool-approval.router.js";
 export { _CreateDeferredToolApprovalRouter } from "./prisma-deferred-tool-approval.router.js";

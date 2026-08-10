@@ -2,13 +2,13 @@ import type { PrismaClient } from "@prisma/client";
 
 import { RunEventTypes, type AgUiProjectionSourceEvent, type AgUiPublicEventPayload } from "@opencrane/contracts";
 
-import { PrismaSelfDeferredToolApprovalListRepository } from "./prisma-self-deferred-tool-approval-list-repository.js";
+import { PrismaSelfDeferredToolApprovalReadUnitOfWork } from "./prisma-self-deferred-tool-approval-list-repository.js";
 import type { DeferredToolApprovalInterruptReader } from "./deferred-tool-approval.types.js";
 
 /** Compose a safe actor-only AG-UI interrupt projection over the approval authority. */
 export function _CreateDeferredToolApprovalInterruptReader(prisma: PrismaClient): DeferredToolApprovalInterruptReader
 {
-	const approvals = new PrismaSelfDeferredToolApprovalListRepository(prisma);
+	const approvals = new PrismaSelfDeferredToolApprovalReadUnitOfWork(prisma);
 	return {
 		async readOpen(command): Promise<readonly AgUiProjectionSourceEvent[]>
 		{

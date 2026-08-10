@@ -288,10 +288,23 @@ export interface SelfDeferredToolApproval
 /** Read-only persistence boundary for the signed-in owner's approval inbox and detail. */
 export interface SelfDeferredToolApprovalListRepository
 {
+	/** Proves the caller still owns an active membership in the exact silo snapshot. */
+	hasActiveMembership(siloId: string, subjectId: string): Promise<boolean>;
 	/** Lists at most fifty actionable tool approvals owned by one exact caller in one silo. */
 	listPendingOwned(siloId: string, subjectId: string, now: Date): Promise<readonly SelfDeferredToolApproval[]>;
 	/** Lists actionable interrupts for one exact owner-visible conversation. */
 	listPendingOwnedForConversation(conversationId: string, siloId: string, subjectId: string, now: Date): Promise<readonly SelfDeferredToolApproval[]>;
 	/** Reads one actor-owned tool interrupt without selecting server-only arguments or resume material. */
+	readOwned(approvalRequestId: string, siloId: string, subjectId: string, now: Date): Promise<SelfDeferredToolApproval | null>;
+}
+
+/** Atomic read boundary that snapshots membership and actor-safe approval data together. */
+export interface SelfDeferredToolApprovalReadUnitOfWork
+{
+	/** Lists actionable approvals only while the caller's membership remains active. */
+	listPendingOwned(siloId: string, subjectId: string, now: Date): Promise<readonly SelfDeferredToolApproval[]>;
+	/** Lists conversation overlays only while the caller's membership remains active. */
+	listPendingOwnedForConversation(conversationId: string, siloId: string, subjectId: string, now: Date): Promise<readonly SelfDeferredToolApproval[]>;
+	/** Reads one detail only while the caller's membership remains active. */
 	readOwned(approvalRequestId: string, siloId: string, subjectId: string, now: Date): Promise<SelfDeferredToolApproval | null>;
 }

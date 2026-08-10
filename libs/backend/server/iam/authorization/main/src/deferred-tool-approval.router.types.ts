@@ -2,7 +2,7 @@ import type { Request } from "express";
 
 import type { Logger } from "@opencrane/backend/observability";
 
-import type { DeferredToolApprovalDecisionRepository, SelfDeferredToolApprovalListRepository } from "./deferred-tool-approval.types.js";
+import type { DeferredToolApprovalDecisionRepository, SelfDeferredToolApprovalReadUnitOfWork } from "./deferred-tool-approval.types.js";
 
 /** Authenticated browser caller resolved by the composing server, never from request input. */
 export interface DeferredToolApprovalCaller
@@ -28,7 +28,7 @@ export interface DeferredToolApprovalRouterDependencies
 	/** Atomically records the decision after binding it to the durable approval owner. */
 	readonly decisions: DeferredToolApprovalDecisionRepository;
 	/** Lists only the pending approvals owned by the browser caller. */
-	readonly pendingApprovals: SelfDeferredToolApprovalListRepository;
+	readonly pendingApprovals: SelfDeferredToolApprovalReadUnitOfWork;
 	/** Supplies trusted server timestamps. */
 	readonly clock: DeferredToolApprovalClock;
 	/** Records unexpected persistence failures without logging approval payloads or tokens. */
