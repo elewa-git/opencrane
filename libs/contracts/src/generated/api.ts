@@ -719,11 +719,7 @@ export interface paths {
          */
         get: operations["listMyRuns"];
         put?: never;
-        /**
-         * Start a signed-in user's personal run from an existing conversation
-         * @description The body may name only a thread and idempotency key. The server derives the session subject, host silo, personal AgentService, signed personal membership assertion, organization, scope, dataset, and immutable run input snapshot.
-         */
-        post: operations["startMyRun"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -971,7 +967,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/me/conversations/{threadId}/events": {
+    "/me/conversations/{conversationId}/events": {
         parameters: {
             query?: never;
             header?: never;
@@ -980,11 +976,100 @@ export interface paths {
         };
         /**
          * Replay the signed-in participant's canonical conversation events
-         * @description The server derives the participant and silo from the browser session. It streams display-safe canonical events only when that participant belongs to the selected thread.
+         * @description The server derives the participant and silo from the browser session. It streams display-safe canonical events only when that participant belongs to the selected conversation.
          */
         get: operations["replayMyConversationEvents"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/conversations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List the signed-in participant's conversations */
+        get: operations["listMyConversations"];
+        put?: never;
+        /** Create one immutable-mode conversation */
+        post: operations["createMyConversation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/conversations/{conversationId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Open one participant-bound conversation */
+        get: operations["openMyConversation"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/conversations/{conversationId}/messages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Submit participant input through the immutable mode strategy
+         * @description Agent-session input is committed atomically with a governed run. Direct and ordinary group input is committed without creating an AgentRun.
+         */
+        post: operations["submitMyConversationMessage"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/conversations/{conversationId}/archive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Change participant-local archive visibility */
+        patch: operations["archiveMyConversation"];
+        trace?: never;
+    };
+    "/me/conversations/{conversationId}/close": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Permanently close one conversation */
+        post: operations["closeMyConversation"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1707,7 +1792,7 @@ export interface components {
             attempt: number;
             /** @enum {string} */
             state: "accepted" | "queued" | "assigned" | "running" | "waiting_for_approval" | "cancelling" | "completed" | "failed" | "cancelled";
-            threadId: string | null;
+            conversationId: string | null;
             agentRevisionId: string;
             /** Format: date-time */
             acceptedAt: string;
@@ -1751,7 +1836,7 @@ export interface components {
             };
             /** @enum {string} */
             state: "proposed" | "accepted" | "applied" | "rejected" | "superseded";
-            sourceThreadId: string;
+            sourceConversationId: string;
             sourceRunId: string;
             /** Format: date-time */
             proposedAt: string;
@@ -4164,93 +4249,6 @@ export interface operations {
             };
         };
     };
-    startMyRun: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": {
-                    /** @description Existing conversation thread the signed-in user participates in. */
-                    threadId: string;
-                    /** @description Caller-generated key for safe transport retries. */
-                    requestIdempotencyKey: string;
-                };
-            };
-        };
-        responses: {
-            /** @description A duplicate idempotency key returned the already-admitted run. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        runId: string;
-                    };
-                };
-            };
-            /** @description A new immutable run snapshot was accepted. */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        runId: string;
-                    };
-                };
-            };
-            /** @description The body omitted a required field or attempted to supply server-owned coordinates. */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description No browser session owns the request. */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description The thread, current personal persona, membership, dataset, or other admission evidence was unavailable. */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description The shared managed-and-personal admission capacity is full. */
-            429: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description The run admission authority was unavailable. */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-        };
-    };
     getMyRunStatus: {
         parameters: {
             query?: never;
@@ -5601,14 +5599,14 @@ export interface operations {
                 "Last-Event-ID"?: string;
             };
             path: {
-                /** @description Opaque conversation-thread identifier. */
-                threadId: string;
+                /** @description Opaque conversation identifier. */
+                conversationId: string;
             };
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description A bounded text/event-stream replay. An empty stream does not disclose whether the thread exists or belongs to another participant. */
+            /** @description A bounded text/event-stream replay. An empty stream does not disclose whether the conversation exists or belongs to another participant. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -5617,7 +5615,7 @@ export interface operations {
                     "text/event-stream": string;
                 };
             };
-            /** @description The thread identifier or replay cursor is malformed. */
+            /** @description The conversation identifier or replay cursor is malformed. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -5643,6 +5641,353 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["Error"];
                 };
+            };
+        };
+    };
+    listMyConversations: {
+        parameters: {
+            query?: {
+                includeArchived?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Participant-bound conversation summaries. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        conversations: {
+                            id: string;
+                            /** @enum {string} */
+                            mode: "agent_session" | "direct" | "group";
+                            /** @enum {string} */
+                            lifecycle: "open" | "closed";
+                            agentServiceId: string | null;
+                            participantUserIds: string[];
+                            /** Format: date-time */
+                            archivedAt: string | null;
+                            readThroughPosition: string;
+                            /** Format: date-time */
+                            updatedAt: string;
+                        }[];
+                    };
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Conversation authority unavailable. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    createMyConversation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @enum {string} */
+                    mode: "agent_session";
+                    agentServiceId: string;
+                } | {
+                    /** @enum {string} */
+                    mode: "direct";
+                    participantUserIds: string[];
+                } | {
+                    /** @enum {string} */
+                    mode: "group";
+                    participantUserIds: string[];
+                };
+            };
+        };
+        responses: {
+            /** @description Conversation created. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        conversation: {
+                            id: string;
+                            /** @enum {string} */
+                            mode: "agent_session" | "direct" | "group";
+                            /** @enum {string} */
+                            lifecycle: "open" | "closed";
+                            agentServiceId: string | null;
+                            participantUserIds: string[];
+                            /** Format: date-time */
+                            archivedAt: string | null;
+                            readThroughPosition: string;
+                            /** Format: date-time */
+                            updatedAt: string;
+                        };
+                    };
+                };
+            };
+            /** @description Invalid immutable-mode request. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description A participant or agent service is unavailable. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Conversation authority unavailable. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    openMyConversation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Conversation detail with bounded canonical message history. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Conversation unavailable. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Conversation authority unavailable. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    submitMyConversationMessage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    idempotencyKey: string;
+                    blocks: {
+                        id: string;
+                        /** @enum {string} */
+                        kind: "text" | "artifact";
+                        value: string;
+                    }[];
+                };
+            };
+        };
+        responses: {
+            /** @description Exact idempotent retry returned the canonical message. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Message accepted. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid message body. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Conversation unavailable. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Closed, active-run, mode, or idempotency conflict. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Admission authority unavailable. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    archiveMyConversation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    archived: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description Participant archive visibility changed. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid archive request. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Conversation unavailable. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Conversation authority unavailable. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    closeMyConversation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Conversation permanently closed. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Conversation unavailable. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description An active foreground run prevents closure. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Conversation authority unavailable. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

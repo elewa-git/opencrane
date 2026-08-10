@@ -33,7 +33,7 @@ spec:
       http:
         paths:
           # Same-origin hosting: server health at /healthz, the OpenCrane API under /api, the
-          # bounded channel HTTP/SSE endpoints under /v1, and the org-admin SPA under /. One origin gives the channel
+          # bounded channel SSE endpoint under /v1, and the org-admin SPA under /. One origin gives the channel
           # proxy first-party session cookies without CORS. Helm OWNS these rules,
           # so the frontend layer never has to kubectl-patch the Ingress out-of-band (that
           # patch fought `helm upgrade` via an SSA field-manager conflict and reverted on
@@ -53,13 +53,6 @@ spec:
                 port:
                   number: {{ .Values.clustertenantManager.service.port }}
           {{- if .Values.channelProxy.enabled }}
-          - path: /v1/commands
-            pathType: Exact
-            backend:
-              service:
-                name: {{ include "opencrane.fullname" . }}-channel-proxy
-                port:
-                  number: {{ .Values.channelProxy.service.port }}
           - path: /v1/events
             pathType: Exact
             backend:

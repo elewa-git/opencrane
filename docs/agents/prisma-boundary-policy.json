@@ -17,6 +17,13 @@
         "constructs": []
       },
       {
+        "path": "libs/backend/agents/personal/configuration/main/src/proposal/prisma-personal-configuration-proposal-repository.ts",
+        "adapter": "PrismaPersonalConfigurationProposalRepository",
+        "contract": "PersonalConfigurationProposalRepository",
+        "contractImportPath": "./personal-configuration-proposal-unit-of-work.types.js",
+        "constructs": []
+      },
+      {
         "path": "libs/backend/agents/personal/configuration/main/src/persona-refresh/prisma-personal-configuration-persona-refresh-repository.ts",
         "adapter": "PrismaPersonalConfigurationPersonaRefreshRepository",
         "contract": "PersonalConfigurationPersonaRefreshRepository",
@@ -209,11 +216,37 @@
         "constructs": []
       },
       {
-        "path": "libs/backend/server/agents/conversation-replay/main/src/prisma-conversation-replay-repository.ts",
-        "adapter": "_PrismaConversationReplayRepository",
+        "path": "libs/backend/server/agents/channel-targets/main/src/prisma-channel-target-authority.ts",
+        "adapter": "PrismaChannelTargetAuthorityTransactionRepository",
+        "contract": "ChannelTargetAuthorityRepository",
+        "contractImportPath": "./channel-target-resolution.types.js",
+        "constructs": []
+      },
+      {
+        "path": "libs/backend/server/conversations/main/src/prisma-conversation-replay-repository.ts",
+        "adapter": "PrismaConversationReplayRepository",
         "contract": "ConversationReplayRepository",
         "contractImportPath": "./replay-reader.types.js",
         "constructs": []
+      },
+      {
+        "path": "libs/backend/server/conversations/main/src/prisma-conversation-query-repository.ts",
+        "adapter": "PrismaConversationQueryRepository",
+        "contract": "ConversationQueryRepository",
+        "contractImportPath": "./prisma-conversation-query-repository.types.js",
+        "constructs": []
+      },
+      {
+        "path": "libs/backend/server/conversations/main/src/prisma-conversation-mutation-repository.ts",
+        "adapter": "PrismaConversationMutationRepository",
+        "contract": "ConversationMutationRepository",
+        "contractImportPath": "./prisma-conversation-mutation-repository.types.js",
+        "constructs": [
+          {
+            "adapter": "PrismaConversationQueryRepository",
+            "importPath": "./prisma-conversation-query-repository.js"
+          }
+        ]
       },
       {
         "path": "libs/backend/server/agents/onboarding/main/src/prisma-user-onboarding-repository.ts",
@@ -276,6 +309,13 @@
         "adapter": "PrismaPersonalRunAdmissionRepository",
         "contract": "PersonalRunAdmissionReadRepository",
         "contractImportPath": "./personal-run-admission.types.js",
+        "constructs": []
+      },
+      {
+        "path": "libs/backend/agents/execution/inputs/main/src/prisma-conversation-context-repository.ts",
+        "adapter": "PrismaConversationContextRepository",
+        "contract": "ConversationContextRepository",
+        "contractImportPath": "./session-assembly.types.js",
         "constructs": []
       },
       {
@@ -401,6 +441,18 @@
         ]
       },
       {
+        "path": "libs/backend/server/agents/channel-targets/main/src/prisma-channel-target-authority.ts",
+        "adapter": "PrismaChannelTargetAuthorityUnitOfWork",
+        "contract": "ChannelTargetAuthorityUnitOfWork",
+        "contractImportPath": "./channel-target-resolution.types.js",
+        "constructs": [
+          {
+            "adapter": "PrismaChannelTargetAuthorityTransactionRepository",
+            "importPath": "<same-file>"
+          }
+        ]
+      },
+      {
         "path": "libs/backend/server/agents/scheduling/main/src/prisma-schedule-tick-unit-of-work.ts",
         "adapter": "PrismaScheduleTickerUnitOfWork",
         "contract": "ScheduleTickerUnitOfWork",
@@ -477,6 +529,34 @@
         ]
       },
       {
+        "path": "libs/backend/server/conversations/main/src/prisma-conversation-replay-unit-of-work.ts",
+        "adapter": "PrismaConversationReplayUnitOfWork",
+        "contract": "ConversationReplayUnitOfWork",
+        "contractImportPath": "./replay-reader.types.js",
+        "constructs": [
+          {
+            "adapter": "PrismaConversationReplayRepository",
+            "importPath": "./prisma-conversation-replay-repository.js"
+          }
+        ]
+      },
+      {
+        "path": "libs/backend/server/conversations/main/src/prisma-conversation-unit-of-work.ts",
+        "adapter": "PrismaConversationUnitOfWork",
+        "contract": "ConversationUnitOfWork",
+        "contractImportPath": "./conversation-authority.types.js",
+        "constructs": [
+          {
+            "adapter": "PrismaConversationMutationRepository",
+            "importPath": "./prisma-conversation-mutation-repository.js"
+          },
+          {
+            "adapter": "PrismaConversationQueryRepository",
+            "importPath": "./prisma-conversation-query-repository.js"
+          }
+        ]
+      },
+      {
         "path": "libs/backend/server/iam/authorization/main/src/prisma-share-authorization-unit-of-work.ts",
         "adapter": "PrismaShareAuthorizationUnitOfWork",
         "contract": "ShareAuthorizationUnitOfWork",
@@ -514,7 +594,9 @@
 		"libs/backend/agents/execution/inputs/main/src/prisma-session-assembly-authorities.ts",
 		"libs/backend/agents/execution/admission/main/src/personal-run-admission.composition.ts",
 		"libs/backend/server/agents/artifacts/main/src/prisma-artifact-authority.composition.ts",
-		"libs/backend/server/agents/conversation-replay/main/src/prisma-conversation-replay-repository.ts",
+		"libs/backend/server/conversations/main/src/prisma-conversation-replay.composition.ts",
+		"libs/backend/server/conversations/main/src/prisma-self-conversation-replay.router.ts",
+		"libs/backend/server/conversations/main/src/prisma-self-conversations.router.ts",
 		"libs/backend/server/agents/onboarding/main/src/prisma-user-onboarding-repository.ts",
 		"libs/backend/server/agents/skills/main/src/prisma-skill-catalogue.router.ts",
 		"libs/backend/server/iam/identity/main/src/oidc.service.ts",

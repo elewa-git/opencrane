@@ -1,7 +1,7 @@
 import { createServer } from "node:http";
 import type { IncomingHttpHeaders, IncomingMessage, Server, ServerResponse } from "node:http";
 
-import { __FixedWindowRateLimiter, __ForwardCommand, __OpenCraneTargetResolver, __RelayEvents } from "@opencrane/backend/channel-proxy";
+import { __FixedWindowRateLimiter, __OpenCraneTargetResolver, __RelayEvents } from "@opencrane/backend/channel-proxy";
 import type { ChannelProxyDependencies } from "@opencrane/backend/channel-proxy";
 import { ___DoWithTrace } from "@opencrane/backend/observability";
 import type { ChannelProxyProcessConfig } from "./config.types.js";
@@ -30,7 +30,7 @@ export function _CreateServer(config: ChannelProxyProcessConfig): Server
 	});
 }
 
-/** Route probes, command forwarding and SSE relay without adding product authority. */
+/** Route probes and SSE relay without adding product authority. */
 async function _HandleRequest(request: IncomingMessage, response: ServerResponse, dependencies: ChannelProxyDependencies): Promise<void>
 {
 	const path = new URL(request.url ?? "/", "http://localhost").pathname;
@@ -41,14 +41,13 @@ async function _HandleRequest(request: IncomingMessage, response: ServerResponse
 			_WriteResponse(response, new Response(null, { status: 204 }));
 			return;
 		}
-		if (path !== "/v1/commands" && path !== "/v1/events")
+		if (path !== "/v1/events")
 		{
 			_WriteResponse(response, Response.json({ error: "not_found" }, { status: 404 }));
 			return;
 		}
 
-		// 1. Adapt the bounded public request to the Web Request contract used by the domain library.
-		const body = request.method === "GET" || request.method === "HEAD" ? undefined : await _ReadBody(request, dependencies.config.maxCommandBytes);
+		// 1. Adapt the event request to the Web Request contract used by the domain library.
 		const abort = new AbortController();
 		response.on("close", function _onClose()
 		{
@@ -57,10 +56,10 @@ async function _HandleRequest(request: IncomingMessage, response: ServerResponse
 				abort.abort(new Error("downstream disconnected"));
 			}
 		});
-		const webRequest = new Request(`https://${request.headers.host ?? "invalid"}${request.url ?? "/"}`, { method: request.method, headers: _ToHeaders(request.headers), body: body ? Uint8Array.from(body).buffer : undefined, signal: abort.signal });
+		const webRequest = new Request(`https://${request.headers.host ?? "invalid"}${request.url ?? "/"}`, { method: request.method, headers: _ToHeaders(request.headers), signal: abort.signal });
 
-		// 2. Dispatch only the canonical HTTP command and SSE endpoints.
-		const webResponse = path === "/v1/commands" ? await __ForwardCommand(webRequest, dependencies) : await __RelayEvents(webRequest, dependencies);
+		// 2. Dispatch only the canonical SSE endpoint.
+		const webResponse = await __RelayEvents(webRequest, dependencies);
 
 		// 3. Stream the bounded response back while preserving downstream disconnect cancellation.
 		await _WriteResponse(response, webResponse);
@@ -70,32 +69,13 @@ async function _HandleRequest(request: IncomingMessage, response: ServerResponse
 		log.error({ err: error, method: request.method, path }, "channel request failed");
 		if (!response.headersSent)
 		{
-			const status = error instanceof RangeError ? 413 : 500;
-			_WriteResponse(response, Response.json({ error: status === 413 ? "command_too_large" : "internal_error" }, { status }));
+			_WriteResponse(response, Response.json({ error: "internal_error" }, { status: 500 }));
 		}
 		else
 		{
 			response.destroy(error instanceof Error ? error : new Error("channel proxy response failed"));
 		}
 	}
-}
-
-/** Read one command body while enforcing a hard adapter-level byte cap. */
-async function _ReadBody(request: IncomingMessage, maxBytes: number): Promise<Buffer>
-{
-	const chunks: Uint8Array[] = [];
-	let total = 0;
-	for await (const chunk of request)
-	{
-		const bytes = typeof chunk === "string" ? Buffer.from(chunk) : chunk;
-		total += bytes.byteLength;
-		if (total > maxBytes)
-		{
-			throw new RangeError("command body exceeds configured byte bound");
-		}
-		chunks.push(bytes);
-	}
-	return Buffer.concat(chunks, total);
 }
 
 /** Convert Node's multi-value request headers without inventing trusted identity headers. */

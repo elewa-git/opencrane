@@ -1,16 +1,10 @@
-/** Configuration shared by command and event forwarding. */
+/** Configuration for bounded authorized event forwarding. */
 export interface ChannelProxyConfig
 {
 	/** Exact HTTPS browser origins allowed to use the proxy. */
 	allowedOrigins: ReadonlySet<string>;
 	/** Internal DNS suffixes to which an authorized route may point. */
 	allowedTargetHostSuffixes: readonly string[];
-	/** Maximum accepted command body size in bytes. */
-	maxCommandBytes: number;
-	/** Maximum command response body size in bytes. */
-	maxCommandResponseBytes: number;
-	/** Maximum duration of a command request in milliseconds. */
-	commandTimeoutMs: number;
 	/** Maximum time to establish an SSE upstream in milliseconds. */
 	streamConnectTimeoutMs: number;
 	/** Maximum duration of an SSE relay in milliseconds. */
@@ -37,12 +31,10 @@ export interface TargetResolutionRequest
 {
 	/** Delegated browser identity inputs. */
 	session: DelegatedSession;
-	/** Stable target-neutral operation name. */
-	action: "command.forward" | "events.read";
-	/** Canonical thread selected by the caller for either a command or event read. */
-	threadId: string;
-	/** Caller-supplied key that makes one retried command delivery addressable without trusting its body. */
-	requestIdempotencyKey?: string;
+	/** Stable event-read operation name. */
+	action: "events.read";
+	/** Canonical conversation selected by the caller. */
+	conversationId: string;
 	/** Persisted event cursor selected by the caller. */
 	cursor?: string;
 }

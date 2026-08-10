@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { AgentServiceKinds, ApprovalStatus, MemoryFactProvenanceSourceKinds, RunInputSnapshotIdentityKinds } from "../index.js";
-import type { AgentRun, AgentService, Approval, AuthorizationGrant, RunEvent, SignedFleetMembershipRevision } from "../index.js";
+import { AgentServiceKinds, ApprovalStatus, ConversationLifecycles, ConversationModes, MemoryFactProvenanceSourceKinds, RunInputSnapshotIdentityKinds } from "../index.js";
+import type { AgentRun, AgentService, Approval, AuthorizationGrant, Conversation, RunEvent, SignedFleetMembershipRevision } from "../index.js";
 
 describe("canonical model exports", function ()
 {
@@ -41,7 +41,7 @@ describe("canonical model exports", function ()
       siloId: "silo-1",
       agentServiceId: service.id,
       agentRevisionId: "revision-1",
-      threadId: "thread-1",
+      conversationId: "conversation-1",
       trigger: "interactive",
       delegatedUserId: "user-1",
       requestIdempotencyKey: "request-1",
@@ -60,6 +60,23 @@ describe("canonical model exports", function ()
 
     expect(event.runId).toBe(approval.runId);
     expect(run.agentServiceId).toBe(service.id);
+  });
+
+  it("re-exports the canonical immutable-mode conversation model", function ()
+  {
+    const conversation: Conversation = {
+      id: "conversation-1",
+      siloId: "silo-1",
+      mode: ConversationModes.AgentSession,
+      lifecycle: ConversationLifecycles.Open,
+      agentServiceId: "agent-1",
+      contextRevisionId: null,
+      closedAt: null,
+      createdAt: "2026-08-10T08:00:00.000Z",
+      updatedAt: "2026-08-10T08:00:00.000Z",
+    };
+
+    expect(conversation.mode).toBe("agent_session");
   });
 
   it("preserves serialized agent, identity, and memory provenance discriminants", function ()

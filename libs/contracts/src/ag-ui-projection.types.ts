@@ -1,4 +1,5 @@
 import type { RunEventType } from "@opencrane/models/agents";
+import type { ConversationId } from "@opencrane/models/conversations";
 
 /** Version of OpenCrane's intentionally small AG-UI event projection. */
 export const AG_UI_PROJECTION_VERSION = "opencrane.ag-ui.v1";
@@ -23,12 +24,12 @@ export interface AgUiProjectionSourceEvent
 {
 	/** Durable cursor selected by the server-owned replay reader. */
 	readonly cursor: string;
-	/** Thread selected by the authorized server-side replay reader. */
-	readonly threadId: string;
+	/** Conversation selected by the authorized server-side replay reader. */
+	readonly conversationId: ConversationId;
 	/** Run that owns the canonical event. */
 	readonly runId: string;
-	/** Monotonic canonical sequence used only for deterministic mapping. */
-	readonly sequence: number;
+	/** Canonical positive decimal timeline position, preserving database BigInt precision. */
+	readonly position: string;
 	/** Canonical event vocabulary, retaining unknown strings for fail-safe rendering. */
 	readonly eventType: RunEventType | (string & {});
 	/** ISO-8601 time at which the canonical event occurred. */
@@ -42,7 +43,7 @@ export interface AgUiRunStartedEvent
 {
 	/** AG-UI discriminator. */
 	readonly type: "RUN_STARTED";
-	/** Thread represented by this stream. */
+	/** AG-UI-standard thread field populated with the canonical conversation identifier. */
 	readonly threadId: string;
 	/** Run represented by this event. */
 	readonly runId: string;
@@ -53,7 +54,7 @@ export interface AgUiRunFinishedEvent
 {
 	/** AG-UI discriminator. */
 	readonly type: "RUN_FINISHED";
-	/** Thread represented by this stream. */
+	/** AG-UI-standard thread field populated with the canonical conversation identifier. */
 	readonly threadId: string;
 	/** Run represented by this event. */
 	readonly runId: string;

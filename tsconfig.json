@@ -19,8 +19,8 @@
       "@opencrane/backend/server/agents/channel-targets": [
         "./libs/backend/server/agents/channel-targets/main/src/index.ts"
       ],
-      "@opencrane/backend/server/agents/conversation-replay": [
-        "./libs/backend/server/agents/conversation-replay/main/src/index.ts"
+      "@opencrane/backend/server/conversations": [
+        "./libs/backend/server/conversations/main/src/index.ts"
       ],
       "@opencrane/backend/server/agents/onboarding": [
         "./libs/backend/server/agents/onboarding/main/src/index.ts"
@@ -120,6 +120,9 @@
       ],
       "@opencrane/models/agents": [
         "./libs/models/agents/main/src/index.ts"
+      ],
+      "@opencrane/models/conversations": [
+        "./libs/models/conversations/main/src/index.ts"
       ],
       "@opencrane/models/artifacts": [
         "./libs/models/artifacts/main/src/index.ts"

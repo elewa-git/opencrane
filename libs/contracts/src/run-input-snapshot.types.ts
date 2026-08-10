@@ -1,5 +1,6 @@
-import type { AgentRevisionId, AgentRunId, AgentServiceId, MessageId, PersonaRevisionId, ThreadId } from "@opencrane/models/agents";
+import type { AgentRevisionId, AgentRunId, AgentServiceId, PersonaRevisionId } from "@opencrane/models/agents";
 import type { ArtifactRevisionId, SkillRevisionId } from "@opencrane/models/artifacts";
+import type { ConversationId, MessageId } from "@opencrane/models/conversations";
 import type { JsonValue } from "@opencrane/util";
 import type { MemoryFactReference } from "./memory.types.js";
 
@@ -96,8 +97,8 @@ export interface RunInputSnapshot
   agentRevisionId: AgentRevisionId;
   /** Monotonically versioned snapshot contract shape. */
   snapshotVersion: number;
-  /** Thread supplying ordered conversation history, or null for a non-conversational run. */
-  threadId: ThreadId | null;
+  /** Conversation supplying ordered history, or null for a non-conversational run. */
+  conversationId: ConversationId | null;
   /** Ordered persisted messages included in the prompt. */
   messageIds: readonly MessageId[];
   /** Approved persona revision compiled into the prompt, when personal. */

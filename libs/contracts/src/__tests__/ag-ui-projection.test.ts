@@ -5,17 +5,17 @@ import { AG_UI_PROJECTION_VERSION, __EncodeAgUiSseRecord, __ProjectAgUiEvent, ty
 /** Construct one server-authorized safe source event for projection tests. */
 function _Source(eventType: AgUiProjectionSourceEvent["eventType"], payload: AgUiProjectionSourceEvent["payload"] = {}): AgUiProjectionSourceEvent
 {
-	return { cursor: "event-4", threadId: "thread-2", runId: "run-3", sequence: 4, eventType, occurredAt: "2026-07-23T00:00:00.000Z", payload };
+	return { cursor: "event-4", conversationId: "conversation-2", runId: "run-3", position: "9007199254740993", eventType, occurredAt: "2026-07-23T00:00:00.000Z", payload };
 }
 
 describe("AG-UI projection", function _Suite()
 {
-	it("projects run lifecycle events with their authorized thread and run coordinates", function _ProjectsLifecycle()
+	it("projects run lifecycle events with the standardized AG-UI thread field", function _ProjectsLifecycle()
 	{
-		expect(__ProjectAgUiEvent(_Source("run.accepted")).data).toEqual({ type: "RUN_STARTED", threadId: "thread-2", runId: "run-3" });
-		expect(__ProjectAgUiEvent(_Source("run.started")).data).toEqual({ type: "RUN_STARTED", threadId: "thread-2", runId: "run-3" });
-		expect(__ProjectAgUiEvent(_Source("run.completed")).data).toEqual({ type: "RUN_FINISHED", threadId: "thread-2", runId: "run-3" });
-		expect(__ProjectAgUiEvent(_Source("run.cancelled")).data).toEqual({ type: "RUN_FINISHED", threadId: "thread-2", runId: "run-3" });
+		expect(__ProjectAgUiEvent(_Source("run.accepted")).data).toEqual({ type: "RUN_STARTED", threadId: "conversation-2", runId: "run-3" });
+		expect(__ProjectAgUiEvent(_Source("run.started")).data).toEqual({ type: "RUN_STARTED", threadId: "conversation-2", runId: "run-3" });
+		expect(__ProjectAgUiEvent(_Source("run.completed")).data).toEqual({ type: "RUN_FINISHED", threadId: "conversation-2", runId: "run-3" });
+		expect(__ProjectAgUiEvent(_Source("run.cancelled")).data).toEqual({ type: "RUN_FINISHED", threadId: "conversation-2", runId: "run-3" });
 	});
 
 	it("projects safe message and tool identifiers but never an untrusted tool result", function _ProjectsSafeFields()
@@ -41,7 +41,7 @@ describe("AG-UI projection", function _Suite()
 	{
 		const record = __ProjectAgUiEvent(_Source("run.started"));
 		expect(AG_UI_PROJECTION_VERSION).toBe("opencrane.ag-ui.v1");
-		expect(__EncodeAgUiSseRecord(record)).toBe("id: event-4\nevent: ag-ui\ndata: {\"type\":\"RUN_STARTED\",\"threadId\":\"thread-2\",\"runId\":\"run-3\"}\n\n");
+		expect(__EncodeAgUiSseRecord(record)).toBe("id: event-4\nevent: ag-ui\ndata: {\"type\":\"RUN_STARTED\",\"threadId\":\"conversation-2\",\"runId\":\"run-3\"}\n\n");
 	});
 
 	it("refuses a cursor that could inject a second SSE field", function _RejectsInjectedCursor()

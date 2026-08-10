@@ -9,7 +9,8 @@ contract.
 | Group | Shared concern | Members |
 | --- | --- | --- |
 | [`iam`](./iam/) | Who may act, and evidence of those decisions. | identity, membership, authorization, grants, groups, audit |
-| [`agents`](./agents/) | Agent publication, onboarding, scheduling, channel admission, artifacts, and replay. | agent-services, onboarding, scheduling, skills, artifacts, channel-targets, conversation-replay |
+| [`agents`](./agents/) | Agent publication, onboarding, scheduling, channel admission, and artifacts. | agent-services, onboarding, scheduling, skills, artifacts, channel-targets |
+| [`conversations`](./conversations/main/) | Conversation membership, canonical timeline, mode-correct admission, and display-safe replay. | conversations |
 | [`gateways`](./gateways/) | Governance of external model and tool planes. | mcp, integrations, providers, model-routing |
 | [`knowledge`](./knowledge/) | Organisational retrieval and memory access. | retrieval |
 | [`tenancy`](./tenancy/) | The organisation boundary used by server capabilities. | cluster-tenants |

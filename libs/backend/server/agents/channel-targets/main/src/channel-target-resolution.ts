@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
 
-import type { AuthorizedChannelTargetResult, ChannelAuthorizedAction, ChannelOpaqueContextSource, ChannelTargetClock, ChannelTargetResolutionDependencies, DelegatedBrowserIdentityDecision, ResolveChannelTargetCommand, ResolveChannelTargetResult } from "./channel-target-resolution.types.js";
+import type { AuthorizedChannelTargetResult, ChannelOpaqueContextSource, ChannelTargetClock, ChannelTargetResolutionDependencies, DelegatedBrowserIdentityDecision, ResolveChannelTargetCommand, ResolveChannelTargetResult } from "./channel-target-resolution.types.js";
 
 /** Real wall clock for production composition. */
 export class __SystemChannelTargetClock implements ChannelTargetClock
@@ -65,22 +65,21 @@ export async function __ResolveChannelTarget(dependencies: ChannelTargetResoluti
 		return { outcome: "denied", reason: "membership_denied" };
 	}
 
-	// 5. Require an active thread bound to the same silo, service, and explicit participant.
-	const thread = await dependencies.repository.getThreadAuthority(command.threadId);
-	if (thread === null || thread.state !== "active" || thread.siloId !== hostBinding.siloId || !thread.agentServiceId.trim() || !thread.participantUserIds.includes(subjectId))
+	// 5. Require an open agent session bound to the same silo, service, and explicit participant.
+	const conversation = await dependencies.repository.getConversationAuthority(command.conversationId);
+	if (conversation === null || conversation.mode !== "agent_session" || conversation.lifecycle !== "open" || conversation.siloId !== hostBinding.siloId || !conversation.agentServiceId.trim() || !conversation.participantUserIds.includes(subjectId))
 	{
-		return { outcome: "denied", reason: "thread_denied" };
+		return { outcome: "denied", reason: "conversation_denied" };
 	}
 
-	// 6. Authorize the complete action set; command forwarding requires both message and run authority.
-	const requiredActions = _requiredActions(command.action);
+	// 6. Authorize the event-read action without manufacturing command or run authority.
 	const authorization = await dependencies.authorization.authorize({
 		subjectId,
 		siloId: hostBinding.siloId,
-		threadId: thread.threadId,
-		agentServiceId: thread.agentServiceId,
+		conversationId: conversation.conversationId,
+		agentServiceId: conversation.agentServiceId,
 		scope: hostBinding.authorizationScope,
-		requiredActions,
+		requiredActions: ["conversation.read"],
 		membershipRevision: membership.revision,
 		nowEpochMs,
 	});
@@ -89,17 +88,7 @@ export async function __ResolveChannelTarget(dependencies: ChannelTargetResoluti
 		return { outcome: "denied", reason: "authorization_denied" };
 	}
 
-	// 7. Commands require a real durable run authority. An absent/unready controller path fails closed.
-	let runId: string | null = null;
-	if (command.action === "command.forward")
-	{
-		const run = await dependencies.runStart.prepareInteractiveRun({ subjectId, siloId: hostBinding.siloId, threadId: thread.threadId, agentServiceId: thread.agentServiceId, authorizationDigest: authorization.authorizationDigest, requestIdempotencyKey: command.requestIdempotencyKey! });
-		if (run.outcome === "unavailable") return { outcome: "denied", reason: "run_unavailable" };
-		if (run.outcome !== "ready" || !run.runId.trim()) return { outcome: "denied", reason: "run_denied" };
-		runId = run.runId;
-	}
-
-	// 8. Generate an opaque context, persist only its digest, and atomically recheck every DB binding.
+	// 7. Generate an opaque context, persist only its digest, and atomically recheck every DB binding.
 	const invocationContext = dependencies.opaqueContext.create();
 	if (!/^[A-Za-z0-9_-]{43,}$/u.test(invocationContext))
 	{
@@ -111,7 +100,7 @@ export async function __ResolveChannelTarget(dependencies: ChannelTargetResoluti
 	{
 		return { outcome: "denied", reason: "membership_denied" };
 	}
-	const issued = await dependencies.repository.issueInvocationContextAtomically({ digest, subjectId, siloId: hostBinding.siloId, threadId: thread.threadId, agentServiceId: thread.agentServiceId, action: command.action, runId, membershipRevision: membership.revision, authorizationDigest: authorization.authorizationDigest, nowEpochMs, expiresAtEpochMs, allowedRouteHostSuffixes: dependencies.config.allowedRouteHostSuffixes });
+	const issued = await dependencies.repository.issueInvocationContextAtomically({ digest, subjectId, siloId: hostBinding.siloId, conversationId: conversation.conversationId, agentServiceId: conversation.agentServiceId, action: command.action, membershipRevision: membership.revision, authorizationDigest: authorization.authorizationDigest, nowEpochMs, expiresAtEpochMs, allowedRouteHostSuffixes: dependencies.config.allowedRouteHostSuffixes });
 	if (issued.status !== "issued" || !_endpointIsAllowed(issued.context.endpoint, dependencies.config.allowedRouteHostSuffixes))
 	{
 		return { outcome: "denied", reason: "route_denied" };
@@ -139,20 +128,13 @@ async function _resolveDelegatedIdentity(dependencies: ChannelTargetResolutionDe
 	return { outcome: "denied", reason: "missing_identity" };
 }
 
-/** Returns the complete product action set for one proxy operation. */
-function _requiredActions(action: ResolveChannelTargetCommand["action"]): readonly ChannelAuthorizedAction[]
-{
-	return action === "command.forward" ? ["agent.run.start", "thread.message.create"] : ["thread.read"];
-}
-
 /** Validates target-neutral request structure without interpreting credentials. */
 function _commandIsValid(command: ResolveChannelTargetCommand): boolean
 {
 	return command.workloadToken.trim().length > 0
 		&& /^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?(?::[0-9]{1,5})?$/u.test(command.trustedHost)
-		&& /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/u.test(command.threadId)
-		&& (command.action === "command.forward" || command.action === "events.read")
-		&& (command.action !== "command.forward" || (command.requestIdempotencyKey !== undefined && /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/u.test(command.requestIdempotencyKey)))
+		&& /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/u.test(command.conversationId)
+		&& command.action === "events.read"
 		&& (command.cursor === undefined || /^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/u.test(command.cursor));
 }
 

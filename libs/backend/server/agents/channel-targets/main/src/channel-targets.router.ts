@@ -22,7 +22,7 @@ export function __CreateChannelTargetsRouter(dependencies: ChannelTargetResoluti
 		const command = workloadToken === null ? null : _parseCommand(request, workloadToken);
 		if (command === null)
 		{
-			_respondProblem(response, workloadToken === null ? 401 : 400, workloadToken === null ? "workload_auth_required" : "invalid_request");
+			_respondInvalidCommand(response, workloadToken);
 			return;
 		}
 
@@ -32,9 +32,7 @@ export function __CreateChannelTargetsRouter(dependencies: ChannelTargetResoluti
 			const result = await __ResolveChannelTarget(dependencies, command);
 			if (result.outcome !== "authorized")
 			{
-				const unavailable = result.reason === "run_unavailable" || result.reason === "route_denied";
-				const unauthenticated = result.reason === "workload_denied" || result.reason === "identity_denied";
-				_respondProblem(response, unavailable ? 503 : unauthenticated ? 401 : 403, result.reason);
+				_respondProblem(response, _denialStatus(result.reason), result.reason);
 				return;
 			}
 
@@ -49,14 +47,29 @@ export function __CreateChannelTargetsRouter(dependencies: ChannelTargetResoluti
 	return router;
 }
 
+/** Maps absent workload authentication separately from a malformed authenticated command. */
+function _respondInvalidCommand(response: Response, workloadToken: string | null): void
+{
+	if (workloadToken === null) _respondProblem(response, 401, "workload_auth_required");
+	else _respondProblem(response, 400, "invalid_request");
+}
+
+/** Maps channel-target denial classes without nested conditional expressions. */
+function _denialStatus(reason: string): number
+{
+	if (reason === "route_denied") return 503;
+	if (reason === "workload_denied" || reason === "identity_denied") return 401;
+	return 403;
+}
+
 /** Parses the internal request without accepting self-asserted subject or silo fields. */
 function _parseCommand(request: Request, workloadToken: string): ResolveChannelTargetCommand | null
 {
 	if (!request.body || typeof request.body !== "object" || Array.isArray(request.body)) return null;
 	const body = request.body as Record<string, unknown>;
-	if (!_isAction(body["action"]) || typeof body["trustedHost"] !== "string" || typeof body["threadId"] !== "string" || (body["requestIdempotencyKey"] !== undefined && typeof body["requestIdempotencyKey"] !== "string") || (body["cursor"] !== undefined && typeof body["cursor"] !== "string")) return null;
+	if (!_isAction(body["action"]) || typeof body["trustedHost"] !== "string" || typeof body["conversationId"] !== "string" || body["requestIdempotencyKey"] !== undefined || (body["cursor"] !== undefined && typeof body["cursor"] !== "string")) return null;
 	const delegatedAuthorization = request.header("x-opencrane-session-authorization");
-	return { workloadToken, cookie: request.header("cookie"), delegatedAuthorization, trustedHost: body["trustedHost"], action: body["action"], threadId: body["threadId"], requestIdempotencyKey: body["requestIdempotencyKey"] as string | undefined, cursor: body["cursor"] as string | undefined };
+	return { workloadToken, cookie: request.header("cookie"), delegatedAuthorization, trustedHost: body["trustedHost"], action: body["action"], conversationId: body["conversationId"], cursor: body["cursor"] as string | undefined };
 }
 
 /** Returns a bearer value only for one unambiguous standard Authorization header. */
@@ -70,7 +83,7 @@ function _bearerValue(value: string | undefined): string | null
 /** Narrows an untrusted value to the public channel action vocabulary. */
 function _isAction(value: unknown): value is ChannelResolutionAction
 {
-	return value === "command.forward" || value === "events.read";
+	return value === "events.read";
 }
 
 /** Writes a non-sensitive internal problem response. */

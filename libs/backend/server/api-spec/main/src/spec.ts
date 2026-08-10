@@ -587,12 +587,12 @@ export const spec = {
       TokenUsage: TokenUsageSchema,
       SelfRunStatus: {
         type: "object",
-        required: ["runId", "attempt", "state", "threadId", "agentRevisionId", "acceptedAt", "finishedAt"],
+        required: ["runId", "attempt", "state", "conversationId", "agentRevisionId", "acceptedAt", "finishedAt"],
         properties: {
           runId: { type: "string" },
           attempt: { type: "integer", minimum: 1 },
           state: { type: "string", enum: ["accepted", "queued", "assigned", "running", "waiting_for_approval", "cancelling", "completed", "failed", "cancelled"] },
-          threadId: { type: "string", nullable: true },
+          conversationId: { type: "string", nullable: true },
           agentRevisionId: { type: "string" },
           acceptedAt: { type: "string", format: "date-time" },
           finishedAt: { type: "string", format: "date-time", nullable: true },
@@ -627,12 +627,12 @@ export const spec = {
       },
       PersonalConfigurationChange: {
         type: "object",
-        required: ["changeId", "requestedPatch", "state", "sourceThreadId", "sourceRunId", "proposedAt", "decidedAt", "rejectionReason"],
+        required: ["changeId", "requestedPatch", "state", "sourceConversationId", "sourceRunId", "proposedAt", "decidedAt", "rejectionReason"],
         properties: {
           changeId: { type: "string" },
           requestedPatch: { oneOf: [{ type: "object", required: ["kind"], additionalProperties: false, properties: { kind: { const: "persona_refresh" } } }, { type: "object", required: ["kind", "modelAlias"], additionalProperties: false, properties: { kind: { const: "model_alias" }, modelAlias: { type: "string", minLength: 1, maxLength: 200, pattern: ".*\\S.*" } } }] },
           state: { type: "string", enum: ["proposed", "accepted", "applied", "rejected", "superseded"] },
-          sourceThreadId: { type: "string" },
+          sourceConversationId: { type: "string" },
           sourceRunId: { type: "string" },
           proposedAt: { type: "string", format: "date-time" },
           decidedAt: { type: "string", format: "date-time", nullable: true },

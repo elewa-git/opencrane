@@ -4,11 +4,11 @@ import type { AgUiStreamState } from "@opencrane/state/conversation/ag-ui";
 export interface ConversationReplayReader
 {
 	/**
-	 * Read and validate one bounded replay page for `threadId`.
+	 * Read and validate one bounded replay page for `conversationId`.
 	 *
-	 * @param threadId - Opaque canonical conversation-thread identifier.
+	 * @param conversationId - Opaque canonical conversation identifier.
 	 * @param cursor - Opaque server-issued resume cursor, when continuing a prior replay.
 	 * @returns The display-safe browser state reduced from the authoritative SSE response.
 	 */
-	replay(threadId: string, cursor?: string): Promise<AgUiStreamState>;
+	replay(conversationId: string, cursor?: string): Promise<AgUiStreamState>;
 }
