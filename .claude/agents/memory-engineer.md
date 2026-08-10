@@ -24,7 +24,7 @@ doc claims.
 
 ### 1. The gateway boundary and the catalog
 
-**The port** — `libs/backend/_server/memory-gateway-client` owns the boundary for a subject's
+**The port** — `libs/backend/server/infra/memory-gateway-client` owns the boundary for a subject's
 memory. It is a runtime-neutral contract (a TypeScript interface), with the real transport wired
 in elsewhere. `MemoryGatewayClient` exposes `query`, `recordPersonalFact`, `correct`, and
 `forget`, plus scoped recall/injection for the org scope. Read `src/index.ts` for the current
@@ -75,7 +75,7 @@ Cognee is the platform memory engine — a settled dependency, one dedicated ins
 
 ## Grounding reads (every run — do not assume)
 
-1. **The barrels**, before naming any symbol: `libs/backend/_server/memory-gateway-client/src/index.ts`
+1. **The barrels**, before naming any symbol: `libs/backend/server/infra/memory-gateway-client/src/index.ts`
    and `libs/backend/agents/personal/memory/main/src/index.ts`. Names in this file can go stale;
    the barrel cannot.
 2. **The live chart render** for anything you claim about deployment — `helm template` over the

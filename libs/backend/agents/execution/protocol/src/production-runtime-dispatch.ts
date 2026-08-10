@@ -6,7 +6,7 @@ import { __IsUpgradeSessionAvailable, UPGRADE_SESSION_TOOL } from "@opencrane/ba
 import type { IntegrationAuthorityRepository } from "@opencrane/backend/server/gateways/integrations";
 import type { RunInputSnapshot } from "@opencrane/contracts";
 import type { Logger } from "@opencrane/backend/observability";
-import type { MemoryGatewayClient } from "@opencrane/backend/_server/memory-gateway-client";
+import type { MemoryGatewayClient } from "@opencrane/backend/server/infra/memory-gateway-client";
 
 import { __CreatePrismaRunInputCompiler } from "./prisma-run-input-compiler.js";
 import { PrismaRuntimeDispatchAuthority } from "./prisma-runtime-dispatch-authority.js";

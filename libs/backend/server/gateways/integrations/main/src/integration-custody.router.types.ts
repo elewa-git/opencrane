@@ -1,4 +1,4 @@
-import type { ObotCustodyCredential } from "@opencrane/backend/_server/obot-custody";
+import type { ObotCustodyCredential } from "@opencrane/backend/server/infra/obot-custody";
 
 /** Validated request body accepted by the org-admin custody provisioning route. */
 export interface ProvisionIntegrationCustodyRequestBody

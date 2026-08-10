@@ -76,5 +76,5 @@ non-private Cognee transport before allowing that mode; the chart currently fail
 ## See also
 
 - Parent index: [apps](../README.md)
-- Call-site client: [memory gateway client](../../libs/backend/_server/memory-gateway-client/README.md)
+- Call-site client: [memory gateway client](../../libs/backend/server/infra/memory-gateway-client/README.md)
 - Private vendor deployment: [Cognee](../_infra/cognee/README.md)

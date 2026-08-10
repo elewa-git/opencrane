@@ -1,4 +1,4 @@
-import type { ObotCustodyPort } from "@opencrane/backend/_server/obot-custody";
+import type { ObotCustodyPort } from "@opencrane/backend/server/infra/obot-custody";
 
 import type { IntegrationCustodyLogger, IntegrationCustodyRepository, ProvisionIntegrationCustodyCommand, ProvisionIntegrationCustodyResult } from "./integration-custody-provisioning.types.js";
 

@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { Prisma, type PrismaClient, type ModelRoutingDefault as PrismaModelRoutingDefault } from "@prisma/client";
 
-import { ___WithValidatedPublicBody } from "@opencrane/backend/_server/http";
+import { ___WithValidatedPublicBody } from "@opencrane/backend/server/infra/http";
 import { _ClusterTenantScopeGuard, type ClusterTenantScopedResource } from "@opencrane/backend/server/tenancy/cluster-tenants";
 import { ___ModelRoutingDefaultWriteSchema, ModelRoutingScope, type AutoRoutingConfig, type ModelRoutingDefault } from "@opencrane/contracts";
 

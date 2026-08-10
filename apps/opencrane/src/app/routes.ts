@@ -8,7 +8,7 @@ import { groupsRouter } from "@opencrane/backend/server/iam/groups";
 import { _IssueAttemptLiteLlmKey, modelRoutingDefaultsRouter } from "@opencrane/backend/server/gateways/model-routing";
 import { mcpOperatorRouter, mcpServersRouter } from "@opencrane/backend/server/gateways/mcp";
 import { _CreateIntegrationCustodyRouter } from "@opencrane/backend/server/gateways/integrations";
-import type { ObotAttemptKeyIssuer, ObotCustodyPort } from "@opencrane/backend/_server/obot-custody";
+import type { ObotAttemptKeyIssuer, ObotCustodyPort } from "@opencrane/backend/server/infra/obot-custody";
 import { providerCredentialsRouter, providerByokRouter, modelRegistryRouter } from "@opencrane/backend/server/gateways/providers";
 import { resourceSharesRouter, sharesRouter } from "@opencrane/backend/server/iam/grants";
 import { thirdPartySourcesRouter } from "@opencrane/backend/server/knowledge/retrieval";
@@ -24,15 +24,16 @@ import { _CreateSelfRunStatusRouter } from "@opencrane/backend/agents/execution/
 import { __CreatePersonalRunAdmissionRouter, type PersonalRunAdmissionPort } from "@opencrane/backend/agents/execution/admission";
 import { _CreateSkillCatalogueRouter } from "@opencrane/backend/server/agents/skills";
 import { _CreateSteeringIngestRouter } from "@opencrane/backend/agents/execution/protocol";
-import { _ResolveRequestPrincipal } from "@opencrane/backend/_server/auth";
-import { _CheckDbHealth, _OpenapiRouter, _RateLimit } from "@opencrane/backend/_server/http";
-import type { MemoryGatewayClient } from "@opencrane/backend/_server/memory-gateway-client";
+import { _ResolveRequestPrincipal } from "@opencrane/backend/server/infra/auth";
+import { _CheckDbHealth, _OpenapiRouter, _RateLimit } from "@opencrane/backend/server/infra/http";
+import type { MemoryGatewayClient } from "@opencrane/backend/server/infra/memory-gateway-client";
 
 import type { InternalRuntimeConfig } from "./config.types.js";
 import { _log } from "./log.js";
 import { _CreateInternalRuntimeComposition } from "./runtime-composition.js";
 import type { RouteMount, SharesRouteOptions } from "./routes.types.js";
 import { _CreateUserOnboardingComposition } from "./user-onboarding-composition.js";
+import { ___CreateDbHealthProbe } from "../infra/db/db.js";
 
 /**
  * Register the authenticated product API from functional route lists.
@@ -88,7 +89,7 @@ export function _RegisterRoutes(app: Express, prisma: PrismaClient, coreApi: k8s
 	];
 	const infrastructureRoutes: readonly RouteMount[] = [
 		{ method: "use", path: "/api/v1/openapi.json", handler: _OpenapiRouter(spec) },
-		{ method: "get", path: "/healthz", handler: _CheckDbHealth(prisma) },
+		{ method: "get", path: "/healthz", handler: _CheckDbHealth(___CreateDbHealthProbe(prisma)) },
 	];
 	_MountRouteAreas(app, [
 		identityAndAccessRoutes,

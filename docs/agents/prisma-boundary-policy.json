@@ -3,6 +3,13 @@
   "owners": {
     "repositories": [
       {
+        "path": "apps/opencrane/src/infra/db/db.ts",
+        "adapter": "_PrismaDbHealthProbeRepository",
+        "contract": "DbHealthProbeRepository",
+        "contractImportPath": "@opencrane/backend/server/infra/http",
+        "constructs": []
+      },
+      {
         "path": "libs/backend/agents/personal/configuration/main/src/materialization/prisma-personal-configuration-materialization.ts",
         "adapter": "PrismaPersonalConfigurationMaterializationRepository",
         "contract": "PersonalConfigurationMaterializationRepository",
@@ -132,7 +139,7 @@
         "constructs": []
       },
       {
-        "path": "libs/backend/_server/auth/src/prisma-org-membership-repository.ts",
+        "path": "libs/backend/server/infra/auth/src/prisma-org-membership-repository.ts",
         "adapter": "PrismaOrgMembershipRepository",
         "contract": "OrgMembershipRepository",
         "contractImportPath": "./org-membership.types.js",
@@ -301,6 +308,18 @@
       }
     ],
     "unitsOfWork": [
+      {
+        "path": "apps/opencrane/src/infra/db/db.ts",
+        "adapter": "_PrismaDbHealthProbeUnitOfWork",
+        "contract": "DbHealthProbeUnitOfWork",
+        "contractImportPath": "@opencrane/backend/server/infra/http",
+        "constructs": [
+          {
+            "adapter": "_PrismaDbHealthProbeRepository",
+            "importPath": "<same-file>"
+          }
+        ]
+      },
       {
         "path": "libs/backend/server/iam/identity/main/src/prisma-standalone-first-user-admission-unit-of-work.ts",
         "adapter": "PrismaStandaloneFirstUserAdmissionUnitOfWork",

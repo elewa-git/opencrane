@@ -1,4 +1,4 @@
-import type { ObotAttemptKeyIssuer, ObotCustodyPort } from "@opencrane/backend/_server/obot-custody";
+import type { ObotAttemptKeyIssuer, ObotCustodyPort } from "@opencrane/backend/server/infra/obot-custody";
 
 /** Composed Obot authorities shared by the public custody route and the runtime dispatch plane. */
 export interface ObotAdapters

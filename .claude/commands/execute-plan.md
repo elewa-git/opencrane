@@ -50,7 +50,7 @@ Before building the dependency DAG:
    `apps/_infra/<name>` root is a blocker.
 2. Place reusable logic under a functional-first library root (`libs/models`, `libs/util`,
    `libs/backend`, `libs/frontend`) and then its bounded capability. Server-only runtime adapters
-   belong under `libs/backend/_server`. Apps contain only
+   belong under `libs/backend/server/infra`. Apps contain only
    entrypoint/composition/configuration/build/deployment wiring. Models remain dependency-light and
    cannot import databases, HTTP, Kubernetes, filesystems, frameworks, or apps.
 3. Require reuse discovery before adding a new app, library, route, event/topic, chart template, or

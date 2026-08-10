@@ -1,4 +1,4 @@
-import type { ObotCustodyCredential } from "@opencrane/backend/_server/obot-custody";
+import type { ObotCustodyCredential } from "@opencrane/backend/server/infra/obot-custody";
 import type { Logger } from "@opencrane/backend/observability";
 
 /** Structured logger methods used by the custody provisioning operation. */

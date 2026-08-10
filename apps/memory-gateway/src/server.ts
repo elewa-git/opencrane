@@ -2,7 +2,7 @@ import { createServer } from "node:http";
 import type { IncomingMessage, Server, ServerResponse } from "node:http";
 
 import { ___DoWithTrace, ___DoWithoutTrace } from "@opencrane/backend/observability";
-import type { FixedServiceAccountTokenReviewer } from "@opencrane/backend/_server/workload-identity";
+import type { FixedServiceAccountTokenReviewer } from "@opencrane/backend/server/infra/workload-identity";
 
 import type { MemoryGatewayProcessConfig } from "./config.types.js";
 import { _log as log } from "./log.js";

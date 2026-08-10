@@ -178,7 +178,7 @@ to; a backend authority with a diagram lands near the top of its range and that 
 | Frontend core / platform | `libs/frontend/{core,platform}` | the cross-cutting primitives it holds, FORK-shared status | 30–55 lines |
 | Deployable app | `apps/opencrane`, `apps/opencrane-ui`, `apps/channel-proxy`, `apps/artifact-service` | what it composes, trust/runtime posture, entrypoint, deploy unit | 45–100 lines |
 | Vendored infra app | `apps/_infra/{cognee,litellm,obot}`, `apps/postgres` | upstream link, **why we run it**, pinned image/version, config knobs, what OpenCrane owns vs the vendor | 30–55 lines |
-| Server infra lib | `libs/backend/_server/*` | the runtime seam it owns, its sole consumer, what it must not import | 30–50 lines |
+| Server infra lib | `libs/backend/server/infra/*` | the runtime seam it owns, its sole consumer, what it must not import | 30–50 lines |
 | Group / area index | grouping dirs | the child map table + the tier dependency rule + a child diagram | 25–45 lines |
 
 If a README runs well past the top of its range, the fix is tighter prose per section (and dropping

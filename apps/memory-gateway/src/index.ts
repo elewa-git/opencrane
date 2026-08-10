@@ -2,7 +2,7 @@ import "./instrument.js";
 
 import * as k8s from "@kubernetes/client-node";
 import { ___BindConsole, ___ShutdownTelemetry } from "@opencrane/backend/observability";
-import { _CreateMemoryGatewayServerTokenReviewer } from "@opencrane/backend/_server/workload-identity";
+import { _CreateMemoryGatewayServerTokenReviewer } from "@opencrane/backend/server/infra/workload-identity";
 
 import { _ReadConfig } from "./config.js";
 import { _log } from "./log.js";

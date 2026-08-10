@@ -1,8 +1,8 @@
 import { IntegrationState, type PrismaClient } from "@prisma/client";
 import { Router, type Request, type Response } from "express";
 
-import { _RequireOrgAdmin, _ResolveRequestPrincipal } from "@opencrane/backend/_server/auth";
-import type { ObotCustodyCredential, ObotCustodyPort } from "@opencrane/backend/_server/obot-custody";
+import { _RequireOrgAdmin, _ResolveRequestPrincipal } from "@opencrane/backend/server/infra/auth";
+import type { ObotCustodyCredential, ObotCustodyPort } from "@opencrane/backend/server/infra/obot-custody";
 
 import { __ProvisionIntegrationCustody } from "./integration-custody-provisioning.js";
 import { PrismaIntegrationCustodyRepository } from "./prisma-integration-custody-repository.js";

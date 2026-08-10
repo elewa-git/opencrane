@@ -1,0 +1,27 @@
+{
+  "name": "backend-server-infra-auth",
+  "$schema": "../../../../../node_modules/nx/schemas/project-schema.json",
+  "projectType": "library",
+  "sourceRoot": "libs/backend/server/infra/auth/src",
+  "tags": [
+    "type:lib",
+    "layer:infra",
+    "scope:auth"
+  ],
+  "targets": {
+    "lint": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "tsc -p tsconfig.json --noEmit",
+        "cwd": "libs/backend/server/infra/auth"
+      }
+    },
+    "test": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "vitest run --passWithNoTests",
+        "cwd": "libs/backend/server/infra/auth"
+      }
+    }
+  }
+}

@@ -3,7 +3,7 @@ import type { PrismaClient } from "@prisma/client";
 import request from "supertest";
 import { describe, expect, it, vi } from "vitest";
 
-import type { ObotCustodyPort } from "@opencrane/backend/_server/obot-custody";
+import type { ObotCustodyPort } from "@opencrane/backend/server/infra/obot-custody";
 
 import { _CreateIntegrationCustodyRouter } from "../integration-custody.router.js";
 

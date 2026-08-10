@@ -25,7 +25,7 @@ database-isolation, Certificate, or TLS `/healthz` failure. Set `KEEP_CLUSTER=1`
 It is intentionally a smoke gate: backup/restore and production storage, DNS, and transport remain
 separate live qualifications.
 
-Business logic does not belong here. Server-process infrastructure belongs in `libs/backend/_server`;
+Business logic does not belong here. Server-process infrastructure belongs in `libs/backend/server/infra`;
 backend capabilities belong in `libs/backend/server`; independently owned third-party workloads
 belong in sibling `apps/_infra/<service>` projects.
 

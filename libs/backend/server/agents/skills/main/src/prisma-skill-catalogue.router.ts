@@ -2,7 +2,7 @@ import type { PrismaClient } from "@prisma/client";
 import type { Router } from "express";
 import type { Logger } from "pino";
 
-import { _ResolveRequestPrincipal } from "@opencrane/backend/_server/auth";
+import { _ResolveRequestPrincipal } from "@opencrane/backend/server/infra/auth";
 
 import { PrismaSkillCatalogueRepository } from "./prisma-skill-catalogue-repository.js";
 import { __CreateSkillCatalogueRouter } from "./skill-catalogue.router.js";

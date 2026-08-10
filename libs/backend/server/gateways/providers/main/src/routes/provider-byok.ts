@@ -1,7 +1,7 @@
 import { Router } from "express";
 import * as k8s from "@kubernetes/client-node";
 import { ByokProvider, type ProviderKeyStatus } from "@opencrane/contracts";
-import { _RequireOrgAdmin } from "@opencrane/backend/_server/auth";
+import { _RequireOrgAdmin } from "@opencrane/backend/server/infra/auth";
 import type { PrismaClient, ProviderCredential as PrismaProviderCredential } from "@prisma/client";
 
 import { _log } from "../log.js";

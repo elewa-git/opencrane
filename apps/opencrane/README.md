@@ -103,7 +103,7 @@ its resources to the lifecycle owner.
 This app owns process composition, app-specific configuration, listeners, and shutdown. Reusable
 product behaviour belongs under [`libs/backend`](../../libs/backend/README.md); authentication,
 transport, and external-service seams belong under
-[`libs/backend/_server`](../../libs/backend/_server/README.md). Libraries never import this app.
+[`libs/backend/server/infra`](../../libs/backend/server/infra/README.md). Libraries never import this app.
 
 The public and workload-facing APIs share a process but not an exposure boundary. Public ingress
 routes `/api` and the database-aware `/healthz` endpoint only to `:8080`. The `:8081` Service is restricted by Kubernetes NetworkPolicy, and endpoints
@@ -180,7 +180,7 @@ Helm library chart, which [`deploy-k8s`](../_infra/deploy-k8s/README.md) compose
 
 - Parent index: [apps](../README.md)
 - Composed logic: [backend capabilities](../../libs/backend/README.md) ·
-  [server infrastructure](../../libs/backend/_server/README.md)
+  [server infrastructure](../../libs/backend/server/infra/README.md)
 - Sibling apps: [opencrane-ui](../opencrane-ui/README.md) ·
   [channel-proxy](../channel-proxy/README.md) ·
   [agent-controller](../agent-controller/README.md)

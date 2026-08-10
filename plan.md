@@ -74,7 +74,7 @@ workload-identity contracts now define the Phase D implementation boundary. The 
 
 Deployment-only app owners now live under `apps/_infra`, OpenCrane's installation chart is
 `apps/_infra/deploy-k8s`, reusable server domains are grouped under `libs/backend/server`, and
-process-supporting server internals are isolated under `libs/backend/_server`. This is a direct
+process-supporting server internals are isolated under `libs/backend/server/infra`. This is a direct
 path and ownership refactor; it adds no compatibility aliases and changes no runtime behaviour.
 
 ### Phase D — foundations, identity, and fresh provisioning

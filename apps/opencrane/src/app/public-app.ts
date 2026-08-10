@@ -6,13 +6,13 @@ import express, { type Express } from "express";
 import { pinoHttp } from "pino-http";
 
 import type { ManagedRunAdmissionPort } from "@opencrane/backend/server/agents/agent-services";
-import type { ObotCustodyPort } from "@opencrane/backend/_server/obot-custody";
+import type { ObotCustodyPort } from "@opencrane/backend/server/infra/obot-custody";
 import type { PersonalRunAdmissionPort } from "@opencrane/backend/agents/execution/admission";
 import { __CreateStandaloneFirstUserAdmissionAuditAppender } from "@opencrane/backend/server/iam/audit";
 import { ___AuthRouter, ___CreateOidcAuthService, type StandaloneFirstUserAdmissionAuditPort, type StandaloneFirstUserAdmissionConfig } from "@opencrane/backend/server/iam/identity";
 import { ___GetContext, ___RequestContext } from "@opencrane/backend/observability";
-import { ___AuthMiddleware } from "@opencrane/backend/_server/auth";
-import { _ErrorHandler, _RateLimit, _TransportSecurity } from "@opencrane/backend/_server/http";
+import { ___AuthMiddleware } from "@opencrane/backend/server/infra/auth";
+import { _ErrorHandler, _RateLimit, _TransportSecurity } from "@opencrane/backend/server/infra/http";
 
 import { _log } from "./log.js";
 import { _RegisterRoutes } from "./routes.js";
