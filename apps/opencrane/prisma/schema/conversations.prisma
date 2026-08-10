@@ -41,8 +41,10 @@ model Conversation {
   contextRevisionId    String?                       @map("context_revision_id")
   closedAt             DateTime?                     @map("closed_at")
   createdAt            DateTime                      @default(now()) @map("created_at")
-  /// Database-owned latest canonical timeline coordinate. Lifecycle or context updates do not advance it.
+  /// Real database append time for display. Lifecycle or context updates do not advance it.
   updatedAt            DateTime                      @default(now()) @map("updated_at")
+  /// Global database allocation order for list sorting. Rollbacks may leave gaps; commit order does not rewrite it.
+  activitySequence     BigInt                        @default(autoincrement()) @unique @map("activity_sequence")
   participants         ConversationParticipant[]
   messages             ConversationMessage[]
   runEvents            ConversationRunEvent[]
@@ -55,7 +57,7 @@ model Conversation {
   @@unique([id, siloId])
   @@unique([id, siloId, agentServiceId], map: "conversations_exact_service_key")
   @@unique([id, contextRevisionId])
-  @@index([siloId, mode, lifecycle, updatedAt])
+  @@index([siloId, mode, lifecycle, activitySequence])
   @@index([siloId, agentServiceId, lifecycle])
   @@map("conversations")
 }

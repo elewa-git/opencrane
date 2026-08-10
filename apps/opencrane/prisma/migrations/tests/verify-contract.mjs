@@ -67,17 +67,29 @@ requireContract(sql.includes('CREATE TYPE "ConversationMode"'), "migration must 
 requireContract(sql.includes('CREATE TABLE "conversation_timeline_entries"'), "migration must create the canonical mixed timeline");
 requireContract(
 	conversationSchema.includes('updatedAt            DateTime                      @default(now()) @map("updated_at")'),
-	"Conversation activity coordinate must be database-defaulted rather than Prisma-managed",
+	"Conversation activity time must be database-defaulted rather than Prisma-managed",
 );
-requireContract(!conversationSchema.includes('updatedAt            DateTime                      @updatedAt'), "Conversation activity coordinate must not be Prisma-managed");
+requireContract(!conversationSchema.includes('updatedAt            DateTime                      @updatedAt'), "Conversation activity time must not be Prisma-managed");
+requireContract(
+	conversationSchema.includes('activitySequence     BigInt                        @default(autoincrement()) @unique @map("activity_sequence")'),
+	"Conversation list order must use one database-generated global activity sequence",
+);
 requireContract(
 	targetBaseline.includes('"updated_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP'),
-	"target Conversation activity coordinate must retain its database default",
+	"target Conversation activity time must retain its database default",
 );
 requireContract(
 	sql.includes('"updated_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP'),
-	"migrated Conversation activity coordinate must retain its database default",
+	"migrated Conversation activity time must retain its database default",
 );
+for (const source of [targetBaseline, sql])
+{
+	requireContract(source.includes('"activity_sequence" BIGINT GENERATED ALWAYS AS IDENTITY NOT NULL'), "Conversation activity sequence must be generated-always database identity");
+	requireContract(source.includes('CREATE UNIQUE INDEX "conversations_activity_sequence_key"'), "Conversation activity sequence must remain globally unique");
+	requireContract(source.includes('"activity_sequence" = DEFAULT'), "canonical appends must allocate the next generated-always global activity sequence");
+	requireContract(source.includes('conversations_silo_id_mode_lifecycle_activity_sequence_idx'), "Conversation catalogue index must order by global activity sequence");
+	requireContract(!source.includes("conversation_activity_at + INTERVAL '1 millisecond'"), "per-conversation synthetic timestamp ordering must stay retired");
+}
 requireContract(sql.includes('CREATE SCHEMA "opencrane_migrations"'), "successful migration must create schema history authority");
 requireContract(sql.includes("'0.8.0', '0.7.0'"), "schema history must bind the exact transition");
 requireContract(sql.includes("migration_history_exists"), "migration must detect a prior completed transition");

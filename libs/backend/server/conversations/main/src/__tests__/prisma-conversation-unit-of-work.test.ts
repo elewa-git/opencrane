@@ -180,6 +180,18 @@ describe("PrismaConversationUnitOfWork message admission", function _Suite()
 		expect(participants.findFirst).not.toHaveBeenCalled();
 	});
 
+	it("orders visible conversations by the database-global activity allocation", async function _OrdersByGlobalActivity()
+	{
+		const findMany = vi.fn().mockResolvedValue([]);
+		const transaction = { orgMembership: _ActiveMembership(), conversationParticipant: { findMany } };
+		const authority = new PrismaConversationUnitOfWork(_Prisma(transaction) as never, {} as never, _CreateMutationRepository);
+
+		await expect(authority.list(_CALLER, false)).resolves.toEqual([]);
+		expect(findMany).toHaveBeenCalledWith(expect.objectContaining({
+			orderBy: [{ conversation: { activitySequence: "desc" } }, { conversationId: "desc" }],
+		}));
+	});
+
 	it("fails direct writes and idempotency replay closed after membership revocation", async function _RejectsRevokedMessage()
 	{
 		const timeline = vi.fn().mockResolvedValue(_Entry(null));

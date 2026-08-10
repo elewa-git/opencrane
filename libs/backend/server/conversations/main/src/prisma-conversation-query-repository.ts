@@ -46,10 +46,11 @@ export class PrismaConversationQueryRepository implements ConversationQueryRepos
 		if (!await this.hasActiveCallerMembership(caller)) return [];
 
 		// 2. Read only participant coordinates from the same repeatable snapshot as membership.
+		// The global sequence records allocation order; rollback gaps are valid and commit order never rewrites it.
 		const participants = await this.prisma.conversationParticipant.findMany({
 			where: { userId: caller.subjectId, conversation: { siloId: caller.siloId }, ...(includeArchived ? {} : { archivedAt: null }) },
 			include: { conversation: { include: { participants: { select: { userId: true } } } } },
-			orderBy: [{ conversation: { updatedAt: "desc" } }, { conversationId: "desc" }],
+			orderBy: [{ conversation: { activitySequence: "desc" } }, { conversationId: "desc" }],
 		});
 
 		// 3. Project bounded summaries only after both authority fences have succeeded.

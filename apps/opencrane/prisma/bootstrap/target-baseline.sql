@@ -649,6 +649,7 @@ CREATE TABLE "conversations" (
     "closed_at" TIMESTAMP(3),
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updated_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "activity_sequence" BIGINT GENERATED ALWAYS AS IDENTITY NOT NULL,
 
     CONSTRAINT "conversations_pkey" PRIMARY KEY ("id")
 );
@@ -2307,7 +2308,10 @@ CREATE INDEX "channel_invocation_contexts_route_expiry_idx" ON "channel_invocati
 CREATE INDEX "channel_invocation_contexts_subject_conversation_idx" ON "channel_invocation_contexts"("subject_id", "silo_id", "conversation_id", "created_at");
 
 -- CreateIndex
-CREATE INDEX "conversations_silo_id_mode_lifecycle_updated_at_idx" ON "conversations"("silo_id", "mode", "lifecycle", "updated_at");
+CREATE INDEX "conversations_silo_id_mode_lifecycle_activity_sequence_idx" ON "conversations"("silo_id", "mode", "lifecycle", "activity_sequence");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "conversations_activity_sequence_key" ON "conversations"("activity_sequence");
 
 -- CreateIndex
 CREATE INDEX "conversations_silo_id_agent_service_id_lifecycle_idx" ON "conversations"("silo_id", "agent_service_id", "lifecycle");
@@ -3699,8 +3703,10 @@ BEGIN
         OR NEW."created_at" IS DISTINCT FROM OLD."created_at" THEN
         RAISE EXCEPTION 'Conversation identity, mode, and agent binding are immutable';
     END IF;
-    IF NEW."updated_at" IS DISTINCT FROM OLD."updated_at" AND pg_trigger_depth() < 2 THEN
-        RAISE EXCEPTION 'Conversation activity coordinate is database-owned by canonical timeline appends';
+    IF (NEW."updated_at" IS DISTINCT FROM OLD."updated_at"
+        OR NEW."activity_sequence" IS DISTINCT FROM OLD."activity_sequence")
+        AND pg_trigger_depth() < 2 THEN
+        RAISE EXCEPTION 'Conversation activity time and sequence are database-owned by canonical timeline appends';
     END IF;
     IF OLD."lifecycle" = 'closed' THEN
         RAISE EXCEPTION 'closed Conversation is read-only';
@@ -4025,7 +4031,6 @@ END;
 $$;
 CREATE FUNCTION "enforce_conversation_timeline_entry"() RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE
-    conversation_activity_at TIMESTAMP(3);
     conversation_lifecycle "ConversationLifecycle";
 BEGIN
     IF TG_OP <> 'INSERT' THEN
@@ -4086,7 +4091,7 @@ BEGIN
     ELSE
         RAISE EXCEPTION 'unsupported ConversationTimelineEntry kind';
     END IF;
-    SELECT "lifecycle", "updated_at" INTO conversation_lifecycle, conversation_activity_at
+    SELECT "lifecycle" INTO conversation_lifecycle
     FROM "conversations"
     WHERE "id" = NEW."conversation_id"
     FOR UPDATE;
@@ -4096,12 +4101,10 @@ BEGIN
     SELECT COALESCE(max("position"), 0) + 1 INTO NEW."position"
     FROM "conversation_timeline_entries"
     WHERE "conversation_id" = NEW."conversation_id";
-    NEW."occurred_at" := GREATEST(
-        date_trunc('milliseconds', clock_timestamp())::TIMESTAMP(3),
-        conversation_activity_at + INTERVAL '1 millisecond'
-    );
+    NEW."occurred_at" := date_trunc('milliseconds', clock_timestamp())::TIMESTAMP(3);
     UPDATE "conversations"
-    SET "updated_at" = NEW."occurred_at"
+    SET "updated_at" = NEW."occurred_at",
+        "activity_sequence" = DEFAULT
     WHERE "id" = NEW."conversation_id";
     RETURN NEW;
 END;
@@ -5610,7 +5613,7 @@ ALTER TABLE "audit_decisions" ADD CONSTRAINT "audit_decisions_workload_identity_
     );
 ALTER TABLE "audit_decisions" ADD CONSTRAINT "audit_decisions_membership_revision_check" CHECK ("membership_revision" IS NULL OR "membership_revision" > 0);
 ALTER TABLE "conversations" ADD CONSTRAINT "conversations_identity_check" CHECK (
-        btrim("silo_id") <> '' AND
+        btrim("silo_id") <> '' AND "activity_sequence" > 0 AND
         (("mode" = 'agent_session' AND "agent_service_id" IS NOT NULL AND btrim("agent_service_id") <> '') OR
          ("mode" IN ('direct', 'group') AND "agent_service_id" IS NULL)) AND
         (("lifecycle" = 'open' AND "closed_at" IS NULL) OR
