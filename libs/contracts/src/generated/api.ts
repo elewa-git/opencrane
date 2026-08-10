@@ -5880,6 +5880,13 @@ export interface operations {
                 };
                 content?: never;
             };
+            /** @description Conversation admission capacity is currently full; retry later. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             /** @description Admission authority unavailable. */
             503: {
                 headers: {

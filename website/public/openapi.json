@@ -8584,6 +8584,9 @@
           "409": {
             "description": "Closed, active-run, mode, or idempotency conflict."
           },
+          "429": {
+            "description": "Conversation admission capacity is currently full; retry later."
+          },
           "503": {
             "description": "Admission authority unavailable."
           }
