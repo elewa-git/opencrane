@@ -1,6 +1,7 @@
 import { ___DoWithTrace } from "@opencrane/backend/observability";
 
-import { UserOnboardingDenialReasons, UserOnboardingStates, UserOnboardingTransitionStatuses } from "./user-onboarding.enums.js";
+import { UserOnboardingDenialReasons, UserOnboardingTransitionStatuses } from "./user-onboarding.enums.js";
+import { _UserOnboardingLifecycleState } from "./user-onboarding-lifecycle-state.js";
 import type { ApprovedPersonaEvidence, UserOnboardingOwner, UserOnboardingPersonaEvidencePort, UserOnboardingRecord, UserOnboardingRepository, UserOnboardingTransitionResult } from "./user-onboarding.types.js";
 
 /** Server-owned orchestration for the resumable persona-survey phase of onboarding. */
@@ -56,14 +57,7 @@ export class __UserOnboardingAuthority
 			if (approved === null || approved.interviewId !== evidence.interviewId || approved.personaRevisionId !== evidence.personaRevisionId) return _Denied(UserOnboardingDenialReasons.PersonaNotApproved, await self.repository.read(owner));
 			const before = await self.repository.read(owner);
 			if (before === null) return _Denied(UserOnboardingDenialReasons.StateConflict, null);
-			const existingResult = _ApprovedResumeOrConflict(before, evidence);
-			if (existingResult !== null) return existingResult;
-			if (before.state !== UserOnboardingStates.SurveyInProgress) return _Denied(UserOnboardingDenialReasons.StateConflict, before);
-			if (before.personaInterviewId !== evidence.interviewId) return _Denied(UserOnboardingDenialReasons.InterviewConflict, before);
-			const advanced = await self.repository.markPersonaApproved(owner, evidence);
-			const after = await self.repository.read(owner);
-			if (advanced && after !== null) return { status: UserOnboardingTransitionStatuses.Advanced, onboarding: after };
-			return _ApprovedResumeOrConflict(after, evidence) ?? _Denied(UserOnboardingDenialReasons.StateConflict, after);
+			return _UserOnboardingLifecycleState(before).recordPersonaApproved({ repository: self.repository, owner, onboarding: before, evidence });
 		});
 	}
 
@@ -75,41 +69,14 @@ export class __UserOnboardingAuthority
 		if (!await this.personaEvidence.ownsInterview(owner, interviewId)) return _Denied(UserOnboardingDenialReasons.InterviewNotOwned, await this.repository.read(owner));
 		const before = await this.repository.ensure(owner, this.currentWorkflowVersion);
 
-		// 2. Persona maintenance after the initial survey is deliberately outside this workflow.
-		if (_BeyondInitialSurvey(before.state)) return { status: UserOnboardingTransitionStatuses.NoOp, onboarding: before };
-		if (before.state === UserOnboardingStates.SurveyInProgress && before.personaInterviewId === interviewId) return { status: UserOnboardingTransitionStatuses.Resumed, onboarding: before };
-
-		// 3. Start the first survey or CAS-replace only its expected interview during an intentional re-sort.
-		let advanced = false;
-		if (before.state === UserOnboardingStates.SurveyPending && before.personaInterviewId === null)
-		{
-			advanced = await this.repository.markSurveyInProgress(owner, interviewId);
-		}
-		else if (before.state === UserOnboardingStates.SurveyInProgress && before.personaInterviewId !== null)
-		{
-			advanced = await this.repository.replaceSurveyInterview(owner, before.personaInterviewId, interviewId);
-		}
-		else
-		{
-			return _Denied(UserOnboardingDenialReasons.StateConflict, before);
-		}
-
-		// 4. Re-read after the CAS so retries recover the exact durable winner without regressing state.
-		const after = await this.repository.read(owner);
-		if (advanced && after !== null) return { status: UserOnboardingTransitionStatuses.Advanced, onboarding: after };
-		if (after?.state === UserOnboardingStates.SurveyInProgress && after.personaInterviewId === interviewId) return { status: UserOnboardingTransitionStatuses.Resumed, onboarding: after };
-		if (after !== null && _BeyondInitialSurvey(after.state)) return { status: UserOnboardingTransitionStatuses.NoOp, onboarding: after };
-		return _Denied(_SurveyConflictReason(after, interviewId), after);
+		// 2. State dispatch keeps the initial-survey lifecycle exhaustive while each state retains its CAS semantics.
+		return _UserOnboardingLifecycleState(before).startSurvey({ repository: this.repository, owner, onboarding: before, interviewId });
 	}
 
 	/** Recover a committed persona approval when its post-commit workflow notification was interrupted. */
 	private async _reconcileApprovedPersona(owner: UserOnboardingOwner, onboarding: UserOnboardingRecord): Promise<UserOnboardingRecord>
 	{
-		if (onboarding.state !== UserOnboardingStates.SurveyInProgress || onboarding.personaInterviewId === null) return onboarding;
-		const approved = await this.personaEvidence.readLatestApprovedPersona(owner, onboarding.personaInterviewId);
-		if (approved === null || approved.interviewId !== onboarding.personaInterviewId) return onboarding;
-		await this.repository.markPersonaApproved(owner, approved);
-		return await this.repository.read(owner) ?? onboarding;
+		return _UserOnboardingLifecycleState(onboarding).reconcilePersonaApproval({ repository: this.repository, personaEvidence: this.personaEvidence, owner, onboarding });
 	}
 }
 
@@ -129,26 +96,4 @@ function _TraceOwner(owner: UserOnboardingOwner): Record<string, unknown>
 function _Denied(reason: UserOnboardingDenialReasons, onboarding: UserOnboardingRecord | null): UserOnboardingTransitionResult
 {
 	return { status: UserOnboardingTransitionStatuses.Denied, reason, onboarding };
-}
-
-/** Recognise an idempotent approved result or an already-advanced conflict. */
-function _ApprovedResumeOrConflict(onboarding: UserOnboardingRecord | null, evidence: ApprovedPersonaEvidence): UserOnboardingTransitionResult | null
-{
-	if (onboarding === null) return null;
-	if (onboarding.state === UserOnboardingStates.BootstrapChatPending && onboarding.personaInterviewId === evidence.interviewId && onboarding.personaRevisionId === evidence.personaRevisionId) return { status: UserOnboardingTransitionStatuses.Resumed, onboarding };
-	if (_BeyondInitialSurvey(onboarding.state)) return { status: UserOnboardingTransitionStatuses.NoOp, onboarding };
-	return null;
-}
-
-/** Return whether initial survey provenance is already frozen behind a later workflow state. */
-function _BeyondInitialSurvey(state: UserOnboardingStates): boolean
-{
-	return state === UserOnboardingStates.BootstrapChatPending || state === UserOnboardingStates.BootstrapChatInProgress || state === UserOnboardingStates.Completed;
-}
-
-/** Explain a failed survey update from the durable row observed after the race. */
-function _SurveyConflictReason(onboarding: UserOnboardingRecord | null, interviewId: string): UserOnboardingDenialReasons
-{
-	if (onboarding !== null && onboarding.personaInterviewId !== null && onboarding.personaInterviewId !== interviewId) return UserOnboardingDenialReasons.InterviewConflict;
-	return UserOnboardingDenialReasons.StateConflict;
 }
