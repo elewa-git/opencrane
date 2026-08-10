@@ -5720,7 +5720,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Conversation created. */
+            /** @description Conversation created with its bounded canonical history. */
             201: {
                 headers: {
                     [name: string]: unknown;
@@ -5740,6 +5740,30 @@ export interface operations {
                             readThroughPosition: string;
                             /** Format: date-time */
                             updatedAt: string;
+                            visibleFromPosition: string;
+                            accessEndedPosition: string | null;
+                            messages: {
+                                id: string;
+                                position: string;
+                                /** @enum {string} */
+                                role: "user" | "assistant" | "tool" | "system";
+                                /** @enum {string} */
+                                state: "pending" | "streaming" | "completed" | "failed" | "cancelled";
+                                /** @enum {string} */
+                                source: "user_input" | "model_output" | "tool_result" | "platform";
+                                blocks: {
+                                    id: string;
+                                    /** @enum {string} */
+                                    kind: "text" | "artifact" | "tool_call" | "tool_result";
+                                    value: string;
+                                }[];
+                                runId: string | null;
+                                userId: string | null;
+                                /** Format: date-time */
+                                createdAt: string;
+                                /** Format: date-time */
+                                completedAt: string | null;
+                            }[];
                         };
                     };
                 };
@@ -5790,7 +5814,48 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": {
+                        conversation: {
+                            id: string;
+                            /** @enum {string} */
+                            mode: "agent_session" | "direct" | "group";
+                            /** @enum {string} */
+                            lifecycle: "open" | "closed";
+                            agentServiceId: string | null;
+                            participantUserIds: string[];
+                            /** Format: date-time */
+                            archivedAt: string | null;
+                            readThroughPosition: string;
+                            /** Format: date-time */
+                            updatedAt: string;
+                            visibleFromPosition: string;
+                            accessEndedPosition: string | null;
+                            messages: {
+                                id: string;
+                                position: string;
+                                /** @enum {string} */
+                                role: "user" | "assistant" | "tool" | "system";
+                                /** @enum {string} */
+                                state: "pending" | "streaming" | "completed" | "failed" | "cancelled";
+                                /** @enum {string} */
+                                source: "user_input" | "model_output" | "tool_result" | "platform";
+                                blocks: {
+                                    id: string;
+                                    /** @enum {string} */
+                                    kind: "text" | "artifact" | "tool_call" | "tool_result";
+                                    value: string;
+                                }[];
+                                runId: string | null;
+                                userId: string | null;
+                                /** Format: date-time */
+                                createdAt: string;
+                                /** Format: date-time */
+                                completedAt: string | null;
+                            }[];
+                        };
+                    };
+                };
             };
             /** @description Authentication required. */
             401: {
@@ -5843,14 +5908,68 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": {
+                        /** @enum {string} */
+                        outcome: "idempotent";
+                        message: {
+                            id: string;
+                            position: string;
+                            /** @enum {string} */
+                            role: "user" | "assistant" | "tool" | "system";
+                            /** @enum {string} */
+                            state: "pending" | "streaming" | "completed" | "failed" | "cancelled";
+                            /** @enum {string} */
+                            source: "user_input" | "model_output" | "tool_result" | "platform";
+                            blocks: {
+                                id: string;
+                                /** @enum {string} */
+                                kind: "text" | "artifact" | "tool_call" | "tool_result";
+                                value: string;
+                            }[];
+                            runId: string | null;
+                            userId: string | null;
+                            /** Format: date-time */
+                            createdAt: string;
+                            /** Format: date-time */
+                            completedAt: string | null;
+                        };
+                    };
+                };
             };
             /** @description Message accepted. */
             201: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": {
+                        /** @enum {string} */
+                        outcome: "accepted";
+                        message: {
+                            id: string;
+                            position: string;
+                            /** @enum {string} */
+                            role: "user" | "assistant" | "tool" | "system";
+                            /** @enum {string} */
+                            state: "pending" | "streaming" | "completed" | "failed" | "cancelled";
+                            /** @enum {string} */
+                            source: "user_input" | "model_output" | "tool_result" | "platform";
+                            blocks: {
+                                id: string;
+                                /** @enum {string} */
+                                kind: "text" | "artifact" | "tool_call" | "tool_result";
+                                value: string;
+                            }[];
+                            runId: string | null;
+                            userId: string | null;
+                            /** Format: date-time */
+                            createdAt: string;
+                            /** Format: date-time */
+                            completedAt: string | null;
+                        };
+                    };
+                };
             };
             /** @description Invalid message body. */
             400: {
@@ -5918,7 +6037,48 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": {
+                        conversation: {
+                            id: string;
+                            /** @enum {string} */
+                            mode: "agent_session" | "direct" | "group";
+                            /** @enum {string} */
+                            lifecycle: "open" | "closed";
+                            agentServiceId: string | null;
+                            participantUserIds: string[];
+                            /** Format: date-time */
+                            archivedAt: string | null;
+                            readThroughPosition: string;
+                            /** Format: date-time */
+                            updatedAt: string;
+                            visibleFromPosition: string;
+                            accessEndedPosition: string | null;
+                            messages: {
+                                id: string;
+                                position: string;
+                                /** @enum {string} */
+                                role: "user" | "assistant" | "tool" | "system";
+                                /** @enum {string} */
+                                state: "pending" | "streaming" | "completed" | "failed" | "cancelled";
+                                /** @enum {string} */
+                                source: "user_input" | "model_output" | "tool_result" | "platform";
+                                blocks: {
+                                    id: string;
+                                    /** @enum {string} */
+                                    kind: "text" | "artifact" | "tool_call" | "tool_result";
+                                    value: string;
+                                }[];
+                                runId: string | null;
+                                userId: string | null;
+                                /** Format: date-time */
+                                createdAt: string;
+                                /** Format: date-time */
+                                completedAt: string | null;
+                            }[];
+                        };
+                    };
+                };
             };
             /** @description Invalid archive request. */
             400: {
@@ -5966,7 +6126,48 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": {
+                        conversation: {
+                            id: string;
+                            /** @enum {string} */
+                            mode: "agent_session" | "direct" | "group";
+                            /** @enum {string} */
+                            lifecycle: "open" | "closed";
+                            agentServiceId: string | null;
+                            participantUserIds: string[];
+                            /** Format: date-time */
+                            archivedAt: string | null;
+                            readThroughPosition: string;
+                            /** Format: date-time */
+                            updatedAt: string;
+                            visibleFromPosition: string;
+                            accessEndedPosition: string | null;
+                            messages: {
+                                id: string;
+                                position: string;
+                                /** @enum {string} */
+                                role: "user" | "assistant" | "tool" | "system";
+                                /** @enum {string} */
+                                state: "pending" | "streaming" | "completed" | "failed" | "cancelled";
+                                /** @enum {string} */
+                                source: "user_input" | "model_output" | "tool_result" | "platform";
+                                blocks: {
+                                    id: string;
+                                    /** @enum {string} */
+                                    kind: "text" | "artifact" | "tool_call" | "tool_result";
+                                    value: string;
+                                }[];
+                                runId: string | null;
+                                userId: string | null;
+                                /** Format: date-time */
+                                createdAt: string;
+                                /** Format: date-time */
+                                completedAt: string | null;
+                            }[];
+                        };
+                    };
+                };
             };
             /** @description Authentication required. */
             401: {

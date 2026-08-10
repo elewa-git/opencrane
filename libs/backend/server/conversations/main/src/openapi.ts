@@ -21,9 +21,10 @@ export const _SelfConversationReplayOpenapiPaths = {
 	},
 };
 
-/** Shared participant conversation response schema kept local to the owning OpenAPI fragment. */
-const _ConversationSchema = {
+/** Shared participant conversation summary schema kept local to the owning OpenAPI fragment. */
+const _ConversationSummarySchema = {
 	type: "object",
+	additionalProperties: false,
 	required: ["id", "mode", "lifecycle", "agentServiceId", "participantUserIds", "archivedAt", "readThroughPosition", "updatedAt"],
 	properties: {
 		id: { type: "string" },
@@ -37,6 +38,74 @@ const _ConversationSchema = {
 	},
 } as const;
 
+/** Canonical display-safe content block returned inside participant-visible messages. */
+const _ConversationMessageBlockSchema = {
+	type: "object",
+	additionalProperties: false,
+	required: ["id", "kind", "value"],
+	properties: {
+		id: { type: "string" },
+		kind: { type: "string", enum: ["text", "artifact", "tool_call", "tool_result"] },
+		value: { type: "string" },
+	},
+} as const;
+
+/** Canonical participant-visible message schema shared by detail and submission responses. */
+const _ConversationMessageSchema = {
+	type: "object",
+	additionalProperties: false,
+	required: ["id", "position", "role", "state", "source", "blocks", "runId", "userId", "createdAt", "completedAt"],
+	properties: {
+		id: { type: "string" },
+		position: { type: "string", pattern: "^(0|[1-9][0-9]*)$" },
+		role: { type: "string", enum: ["user", "assistant", "tool", "system"] },
+		state: { type: "string", enum: ["pending", "streaming", "completed", "failed", "cancelled"] },
+		source: { type: "string", enum: ["user_input", "model_output", "tool_result", "platform"] },
+		blocks: { type: "array", items: _ConversationMessageBlockSchema },
+		runId: { type: ["string", "null"] },
+		userId: { type: ["string", "null"] },
+		createdAt: { type: "string", format: "date-time" },
+		completedAt: { type: ["string", "null"], format: "date-time" },
+	},
+} as const;
+
+/** Participant-visible conversation detail including its bounded canonical history. */
+const _ConversationDetailSchema = {
+	type: "object",
+	additionalProperties: false,
+	required: [..._ConversationSummarySchema.required, "visibleFromPosition", "accessEndedPosition", "messages"],
+	properties: {
+		..._ConversationSummarySchema.properties,
+		visibleFromPosition: { type: "string", pattern: "^(0|[1-9][0-9]*)$" },
+		accessEndedPosition: { type: ["string", "null"], pattern: "^(0|[1-9][0-9]*)$" },
+		messages: { type: "array", items: _ConversationMessageSchema },
+	},
+} as const;
+
+/** Exact envelope returned when an endpoint projects one conversation detail. */
+const _ConversationDetailEnvelopeSchema = {
+	type: "object",
+	additionalProperties: false,
+	required: ["conversation"],
+	properties: { conversation: _ConversationDetailSchema },
+} as const;
+
+/** Exact accepted-message response, distinct from an idempotent replay. */
+const _AcceptedConversationMessageEnvelopeSchema = {
+	type: "object",
+	additionalProperties: false,
+	required: ["outcome", "message"],
+	properties: { outcome: { type: "string", enum: ["accepted"] }, message: _ConversationMessageSchema },
+} as const;
+
+/** Exact idempotent-message response, distinct from a newly accepted write. */
+const _IdempotentConversationMessageEnvelopeSchema = {
+	type: "object",
+	additionalProperties: false,
+	required: ["outcome", "message"],
+	properties: { outcome: { type: "string", enum: ["idempotent"] }, message: _ConversationMessageSchema },
+} as const;
+
 /** OpenAPI path fragment for participant-owned immutable-mode conversation operations. */
 export const _SelfConversationsOpenapiPaths = {
 	"/me/conversations": {
@@ -45,7 +114,7 @@ export const _SelfConversationsOpenapiPaths = {
 			summary: "List the signed-in participant's conversations",
 			tags: ["Conversations"],
 			parameters: [{ name: "includeArchived", in: "query", required: false, schema: { type: "boolean", default: false } }],
-			responses: { 200: { description: "Participant-bound conversation summaries.", content: { "application/json": { schema: { type: "object", required: ["conversations"], properties: { conversations: { type: "array", items: _ConversationSchema } } } } } }, 401: { description: "Authentication required." }, 503: { description: "Conversation authority unavailable." } },
+			responses: { 200: { description: "Participant-bound conversation summaries.", content: { "application/json": { schema: { type: "object", additionalProperties: false, required: ["conversations"], properties: { conversations: { type: "array", items: _ConversationSummarySchema } } } } } }, 401: { description: "Authentication required." }, 503: { description: "Conversation authority unavailable." } },
 		},
 		post: {
 			operationId: "createMyConversation",
@@ -56,7 +125,7 @@ export const _SelfConversationsOpenapiPaths = {
 				{ type: "object", additionalProperties: false, required: ["mode", "participantUserIds"], properties: { mode: { type: "string", enum: ["direct"] }, participantUserIds: { type: "array", items: { type: "string" }, minItems: 1, maxItems: 1 } } },
 				{ type: "object", additionalProperties: false, required: ["mode", "participantUserIds"], properties: { mode: { type: "string", enum: ["group"] }, participantUserIds: { type: "array", items: { type: "string" }, minItems: 1, maxItems: 99 } } },
 			] } } } },
-			responses: { 201: { description: "Conversation created.", content: { "application/json": { schema: { type: "object", required: ["conversation"], properties: { conversation: _ConversationSchema } } } } }, 400: { description: "Invalid immutable-mode request." }, 401: { description: "Authentication required." }, 404: { description: "A participant or agent service is unavailable." }, 503: { description: "Conversation authority unavailable." } },
+			responses: { 201: { description: "Conversation created with its bounded canonical history.", content: { "application/json": { schema: _ConversationDetailEnvelopeSchema } } }, 400: { description: "Invalid immutable-mode request." }, 401: { description: "Authentication required." }, 404: { description: "A participant or agent service is unavailable." }, 503: { description: "Conversation authority unavailable." } },
 		},
 	},
 	"/me/conversations/{conversationId}": {
@@ -65,7 +134,7 @@ export const _SelfConversationsOpenapiPaths = {
 			summary: "Open one participant-bound conversation",
 			tags: ["Conversations"],
 			parameters: [{ name: "conversationId", in: "path", required: true, schema: { type: "string" } }],
-			responses: { 200: { description: "Conversation detail with bounded canonical message history." }, 401: { description: "Authentication required." }, 404: { description: "Conversation unavailable." }, 503: { description: "Conversation authority unavailable." } },
+			responses: { 200: { description: "Conversation detail with bounded canonical message history.", content: { "application/json": { schema: _ConversationDetailEnvelopeSchema } } }, 401: { description: "Authentication required." }, 404: { description: "Conversation unavailable." }, 503: { description: "Conversation authority unavailable." } },
 		},
 	},
 	"/me/conversations/{conversationId}/messages": {
@@ -101,7 +170,7 @@ export const _SelfConversationsOpenapiPaths = {
 					},
 				},
 			},
-			responses: { 201: { description: "Message accepted." }, 200: { description: "Exact idempotent retry returned the canonical message." }, 400: { description: "Invalid message body." }, 401: { description: "Authentication required." }, 404: { description: "Conversation unavailable." }, 409: { description: "Closed, active-run, mode, or idempotency conflict." }, 429: { description: "Conversation admission capacity is currently full; retry later." }, 503: { description: "Admission authority unavailable." } },
+			responses: { 201: { description: "Message accepted.", content: { "application/json": { schema: _AcceptedConversationMessageEnvelopeSchema } } }, 200: { description: "Exact idempotent retry returned the canonical message.", content: { "application/json": { schema: _IdempotentConversationMessageEnvelopeSchema } } }, 400: { description: "Invalid message body." }, 401: { description: "Authentication required." }, 404: { description: "Conversation unavailable." }, 409: { description: "Closed, active-run, mode, or idempotency conflict." }, 429: { description: "Conversation admission capacity is currently full; retry later." }, 503: { description: "Admission authority unavailable." } },
 		},
 	},
 	"/me/conversations/{conversationId}/archive": {
@@ -111,7 +180,7 @@ export const _SelfConversationsOpenapiPaths = {
 			tags: ["Conversations"],
 			parameters: [{ name: "conversationId", in: "path", required: true, schema: { type: "string" } }],
 			requestBody: { required: true, content: { "application/json": { schema: { type: "object", additionalProperties: false, required: ["archived"], properties: { archived: { type: "boolean" } } } } } },
-			responses: { 200: { description: "Participant archive visibility changed." }, 400: { description: "Invalid archive request." }, 401: { description: "Authentication required." }, 404: { description: "Conversation unavailable." }, 503: { description: "Conversation authority unavailable." } },
+			responses: { 200: { description: "Participant archive visibility changed.", content: { "application/json": { schema: _ConversationDetailEnvelopeSchema } } }, 400: { description: "Invalid archive request." }, 401: { description: "Authentication required." }, 404: { description: "Conversation unavailable." }, 503: { description: "Conversation authority unavailable." } },
 		},
 	},
 	"/me/conversations/{conversationId}/close": {
@@ -120,7 +189,7 @@ export const _SelfConversationsOpenapiPaths = {
 			summary: "Permanently close one conversation",
 			tags: ["Conversations"],
 			parameters: [{ name: "conversationId", in: "path", required: true, schema: { type: "string" } }],
-			responses: { 200: { description: "Conversation permanently closed." }, 401: { description: "Authentication required." }, 404: { description: "Conversation unavailable." }, 409: { description: "An active foreground run prevents closure." }, 503: { description: "Conversation authority unavailable." } },
+			responses: { 200: { description: "Conversation permanently closed.", content: { "application/json": { schema: _ConversationDetailEnvelopeSchema } } }, 401: { description: "Authentication required." }, 404: { description: "Conversation unavailable." }, 409: { description: "An active foreground run prevents closure." }, 503: { description: "Conversation authority unavailable." } },
 		},
 	},
 } as const;

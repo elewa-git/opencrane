@@ -8208,6 +8208,7 @@
               "application/json": {
                 "schema": {
                   "type": "object",
+                  "additionalProperties": false,
                   "required": [
                     "conversations"
                   ],
@@ -8216,6 +8217,7 @@
                       "type": "array",
                       "items": {
                         "type": "object",
+                        "additionalProperties": false,
                         "required": [
                           "id",
                           "mode",
@@ -8374,17 +8376,19 @@
         },
         "responses": {
           "201": {
-            "description": "Conversation created.",
+            "description": "Conversation created with its bounded canonical history.",
             "content": {
               "application/json": {
                 "schema": {
                   "type": "object",
+                  "additionalProperties": false,
                   "required": [
                     "conversation"
                   ],
                   "properties": {
                     "conversation": {
                       "type": "object",
+                      "additionalProperties": false,
                       "required": [
                         "id",
                         "mode",
@@ -8393,7 +8397,10 @@
                         "participantUserIds",
                         "archivedAt",
                         "readThroughPosition",
-                        "updatedAt"
+                        "updatedAt",
+                        "visibleFromPosition",
+                        "accessEndedPosition",
+                        "messages"
                       ],
                       "properties": {
                         "id": {
@@ -8440,6 +8447,125 @@
                         "updatedAt": {
                           "type": "string",
                           "format": "date-time"
+                        },
+                        "visibleFromPosition": {
+                          "type": "string",
+                          "pattern": "^(0|[1-9][0-9]*)$"
+                        },
+                        "accessEndedPosition": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "pattern": "^(0|[1-9][0-9]*)$"
+                        },
+                        "messages": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "required": [
+                              "id",
+                              "position",
+                              "role",
+                              "state",
+                              "source",
+                              "blocks",
+                              "runId",
+                              "userId",
+                              "createdAt",
+                              "completedAt"
+                            ],
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "position": {
+                                "type": "string",
+                                "pattern": "^(0|[1-9][0-9]*)$"
+                              },
+                              "role": {
+                                "type": "string",
+                                "enum": [
+                                  "user",
+                                  "assistant",
+                                  "tool",
+                                  "system"
+                                ]
+                              },
+                              "state": {
+                                "type": "string",
+                                "enum": [
+                                  "pending",
+                                  "streaming",
+                                  "completed",
+                                  "failed",
+                                  "cancelled"
+                                ]
+                              },
+                              "source": {
+                                "type": "string",
+                                "enum": [
+                                  "user_input",
+                                  "model_output",
+                                  "tool_result",
+                                  "platform"
+                                ]
+                              },
+                              "blocks": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "additionalProperties": false,
+                                  "required": [
+                                    "id",
+                                    "kind",
+                                    "value"
+                                  ],
+                                  "properties": {
+                                    "id": {
+                                      "type": "string"
+                                    },
+                                    "kind": {
+                                      "type": "string",
+                                      "enum": [
+                                        "text",
+                                        "artifact",
+                                        "tool_call",
+                                        "tool_result"
+                                      ]
+                                    },
+                                    "value": {
+                                      "type": "string"
+                                    }
+                                  }
+                                }
+                              },
+                              "runId": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "userId": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "createdAt": {
+                                "type": "string",
+                                "format": "date-time"
+                              },
+                              "completedAt": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ],
+                                "format": "date-time"
+                              }
+                            }
+                          }
                         }
                       }
                     }
@@ -8482,7 +8608,203 @@
         ],
         "responses": {
           "200": {
-            "description": "Conversation detail with bounded canonical message history."
+            "description": "Conversation detail with bounded canonical message history.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "conversation"
+                  ],
+                  "properties": {
+                    "conversation": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "id",
+                        "mode",
+                        "lifecycle",
+                        "agentServiceId",
+                        "participantUserIds",
+                        "archivedAt",
+                        "readThroughPosition",
+                        "updatedAt",
+                        "visibleFromPosition",
+                        "accessEndedPosition",
+                        "messages"
+                      ],
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "mode": {
+                          "type": "string",
+                          "enum": [
+                            "agent_session",
+                            "direct",
+                            "group"
+                          ]
+                        },
+                        "lifecycle": {
+                          "type": "string",
+                          "enum": [
+                            "open",
+                            "closed"
+                          ]
+                        },
+                        "agentServiceId": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "participantUserIds": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "archivedAt": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "format": "date-time"
+                        },
+                        "readThroughPosition": {
+                          "type": "string",
+                          "pattern": "^(0|[1-9][0-9]*)$"
+                        },
+                        "updatedAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "visibleFromPosition": {
+                          "type": "string",
+                          "pattern": "^(0|[1-9][0-9]*)$"
+                        },
+                        "accessEndedPosition": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "pattern": "^(0|[1-9][0-9]*)$"
+                        },
+                        "messages": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "required": [
+                              "id",
+                              "position",
+                              "role",
+                              "state",
+                              "source",
+                              "blocks",
+                              "runId",
+                              "userId",
+                              "createdAt",
+                              "completedAt"
+                            ],
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "position": {
+                                "type": "string",
+                                "pattern": "^(0|[1-9][0-9]*)$"
+                              },
+                              "role": {
+                                "type": "string",
+                                "enum": [
+                                  "user",
+                                  "assistant",
+                                  "tool",
+                                  "system"
+                                ]
+                              },
+                              "state": {
+                                "type": "string",
+                                "enum": [
+                                  "pending",
+                                  "streaming",
+                                  "completed",
+                                  "failed",
+                                  "cancelled"
+                                ]
+                              },
+                              "source": {
+                                "type": "string",
+                                "enum": [
+                                  "user_input",
+                                  "model_output",
+                                  "tool_result",
+                                  "platform"
+                                ]
+                              },
+                              "blocks": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "additionalProperties": false,
+                                  "required": [
+                                    "id",
+                                    "kind",
+                                    "value"
+                                  ],
+                                  "properties": {
+                                    "id": {
+                                      "type": "string"
+                                    },
+                                    "kind": {
+                                      "type": "string",
+                                      "enum": [
+                                        "text",
+                                        "artifact",
+                                        "tool_call",
+                                        "tool_result"
+                                      ]
+                                    },
+                                    "value": {
+                                      "type": "string"
+                                    }
+                                  }
+                                }
+                              },
+                              "runId": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "userId": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "createdAt": {
+                                "type": "string",
+                                "format": "date-time"
+                              },
+                              "completedAt": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ],
+                                "format": "date-time"
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
           },
           "401": {
             "description": "Authentication required."
@@ -8567,10 +8889,260 @@
         },
         "responses": {
           "200": {
-            "description": "Exact idempotent retry returned the canonical message."
+            "description": "Exact idempotent retry returned the canonical message.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "outcome",
+                    "message"
+                  ],
+                  "properties": {
+                    "outcome": {
+                      "type": "string",
+                      "enum": [
+                        "idempotent"
+                      ]
+                    },
+                    "message": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "id",
+                        "position",
+                        "role",
+                        "state",
+                        "source",
+                        "blocks",
+                        "runId",
+                        "userId",
+                        "createdAt",
+                        "completedAt"
+                      ],
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "position": {
+                          "type": "string",
+                          "pattern": "^(0|[1-9][0-9]*)$"
+                        },
+                        "role": {
+                          "type": "string",
+                          "enum": [
+                            "user",
+                            "assistant",
+                            "tool",
+                            "system"
+                          ]
+                        },
+                        "state": {
+                          "type": "string",
+                          "enum": [
+                            "pending",
+                            "streaming",
+                            "completed",
+                            "failed",
+                            "cancelled"
+                          ]
+                        },
+                        "source": {
+                          "type": "string",
+                          "enum": [
+                            "user_input",
+                            "model_output",
+                            "tool_result",
+                            "platform"
+                          ]
+                        },
+                        "blocks": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "required": [
+                              "id",
+                              "kind",
+                              "value"
+                            ],
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "kind": {
+                                "type": "string",
+                                "enum": [
+                                  "text",
+                                  "artifact",
+                                  "tool_call",
+                                  "tool_result"
+                                ]
+                              },
+                              "value": {
+                                "type": "string"
+                              }
+                            }
+                          }
+                        },
+                        "runId": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "userId": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "createdAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "completedAt": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "format": "date-time"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
           },
           "201": {
-            "description": "Message accepted."
+            "description": "Message accepted.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "outcome",
+                    "message"
+                  ],
+                  "properties": {
+                    "outcome": {
+                      "type": "string",
+                      "enum": [
+                        "accepted"
+                      ]
+                    },
+                    "message": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "id",
+                        "position",
+                        "role",
+                        "state",
+                        "source",
+                        "blocks",
+                        "runId",
+                        "userId",
+                        "createdAt",
+                        "completedAt"
+                      ],
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "position": {
+                          "type": "string",
+                          "pattern": "^(0|[1-9][0-9]*)$"
+                        },
+                        "role": {
+                          "type": "string",
+                          "enum": [
+                            "user",
+                            "assistant",
+                            "tool",
+                            "system"
+                          ]
+                        },
+                        "state": {
+                          "type": "string",
+                          "enum": [
+                            "pending",
+                            "streaming",
+                            "completed",
+                            "failed",
+                            "cancelled"
+                          ]
+                        },
+                        "source": {
+                          "type": "string",
+                          "enum": [
+                            "user_input",
+                            "model_output",
+                            "tool_result",
+                            "platform"
+                          ]
+                        },
+                        "blocks": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "required": [
+                              "id",
+                              "kind",
+                              "value"
+                            ],
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "kind": {
+                                "type": "string",
+                                "enum": [
+                                  "text",
+                                  "artifact",
+                                  "tool_call",
+                                  "tool_result"
+                                ]
+                              },
+                              "value": {
+                                "type": "string"
+                              }
+                            }
+                          }
+                        },
+                        "runId": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "userId": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "createdAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "completedAt": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "format": "date-time"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
           },
           "400": {
             "description": "Invalid message body."
@@ -8631,7 +9203,203 @@
         },
         "responses": {
           "200": {
-            "description": "Participant archive visibility changed."
+            "description": "Participant archive visibility changed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "conversation"
+                  ],
+                  "properties": {
+                    "conversation": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "id",
+                        "mode",
+                        "lifecycle",
+                        "agentServiceId",
+                        "participantUserIds",
+                        "archivedAt",
+                        "readThroughPosition",
+                        "updatedAt",
+                        "visibleFromPosition",
+                        "accessEndedPosition",
+                        "messages"
+                      ],
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "mode": {
+                          "type": "string",
+                          "enum": [
+                            "agent_session",
+                            "direct",
+                            "group"
+                          ]
+                        },
+                        "lifecycle": {
+                          "type": "string",
+                          "enum": [
+                            "open",
+                            "closed"
+                          ]
+                        },
+                        "agentServiceId": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "participantUserIds": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "archivedAt": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "format": "date-time"
+                        },
+                        "readThroughPosition": {
+                          "type": "string",
+                          "pattern": "^(0|[1-9][0-9]*)$"
+                        },
+                        "updatedAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "visibleFromPosition": {
+                          "type": "string",
+                          "pattern": "^(0|[1-9][0-9]*)$"
+                        },
+                        "accessEndedPosition": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "pattern": "^(0|[1-9][0-9]*)$"
+                        },
+                        "messages": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "required": [
+                              "id",
+                              "position",
+                              "role",
+                              "state",
+                              "source",
+                              "blocks",
+                              "runId",
+                              "userId",
+                              "createdAt",
+                              "completedAt"
+                            ],
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "position": {
+                                "type": "string",
+                                "pattern": "^(0|[1-9][0-9]*)$"
+                              },
+                              "role": {
+                                "type": "string",
+                                "enum": [
+                                  "user",
+                                  "assistant",
+                                  "tool",
+                                  "system"
+                                ]
+                              },
+                              "state": {
+                                "type": "string",
+                                "enum": [
+                                  "pending",
+                                  "streaming",
+                                  "completed",
+                                  "failed",
+                                  "cancelled"
+                                ]
+                              },
+                              "source": {
+                                "type": "string",
+                                "enum": [
+                                  "user_input",
+                                  "model_output",
+                                  "tool_result",
+                                  "platform"
+                                ]
+                              },
+                              "blocks": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "additionalProperties": false,
+                                  "required": [
+                                    "id",
+                                    "kind",
+                                    "value"
+                                  ],
+                                  "properties": {
+                                    "id": {
+                                      "type": "string"
+                                    },
+                                    "kind": {
+                                      "type": "string",
+                                      "enum": [
+                                        "text",
+                                        "artifact",
+                                        "tool_call",
+                                        "tool_result"
+                                      ]
+                                    },
+                                    "value": {
+                                      "type": "string"
+                                    }
+                                  }
+                                }
+                              },
+                              "runId": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "userId": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "createdAt": {
+                                "type": "string",
+                                "format": "date-time"
+                              },
+                              "completedAt": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ],
+                                "format": "date-time"
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
           },
           "400": {
             "description": "Invalid archive request."
@@ -8667,7 +9435,203 @@
         ],
         "responses": {
           "200": {
-            "description": "Conversation permanently closed."
+            "description": "Conversation permanently closed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "conversation"
+                  ],
+                  "properties": {
+                    "conversation": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "id",
+                        "mode",
+                        "lifecycle",
+                        "agentServiceId",
+                        "participantUserIds",
+                        "archivedAt",
+                        "readThroughPosition",
+                        "updatedAt",
+                        "visibleFromPosition",
+                        "accessEndedPosition",
+                        "messages"
+                      ],
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "mode": {
+                          "type": "string",
+                          "enum": [
+                            "agent_session",
+                            "direct",
+                            "group"
+                          ]
+                        },
+                        "lifecycle": {
+                          "type": "string",
+                          "enum": [
+                            "open",
+                            "closed"
+                          ]
+                        },
+                        "agentServiceId": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "participantUserIds": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "archivedAt": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "format": "date-time"
+                        },
+                        "readThroughPosition": {
+                          "type": "string",
+                          "pattern": "^(0|[1-9][0-9]*)$"
+                        },
+                        "updatedAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "visibleFromPosition": {
+                          "type": "string",
+                          "pattern": "^(0|[1-9][0-9]*)$"
+                        },
+                        "accessEndedPosition": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "pattern": "^(0|[1-9][0-9]*)$"
+                        },
+                        "messages": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "required": [
+                              "id",
+                              "position",
+                              "role",
+                              "state",
+                              "source",
+                              "blocks",
+                              "runId",
+                              "userId",
+                              "createdAt",
+                              "completedAt"
+                            ],
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "position": {
+                                "type": "string",
+                                "pattern": "^(0|[1-9][0-9]*)$"
+                              },
+                              "role": {
+                                "type": "string",
+                                "enum": [
+                                  "user",
+                                  "assistant",
+                                  "tool",
+                                  "system"
+                                ]
+                              },
+                              "state": {
+                                "type": "string",
+                                "enum": [
+                                  "pending",
+                                  "streaming",
+                                  "completed",
+                                  "failed",
+                                  "cancelled"
+                                ]
+                              },
+                              "source": {
+                                "type": "string",
+                                "enum": [
+                                  "user_input",
+                                  "model_output",
+                                  "tool_result",
+                                  "platform"
+                                ]
+                              },
+                              "blocks": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "additionalProperties": false,
+                                  "required": [
+                                    "id",
+                                    "kind",
+                                    "value"
+                                  ],
+                                  "properties": {
+                                    "id": {
+                                      "type": "string"
+                                    },
+                                    "kind": {
+                                      "type": "string",
+                                      "enum": [
+                                        "text",
+                                        "artifact",
+                                        "tool_call",
+                                        "tool_result"
+                                      ]
+                                    },
+                                    "value": {
+                                      "type": "string"
+                                    }
+                                  }
+                                }
+                              },
+                              "runId": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "userId": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "createdAt": {
+                                "type": "string",
+                                "format": "date-time"
+                              },
+                              "completedAt": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ],
+                                "format": "date-time"
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
           },
           "401": {
             "description": "Authentication required."
