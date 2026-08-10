@@ -276,6 +276,70 @@ still incomplete. Tool/OAuth success is not backed by the real exchange, and the
 route-level browser end-to-end suite. The production Angular build, focused feature tests, and
 Storybook regression catalogue are green, but they do not qualify the remaining product journeys.
 
+#### Track F1 — conversation workspace, modes, and Agent threads
+
+Build the first post-onboarding workspace as one durable **Conversation** product with three
+immutable modes. The user-facing navigation calls the aggregate a **Chat**; `agent_session`,
+`direct`, and `group` remain explicit domain modes rather than inferred UI states.
+
+The accepted product contract is:
+
+- `agent_session` routes every user, agent, tool, asset, elicitation, and A2UI interaction through
+  run authority. It admits one foreground run at a time; elicitation and steering continue that run,
+  while later questions create serial follow-up runs.
+- `direct` and ordinary `group` messages are durable conversation messages and never create fake
+  `AgentRun` records.
+- an authorized `@agent` message in a group creates one linked child Conversation in
+  `agent_session` mode and its first run. The UI calls this an **Agent thread**, not a subagent.
+- an Agent thread can communicate status, questions, approvals, safe results, failures, and durable
+  asset references to its immediate parent through typed, append-only, idempotent delivery. Runtime
+  subagents and recursive governed child runs remain the separate authority in
+  [#320](https://github.com/elewa-git/opencrane/issues/320).
+- the parent shows a compact Slack-style thread summary. Opening it replaces the main transcript
+  with a stable, deep-linkable child route and breadcrumbs; returning restores the exact parent
+  message and scroll position. There is no separate window and no side-panel-only child experience.
+- completed onboarding becomes a closed/read-only conversation in normal history. Completion never
+  reopens; archive remains a separate user-applied visibility state.
+- attached and agent-created assets have distinct provenance. A created asset becomes durable only
+  after finalization and survives retry, refresh, and conversation closure.
+- tool failure remains visible while retrying and after recovery. Plain-language state is primary;
+  sanitized tool, error category, provider response, time, and retry details are progressively
+  disclosed. Tokens, credentials, cookies, authorization headers, keys, proofs, and raw secrets never
+  reach the browser.
+- one recoverable elicitation contract renders approvals, single choice, multiple choice, and bounded
+  free text. Consequential A2UI actions use that authority; rendered UI never grants permission.
+
+The accepted paper/origami workspace language remains the visual source. Before implementation, the
+final Agent-thread boards must join the repository-owned design handoff: group mention admission,
+starting/running/waiting/failed/completed parent summaries, breadcrumb child view, parent delivery,
+follow-up run, access loss, reconnect, and compact/mobile navigation.
+
+| Step | Outcome | Owning GitHub issues | Exit gate |
+|---|---|---|---|
+| F1.1 — model and design contract | Freeze mode vocabulary, strategy ownership, lifecycle, parent/child coordinates, terminology, route hierarchy, finite visual states, and the no-secret disclosure contract | [#600](https://github.com/elewa-git/opencrane/issues/600), [#601](https://github.com/elewa-git/opencrane/issues/601), [#351](https://github.com/elewa-git/opencrane/issues/351) | User stories, architecture decision, component/state map, and committed desktop/compact wireframes agree before schema or routed-page work starts |
+| F1.2 — conversation authority and ordinary messaging | Add immutable modes, mode strategies, conditional agent binding, participant/join authority, canonical mixed timeline, list/create/open APIs, and idempotent direct/group message admission | [#600](https://github.com/elewa-git/opencrane/issues/600) | Agent-session input cannot bypass runs; ordinary direct/group messages cannot create runs; foreign, closed, wrong-mode, and replay attempts fail closed |
+| F1.3 — onboarding handoff | Retain the completed bootstrap exchange as the selected closed/read-only workspace conversation and expose Start a new chat without rewriting onboarding evidence | [#602](https://github.com/elewa-git/opencrane/issues/602), [#351](https://github.com/elewa-git/opencrane/issues/351) | Completion, refresh, direct navigation, attempted write, and incomplete-user API/route denial pass end to end |
+| F1.4 — canonical live delivery | Extend finite replay into authorized snapshot-to-live conversation delivery across ordinary messages and run events; pin AG-UI, reconnect/interrupt semantics, terminal projection, and the versioned A2UI envelope | [#319](https://github.com/elewa-git/opencrane/issues/319), [#351](https://github.com/elewa-git/opencrane/issues/351) | No gaps or duplicates; opaque cursors recover open elicitation; failure/cancellation stay truthful; raw authority/runtime payloads remain server-side |
+| F1.5 — group Agent threads and parent communication | Admit `@agent`, create the child agent session, stream its serial runs, project the parent summary, deliver safe results upward, and navigate through stable breadcrumbs | [#601](https://github.com/elewa-git/opencrane/issues/601), [#351](https://github.com/elewa-git/opencrane/issues/351) | One mention creates one child and first run; parent/child keep independent history and unread state; access loss, deep links, back/scroll restoration, and immediate-parent-only delivery pass |
+| F1.6 — conversation assets | Add governed upload/attach/preview/download, finalized agent-output receipts, inline asset cards, and the Files index | [#603](https://github.com/elewa-git/opencrane/issues/603), [#351](https://github.com/elewa-git/opencrane/issues/351) | Upload, scan/process, failure/retry, inaccessible/expired, ready, and durable-created-output journeys pass without exposing storage internals |
+| F1.7 — tools, elicitation, approvals, and A2UI | Render honest tool/retry state with sanitized disclosure; unify approval, single-choice, multiple-choice, and free-text requests; route A2UI actions through authenticated command authority | [#604](https://github.com/elewa-git/opencrane/issues/604), [#319](https://github.com/elewa-git/opencrane/issues/319), [#351](https://github.com/elewa-git/opencrane/issues/351) | Duplicate, foreign, expired, stale-run, and unauthorized responses fail closed; reconnect restores unresolved input; keyboard, focus, screen-reader, and reduced-motion contracts pass |
+| F1.8 — workspace composition | Mount the authenticated Chats rail, mode-aware transcript/composer, closed states, participant controls, Agent-thread summaries/routes, Files, and Activity through thin pages, a feature store, pure mappers, and approved components | [#351](https://github.com/elewa-git/opencrane/issues/351), [#600](https://github.com/elewa-git/opencrane/issues/600), [#601](https://github.com/elewa-git/opencrane/issues/601) | Production has no mock gateway or alternate renderer; desktop/compact layouts, empty/unavailable/no-agent states, long/hostile content, and mode-specific commands pass Storybook and route-level Playwright |
+| F1.9 — delivery and qualification | Publish the immutable SPA with the server/contracts it consumes and qualify login → onboarding → workspace, direct/group chat, Agent thread, live reconnect, assets, elicitation, A2UI, cancellation, and retry | [#351](https://github.com/elewa-git/opencrane/issues/351), [#162](https://github.com/elewa-git/opencrane/issues/162) | Reviewed version/migration evidence is complete; live desired/observed versions match; the named journeys pass against target APIs with no mock or legacy transport |
+
+Track F1 closes [#351](https://github.com/elewa-git/opencrane/issues/351),
+[#600](https://github.com/elewa-git/opencrane/issues/600),
+[#601](https://github.com/elewa-git/opencrane/issues/601),
+[#602](https://github.com/elewa-git/opencrane/issues/602),
+[#603](https://github.com/elewa-git/opencrane/issues/603), and
+[#604](https://github.com/elewa-git/opencrane/issues/604) only when their live acceptance criteria
+pass. It closes [#319](https://github.com/elewa-git/opencrane/issues/319) only if the pinned-client,
+interrupt, A2UI, and governed-child-run projection decisions there are all resolved. It advances but
+does not by itself close [#162](https://github.com/elewa-git/opencrane/issues/162),
+[#318](https://github.com/elewa-git/opencrane/issues/318), or
+[#320](https://github.com/elewa-git/opencrane/issues/320): UI delivery covers more product journeys,
+configuration materialization remains separate, and runtime child-run delegation is not the same as
+a group-created child Conversation.
+
 Exit: named end-to-end user and operator journeys work only through the target APIs and UI;
 parallel legacy product surfaces are deleted.
 
@@ -305,7 +369,6 @@ to create, share, schedule, observe, revoke, and delete agents and assets.
 | Issue | Target-state action |
 |---|---|
 | [#127](https://github.com/elewa-git/opencrane/issues/127) | Keep enforcing CNI, per-silo routing, encrypted-storage preflights, and live probes |
-| [#128](https://github.com/elewa-git/opencrane/issues/128) | Build app-owned Obot custody, grants, and runtime-neutral MCP invocation; delete fake-success paths |
 | [#136](https://github.com/elewa-git/opencrane/issues/136) | Defer compute tiers and pooling until measured target workload evidence exists |
 | [#154](https://github.com/elewa-git/opencrane/issues/154) | Replace generic plugin-kernel work with concrete app/module contracts |
 | [#162](https://github.com/elewa-git/opencrane/issues/162) | Retain target chart-native UI deployment work |
@@ -316,9 +379,19 @@ to create, share, schedule, observe, revoke, and delete agents and assets.
 | [#227](https://github.com/elewa-git/opencrane/issues/227) | Delete packages and images when their replacement slice lands |
 | [#231](https://github.com/elewa-git/opencrane/issues/231) | Introduce final target names directly; do not preserve legacy DNS or aliases |
 | [#318](https://github.com/elewa-git/opencrane/issues/318) | Conversation-initiated config changes: always-granted `upgrade_session` tool, logged persona refresh, user-editable params in the product UI |
+| [#319](https://github.com/elewa-git/opencrane/issues/319) | Finish authorized snapshot-to-live AG-UI, interrupts, truthful terminal projection, and the versioned A2UI boundary in F1 |
+| [#320](https://github.com/elewa-git/opencrane/issues/320) | Keep governed runtime child runs separate from F1 child Conversations; project them only after the explicit #319 decision |
+| [#351](https://github.com/elewa-git/opencrane/issues/351) | Deliver and qualify the authenticated conversation workspace through Track F1 |
 | [#513](https://github.com/elewa-git/opencrane/issues/513) | Low priority: evaluate LiteLLM-native OTLP GenAI spans through an operator-supplied collector, with message content disabled by default |
+| [#592](https://github.com/elewa-git/opencrane/issues/592) | Replace retired #128/Obot framing with the MCP 2026-07-28-only plane and warm-path runtime contract |
+| [#600](https://github.com/elewa-git/opencrane/issues/600) | Build immutable conversation modes, strategy ownership, ordinary messaging, and the mixed canonical timeline |
+| [#601](https://github.com/elewa-git/opencrane/issues/601) | Build group `@agent` child sessions, immediate-parent delivery, compact summaries, and breadcrumb navigation |
+| [#602](https://github.com/elewa-git/opencrane/issues/602) | Retain completed onboarding as closed/read-only workspace history |
+| [#603](https://github.com/elewa-git/opencrane/issues/603) | Build governed conversation attachments and durable agent-created outputs |
+| [#604](https://github.com/elewa-git/opencrane/issues/604) | Build reusable approvals, choices, free-text elicitation, recovery, and safe disclosure |
 
-Closed issues are intentionally absent from the active list: [#129](https://github.com/elewa-git/opencrane/issues/129),
+Closed issues are intentionally absent from the active list: [#128](https://github.com/elewa-git/opencrane/issues/128),
+[#129](https://github.com/elewa-git/opencrane/issues/129),
 [#133](https://github.com/elewa-git/opencrane/issues/133),
 [#150](https://github.com/elewa-git/opencrane/issues/150),
 [#174](https://github.com/elewa-git/opencrane/issues/174),
