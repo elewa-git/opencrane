@@ -50,8 +50,8 @@ The package's index file (barrel) re-exports the components directly:
 - `LedgerCardComponent` and `LedgerCardKinds` — one finite semantic card in an agent
   action/observation ledger.
 - `SectionHeadingComponent` — the existing feature-section heading.
-- `JourneyShellComponent` and `JourneyShellLayouts` — the responsive paper frame shared by bounded
-  sign-in and onboarding journeys.
+- `JourneyShellComponent` and `JourneyShellLayouts` — the full-viewport responsive paper frame
+  shared by bounded sign-in and onboarding journeys.
 - `ChoiceCardGroupComponent`, `ChoiceCardOption`, and `ChoiceCardLayouts` — an accessible
   single-choice fieldset rendered as selectable paper cards.
 - `JourneyProgressComponent` — an accessible finite progress summary for resumable interviews and
@@ -85,6 +85,8 @@ package.
 
 Stories tagged `visual-test-narrow` are captured at the supported 390-pixel viewport instead of the
 default desktop viewport, so responsive contracts remain explicit and reproducible.
+Stories tagged `visual-test-full-viewport` must render exactly one journey canvas whose height is at
+least the selected browser viewport, so short routes cannot expose the body below their surface.
 
 ## See also
 
