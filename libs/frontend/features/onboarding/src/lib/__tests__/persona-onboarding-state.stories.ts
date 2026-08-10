@@ -4,11 +4,11 @@ import { expect, userEvent, waitFor, within } from "storybook/test";
 
 import { PersonaColours, PersonaModifiers, PersonaOnboardingSnapshot, PersonaOnboardingStates, PersonaResolutionKinds } from "@opencrane/state/onboarding";
 
-import { PersonaInterviewStateComponent } from "./states/interview/persona-interview-state.component";
-import { PersonaReadyStateComponent } from "./states/ready/persona-ready-state.component";
-import { PersonaResolutionStateComponent } from "./states/resolution/persona-resolution-state.component";
-import { PersonaResultEvidenceComponent } from "./states/result/persona-result-evidence.component";
-import { PersonaReviewStateComponent } from "./states/review/persona-review-state.component";
+import { PersonaInterviewStateComponent } from "../states/interview/persona-interview-state.component";
+import { PersonaReadyStateComponent } from "../states/ready/persona-ready-state.component";
+import { PersonaResolutionStateComponent } from "../states/resolution/persona-resolution-state.component";
+import { PersonaResultEvidenceComponent } from "../states/result/persona-result-evidence.component";
+import { PersonaReviewStateComponent } from "../states/review/persona-review-state.component";
 
 /** Frozen reviewed question used by the feature-state catalogue. */
 const _QUESTION = { id: "q1", category: "pace", prompt: "When the decision is consequential and the available evidence is incomplete, how should your agent help you move forward?", ordinal: 1, choices: [{ id: "recommend", label: "Lead with the strongest recommendation, then explain the uncertainty and the best alternative.", ordinal: 1 }, { id: "context", label: "Build the context first and wait for me to choose the direction.", ordinal: 2 }], selectedChoiceId: null } as const;
