@@ -6,8 +6,8 @@ VALUES ('dispatch-terminal-model', 'global', 'dispatch-terminal-model', 'litellm
 INSERT INTO "agent_services" (
     "id", "silo_id", "kind", "name", "workload_profile", "updated_at"
 ) VALUES (
-    'dispatch-terminal-service', 'dispatch-terminal-silo', 'personal', 'Dispatch terminal service',
-    'personal-default', clock_timestamp()
+    'dispatch-terminal-service', 'dispatch-terminal-silo', 'managed', 'Dispatch terminal service',
+    'managed-agent', clock_timestamp()
 );
 INSERT INTO "agent_revisions" (
     "id", "agent_service_id", "revision", "state", "digest", "prompt_policy_version",
@@ -23,26 +23,26 @@ UPDATE "agent_services"
 SET "state" = 'active', "active_revision_id" = 'dispatch-terminal-revision'
 WHERE "id" = 'dispatch-terminal-service';
 
-INSERT INTO "conversation_threads" ("id", "silo_id", "agent_service_id", "updated_at")
-VALUES ('dispatch-terminal-thread', 'dispatch-terminal-silo', 'dispatch-terminal-service', clock_timestamp());
+INSERT INTO "conversations" ("id", "silo_id", "agent_service_id", "mode", "updated_at")
+VALUES ('dispatch-terminal-conversation', 'dispatch-terminal-silo', 'dispatch-terminal-service', 'agent_session', clock_timestamp());
 INSERT INTO "agent_runs" (
-    "id", "silo_id", "agent_service_id", "agent_revision_id", "thread_id", "trigger",
+    "id", "silo_id", "agent_service_id", "agent_revision_id", "conversation_id", "trigger",
     "request_idempotency_key", "root_run_id", "effective_contract_digest", "input_snapshot_digest"
 ) VALUES (
     'dispatch-terminal-run', 'dispatch-terminal-silo', 'dispatch-terminal-service',
-    'dispatch-terminal-revision', 'dispatch-terminal-thread', 'interactive',
+    'dispatch-terminal-revision', 'dispatch-terminal-conversation', 'interactive',
     'dispatch-terminal-request', 'dispatch-terminal-run', 'sha256:' || repeat('b', 64),
     'sha256:' || repeat('c', 64)
 );
 INSERT INTO "run_input_snapshots" (
-    "run_id", "snapshot_version", "silo_id", "agent_service_id", "agent_revision_id",
-    "effective_contract_digest", "thread_id", "memory_facts", "identity_snapshot", "model_route",
-    "memory_query_policy", "budget_policy", "capability_set_digest", "prompt_compiler_version", "input_digest"
+    "id", "run_id", "snapshot_version", "silo_id", "agent_service_id", "agent_revision_id",
+    "effective_contract_digest", "conversation_id", "memory_facts", "identity_snapshot", "model_route",
+    "integration_assignments", "memory_query_policy", "budget_policy", "capability_set_digest", "prompt_compiler_version", "input_digest"
 ) VALUES (
-    'dispatch-terminal-run', 1, 'dispatch-terminal-silo', 'dispatch-terminal-service',
-    'dispatch-terminal-revision', 'sha256:' || repeat('b', 64), 'dispatch-terminal-thread', '[]',
+    'dispatch-terminal-input', 'dispatch-terminal-run', 1, 'dispatch-terminal-silo', 'dispatch-terminal-service',
+    'dispatch-terminal-revision', 'sha256:' || repeat('b', 64), 'dispatch-terminal-conversation', '[]',
     '{"executionSubjectId":"dispatch-terminal-user","fleetMembershipTrustedUntil":"2026-07-20T00:00:00.000Z"}',
-    '{}', '{}', '{}', 'sha256:' || repeat('d', 64), 'prompt-v1', 'sha256:' || repeat('c', 64)
+    '{}', '{}', '{}', '{}', 'sha256:' || repeat('d', 64), 'prompt-v1', 'sha256:' || repeat('c', 64)
 );
 INSERT INTO "run_outbox_events" (
     "id", "run_id", "attempt", "sequence", "kind", "idempotency_key", "payload"
@@ -58,9 +58,9 @@ WHERE "id" = 'dispatch-terminal-event';
 UPDATE "agent_runs"
 SET "state" = 'failed', "terminal_reason" = 'policy_denied', "finished_at" = clock_timestamp()
 WHERE "id" = 'dispatch-terminal-run';
-INSERT INTO "conversation_run_events" ("run_id", "sequence", "type", "payload", "occurred_at")
+INSERT INTO "conversation_run_events" ("conversation_id", "run_id", "sequence", "type", "payload", "occurred_at")
 VALUES (
-    'dispatch-terminal-run', 1, 'run.failed',
+    'dispatch-terminal-conversation', 'dispatch-terminal-run', 1, 'run.failed',
     '{"terminalReason":"policy_denied","failureCode":"RUN_DISPATCH_MEMBERSHIP_EXPIRED"}',
     clock_timestamp()
 );

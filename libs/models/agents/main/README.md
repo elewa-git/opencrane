@@ -13,8 +13,8 @@ It owns two kinds of thing:
 - **Types** for an `AgentService` (a named, reusable agent), its immutable `AgentRevision`
   (a published, frozen version of that agent, carrying revision lineage — `parentRevisionId`,
   `sourceRevisionId`, `changeMessage` — and revision-scoped `RevisionScopeAttachment`s over the
-  canonical `GrantScope`/`GrantSubjectType` vocabulary), an `AgentRun` (one execution attempt), the
-  conversation record — `Thread`, `Message`, and `RunEvent`.
+  canonical `GrantScope`/`GrantSubjectType` vocabulary), an `AgentRun` (one execution attempt), and
+  the ordered `RunEvent` emitted by that attempt.
 - A **pure revision diff** (`__DiffAgentRevisions`): line-level prompt diff plus semantic
   field-level configuration diff, flagging security-relevant widening (broader scopes, tools,
   credentials, or budgets) for reviewer confirmation. It reads only stable references, never secrets.
@@ -37,22 +37,24 @@ persistence; a wrong answer here can only refuse a legal move, never invent one.
 
 - Lifecycle types: `AgentService`/`…State`, `AgentRevision`/`…State`, `AgentRun`/`…State`,
   `AgentServiceKinds`, `AgentServiceStates`, `AgentRevisionContent`, `RevisionScopeAttachment`, `GrantScope`,
-  `GrantSubjectType`, `Thread`, `Message`, `RunEvent`, and the `*Id` identifier aliases.
+  `GrantSubjectType`, `RunEvent`, `RunEventTypes`, and the agent/run `*Id` identifier aliases.
 - Revision invariants: `__DigestAgentRevisionContent`, `__DiffAgentRevisions`, and the
   `AgentRevisionDiff` result types.
 - `__Is…TransitionAllowed`, `__CanAppendRunEvent` — the guard functions over the transition tables.
 
 ## Boundary
 
-Persistence- and network-free: it defines, decides, and deterministically hashes canonical domain
-values, but callers do the reading and writing. It does not know about Kubernetes, HTTP, or Prisma.
+Persistence- and network-free: it defines, decides, and deterministically hashes canonical agent
+values, but callers do the reading and writing. Conversation mode, lifecycle, participants, messages,
+and timeline ordering belong to the sibling conversations model. This package does not know about
+Kubernetes, HTTP, or Prisma.
 
 ## Dependency direction
 
-Tagged `scope:agents` (`layer:model`): it may depend only on other `scope:agents` and `scope:shared`
-packages — never on apps, backend domains, or other model domains.
+Tagged `scope:agents` (`layer:model`): it may depend on the lower conversation identifier contract
+and other explicitly allowed model/shared packages — never on apps or backend domains.
 
 ## See also
 
 - Parent index: [models](../../README.md)
-- Siblings: [artifacts](../../artifacts/main/README.md) · [authorization](../../authorization/main/README.md)
+- Siblings: [conversations](../../conversations/main/README.md) · [artifacts](../../artifacts/main/README.md) · [authorization](../../authorization/main/README.md)

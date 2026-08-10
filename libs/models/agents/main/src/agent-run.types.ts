@@ -1,4 +1,5 @@
-import type { AgentRevisionId, AgentRunId, AgentServiceId, SiloId, ThreadId, UserId } from "./identifiers.types.js";
+import type { ConversationId } from "@opencrane/models/conversations";
+import type { AgentRevisionId, AgentRunId, AgentServiceId, SiloId, UserId } from "./identifiers.types.js";
 
 /** Trigger that created an agent run. */
 export type AgentRunTrigger = "interactive" | "schedule" | "managed_invocation";
@@ -29,8 +30,8 @@ export interface AgentRun
 	readonly agentServiceId: AgentServiceId;
 	/** Immutable revision executed by this run. */
 	readonly agentRevisionId: AgentRevisionId;
-	/** Thread receiving user-visible transcript output, or null for non-conversational runs. */
-	readonly threadId: ThreadId | null;
+	/** Conversation receiving user-visible output, or null for non-conversational runs. */
+	readonly conversationId: ConversationId | null;
 	/** Trigger that created the run. */
 	readonly trigger: AgentRunTrigger;
 	/** Delegated interactive user, or null when the service acts as itself. */

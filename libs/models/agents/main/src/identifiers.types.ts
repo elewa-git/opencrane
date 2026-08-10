@@ -7,12 +7,6 @@ export type AgentRevisionId = string;
 /** Stable identifier of an agent run. */
 export type AgentRunId = string;
 
-/** Stable identifier of a conversation thread. */
-export type ThreadId = string;
-
-/** Stable identifier of an immutable transcript message. */
-export type MessageId = string;
-
 /** Stable identifier of a persona profile. */
 export type PersonaProfileId = string;
 

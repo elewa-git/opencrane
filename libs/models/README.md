@@ -14,11 +14,12 @@ enforced identically on both sides.
 | [`agents`](./agents/main/README.md) | Agent-domain types and lifecycle rules. |
 | [`artifacts`](./artifacts/main/README.md) | Content-addressed artifact types and invariants. |
 | [`authorization`](./authorization/main/README.md) | Capabilities, proofs, and the pure allow/deny function. |
+| [`conversations`](./conversations/main/README.md) | Conversation modes, lifecycle, messages, timeline coordinates, and pure command decisions. |
 
 ```
                  libs/models  (pure — no I/O)
     ┌───────────┬────────────┬───────────────┐
-  agents    artifacts   authorization
+  agents    artifacts   authorization   conversations
     └───────────┴────────────┴───────────────┘
                         │ imported by
               ┌─────────┴─────────┐

@@ -59,7 +59,7 @@ CREATE TYPE "ActionExecutionState" AS ENUM ('reserved', 'succeeded', 'failed');
 CREATE TYPE "ActionReplayMode" AS ENUM ('one_shot', 'idempotent');
 
 -- CreateEnum
-CREATE TYPE "ChannelInvocationAction" AS ENUM ('command.forward', 'events.read');
+CREATE TYPE "ChannelInvocationAction" AS ENUM ('events.read');
 
 -- CreateEnum
 CREATE TYPE "OrgRole" AS ENUM ('owner', 'admin', 'member');
@@ -68,13 +68,19 @@ CREATE TYPE "OrgRole" AS ENUM ('owner', 'admin', 'member');
 CREATE TYPE "OrgMemberStatus" AS ENUM ('active', 'suspended');
 
 -- CreateEnum
-CREATE TYPE "ConversationThreadState" AS ENUM ('active', 'archived');
+CREATE TYPE "ConversationMode" AS ENUM ('agent_session', 'direct', 'group');
+
+-- CreateEnum
+CREATE TYPE "ConversationLifecycle" AS ENUM ('open', 'closed');
 
 -- CreateEnum
 CREATE TYPE "ConversationMessageRole" AS ENUM ('user', 'assistant', 'tool', 'system');
 
 -- CreateEnum
 CREATE TYPE "ConversationMessageState" AS ENUM ('pending', 'streaming', 'completed', 'failed', 'cancelled');
+
+-- CreateEnum
+CREATE TYPE "ConversationTimelineEntryKind" AS ENUM ('message', 'run_event', 'membership', 'system', 'parent_delivery');
 
 -- CreateEnum
 CREATE TYPE "GrantScope" AS ENUM ('org', 'department', 'team', 'project', 'personal');
@@ -605,11 +611,10 @@ CREATE TABLE "channel_invocation_contexts" (
     "digest" TEXT NOT NULL,
     "subject_id" TEXT NOT NULL,
     "silo_id" TEXT NOT NULL,
-    "thread_id" TEXT NOT NULL,
+    "conversation_id" TEXT NOT NULL,
     "agent_service_id" TEXT NOT NULL,
     "action" "ChannelInvocationAction" NOT NULL,
     "route_id" TEXT NOT NULL,
-    "run_id" TEXT,
     "membership_revision" INTEGER NOT NULL,
     "authorization_digest" TEXT NOT NULL,
     "expires_at" TIMESTAMP(3) NOT NULL,
@@ -634,33 +639,40 @@ CREATE TABLE "org_memberships" (
 );
 
 -- CreateTable
-CREATE TABLE "conversation_threads" (
+CREATE TABLE "conversations" (
     "id" TEXT NOT NULL,
     "silo_id" TEXT NOT NULL,
-    "agent_service_id" TEXT NOT NULL,
-    "state" "ConversationThreadState" NOT NULL DEFAULT 'active',
+    "mode" "ConversationMode" NOT NULL,
+    "agent_service_id" TEXT,
+    "lifecycle" "ConversationLifecycle" NOT NULL DEFAULT 'open',
     "context_revision_id" TEXT,
+    "closed_at" TIMESTAMP(3),
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updated_at" TIMESTAMP(3) NOT NULL,
 
-    CONSTRAINT "conversation_threads_pkey" PRIMARY KEY ("id")
+    CONSTRAINT "conversations_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
 CREATE TABLE "conversation_participants" (
-    "thread_id" TEXT NOT NULL,
+    "conversation_id" TEXT NOT NULL,
     "user_id" TEXT NOT NULL,
+    "visible_from_position" BIGINT NOT NULL DEFAULT 0,
+    "read_through_position" BIGINT NOT NULL DEFAULT 0,
+    "access_ended_position" BIGINT,
+    "archived_at" TIMESTAMP(3),
     "joined_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
-    CONSTRAINT "conversation_participants_pkey" PRIMARY KEY ("thread_id","user_id")
+    CONSTRAINT "conversation_participants_pkey" PRIMARY KEY ("conversation_id","user_id")
 );
 
 -- CreateTable
 CREATE TABLE "conversation_messages" (
     "id" TEXT NOT NULL,
-    "thread_id" TEXT NOT NULL,
+    "conversation_id" TEXT NOT NULL,
     "run_id" TEXT,
     "user_id" TEXT,
+    "idempotency_key" TEXT NOT NULL,
     "role" "ConversationMessageRole" NOT NULL,
     "state" "ConversationMessageState" NOT NULL,
     "source" TEXT NOT NULL,
@@ -673,6 +685,7 @@ CREATE TABLE "conversation_messages" (
 
 -- CreateTable
 CREATE TABLE "conversation_run_events" (
+    "conversation_id" TEXT NOT NULL,
     "run_id" TEXT NOT NULL,
     "sequence" INTEGER NOT NULL,
     "type" TEXT NOT NULL,
@@ -683,9 +696,27 @@ CREATE TABLE "conversation_run_events" (
 );
 
 -- CreateTable
+CREATE TABLE "conversation_timeline_entries" (
+    "conversation_id" TEXT NOT NULL,
+    "position" BIGINT NOT NULL DEFAULT 0,
+    "kind" "ConversationTimelineEntryKind" NOT NULL,
+    "message_id" TEXT,
+    "run_id" TEXT,
+    "run_event_sequence" INTEGER,
+    "membership_event_id" TEXT,
+    "participant_user_id" TEXT,
+    "system_event_id" TEXT,
+    "parent_delivery_child_run_id" TEXT,
+    "payload" JSONB,
+    "occurred_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "conversation_timeline_entries_pkey" PRIMARY KEY ("conversation_id","position")
+);
+
+-- CreateTable
 CREATE TABLE "conversation_context_revisions" (
     "id" TEXT NOT NULL,
-    "thread_id" TEXT NOT NULL,
+    "conversation_id" TEXT NOT NULL,
     "revision" INTEGER NOT NULL,
     "through_message_id" TEXT NOT NULL,
     "summary" JSONB NOT NULL,
@@ -1149,7 +1180,7 @@ CREATE TABLE "personal_configuration_changes" (
     "user_id" TEXT NOT NULL,
     "persona_profile_id" TEXT NOT NULL,
     "agent_service_id" TEXT NOT NULL,
-    "source_thread_id" TEXT NOT NULL,
+    "source_conversation_id" TEXT NOT NULL,
     "source_run_id" TEXT NOT NULL,
     "source_message_id" TEXT,
     "requested_patch" JSONB NOT NULL,
@@ -1237,7 +1268,7 @@ CREATE TABLE "agent_runs" (
     "silo_id" TEXT NOT NULL,
     "agent_service_id" TEXT NOT NULL,
     "agent_revision_id" TEXT NOT NULL,
-    "thread_id" TEXT,
+    "conversation_id" TEXT,
     "trigger" "AgentRunTrigger" NOT NULL,
     "delegated_user_id" TEXT,
     "request_idempotency_key" TEXT NOT NULL,
@@ -1267,7 +1298,7 @@ CREATE TABLE "run_input_snapshots" (
     "agent_revision_id" TEXT NOT NULL,
     "effective_contract_digest" TEXT NOT NULL,
     "persona_revision_id" TEXT,
-    "thread_id" TEXT,
+    "conversation_id" TEXT,
     "message_ids" TEXT[] DEFAULT ARRAY[]::TEXT[],
     "preference_fact_ids" TEXT[] DEFAULT ARRAY[]::TEXT[],
     "artifact_revision_ids" TEXT[] DEFAULT ARRAY[]::TEXT[],
@@ -1878,18 +1909,6 @@ CREATE INDEX "channel_runtime_routes_current_lookup_idx" ON "channel_runtime_rou
 CREATE UNIQUE INDEX "channel_runtime_routes_exact_target_key" ON "channel_runtime_routes"("id", "silo_id", "agent_service_id", "action");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "channel_invocation_contexts_digest_key" ON "channel_invocation_contexts"("digest");
-
--- CreateIndex
-CREATE INDEX "channel_invocation_contexts_digest_expiry_idx" ON "channel_invocation_contexts"("digest", "expires_at");
-
--- CreateIndex
-CREATE INDEX "channel_invocation_contexts_route_expiry_idx" ON "channel_invocation_contexts"("route_id", "expires_at");
-
--- CreateIndex
-CREATE INDEX "channel_invocation_contexts_subject_thread_idx" ON "channel_invocation_contexts"("subject_id", "silo_id", "thread_id", "created_at");
-
--- CreateIndex
 CREATE INDEX "org_memberships_subject_idx" ON "org_memberships"("subject");
 
 -- CreateIndex
@@ -1897,39 +1916,6 @@ CREATE INDEX "org_memberships_cluster_tenant_idx" ON "org_memberships"("cluster_
 
 -- CreateIndex
 CREATE UNIQUE INDEX "org_memberships_cluster_tenant_subject_key" ON "org_memberships"("cluster_tenant", "subject");
-
--- CreateIndex
-CREATE INDEX "conversation_threads_silo_id_agent_service_id_state_idx" ON "conversation_threads"("silo_id", "agent_service_id", "state");
-
--- CreateIndex
-CREATE UNIQUE INDEX "conversation_threads_id_silo_id_key" ON "conversation_threads"("id", "silo_id");
-
--- CreateIndex
-CREATE UNIQUE INDEX "conversation_threads_exact_service_key" ON "conversation_threads"("id", "silo_id", "agent_service_id");
-
--- CreateIndex
-CREATE UNIQUE INDEX "conversation_threads_id_context_revision_id_key" ON "conversation_threads"("id", "context_revision_id");
-
--- CreateIndex
-CREATE INDEX "conversation_participants_user_id_thread_id_idx" ON "conversation_participants"("user_id", "thread_id");
-
--- CreateIndex
-CREATE INDEX "conversation_messages_thread_id_created_at_id_idx" ON "conversation_messages"("thread_id", "created_at", "id");
-
--- CreateIndex
-CREATE INDEX "conversation_messages_run_id_idx" ON "conversation_messages"("run_id");
-
--- CreateIndex
-CREATE INDEX "conversation_run_events_run_id_occurred_at_idx" ON "conversation_run_events"("run_id", "occurred_at");
-
--- CreateIndex
-CREATE INDEX "conversation_context_revisions_created_by_run_id_idx" ON "conversation_context_revisions"("created_by_run_id");
-
--- CreateIndex
-CREATE UNIQUE INDEX "conversation_context_revisions_thread_id_revision_key" ON "conversation_context_revisions"("thread_id", "revision");
-
--- CreateIndex
-CREATE UNIQUE INDEX "conversation_context_revisions_thread_id_id_key" ON "conversation_context_revisions"("thread_id", "id");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "groups_name_key" ON "groups"("name");
@@ -2106,15 +2092,6 @@ CREATE UNIQUE INDEX "persona_revisions_persona_profile_id_id_key" ON "persona_re
 CREATE INDEX "persona_insights_answer_id_interview_id_question_set_id_que_idx" ON "persona_insights"("answer_id", "interview_id", "question_set_id", "question_set_version", "question_id");
 
 -- CreateIndex
-CREATE INDEX "personal_configuration_changes_silo_id_user_id_proposed_at_idx" ON "personal_configuration_changes"("silo_id", "user_id", "proposed_at");
-
--- CreateIndex
-CREATE INDEX "personal_configuration_changes_source_run_id_idx" ON "personal_configuration_changes"("source_run_id");
-
--- CreateIndex
-CREATE INDEX "personal_configuration_changes_persona_profile_id_state_pro_idx" ON "personal_configuration_changes"("persona_profile_id", "state", "proposed_at");
-
--- CreateIndex
 CREATE UNIQUE INDEX "persona_insights_persona_revision_id_id_key" ON "persona_insights"("persona_revision_id", "id");
 
 -- CreateIndex
@@ -2143,48 +2120,6 @@ CREATE INDEX "third_party_source_items_source_id_idx" ON "third_party_source_ite
 
 -- CreateIndex
 CREATE UNIQUE INDEX "third_party_source_items_source_id_kind_upstream_id_key" ON "third_party_source_items"("source_id", "kind", "upstream_id");
-
--- CreateIndex
-CREATE INDEX "agent_runs_agent_service_id_state_idx" ON "agent_runs"("agent_service_id", "state");
-
--- CreateIndex
-CREATE INDEX "agent_runs_thread_id_accepted_at_idx" ON "agent_runs"("thread_id", "accepted_at");
-
--- CreateIndex
-CREATE INDEX "agent_runs_root_run_id_idx" ON "agent_runs"("root_run_id");
-
--- CreateIndex
-CREATE UNIQUE INDEX "agent_runs_silo_id_request_idempotency_key_key" ON "agent_runs"("silo_id", "request_idempotency_key");
-
--- CreateIndex
-CREATE UNIQUE INDEX "agent_runs_id_agent_service_id_agent_revision_id_key" ON "agent_runs"("id", "agent_service_id", "agent_revision_id");
-
--- CreateIndex
-CREATE UNIQUE INDEX "agent_runs_id_silo_id_agent_service_id_agent_revision_id_key" ON "agent_runs"("id", "silo_id", "agent_service_id", "agent_revision_id");
-
--- CreateIndex
-CREATE UNIQUE INDEX "agent_runs_id_agent_revision_id_key" ON "agent_runs"("id", "agent_revision_id");
-
--- CreateIndex
-CREATE UNIQUE INDEX "agent_runs_id_input_snapshot_digest_key" ON "agent_runs"("id", "input_snapshot_digest");
-
--- CreateIndex
-CREATE UNIQUE INDEX "agent_run_snapshot_identity_key" ON "agent_runs"("id", "input_snapshot_digest", "thread_id", "silo_id", "agent_service_id", "agent_revision_id", "effective_contract_digest");
-
--- CreateIndex
-CREATE UNIQUE INDEX "run_input_snapshots_run_id_key" ON "run_input_snapshots"("run_id");
-
--- CreateIndex
-CREATE UNIQUE INDEX "run_input_snapshots_input_digest_key" ON "run_input_snapshots"("input_digest");
-
--- CreateIndex
-CREATE INDEX "run_input_snapshots_agent_service_id_agent_revision_id_idx" ON "run_input_snapshots"("agent_service_id", "agent_revision_id");
-
--- CreateIndex
-CREATE UNIQUE INDEX "run_input_snapshots_run_id_input_digest_key" ON "run_input_snapshots"("run_id", "input_digest");
-
--- CreateIndex
-CREATE UNIQUE INDEX "run_input_snapshot_run_identity_key" ON "run_input_snapshots"("run_id", "input_digest", "thread_id", "silo_id", "agent_service_id", "agent_revision_id", "effective_contract_digest");
 
 -- CreateIndex
 CREATE INDEX "child_run_reservations_parent_run_id_idx" ON "child_run_reservations"("parent_run_id");
@@ -2359,6 +2294,133 @@ CREATE UNIQUE INDEX "user_onboarding_bootstrap_answers_conversation_id_ordinal_k
 CREATE UNIQUE INDEX "user_onboarding_bootstrap_answers_conversation_id_question_ordinal_key" ON "user_onboarding_bootstrap_answers"("conversation_id", "question_ordinal");
 CREATE UNIQUE INDEX "user_onboarding_bootstrap_answers_conversation_id_idempotency_key" ON "user_onboarding_bootstrap_answers"("conversation_id", "idempotency_key");
 
+-- CreateIndex
+CREATE UNIQUE INDEX "channel_invocation_contexts_digest_key" ON "channel_invocation_contexts"("digest");
+
+-- CreateIndex
+CREATE INDEX "channel_invocation_contexts_digest_expiry_idx" ON "channel_invocation_contexts"("digest", "expires_at");
+
+-- CreateIndex
+CREATE INDEX "channel_invocation_contexts_route_expiry_idx" ON "channel_invocation_contexts"("route_id", "expires_at");
+
+-- CreateIndex
+CREATE INDEX "channel_invocation_contexts_subject_conversation_idx" ON "channel_invocation_contexts"("subject_id", "silo_id", "conversation_id", "created_at");
+
+-- CreateIndex
+CREATE INDEX "conversations_silo_id_mode_lifecycle_updated_at_idx" ON "conversations"("silo_id", "mode", "lifecycle", "updated_at");
+
+-- CreateIndex
+CREATE INDEX "conversations_silo_id_agent_service_id_lifecycle_idx" ON "conversations"("silo_id", "agent_service_id", "lifecycle");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "conversations_id_silo_id_key" ON "conversations"("id", "silo_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "conversations_exact_service_key" ON "conversations"("id", "silo_id", "agent_service_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "conversations_id_context_revision_id_key" ON "conversations"("id", "context_revision_id");
+
+-- CreateIndex
+CREATE INDEX "conversation_participants_user_id_archived_at_conversation__idx" ON "conversation_participants"("user_id", "archived_at", "conversation_id");
+
+-- CreateIndex
+CREATE INDEX "conversation_messages_run_id_idx" ON "conversation_messages"("run_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "conversation_messages_conversation_id_id_key" ON "conversation_messages"("conversation_id", "id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "conversation_messages_conversation_id_idempotency_key_key" ON "conversation_messages"("conversation_id", "idempotency_key");
+
+-- CreateIndex
+CREATE INDEX "conversation_run_events_run_id_occurred_at_idx" ON "conversation_run_events"("run_id", "occurred_at");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "conversation_run_events_conversation_id_run_id_sequence_key" ON "conversation_run_events"("conversation_id", "run_id", "sequence");
+
+-- CreateIndex
+CREATE INDEX "conversation_timeline_entries_conversation_id_occurred_at_idx" ON "conversation_timeline_entries"("conversation_id", "occurred_at");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "conversation_timeline_entries_conversation_id_message_id_key" ON "conversation_timeline_entries"("conversation_id", "message_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "conversation_timeline_entries_conversation_id_run_id_run_ev_key" ON "conversation_timeline_entries"("conversation_id", "run_id", "run_event_sequence");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "conversation_timeline_entries_conversation_id_membership_ev_key" ON "conversation_timeline_entries"("conversation_id", "membership_event_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "conversation_timeline_entries_conversation_id_system_event__key" ON "conversation_timeline_entries"("conversation_id", "system_event_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "conversation_timeline_entries_parent_delivery_child_run_id_key" ON "conversation_timeline_entries"("parent_delivery_child_run_id");
+
+-- CreateIndex
+CREATE INDEX "conversation_context_revisions_created_by_run_id_idx" ON "conversation_context_revisions"("created_by_run_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "conversation_context_revisions_conversation_id_revision_key" ON "conversation_context_revisions"("conversation_id", "revision");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "conversation_context_revisions_conversation_id_id_key" ON "conversation_context_revisions"("conversation_id", "id");
+
+-- CreateIndex
+CREATE INDEX "personal_configuration_changes_silo_id_user_id_proposed_at_idx" ON "personal_configuration_changes"("silo_id", "user_id", "proposed_at");
+
+-- CreateIndex
+CREATE INDEX "personal_configuration_changes_source_run_id_idx" ON "personal_configuration_changes"("source_run_id");
+
+-- CreateIndex
+CREATE INDEX "personal_configuration_changes_persona_profile_id_state_pro_idx" ON "personal_configuration_changes"("persona_profile_id", "state", "proposed_at");
+
+-- CreateIndex
+CREATE INDEX "agent_runs_agent_service_id_state_idx" ON "agent_runs"("agent_service_id", "state");
+
+-- CreateIndex
+CREATE INDEX "agent_runs_conversation_id_accepted_at_idx" ON "agent_runs"("conversation_id", "accepted_at");
+
+-- CreateIndex
+CREATE INDEX "agent_runs_root_run_id_idx" ON "agent_runs"("root_run_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "agent_runs_silo_id_request_idempotency_key_key" ON "agent_runs"("silo_id", "request_idempotency_key");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "agent_runs_id_agent_service_id_agent_revision_id_key" ON "agent_runs"("id", "agent_service_id", "agent_revision_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "agent_runs_id_silo_id_agent_service_id_agent_revision_id_key" ON "agent_runs"("id", "silo_id", "agent_service_id", "agent_revision_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "agent_runs_id_agent_revision_id_key" ON "agent_runs"("id", "agent_revision_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "agent_runs_id_input_snapshot_digest_key" ON "agent_runs"("id", "input_snapshot_digest");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "agent_runs_conversation_id_id_key" ON "agent_runs"("conversation_id", "id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "agent_run_snapshot_identity_key" ON "agent_runs"("id", "input_snapshot_digest", "conversation_id", "silo_id", "agent_service_id", "agent_revision_id", "effective_contract_digest");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "run_input_snapshots_run_id_key" ON "run_input_snapshots"("run_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "run_input_snapshots_input_digest_key" ON "run_input_snapshots"("input_digest");
+
+-- CreateIndex
+CREATE INDEX "run_input_snapshots_agent_service_id_agent_revision_id_idx" ON "run_input_snapshots"("agent_service_id", "agent_revision_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "run_input_snapshots_run_id_input_digest_key" ON "run_input_snapshots"("run_id", "input_digest");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "run_input_snapshot_run_identity_key" ON "run_input_snapshots"("run_id", "input_digest", "conversation_id", "silo_id", "agent_service_id", "agent_revision_id", "effective_contract_digest");
+
+
 -- AddForeignKey
 ALTER TABLE "agent_services" ADD CONSTRAINT "agent_services_id_active_revision_id_fkey" FOREIGN KEY ("id", "active_revision_id") REFERENCES "agent_revisions"("agent_service_id", "id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
@@ -2469,21 +2531,6 @@ ALTER TABLE "action_execution_receipts" ADD CONSTRAINT "action_execution_receipt
 
 -- AddForeignKey
 ALTER TABLE "action_execution_receipts" ADD CONSTRAINT "action_execution_receipts_run_id_attempt_agent_service_id__fkey" FOREIGN KEY ("run_id", "attempt", "agent_service_id", "agent_revision_id", "silo_id", "subject_id", "service_account_name", "namespace", "workload_kind", "workload_uid") REFERENCES "workload_assignments"("run_id", "attempt", "agent_service_id", "agent_revision_id", "silo_id", "subject_id", "service_account_name", "namespace", "workload_kind", "workload_uid") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "channel_invocation_contexts" ADD CONSTRAINT "channel_invocation_contexts_route_id_silo_id_agent_service_fkey" FOREIGN KEY ("route_id", "silo_id", "agent_service_id", "action") REFERENCES "channel_runtime_routes"("id", "silo_id", "agent_service_id", "action") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "conversation_threads" ADD CONSTRAINT "conversation_threads_id_context_revision_id_fkey" FOREIGN KEY ("id", "context_revision_id") REFERENCES "conversation_context_revisions"("thread_id", "id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "conversation_participants" ADD CONSTRAINT "conversation_participants_thread_id_fkey" FOREIGN KEY ("thread_id") REFERENCES "conversation_threads"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "conversation_messages" ADD CONSTRAINT "conversation_messages_thread_id_fkey" FOREIGN KEY ("thread_id") REFERENCES "conversation_threads"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "conversation_context_revisions" ADD CONSTRAINT "conversation_context_revisions_thread_id_fkey" FOREIGN KEY ("thread_id") REFERENCES "conversation_threads"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "integration_custody_references" ADD CONSTRAINT "integration_custody_references_integration_id_silo_id_fkey" FOREIGN KEY ("integration_id", "silo_id") REFERENCES "integrations"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
@@ -2597,12 +2644,6 @@ ALTER TABLE "agent_revisions" ADD CONSTRAINT "agent_revisions_model_definition_i
 ALTER TABLE "third_party_source_items" ADD CONSTRAINT "third_party_source_items_source_id_fkey" FOREIGN KEY ("source_id") REFERENCES "third_party_sources"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "agent_runs" ADD CONSTRAINT "agent_runs_agent_service_id_agent_revision_id_fkey" FOREIGN KEY ("agent_service_id", "agent_revision_id") REFERENCES "agent_revisions"("agent_service_id", "id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "agent_runs" ADD CONSTRAINT "agent_runs_agent_service_id_silo_id_fkey" FOREIGN KEY ("agent_service_id", "silo_id") REFERENCES "agent_services"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
 ALTER TABLE "child_run_reservations" ADD CONSTRAINT "child_run_reservations_parent_run_id_fkey" FOREIGN KEY ("parent_run_id") REFERENCES "agent_runs"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
@@ -2613,9 +2654,6 @@ ALTER TABLE "child_run_completion_deliveries" ADD CONSTRAINT "child_run_completi
 
 -- AddForeignKey
 ALTER TABLE "child_run_completion_deliveries" ADD CONSTRAINT "child_run_completion_deliveries_parent_run_id_fkey" FOREIGN KEY ("parent_run_id") REFERENCES "agent_runs"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "run_input_snapshots" ADD CONSTRAINT "run_input_snapshots_run_id_input_digest_thread_id_silo_id__fkey" FOREIGN KEY ("run_id", "input_digest", "thread_id", "silo_id", "agent_service_id", "agent_revision_id", "effective_contract_digest") REFERENCES "agent_runs"("id", "input_snapshot_digest", "thread_id", "silo_id", "agent_service_id", "agent_revision_id", "effective_contract_digest") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "workload_assignments" ADD CONSTRAINT "workload_assignments_run_id_silo_id_agent_service_id_agent_fkey" FOREIGN KEY ("run_id", "silo_id", "agent_service_id", "agent_revision_id") REFERENCES "agent_runs"("id", "silo_id", "agent_service_id", "agent_revision_id") ON DELETE RESTRICT ON UPDATE CASCADE;
@@ -2651,17 +2689,63 @@ ALTER TABLE "skill_workloads" ADD CONSTRAINT "skill_workloads_tool_invocation_id
 ALTER TABLE "skill_workload_bootstraps" ADD CONSTRAINT "skill_workload_bootstraps_skill_workload_id_fkey" FOREIGN KEY ("skill_workload_id") REFERENCES "skill_workloads"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 
--- Null-safe immutable run/snapshot binding. SQL composite FKs alone skip checks when thread_id is NULL.
+-- AddForeignKey
+ALTER TABLE "channel_invocation_contexts" ADD CONSTRAINT "channel_invocation_contexts_route_id_silo_id_agent_service_fkey" FOREIGN KEY ("route_id", "silo_id", "agent_service_id", "action") REFERENCES "channel_runtime_routes"("id", "silo_id", "agent_service_id", "action") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "conversations" ADD CONSTRAINT "conversations_id_context_revision_id_fkey" FOREIGN KEY ("id", "context_revision_id") REFERENCES "conversation_context_revisions"("conversation_id", "id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "conversations" ADD CONSTRAINT "conversations_agent_service_id_silo_id_fkey" FOREIGN KEY ("agent_service_id", "silo_id") REFERENCES "agent_services"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "conversation_participants" ADD CONSTRAINT "conversation_participants_conversation_id_fkey" FOREIGN KEY ("conversation_id") REFERENCES "conversations"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "conversation_messages" ADD CONSTRAINT "conversation_messages_conversation_id_fkey" FOREIGN KEY ("conversation_id") REFERENCES "conversations"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "conversation_run_events" ADD CONSTRAINT "conversation_run_events_conversation_id_fkey" FOREIGN KEY ("conversation_id") REFERENCES "conversations"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "conversation_timeline_entries" ADD CONSTRAINT "conversation_timeline_entries_conversation_id_fkey" FOREIGN KEY ("conversation_id") REFERENCES "conversations"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "conversation_timeline_entries" ADD CONSTRAINT "conversation_timeline_entries_conversation_id_message_id_fkey" FOREIGN KEY ("conversation_id", "message_id") REFERENCES "conversation_messages"("conversation_id", "id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "conversation_timeline_entries" ADD CONSTRAINT "conversation_timeline_entries_conversation_id_run_id_run_e_fkey" FOREIGN KEY ("conversation_id", "run_id", "run_event_sequence") REFERENCES "conversation_run_events"("conversation_id", "run_id", "sequence") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "conversation_timeline_entries" ADD CONSTRAINT "conversation_timeline_entries_conversation_id_participant__fkey" FOREIGN KEY ("conversation_id", "participant_user_id") REFERENCES "conversation_participants"("conversation_id", "user_id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "conversation_timeline_entries" ADD CONSTRAINT "conversation_timeline_entries_parent_delivery_child_run_id_fkey" FOREIGN KEY ("parent_delivery_child_run_id") REFERENCES "child_run_completion_deliveries"("child_run_id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "conversation_context_revisions" ADD CONSTRAINT "conversation_context_revisions_conversation_id_fkey" FOREIGN KEY ("conversation_id") REFERENCES "conversations"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "agent_runs" ADD CONSTRAINT "agent_runs_agent_service_id_agent_revision_id_fkey" FOREIGN KEY ("agent_service_id", "agent_revision_id") REFERENCES "agent_revisions"("agent_service_id", "id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "agent_runs" ADD CONSTRAINT "agent_runs_agent_service_id_silo_id_fkey" FOREIGN KEY ("agent_service_id", "silo_id") REFERENCES "agent_services"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "run_input_snapshots" ADD CONSTRAINT "run_input_snapshots_run_id_input_digest_conversation_id_si_fkey" FOREIGN KEY ("run_id", "input_digest", "conversation_id", "silo_id", "agent_service_id", "agent_revision_id", "effective_contract_digest") REFERENCES "agent_runs"("id", "input_snapshot_digest", "conversation_id", "silo_id", "agent_service_id", "agent_revision_id", "effective_contract_digest") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+
+-- Null-safe immutable run/snapshot binding. SQL composite FKs alone skip checks when conversation_id is NULL.
 ALTER TABLE "run_input_snapshots" ADD CONSTRAINT "run_input_snapshots_run_digest_fkey"
-    FOREIGN KEY ("run_id", "input_digest", "thread_id", "silo_id", "agent_service_id", "agent_revision_id", "effective_contract_digest")
-    REFERENCES "agent_runs"("id", "input_snapshot_digest", "thread_id", "silo_id", "agent_service_id", "agent_revision_id", "effective_contract_digest")
+    FOREIGN KEY ("run_id", "input_digest", "conversation_id", "silo_id", "agent_service_id", "agent_revision_id", "effective_contract_digest")
+    REFERENCES "agent_runs"("id", "input_snapshot_digest", "conversation_id", "silo_id", "agent_service_id", "agent_revision_id", "effective_contract_digest")
     ON DELETE RESTRICT ON UPDATE CASCADE DEFERRABLE INITIALLY DEFERRED;
 ALTER TABLE "agent_runs" ADD CONSTRAINT "agent_runs_input_snapshot_fkey"
-    FOREIGN KEY ("id", "input_snapshot_digest", "thread_id", "silo_id", "agent_service_id", "agent_revision_id", "effective_contract_digest")
-    REFERENCES "run_input_snapshots"("run_id", "input_digest", "thread_id", "silo_id", "agent_service_id", "agent_revision_id", "effective_contract_digest")
+    FOREIGN KEY ("id", "input_snapshot_digest", "conversation_id", "silo_id", "agent_service_id", "agent_revision_id", "effective_contract_digest")
+    REFERENCES "run_input_snapshots"("run_id", "input_digest", "conversation_id", "silo_id", "agent_service_id", "agent_revision_id", "effective_contract_digest")
     ON DELETE RESTRICT ON UPDATE CASCADE DEFERRABLE INITIALLY DEFERRED;
 ALTER TABLE "run_input_snapshots" ADD CONSTRAINT "run_input_snapshots_run_input_check" CHECK (
-    ("thread_id" IS NULL OR btrim("thread_id") <> '')
+    ("conversation_id" IS NULL OR btrim("conversation_id") <> '')
     AND btrim("capability_set_digest") <> ''
     AND "capability_set_digest" ~ '^sha256:[0-9a-f]{64}$'
     AND jsonb_typeof("memory_facts") = 'array'
@@ -2674,32 +2758,25 @@ ALTER TABLE "channel_runtime_routes" ADD CONSTRAINT "channel_runtime_routes_serv
     FOREIGN KEY ("agent_service_id", "silo_id") REFERENCES "agent_services"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
 CREATE UNIQUE INDEX "channel_runtime_routes_one_current_target"
     ON "channel_runtime_routes"("silo_id", "agent_service_id", "action") WHERE "is_current" = TRUE AND "revoked_at" IS NULL;
-CREATE UNIQUE INDEX "agent_runs_channel_context_identity_key"
-    ON "agent_runs"("id", "thread_id", "silo_id", "agent_service_id", "delegated_user_id");
 ALTER TABLE "channel_invocation_contexts" ADD CONSTRAINT "channel_invocation_contexts_digest_format" CHECK ("digest" ~ '^sha256:[0-9a-f]{64}$');
 ALTER TABLE "channel_invocation_contexts" ADD CONSTRAINT "channel_invocation_contexts_membership_revision_positive" CHECK ("membership_revision" > 0);
 ALTER TABLE "channel_invocation_contexts" ADD CONSTRAINT "channel_invocation_contexts_expiry_after_creation" CHECK ("expires_at" > "created_at");
-ALTER TABLE "channel_invocation_contexts" ADD CONSTRAINT "channel_invocation_contexts_action_run_binding" CHECK (("action" = 'command.forward' AND "run_id" IS NOT NULL) OR ("action" = 'events.read' AND "run_id" IS NULL));
-ALTER TABLE "channel_invocation_contexts" ADD CONSTRAINT "channel_invocation_contexts_thread_fkey"
-    FOREIGN KEY ("thread_id", "silo_id", "agent_service_id") REFERENCES "conversation_threads"("id", "silo_id", "agent_service_id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "channel_invocation_contexts" ADD CONSTRAINT "channel_invocation_contexts_conversation_fkey"
+    FOREIGN KEY ("conversation_id", "silo_id", "agent_service_id") REFERENCES "conversations"("id", "silo_id", "agent_service_id") ON DELETE RESTRICT ON UPDATE CASCADE;
 ALTER TABLE "channel_invocation_contexts" ADD CONSTRAINT "channel_invocation_contexts_participant_fkey"
-    FOREIGN KEY ("thread_id", "subject_id") REFERENCES "conversation_participants"("thread_id", "user_id") ON DELETE RESTRICT ON UPDATE CASCADE;
-ALTER TABLE "channel_invocation_contexts" ADD CONSTRAINT "channel_invocation_contexts_run_fkey"
-    FOREIGN KEY ("run_id", "thread_id", "silo_id", "agent_service_id", "subject_id") REFERENCES "agent_runs"("id", "thread_id", "silo_id", "agent_service_id", "delegated_user_id") ON DELETE RESTRICT ON UPDATE CASCADE;
+    FOREIGN KEY ("conversation_id", "subject_id") REFERENCES "conversation_participants"("conversation_id", "user_id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- Cross-domain transcript and persona provenance constraints are deliberately database-enforced.
-ALTER TABLE "conversation_threads" ADD CONSTRAINT "conversation_threads_agent_service_id_silo_id_fkey"
-    FOREIGN KEY ("agent_service_id", "silo_id") REFERENCES "agent_services"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
-ALTER TABLE "agent_runs" ADD CONSTRAINT "agent_runs_conversation_thread_fkey"
-    FOREIGN KEY ("thread_id", "silo_id", "agent_service_id") REFERENCES "conversation_threads"("id", "silo_id", "agent_service_id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "agent_runs" ADD CONSTRAINT "agent_runs_conversation_fkey"
+    FOREIGN KEY ("conversation_id", "silo_id", "agent_service_id") REFERENCES "conversations"("id", "silo_id", "agent_service_id") ON DELETE RESTRICT ON UPDATE CASCADE;
 ALTER TABLE "conversation_messages" ADD CONSTRAINT "conversation_messages_run_id_fkey"
-    FOREIGN KEY ("run_id") REFERENCES "agent_runs"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+    FOREIGN KEY ("conversation_id", "run_id") REFERENCES "agent_runs"("conversation_id", "id") ON DELETE RESTRICT ON UPDATE CASCADE;
 ALTER TABLE "conversation_run_events" ADD CONSTRAINT "conversation_run_events_run_id_fkey"
-    FOREIGN KEY ("run_id") REFERENCES "agent_runs"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+    FOREIGN KEY ("conversation_id", "run_id") REFERENCES "agent_runs"("conversation_id", "id") ON DELETE RESTRICT ON UPDATE CASCADE;
 ALTER TABLE "conversation_context_revisions" ADD CONSTRAINT "conversation_context_revisions_through_message_id_fkey"
-    FOREIGN KEY ("through_message_id") REFERENCES "conversation_messages"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+    FOREIGN KEY ("conversation_id", "through_message_id") REFERENCES "conversation_messages"("conversation_id", "id") ON DELETE RESTRICT ON UPDATE CASCADE;
 ALTER TABLE "conversation_context_revisions" ADD CONSTRAINT "conversation_context_revisions_created_by_run_id_fkey"
-    FOREIGN KEY ("created_by_run_id") REFERENCES "agent_runs"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+    FOREIGN KEY ("conversation_id", "created_by_run_id") REFERENCES "agent_runs"("conversation_id", "id") ON DELETE RESTRICT ON UPDATE CASCADE;
 ALTER TABLE "persona_interview_answers" ADD CONSTRAINT "persona_interview_answers_question_fkey"
     FOREIGN KEY ("question_set_id", "question_set_version", "question_id") REFERENCES "persona_questions"("question_set_id", "question_set_version", "question_id") ON DELETE RESTRICT ON UPDATE CASCADE;
 ALTER TABLE "persona_insights" ADD CONSTRAINT "persona_insights_answer_provenance_fkey"
@@ -3013,7 +3090,7 @@ BEGIN
     IF NEW."id" IS DISTINCT FROM OLD."id" OR NEW."silo_id" IS DISTINCT FROM OLD."silo_id"
         OR NEW."agent_service_id" IS DISTINCT FROM OLD."agent_service_id"
         OR NEW."agent_revision_id" IS DISTINCT FROM OLD."agent_revision_id"
-        OR NEW."thread_id" IS DISTINCT FROM OLD."thread_id"
+        OR NEW."conversation_id" IS DISTINCT FROM OLD."conversation_id"
         OR NEW."trigger" IS DISTINCT FROM OLD."trigger"
         OR NEW."delegated_user_id" IS DISTINCT FROM OLD."delegated_user_id"
         OR NEW."request_idempotency_key" IS DISTINCT FROM OLD."request_idempotency_key"
@@ -3603,20 +3680,144 @@ BEGIN
     RAISE EXCEPTION 'AuditDecision rows are append-only';
 END;
 $$;
+CREATE FUNCTION "enforce_conversation_lifecycle"() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+    IF TG_OP = 'DELETE' THEN
+        RAISE EXCEPTION 'Conversation rows cannot be deleted';
+    END IF;
+    IF TG_OP = 'INSERT' THEN
+        IF NEW."lifecycle" <> 'open' OR NEW."closed_at" IS NOT NULL THEN
+            RAISE EXCEPTION 'Conversation must begin open without closure evidence';
+        END IF;
+        RETURN NEW;
+    END IF;
+    IF NEW."id" IS DISTINCT FROM OLD."id"
+        OR NEW."silo_id" IS DISTINCT FROM OLD."silo_id"
+        OR NEW."mode" IS DISTINCT FROM OLD."mode"
+        OR NEW."agent_service_id" IS DISTINCT FROM OLD."agent_service_id"
+        OR NEW."created_at" IS DISTINCT FROM OLD."created_at" THEN
+        RAISE EXCEPTION 'Conversation identity, mode, and agent binding are immutable';
+    END IF;
+    IF OLD."lifecycle" = 'closed' THEN
+        RAISE EXCEPTION 'closed Conversation is read-only';
+    END IF;
+    IF NEW."lifecycle" = 'open' THEN
+        IF NEW."closed_at" IS NOT NULL THEN
+            RAISE EXCEPTION 'open Conversation cannot carry closure evidence';
+        END IF;
+        RETURN NEW;
+    END IF;
+    IF NEW."lifecycle" <> 'closed' OR OLD."closed_at" IS NOT NULL OR NEW."closed_at" IS NULL THEN
+        RAISE EXCEPTION 'Conversation may only transition once from open to closed';
+    END IF;
+    IF EXISTS (
+        SELECT 1 FROM "agent_runs"
+        WHERE "conversation_id" = OLD."id"
+          AND "state" NOT IN ('completed', 'failed', 'cancelled')
+    ) THEN
+        RAISE EXCEPTION 'Conversation cannot close while a foreground run is active';
+    END IF;
+    RETURN NEW;
+END;
+$$;
+CREATE FUNCTION "enforce_conversation_participant_coordinates"() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+    conversation_lifecycle "ConversationLifecycle";
+    next_position BIGINT;
+    last_position BIGINT;
+BEGIN
+    IF TG_OP = 'DELETE' THEN
+        RAISE EXCEPTION 'ConversationParticipant rows cannot be deleted';
+    END IF;
+    SELECT "lifecycle", COALESCE((
+        SELECT max(entry."position") + 1
+        FROM "conversation_timeline_entries" entry
+        WHERE entry."conversation_id" = conversation."id"
+    ), 1)
+    INTO conversation_lifecycle, next_position
+    FROM "conversations" conversation
+    WHERE conversation."id" = NEW."conversation_id"
+    FOR UPDATE;
+    IF conversation_lifecycle IS NULL THEN
+        RAISE EXCEPTION 'ConversationParticipant requires its exact Conversation';
+    END IF;
+    last_position := next_position - 1;
+    IF TG_OP = 'INSERT' THEN
+        IF conversation_lifecycle <> 'open' THEN
+            RAISE EXCEPTION 'participants cannot join a closed Conversation';
+        END IF;
+        NEW."visible_from_position" := next_position;
+        NEW."read_through_position" := last_position;
+        IF NEW."access_ended_position" IS NOT NULL OR NEW."archived_at" IS NOT NULL THEN
+            RAISE EXCEPTION 'new ConversationParticipant must begin with current, unarchived access';
+        END IF;
+        RETURN NEW;
+    END IF;
+    IF NEW."conversation_id" IS DISTINCT FROM OLD."conversation_id"
+        OR NEW."user_id" IS DISTINCT FROM OLD."user_id"
+        OR NEW."visible_from_position" IS DISTINCT FROM OLD."visible_from_position"
+        OR NEW."joined_at" IS DISTINCT FROM OLD."joined_at" THEN
+        RAISE EXCEPTION 'ConversationParticipant join authority is immutable';
+    END IF;
+    IF NEW."read_through_position" < NEW."visible_from_position" - 1
+        OR NEW."read_through_position" > last_position THEN
+        RAISE EXCEPTION 'ConversationParticipant read position is outside its visible timeline';
+    END IF;
+    IF NEW."access_ended_position" IS NOT NULL
+        AND NEW."read_through_position" >= NEW."access_ended_position" THEN
+        RAISE EXCEPTION 'ConversationParticipant cannot read at or beyond its access end';
+    END IF;
+    IF OLD."access_ended_position" IS NOT NULL
+        AND NEW."access_ended_position" IS DISTINCT FROM OLD."access_ended_position" THEN
+        RAISE EXCEPTION 'ConversationParticipant access end is immutable';
+    END IF;
+    IF OLD."access_ended_position" IS NULL AND NEW."access_ended_position" IS NOT NULL THEN
+        IF NEW."access_ended_position" <> 0 THEN
+            RAISE EXCEPTION 'ConversationParticipant access end position is database allocated';
+        END IF;
+        INSERT INTO "conversation_timeline_entries" (
+            "conversation_id", "kind", "membership_event_id", "participant_user_id", "payload"
+        ) VALUES (
+            NEW."conversation_id", 'membership', 'access-ended:' || NEW."user_id", NEW."user_id",
+            jsonb_build_object('action', 'access_ended', 'userId', NEW."user_id")
+        ) RETURNING "position" INTO NEW."access_ended_position";
+    END IF;
+    RETURN NEW;
+END;
+$$;
+CREATE FUNCTION "append_conversation_participant_join"() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+    allocated_position BIGINT;
+BEGIN
+    INSERT INTO "conversation_timeline_entries" (
+        "conversation_id", "kind", "membership_event_id", "participant_user_id", "payload"
+    ) VALUES (
+        NEW."conversation_id", 'membership', 'joined:' || NEW."user_id", NEW."user_id",
+        jsonb_build_object('action', 'joined', 'userId', NEW."user_id")
+    ) RETURNING "position" INTO allocated_position;
+    IF allocated_position IS DISTINCT FROM NEW."visible_from_position" THEN
+        RAISE EXCEPTION 'ConversationParticipant join visibility must equal its membership position';
+    END IF;
+    RETURN NULL;
+END;
+$$;
 CREATE FUNCTION "enforce_conversation_message_lifecycle"() RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE
-    thread_silo_id TEXT;
-    thread_agent_service_id TEXT;
+    conversation_silo_id TEXT;
+    conversation_agent_service_id TEXT;
+    conversation_mode "ConversationMode";
+    conversation_lifecycle "ConversationLifecycle";
     run_silo_id TEXT;
     run_agent_service_id TEXT;
-    run_thread_id TEXT;
+    run_conversation_id TEXT;
 BEGIN
     IF TG_OP = 'DELETE' THEN
         RAISE EXCEPTION 'ConversationMessage rows cannot be deleted';
     END IF;
     IF TG_OP = 'UPDATE' THEN
-        IF NEW."id" IS DISTINCT FROM OLD."id" OR NEW."thread_id" IS DISTINCT FROM OLD."thread_id"
+        IF NEW."id" IS DISTINCT FROM OLD."id" OR NEW."conversation_id" IS DISTINCT FROM OLD."conversation_id"
             OR NEW."run_id" IS DISTINCT FROM OLD."run_id" OR NEW."user_id" IS DISTINCT FROM OLD."user_id"
+            OR NEW."idempotency_key" IS DISTINCT FROM OLD."idempotency_key"
             OR NEW."role" IS DISTINCT FROM OLD."role" OR NEW."source" IS DISTINCT FROM OLD."source"
             OR NEW."created_at" IS DISTINCT FROM OLD."created_at" THEN
             RAISE EXCEPTION 'ConversationMessage identity and provenance are immutable';
@@ -3628,11 +3829,27 @@ BEGIN
             RAISE EXCEPTION 'invalid ConversationMessage lifecycle transition';
         END IF;
     END IF;
-    SELECT "silo_id", "agent_service_id" INTO thread_silo_id, thread_agent_service_id
-      FROM "conversation_threads" WHERE "id" = NEW."thread_id" FOR UPDATE;
+    SELECT "silo_id", "agent_service_id", "mode", "lifecycle"
+      INTO conversation_silo_id, conversation_agent_service_id, conversation_mode, conversation_lifecycle
+      FROM "conversations" WHERE "id" = NEW."conversation_id" FOR UPDATE;
+    IF conversation_lifecycle IS NULL OR conversation_lifecycle <> 'open' THEN
+        RAISE EXCEPTION 'ConversationMessage requires an open Conversation';
+    END IF;
     IF NEW."source" = 'user_input' THEN
-        IF NEW."role" <> 'user' OR NEW."user_id" IS NULL OR NEW."run_id" IS NOT NULL THEN
+        IF NEW."role" <> 'user' OR NEW."user_id" IS NULL THEN
             RAISE EXCEPTION 'user input requires User role and exact user provenance';
+        END IF;
+        IF NOT EXISTS (
+            SELECT 1 FROM "conversation_participants"
+            WHERE "conversation_id" = NEW."conversation_id"
+              AND "user_id" = NEW."user_id"
+              AND "access_ended_position" IS NULL
+        ) THEN
+            RAISE EXCEPTION 'user input requires a participant with current Conversation access';
+        END IF;
+        IF (conversation_mode = 'agent_session' AND NEW."run_id" IS NULL)
+            OR (conversation_mode IN ('direct', 'group') AND NEW."run_id" IS NOT NULL) THEN
+            RAISE EXCEPTION 'user input run provenance must match persisted Conversation mode';
         END IF;
     ELSIF NEW."source" = 'model_output' THEN
         IF NEW."role" <> 'assistant' OR NEW."run_id" IS NULL OR NEW."user_id" IS NOT NULL THEN
@@ -3646,14 +3863,21 @@ BEGIN
         RAISE EXCEPTION 'platform message requires System role';
     END IF;
     IF NEW."run_id" IS NOT NULL THEN
-        SELECT "silo_id", "agent_service_id", "thread_id" INTO run_silo_id, run_agent_service_id, run_thread_id
+        SELECT "silo_id", "agent_service_id", "conversation_id" INTO run_silo_id, run_agent_service_id, run_conversation_id
           FROM "agent_runs" WHERE "id" = NEW."run_id" FOR UPDATE;
-        IF run_silo_id IS DISTINCT FROM thread_silo_id OR run_agent_service_id IS DISTINCT FROM thread_agent_service_id
-            OR run_thread_id IS DISTINCT FROM NEW."thread_id" THEN
-            RAISE EXCEPTION 'ConversationMessage run must belong to the exact thread and silo';
+        IF run_silo_id IS DISTINCT FROM conversation_silo_id OR run_agent_service_id IS DISTINCT FROM conversation_agent_service_id
+            OR run_conversation_id IS DISTINCT FROM NEW."conversation_id" THEN
+            RAISE EXCEPTION 'ConversationMessage run must belong to the exact conversation and silo';
         END IF;
     END IF;
     RETURN NEW;
+END;
+$$;
+CREATE FUNCTION "append_conversation_message_timeline"() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+    INSERT INTO "conversation_timeline_entries" ("conversation_id", "kind", "message_id")
+    VALUES (NEW."conversation_id", 'message', NEW."id");
+    RETURN NULL;
 END;
 $$;
 -- Protect owner-authored steering from direct-SQL identity changes, late injection after a resume,
@@ -3743,12 +3967,15 @@ DECLARE
     previous_sequence INTEGER;
     terminal_exists BOOLEAN;
     run_state "AgentRunState";
-    run_thread_id TEXT;
+    run_conversation_id TEXT;
 BEGIN
     PERFORM pg_advisory_xact_lock(hashtextextended(NEW."run_id", 0));
-    SELECT "state", "thread_id" INTO run_state, run_thread_id FROM "agent_runs" WHERE "id" = NEW."run_id" FOR UPDATE;
+    SELECT "state", "conversation_id" INTO run_state, run_conversation_id FROM "agent_runs" WHERE "id" = NEW."run_id" FOR UPDATE;
     IF run_state IS NULL THEN RAISE EXCEPTION 'RunEvent run does not exist'; END IF;
-    IF run_thread_id IS NULL THEN RAISE EXCEPTION 'RunEvent requires a conversation-bound AgentRun'; END IF;
+    IF run_conversation_id IS NULL THEN RAISE EXCEPTION 'RunEvent requires a conversation-bound AgentRun'; END IF;
+    IF NEW."conversation_id" IS DISTINCT FROM run_conversation_id THEN
+        RAISE EXCEPTION 'RunEvent must bind the exact AgentRun Conversation';
+    END IF;
     SELECT COALESCE(MAX("sequence"), 0), COALESCE(bool_or("type" IN ('run.completed', 'run.failed', 'run.cancelled')), false)
       INTO previous_sequence, terminal_exists
       FROM "conversation_run_events" WHERE "run_id" = NEW."run_id";
@@ -3782,6 +4009,118 @@ BEGIN
     RETURN NEW;
 END;
 $$;
+CREATE FUNCTION "append_conversation_run_event_timeline"() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+    INSERT INTO "conversation_timeline_entries" (
+        "conversation_id", "kind", "run_id", "run_event_sequence"
+    ) VALUES (
+        NEW."conversation_id", 'run_event', NEW."run_id", NEW."sequence"
+    );
+    RETURN NULL;
+END;
+$$;
+CREATE FUNCTION "enforce_conversation_timeline_entry"() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+    conversation_lifecycle "ConversationLifecycle";
+BEGIN
+    IF TG_OP <> 'INSERT' THEN
+        RAISE EXCEPTION 'ConversationTimelineEntry rows are append-only';
+    END IF;
+    IF NEW."position" <> 0 THEN
+        RAISE EXCEPTION 'ConversationTimelineEntry position is database allocated';
+    END IF;
+    IF NEW."kind" = 'message' THEN
+        IF NEW."message_id" IS NULL OR NEW."run_id" IS NOT NULL OR NEW."run_event_sequence" IS NOT NULL
+            OR NEW."membership_event_id" IS NOT NULL OR NEW."participant_user_id" IS NOT NULL
+            OR NEW."system_event_id" IS NOT NULL OR NEW."parent_delivery_child_run_id" IS NOT NULL
+            OR NEW."payload" IS NOT NULL THEN
+            RAISE EXCEPTION 'message timeline entry requires only exact Message provenance';
+        END IF;
+    ELSIF NEW."kind" = 'run_event' THEN
+        IF NEW."message_id" IS NOT NULL OR NEW."run_id" IS NULL OR NEW."run_event_sequence" IS NULL
+            OR NEW."membership_event_id" IS NOT NULL OR NEW."participant_user_id" IS NOT NULL
+            OR NEW."system_event_id" IS NOT NULL OR NEW."parent_delivery_child_run_id" IS NOT NULL
+            OR NEW."payload" IS NOT NULL THEN
+            RAISE EXCEPTION 'run-event timeline entry requires only exact RunEvent provenance';
+        END IF;
+    ELSIF NEW."kind" = 'membership' THEN
+        IF NEW."message_id" IS NOT NULL OR NEW."run_id" IS NOT NULL OR NEW."run_event_sequence" IS NOT NULL
+            OR NEW."membership_event_id" IS NULL OR NEW."participant_user_id" IS NULL
+            OR NEW."system_event_id" IS NOT NULL OR NEW."parent_delivery_child_run_id" IS NOT NULL
+            OR jsonb_typeof(NEW."payload") IS DISTINCT FROM 'object' THEN
+            RAISE EXCEPTION 'membership timeline entry requires only exact participant event provenance';
+        END IF;
+        IF NEW."payload"->>'action' NOT IN ('joined', 'access_ended')
+            OR NEW."payload"->>'userId' IS DISTINCT FROM NEW."participant_user_id" THEN
+            RAISE EXCEPTION 'membership timeline payload must bind its exact participant action';
+        END IF;
+    ELSIF NEW."kind" = 'system' THEN
+        IF NEW."message_id" IS NOT NULL OR NEW."run_id" IS NOT NULL OR NEW."run_event_sequence" IS NOT NULL
+            OR NEW."membership_event_id" IS NOT NULL OR NEW."participant_user_id" IS NOT NULL
+            OR NEW."system_event_id" IS NULL OR NEW."parent_delivery_child_run_id" IS NOT NULL
+            OR jsonb_typeof(NEW."payload") IS DISTINCT FROM 'object' THEN
+            RAISE EXCEPTION 'system timeline entry requires only exact system event provenance';
+        END IF;
+    ELSIF NEW."kind" = 'parent_delivery' THEN
+        IF NEW."message_id" IS NOT NULL OR NEW."run_id" IS NOT NULL OR NEW."run_event_sequence" IS NOT NULL
+            OR NEW."membership_event_id" IS NOT NULL OR NEW."participant_user_id" IS NOT NULL
+            OR NEW."system_event_id" IS NOT NULL OR NEW."parent_delivery_child_run_id" IS NULL
+            OR NEW."payload" IS NOT NULL THEN
+            RAISE EXCEPTION 'parent-delivery timeline entry requires only exact delivery provenance';
+        END IF;
+        IF NOT EXISTS (
+            SELECT 1
+            FROM "child_run_completion_deliveries" delivery
+            JOIN "agent_runs" parent_run ON parent_run."id" = delivery."parent_run_id"
+            WHERE delivery."child_run_id" = NEW."parent_delivery_child_run_id"
+              AND delivery."outcome" = 'delivered'
+              AND parent_run."conversation_id" = NEW."conversation_id"
+        ) THEN
+            RAISE EXCEPTION 'parent-delivery timeline entry requires exact immediate-parent delivery authority';
+        END IF;
+    ELSE
+        RAISE EXCEPTION 'unsupported ConversationTimelineEntry kind';
+    END IF;
+    SELECT "lifecycle" INTO conversation_lifecycle
+    FROM "conversations"
+    WHERE "id" = NEW."conversation_id"
+    FOR UPDATE;
+    IF conversation_lifecycle IS NULL OR conversation_lifecycle <> 'open' THEN
+        RAISE EXCEPTION 'ConversationTimelineEntry requires an open Conversation';
+    END IF;
+    SELECT COALESCE(max("position"), 0) + 1 INTO NEW."position"
+    FROM "conversation_timeline_entries"
+    WHERE "conversation_id" = NEW."conversation_id";
+    NEW."occurred_at" := date_trunc('milliseconds', clock_timestamp())::TIMESTAMP(3);
+    RETURN NEW;
+END;
+$$;
+CREATE FUNCTION "enforce_agent_run_conversation_authority"() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+    conversation_mode "ConversationMode";
+    conversation_lifecycle "ConversationLifecycle";
+    conversation_silo_id TEXT;
+    conversation_agent_service_id TEXT;
+BEGIN
+    IF NEW."conversation_id" IS NULL THEN
+        RETURN NEW;
+    END IF;
+    SELECT "mode", "lifecycle", "silo_id", "agent_service_id"
+    INTO conversation_mode, conversation_lifecycle, conversation_silo_id, conversation_agent_service_id
+    FROM "conversations"
+    WHERE "id" = NEW."conversation_id"
+    FOR UPDATE;
+    IF conversation_mode IS DISTINCT FROM 'agent_session'
+        OR conversation_silo_id IS DISTINCT FROM NEW."silo_id"
+        OR conversation_agent_service_id IS DISTINCT FROM NEW."agent_service_id" THEN
+        RAISE EXCEPTION 'AgentRun requires the exact agent-session Conversation authority';
+    END IF;
+    IF conversation_lifecycle <> 'open' AND NEW."state" NOT IN ('completed', 'failed', 'cancelled') THEN
+        RAISE EXCEPTION 'non-terminal AgentRun requires an open Conversation';
+    END IF;
+    RETURN NEW;
+END;
+$$;
 CREATE FUNCTION "enforce_child_run_completion_delivery"() RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE
     child_parent_run_id TEXT;
@@ -3792,20 +4131,20 @@ DECLARE
     reservation_root_run_id TEXT;
     parent_silo_id TEXT;
     parent_root_run_id TEXT;
-    parent_thread_id TEXT;
+    parent_conversation_id TEXT;
     expected_event_type TEXT;
 BEGIN
     IF TG_OP <> 'INSERT' THEN RAISE EXCEPTION 'child completion deliveries are append-only'; END IF;
     SELECT "parent_run_id", "root_run_id", "silo_id", "state" INTO child_parent_run_id, child_root_run_id, child_silo_id, child_state FROM "agent_runs" WHERE "id" = NEW."child_run_id" FOR UPDATE;
     IF child_parent_run_id IS NULL OR child_state NOT IN ('completed', 'failed', 'cancelled') THEN RAISE EXCEPTION 'child completion delivery requires terminal child authority'; END IF;
     SELECT "parent_run_id", "root_run_id" INTO reservation_parent_run_id, reservation_root_run_id FROM "child_run_reservations" WHERE "child_run_id" = NEW."child_run_id" FOR UPDATE;
-    SELECT "silo_id", "root_run_id", "thread_id" INTO parent_silo_id, parent_root_run_id, parent_thread_id FROM "agent_runs" WHERE "id" = NEW."parent_run_id" FOR UPDATE;
+    SELECT "silo_id", "root_run_id", "conversation_id" INTO parent_silo_id, parent_root_run_id, parent_conversation_id FROM "agent_runs" WHERE "id" = NEW."parent_run_id" FOR UPDATE;
     IF reservation_parent_run_id IS NULL OR parent_silo_id IS NULL OR NEW."parent_run_id" <> child_parent_run_id OR reservation_parent_run_id <> child_parent_run_id OR reservation_root_run_id <> child_root_run_id OR parent_silo_id <> child_silo_id OR parent_root_run_id <> child_root_run_id THEN RAISE EXCEPTION 'child completion delivery lineage mismatch'; END IF;
     IF NEW."outcome" = 'delivered' THEN
         expected_event_type := CASE child_state WHEN 'completed' THEN 'child.run.completed' WHEN 'failed' THEN 'child.run.failed' ELSE 'child.run.cancelled' END;
-        IF parent_thread_id IS NULL OR NEW."parent_event_sequence" IS NULL THEN RAISE EXCEPTION 'delivered child completion requires a parent conversation stream and event sequence'; END IF;
+        IF parent_conversation_id IS NULL OR NEW."parent_event_sequence" IS NULL THEN RAISE EXCEPTION 'delivered child completion requires a parent conversation stream and event sequence'; END IF;
     ELSIF NEW."outcome" = 'no_parent_stream' THEN
-        IF parent_thread_id IS NOT NULL OR NEW."parent_event_sequence" IS NOT NULL THEN RAISE EXCEPTION 'no_parent_stream outcome requires no parent conversation stream'; END IF;
+        IF parent_conversation_id IS NOT NULL OR NEW."parent_event_sequence" IS NOT NULL THEN RAISE EXCEPTION 'no_parent_stream outcome requires no parent conversation stream'; END IF;
     ELSE
         IF NEW."parent_event_sequence" IS NOT NULL OR NOT EXISTS (SELECT 1 FROM "conversation_run_events" WHERE "run_id" = NEW."parent_run_id" AND "type" IN ('run.completed', 'run.failed', 'run.cancelled')) THEN RAISE EXCEPTION 'parent_stream_terminal outcome requires terminal parent stream'; END IF;
     END IF;
@@ -3831,13 +4170,13 @@ END;
 $$;
 CREATE FUNCTION "enforce_conversation_context_provenance"() RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE
-    message_thread_id TEXT;
-    run_thread_id TEXT;
+    message_conversation_id TEXT;
+    run_conversation_id TEXT;
 BEGIN
-    SELECT "thread_id" INTO message_thread_id FROM "conversation_messages" WHERE "id" = NEW."through_message_id" FOR UPDATE;
-    SELECT "thread_id" INTO run_thread_id FROM "agent_runs" WHERE "id" = NEW."created_by_run_id" FOR UPDATE;
-    IF message_thread_id IS DISTINCT FROM NEW."thread_id" OR run_thread_id IS DISTINCT FROM NEW."thread_id" THEN
-        RAISE EXCEPTION 'ConversationContextRevision provenance must belong to the exact thread';
+    SELECT "conversation_id" INTO message_conversation_id FROM "conversation_messages" WHERE "id" = NEW."through_message_id" FOR UPDATE;
+    SELECT "conversation_id" INTO run_conversation_id FROM "agent_runs" WHERE "id" = NEW."created_by_run_id" FOR UPDATE;
+    IF message_conversation_id IS DISTINCT FROM NEW."conversation_id" OR run_conversation_id IS DISTINCT FROM NEW."conversation_id" THEN
+        RAISE EXCEPTION 'ConversationContextRevision provenance must belong to the exact conversation';
     END IF;
     RETURN NEW;
 END;
@@ -3846,7 +4185,7 @@ CREATE FUNCTION "enforce_terminal_agent_run_event"() RETURNS trigger LANGUAGE pl
 DECLARE
     expected_type TEXT;
 BEGIN
-    IF NEW."thread_id" IS NULL OR NEW."state" NOT IN ('completed', 'failed', 'cancelled') THEN RETURN NULL; END IF;
+    IF NEW."conversation_id" IS NULL OR NEW."state" NOT IN ('completed', 'failed', 'cancelled') THEN RETURN NULL; END IF;
     expected_type := CASE NEW."state" WHEN 'completed' THEN 'run.completed' WHEN 'failed' THEN 'run.failed' ELSE 'run.cancelled' END;
     IF NOT EXISTS (SELECT 1 FROM "conversation_run_events" WHERE "run_id" = NEW."id" AND "type" = expected_type) THEN
         RAISE EXCEPTION 'terminal conversation AgentRun requires its matching terminal RunEvent';
@@ -4447,8 +4786,8 @@ BEGIN
 END;
 $$;
 CREATE FUNCTION "enforce_personal_configuration_change_lifecycle"() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE profile_silo TEXT; profile_user TEXT; active_persona TEXT; thread_silo TEXT; thread_service TEXT;
-        run_silo TEXT; run_thread TEXT; run_service TEXT; run_user TEXT; service_silo TEXT; service_kind "AgentServiceKind"; active_agent TEXT;
+DECLARE profile_silo TEXT; profile_user TEXT; active_persona TEXT; conversation_silo TEXT; conversation_service TEXT;
+        run_silo TEXT; run_conversation TEXT; run_service TEXT; run_user TEXT; service_silo TEXT; service_kind "AgentServiceKind"; active_agent TEXT;
         refresh_change TEXT; applied_revision_profile TEXT; applied_revision_service TEXT; applied_revision_parent TEXT; applied_model_alias TEXT;
 BEGIN
     IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'PersonalConfigurationChange rows cannot be deleted'; END IF;
@@ -4456,31 +4795,31 @@ BEGIN
         IF NEW."state" <> 'proposed' THEN RAISE EXCEPTION 'PersonalConfigurationChange must begin as Proposed'; END IF;
         SELECT "silo_id", "user_id", "active_revision_id" INTO profile_silo, profile_user, active_persona
           FROM "persona_profiles" WHERE "id" = NEW."persona_profile_id" FOR UPDATE;
-        SELECT "silo_id", "agent_service_id" INTO thread_silo, thread_service
-          FROM "conversation_threads" WHERE "id" = NEW."source_thread_id" FOR UPDATE;
-        IF NOT EXISTS (SELECT 1 FROM "conversation_participants" WHERE "thread_id" = NEW."source_thread_id" AND "user_id" = NEW."user_id") THEN
-            RAISE EXCEPTION 'PersonalConfigurationChange source thread requires the initiating participant';
+        SELECT "silo_id", "agent_service_id" INTO conversation_silo, conversation_service
+          FROM "conversations" WHERE "id" = NEW."source_conversation_id" FOR UPDATE;
+        IF NOT EXISTS (SELECT 1 FROM "conversation_participants" WHERE "conversation_id" = NEW."source_conversation_id" AND "user_id" = NEW."user_id") THEN
+            RAISE EXCEPTION 'PersonalConfigurationChange source conversation requires the initiating participant';
         END IF;
-        SELECT "silo_id", "thread_id", "agent_service_id", "delegated_user_id" INTO run_silo, run_thread, run_service, run_user
+        SELECT "silo_id", "conversation_id", "agent_service_id", "delegated_user_id" INTO run_silo, run_conversation, run_service, run_user
           FROM "agent_runs" WHERE "id" = NEW."source_run_id" FOR UPDATE;
         SELECT "silo_id", "kind", "active_revision_id" INTO service_silo, service_kind, active_agent
           FROM "agent_services" WHERE "id" = NEW."agent_service_id" FOR UPDATE;
         IF profile_silo IS DISTINCT FROM NEW."silo_id" OR profile_user IS DISTINCT FROM NEW."user_id"
-           OR thread_silo IS DISTINCT FROM NEW."silo_id" OR thread_service IS DISTINCT FROM NEW."agent_service_id"
-           OR run_silo IS DISTINCT FROM NEW."silo_id" OR run_thread IS DISTINCT FROM NEW."source_thread_id"
+           OR conversation_silo IS DISTINCT FROM NEW."silo_id" OR conversation_service IS DISTINCT FROM NEW."agent_service_id"
+           OR run_silo IS DISTINCT FROM NEW."silo_id" OR run_conversation IS DISTINCT FROM NEW."source_conversation_id"
            OR run_service IS DISTINCT FROM NEW."agent_service_id" OR run_user IS DISTINCT FROM NEW."user_id"
            OR service_silo IS DISTINCT FROM NEW."silo_id" OR service_kind IS DISTINCT FROM 'personal'
            OR active_persona IS DISTINCT FROM NEW."expected_persona_revision_id" OR active_agent IS DISTINCT FROM NEW."expected_agent_revision_id" THEN
             RAISE EXCEPTION 'PersonalConfigurationChange provenance or active-revision fence conflict';
         END IF;
-        IF NEW."source_message_id" IS NOT NULL AND NOT EXISTS (SELECT 1 FROM "conversation_messages" WHERE "id" = NEW."source_message_id" AND "thread_id" = NEW."source_thread_id") THEN
-            RAISE EXCEPTION 'PersonalConfigurationChange source message must belong to its source thread';
+        IF NEW."source_message_id" IS NOT NULL AND NOT EXISTS (SELECT 1 FROM "conversation_messages" WHERE "id" = NEW."source_message_id" AND "conversation_id" = NEW."source_conversation_id") THEN
+            RAISE EXCEPTION 'PersonalConfigurationChange source message must belong to its source conversation';
         END IF;
         RETURN NEW;
     END IF;
     IF NEW."id" IS DISTINCT FROM OLD."id" OR NEW."silo_id" IS DISTINCT FROM OLD."silo_id" OR NEW."user_id" IS DISTINCT FROM OLD."user_id"
        OR NEW."persona_profile_id" IS DISTINCT FROM OLD."persona_profile_id" OR NEW."agent_service_id" IS DISTINCT FROM OLD."agent_service_id"
-       OR NEW."source_thread_id" IS DISTINCT FROM OLD."source_thread_id" OR NEW."source_run_id" IS DISTINCT FROM OLD."source_run_id"
+       OR NEW."source_conversation_id" IS DISTINCT FROM OLD."source_conversation_id" OR NEW."source_run_id" IS DISTINCT FROM OLD."source_run_id"
        OR NEW."source_message_id" IS DISTINCT FROM OLD."source_message_id" OR NEW."requested_patch" IS DISTINCT FROM OLD."requested_patch"
        OR NEW."requested_patch_digest" IS DISTINCT FROM OLD."requested_patch_digest" OR NEW."expected_persona_revision_id" IS DISTINCT FROM OLD."expected_persona_revision_id"
        OR NEW."expected_agent_revision_id" IS DISTINCT FROM OLD."expected_agent_revision_id" OR NEW."proposed_at" IS DISTINCT FROM OLD."proposed_at" THEN
@@ -4568,9 +4907,9 @@ BEGIN
         IF source_silo_id IS DISTINCT FROM artifact_silo_id THEN RAISE EXCEPTION 'ArtifactRevision run provenance must stay inside its silo'; END IF;
     END IF;
     IF NEW."source_message_id" IS NOT NULL THEN
-        SELECT thread."silo_id" INTO source_silo_id FROM "conversation_messages" message
-          JOIN "conversation_threads" thread ON thread."id" = message."thread_id"
-          WHERE message."id" = NEW."source_message_id" FOR UPDATE OF message, thread;
+        SELECT conversation."silo_id" INTO source_silo_id FROM "conversation_messages" message
+          JOIN "conversations" conversation ON conversation."id" = message."conversation_id"
+          WHERE message."id" = NEW."source_message_id" FOR UPDATE OF message, conversation;
         IF source_silo_id IS DISTINCT FROM artifact_silo_id THEN RAISE EXCEPTION 'ArtifactRevision message provenance must stay inside its silo'; END IF;
     END IF;
     RETURN NEW;
@@ -4962,9 +5301,9 @@ BEGIN
               JOIN "artifacts" artifact ON artifact."id" = revision."artifact_id"
               WHERE revision."id" = NEW."source_artifact_revision_id" FOR UPDATE OF revision, artifact;
         ELSIF NEW."source_message_id" IS NOT NULL THEN
-            SELECT thread."silo_id" INTO source_silo_id FROM "conversation_messages" message
-              JOIN "conversation_threads" thread ON thread."id" = message."thread_id"
-              WHERE message."id" = NEW."source_message_id" FOR UPDATE OF message, thread;
+            SELECT conversation."silo_id" INTO source_silo_id FROM "conversation_messages" message
+              JOIN "conversations" conversation ON conversation."id" = message."conversation_id"
+              WHERE message."id" = NEW."source_message_id" FOR UPDATE OF message, conversation;
         ELSE
             source_silo_id := dataset_silo_id;
         END IF;
@@ -5259,18 +5598,38 @@ ALTER TABLE "audit_decisions" ADD CONSTRAINT "audit_decisions_workload_identity_
          "proof_key_thumbprint" IS NOT NULL AND "proof_key_thumbprint" ~ '^[A-Za-z0-9_-]{43}$')
     );
 ALTER TABLE "audit_decisions" ADD CONSTRAINT "audit_decisions_membership_revision_check" CHECK ("membership_revision" IS NULL OR "membership_revision" > 0);
-ALTER TABLE "conversation_threads" ADD CONSTRAINT "conversation_threads_identity_check" CHECK (btrim("silo_id") <> '' AND btrim("agent_service_id") <> '');
-ALTER TABLE "conversation_participants" ADD CONSTRAINT "conversation_participants_user_check" CHECK (btrim("user_id") <> '');
+ALTER TABLE "conversations" ADD CONSTRAINT "conversations_identity_check" CHECK (
+        btrim("silo_id") <> '' AND
+        (("mode" = 'agent_session' AND "agent_service_id" IS NOT NULL AND btrim("agent_service_id") <> '') OR
+         ("mode" IN ('direct', 'group') AND "agent_service_id" IS NULL)) AND
+        (("lifecycle" = 'open' AND "closed_at" IS NULL) OR
+         ("lifecycle" = 'closed' AND "closed_at" IS NOT NULL AND "closed_at" >= "created_at"))
+    );
+ALTER TABLE "conversation_participants" ADD CONSTRAINT "conversation_participants_coordinates_check" CHECK (
+        btrim("user_id") <> '' AND "visible_from_position" > 0 AND
+        "read_through_position" >= "visible_from_position" - 1 AND
+        ("access_ended_position" IS NULL OR
+         ("access_ended_position" >= "visible_from_position" AND "read_through_position" < "access_ended_position")) AND
+        ("archived_at" IS NULL OR "archived_at" >= "joined_at")
+    );
 ALTER TABLE "conversation_messages" ADD CONSTRAINT "conversation_messages_source_check" CHECK ("source" IN ('user_input', 'model_output', 'tool_result', 'platform'));
 ALTER TABLE "conversation_messages" ADD CONSTRAINT "conversation_messages_blocks_check" CHECK (jsonb_typeof("blocks") = 'array');
+ALTER TABLE "conversation_messages" ADD CONSTRAINT "conversation_messages_idempotency_key_check" CHECK (length(btrim("idempotency_key")) BETWEEN 1 AND 128);
 ALTER TABLE "conversation_messages" ADD CONSTRAINT "conversation_messages_provenance_check" CHECK (
-        ("source" = 'user_input' AND "user_id" IS NOT NULL AND "run_id" IS NULL) OR
-        ("source" <> 'user_input' AND "user_id" IS NULL)
+        ("source" = 'user_input' AND "role" = 'user' AND "user_id" IS NOT NULL) OR
+        ("source" = 'model_output' AND "role" = 'assistant' AND "user_id" IS NULL AND "run_id" IS NOT NULL) OR
+        ("source" = 'tool_result' AND "role" = 'tool' AND "user_id" IS NULL AND "run_id" IS NOT NULL) OR
+        ("source" = 'platform' AND "role" = 'system' AND "user_id" IS NULL)
     );
 ALTER TABLE "conversation_messages" ADD CONSTRAINT "conversation_messages_completion_check" CHECK (
         ("state" IN ('pending', 'streaming') AND "completed_at" IS NULL) OR
         ("state" IN ('completed', 'failed', 'cancelled') AND "completed_at" IS NOT NULL)
     );
+CREATE UNIQUE INDEX "conversation_messages_one_user_input_per_run"
+    ON "conversation_messages"("run_id") WHERE "source" = 'user_input';
+CREATE UNIQUE INDEX "agent_runs_one_foreground_per_conversation"
+    ON "agent_runs"("conversation_id")
+    WHERE "conversation_id" IS NOT NULL AND "state" NOT IN ('completed', 'failed', 'cancelled');
 ALTER TABLE "conversation_run_events" ADD CONSTRAINT "conversation_run_events_sequence_check" CHECK ("sequence" > 0);
 ALTER TABLE "conversation_run_events" ADD CONSTRAINT "conversation_run_events_type_check" CHECK ("type" IN (
         'run.accepted', 'run.started', 'message.started', 'message.delta', 'message.completed',
@@ -5280,6 +5639,24 @@ ALTER TABLE "conversation_run_events" ADD CONSTRAINT "conversation_run_events_ty
         'child.run.completed', 'child.run.failed', 'child.run.cancelled'
     ));
 ALTER TABLE "conversation_run_events" ADD CONSTRAINT "conversation_run_events_payload_check" CHECK (jsonb_typeof("payload") = 'object');
+ALTER TABLE "conversation_timeline_entries" ADD CONSTRAINT "conversation_timeline_entries_reference_shape_check" CHECK (
+        ("kind" = 'message' AND "message_id" IS NOT NULL AND "run_id" IS NULL AND "run_event_sequence" IS NULL
+            AND "membership_event_id" IS NULL AND "participant_user_id" IS NULL AND "system_event_id" IS NULL
+            AND "parent_delivery_child_run_id" IS NULL AND "payload" IS NULL) OR
+        ("kind" = 'run_event' AND "message_id" IS NULL AND "run_id" IS NOT NULL AND "run_event_sequence" IS NOT NULL
+            AND "membership_event_id" IS NULL AND "participant_user_id" IS NULL AND "system_event_id" IS NULL
+            AND "parent_delivery_child_run_id" IS NULL AND "payload" IS NULL) OR
+        ("kind" = 'membership' AND "message_id" IS NULL AND "run_id" IS NULL AND "run_event_sequence" IS NULL
+            AND "membership_event_id" IS NOT NULL AND btrim("membership_event_id") <> '' AND "participant_user_id" IS NOT NULL
+            AND btrim("participant_user_id") <> '' AND "system_event_id" IS NULL AND "parent_delivery_child_run_id" IS NULL
+            AND jsonb_typeof("payload") = 'object') OR
+        ("kind" = 'system' AND "message_id" IS NULL AND "run_id" IS NULL AND "run_event_sequence" IS NULL
+            AND "membership_event_id" IS NULL AND "participant_user_id" IS NULL AND "system_event_id" IS NOT NULL
+            AND btrim("system_event_id") <> '' AND "parent_delivery_child_run_id" IS NULL AND jsonb_typeof("payload") = 'object') OR
+        ("kind" = 'parent_delivery' AND "message_id" IS NULL AND "run_id" IS NULL AND "run_event_sequence" IS NULL
+            AND "membership_event_id" IS NULL AND "participant_user_id" IS NULL AND "system_event_id" IS NULL
+            AND "parent_delivery_child_run_id" IS NOT NULL AND btrim("parent_delivery_child_run_id") <> '' AND "payload" IS NULL)
+    );
 ALTER TABLE "conversation_context_revisions" ADD CONSTRAINT "conversation_context_revisions_revision_check" CHECK ("revision" > 0);
 ALTER TABLE "conversation_context_revisions" ADD CONSTRAINT "conversation_context_revisions_digest_check" CHECK ("digest" ~ '^sha256:[0-9a-f]{64}$');
 ALTER TABLE "conversation_context_revisions" ADD CONSTRAINT "conversation_context_revisions_summary_check" CHECK (jsonb_typeof("summary") = 'object');
@@ -5398,7 +5775,7 @@ ALTER TABLE "user_onboarding_bootstrap_answers" ADD CONSTRAINT "user_onboarding_
     );
 ALTER TABLE "personal_configuration_changes" ADD CONSTRAINT "personal_configuration_changes_valid_check" CHECK (
         btrim("silo_id") <> '' AND btrim("user_id") <> '' AND btrim("persona_profile_id") <> ''
-        AND btrim("agent_service_id") <> '' AND btrim("source_thread_id") <> '' AND btrim("source_run_id") <> ''
+        AND btrim("agent_service_id") <> '' AND btrim("source_conversation_id") <> '' AND btrim("source_run_id") <> ''
         AND ("requested_patch" = '{"kind":"persona_refresh"}'::jsonb
              OR ("requested_patch"->>'kind' = 'model_alias'
                  AND jsonb_typeof("requested_patch"->'modelAlias') = 'string'
@@ -5565,10 +5942,22 @@ CREATE TRIGGER "verified_fleet_membership_revisions_immutable" BEFORE UPDATE OR 
 CREATE TRIGGER "verified_fleet_membership_assertions_immutable" BEFORE INSERT OR UPDATE OR DELETE ON "verified_fleet_membership_assertions" FOR EACH ROW EXECUTE FUNCTION "reject_verified_membership_assertion_mutation"();
 CREATE TRIGGER "highest_accepted_fleet_memberships_monotonic" BEFORE INSERT OR UPDATE OR DELETE ON "highest_accepted_fleet_memberships" FOR EACH ROW EXECUTE FUNCTION "enforce_highest_membership_revision"();
 CREATE TRIGGER "audit_decisions_append_only" BEFORE UPDATE OR DELETE ON "audit_decisions" FOR EACH ROW EXECUTE FUNCTION "reject_audit_decision_mutation"();
+CREATE TRIGGER "conversations_closed_lifecycle" BEFORE INSERT OR UPDATE OR DELETE ON "conversations"
+    FOR EACH ROW EXECUTE FUNCTION "enforce_conversation_lifecycle"();
+CREATE TRIGGER "conversation_participants_coordinates" BEFORE INSERT OR UPDATE OR DELETE ON "conversation_participants"
+    FOR EACH ROW EXECUTE FUNCTION "enforce_conversation_participant_coordinates"();
+CREATE TRIGGER "conversation_participants_join_timeline" AFTER INSERT ON "conversation_participants"
+    FOR EACH ROW EXECUTE FUNCTION "append_conversation_participant_join"();
+CREATE TRIGGER "conversation_timeline_entries_allocate" BEFORE INSERT OR UPDATE OR DELETE ON "conversation_timeline_entries"
+    FOR EACH ROW EXECUTE FUNCTION "enforce_conversation_timeline_entry"();
 CREATE TRIGGER "conversation_messages_closed_lifecycle" BEFORE INSERT OR UPDATE OR DELETE ON "conversation_messages"
     FOR EACH ROW EXECUTE FUNCTION "enforce_conversation_message_lifecycle"();
+CREATE TRIGGER "conversation_messages_timeline" AFTER INSERT ON "conversation_messages"
+    FOR EACH ROW EXECUTE FUNCTION "append_conversation_message_timeline"();
 CREATE TRIGGER "conversation_run_events_contiguous" BEFORE INSERT ON "conversation_run_events"
     FOR EACH ROW EXECUTE FUNCTION "enforce_conversation_run_event_append"();
+CREATE TRIGGER "conversation_run_events_timeline" AFTER INSERT ON "conversation_run_events"
+    FOR EACH ROW EXECUTE FUNCTION "append_conversation_run_event_timeline"();
 CREATE TRIGGER "conversation_run_events_append_only" BEFORE UPDATE OR DELETE ON "conversation_run_events"
     FOR EACH ROW EXECUTE FUNCTION "reject_conversation_immutable_mutation"();
 CREATE TRIGGER "conversation_context_revisions_append_only" BEFORE UPDATE OR DELETE ON "conversation_context_revisions"
@@ -5577,6 +5966,8 @@ CREATE TRIGGER "conversation_context_revisions_exact_provenance" BEFORE INSERT O
     FOR EACH ROW EXECUTE FUNCTION "enforce_conversation_context_provenance"();
 CREATE CONSTRAINT TRIGGER "terminal_agent_runs_require_event" AFTER INSERT OR UPDATE OF "state" ON "agent_runs"
     DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION "enforce_terminal_agent_run_event"();
+CREATE TRIGGER "agent_runs_conversation_authority" BEFORE INSERT OR UPDATE OF "conversation_id", "silo_id", "agent_service_id", "state" ON "agent_runs"
+    FOR EACH ROW EXECUTE FUNCTION "enforce_agent_run_conversation_authority"();
 CREATE TRIGGER "persona_question_sets_closed_lifecycle" BEFORE INSERT OR UPDATE OR DELETE ON "persona_question_sets"
     FOR EACH ROW EXECUTE FUNCTION "enforce_persona_question_set_lifecycle"();
 CREATE TRIGGER "persona_questions_draft_only" BEFORE INSERT OR UPDATE OR DELETE ON "persona_questions"
@@ -5662,7 +6053,7 @@ BEGIN
         SELECT 1 FROM "run_input_snapshots" snapshot
         WHERE snapshot."run_id" = NEW."id"
           AND snapshot."input_digest" = NEW."input_snapshot_digest"
-          AND snapshot."thread_id" IS NOT DISTINCT FROM NEW."thread_id"
+          AND snapshot."conversation_id" IS NOT DISTINCT FROM NEW."conversation_id"
           AND snapshot."silo_id" = NEW."silo_id"
           AND snapshot."agent_service_id" = NEW."agent_service_id"
           AND snapshot."agent_revision_id" = NEW."agent_revision_id"
@@ -5675,7 +6066,7 @@ END;
 $$;
 
 CREATE CONSTRAINT TRIGGER agent_runs_input_snapshot_complete
-AFTER INSERT OR UPDATE OF "input_snapshot_digest", "thread_id", "silo_id", "agent_service_id", "agent_revision_id", "effective_contract_digest"
+AFTER INSERT OR UPDATE OF "input_snapshot_digest", "conversation_id", "silo_id", "agent_service_id", "agent_revision_id", "effective_contract_digest"
 ON "agent_runs" DEFERRABLE INITIALLY DEFERRED FOR EACH ROW
 EXECUTE FUNCTION enforce_agent_run_input_snapshot_completeness();
 
@@ -5687,20 +6078,20 @@ BEGIN
         SELECT 1 FROM "agent_runs" run
         WHERE run."id" = NEW."run_id"
           AND run."input_snapshot_digest" = NEW."input_digest"
-          AND run."thread_id" IS NOT DISTINCT FROM NEW."thread_id"
+          AND run."conversation_id" IS NOT DISTINCT FROM NEW."conversation_id"
           AND run."silo_id" = NEW."silo_id"
           AND run."agent_service_id" = NEW."agent_service_id"
           AND run."agent_revision_id" = NEW."agent_revision_id"
           AND run."effective_contract_digest" = NEW."effective_contract_digest"
     ) THEN
-        RAISE EXCEPTION 'RunInputSnapshot must bind the exact AgentRun thread and authority' USING ERRCODE = '23503';
+        RAISE EXCEPTION 'RunInputSnapshot must bind the exact AgentRun conversation and authority' USING ERRCODE = '23503';
     END IF;
     RETURN NEW;
 END;
 $$;
 
 CREATE CONSTRAINT TRIGGER run_input_snapshots_run_binding
-AFTER INSERT OR UPDATE OF "run_id", "input_digest", "thread_id", "silo_id", "agent_service_id", "agent_revision_id", "effective_contract_digest"
+AFTER INSERT OR UPDATE OF "run_id", "input_digest", "conversation_id", "silo_id", "agent_service_id", "agent_revision_id", "effective_contract_digest"
 ON "run_input_snapshots" DEFERRABLE INITIALLY DEFERRED FOR EACH ROW
 EXECUTE FUNCTION enforce_run_input_snapshot_run_binding();
 

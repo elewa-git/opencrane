@@ -49,7 +49,7 @@ requireContract(
 	"migration must bind the default-owner protected source baseline",
 );
 requireContract(
-	manifest.executionMode === "automatic-when-legacy-persona-empty-otherwise-manual-data-mapping-required",
+	manifest.executionMode === "automatic-when-legacy-persona-and-conversations-empty-otherwise-manual-data-mapping-required",
 	"migration execution mode must retain its conditional data boundary",
 );
 requireContract(sql.includes("pg_advisory_xact_lock"), "migration must acquire the database migration lock");
@@ -59,6 +59,11 @@ requireContract(sql.includes("opencrane_migrations.schema_history"), "migration 
 requireContract(sql.includes("LOCK TABLE"), "migration must lock persona mutation sources before counting them");
 requireContract(sql.includes("ERRCODE = 'OC708'"), "migration must retain the explicit semantic-mapping blocker");
 requireContract(sql.includes("IF persona_profiles_count + persona_interviews_count"), "OC708 must be conditional on legacy runtime data");
+requireContract(sql.includes("ERRCODE = 'OC710'"), "migration must retain the explicit Conversation semantic-mapping blocker");
+requireContract(sql.includes("IF legacy_conversations_count + conversation_participants_count"), "OC710 must be conditional on legacy Conversation data");
+requireContract(sql.includes('DROP TYPE "ConversationThreadState"'), "migration must remove the retired ConversationThread model");
+requireContract(sql.includes('CREATE TYPE "ConversationMode"'), "migration must create immutable Conversation modes");
+requireContract(sql.includes('CREATE TABLE "conversation_timeline_entries"'), "migration must create the canonical mixed timeline");
 requireContract(sql.includes('CREATE SCHEMA "opencrane_migrations"'), "successful migration must create schema history authority");
 requireContract(sql.includes("'0.8.0', '0.7.0'"), "schema history must bind the exact transition");
 requireContract(sql.includes("migration_history_exists"), "migration must detect a prior completed transition");
