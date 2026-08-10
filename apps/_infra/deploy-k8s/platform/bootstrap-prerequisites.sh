@@ -465,19 +465,17 @@ verify_prerequisites()
   wait_for_established_crds "${CERT_MANAGER_CLUSTER_RESOURCES[@]}"
   wait_for_established_crds "${CNPG_CLUSTER_RESOURCES[@]}"
   kubectl --context "$EXPECTED_CONTEXT" wait \
-    --for=condition=Health "computeclass/$DATABASE_PROOF_COMPUTE_CLASS" --timeout=2m
-  local scale_policy boot_disk_size machine_type
-  scale_policy="$(kubectl --context "$EXPECTED_CONTEXT" get "computeclass/$DATABASE_PROOF_COMPUTE_CLASS" \
-    --output=jsonpath='{.spec.whenUnsatisfiable}')"
-  [[ "$scale_policy" == "ScaleUpAnyway" ]] || fail \
-    "ComputeClass '$DATABASE_PROOF_COMPUTE_CLASS' has whenUnsatisfiable '$scale_policy', expected ScaleUpAnyway"
-  boot_disk_size="$(kubectl --context "$EXPECTED_CONTEXT" get "computeclass/$DATABASE_PROOF_COMPUTE_CLASS" \
-    --output=jsonpath='{.spec.priorities[0].storage.bootDiskSize}')"
-  [[ "$boot_disk_size" == "10" ]] || fail \
-    "ComputeClass '$DATABASE_PROOF_COMPUTE_CLASS' has bootDiskSize '$boot_disk_size', expected 10 GiB"
-  machine_type="$(kubectl --context "$EXPECTED_CONTEXT" get "computeclass/$DATABASE_PROOF_COMPUTE_CLASS" \
-    --output=jsonpath='{.spec.priorities[0].machineType}')"
-  [[ "$machine_type" == "e2-small" ]] || fail "ComputeClass '$DATABASE_PROOF_COMPUTE_CLASS' machineType '$machine_type', expected e2-small"
+    --for=condition=Health "computeclass/$DATABASE_PROOF_COMPUTE_CLASS" --timeout=2m || fail \
+    "ComputeClass '$DATABASE_PROOF_COMPUTE_CLASS' did not reach Health=True; inspect CrdMisconfigured"
+  local compute_class_json
+  compute_class_json="$(kubectl --context "$EXPECTED_CONTEXT" get \
+    "computeclass/$DATABASE_PROOF_COMPUTE_CLASS" --output=json)"
+  jq -e '(any(.status.conditions[]?; .type == "Health" and .status == "True"))
+    and (all(.status.conditions[]?; .type != "CrdMisconfigured" or .status != "True"))
+    and (.spec.autopilot.enabled == true) and (.spec.whenUnsatisfiable == "ScaleUpAnyway")
+    and (.spec.priorities == [{"podFamily":"general-purpose"}])' \
+    <<<"$compute_class_json" >/dev/null || fail \
+    "ComputeClass '$DATABASE_PROOF_COMPUTE_CLASS' does not match its healthy Autopilot database-proof contract"
   wait_for_ingress_address
 
   log "shared prerequisites are ready; ingress address: $INGRESS_ADDRESS_IP"
