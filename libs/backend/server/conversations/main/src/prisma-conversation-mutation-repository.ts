@@ -1,6 +1,6 @@
 import { AgentServiceKind, AgentServiceState, ConversationLifecycle, ConversationMessageRole, ConversationMessageState, ConversationMode, OrgMemberStatus, Prisma } from "@prisma/client";
 
-import { __DecideConversationCommand, ConversationCommandActions, ConversationCommandDenialReasons, ConversationCommandKinds, ConversationLifecycles, ConversationModes } from "@opencrane/models/conversations";
+import { __DecideConversationCommand, ConversationCommandActions, ConversationCommandDenialReasons, ConversationCommandKinds, ConversationLifecycles, ConversationModes, MessageSources } from "@opencrane/models/conversations";
 
 import { ConversationAuthorityOutcomes, ConversationWriteDenialReasons } from "./conversation-authority.types.js";
 import type { ConversationCaller, ConversationDetail, ConversationWriteDenial, CreateConversationRequest, CreateConversationResult, MutateConversationResult, SubmitConversationMessageRequest } from "./conversation-authority.types.js";
@@ -124,7 +124,7 @@ function _participantIds(subjectId: string, request: CreateConversationRequest):
 /** Constructs the one legal completed participant-input message row. */
 function _messageData(messageId: string, conversationId: string, userId: string, request: SubmitConversationMessageRequest, runId: string | null): Prisma.ConversationMessageUncheckedCreateInput
 {
-	return { id: messageId, conversationId, runId, userId, idempotencyKey: request.idempotencyKey, role: ConversationMessageRole.User, state: ConversationMessageState.Completed, source: "user_input", blocks: request.blocks as unknown as Prisma.InputJsonValue, completedAt: new Date() };
+	return { id: messageId, conversationId, runId, userId, idempotencyKey: request.idempotencyKey, role: ConversationMessageRole.User, state: ConversationMessageState.Completed, source: MessageSources.UserInput, blocks: request.blocks as unknown as Prisma.InputJsonValue, completedAt: new Date() };
 }
 
 /** Maps dependency-light mode vocabulary to Prisma's generated enum. */

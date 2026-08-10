@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { PersonalRunAdmissionOutcomes } from "@opencrane/backend/agents/execution/admission";
 import type { RunAdmissionTransaction } from "@opencrane/backend/agents/execution/runs";
-import { ConversationModes, MessageContentBlockKinds } from "@opencrane/models/conversations";
+import { ConversationModes, MessageContentBlockKinds, MessageSources } from "@opencrane/models/conversations";
 
 import { PrismaConversationUnitOfWork } from "../prisma-conversation-unit-of-work.js";
 import { PrismaConversationMutationRepository } from "../prisma-conversation-mutation-repository.js";
@@ -16,7 +16,7 @@ const _REQUEST: SubmitConversationMessageRequest = { idempotencyKey: "request-1"
 /** Builds a canonical persisted message timeline row. */
 function _Entry(runId: string | null): object
 {
-	return { position: 2n, message: { id: "message-1", role: ConversationMessageRole.User, state: ConversationMessageState.Completed, source: "user_input", blocks: _REQUEST.blocks, runId, userId: "user-1", createdAt: new Date("2026-08-10T10:00:00.000Z"), completedAt: new Date("2026-08-10T10:00:00.000Z") } };
+	return { position: 2n, message: { id: "message-1", role: ConversationMessageRole.User, state: ConversationMessageState.Completed, source: MessageSources.UserInput, blocks: _REQUEST.blocks, runId, userId: "user-1", createdAt: new Date("2026-08-10T10:00:00.000Z"), completedAt: new Date("2026-08-10T10:00:00.000Z") } };
 }
 
 /** Builds the root client facade around one transaction-shaped test double. */
@@ -58,6 +58,19 @@ describe("PrismaConversationUnitOfWork message admission", function _Suite()
 		await expect(authority.open(_CALLER, "conversation-1")).resolves.toEqual(expect.objectContaining({ id: "conversation-1", accessEndedPosition: "4" }));
 		expect(execute).toHaveBeenCalledWith(expect.any(Function), { isolationLevel: "RepeatableRead" });
 		expect(transaction.conversationTimelineEntry.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ position: { gte: 1n, lte: 4n } }) }));
+	});
+
+	it("fails closed when persistence contains a message source outside the model vocabulary", async function _RejectsUnknownSource()
+	{
+		const entry = _Entry(null) as { readonly position: bigint; readonly message: Record<string, unknown> };
+		const transaction = {
+			orgMembership: _ActiveMembership(),
+			conversationParticipant: { findFirst: vi.fn().mockResolvedValue(_Participant()) },
+			conversationTimelineEntry: { findMany: vi.fn().mockResolvedValue([{ ...entry, message: { ...entry.message, source: "future_unreviewed_source" } }]) },
+		};
+		const authority = new PrismaConversationUnitOfWork(_Prisma(transaction) as never, {} as never, _CreateMutationRepository);
+
+		await expect(authority.open(_CALLER, "conversation-1")).rejects.toThrow("Persisted conversation message source is unsupported");
 	});
 
 	it("routes agent-session input through run admission and persists the message in its transaction", async function _AdmitsAgentMessage()

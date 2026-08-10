@@ -1,6 +1,6 @@
 import { AgentRunState, ConversationLifecycle, ConversationMessageRole, ConversationMessageState, ConversationMode, OrgMemberStatus, Prisma } from "@prisma/client";
 
-import { ConversationLifecycles, ConversationModes, type MessageContentBlock } from "@opencrane/models/conversations";
+import { ConversationLifecycles, ConversationModes, MessageRoles, MessageSources, MessageStates, type MessageContentBlock } from "@opencrane/models/conversations";
 
 import type { ConversationCaller, ConversationDetail, ConversationMessageView, ConversationSummary } from "./conversation-authority.types.js";
 import type { ConversationCommandContext, ConversationQueryRepository } from "./prisma-conversation-query-repository.types.js";
@@ -19,6 +19,23 @@ const _MODE_BY_PERSISTED_MODE: Readonly<Record<ConversationMode, ConversationMod
 const _LIFECYCLE_BY_PERSISTED_LIFECYCLE: Readonly<Record<ConversationLifecycle, ConversationLifecycles>> = {
 	[ConversationLifecycle.Open]: ConversationLifecycles.Open,
 	[ConversationLifecycle.Closed]: ConversationLifecycles.Closed,
+};
+
+/** Exhaustive adapter mapping from persisted message roles to model-owned wire vocabulary. */
+const _ROLE_BY_PERSISTED_ROLE: Readonly<Record<ConversationMessageRole, MessageRoles>> = {
+	[ConversationMessageRole.User]: MessageRoles.User,
+	[ConversationMessageRole.Assistant]: MessageRoles.Assistant,
+	[ConversationMessageRole.Tool]: MessageRoles.Tool,
+	[ConversationMessageRole.System]: MessageRoles.System,
+};
+
+/** Exhaustive adapter mapping from persisted message states to model-owned wire vocabulary. */
+const _STATE_BY_PERSISTED_STATE: Readonly<Record<ConversationMessageState, MessageStates>> = {
+	[ConversationMessageState.Pending]: MessageStates.Pending,
+	[ConversationMessageState.Streaming]: MessageStates.Streaming,
+	[ConversationMessageState.Completed]: MessageStates.Completed,
+	[ConversationMessageState.Failed]: MessageStates.Failed,
+	[ConversationMessageState.Cancelled]: MessageStates.Cancelled,
 };
 
 /** Participant-scoped Conversation reads shared by root and transaction-bound command paths. */
@@ -127,7 +144,17 @@ function _summary(conversation: { id: string; mode: ConversationMode; lifecycle:
 /** Maps a canonical persisted message and database-owned position. */
 function _messageView(message: { id: string; role: ConversationMessageRole; state: ConversationMessageState; source: string; blocks: Prisma.JsonValue; runId: string | null; userId: string | null; createdAt: Date; completedAt: Date | null }, position: bigint): ConversationMessageView
 {
-	return { id: message.id, position: position.toString(10), role: message.role.toLowerCase() as ConversationMessageView["role"], state: message.state.toLowerCase() as ConversationMessageView["state"], source: message.source as ConversationMessageView["source"], blocks: message.blocks as unknown as readonly MessageContentBlock[], runId: message.runId, userId: message.userId, createdAt: message.createdAt.toISOString(), completedAt: message.completedAt?.toISOString() ?? null };
+	return { id: message.id, position: position.toString(10), role: _ROLE_BY_PERSISTED_ROLE[message.role], state: _STATE_BY_PERSISTED_STATE[message.state], source: _messageSource(message.source), blocks: message.blocks as unknown as readonly MessageContentBlock[], runId: message.runId, userId: message.userId, createdAt: message.createdAt.toISOString(), completedAt: message.completedAt?.toISOString() ?? null };
+}
+
+/** Validates the string-backed persistence column against the complete model-owned source vocabulary. */
+function _messageSource(source: string): MessageSources
+{
+	if (source === MessageSources.UserInput) return MessageSources.UserInput;
+	if (source === MessageSources.ModelOutput) return MessageSources.ModelOutput;
+	if (source === MessageSources.ToolResult) return MessageSources.ToolResult;
+	if (source === MessageSources.Platform) return MessageSources.Platform;
+	throw new Error("Persisted conversation message source is unsupported");
 }
 
 /** Maps persisted enum vocabulary to the dependency-light model enum. */

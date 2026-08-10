@@ -1,4 +1,4 @@
-import type { ConversationCreationRequest, MessageContentBlock } from "@opencrane/models/conversations";
+import { ConversationLifecycles, ConversationModes, MessageRoles, MessageSources, MessageStates, type ConversationCreationRequest, type MessageContentBlock } from "@opencrane/models/conversations";
 
 /** Browser-session identity derived by the server before conversation authority is consulted. */
 export interface ConversationCaller
@@ -25,8 +25,8 @@ export interface SubmitConversationMessageRequest
 export interface ConversationSummary
 {
 	readonly id: string;
-	readonly mode: "agent_session" | "direct" | "group";
-	readonly lifecycle: "open" | "closed";
+	readonly mode: ConversationModes;
+	readonly lifecycle: ConversationLifecycles;
 	readonly agentServiceId: string | null;
 	readonly participantUserIds: readonly string[];
 	readonly archivedAt: string | null;
@@ -39,9 +39,9 @@ export interface ConversationMessageView
 {
 	readonly id: string;
 	readonly position: string;
-	readonly role: "user" | "assistant" | "tool" | "system";
-	readonly state: "pending" | "streaming" | "completed" | "failed" | "cancelled";
-	readonly source: "user_input" | "model_output" | "tool_result" | "platform";
+	readonly role: MessageRoles;
+	readonly state: MessageStates;
+	readonly source: MessageSources;
 	readonly blocks: readonly MessageContentBlock[];
 	readonly runId: string | null;
 	readonly userId: string | null;

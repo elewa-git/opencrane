@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { ConversationLifecycles, ConversationModes, MessageContentBlockKinds, MessageRoles, MessageSources, MessageStates } from "@opencrane/models/conversations";
 
 import { _SelfConversationsOpenapiPaths } from "../openapi.js";
 
@@ -48,6 +49,18 @@ describe("participant conversation OpenAPI", function _Suite()
 
 		expect(accepted).toMatchObject({ additionalProperties: false, required: ["outcome", "message"], properties: { outcome: { enum: ["accepted"] } } });
 		expect(idempotent).toMatchObject({ additionalProperties: false, required: ["outcome", "message"], properties: { outcome: { enum: ["idempotent"] } } });
-		expect(accepted).toMatchObject({ properties: { message: { properties: { blocks: { items: { properties: { kind: { enum: ["text", "artifact", "tool_call", "tool_result"] } } } } } } } });
+		expect(accepted).toMatchObject({ properties: { message: { properties: {
+			role: { enum: Object.values(MessageRoles) },
+			state: { enum: Object.values(MessageStates) },
+			source: { enum: Object.values(MessageSources) },
+			blocks: { items: { properties: { kind: { enum: Object.values(MessageContentBlockKinds) } } } },
+		} } } });
+	});
+
+	it("keeps conversation OpenAPI vocabularies owned by the domain model", function _OwnsConversationVocabularies()
+	{
+		const list = _SuccessSchema("/me/conversations", "get", 200) as { readonly properties: { readonly conversations: { readonly items: { readonly properties: Record<string, { readonly enum: readonly string[] }> } } } };
+		expect(list.properties.conversations.items.properties.mode.enum).toEqual(Object.values(ConversationModes));
+		expect(list.properties.conversations.items.properties.lifecycle.enum).toEqual(Object.values(ConversationLifecycles));
 	});
 });

@@ -1,3 +1,5 @@
+import { ConversationLifecycles, ConversationModes, MessageContentBlockKinds, MessageRoles, MessageSources, MessageStates } from "@opencrane/models/conversations";
+
 /** OpenAPI path fragment for owner-bound canonical conversation timeline replay. */
 export const _SelfConversationReplayOpenapiPaths = {
 	"/me/conversations/{conversationId}/events": {
@@ -28,8 +30,8 @@ const _ConversationSummarySchema = {
 	required: ["id", "mode", "lifecycle", "agentServiceId", "participantUserIds", "archivedAt", "readThroughPosition", "updatedAt"],
 	properties: {
 		id: { type: "string" },
-		mode: { type: "string", enum: ["agent_session", "direct", "group"] },
-		lifecycle: { type: "string", enum: ["open", "closed"] },
+		mode: { type: "string", enum: [ConversationModes.AgentSession, ConversationModes.Direct, ConversationModes.Group] },
+		lifecycle: { type: "string", enum: [ConversationLifecycles.Open, ConversationLifecycles.Closed] },
 		agentServiceId: { type: ["string", "null"] },
 		participantUserIds: { type: "array", items: { type: "string" } },
 		archivedAt: { type: ["string", "null"], format: "date-time" },
@@ -45,7 +47,7 @@ const _ConversationMessageBlockSchema = {
 	required: ["id", "kind", "value"],
 	properties: {
 		id: { type: "string" },
-		kind: { type: "string", enum: ["text", "artifact", "tool_call", "tool_result"] },
+		kind: { type: "string", enum: [MessageContentBlockKinds.Text, MessageContentBlockKinds.Artifact, MessageContentBlockKinds.ToolCall, MessageContentBlockKinds.ToolResult] },
 		value: { type: "string" },
 	},
 } as const;
@@ -58,9 +60,9 @@ const _ConversationMessageSchema = {
 	properties: {
 		id: { type: "string" },
 		position: { type: "string", pattern: "^(0|[1-9][0-9]*)$" },
-		role: { type: "string", enum: ["user", "assistant", "tool", "system"] },
-		state: { type: "string", enum: ["pending", "streaming", "completed", "failed", "cancelled"] },
-		source: { type: "string", enum: ["user_input", "model_output", "tool_result", "platform"] },
+		role: { type: "string", enum: [MessageRoles.User, MessageRoles.Assistant, MessageRoles.Tool, MessageRoles.System] },
+		state: { type: "string", enum: [MessageStates.Pending, MessageStates.Streaming, MessageStates.Completed, MessageStates.Failed, MessageStates.Cancelled] },
+		source: { type: "string", enum: [MessageSources.UserInput, MessageSources.ModelOutput, MessageSources.ToolResult, MessageSources.Platform] },
 		blocks: { type: "array", items: _ConversationMessageBlockSchema },
 		runId: { type: ["string", "null"] },
 		userId: { type: ["string", "null"] },
@@ -121,9 +123,9 @@ export const _SelfConversationsOpenapiPaths = {
 			summary: "Create one immutable-mode conversation",
 			tags: ["Conversations"],
 			requestBody: { required: true, content: { "application/json": { schema: { oneOf: [
-				{ type: "object", additionalProperties: false, required: ["mode", "agentServiceId"], properties: { mode: { type: "string", enum: ["agent_session"] }, agentServiceId: { type: "string" } } },
-				{ type: "object", additionalProperties: false, required: ["mode", "participantUserIds"], properties: { mode: { type: "string", enum: ["direct"] }, participantUserIds: { type: "array", items: { type: "string" }, minItems: 1, maxItems: 1 } } },
-				{ type: "object", additionalProperties: false, required: ["mode", "participantUserIds"], properties: { mode: { type: "string", enum: ["group"] }, participantUserIds: { type: "array", items: { type: "string" }, minItems: 1, maxItems: 99 } } },
+				{ type: "object", additionalProperties: false, required: ["mode", "agentServiceId"], properties: { mode: { type: "string", enum: [ConversationModes.AgentSession] }, agentServiceId: { type: "string" } } },
+				{ type: "object", additionalProperties: false, required: ["mode", "participantUserIds"], properties: { mode: { type: "string", enum: [ConversationModes.Direct] }, participantUserIds: { type: "array", items: { type: "string" }, minItems: 1, maxItems: 1 } } },
+				{ type: "object", additionalProperties: false, required: ["mode", "participantUserIds"], properties: { mode: { type: "string", enum: [ConversationModes.Group] }, participantUserIds: { type: "array", items: { type: "string" }, minItems: 1, maxItems: 99 } } },
 			] } } } },
 			responses: { 201: { description: "Conversation created with its bounded canonical history.", content: { "application/json": { schema: _ConversationDetailEnvelopeSchema } } }, 400: { description: "Invalid immutable-mode request." }, 401: { description: "Authentication required." }, 404: { description: "A participant or agent service is unavailable." }, 503: { description: "Conversation authority unavailable." } },
 		},
@@ -162,7 +164,7 @@ export const _SelfConversationsOpenapiPaths = {
 										type: "object",
 										additionalProperties: false,
 										required: ["id", "kind", "value"],
-										properties: { id: { type: "string" }, kind: { type: "string", enum: ["text", "artifact"] }, value: { type: "string", maxLength: 32000 } },
+										properties: { id: { type: "string" }, kind: { type: "string", enum: [MessageContentBlockKinds.Text, MessageContentBlockKinds.Artifact] }, value: { type: "string", maxLength: 32000 } },
 									},
 								},
 							},
