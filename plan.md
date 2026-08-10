@@ -317,7 +317,9 @@ asset removal/availability, bounded elicitation, immutable route coordinates, or
 state, production focus, and the A2UI count/protocol decision. The retained A2UI sink is re-pinned
 directly to supported upstream A2UI packages and loses its OpenClaw lockstep. F1.1 is closed: the
 component-manager validated the supplement against the live catalogue and returned `PASS` on
-2026-08-10.
+2026-08-10. The matching product contract is frozen in
+[workspace and conversation user stories](./docs/user-stories/workspace-and-conversations.md) and
+[ADR 0012](./docs/adr/0012-conversation-modes-and-agent-thread-authority.md).
 
 | Step | Outcome | Owning GitHub issues | Exit gate |
 |---|---|---|---|

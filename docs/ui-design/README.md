@@ -30,9 +30,10 @@ qualification remain separate exit gates in [`plan.md`](../../plan.md).
 Supplement boards `11a` through `11f` close the v4 design gaps without changing its primary
 workspace composition:
 
-- `11a` renders queued Agent-thread admission, active reconnect, direct ask-card deep links, and the
-  fully revoked child route. Revocation purges rendered child content, drafts, cursors, filenames,
-  run details, and ask text; only a non-disclosing restricted parent summary remains.
+- `11a` renders queued Agent-thread admission, active reconnect, direct ask-card deep links, the
+  revoked-client transition, and the indistinguishable unavailable route. Revocation purges rendered
+  child content, drafts, cursors, filenames, run details, and ask text; missing, foreign, guessed,
+  and never-authorized child ids reveal neither conversation kind nor prior access.
 - `11b` renders scanning, inaccessible, expired, removed, and foreign asset states. Local selections
   are removable before admission; after admission the server must return a removal capability.
 - `11c` makes free text visibly bounded, separates local selection from authoritative submission,
