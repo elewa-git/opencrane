@@ -82,7 +82,9 @@ conversation, append-only answers, and their enums in
 is not. The immutable conversation carries provenance only; `UserOnboarding.state` and
 `UserOnboarding.completedAt` are the sole completion authority, admitted only when its pinned
 conversation has exactly three answers. The reviewed clean-database baseline contains the same
-schema plus lifecycle triggers and is the deployment setup boundary.
+schema plus lifecycle triggers and is the deployment setup boundary. Initial workflow provisioning
+supplies its opaque identifier explicitly on the native upsert path instead of relying on an
+ORM-side default for a database column with no SQL default.
 
 ## See also
 
