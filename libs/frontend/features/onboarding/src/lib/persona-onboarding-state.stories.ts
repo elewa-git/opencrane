@@ -159,7 +159,7 @@ export const Ready: Story = {
 	tags: ["visual-test"],
 	render: function render()
 	{
-		return { props: { snapshot: _ResultSnapshot(PersonaOnboardingStates.Ready) }, template: `<wo-persona-ready-state [snapshot]="snapshot" />` };
+		return { props: { snapshot: _ResultSnapshot(PersonaOnboardingStates.Ready), actionError: null }, template: `<wo-persona-ready-state [snapshot]="snapshot" [actionError]="actionError" />` };
 	},
 	play: async function play({ canvasElement })
 	{

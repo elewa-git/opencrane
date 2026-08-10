@@ -1,0 +1,59 @@
+:host {
+	display: contents;
+}
+
+.wo-first-chat {
+	&__transcript {
+		display: grid;
+		align-content: start;
+		gap: var(--oc-space-4);
+		// Keep saved evidence visible while bounding the independently scrollable transcript region.
+		min-height: 10rem;
+		max-height: 24rem;
+		margin: 0;
+		padding: 0 var(--oc-space-1);
+		list-style: none;
+		overflow-y: auto;
+	}
+
+	&__message {
+		display: grid;
+		gap: var(--oc-space-1);
+		justify-self: start;
+		// Preserve readable line length and the reviewed participant alignment at each viewport.
+		max-width: min(42rem, 88%);
+		padding: var(--oc-space-3) var(--oc-space-4);
+		border-radius: var(--oc-radius-card);
+		background: var(--oc-surface-subtle);
+
+		&--owner {
+			justify-self: end;
+			background: var(--oc-accent-soft);
+		}
+
+		p {
+			margin: 0;
+			font-size: var(--oc-text-md);
+			// Conversation evidence needs a looser measure than compact metadata.
+			line-height: 1.6;
+			white-space: pre-wrap;
+			overflow-wrap: anywhere;
+		}
+	}
+
+	&__speaker {
+		font-family: var(--oc-font-mono);
+		font-size: var(--oc-text-2xs);
+		font-weight: 500;
+		letter-spacing: var(--oc-tracking-label);
+		text-transform: uppercase;
+		color: var(--oc-ink-muted);
+	}
+}
+
+// Match the parent conversation's reviewed mobile composition.
+@media (max-width: 640px) {
+	.wo-first-chat__message {
+		max-width: 94%;
+	}
+}

@@ -1,6 +1,6 @@
 import { Routes } from "@angular/router";
 
-/** Lazy route for the server-authoritative persona lifecycle shell. */
+/** Lazy routes for the server-authoritative persona lifecycle and first-chat journey. */
 export const ONBOARDING_ROUTES: Routes =
 [
 	{
@@ -11,6 +11,16 @@ export const ONBOARDING_ROUTES: Routes =
 			return import("./persona-onboarding-page.component").then(function pickOnboarding(module)
 			{
 				return module.PersonaOnboardingPageComponent;
+			});
+		}
+	},
+	{
+		path: "chat",
+		loadComponent: function loadChat()
+		{
+			return import("./chat/persona-first-chat-page.component").then(function pickChat(module)
+			{
+				return module.PersonaFirstChatPageComponent;
 			});
 		}
 	},

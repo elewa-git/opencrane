@@ -5,9 +5,10 @@ import { CUSTOM_ELEMENTS_SCHEMA, Component, input, output, ɵresolveComponentRes
 import { TestBed, type ComponentFixture } from "@angular/core/testing";
 import { BrowserDynamicTestingModule, platformBrowserDynamicTesting } from "@angular/platform-browser-dynamic/testing";
 import { By } from "@angular/platform-browser";
-import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { Router } from "@angular/router";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { PersonaColours, PersonaModifiers, PersonaOnboardingService, PersonaOnboardingSnapshot, PersonaOnboardingStates, PersonaOnboardingStore, PersonaResolutionKinds } from "@opencrane/state/onboarding";
+import { PersonaColours, PersonaFirstChatService, PersonaModifiers, PersonaOnboardingService, PersonaOnboardingSnapshot, PersonaOnboardingStates, PersonaOnboardingStore, PersonaResolutionKinds, UserOnboardingRouteSnapshot, UserOnboardingRouteStates } from "@opencrane/state/onboarding";
 
 import { PersonaOnboardingPageComponent } from "../persona-onboarding-page.component";
 import type { PersonaAnswerIntent, PersonaApprovalIntent, PersonaResolutionIntent } from "../persona-onboarding-state.types";
@@ -63,8 +64,15 @@ class _PersonaReviewStateStubComponent
 class _PersonaReadyStateStubComponent
 {
 	public readonly snapshot = input.required<PersonaOnboardingSnapshot>();
+	public readonly actionError = input.required<string | null>();
 	public readonly retryRequested = output<void>();
 }
+
+/** Controlled route-state loader shared by routed shell fixtures. */
+let _loadRouteState: ReturnType<typeof vi.fn>;
+
+/** Controlled router transition shared by routed shell fixtures. */
+let _navigateByUrl: ReturnType<typeof vi.fn>;
 
 /** Build one complete authority projection for state-component orchestration tests. */
 function _Snapshot(overrides: Partial<PersonaOnboardingSnapshot> = {}): PersonaOnboardingSnapshot
@@ -101,6 +109,21 @@ function _ReviewSnapshot(personaRevisionId: string, state: PersonaOnboardingStat
 			instructionPreview: "Lead with a direct recommendation."
 		}
 	});
+}
+
+/** Build one complete public onboarding route projection. */
+function _RouteSnapshot(state: UserOnboardingRouteStates): UserOnboardingRouteSnapshot
+{
+	return {
+		workflowVersion: 1,
+		state,
+		personaInterviewId: "interview-1",
+		personaRevisionId: state === UserOnboardingRouteStates.SurveyPending || state === UserOnboardingRouteStates.SurveyInProgress ? null : "revision-1",
+		bootstrapConversationId: state === UserOnboardingRouteStates.BootstrapChatInProgress || state === UserOnboardingRouteStates.Completed ? "conversation-1" : null,
+		startedAt: "2026-08-08T09:00:00.000Z",
+		updatedAt: "2026-08-08T10:00:00.000Z",
+		completedAt: state === UserOnboardingRouteStates.Completed ? "2026-08-08T11:00:00.000Z" : null
+	};
 }
 
 /** Build valid state evidence for every durable shell case. */
@@ -173,6 +196,16 @@ afterAll(function _ResetAngularTesting()
 	TestBed.resetTestEnvironment();
 });
 
+beforeEach(function _ConfigureRouteAuthorities()
+{
+	_loadRouteState = vi.fn().mockResolvedValue(_RouteSnapshot(UserOnboardingRouteStates.SurveyInProgress));
+	_navigateByUrl = vi.fn().mockResolvedValue(true);
+	TestBed.configureTestingModule({ providers: [
+		{ provide: PersonaFirstChatService, useValue: { loadRouteState: _loadRouteState } },
+		{ provide: Router, useValue: { navigateByUrl: _navigateByUrl } }
+	] });
+});
+
 afterEach(function _ResetTestBed()
 {
 	TestBed.resetTestingModule();
@@ -213,6 +246,7 @@ describe("persona onboarding shell orchestration", function _PersonaOnboardingSh
 		const ready = _ReviewSnapshot("revision-1", PersonaOnboardingStates.Ready);
 		const service = _Service(review);
 		vi.mocked(service.approve).mockResolvedValue(ready);
+		_loadRouteState.mockResolvedValue(_RouteSnapshot(UserOnboardingRouteStates.BootstrapChatPending));
 		const fixture = await _RenderShell(review, service);
 		const state = fixture.debugElement.query(By.directive(_PersonaReviewStateStubComponent));
 
@@ -222,6 +256,7 @@ describe("persona onboarding shell orchestration", function _PersonaOnboardingSh
 		fixture.detectChanges();
 		expect(service.approve).toHaveBeenCalledWith("revision-1");
 		expect(fixture.nativeElement.querySelectorAll("wo-persona-ready-state")).toHaveLength(1);
+		await vi.waitFor(function _Routed() { expect(_navigateByUrl).toHaveBeenCalledWith("/onboarding/chat"); });
 	});
 
 	it("saves the final answer and adopts the confirmed review state", async function _SurveyCompletion()

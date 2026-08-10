@@ -1,0 +1,62 @@
+:host {
+	display: block;
+	min-height: 100%;
+}
+
+.wo-first-chat {
+	display: grid;
+	gap: var(--oc-space-5);
+	// Preserve the reviewed conversation canvas height across sparse and complete transcripts.
+	min-height: 34rem;
+	padding: var(--oc-space-6);
+	border: 1px solid var(--oc-border-default);
+	border-radius: var(--oc-radius-panel);
+	background: var(--oc-surface-paper);
+
+	&__status {
+		display: flex;
+		align-items: center;
+		gap: var(--oc-space-3);
+		color: var(--oc-ink-muted);
+	}
+
+	&__spinner {
+		width: var(--oc-space-5);
+		height: var(--oc-space-5);
+	}
+
+	&__completion {
+		display: flex;
+		align-items: flex-start;
+		gap: var(--oc-space-3);
+		padding: var(--oc-space-4);
+		border-radius: var(--oc-radius-card);
+		background: var(--oc-success-soft);
+		color: var(--oc-ink-strong);
+
+		i {
+			margin-top: var(--oc-space-1);
+			color: var(--oc-success);
+		}
+
+		p {
+			margin: var(--oc-space-1) 0 0;
+			line-height: 1.5;
+			color: var(--oc-ink-default);
+		}
+	}
+
+	&__retry {
+		display: flex;
+		justify-content: flex-end;
+	}
+}
+
+// Match the shared journey-shell mobile transition while retaining the approved edge-to-edge card.
+@media (max-width: 640px) {
+	.wo-first-chat {
+		min-height: calc(100dvh - var(--oc-space-8));
+		padding: var(--oc-space-4) 0;
+		border: 0;
+	}
+}

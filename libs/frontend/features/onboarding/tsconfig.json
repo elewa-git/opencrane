@@ -7,7 +7,7 @@
 		"tsBuildInfoFile": "../../../../dist/out-tsc/libs/frontend/features/onboarding/tsconfig.tsbuildinfo"
 	},
 	"include": ["src/**/*.ts"],
-	"exclude": ["**/*.spec.ts"],
+	"exclude": ["**/*.spec.ts", "**/*.stories.ts"],
 	"references": [
 		{ "path": "../../elements/ui" },
 		{ "path": "../../state/onboarding" }

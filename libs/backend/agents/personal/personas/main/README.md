@@ -93,7 +93,9 @@ and rolls back the whole approval rather than activating the revision alone.
 - `_CreatePersonaOnboardingRouter` — the ready-to-mount Prisma composition. It maps the shared
   request principal to the persona caller and supplies one aggregate persistence unit of work and the clock.
 - `_CreatePersonaWorkflowEvidenceRepository` — the narrow owner-bound evidence reader used by the
-  server-tracked onboarding authority; the raw Prisma adapter remains internal.
+  server-tracked onboarding authority; it exposes the exact pinned approved revision's reviewed
+  display name and safe `PersonaWorkflowColours` value even after a later refresh becomes active,
+  never compiled instructions. The raw Prisma adapter remains internal.
 - `PersonaOnboardingWorkflowPort` — the narrow app-composed notification boundary that advances the
   distinct durable onboarding authority after an owner starts an interview or approves a persona.
 - `_PersonaOnboardingOpenapiPaths` — the OpenAPI paths for that owner-only router.

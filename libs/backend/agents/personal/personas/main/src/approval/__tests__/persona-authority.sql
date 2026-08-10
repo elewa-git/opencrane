@@ -235,15 +235,46 @@ $statement$, 'provenance is immutable once pinned');
 SELECT pg_temp.expect_failure('bootstrap start requires retrievable content and digest evidence', $statement$
     UPDATE "user_onboardings" SET "state" = 'bootstrap_chat_in_progress', "bootstrap_conversation_id" = 'conversation-1',
         "bootstrap_content_revision_id" = 'bootstrap-v1', "updated_at" = clock_timestamp() WHERE "id" = 'onboarding-1'
-$statement$, 'user_onboardings_valid_check');
-UPDATE "user_onboardings" SET "state" = 'bootstrap_chat_in_progress', "bootstrap_conversation_id" = 'conversation-1',
-    "bootstrap_content_revision_id" = 'bootstrap-v1', "bootstrap_content_digest" = 'sha256:' || repeat('a',64),
-    "updated_at" = clock_timestamp() WHERE "id" = 'onboarding-1';
+$statement$, 'bootstrap conversation must retain exact owner, persona, and content pins');
+INSERT INTO "user_onboarding_bootstrap_conversations" (
+    "id", "onboarding_id", "silo_id", "user_id", "persona_revision_id", "persona_display_name",
+    "persona_archetype", "content_revision_id", "content_digest"
+)
+SELECT 'conversation-1', 'onboarding-1', 'silo-persona', 'user-1', revision."id", template."display_name",
+    content."archetype", content."id", content."digest"
+FROM "persona_revisions" revision
+JOIN "persona_soul_templates" template
+  ON template."template_id" = revision."soul_template_id" AND template."version" = revision."soul_template_version"
+JOIN "user_onboarding_bootstrap_content_revisions" content
+  ON content."primary_colour" = revision."primary_colour" AND content."revision" = 1
+WHERE revision."id" = 'persona-1';
+SELECT pg_temp.expect_failure('bootstrap conversation provenance is fully immutable after creation', $statement$
+    UPDATE "user_onboarding_bootstrap_conversations" SET "persona_display_name" = 'Changed' WHERE "id" = 'conversation-1'
+$statement$, 'bootstrap conversations are immutable after creation');
+UPDATE "user_onboardings" onboarding SET "state" = 'bootstrap_chat_in_progress',
+    "bootstrap_conversation_id" = conversation."id", "bootstrap_content_revision_id" = conversation."content_revision_id",
+    "bootstrap_content_digest" = conversation."content_digest", "updated_at" = clock_timestamp()
+FROM "user_onboarding_bootstrap_conversations" conversation
+WHERE onboarding."id" = 'onboarding-1' AND conversation."id" = 'conversation-1';
+INSERT INTO "user_onboarding_bootstrap_answers" ("id", "conversation_id", "ordinal", "question_ordinal", "text", "idempotency_key") VALUES
+    ('bootstrap-answer-1', 'conversation-1', 1, 1, 'Answer one', 'bootstrap-key-1'),
+    ('bootstrap-answer-2', 'conversation-1', 2, 2, 'Answer two', 'bootstrap-key-2'),
+    ('bootstrap-answer-3', 'conversation-1', 3, 3, 'Answer three', 'bootstrap-key-3');
 SELECT pg_temp.expect_failure('bootstrap completion requires an exact completed timestamp', $statement$
     UPDATE "user_onboardings" SET "state" = 'completed', "completion_provenance" = 'bootstrap_concluded',
         "updated_at" = clock_timestamp() WHERE "id" = 'onboarding-1'
 $statement$, 'user_onboardings_valid_check');
-UPDATE "user_onboardings" SET "state" = 'completed', "completion_provenance" = 'bootstrap_concluded',
-    "completed_at" = clock_timestamp(), "updated_at" = clock_timestamp() WHERE "id" = 'onboarding-1';
+DO $$
+DECLARE completion_time TIMESTAMP(3) := clock_timestamp();
+BEGIN
+    UPDATE "user_onboardings" SET "state" = 'completed', "completion_provenance" = 'bootstrap_concluded',
+        "completed_at" = completion_time, "updated_at" = completion_time WHERE "id" = 'onboarding-1';
+END;
+$$;
+SELECT pg_temp.assert_true((SELECT onboarding."state" = 'completed' AND onboarding."completed_at" IS NOT NULL
+        AND (SELECT count(*) FROM "user_onboarding_bootstrap_answers" answer WHERE answer."conversation_id" = conversation."id") = 3
+    FROM "user_onboardings" onboarding JOIN "user_onboarding_bootstrap_conversations" conversation
+      ON conversation."id" = onboarding."bootstrap_conversation_id" WHERE onboarding."id" = 'onboarding-1'),
+    'bootstrap completion remains parent-owned and requires the exact three-answer conversation');
 
 ROLLBACK;

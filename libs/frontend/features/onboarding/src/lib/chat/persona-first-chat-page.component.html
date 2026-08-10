@@ -1,0 +1,29 @@
+@if (preparing()) {
+	<wo-journey-shell title="Preparing your first conversation" description="OpenCrane is resolving the exact approved persona and reviewed bootstrap source." [layout]="layouts.Compact" [busy]="true">
+		<div class="wo-onboarding__loading" role="status"><p-progressspinner ariaLabel="Loading first conversation" /></div>
+	</wo-journey-shell>
+} @else if (chat.error() && !chat.hasValue()) {
+	<wo-journey-shell title="We could not resume your first conversation" description="No answer or completion has been inferred in the browser." [layout]="layouts.Compact">
+		<p-message journey-status severity="error" [closable]="false">The onboarding authority is unavailable. Your last durable position is unchanged.</p-message>
+		<p-button journey-actions label="Retry" icon="pi pi-refresh" (onClick)="retry()" />
+	</wo-journey-shell>
+} @else if (view(); as presentation) {
+	<wo-persona-first-chat
+		[identity]="presentation.identity"
+		[provenance]="presentation.provenance"
+		[transcript]="presentation.transcript"
+		[currentQuestion]="presentation.currentQuestion"
+		[state]="presentationState()"
+		[draftAnswer]="draftAnswer()"
+		[statusMessage]="actionError() ?? undefined"
+		completionMessage="OpenCrane validated all three answers and concluded onboarding on the server."
+		(draftAnswerChange)="updateDraft($event)"
+		(answerSubmitted)="submitAnswer($event)"
+		(retryRequested)="retry()"
+	/>
+} @else {
+	<wo-journey-shell title="First-conversation evidence is incomplete" description="OpenCrane did not return the exact persona and reviewed source required to continue." [layout]="layouts.Compact">
+		<p-message journey-status severity="error" [closable]="false">No local conversation was created. Retry the authoritative onboarding state.</p-message>
+		<p-button journey-actions label="Retry" icon="pi pi-refresh" (onClick)="retry()" />
+	</wo-journey-shell>
+}

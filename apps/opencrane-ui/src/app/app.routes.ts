@@ -18,7 +18,7 @@ export const APP_ROUTES: Routes =
 		}
 	},
 	{
-		// Server-authoritative persona lifecycle shell.
+		// Server-authoritative persona lifecycle and bounded first-chat journey.
 		path: "onboarding",
 		canActivate: [___OperatorAccessGuard],
 		loadChildren: function loadOnboardingRoutes()

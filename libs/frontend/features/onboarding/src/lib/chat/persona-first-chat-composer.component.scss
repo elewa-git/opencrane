@@ -1,0 +1,65 @@
+:host {
+	display: contents;
+}
+
+.wo-first-chat {
+	&__step {
+		font-family: var(--oc-font-mono);
+		font-size: var(--oc-text-2xs);
+		font-weight: 500;
+		letter-spacing: var(--oc-tracking-label);
+		text-transform: uppercase;
+		color: var(--oc-ink-muted);
+	}
+
+	&__question {
+		display: grid;
+		gap: var(--oc-space-2);
+		padding-top: var(--oc-space-4);
+		border-top: 1px solid var(--oc-border-subtle);
+
+		h2 {
+			margin: 0;
+			font-size: var(--oc-text-lg);
+			font-weight: 500;
+			// Allow reviewed calibration questions to wrap without crowding successive lines.
+			line-height: 1.45;
+			color: var(--oc-ink-strong);
+		}
+	}
+
+	&__composer {
+		display: grid;
+		gap: var(--oc-space-2);
+
+		label {
+			font-size: var(--oc-text-sm);
+			font-weight: 500;
+		}
+
+		textarea {
+			width: 100%;
+			resize: vertical;
+		}
+	}
+
+	&__composer-footer {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: var(--oc-space-3);
+
+		span {
+			font-size: var(--oc-text-xs);
+			color: var(--oc-ink-muted);
+		}
+	}
+}
+
+// Match the parent conversation's reviewed mobile composition.
+@media (max-width: 640px) {
+	.wo-first-chat__composer-footer {
+		align-items: flex-start;
+		flex-direction: column;
+	}
+}

@@ -1,0 +1,54 @@
+<wo-journey-shell
+	title="Meet your personal agent"
+	description="This private first conversation calibrates how you will work together."
+	[layout]="journeyLayouts.Wide"
+	[busy]="state() === states.Submitting || state() === states.Reconnecting || state() === states.Finishing"
+>
+	@if (state() === states.Submitting) {
+		<div journey-status class="wo-first-chat__status" role="status" aria-live="polite">
+			<p-progressspinner class="wo-first-chat__spinner" ariaLabel="Saving your answer" data-visual-target="progress-spinner" strokeWidth="5" />
+			<span>{{ statusMessage() ?? "Saving your answer…" }}</span>
+		</div>
+	} @else if (state() === states.Reconnecting) {
+		<p-message journey-status severity="warn" [closable]="false">{{ statusMessage() ?? "Reconnecting to the saved conversation…" }}</p-message>
+	} @else if (state() === states.Finishing) {
+		<div journey-status class="wo-first-chat__status" role="status" aria-live="polite">
+			<p-progressspinner class="wo-first-chat__spinner" ariaLabel="Finishing onboarding" data-visual-target="progress-spinner" strokeWidth="5" />
+			<span>{{ statusMessage() ?? "Validating your completed calibration…" }}</span>
+		</div>
+	} @else if (state() === states.Error) {
+		<p-message journey-status severity="error" [closable]="false">{{ statusMessage() ?? "The conversation could not continue." }}</p-message>
+	}
+
+	<section class="wo-first-chat" aria-label="First conversation">
+		<wo-persona-first-chat-identity [identity]="identity()" [provenance]="provenance()" />
+
+		<wo-persona-first-chat-transcript [agentName]="identity().name" [messages]="transcript()" />
+
+		@if (currentQuestion(); as question) {
+			<wo-persona-first-chat-composer
+				[question]="question"
+				[state]="state()"
+				[draftAnswer]="draftAnswer()"
+				(draftAnswerChange)="draftAnswer.set($event)"
+				(answerSubmitted)="answerSubmitted.emit($event)"
+			/>
+		} @else if (state() === states.Completed) {
+			<div class="wo-first-chat__completion" role="status" aria-live="polite">
+				<i class="pi pi-check-circle" aria-hidden="true"></i>
+				<div>
+					<strong>Calibration complete</strong>
+					@if (completionMessage(); as completionMessageValue) {
+						<p>{{ completionMessageValue }}</p>
+					}
+				</div>
+			</div>
+		}
+
+		@if (state() === states.Error) {
+			<div class="wo-first-chat__retry">
+				<p-button label="Try again" severity="secondary" icon="pi pi-refresh" (onClick)="retryRequested.emit()" />
+			</div>
+		}
+	</section>
+</wo-journey-shell>
