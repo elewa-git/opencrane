@@ -1,0 +1,27 @@
+<aside class="wo-files-panel" aria-labelledby="conversation-files-heading">
+	<header class="wo-files-panel__header">
+		<h2 id="conversation-files-heading">Files</h2>
+		<span class="wo-files-panel__count" aria-label="File count">{{ items().length }}</span>
+	</header>
+	@if (items().length === 0) {
+		<p class="wo-files-panel__empty">Files attached to messages or finalized by an assistant will appear here.</p>
+	} @else {
+		@if (participantFiles().length > 0) {
+			<section aria-labelledby="participant-files-heading">
+				<h3 id="participant-files-heading">Attached by you · {{ participantFiles().length }}</h3>
+				<div class="wo-files-panel__list">
+					@for (item of participantFiles(); track item.id) { <wo-conversation-file-row [item]="item" (actionRequested)="request($event)" /> }
+				</div>
+			</section>
+		}
+		@if (agentFiles().length > 0) {
+			<section aria-labelledby="agent-files-heading">
+				<h3 id="agent-files-heading">Created by assistant · {{ agentFiles().length }}</h3>
+				<div class="wo-files-panel__list">
+					@for (item of agentFiles(); track item.id) { <wo-conversation-file-row [item]="item" (actionRequested)="request($event)" /> }
+				</div>
+			</section>
+		}
+	}
+	<footer>Finalized files survive retries and session close.</footer>
+</aside>

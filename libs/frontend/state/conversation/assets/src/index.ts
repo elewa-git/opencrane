@@ -4,3 +4,4 @@ export { ConversationAssetsStore } from "./lib/conversation-assets.store.js";
 export { ConversationAssetTransferPhases } from "./lib/conversation-assets.types.js";
 export type { ConversationAsset, ConversationAssetSelectionFailure, PendingConversationAssetUpload, ReserveConversationAssetUpload } from "./lib/conversation-assets.types.js";
 export { OpenCraneConversationAssetsGateway } from "./lib/opencrane-conversation-assets-gateway.js";
+export { ConversationAssetDisposition, ConversationAssetLifecycle, ConversationAssetProvenance } from "@opencrane/models/conversation-assets";
