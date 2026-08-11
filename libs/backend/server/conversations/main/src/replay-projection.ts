@@ -2,7 +2,7 @@ import { AG_UI_CHILD_RUN_ENVELOPE_VERSION, AgUiToolRecoveryProviderOutcomes, ___
 
 import type { ConversationReplayEventRow, ConversationReplayProjectionResult } from "./replay-projection.types.js";
 
-const _SAFE_FAILURE_CODES = new Set(["AuthenticationError", "ConnectionError", "HTTPError", "ModelLoopError", "OSError", "PermissionError", "RuntimeError", "TimeoutError", "URLError", "ValueError", "invalid_deferred_result", "malformed_tool_call", "model_loop_error", "obot_invocation_failed", "tool_not_allowed", "unknown_tool", "unknown_tool_invocation"]);
+const _SAFE_FAILURE_CODES = new Set(["AuthenticationError", "ConnectionError", "HTTPError", "ModelLoopError", "OSError", "PermissionError", "RuntimeError", "TimeoutError", "URLError", "ValueError", "approval_arguments_invalid", "approval_cancelled", "approval_defer_failed", "approval_denied", "approval_expired", "approval_unavailable", "external_action_pre_dispatch_unavailable", "external_action_preparation_failed", "external_action_provider_outcome_ambiguous", "external_action_unsupported", "integration_provider_unavailable", "integration_tool_not_allowed", "malformed_tool_call", "memory_provider_unavailable", "memory_scope_unavailable", "model_loop_error", "sandbox_provider_unavailable"]);
 
 /** Redact one canonical timeline row into only the fields the AG-UI projection contract allows. */
 export function __ProjectConversationReplayEvent(row: ConversationReplayEventRow): ConversationReplayProjectionResult

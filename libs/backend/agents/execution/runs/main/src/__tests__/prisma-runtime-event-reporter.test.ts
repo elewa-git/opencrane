@@ -78,6 +78,25 @@ describe("PrismaRuntimeEventReporter", function _Suite()
 		expect(transaction.conversationRunEvent.create).not.toHaveBeenCalled();
 	});
 
+	it("rejects server-owned tool lifecycle events from the runtime", async function _RejectsToolLifecycle()
+	{
+		const transaction = _Transaction();
+		const reporter = new PrismaRuntimeEventReporter();
+		for (const eventType of ["tool.started", "tool.completed", "tool.failed"])
+		{
+			await expect(reporter.reportInTransaction(transaction, { runId: "run-1", attempt: 2, eventType, payload: {} })).resolves.toEqual({ outcome: "denied", reason: "invalid_event" });
+		}
+		expect(transaction.conversationRunEvent.create).not.toHaveBeenCalled();
+	});
+
+	it("accepts the current saved-result validation errors without accepting details", async function _AcceptsResultErrors()
+	{
+		const transaction = _Transaction();
+		const reporter = new PrismaRuntimeEventReporter();
+		await expect(reporter.reportInTransaction(transaction, { runId: "run-1", attempt: 2, eventType: "run.error", payload: { reason: "invalid_tool_result" } })).resolves.toEqual({ outcome: "reported" });
+		await expect(reporter.reportInTransaction(transaction, { runId: "run-1", attempt: 2, eventType: "run.error", payload: { reason: "unknown_tool_result" } })).resolves.toEqual({ outcome: "reported" });
+	});
+
 	it("accepts only a versioned A2UI envelope bound to the durable run and conversation", async function _A2uiCoordinates()
 	{
 		const transaction = _Transaction();

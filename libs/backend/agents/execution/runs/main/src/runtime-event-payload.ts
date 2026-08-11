@@ -4,9 +4,8 @@ import type { JsonValue } from "@opencrane/util";
 
 const _SECRET_FIELD = /token|secret|password|authorization|cookie|credential|proof|private.?key/iu;
 const _ERROR_TYPES = new Set(["AuthenticationError", "ConnectionError", "HTTPError", "ModelLoopError", "OSError", "PermissionError", "RuntimeError", "TimeoutError", "URLError", "ValueError"]);
-const _RUN_ERROR_REASONS = new Set(["invalid_deferred_result", "malformed_tool_call", "model_loop_error"]);
-const _RUN_FAILURE_REASONS = new Set(["executor_failed", "invalid_resume_steering", "missing_compiled_input", "missing_resume_payload"]);
-const _TOOL_FAILURE_REASONS = new Set(["invalid_deferred_result", "malformed_tool_call", "obot_invocation_failed", "tool_not_allowed", "unknown_tool", "unknown_tool_invocation"]);
+const _RUN_ERROR_REASONS = new Set(["invalid_tool_result", "malformed_tool_call", "model_loop_error", "unknown_tool_result"]);
+const _RUN_FAILURE_REASONS = new Set(["executor_failed", "invalid_resume_steering", "invalid_tool_results", "missing_compiled_input", "missing_resume_payload"]);
 const _A2UI_EVENT_TYPES = new Set<string>([RunEventTypes.A2uiRenderingBegun, RunEventTypes.A2uiSurfaceUpdated, RunEventTypes.A2uiDataModelUpdated]);
 
 /** Enforce global bounds and the exact public payload shape of one runtime-owned event. */
@@ -19,24 +18,20 @@ export function _RuntimeEventPayloadIsSafe(eventType: string, payload: JsonValue
 	if (eventType === RunEventTypes.MessageDelta) return _Exact(payload, ["messageId", "delta"]) && _Identifier(payload["messageId"]) && typeof payload["delta"] === "string";
 	if (eventType === RunEventTypes.MessageCompleted) return _Exact(payload, ["messageId"]) && _Identifier(payload["messageId"]);
 	if (eventType === RunEventTypes.ToolRequested) return _Exact(payload, ["toolCallId", "toolCallName"]) && _Identifier(payload["toolCallId"]) && _Identifier(payload["toolCallName"]);
-	if (eventType === RunEventTypes.ToolStarted) return _Exact(payload, ["toolInvocationId", "toolCallId"]) && _Identifier(payload["toolInvocationId"]) && payload["toolCallId"] === payload["toolInvocationId"];
-	if (eventType === RunEventTypes.ToolCompleted) return _Exact(payload, ["toolInvocationId", "toolCallId", "resultDigest"]) && _Identifier(payload["toolInvocationId"]) && payload["toolCallId"] === payload["toolInvocationId"] && typeof payload["resultDigest"] === "string" && /^sha256:[0-9a-f]{64}$/u.test(payload["resultDigest"]);
-	if (eventType === RunEventTypes.ToolFailed) return _Failure(payload, _TOOL_FAILURE_REASONS, true);
 	if (eventType === RunEventTypes.RunUsage) return _Exact(payload, ["inputTokens", "outputTokens"]) && _Counter(payload["inputTokens"]) && _Counter(payload["outputTokens"]);
-	if (eventType === RunEventTypes.RunError) return _Failure(payload, _RUN_ERROR_REASONS, false);
+	if (eventType === RunEventTypes.RunError) return _Failure(payload, _RUN_ERROR_REASONS);
 	if (_A2UI_EVENT_TYPES.has(eventType)) return _A2ui(payload);
 	if (eventType === RunEventTypes.RunCompleted) return _Exact(payload, []);
-	if (eventType === RunEventTypes.RunFailed) return _Failure(payload, _RUN_FAILURE_REASONS, false);
+	if (eventType === RunEventTypes.RunFailed) return _Failure(payload, _RUN_FAILURE_REASONS);
 	return false;
 }
 
 /** Validate one fixed failure vocabulary while preserving only optional bounded coordinates. */
-function _Failure(payload: Readonly<Record<string, JsonValue>>, reasons: ReadonlySet<string>, tool: boolean): boolean
+function _Failure(payload: Readonly<Record<string, JsonValue>>, reasons: ReadonlySet<string>): boolean
 {
-	const optional = tool ? ["toolInvocationId", "errorType"] : ["errorType"];
-	if (!_Exact(payload, ["reason"], optional) || typeof payload["reason"] !== "string" || !reasons.has(payload["reason"])) return false;
+	if (!_Exact(payload, ["reason"], ["errorType"]) || typeof payload["reason"] !== "string" || !reasons.has(payload["reason"])) return false;
 	if (payload["errorType"] !== undefined && (typeof payload["errorType"] !== "string" || !_ERROR_TYPES.has(payload["errorType"]))) return false;
-	return !tool || _Identifier(payload["toolInvocationId"]);
+	return true;
 }
 
 /** Require the one exact A2UI wrapper and an upstream-valid governed envelope. */
