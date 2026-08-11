@@ -38,6 +38,6 @@ export interface ObotHttpOptions
 	readonly fetch?: ObotFetch;
 	/** Optional service-token reader seam used by focused tests. */
 	readonly readServiceToken?: () => Promise<string>;
-	/** Optional process-lifecycle signal that aborts active exchanges before dependency shutdown. */
-	readonly shutdownSignal?: AbortSignal;
+	/** Process-lifecycle signal that aborts active exchanges before dependency shutdown. */
+	readonly shutdownSignal: AbortSignal;
 }

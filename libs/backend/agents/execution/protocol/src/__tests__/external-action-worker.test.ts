@@ -2,13 +2,31 @@ import { ExternalActionClaimKinds, ExternalActionRecoveryModes, ToolInvocationEv
 import type { Logger } from "@opencrane/backend/observability";
 import type { RunInputSnapshot } from "@opencrane/contracts";
 import type { JsonValue } from "@opencrane/util";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ExternalActionWorker } from "../external-action-worker.js";
 import { ExternalActionProviderOutcomeKinds, type ExternalActionAdapterFactory, type ExternalActionExecutionContext, type ExternalActionExecutionContextLoader, type ExternalActionWorkerDependencies, type ExternalActionWorkerEvent, type ExternalActionWorkerInvocation, type ExternalActionWorkerUnitOfWork, type PreparedExternalActionAdapter, type ToolInvocationWorkSource } from "../external-action-worker.types.js";
 
+/** Operation names opened through the observability seam during one focused worker test. */
+const _traceOperations = vi.hoisted(function _TraceOperations() { return [] as string[]; });
+
+vi.mock("@opencrane/backend/observability", async function _Observability(importOriginal)
+{
+	const original = await importOriginal<typeof import("@opencrane/backend/observability")>();
+	return {
+		...original,
+		___DoWithTrace: async function _DoWithTrace<T>(name: string, _fields: Record<string, unknown>, work: () => Promise<T>): Promise<T>
+		{
+			_traceOperations.push(name);
+			return work();
+		},
+	};
+});
+
 /** Fixed server instant shared by every focused worker pass. */
 const _NOW = new Date("2026-08-11T10:00:00.000Z");
+
+beforeEach(function _ResetTraces() { _traceOperations.length = 0; });
 
 /** Build one runnable invocation for a selected lifecycle and recovery mode. */
 function _invocation(state: ToolInvocationStates, recoveryMode: ExternalActionRecoveryModes = ExternalActionRecoveryModes.Manual): ExternalActionWorkerInvocation
@@ -331,6 +349,7 @@ describe("external action worker", function _suite()
 		const worker = new ExternalActionWorker({ ...dependencies.value, source: new _Source(null) });
 		await expect(worker.runOnce()).resolves.toBe(false);
 		expect(dependencies.adapters.prepareCount).toBe(0);
+		expect(_traceOperations).not.toContain("external_action.worker.run");
 	});
 
 	it("uses the exact frozen idempotency key for a provider-idempotent dispatch", async function _idempotentDispatch()

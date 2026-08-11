@@ -70,7 +70,7 @@ function _json(payload: unknown, status = 200): Response
 /** Creates a session bound to the recording seam with an injected token reader. */
 function _session(recorded: _RecordedRequest[], respond: () => Response | Promise<Response>, extra: Partial<ObotHttpOptions> = {})
 {
-	return __CreateObotSession({ baseUrl: "http://oc-mcp-gateway.silo.svc.cluster.local:8080", requestTimeoutMilliseconds: 30_000, serviceTokenFile: "/var/run/opencrane/obot/token", readServiceToken: async function _readToken() { return "obot-service-token"; }, fetch: _fetchSeam(recorded, respond), ...extra });
+	return __CreateObotSession({ baseUrl: "http://oc-mcp-gateway.silo.svc.cluster.local:8080", requestTimeoutMilliseconds: 30_000, serviceTokenFile: "/var/run/opencrane/obot/token", readServiceToken: async function _readToken() { return "obot-service-token"; }, fetch: _fetchSeam(recorded, respond), shutdownSignal: new AbortController().signal, ...extra });
 }
 
 describe("Obot HTTP session", function _SessionSuite()
@@ -90,7 +90,7 @@ describe("Obot HTTP session", function _SessionSuite()
 	{
 		expect(function _TooShort() { _session([], function _never() { return _json(null); }, { requestTimeoutMilliseconds: 999 }); }).toThrow("1 and 300 seconds");
 		expect(function _TooLong() { _session([], function _never() { return _json(null); }, { requestTimeoutMilliseconds: 300_001 }); }).toThrow("1 and 300 seconds");
-		expect(function _Relative() { __CreateObotSession({ baseUrl: "http://oc-mcp-gateway.silo.svc.cluster.local:8080", requestTimeoutMilliseconds: 30_000, serviceTokenFile: "relative/token" }); }).toThrow("absolute");
+		expect(function _Relative() { __CreateObotSession({ baseUrl: "http://oc-mcp-gateway.silo.svc.cluster.local:8080", requestTimeoutMilliseconds: 30_000, serviceTokenFile: "relative/token", shutdownSignal: new AbortController().signal }); }).toThrow("absolute");
 	});
 
 	it("presents the freshly read bearer token and suppresses child tracing", async function _AuthenticatedExchange()

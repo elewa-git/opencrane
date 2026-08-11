@@ -167,10 +167,10 @@ function _McpSessionId(value: string | null): string | null
 }
 
 /** Combine the per-exchange deadline with the process shutdown fence. */
-function _RequestSignal(timeoutMilliseconds: number, shutdownSignal?: AbortSignal): AbortSignal
+function _RequestSignal(timeoutMilliseconds: number, shutdownSignal: AbortSignal): AbortSignal
 {
 	const timeoutSignal = AbortSignal.timeout(timeoutMilliseconds);
-	return shutdownSignal === undefined ? timeoutSignal : AbortSignal.any([timeoutSignal, shutdownSignal]);
+	return AbortSignal.any([timeoutSignal, shutdownSignal]);
 }
 
 /**
