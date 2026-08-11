@@ -2,7 +2,7 @@ import { Prisma, type PrismaClient } from "@prisma/client";
 import { ___DoWithTrace } from "@opencrane/backend/observability";
 
 import { __DecideDeferredToolRequest } from "./deferred-tool-approval.js";
-import type { DecideDeferredToolRequestCommand, DecideDeferredToolRequestResult, DeferredToolApprovalDecisionRepository } from "./deferred-tool-approval.types.js";
+import type { DecideDeferredToolRequestCommand, DecideDeferredToolRequestResult, DeferredToolApprovalDecisionRepository } from "./deferred-tool-approval-decision.types.js";
 
 /** Prisma-backed atomic persistence for session-authorized deferred-tool decisions. */
 export class PrismaDeferredToolApprovalDecisionRepository implements DeferredToolApprovalDecisionRepository

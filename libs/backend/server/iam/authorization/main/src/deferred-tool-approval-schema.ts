@@ -2,7 +2,7 @@ import { Ajv } from "ajv";
 
 import { ___CloneCanonicalJson, type JsonValue } from "@opencrane/util";
 
-import type { DeferredToolApprovalProjection } from "./deferred-tool-approval.types.js";
+import type { DeferredToolApprovalProjection } from "./deferred-tool-approval-interrupt.types.js";
 
 /** JSON object used while deriving a display-safe decision schema. */
 type JsonObject = { readonly [key: string]: JsonValue };

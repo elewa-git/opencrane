@@ -81,6 +81,10 @@ carries a concrete, currently authorized human approval subject.
   recovers an ambiguous commit or terminalises the reservation so it cannot be replayed.
 - `__ProjectDeferredToolApproval`, `__ValidateDeferredToolArguments` — derive the secret-safe actor
   projection and validate a complete approved replacement against the frozen reviewed tool schema.
+- Deferred-approval contracts are split by authority: `DeferredToolApprovalLifecycle*` owns the
+  exhaustive run-state table; `DeferredToolApprovalInterrupt*` and `SelfDeferredToolApproval*` own
+  actor-safe reads; `DeferredToolDecision*` owns decision and expiry commands; and
+  `DeferredToolApprovalOpen*` owns reservation-linked opening and ambiguous-commit recovery.
 - `__DigestCanonicalJson` — an authorization-domain wrapper over the shared environment-neutral
   canonical JSON hash, preserving one SHA-256 implementation across server and browser consumers.
 - `PrismaRuntimeAuthorityRepository`, `PrismaAuthorizationGrantRepository` — the database-backed

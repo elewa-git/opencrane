@@ -3,7 +3,7 @@ import { ___DoWithTrace } from "@opencrane/backend/observability";
 
 import type { JsonValue } from "@opencrane/util";
 
-import { DeferredToolApprovalStates, type SelfDeferredToolApproval, type SelfDeferredToolApprovalListRepository, type SelfDeferredToolApprovalReadUnitOfWork } from "./deferred-tool-approval.types.js";
+import { DeferredToolApprovalStates, type SelfDeferredToolApproval, type SelfDeferredToolApprovalListRepository, type SelfDeferredToolApprovalReadUnitOfWork } from "./deferred-tool-approval-interrupt.types.js";
 
 /** Exact actor-safe columns selected for an owned tool approval. */
 type SafeApprovalRow = {

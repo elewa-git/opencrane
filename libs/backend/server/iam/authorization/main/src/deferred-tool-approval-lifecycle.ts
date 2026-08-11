@@ -1,4 +1,4 @@
-import { DeferredToolApprovalLifecycleActions, DeferredToolApprovalLifecycleEvents, DeferredToolApprovalRunStates, type DeferredToolApprovalLifecycleInput } from "./deferred-tool-approval.types.js";
+import { DeferredToolApprovalLifecycleActions, DeferredToolApprovalLifecycleEvents, DeferredToolApprovalRunStates, type DeferredToolApprovalLifecycleInput } from "./deferred-tool-approval-lifecycle.types.js";
 
 /** State-owned handler signature used by the exhaustive run lifecycle registry. */
 type DeferredToolApprovalStateHandler = (input: DeferredToolApprovalLifecycleInput) => DeferredToolApprovalLifecycleActions;

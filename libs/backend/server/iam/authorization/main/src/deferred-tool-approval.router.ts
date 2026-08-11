@@ -3,7 +3,7 @@ import { Router, type Request, type Response } from "express";
 import { ___DoWithTrace } from "@opencrane/backend/observability";
 import type { JsonValue } from "@opencrane/util";
 
-import { DeferredToolDecisionKinds } from "./deferred-tool-approval.types.js";
+import { DeferredToolDecisionKinds } from "./deferred-tool-approval-decision.types.js";
 import type { DeferredToolApprovalCaller, DeferredToolApprovalRouterDependencies } from "./deferred-tool-approval.router.types.js";
 
 type ParsedDecision =

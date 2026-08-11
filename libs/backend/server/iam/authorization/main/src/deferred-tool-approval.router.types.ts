@@ -2,7 +2,8 @@ import type { Request } from "express";
 
 import type { Logger } from "@opencrane/backend/observability";
 
-import type { DeferredToolApprovalDecisionRepository, SelfDeferredToolApprovalReadUnitOfWork } from "./deferred-tool-approval.types.js";
+import type { DeferredToolApprovalDecisionRepository } from "./deferred-tool-approval-decision.types.js";
+import type { SelfDeferredToolApprovalReadUnitOfWork } from "./deferred-tool-approval-interrupt.types.js";
 
 /** Authenticated browser caller resolved by the composing server, never from request input. */
 export interface DeferredToolApprovalCaller

@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { __DecideDeferredToolRequest, __DeferToolRequest, __ExpireDeferredToolApprovalBatch } from "../deferred-tool-approval.js";
 import { __DigestCanonicalJson } from "../canonical-json-digest.js";
-import { DeferredToolDecisionKinds } from "../deferred-tool-approval.types.js";
+import { DeferredToolDecisionKinds } from "../deferred-tool-approval-decision.types.js";
 
 /** Build a transaction whose approvalRequest reads return the supplied row and writes report a count. */
 function _transaction(row: unknown, updatedCount: number, invocationRow: unknown = { id: "tool-1", runId: "run-1", attempt: 2, toolInvocationId: "call-7", toolRevisionId: "integration:search:query", argumentsDigest: __DigestCanonicalJson({ query: "original" }), state: ActionExecutionState.Reserved }, pendingCount = 0): { transaction: Prisma.TransactionClient; updateMany: ReturnType<typeof vi.fn>; invocationUpdateMany: ReturnType<typeof vi.fn>; runUpdateMany: ReturnType<typeof vi.fn>; membershipFindFirst: ReturnType<typeof vi.fn> }

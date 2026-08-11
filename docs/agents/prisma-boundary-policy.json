@@ -336,7 +336,7 @@
 		"path": "libs/backend/server/iam/authorization/main/src/prisma-deferred-tool-approval-opener.ts",
 		"adapter": "PrismaDeferredToolApprovalOpenRepository",
 		"contract": "DeferredToolApprovalOpenRepository",
-		"contractImportPath": "./deferred-tool-approval.types.js",
+		"contractImportPath": "./deferred-tool-approval-open.types.js",
 		"constructs": []
 	  },
 	  {
@@ -364,7 +364,7 @@
 		"path": "libs/backend/server/iam/authorization/main/src/prisma-self-deferred-tool-approval-list-repository.ts",
 		"adapter": "PrismaSelfDeferredToolApprovalListRepository",
 		"contract": "SelfDeferredToolApprovalListRepository",
-		"contractImportPath": "./deferred-tool-approval.types.js",
+		"contractImportPath": "./deferred-tool-approval-interrupt.types.js",
 		"constructs": []
 	  },
       {
@@ -611,7 +611,7 @@
 		"path": "libs/backend/server/iam/authorization/main/src/prisma-deferred-tool-approval-opener.ts",
 		"adapter": "PrismaDeferredToolApprovalOpenUnitOfWork",
 		"contract": "DeferredToolApprovalOpenUnitOfWork",
-		"contractImportPath": "./deferred-tool-approval.types.js",
+		"contractImportPath": "./deferred-tool-approval-open.types.js",
 		"constructs": [
 		  {
 			"adapter": "PrismaDeferredToolApprovalOpenRepository",
@@ -671,7 +671,7 @@
 		"path": "libs/backend/server/iam/authorization/main/src/prisma-self-deferred-tool-approval-list-repository.ts",
 		"adapter": "PrismaSelfDeferredToolApprovalReadUnitOfWork",
 		"contract": "SelfDeferredToolApprovalReadUnitOfWork",
-		"contractImportPath": "./deferred-tool-approval.types.js",
+		"contractImportPath": "./deferred-tool-approval-interrupt.types.js",
 		"constructs": [
 		  {
 			"adapter": "PrismaSelfDeferredToolApprovalListRepository",

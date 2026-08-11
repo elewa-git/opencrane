@@ -10,8 +10,13 @@ export type { CancelPendingRunApprovalAuthorityCommand, CancelPendingRunApproval
 export { __DecideDeferredToolRequest, __DeferToolRequest, __ExpireDeferredToolApprovalBatch } from "./deferred-tool-approval.js";
 export { __PlanDeferredToolApprovalLifecycle } from "./deferred-tool-approval-lifecycle.js";
 export { __ProjectDeferredToolApproval, __ValidateDeferredToolArguments } from "./deferred-tool-approval-schema.js";
-export { DeferredToolApprovalLifecycleActions, DeferredToolApprovalLifecycleEvents, DeferredToolApprovalRunStates, DeferredToolApprovalStates, DeferredToolDecisionKinds } from "./deferred-tool-approval.types.js";
-export type { DecideDeferredToolRequestCommand, DecideDeferredToolRequestResult, DeferredToolApprovalDecisionRepository, DeferredToolApprovalInterruptReader, DeferredToolApprovalLifecycleInput, DeferredToolApprovalProjection, DeferToolRequestCommand, DeferToolRequestResult, ExpireDeferredToolApprovalBatchCommand, ExpireDeferredToolApprovalBatchResult, OpenDeferredToolApprovalCommand, SelfDeferredToolApproval, SelfDeferredToolApprovalListRepository, SelfDeferredToolApprovalReadUnitOfWork } from "./deferred-tool-approval.types.js";
+export { DeferredToolDecisionKinds } from "./deferred-tool-approval-decision.types.js";
+export type { DecideDeferredToolRequestCommand, DecideDeferredToolRequestResult, DeferredToolApprovalDecisionRepository, ExpireDeferredToolApprovalBatchCommand, ExpireDeferredToolApprovalBatchResult } from "./deferred-tool-approval-decision.types.js";
+export { DeferredToolApprovalStates } from "./deferred-tool-approval-interrupt.types.js";
+export type { ApprovalInterruptReadCommand, DeferredToolApprovalInterruptReader, DeferredToolApprovalProjection, SelfDeferredToolApproval, SelfDeferredToolApprovalListRepository, SelfDeferredToolApprovalReadUnitOfWork } from "./deferred-tool-approval-interrupt.types.js";
+export { DeferredToolApprovalLifecycleActions, DeferredToolApprovalLifecycleEvents, DeferredToolApprovalRunStates } from "./deferred-tool-approval-lifecycle.types.js";
+export type { DeferredToolApprovalLifecycleInput } from "./deferred-tool-approval-lifecycle.types.js";
+export type { DeferredToolApprovalOpenRepository, DeferredToolApprovalOpenUnitOfWork, DeferToolRequestCommand, DeferToolRequestResult, OpenDeferredToolApprovalCommand } from "./deferred-tool-approval-open.types.js";
 export { __OpenDeferredToolApproval } from "./prisma-deferred-tool-approval-opener.js";
 export { PrismaDeferredToolApprovalDecisionRepository } from "./prisma-deferred-tool-approval-decision-repository.js";
 export { PrismaSelfDeferredToolApprovalListRepository, PrismaSelfDeferredToolApprovalReadUnitOfWork } from "./prisma-self-deferred-tool-approval-list-repository.js";

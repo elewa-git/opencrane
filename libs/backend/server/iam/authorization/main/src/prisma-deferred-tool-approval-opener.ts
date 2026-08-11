@@ -5,7 +5,7 @@ import { ___DoWithTrace, type Logger } from "@opencrane/backend/observability";
 import { __DigestCanonicalJson } from "./canonical-json-digest.js";
 import { __DeferToolRequest } from "./deferred-tool-approval.js";
 import { __ProjectDeferredToolApproval, __ValidateDeferredToolArguments } from "./deferred-tool-approval-schema.js";
-import type { DeferredToolApprovalOpenRepository, DeferredToolApprovalOpenUnitOfWork, DeferToolRequestCommand, DeferToolRequestResult, OpenDeferredToolApprovalCommand } from "./deferred-tool-approval.types.js";
+import type { DeferredToolApprovalOpenRepository, DeferredToolApprovalOpenUnitOfWork, DeferToolRequestCommand, DeferToolRequestResult, OpenDeferredToolApprovalCommand } from "./deferred-tool-approval-open.types.js";
 
 /** One transaction-scoped operation over the approval-open repository. */
 type ApprovalOpenTransaction = <TResult>(operation: (repository: DeferredToolApprovalOpenRepository) => Promise<TResult>) => Promise<TResult>;

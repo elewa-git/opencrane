@@ -5,7 +5,10 @@ import { ___CloneCanonicalJson, type JsonValue } from "@opencrane/util";
 import { __DigestCanonicalJson } from "./canonical-json-digest.js";
 import { __PlanDeferredToolApprovalLifecycle } from "./deferred-tool-approval-lifecycle.js";
 import { __ValidateDeferredToolArguments } from "./deferred-tool-approval-schema.js";
-import { DeferredToolApprovalLifecycleActions, DeferredToolApprovalLifecycleEvents, DeferredToolApprovalRunStates, DeferredToolApprovalStates, DeferredToolDecisionKinds, type DecideDeferredToolRequestCommand, type DecideDeferredToolRequestResult, type DeferToolRequestCommand, type DeferToolRequestResult, type ExpireDeferredToolApprovalBatchCommand, type ExpireDeferredToolApprovalBatchResult } from "./deferred-tool-approval.types.js";
+import { DeferredToolDecisionKinds, type DecideDeferredToolRequestCommand, type DecideDeferredToolRequestResult, type ExpireDeferredToolApprovalBatchCommand, type ExpireDeferredToolApprovalBatchResult } from "./deferred-tool-approval-decision.types.js";
+import { DeferredToolApprovalStates } from "./deferred-tool-approval-interrupt.types.js";
+import { DeferredToolApprovalLifecycleActions, DeferredToolApprovalLifecycleEvents, DeferredToolApprovalRunStates } from "./deferred-tool-approval-lifecycle.types.js";
+import type { DeferToolRequestCommand, DeferToolRequestResult } from "./deferred-tool-approval-open.types.js";
 
 /** Map the two run states that may own a live approval batch into the lifecycle authority. */
 function _approvalRunState(state: AgentRunState): DeferredToolApprovalRunStates | null

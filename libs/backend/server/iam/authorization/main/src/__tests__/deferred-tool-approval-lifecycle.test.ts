@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { __PlanDeferredToolApprovalLifecycle } from "../deferred-tool-approval-lifecycle.js";
-import { DeferredToolApprovalLifecycleActions, DeferredToolApprovalLifecycleEvents, DeferredToolApprovalRunStates } from "../deferred-tool-approval.types.js";
+import { DeferredToolApprovalLifecycleActions, DeferredToolApprovalLifecycleEvents, DeferredToolApprovalRunStates } from "../deferred-tool-approval-lifecycle.types.js";
 
 describe("deferred tool approval State x Event table", function _suite()
 {

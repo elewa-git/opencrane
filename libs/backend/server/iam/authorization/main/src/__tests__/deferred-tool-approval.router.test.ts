@@ -5,7 +5,8 @@ import type { Logger } from "@opencrane/backend/observability";
 
 import { __CreateDeferredToolApprovalRouter } from "../deferred-tool-approval.router.js";
 import type { DeferredToolApprovalRouterDependencies } from "../deferred-tool-approval.router.types.js";
-import { DeferredToolApprovalStates, DeferredToolDecisionKinds } from "../deferred-tool-approval.types.js";
+import { DeferredToolDecisionKinds } from "../deferred-tool-approval-decision.types.js";
+import { DeferredToolApprovalStates } from "../deferred-tool-approval-interrupt.types.js";
 
 /** Build router ports with one authenticated owner and observable decision persistence. */
 function _dependencies(overrides: Partial<DeferredToolApprovalRouterDependencies> = {}): DeferredToolApprovalRouterDependencies

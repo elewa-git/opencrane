@@ -2,7 +2,7 @@ import type { PrismaClient } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
 
 import { PrismaDeferredToolApprovalDecisionRepository } from "../prisma-deferred-tool-approval-decision-repository.js";
-import { DeferredToolDecisionKinds } from "../deferred-tool-approval.types.js";
+import { DeferredToolDecisionKinds } from "../deferred-tool-approval-decision.types.js";
 
 /** Exact owner-bound command used to exercise the transaction boundary. */
 function _command()
