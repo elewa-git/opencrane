@@ -386,6 +386,12 @@ receiver-bound channel relay, and database/release authority. Follow-up commits 
 event admission atomic, allow cancellation to supersede stale delivery, retain failed-then-recovered
 tool evidence, materialize progressive A2UI surfaces, admit the complete v4 component catalogue,
 pass the Linux visual baselines, and prove the projection against the exact pinned AG-UI client.
+The latest architecture wave leaves the OpenCrane app as typed assembly only: fixed TokenReview,
+signed membership selection, conversation-read policy, exact host binding, and bounded route
+reconciliation now live in their owning libraries. A verified producer/consumer mismatch was also
+closed by sharing one digest authority between invocation-context issuance and replay consumption;
+the raw bearer remains absent from persistence and logs. Focused package tests, policy gates, and
+independent correctness/security review pass at this checkpoint.
 Independent protocol review still blocks completion on durable recovery for irreversible external
 actions: immutable candidate disposition, pre-dispatch retry eligibility, leased claims, terminal
 compare-and-swap, ToolInvocation reconciliation, and an exact replay/outbox path remain subject to

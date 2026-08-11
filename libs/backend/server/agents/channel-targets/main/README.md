@@ -4,11 +4,11 @@
 
 ## What it owns
 
-When someone uses an agent from their browser, the request does not reach the agent runtime
-directly. It arrives through the **channel-proxy** — a workload that forwards browser traffic — and
-must be turned into one specific, authorized runtime destination. A *channel target* is that
-resolved destination: an internal endpoint plus a single-use *invocation context* (an opaque token
-the runtime later exchanges to prove the call was authorized).
+When someone follows an agent conversation from their browser, the request arrives through the
+**channel-proxy** — a workload that forwards browser traffic — and must be turned into one specific,
+authorized OpenCrane replay destination. A *channel target* is that resolved destination: the
+internal OpenCrane conversation-replay endpoint plus a single-use *invocation context* (an opaque
+token the replay receiver exchanges to prove the read was authorized).
 
 This package is the gate that produces it for authorised event reads from an open `agent_session`.
 Direct and group conversations do not have runtime routes. Message and run admission use the
@@ -25,7 +25,7 @@ participant-owned conversation API; this package exposes no parallel command pat
  └────────────────────────────────────────────┘
         │  authorized endpoint + single-use invocation context (only its digest is stored)
         ▼
- agent runtime performs the read
+ OpenCrane conversation-replay receiver streams the participant-authorized canonical timeline
 ```
 
 **In this flow:** channel-proxy [(app)](../../../../../../apps/channel-proxy/README.md) · [membership](../../../iam/membership/main/README.md) *(signed participant admission)*
