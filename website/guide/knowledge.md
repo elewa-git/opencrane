@@ -32,9 +32,8 @@ records provenance for durable facts.
 ::: info
 Reads are live: run admission freezes gateway-selected fact references (id and content digest only)
 into the `RunInputSnapshot`, and prompt compilation inlines each statement only after verifying it
-against the frozen digest. Mid-run memory actions and every write remain fail closed — recalled
-text still has no safe, attempt-fenced ephemeral result channel, and no durable write lifecycle
-exists yet.
+against the frozen digest. Mid-run memory actions can use the durable server-worker result channel;
+every write remains fail closed until its durable recovery lifecycle exists.
 :::
 
 ::: warning

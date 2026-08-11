@@ -48,8 +48,8 @@ Reads are live through the authenticated private gateway: admission freezes gate
 references (fact id and `sha256:` content digest, never fact text) into the run snapshot, and the
 compile step re-resolves each reference and verifies it against the frozen digest before inlining —
 a mismatch or missing fact fails the compile closed rather than producing a partial prompt. Mid-run
-memory actions still have no attempt-fenced ephemeral result channel and remain fail closed, and no
-write transport is implemented.
+memory actions can use the same durable server-worker result channel as other external actions. No
+memory write transport is implemented yet.
 :::
 
 ::: tip

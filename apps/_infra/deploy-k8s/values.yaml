@@ -298,12 +298,10 @@ managedAgentRuntimePlane:
       artifactServiceComponent: artifact-service
       memoryGatewayComponent: opencrane-server
       litellmComponent: litellm
-      obotComponent: mcp-gateway
       serverInternalPort: 8081
       channelProxyPort: 8080
       artifactServicePort: 8080
       litellmPort: 4000
-      obotPort: 8080
 
 # -- Personal and managed runtime workload controller. Disabled until immutable runtime image
 # digests and exact Kubernetes API Service CIDRs are supplied; enabling it never starts a Job directly.
