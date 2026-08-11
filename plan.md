@@ -382,10 +382,17 @@ exactly one issue's incremental work.
 Current F1.4 checkpoint: #319 has committed snapshot-to-live replay, reconnect and interrupt
 overlays, canonical runtime-event persistence, exact runtime payload contracts, per-approval-batch
 resume, truthful tool/run failure projection, governed A2UI and child-run envelopes, stateless
-receiver-bound channel relay, and database/release authority. Confirmed protocol review blockers are
-being repaired in follow-up commits before publication. The legacy 0.7 route-expiry replacement is
-held behind explicit destructive-migration approval; no route ids or prior expiry evidence will be
-discarded when that transition is authorized.
+receiver-bound channel relay, and database/release authority. Follow-up commits now make lifecycle
+event admission atomic, allow cancellation to supersede stale delivery, retain failed-then-recovered
+tool evidence, materialize progressive A2UI surfaces, admit the complete v4 component catalogue,
+pass the Linux visual baselines, and prove the projection against the exact pinned AG-UI client.
+Independent protocol review still blocks completion on durable recovery for irreversible external
+actions: immutable candidate disposition, pre-dispatch retry eligibility, leased claims, terminal
+compare-and-swap, ToolInvocation reconciliation, and an exact replay/outbox path remain subject to
+explicit authority-model approval. The legacy 0.7 route-expiry replacement is likewise held behind
+explicit destructive-migration approval; no route ids or prior expiry evidence will be discarded
+when that transition is authorized. Neither approval-gated change is treated as complete or hidden
+by the otherwise-green projection work.
 
 Track F1 closes [#351](https://github.com/elewa-git/opencrane/issues/351),
 [#600](https://github.com/elewa-git/opencrane/issues/600),
