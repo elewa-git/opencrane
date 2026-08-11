@@ -27,7 +27,8 @@ describe("PrismaRuntimeEventReporter", function _Suite()
 		const reporter = new PrismaRuntimeEventReporter();
 		await expect(reporter.reportInTransaction(transaction, { runId: "run-1", attempt: 2, eventType: "framework.internal", payload: {} })).resolves.toEqual({ outcome: "denied", reason: "invalid_event" });
 		await expect(reporter.reportInTransaction(transaction, { runId: "run-1", attempt: 2, eventType: "run.error", payload: { accessToken: "never" } })).resolves.toEqual({ outcome: "denied", reason: "invalid_payload" });
-		await expect(reporter.reportInTransaction(transaction, { runId: "run-1", attempt: 2, eventType: "message.delta", payload: { delta: "x".repeat(33_000) } })).resolves.toEqual({ outcome: "denied", reason: "invalid_payload" });
+		await expect(reporter.reportInTransaction(transaction, { runId: "run-1", attempt: 2, eventType: "run.error", payload: { reason: "model_loop_error", detail: "Bearer never" } })).resolves.toEqual({ outcome: "denied", reason: "invalid_payload" });
+		await expect(reporter.reportInTransaction(transaction, { runId: "run-1", attempt: 2, eventType: "message.delta", payload: { messageId: "message-1", delta: "x".repeat(33_000) } })).resolves.toEqual({ outcome: "denied", reason: "invalid_payload" });
 		expect(transaction.conversationRunEvent.create).not.toHaveBeenCalled();
 	});
 

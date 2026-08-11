@@ -5,12 +5,12 @@ import { ___ParseAgUiA2uiEnvelope } from "@opencrane/contracts";
 import type { JsonValue } from "@opencrane/util";
 
 import { PrismaRuntimeTerminalReporter } from "./prisma-runtime-terminal-reporter.js";
+import { _RuntimeEventPayloadIsSafe } from "./runtime-event-payload.js";
 import type { RuntimeEventAppendRepository, RuntimeEventAppendUnitOfWork, RuntimeEventReportCommand, RuntimeEventReporter, RuntimeEventReportResult } from "./runtime-event-reporter.types.js";
 
 /** Canonical runtime event names a workload may propose. Server-owned lifecycle events stay absent. */
 const _RUNTIME_EVENT_TYPES = new Set<string>([RunEventTypes.MessageStarted, RunEventTypes.MessageDelta, RunEventTypes.MessageCompleted, RunEventTypes.ToolRequested, RunEventTypes.ToolStarted, RunEventTypes.ToolCompleted, RunEventTypes.ToolFailed, RunEventTypes.RunUsage, RunEventTypes.RunError, RunEventTypes.A2uiRenderingBegun, RunEventTypes.A2uiSurfaceUpdated, RunEventTypes.A2uiDataModelUpdated, RunEventTypes.RunCompleted, RunEventTypes.RunFailed]);
 const _A2UI_EVENT_TYPES = new Set<string>([RunEventTypes.A2uiRenderingBegun, RunEventTypes.A2uiSurfaceUpdated, RunEventTypes.A2uiDataModelUpdated]);
-const _SECRET_FIELD = /token|secret|password|authorization|cookie|credential|proof|private.?key/iu;
 
 /** Production reporter that validates runtime proposals before canonical persistence. */
 export class PrismaRuntimeEventReporter implements RuntimeEventReporter
@@ -19,7 +19,7 @@ export class PrismaRuntimeEventReporter implements RuntimeEventReporter
 	async reportInTransaction(transaction: Prisma.TransactionClient, command: RuntimeEventReportCommand): Promise<RuntimeEventReportResult>
 	{
 		if (!_RUNTIME_EVENT_TYPES.has(command.eventType)) return { outcome: "denied", reason: "invalid_event" };
-		if (!_PayloadIsSafe(command.payload)) return { outcome: "denied", reason: "invalid_payload" };
+		if (!_RuntimeEventPayloadIsSafe(command.eventType, command.payload)) return { outcome: "denied", reason: "invalid_payload" };
 		if (command.eventType === RunEventTypes.RunCompleted || command.eventType === RunEventTypes.RunFailed)
 		{
 			return new PrismaRuntimeTerminalReporter().reportInTransaction(transaction, { runId: command.runId, attempt: command.attempt, eventType: command.eventType });
@@ -57,20 +57,6 @@ class PrismaRuntimeEventAppendRepository implements RuntimeEventAppendRepository
 		await this._transaction.conversationRunEvent.create({ data: { conversationId: run.conversationId, runId: run.id, sequence: (maximum._max.sequence ?? 0) + 1, type: command.eventType, payload: command.payload as Prisma.InputJsonValue, occurredAt: new Date() } });
 		return { outcome: "reported" };
 	}
-}
-
-/** Enforce byte, depth, and secret-field bounds before data becomes durable. */
-function _PayloadIsSafe(payload: JsonValue): boolean
-{
-	if (JSON.stringify(payload).length > 32_768) return false;
-	function _Visit(value: JsonValue, depth: number): boolean
-	{
-		if (depth > 12) return false;
-		if (Array.isArray(value)) return value.length <= 256 && value.every(function _Safe(item) { return _Visit(item, depth + 1); });
-		if (value === null || typeof value !== "object") return typeof value !== "string" || value.length <= 16_384;
-		return Object.entries(value).every(function _Safe(entry) { return !_SECRET_FIELD.test(entry[0]) && _Visit(entry[1], depth + 1); });
-	}
-	return _Visit(payload, 0);
 }
 
 /** Require a versioned A2UI envelope bound to the exact durable conversation and run. */

@@ -155,7 +155,9 @@ uncertainty fails closed.
 
 `PrismaRuntimeEventReporter` is the transaction-scoped admission bridge for nonterminal runtime
 output. It rejects arbitrary names, oversized payloads, secret-shaped fields, stale attempts, and
-mis-bound A2UI envelopes before appending a contiguous canonical `ConversationRunEvent`.
+mis-bound A2UI envelopes before appending a contiguous canonical `ConversationRunEvent`. Each event
+also has an exact key and value vocabulary, so a compromised runtime cannot persist provider text or
+credential material under an innocuous field name such as `detail`.
 
 - `__DigestRunInputSnapshot(snapshot)` — compute the canonical SHA-256 identity of all frozen run
   inputs without digesting the self-referential `digest` field.
