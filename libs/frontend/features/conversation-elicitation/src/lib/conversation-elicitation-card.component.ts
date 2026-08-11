@@ -5,6 +5,16 @@ import { MessageModule } from "primeng/message";
 import { ElicitationBodyKinds, ElicitationRequestStates, type ConversationElicitation, type ElicitationApprovalBody, type ElicitationFreeTextBody, type ElicitationMultipleChoiceBody, type ElicitationResponseValue, type ElicitationSingleChoiceBody } from "@opencrane/contracts";
 import { ElicitationApprovalComponent, ElicitationFreeTextComponent, ElicitationMultipleChoiceComponent, ElicitationSingleChoiceComponent } from "@opencrane/elements/elicitation";
 
+/** Validate the exact controlled draft against the current authoritative body and command state. */
+export function _CanSubmitElicitation(elicitation: ConversationElicitation, draft: ElicitationResponseValue | null, busy: boolean): boolean
+{
+	const body = elicitation.body;
+	if (busy || elicitation.state !== ElicitationRequestStates.Requested || draft === null || draft.kind !== body.kind) return false;
+	if (draft.kind === ElicitationBodyKinds.MultipleChoice && body.kind === ElicitationBodyKinds.MultipleChoice) return draft.selections.length >= body.minimumSelections && draft.selections.length <= body.maximumSelections;
+	if (draft.kind === ElicitationBodyKinds.FreeText && body.kind === ElicitationBodyKinds.FreeText) return draft.text.length <= body.maximumLength && (body.allowEmpty || draft.text.trim().length > 0);
+	return true;
+}
+
 /** Recoverable conversation card for one server-owned participant request. */
 @Component({
 	selector: "wo-conversation-elicitation-card",
@@ -46,12 +56,7 @@ export class ConversationElicitationCardComponent
 	/** Whether the exact draft satisfies local shape and body bounds. */
 	protected canSubmit(): boolean
 	{
-		const draft = this.draft();
-		const body = this.elicitation().body;
-		if (this.busy() || this.elicitation().state !== ElicitationRequestStates.Requested || draft === null || draft.kind !== body.kind) return false;
-		if (draft.kind === ElicitationBodyKinds.MultipleChoice && body.kind === ElicitationBodyKinds.MultipleChoice) return draft.selections.length >= body.minimumSelections && draft.selections.length <= body.maximumSelections;
-		if (draft.kind === ElicitationBodyKinds.FreeText && body.kind === ElicitationBodyKinds.FreeText) return draft.text.length <= body.maximumLength && (body.allowEmpty || draft.text.trim().length > 0);
-		return true;
+		return _CanSubmitElicitation(this.elicitation(), this.draft(), this.busy());
 	}
 
 	/** Emit the exact fixed recovery path. */
