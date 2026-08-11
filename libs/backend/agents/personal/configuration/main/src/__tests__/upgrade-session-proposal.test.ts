@@ -9,11 +9,14 @@ import type { PersonalUpgradeSessionCandidate, PersonalUpgradeSessionSnapshot } 
 /** Builds the validated candidate consumed by transaction-scoped orchestration. */
 function _candidate(): PersonalUpgradeSessionCandidate
 {
-	const candidate = {
+	const candidate: PersonalUpgradeSessionCandidate = {
 		runId: "run-1",
+		attempt: 1,
+		toolRevisionId: "upgrade-session-v1",
+		toolInvocationId: "invocation-1",
 		arguments: { kind: AgentConfigPatchKinds.ModelAlias, modelAlias: "careful-model" },
 		argumentsDigest: "sha256:2f03c46815d8ef4662fd1544f939dd487e797baebec17c65b10742222a0a4406",
-	} as unknown as PersonalUpgradeSessionCandidate;
+	};
 	return candidate;
 }
 

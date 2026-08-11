@@ -1,19 +1,24 @@
 import { Prisma } from "@prisma/client";
-import { AgentConfigPatchKinds, type RunInputSnapshot, type RuntimeExternalActionCandidate } from "@opencrane/contracts";
+import { AgentConfigPatchKinds, type RunInputSnapshot } from "@opencrane/contracts";
 import { ___GetContext } from "@opencrane/backend/observability";
+import type { JsonValue } from "@opencrane/util";
 import { describe, expect, it, vi } from "vitest";
 
 import { PersonalConfigurationProposalCodes } from "../proposal/personal-configuration-proposal.types.js";
 import { PrismaUpgradeSessionProposalUnitOfWork } from "../upgrade-session/prisma-upgrade-session-proposal-unit-of-work.js";
+import type { UpgradeSessionInvocation } from "../upgrade-session/upgrade-session.types.js";
 
-/** Builds one runtime candidate, optionally replacing its protected arguments. */
-function _candidate(argumentsValue: unknown = { kind: AgentConfigPatchKinds.ModelAlias, modelAlias: "careful-model" }): RuntimeExternalActionCandidate
+/** Builds one durable admitted invocation, optionally replacing its protected arguments. */
+function _candidate(argumentsValue: JsonValue = { kind: AgentConfigPatchKinds.ModelAlias, modelAlias: "careful-model" }): UpgradeSessionInvocation
 {
-	const candidate = {
+	const candidate: UpgradeSessionInvocation = {
 		runId: "run-1",
+		attempt: 1,
+		toolRevisionId: "upgrade-session-v1",
+		toolInvocationId: "invocation-1",
 		arguments: argumentsValue,
 		argumentsDigest: "sha256:2f03c46815d8ef4662fd1544f939dd487e797baebec17c65b10742222a0a4406",
-	} as unknown as RuntimeExternalActionCandidate;
+	};
 	return candidate;
 }
 

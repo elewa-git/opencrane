@@ -17,18 +17,6 @@
         "constructs": []
       },
       {
-        "path": "libs/backend/agents/personal/configuration/main/src/upgrade-session/prisma-upgrade-session-proposal-repository.ts",
-        "adapter": "PrismaUpgradeSessionProposalRepository",
-        "contract": "UpgradeSessionProposalRepository",
-        "contractImportPath": "./upgrade-session.types.js",
-        "constructs": [
-          {
-            "adapter": "PrismaPersonalConfigurationProposalRepository",
-            "importPath": "../proposal/prisma-personal-configuration-proposal-repository.js"
-          }
-        ]
-      },
-      {
         "path": "libs/backend/agents/personal/configuration/main/src/materialization/prisma-personal-configuration-materialization.ts",
         "adapter": "PrismaPersonalConfigurationMaterializationRepository",
         "contract": "PersonalConfigurationMaterializationRepository",
