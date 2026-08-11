@@ -1,5 +1,6 @@
-import { ExternalActionClaimKinds, ToolInvocationEventTypes, ToolInvocationStates, type ToolInvocationClaim, type ToolInvocationRecord } from "@opencrane/backend/server/iam/authorization";
+import { ExternalActionClaimKinds, ToolInvocationClaimOutcomes, ToolInvocationEventTypes, ToolInvocationStates, type ToolInvocationClaim, type ToolInvocationRecord } from "@opencrane/backend/server/iam/authorization";
 import { ___DoWithTrace } from "@opencrane/backend/observability";
+import { PERSONAL_MEMORY_RECALL_TOOL_REVISION } from "@opencrane/models/agents";
 
 import { _ExternalActionRecoveryStrategy } from "./external-action-recovery-strategy.js";
 import { ExternalActionProviderOutcomeKinds, type ExternalActionExecutionContext, type ExternalActionProviderOutcome, type ExternalActionWorkerDependencies, type ExternalActionWorkerInvocation, type PreparedExternalActionAdapter } from "./external-action-worker.types.js";
@@ -155,8 +156,10 @@ async function _openApproval(invocation: ExternalActionWorkerInvocation, now: Da
 	const context = preparedContext ?? await dependencies.contexts.load(invocation.runId, invocation.attempt);
 	if (context === null || !_contextMatchesInvocation(context, invocation)) throw new Error("external action approval context is unavailable");
 
-	// 2. Let the approval port pause the run and create the approval request (or find the one already open) in a single transaction.
-	const opened = await dependencies.approvals.open(invocation, context, now);
+	// 2. Let the approval authority atomically pause the run and create or recover the exact request.
+	const opened = invocation.toolRevisionId === PERSONAL_MEMORY_RECALL_TOOL_REVISION
+		? await dependencies.personalMemoryPermissions.openMemoryPermission(invocation, context.snapshot, now)
+		: await dependencies.approvals.open(invocation, context, now);
 	if (!opened) dependencies.log.warn({ runId: invocation.runId, attempt: invocation.attempt, toolInvocationId: invocation.toolInvocationId, failureKind: "external_action_approval_unavailable" }, "external action approval could not be opened and was closed without provider dispatch");
 	return true;
 }
@@ -178,7 +181,7 @@ async function _execute(invocation: ExternalActionWorkerInvocation, kind: Extern
 
 	// 2. Save the claim that fences this provider operation before the adapter may send anything.
 	const claimed = await dependencies.invocations.claim(invocation.id, kind, now, dependencies.policy.providerClaimLeaseMilliseconds);
-	if (claimed.outcome !== "claimed") return claimed.outcome === "winner";
+	if (claimed.outcome !== ToolInvocationClaimOutcomes.Claimed) return claimed.outcome === ToolInvocationClaimOutcomes.Winner;
 	if (!await _announceStart(invocation, claimed.claim, dependencies)) return true;
 
 	// 3. Run the frozen recovery strategy. Only this call is caught: a thrown adapter call is
@@ -245,7 +248,7 @@ async function _recoverExpiredClaim(invocation: ExternalActionWorkerInvocation, 
 async function _failBeforeProvider(invocation: ExternalActionWorkerInvocation, kind: ExternalActionClaimKinds, now: Date, dependencies: ExternalActionWorkerDependencies): Promise<boolean>
 {
 	const claimed = await dependencies.invocations.claim(invocation.id, kind, now, dependencies.policy.providerClaimLeaseMilliseconds);
-	if (claimed.outcome !== "claimed") return claimed.outcome === "winner";
+	if (claimed.outcome !== ToolInvocationClaimOutcomes.Claimed) return claimed.outcome === ToolInvocationClaimOutcomes.Winner;
 	if (kind === ExternalActionClaimKinds.Reconcile)
 	{
 		await _completeAmbiguous(claimed.claim, claimed.invocation, dependencies);

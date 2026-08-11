@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { AgentServiceKinds, ApprovalStatus, ConversationLifecycles, ConversationModes, MemoryFactProvenanceSourceKinds, RunInputSnapshotIdentityKinds } from "../index.js";
-import type { AgentRun, AgentService, Approval, AuthorizationGrant, Conversation, RunEvent, SignedFleetMembershipRevision } from "../index.js";
+import { AgentServiceKinds, ConversationLifecycles, ConversationModes, MemoryFactProvenanceSourceKinds, RunInputSnapshotIdentityKinds } from "../index.js";
+import type { AgentRun, AgentService, AuthorizationGrant, Conversation, RunEvent, SignedFleetMembershipRevision } from "../index.js";
 
 describe("canonical model exports", function ()
 {
@@ -23,7 +23,7 @@ describe("canonical model exports", function ()
     expect(projectGrant.scope).toEqual({ kind: "project", organizationId: "org-1", projectId: "project-cross-functional" });
   });
 
-  it("binds services, runs, events, and approvals to the target vocabulary", function ()
+	it("binds services, runs, and events to the target vocabulary", function ()
   {
     const service: AgentService = {
       id: "agent-1",
@@ -55,10 +55,9 @@ describe("canonical model exports", function ()
       finishedAt: null,
       terminalReason: null,
     };
-    const event: RunEvent = { runId: run.id, sequence: 4, type: "tool.approval_required", payload: { approvalId: "approval-1" }, occurredAt: "2026-07-18T09:00:02.000Z" };
-    const approval: Approval = { id: "approval-1", runId: run.id, capabilityKey: "email.send", actionDigest: "sha256:action", status: ApprovalStatus.Pending, decisionOwnerUserId: "user-1", expiresAt: "2026-07-18T09:05:00.000Z" };
+		const event: RunEvent = { runId: run.id, sequence: 4, type: "elicitation.requested", payload: { requestId: "elicitation-1" }, occurredAt: "2026-07-18T09:00:02.000Z" };
 
-    expect(event.runId).toBe(approval.runId);
+		expect(event.runId).toBe(run.id);
     expect(run.agentServiceId).toBe(service.id);
   });
 

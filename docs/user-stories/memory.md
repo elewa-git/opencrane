@@ -75,7 +75,9 @@ can understand, challenge, or correct the result.
 
 Acceptance criteria:
 
-- The run references only gateway-minted safe fact references/digests frozen at admission.
+- The run records the exact approval-bound memory invocation and query digest; recalled content is
+  never copied into the immutable input snapshot.
 - The UI does not expose raw internal snapshot, dataset, or authorization coordinates.
 
-Status: `API blocked`; no public run-memory explanation endpoint exists.
+Status: `API blocked`; no public run-memory explanation endpoint exists and safe content delivery
+remains blocked until #601.

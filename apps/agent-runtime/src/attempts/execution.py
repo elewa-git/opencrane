@@ -12,6 +12,7 @@ from urllib.error import HTTPError, URLError
 
 from ..model_loop.checkpoints import read_checkpoint, write_checkpoint
 from ..model_loop.driver import pydantic_ai_event_source, pydantic_ai_resume_source
+from ..model_loop.histories import clear_model_history
 from ..observability import log, run_evidence, trace
 from ..protocol.candidates import (
     candidate,
@@ -60,6 +61,12 @@ def execute_start_attempt(
             candidate(coordinates, "run.failed", {"reason": "missing_compiled_input"}),
         )
         return
+    if not _compiled_input_matches_coordinates(compiled_input, coordinates):
+        terminal_gate.post_completion(
+            post_candidate,
+            candidate(coordinates, "run.failed", {"reason": "compiled_input_coordinate_mismatch"}),
+        )
+        return
     # Announce the attempt before touching the model adapter. This keeps the candidate stream ordered
     # even when model construction fails immediately after admission.
     post_candidate(
@@ -96,14 +103,15 @@ def execute_start_attempt(
                     # response cannot become a late candidate.
                     break
                 projector.emit(neutral_event)
-            # Do not close a partial message after cancellation. Leaving it open accurately records
-            # where local production stopped and avoids inventing a successful message boundary.
-            if not cancel_event.is_set():
-                projector.complete_message()
+            if cancel_event.is_set():
+                clear_model_history(str(coordinates["runId"]), int(coordinates["attempt"]))
+                return
+            projector.complete_message()
             if projector.has_pending_tool_calls:
                 # A tool proposal pauses the model loop. Completion belongs after the control plane
                 # authorises and returns the saved result through a later resume command.
                 return
+            clear_model_history(str(coordinates["runId"]), int(coordinates["attempt"]))
             if terminal_gate.post_completion(
                 post_candidate,
                 candidate(coordinates, "run.completed", {}),
@@ -112,6 +120,7 @@ def execute_start_attempt(
         except (HTTPError, URLError, OSError, RuntimeError, ValueError) as error:
             # Report only the exception type. Messages may contain provider URLs, content, or other
             # data that does not belong in a candidate or structured log.
+            clear_model_history(str(coordinates["runId"]), int(coordinates["attempt"]))
             if terminal_gate.post_completion(
                 post_candidate,
                 candidate(
@@ -192,6 +201,13 @@ def execute_resume_attempt(
         input_generation,
         checkpoint_cipher,
     )
+    if compiled_input and not _compiled_input_matches_coordinates(compiled_input, coordinates):
+        clear_model_history(str(coordinates["runId"]), int(coordinates["attempt"]))
+        terminal_gate.post_completion(
+            post_candidate,
+            candidate(coordinates, "run.failed", {"reason": "compiled_input_coordinate_mismatch"}),
+        )
+        return
     # The control plane already executed or refused each call and persisted its terminal result.
     # The runtime only maps those exact results into the model framework.
     # Resolution atomically consumes the pending calls named by this command. This must precede
@@ -241,21 +257,22 @@ def execute_resume_attempt(
                     # A resume is subject to the same late-output suppression as a fresh attempt.
                     break
                 projector.emit(neutral_event)
-            # Once cancellation is observed here, suppress the synthetic message end and subsequent
-            # local completion work. The terminal gate samples the signal again before posting, while
-            # the server remains authoritative for cancellation racing an already in-flight post.
-            if not cancel_event.is_set():
-                projector.complete_message()
+            if cancel_event.is_set():
+                clear_model_history(str(coordinates["runId"]), int(coordinates["attempt"]))
+                return
+            projector.complete_message()
             if projector.has_pending_tool_calls:
                 # Additional tool calls create another control-plane round trip; a resume may pause
                 # repeatedly, and none of those intermediate pauses is a completed run.
                 return
+            clear_model_history(str(coordinates["runId"]), int(coordinates["attempt"]))
             if terminal_gate.post_completion(
                 post_candidate,
                 candidate(coordinates, "run.completed", {}),
             ):
                 run_evidence(coordinates, "completed")
         except (HTTPError, URLError, OSError, RuntimeError, ValueError) as error:
+            clear_model_history(str(coordinates["runId"]), int(coordinates["attempt"]))
             if terminal_gate.post_completion(
                 post_candidate,
                 candidate(
@@ -290,6 +307,7 @@ def execute_cancel_attempt(
         # Set the shared event before recording evidence so the worker observes cancellation as soon
         # as possible and cannot race a late completion through the terminal gate.
         cancel_event.set()
+    clear_model_history(str(coordinates["runId"]), int(coordinates["attempt"]))
     # The reason is evidence only. It cannot alter cancellation semantics or select a different local
     # worker, because command routing already paired this signal with the active attempt.
     payload = command.get("payload")
@@ -305,6 +323,17 @@ def _snapshot_input_generation(payload: dict[str, object]) -> object:
     if isinstance(snapshot, dict) and isinstance(snapshot.get("inputGeneration"), int):
         return snapshot["inputGeneration"]
     return 0
+
+
+def _compiled_input_matches_coordinates(
+    compiled_input: dict[str, object],
+    coordinates: dict[str, object],
+) -> bool:
+    """Require the sealed compiler coordinates to match the admitted command exactly."""
+    return (
+        compiled_input.get("runId") == coordinates.get("runId")
+        and compiled_input.get("attempt") == coordinates.get("attempt")
+    )
 
 
 def _try_write_checkpoint(

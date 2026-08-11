@@ -1,12 +1,12 @@
 import { createHash } from "node:crypto";
+import { AgentRunState as PrismaAgentRunState, AgentRunTerminalReason, Prisma, RuntimeCommandKind, RuntimeSteeringRequestState, WorkloadAssignmentState, type PrismaClient } from "@prisma/client";
 
-import { AgentRunState as PrismaAgentRunState, AgentRunTerminalReason, Prisma, RuntimeCommandKind, WorkloadAssignmentState, type PrismaClient } from "@prisma/client";
-
-import { AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, AGENT_RUNTIME_PROTOCOL_V1, MANAGED_AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, ___IsAgentRuntimeServiceAccountName, ___IsManagedAgentRuntimeServiceAccountName, type CancelAttemptCommand, type CompiledRunInput, type ResumeAttemptCommand, type RunInputSnapshot, type RuntimeAssignment, type RuntimeAssignmentIdentity, type RuntimeCandidate, type RuntimeCommand, type RuntimeCommandEnvelope, type RuntimeExternalActionCandidate, type RuntimeStreamOpen } from "@opencrane/contracts";
+import { AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, AGENT_RUNTIME_PROTOCOL_V1, MANAGED_AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, RunInputSnapshotIdentityKinds, RuntimeCandidateKinds, ___IsAgentRuntimeServiceAccountName, ___IsManagedAgentRuntimeServiceAccountName, type CancelAttemptCommand, type CompiledRunInput, type ResumeAttemptCommand, type RunInputSnapshot, type RuntimeAssignment, type RuntimeAssignmentIdentity, type RuntimeCandidate, type RuntimeCommand, type RuntimeCommandEnvelope, type RuntimeExternalActionCandidate, type RuntimeStreamOpen } from "@opencrane/contracts";
 import { ___DoWithTrace } from "@opencrane/backend/observability";
-import { ExternalActionRecoveryModes, TOOL_INVOCATION_PREPARATION_POLICY, __AdmitPreparingToolInvocationInTransaction, __DigestCanonicalJson, __ValidateDeferredToolArguments } from "@opencrane/backend/server/iam/authorization";
-import type { ToolInvocationIntent } from "@opencrane/backend/server/iam/authorization";
+import { ExternalActionRecoveryModes, TOOL_INVOCATION_PREPARATION_POLICY, ToolInvocationAdmissionOutcomes, __AdmitPreparingToolInvocationInTransaction, __DigestCanonicalJson, __ValidateDeferredToolArguments, type ToolInvocationIntent } from "@opencrane/backend/server/iam/authorization";
+import { PERSONAL_MEMORY_RECALL_TOOL_REVISION, RunEventTypes } from "@opencrane/models/agents";
 
+import { _CompileRunInputForContext } from "./compiled-run-input-context.js";
 import { _ApplyRuntimeCandidateSideEffects, _RuntimeCandidateRequiresEventReporter, RuntimeCandidateSideEffectDeniedError } from "./prisma-runtime-candidate-side-effects.js";
 import { PrismaRuntimeCommandDecisionUnitOfWork } from "./prisma-runtime-command-decision-unit-of-work.js";
 import { PrismaRuntimeDispatchStateUnitOfWork } from "./prisma-runtime-dispatch-state-repository.js";
@@ -14,7 +14,7 @@ import { PrismaRuntimeResumeInputUnitOfWork } from "./prisma-runtime-resume-inpu
 import { __ProjectRuntimeInputSnapshot } from "./runtime-input-snapshot-projector.js";
 import { _ParseRuntimeResumeInput } from "./runtime-resume-input.js";
 import { __AdmitRuntimeCandidate, __AdmitRuntimeCommand } from "./runtime-protocol-authority.js";
-import type { RuntimeAdmissionRunState, RuntimeAttemptAuthority, RuntimeProtocolClock } from "./runtime-protocol-authority.types.js";
+import { RuntimeAdmissionOutcomes, type RuntimeAdmissionRunState, type RuntimeAttemptAuthority, type RuntimeProtocolClock } from "./runtime-protocol-authority.types.js";
 import type { RunInputCompiler, RuntimeApprovalExpiry, RuntimeCandidateDispatchResult, RuntimeDispatchAuthorityConfig, RuntimeEventReporter, RuntimeStreamWorkloadIdentity } from "./prisma-runtime-dispatch-authority.types.js";
 
 /** Database facts about one connected runtime Pod's run and assignment, read under a row lock. */
@@ -311,7 +311,7 @@ async function _nextCommand(prisma: PrismaClient, config: RuntimeDispatchAuthori
 			if (extras === null) return null;
 			const envelope = _rebuildEnvelope(context, runtimeInstanceId, stored, extras);
 			const admission = __AdmitRuntimeCommand({ authority, command: envelope, clock });
-			return admission.outcome === "idempotent" ? envelope : null;
+			return admission.outcome === RuntimeAdmissionOutcomes.Idempotent ? envelope : null;
 		}
 		if (context.runState !== "cancelling" && targetSequence !== stream.nextCommandSequence) return null;
 
@@ -324,7 +324,7 @@ async function _nextCommand(prisma: PrismaClient, config: RuntimeDispatchAuthori
 		const envelope = _mintEnvelope(context, runtimeInstanceId, stream.fence, stream.nextCommandSequence, kind, nowEpochMs, config.commandTtlMilliseconds, extras);
 		if (envelope === null) return null;
 		const admission = __AdmitRuntimeCommand({ authority, command: envelope, clock });
-		if (admission.outcome !== "accepted") return null;
+		if (admission.outcome !== RuntimeAdmissionOutcomes.Accepted) return null;
 		// 5. Persist the accepted command (with any resume payload) and advance the sequence under lock.
 		await transaction.runtimeDispatchedCommand.create({ data: { runId: context.runId, attempt: context.attempt, sequence: envelope.sequence, commandId: envelope.commandId, kind, fence: envelope.fence, payload: extras.resume === null ? Prisma.DbNull : extras.resume as unknown as Prisma.InputJsonValue, issuedAt: new Date(envelope.issuedAt), expiresAt: new Date(envelope.expiresAt) } });
 		const advanced = await transaction.runtimeCommandStream.updateMany({ where: { runId: context.runId, attempt: context.attempt, nextCommandSequence: stream.nextCommandSequence }, data: { nextCommandSequence: admission.nextCommandSequence } });
@@ -332,14 +332,14 @@ async function _nextCommand(prisma: PrismaClient, config: RuntimeDispatchAuthori
 		// Mark the tool-result rows consumed only after the command that carries them is saved.
 		if (kind === RuntimeCommandKind.ResumeAttempt && extras.resumeToolResultDeliveryIds.length > 0) await new PrismaRuntimeDispatchStateUnitOfWork(transaction).consumeToolResultDeliveries(extras.resumeToolResultDeliveryIds, new Date(nowEpochMs));
 		if (kind === RuntimeCommandKind.ResumeAttempt && extras.resumeElicitationResultDeliveryIds.length > 0) await new PrismaRuntimeDispatchStateUnitOfWork(transaction).consumeElicitationResultDeliveries(extras.resumeElicitationResultDeliveryIds, new Date(nowEpochMs));
-		if (kind === RuntimeCommandKind.ResumeAttempt && extras.resumeSteeringRequestIds.length > 0) await transaction.runtimeSteeringRequest.updateMany({ where: { id: { in: [...extras.resumeSteeringRequestIds] }, state: "Pending" }, data: { state: "Consumed", consumedAt: new Date(nowEpochMs) } });
+		if (kind === RuntimeCommandKind.ResumeAttempt && extras.resumeSteeringRequestIds.length > 0) await transaction.runtimeSteeringRequest.updateMany({ where: { id: { in: [...extras.resumeSteeringRequestIds] }, state: RuntimeSteeringRequestState.Pending }, data: { state: RuntimeSteeringRequestState.Consumed, consumedAt: new Date(nowEpochMs) } });
 		return envelope;
 	});
 }
 /** Admit one runtime candidate and durably record its id when the pure authority accepts it. */
 async function _admitCandidate(prisma: PrismaClient, config: RuntimeDispatchAuthorityConfig, clock: RuntimeProtocolClock, compileRunInput: RunInputCompiler, identity: RuntimeStreamWorkloadIdentity, candidate: RuntimeCandidate, eventReporter: RuntimeEventReporter | null): Promise<RuntimeCandidateDispatchResult>
 {
-	if (candidate.kind === "event" && candidate.eventType === "run.cancelled") return { accepted: false, reason: "runtime_cancellation_not_authoritative" };
+	if (candidate.kind === RuntimeCandidateKinds.Event && candidate.eventType === RunEventTypes.RunCancelled) return { accepted: false, reason: "runtime_cancellation_not_authoritative" };
 	if (_RuntimeCandidateRequiresEventReporter(candidate) && eventReporter === null) return { accepted: false, reason: "event_reporter_unavailable" };
 	try
 	{
@@ -352,31 +352,31 @@ async function _admitCandidate(prisma: PrismaClient, config: RuntimeDispatchAuth
 			if (stream === null || stream.runtimeInstanceId === null) return { accepted: false, reason: "no_active_stream" };
 			const commands = await transaction.runtimeDispatchedCommand.findMany({ where: { runId: context.runId, attempt: context.attempt }, orderBy: { sequence: "asc" } });
 			const authority = _buildAuthority(context, stream.runtimeInstanceId, stream.fence, stream.nextCommandSequence, commands, stream.acceptedCandidateIds);
-
-			// 2. Let __AdmitRuntimeCandidate make the allow-or-deny decision; it reads no database.
+			// 2. Delegate the allow-or-deny decision to the pure candidate authority.
 			const admission = __AdmitRuntimeCandidate({ authority, candidate, clock });
-			if (admission.outcome === "idempotent")
+			if (admission.outcome === RuntimeAdmissionOutcomes.Idempotent)
 			{
-				if (candidate.kind !== "external_action") return { accepted: true };
+				if (candidate.kind !== RuntimeCandidateKinds.ExternalAction) return { accepted: true };
 				const invocation = await new PrismaRuntimeDispatchStateUnitOfWork(transaction).findToolInvocation(candidate.runId, candidate.attempt, candidate.candidateId);
 				const actualArgumentsDigest = __DigestCanonicalJson(candidate.arguments);
 				const requestFingerprint = _ToolInvocationFingerprint(candidate, actualArgumentsDigest);
 				return invocation !== null && actualArgumentsDigest === candidate.argumentsDigest && invocation.runtimeInstanceId === candidate.runtimeInstanceId && invocation.commandId === candidate.commandId && invocation.toolRevisionId === candidate.toolRevisionId && invocation.toolInvocationId === candidate.toolInvocationId && invocation.argumentsDigest === actualArgumentsDigest && invocation.requestFingerprint === requestFingerprint ? { accepted: true } : { accepted: false, reason: "external_action_replay_conflict" };
 			}
-			if (admission.outcome === "denied") return { accepted: false, reason: admission.reason };
-			// 2b. Save the ToolInvocation row before accepting an external action. Nothing is sent to a provider here.
-			if (candidate.kind === "external_action")
+			if (admission.outcome === RuntimeAdmissionOutcomes.Denied) return { accepted: false, reason: admission.reason };
+			const sourceCommand = commands.find(function _MatchesCandidate(row) { return row.commandId === candidate.commandId; });
+			if (sourceCommand === undefined) return { accepted: false, reason: "command_not_accepted" };
+			// 2b. Persist complete provider-free work authority before accepting an external action.
+			if (candidate.kind === RuntimeCandidateKinds.ExternalAction)
 			{
 				const intent = await _toolInvocationIntent(transaction, context, stream.runtimeInstanceId, candidate, compileRunInput);
 				if (intent === null) return { accepted: false, reason: "external_action_invalid" };
 				const durable = await __AdmitPreparingToolInvocationInTransaction(transaction, intent, new Date(clock.nowEpochMs()), TOOL_INVOCATION_PREPARATION_POLICY);
-				if (durable.outcome === "conflict") return { accepted: false, reason: "external_action_conflict" };
+				if (durable.outcome === ToolInvocationAdmissionOutcomes.Conflict) return { accepted: false, reason: "external_action_conflict" };
 			}
-			// 2c. Record any run event the candidate asks for, in this transaction, before accepting its id.
-			const sideEffectDenial = await _ApplyRuntimeCandidateSideEffects(transaction, candidate, context.runId, context.attempt, eventReporter);
+			// 2c. Apply transaction-local canonical event effects before accepting the id.
+			const sideEffectDenial = await _ApplyRuntimeCandidateSideEffects(transaction, candidate, context.runId, context.attempt, sourceCommand.kind === RuntimeCommandKind.StartAttempt, eventReporter);
 			if (sideEffectDenial !== null) return { accepted: false, reason: sideEffectDenial };
-
-			// 3. Add the accepted candidate id to the stream row while still holding its lock.
+			// 3. Append the accepted candidate id monotonically under the held stream lock.
 			const appended = await transaction.runtimeCommandStream.updateMany({ where: { runId: context.runId, attempt: context.attempt, nextCommandSequence: stream.nextCommandSequence }, data: { acceptedCandidateIds: { push: candidate.candidateId } } });
 			if (appended.count !== 1) throw new Error("runtime dispatch lost its candidate acceptance fence");
 			return { accepted: true };
@@ -396,7 +396,7 @@ async function _toolInvocationIntent(transaction: Prisma.TransactionClient, cont
 	{
 		const actualArgumentsDigest = __DigestCanonicalJson(candidate.arguments);
 		if (actualArgumentsDigest !== candidate.argumentsDigest) return null;
-		const compiled = await compileRunInput(context.snapshot, transaction);
+		const compiled = await _CompileRunInputForContext(context, transaction, compileRunInput);
 		const tool = compiled.tools.find(function _Granted(definition) { return definition.toolRevisionId === candidate.toolRevisionId; });
 		if (tool === undefined || __DigestCanonicalJson(tool.parametersSchema) !== tool.parametersSchemaDigest || !__ValidateDeferredToolArguments(tool.parametersSchema, candidate.arguments)) return null;
 		return {
@@ -412,7 +412,7 @@ async function _toolInvocationIntent(transaction: Prisma.TransactionClient, cont
 			arguments: candidate.arguments,
 			argumentsDigest: candidate.argumentsDigest,
 			requestFingerprint: _ToolInvocationFingerprint(candidate, actualArgumentsDigest),
-			approvalRequired: tool.requiresApproval,
+			approvalRequired: tool.requiresApproval || candidate.toolRevisionId === PERSONAL_MEMORY_RECALL_TOOL_REVISION,
 			recoveryMode: ExternalActionRecoveryModes.Manual,
 			recoveryKey: null,
 		};
@@ -433,7 +433,7 @@ function _ToolInvocationFingerprint(candidate: RuntimeExternalActionCandidate, a
 /** Return whether the assignment's namespace, token audience, and ServiceAccount name match the snapshot identity's kind. */
 function _RuntimePlaneMatches(identity: RuntimeAssignmentIdentity, assignment: { namespace: string; audience: string; serviceAccountName: string }, config: RuntimeDispatchAuthorityConfig): boolean
 {
-	if (identity.kind === "service")
+	if (identity.kind === RunInputSnapshotIdentityKinds.Service)
 	{
 		return assignment.namespace === config.managedRuntimeNamespace
 			&& assignment.audience === MANAGED_AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE
@@ -624,7 +624,7 @@ async function _mintCommandExtras(transaction: Prisma.TransactionClient, context
 {
 	if (kind === RuntimeCommandKind.StartAttempt)
 	{
-		const compiledInput = await compileRunInput(context.snapshot, transaction);
+		const compiledInput = await _CompileRunInputForContext(context, transaction, compileRunInput);
 		return { compiledInput, resume: null, resumeToolResultDeliveryIds: [], resumeElicitationResultDeliveryIds: [], resumeSteeringRequestIds: [], cancelReason: "cancelled" };
 	}
 	if (kind === RuntimeCommandKind.CancelAttempt) return { compiledInput: null, resume: null, resumeToolResultDeliveryIds: [], resumeElicitationResultDeliveryIds: [], resumeSteeringRequestIds: [], cancelReason: _cancelReason(context.terminalReason) };
@@ -638,7 +638,7 @@ async function _storedCommandExtras(transaction: Prisma.TransactionClient, conte
 {
 	if (row.kind === RuntimeCommandKind.StartAttempt)
 	{
-		const compiledInput = await compileRunInput(context.snapshot, transaction);
+		const compiledInput = await _CompileRunInputForContext(context, transaction, compileRunInput);
 		return { compiledInput, resume: null, resumeToolResultDeliveryIds: [], resumeElicitationResultDeliveryIds: [], resumeSteeringRequestIds: [], cancelReason: "cancelled" };
 	}
 	if (row.kind === RuntimeCommandKind.CancelAttempt) return { compiledInput: null, resume: null, resumeToolResultDeliveryIds: [], resumeElicitationResultDeliveryIds: [], resumeSteeringRequestIds: [], cancelReason: _cancelReason(context.terminalReason) };
@@ -689,7 +689,7 @@ function _computeAssignmentDigest(context: { runId: string; attempt: number; age
 /** Put the identity fields in a fixed order and shape before they go into the assignment digest. */
 function _CanonicalAssignmentIdentity(identity: RuntimeAssignmentIdentity): readonly string[]
 {
-	if (identity.kind === "user") return [identity.kind, identity.executionSubjectId, String(identity.fleetMembershipRevision)];
+	if (identity.kind === RunInputSnapshotIdentityKinds.User) return [identity.kind, identity.executionSubjectId, String(identity.fleetMembershipRevision)];
 	return [identity.kind, identity.executionSubjectId, identity.agentServiceId, String(identity.fleetMembershipRevision), identity.effectiveScopeAttachmentDigest];
 }
 

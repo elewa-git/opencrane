@@ -39,7 +39,7 @@ export function _RuntimeCandidateRequiresEventReporter(candidate: RuntimeCandida
  * and the accepted-id append; this function must never call out to a provider or advance the
  * runtime command stream.
  */
-export async function _ApplyRuntimeCandidateSideEffects(transaction: RuntimeCandidateTransaction, candidate: RuntimeCandidate, runId: string, attempt: number, eventReporter: RuntimeEventReporter | null): Promise<string | null>
+export async function _ApplyRuntimeCandidateSideEffects(transaction: RuntimeCandidateTransaction, candidate: RuntimeCandidate, runId: string, attempt: number, sourceIsStartAttempt: boolean, eventReporter: RuntimeEventReporter | null): Promise<string | null>
 {
 	// 1. A candidate that carries no event has no side effect to apply.
 	if (!("eventType" in candidate)) return null;
@@ -51,7 +51,7 @@ export async function _ApplyRuntimeCandidateSideEffects(transaction: RuntimeCand
 	if (_WORKER_OWNED_EVENT_TYPES.has(candidate.eventType)) return "runtime_tool_lifecycle_not_authoritative";
 
 	// 4. Persist the event, and treat any refusal as this candidate's refusal.
-	const report = await eventReporter.reportInTransaction(transaction, { runId, attempt, eventType: candidate.eventType, payload: candidate.payload });
+	const report = await eventReporter.reportInTransaction(transaction, { runId, attempt, sourceIsStartAttempt, eventType: candidate.eventType, payload: candidate.payload });
 	if (report.outcome === "denied") return report.reason ?? "event_report_denied";
 	return null;
 }

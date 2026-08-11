@@ -1,4 +1,5 @@
 import type { UpgradeSessionProposalRepository } from "@opencrane/backend/agents/personal/configuration";
+import type { PersonalMemoryPermissionAuthority } from "@opencrane/backend/agents/execution/elicitation";
 import type { Logger } from "@opencrane/backend/observability";
 
 import type { ExternalActionApprovalOpener, ExternalActionExecutionContextLoader, ExternalActionWorkerEventSink, ExternalActionWorkerUnitOfWork, ToolInvocationWorkSource } from "./external-action-worker.types.js";
@@ -20,7 +21,9 @@ export interface ProductionExternalActionWorkerDependencies
 	readonly transports: ProductionExternalActionTransports;
 	/** Opens approval requests. Wired separately from the provider adapter. */
 	readonly approvals: ExternalActionApprovalOpener;
-	/** Writes upgrade-session proposals for the built-in personal configuration tool. */
+	/** Execution-user elicitation gate required before any personal-memory recall may proceed. */
+	readonly personalMemoryPermissions: PersonalMemoryPermissionAuthority;
+	/** Built-in personal configuration proposal authority. */
 	readonly personalConfiguration: UpgradeSessionProposalRepository;
 	/** Structured logger. Never log credentials to it. */
 	readonly log: Logger;

@@ -1,11 +1,11 @@
 {
   "fromSchemaVersion": "0.7.0",
   "toSchemaVersion": "0.8.0",
-  "sqlSha256": "16befb7d7f2a69d33448997eae290f1139cfa2a54812582895c7be2a0bbc6c51",
+  "sqlSha256": "4b0e6a04c27a60731f8dec2457e10dc952ada0bf9ee017b0739fa0727252764c",
   "owner": "apps/opencrane",
   "rollback": "backup-restore-or-forward-repair",
   "executionMode": "automatic-when-legacy-persona-conversations-channel-invocation-contexts-approval-requests-and-integration-assignments-empty-otherwise-manual-data-mapping-required",
   "sourceTargetBaselineSha256": "bc346c1e5894cc491c7ef4e4cf925ef9861e77df1c3f1e5835029e49022c95ca",
   "sourceProtectedBaselineSha256": "25bfc5d31c4966ee697ae5aaa47edc855d25120d0829c241f213353f69e0358d",
-  "targetBaselineSha256": "b32befa61b0cb25eca09c057a9900575880022f98be078e384c4ff9162d1db34"
+  "targetBaselineSha256": "f13768489dcdf7d0878919f2c2cd6f4ceb8550e0ff9eab0cc61f712911fd7a20"
 }

@@ -5,7 +5,7 @@ import { __AreReviewedIntegrationToolDefinitionsValid, type ReviewedIntegrationT
 import { ___CloneCanonicalJson, ___SortBy } from "@opencrane/util";
 import type { JsonValue } from "@opencrane/util";
 
-import { _CanonicalMemoryFacts, _IsIdentityFresh } from "./utils/canonical-inputs.js";
+import { _IsIdentityFresh } from "./utils/canonical-inputs.js";
 import type { AssembleRunInputSnapshotResult, SessionAssemblyRefusalReason } from "./session-assembly-result.types.js";
 import type { ApprovedPersonaInput, IdentityEnvelopeInput, MemoryScopeInput, SessionAssemblyAuthorities, SessionAssemblyCommand, ConversationContextInput, ToolPolicyInput } from "./session-assembly.types.js";
 
@@ -127,7 +127,6 @@ function _compileSnapshot(command: SessionAssemblyCommand, admittedAt: string, r
 		preferenceFactIds: ___SortBy(preferences.map(function _preferenceId(preference): string { return preference.id; })),
 		artifactRevisionIds: ___SortBy([...tools.artifactRevisionIds]),
 		skillRevisionIds: ___SortBy([...tools.skillRevisionIds]),
-		memoryFacts: _CanonicalMemoryFacts(memory.memoryFacts),
 		memoryQueryPolicy: ___CloneCanonicalJson(memory.memoryQueryPolicy),
 		integrationAssignments: _canonicalIntegrationAssignments(tools.integrationAssignments),
 		modelRoute: ___CloneCanonicalJson(tools.modelRoute),

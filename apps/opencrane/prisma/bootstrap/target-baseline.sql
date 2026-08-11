@@ -104,10 +104,7 @@ CREATE TYPE "ConversationMessageState" AS ENUM ('pending', 'streaming', 'complet
 CREATE TYPE "ConversationTimelineEntryKind" AS ENUM ('message', 'run_event', 'membership', 'system', 'parent_delivery');
 
 -- CreateEnum
-CREATE TYPE "ElicitationRequestState" AS ENUM ('requested', 'answered', 'declined', 'expired', 'cancelled', 'failed');
-
--- CreateEnum
-CREATE TYPE "ElicitationResponseAttemptState" AS ENUM ('submitting', 'accepted', 'rejected');
+CREATE TYPE "ElicitationRequestState" AS ENUM ('requested', 'answered', 'declined', 'expired', 'cancelled');
 
 -- CreateEnum
 CREATE TYPE "ElicitationBodyKind" AS ENUM ('approval', 'single_choice', 'multiple_choice', 'free_text');
@@ -117,6 +114,9 @@ CREATE TYPE "ElicitationPurpose" AS ENUM ('runtime_input', 'tool_approval', 'per
 
 -- CreateEnum
 CREATE TYPE "ElicitationResultDeliveryState" AS ENUM ('pending', 'consumed');
+
+-- CreateEnum
+CREATE TYPE "PersonalMemoryPermissionReceiptState" AS ENUM ('active', 'consumed');
 
 -- CreateEnum
 CREATE TYPE "GrantScope" AS ENUM ('org', 'department', 'team', 'project', 'personal');
@@ -1383,7 +1383,7 @@ CREATE TABLE "run_input_snapshots" (
     "message_ids" TEXT[] DEFAULT ARRAY[]::TEXT[],
     "preference_fact_ids" TEXT[] DEFAULT ARRAY[]::TEXT[],
     "artifact_revision_ids" TEXT[] DEFAULT ARRAY[]::TEXT[],
-    "memory_facts" JSONB NOT NULL,
+    "memory_facts" JSONB NOT NULL DEFAULT '[]'::jsonb,
     "identity_snapshot" JSONB NOT NULL,
     "model_route" JSONB NOT NULL,
     "integration_assignments" JSONB NOT NULL,
@@ -1797,11 +1797,8 @@ CREATE TABLE "elicitation_response_attempts" (
     "responding_subject_id" TEXT NOT NULL,
     "response" JSONB NOT NULL,
     "response_digest" TEXT NOT NULL,
-    "state" "ElicitationResponseAttemptState" NOT NULL DEFAULT 'submitting',
     "verified_step_up_at" TIMESTAMP(3),
-    "rejection_reason" TEXT,
     "submitted_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "completed_at" TIMESTAMP(3),
 
     CONSTRAINT "elicitation_response_attempts_pkey" PRIMARY KEY ("id")
 );
@@ -1823,14 +1820,17 @@ CREATE TABLE "elicitation_result_deliveries" (
 CREATE TABLE "personal_memory_permission_receipts" (
     "id" TEXT NOT NULL,
     "request_id" TEXT NOT NULL,
+    "tool_invocation_id" TEXT NOT NULL,
+    "tool_invocation_revision" INTEGER NOT NULL,
     "run_id" TEXT NOT NULL,
     "attempt" INTEGER NOT NULL,
-    "subject_id" TEXT NOT NULL,
     "execution_subject_id" TEXT NOT NULL,
-    "purpose_digest" TEXT NOT NULL,
+    "responding_subject_id" TEXT NOT NULL,
     "query_digest" TEXT NOT NULL,
-    "invocation_key" TEXT NOT NULL,
-    "consumed_by_tool_invocation_id" TEXT,
+    "input_snapshot_digest" TEXT NOT NULL,
+    "persona_revision_id" TEXT NOT NULL,
+    "purpose_digest" TEXT NOT NULL,
+    "state" "PersonalMemoryPermissionReceiptState" NOT NULL DEFAULT 'active',
     "expires_at" TIMESTAMP(3) NOT NULL,
     "consumed_at" TIMESTAMP(3),
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -2597,15 +2597,13 @@ CREATE INDEX "elicitation_requests_assigned_participant_id_state_expires__idx" O
 CREATE INDEX "elicitation_requests_run_id_attempt_state_idx" ON "elicitation_requests"("run_id", "attempt", "state");
 CREATE UNIQUE INDEX "elicitation_requests_run_id_attempt_request_key_key" ON "elicitation_requests"("run_id", "attempt", "request_key");
 CREATE UNIQUE INDEX "elicitation_requests_id_run_id_attempt_key" ON "elicitation_requests"("id", "run_id", "attempt");
-CREATE INDEX "elicitation_response_attempts_request_id_state_submitted_at_idx" ON "elicitation_response_attempts"("request_id", "state", "submitted_at");
+CREATE INDEX "elicitation_response_attempts_request_id_submitted_at_idx" ON "elicitation_response_attempts"("request_id", "submitted_at");
 CREATE UNIQUE INDEX "elicitation_response_attempts_request_id_idempotency_key_key" ON "elicitation_response_attempts"("request_id", "idempotency_key");
-CREATE UNIQUE INDEX "elicitation_response_attempts_one_accepted_per_request" ON "elicitation_response_attempts"("request_id") WHERE "state" = 'accepted';
 CREATE UNIQUE INDEX "elicitation_result_deliveries_request_id_key" ON "elicitation_result_deliveries"("request_id");
 CREATE INDEX "elicitation_result_deliveries_state_created_at_idx" ON "elicitation_result_deliveries"("state", "created_at");
 CREATE UNIQUE INDEX "personal_memory_permission_receipts_request_id_key" ON "personal_memory_permission_receipts"("request_id");
-CREATE UNIQUE INDEX "personal_memory_permission_receipts_consumed_by_tool_invoca_key" ON "personal_memory_permission_receipts"("consumed_by_tool_invocation_id");
-CREATE INDEX "personal_memory_permission_receipts_run_id_attempt_subject__idx" ON "personal_memory_permission_receipts"("run_id", "attempt", "subject_id", "expires_at");
-CREATE UNIQUE INDEX "personal_memory_permission_receipts_run_id_attempt_invocati_key" ON "personal_memory_permission_receipts"("run_id", "attempt", "invocation_key");
+CREATE UNIQUE INDEX "personal_memory_permission_receipts_tool_invocation_id_key" ON "personal_memory_permission_receipts"("tool_invocation_id");
+CREATE INDEX "personal_memory_permission_receipts_run_id_attempt_executio_idx" ON "personal_memory_permission_receipts"("run_id", "attempt", "execution_subject_id", "state", "expires_at");
 CREATE UNIQUE INDEX "personal_memory_permission_receipts_request_id_run_id_attem_key" ON "personal_memory_permission_receipts"("request_id", "run_id", "attempt");
 
 
@@ -2626,7 +2624,7 @@ ALTER TABLE "elicitation_requests" ADD CONSTRAINT "elicitation_requests_conversa
 ALTER TABLE "elicitation_response_attempts" ADD CONSTRAINT "elicitation_response_attempts_request_id_fkey" FOREIGN KEY ("request_id") REFERENCES "elicitation_requests"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 ALTER TABLE "elicitation_result_deliveries" ADD CONSTRAINT "elicitation_result_deliveries_request_id_fkey" FOREIGN KEY ("request_id") REFERENCES "elicitation_requests"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 ALTER TABLE "personal_memory_permission_receipts" ADD CONSTRAINT "personal_memory_permission_receipts_request_id_run_id_atte_fkey" FOREIGN KEY ("request_id", "run_id", "attempt") REFERENCES "elicitation_requests"("id", "run_id", "attempt") ON DELETE RESTRICT ON UPDATE CASCADE;
-ALTER TABLE "personal_memory_permission_receipts" ADD CONSTRAINT "personal_memory_permission_receipts_consumed_by_tool_invoc_fkey" FOREIGN KEY ("consumed_by_tool_invocation_id") REFERENCES "tool_invocations"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "personal_memory_permission_receipts" ADD CONSTRAINT "personal_memory_permission_receipts_tool_invocation_id_fkey" FOREIGN KEY ("tool_invocation_id") REFERENCES "tool_invocations"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 ALTER TABLE "approval_requests" ADD CONSTRAINT "approval_requests_elicitation_request_id_fkey" FOREIGN KEY ("elicitation_request_id") REFERENCES "elicitation_requests"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 ALTER TABLE "user_onboardings" ADD CONSTRAINT "user_onboardings_bootstrap_content_revision_fkey" FOREIGN KEY ("bootstrap_content_revision_id", "bootstrap_content_digest") REFERENCES "user_onboarding_bootstrap_content_revisions"("id", "digest") ON DELETE RESTRICT ON UPDATE CASCADE;
 ALTER TABLE "user_onboardings" ADD CONSTRAINT "user_onboardings_bootstrap_conversation_id_fkey" FOREIGN KEY ("bootstrap_conversation_id") REFERENCES "user_onboarding_bootstrap_conversations"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
@@ -5785,15 +5783,12 @@ ALTER TABLE "elicitation_requests" ADD CONSTRAINT "elicitation_requests_exact_ch
 	(("state" = 'requested' AND "resolved_at" IS NULL AND "resolved_by" IS NULL AND "safe_reason" IS NULL) OR
 	 ("state" = 'answered' AND "resolved_at" IS NOT NULL AND "resolved_by" IS NOT NULL AND btrim("resolved_by") <> '') OR
 	 ("state" = 'declined' AND "resolved_at" IS NOT NULL AND "resolved_by" IS NOT NULL AND btrim("resolved_by") <> '') OR
-	 ("state" IN ('expired', 'cancelled', 'failed') AND "resolved_at" IS NOT NULL AND "resolved_by" IS NULL))
+	 ("state" IN ('expired', 'cancelled') AND "resolved_at" IS NOT NULL AND "resolved_by" IS NULL))
 );
 ALTER TABLE "elicitation_response_attempts" ADD CONSTRAINT "elicitation_response_attempts_exact_check" CHECK (
 	btrim("id") <> '' AND btrim("request_id") <> '' AND btrim("idempotency_key") <> '' AND
 	btrim("responding_subject_id") <> '' AND jsonb_typeof("response") = 'object' AND
-	"response_digest" ~ '^sha256:[0-9a-f]{64}$' AND
-	(("state" = 'submitting' AND "completed_at" IS NULL AND "rejection_reason" IS NULL) OR
-	 ("state" = 'accepted' AND "completed_at" IS NOT NULL AND "rejection_reason" IS NULL) OR
-	 ("state" = 'rejected' AND "completed_at" IS NOT NULL AND "rejection_reason" IS NOT NULL AND btrim("rejection_reason") <> ''))
+	"response_digest" ~ '^sha256:[0-9a-f]{64}$'
 );
 ALTER TABLE "elicitation_result_deliveries" ADD CONSTRAINT "elicitation_result_deliveries_exact_check" CHECK (
 	btrim("id") <> '' AND btrim("request_id") <> '' AND
@@ -5801,12 +5796,13 @@ ALTER TABLE "elicitation_result_deliveries" ADD CONSTRAINT "elicitation_result_d
 	(("state" = 'pending' AND "consumed_at" IS NULL) OR ("state" = 'consumed' AND "consumed_at" IS NOT NULL))
 );
 ALTER TABLE "personal_memory_permission_receipts" ADD CONSTRAINT "personal_memory_permission_receipts_exact_check" CHECK (
-	btrim("id") <> '' AND btrim("request_id") <> '' AND btrim("run_id") <> '' AND "attempt" > 0 AND
-	btrim("subject_id") <> '' AND btrim("execution_subject_id") <> '' AND
-	"purpose_digest" ~ '^sha256:[0-9a-f]{64}$' AND "query_digest" ~ '^sha256:[0-9a-f]{64}$' AND
-	btrim("invocation_key") <> '' AND "expires_at" > "created_at" AND
-	(("consumed_by_tool_invocation_id" IS NULL AND "consumed_at" IS NULL) OR
-	 ("consumed_by_tool_invocation_id" IS NOT NULL AND "consumed_at" IS NOT NULL))
+	btrim("id") <> '' AND btrim("request_id") <> '' AND btrim("tool_invocation_id") <> '' AND
+	"tool_invocation_revision" > 0 AND btrim("run_id") <> '' AND "attempt" > 0 AND
+	btrim("execution_subject_id") <> '' AND btrim("responding_subject_id") <> '' AND
+	"query_digest" ~ '^sha256:[0-9a-f]{64}$' AND "input_snapshot_digest" ~ '^sha256:[0-9a-f]{64}$' AND
+	btrim("persona_revision_id") <> '' AND "purpose_digest" ~ '^sha256:[0-9a-f]{64}$' AND
+	"expires_at" > "created_at" AND
+	(("state" = 'active' AND "consumed_at" IS NULL) OR ("state" = 'consumed' AND "consumed_at" IS NOT NULL))
 );
 
 ALTER TABLE "agent_runs" ADD CONSTRAINT "agent_runs_attempt_check" CHECK ("attempt" > 0);
@@ -6045,7 +6041,7 @@ CREATE UNIQUE INDEX "agent_runs_one_foreground_per_conversation"
 ALTER TABLE "conversation_run_events" ADD CONSTRAINT "conversation_run_events_sequence_check" CHECK ("sequence" > 0);
 ALTER TABLE "conversation_run_events" ADD CONSTRAINT "conversation_run_events_type_check" CHECK ("type" IN (
         'run.accepted', 'run.started', 'message.started', 'message.delta', 'message.completed',
-        'tool.requested', 'tool.approval_required', 'tool.started', 'tool.progress', 'tool.completed', 'tool.failed',
+        'tool.requested', 'elicitation.requested', 'tool.started', 'tool.progress', 'tool.completed', 'tool.failed',
         'a2ui.rendering.begun', 'a2ui.surface.updated', 'a2ui.data_model.updated',
         'context.compaction_started', 'context.compaction_completed', 'run.usage',
         'run.completed', 'run.failed', 'run.cancelled', 'run.error',
@@ -6407,18 +6403,74 @@ BEGIN
           WHERE "conversation_id" = request_row."conversation_id" AND "user_id" = NEW."responding_subject_id" FOR UPDATE;
         IF request_row."id" IS NULL OR request_row."state" <> 'requested' OR request_row."expires_at" <= clock_timestamp()
             OR request_row."assigned_participant_id" IS DISTINCT FROM NEW."responding_subject_id" OR NOT FOUND OR participant_ended IS NOT NULL
-            OR NEW."state" <> 'submitting' OR (request_row."requires_step_up" AND
+            OR (request_row."requires_step_up" AND
                 (NEW."verified_step_up_at" IS NULL OR NEW."verified_step_up_at" < request_row."created_at" OR NEW."verified_step_up_at" > clock_timestamp())) THEN
             RAISE EXCEPTION 'ElicitationResponseAttempt lacks current participant or step-up authority';
         END IF;
         RETURN NEW;
     END IF;
-    IF NEW."id" IS DISTINCT FROM OLD."id" OR NEW."request_id" IS DISTINCT FROM OLD."request_id"
-        OR NEW."idempotency_key" IS DISTINCT FROM OLD."idempotency_key" OR NEW."responding_subject_id" IS DISTINCT FROM OLD."responding_subject_id"
-        OR NEW."response" IS DISTINCT FROM OLD."response" OR NEW."response_digest" IS DISTINCT FROM OLD."response_digest"
-        OR NEW."verified_step_up_at" IS DISTINCT FROM OLD."verified_step_up_at" OR NEW."submitted_at" IS DISTINCT FROM OLD."submitted_at"
-        OR OLD."state" <> 'submitting' OR NEW."state" NOT IN ('accepted', 'rejected') THEN
-        RAISE EXCEPTION 'ElicitationResponseAttempt may complete exactly once';
+    RAISE EXCEPTION 'ElicitationResponseAttempt rows are immutable';
+END;
+$$;
+
+CREATE FUNCTION "enforce_personal_memory_permission_authority"() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+    request_row "elicitation_requests"%ROWTYPE;
+    invocation_row "tool_invocations"%ROWTYPE;
+    snapshot_row "run_input_snapshots"%ROWTYPE;
+    accepted_response BOOLEAN;
+BEGIN
+    IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'PersonalMemoryPermissionReceipt rows cannot be deleted'; END IF;
+    IF TG_OP = 'UPDATE' THEN
+        IF OLD."state" <> 'active' OR NEW."state" <> 'consumed' OR NEW."consumed_at" IS NULL
+            OR NEW."id" IS DISTINCT FROM OLD."id" OR NEW."request_id" IS DISTINCT FROM OLD."request_id"
+            OR NEW."tool_invocation_id" IS DISTINCT FROM OLD."tool_invocation_id"
+            OR NEW."tool_invocation_revision" IS DISTINCT FROM OLD."tool_invocation_revision"
+            OR NEW."run_id" IS DISTINCT FROM OLD."run_id" OR NEW."attempt" IS DISTINCT FROM OLD."attempt"
+            OR NEW."execution_subject_id" IS DISTINCT FROM OLD."execution_subject_id"
+            OR NEW."responding_subject_id" IS DISTINCT FROM OLD."responding_subject_id"
+            OR NEW."query_digest" IS DISTINCT FROM OLD."query_digest"
+            OR NEW."input_snapshot_digest" IS DISTINCT FROM OLD."input_snapshot_digest"
+            OR NEW."persona_revision_id" IS DISTINCT FROM OLD."persona_revision_id"
+            OR NEW."purpose_digest" IS DISTINCT FROM OLD."purpose_digest"
+            OR NEW."expires_at" IS DISTINCT FROM OLD."expires_at" OR NEW."created_at" IS DISTINCT FROM OLD."created_at" THEN
+            RAISE EXCEPTION 'PersonalMemoryPermissionReceipt may only be consumed once';
+        END IF;
+        RETURN NEW;
+    END IF;
+    SELECT * INTO request_row FROM "elicitation_requests" WHERE "id" = NEW."request_id" FOR UPDATE;
+    SELECT * INTO invocation_row FROM "tool_invocations" WHERE "id" = NEW."tool_invocation_id" FOR UPDATE;
+    SELECT * INTO snapshot_row FROM "run_input_snapshots" WHERE "run_id" = NEW."run_id";
+    SELECT EXISTS (
+        SELECT 1 FROM "elicitation_response_attempts"
+        WHERE "request_id" = NEW."request_id"
+          AND "responding_subject_id" = NEW."responding_subject_id"
+          AND "response"->>'kind' = 'approval' AND ("response"->>'approved')::boolean IS TRUE
+    ) INTO accepted_response;
+    IF request_row."id" IS NULL OR request_row."purpose" <> 'personal_memory_permission'
+        OR request_row."state" <> 'answered' OR request_row."resolved_by" IS DISTINCT FROM NEW."responding_subject_id"
+        OR request_row."assigned_participant_id" IS DISTINCT FROM NEW."execution_subject_id"
+        OR NEW."responding_subject_id" IS DISTINCT FROM NEW."execution_subject_id"
+        OR request_row."run_id" IS DISTINCT FROM NEW."run_id" OR request_row."attempt" IS DISTINCT FROM NEW."attempt"
+        OR request_row."expires_at" IS DISTINCT FROM NEW."expires_at"
+        OR request_row."purpose_payload_digest" IS DISTINCT FROM NEW."purpose_digest" OR NOT accepted_response
+        OR invocation_row."id" IS NULL OR invocation_row."tool_revision_id" <> 'memory:recall'
+        OR invocation_row."run_id" IS DISTINCT FROM NEW."run_id" OR invocation_row."attempt" IS DISTINCT FROM NEW."attempt"
+        OR invocation_row."subject_id" IS DISTINCT FROM NEW."execution_subject_id"
+        OR invocation_row."state" <> 'ready' OR invocation_row."revision" IS DISTINCT FROM NEW."tool_invocation_revision"
+        OR snapshot_row."run_id" IS NULL OR snapshot_row."input_digest" IS DISTINCT FROM NEW."input_snapshot_digest"
+        OR snapshot_row."persona_revision_id" IS DISTINCT FROM NEW."persona_revision_id"
+        OR request_row."purpose_payload"->>'toolInvocationId' IS DISTINCT FROM NEW."tool_invocation_id"
+        OR (request_row."purpose_payload"->>'toolInvocationRevision')::integer + 1 IS DISTINCT FROM NEW."tool_invocation_revision"
+        OR request_row."purpose_payload"->>'runId' IS DISTINCT FROM NEW."run_id"
+        OR (request_row."purpose_payload"->>'attempt')::integer IS DISTINCT FROM NEW."attempt"
+        OR request_row."purpose_payload"->>'executionSubjectId' IS DISTINCT FROM NEW."execution_subject_id"
+        OR request_row."purpose_payload"->>'queryDigest' IS DISTINCT FROM NEW."query_digest"
+        OR request_row."purpose_payload"->>'inputSnapshotDigest' IS DISTINCT FROM NEW."input_snapshot_digest"
+        OR request_row."purpose_payload"->>'personaRevisionId' IS DISTINCT FROM NEW."persona_revision_id"
+        OR (request_row."purpose_payload"->>'expiresAt')::timestamp IS DISTINCT FROM NEW."expires_at"
+        OR NEW."state" <> 'active' OR NEW."consumed_at" IS NOT NULL OR NEW."expires_at" <= clock_timestamp() THEN
+        RAISE EXCEPTION 'PersonalMemoryPermissionReceipt requires the exact accepted execution-user invocation';
     END IF;
     RETURN NEW;
 END;
@@ -6426,6 +6478,7 @@ $$;
 
 CREATE TRIGGER "elicitation_requests_authority" BEFORE INSERT OR UPDATE OR DELETE ON "elicitation_requests" FOR EACH ROW EXECUTE FUNCTION "enforce_elicitation_request_authority"();
 CREATE TRIGGER "elicitation_response_attempts_authority" BEFORE INSERT OR UPDATE OR DELETE ON "elicitation_response_attempts" FOR EACH ROW EXECUTE FUNCTION "enforce_elicitation_response_attempt_authority"();
+CREATE TRIGGER "personal_memory_permission_receipts_authority" BEFORE INSERT OR UPDATE OR DELETE ON "personal_memory_permission_receipts" FOR EACH ROW EXECUTE FUNCTION "enforce_personal_memory_permission_authority"();
 CREATE TRIGGER "approval_requests_immutable" BEFORE INSERT OR UPDATE OR DELETE ON "approval_requests" FOR EACH ROW EXECUTE FUNCTION "enforce_approval_request_update"();
 CREATE TRIGGER "action_execution_receipts_immutable" BEFORE INSERT OR UPDATE OR DELETE ON "action_execution_receipts" FOR EACH ROW EXECUTE FUNCTION "enforce_action_execution_receipt_lifecycle"();
 CREATE TRIGGER "tool_invocations_lifecycle_guard" BEFORE INSERT OR UPDATE OR DELETE ON "tool_invocations" FOR EACH ROW EXECUTE FUNCTION "enforce_tool_invocation_lifecycle"();

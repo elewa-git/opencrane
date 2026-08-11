@@ -2,7 +2,6 @@ import type { AgentRevisionId, AgentRunId, AgentServiceId, PersonaRevisionId } f
 import type { ArtifactRevisionId, SkillRevisionId } from "@opencrane/models/artifacts";
 import type { ConversationId, MessageId } from "@opencrane/models/conversations";
 import type { JsonValue } from "@opencrane/util";
-import type { MemoryFactReference } from "./memory.types.js";
 
 /**
  * Says whether a run is executed by a person or by a managed service. Stored in every run snapshot.
@@ -122,8 +121,6 @@ export interface RunInputSnapshot
   artifactRevisionIds: readonly ArtifactRevisionId[];
   /** Immutable skill revisions made available to the run. */
   skillRevisionIds: readonly SkillRevisionId[];
-  /** Scoped durable memory facts included in the prompt. */
-  memoryFacts: readonly MemoryFactReference[];
   /** Authorised memory retrieval policy selected for this run. */
   memoryQueryPolicy: JsonValue;
   /** Immutable third-party integration tool allowances selected by the revision. */

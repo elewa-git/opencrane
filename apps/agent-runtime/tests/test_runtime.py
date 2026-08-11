@@ -29,9 +29,17 @@ from src.model_loop.checkpoints import (
 from src.model_loop.driver import (
     absorb_steering as _absorb_steering,
     build_zero_retry_agent as _build_zero_retry_agent,
+    pydantic_ai_event_source as _pydantic_ai_event_source,
+    pydantic_ai_resume_source as _pydantic_ai_resume_source,
     zero_retry_openai_settings as _zero_retry_openai_settings,
 )
 from src.model_loop.openai_generated_outputs import OpenAIGeneratedOutputConfiguration as _OpenAIGeneratedOutputConfiguration
+from src.model_loop.openai_generated_outputs import OpenAIGeneratedOutputCollector as _OpenAIGeneratedOutputCollector
+from src.model_loop.histories import (
+    clear_model_history as _clear_model_history,
+    load_model_history as _load_model_history,
+    store_model_history as _store_model_history,
+)
 from src.attempts.execution import (
     execute_cancel_attempt as _execute_cancel_attempt,
     execute_resume_attempt as _execute_resume_attempt,
@@ -53,10 +61,12 @@ from src.transport.stream import (
 )
 
 
-def _compiled_input() -> dict:
+def _compiled_input(run_id: str = "r1", attempt: int = 1) -> dict:
     """Build a compiled input whose grant set fixes the ``alpha`` and ``zulu`` tool revisions."""
     return {
         "promptCompilerVersion": "v1",
+        "runId": run_id,
+        "attempt": attempt,
         "instructions": "be careful",
         "messages": [{"role": "user", "content": "hi"}],
         "tools": [
@@ -69,35 +79,35 @@ def _compiled_input() -> dict:
     }
 
 
-def _start_command() -> dict:
+def _start_command(attempt: int = 1) -> dict:
     """Build one structurally valid ``start_attempt`` command carrying a compiled input."""
     return {
         "kind": "start_attempt",
         "commandId": "c1",
         "fence": 2,
-        "assignment": {"runId": "r1", "attempt": 1},
-        "payload": {"snapshot": {"inputGeneration": 4}, "compiledInput": _compiled_input()},
+        "assignment": {"runId": "r1", "attempt": attempt},
+        "payload": {"snapshot": {"inputGeneration": 4}, "compiledInput": _compiled_input(attempt=attempt)},
     }
 
 
-def _resume_command() -> dict:
+def _resume_command(attempt: int = 1) -> dict:
     """Build one structurally valid ``resume_attempt`` command carrying saved tool results."""
     return {
         "kind": "resume_attempt",
         "commandId": "c2",
         "fence": 2,
-        "assignment": {"runId": "r1", "attempt": 1},
+        "assignment": {"runId": "r1", "attempt": attempt},
         "payload": {"inputGeneration": 7, "toolResults": [], "steeringRequests": []},
     }
 
 
-def _cancel_command() -> dict:
+def _cancel_command(attempt: int = 1) -> dict:
     """Build one structurally valid ``cancel_attempt`` command carrying a server-chosen reason."""
     return {
         "kind": "cancel_attempt",
         "commandId": "c3",
         "fence": 2,
-        "assignment": {"runId": "r1", "attempt": 1},
+        "assignment": {"runId": "r1", "attempt": attempt},
         "payload": {"reason": "budget_exhausted"},
     }
 
@@ -378,6 +388,7 @@ class RuntimeZeroRetryTests(unittest.TestCase):
                 ({"kind": "image_generation", "output_format": "png", "partial_images": 0},),
                 {"openai_include_code_execution_outputs": True, "openai_include_raw_annotations": True},
             ),
+            deferred_tool_requests_cls=type("_DeferredToolRequests", (), {}),
         )
         # Provider HTTP / model-request retries land on the OpenAI client transport as max_retries=0.
         self.assertEqual(recorded["client"]["max_retries"], 0)
@@ -390,6 +401,162 @@ class RuntimeZeroRetryTests(unittest.TestCase):
         self.assertEqual(recorded["agent"]["retries"], {"tools": 0, "output": 0})
         self.assertEqual(recorded["agent"]["capabilities"], ({"kind": "image_generation", "output_format": "png", "partial_images": 0},))
         self.assertEqual(recorded["agent"]["model_settings"], {"openai_include_code_execution_outputs": True, "openai_include_raw_annotations": True})
+        self.assertEqual(recorded["agent"]["output_type"][0], str)
+        self.assertEqual(recorded["agent"]["output_type"][1].__name__, "_DeferredToolRequests")
+        self.assertEqual(recorded["agent"]["toolsets"], [])
+
+    def test_compiled_memory_tool_reaches_model_as_external_tool(self) -> None:
+        """The sealed memory schema is model-visible but has no runtime execution callback."""
+        recorded: dict = {}
+
+        class _Client:
+            def __init__(self, **_kwargs: object) -> None:
+                pass
+
+        class _Provider:
+            def __init__(self, **_kwargs: object) -> None:
+                pass
+
+        class _Model:
+            def __init__(self, _name: str, **_kwargs: object) -> None:
+                pass
+
+        class _Agent:
+            def __init__(self, _model: object, **kwargs: object) -> None:
+                recorded["agent"] = kwargs
+
+        class _ToolDefinition:
+            def __init__(self, **kwargs: object) -> None:
+                self.definition = kwargs
+
+        class _ExternalToolset:
+            def __init__(self, definitions: list[object], **kwargs: object) -> None:
+                self.definitions = definitions
+                self.options = kwargs
+
+        schema = {
+            "type": "object",
+            "properties": {"query": {"type": "string", "minLength": 1, "maxLength": 2000}},
+            "required": ["query"],
+            "additionalProperties": False,
+        }
+        _build_zero_retry_agent(
+            "silo-default",
+            "http://litellm.svc.cluster.local",
+            "sk-attempt",
+            "be careful",
+            [{
+                "name": "memory_recall",
+                "toolRevisionId": "memory:recall",
+                "description": "Ask permission before recall.",
+                "requiresApproval": True,
+                "parametersSchema": schema,
+            }],
+            agent_cls=_Agent,
+            model_cls=_Model,
+            provider_cls=_Provider,
+            async_openai=_Client,
+            generated_output_configuration=_OpenAIGeneratedOutputConfiguration((), {}),
+            external_toolset_cls=_ExternalToolset,
+            tool_definition_cls=_ToolDefinition,
+            deferred_tool_requests_cls=type("_DeferredToolRequests", (), {}),
+        )
+
+        toolsets = recorded["agent"]["toolsets"]
+        self.assertEqual(len(toolsets), 1)
+        self.assertEqual(toolsets[0].options, {"id": "opencrane-compiled-tools"})
+        self.assertEqual(toolsets[0].definitions[0].definition, {
+            "name": "memory_recall",
+            "description": "Ask permission before recall.",
+            "parameters_json_schema": schema,
+        })
+        self.assertIsNot(toolsets[0].definitions[0].definition["parameters_json_schema"], schema)
+
+
+class RuntimeDeferredToolBridgeTests(unittest.TestCase):
+    """Prove same-attempt external tool calls survive the real pinned framework bridge."""
+
+    def tearDown(self) -> None:
+        """Keep subordinate framework history isolated between tests."""
+        _clear_model_history("framework-run", 1)
+        _clear_model_history("history-run", 2)
+
+    def test_model_history_is_coordinate_bound_and_copy_safe(self) -> None:
+        """History is replaced and copied only under one exact run-attempt key."""
+        source = [{"message": "first"}]
+        _store_model_history("history-run", 2, source)
+        source.append({"message": "outside"})
+
+        loaded = _load_model_history("history-run", 2)
+        self.assertEqual(loaded, [{"message": "first"}])
+        self.assertIsNone(_load_model_history("history-run", 1))
+        assert loaded is not None
+        loaded.append({"message": "changed-copy"})
+        self.assertEqual(_load_model_history("history-run", 2), [{"message": "first"}])
+
+        _clear_model_history("history-run", 2)
+        self.assertIsNone(_load_model_history("history-run", 2))
+
+    @unittest.skipUnless(importlib.util.find_spec("pydantic_ai"), "pydantic-ai is a qualification dependency")
+    def test_pinned_framework_external_call_resumes_without_prompt_replay(self) -> None:
+        """Pydantic 2.13 emits one complete call and accepts its result over saved history."""
+        from pydantic_ai import Agent, DeferredToolRequests, ExternalToolset, ToolDefinition
+        from pydantic_ai.models.test import TestModel
+
+        tool_schema = {
+            "type": "object",
+            "properties": {"query": {"type": "string", "minLength": 1}},
+            "required": ["query"],
+            "additionalProperties": False,
+        }
+        agent = _build_zero_retry_agent(
+            "test-model",
+            "http://unused.invalid",
+            "test-key",
+            "Follow the compiled instructions.",
+            [{
+                "name": "memory_recall",
+                "toolRevisionId": "memory:recall",
+                "description": "Recall only after permission.",
+                "requiresApproval": True,
+                "parametersSchema": tool_schema,
+            }],
+            agent_cls=Agent,
+            model_cls=lambda _name, **_kwargs: TestModel(call_tools=["memory_recall"]),
+            provider_cls=lambda **_kwargs: object(),
+            async_openai=lambda **_kwargs: object(),
+            external_toolset_cls=ExternalToolset,
+            tool_definition_cls=ToolDefinition,
+            deferred_tool_requests_cls=DeferredToolRequests,
+        )
+        compiled_input = {
+            "runId": "framework-run",
+            "attempt": 1,
+            "messages": [{"role": "user", "content": "What did I decide?"}],
+        }
+        cancel_event = threading.Event()
+
+        def _model_components(_compiled_input: dict[str, object]) -> tuple[object, object, str, str]:
+            return (agent, _OpenAIGeneratedOutputCollector(), "http://unused.invalid", "test-key")
+
+        with mock.patch("src.model_loop.driver._model_loop_components", side_effect=_model_components):
+            started = list(_pydantic_ai_event_source(compiled_input, cancel_event, []))
+            calls = [event for event in started if event.get("type") == "tool_call"]
+            self.assertEqual(len(calls), 1)
+            self.assertEqual(calls[0]["toolName"], "memory_recall")
+            self.assertTrue(calls[0]["toolCallId"])
+            self.assertIn("query", json.loads(calls[0]["arguments"]))
+
+            resumed = list(_pydantic_ai_resume_source(
+                compiled_input,
+                {calls[0]["toolCallId"]: {"facts": ["approved fact"]}},
+                cancel_event,
+                [],
+            ))
+
+        self.assertFalse(any(event.get("type") == "tool_call" for event in resumed))
+        self.assertTrue(any(event.get("type") == "output_text" and event.get("text") for event in resumed))
+        self.assertIsNotNone(_load_model_history("framework-run", 1))
 
 
 class RuntimeExecutorTests(unittest.TestCase):
@@ -408,6 +575,51 @@ class RuntimeExecutorTests(unittest.TestCase):
         self.assertEqual(kinds, ["event", "event", "event", "event", "external_action", "event", "event"])
         self.assertEqual([candidate.get("eventType") for candidate in emitted], ["run.started", "message.started", "message.delta", "tool.requested", None, "run.usage", "message.completed"])
         self.assertTrue(all(candidate["runId"] == "r1" and candidate["fence"] == 2 for candidate in emitted))
+
+    def test_cancellation_clears_history_even_after_a_pending_tool_event(self) -> None:
+        """A racing cancel cannot leave resumable framework history behind a pending call."""
+        cancel_event = threading.Event()
+        _store_model_history("r1", 1, [{"message": "private framework context"}])
+
+        def _events(_compiled: dict, _cancel: threading.Event, _steering: list[str]):
+            yield {"type": "tool_call", "toolName": "alpha", "toolCallId": "cancelled-call", "arguments": "{}"}
+            cancel_event.set()
+
+        _execute_start_attempt(
+            _start_command(),
+            "instance-1",
+            lambda _candidate_body: None,
+            event_source=_events,
+            cancel_event=cancel_event,
+        )
+
+        self.assertIsNone(_load_model_history("r1", 1))
+
+    def test_attempt_two_start_stores_and_clears_the_same_history_key(self) -> None:
+        """Attempt-two model history cannot fall back to or clear the first-attempt key."""
+        self.addCleanup(_clear_model_history, "r1", 1)
+        self.addCleanup(_clear_model_history, "r1", 2)
+        _store_model_history("r1", 1, [{"message": "older attempt"}])
+
+        def _events(compiled: dict, _cancel: threading.Event, _steer: list[str]):
+            _store_model_history(compiled["runId"], compiled["attempt"], [{"message": "attempt two"}])
+            return iter([])
+
+        _execute_start_attempt(_start_command(2), "instance-1", lambda _candidate: None, event_source=_events)
+
+        self.assertIsNone(_load_model_history("r1", 2))
+        self.assertEqual(_load_model_history("r1", 1), [{"message": "older attempt"}])
+
+    def test_start_rejects_compiled_coordinates_from_another_attempt(self) -> None:
+        """A start frame cannot make the driver store history under a different attempt."""
+        emitted: list[dict] = []
+        command = _start_command(2)
+        command["payload"]["compiledInput"] = _compiled_input(attempt=1)
+
+        _execute_start_attempt(command, "instance-1", emitted.append, event_source=lambda *_args: iter([]))
+
+        self.assertEqual([candidate["eventType"] for candidate in emitted], ["run.failed"])
+        self.assertEqual(emitted[0]["payload"], {"reason": "compiled_input_coordinate_mismatch"})
 
     def test_tool_call_surfaces_external_action_with_resolved_revision(self) -> None:
         """A granted tool call surfaces an external-action candidate with the compiled revision + digest."""
@@ -545,6 +757,31 @@ class RuntimeResumeCancelTests(unittest.TestCase):
         self.assertEqual(captured["compiledInput"], compiled_input)
         self.assertEqual([candidate["eventType"] for candidate in emitted], ["run.resumed", "run.completed"])
 
+    def test_attempt_two_resume_recovers_and_clears_the_same_history_key(self) -> None:
+        """Attempt-two resume reads and clears only its exact compiled-history coordinate."""
+        self.addCleanup(_clear_model_history, "r1", 1)
+        self.addCleanup(_clear_model_history, "r1", 2)
+        cipher = _ReversingCipher()
+        compiled_input = _compiled_input(attempt=2)
+        _store_model_history("r1", 1, [{"message": "older attempt"}])
+        _store_model_history("r1", 2, [{"message": "attempt two"}])
+
+        def _resume_source(recovered_input, _deferred, _cancel, _steering):
+            self.assertEqual((recovered_input["runId"], recovered_input["attempt"]), ("r1", 2))
+            self.assertEqual(_load_model_history("r1", 2), [{"message": "attempt two"}])
+            return iter([])
+
+        with tempfile.TemporaryDirectory() as directory:
+            os.environ["OPENCRANE_RUNTIME_CHECKPOINT_DIR"] = directory
+            try:
+                _write_checkpoint("r1", 2, 7, {"compiledInput": compiled_input}, cipher=cipher, checkpoint_dir=directory)
+                _execute_resume_attempt(_resume_command(2), "instance-1", lambda _candidate: None, resume_event_source=_resume_source, checkpoint_cipher=cipher)
+            finally:
+                os.environ.pop("OPENCRANE_RUNTIME_CHECKPOINT_DIR", None)
+
+        self.assertIsNone(_load_model_history("r1", 2))
+        self.assertEqual(_load_model_history("r1", 1), [{"message": "older attempt"}])
+
     def test_missing_resume_payload_is_a_terminal_failure(self) -> None:
         """A resume command without a payload surfaces `run.failed`, never a silent ack."""
         emitted: list[dict] = []
@@ -559,6 +796,18 @@ class RuntimeResumeCancelTests(unittest.TestCase):
         cancel_event = threading.Event()
         _execute_cancel_attempt(_cancel_command(), "instance-1", cancel_event=cancel_event)
         self.assertTrue(cancel_event.is_set())
+
+    def test_attempt_two_cancel_clears_only_its_history_key(self) -> None:
+        """An attempt-two cancel cannot leave or erase history under a neighbouring attempt."""
+        self.addCleanup(_clear_model_history, "r1", 1)
+        self.addCleanup(_clear_model_history, "r1", 2)
+        _store_model_history("r1", 1, [{"message": "older attempt"}])
+        _store_model_history("r1", 2, [{"message": "attempt two"}])
+
+        _execute_cancel_attempt(_cancel_command(2), "instance-1")
+
+        self.assertIsNone(_load_model_history("r1", 2))
+        self.assertEqual(_load_model_history("r1", 1), [{"message": "older attempt"}])
 
     def test_cancel_before_the_active_task_emits_no_candidate_without_coordinates(self) -> None:
         """A cancel frame lacking coordinates yields no candidate and no crash when no task is active."""

@@ -3,7 +3,6 @@
 import "./app/instrument.js";
 
 import { __CreateManagedRunAdmissionPort, __CreatePersonalRunAdmissionPort, __ReadRunAdmissionConcurrencyPolicy, _CreateRunAdmissionCapacityGate } from "@opencrane/backend/agents/execution/admission";
-import { GatewayMemoryFactSelector } from "@opencrane/backend/agents/execution/protocol";
 import { _CreateManagedExecutionEvidenceAuthority } from "@opencrane/backend/server/agents/agent-services";
 import { _CreateFleetMembershipEvidenceConfig } from "@opencrane/backend/server/iam/membership";
 import { ___BindConsole } from "@opencrane/backend/observability";
@@ -20,7 +19,6 @@ import { _CreatePublicApp, _CreatePublicAuthentication } from "./app/public-app.
 import { _CreateRunCancellationAuthority } from "./app/run-cancellation-composition.js";
 import { _CreateArtifactUploadGateway } from "./infra/artifacts/artifact-upload.factory.js";
 import { ___CreatePrismaClient } from "./infra/db/db.js";
-import { _CreateMemoryGatewayClient } from "./infra/memory/memory-gateway-client.factory.js";
 import { _CreateObotAdapters } from "./infra/obot/obot-adapters.factory.js";
 
 /**
@@ -38,7 +36,6 @@ async function _Main(): Promise<void>
 	const config = _ReadProcessConfig();
 	const prisma = ___CreatePrismaClient(_log);
 	const kubernetes = _CreateKubernetesClients();
-	const memoryGateway = _CreateMemoryGatewayClient(config.runtime);
 	await _BootstrapInitialModel({ prisma, coreApi: kubernetes.coreApi, config: config.initialModelBootstrap, namespace: config.runtime.serverNamespace });
 	await _ReconcileChannelTargetRoutes(prisma, config.runtime.channelTargets);
 
@@ -47,19 +44,19 @@ async function _Main(): Promise<void>
 	const runAdmissionCapacityGate = _CreateRunAdmissionCapacityGate(__ReadRunAdmissionConcurrencyPolicy());
 	const membershipEvidence = _CreateFleetMembershipEvidenceConfig();
 	const managedRunAdmission = __CreateManagedRunAdmissionPort(prisma, runAdmissionCapacityGate, _CreateManagedExecutionEvidenceAuthority());
-	const personalRunAdmission = __CreatePersonalRunAdmissionPort(prisma, runAdmissionCapacityGate, membershipEvidence, new GatewayMemoryFactSelector(memoryGateway));
+	const personalRunAdmission = __CreatePersonalRunAdmissionPort(prisma, runAdmissionCapacityGate, membershipEvidence);
 	const runCancellation = _CreateRunCancellationAuthority(prisma, config.runtime);
 
 	// 4. Compose the server-owned Obot custody and action transport without exposing it to runtimes.
 	const obot = _CreateObotAdapters(config.obot);
-	const externalActions = _CreateExternalActionWorker(prisma, memoryGateway, obot.invocation, _log);
+	const externalActions = _CreateExternalActionWorker(prisma, obot.invocation, _log);
 	const channelTargetRoutes = _StartChannelTargetRouteReconciler(prisma, config.runtime.channelTargets);
 
 	// 5. Build separate HTTP listeners; only the internal app receives workload-only routes.
 	const authentication = _CreatePublicAuthentication(prisma, kubernetes.customApi, config.standaloneFirstUserAdmission);
 	const publicApp = _CreatePublicApp(prisma, kubernetes.coreApi, managedRunAdmission, personalRunAdmission, runCancellation, config.runtime.serverNamespace, obot.custody, authentication, config.runtime.artifactScannerEnabled);
 	publicApp.locals.artifactUploadGateway = _CreateArtifactUploadGateway(prisma);
-	const internalApp = _CreateInternalApp(prisma, kubernetes.authApi, config.runtime, memoryGateway, authentication.sessionMiddleware);
+	const internalApp = _CreateInternalApp(prisma, kubernetes.authApi, config.runtime, authentication.sessionMiddleware);
 
 	// 6. Start listeners and workers under one drain order so shared dependencies close exactly once.
 	_StartProcessLifecycle(publicApp, internalApp, prisma, kubernetes.batchApi, managedRunAdmission, runCancellation, config, channelTargetRoutes, unbindConsole, externalActions, obot.stop);

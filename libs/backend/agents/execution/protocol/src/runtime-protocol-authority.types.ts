@@ -47,17 +47,28 @@ export interface RuntimeProtocolClock
 	nowEpochMs(): number;
 }
 
-/** What checking one runtime command returns. */
+/** Stable command-admission outcome for a runtime frame. */
+export enum RuntimeAdmissionOutcomes
+{
+	/** The frame may advance durable authority. */
+	Accepted = "accepted",
+	/** The exact frame was already admitted. */
+	Idempotent = "idempotent",
+	/** The frame lacks authority and carries a safe refusal reason. */
+	Denied = "denied",
+}
+
+/** Stable command-admission outcome for a runtime frame. */
 export type RuntimeCommandAdmission =
-	| { readonly outcome: "accepted"; readonly nextCommandSequence: number }
-	| { readonly outcome: "idempotent" }
-	| { readonly outcome: "denied"; readonly reason: "invalid_frame" | "unsupported_protocol" | "not_yet_valid" | "expired" | "assignment_mismatch" | "runtime_instance_mismatch" | "fence_mismatch" | "sequence_mismatch" | "terminal_run" | "snapshot_mismatch" };
+	| { readonly outcome: RuntimeAdmissionOutcomes.Accepted; readonly nextCommandSequence: number }
+	| { readonly outcome: RuntimeAdmissionOutcomes.Idempotent }
+	| { readonly outcome: RuntimeAdmissionOutcomes.Denied; readonly reason: "invalid_frame" | "unsupported_protocol" | "not_yet_valid" | "expired" | "assignment_mismatch" | "runtime_instance_mismatch" | "fence_mismatch" | "sequence_mismatch" | "terminal_run" | "snapshot_mismatch" };
 
 /** What checking one runtime-proposed action or event returns. */
 export type RuntimeCandidateAdmission =
-	| { readonly outcome: "accepted" }
-	| { readonly outcome: "idempotent" }
-	| { readonly outcome: "denied"; readonly reason: "invalid_candidate" | "unsupported_protocol" | "expired" | "assignment_mismatch" | "runtime_instance_mismatch" | "fence_mismatch" | "command_not_accepted" | "terminal_run" };
+	| { readonly outcome: RuntimeAdmissionOutcomes.Accepted }
+	| { readonly outcome: RuntimeAdmissionOutcomes.Idempotent }
+	| { readonly outcome: RuntimeAdmissionOutcomes.Denied; readonly reason: "invalid_candidate" | "unsupported_protocol" | "expired" | "assignment_mismatch" | "runtime_instance_mismatch" | "fence_mismatch" | "command_not_accepted" | "terminal_run" };
 
 /** Everything `__AdmitRuntimeCommand` needs in order to decide. */
 export interface RuntimeCommandAdmissionInput

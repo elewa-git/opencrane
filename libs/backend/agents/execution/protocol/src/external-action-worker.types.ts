@@ -1,4 +1,5 @@
 import type { ExternalActionRecoveryModes, ToolInvocationClaim, ToolInvocationLifecycleEvent, ToolInvocationRecord, ToolInvocationUnitOfWork } from "@opencrane/backend/server/iam/authorization";
+import type { PersonalMemoryPermissionAuthority } from "@opencrane/backend/agents/execution/elicitation";
 import type { Logger } from "@opencrane/backend/observability";
 import type { RunInputSnapshot } from "@opencrane/contracts";
 import type { JsonValue } from "@opencrane/util";
@@ -152,22 +153,10 @@ export interface PreparedExternalActionAdapter
 {
 	/** What this adapter can really guarantee. The worker stops the invocation if it differs from the mode saved on the row. */
 	readonly recoveryMode: ExternalActionRecoveryModes;
-	/**
-	 * Make the provider call, once.
-	 *
-	 * @param recoveryKey - The frozen idempotency key when the strategy requires one, otherwise null.
-	 * @returns What the provider concluded. An error the adapter cannot classify must come back as
-	 * `Ambiguous`, never `Failed`, because the request may already have taken effect.
-	 */
-	dispatch(recoveryKey: string | null): Promise<ExternalActionProviderOutcome>;
-	/**
-	 * Ask the provider what happened, without doing it again.
-	 *
-	 * @param recoveryKey - The frozen key identifying the earlier request at the provider.
-	 * @returns The outcome the provider reports. Must not repeat the effect; an adapter that cannot
-	 * read back returns `Ambiguous` instead of dispatching.
-	 */
-	reconcile(recoveryKey: string): Promise<ExternalActionProviderOutcome>;
+	/** Dispatch exactly once, using the frozen provider key when the strategy requires it. */
+	dispatch(recoveryKey: string | null, invocation: ToolInvocationRecord, claim: ToolInvocationClaim): Promise<ExternalActionProviderOutcome>;
+	/** Read a provider outcome without repeating its effect. */
+	reconcile(recoveryKey: string, invocation: ToolInvocationRecord, claim: ToolInvocationClaim): Promise<ExternalActionProviderOutcome>;
 }
 
 /**
@@ -300,7 +289,9 @@ export interface ExternalActionWorkerDependencies
 	readonly adapters: ExternalActionAdapterFactory;
 	/** Opens approval requests; used only once preparation set the state to AwaitingApproval. */
 	readonly approvals: ExternalActionApprovalOpener;
-	/** Saves tool lifecycle events. */
+	/** Exact personal-memory input gate selected for the built-in recall revision. */
+	readonly personalMemoryPermissions: PersonalMemoryPermissionAuthority;
+	/** Server-owned canonical tool lifecycle events. */
 	readonly events: ExternalActionWorkerEventSink;
 	/** Trusted server clock. */
 	readonly clock: ExternalActionWorkerClock;

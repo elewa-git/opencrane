@@ -1,7 +1,8 @@
 import type { PrismaClient } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
 
-import { AGENT_RUNTIME_PROTOCOL_V1, type CompiledRunInput, type RuntimeCandidate, type RuntimeCommandEnvelope } from "@opencrane/contracts";
+import { AGENT_RUNTIME_PROTOCOL_V1, RuntimeCandidateKinds, type CompiledRunInput, type RuntimeCandidate, type RuntimeCommandEnvelope } from "@opencrane/contracts";
+import { PERSONAL_MEMORY_RECALL_TOOL_NAME, PERSONAL_MEMORY_RECALL_TOOL_REVISION } from "@opencrane/models/agents";
 import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 
 import { PrismaRuntimeDispatchAuthority } from "../prisma-runtime-dispatch-authority.js";
@@ -96,6 +97,8 @@ interface FakeOptions
 	readonly pendingSteeringRequests?: readonly unknown[];
 	/** Use a managed-service identity, with its own workload identity, instead of a user one. */
 	readonly managed?: boolean;
+	/** Optional compiler used to prove exact built-in tool admission policy. */
+	readonly compileRunInput?: RunInputCompiler;
 }
 
 /** Minimal in-memory Prisma double covering only the reads and writes the adapter performs. */
@@ -123,7 +126,7 @@ function _fakePrisma(options: FakeOptions)
 	const audience = options.managed ? "opencrane-managed-agent-runtime" : "opencrane-agent-runtime";
 	const assignment = { runId: "run-1", attempt: 1, agentServiceId: "svc-1", agentRevisionId: "rev-1", siloId: "silo-1", subjectId, audience, serviceAccountName: workloadIdentity.serviceAccountName, namespace: workloadIdentity.namespace, workloadKind: "Job", workloadUid: "wl-1", workloadProfile: "profile", podUid: options.podUid === undefined ? "pod-1" : options.podUid, state: options.assignmentState ?? "Registered", expiresAt: new Date("2026-07-20T00:05:00.000Z"), createdAt: new Date("2026-07-20T00:00:00.000Z") };
 	const run = { id: "run-1", attempt: 1, agentServiceId: "svc-1", agentRevisionId: "rev-1", siloId: "silo-1", state: options.runState, inputSnapshotDigest: "sha256:snap" };
-	const snapshot = { runId: "run-1", siloId: "silo-1", agentServiceId: "svc-1", agentRevisionId: "rev-1", snapshotVersion: 1, conversationId: null, messageIds: [], personaRevisionId: null, preferenceFactIds: [], artifactRevisionIds: [], skillRevisionIds: [], memoryFacts: [], memoryQueryPolicy: {}, integrationAssignments: [], modelRoute: {}, budgetPolicy: {}, identitySnapshot: options.managed ? { kind: "service", executionSubjectId: "agent-service:svc-1", agentServiceId: "svc-1", effectiveScopeAttachmentDigest: `sha256:${"a".repeat(64)}`, organizationId: "org-1", fleetMembershipRevision: 3 } : { kind: "user", executionSubjectId: "user-1", organizationId: "org-1", fleetMembershipRevision: 3 }, capabilitySetDigest: "sha256:cap", effectiveContractDigest: "sha256:contract", promptCompilerVersion: "v1", digest: "sha256:snap", compiledAt: new Date("2026-07-20T00:00:00.000Z") };
+	const snapshot = { runId: "run-1", siloId: "silo-1", agentServiceId: "svc-1", agentRevisionId: "rev-1", snapshotVersion: 1, conversationId: null, messageIds: [], personaRevisionId: null, preferenceFactIds: [], artifactRevisionIds: [], skillRevisionIds: [], memoryQueryPolicy: {}, integrationAssignments: [], modelRoute: {}, budgetPolicy: {}, identitySnapshot: options.managed ? { kind: "service", executionSubjectId: "agent-service:svc-1", agentServiceId: "svc-1", effectiveScopeAttachmentDigest: `sha256:${"a".repeat(64)}`, organizationId: "org-1", fleetMembershipRevision: 3 } : { kind: "user", executionSubjectId: "user-1", organizationId: "org-1", fleetMembershipRevision: 3 }, capabilitySetDigest: "sha256:cap", effectiveContractDigest: "sha256:contract", promptCompilerVersion: "v1", digest: "sha256:snap", compiledAt: new Date("2026-07-20T00:00:00.000Z") };
 	const queryRaw = vi.fn().mockResolvedValue([]);
 
 	/** Return whether a stream row matches the fields given in a where clause. */
@@ -224,11 +227,11 @@ function _fakePrisma(options: FakeOptions)
 	return { prisma: client as unknown as PrismaClient, queryRaw, run, streams, commands, resultDeliveries, elicitationResultDeliveries, steeringRequests, toolInvocations };
 }
 
-/** Deterministic fake compiler: same snapshot digest always yields byte-identical compiled input. */
-const _compileRunInput: RunInputCompiler = async function _compile(snapshot): Promise<CompiledRunInput>
+/** Deterministic fake compiler: the same snapshot and live attempt yield byte-identical input. */
+const _compileRunInput: RunInputCompiler = async function _compile(snapshot, attempt): Promise<CompiledRunInput>
 {
 	const parametersSchema = { type: "object", properties: { q: { type: "string" } }, required: ["q"], additionalProperties: false } as const;
-	return { promptCompilerVersion: "v1", runId: snapshot.runId, attempt: 1, instructions: "compiled", messages: [], tools: [{ name: "integration:search:query", toolRevisionId: "integration:search:query", description: "search", requiresApproval: true, parametersSchema, parametersSchemaDigest: ___DigestCanonicalJson(parametersSchema) }], model: { modelAlias: "silo-default", maxOutputTokens: null, generatedOutputCapabilities: [] }, budget: { maxTotalTokens: null, maxCostUsdMicros: null, maxToolInvocations: null, wallClockDeadlineEpochMs: null }, digest: `sha256:${snapshot.digest}` };
+	return { promptCompilerVersion: "v1", runId: snapshot.runId, attempt, instructions: "compiled", messages: [], tools: [{ name: "integration:search:query", toolRevisionId: "integration:search:query", description: "search", requiresApproval: true, parametersSchema, parametersSchemaDigest: ___DigestCanonicalJson(parametersSchema) }], model: { modelAlias: "silo-default", maxOutputTokens: null, generatedOutputCapabilities: [] }, budget: { maxTotalTokens: null, maxCostUsdMicros: null, maxToolInvocations: null, wallClockDeadlineEpochMs: null }, digest: `sha256:${snapshot.digest}` };
 };
 
 /** Build the adapter under test over a fake with the requested durable state. */
@@ -236,13 +239,13 @@ function _authority(options: FakeOptions)
 {
 	const fake = _fakePrisma(options);
 	const eventReporter = options.eventReporter ?? { reportInTransaction: vi.fn().mockResolvedValue({ outcome: "reported" as const }) };
-	return { authority: new PrismaRuntimeDispatchAuthority(fake.prisma, { personalRuntimeNamespace: "runtime-ns", managedRuntimeNamespace: "managed-runtime-ns", commandTtlMilliseconds: 60_000 }, _compileRunInput, eventReporter, options.clock ?? _clock, options.approvalExpiry), ...fake };
+	return { authority: new PrismaRuntimeDispatchAuthority(fake.prisma, { personalRuntimeNamespace: "runtime-ns", managedRuntimeNamespace: "managed-runtime-ns", commandTtlMilliseconds: 60_000 }, options.compileRunInput ?? _compileRunInput, eventReporter, options.clock ?? _clock, options.approvalExpiry), ...fake };
 }
 
 /** Build a runtime event candidate bound to a dispatched command. */
 function _candidate(commandId: string): RuntimeCandidate
 {
-	return { protocolVersion: AGENT_RUNTIME_PROTOCOL_V1, runtimeInstanceId: "instance-1", commandId, candidateId: "candidate-1", runId: "run-1", attempt: 1, fence: 1, kind: "event", eventType: "run.attempt_acknowledged", payload: {} };
+	return { protocolVersion: AGENT_RUNTIME_PROTOCOL_V1, runtimeInstanceId: "instance-1", commandId, candidateId: "candidate-1", runId: "run-1", attempt: 1, fence: 1, kind: RuntimeCandidateKinds.Event, eventType: "run.attempt_acknowledged", payload: {} };
 }
 
 describe("PrismaRuntimeDispatchAuthority", function _describeDispatchAuthority()
@@ -258,6 +261,19 @@ describe("PrismaRuntimeDispatchAuthority", function _describeDispatchAuthority()
 		expect(context.commands).toHaveLength(1);
 		expect(context.streams[0]?.nextCommandSequence).toBe(2);
 		expect(command?.kind === "start_attempt" ? command.payload.compiledInput.digest : null).toBe("sha256:sha256:snap");
+	});
+
+	it("rejects a compiled input that disagrees with the live dispatch attempt", async function _RejectsCompiledAttemptDrift()
+	{
+		const driftingCompiler: RunInputCompiler = async function _Compile(snapshot, attempt, transaction): Promise<CompiledRunInput>
+		{
+			const compiled = await _compileRunInput(snapshot, attempt, transaction);
+			return { ...compiled, attempt: attempt + 1 };
+		};
+		const context = _authority({ runState: "Running", compileRunInput: driftingCompiler });
+
+		await expect(context.authority.__NextCommand(_identity, _open, 0)).rejects.toThrow(/does not match its live dispatch context/);
+		expect(context.commands).toHaveLength(0);
 	});
 
 	it("mints a managed-runtime frame only from tagged service identity evidence", async function _mintsManagedStart()
@@ -510,7 +526,7 @@ describe("PrismaRuntimeDispatchAuthority", function _describeDispatchAuthority()
 		const context = _authority({ runState: "Running" });
 		const start = await context.authority.__NextCommand(_identity, _open, 0);
 		const argumentsValue = { q: "a" };
-		const candidate: RuntimeCandidate = { protocolVersion: AGENT_RUNTIME_PROTOCOL_V1, runtimeInstanceId: "instance-1", commandId: start?.commandId ?? "command-1", candidateId: "candidate-ext", runId: "run-1", attempt: 1, fence: 1, kind: "external_action", toolRevisionId: "integration:search:query", toolInvocationId: "invocation-1", argumentsDigest: ___DigestCanonicalJson(argumentsValue), arguments: argumentsValue };
+		const candidate: RuntimeCandidate = { protocolVersion: AGENT_RUNTIME_PROTOCOL_V1, runtimeInstanceId: "instance-1", commandId: start?.commandId ?? "command-1", candidateId: "candidate-ext", runId: "run-1", attempt: 1, fence: 1, kind: RuntimeCandidateKinds.ExternalAction, toolRevisionId: "integration:search:query", toolInvocationId: "invocation-1", argumentsDigest: ___DigestCanonicalJson(argumentsValue), arguments: argumentsValue };
 
 		await expect(context.authority.__AdmitCandidate(_identity, candidate)).resolves.toEqual({ accepted: true });
 		await expect(context.authority.__AdmitCandidate(_identity, candidate)).resolves.toEqual({ accepted: true });
@@ -519,12 +535,28 @@ describe("PrismaRuntimeDispatchAuthority", function _describeDispatchAuthority()
 		expect(context.streams[0]?.acceptedCandidateIds).toEqual(["candidate-ext"]);
 	});
 
+	it("forces personal-memory recall through approval even when its descriptor says otherwise", async function _forcesMemoryApproval()
+	{
+		const compileRunInput: RunInputCompiler = async function _compile(snapshot, attempt): Promise<CompiledRunInput>
+		{
+			const parametersSchema = { type: "object", properties: { query: { type: "string" } }, required: ["query"], additionalProperties: false } as const;
+			return { promptCompilerVersion: "v1", runId: snapshot.runId, attempt, instructions: "compiled", messages: [], tools: [{ name: PERSONAL_MEMORY_RECALL_TOOL_NAME, toolRevisionId: PERSONAL_MEMORY_RECALL_TOOL_REVISION, description: "recall", requiresApproval: false, parametersSchema, parametersSchemaDigest: ___DigestCanonicalJson(parametersSchema) }], model: { modelAlias: "silo-default", maxOutputTokens: null }, budget: { maxTotalTokens: null, maxCostUsdMicros: null, maxToolInvocations: null, wallClockDeadlineEpochMs: null }, digest: `sha256:${snapshot.digest}` };
+		};
+		const context = _authority({ runState: "Running", compileRunInput });
+		const start = await context.authority.__NextCommand(_identity, _open, 0);
+		const argumentsValue = { query: "remember this" };
+		const candidate: RuntimeCandidate = { protocolVersion: AGENT_RUNTIME_PROTOCOL_V1, runtimeInstanceId: "instance-1", commandId: start?.commandId ?? "command-1", candidateId: "candidate-memory", runId: "run-1", attempt: 1, fence: 1, kind: RuntimeCandidateKinds.ExternalAction, toolRevisionId: PERSONAL_MEMORY_RECALL_TOOL_REVISION, toolInvocationId: "memory-1", argumentsDigest: ___DigestCanonicalJson(argumentsValue), arguments: argumentsValue };
+
+		await expect(context.authority.__AdmitCandidate(_identity, candidate)).resolves.toEqual({ accepted: true });
+		expect(context.toolInvocations[0]).toMatchObject({ approvalRequired: true, toolRevisionId: PERSONAL_MEMORY_RECALL_TOOL_REVISION });
+	});
+
 	it("rejects an external-action replay whose arguments changed behind the accepted digest", async function _rejectsMutatedActionReplay()
 	{
 		const context = _authority({ runState: "Running" });
 		const start = await context.authority.__NextCommand(_identity, _open, 0);
 		const argumentsValue = { q: "accepted" };
-		const candidate: RuntimeCandidate = { protocolVersion: AGENT_RUNTIME_PROTOCOL_V1, runtimeInstanceId: "instance-1", commandId: start?.commandId ?? "command-1", candidateId: "candidate-ext", runId: "run-1", attempt: 1, fence: 1, kind: "external_action", toolRevisionId: "integration:search:query", toolInvocationId: "invocation-1", argumentsDigest: ___DigestCanonicalJson(argumentsValue), arguments: argumentsValue };
+		const candidate: RuntimeCandidate = { protocolVersion: AGENT_RUNTIME_PROTOCOL_V1, runtimeInstanceId: "instance-1", commandId: start?.commandId ?? "command-1", candidateId: "candidate-ext", runId: "run-1", attempt: 1, fence: 1, kind: RuntimeCandidateKinds.ExternalAction, toolRevisionId: "integration:search:query", toolInvocationId: "invocation-1", argumentsDigest: ___DigestCanonicalJson(argumentsValue), arguments: argumentsValue };
 
 		await expect(context.authority.__AdmitCandidate(_identity, candidate)).resolves.toEqual({ accepted: true });
 		await expect(context.authority.__AdmitCandidate(_identity, { ...candidate, arguments: { q: "changed" } })).resolves.toEqual({ accepted: false, reason: "external_action_replay_conflict" });
@@ -536,10 +568,33 @@ describe("PrismaRuntimeDispatchAuthority", function _describeDispatchAuthority()
 		const reporter = { reportInTransaction: vi.fn().mockResolvedValue({ outcome: "reported" }) };
 		const context = _authority({ runState: "Running", eventReporter: reporter });
 		const start = await context.authority.__NextCommand(_identity, _open, 0);
-		const candidate: RuntimeCandidate = { protocolVersion: AGENT_RUNTIME_PROTOCOL_V1, runtimeInstanceId: "instance-1", commandId: start?.commandId ?? "command-1", candidateId: "candidate-complete", runId: "run-1", attempt: 1, fence: 1, kind: "event", eventType: "run.completed", payload: { ignored: "runtime payload never becomes durable terminal evidence" } };
+		const candidate: RuntimeCandidate = { protocolVersion: AGENT_RUNTIME_PROTOCOL_V1, runtimeInstanceId: "instance-1", commandId: start?.commandId ?? "command-1", candidateId: "candidate-complete", runId: "run-1", attempt: 1, fence: 1, kind: RuntimeCandidateKinds.Event, eventType: "run.completed", payload: { ignored: "runtime payload never becomes durable terminal evidence" } };
 
 		await expect(context.authority.__AdmitCandidate(_identity, candidate)).resolves.toEqual({ accepted: true });
-		expect(reporter.reportInTransaction).toHaveBeenCalledWith(expect.anything(), { runId: "run-1", attempt: 1, eventType: "run.completed", payload: { ignored: "runtime payload never becomes durable terminal evidence" } });
+		expect(reporter.reportInTransaction).toHaveBeenCalledWith(expect.anything(), { runId: "run-1", attempt: 1, sourceIsStartAttempt: true, eventType: "run.completed", payload: { ignored: "runtime payload never becomes durable terminal evidence" } });
+	});
+
+	it("binds a pre-start coordinate failure to the exact accepted start command", async function _BindsStartMismatchFailure()
+	{
+		const reporter = { reportInTransaction: vi.fn().mockResolvedValue({ outcome: "reported" }) };
+		const context = _authority({ runState: "Assigned", eventReporter: reporter });
+		const start = await context.authority.__NextCommand(_identity, _open, 0);
+		const candidate: RuntimeCandidate = { protocolVersion: AGENT_RUNTIME_PROTOCOL_V1, runtimeInstanceId: "instance-1", commandId: start?.commandId ?? "command-1", candidateId: "candidate-start-mismatch", runId: "run-1", attempt: 1, fence: 1, kind: RuntimeCandidateKinds.Event, eventType: "run.failed", payload: { reason: "compiled_input_coordinate_mismatch" } };
+
+		await expect(context.authority.__AdmitCandidate(_identity, candidate)).resolves.toEqual({ accepted: true });
+		expect(reporter.reportInTransaction).toHaveBeenCalledWith(expect.anything(), { runId: "run-1", attempt: 1, sourceIsStartAttempt: true, eventType: "run.failed", payload: { reason: "compiled_input_coordinate_mismatch" } });
+	});
+
+	it("binds a running coordinate failure to the exact accepted resume command", async function _BindsResumeMismatchFailure()
+	{
+		const reporter = { reportInTransaction: vi.fn().mockResolvedValue({ outcome: "reported" }) };
+		const context = _authority({ runState: "Running", savedToolResults: [{ ok: true }], eventReporter: reporter });
+		await context.authority.__NextCommand(_identity, _open, 0);
+		const resume = await context.authority.__NextCommand(_identity, _open, 1);
+		const candidate: RuntimeCandidate = { protocolVersion: AGENT_RUNTIME_PROTOCOL_V1, runtimeInstanceId: "instance-1", commandId: resume?.commandId ?? "command-2", candidateId: "candidate-resume-mismatch", runId: "run-1", attempt: 1, fence: 1, kind: RuntimeCandidateKinds.Event, eventType: "run.failed", payload: { reason: "compiled_input_coordinate_mismatch" } };
+
+		await expect(context.authority.__AdmitCandidate(_identity, candidate)).resolves.toEqual({ accepted: true });
+		expect(reporter.reportInTransaction).toHaveBeenCalledWith(expect.anything(), { runId: "run-1", attempt: 1, sourceIsStartAttempt: false, eventType: "run.failed", payload: { reason: "compiled_input_coordinate_mismatch" } });
 	});
 
 	it("persists each canonical event before accepting its candidate id", async function _persistsBeforeCandidateAcceptance()
@@ -552,7 +607,7 @@ describe("PrismaRuntimeDispatchAuthority", function _describeDispatchAuthority()
 		} };
 		context = _authority({ runState: "Running", eventReporter: reporter });
 		const start = await context.authority.__NextCommand(_identity, _open, 0);
-		const candidate: RuntimeCandidate = { protocolVersion: AGENT_RUNTIME_PROTOCOL_V1, runtimeInstanceId: "instance-1", commandId: start?.commandId ?? "command-1", candidateId: "candidate-delta", runId: "run-1", attempt: 1, fence: 1, kind: "event", eventType: "message.delta", payload: { messageId: "message-1", delta: "Hello" } };
+		const candidate: RuntimeCandidate = { protocolVersion: AGENT_RUNTIME_PROTOCOL_V1, runtimeInstanceId: "instance-1", commandId: start?.commandId ?? "command-1", candidateId: "candidate-delta", runId: "run-1", attempt: 1, fence: 1, kind: RuntimeCandidateKinds.Event, eventType: "message.delta", payload: { messageId: "message-1", delta: "Hello" } };
 
 		await expect(context.authority.__AdmitCandidate(_identity, candidate)).resolves.toEqual({ accepted: true });
 		expect(context.streams[0]?.acceptedCandidateIds).toEqual(["candidate-delta"]);
@@ -563,7 +618,7 @@ describe("PrismaRuntimeDispatchAuthority", function _describeDispatchAuthority()
 		const reporter: RuntimeEventReporter = { reportInTransaction: vi.fn().mockResolvedValue({ outcome: "denied", reason: "invalid_event_type" }) };
 		const context = _authority({ runState: "Running", eventReporter: reporter });
 		const start = await context.authority.__NextCommand(_identity, _open, 0);
-		const candidate: RuntimeCandidate = { protocolVersion: AGENT_RUNTIME_PROTOCOL_V1, runtimeInstanceId: "instance-1", commandId: start?.commandId ?? "command-1", candidateId: "candidate-unknown", runId: "run-1", attempt: 1, fence: 1, kind: "event", eventType: "framework.internal", payload: {} };
+		const candidate: RuntimeCandidate = { protocolVersion: AGENT_RUNTIME_PROTOCOL_V1, runtimeInstanceId: "instance-1", commandId: start?.commandId ?? "command-1", candidateId: "candidate-unknown", runId: "run-1", attempt: 1, fence: 1, kind: RuntimeCandidateKinds.Event, eventType: "framework.internal", payload: {} };
 
 		await expect(context.authority.__AdmitCandidate(_identity, candidate)).resolves.toEqual({ accepted: false, reason: "invalid_event_type" });
 		expect(context.streams[0]?.acceptedCandidateIds).toEqual([]);
@@ -573,7 +628,7 @@ describe("PrismaRuntimeDispatchAuthority", function _describeDispatchAuthority()
 	{
 		const context = _authority({ runState: "Running", eventReporter: { reportInTransaction: vi.fn() } });
 		const start = await context.authority.__NextCommand(_identity, _open, 0);
-		const candidate: RuntimeCandidate = { protocolVersion: AGENT_RUNTIME_PROTOCOL_V1, runtimeInstanceId: "instance-1", commandId: start?.commandId ?? "command-1", candidateId: "candidate-cancel", runId: "run-1", attempt: 1, fence: 1, kind: "event", eventType: "run.cancelled", payload: {} };
+		const candidate: RuntimeCandidate = { protocolVersion: AGENT_RUNTIME_PROTOCOL_V1, runtimeInstanceId: "instance-1", commandId: start?.commandId ?? "command-1", candidateId: "candidate-cancel", runId: "run-1", attempt: 1, fence: 1, kind: RuntimeCandidateKinds.Event, eventType: "run.cancelled", payload: {} };
 
 		await expect(context.authority.__AdmitCandidate(_identity, candidate)).resolves.toEqual({ accepted: false, reason: "runtime_cancellation_not_authoritative" });
 	});

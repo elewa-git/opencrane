@@ -6,7 +6,7 @@ import { ___CloneCanonicalJson, type JsonValue } from "@opencrane/util";
 import { __DigestCanonicalJson } from "./canonical-json-digest.js";
 import { __PlanDeferredToolApprovalLifecycle } from "./deferred-tool-approval-lifecycle.js";
 import { __IsDeferredToolApprovalReplacementAllowed, __ProjectDeferredToolApproval, __ValidateDeferredToolArguments } from "./deferred-tool-approval-schema.js";
-import { DeferredToolDecisionKinds, type DecideDeferredToolRequestCommand, type DecideDeferredToolRequestResult, type ExpireDeferredToolApprovalBatchCommand, type ExpireDeferredToolApprovalBatchResult } from "./deferred-tool-approval-decision.types.js";
+import { DeferredToolDecisionKinds, DeferredToolDecisionOutcomes, type DecideDeferredToolRequestCommand, type DecideDeferredToolRequestResult, type ExpireDeferredToolApprovalBatchCommand, type ExpireDeferredToolApprovalBatchResult } from "./deferred-tool-approval-decision.types.js";
 import { DeferredToolApprovalLifecycleActions, DeferredToolApprovalLifecycleEvents, DeferredToolApprovalRunStates } from "./deferred-tool-approval-lifecycle.types.js";
 import type { DeferToolRequestCommand, DeferToolRequestResult } from "./deferred-tool-approval-open.types.js";
 import { ToolInvocationStates } from "./tool-invocation-lifecycle.types.js";
@@ -180,39 +180,39 @@ export async function __DecideDeferredToolRequest(transaction: Prisma.Transactio
 {
 	// 1. Reload owner, membership, waiting run, approval, and invocation inside one serializable unit.
 	const approval = await transaction.approvalRequest.findUnique({ where: { id: command.approvalRequestId } });
-	if (approval === null || approval.siloId !== command.siloId || approval.subjectId !== command.subjectId || approval.toolInvocationRowId === null) return { outcome: "conflict" };
+	if (approval === null || approval.siloId !== command.siloId || approval.subjectId !== command.subjectId || approval.toolInvocationRowId === null) return { outcome: DeferredToolDecisionOutcomes.Conflict };
 	const membership = await transaction.orgMembership.findFirst({ where: { clusterTenant: command.siloId, subject: command.subjectId, status: OrgMemberStatus.Active } });
 	const run = await transaction.agentRun.findUnique({ where: { id: approval.runId } });
 	const invocation = await __FindToolInvocationInTransaction(transaction, approval.toolInvocationRowId);
-	if (membership === null || run === null || run.attempt !== approval.attempt || run.state !== AgentRunState.WaitingForInput || invocation === null || invocation.runId !== approval.runId || invocation.attempt !== approval.attempt || invocation.toolRevisionId !== approval.resourceId || invocation.argumentsDigest !== approval.argumentsDigest) return { outcome: "conflict" };
-	if (approval.reviewedToolArguments === null || approval.reviewedToolSchema === null || approval.reviewedToolSchemaDigest === null || approval.responseSchema === null) return { outcome: "conflict" };
+	if (membership === null || run === null || run.attempt !== approval.attempt || run.state !== AgentRunState.WaitingForInput || invocation === null || invocation.runId !== approval.runId || invocation.attempt !== approval.attempt || invocation.toolRevisionId !== approval.resourceId || invocation.argumentsDigest !== approval.argumentsDigest) return { outcome: DeferredToolDecisionOutcomes.Conflict };
+	if (approval.reviewedToolArguments === null || approval.reviewedToolSchema === null || approval.reviewedToolSchemaDigest === null || approval.responseSchema === null) return { outcome: DeferredToolDecisionOutcomes.Conflict };
 	const reviewedSchema = approval.reviewedToolSchema as JsonValue;
 	const reviewedArguments = approval.reviewedToolArguments as JsonValue;
-	if (__DigestCanonicalJson(reviewedSchema) !== approval.reviewedToolSchemaDigest || !__ValidateDeferredToolArguments(reviewedSchema, reviewedArguments)) return { outcome: "conflict" };
+	if (__DigestCanonicalJson(reviewedSchema) !== approval.reviewedToolSchemaDigest || !__ValidateDeferredToolArguments(reviewedSchema, reviewedArguments)) return { outcome: DeferredToolDecisionOutcomes.Conflict };
 	const projection = __ProjectDeferredToolApproval(reviewedSchema, reviewedArguments);
-	if (__DigestCanonicalJson(approval.safeProposedArguments as JsonValue) !== __DigestCanonicalJson(projection.proposedArguments) || __DigestCanonicalJson(approval.responseSchema as JsonValue) !== __DigestCanonicalJson(projection.responseSchema)) return { outcome: "conflict" };
+	if (__DigestCanonicalJson(approval.safeProposedArguments as JsonValue) !== __DigestCanonicalJson(projection.proposedArguments) || __DigestCanonicalJson(approval.responseSchema as JsonValue) !== __DigestCanonicalJson(projection.responseSchema)) return { outcome: DeferredToolDecisionOutcomes.Conflict };
 	const replacementAllowed = __IsDeferredToolApprovalReplacementAllowed(reviewedSchema);
 
 	// 2. A previously decided request replays idempotently or conflicts on a differing outcome.
 	const priorDecision = _decisionOf(approval.state);
 	if (priorDecision !== null)
 	{
-		if (priorDecision !== command.decision) return { outcome: "conflict" };
-		if (priorDecision === DeferredToolDecisionKinds.Denied) return command.arguments === undefined ? { outcome: "already_decided", decision: priorDecision } : { outcome: "conflict" };
-		if (command.arguments === undefined) return { outcome: "conflict" };
+		if (priorDecision !== command.decision) return { outcome: DeferredToolDecisionOutcomes.Conflict };
+		if (priorDecision === DeferredToolDecisionKinds.Denied) return command.arguments === undefined ? { outcome: DeferredToolDecisionOutcomes.AlreadyDecided, decision: priorDecision } : { outcome: DeferredToolDecisionOutcomes.Conflict };
+		if (command.arguments === undefined) return { outcome: DeferredToolDecisionOutcomes.Conflict };
 		const digest = __DigestCanonicalJson(___CloneCanonicalJson(command.arguments));
-		return digest === approval.finalArgumentsDigest ? { outcome: "already_decided", decision: priorDecision, argumentsDigest: digest } : { outcome: "conflict" };
+		return digest === approval.finalArgumentsDigest ? { outcome: DeferredToolDecisionOutcomes.AlreadyDecided, decision: priorDecision, argumentsDigest: digest } : { outcome: DeferredToolDecisionOutcomes.Conflict };
 	}
-	if (approval.state !== ApprovalRequestState.Pending) return { outcome: "conflict" };
+	if (approval.state !== ApprovalRequestState.Pending) return { outcome: DeferredToolDecisionOutcomes.Conflict };
 	if (approval.expiresAt.getTime() <= command.now.getTime())
 	{
-		return await _ExpireDeferredToolApproval(transaction, approval, command.now) ? { outcome: "expired" } : { outcome: "conflict" };
+		return await _ExpireDeferredToolApproval(transaction, approval, command.now) ? { outcome: DeferredToolDecisionOutcomes.Expired } : { outcome: DeferredToolDecisionOutcomes.Conflict };
 	}
 
 	// 3. Denial writes the result delivery, then terminalises the waiting action with the real reason.
 	if (command.decision === DeferredToolDecisionKinds.Denied)
 	{
-		if (command.arguments !== undefined) return { outcome: "invalid_arguments" };
+		if (command.arguments !== undefined) return { outcome: DeferredToolDecisionOutcomes.InvalidArguments };
 		const denied = await transaction.approvalRequest.updateMany({
 			where: { id: command.approvalRequestId, state: ApprovalRequestState.Pending, expiresAt: { gt: command.now } },
 			data: { state: ApprovalRequestState.Denied, decidedAt: command.now, decidedBy: command.decidedBy },
@@ -220,12 +220,12 @@ export async function __DecideDeferredToolRequest(transaction: Prisma.Transactio
 		if (denied.count !== 1) return _conflictOrExpire(transaction, command);
 		if (!await __MarkToolInvocationApprovalRejectedInTransaction(transaction, invocation.id, command.now, "approval_denied")) throw new Error("deferred approval lost its awaiting invocation fence");
 		if (approval.elicitationRequestId === null) await _FinishDeferredToolApprovalBatch(transaction, approval.runId, approval.attempt, DeferredToolApprovalLifecycleEvents.Decision);
-		return { outcome: "denied" };
+		return { outcome: DeferredToolDecisionOutcomes.Denied };
 	}
 
 	// 4. Validate the frozen schema and proposed arguments before an actor replacement becomes effective.
-	if (invocation.state !== ToolInvocationStates.AwaitingApproval) return { outcome: "conflict" };
-	if (!replacementAllowed || command.arguments === undefined || command.arguments === null || typeof command.arguments !== "object" || Array.isArray(command.arguments) || !__ValidateDeferredToolArguments(reviewedSchema, command.arguments)) return { outcome: "invalid_arguments" };
+	if (invocation.state !== ToolInvocationStates.AwaitingApproval) return { outcome: DeferredToolDecisionOutcomes.Conflict };
+	if (!replacementAllowed || command.arguments === undefined || command.arguments === null || typeof command.arguments !== "object" || Array.isArray(command.arguments) || !__ValidateDeferredToolArguments(reviewedSchema, command.arguments)) return { outcome: DeferredToolDecisionOutcomes.InvalidArguments };
 	const finalArguments = ___CloneCanonicalJson(command.arguments);
 	const finalArgumentsDigest = __DigestCanonicalJson(finalArguments);
 
@@ -243,14 +243,14 @@ export async function __DecideDeferredToolRequest(transaction: Prisma.Transactio
 	if (approved.count !== 1) return _conflictOrExpire(transaction, command);
 	if (!await __MarkToolInvocationApprovedInTransaction(transaction, invocation.id, approval.reviewedToolArguments as JsonValue, approval.argumentsDigest, finalArguments, finalArgumentsDigest)) throw new Error("deferred approval lost its awaiting invocation fence");
 	if (approval.elicitationRequestId === null) await _FinishDeferredToolApprovalBatch(transaction, approval.runId, approval.attempt, DeferredToolApprovalLifecycleEvents.Decision);
-	return { outcome: "approved", argumentsDigest: finalArgumentsDigest };
+	return { outcome: DeferredToolDecisionOutcomes.Approved, argumentsDigest: finalArgumentsDigest };
 }
 /** After the decision update matched no row: expire the request if its deadline has passed, otherwise report a conflict. */
 async function _conflictOrExpire(transaction: Prisma.TransactionClient, command: DecideDeferredToolRequestCommand): Promise<DecideDeferredToolRequestResult>
 {
 	const approval = await transaction.approvalRequest.findUnique({ where: { id: command.approvalRequestId } });
-	if (approval === null || approval.siloId !== command.siloId || approval.subjectId !== command.subjectId || approval.state !== ApprovalRequestState.Pending || approval.expiresAt.getTime() > command.now.getTime()) return { outcome: "conflict" };
-	return await _ExpireDeferredToolApproval(transaction, approval, command.now) ? { outcome: "expired" } : { outcome: "conflict" };
+	if (approval === null || approval.siloId !== command.siloId || approval.subjectId !== command.subjectId || approval.state !== ApprovalRequestState.Pending || approval.expiresAt.getTime() > command.now.getTime()) return { outcome: DeferredToolDecisionOutcomes.Conflict };
+	return await _ExpireDeferredToolApproval(transaction, approval, command.now) ? { outcome: DeferredToolDecisionOutcomes.Expired } : { outcome: DeferredToolDecisionOutcomes.Conflict };
 }
 
 /** Expires every approval past its deadline for this attempt, and resumes the run once none are left pending. */

@@ -4,7 +4,7 @@ import type { AddressInfo } from "node:net";
 import request from "supertest";
 import { describe, expect, it, vi } from "vitest";
 
-import { AGENT_RUNTIME_PROTOCOL_V1, type RuntimeCandidate, type RuntimeCommandEnvelope } from "@opencrane/contracts";
+import { AGENT_RUNTIME_PROTOCOL_V1, RuntimeCandidateKinds, type RuntimeCandidate, type RuntimeCommandEnvelope } from "@opencrane/contracts";
 
 import { _RegisterInternalAgentRuntimeStream } from "../agent-runtime-stream.js";
 import { RuntimeCommandWakeup } from "../runtime-command-wakeup.js";
@@ -44,7 +44,7 @@ const _candidate: RuntimeCandidate = {
 	runId: "run-1" as RuntimeCandidate["runId"],
 	attempt: 0,
 	fence: 1,
-	kind: "event",
+	kind: RuntimeCandidateKinds.Event,
 	eventType: "run.started",
 	payload: {},
 };
@@ -52,7 +52,7 @@ const _candidate: RuntimeCandidate = {
 /** Valid external action that may make a deferred resume command due after durable execution. */
 const _externalActionCandidate: RuntimeCandidate = {
 	..._candidate,
-	kind: "external_action",
+	kind: RuntimeCandidateKinds.ExternalAction,
 	toolRevisionId: "integration:search:query",
 	toolInvocationId: "invocation-1",
 	argumentsDigest: "sha256:arguments",

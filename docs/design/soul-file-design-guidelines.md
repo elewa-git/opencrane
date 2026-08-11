@@ -24,21 +24,20 @@ Four concerns. Never collapse their authority or lifecycle boundaries.
 | **SOUL.md** | Reviewed personality, voice, and style source | Compiled into an immutable approved `PersonaRevision` | <500 tokens | Rare — governed refresh cycle |
 | **AGENT.md** | Shared authoring and evaluation guidance | Not currently compiled or loaded at runtime; never grants authority | n/a | Governed product/configuration change |
 | **bootstrap.md** | First-session interview source | Produces evidence and candidate proposals only | <800 tokens | Versioned product change |
-| **Memory** | Explicitly confirmed contextual preferences | Target: only catalog-matched, consented fact references are frozen into a new run snapshot | ~100–500/turn | User-reviewed proposal; production writes and safe injection currently blocked |
+| **Memory** | Explicitly confirmed contextual preferences | Admission freezes verified dataset coordinates; the model queries only through approval-required `memory_recall` | ~100–500/turn | User-reviewed proposal; transient content delivery awaits #601 |
 
-The implementation must measure the compiled recurring instruction payload and admitted memory
-content separately. The limits above are design budgets, not empirically established optima, and
-source-file token counts are not proof of the runtime payload.
+The implementation must measure the compiled recurring instruction payload separately from any
+future transient memory delivery. The limits above are design budgets, not empirically established
+optima, and source-file token counts are not proof of the runtime payload.
 
 ### 1.1 Why the split matters
 
 Compiled persona instructions are a token budget. Every approved token costs whenever that exact
-revision is selected for a new run. Memory must be selectively retrieved, and only facts intersected
-with the verified user's active, consented catalog entries may be frozen into that run's immutable
-`RunInputSnapshot`. The current recall/compiler path does not yet prove that intersection, so
-persona-memory injection remains a blocked target rather than a shipped guarantee. Operational
-rules remain separate from personality, and neither layer can create grants or alter approval
-boundaries.
+revision is selected for a new run. Admission freezes only the verified user's dataset coordinates;
+it does not select facts or store a recall query. The model can request recall only through the
+approval-required `memory_recall` tool, while safe transient content delivery remains blocked until
+#601. Operational rules remain separate from personality, and neither layer can create grants or
+alter approval boundaries.
 
 ### 1.2 What belongs where
 
@@ -361,11 +360,10 @@ admitted run.
 4. **Preserve user control.** Confirmed facts must be visible, individually correctable and
    forgettable, and labelled with their source and scope once those production paths exist.
 5. **Represent the current gap exactly.** Production record, correct, and forget operations and
-   their public API/UI surfaces remain blocked and fail closed. Gateway recall and prompt injection
-   exist today, but admission does not yet intersect each recalled fact with an active, consented
-   catalog record. Treat **catalog-safe persona-memory injection** as blocked and unqualified live;
-   never imply that the agent can write memory directly or that current injected facts have proven
-   consent/catalog linkage.
+   their public API/UI surfaces remain blocked and fail closed. Admission freezes verified dataset
+   coordinates, and personal recall requires approval for the exact invocation and query. Content
+   delivery still stops safely until #601; never imply that recalled facts are injected today or
+   that the agent can write memory directly.
 6. **Keep authority separate.** Persona text, prompts, memory, and initiative settings never grant
    permission to act. Consequential actions still require current grants and the exact proof-bound
    approval checkpoint.
@@ -402,9 +400,9 @@ Mitigations:
 
 - Evaluate epistemic independence separately from affective alignment.
 - Test irrelevance, repetition, and sycophancy using an over-personalisation rubric.
-- Target catalog-safe admission must select only consented facts whose exact matched references are
-  frozen at admission, then surface content only when the current turn warrants it. The current
-  recall/compiler path does not yet satisfy this requirement.
+- Admission must freeze only verified dataset coordinates. Query selection belongs to the
+  approval-required `memory_recall` tool, and #601 must deliver any recalled content transiently
+  without adding it to the immutable snapshot.
 - Keep honesty, access limits, and approval rules outside the stylistic personality layer.
 
 ## 8. Gender and demographic considerations

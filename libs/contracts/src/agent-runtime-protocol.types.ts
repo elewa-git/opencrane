@@ -148,7 +148,18 @@ export interface CancelAttemptCommand
 	readonly reason: "cancelled" | "deadline_exceeded" | "budget_exhausted" | "capability_revoked";
 }
 
-/** Every command the control plane can send one runtime instance. A runtime must reject any other `type`. */
+/** Stable command discriminants serialized on the runtime protocol. */
+export enum RuntimeCommandKinds
+{
+	/** Starts one attempt from immutable input. */
+	StartAttempt = "start_attempt",
+	/** Resumes an attempt with server-owned results. */
+	ResumeAttempt = "resume_attempt",
+	/** Stops an attempt for a server-owned reason. */
+	CancelAttempt = "cancel_attempt",
+}
+
+/** Versioned command union issued by the control plane to one runtime instance. */
 export type RuntimeCommand =
 	| { readonly kind: "start_attempt"; readonly payload: StartAttemptCommand }
 	| { readonly kind: "resume_attempt"; readonly payload: ResumeAttemptCommand }
@@ -176,11 +187,22 @@ export interface RuntimeCandidateCoordinates
 	readonly fence: number;
 }
 
-/** An event the runtime proposes. The control plane decides whether to store it; the runtime never writes directly. */
+/** Stable runtime-candidate discriminants serialized on the workload protocol. */
+export enum RuntimeCandidateKinds
+{
+	/** Proposes one canonical run event for server admission. */
+	Event = "event",
+	/** Proposes one governed external action. */
+	ExternalAction = "external_action",
+	/** Proposes one participant input request. */
+	Elicitation = "elicitation",
+}
+
+/** Runtime-proposed canonical event, never a direct durable write. */
 export interface RuntimeEventCandidate extends RuntimeCandidateCoordinates
 {
-	/** Tag marking this candidate as an event the control plane must approve. */
-	readonly kind: "event";
+	/** Candidate category that requires control-plane event admission. */
+	readonly kind: RuntimeCandidateKinds.Event;
 	/** Proposed canonical event type. */
 	readonly eventType: string;
 	/** Validated, bounded event body for the control-plane authority to inspect. */
@@ -191,7 +213,7 @@ export interface RuntimeEventCandidate extends RuntimeCandidateCoordinates
 export interface RuntimeExternalActionCandidate extends RuntimeCandidateCoordinates
 {
 	/** Candidate category requiring deferred external-action authorization. */
-	readonly kind: "external_action";
+	readonly kind: RuntimeCandidateKinds.ExternalAction;
 	/** Immutable tool revision fixed by the accepted RunInputSnapshot. */
 	readonly toolRevisionId: string;
 	/** Caller-provided unique invocation identifier. */
@@ -206,7 +228,7 @@ export interface RuntimeExternalActionCandidate extends RuntimeCandidateCoordina
 export interface RuntimeElicitationCandidate extends RuntimeCandidateCoordinates
 {
 	/** Candidate category requiring generic elicitation admission. */
-	readonly kind: "elicitation";
+	readonly kind: RuntimeCandidateKinds.Elicitation;
 	/** Bounded proposal interpreted and bound by the server. */
 	readonly proposal: RuntimeElicitationProposal;
 }

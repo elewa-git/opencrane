@@ -19,15 +19,16 @@ lifecycle while keeping the purpose-specific consequence behind a server-owned s
 
 The invariant is that one exact participant may resolve one run-, attempt-, conversation-, and
 request-bound ask once. A stale run, ended participant, missing step-up, duplicate conflict, or
-expired deadline fails closed. Personal-memory permission creates only a one-use receipt; fact
-content never passes through the generic elicitation result.
+expired deadline fails closed. Personal-memory permission pauses the exact `memory:recall`
+invocation for its execution user, then binds the accepted receipt to that invocation revision,
+run attempt, query digest, frozen input snapshot, persona revision, and expiry. A parent or another
+group participant cannot answer in the execution user's place. Fact content never passes through
+the generic elicitation result.
 
 ## Public surface
 
-- `__PlanElicitationLifecycle` — exhaustive state and event decision for request finality.
-- `OpenElicitationCommand` — server-derived coordinates for one admitted runtime proposal.
-- `RespondToElicitationCommand` — authenticated, idempotent response command with server step-up evidence.
-- `SelfElicitationQueryRepository` — read port restricted to the active assigned participant.
+- `PrismaElicitationUnitOfWork` — transaction-bound request, response, and resume authority.
+- `PersonalMemoryPermissionAuthority` — opens and verifies the exact execution-user receipt without reading or consuming remembered content.
 - `_CreateElicitationInterruptReader` — generic cursorless reconnect overlay for every body type.
 - `_CreateSelfElicitationActivityRouter` — bounded derived Activity references over canonical requests.
 
@@ -49,7 +50,12 @@ personal-memory permission receipts. The clean baseline and adjacent upgrade SQL
 coordinates, terminal finality, and one accepted response.
 
 Ordinary input answers are delivered to the exact runtime attempt once. Protected tool, memory, and
-A2UI payloads remain server-side; only their safe terminal outcome may cross the runtime protocol.
+A2UI payloads remain server-side. The authorization package owns every ToolInvocation transition
+inside the elicitation transaction; this package owns only the response and exact memory receipt.
+Receipt verification rechecks the current single dispatch claim, fence, revision, lease, execution
+user, query digest, frozen input digest, and persona. Until a transient memory-delivery path can hand
+facts directly to the active model loop without persistence, an accepted receipt stops with the
+bounded `safe_delivery_required` outcome before Cognee is called.
 
 ## See also
 

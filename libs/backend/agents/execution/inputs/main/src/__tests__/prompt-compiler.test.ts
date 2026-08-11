@@ -28,7 +28,6 @@ function _snapshot(overrides: Partial<RunInputSnapshot> = {}): RunInputSnapshot
 		preferenceFactIds: [],
 		artifactRevisionIds: ["art-2", "art-1"],
 		skillRevisionIds: ["skill-1"],
-		memoryFacts: [{ datasetId: "d-1", factId: "fact-2", contentDigest: "sha256:a", provenance: [] }, { datasetId: "d-1", factId: "fact-1", contentDigest: "sha256:b", provenance: [] }],
 		memoryQueryPolicy: {},
 		integrationAssignments: [{ integrationId: "integration-b", toolDefinitions: [_snapshotTool("write")] }, { integrationId: "integration-a", toolDefinitions: [_snapshotTool("read")] }],
 		modelRoute: { alias: "silo-default" },
@@ -60,7 +59,6 @@ function _repositories(overrides: Partial<PromptCompilerRepositories> = {}): Pro
 		loadPersonaInstructions: async function _persona(id): Promise<string> { return id === null ? "" : "You are a careful assistant."; },
 		loadMessages: async function _messages(ids): Promise<readonly { role: "user"; content: string }[]> { return ids.map(function _turn(id): { role: "user"; content: string } { return { role: "user", content: `msg:${id}` }; }); },
 		loadToolDefinitions: async function _toolDefs(): Promise<readonly CompiledToolDefinition[]> { return _tools(); },
-		loadMemoryFactStatements: async function _memory(facts): Promise<readonly string[]> { return facts.map(function _fact(fact): string { return `remembered ${fact.factId}`; }); },
 		loadArtifactSummaries: async function _artifacts(ids): Promise<readonly string[]> { return ids.map(function _summary(id): string { return `artifact ${id}`; }); },
 		loadSkillSummaries: async function _skills(ids): Promise<readonly string[]> { return ids.map(function _summary(id): string { return `skill ${id}`; }); },
 		resolveModelRoute: async function _route(): Promise<CompiledModelRoute> { return model; },
@@ -72,7 +70,7 @@ describe("__CompileRunInput", function _describeCompiler()
 {
 	it("stamps the compiler version and preserves message order", async function _stampsVersion()
 	{
-		const compiled = await __CompileRunInput(_snapshot(), _repositories());
+		const compiled = await __CompileRunInput(_snapshot(), 1, _repositories());
 
 		expect(compiled.promptCompilerVersion).toBe(PROMPT_COMPILER_VERSION);
 		expect(compiled.messages.map(function _content(m): string { return m.content; })).toEqual(["msg:m-1", "msg:m-2"]);
@@ -80,7 +78,7 @@ describe("__CompileRunInput", function _describeCompiler()
 
 	it("orders tools by name regardless of integration-assignment iteration order", async function _ordersTools()
 	{
-		const compiled = await __CompileRunInput(_snapshot(), _repositories());
+		const compiled = await __CompileRunInput(_snapshot(), 1, _repositories());
 
 		expect(compiled.tools.map(function _name(t): string { return t.name; })).toEqual(["alpha", "zulu"]);
 	});
@@ -90,58 +88,75 @@ describe("__CompileRunInput", function _describeCompiler()
 		let received: RunInputSnapshot["integrationAssignments"] | null = null;
 		const snapshot = _snapshot({ integrationAssignments: [{ integrationId: "integration-z", toolDefinitions: [_snapshotTool("write"), _snapshotTool("read")] }] });
 
-		await __CompileRunInput(snapshot, _repositories({ loadToolDefinitions: async function _toolDefinitions(assignments): Promise<readonly CompiledToolDefinition[]> { received = assignments; return []; } }));
+		await __CompileRunInput(snapshot, 1, _repositories({ loadToolDefinitions: async function _toolDefinitions(assignments): Promise<readonly CompiledToolDefinition[]> { received = assignments; return []; } }));
 
 		expect(received).toEqual(snapshot.integrationAssignments);
 	});
 
 	it("resolves literal budget numbers from the opaque budget policy", async function _resolvesBudget()
 	{
-		const compiled = await __CompileRunInput(_snapshot(), _repositories());
+		const compiled = await __CompileRunInput(_snapshot(), 1, _repositories());
 
 		expect(compiled.budget).toEqual({ maxTotalTokens: 4096, maxCostUsdMicros: 500000, maxToolInvocations: 8, wallClockDeadlineEpochMs: 1_800_000_000_000 });
 	});
 
 	it("nulls malformed or absent budget limits rather than inventing them", async function _nullsBadBudget()
 	{
-		const compiled = await __CompileRunInput(_snapshot({ budgetPolicy: { maxTotalTokens: "lots" as unknown as JsonValue } }), _repositories());
+		const compiled = await __CompileRunInput(_snapshot({ budgetPolicy: { maxTotalTokens: "lots" as unknown as JsonValue } }), 1, _repositories());
 
 		expect(compiled.budget).toEqual({ maxTotalTokens: null, maxCostUsdMicros: null, maxToolInvocations: null, wallClockDeadlineEpochMs: null });
 	});
 
-	it("assembles persona, memory, artifact, and skill sections in canonical order", async function _assembles()
+	it("assembles persona, artifact, and skill sections without memory content", async function _assembles()
 	{
-		const compiled = await __CompileRunInput(_snapshot(), _repositories());
+		const compiled = await __CompileRunInput(_snapshot(), 1, _repositories());
 
 		expect(compiled.instructions).toBe(
 			"You are a careful assistant.\n\n"
-			+ "Durable memory available for this run:\n- remembered fact-1\n- remembered fact-2\n\n"
 			+ "Artifacts available for this run:\n- artifact art-1\n- artifact art-2\n\n"
 			+ "Skills available for this run:\n- skill skill-1",
 		);
+		expect(JSON.stringify(compiled)).not.toContain("fact-1");
 	});
 
 	it("produces byte-identical output for the same snapshot across repeated compilations", async function _deterministic()
 	{
-		const first = await __CompileRunInput(_snapshot(), _repositories());
-		const second = await __CompileRunInput(_snapshot(), _repositories());
+		const first = await __CompileRunInput(_snapshot(), 1, _repositories());
+		const second = await __CompileRunInput(_snapshot(), 1, _repositories());
 
 		expect(JSON.stringify(second)).toBe(JSON.stringify(first));
 		expect(second.digest).toBe(first.digest);
 		expect(first.digest).toMatch(/^sha256:[a-f0-9]{64}$/);
 	});
 
+	it("seals the authoritative live attempt without changing the stored snapshot", async function _BindsLiveAttempt()
+	{
+		const snapshot = _snapshot({ snapshotVersion: 1 });
+		const first = await __CompileRunInput(snapshot, 1, _repositories());
+		const second = await __CompileRunInput(snapshot, 2, _repositories());
+
+		expect(first.attempt).toBe(1);
+		expect(second.attempt).toBe(2);
+		expect(second.digest).not.toBe(first.digest);
+		expect(snapshot.snapshotVersion).toBe(1);
+	});
+
+	it("rejects a malformed live attempt", async function _RejectsMalformedAttempt()
+	{
+		await expect(__CompileRunInput(_snapshot(), 0, _repositories())).rejects.toThrow(/positive live attempt/);
+	});
+
 	it("changes the digest when any compiled input changes", async function _digestSensitive()
 	{
-		const base = await __CompileRunInput(_snapshot(), _repositories());
-		const changed = await __CompileRunInput(_snapshot(), _repositories({ loadPersonaInstructions: async function _other(): Promise<string> { return "Different persona."; } }));
+		const base = await __CompileRunInput(_snapshot(), 1, _repositories());
+		const changed = await __CompileRunInput(_snapshot(), 1, _repositories({ loadPersonaInstructions: async function _other(): Promise<string> { return "Different persona."; } }));
 
 		expect(changed.digest).not.toBe(base.digest);
 	});
 
 	it("fails closed when the snapshot targets a different compiler version", async function _versionMismatch()
 	{
-		await expect(__CompileRunInput(_snapshot({ promptCompilerVersion: "opencrane.prompt-compiler/other" }), _repositories())).rejects.toThrow(/cannot compile snapshot version/);
+		await expect(__CompileRunInput(_snapshot({ promptCompilerVersion: "opencrane.prompt-compiler/other" }), 1, _repositories())).rejects.toThrow(/cannot compile snapshot version/);
 	});
 });
 
@@ -149,7 +164,7 @@ describe("__AppendCompiledTool", function _describeAppend()
 {
 	it("orders the added first-party tool and reseals the changed payload", async function _Reseals()
 	{
-		const input = await __CompileRunInput(_snapshot(), _repositories());
+		const input = await __CompileRunInput(_snapshot(), 1, _repositories());
 		const tool = _snapshotTool("upgrade_session");
 		const updated = __AppendCompiledTool(input, { name: "upgrade_session", toolRevisionId: "opencrane:personal:upgrade_session:v1", description: "future change", requiresApproval: false, parametersSchema: tool.parametersSchema, parametersSchemaDigest: tool.parametersSchemaDigest });
 
@@ -159,7 +174,7 @@ describe("__AppendCompiledTool", function _describeAppend()
 
 	it("rejects a duplicate tool name so an MCP descriptor cannot shadow a first-party tool", async function _RejectsDuplicateName()
 	{
-		const input = await __CompileRunInput(_snapshot(), _repositories());
+		const input = await __CompileRunInput(_snapshot(), 1, _repositories());
 		const tool = _snapshotTool("alpha");
 		expect(function _appendDuplicateName(): void { __AppendCompiledTool(input, { name: "alpha", toolRevisionId: "opencrane:personal:upgrade_session:v1", description: "shadow", requiresApproval: false, parametersSchema: tool.parametersSchema, parametersSchemaDigest: tool.parametersSchemaDigest }); }).toThrow(/already contains tool/);
 	});

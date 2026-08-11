@@ -47,7 +47,7 @@ function _Project(source: AgUiProjectionSourceEvent): AgUiProjectionEvent
 			return { type: EventType.RUN_ERROR, message: _TerminalMessage(source, "Run failed"), ...(source.payload.failureCode === undefined ? {} : { code: source.payload.failureCode }) };
 		case RunEventTypes.RunCancelled:
 			return { type: EventType.RUN_ERROR, message: _TerminalMessage(source, "Run cancelled"), code: "RUN_CANCELLED" };
-		case RunEventTypes.ToolApprovalRequired:
+		case RunEventTypes.ElicitationRequested:
 			return source.payload.interrupt === undefined || source.runId === undefined ? _Custom(source) : { type: EventType.RUN_FINISHED, threadId: source.conversationId, runId: source.runId, outcome: { type: "interrupt", interrupts: [source.payload.interrupt] } };
 		case RunEventTypes.MessageStarted:
 			return typeof source.payload.messageId === "string" ? { type: EventType.TEXT_MESSAGE_START, messageId: source.payload.messageId, role: "assistant" } : _Custom(source);

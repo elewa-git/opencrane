@@ -18,14 +18,14 @@ authorization, and memory lifecycle decisions in its server-owned contracts.
    activated only after the user approves that exact revision.
 2. **Activation affects future runs only.** An approved persona revision enters only subsequently
    admitted `RunInputSnapshot`s. It cannot mutate an in-flight snapshot or conversation.
-3. **Target memory admission is snapshot-bound.** Recall may use only a gateway-native dataset and
-   fact references intersected with active, consented catalog records; those identifiers, content
-   digests, and the query policy are then frozen during run admission. The current recall/compiler
-   path does not yet enforce that intersection.
+3. **Memory scope is snapshot-bound; recall is consent-bound.** Admission freezes only the verified
+   gateway-native dataset coordinates. The model may choose a query only through the
+   approval-required `memory_recall` tool. Recalled content is not compiled into the snapshot and
+   awaits #601's transient safe-delivery path.
 4. **Conversation is evidence, not consent.** A bootstrap answer, correction, or observed pattern may
    motivate a candidate preference proposal. It is never a direct durable write.
-5. **Prompts never grant authority.** Persona instructions and memory facts may affect communication
-   style and proposal cadence, but they cannot create a capability, approval, or durable permission.
+5. **Prompts never grant authority.** Persona instructions may affect communication style and
+   proposal cadence, but they cannot create a capability, approval, or durable permission.
 
 ## The boundary
 
@@ -86,15 +86,15 @@ A candidate becomes durable only through the platform memory lifecycle:
 5. Deliver through the memory gateway to the exact authenticated subject and Cognee dataset.
 6. Complete the recoverable catalog metadata and outbox lifecycle with the gateway acceptance
    evidence and content digest.
-7. Admit the active fact into a future run snapshot; existing snapshots remain unchanged.
+7. Revalidate the active dataset coordinates at future run admission; select a query only through an
+   approval-required per-run memory invocation.
 
-OpenCrane currently has a gateway recall path and a separate consented catalog lookup, but run
-compilation does not yet prove that every recalled gateway fact matches an active, consented
-catalog record. Safe production persona-memory injection therefore remains blocked alongside
-record, correction, and forget. Their public APIs and management UI are also blocked. Until the
-catalog-to-gateway intersection and recoverable write lifecycle exist, confirmed candidates remain
-conversation evidence and must not be described as stored, editable, removable, indexed, or
-available for later recall.
+OpenCrane now freezes verified dataset coordinates and requires one exact user approval before a
+personal-memory invocation can proceed. The accepted invocation still stops at
+`safe_delivery_required`; #601 must add transient content delivery without persisting recalled facts
+in the run snapshot. Record, correction, forget, and their public management APIs remain blocked.
+Until those paths exist, confirmed candidates remain conversation evidence and must not be
+described as stored, editable, removable, indexed, or available for later recall.
 
 ### Never stored as persona memory
 

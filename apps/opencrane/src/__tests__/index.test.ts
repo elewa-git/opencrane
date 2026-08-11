@@ -5,10 +5,9 @@ import type { Express } from "express";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import request from "supertest";
 
-import { AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, AGENT_RUNTIME_PROTOCOL_V1, MANAGED_AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, type RuntimeCandidate } from "@opencrane/contracts";
+import { AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, AGENT_RUNTIME_PROTOCOL_V1, MANAGED_AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, RuntimeCandidateKinds, type RuntimeCandidate } from "@opencrane/contracts";
 import { ___AuthMiddleware } from "@opencrane/backend/server/infra/auth";
 import { _RateLimit } from "@opencrane/backend/server/infra/http";
-import { __UnavailableMemoryGatewayClient } from "@opencrane/backend/server/infra/memory-gateway-client";
 import { _ReadProcessConfig } from "../app/config.js";
 
 /** Keep identity-route tests independent from mounted ArtifactStore credentials. */
@@ -76,7 +75,7 @@ async function _BuildRuntimeCandidateApp(username: string, audiences: string[] =
   } as unknown as AuthenticationV1Api;
   const app = express();
   app.use(express.json());
-  _RegisterInternalRoutes(app, prisma, authApi, _ReadProcessConfig().runtime, new __UnavailableMemoryGatewayClient());
+  _RegisterInternalRoutes(app, prisma, authApi, _ReadProcessConfig().runtime);
   return app;
 }
 
@@ -91,7 +90,7 @@ function _RuntimeCandidate(): RuntimeCandidate
     runId: "run-1",
     attempt: 1,
     fence: 1,
-    kind: "event",
+    kind: RuntimeCandidateKinds.Event,
     eventType: "run.started",
     payload: {},
   };
@@ -168,10 +167,10 @@ describe("Control Plane", () =>
       const { _RegisterInternalRoutes } = await import("../app/routes.js");
       const app = express();
       vi.stubEnv("AGENT_RUNTIME_PERSONAL_NAMESPACE", "");
-      expect(function _MissingRuntimeNamespace() { _RegisterInternalRoutes(app, {} as PrismaClient, {} as AuthenticationV1Api, _ReadProcessConfig().runtime, new __UnavailableMemoryGatewayClient()); }).toThrow(/different from POD_NAMESPACE/);
+      expect(function _MissingRuntimeNamespace() { _RegisterInternalRoutes(app, {} as PrismaClient, {} as AuthenticationV1Api, _ReadProcessConfig().runtime); }).toThrow(/different from POD_NAMESPACE/);
 
       vi.stubEnv("AGENT_RUNTIME_PERSONAL_NAMESPACE", "opencrane-silo");
-      expect(function _SameRuntimeNamespace() { _RegisterInternalRoutes(app, {} as PrismaClient, {} as AuthenticationV1Api, _ReadProcessConfig().runtime, new __UnavailableMemoryGatewayClient()); }).toThrow(/different from POD_NAMESPACE/);
+      expect(function _SameRuntimeNamespace() { _RegisterInternalRoutes(app, {} as PrismaClient, {} as AuthenticationV1Api, _ReadProcessConfig().runtime); }).toThrow(/different from POD_NAMESPACE/);
     });
 
     it("rejects a reviewed token when Kubernetes omits the runtime audience", async function _RuntimeAudienceMismatch()
@@ -193,7 +192,7 @@ describe("Control Plane", () =>
 			vi.stubEnv("CHANNEL_REPLAY_ENDPOINT", "http://opencrane-server.opencrane-silo.svc.cluster.local:8081/api/internal/conversation-replay");
 			const app = express();
 			app.use(express.json());
-			_RegisterInternalRoutes(app, {} as PrismaClient, {} as AuthenticationV1Api, _ReadProcessConfig().runtime, new __UnavailableMemoryGatewayClient());
+			_RegisterInternalRoutes(app, {} as PrismaClient, {} as AuthenticationV1Api, _ReadProcessConfig().runtime);
 
 			const response = await request(app).post("/api/internal/channel-targets:resolve").set("authorization", "Bearer projected-token").send({ action: "events.read", trustedHost: "acme.example.com", conversationId: "conversation-1" });
 

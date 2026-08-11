@@ -1,31 +1,53 @@
-import { AgentServiceKind, type Prisma, type PrismaClient } from "@prisma/client";
+import { type Prisma, type PrismaClient } from "@prisma/client";
 
 import { __AppendCompiledTool } from "@opencrane/backend/agents/execution/inputs";
 import { PrismaRuntimeEventReporter } from "@opencrane/backend/agents/execution/runs";
 import { __IsUpgradeSessionAvailable, UPGRADE_SESSION_TOOL } from "@opencrane/backend/agents/personal/configuration";
 import { __ExpireDeferredToolApprovalBatch } from "@opencrane/backend/server/iam/authorization";
-import type { RunInputSnapshot } from "@opencrane/contracts";
-import type { MemoryGatewayClient } from "@opencrane/backend/server/infra/memory-gateway-client";
+import { RunInputSnapshotIdentityKinds, type CompiledToolDefinition, type RunInputSnapshot } from "@opencrane/contracts";
+import { PERSONAL_MEMORY_RECALL_TOOL_NAME, PERSONAL_MEMORY_RECALL_TOOL_REVISION } from "@opencrane/models/agents";
+import { ___DigestCanonicalJson } from "@opencrane/util";
 
 import { __CreatePrismaRunInputCompiler } from "./prisma-run-input-compiler.js";
 import { PrismaRuntimeDispatchAuthority } from "./prisma-runtime-dispatch-authority.js";
 import type { RunInputCompiler, RuntimeApprovalExpiry, RuntimeDispatchAuthorityConfig } from "./prisma-runtime-dispatch-authority.types.js";
 
-/** Compile the snapshot's tools, then add the built-in upgrade-session tool for runs whose service really is Personal. */
-function _CreateProductionRunInputCompiler(memoryGateway: MemoryGatewayClient): RunInputCompiler
+/** Reviewed arguments for one model-proposed personal-memory recall. */
+const _PERSONAL_MEMORY_RECALL_PARAMETERS_SCHEMA = {
+	type: "object",
+	properties: { query: { type: "string", minLength: 1, maxLength: 2_000, pattern: "\\S" } },
+	required: ["query"],
+	additionalProperties: false,
+} as const;
+
+/** Declared memory tool; execution always pauses for the exact user permission receipt. */
+export const PERSONAL_MEMORY_RECALL_TOOL: CompiledToolDefinition = {
+	name: PERSONAL_MEMORY_RECALL_TOOL_NAME,
+	toolRevisionId: PERSONAL_MEMORY_RECALL_TOOL_REVISION,
+	description: "Ask the execution user for permission to recall personal memory relevant to this answer.",
+	requiresApproval: true,
+	parametersSchema: _PERSONAL_MEMORY_RECALL_PARAMETERS_SCHEMA,
+	parametersSchemaDigest: ___DigestCanonicalJson(_PERSONAL_MEMORY_RECALL_PARAMETERS_SCHEMA),
+};
+
+/** Compile ordinary grants, then append sealed first-party tools to proven personal services. */
+export function __CreateProductionRunInputCompiler(): RunInputCompiler
 {
-	const compile = __CreatePrismaRunInputCompiler(memoryGateway);
-	return async function _compileRunInput(snapshot: RunInputSnapshot, transaction: Prisma.TransactionClient)
+	const compile = __CreatePrismaRunInputCompiler();
+	return async function _compileRunInput(snapshot: RunInputSnapshot, attempt: number, transaction: Prisma.TransactionClient)
 	{
-		// 1. Compile the snapshot first, before considering the built-in tool.
-		const input = await compile(snapshot, transaction);
+		// 1. Compile the immutable snapshot before considering any first-party descriptor.
+		const input = await compile(snapshot, attempt, transaction);
 
 		// 2. Skip snapshots that have no conversation or no persona, without guessing the service kind.
 		if (!__IsUpgradeSessionAvailable(snapshot)) return input;
 
-		// 3. Confirm the service is Personal in the same transaction, and add only that one tool.
-		const service = await transaction.agentService.findFirst({ where: { id: snapshot.agentServiceId, siloId: snapshot.siloId, kind: AgentServiceKind.Personal }, select: { id: true } });
-		return service === null ? input : __AppendCompiledTool(input, UPGRADE_SESSION_TOOL);
+		// 3. Require the immutable user identity that only personal admission can mint.
+		if (snapshot.identitySnapshot.kind !== RunInputSnapshotIdentityKinds.User) return input;
+
+		// 4. Expose memory only as a declared approval-required action; no compile-time gateway exists.
+		const withMemory = __AppendCompiledTool(input, PERSONAL_MEMORY_RECALL_TOOL);
+		return __AppendCompiledTool(withMemory, UPGRADE_SESSION_TOOL);
 	};
 }
 
@@ -44,10 +66,9 @@ function _CreateProductionApprovalExpiry(): RuntimeApprovalExpiry
  *
  * @param prisma - Canonical product-authority persistence client.
  * @param config - Deployment-fixed namespaces, command lifetime, and retry bounds.
- * @param memoryGateway - One authenticated memory-gateway client used by the input compiler.
  * @returns One production dispatch authority ready for the runtime stream transport.
  */
-export function __CreateProductionRuntimeDispatchAuthority(prisma: PrismaClient, config: RuntimeDispatchAuthorityConfig, memoryGateway: MemoryGatewayClient): PrismaRuntimeDispatchAuthority
+export function __CreateProductionRuntimeDispatchAuthority(prisma: PrismaClient, config: RuntimeDispatchAuthorityConfig): PrismaRuntimeDispatchAuthority
 {
-	return new PrismaRuntimeDispatchAuthority(prisma, config, _CreateProductionRunInputCompiler(memoryGateway), new PrismaRuntimeEventReporter(), undefined, _CreateProductionApprovalExpiry());
+	return new PrismaRuntimeDispatchAuthority(prisma, config, __CreateProductionRunInputCompiler(), new PrismaRuntimeEventReporter(), undefined, _CreateProductionApprovalExpiry());
 }

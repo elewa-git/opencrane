@@ -43,6 +43,11 @@ persistence; a wrong answer here can only refuse a legal move, never invent one.
   `GrantSubjectType`, `RunEvent`, `RunEventTypes`, and the agent/run `*Id` identifier aliases.
 - `RunEventTypes` is the closed durable vocabulary for streamed messages, tool lifecycle and failure,
   usage, display-safe runtime errors, terminal outcomes, and versioned governed A2UI updates.
+- `PERSONAL_MEMORY_RECALL_TOOL_NAME` is the provider-safe model-visible name, while
+  `PERSONAL_MEMORY_RECALL_TOOL_REVISION` is the dependency-neutral identity used by admission,
+  elicitation, and execution for the built-in personal-memory recall tool.
+- `AgentRunStates` is the documented string-backed run lifecycle vocabulary used by runtime
+  admission instead of repeated categorical literals.
 - Revision invariants: `__DigestAgentRevisionContent`, `__DiffAgentRevisions`, and the
   `AgentRevisionDiff` result types.
 - `__Is…TransitionAllowed`, `__CanAppendRunEvent` — the guard functions over the transition tables.

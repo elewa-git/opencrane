@@ -21,24 +21,6 @@ export function __DigestRunInputSnapshot(snapshot: Omit<RunInputSnapshot, "diges
 		preferenceFactIds: snapshot.preferenceFactIds,
 		artifactRevisionIds: snapshot.artifactRevisionIds,
 		skillRevisionIds: snapshot.skillRevisionIds,
-		memoryFacts: snapshot.memoryFacts.map(function _memoryFact(fact): JsonValue
-		{
-			return {
-				datasetId: fact.datasetId,
-				factId: fact.factId,
-				contentDigest: fact.contentDigest,
-				provenance: fact.provenance.map(function _provenance(provenance): JsonValue
-				{
-					return {
-						sourceKind: provenance.sourceKind,
-						sourceId: provenance.sourceId,
-						...(provenance.artifactRevisionId === undefined ? {} : { artifactRevisionId: provenance.artifactRevisionId }),
-						...(provenance.sourceUserId === undefined ? {} : { sourceUserId: provenance.sourceUserId }),
-						capturedAt: provenance.capturedAt,
-					};
-				}),
-			};
-		}),
 		memoryQueryPolicy: snapshot.memoryQueryPolicy,
 		integrationAssignments: snapshot.integrationAssignments.map(function _integration(assignment): JsonValue
 		{
