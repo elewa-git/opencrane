@@ -40,6 +40,8 @@ const _REQUIRED_AUTHORITY_MARKERS = [
 	'"tool_definitions" JSONB NOT NULL',
 	'CREATE TYPE "ToolInvocationState" AS ENUM (\'preparing\', \'awaiting_approval\', \'ready\', \'claimed\', \'reconciling\', \'succeeded\', \'failed\', \'recovery_required\');',
 	'CREATE TABLE "tool_result_deliveries"',
+	'CREATE FUNCTION "enforce_tool_result_delivery_identity"()',
+	'CREATE TRIGGER "tool_result_deliveries_invocation_identity" BEFORE INSERT OR UPDATE OF "tool_invocation_id", "payload" ON "tool_result_deliveries"',
 	'CREATE FUNCTION "enforce_tool_invocation_lifecycle"()',
 	'CREATE TRIGGER "tool_invocations_lifecycle_guard"',
 	'ALTER TABLE "tool_invocations" ADD CONSTRAINT "tool_invocations_identity_check"',

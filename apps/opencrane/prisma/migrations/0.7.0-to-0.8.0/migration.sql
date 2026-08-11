@@ -56,7 +56,7 @@ SELECT (
         WHERE "schema_version" = '0.8.0'
           AND "source_schema_version" = '0.7.0'
           AND "source_baseline_sha256" = :'source_baseline_sha256'
-          AND "target_baseline_sha256" = '814a3a2127c35405d9b54d97f9f877b0aa616d624aed51c53d496d04cc8aea44'
+          AND "target_baseline_sha256" = 'bd658d2fee5b6b0c1660e06f1d50fc02daf5a10a0c368f0d6ac7ae16adb47e30'
           AND "sql_sha256" = :'migration_sql_sha256'
           AND "migration_id" = '0.7.0-to-0.8.0') = 1
     AND (SELECT "baseline_sha256" FROM "opencrane_bootstrap"."target_baseline" WHERE "singleton" = TRUE)
@@ -482,12 +482,26 @@ ALTER TABLE "tool_invocations" ADD CONSTRAINT "tool_invocations_identity_check" 
 );
 ALTER TABLE "tool_result_deliveries" ADD CONSTRAINT "tool_result_deliveries_exact_check" CHECK (
     btrim("id") <> '' AND btrim("tool_invocation_id") <> '' AND jsonb_typeof("payload") = 'object' AND
-    "payload_digest" ~ '^sha256:[0-9a-f]{64}$' AND "payload"->>'toolInvocationId' = "tool_invocation_id" AND
+    "payload_digest" ~ '^sha256:[0-9a-f]{64}$' AND
     (("payload"->>'outcome' = 'succeeded' AND "payload" ? 'result' AND NOT ("payload" ? 'failureCode')) OR
      ("payload"->>'outcome' = 'failed' AND btrim("payload"->>'failureCode') <> '' AND NOT ("payload" ? 'result'))) AND
     (("state" = 'pending' AND "consumed_at" IS NULL) OR ("state" = 'consumed' AND "consumed_at" IS NOT NULL))
 );
 
+CREATE FUNCTION "enforce_tool_result_delivery_identity"() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE public_tool_invocation_id TEXT;
+BEGIN
+    SELECT invocation."tool_invocation_id" INTO public_tool_invocation_id
+      FROM "tool_invocations" invocation
+     WHERE invocation."id" = NEW."tool_invocation_id"
+       FOR KEY SHARE;
+    IF NOT FOUND THEN RAISE EXCEPTION 'ToolResultDelivery requires its related ToolInvocation'; END IF;
+    IF NEW."payload"->>'toolInvocationId' IS DISTINCT FROM public_tool_invocation_id THEN
+        RAISE EXCEPTION 'ToolResultDelivery payload must name the related ToolInvocation public id';
+    END IF;
+    RETURN NEW;
+END;
+$$;
 CREATE FUNCTION "enforce_tool_invocation_lifecycle"() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
     IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'ToolInvocation rows cannot be deleted'; END IF;
@@ -538,6 +552,7 @@ BEGIN
 END;
 $$;
 CREATE TRIGGER "tool_invocations_lifecycle_guard" BEFORE INSERT OR UPDATE OR DELETE ON "tool_invocations" FOR EACH ROW EXECUTE FUNCTION "enforce_tool_invocation_lifecycle"();
+CREATE TRIGGER "tool_result_deliveries_invocation_identity" BEFORE INSERT OR UPDATE OF "tool_invocation_id", "payload" ON "tool_result_deliveries" FOR EACH ROW EXECUTE FUNCTION "enforce_tool_result_delivery_identity"();
 
 CREATE OR REPLACE FUNCTION "cancel_ineligible_skill_workloads"() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
@@ -3328,7 +3343,7 @@ INSERT INTO "opencrane_migrations"."schema_history" (
     "target_baseline_sha256", "sql_sha256", "migration_id"
 ) VALUES (
     '0.8.0', '0.7.0', current_setting('opencrane.expected_source_baseline_sha256'),
-    '814a3a2127c35405d9b54d97f9f877b0aa616d624aed51c53d496d04cc8aea44',
+    'bd658d2fee5b6b0c1660e06f1d50fc02daf5a10a0c368f0d6ac7ae16adb47e30',
     current_setting('opencrane.expected_migration_sql_sha256'),
     '0.7.0-to-0.8.0'
 );

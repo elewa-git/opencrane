@@ -5323,6 +5323,20 @@ BEGIN
     RETURN NEW;
 END;
 $$;
+CREATE FUNCTION "enforce_tool_result_delivery_identity"() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE public_tool_invocation_id TEXT;
+BEGIN
+    SELECT invocation."tool_invocation_id" INTO public_tool_invocation_id
+      FROM "tool_invocations" invocation
+     WHERE invocation."id" = NEW."tool_invocation_id"
+       FOR KEY SHARE;
+    IF NOT FOUND THEN RAISE EXCEPTION 'ToolResultDelivery requires its related ToolInvocation'; END IF;
+    IF NEW."payload"->>'toolInvocationId' IS DISTINCT FROM public_tool_invocation_id THEN
+        RAISE EXCEPTION 'ToolResultDelivery payload must name the related ToolInvocation public id';
+    END IF;
+    RETURN NEW;
+END;
+$$;
 CREATE FUNCTION "enforce_tool_invocation_lifecycle"() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
     IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'ToolInvocation rows cannot be deleted'; END IF;
@@ -5760,7 +5774,7 @@ ALTER TABLE "tool_invocations" ADD CONSTRAINT "tool_invocations_identity_check" 
     );
 ALTER TABLE "tool_result_deliveries" ADD CONSTRAINT "tool_result_deliveries_exact_check" CHECK (
         btrim("id") <> '' AND btrim("tool_invocation_id") <> '' AND jsonb_typeof("payload") = 'object' AND
-        "payload_digest" ~ '^sha256:[0-9a-f]{64}$' AND "payload"->>'toolInvocationId' = "tool_invocation_id" AND
+        "payload_digest" ~ '^sha256:[0-9a-f]{64}$' AND
         (("payload"->>'outcome' = 'succeeded' AND "payload" ? 'result' AND NOT ("payload" ? 'failureCode')) OR
          ("payload"->>'outcome' = 'failed' AND btrim("payload"->>'failureCode') <> '' AND NOT ("payload" ? 'result'))) AND
         (("state" = 'pending' AND "consumed_at" IS NULL) OR ("state" = 'consumed' AND "consumed_at" IS NOT NULL))
@@ -6158,6 +6172,7 @@ CREATE TRIGGER "authorization_grants_immutable" BEFORE UPDATE OR DELETE ON "auth
 CREATE TRIGGER "approval_requests_immutable" BEFORE INSERT OR UPDATE OR DELETE ON "approval_requests" FOR EACH ROW EXECUTE FUNCTION "enforce_approval_request_update"();
 CREATE TRIGGER "action_execution_receipts_immutable" BEFORE INSERT OR UPDATE OR DELETE ON "action_execution_receipts" FOR EACH ROW EXECUTE FUNCTION "enforce_action_execution_receipt_lifecycle"();
 CREATE TRIGGER "tool_invocations_lifecycle_guard" BEFORE INSERT OR UPDATE OR DELETE ON "tool_invocations" FOR EACH ROW EXECUTE FUNCTION "enforce_tool_invocation_lifecycle"();
+CREATE TRIGGER "tool_result_deliveries_invocation_identity" BEFORE INSERT OR UPDATE OF "tool_invocation_id", "payload" ON "tool_result_deliveries" FOR EACH ROW EXECUTE FUNCTION "enforce_tool_result_delivery_identity"();
 CREATE TRIGGER "verified_fleet_membership_revisions_immutable" BEFORE UPDATE OR DELETE ON "verified_fleet_membership_revisions" FOR EACH ROW EXECUTE FUNCTION "reject_verified_membership_revision_mutation"();
 CREATE TRIGGER "verified_fleet_membership_assertions_immutable" BEFORE INSERT OR UPDATE OR DELETE ON "verified_fleet_membership_assertions" FOR EACH ROW EXECUTE FUNCTION "reject_verified_membership_assertion_mutation"();
 CREATE TRIGGER "highest_accepted_fleet_memberships_monotonic" BEFORE INSERT OR UPDATE OR DELETE ON "highest_accepted_fleet_memberships" FOR EACH ROW EXECUTE FUNCTION "enforce_highest_membership_revision"();

@@ -85,6 +85,7 @@ psql_command fresh <"$CURRENT_BASELINE" >/dev/null
 psql_command fresh <"$ROOT/libs/backend/server/gateways/integrations/main/tests/integrations-authority.sql" >/dev/null
 
 for database in migrated fresh; do
+	psql_command "$database" <"$ROOT/apps/opencrane/prisma/migrations/tests/tool-result-delivery-authority.sql" >/dev/null
 	psql_command "$database" <"$ROOT/apps/opencrane/prisma/migrations/tests/conversation-activity-ordering.sql" >/dev/null
 	docker exec "$CONTAINER" pg_dump --username postgres --dbname "$database" \
 		--schema-only --no-owner --no-privileges \

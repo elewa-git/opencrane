@@ -77,6 +77,9 @@ for (const source of [targetBaseline, sql])
 	requireContract(source.includes('CREATE TYPE "ToolInvocationState"'), "tool invocation lifecycle must use its own durable state vocabulary");
 	requireContract(source.includes('CREATE TYPE "ExternalActionRecoveryMode"'), "tool invocation recovery strategy must be frozen before dispatch");
 	requireContract(source.includes('CREATE TABLE "tool_result_deliveries"'), "terminal tool results must use one durable delivery outbox");
+	requireContract(source.includes('CREATE FUNCTION "enforce_tool_result_delivery_identity"'), "tool result delivery identity must use relational invocation authority");
+	requireContract(source.includes('CREATE TRIGGER "tool_result_deliveries_invocation_identity" BEFORE INSERT OR UPDATE OF "tool_invocation_id", "payload" ON "tool_result_deliveries"'), "tool result delivery identity must remain enforced on inserts and identity updates");
+	requireContract(!source.includes('"payload"->>\'toolInvocationId\' = "tool_invocation_id"'), "tool result delivery must not compare a public protocol id with its internal foreign key");
 	requireContract(source.includes('"preparation_attempt" INTEGER NOT NULL DEFAULT 0'), "provider-free preparation attempts must persist on the invocation");
 	requireContract(source.includes('"retry_deadline_at" TIMESTAMP(3) NOT NULL'), "the five-minute provider-free retry deadline must persist on the invocation");
 	requireContract(!source.includes('CREATE TABLE "runtime_external_action_retries"'), "the superseded split retry authority must stay removed");
