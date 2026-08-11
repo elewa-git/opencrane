@@ -39,6 +39,9 @@ VALUES ('custody-tools', 'integration-tools', 'silo-integrations', 'obot:opaque:
 SELECT pg_temp.expect_failure('malformed reviewed tool definitions are rejected', $statement$
   INSERT INTO "agent_revision_integration_assignments" ("agent_revision_id", "integration_id", "silo_id", "custody_reference_id", "tool_definitions")
   VALUES ('integration-revision-tools', 'integration-tools', 'silo-integrations', 'custody-tools', '[{"name":"","description":"","parametersSchema":{"type":"string"},"parametersSchemaDigest":"not-a-digest"}]'::jsonb)$statement$, 'tool_definitions_check');
+SELECT pg_temp.expect_failure('incomplete reviewed tool definitions are rejected', $statement$
+  INSERT INTO "agent_revision_integration_assignments" ("agent_revision_id", "integration_id", "silo_id", "custody_reference_id", "tool_definitions")
+  VALUES ('integration-revision-tools', 'integration-tools', 'silo-integrations', 'custody-tools', '[{}]'::jsonb)$statement$, 'tool_definitions_check');
 SELECT pg_temp.expect_failure('duplicate reviewed tool names are rejected', $statement$
   INSERT INTO "agent_revision_integration_assignments" ("agent_revision_id", "integration_id", "silo_id", "custody_reference_id", "tool_definitions")
   VALUES ('integration-revision-tools', 'integration-tools', 'silo-integrations', 'custody-tools', jsonb_build_array(

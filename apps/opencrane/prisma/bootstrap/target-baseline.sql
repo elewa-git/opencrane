@@ -5376,27 +5376,27 @@ BEGIN
 END;
 $$;
 CREATE FUNCTION "has_reviewed_tool_definitions"(JSONB) RETURNS BOOLEAN LANGUAGE sql IMMUTABLE AS $$
-  SELECT COALESCE(
-    jsonb_typeof($1) = 'array'
-    AND jsonb_array_length($1) > 0
+  SELECT CASE WHEN jsonb_typeof($1) IS DISTINCT FROM 'array' THEN FALSE ELSE COALESCE(
+    jsonb_array_length($1) > 0
     AND NOT EXISTS (
       SELECT 1
       FROM jsonb_array_elements($1) AS tool("value")
-      WHERE jsonb_typeof(tool."value") <> 'object'
-        OR jsonb_typeof(tool."value"->'name') <> 'string'
+      WHERE jsonb_typeof(tool."value") IS DISTINCT FROM 'object'
+        OR jsonb_typeof(tool."value"->'name') IS DISTINCT FROM 'string'
         OR btrim(tool."value"->>'name') = ''
         OR position(':' in tool."value"->>'name') > 0
-        OR jsonb_typeof(tool."value"->'description') <> 'string'
+        OR jsonb_typeof(tool."value"->'description') IS DISTINCT FROM 'string'
         OR btrim(tool."value"->>'description') = ''
-        OR jsonb_typeof(tool."value"->'parametersSchema') <> 'object'
+        OR jsonb_typeof(tool."value"->'parametersSchema') IS DISTINCT FROM 'object'
         OR tool."value"->'parametersSchema'->>'type' IS DISTINCT FROM 'object'
+        OR jsonb_typeof(tool."value"->'parametersSchemaDigest') IS DISTINCT FROM 'string'
         OR tool."value"->>'parametersSchemaDigest' !~ '^sha256:[0-9a-f]{64}$'
     )
     AND jsonb_array_length($1) = (
       SELECT count(DISTINCT tool."value"->>'name') FROM jsonb_array_elements($1) AS tool("value")
     ),
     FALSE
-  );
+  ) END;
 $$;
 CREATE FUNCTION "enforce_integration_lifecycle"() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN

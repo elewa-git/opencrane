@@ -36,7 +36,7 @@ SELECT (
         WHERE "schema_version" = '0.8.0'
           AND "source_schema_version" = '0.7.0'
           AND "source_baseline_sha256" = :'source_baseline_sha256'
-          AND "target_baseline_sha256" = 'a73a90dc448fb7f11310b3baaf8015a07a16e2ad3fbfda24e3de7a357ace3fef'
+          AND "target_baseline_sha256" = '503442ee8f567c61016ccbde60621f577bc39ac4b36816ec2c09c04c0d291bb6'
           AND "sql_sha256" = :'migration_sql_sha256'
           AND "migration_id" = '0.7.0-to-0.8.0') = 1
     AND (SELECT "baseline_sha256" FROM "opencrane_bootstrap"."target_baseline" WHERE "singleton" = TRUE)
@@ -330,27 +330,27 @@ ALTER TABLE "agent_revision_integration_assignments"
 	ADD COLUMN "tool_definitions" JSONB NOT NULL;
 DROP FUNCTION "has_nonempty_distinct_tool_ids"(TEXT[]);
 CREATE FUNCTION "has_reviewed_tool_definitions"(JSONB) RETURNS BOOLEAN LANGUAGE sql IMMUTABLE AS $$
-  SELECT COALESCE(
-    jsonb_typeof($1) = 'array'
-    AND jsonb_array_length($1) > 0
+  SELECT CASE WHEN jsonb_typeof($1) IS DISTINCT FROM 'array' THEN FALSE ELSE COALESCE(
+    jsonb_array_length($1) > 0
     AND NOT EXISTS (
       SELECT 1
       FROM jsonb_array_elements($1) AS tool("value")
-      WHERE jsonb_typeof(tool."value") <> 'object'
-        OR jsonb_typeof(tool."value"->'name') <> 'string'
+      WHERE jsonb_typeof(tool."value") IS DISTINCT FROM 'object'
+        OR jsonb_typeof(tool."value"->'name') IS DISTINCT FROM 'string'
         OR btrim(tool."value"->>'name') = ''
         OR position(':' in tool."value"->>'name') > 0
-        OR jsonb_typeof(tool."value"->'description') <> 'string'
+        OR jsonb_typeof(tool."value"->'description') IS DISTINCT FROM 'string'
         OR btrim(tool."value"->>'description') = ''
-        OR jsonb_typeof(tool."value"->'parametersSchema') <> 'object'
+        OR jsonb_typeof(tool."value"->'parametersSchema') IS DISTINCT FROM 'object'
         OR tool."value"->'parametersSchema'->>'type' IS DISTINCT FROM 'object'
+        OR jsonb_typeof(tool."value"->'parametersSchemaDigest') IS DISTINCT FROM 'string'
         OR tool."value"->>'parametersSchemaDigest' !~ '^sha256:[0-9a-f]{64}$'
     )
     AND jsonb_array_length($1) = (
       SELECT count(DISTINCT tool."value"->>'name') FROM jsonb_array_elements($1) AS tool("value")
     ),
     FALSE
-  );
+  ) END;
 $$;
 ALTER TABLE "agent_revision_integration_assignments" ADD CONSTRAINT "agent_revision_integration_assignments_tool_definitions_check" CHECK ("has_reviewed_tool_definitions"("tool_definitions"));
 
@@ -3025,7 +3025,7 @@ INSERT INTO "opencrane_migrations"."schema_history" (
     "target_baseline_sha256", "sql_sha256", "migration_id"
 ) VALUES (
     '0.8.0', '0.7.0', current_setting('opencrane.expected_source_baseline_sha256'),
-    'a73a90dc448fb7f11310b3baaf8015a07a16e2ad3fbfda24e3de7a357ace3fef',
+    '503442ee8f567c61016ccbde60621f577bc39ac4b36816ec2c09c04c0d291bb6',
     current_setting('opencrane.expected_migration_sql_sha256'),
     '0.7.0-to-0.8.0'
 );
