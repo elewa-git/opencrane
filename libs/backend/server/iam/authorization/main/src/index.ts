@@ -13,10 +13,10 @@ export { __ProjectDeferredToolApproval, __ValidateDeferredToolArguments } from "
 export { DeferredToolDecisionKinds } from "./deferred-tool-approval-decision.types.js";
 export type { DecideDeferredToolRequestCommand, DecideDeferredToolRequestResult, DeferredToolApprovalDecisionRepository, ExpireDeferredToolApprovalBatchCommand, ExpireDeferredToolApprovalBatchResult } from "./deferred-tool-approval-decision.types.js";
 export { DeferredToolApprovalStates } from "./deferred-tool-approval-interrupt.types.js";
-export type { ApprovalInterruptReadCommand, DeferredToolApprovalInterruptReader, DeferredToolApprovalProjection, SelfDeferredToolApproval, SelfDeferredToolApprovalListRepository, SelfDeferredToolApprovalReadUnitOfWork } from "./deferred-tool-approval-interrupt.types.js";
+export type { DeferredToolApprovalInterruptReader, DeferredToolApprovalProjection, SelfDeferredToolApproval, SelfDeferredToolApprovalListRepository, SelfDeferredToolApprovalReadUnitOfWork } from "./deferred-tool-approval-interrupt.types.js";
 export { DeferredToolApprovalLifecycleActions, DeferredToolApprovalLifecycleEvents, DeferredToolApprovalRunStates } from "./deferred-tool-approval-lifecycle.types.js";
 export type { DeferredToolApprovalLifecycleInput } from "./deferred-tool-approval-lifecycle.types.js";
-export type { DeferredToolApprovalOpenRepository, DeferredToolApprovalOpenUnitOfWork, DeferToolRequestCommand, DeferToolRequestResult, OpenDeferredToolApprovalCommand } from "./deferred-tool-approval-open.types.js";
+export type { DeferToolRequestCommand, DeferToolRequestResult, OpenDeferredToolApprovalCommand } from "./deferred-tool-approval-open.types.js";
 export { __OpenDeferredToolApproval } from "./prisma-deferred-tool-approval-opener.js";
 export { PrismaDeferredToolApprovalDecisionRepository } from "./prisma-deferred-tool-approval-decision-repository.js";
 export { PrismaSelfDeferredToolApprovalListRepository, PrismaSelfDeferredToolApprovalReadUnitOfWork } from "./prisma-self-deferred-tool-approval-list-repository.js";

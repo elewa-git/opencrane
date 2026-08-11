@@ -5,10 +5,10 @@ import type { PrismaClient } from "@prisma/client";
 import type { Express } from "express";
 
 import type { ManagedRunAdmissionPort } from "@opencrane/backend/server/agents/agent-services";
+import type { ChannelTargetRouteReconciler } from "@opencrane/backend/server/agents/channel-targets";
 import { ___ShutdownTelemetry } from "@opencrane/backend/observability";
 
 import { _StartBackgroundWorkers } from "./background-workers.js";
-import type { ChannelTargetRouteReconciler } from "./channel-target-composition.types.js";
 import type { OpenCraneProcessConfig } from "./config.types.js";
 import type { OpenCraneHttpServers } from "./lifecycle.types.js";
 import { _log } from "./log.js";

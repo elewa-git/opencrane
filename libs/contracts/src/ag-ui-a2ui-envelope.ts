@@ -15,7 +15,7 @@ const _MAX_A2UI_IDENTIFIER_LENGTH = 256;
 /** Maximum length of a server-selected display-safe lifecycle explanation. */
 const _MAX_A2UI_REASON_LENGTH = 2000;
 
-/** Exact upstream component wrappers admitted by OpenCrane's governed catalogue. */
+/** Canonical OpenCrane v4 component contracts admitted by the governed catalogue. */
 const _A2UI_COMPONENT_NAMES = new Set<string>(["Text", "Button", "TextField", "SingleChoice", "MultipleChoice", "Select", "Slider", "DateTimeInput", "Image", "Card", "List"]);
 
 /** Exact authoritative presentation states admitted across the public projection boundary. */
@@ -51,7 +51,7 @@ function _A2uiOperation(value: unknown, surfaceId: string): boolean
 	return _SurfaceUpdate(value["surfaceUpdate"], surfaceId);
 }
 
-/** Map the two accepted one-value choice aliases onto the pinned upstream property schema. */
+/** Validate the two OpenCrane one-value display contracts through the upstream MultipleChoice property schema. */
 function _UpstreamA2uiOperation(value: Record<string, unknown>): Record<string, unknown>
 {
 	const update = value["surfaceUpdate"];
@@ -106,7 +106,7 @@ function _SurfaceUpdate(value: unknown, surfaceId: string): boolean
 	return value["components"].every(_A2uiComponent);
 }
 
-/** Whether one component instance has one admitted upstream wrapper and exact outer fields. */
+/** Whether one component instance has one admitted OpenCrane catalogue contract and exact outer fields. */
 function _A2uiComponent(value: unknown): boolean
 {
 	if (!_Record(value) || !_ExactKeys(value, ["id", "component"], ["weight"]) || !_Identifier(value["id"]) || !_Record(value["component"])) return false;

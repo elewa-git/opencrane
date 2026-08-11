@@ -2,11 +2,10 @@ import type { AuthenticationV1Api } from "@kubernetes/client-node";
 import type { PrismaClient } from "@prisma/client";
 import type { Router } from "express";
 
-import { PrismaChannelTargetAuthorityUnitOfWork, __CreateChannelTargetsRouter, __ExactHostSiloResolver, __RandomChannelOpaqueContextSource, __ReconcileChannelTargetRoutes as __ReconcileOwnedChannelTargetRoutes, __StartChannelTargetRouteReconciler as __StartOwnedChannelTargetRouteReconciler, __SystemChannelTargetClock, type ChannelTargetResolutionConfig, type ChannelTargetResolutionDependencies, type ChannelTargetRouteReconcilerDependencies, type ReconcileChannelRuntimeRoutesCommand } from "@opencrane/backend/server/agents/channel-targets";
+import { PrismaChannelTargetAuthorityUnitOfWork, __CreateChannelTargetsRouter, __ExactHostSiloResolver, __RandomChannelOpaqueContextSource, __ReconcileChannelTargetRoutes as __ReconcileOwnedChannelTargetRoutes, __StartChannelTargetRouteReconciler as __StartOwnedChannelTargetRouteReconciler, __SystemChannelTargetClock, type ChannelTargetResolutionConfig, type ChannelTargetResolutionDependencies, type ChannelTargetRouteReconciler, type ChannelTargetRouteReconcilerDependencies, type ReconcileChannelRuntimeRoutesCommand } from "@opencrane/backend/server/agents/channel-targets";
 import { PrismaFleetMembershipAuthorityRepository, SignedFleetMembershipAssertionVerifier, _CreateFleetMembershipEvidenceConfig } from "@opencrane/backend/server/iam/membership";
 import { _CreateChannelProxyTokenReviewer } from "@opencrane/backend/server/infra/workload-identity";
 
-import type { ChannelTargetRouteReconciler } from "./channel-target-composition.types.js";
 import type { ChannelTargetRuntimeConfig } from "./config.types.js";
 import { _log } from "./log.js";
 

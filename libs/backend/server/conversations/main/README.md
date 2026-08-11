@@ -52,10 +52,11 @@ authorization material, and secret-shaped fields remain behind the disclosure bo
 
 Governed A2UI replay adopts only the exact `opencrane.a2ui.v1` envelope bound to the replayed
 conversation and run. It preserves ordered upstream `beginRendering`, `surfaceUpdate`, and
-`dataModelUpdate` operations, admits only the nine upstream component wrappers, and forwards the
-server-selected ten-state presentation lifecycle plus optional bounded safe reason. Replay never
-maps the frontend-only `SingleChoice` or `Select` aliases into upstream authority and never infers
-an action or lifecycle transition locally.
+`dataModelUpdate` operations, admits the eleven-name canonical OpenCrane v4 catalogue, and forwards
+the server-selected ten-state presentation lifecycle plus optional bounded safe reason.
+`SingleChoice` and `Select` are one-value display contracts validated through the pinned upstream
+`MultipleChoice` property schema; that validation adapter grants no action authority. Replay never
+infers an action or lifecycle transition locally.
 
 Each response drains the durable snapshot before entering a bounded live tail. Recovery polling is
 authoritative; wake-ups may reduce latency later but can never replace a database read. The server
