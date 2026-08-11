@@ -8,10 +8,15 @@ import { PrismaChannelTargetAuthorityUnitOfWork, __CreateChannelTargetsRouter, _
 import { PrismaFleetMembershipAuthorityRepository, __VerifyCurrentFleetMembership, _CreateFleetMembershipEvidenceConfig } from "@opencrane/backend/server/iam/membership";
 import { ___DoWithTrace } from "@opencrane/backend/observability";
 
+import type { ChannelTargetRouteReconciler } from "./channel-target-composition.types.js";
 import type { ChannelTargetRuntimeConfig } from "./config.types.js";
+import { _log } from "./log.js";
 
 /** Internal Kubernetes DNS suffix accepted for the release-local replay receiver. */
 const _INTERNAL_ROUTE_HOST_SUFFIXES = [".svc.cluster.local"] as const;
+
+/** Delay before discovering AgentServices created after process startup. */
+const _CHANNEL_ROUTE_RECONCILE_INTERVAL_MILLISECONDS = 5_000;
 
 /** Bind Kubernetes TokenReview to the one Helm-owned channel-proxy identity. */
 function _CreateChannelWorkloadIdentity(authApi: k8s.AuthenticationV1Api): ChannelWorkloadIdentityPort
@@ -123,4 +128,30 @@ export async function _ReconcileChannelTargetRoutes(prisma: PrismaClient, config
 {
 	if (config === null) return 0;
 	return new PrismaChannelTargetAuthorityUnitOfWork(prisma).reconcileRuntimeRoutes({ receiverId: config.receiverId, endpoint: config.receiverEndpoint, action: "events.read", allowedRouteHostSuffixes: _INTERNAL_ROUTE_HOST_SUFFIXES });
+}
+
+/** Keep deployment-owned routes converged as new AgentServices are created after startup. */
+export function _StartChannelTargetRouteReconciler(prisma: PrismaClient, config: ChannelTargetRuntimeConfig | null, intervalMilliseconds = _CHANNEL_ROUTE_RECONCILE_INTERVAL_MILLISECONDS): ChannelTargetRouteReconciler
+{
+	if (config === null) return { async stop(): Promise<void> {} };
+	let activePass: Promise<void> | null = null;
+	let stopping = false;
+	function _Reconcile(): void
+	{
+		if (stopping || activePass !== null) return;
+		activePass = _ReconcileChannelTargetRoutes(prisma, config)
+			.then(function _Reconciled(routeCount) { _log.debug({ routeCount }, "channel target routes reconciled"); })
+			.catch(function _ReconcileFailed(error: unknown) { _log.error({ err: error }, "channel target route reconciliation failed"); })
+			.finally(function _PassFinished() { activePass = null; });
+	}
+	const handle = setInterval(_Reconcile, intervalMilliseconds);
+	handle.unref();
+	return {
+		async stop(): Promise<void>
+		{
+			stopping = true;
+			clearInterval(handle);
+			await activePass;
+		},
+	};
 }

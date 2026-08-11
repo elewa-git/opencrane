@@ -8,6 +8,7 @@ import type { ManagedRunAdmissionPort } from "@opencrane/backend/server/agents/a
 import { ___ShutdownTelemetry } from "@opencrane/backend/observability";
 
 import { _StartBackgroundWorkers } from "./background-workers.js";
+import type { ChannelTargetRouteReconciler } from "./channel-target-composition.types.js";
 import type { OpenCraneProcessConfig } from "./config.types.js";
 import type { OpenCraneHttpServers } from "./lifecycle.types.js";
 import { _log } from "./log.js";
@@ -43,7 +44,7 @@ function _startHttpServers(publicApp: Express, internalApp: Express, config: Ope
  * Workload routes stay on a separate socket throughout the lifecycle; shutdown stops producers
  * before closing listeners and database state, then flushes telemetry as the final I/O boundary.
  */
-export function _StartProcessLifecycle(publicApp: Express, internalApp: Express, prisma: PrismaClient, batchApi: k8s.BatchV1Api, managedRunAdmission: ManagedRunAdmissionPort, config: OpenCraneProcessConfig, unbindConsole: () => void): void
+export function _StartProcessLifecycle(publicApp: Express, internalApp: Express, prisma: PrismaClient, batchApi: k8s.BatchV1Api, managedRunAdmission: ManagedRunAdmissionPort, config: OpenCraneProcessConfig, channelTargetRoutes: ChannelTargetRouteReconciler, unbindConsole: () => void): void
 {
 	// 1. Bind both transport surfaces before starting the loops that serve or repair their work.
 	const servers = _startHttpServers(publicApp, internalApp, config);
@@ -66,7 +67,7 @@ export function _StartProcessLifecycle(publicApp: Express, internalApp: Express,
 			// 1. End long-lived streams before the ten-second hard-exit and telemetry-flush fence.
 			_BeginProcessShutdown();
 			// 2. Stop producers and drain active cleanup before its Kubernetes and Prisma ports close.
-			await backgroundWorkers.stop();
+			await Promise.all([backgroundWorkers.stop(), channelTargetRoutes.stop()]);
 			// 3. Stop both listeners together so public and workload traffic drain as one process.
 			await Promise.all([_closeServer(servers.public), _closeServer(servers.internal)]);
 			// 4. Release durable state only after requests and workers can no longer use it.

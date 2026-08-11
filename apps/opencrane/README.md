@@ -177,7 +177,7 @@ are:
 | `ARTIFACT_SERVICE_URL` and mounted artifact keys | Private byte promotion/read brokers | required when used |
 | `ARTIFACT_PREPROCESSOR_*` | Restricted preprocessing worker and output ceiling | disabled |
 | `CHANNEL_TARGET_*`, `CHANNEL_PROXY_SERVICE_ACCOUNT_NAME` | Exact trusted host/silo and TokenReviewed proxy caller for channel resolution | disabled when absent |
-| `CHANNEL_REPLAY_RECEIVER_ID`, `CHANNEL_REPLAY_ENDPOINT` | Stable replay receiver plus exact internal endpoint; startup reconciles distinct routes per AgentService | disabled when absent |
+| `CHANNEL_REPLAY_RECEIVER_ID`, `CHANNEL_REPLAY_ENDPOINT` | Stable replay receiver plus exact internal endpoint; startup and the drained convergence worker reconcile distinct routes per AgentService | disabled when absent |
 
 The app builds into `dist/apps/opencrane`, uses `deploy/Dockerfile`, and ships through its app-owned
 Helm library chart, which [`deploy-k8s`](../_infra/deploy-k8s/README.md) composes into a release.

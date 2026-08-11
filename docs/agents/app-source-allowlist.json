@@ -16,6 +16,7 @@
     { "path": "apps/opencrane/src/app/background-workers.types.ts", "owner": "apps/opencrane", "classification": "process-composition" },
     { "path": "apps/opencrane/src/app/config.ts", "owner": "apps/opencrane", "classification": "app-config" },
     { "path": "apps/opencrane/src/app/config.types.ts", "owner": "apps/opencrane", "classification": "app-config" },
+    { "path": "apps/opencrane/src/app/channel-target-composition.types.ts", "owner": "apps/opencrane", "classification": "route-composition" },
     { "path": "apps/opencrane/src/app/instrument.ts", "owner": "apps/opencrane", "classification": "process-instrumentation" },
     { "path": "apps/opencrane/src/app/initial-model-bootstrap.ts", "owner": "apps/opencrane", "classification": "process-composition" },
     { "path": "apps/opencrane/src/app/initial-model-bootstrap.types.ts", "owner": "apps/opencrane", "classification": "process-composition" },

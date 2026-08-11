@@ -9,7 +9,7 @@ import { _CreateFleetMembershipEvidenceConfig } from "@opencrane/backend/server/
 import { ___BindConsole } from "@opencrane/backend/observability";
 
 import { _ReadProcessConfig } from "./app/config.js";
-import { _ReconcileChannelTargetRoutes } from "./app/channel-target-composition.js";
+import { _ReconcileChannelTargetRoutes, _StartChannelTargetRouteReconciler } from "./app/channel-target-composition.js";
 import { _CreateInternalApp } from "./app/internal-app.js";
 import { _BootstrapInitialModel } from "./app/initial-model-bootstrap.js";
 import { _CreateKubernetesClients } from "./app/kubernetes-clients.js";
@@ -50,6 +50,7 @@ async function _Main(): Promise<void>
 	// 4. Compose the optional Obot custody and attempt-key transport once, so the public custody
 	//    route and the runtime dispatch plane always target the same Obot with one credential.
 	const obot = _CreateObotAdapters(config.obot);
+	const channelTargetRoutes = _StartChannelTargetRouteReconciler(prisma, config.runtime.channelTargets);
 
 	// 5. Build separate transport surfaces; only the internal app receives workload-only routes.
 	const authentication = _CreatePublicAuthentication(prisma, kubernetes.customApi, config.standaloneFirstUserAdmission);
@@ -58,7 +59,7 @@ async function _Main(): Promise<void>
 	const internalApp = _CreateInternalApp(prisma, kubernetes.authApi, config.runtime, memoryGateway, authentication.sessionMiddleware, obot.attemptKeys);
 
 	// 6. Start listeners and workers under one drain order so shared dependencies close exactly once.
-	_StartProcessLifecycle(publicApp, internalApp, prisma, kubernetes.batchApi, managedRunAdmission, config, unbindConsole);
+	_StartProcessLifecycle(publicApp, internalApp, prisma, kubernetes.batchApi, managedRunAdmission, config, channelTargetRoutes, unbindConsole);
 }
 
 void _Main().catch(function _fatalStartupError(err: unknown)
