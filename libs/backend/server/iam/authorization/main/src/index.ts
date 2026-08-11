@@ -25,10 +25,10 @@ export { __CreateDeferredToolApprovalRouter } from "./deferred-tool-approval.rou
 export { _CreateDeferredToolApprovalRouter } from "./prisma-deferred-tool-approval.router.js";
 export type { DeferredToolApprovalCaller, DeferredToolApprovalClock, DeferredToolApprovalRouterDependencies } from "./deferred-tool-approval.router.types.js";
 export { _AuthorizationOpenapiPaths } from "./openapi.js";
-export { PrismaToolInvocationRepository, __AdmitPreparingToolInvocationInTransaction } from "./prisma-tool-invocation-repository.js";
+export { __AdmitPreparingToolInvocationInTransaction } from "./prisma-tool-invocation-repository.js";
 export { PrismaToolInvocationUnitOfWork } from "./prisma-tool-invocation-unit-of-work.js";
 export { ToolInvocationEventTypes, ToolInvocationRunRecoveryEnterResults } from "./tool-invocation.types.js";
-export type { AdmitPreparingToolInvocation, ToolInvocationAdmissionResult, ToolInvocationAdmissionUnitOfWork, ToolInvocationClaim, ToolInvocationClaimResult, ToolInvocationCompletionResult, ToolInvocationIntent, ToolInvocationLifecycleEvent, ToolInvocationLifecycleEventSink, ToolInvocationPreparationPolicy, ToolInvocationRecord, ToolInvocationRecoveryEvent, ToolInvocationRecoveryEventSink, ToolInvocationRepository, ToolInvocationRequestIdentity, ToolInvocationRunRecoveryAuthority, ToolInvocationRunRecoveryCommand, ToolInvocationRunRecoveryEnterResult, ToolInvocationTransactionRepository, ToolInvocationTransitionResult, ToolInvocationUnitOfWork, ToolResultDeliveryPayload } from "./tool-invocation.types.js";
+export type { AdmitPreparingToolInvocation, ToolInvocationAdmissionResult, ToolInvocationAdmissionUnitOfWork, ToolInvocationClaim, ToolInvocationClaimResult, ToolInvocationCompletionResult, ToolInvocationIntent, ToolInvocationLifecycleEvent, ToolInvocationLifecycleEventSink, ToolInvocationPreparationPolicy, ToolInvocationRecord, ToolInvocationRecoveryEvent, ToolInvocationRecoveryEventSink, ToolInvocationRequestIdentity, ToolInvocationRunRecoveryAuthority, ToolInvocationRunRecoveryCommand, ToolInvocationRunRecoveryEnterResult, ToolInvocationTransitionResult, ToolInvocationUnitOfWork, ToolResultDeliveryPayload } from "./tool-invocation.types.js";
 export { __PlanToolInvocationLifecycle } from "./tool-invocation-lifecycle.js";
 export { ExternalActionClaimKinds, ExternalActionRecoveryModes, ToolInvocationLifecycleActions, ToolInvocationLifecycleEvents, ToolInvocationStates } from "./tool-invocation-lifecycle.types.js";
 export type { ToolInvocationLifecycleInput } from "./tool-invocation-lifecycle.types.js";

@@ -73,12 +73,6 @@ export class PrismaToolInvocationUnitOfWork implements ToolInvocationUnitOfWork
 	/** Consume one preparation failure and append its safe lifecycle event atomically. */
 	async recordPreparationFailure(invocationId: string, expectedRevision: number, now: Date, policy: ToolInvocationPreparationPolicy, failureCode: string): Promise<ToolInvocationRecord | null>
 	{
-		return this.recordPreparationFailureWithEvent(invocationId, expectedRevision, now, policy, failureCode);
-	}
-
-	/** Consume one preparation failure and append its safe lifecycle event atomically. */
-	async recordPreparationFailureWithEvent(invocationId: string, expectedRevision: number, now: Date, policy: ToolInvocationPreparationPolicy, failureCode: string): Promise<ToolInvocationRecord | null>
-	{
 		const lifecycleEvents = this._lifecycleEvents;
 		return this._execute(async function _preparationFailure(repository, transaction)
 		{
@@ -102,12 +96,6 @@ export class PrismaToolInvocationUnitOfWork implements ToolInvocationUnitOfWork
 	/** Complete success, result delivery, and the canonical completion event atomically. */
 	async completeSucceeded(claim: ToolInvocationClaim, result: JsonValue, now: Date): Promise<ToolInvocationCompletionResult>
 	{
-		return this.completeSucceededWithEvent(claim, result, now);
-	}
-
-	/** Complete success, result delivery, and the canonical completion event atomically. */
-	async completeSucceededWithEvent(claim: ToolInvocationClaim, result: JsonValue, now: Date): Promise<ToolInvocationCompletionResult>
-	{
 		const lifecycleEvents = this._lifecycleEvents;
 		return this._execute(async function _completeSuccess(repository, transaction)
 		{
@@ -123,12 +111,6 @@ export class PrismaToolInvocationUnitOfWork implements ToolInvocationUnitOfWork
 	/** Complete failure, result delivery, and the canonical failure event atomically. */
 	async completeFailed(claim: ToolInvocationClaim, failureCode: string, now: Date): Promise<ToolInvocationCompletionResult>
 	{
-		return this.completeFailedWithEvent(claim, failureCode, now);
-	}
-
-	/** Complete failure, result delivery, and the canonical failure event atomically. */
-	async completeFailedWithEvent(claim: ToolInvocationClaim, failureCode: string, now: Date): Promise<ToolInvocationCompletionResult>
-	{
 		const lifecycleEvents = this._lifecycleEvents;
 		return this._execute(async function _completeFailure(repository, transaction)
 		{
@@ -143,12 +125,6 @@ export class PrismaToolInvocationUnitOfWork implements ToolInvocationUnitOfWork
 
 	/** Apply ambiguous recovery policy and append its safe lifecycle event atomically. */
 	async completeAmbiguous(claim: ToolInvocationClaim, now: Date): Promise<ToolInvocationRecord | null>
-	{
-		return this.completeAmbiguousWithEvent(claim, now);
-	}
-
-	/** Apply ambiguous recovery policy and append its safe lifecycle event atomically. */
-	async completeAmbiguousWithEvent(claim: ToolInvocationClaim, now: Date): Promise<ToolInvocationRecord | null>
 	{
 		const lifecycleEvents = this._lifecycleEvents;
 		const recoveryEvents = this._recoveryEvents;

@@ -52,6 +52,17 @@ describe("PrismaToolInvocationRepository", function _suite()
 		]) } }));
 	});
 
+	it("allows successful first preparation after the retry deadline because only retries expire", async function _latePreparationSuccess()
+	{
+		const initial = _row({ preparationAttempt: 0, revision: 0 });
+		const ready = _row({ state: ToolInvocationState.Ready, preparationAttempt: 1, revision: 1, nextPreparationAttemptAt: new Date("2026-08-11T10:06:00.000Z") });
+		const updateMany = vi.fn().mockResolvedValue({ count: 1 });
+		const transaction = { toolInvocation: { findUnique: vi.fn().mockResolvedValueOnce(initial).mockResolvedValueOnce(ready), updateMany } } as unknown as Prisma.TransactionClient;
+
+		await expect(new PrismaToolInvocationRepository(transaction).markPrepared("invocation-row-1", 0, new Date("2026-08-11T10:06:00.000Z"))).resolves.toEqual(expect.objectContaining({ state: ToolInvocationStates.Ready, preparationAttempt: 1 }));
+		expect(updateMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ state: ToolInvocationState.Preparing, revision: 0 }), data: expect.objectContaining({ state: ToolInvocationState.Ready, preparationAttempt: { increment: 1 } }) }));
+	});
+
 	it("retries only provider-free preparation before the third attempt", async function _boundedPreparationRetry()
 	{
 		const initial = _row({ preparationAttempt: 0, revision: 0 });
@@ -92,6 +103,20 @@ describe("PrismaToolInvocationRepository", function _suite()
 		const claim = { invocationId: "invocation-row-1", kind: ExternalActionClaimKinds.Reconcile, fence: 4, revision: 6 };
 		await new PrismaToolInvocationRepository(transaction).complete(claim, { toolInvocationId: "tool-1", outcome: "succeeded", result: { ok: true } }, new Date("2026-08-11T10:00:01.000Z"));
 		expect(updateMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ state: ToolInvocationState.Reconciling, claimKind: ExternalActionClaimKind.Reconcile, claimFence: 4, revision: 6, run: { is: { attempt: 2, state: { in: [AgentRunState.Running, AgentRunState.Cancelling] } } } }) }));
+	});
+
+	it("does not create a duplicate delivery when a stale claim and revision lose the completion CAS", async function _completionCasLoser()
+	{
+		const claimed = _row({ state: ToolInvocationState.Claimed, claimKind: ExternalActionClaimKind.Dispatch, claimFence: 3, revision: 5 });
+		const winner = _row({ state: ToolInvocationState.Succeeded, claimKind: null, claimFence: 3, revision: 6, result: { ok: true }, completedAt: new Date("2026-08-11T10:00:01.000Z") });
+		const updateMany = vi.fn().mockResolvedValue({ count: 0 });
+		const create = vi.fn();
+		const transaction = { toolInvocation: { findUnique: vi.fn().mockResolvedValueOnce(claimed).mockResolvedValueOnce(winner), updateMany }, toolResultDelivery: { create } } as unknown as Prisma.TransactionClient;
+		const staleClaim = { invocationId: "invocation-row-1", kind: ExternalActionClaimKinds.Dispatch, fence: 2, revision: 4 };
+
+		await expect(new PrismaToolInvocationRepository(transaction).complete(staleClaim, { toolInvocationId: "tool-1", outcome: "succeeded", result: { ok: true } }, new Date("2026-08-11T10:00:01.000Z"))).resolves.toEqual({ outcome: "winner", invocation: expect.objectContaining({ state: ToolInvocationStates.Succeeded, revision: 6 }) });
+		expect(updateMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ claimFence: 2, revision: 4 }) }));
+		expect(create).not.toHaveBeenCalled();
 	});
 
 	it("never grants a second reconciliation claim while a live lease exists", async function _singleClaim()
@@ -145,7 +170,7 @@ describe("PrismaToolInvocationUnitOfWork", function _unitOfWorkSuite()
 		const appendLifecycle = vi.fn().mockResolvedValue(true);
 		const runRecovery = { enterRecoveryRequiredInTransaction: vi.fn().mockResolvedValue(ToolInvocationRunRecoveryEnterResults.Entered), resumeRunningInTransaction: vi.fn().mockResolvedValue(true) };
 		const unit = new PrismaToolInvocationUnitOfWork(prisma, { appendInTransaction: appendLifecycle }, { appendInTransaction: vi.fn().mockResolvedValue(true) }, runRecovery);
-		await unit.recordPreparationFailureWithEvent("invocation-row-1", 0, new Date("2026-08-11T10:00:01.000Z"), _policy(), "preparation_failed");
+		await unit.recordPreparationFailure("invocation-row-1", 0, new Date("2026-08-11T10:00:01.000Z"), _policy(), "preparation_failed");
 		expect(appendLifecycle).toHaveBeenCalledWith(transaction, { runId: "run-1", attempt: 2, eventType: ToolInvocationEventTypes.Failed, payload: { toolInvocationId: "tool-1", reason: "preparation_failed", retryCount: 1, retryLimit: 3, retrying: true } });
 	});
 
@@ -158,7 +183,7 @@ describe("PrismaToolInvocationUnitOfWork", function _unitOfWorkSuite()
 		const appendRecovery = vi.fn().mockResolvedValue(true);
 		const runRecovery = { enterRecoveryRequiredInTransaction: vi.fn().mockResolvedValue(ToolInvocationRunRecoveryEnterResults.Cancelling), resumeRunningInTransaction: vi.fn().mockResolvedValue(true) };
 		const unit = new PrismaToolInvocationUnitOfWork(prisma, { appendInTransaction: vi.fn().mockResolvedValue(true) }, { appendInTransaction: appendRecovery }, runRecovery);
-		await expect(unit.completeAmbiguousWithEvent({ invocationId: "invocation-row-1", kind: ExternalActionClaimKinds.Dispatch, fence: 3, revision: 5 }, new Date("2026-08-11T10:00:01.000Z"))).resolves.toEqual(expect.objectContaining({ state: ToolInvocationStates.RecoveryRequired }));
+		await expect(unit.completeAmbiguous({ invocationId: "invocation-row-1", kind: ExternalActionClaimKinds.Dispatch, fence: 3, revision: 5 }, new Date("2026-08-11T10:00:01.000Z"))).resolves.toEqual(expect.objectContaining({ state: ToolInvocationStates.RecoveryRequired }));
 		expect(runRecovery.enterRecoveryRequiredInTransaction).toHaveBeenCalledWith(transaction, { runId: "run-1", attempt: 2 });
 		expect(runRecovery.resumeRunningInTransaction).not.toHaveBeenCalled();
 		expect(appendRecovery).not.toHaveBeenCalled();
@@ -174,7 +199,7 @@ describe("PrismaToolInvocationUnitOfWork", function _unitOfWorkSuite()
 		const runRecovery = { enterRecoveryRequiredInTransaction: vi.fn().mockResolvedValue(ToolInvocationRunRecoveryEnterResults.Conflict), resumeRunningInTransaction: vi.fn() };
 		const unit = new PrismaToolInvocationUnitOfWork(prisma, { appendInTransaction: vi.fn().mockResolvedValue(true) }, { appendInTransaction: appendRecovery }, runRecovery);
 
-		await expect(unit.completeAmbiguousWithEvent({ invocationId: "invocation-row-1", kind: ExternalActionClaimKinds.Dispatch, fence: 3, revision: 5 }, new Date("2026-08-11T10:00:01.000Z"))).rejects.toThrow("tool recovery state conflicts with its owning run attempt");
+		await expect(unit.completeAmbiguous({ invocationId: "invocation-row-1", kind: ExternalActionClaimKinds.Dispatch, fence: 3, revision: 5 }, new Date("2026-08-11T10:00:01.000Z"))).rejects.toThrow("tool recovery state conflicts with its owning run attempt");
 		expect(appendRecovery).not.toHaveBeenCalled();
 	});
 
@@ -189,9 +214,26 @@ describe("PrismaToolInvocationUnitOfWork", function _unitOfWorkSuite()
 		const runRecovery = { enterRecoveryRequiredInTransaction: vi.fn(), resumeRunningInTransaction: vi.fn() };
 		const unit = new PrismaToolInvocationUnitOfWork(prisma, { appendInTransaction: appendLifecycle }, { appendInTransaction: vi.fn() }, runRecovery);
 
-		await expect(unit.completeSucceededWithEvent({ invocationId: "invocation-row-1", kind: ExternalActionClaimKinds.Dispatch, fence: 3, revision: 5 }, { ok: true }, new Date("2026-08-11T10:00:01.000Z"))).resolves.toEqual(expect.objectContaining({ outcome: "completed", invocation: expect.objectContaining({ state: ToolInvocationStates.Succeeded, claimKind: null }) }));
+		await expect(unit.completeSucceeded({ invocationId: "invocation-row-1", kind: ExternalActionClaimKinds.Dispatch, fence: 3, revision: 5 }, { ok: true }, new Date("2026-08-11T10:00:01.000Z"))).resolves.toEqual(expect.objectContaining({ outcome: "completed", invocation: expect.objectContaining({ state: ToolInvocationStates.Succeeded, claimKind: null }) }));
 		expect(updateMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ run: { is: { attempt: 2, state: { in: [AgentRunState.Running, AgentRunState.Cancelling] } } } }), data: expect.objectContaining({ claimKind: null, claimExpiresAt: null }) }));
 		expect(appendLifecycle).toHaveBeenCalledWith(transaction, expect.objectContaining({ eventType: ToolInvocationEventTypes.Completed }));
+	});
+
+	it("does not create a delivery or lifecycle event when a stale completion loses the durable CAS", async function _completionCasLoser()
+	{
+		const claimed = _row({ state: ToolInvocationState.Claimed, claimKind: ExternalActionClaimKind.Dispatch, claimFence: 3, revision: 5 });
+		const winner = _row({ state: ToolInvocationState.Succeeded, claimKind: null, claimFence: 3, revision: 6, result: { ok: true }, completedAt: new Date("2026-08-11T10:00:01.000Z") });
+		const updateMany = vi.fn().mockResolvedValue({ count: 0 });
+		const create = vi.fn();
+		const transaction = { toolInvocation: { findUnique: vi.fn().mockResolvedValueOnce(claimed).mockResolvedValueOnce(claimed).mockResolvedValueOnce(winner), updateMany }, toolResultDelivery: { create } };
+		const prisma = { $transaction: vi.fn(async function _transaction(operation) { return operation(transaction); }) } as unknown as PrismaClient;
+		const appendLifecycle = vi.fn().mockResolvedValue(true);
+		const unit = new PrismaToolInvocationUnitOfWork(prisma, { appendInTransaction: appendLifecycle }, { appendInTransaction: vi.fn() }, { enterRecoveryRequiredInTransaction: vi.fn(), resumeRunningInTransaction: vi.fn() });
+
+		await expect(unit.completeSucceeded({ invocationId: "invocation-row-1", kind: ExternalActionClaimKinds.Dispatch, fence: 2, revision: 4 }, { ok: true }, new Date("2026-08-11T10:00:01.000Z"))).resolves.toEqual({ outcome: "winner", invocation: expect.objectContaining({ state: ToolInvocationStates.Succeeded, revision: 6 }) });
+		expect(updateMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ claimFence: 2, revision: 4 }) }));
+		expect(create).not.toHaveBeenCalled();
+		expect(appendLifecycle).not.toHaveBeenCalled();
 	});
 
 	it("commits definite failure and clears its dispatch claim while the run is cancelling", async function _failureUnderCancellation()
@@ -205,7 +247,7 @@ describe("PrismaToolInvocationUnitOfWork", function _unitOfWorkSuite()
 		const runRecovery = { enterRecoveryRequiredInTransaction: vi.fn(), resumeRunningInTransaction: vi.fn() };
 		const unit = new PrismaToolInvocationUnitOfWork(prisma, { appendInTransaction: appendLifecycle }, { appendInTransaction: vi.fn() }, runRecovery);
 
-		await expect(unit.completeFailedWithEvent({ invocationId: "invocation-row-1", kind: ExternalActionClaimKinds.Dispatch, fence: 3, revision: 5 }, "provider_rejected", new Date("2026-08-11T10:00:01.000Z"))).resolves.toEqual(expect.objectContaining({ outcome: "completed", invocation: expect.objectContaining({ state: ToolInvocationStates.Failed, claimKind: null }) }));
+		await expect(unit.completeFailed({ invocationId: "invocation-row-1", kind: ExternalActionClaimKinds.Dispatch, fence: 3, revision: 5 }, "provider_rejected", new Date("2026-08-11T10:00:01.000Z"))).resolves.toEqual(expect.objectContaining({ outcome: "completed", invocation: expect.objectContaining({ state: ToolInvocationStates.Failed, claimKind: null }) }));
 		expect(updateMany).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ claimKind: null, claimExpiresAt: null }) }));
 		expect(appendLifecycle).toHaveBeenCalledWith(transaction, expect.objectContaining({ eventType: ToolInvocationEventTypes.Failed }));
 	});
@@ -234,7 +276,7 @@ describe("PrismaToolInvocationUnitOfWork", function _unitOfWorkSuite()
 		const runRecovery = { enterRecoveryRequiredInTransaction: vi.fn().mockResolvedValue(ToolInvocationRunRecoveryEnterResults.Cancelling), resumeRunningInTransaction: vi.fn() };
 		const unit = new PrismaToolInvocationUnitOfWork(prisma, { appendInTransaction: vi.fn().mockResolvedValue(true) }, { appendInTransaction: appendRecovery }, runRecovery);
 
-		await expect(unit.completeAmbiguousWithEvent({ invocationId: "invocation-row-1", kind: ExternalActionClaimKinds.Dispatch, fence: 3, revision: 5 }, new Date("2026-08-11T10:00:01.000Z"))).resolves.toEqual(expect.objectContaining({ state: ToolInvocationStates.RecoveryRequired, claimKind: null }));
+		await expect(unit.completeAmbiguous({ invocationId: "invocation-row-1", kind: ExternalActionClaimKinds.Dispatch, fence: 3, revision: 5 }, new Date("2026-08-11T10:00:01.000Z"))).resolves.toEqual(expect.objectContaining({ state: ToolInvocationStates.RecoveryRequired, claimKind: null }));
 		expect(updateMany).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ claimKind: null, claimExpiresAt: null }) }));
 		expect(appendRecovery).not.toHaveBeenCalled();
 	});

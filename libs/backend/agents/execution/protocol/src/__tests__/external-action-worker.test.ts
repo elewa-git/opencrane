@@ -190,13 +190,11 @@ class _Invocations implements ExternalActionWorkerUnitOfWork
 		return { ...this.invocation, state, revision: this.invocation.revision + 1 };
 	}
 	/** Record one bounded provider-free preparation failure. */
-	async recordPreparationFailure(_invocationId: string, _expectedRevision: number, _now: Date, policy: ToolInvocationPreparationPolicy, _failureCode: string): Promise<ToolInvocationRecord | null> { this.preparationFailures.push(policy); return this.invocation; }
-	/** Record preparation failure and its retry-visible event as one fake transaction. */
-	async recordPreparationFailureWithEvent(invocationId: string, expectedRevision: number, now: Date, policy: ToolInvocationPreparationPolicy, failureCode: string): Promise<ToolInvocationRecord | null>
+	async recordPreparationFailure(_invocationId: string, _expectedRevision: number, _now: Date, policy: ToolInvocationPreparationPolicy, failureCode: string): Promise<ToolInvocationRecord | null>
 	{
-		const record = await this.recordPreparationFailure(invocationId, expectedRevision, now, policy, failureCode);
+		this.preparationFailures.push(policy);
 		this.lifecycleEvents.push({ runId: this.invocation.runId, attempt: this.invocation.attempt, eventType: ToolInvocationEventTypes.Failed, payload: { toolInvocationId: this.invocation.toolInvocationId, reason: failureCode, retryCount: this.invocation.preparationAttempt + 1, retryLimit: policy.attemptLimit, retrying: true } });
-		return record;
+		return this.invocation;
 	}
 	/** Acquire one exact provider-operation claim. */
 	async claim(_invocationId: string, kind: ExternalActionClaimKinds, _now: Date, _leaseMilliseconds: number): Promise<ToolInvocationClaimResult>
@@ -207,17 +205,11 @@ class _Invocations implements ExternalActionWorkerUnitOfWork
 		return { outcome: "claimed", claim: { invocationId: invocation.id, kind, fence: 1, revision: invocation.revision + 1 }, invocation };
 	}
 	/** Commit one successful provider result. */
-	async completeSucceeded(_claim: ToolInvocationClaim, result: JsonValue, _now: Date): Promise<ToolInvocationCompletionResult> { this.successes.push(result); return { outcome: "winner", invocation: this.invocation }; }
-	/** Commit success and its event as one fake transaction. */
-	async completeSucceededWithEvent(claim: ToolInvocationClaim, result: JsonValue, now: Date): Promise<ToolInvocationCompletionResult> { const completed = await this.completeSucceeded(claim, result, now); this.lifecycleEvents.push({ runId: this.invocation.runId, attempt: this.invocation.attempt, eventType: ToolInvocationEventTypes.Completed, payload: { toolInvocationId: this.invocation.toolInvocationId } }); return completed; }
+	async completeSucceeded(_claim: ToolInvocationClaim, result: JsonValue, _now: Date): Promise<ToolInvocationCompletionResult> { this.successes.push(result); this.lifecycleEvents.push({ runId: this.invocation.runId, attempt: this.invocation.attempt, eventType: ToolInvocationEventTypes.Completed, payload: { toolInvocationId: this.invocation.toolInvocationId } }); return { outcome: "winner", invocation: this.invocation }; }
 	/** Commit one proven provider failure. */
-	async completeFailed(_claim: ToolInvocationClaim, _failureCode: string, _now: Date): Promise<ToolInvocationCompletionResult> { return { outcome: "winner", invocation: this.invocation }; }
-	/** Commit failure and its event as one fake transaction. */
-	async completeFailedWithEvent(claim: ToolInvocationClaim, failureCode: string, now: Date): Promise<ToolInvocationCompletionResult> { const completed = await this.completeFailed(claim, failureCode, now); this.lifecycleEvents.push({ runId: this.invocation.runId, attempt: this.invocation.attempt, eventType: ToolInvocationEventTypes.Failed, payload: { toolInvocationId: this.invocation.toolInvocationId, reason: failureCode, retryCount: this.invocation.preparationAttempt, retryLimit: 3, retrying: false } }); return completed; }
+	async completeFailed(_claim: ToolInvocationClaim, failureCode: string, _now: Date): Promise<ToolInvocationCompletionResult> { this.lifecycleEvents.push({ runId: this.invocation.runId, attempt: this.invocation.attempt, eventType: ToolInvocationEventTypes.Failed, payload: { toolInvocationId: this.invocation.toolInvocationId, reason: failureCode, retryCount: this.invocation.preparationAttempt, retryLimit: 3, retrying: false } }); return { outcome: "winner", invocation: this.invocation }; }
 	/** Record an ambiguous result for frozen recovery policy. */
-	async completeAmbiguous(claim: ToolInvocationClaim, _now: Date): Promise<ToolInvocationRecord | null> { this.ambiguous.push(claim); return this.invocation; }
-	/** Apply ambiguity and append its event as one fake transaction. */
-	async completeAmbiguousWithEvent(claim: ToolInvocationClaim, now: Date): Promise<ToolInvocationRecord | null> { const completed = await this.completeAmbiguous(claim, now); this.lifecycleEvents.push({ runId: this.invocation.runId, attempt: this.invocation.attempt, eventType: ToolInvocationEventTypes.Failed, payload: { toolInvocationId: this.invocation.toolInvocationId, reason: "external_action_provider_outcome_ambiguous", retryCount: this.invocation.preparationAttempt, retryLimit: 3, retrying: this.invocation.recoveryMode !== ExternalActionRecoveryModes.Manual } }); return completed; }
+	async completeAmbiguous(claim: ToolInvocationClaim, _now: Date): Promise<ToolInvocationRecord | null> { this.ambiguous.push(claim); this.lifecycleEvents.push({ runId: this.invocation.runId, attempt: this.invocation.attempt, eventType: ToolInvocationEventTypes.Failed, payload: { toolInvocationId: this.invocation.toolInvocationId, reason: "external_action_provider_outcome_ambiguous", retryCount: this.invocation.preparationAttempt, retryLimit: 3, retrying: this.invocation.recoveryMode !== ExternalActionRecoveryModes.Manual } }); return this.invocation; }
 	/** Recover one expired provider claim without dispatching. */
 	async recoverExpiredClaim(_invocationId: string, _now: Date): Promise<ToolInvocationRecord | null> { this.expiredRecoveries += 1; return this.invocation; }
 	/** Release one exact claim and record its retry-visible failure event. */

@@ -98,7 +98,7 @@ async function _prepare(invocation: ExternalActionWorkerInvocation, now: Date, d
 	}
 	catch
 	{
-		await dependencies.invocations.recordPreparationFailureWithEvent(invocation.id, invocation.revision, now, {
+		await dependencies.invocations.recordPreparationFailure(invocation.id, invocation.revision, now, {
 			attemptLimit: dependencies.policy.preparationAttemptLimit,
 			retryWindowMilliseconds: dependencies.policy.preparationRetryWindowMilliseconds,
 			retryDelayMilliseconds: dependencies.policy.preparationRetryDelayMilliseconds,
@@ -172,12 +172,12 @@ async function _execute(invocation: ExternalActionWorkerInvocation, kind: Extern
 	// 4. Commit only a provider-originated definite result; payloads never enter logs or spans.
 	if (outcome.kind === ExternalActionProviderOutcomeKinds.Succeeded)
 	{
-		await dependencies.invocations.completeSucceededWithEvent(claimed.claim, outcome.result, dependencies.clock.now());
+		await dependencies.invocations.completeSucceeded(claimed.claim, outcome.result, dependencies.clock.now());
 		return true;
 	}
 	if (outcome.kind === ExternalActionProviderOutcomeKinds.Failed)
 	{
-		await dependencies.invocations.completeFailedWithEvent(claimed.claim, outcome.failureCode, dependencies.clock.now());
+		await dependencies.invocations.completeFailed(claimed.claim, outcome.failureCode, dependencies.clock.now());
 		return true;
 	}
 	await _completeAmbiguous(claimed.claim, claimed.invocation, dependencies);
@@ -194,7 +194,7 @@ async function _failBeforeProvider(invocation: ExternalActionWorkerInvocation, k
 		await _completeAmbiguous(claimed.claim, claimed.invocation, dependencies);
 		return true;
 	}
-	await dependencies.invocations.completeFailedWithEvent(claimed.claim, "external_action_pre_dispatch_unavailable", dependencies.clock.now());
+	await dependencies.invocations.completeFailed(claimed.claim, "external_action_pre_dispatch_unavailable", dependencies.clock.now());
 	dependencies.log.warn({ runId: invocation.runId, attempt: invocation.attempt, toolInvocationId: invocation.toolInvocationId, failureKind: "external_action_pre_dispatch_unavailable" }, "external action adapter was unavailable before provider dispatch");
 	return true;
 }
@@ -202,6 +202,6 @@ async function _failBeforeProvider(invocation: ExternalActionWorkerInvocation, k
 /** Apply the frozen recovery mode without exposing provider errors or response bodies. */
 async function _completeAmbiguous(claim: ToolInvocationClaim, invocation: ToolInvocationRecord, dependencies: ExternalActionWorkerDependencies): Promise<void>
 {
-	await dependencies.invocations.completeAmbiguousWithEvent(claim, dependencies.clock.now());
+	await dependencies.invocations.completeAmbiguous(claim, dependencies.clock.now());
 	dependencies.log.warn({ runId: invocation.runId, attempt: invocation.attempt, toolInvocationId: invocation.toolInvocationId, recoveryMode: invocation.recoveryMode, claimKind: claim.kind, failureKind: "external_action_provider_outcome_ambiguous" }, "external action provider outcome could not be proven");
 }

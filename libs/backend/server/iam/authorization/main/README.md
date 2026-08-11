@@ -93,13 +93,15 @@ carries a concrete, currently authorized human approval subject.
   canonical JSON hash, preserving one SHA-256 implementation across server and browser consumers.
 - `PrismaRuntimeAuthorityRepository`, `PrismaAuthorizationGrantRepository` — the database-backed
   stores for accepted proofs/receipts and for candidate grants.
-- `PrismaToolInvocationUnitOfWork`, its transaction-scoped `PrismaToolInvocationRepository`,
-  `__AdmitPreparingToolInvocationInTransaction`, and
+- `PrismaToolInvocationUnitOfWork`, the narrow
+  `__AdmitPreparingToolInvocationInTransaction` helper, and
   `__PlanToolInvocationLifecycle` — atomically turn an admitted runtime candidate into durable work,
   then apply one exhaustive State × Event policy to every preparation, approval, fenced provider
   claim, reconciliation, terminal result, cancellation, and recovery-required transition without
-  changing the separate proof/JTI receipt lifecycle. Runs owns the injected run-state recovery port;
-  authorization never writes `AgentRun.state` directly.
+  changing the separate proof/JTI receipt lifecycle. Every public UnitOfWork completion includes its
+  canonical lifecycle event in the same transaction; its transaction repository remains
+  package-private. Runs owns the injected run-state recovery port; authorization never writes
+  `AgentRun.state` directly.
 - `ShareAuthorizationScopeKinds` — the four domain scope categories that sharing accepts; the
   Prisma adapter translates them explicitly and rejects any unsupported stored category.
 - Contract types: `ResolveEffectiveAccessCommand`/`Result`, `AuthorizationGrantRepository`,

@@ -251,8 +251,8 @@ export interface ToolInvocationRunRecoveryAuthority
 	resumeRunningInTransaction(transaction: unknown, command: ToolInvocationRunRecoveryCommand): Promise<boolean>;
 }
 
-/** Persistence authority for one ToolInvocation-owned external-action lifecycle. */
-export interface ToolInvocationRepository
+/** Public UnitOfWork operations for one ToolInvocation-owned external-action lifecycle. */
+interface ToolInvocationOperations
 {
 	/** Load one invocation from its accepted candidate coordinates. */
 	findByCandidate(runId: string, attempt: number, candidateId: string): Promise<ToolInvocationRecord | null>;
@@ -260,24 +260,16 @@ export interface ToolInvocationRepository
 	findNextRunnable(now: Date): Promise<ToolInvocationRecord | null>;
 	/** Record provider-free preparation success under the observed lifecycle revision. */
 	markPrepared(invocationId: string, expectedRevision: number, now: Date): Promise<ToolInvocationRecord | null>;
-	/** Consume one failed provider-free preparation attempt without granting dispatch. */
+	/** Consume one failed preparation attempt and append its canonical failure event atomically. */
 	recordPreparationFailure(invocationId: string, expectedRevision: number, now: Date, policy: ToolInvocationPreparationPolicy, failureCode: string): Promise<ToolInvocationRecord | null>;
-	/** Consume one preparation failure and append its safe failure event atomically. */
-	recordPreparationFailureWithEvent(invocationId: string, expectedRevision: number, now: Date, policy: ToolInvocationPreparationPolicy, failureCode: string): Promise<ToolInvocationRecord | null>;
 	/** Acquire a monotonic provider operation claim or return the durable CAS winner. */
 	claim(invocationId: string, kind: ExternalActionClaimKinds, now: Date, leaseMilliseconds: number): Promise<ToolInvocationClaimResult>;
-	/** Complete a claimed success and create its one-to-one delivery intent atomically. */
+	/** Complete success, delivery intent, and its canonical lifecycle event atomically. */
 	completeSucceeded(claim: ToolInvocationClaim, result: JsonValue, now: Date): Promise<ToolInvocationCompletionResult>;
-	/** Complete success, result delivery, and the canonical completion event atomically. */
-	completeSucceededWithEvent(claim: ToolInvocationClaim, result: JsonValue, now: Date): Promise<ToolInvocationCompletionResult>;
-	/** Complete a claimed proven failure and create its one-to-one delivery intent atomically. */
+	/** Complete failure, delivery intent, and its canonical lifecycle event atomically. */
 	completeFailed(claim: ToolInvocationClaim, failureCode: string, now: Date): Promise<ToolInvocationCompletionResult>;
-	/** Complete failure, result delivery, and the canonical failure event atomically. */
-	completeFailedWithEvent(claim: ToolInvocationClaim, failureCode: string, now: Date): Promise<ToolInvocationCompletionResult>;
-	/** Apply recovery-mode policy after an ambiguous provider outcome, with no result delivery. */
+	/** Apply ambiguous recovery policy and append its canonical lifecycle event atomically. */
 	completeAmbiguous(claim: ToolInvocationClaim, now: Date): Promise<ToolInvocationRecord | null>;
-	/** Apply ambiguous recovery policy and append its safe failure event atomically. */
-	completeAmbiguousWithEvent(claim: ToolInvocationClaim, now: Date): Promise<ToolInvocationRecord | null>;
 	/** Release an exact claim after a pre-dispatch failure proved that no provider request started. */
 	releaseClaimBeforeDispatch(claim: ToolInvocationClaim, now: Date): Promise<ToolInvocationRecord | null>;
 	/** Apply frozen recovery policy to one expired provider claim without repeating its effect. */
@@ -285,7 +277,7 @@ export interface ToolInvocationRepository
 }
 
 /** Process-scoped transaction owner that exposes the ToolInvocation lifecycle as atomic calls. */
-export interface ToolInvocationUnitOfWork extends ToolInvocationRepository {}
+export interface ToolInvocationUnitOfWork extends ToolInvocationOperations {}
 
 /** Transaction-scoped persistence methods constructed only by the ToolInvocation unit of work. */
 export interface ToolInvocationTransactionRepository
