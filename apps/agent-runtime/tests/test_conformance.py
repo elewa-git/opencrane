@@ -24,8 +24,6 @@ import threading
 import types
 import unittest
 import unittest.mock
-
-from src.tools import obot_mcp as _obot_mcp
 from src.model_loop.checkpoints import (
     read_checkpoint as _read_checkpoint,
     write_checkpoint as _write_checkpoint,
@@ -85,27 +83,25 @@ def _start_command() -> dict:
     }
 
 
-def _resume_command(deferred: list, input_generation: int = 9) -> dict:
-    """Build one structurally valid ``resume_attempt`` carrying authorized approval decisions.
-
-    The REAL control-plane payload shape is an array of
-    ``{approvalRequestId, decision, toolInvocationId, arguments, argumentsDigest}`` records. The
-    server carries the authoritative replacement arguments and never carries an executed result body.
-    The default input generation matches the
-    start fixture so checkpoint recovery of the compiled grants succeeds.
-    """
+def _resume_command(tool_results: list, input_generation: int = 9) -> dict:
+    """Build one valid resume carrying exact saved server-owned tool results."""
     return {
         "kind": "resume_attempt",
         "commandId": "cmd-resume",
         "fence": 3,
         "assignment": {"runId": "run-conf", "attempt": 1},
-        "payload": {"inputGeneration": input_generation, "deferredToolResults": deferred, "steeringRequests": []},
+        "payload": {"inputGeneration": input_generation, "toolResults": tool_results, "steeringRequests": []},
     }
 
 
-def _approved(approval_request_id: str, tool_invocation_id: str, arguments: dict) -> dict:
-    """Build one authority-approved replacement with its exact canonical digest."""
-    return {"approvalRequestId": approval_request_id, "decision": "approved", "toolInvocationId": tool_invocation_id, "arguments": arguments, "argumentsDigest": _arguments_digest(arguments)}
+def _succeeded(tool_invocation_id: str, result: object) -> dict:
+    """Build one exact saved success returned by the control plane."""
+    return {"toolInvocationId": tool_invocation_id, "outcome": "succeeded", "result": result}
+
+
+def _failed(tool_invocation_id: str, failure_code: str) -> dict:
+    """Build one exact saved terminal failure returned by the control plane."""
+    return {"toolInvocationId": tool_invocation_id, "outcome": "failed", "failureCode": failure_code}
 
 
 def _scripted_source(events: list[dict]):
@@ -207,134 +203,78 @@ class ConformanceToolCallTests(unittest.TestCase):
 
 
 def _integration_compiled_input() -> dict:
-    """Compiled input granting one integration tool with Obot addressing for direct invocation."""
+    """Compiled input granting one integration tool without provider authority."""
     return {
         **_compiled_input(),
         "tools": [
-            {"name": "integration:github:create_issue", "toolRevisionId": "integration:github:create_issue", "description": "", "parametersSchema": {}, "obotMcpServerId": "srv-9"},
+            {"name": "integration:github:create_issue", "toolRevisionId": "integration:github:create_issue", "description": "", "parametersSchema": {}},
         ],
     }
 
 
 def _integration_start_command() -> dict:
-    """Start command whose compiled grants carry Obot addressing."""
+    """Start command whose compiled grants carry only model-visible tool definitions."""
     return {**_start_command(), "payload": {"snapshot": {"inputGeneration": 9}, "compiledInput": _integration_compiled_input()}}
 
 
-def _write_key_file(directory: str) -> str:
-    """Write one attempt-scoped Obot key fixture and return its path."""
-    path = os.path.join(directory, "obot-key")
-    with open(path, "w", encoding="utf-8") as key_file:
-        key_file.write("ok1-attempt-key\n")
-    return path
-
-
 class ConformanceApprovalResumeTests(unittest.TestCase):
-    """The approval boundary surfaces an external action; resume executes it directly against Obot."""
+    """The runtime maps saved server results and never contacts an external provider."""
 
-    def test_approved_resume_executes_via_obot_and_reports_digest_only(self) -> None:
-        """An approved decision executes against Obot, feeds the result, and reports a digest."""
+    def test_resume_feeds_the_saved_success_without_repeating_the_action(self) -> None:
+        """A saved success enters the loop without a second tool lifecycle or provider call."""
         captured: dict = {}
-        obot_calls: list = []
         tool_result = {"content": [{"type": "text", "text": "created"}], "isError": False}
 
-        def _resume_source(_compiled_input, deferred, _cancel, _steering):
-            captured["deferred"] = deferred
+        def _resume_source(_compiled_input, results, _cancel, _steering):
+            captured["results"] = results
             return iter([{"type": "output_text", "text": "done"}, {"type": "usage", "inputTokens": 1, "outputTokens": 1}])
-
-        def _invoke(base_url, key, mcp_server_id, tool_name, arguments, timeout_s):
-            obot_calls.append({"base_url": base_url, "key": key, "mcp_server_id": mcp_server_id, "tool_name": tool_name, "arguments": arguments, "timeout_s": timeout_s})
-            return tool_result
 
         resume_emitted: list[dict] = []
         cipher = _ReversingCipher()
         with tempfile.TemporaryDirectory() as directory:
-            key_path = _write_key_file(directory)
-            environment = {"OPENCRANE_RUNTIME_OBOT_URL": "http://obot.silo.svc.cluster.local:8080", "OPENCRANE_RUNTIME_OBOT_KEY_PATH": key_path, "OPENCRANE_RUNTIME_CHECKPOINT_DIR": directory}
+            environment = {"OPENCRANE_RUNTIME_CHECKPOINT_DIR": directory}
             with unittest.mock.patch.dict(os.environ, environment):
                 start_emitted = _run_start(_integration_start_command(), [{"type": "tool_call", "toolName": "integration:github:create_issue", "toolCallId": "call-approve", "arguments": '{"title":"x"}'}], checkpoint_cipher=cipher)
                 self.assertEqual([candidate["kind"] for candidate in start_emitted if candidate["kind"] == "external_action"], ["external_action"])
-                with unittest.mock.patch.object(_obot_mcp, "invoke_tool", _invoke):
-                    _execute_resume_attempt(_resume_command([_approved("approval-1", "call-approve", {"title": "edited"})]), "instance-conf", resume_emitted.append, resume_event_source=_resume_source, checkpoint_cipher=cipher)
+                _execute_resume_attempt(_resume_command([_succeeded("call-approve", tool_result)]), "instance-conf", resume_emitted.append, resume_event_source=_resume_source, checkpoint_cipher=cipher)
 
-        self.assertEqual(obot_calls, [{"base_url": "http://obot.silo.svc.cluster.local:8080", "key": "ok1-attempt-key", "mcp_server_id": "srv-9", "tool_name": "create_issue", "arguments": {"title": "edited"}, "timeout_s": 30.0}])
-        self.assertEqual(captured["deferred"], {"call-approve": tool_result})
-        completed = next(candidate for candidate in resume_emitted if candidate.get("eventType") == "tool.completed")
-        self.assertEqual(completed["payload"], {"toolInvocationId": "call-approve", "toolCallId": "call-approve", "resultDigest": _arguments_digest(tool_result)})
-        # The digest-only receipt candidate never carries the tool content itself.
-        self.assertNotIn("created", json.dumps(completed))
-        self.assertEqual(_event_types(resume_emitted), ["run.resumed", "tool.started", "tool.completed", "message.started", "message.delta", "run.usage", "message.completed", "run.completed"])
+        self.assertEqual(captured["results"], {"call-approve": tool_result})
+        self.assertEqual(_event_types(resume_emitted), ["run.resumed", "message.started", "message.delta", "run.usage", "message.completed", "run.completed"])
 
-    def test_denied_resume_feeds_a_refusal_without_contacting_obot(self) -> None:
-        """A denied decision becomes an explicit refusal result and Obot is never reached."""
+    def test_terminal_failure_enters_the_loop_as_a_typed_error(self) -> None:
+        """A saved refusal becomes an exact typed result with no external provider path."""
         _run_start(_integration_start_command(), [{"type": "tool_call", "toolName": "integration:github:create_issue", "toolCallId": "call-deny", "arguments": "{}"}])
 
         captured: dict = {}
 
-        def _resume_source(_compiled_input, deferred, _cancel, _steering):
-            captured["deferred"] = deferred
+        def _resume_source(_compiled_input, results, _cancel, _steering):
+            captured["results"] = results
             return iter([{"type": "usage", "inputTokens": 1, "outputTokens": 1}])
 
-        def _never_invoke(*_args, **_kwargs):
-            raise AssertionError("denied approvals must not reach Obot")
-
         resume_emitted: list[dict] = []
-        with unittest.mock.patch.object(_obot_mcp, "invoke_tool", _never_invoke):
-            _execute_resume_attempt(_resume_command([{"approvalRequestId": "approval-1", "decision": "denied", "toolInvocationId": "call-deny"}]), "instance-conf", resume_emitted.append, resume_event_source=_resume_source)
+        _execute_resume_attempt(_resume_command([_failed("call-deny", "approval_denied")]), "instance-conf", resume_emitted.append, resume_event_source=_resume_source)
 
-        self.assertEqual(captured["deferred"], {"call-deny": {"approved": False, "reason": "approval_denied"}})
+        self.assertEqual(captured["results"], {"call-deny": {"error": "approval_denied"}})
         self.assertNotIn("tool.completed", _event_types(resume_emitted))
 
-    def test_approved_resume_without_obot_configuration_fails_typed(self) -> None:
-        """Without the Obot mount an approved integration tool fails with a typed loop error."""
-        _run_start(_integration_start_command(), [{"type": "tool_call", "toolName": "integration:github:create_issue", "toolCallId": "call-unconfigured", "arguments": "{}"}])
-
+    def test_unknown_or_malformed_saved_results_fail_closed(self) -> None:
+        """An unmapped or malformed result never enters model context."""
         captured: dict = {}
 
-        def _resume_source(_compiled_input, deferred, _cancel, _steering):
-            captured["deferred"] = deferred
+        def _resume_source(_compiled_input, results, _cancel, _steering):
+            captured["results"] = results
             return iter([{"type": "usage", "inputTokens": 1, "outputTokens": 1}])
 
-        environment = {key: value for key, value in os.environ.items() if not key.startswith("OPENCRANE_RUNTIME_OBOT_")}
         resume_emitted: list[dict] = []
-        with unittest.mock.patch.dict(os.environ, environment, clear=True):
-            _execute_resume_attempt(_resume_command([_approved("approval-1", "call-unconfigured", {})]), "instance-conf", resume_emitted.append, resume_event_source=_resume_source)
+        _execute_resume_attempt(_resume_command([
+            _succeeded("call-never-proposed", {"secret": "must-not-enter"}),
+            {"toolInvocationId": "call-malformed", "outcome": "failed", "failureCode": ""},
+        ]), "instance-conf", resume_emitted.append, resume_event_source=_resume_source)
 
-        self.assertEqual(captured["deferred"], {"call-unconfigured": {"error": "obot_unavailable"}})
-        error = next(candidate for candidate in resume_emitted if candidate.get("eventType") == "tool.failed")
-        self.assertEqual(error["payload"], {"reason": "obot_invocation_failed", "toolInvocationId": "call-unconfigured"})
-
-    def test_unknown_invocation_and_obot_failure_fail_closed(self) -> None:
-        """An unmapped approval or an Obot transport failure feeds typed errors, never fabrication."""
-        captured: dict = {}
-
-        def _resume_source(_compiled_input, deferred, _cancel, _steering):
-            captured["deferred"] = deferred
-            return iter([{"type": "usage", "inputTokens": 1, "outputTokens": 1}])
-
-        def _broken_invoke(*_args, **_kwargs):
-            raise RuntimeError("proxy body must never surface")
-
-        resume_emitted: list[dict] = []
-        cipher = _ReversingCipher()
-        with tempfile.TemporaryDirectory() as directory:
-            key_path = _write_key_file(directory)
-            environment = {"OPENCRANE_RUNTIME_OBOT_URL": "http://obot.silo.svc.cluster.local:8080", "OPENCRANE_RUNTIME_OBOT_KEY_PATH": key_path, "OPENCRANE_RUNTIME_CHECKPOINT_DIR": directory}
-            with unittest.mock.patch.dict(os.environ, environment):
-                _run_start(_integration_start_command(), [{"type": "tool_call", "toolName": "integration:github:create_issue", "toolCallId": "call-fails", "arguments": "{}"}], checkpoint_cipher=cipher)
-                with unittest.mock.patch.object(_obot_mcp, "invoke_tool", _broken_invoke):
-                    _execute_resume_attempt(_resume_command([
-                        _approved("approval-1", "call-fails", {}),
-                        _approved("approval-2", "call-never-proposed", {}),
-                    ]), "instance-conf", resume_emitted.append, resume_event_source=_resume_source, checkpoint_cipher=cipher)
-
-        self.assertEqual(captured["deferred"], {
-            "call-fails": {"error": "obot_invocation_failed", "errorType": "RuntimeError"},
-            "call-never-proposed": {"error": "unknown_tool_invocation"},
-        })
-        reasons = [candidate["payload"].get("reason") for candidate in resume_emitted if candidate.get("eventType") == "tool.failed"]
-        self.assertEqual(sorted(reasons), ["obot_invocation_failed", "unknown_tool_invocation"])
-        self.assertNotIn("proxy body must never surface", json.dumps(resume_emitted))
+        self.assertNotIn("results", captured)
+        reasons = [candidate["payload"].get("reason") for candidate in resume_emitted if candidate.get("eventType") in ("run.error", "run.failed")]
+        self.assertEqual(reasons, ["invalid_tool_result", "invalid_tool_results"])
+        self.assertNotIn("must-not-enter", json.dumps(captured))
 
 
 class ConformanceRestartTests(unittest.TestCase):

@@ -26,6 +26,12 @@ class RuntimeEventProjector:
         self._record_tool_call = record_tool_call
         self._message_id = f"assistant:{coordinates['commandId']}"
         self._message_started = False
+        self._has_pending_tool_calls = False
+
+    @property
+    def has_pending_tool_calls(self) -> bool:
+        """Whether this command proposed at least one durable external action."""
+        return self._has_pending_tool_calls
 
     def emit(self, neutral_event: dict[str, object]) -> None:
         """Emit the canonical candidate sequence for one neutral model event."""
@@ -67,6 +73,7 @@ class RuntimeEventProjector:
             neutral_event,
         )
         if proposal.get("kind") == "external_action":
+            self._has_pending_tool_calls = True
             self._post_candidate(
                 candidate(
                     self._coordinates,

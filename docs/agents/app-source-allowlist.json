@@ -102,7 +102,7 @@
     { "path": "apps/skill-authoring/src/authoring_worker.py", "owner": "apps/skill-authoring", "classification": "process-entrypoint" },
 
     { "path": "apps/agent-runtime/src/attempts/execution.py", "owner": "apps/agent-runtime", "classification": "process-composition" },
-    { "path": "apps/agent-runtime/src/attempts/deferred_results.py", "owner": "apps/agent-runtime", "classification": "process-composition" },
+    { "path": "apps/agent-runtime/src/attempts/tool_results.py", "owner": "apps/agent-runtime", "classification": "process-composition" },
     { "path": "apps/agent-runtime/src/attempts/pending_tools.py", "owner": "apps/agent-runtime", "classification": "process-composition" },
     { "path": "apps/agent-runtime/src/attempts/terminal.py", "owner": "apps/agent-runtime", "classification": "process-composition" },
     { "path": "apps/agent-runtime/src/bootstrap/exchange.py", "owner": "apps/agent-runtime", "classification": "process-composition" },
@@ -116,8 +116,7 @@
     { "path": "apps/agent-runtime/src/protocol/event_projector.py", "owner": "apps/agent-runtime", "classification": "process-composition" },
     { "path": "apps/agent-runtime/src/runtime.py", "owner": "apps/agent-runtime", "classification": "process-entrypoint" },
     { "path": "apps/agent-runtime/src/transport/http.py", "owner": "apps/agent-runtime", "classification": "process-composition" },
-    { "path": "apps/agent-runtime/src/transport/stream.py", "owner": "apps/agent-runtime", "classification": "process-composition" },
-    { "path": "apps/agent-runtime/src/tools/obot_mcp.py", "owner": "apps/agent-runtime", "classification": "process-composition" }
+    { "path": "apps/agent-runtime/src/transport/stream.py", "owner": "apps/agent-runtime", "classification": "process-composition" }
   ],
   "requiredTaggedProjects": [
     "apps/_infra/cognee/project.json",

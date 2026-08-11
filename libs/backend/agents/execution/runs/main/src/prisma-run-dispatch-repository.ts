@@ -7,8 +7,7 @@ import { ___DoWithTrace } from "@opencrane/backend/observability";
 
 import { __DeliverChildRunCompletionInTransaction } from "./prisma-child-run-completion-repository.js";
 import type { AttemptModelKeyIssuer } from "./attempt-model-key.types.js";
-import type { AttemptObotKeyIssuer } from "./attempt-obot-key.types.js";
-import { _BuildRunAttemptCredentialMintInputs, _MintRunAttemptCredentials, _SnapshotIntegrationIds } from "./run-attempt-credential-minting.js";
+import { _BuildRunAttemptCredentialMintInputs, _MintRunAttemptCredentials } from "./run-attempt-credential-minting.js";
 import type { ClaimTransactionResult } from "./run-dispatch-persistence.types.js";
 import { RunDispatchResultStatuses, type ClaimNextRunAttemptResult, type ClaimNextRunWorkloadReleaseResult, type CommitRunAttemptAssignmentResult, type RegisterRunWorkloadPodResult, type RunDispatchRepository, type RunDispatchRepositoryConfig, type RunOutboxCandidateRow, type RunWorkloadReleaseCandidateRow } from "./run-dispatch.types.js";
 
@@ -42,17 +41,13 @@ export class PrismaRunDispatchRepository implements RunDispatchRepository
 	private readonly config: RunDispatchRepositoryConfig;
 	/** App-injected issuer that mints the attempt-scoped model key; the master key stays server-side. */
 	private readonly issueAttemptModelKey: AttemptModelKeyIssuer;
-	/** Optional app-injected Obot key issuer; null leaves runtime attempts without any Obot credential. */
-	private readonly issueAttemptObotKey: AttemptObotKeyIssuer | null;
-
-	/** Creates a dispatch adapter over canonical Postgres with injected attempt-key issuers. */
-	constructor(prisma: PrismaClient, config: RunDispatchRepositoryConfig, issueAttemptModelKey: AttemptModelKeyIssuer, issueAttemptObotKey?: AttemptObotKeyIssuer | null)
+	/** Creates a dispatch adapter over canonical Postgres with the injected model-key issuer. */
+	constructor(prisma: PrismaClient, config: RunDispatchRepositoryConfig, issueAttemptModelKey: AttemptModelKeyIssuer)
 	{
 		if (!_ConfigIsValid(config)) throw new Error("run dispatch repository requires distinct bounded runtime namespaces and lifetimes");
 		this.prisma = prisma;
 		this.config = config;
 		this.issueAttemptModelKey = issueAttemptModelKey;
-		this.issueAttemptObotKey = issueAttemptObotKey ?? null;
 	}
 
 	/** Claims one eligible event, loads its narrow projection, and mints its transient attempt key. */
@@ -123,7 +118,7 @@ export class PrismaRunDispatchRepository implements RunDispatchRepository
 			// 3. Derive the exact post-commit credential requests; invalid frozen policy fails closed.
 			const claimedAt = new Date(Math.max(now.getTime(), (event.claimedAt?.getTime() ?? -1) + 1));
 			const deliveryCount = event.deliveryCount + 1;
-			const credentials = _BuildRunAttemptCredentialMintInputs({ modelRoute: snapshot.modelRoute, budgetPolicy: snapshot.budgetPolicy, integrationAssignments: snapshot.integrationAssignments, runId: run.id, attempt: run.attempt, siloId: run.siloId, deliveryCount, assignmentTtlMilliseconds: config.assignmentTtlMilliseconds, claimedAt });
+			const credentials = _BuildRunAttemptCredentialMintInputs({ modelRoute: snapshot.modelRoute, budgetPolicy: snapshot.budgetPolicy, runId: run.id, attempt: run.attempt, siloId: run.siloId, deliveryCount, assignmentTtlMilliseconds: config.assignmentTtlMilliseconds });
 			if (credentials === null)
 			{
 				await _TerminalizeUndispatchableAttempt(transaction, event, run, now, "RUN_DISPATCH_MODEL_ROUTE_INVALID", AgentRunTerminalReason.InvalidInput);
@@ -150,7 +145,7 @@ export class PrismaRunDispatchRepository implements RunDispatchRepository
 		});
 		if (claimed.status === RunDispatchResultStatuses.None) return { status: RunDispatchResultStatuses.None };
 		// Mint after commit so neither provider call can hold a database lock.
-		return _MintRunAttemptCredentials(claimed, this.issueAttemptModelKey, this.issueAttemptObotKey);
+		return _MintRunAttemptCredentials(claimed, this.issueAttemptModelKey);
 	}
 
 	/** Remove one bounded batch of delivered operational records while preserving failed evidence. */
@@ -312,7 +307,6 @@ export class PrismaRunDispatchRepository implements RunDispatchRepository
 	{
 		const config = this.config;
 		const prisma = this.prisma;
-		const obotComposed = this.issueAttemptObotKey !== null;
 		return ___DoWithTrace("run_dispatch.workload_release.claim", { runtimePlanes: 2 }, async function _traceReleaseClaim(): Promise<ClaimNextRunWorkloadReleaseResult>
 		{
 			return prisma.$transaction(async function _claimRelease(transaction: Prisma.TransactionClient): Promise<ClaimNextRunWorkloadReleaseResult>
@@ -375,16 +369,12 @@ export class PrismaRunDispatchRepository implements RunDispatchRepository
 				if (claimed.count !== 1) throw new Error("run workload release lost its event fence");
 
 
-				// 5. Reload the immutable snapshot so the release rebuilds the exact assigned Job shape:
-				//    the obot key volume exists iff the claim minted an attempt key for ≥1 assignment.
-				const snapshot = await transaction.runInputSnapshot.findUnique({ where: { runId_digest: { runId: run.id, digest: run.inputSnapshotDigest } } });
-				const obotKeyProvisioned = obotComposed && snapshot !== null && _SnapshotIntegrationIds(snapshot.integrationAssignments).length > 0;
-
+				// 5. Return only durable assignment coordinates; provider credentials stay server-side.
 				return {
 					status: RunDispatchResultStatuses.Claimed,
 					claim: {
 						lease: { eventId: event.id, claimedAt: claimedAt.toISOString(), deliveryCount, expiresAt: new Date(claimedAt.getTime() + config.claimLeaseMilliseconds).toISOString() },
-						workload: _ReleaseProjection(assignment!, bootstrap!.id, obotKeyProvisioned),
+						workload: _ReleaseProjection(assignment!, bootstrap!.id),
 					},
 				};
 			});
@@ -644,7 +634,7 @@ function _ReleasePayload(assignment: WorkloadAssignment, bootstrapReference: str
 }
 
 /** Map a durable assignment into the narrow controller release projection. */
-function _ReleaseProjection(assignment: WorkloadAssignment, bootstrapReference: string, obotKeyProvisioned: boolean): AgentControllerRunWorkloadReleaseProjection
+function _ReleaseProjection(assignment: WorkloadAssignment, bootstrapReference: string): AgentControllerRunWorkloadReleaseProjection
 {
 	return {
 		runId: assignment.runId,
@@ -658,7 +648,6 @@ function _ReleaseProjection(assignment: WorkloadAssignment, bootstrapReference: 
 		workloadProfile: assignment.workloadProfile,
 		assignmentExpiresAt: assignment.expiresAt.toISOString(),
 		bootstrapReference,
-		obotKeyProvisioned,
 	};
 }
 

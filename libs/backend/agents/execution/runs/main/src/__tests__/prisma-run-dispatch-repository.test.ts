@@ -2,18 +2,10 @@ import { createHash } from "node:crypto";
 
 import { AgentRunState, AgentRunTerminalReason, AgentServiceKind, AgentServiceState, RunOutboxEventKind, WorkloadAssignmentState, WorkloadKind, type PrismaClient } from "@prisma/client";
 import { ___GetContext } from "@opencrane/backend/observability";
-import { ___DigestCanonicalJson } from "@opencrane/util";
 import { describe, expect, it, vi } from "vitest";
 
 import { PrismaRunDispatchRepository } from "../prisma-run-dispatch-repository.js";
 import type { AttemptModelKeyIssuer, AttemptModelKeyMintRequest, MintedAttemptModelKey } from "../attempt-model-key.types.js";
-
-/** Build one reviewed tool definition. */
-function _Tool(name: string)
-{
-	const parametersSchema = { type: "object", additionalProperties: false } as const;
-	return { name, description: `${name} description`, parametersSchema, parametersSchemaDigest: ___DigestCanonicalJson(parametersSchema) };
-}
 
 /** A recording attempt-key issuer; non-claim tests never reach minting so its key is unused there. */
 function _Issuer(record?: (request: AttemptModelKeyMintRequest) => void): AttemptModelKeyIssuer
@@ -140,65 +132,6 @@ describe("PrismaRunDispatchRepository", function _DescribeDispatchRepository()
 		expect(transaction.outboxEvent.updateMany).toHaveBeenCalledWith({ where: expect.objectContaining({ id: "event-1", deliveryCount: 0 }), data: { claimedAt: new Date("2026-07-20T00:00:00.000Z"), deliveryCount: 1 } });
 		expect(transaction.agentRun.updateMany).toHaveBeenCalledWith({ where: expect.objectContaining({ state: AgentRunState.Accepted }), data: { state: AgentRunState.Queued } });
 		expect(JSON.stringify(result)).not.toContain("executionSubjectId");
-	});
-
-	it("mints one attempt Obot key scoped by the snapshot's integration assignments", async function _ClaimWithObotKey()
-	{
-		const run = _Run();
-		const event = _Event();
-		const queryRaw = vi.fn()
-			.mockResolvedValueOnce([{ eventId: event.id, runId: run.id, agentServiceId: run.agentServiceId }])
-			.mockResolvedValueOnce([]).mockResolvedValueOnce([]).mockResolvedValueOnce([]).mockResolvedValueOnce([])
-			.mockResolvedValueOnce([{ now: new Date("2026-07-20T00:00:00.000Z") }]);
-		const transaction = {
-			$queryRaw: queryRaw,
-			agentService: { findUnique: vi.fn().mockResolvedValue(_Service()) },
-			agentRun: { findUnique: vi.fn().mockResolvedValue(run), updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
-			outboxEvent: { findUnique: vi.fn().mockResolvedValue(event), updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
-			workloadAssignment: { findUnique: vi.fn().mockResolvedValue(null) },
-			runInputSnapshot: { findUnique: vi.fn().mockResolvedValue({ ..._Snapshot(), integrationAssignments: [{ integrationId: "int-1", toolDefinitions: [_Tool("read")] }, { integrationId: "int-2", toolDefinitions: [_Tool("write")] }] }) },
-		};
-		const prisma = { $transaction: vi.fn(async function _Transaction(callback: (client: typeof transaction) => Promise<unknown>) { return callback(transaction); }) } as unknown as PrismaClient;
-		const obotRequests: unknown[] = [];
-		const repository = new PrismaRunDispatchRepository(prisma, { personalRuntimeNamespace: "silo-a", managedRuntimeNamespace: "silo-managed", claimLeaseMilliseconds: 30_000, assignmentTtlMilliseconds: 3_600_000 }, _Issuer(), async function _issueObot(request) { obotRequests.push(request); return { key: "ok1-attempt-transient", keyId: "obot-key-id-1" }; });
-
-		const result = await repository.claimNextAttemptAtomically();
-		expect(result).toMatchObject({ status: "claimed", claim: { attempt: { litellmKey: "sk-attempt-transient", obotKey: { key: "ok1-attempt-transient", keyId: "obot-key-id-1" } } } });
-		expect(obotRequests).toEqual([expect.objectContaining({ runId: "run-1", attempt: 1, siloId: "silo-1", agentRevisionId: "revision-1", integrationIds: ["int-1", "int-2"], keyName: expect.stringMatching(/^attempt-obot-[a-f0-9]{32}$/), expiresAt: new Date("2026-07-20T01:00:00.000Z") })]);
-	});
-
-	it("mints no Obot key without integration assignments or without a composed issuer", async function _ClaimWithoutObotKey()
-	{
-		const run = _Run();
-		const event = _Event();
-		function _buildTransaction(snapshot: unknown)
-		{
-			return {
-				$queryRaw: vi.fn()
-					.mockResolvedValueOnce([{ eventId: event.id, runId: run.id, agentServiceId: run.agentServiceId }])
-					.mockResolvedValueOnce([]).mockResolvedValueOnce([]).mockResolvedValueOnce([]).mockResolvedValueOnce([])
-					.mockResolvedValueOnce([{ now: new Date("2026-07-20T00:00:00.000Z") }]),
-				agentService: { findUnique: vi.fn().mockResolvedValue(_Service()) },
-				agentRun: { findUnique: vi.fn().mockResolvedValue({ ...run }), updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
-				outboxEvent: { findUnique: vi.fn().mockResolvedValue({ ...event }), updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
-				workloadAssignment: { findUnique: vi.fn().mockResolvedValue(null) },
-				runInputSnapshot: { findUnique: vi.fn().mockResolvedValue(snapshot) },
-			};
-		}
-
-		// 1. Assignments present but no issuer composed: the claim carries no Obot key at all.
-		const withAssignments = _buildTransaction({ ..._Snapshot(), integrationAssignments: [{ integrationId: "int-1", toolDefinitions: [_Tool("read")] }] });
-		const withoutIssuer = new PrismaRunDispatchRepository({ $transaction: vi.fn(async function _Transaction(callback: (client: unknown) => Promise<unknown>) { return callback(withAssignments); }) } as unknown as PrismaClient, { personalRuntimeNamespace: "silo-a", managedRuntimeNamespace: "silo-managed", claimLeaseMilliseconds: 30_000, assignmentTtlMilliseconds: 3_600_000 }, _Issuer());
-		const noIssuerResult = await withoutIssuer.claimNextAttemptAtomically();
-		expect(JSON.stringify(noIssuerResult)).not.toContain("obotKey");
-
-		// 2. Issuer composed but zero assignments: the issuer is never called.
-		const withoutAssignments = _buildTransaction(_Snapshot());
-		const issueObot = vi.fn();
-		const withIssuer = new PrismaRunDispatchRepository({ $transaction: vi.fn(async function _Transaction(callback: (client: unknown) => Promise<unknown>) { return callback(withoutAssignments); }) } as unknown as PrismaClient, { personalRuntimeNamespace: "silo-a", managedRuntimeNamespace: "silo-managed", claimLeaseMilliseconds: 30_000, assignmentTtlMilliseconds: 3_600_000 }, _Issuer(), issueObot);
-		const noAssignmentsResult = await withIssuer.claimNextAttemptAtomically();
-		expect(JSON.stringify(noAssignmentsResult)).not.toContain("obotKey");
-		expect(issueObot).not.toHaveBeenCalled();
 	});
 
 	it("claims a managed service from its tagged service evidence without a user fallback", async function _ClaimsManagedService()
@@ -445,7 +378,7 @@ describe("PrismaRunDispatchRepository", function _DescribeDispatchRepository()
 			status: "claimed",
 			claim: {
 				lease: { eventId: "release-1", claimedAt: "2026-07-20T00:20:00.000Z", deliveryCount: 4, expiresAt: "2026-07-20T00:20:30.000Z" },
-				workload: { runId: "run-1", attempt: 1, siloId: "silo-1", agentServiceId: "service-1", agentRevisionId: "revision-1", namespace: "silo-a", serviceAccountName: "agent-runtime-small", workloadUid: "job-uid-1", workloadProfile: "personal-small", assignmentExpiresAt: "2026-07-20T01:00:10.000Z", bootstrapReference: _Command().bootstrapReference, obotKeyProvisioned: false },
+				workload: { runId: "run-1", attempt: 1, siloId: "silo-1", agentServiceId: "service-1", agentRevisionId: "revision-1", namespace: "silo-a", serviceAccountName: "agent-runtime-small", workloadUid: "job-uid-1", workloadProfile: "personal-small", assignmentExpiresAt: "2026-07-20T01:00:10.000Z", bootstrapReference: _Command().bootstrapReference },
 			},
 		});
 		const selectionSql = _SqlText(queryRaw.mock.calls[0]?.[0]);

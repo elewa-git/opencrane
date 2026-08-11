@@ -1,5 +1,4 @@
 export * from "./attempt-model-key.types.js";
-export * from "./attempt-obot-key.types.js";
 export * from "./openapi.js";
 export * from "./prisma-run-admission-repository.js";
 export * from "./prisma-run-cancellation-repository.js";

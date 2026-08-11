@@ -1,9 +1,8 @@
-"""Track proposed tool calls until the control plane's approval decision returns.
+"""Track proposed tool calls until the control plane returns saved terminal results.
 
-An ``external_action`` candidate carries only identifiers and digests to the server; the concrete
-tool name and parsed arguments needed to EXECUTE the call after approval stay here, in bounded
-process-local attempt state. A resume maps each authorized ``toolInvocationId`` back to its pending
-call exactly once — taking an entry removes it, so a duplicated resume cannot re-execute a call.
+An ``external_action`` candidate carries its execution arguments to the server-owned durable
+authority. This bounded registry retains only the model-framework call identity needed to match a
+saved result back into the same attempt. A resume consumes a complete batch exactly once.
 
 This registry is deliberately not durable: the runtime Job never restarts (``backoffLimit: 0``), so
 a lost process also loses its stream fence and the attempt terminates server-side. A resume that
@@ -37,7 +36,21 @@ def record_pending_tool_call(
         _PENDING[(run_id, attempt, tool_invocation_id)] = {"toolName": tool_name, "arguments": arguments}
 
 
-def take_pending_tool_call(run_id: str, attempt: int, tool_invocation_id: str) -> dict[str, object] | None:
-    """Return and remove the pending call for one authorized invocation, or ``None`` when unknown."""
+def take_pending_tool_calls(
+    run_id: str,
+    attempt: int,
+    tool_invocation_ids: list[str],
+) -> dict[str, dict[str, object]] | None:
+    """Atomically validate and consume one complete saved-result batch.
+
+    No entry is removed when an id is duplicated or unknown, so a malformed server command cannot
+    partially consume state and make a later byte-identical redelivery impossible to validate.
+    """
     with _LOCK:
-        return _PENDING.pop((run_id, attempt, tool_invocation_id), None)
+        keys = [(run_id, attempt, tool_invocation_id) for tool_invocation_id in tool_invocation_ids]
+        if len(keys) != len(set(keys)) or any(key not in _PENDING for key in keys):
+            return None
+        pending = {key[2]: _PENDING[key] for key in keys}
+        for key in keys:
+            del _PENDING[key]
+        return pending

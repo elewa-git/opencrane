@@ -49,8 +49,7 @@ async function _Main(): Promise<void>
 	const personalRunAdmission = __CreatePersonalRunAdmissionPort(prisma, runAdmissionCapacityGate, membershipEvidence, new GatewayMemoryFactSelector(memoryGateway));
 	const runCancellation = _CreateRunCancellationAuthority(prisma, config.runtime);
 
-	// 4. Compose the optional Obot custody and attempt-key transport once, so the public custody
-	//    route and the runtime dispatch plane always target the same Obot with one credential.
+	// 4. Compose the server-owned Obot custody and action transport without exposing it to runtimes.
 	const obot = _CreateObotAdapters(config.obot);
 	const channelTargetRoutes = _StartChannelTargetRouteReconciler(prisma, config.runtime.channelTargets);
 
@@ -58,7 +57,7 @@ async function _Main(): Promise<void>
 	const authentication = _CreatePublicAuthentication(prisma, kubernetes.customApi, config.standaloneFirstUserAdmission);
 	const publicApp = _CreatePublicApp(prisma, kubernetes.coreApi, managedRunAdmission, personalRunAdmission, runCancellation, config.runtime.serverNamespace, obot.custody, authentication);
 	publicApp.locals.artifactUploadGateway = _CreateArtifactUploadGateway(prisma);
-	const internalApp = _CreateInternalApp(prisma, kubernetes.authApi, config.runtime, memoryGateway, authentication.sessionMiddleware, obot.attemptKeys);
+	const internalApp = _CreateInternalApp(prisma, kubernetes.authApi, config.runtime, memoryGateway, authentication.sessionMiddleware);
 
 	// 6. Start listeners and workers under one drain order so shared dependencies close exactly once.
 	_StartProcessLifecycle(publicApp, internalApp, prisma, kubernetes.batchApi, managedRunAdmission, runCancellation, config, channelTargetRoutes, unbindConsole);

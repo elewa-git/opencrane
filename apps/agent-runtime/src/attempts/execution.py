@@ -18,7 +18,7 @@ from ..protocol.candidates import (
     command_coordinates,
 )
 from ..protocol.event_projector import RuntimeEventProjector
-from .deferred_results import resolve_deferred_tool_results
+from .tool_results import resolve_tool_results
 from .pending_tools import record_pending_tool_call
 from .terminal import TerminalGate
 
@@ -85,6 +85,8 @@ def execute_start_attempt(
                 projector.emit(neutral_event)
             if not cancel_event.is_set():
                 projector.complete_message()
+            if projector.has_pending_tool_calls:
+                return
             if terminal_gate.post_completion(
                 post_candidate,
                 candidate(coordinates, "run.completed", {}),
@@ -118,10 +120,10 @@ def execute_resume_attempt(
     checkpoint_cipher: object | None = None,
     terminal_gate: "TerminalGate | None" = None,
 ) -> None:
-    """Execute one admitted ``resume_attempt`` with authorised deferred results.
+    """Execute one admitted ``resume_attempt`` with saved tool results.
 
-    Resume never decides whether an action was approved. It accepts the server's input generation,
-    deferred tool results, and steering requests; recovers only coordinate-matching compiled context;
+    Resume never executes an external action. It accepts the server's input generation, exact saved
+    tool results, and steering requests; recovers only coordinate-matching compiled context;
     then runs the same neutral-event and terminal pipeline as a fresh start.
     """
     coordinates = command_coordinates(command, runtime_instance_id)
@@ -137,12 +139,12 @@ def execute_resume_attempt(
         )
         return
     input_generation = payload.get("inputGeneration")
-    deferred_tool_results = payload.get("deferredToolResults")
+    tool_results = payload.get("toolResults")
     steering_requests = payload.get("steeringRequests")
-    if not isinstance(deferred_tool_results, list):
+    if not isinstance(tool_results, list):
         terminal_gate.post_completion(
             post_candidate,
-            candidate(coordinates, "run.failed", {"reason": "invalid_deferred_results"}),
+            candidate(coordinates, "run.failed", {"reason": "invalid_tool_results"}),
         )
         return
     if (
@@ -166,6 +168,19 @@ def execute_resume_attempt(
         input_generation,
         checkpoint_cipher,
     )
+    # The control plane already executed or refused each call and persisted its terminal result.
+    # The runtime only maps those exact results into the model framework.
+    resolved_tool_results = resolve_tool_results(
+        coordinates,
+        tool_results,
+        post_candidate,
+    )
+    if resolved_tool_results is None:
+        terminal_gate.post_completion(
+            post_candidate,
+            candidate(coordinates, "run.failed", {"reason": "invalid_tool_results"}),
+        )
+        return
     post_candidate(
         candidate(
             coordinates,
@@ -174,14 +189,6 @@ def execute_resume_attempt(
         ),
     )
     run_evidence(coordinates, "resumed", inputGeneration=input_generation)
-    # Approval decisions name WHICH proposed calls were approved; the runtime executes each approved
-    # call directly against Obot here and feeds the framework only the resulting per-call mapping.
-    deferred_tool_results = resolve_deferred_tool_results(
-        coordinates,
-        compiled_input,
-        deferred_tool_results,
-        post_candidate,
-    )
     steering_buffer = [item["text"].strip() for item in steering_requests]
     projector = RuntimeEventProjector(coordinates, compiled_input, post_candidate, record_pending_tool_call)
     with trace(
@@ -192,7 +199,7 @@ def execute_resume_attempt(
         try:
             for neutral_event in resume_event_source(
                 compiled_input,
-                deferred_tool_results,
+                resolved_tool_results,
                 cancel_event,
                 steering_buffer,
             ):
@@ -202,6 +209,8 @@ def execute_resume_attempt(
                 projector.emit(neutral_event)
             if not cancel_event.is_set():
                 projector.complete_message()
+            if projector.has_pending_tool_calls:
+                return
             if terminal_gate.post_completion(
                 post_candidate,
                 candidate(coordinates, "run.completed", {}),

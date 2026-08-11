@@ -19,7 +19,7 @@ from ..attempts.execution import (
 from ..attempts.terminal import TerminalGate
 from ..constants import MAX_FRAME_BYTES, PROTOCOL_VERSION
 from ..observability import log
-from .http import post_candidate_with_retry
+from .http import post_candidate
 
 
 class _AttemptWorkerRegistry:
@@ -82,12 +82,11 @@ def _launch_attempt_worker(
     terminal_gate = TerminalGate(cancel_event)
 
     def _post_candidate(candidate: dict[str, object]) -> None:
-        """Post a stable candidate while allowing this worker's cancellation to interrupt waits."""
-        post_candidate_with_retry(
+        """Post a stable candidate once; the server owns all durable preparation retries."""
+        post_candidate(
             control_plane_url,
             token,
             candidate,
-            cancel_event,
         )
 
     def _run() -> None:

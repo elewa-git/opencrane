@@ -217,7 +217,7 @@ spec:
             {{- end }}
             {{- end }}
             {{- if .Values.mcpGateway.serviceTokenExistingSecret }}
-            # Obot management transport: custody provisioning and attempt-key minting. Rendered only
+            # Obot server transport: custody provisioning and durable action execution. Rendered only
             # when the pre-provisioned service-credential Secret is named; otherwise the app composes
             # fail-closed unavailable adapters and no Obot exchange can occur.
             - name: OBOT_GATEWAY_URL

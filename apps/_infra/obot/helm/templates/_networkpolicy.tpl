@@ -26,24 +26,6 @@ spec:
       ports:
         - protocol: TCP
           port: {{ .Values.mcpGateway.service.port }}
-    {{- if .Values.agentController.enabled }}
-    # Direct approved tool invocation from the two isolated runtime planes. Network reach is only
-    # the L3/4 floor: Obot authorises each call with the attempt-scoped, server-scoped API key.
-    {{- $personalRuntimeNamespace := include "opencrane.agentController.runtimeNamespace" . }}
-    {{- $managedRuntimeNamespace := default (printf "%s-managed-runtime" .Release.Name | trunc 63 | trimSuffix "-") .Values.managedAgentRuntimePlane.managedAgentRuntime.namespace }}
-    - from:
-        {{- range $runtimeNamespace := (list $personalRuntimeNamespace $managedRuntimeNamespace) }}
-        - namespaceSelector:
-            matchLabels:
-              kubernetes.io/metadata.name: {{ $runtimeNamespace | quote }}
-          podSelector:
-            matchLabels:
-              app.kubernetes.io/component: agent-runtime
-        {{- end }}
-      ports:
-        - protocol: TCP
-          port: {{ .Values.mcpGateway.service.port }}
-    {{- end }}
 ---
 {{- end }}
 {{- end }}

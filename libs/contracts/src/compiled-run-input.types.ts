@@ -55,16 +55,6 @@ export interface CompiledToolDefinition
 	readonly parametersSchema: JsonValue;
 	/** Canonical digest binding the exact parameters schema to revision and snapshot authority. */
 	readonly parametersSchemaDigest: string;
-	/**
-	 * Obot MCP server id the runtime addresses for an approved invocation of this integration tool.
-	 *
-	 * This is ADDRESSING, not authority: the custody reference doubles as Obot's MCP server id, which
-	 * is not a credential. Authority comes from the compiled allow-list plus the attempt-scoped Obot
-	 * key, which is itself scoped to exactly these server ids — a runtime holding the id alone can
-	 * reach nothing. Absent for first-party tools and whenever the assignment could not be resolved
-	 * at compile time (the invocation then fails closed at execution).
-	 */
-	readonly obotMcpServerId?: string;
 }
 
 /** Resolved model route delivered to the runtime, never carrying a provider credential. */

@@ -94,9 +94,9 @@ model-routing gateway, which holds the LiteLLM master key) using the alias and b
 snapshot, and attaches the transient virtual key to the claim response only — it is never written to
 Postgres. Minting happens outside the database transaction so no external call holds a lock. That commit also creates an
 unconsumed bootstrap record and a second durable command asking the controller to release the Job.
-The package-private credential-minting seam derives both model and optional Obot requests from the
-locked immutable snapshot, then performs both provider calls only after the claim transaction has
-committed; the public repository remains the single controller-facing facade.
+The package-private credential-minting seam derives only the model-key request from the locked
+immutable snapshot, then calls LiteLLM after the claim transaction commits. Obot addressing and
+credentials stay in the server-owned action authority and never enter controller claims.
 The bootstrap reference is an opaque label, not a password: it grants nothing without the exact
 projected workload identity, assigned Job and registered first Pod. The stored integrity digest binds
 the label to every immutable assignment field, including the selected workload profile.

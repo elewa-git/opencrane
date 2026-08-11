@@ -5,7 +5,6 @@ import express, { type Express, type RequestHandler } from "express";
 import { ___RequestContext } from "@opencrane/backend/observability";
 import { _ErrorHandler } from "@opencrane/backend/server/infra/http";
 import type { MemoryGatewayClient } from "@opencrane/backend/server/infra/memory-gateway-client";
-import type { ObotAttemptKeyIssuer } from "@opencrane/backend/server/infra/obot-custody";
 
 import type { InternalRuntimeConfig } from "./config.types.js";
 import { _log } from "./log.js";
@@ -18,7 +17,7 @@ import { _CreateHttpRequestLogger } from "./telemetry.js";
  * It shares the public listener's signed-session middleware only so channel-proxy can delegate the
  * browser cookie. Every resolver request independently TokenReviews the proxy workload identity.
  */
-export function _CreateInternalApp(prisma: PrismaClient, authApi: k8s.AuthenticationV1Api, config: InternalRuntimeConfig, memoryGateway: MemoryGatewayClient, sessionMiddleware: readonly RequestHandler[], obotAttemptKeys: ObotAttemptKeyIssuer | null = null): Express
+export function _CreateInternalApp(prisma: PrismaClient, authApi: k8s.AuthenticationV1Api, config: InternalRuntimeConfig, memoryGateway: MemoryGatewayClient, sessionMiddleware: readonly RequestHandler[]): Express
 {
 	const app = express();
 
@@ -34,7 +33,7 @@ export function _CreateInternalApp(prisma: PrismaClient, authApi: k8s.Authentica
 	app.use(_CreateHttpRequestLogger(_log));
 
 	// 3. Mount only workload-facing routes and terminate failures through the structured handler.
-	_RegisterInternalRoutes(app, prisma, authApi, config, memoryGateway, obotAttemptKeys);
+	_RegisterInternalRoutes(app, prisma, authApi, config, memoryGateway);
 	app.use(_ErrorHandler(_log));
 	return app;
 }

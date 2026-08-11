@@ -8,7 +8,7 @@ import { groupsRouter } from "@opencrane/backend/server/iam/groups";
 import { _IssueAttemptLiteLlmKey, modelRoutingDefaultsRouter } from "@opencrane/backend/server/gateways/model-routing";
 import { mcpOperatorRouter, mcpServersRouter } from "@opencrane/backend/server/gateways/mcp";
 import { _CreateIntegrationCustodyRouter } from "@opencrane/backend/server/gateways/integrations";
-import type { ObotAttemptKeyIssuer, ObotCustodyPort } from "@opencrane/backend/server/infra/obot-custody";
+import type { ObotCustodyPort } from "@opencrane/backend/server/infra/obot-custody";
 import { providerCredentialsRouter, providerByokRouter, modelRegistryRouter } from "@opencrane/backend/server/gateways/providers";
 import { resourceSharesRouter, sharesRouter } from "@opencrane/backend/server/iam/grants";
 import { thirdPartySourcesRouter } from "@opencrane/backend/server/knowledge/retrieval";
@@ -138,11 +138,10 @@ export function _CreateRateLimitedSharesRouter(prisma: PrismaClient, options?: S
  * @param authApi - Kubernetes TokenReview client for workload identity.
  * @param config - Frozen workload-facing configuration shared with workers and body parsing.
  * @param memoryGateway - Process-wide authenticated memory-gateway client.
- * @param obotAttemptKeys - Optional Obot attempt-key issuer composed by the app root; null disables direct invocation.
  */
-export function _RegisterInternalRoutes(app: Express, prisma: PrismaClient, authApi: k8s.AuthenticationV1Api, config: InternalRuntimeConfig, memoryGateway: MemoryGatewayClient, obotAttemptKeys: ObotAttemptKeyIssuer | null = null): void
+export function _RegisterInternalRoutes(app: Express, prisma: PrismaClient, authApi: k8s.AuthenticationV1Api, config: InternalRuntimeConfig, memoryGateway: MemoryGatewayClient): void
 {
-	const runtime = _CreateInternalRuntimeComposition(prisma, authApi, config, memoryGateway, obotAttemptKeys);
+	const runtime = _CreateInternalRuntimeComposition(prisma, authApi, config, memoryGateway);
 	const internalControllerRoutes: readonly RouteMount[] = [
 		{ method: "use", path: "/api/internal/agent-controller", handler: runtime.agentControllerRunDispatch },
 		{ method: "use", path: "/api/internal/agent-controller", handler: runtime.skillWorkloadDispatch },

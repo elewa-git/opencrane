@@ -70,16 +70,8 @@
 {{- if or (gt (len $personalRuntimeProfileName) 63) (not (regexMatch "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$" $personalRuntimeProfileName)) (eq $personalRuntimeProfileName $managedRuntimeProfileName) -}}
 {{- fail "agentController.runtimeProfile.name must be a valid personal profile name distinct from reserved managed-default" -}}
 {{- end -}}
-{{/* Direct Obot invocation is available only for a release-local (instance-scoped) gateway: a shared
-     Obot lives outside this release, so its origin cannot pass the launcher's same-release pin. */}}
-{{- $obotDirect := and .Values.mcpGateway.enabled (ne (include "opencrane.mcpGatewayShared" .) "true") -}}
-{{- $runtimeObotUrl := printf "http://%s-mcp-gateway.%s.svc.cluster.local:%v" (include "opencrane.fullname" .) .Release.Namespace .Values.mcpGateway.service.port -}}
 {{- $personalProfile := dict "name" $personalRuntimeProfileName "namespace" $runtimeNamespace "serviceAccountName" $runtimeServiceAccount "identityProfile" "personal" "tokenAudience" "opencrane-agent-runtime" "image" $runtimeImage "imagePullPolicy" .Values.agentController.runtimeProfile.image.pullPolicy "runtimeStreamUrl" $runtimeStreamUrl "litellmBaseUrl" $runtimeLiteLlmUrl "projectedTokenTtlSeconds" .Values.agentController.runtimeProfile.projectedTokenTtlSeconds "scratchSize" .Values.agentController.runtimeProfile.scratchSize "activeDeadlineSeconds" .Values.agentController.runtimeProfile.activeDeadlineSeconds "ttlSecondsAfterFinished" .Values.agentController.runtimeProfile.ttlSecondsAfterFinished "resources" .Values.agentController.runtimeProfile.resources -}}
 {{- $managedProfile := dict "name" $managedRuntimeProfileName "namespace" $managedRuntimeNamespace "serviceAccountName" $managedRuntimeServiceAccount "identityProfile" "managed" "tokenAudience" "opencrane-managed-agent-runtime" "image" $runtimeImage "imagePullPolicy" .Values.agentController.runtimeProfile.image.pullPolicy "runtimeStreamUrl" $runtimeStreamUrl "litellmBaseUrl" $runtimeLiteLlmUrl "projectedTokenTtlSeconds" .Values.agentController.runtimeProfile.projectedTokenTtlSeconds "scratchSize" .Values.agentController.runtimeProfile.scratchSize "activeDeadlineSeconds" .Values.agentController.runtimeProfile.activeDeadlineSeconds "ttlSecondsAfterFinished" .Values.agentController.runtimeProfile.ttlSecondsAfterFinished "resources" .Values.agentController.runtimeProfile.resources -}}
-{{- if $obotDirect -}}
-{{- $_ := set $personalProfile "obotMcpBaseUrl" $runtimeObotUrl -}}
-{{- $_ := set $managedProfile "obotMcpBaseUrl" $runtimeObotUrl -}}
-{{- end -}}
 {{- $runtimeProfiles := list $personalProfile $managedProfile -}}
 {{- $authoringImage := printf "%s@%s" .Values.agentController.skillWorkloadProfiles.authoring.image.repository .Values.agentController.skillWorkloadProfiles.authoring.image.digest -}}
 {{- $toolRunnerImage := printf "%s@%s" .Values.agentController.skillWorkloadProfiles.toolRunner.image.repository .Values.agentController.skillWorkloadProfiles.toolRunner.image.digest -}}
@@ -310,10 +302,6 @@ spec:
               value: {{ .Values.agentController.outboxPruneIntervalMs | quote }}
             {{- $personalProfileEnv := dict "namespace" $runtimeNamespace "identityProfile" "personal" "image" $runtimeImage "imagePullPolicy" .Values.agentController.runtimeProfile.image.pullPolicy "runtimeStreamUrl" $runtimeStreamUrl "litellmBaseUrl" $runtimeLiteLlmUrl "serverNamespace" .Release.Namespace "serviceAccountName" $runtimeServiceAccount "projectedTokenTtlSeconds" .Values.agentController.runtimeProfile.projectedTokenTtlSeconds "scratchSize" .Values.agentController.runtimeProfile.scratchSize "activeDeadlineSeconds" .Values.agentController.runtimeProfile.activeDeadlineSeconds "ttlSecondsAfterFinished" .Values.agentController.runtimeProfile.ttlSecondsAfterFinished "resources" .Values.agentController.runtimeProfile.resources }}
             {{- $managedProfileEnv := dict "namespace" $managedRuntimeNamespace "identityProfile" "managed" "image" $runtimeImage "imagePullPolicy" .Values.agentController.runtimeProfile.image.pullPolicy "runtimeStreamUrl" $runtimeStreamUrl "litellmBaseUrl" $runtimeLiteLlmUrl "serverNamespace" .Release.Namespace "serviceAccountName" $managedRuntimeServiceAccount "projectedTokenTtlSeconds" .Values.agentController.runtimeProfile.projectedTokenTtlSeconds "scratchSize" .Values.agentController.runtimeProfile.scratchSize "activeDeadlineSeconds" .Values.agentController.runtimeProfile.activeDeadlineSeconds "ttlSecondsAfterFinished" .Values.agentController.runtimeProfile.ttlSecondsAfterFinished "resources" .Values.agentController.runtimeProfile.resources }}
-            {{- if $obotDirect }}
-            {{- $_ := set $personalProfileEnv "obotMcpBaseUrl" $runtimeObotUrl }}
-            {{- $_ := set $managedProfileEnv "obotMcpBaseUrl" $runtimeObotUrl }}
-            {{- end }}
             - name: AGENT_CONTROLLER_PROFILES_JSON
               value: {{ dict .Values.agentController.runtimeProfile.name $personalProfileEnv $managedRuntimeProfileName $managedProfileEnv | toJson | quote }}
             - name: AGENT_CONTROLLER_SKILL_WORKLOAD_PROFILES_JSON
@@ -483,19 +471,6 @@ spec:
       ports:
         - protocol: TCP
           port: {{ .Values.litellm.service.port }}
-    # Direct approved tool invocation: the runtime reaches the release-local Obot MCP proxy with
-    # its attempt-scoped, server-scoped key. Candidates and approvals still flow via the server.
-    - to:
-        - namespaceSelector:
-            matchLabels:
-              kubernetes.io/metadata.name: {{ .Release.Namespace }}
-          podSelector:
-            matchLabels:
-              {{- include "opencrane.selectorLabels" . | nindent 14 }}
-              app.kubernetes.io/component: mcp-gateway
-      ports:
-        - protocol: TCP
-          port: {{ .Values.mcpGateway.service.port }}
     - to:
         - namespaceSelector:
             matchLabels:
@@ -833,21 +808,7 @@ spec:
         quantity(object.spec.template.spec.containers[0].resources.limits.memory).compareTo(quantity({{ $profile.resources.limits.memory | toJson }})) == 0
       message: runtime image, container shape, security and resources are immutable
     - expression: >-
-        {{- if $profile.obotMcpBaseUrl }}
-        (object.spec.template.spec.containers[0].env.size() == 5 ||
-         (object.spec.template.spec.containers[0].env.size() == 7 &&
-          object.spec.template.spec.containers[0].volumeMounts.size() == 5 &&
-          object.spec.template.spec.containers[0].env[5].name == 'OPENCRANE_RUNTIME_OBOT_URL' &&
-          object.spec.template.spec.containers[0].env[5].value == {{ $profile.obotMcpBaseUrl | toJson }} &&
-          object.spec.template.spec.containers[0].env[6].name == 'OPENCRANE_RUNTIME_OBOT_KEY_PATH' &&
-          object.spec.template.spec.containers[0].env[6].value == '/var/run/opencrane/obot/key' &&
-          object.spec.template.spec.containers[0].volumeMounts[4].name == 'obot-key' &&
-          object.spec.template.spec.containers[0].volumeMounts[4].mountPath == '/var/run/opencrane/obot' &&
-          object.spec.template.spec.containers[0].volumeMounts[4].readOnly == true)) &&
-        (object.spec.template.spec.containers[0].env.size() == 5) == (object.spec.template.spec.containers[0].volumeMounts.size() == 4) &&
-        {{- else }}
         object.spec.template.spec.containers[0].env.size() == 5 &&
-        {{- end }}
         object.spec.template.spec.containers[0].env[0].name == 'OPENCRANE_RUNTIME_STREAM_URL' &&
         object.spec.template.spec.containers[0].env[0].value == {{ $profile.runtimeStreamUrl | toJson }} &&
         object.spec.template.spec.containers[0].env[1].name == 'OPENCRANE_RUNTIME_TOKEN_PATH' &&
@@ -858,11 +819,7 @@ spec:
         object.spec.template.spec.containers[0].env[3].value == '/var/run/opencrane/litellm/key' &&
         object.spec.template.spec.containers[0].env[4].name == 'POD_UID' &&
         object.spec.template.spec.containers[0].env[4].valueFrom.fieldRef.fieldPath == 'metadata.uid' &&
-        {{- if $profile.obotMcpBaseUrl }}
-        (object.spec.template.spec.containers[0].volumeMounts.size() == 4 || object.spec.template.spec.containers[0].volumeMounts.size() == 5) &&
-        {{- else }}
         object.spec.template.spec.containers[0].volumeMounts.size() == 4 &&
-        {{- end }}
         object.spec.template.spec.containers[0].volumeMounts[0].name == 'runtime-token' &&
         object.spec.template.spec.containers[0].volumeMounts[0].mountPath == '/var/run/opencrane/tokens' &&
         object.spec.template.spec.containers[0].volumeMounts[0].readOnly == true &&
@@ -875,22 +832,9 @@ spec:
         object.spec.template.spec.containers[0].volumeMounts[3].name == 'scratch' &&
         object.spec.template.spec.containers[0].volumeMounts[3].mountPath == '/tmp' &&
         (!has(object.spec.template.spec.containers[0].volumeMounts[3].readOnly) || object.spec.template.spec.containers[0].volumeMounts[3].readOnly == false)
-      message: runtime environment and mounts must contain only the fixed stream, virtual-key, optional obot-key, and scratch interfaces
+      message: runtime environment and mounts must contain only the fixed stream, virtual-key, and scratch interfaces
     - expression: >-
-        {{- if $profile.obotMcpBaseUrl }}
-        (object.spec.template.spec.volumes.size() == 4 ||
-         (object.spec.template.spec.volumes.size() == 5 &&
-          object.spec.template.spec.volumes[4].name == 'obot-key' &&
-          object.spec.template.spec.volumes[4].projected.defaultMode == 288 &&
-          object.spec.template.spec.volumes[4].projected.sources.size() == 1 &&
-          object.spec.template.spec.volumes[4].projected.sources[0].secret.name.matches('^obot-key-[a-f0-9]{32}$') &&
-          object.spec.template.spec.volumes[4].projected.sources[0].secret.items.size() == 1 &&
-          object.spec.template.spec.volumes[4].projected.sources[0].secret.items[0].key == 'key' &&
-          object.spec.template.spec.volumes[4].projected.sources[0].secret.items[0].path == 'key')) &&
-        (object.spec.template.spec.volumes.size() == 4) == (object.spec.template.spec.containers[0].volumeMounts.size() == 4) &&
-        {{- else }}
         object.spec.template.spec.volumes.size() == 4 &&
-        {{- end }}
         object.spec.template.spec.volumes[0].name == 'runtime-token' &&
         object.spec.template.spec.volumes[0].projected.defaultMode == 288 &&
         object.spec.template.spec.volumes[0].projected.sources.size() == 1 &&
@@ -912,7 +856,7 @@ spec:
         object.spec.template.spec.volumes[3].name == 'scratch' &&
         (!has(object.spec.template.spec.volumes[3].emptyDir.medium) || object.spec.template.spec.volumes[3].emptyDir.medium == '') &&
         quantity(object.spec.template.spec.volumes[3].emptyDir.sizeLimit).compareTo(quantity({{ $profile.scratchSize | toJson }})) == 0
-      message: runtime volumes must be exactly one audience token, one reference, one virtual key, an optional obot key, and bounded scratch
+      message: runtime volumes must be exactly one audience token, one reference, one virtual key, and bounded scratch
     - expression: >-
         (request.operation == 'CREATE' && object.spec.suspend == true) ||
         (request.operation == 'UPDATE' && oldObject.spec.suspend == true && object.spec.suspend == false &&

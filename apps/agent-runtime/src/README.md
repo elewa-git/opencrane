@@ -4,9 +4,9 @@
 
 This directory contains the process-local implementation of one isolated agent-run attempt. The
 OpenCrane server admits the run, freezes its input, authorises external actions, and stores the
-durable event history. This process runs the ephemeral model loop, proposes candidates back to that
-authority, and — once the server approves a proposed integration tool call — executes that exact
-call directly against Obot's MCP proxy with an attempt-scoped key, reporting only a result digest.
+durable event history. This process runs the ephemeral model loop and proposes candidates back to
+that authority. External calls execute in the control plane; this runtime receives only exact saved
+results and therefore cannot repeat a provider action after reconnecting.
 
 ## Component map
 
@@ -26,8 +26,6 @@ runtime.py  process lifecycle and bounded reconnects
         ▼                 ▼
     model_loop/       protocol/
     Pydantic adapter  candidate projection
-        │                 │
-        │             tools/ (obot_mcp: approved direct MCP invocation)
         │
         └── encrypted local checkpoint
 
@@ -39,8 +37,7 @@ config.py · constants.py · observability.py support the components above.
 | `runtime.py` | Mounted settings and projected identity files | One bootstrapped outbound stream | Run selection or durable state |
 | `bootstrap/` | Bootstrap reference, projected token, generated public key evidence | One accepted proof-key binding | Retry after permanent refusal |
 | `transport/` | Authenticated server-sent events and candidate dictionaries | Dispatched commands and bounded HTTP requests | An inbound listener or local queue |
-| `attempts/` | Fenced start, resume, and cancel commands | Ordered runtime candidates, executed approved calls, and safe run evidence | Approval or canonical cancellation |
-| `tools/` | Approved call coordinates, Obot addressing, mounted attempt key | One bounded MCP `initialize` + `tools/call` exchange | Unapproved execution or the Obot service credential |
+| `attempts/` | Fenced start, resume, and cancel commands | Ordered runtime candidates, mapped saved tool results, and safe run evidence | Tool execution, approval, or canonical cancellation |
 | `model_loop/` | Compiled input, attempt-scoped LiteLLM key, authorised resume results | Framework-neutral model events | Direct tool execution or implicit retries |
 | `protocol/` | Neutral events and compiled tool grants | Stable event or external-action candidates | Trusting a model-selected tool revision |
 
@@ -57,11 +54,10 @@ config.py · constants.py · observability.py support the components above.
    `external_action` candidates only after resolving the exact revision from the compiled grant set.
 6. `transport/http.py` delivers each stable candidate. It retries only the control plane's explicit
    pre-reservation response and preserves the same candidate identifier across that retry.
-7. A `resume_attempt` names WHICH proposed calls were approved. `attempts/deferred_results.py` maps
-   each approved `toolInvocationId` back to the pending call recorded at proposal time
-   (`attempts/pending_tools.py`), re-checks the compiled allow-list and Obot addressing, executes it
-   through `tools/obot_mcp.py`, emits a digest-only `tool.completed` candidate, and feeds the
-   framework the per-call results (a denial feeds a refusal; failures are typed loop errors).
+7. A `resume_attempt` carries exact saved tool results. `attempts/tool_results.py` maps each
+   `toolInvocationId` back to the pending call recorded at proposal time
+   (`attempts/pending_tools.py`) and feeds the framework that saved result. It never contacts the
+   provider or creates a second tool completion.
    Starting or resuming
    supersedes any prior local worker; a `cancel_attempt` signals the current worker, while dropped
    transport cancels every registered worker and suppresses late runtime output.
@@ -86,7 +82,7 @@ config.py · constants.py · observability.py support the components above.
 Dependencies flow from process composition towards narrower mechanisms:
 
 ```text
-runtime → bootstrap / transport → attempts → model_loop / protocol / tools
+runtime → bootstrap / transport → attempts → model_loop / protocol
                                       │
                                       └── terminal
 

@@ -56,7 +56,7 @@ ends by the durable expiry; zero Pods means retry while multiple or foreign Pods
   canonical Job builder before polling starts.
 - `__CreateHttpAgentControllerAuthority` — claims and commits over the projected-token-authenticated
   internal OpenCrane API.
-- `__CreateKubernetesAgentControllerStore` — exposes exact Job adoption, create-only attempt-key
+- `__CreateKubernetesAgentControllerStore` — exposes exact Job adoption, create-only model-key
   Secret creation, expiry-bounded fenced Job release, and selector-bounded first-Pod listing.
 
 The same controller performs the bounded retention pass for successfully delivered runtime-outbox
@@ -64,7 +64,7 @@ records. It runs once at startup, then at its configured interval. A failed pass
 retried at the next interval; it can never prevent workload reconciliation or keep the controller
 alive after shutdown.
 
-Internally, the polling loop, runtime-profile policy, attempt-key projection, assignment reconcile,
+Internally, the polling loop, runtime-profile policy, model-key projection, assignment reconcile,
 release reconcile, bounded HTTP decoding, Kubernetes Job adoption, conditional release planning,
 Pod proof, and transport calls each have one module owner. The package barrel exposes composition
 capabilities and the profile-map type only. The one-attempt assignment and release steps remain
@@ -75,7 +75,7 @@ package-private test seams. Zod validation of controller wire models is owned be
 
 The package does not read Postgres directly, create ServiceAccounts, Pods, volumes or Deployments,
 read/update/delete Secrets, watch Kubernetes, replace an object, mutate a Pod, or issue runtime
-commands. Its only Secret power is creating the immutable, Job-owned attempt-key Secret (an
+commands. Its only Secret power is creating the immutable, Job-owned model-key Secret (an
 AlreadyExists response is an idempotent success, never re-read); it can lower
 `spec.activeDeadlineSeconds` and patch `spec.suspend` from true to false together only after all
 identity tests pass. The minted key is transient — written straight into the Secret, never persisted

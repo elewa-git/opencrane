@@ -26,21 +26,6 @@ export interface AgentControllerRunAttemptClaimLease
 	readonly expiresAt: string;
 }
 
-/**
- * Attempt-scoped Obot key minted by the control plane at claim time.
- *
- * TRANSIENT ONLY: like the LiteLLM key, the value rides the claim HTTP response, is written straight
- * into the per-attempt Kubernetes Secret by the controller, and is never persisted to Postgres or
- * logged. The key is scoped to the exact Obot MCP server ids of the attempt's integration
- * assignments and expires with the assignment lease — never the Obot service credential.
- */
-export interface AgentControllerObotAttemptKey
-{
-	/** Transient attempt-scoped Obot bearer key value; written only into the per-attempt Secret. */
-	readonly key: string;
-	/** Obot-minted key identifier stored beside the key for later revocation; not a credential. */
-	readonly keyId: string;
-}
 /** Narrow desired-state projection needed to build one suspended runtime Job. */
 export interface AgentControllerRunAttemptProjection
 {
@@ -71,11 +56,6 @@ export interface AgentControllerRunAttemptProjection
 	 * upstream provider secret, both of which stay in the control plane.
 	 */
 	readonly litellmKey: string;
-	/**
-	 * Attempt-scoped Obot key, present only when the run has integration assignments AND the Obot
-	 * transport is composed. Absent means the attempt receives no Obot credential (feature off).
-	 */
-	readonly obotKey?: AgentControllerObotAttemptKey;
 }
 
 /** One claimed outbox command and its authorised suspended-Job projection. */
@@ -148,11 +128,6 @@ export interface AgentControllerRunWorkloadReleaseProjection
 	readonly assignmentExpiresAt: string;
 	/** Stable opaque bootstrap reference projected into the Job; it grants no authority by itself. */
 	readonly bootstrapReference: string;
-	/**
-	 * Whether the attempt was claimed with an Obot key, so the release reconciliation rebuilds the
-	 * exact same Job shape (obot key volume and env present) that the assignment created.
-	 */
-	readonly obotKeyProvisioned?: boolean;
 }
 
 /** One leased request to unsuspend a Job and register its first Pod. */

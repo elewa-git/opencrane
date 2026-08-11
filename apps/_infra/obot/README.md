@@ -12,19 +12,16 @@ This one wraps [Obot](https://github.com/obot-platform/obot), an **MCP gateway**
 Context Protocol, the standard way agents connect to external tools, and the gateway is the single
 governed door through which those tool connections pass.
 
-**Why we run it.** In a **silo** (one customer's isolated slice) the assistants must reach tools only
-through one auditable, access-controlled gateway rather than each pod dialling tools directly. Obot is
-that gateway: it keeps custody of integration credentials, and after a server-side approval a runtime
-Job invokes the tool against Obot's MCP proxy directly with an attempt-scoped API key — tool payloads
-never transit the OpenCrane server. This app owns the release-local Obot `Deployment`,
+**Why we run it.** In a **silo** (one customer's isolated slice) assistants reach integrations only
+through one auditable, access-controlled gateway. Obot keeps custody of integration credentials;
+the OpenCrane server performs each durably admitted action through that gateway and returns only the
+saved result to the runtime. This app owns the release-local Obot `Deployment`,
 `ServiceAccount`, RBAC (Role and binding), `Service`, and `NetworkPolicy` as named Helm templates,
 composed by the silo umbrella chart ([`deploy-k8s`](../deploy-k8s/README.md)).
 
-The ingress policy admits three caller classes to the gateway port: tenant pods, the opencrane-server
-(management: custody provisioning + attempt-key minting with the mounted service credential named by
-`mcpGateway.serviceTokenExistingSecret`), and — when the agent controller is enabled — the two
-isolated runtime namespaces (`component: agent-runtime` pods) for direct approved tool invocation.
-Network reach is only the floor; Obot authorises each data-plane call with the attempt-scoped key.
+The ingress policy admits tenant pods and the opencrane-server. The server uses the mounted service
+credential named by `mcpGateway.serviceTokenExistingSecret` for custody and action execution. The
+isolated runtime namespaces have no direct path to this gateway.
 
 ## Public surface
 
@@ -52,7 +49,7 @@ An app entrypoint (`type:app`, `scope:obot`); composed by the silo chart, import
   provider is `custom` and no key is supplied.
 - `mcpGateway.serviceTokenExistingSecret` (+ `mcpGateway.serverTimeoutSeconds`) — names the
   pre-provisioned Secret (key `token`) carrying the Obot service credential the opencrane-server
-  uses for custody and attempt-key management. Empty (default) leaves the transport off and the
+  uses for custody and durable action execution. Empty (default) leaves the transport off and the
   server fail-closed. Live-shape qualification against Obot v0.23.1 remains gated on issue #337.
 
 ## See also
