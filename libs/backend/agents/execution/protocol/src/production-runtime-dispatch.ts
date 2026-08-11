@@ -42,7 +42,7 @@ function _CreateProductionApprovalExpiry(): RuntimeApprovalExpiry
  * Construct the production runtime dispatch authority behind the workload stream.
  *
  * This factory is the sole concrete policy composition for compiled input, external actions,
- * deferred approvals, terminal reporting, and transport ports. The app supplies process-owned
+ * deferred approvals, canonical event reporting, and transport ports. The app supplies process-owned
  * Prisma, configuration, and logging only; it does not reimplement execution decisions.
  *
  * @param prisma - Canonical product-authority persistence client.
