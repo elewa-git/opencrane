@@ -29,7 +29,10 @@ a duplicate cursor carrying different data is rejected. Cursorless open-interrup
 the current interrupt set without advancing the durable cursor. An access-revoked overlay purges all
 projected content and reconnect coordinates immediately. Tool attempts remain visibly failed when
 the model retries; if a later attempt succeeds, the view becomes `recovered` while retaining the
-ordered safe failure classifications.
+ordered safe failure classifications. An ambiguous provider outcome is a distinct `needs_recovery`
+run and tool state carrying only fixed display-safe evidence and its expected-attempt cancellation
+fence. It never becomes a retry, failure, or elicitation locally; a later canonical cancellation is
+adopted without discarding the unresolved tool evidence.
 
 Governed `opencrane.a2ui.v1` custom events are validated against the exact shared envelope,
 three-operation vocabulary, and constrained upstream-backed catalogue. Surfaces are keyed by conversation,
@@ -53,7 +56,7 @@ this reducer remains the explicit owner of failed versus cancelled browser state
   exercised through the matching pinned `@ag-ui/client` lifecycle.
 - `__ReduceAgUiStream` / `__CreateAgUiStreamState` — builds immutable browser view state while
   preserving truthful success, interruption, failure, and cancellation terminals, display-safe
-  tool-failure classifications, plus monotonic governed A2UI surfaces.
+  tool-failure and recovery classifications, plus monotonic governed A2UI surfaces.
 - `__AgUiResumeCursor` — returns only the latest durable server cursor for reconnect.
 - `__RevokeAgUiStreamAccess` — purges all projected content and reconnect coordinates after access loss.
 - `AgUiRunStatuses` / `AgUiMessageStatuses` / `AgUiToolStatuses` — the browser's explicit projection lifecycle.

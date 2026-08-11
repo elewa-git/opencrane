@@ -1,5 +1,5 @@
 import type { Interrupt, TextMessageStartEvent } from "@ag-ui/core";
-import type { AgUiA2uiEnvelope, AgUiProjectionEvent } from "@opencrane/contracts";
+import type { AgUiA2uiEnvelope, AgUiProjectionEvent, AgUiToolRecoveryRequiredEnvelope } from "@opencrane/contracts";
 
 /** Browser-visible lifecycle for one projected conversation run. */
 export enum AgUiRunStatuses
@@ -12,6 +12,8 @@ export enum AgUiRunStatuses
 	Succeeded = "succeeded",
 	/** The authoritative stream ended because user input remains required. */
 	Interrupted = "interrupted",
+	/** An external action has an ambiguous outcome and the run can only be cancelled safely. */
+	NeedsRecovery = "needs_recovery",
 	/** The authoritative stream reported a run failure. */
 	Failed = "failed",
 	/** The authoritative stream reported cancellation. */
@@ -40,6 +42,8 @@ export enum AgUiToolStatuses
 	Completed = "completed",
 	/** The authoritative stream reported a failure, including before later model recovery. */
 	Failed = "failed",
+	/** The action outcome is ambiguous and must not be dispatched again. */
+	NeedsRecovery = "needs_recovery",
 	/** The tool later completed, while retaining the earlier visible failure evidence. */
 	Recovered = "recovered",
 }
@@ -81,6 +85,8 @@ export interface AgUiToolView
 	readonly failureCode: string | null;
 	/** Ordered failure evidence retained even when a later attempt recovers. */
 	readonly failures: readonly AgUiToolFailure[];
+	/** Exact display-safe recovery evidence retained after the run is cancelled or reconciled. */
+	readonly recovery: AgUiToolRecoveryRequiredEnvelope | null;
 }
 
 /** Safe failure selected by the server-owned AG-UI projection. */
@@ -105,6 +111,8 @@ export interface AgUiStreamState
 	readonly runStatus: AgUiRunStatuses;
 	/** Safe terminal failure, when the run failed or was cancelled. */
 	readonly runFailure: AgUiRunFailure | null;
+	/** Exact display-safe recovery evidence for the current run, when provider outcome is ambiguous. */
+	readonly runRecovery: AgUiToolRecoveryRequiredEnvelope | null;
 	/** Still-open AG-UI interrupts. Cursorless reconnect overlays replace this set. */
 	readonly interrupts: readonly Interrupt[];
 	/** Conversation messages assembled from safe events. */

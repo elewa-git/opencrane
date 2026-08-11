@@ -1,7 +1,7 @@
 import { EventType } from "@ag-ui/core";
 import { describe, expect, it } from "vitest";
 
-import { AG_UI_A2UI_ENVELOPE_VERSION, AG_UI_INTERRUPTS_CLEARED_EVENT, AG_UI_TOOL_FAILURE_EVENT, AgUiA2uiSurfaceStates } from "@opencrane/contracts";
+import { AG_UI_A2UI_ENVELOPE_VERSION, AG_UI_INTERRUPTS_CLEARED_EVENT, AG_UI_TOOL_FAILURE_EVENT, AG_UI_TOOL_RECOVERY_REQUIRED_EVENT, AgUiA2uiSurfaceStates, AgUiToolRecoveryProviderOutcomes } from "@opencrane/contracts";
 
 import { __DecodeAgUiSseRecord } from "../ag-ui-sse-decoder.js";
 import { AgUiMessageStatuses, AgUiRunStatuses, AgUiToolStatuses, type AgUiStreamRecord } from "../ag-ui-stream.types.js";
@@ -26,6 +26,23 @@ function _A2ui(sequence: number, state: AgUiA2uiSurfaceStates, operations: reado
 function _A2uiRecord(id: string, envelope: Readonly<Record<string, unknown>>): AgUiStreamRecord
 {
 	return _Record(id, { type: EventType.CUSTOM, name: AG_UI_A2UI_ENVELOPE_VERSION, value: envelope });
+}
+
+/** Build one exact recovery-required envelope with optional malformed-test overrides. */
+function _Recovery(overrides: Readonly<Record<string, unknown>> = {}): Readonly<Record<string, unknown>>
+{
+	return {
+		eventType: "tool.recovery_required",
+		runId: "run-1",
+		expectedAttempt: 2,
+		toolCallId: "tool-1",
+		occurredAt: "2026-08-11T08:30:00.000Z",
+		recoveryCategory: "manual_action_required",
+		preparationRetryCount: 3,
+		preparationRetryLimit: 3,
+		providerOutcome: AgUiToolRecoveryProviderOutcomes.UnknownAfterDispatch,
+		...overrides,
+	};
 }
 
 describe("AG-UI stream state", function _Suite()
@@ -70,6 +87,55 @@ describe("AG-UI stream state", function _Suite()
 
 		expect(state.tools["tool-1"]).toMatchObject({ status: AgUiToolStatuses.Recovered, result: "recovered", failureCode: "AuthenticationError" });
 		expect(state.tools["tool-1"]?.failures).toEqual([{ code: "AuthenticationError" }]);
+	});
+
+	it("stops a run in Needs recovery, preserves prior failure evidence, and accepts authoritative cancellation", function _NeedsRecovery()
+	{
+		let state = __ReduceAgUiStream(__CreateAgUiStreamState(), _Record("cursor-recovery-1", { type: EventType.RUN_STARTED, threadId: "conversation-1", runId: "run-1" }));
+		state = __ReduceAgUiStream(state, _Record("cursor-recovery-2", { type: EventType.TOOL_CALL_START, toolCallId: "tool-1", toolCallName: "create_invoice" }));
+		state = __ReduceAgUiStream(state, _Record("cursor-recovery-3", { type: EventType.CUSTOM, name: AG_UI_TOOL_FAILURE_EVENT, value: { eventType: "tool.failed", toolCallId: "tool-1", failureCode: "TimeoutError" } }));
+		state = __ReduceAgUiStream(state, _Record("cursor-recovery-4", { type: EventType.CUSTOM, name: AG_UI_TOOL_RECOVERY_REQUIRED_EVENT, value: _Recovery() }));
+
+		expect(state.runStatus).toBe(AgUiRunStatuses.NeedsRecovery);
+		expect(state.runRecovery).toEqual(_Recovery());
+		expect(state.interrupts).toEqual([]);
+		expect(state.tools["tool-1"]).toMatchObject({ status: AgUiToolStatuses.NeedsRecovery, failureCode: "TimeoutError", failures: [{ code: "TimeoutError" }], recovery: _Recovery() });
+		expect(function _CannotGuessSuccess(): void
+		{
+			__ReduceAgUiStream(state, _Record("cursor-recovery-5", { type: EventType.RUN_FINISHED, threadId: "conversation-1", runId: "run-1", outcome: { type: "success" } }));
+		}).toThrow("cannot overwrite");
+
+		state = __ReduceAgUiStream(state, _Record("cursor-recovery-6", { type: EventType.RUN_ERROR, message: "Run cancelled: user_cancelled", code: "RUN_CANCELLED" }));
+		expect(state.runStatus).toBe(AgUiRunStatuses.Cancelled);
+		expect(state.runRecovery).toEqual(_Recovery());
+		expect(state.tools["tool-1"]).toMatchObject({ status: AgUiToolStatuses.NeedsRecovery, failures: [{ code: "TimeoutError" }], recovery: _Recovery() });
+	});
+
+	it("rejects malformed and secret-bearing recovery envelopes without changing state", function _RejectsUnsafeRecovery()
+	{
+		let state = __ReduceAgUiStream(__CreateAgUiStreamState(), _Record("cursor-unsafe-1", { type: EventType.RUN_STARTED, threadId: "conversation-1", runId: "run-1" }));
+		state = __ReduceAgUiStream(state, _Record("cursor-unsafe-2", { type: EventType.TOOL_CALL_START, toolCallId: "tool-1", toolCallName: "create_invoice" }));
+		const invalid = [
+			_Recovery({ expectedAttempt: 0 }),
+			_Recovery({ preparationRetryCount: 4 }),
+			_Recovery({ preparationRetryLimit: 4 }),
+			_Recovery({ occurredAt: "not-an-instant" }),
+			_Recovery({ providerOutcome: "Bearer secret" }),
+			_Recovery({ providerBody: "secret response" }),
+			_Recovery({ authorization: "Bearer secret" }),
+			_Recovery({ password: "never" }),
+		];
+
+		for (const value of invalid)
+		{
+			expect(function _UnsafeEnvelope(): void
+			{
+				__ReduceAgUiStream(state, _Record("cursor-unsafe-value", { type: EventType.CUSTOM, name: AG_UI_TOOL_RECOVERY_REQUIRED_EVENT, value }));
+			}).toThrow("recovery requirement is invalid");
+		}
+		expect(state.runStatus).toBe(AgUiRunStatuses.Running);
+		expect(state.runRecovery).toBeNull();
+		expect(state.tools["tool-1"]?.recovery).toBeNull();
 	});
 
 	it("suppresses exact duplicate cursors and rejects cursor payload mutation", function _RejectsMutation()

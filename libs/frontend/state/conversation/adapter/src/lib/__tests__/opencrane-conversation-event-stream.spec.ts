@@ -2,8 +2,9 @@ import { Injector, runInInjectionContext } from "@angular/core";
 import { EventType } from "@ag-ui/core";
 import { describe, expect, it, vi } from "vitest";
 
+import { AG_UI_TOOL_FAILURE_EVENT, AG_UI_TOOL_RECOVERY_REQUIRED_EVENT, AgUiToolRecoveryProviderOutcomes } from "@opencrane/contracts";
 import { ControlPlaneApiService } from "@opencrane/core";
-import { AgUiRunStatuses, __CreateAgUiStreamState, __DecodeAgUiSseRecord, __ReduceAgUiStream, type AgUiStreamState } from "@opencrane/state/conversation/ag-ui";
+import { AgUiRunStatuses, AgUiToolStatuses, __CreateAgUiStreamState, __DecodeAgUiSseRecord, __ReduceAgUiStream, type AgUiStreamState } from "@opencrane/state/conversation/ag-ui";
 
 import { ConversationEventStreamStatuses, type ConversationEventStreamUpdate } from "../conversation-event-stream.types.js";
 import { OpenCraneConversationEventStream } from "../opencrane-conversation-event-stream.js";
@@ -72,6 +73,23 @@ function _PriorState(): AgUiStreamState
 	return __ReduceAgUiStream(__ReduceAgUiStream(__CreateAgUiStreamState(), start), content);
 }
 
+/** Exact display-safe recovery event used by reconnect and protocol-failure coverage. */
+function _Recovery(overrides: Readonly<Record<string, unknown>> = {}): Readonly<Record<string, unknown>>
+{
+	return {
+		eventType: "tool.recovery_required",
+		runId: "run-1",
+		expectedAttempt: 2,
+		toolCallId: "tool-1",
+		occurredAt: "2026-08-11T08:30:00.000Z",
+		recoveryCategory: "manual_action_required",
+		preparationRetryCount: 3,
+		preparationRetryLimit: 3,
+		providerOutcome: AgUiToolRecoveryProviderOutcomes.UnknownAfterDispatch,
+		...overrides,
+	};
+}
+
 describe("OpenCraneConversationEventStream", function _Suite()
 {
 	it("reduces partial UTF-8 chunks incrementally and reports heartbeats", async function _StreamsIncrementally()
@@ -115,6 +133,46 @@ describe("OpenCraneConversationEventStream", function _Suite()
 		expect(state.cursor).toBe("opaque/+= cursor");
 		expect(state.runStatus).toBe(AgUiRunStatuses.Interrupted);
 		expect(state.interrupts[0]?.id).toBe("approval-1");
+	});
+
+	it("restores Needs recovery from the durable cursor and accepts later cancellation", async function _ReconnectsRecovery()
+	{
+		const controller = new AbortController();
+		const recovery = _Frame("recovery-1", { type: EventType.RUN_STARTED, threadId: "conversation-1", runId: "run-1" })
+			+ _Frame("recovery-2", { type: EventType.TOOL_CALL_START, toolCallId: "tool-1", toolCallName: "create_invoice" })
+			+ _Frame("recovery-3", { type: EventType.CUSTOM, name: AG_UI_TOOL_FAILURE_EVENT, value: { eventType: "tool.failed", toolCallId: "tool-1", failureCode: "TimeoutError" } })
+			+ _Frame("recovery-4", { type: EventType.CUSTOM, name: AG_UI_TOOL_RECOVERY_REQUIRED_EVENT, value: _Recovery() });
+		const cancelled = _Frame("recovery-5", { type: EventType.RUN_ERROR, message: "Run cancelled: user_cancelled", code: "RUN_CANCELLED" });
+		const get = vi.fn().mockResolvedValueOnce(_Success(_Stream(recovery))).mockResolvedValueOnce(_Success(_Stream(cancelled)));
+		const stream = _EventStream(get);
+
+		const state = await stream.stream({ conversationId: "conversation-1", signal: controller.signal, reconnectDelayMilliseconds: 0, onUpdate: function _Update(update): void
+		{
+			if (update.state.runStatus === AgUiRunStatuses.Cancelled) controller.abort();
+		} });
+
+		expect(get).toHaveBeenNthCalledWith(2, "/me/conversations/{conversationId}/events", {
+			params: { path: { conversationId: "conversation-1" }, query: { cursor: "recovery-4" }, header: { "Last-Event-ID": "recovery-4" } },
+			parseAs: "stream",
+			signal: controller.signal
+		});
+		expect(state.cursor).toBe("recovery-5");
+		expect(state.runStatus).toBe(AgUiRunStatuses.Cancelled);
+		expect(state.runRecovery).toEqual(_Recovery());
+		expect(state.tools["tool-1"]).toMatchObject({ status: AgUiToolStatuses.NeedsRecovery, failures: [{ code: "TimeoutError" }], recovery: _Recovery() });
+	});
+
+	it("fails closed when a recovery envelope carries secret-bearing extension fields", async function _RejectsUnsafeRecovery()
+	{
+		const controller = new AbortController();
+		const content = _Frame("unsafe-1", { type: EventType.RUN_STARTED, threadId: "conversation-1", runId: "run-1" })
+			+ _Frame("unsafe-2", { type: EventType.TOOL_CALL_START, toolCallId: "tool-1", toolCallName: "create_invoice" })
+			+ _Frame("unsafe-3", { type: EventType.CUSTOM, name: AG_UI_TOOL_RECOVERY_REQUIRED_EVENT, value: _Recovery({ authorization: "Bearer secret" }) });
+		const get = vi.fn().mockResolvedValue(_Success(_Stream(content)));
+		const stream = _EventStream(get);
+
+		await expect(stream.stream({ conversationId: "conversation-1", signal: controller.signal, reconnectDelayMilliseconds: 0 })).rejects.toThrow("canonical conversation event sequence is invalid");
+		expect(get).toHaveBeenCalledTimes(1);
 	});
 
 	it("fails malformed protocol frames immediately without using the default retries", async function _RejectsMalformed()
