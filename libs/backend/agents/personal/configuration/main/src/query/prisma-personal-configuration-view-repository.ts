@@ -1,6 +1,6 @@
 import { PersonalConfigurationChangeState, Prisma, type PrismaClient } from "@prisma/client";
 
-import { _IsPersonalConfigurationPatch } from "../proposal/personal-configuration-patch.js";
+import { _IsPersonalConfigurationPatch } from "../proposal/personal-configuration-patch.validator.js";
 import { PersonalConfigurationChangeViewStates, type PersonalConfigurationChangeView, type PersonalConfigurationChangeViewRepository } from "./personal-configuration-view.types.js";
 
 /** Selected Prisma proposal row before mapping to the owner-visible product shape. */

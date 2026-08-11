@@ -2,7 +2,7 @@ import type { Prisma, PrismaClient } from "@prisma/client";
 
 import type { RunInputSnapshot } from "@opencrane/contracts";
 
-import { _IsPersonalConfigurationPatch } from "../proposal/personal-configuration-patch.js";
+import { _IsPersonalConfigurationPatch } from "../proposal/personal-configuration-patch.validator.js";
 import { __ProposePersonalConfigurationChange } from "../proposal/personal-configuration-proposal.js";
 import { PersonalConfigurationProposalCodes } from "../proposal/personal-configuration-proposal.types.js";
 import { PrismaPersonalConfigurationProposalRepository } from "../proposal/prisma-personal-configuration-proposal-repository.js";
