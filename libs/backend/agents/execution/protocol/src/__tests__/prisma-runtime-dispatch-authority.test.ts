@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import { AGENT_RUNTIME_PROTOCOL_V1, type CompiledRunInput, type RuntimeCandidate, type RuntimeCommandEnvelope } from "@opencrane/contracts";
 
 import { PrismaRuntimeDispatchAuthority } from "../prisma-runtime-dispatch-authority.js";
-import type { RunInputCompiler, RuntimeApprovalExpiry, RuntimeExternalActionRunner, RuntimeStreamWorkloadIdentity, RuntimeTerminalReporter } from "../prisma-runtime-dispatch-authority.types.js";
+import type { RunInputCompiler, RuntimeApprovalExpiry, RuntimeEventReporter, RuntimeExternalActionRunner, RuntimeStreamWorkloadIdentity } from "../prisma-runtime-dispatch-authority.types.js";
 import type { RuntimeProtocolClock } from "../runtime-protocol-authority.types.js";
 
 /** Fixed reviewed identity for the registered runtime Pod under test. */
@@ -90,8 +90,8 @@ interface FakeOptions
 	readonly externalActionRunner?: RuntimeExternalActionRunner;
 	/** Optional structured logger injected to assert handled dispatch failures remain observable. */
 	readonly logger?: Logger;
-	/** Optional terminal lifecycle bridge supplied by the composition root. */
-	readonly terminalReporter?: RuntimeTerminalReporter;
+	/** Optional canonical event persistence bridge supplied by the composition root. */
+	readonly eventReporter?: RuntimeEventReporter;
 	/** Optional transaction-scoped approval expiry bridge supplied by the composition root. */
 	readonly approvalExpiry?: RuntimeApprovalExpiry;
 	/** Optional trusted clock for retry-window expiry assertions. */
@@ -232,7 +232,8 @@ const _compileRunInput: RunInputCompiler = async function _compile(snapshot): Pr
 function _authority(options: FakeOptions)
 {
 	const fake = _fakePrisma(options);
-	return { authority: new PrismaRuntimeDispatchAuthority(fake.prisma, { personalRuntimeNamespace: "runtime-ns", managedRuntimeNamespace: "managed-runtime-ns", commandTtlMilliseconds: 60_000, externalActionRetryLimit: 3, externalActionRetryWindowMilliseconds: 30_000 }, _compileRunInput, options.externalActionRunner, options.terminalReporter, options.clock ?? _clock, options.logger, options.approvalExpiry), ...fake };
+	const eventReporter = options.eventReporter ?? { reportInTransaction: vi.fn().mockResolvedValue({ outcome: "reported" as const }) };
+	return { authority: new PrismaRuntimeDispatchAuthority(fake.prisma, { personalRuntimeNamespace: "runtime-ns", managedRuntimeNamespace: "managed-runtime-ns", commandTtlMilliseconds: 60_000, externalActionRetryLimit: 3, externalActionRetryWindowMilliseconds: 30_000 }, _compileRunInput, options.externalActionRunner, eventReporter, options.clock ?? _clock, options.logger, options.approvalExpiry), ...fake };
 }
 
 /** Build a runtime event candidate bound to a dispatched command. */
@@ -443,17 +444,44 @@ describe("PrismaRuntimeDispatchAuthority", function _describeDispatchAuthority()
 	it("persists only a fenced runtime completion through the injected run authority", async function _reportsTerminalCompletion()
 	{
 		const reporter = { reportInTransaction: vi.fn().mockResolvedValue({ outcome: "reported" }) };
-		const context = _authority({ runState: "Running", terminalReporter: reporter });
+		const context = _authority({ runState: "Running", eventReporter: reporter });
 		const start = await context.authority.__NextCommand(_identity, _open, 0);
 		const candidate: RuntimeCandidate = { protocolVersion: AGENT_RUNTIME_PROTOCOL_V1, runtimeInstanceId: "instance-1", commandId: start?.commandId ?? "command-1", candidateId: "candidate-complete", runId: "run-1", attempt: 1, fence: 1, kind: "event", eventType: "run.completed", payload: { ignored: "runtime payload never becomes durable terminal evidence" } };
 
 		await expect(context.authority.__AdmitCandidate(_identity, candidate)).resolves.toEqual({ accepted: true });
-		expect(reporter.reportInTransaction).toHaveBeenCalledWith(expect.anything(), { runId: "run-1", attempt: 1, eventType: "run.completed" });
+		expect(reporter.reportInTransaction).toHaveBeenCalledWith(expect.anything(), { runId: "run-1", attempt: 1, eventType: "run.completed", payload: { ignored: "runtime payload never becomes durable terminal evidence" } });
+	});
+
+	it("persists each canonical event before accepting its candidate id", async function _persistsBeforeCandidateAcceptance()
+	{
+		let context: ReturnType<typeof _authority>;
+		const reporter: RuntimeEventReporter = { async reportInTransaction()
+		{
+			expect(context.streams[0]?.acceptedCandidateIds).toEqual([]);
+			return { outcome: "reported" };
+		} };
+		context = _authority({ runState: "Running", eventReporter: reporter });
+		const start = await context.authority.__NextCommand(_identity, _open, 0);
+		const candidate: RuntimeCandidate = { protocolVersion: AGENT_RUNTIME_PROTOCOL_V1, runtimeInstanceId: "instance-1", commandId: start?.commandId ?? "command-1", candidateId: "candidate-delta", runId: "run-1", attempt: 1, fence: 1, kind: "event", eventType: "message.delta", payload: { messageId: "message-1", delta: "Hello" } };
+
+		await expect(context.authority.__AdmitCandidate(_identity, candidate)).resolves.toEqual({ accepted: true });
+		expect(context.streams[0]?.acceptedCandidateIds).toEqual(["candidate-delta"]);
+	});
+
+	it("does not accept a candidate id when canonical event persistence denies it", async function _deniesUnpersistedEvent()
+	{
+		const reporter: RuntimeEventReporter = { reportInTransaction: vi.fn().mockResolvedValue({ outcome: "denied", reason: "invalid_event_type" }) };
+		const context = _authority({ runState: "Running", eventReporter: reporter });
+		const start = await context.authority.__NextCommand(_identity, _open, 0);
+		const candidate: RuntimeCandidate = { protocolVersion: AGENT_RUNTIME_PROTOCOL_V1, runtimeInstanceId: "instance-1", commandId: start?.commandId ?? "command-1", candidateId: "candidate-unknown", runId: "run-1", attempt: 1, fence: 1, kind: "event", eventType: "framework.internal", payload: {} };
+
+		await expect(context.authority.__AdmitCandidate(_identity, candidate)).resolves.toEqual({ accepted: false, reason: "invalid_event_type" });
+		expect(context.streams[0]?.acceptedCandidateIds).toEqual([]);
 	});
 
 	it("keeps cancellation server-owned even for an authenticated runtime", async function _deniesRuntimeCancellation()
 	{
-		const context = _authority({ runState: "Running", terminalReporter: { reportInTransaction: vi.fn() } });
+		const context = _authority({ runState: "Running", eventReporter: { reportInTransaction: vi.fn() } });
 		const start = await context.authority.__NextCommand(_identity, _open, 0);
 		const candidate: RuntimeCandidate = { protocolVersion: AGENT_RUNTIME_PROTOCOL_V1, runtimeInstanceId: "instance-1", commandId: start?.commandId ?? "command-1", candidateId: "candidate-cancel", runId: "run-1", attempt: 1, fence: 1, kind: "event", eventType: "run.cancelled", payload: {} };
 

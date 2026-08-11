@@ -22,12 +22,13 @@ loads and locks the live workload assignment for a connected runtime Pod, mints 
 pure authority accepts, and durably advances the monotonic command sequence and the accepted
 candidate ids so a transport reconnect can neither reorder nor duplicate work. Its compiler adapter
 hydrates the immutable snapshot through the same locked Prisma transaction before dispatch.
-For the two workload-reportable terminal results, the app injects the canonical run authority into
-that transaction: `run.completed` and `run.failed` become one durable run outcome, stream event, and
+For runtime events, the app injects the canonical run-event authority into that transaction. Every
+allowed message, tool, usage, safe error, A2UI, or terminal event is persisted before its candidate
+id may advance. Unknown event names and unsafe or oversized payloads fail closed without accepting
+the candidate id. `run.completed` and `run.failed` additionally become one durable run outcome and
 child-to-parent notification. A runtime cannot cancel itself; cancellation remains server-owned.
-The package-private candidate-side-effect adapter keeps those terminal writes and digest-only
-`tool.completed` receipts inside the already-admitted transaction; it never advances the stream or
-dispatches provider I/O.
+The package-private candidate-side-effect adapter keeps those event writes and digest-only
+`tool.completed` receipts inside the already-admitted transaction; it never dispatches provider I/O.
 
 ```
  OpenCrane run authority + immutable snapshot
@@ -73,7 +74,7 @@ are rechecked at execution, so the runtime never sees either credential or mutab
 
 - `__CreateProductionRuntimeDispatchAuthority` — constructs the ready production authority,
   including first-party personal-session tool augmentation, external-action routing, frozen memory
-  dataset selection, deferred approval recovery, retry bounds, and canonical terminal reporting.
+  dataset selection, deferred approval recovery, retry bounds, and canonical event reporting.
 - `_CreateSteeringIngestRouter` — the ready-to-mount Prisma composition that maps the shared
   authenticated request principal into the steering caller and supplies the queue and clock.
 - `_RuntimeSteeringOpenapiPaths` — contributes the steering contract to the server-owned API spec.
@@ -98,8 +99,8 @@ attempt — the lease fence, the bound runtime instance, the next command sequen
 candidate ids) and `RuntimeDispatchedCommand` (one row per minted command, whose ids are exactly the
 attempt's accepted command set). Their clean-database schema lives in the OpenCrane-owned target
 baseline. It reads the assignment, run, and immutable snapshot rows owned by the execution-run and
-conversation domains. Terminal state remains written by the injected execution-run authority, never
-by this transport/protocol package directly.
+conversation domains. Canonical events and terminal state remain written by the injected
+execution-run authority, never by this transport/protocol package directly.
 
 `RuntimeSteeringRequest` holds each owner-authored instruction before the runtime observes it. The
 first fenced resume command may consume every pending request and seed the runtime's pre-model buffer.

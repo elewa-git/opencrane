@@ -1,6 +1,8 @@
 import type { Prisma, RuntimeCommandKind } from "@prisma/client";
 
 import type { CompiledRunInput, CompiledToolDefinition, RunInputSnapshot, RuntimeExternalActionCandidate } from "@opencrane/contracts";
+import type { JsonValue } from "@opencrane/util";
+
 import type { RuntimeAdmissionRunState } from "./runtime-protocol-authority.types.js";
 
 /**
@@ -69,10 +71,10 @@ export interface RuntimeExternalActionRunner
 }
 
 /** Terminal lifecycle persistence supplied by the composition root without reversing library dependencies. */
-export interface RuntimeTerminalReporter
+export interface RuntimeEventReporter
 {
-	/** Persist an already-fenced runtime completion or failure in the current authority transaction. */
-	reportInTransaction(transaction: Prisma.TransactionClient, command: { readonly runId: string; readonly attempt: number; readonly eventType: "run.completed" | "run.failed" }): Promise<{ readonly outcome: "reported" | "denied"; readonly reason?: string }>;
+	/** Validate and persist an already-fenced canonical runtime event in the current transaction. */
+	reportInTransaction(transaction: Prisma.TransactionClient, command: { readonly runId: string; readonly attempt: number; readonly eventType: string; readonly payload: JsonValue }): Promise<{ readonly outcome: "reported" | "denied"; readonly reason?: string }>;
 }
 
 /** Transaction-scoped expiry sweep supplied by the production approval authority. */

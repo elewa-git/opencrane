@@ -5,14 +5,14 @@ import { AgentRunState as PrismaAgentRunState, AgentRunTerminalReason, Prisma, R
 import { AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, AGENT_RUNTIME_PROTOCOL_V1, MANAGED_AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, ___IsAgentRuntimeServiceAccountName, ___IsManagedAgentRuntimeServiceAccountName, type CancelAttemptCommand, type CompiledRunInput, type ResumeAttemptCommand, type RunInputSnapshot, type RuntimeAssignment, type RuntimeAssignmentIdentity, type RuntimeCandidate, type RuntimeCommand, type RuntimeCommandEnvelope, type RuntimeExternalActionCandidate, type RuntimeStreamOpen } from "@opencrane/contracts";
 import { ___CreateLogger, ___DoWithTrace, type Logger } from "@opencrane/backend/observability";
 
-import { _ApplyRuntimeCandidateSideEffects, _RuntimeCandidateRequiresTerminalReporter } from "./prisma-runtime-candidate-side-effects.js";
+import { _ApplyRuntimeCandidateSideEffects, _RuntimeCandidateRequiresEventReporter, RuntimeCandidateSideEffectDeniedError } from "./prisma-runtime-candidate-side-effects.js";
 import { PrismaRuntimeCommandDecisionUnitOfWork } from "./prisma-runtime-command-decision-unit-of-work.js";
 import { PrismaRuntimeDeferredResumeUnitOfWork } from "./prisma-runtime-deferred-resume-repository.js";
 import { __ProjectRuntimeInputSnapshot } from "./runtime-input-snapshot-projector.js";
 import { _ParseDeferredResumePayload } from "./runtime-deferred-resume.js";
 import { __AdmitRuntimeCandidate, __AdmitRuntimeCommand } from "./runtime-protocol-authority.js";
 import type { RuntimeAdmissionRunState, RuntimeAttemptAuthority, RuntimeProtocolClock } from "./runtime-protocol-authority.types.js";
-import type { RunInputCompiler, RuntimeApprovalExpiry, RuntimeCandidateDispatchResult, RuntimeDispatchAuthorityConfig, RuntimeExternalActionRunner, RuntimeStreamWorkloadIdentity, RuntimeTerminalReporter } from "./prisma-runtime-dispatch-authority.types.js";
+import type { RunInputCompiler, RuntimeApprovalExpiry, RuntimeCandidateDispatchResult, RuntimeDispatchAuthorityConfig, RuntimeEventReporter, RuntimeExternalActionRunner, RuntimeStreamWorkloadIdentity } from "./prisma-runtime-dispatch-authority.types.js";
 
 /** Fixed retry delay returned before an admitted action has a durable invocation receipt. */
 const _EXTERNAL_ACTION_DISPATCH_RETRY_AFTER_MILLISECONDS = 1_000;
@@ -100,13 +100,13 @@ export class PrismaRuntimeDispatchAuthority
 	private readonly externalActionRunner: RuntimeExternalActionRunner | null;
 	/** Structured logger for dispatch failures that must be retried by the runtime. */
 	private readonly log: Logger;
-	/** Optional composition-root bridge to the canonical terminal run authority. */
-	private readonly terminalReporter: RuntimeTerminalReporter | null;
+	/** Optional composition-root bridge to canonical runtime-event persistence. */
+	private readonly eventReporter: RuntimeEventReporter | null;
 	/** Optional production bridge to the deferred-approval expiry authority. */
 	private readonly approvalExpiry: RuntimeApprovalExpiry | null;
 
 	/** Creates a dispatch adapter over canonical Postgres with a bounded command lifetime. */
-	constructor(prisma: PrismaClient, config: RuntimeDispatchAuthorityConfig, compileRunInput: RunInputCompiler, externalActionRunner?: RuntimeExternalActionRunner, terminalReporter?: RuntimeTerminalReporter, clock?: RuntimeProtocolClock, log: Logger = ___CreateLogger("runtime-dispatch"), approvalExpiry?: RuntimeApprovalExpiry)
+	constructor(prisma: PrismaClient, config: RuntimeDispatchAuthorityConfig, compileRunInput: RunInputCompiler, externalActionRunner?: RuntimeExternalActionRunner, eventReporter?: RuntimeEventReporter, clock?: RuntimeProtocolClock, log: Logger = ___CreateLogger("runtime-dispatch"), approvalExpiry?: RuntimeApprovalExpiry)
 	{
 		if (!_configIsValid(config)) throw new Error("runtime dispatch authority requires distinct bounded runtime namespaces and command lifetime");
 		this.prisma = prisma;
@@ -115,7 +115,7 @@ export class PrismaRuntimeDispatchAuthority
 		this.externalActionRunner = externalActionRunner ?? null;
 		this.clock = clock ?? { nowEpochMs(): number { return Date.now(); } };
 		this.log = log;
-		this.terminalReporter = terminalReporter ?? null;
+		this.eventReporter = eventReporter ?? null;
 		this.approvalExpiry = approvalExpiry ?? null;
 	}
 
@@ -143,11 +143,11 @@ export class PrismaRuntimeDispatchAuthority
 		const clock = this.clock;
 		const compileRunInput = this.compileRunInput;
 		const externalActionRunner = this.externalActionRunner;
-		const terminalReporter = this.terminalReporter;
+		const eventReporter = this.eventReporter;
 		const log = this.log;
 		return ___DoWithTrace("runtime_dispatch.candidate.admit", { namespace: identity.namespace }, async function _traceAdmit(): Promise<RuntimeCandidateDispatchResult>
 		{
-			const admission = await _admitCandidate(prisma, config, clock, identity, candidate, terminalReporter);
+			const admission = await _admitCandidate(prisma, config, clock, identity, candidate, eventReporter);
 			// After the fence-checked admission commits, dispatch accepted external actions outside the
 			// admission transaction. Only an explicit runner result that proves no ToolInvocation exists can
 			// use the server-owned retry budget; every post-reservation outcome stays terminal and fail closed.
@@ -275,33 +275,41 @@ async function _nextCommand(prisma: PrismaClient, config: RuntimeDispatchAuthori
 }
 
 /** Admit one runtime candidate and durably record its id when the pure authority accepts it. */
-async function _admitCandidate(prisma: PrismaClient, config: RuntimeDispatchAuthorityConfig, clock: RuntimeProtocolClock, identity: RuntimeStreamWorkloadIdentity, candidate: RuntimeCandidate, terminalReporter: RuntimeTerminalReporter | null): Promise<RuntimeCandidateDispatchResult>
+async function _admitCandidate(prisma: PrismaClient, config: RuntimeDispatchAuthorityConfig, clock: RuntimeProtocolClock, identity: RuntimeStreamWorkloadIdentity, candidate: RuntimeCandidate, eventReporter: RuntimeEventReporter | null): Promise<RuntimeCandidateDispatchResult>
 {
 	if (candidate.kind === "event" && candidate.eventType === "run.cancelled") return { accepted: false, reason: "runtime_cancellation_not_authoritative" };
-	if (_RuntimeCandidateRequiresTerminalReporter(candidate) && terminalReporter === null) return { accepted: false, reason: "terminal_reporter_unavailable" };
-	return prisma.$transaction(async function _admit(transaction: Prisma.TransactionClient): Promise<RuntimeCandidateDispatchResult>
+	if (_RuntimeCandidateRequiresEventReporter(candidate) && eventReporter === null) return { accepted: false, reason: "event_reporter_unavailable" };
+	try
 	{
-		// 1. Load and lock the live assignment, run, and snapshot for the reviewed Pod.
-		const context = await _loadContext(transaction, config, identity);
-		if (context === null) return { accepted: false, reason: "unknown_workload" };
-		const stream = await transaction.runtimeCommandStream.findUnique({ where: { runId_attempt: { runId: context.runId, attempt: context.attempt } } });
-		if (stream === null || stream.runtimeInstanceId === null) return { accepted: false, reason: "no_active_stream" };
-		const commands = await transaction.runtimeDispatchedCommand.findMany({ where: { runId: context.runId, attempt: context.attempt }, orderBy: { sequence: "asc" } });
-		const authority = _buildAuthority(context, stream.runtimeInstanceId, stream.fence, stream.nextCommandSequence, commands, stream.acceptedCandidateIds);
+		return await prisma.$transaction(async function _admit(transaction: Prisma.TransactionClient): Promise<RuntimeCandidateDispatchResult>
+		{
+			// 1. Load and lock the live assignment, run, and snapshot for the reviewed Pod.
+			const context = await _loadContext(transaction, config, identity);
+			if (context === null) return { accepted: false, reason: "unknown_workload" };
+			const stream = await transaction.runtimeCommandStream.findUnique({ where: { runId_attempt: { runId: context.runId, attempt: context.attempt } } });
+			if (stream === null || stream.runtimeInstanceId === null) return { accepted: false, reason: "no_active_stream" };
+			const commands = await transaction.runtimeDispatchedCommand.findMany({ where: { runId: context.runId, attempt: context.attempt }, orderBy: { sequence: "asc" } });
+			const authority = _buildAuthority(context, stream.runtimeInstanceId, stream.fence, stream.nextCommandSequence, commands, stream.acceptedCandidateIds);
 
-		// 2. Delegate the allow-or-deny decision to the pure candidate authority.
-		const admission = __AdmitRuntimeCandidate({ authority, candidate, clock });
-		if (admission.outcome === "idempotent") return { accepted: true };
-		if (admission.outcome === "denied") return { accepted: false, reason: admission.reason };
-		// 2b. Apply only transaction-local terminal and digest-receipt effects before accepting the id.
-		const sideEffectDenial = await _ApplyRuntimeCandidateSideEffects(transaction, candidate, context.runId, context.attempt, terminalReporter);
-		if (sideEffectDenial !== null) return { accepted: false, reason: sideEffectDenial };
+			// 2. Delegate the allow-or-deny decision to the pure candidate authority.
+			const admission = __AdmitRuntimeCandidate({ authority, candidate, clock });
+			if (admission.outcome === "idempotent") return { accepted: true };
+			if (admission.outcome === "denied") return { accepted: false, reason: admission.reason };
+			// 2b. Apply transaction-local event and digest-receipt effects before accepting the id.
+			const sideEffectDenial = await _ApplyRuntimeCandidateSideEffects(transaction, candidate, context.runId, context.attempt, eventReporter);
+			if (sideEffectDenial !== null) return { accepted: false, reason: sideEffectDenial };
 
-		// 3. Append the accepted candidate id monotonically under the held stream lock.
-		const appended = await transaction.runtimeCommandStream.updateMany({ where: { runId: context.runId, attempt: context.attempt, nextCommandSequence: stream.nextCommandSequence }, data: { acceptedCandidateIds: { push: candidate.candidateId } } });
-		if (appended.count !== 1) throw new Error("runtime dispatch lost its candidate acceptance fence");
-		return { accepted: true };
-	});
+			// 3. Append the accepted candidate id monotonically under the held stream lock.
+			const appended = await transaction.runtimeCommandStream.updateMany({ where: { runId: context.runId, attempt: context.attempt, nextCommandSequence: stream.nextCommandSequence }, data: { acceptedCandidateIds: { push: candidate.candidateId } } });
+			if (appended.count !== 1) throw new Error("runtime dispatch lost its candidate acceptance fence");
+			return { accepted: true };
+		});
+	}
+	catch (error)
+	{
+		if (error instanceof RuntimeCandidateSideEffectDeniedError) return { accepted: false, reason: error.reason };
+		throw error;
+	}
 }
 
 /** Reserve and dispatch one admitted external-action candidate through the composition-root runner. */

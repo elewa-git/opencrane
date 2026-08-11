@@ -1,7 +1,7 @@
 import { AgentServiceKind, type Prisma, type PrismaClient } from "@prisma/client";
 
 import { __AppendCompiledTool } from "@opencrane/backend/agents/execution/inputs";
-import { PrismaRuntimeTerminalReporter } from "@opencrane/backend/agents/execution/runs";
+import { PrismaRuntimeEventReporter } from "@opencrane/backend/agents/execution/runs";
 import { __IsUpgradeSessionAvailable, UPGRADE_SESSION_TOOL } from "@opencrane/backend/agents/personal/configuration";
 import { __ExpireDeferredToolApprovalBatch } from "@opencrane/backend/server/iam/authorization";
 import type { IntegrationAuthorityRepository } from "@opencrane/backend/server/gateways/integrations";
@@ -55,5 +55,5 @@ function _CreateProductionApprovalExpiry(): RuntimeApprovalExpiry
  */
 export function __CreateProductionRuntimeDispatchAuthority(prisma: PrismaClient, config: RuntimeDispatchAuthorityConfig, log: Logger, memoryGateway: MemoryGatewayClient, integrationAuthority: IntegrationAuthorityRepository | null = null): PrismaRuntimeDispatchAuthority
 {
-	return new PrismaRuntimeDispatchAuthority(prisma, config, _CreateProductionRunInputCompiler(memoryGateway, integrationAuthority), _CreateProductionExternalActionRunner(prisma, log, memoryGateway), new PrismaRuntimeTerminalReporter(), undefined, undefined, _CreateProductionApprovalExpiry());
+	return new PrismaRuntimeDispatchAuthority(prisma, config, _CreateProductionRunInputCompiler(memoryGateway, integrationAuthority), _CreateProductionExternalActionRunner(prisma, log, memoryGateway), new PrismaRuntimeEventReporter(), undefined, undefined, _CreateProductionApprovalExpiry());
 }
