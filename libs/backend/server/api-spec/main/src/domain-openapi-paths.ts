@@ -1,4 +1,5 @@
 import { _RuntimeSteeringOpenapiPaths } from "@opencrane/backend/agents/execution/protocol";
+import { _ElicitationOpenapiPaths } from "@opencrane/backend/agents/execution/elicitation";
 import { _SelfRunStatusOpenapiPaths } from "@opencrane/backend/agents/execution/runs";
 import { _PersonalConfigurationOpenapiPaths } from "@opencrane/backend/agents/personal/configuration";
 import { _PersonaOnboardingOpenapiPaths } from "@opencrane/backend/agents/personal/personas";
@@ -12,7 +13,6 @@ import { _McpOpenapiPaths } from "@opencrane/backend/server/gateways/mcp";
 import { _ModelRoutingOpenapiPaths } from "@opencrane/backend/server/gateways/model-routing";
 import { _ProvidersOpenapiPaths } from "@opencrane/backend/server/gateways/providers";
 import { _AuditOpenapiPaths } from "@opencrane/backend/server/iam/audit";
-import { _AuthorizationOpenapiPaths } from "@opencrane/backend/server/iam/authorization";
 import { _GrantsOpenapiPaths } from "@opencrane/backend/server/iam/grants";
 import { _GroupsOpenapiPaths } from "@opencrane/backend/server/iam/groups";
 import { _RetrievalOpenapiPaths } from "@opencrane/backend/server/knowledge/retrieval";
@@ -38,7 +38,7 @@ export const _DomainOpenapiPaths = {
 	..._ModelRoutingOpenapiPaths,
 	..._SpendOpenapiPaths,
 	..._AuditOpenapiPaths,
-	..._AuthorizationOpenapiPaths,
+	..._ElicitationOpenapiPaths,
 	..._RuntimeSteeringOpenapiPaths,
 	..._SelfRunStatusOpenapiPaths,
 	..._PersonaOnboardingOpenapiPaths,

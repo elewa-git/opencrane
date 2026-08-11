@@ -64,3 +64,15 @@ export interface SelfElicitationQueryRepository
 	/** Read one request only when the caller remains its active assigned participant. */
 	readOwned(siloId: string, conversationId: string, requestId: string, subjectId: string, now: Date): Promise<ConversationElicitation | null>;
 }
+
+/** Atomic authority for request creation and one response/resume decision. */
+export interface ElicitationUnitOfWork extends SelfElicitationQueryRepository
+{
+	/** Pause the exact run and create or replay one participant request in one transaction. */
+	open(command: OpenElicitationCommand): Promise<ConversationElicitation | null>;
+	/** Attribute, apply, and resume one response in one transaction. */
+	respond(command: RespondToElicitationCommand): Promise<RespondToElicitationResult>;
+}
+
+/** Transaction-bound persistence authority constructed only by the unit of work. */
+export interface ElicitationRepository extends ElicitationUnitOfWork {}

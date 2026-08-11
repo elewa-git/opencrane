@@ -646,7 +646,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/me/approvals": {
+    "/me/conversations/{conversationId}/elicitations/{requestId}": {
         parameters: {
             query?: never;
             header?: never;
@@ -654,10 +654,10 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * List the signed-in owner's pending tool approvals
-         * @description The server derives the owner and silo from the browser session and host. It returns at most fifty actionable interrupts with pre-redacted proposed arguments and an exact decision response schema derived from the frozen reviewed tool schema. It never returns secret-marked values, raw authority evidence, policy digests, or resume material.
+         * Read one participant-input request
+         * @description Returns the browser-safe request only to its active assigned participant. Protected purpose payloads, dataset identifiers, credentials, and resume material are never returned.
          */
-        get: operations["listMyPendingToolApprovals"];
+        get: operations["getMyConversationElicitation"];
         put?: never;
         post?: never;
         delete?: never;
@@ -666,27 +666,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/me/approvals/{approvalRequestId}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Read one tool interrupt owned by the signed-in user
-         * @description The approval id is the interrupt id. The response reports actor-relevant state, pre-redacted proposed arguments, and the frozen decision response schema without returning server-only reviewed arguments or resume material.
-         */
-        get: operations["getMyToolApproval"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/me/approvals/{approvalRequestId}/decision": {
+    "/me/conversations/{conversationId}/elicitations/{requestId}/responses": {
         parameters: {
             query?: never;
             header?: never;
@@ -696,10 +676,10 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Approve or deny one pending tool action owned by the signed-in user
-         * @description The server derives the owner and silo from the browser session. Approval must carry one complete argument value, which the server validates against the frozen reviewed response schema; denial carries no arguments. Partial edits, run coordinates, tool results, and resume material are rejected.
+         * Answer one participant-input request
+         * @description Submits one typed, idempotent answer. The server derives the actor, run, participant, purpose strategy, protected payload, and any verified step-up evidence.
          */
-        post: operations["decideDeferredToolApproval"];
+        post: operations["respondToMyConversationElicitation"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1916,21 +1896,6 @@ export interface components {
             attempt: number;
             /** @enum {string} */
             state: "cancelling" | "cancelled";
-        };
-        SelfDeferredToolApproval: {
-            approvalRequestId: string;
-            runId: string;
-            attempt: number;
-            toolRevisionId: string;
-            toolInvocationId: string;
-            /** @enum {string} */
-            state: "pending" | "approved" | "denied" | "expired" | "cancelled";
-            proposedArguments: unknown;
-            responseSchema: Record<string, never>;
-            /** Format: date-time */
-            expiresAt: string;
-            /** Format: date-time */
-            createdAt: string;
         };
         AgentService: {
             id: string;
@@ -4134,76 +4099,29 @@ export interface operations {
             };
         };
     };
-    listMyPendingToolApprovals: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Pending owner-bound tool approvals. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        approvals: components["schemas"]["SelfDeferredToolApproval"][];
-                    };
-                };
-            };
-            /** @description No authenticated browser session owns the request. */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description The product authority could not read pending approvals. */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-        };
-    };
-    getMyToolApproval: {
+    getMyConversationElicitation: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                /** @description Interrupt identifier for the owned approval. */
-                approvalRequestId: string;
+                /** @description Conversation containing the request. */
+                conversationId: string;
+                /** @description Opaque elicitation identifier. */
+                requestId: string;
             };
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description Owned tool interrupt. */
+            /** @description Owned request. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
                     "application/json": {
-                        approval: components["schemas"]["SelfDeferredToolApproval"];
+                        elicitation: Record<string, never>;
                     };
-                };
-            };
-            /** @description The interrupt identifier is empty. */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
                 };
             };
             /** @description No authenticated browser session owns the request. */
@@ -4215,7 +4133,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description The interrupt is absent or belongs to another actor or silo. */
+            /** @description The request is absent or belongs to another participant. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -4224,7 +4142,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description The product authority could not read the interrupt. */
+            /** @description The elicitation authority is temporarily unavailable. */
             503: {
                 headers: {
                     [name: string]: unknown;
@@ -4235,43 +4153,39 @@ export interface operations {
             };
         };
     };
-    decideDeferredToolApproval: {
+    respondToMyConversationElicitation: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                /** @description Opaque identifier for the pending approval. */
-                approvalRequestId: string;
+                /** @description Conversation containing the request. */
+                conversationId: string;
+                /** @description Opaque elicitation identifier. */
+                requestId: string;
             };
             cookie?: never;
         };
         requestBody: {
             content: {
                 "application/json": {
-                    /** @constant */
-                    decision: "approved";
-                    arguments: unknown;
-                } | {
-                    /** @constant */
-                    decision: "denied";
+                    idempotencyKey: string;
+                    response: Record<string, never>;
                 };
             };
         };
         responses: {
-            /** @description Decision recorded or identical terminal decision replayed. */
+            /** @description Answer accepted or replayed idempotently. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
                     "application/json": {
-                        approvalRequestId: string;
-                        /** @enum {string} */
-                        state: "approved" | "denied";
+                        response: Record<string, never>;
                     };
                 };
             };
-            /** @description The request body is not the exact decision shape, or approved arguments fail the frozen reviewed schema. */
+            /** @description The response does not match the exact request body. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -4289,7 +4203,16 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description The approval is absent, terminal in another way, or not owned by the caller. */
+            /** @description The caller is not the active assigned participant. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The request is absent. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -4298,7 +4221,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description The approval expired before the decision. */
+            /** @description The request is terminal, expired, or conflicts with an idempotent retry. */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -4307,7 +4230,16 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description The product authority could not persist the decision. */
+            /** @description Fresh verified OpenID Connect reauthentication is required. */
+            428: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The elicitation authority is temporarily unavailable. */
             503: {
                 headers: {
                     [name: string]: unknown;

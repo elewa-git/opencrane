@@ -41,6 +41,7 @@ function _CancellationTransaction(run: ReturnType<typeof _Run>, event: ReturnTyp
 		workloadAssignment: { findUnique: vi.fn().mockResolvedValue(assignment), updateMany: vi.fn().mockResolvedValue({ count: assignment ? 1 : 0 }) },
 		workloadBootstrap: { findUnique: vi.fn().mockResolvedValue(assignment ? { id: "bootstrap-v1_exact" } : null) },
 		runProofKey: { updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
+		elicitationRequest: { updateMany: vi.fn().mockResolvedValue({ count: 2 }) },
 		approvalRequest: { updateMany: vi.fn().mockResolvedValue({ count: 2 }) },
 		toolInvocation: {
 			findMany: vi.fn().mockResolvedValue([
@@ -79,6 +80,7 @@ describe("PrismaRunCancellationRepository", function _DescribeCancellationReposi
 		expect(transaction.agentRun.updateMany).toHaveBeenNthCalledWith(1, { where: expect.objectContaining({ state: AgentRunState.Queued }), data: { state: AgentRunState.Cancelling } });
 		expect(transaction.agentRun.updateMany).toHaveBeenNthCalledWith(2, { where: { id: "run-1", attempt: 1, state: AgentRunState.Cancelling }, data: expect.objectContaining({ state: AgentRunState.Cancelled }) });
 		expect(transaction.approvalRequest.updateMany).toHaveBeenCalledWith({ where: { runId: "run-1", attempt: 1, state: "Pending" }, data: { state: "Cancelled", decidedAt: new Date("2026-07-20T00:01:00.000Z"), decidedBy: null } });
+		expect(transaction.elicitationRequest.updateMany).toHaveBeenCalledWith({ where: { runId: "run-1", attempt: 1, state: "Requested" }, data: { state: "Cancelled", resolvedAt: new Date("2026-07-20T00:01:00.000Z"), resolvedBy: null, safeReason: "run_cancelled" } });
 		expect(transaction.toolInvocation.updateMany).toHaveBeenCalledTimes(2);
 		expect(transaction.toolInvocation.updateMany).toHaveBeenCalledWith({ where: expect.objectContaining({ id: "invocation-1", runId: "run-1", attempt: 1, claimKind: null }), data: expect.objectContaining({ state: "Failed", failureCode: "run_cancelled", completedAt: new Date("2026-07-20T00:01:00.000Z") }) });
 		expect(transaction.toolResultDelivery.createMany).toHaveBeenCalledWith({ data: [
@@ -145,6 +147,7 @@ describe("PrismaRunCancellationRepository", function _DescribeCancellationReposi
 			$queryRaw: confirmQuery,
 			outboxEvent: { findUnique: vi.fn().mockResolvedValue(claimedEvent), updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
 			agentRun: { findUnique: vi.fn().mockResolvedValue(run), updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
+			elicitationRequest: { updateMany: vi.fn().mockResolvedValue({ count: 0 }) },
 			approvalRequest: { updateMany: vi.fn().mockResolvedValue({ count: 0 }) },
 			toolInvocation: { findMany: vi.fn().mockResolvedValue([]), updateMany: vi.fn(), count: vi.fn().mockResolvedValue(0) },
 			toolResultDelivery: { createMany: vi.fn() },
@@ -169,6 +172,7 @@ describe("PrismaRunCancellationRepository", function _DescribeCancellationReposi
 			$queryRaw: vi.fn(async function _Query(value: unknown) { return _SqlText(value).includes("clock_timestamp()::timestamp(3)") ? [{ now: new Date("2026-07-20T00:01:10.000Z") }] : []; }),
 			outboxEvent: { findUnique: vi.fn().mockResolvedValue(event), updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
 			agentRun: { findUnique: vi.fn().mockResolvedValue(run), updateMany: vi.fn() },
+			elicitationRequest: { updateMany: vi.fn().mockResolvedValue({ count: 0 }) },
 			approvalRequest: { updateMany: vi.fn().mockResolvedValue({ count: 0 }) },
 			toolInvocation: { findMany: vi.fn().mockResolvedValue([]), updateMany: vi.fn(), count: vi.fn().mockResolvedValue(1) },
 			toolResultDelivery: { createMany: vi.fn() },

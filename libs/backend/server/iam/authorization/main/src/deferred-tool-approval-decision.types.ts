@@ -86,26 +86,3 @@ export type DecideDeferredToolRequestResult =
 	| { readonly outcome: "already_decided"; readonly decision: DeferredToolDecisionKinds; readonly argumentsDigest?: string }
 	| { readonly outcome: "invalid_arguments" }
 	| { readonly outcome: "conflict" };
-
-/**
- * Records one browser-submitted approval decision in a single transaction.
- *
- * Exists so the HTTP route never touches Prisma and never gets to choose the transaction level:
- * the decision re-reads the approval, the run, and the invocation, and applies the approved
- * arguments, all serializably.
- *
- * Called by: ./deferred-tool-approval.router.ts (as `decisions`).
- * Implemented by: ./prisma-deferred-tool-approval-decision-repository.ts.
- */
-export interface DeferredToolApprovalDecisionRepository
-{
-	/**
-	 * Applies one reviewer decision, or explains why it could not be applied.
-	 * @param command - The approval id, the authenticated owner and silo, the decision, and the
-	 *   trusted server time. Ownership is re-checked against the stored row, so a caller cannot
-	 *   decide someone else's approval by supplying its id.
-	 * @returns One of {@link DecideDeferredToolRequestResult}; see it for what each outcome obliges
-	 *   the caller to report.
-	 */
-	decideAtomically(command: DecideDeferredToolRequestCommand): Promise<DecideDeferredToolRequestResult>;
-}

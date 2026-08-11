@@ -12,7 +12,6 @@
 
 import { _DomainOpenapiPaths } from "./domain-openapi-paths.js";
 import { _ErrorEnvelopeSchema, _ValidationIssueSchema } from "./error-schemas.js";
-import { _SelfDeferredToolApprovalSchema } from "./approval-schemas.js";
 import { _ModelDefinitionSchema, _ModelDefinitionWriteSchema } from "./model-definition-schemas.js";
 import { _SelfRunCancellationSchema, _SelfRunStatusSchema } from "./run-schemas.js";
 
@@ -572,7 +571,6 @@ export const spec = {
       TokenUsage: TokenUsageSchema,
       SelfRunStatus: _SelfRunStatusSchema,
       SelfRunCancellation: _SelfRunCancellationSchema,
-      SelfDeferredToolApproval: _SelfDeferredToolApprovalSchema,
       AgentService: {
         type: "object",
         required: ["id", "siloId", "kind", "name", "state", "activeRevisionId", "workloadProfile", "createdAt", "updatedAt"],

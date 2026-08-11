@@ -45,7 +45,7 @@ export class PrismaRuntimeResumeInputRepository implements RuntimeResumeInputRep
 			if (__DigestCanonicalJson(payload) !== delivery.payloadDigest || !_PayloadNamesInvocation(payload, delivery.invocation.toolInvocationId)) return null;
 		}
 		const toolResults = deliveries.map(function _Result(row): RuntimeToolResult { return row.payload as unknown as RuntimeToolResult; });
-		return { resume: { inputGeneration, toolResults, steeringRequests: steering.map(function _Content(row) { return row.content; }) as unknown as JsonValue }, toolResultDeliveryIds: deliveries.map(function _Id(row) { return row.id; }), steeringRequestIds: steering.map(function _Id(row) { return row.id; }) };
+		return { resume: { inputGeneration, toolResults, steeringRequests: steering.map(function _Content(row) { return row.content; }) as unknown as JsonValue, elicitationResults: [] }, toolResultDeliveryIds: deliveries.map(function _Id(row) { return row.id; }), steeringRequestIds: steering.map(function _Id(row) { return row.id; }) };
 	}
 }
 

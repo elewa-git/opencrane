@@ -87,6 +87,13 @@
         "contractImportPath": "./persona-scoring-repository.types.js",
         "constructs": []
       },
+	  {
+		"path": "libs/backend/agents/execution/elicitation/main/src/prisma-elicitation-unit-of-work.ts",
+		"adapter": "PrismaElicitationRepository",
+		"contract": "ElicitationRepository",
+		"contractImportPath": "./elicitation.types.js",
+		"constructs": []
+	  },
       {
         "path": "libs/backend/agents/personal/personas/main/src/interview/prisma-persona-interview-repository.ts",
         "adapter": "PrismaPersonaInterviewRepository",
@@ -798,6 +805,18 @@
 		]
 	  },
 	  {
+		"path": "libs/backend/agents/execution/elicitation/main/src/prisma-elicitation-unit-of-work.ts",
+		"adapter": "PrismaElicitationUnitOfWork",
+		"contract": "ElicitationUnitOfWork",
+		"contractImportPath": "./elicitation.types.js",
+		"constructs": [
+		  {
+			"adapter": "PrismaElicitationRepository",
+			"importPath": "<same-file>"
+		  }
+		]
+	  },
+	  {
 		"path": "libs/backend/server/iam/authorization/main/src/prisma-tool-invocation-unit-of-work.ts",
 		"adapter": "PrismaToolInvocationUnitOfWork",
 		"contract": "ToolInvocationUnitOfWork",
@@ -979,6 +998,7 @@
 		"libs/backend/server/conversations/main/src/prisma-conversation-replay.composition.ts",
 		"libs/backend/server/conversations/main/src/prisma-self-conversation-replay.router.ts",
 		"libs/backend/server/conversations/main/src/prisma-self-conversations.router.ts",
+		"libs/backend/agents/execution/elicitation/main/src/prisma-self-elicitation.router.ts",
 		"libs/backend/agents/execution/runs/main/src/prisma-self-run-cancellation.router.ts",
 		"libs/backend/server/agents/onboarding/main/src/prisma-user-onboarding-repository.ts",
 		"libs/backend/server/agents/skills/main/src/prisma-skill-catalogue.router.ts",

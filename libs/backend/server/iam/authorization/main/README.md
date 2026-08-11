@@ -74,20 +74,17 @@ carries a concrete, currently authorized human approval subject.
 - `__CancelPendingRunApprovalAuthority` — closes pending approvals and only provider-free or
   unclaimed invocations for an exact run attempt on a caller-owned database transaction. Active
   provider claims remain fenced until their definite result or recovery decision becomes durable.
-- `__CreateDeferredToolApprovalRouter`, `PrismaDeferredToolApprovalDecisionRepository`,
-  `PrismaSelfDeferredToolApprovalListRepository` — the owner-only approval inbox, interrupt detail,
-  decision surface, and persistence adapters. The router derives the person and silo from the
-  signed-in browser session; actor reads select only pre-redacted arguments and the derived response
-  schema, never raw reviewed or final arguments, proof data, policy digests, or resume material.
-- `_CreateDeferredToolApprovalRouter` — the ready-to-mount Prisma composition that maps the shared
-  authenticated request principal into the approval caller and owns the adapters and clock.
+- `PrismaSelfDeferredToolApprovalListRepository` — the internal safe-projection adapter retained for
+  tool audit and live-event evidence. Browser reads and decisions now use the conversation-scoped
+  elicitation authority; reviewed arguments, proof data, policy digests, and resume material remain
+  internal here.
 - `__OpenDeferredToolApproval` — atomically links an awaiting ToolInvocation to its approval, then
   recovers an ambiguous commit or terminalises the invocation so it cannot be replayed.
 - `__ProjectDeferredToolApproval`, `__ValidateDeferredToolArguments` — derive the secret-safe actor
   projection and validate a complete approved replacement against the frozen reviewed tool schema.
 - Deferred-approval contracts are split by authority: `DeferredToolApprovalLifecycle*` owns the
   exhaustive run-state table; `DeferredToolApprovalInterrupt*` and `SelfDeferredToolApproval*` own
-  actor-safe reads; `DeferredToolDecision*` owns decision and expiry commands; and
+  internal safe projections; `DeferredToolDecision*` owns decision and expiry commands; and
   `DeferredToolApprovalOpen*` owns invocation-linked opening and ambiguous-commit recovery.
 - `__DigestCanonicalJson` — an authorization-domain wrapper over the shared environment-neutral
   canonical JSON hash, preserving one SHA-256 implementation across server and browser consumers.
