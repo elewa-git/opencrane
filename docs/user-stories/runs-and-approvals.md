@@ -6,8 +6,8 @@ Make execution understandable and controllable without exposing workload credent
 coordinates, proof keys, or internal retry machinery.
 
 Current status: `API partial`, `UI missing`, `Design ready` for list/status/steering and the approval
-inbox. Interactive runs now start only through agent-session messages. Public cancellation and retry
-are blocked; production approval activation is incomplete.
+inbox. Interactive runs now start only through agent-session messages. Owner cancellation is
+available, public retry remains blocked, and production approval activation is incomplete.
 
 ## RUN-01 — Start a run from an authoritative agent session
 
@@ -37,7 +37,7 @@ what is active, waiting, complete, failed, or cancelled.
 Acceptance criteria:
 
 - Canonical states are `accepted`, `queued`, `assigned`, `running`, `waiting_for_approval`,
-  `cancelling`, `completed`, `failed`, and `cancelled`.
+  `recovery_required`, `cancelling`, `completed`, `failed`, and `cancelled`.
 - Terminal reason text is stable and user-safe. Safe technical context, such as an authentication
   failure or a failed tool call, may be disclosed behind details controls; credentials, tokens,
   proofs, raw tool arguments, and infrastructure secrets are never rendered.
@@ -87,8 +87,13 @@ Acceptance criteria:
 - Cancellation is expected-attempt fenced and visibly moves through `cancelling` to `cancelled`.
 - Pending approvals and runtime authority are revoked before cleanup is treated as complete.
 - Duplicate, stale-attempt, already-terminal, and cleanup-delayed outcomes are defined.
+- The server derives owner and silo from the signed-in session; an absent or foreign run is the same
+  `not found` response.
 
-Status: `API blocked`; durable cancellation logic exists internally, but there is no public route.
+API: `POST /api/v1/me/runs/{runId}/cancellation` with the exact `expectedAttempt` last observed by
+the browser.
+
+Status: `API ready`, `UI missing`.
 
 ## RUN-06 — Retry a failed or cancelled run
 

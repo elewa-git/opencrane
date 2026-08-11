@@ -16,6 +16,7 @@ import { _CreateKubernetesClients } from "./app/kubernetes-clients.js";
 import { _StartProcessLifecycle } from "./app/lifecycle.js";
 import { _log } from "./app/log.js";
 import { _CreatePublicApp, _CreatePublicAuthentication } from "./app/public-app.js";
+import { _CreateRunCancellationAuthority } from "./app/run-cancellation-composition.js";
 import { _CreateArtifactUploadGateway } from "./infra/artifacts/artifact-upload.factory.js";
 import { ___CreatePrismaClient } from "./infra/db/db.js";
 import { _CreateMemoryGatewayClient } from "./infra/memory/memory-gateway-client.factory.js";
@@ -46,6 +47,7 @@ async function _Main(): Promise<void>
 	const membershipEvidence = _CreateFleetMembershipEvidenceConfig();
 	const managedRunAdmission = __CreateManagedRunAdmissionPort(prisma, runAdmissionCapacityGate, _CreateManagedExecutionEvidenceAuthority());
 	const personalRunAdmission = __CreatePersonalRunAdmissionPort(prisma, runAdmissionCapacityGate, membershipEvidence, new GatewayMemoryFactSelector(memoryGateway));
+	const runCancellation = _CreateRunCancellationAuthority(prisma, config.runtime);
 
 	// 4. Compose the optional Obot custody and attempt-key transport once, so the public custody
 	//    route and the runtime dispatch plane always target the same Obot with one credential.
@@ -54,12 +56,12 @@ async function _Main(): Promise<void>
 
 	// 5. Build separate transport surfaces; only the internal app receives workload-only routes.
 	const authentication = _CreatePublicAuthentication(prisma, kubernetes.customApi, config.standaloneFirstUserAdmission);
-	const publicApp = _CreatePublicApp(prisma, kubernetes.coreApi, managedRunAdmission, personalRunAdmission, config.runtime.serverNamespace, obot.custody, authentication);
+	const publicApp = _CreatePublicApp(prisma, kubernetes.coreApi, managedRunAdmission, personalRunAdmission, runCancellation, config.runtime.serverNamespace, obot.custody, authentication);
 	publicApp.locals.artifactUploadGateway = _CreateArtifactUploadGateway(prisma);
 	const internalApp = _CreateInternalApp(prisma, kubernetes.authApi, config.runtime, memoryGateway, authentication.sessionMiddleware, obot.attemptKeys);
 
 	// 6. Start listeners and workers under one drain order so shared dependencies close exactly once.
-	_StartProcessLifecycle(publicApp, internalApp, prisma, kubernetes.batchApi, managedRunAdmission, config, channelTargetRoutes, unbindConsole);
+	_StartProcessLifecycle(publicApp, internalApp, prisma, kubernetes.batchApi, managedRunAdmission, runCancellation, config, channelTargetRoutes, unbindConsole);
 }
 
 void _Main().catch(function _fatalStartupError(err: unknown)

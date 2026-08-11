@@ -5,6 +5,7 @@ import express, { type Express } from "express";
 import type { ManagedRunAdmissionPort } from "@opencrane/backend/server/agents/agent-services";
 import type { ObotCustodyPort } from "@opencrane/backend/server/infra/obot-custody";
 import type { PersonalRunAdmissionPort } from "@opencrane/backend/agents/execution/admission";
+import type { RunCancellationRepository } from "@opencrane/backend/agents/execution/runs";
 import { __CreateStandaloneFirstUserAdmissionAuditAppender } from "@opencrane/backend/server/iam/audit";
 import { ___AuthRouter, ___CreateOidcAuthService, type StandaloneFirstUserAdmissionAuditPort, type StandaloneFirstUserAdmissionConfig } from "@opencrane/backend/server/iam/identity";
 import { ___RequestContext } from "@opencrane/backend/observability";
@@ -38,12 +39,13 @@ export function _CreatePublicAuthentication(prisma: PrismaClient, customApi: k8s
  * @param coreApi - Kubernetes core client passed only to routes that create scoped Secrets.
  * @param runAdmission - Managed run admission port shared with scheduler execution.
  * @param personalRunAdmission - Browser-session personal run admission port.
+ * @param runCancellation - Shared attempt-fenced cancellation authority.
  * @param serverNamespace - Namespace in which provider credentials are managed.
  * @param obotCustody - Composed Obot custody authority; fail-closed when the transport is disabled.
  * @param authentication - One browser-session composition shared with the internal resolver.
  * @returns The public Express listener before the lifecycle starts it.
  */
-export function _CreatePublicApp(prisma: PrismaClient, coreApi: k8s.CoreV1Api, runAdmission: ManagedRunAdmissionPort, personalRunAdmission: PersonalRunAdmissionPort, serverNamespace: string, obotCustody: ObotCustodyPort, authentication: PublicAuthenticationComposition): Express
+export function _CreatePublicApp(prisma: PrismaClient, coreApi: k8s.CoreV1Api, runAdmission: ManagedRunAdmissionPort, personalRunAdmission: PersonalRunAdmissionPort, runCancellation: RunCancellationRepository, serverNamespace: string, obotCustody: ObotCustodyPort, authentication: PublicAuthenticationComposition): Express
 {
 	const app = express();
 
@@ -63,7 +65,7 @@ export function _CreatePublicApp(prisma: PrismaClient, coreApi: k8s.CoreV1Api, r
 	app.use(___AuthMiddleware());
 
 	// 4. Mount authenticated product routes, then terminate failures through one structured handler.
-	_RegisterRoutes(app, prisma, coreApi, runAdmission, personalRunAdmission, serverNamespace, obotCustody);
+	_RegisterRoutes(app, prisma, coreApi, runAdmission, personalRunAdmission, runCancellation, serverNamespace, obotCustody);
 	app.use(_ErrorHandler(_log));
 	return app;
 }

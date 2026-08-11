@@ -182,11 +182,14 @@ credential material under an innocuous field name such as `detail`.
   release API for the fixed `agent-controller` ServiceAccount.
 - `_CreateSelfRunStatusRouter` — the ready-to-mount Prisma composition that maps the shared request
   principal into the self-run caller and supplies the status repository.
+- `_CreateSelfRunCancellationRouter` — the ready-to-mount owner-only cancellation route. It derives
+  silo and subject from the session, hides foreign runs, and passes only the browser-observed attempt
+  to the shared durable cancellation authority.
 - `PrismaRuntimeTerminalReporter` — commits a protocol-approved terminal result through the run
   authority.
 - `_SelfRunStatusOpenapiPaths` — contributes the self-run status contract to the server API spec.
 
-Retry, child-run, cancellation, cleanup, status, and dispatch support types remain package-private.
+Retry, child-run, cleanup, status, and dispatch support types remain package-private.
 They can evolve with their owning implementations without becoming cross-package contracts.
 
 ## Boundary

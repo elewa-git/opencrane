@@ -361,6 +361,13 @@
 		"constructs": []
 	  },
 	  {
+		"path": "libs/backend/agents/execution/runs/main/src/prisma-self-run-cancellation-repository.ts",
+		"adapter": "PrismaSelfRunCancellationRepository",
+		"contract": "SelfRunCancellationRepository",
+		"contractImportPath": "./self-run-cancellation.types.js",
+		"constructs": []
+	  },
+	  {
 		"path": "libs/backend/server/iam/authorization/main/src/prisma-self-deferred-tool-approval-list-repository.ts",
 		"adapter": "PrismaSelfDeferredToolApprovalListRepository",
 		"contract": "SelfDeferredToolApprovalListRepository",
@@ -696,6 +703,7 @@
       "apps/opencrane/src/app/runtime-composition.ts",
       "apps/opencrane/src/app/channel-target-composition.ts",
       "apps/opencrane/src/app/lifecycle.ts",
+	  "apps/opencrane/src/app/run-cancellation-composition.ts",
       "libs/backend/agents/personal/configuration/main/src/prisma-personal-configuration.router.ts",
 		"libs/backend/agents/personal/personas/main/src/http/prisma-persona-onboarding.router.ts",
 		"libs/backend/agents/personal/personas/main/src/profile/prisma-persona-workflow-evidence.ts",
@@ -706,6 +714,7 @@
 		"libs/backend/server/conversations/main/src/prisma-conversation-replay.composition.ts",
 		"libs/backend/server/conversations/main/src/prisma-self-conversation-replay.router.ts",
 		"libs/backend/server/conversations/main/src/prisma-self-conversations.router.ts",
+		"libs/backend/agents/execution/runs/main/src/prisma-self-run-cancellation.router.ts",
 		"libs/backend/server/agents/onboarding/main/src/prisma-user-onboarding-repository.ts",
 		"libs/backend/server/agents/skills/main/src/prisma-skill-catalogue.router.ts",
 		"libs/backend/server/iam/identity/main/src/oidc.service.ts",
