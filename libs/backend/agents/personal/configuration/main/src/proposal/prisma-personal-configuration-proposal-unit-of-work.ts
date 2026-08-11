@@ -2,7 +2,7 @@ import { Prisma, type PrismaClient } from "@prisma/client";
 
 import { ___CreateLogger, ___DoWithTrace, type Logger } from "@opencrane/backend/observability";
 
-import { PersonalConfigurationProposalCodes, type PersonalConfigurationChangeRepository, type ProposePersonalConfigurationChangeCommand } from "./personal-configuration-proposal.types.js";
+import { PersonalConfigurationProposalCodes, type PersonalConfigurationChangeRepository, type ProposePersonalConfigurationChangeAtomicResult, type ProposePersonalConfigurationChangeCommand } from "./personal-configuration-proposal.types.js";
 import type { PersonalConfigurationProposalTransaction, PersonalConfigurationProposalUnitOfWork, PersonalConfigurationProposalWork } from "./personal-configuration-proposal-unit-of-work.types.js";
 import { PrismaPersonalConfigurationProposalRepository } from "./prisma-personal-configuration-proposal-repository.js";
 
@@ -22,7 +22,7 @@ export class PrismaPersonalConfigurationProposalUnitOfWork implements PersonalCo
 	}
 
 	/** Verify proposal provenance and insert immutable evidence in one transaction. */
-	async proposeAtomically(command: ProposePersonalConfigurationChangeCommand): Promise<{ readonly status: PersonalConfigurationProposalCodes.Proposed; readonly changeId: string } | { readonly status: PersonalConfigurationProposalCodes.ProvenanceConflict } | { readonly status: PersonalConfigurationProposalCodes.PersistenceUnavailable }>
+	async proposeAtomically(command: ProposePersonalConfigurationChangeCommand): Promise<ProposePersonalConfigurationChangeAtomicResult>
 	{
 		try
 		{

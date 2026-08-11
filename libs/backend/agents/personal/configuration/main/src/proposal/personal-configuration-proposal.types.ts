@@ -49,9 +49,15 @@ export type ProposePersonalConfigurationChangeResult =
 	| { readonly outcome: PersonalConfigurationProposalCodes.Proposed; readonly changeId: string }
 	| { readonly outcome: PersonalConfigurationProposalCodes.Denied; readonly reason: PersonalConfigurationProposalCodes.InvalidCommand | PersonalConfigurationProposalCodes.ProvenanceConflict | PersonalConfigurationProposalCodes.PersistenceUnavailable };
 
+/** Atomic persistence outcome after proposal validation has admitted the command. */
+export type ProposePersonalConfigurationChangeAtomicResult =
+	| { readonly status: PersonalConfigurationProposalCodes.Proposed; readonly changeId: string }
+	| { readonly status: PersonalConfigurationProposalCodes.ProvenanceConflict }
+	| { readonly status: PersonalConfigurationProposalCodes.PersistenceUnavailable };
+
 /** Persistence boundary for append-only personal configuration proposals. */
 export interface PersonalConfigurationChangeRepository
 {
 	/** Inserts one proposal only when every source coordinate is owned by the same user and silo. */
-	proposeAtomically(command: ProposePersonalConfigurationChangeCommand): Promise<{ readonly status: PersonalConfigurationProposalCodes.Proposed; readonly changeId: string } | { readonly status: PersonalConfigurationProposalCodes.ProvenanceConflict } | { readonly status: PersonalConfigurationProposalCodes.PersistenceUnavailable }>;
+	proposeAtomically(command: ProposePersonalConfigurationChangeCommand): Promise<ProposePersonalConfigurationChangeAtomicResult>;
 }
