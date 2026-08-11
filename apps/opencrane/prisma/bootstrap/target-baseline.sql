@@ -292,7 +292,7 @@ CREATE TABLE "agent_revision_integration_assignments" (
     "integration_id" TEXT NOT NULL,
     "silo_id" TEXT NOT NULL,
     "custody_reference_id" TEXT NOT NULL,
-    "allowed_tools" TEXT[],
+    "tool_definitions" JSONB NOT NULL,
 
     CONSTRAINT "agent_revision_integration_assignments_pkey" PRIMARY KEY ("agent_revision_id","integration_id")
 );
@@ -3495,10 +3495,10 @@ BEGIN
         OR NEW."expires_at" IS DISTINCT FROM OLD."expires_at" OR NEW."created_at" IS DISTINCT FROM OLD."created_at" THEN
         RAISE EXCEPTION 'ApprovalRequest proof and action bindings are immutable';
     END IF;
-    -- A dispatched resume consumes its opaque token without changing the already-authorised decision.
+    -- A dispatched resume consumes its opaque token without changing the already-authorised result.
     -- No other terminal-row mutation is allowed, so retry redelivery still relies on the durable command.
-    IF OLD."state" = 'approved' THEN
-        IF NEW."state" = 'approved'
+    IF OLD."state" IN ('approved', 'denied', 'expired') THEN
+        IF NEW."state" = OLD."state"
             AND OLD."resume_token_hash" IS NOT NULL AND NEW."resume_token_hash" IS NULL
             AND NEW."decided_at" IS NOT DISTINCT FROM OLD."decided_at"
             AND NEW."decided_by" IS NOT DISTINCT FROM OLD."decided_by"
@@ -3506,7 +3506,7 @@ BEGIN
 			AND NEW."final_arguments_digest" IS NOT DISTINCT FROM OLD."final_arguments_digest" THEN
             RETURN NEW;
         END IF;
-        RAISE EXCEPTION 'an approved ApprovalRequest may only consume its resume token once';
+        RAISE EXCEPTION 'a terminal ApprovalRequest may only consume its resume token once';
     END IF;
     IF OLD."state" <> 'pending' OR NEW."state" = 'pending' THEN
         RAISE EXCEPTION 'ApprovalRequest may be decided exactly once';
@@ -4903,11 +4903,11 @@ BEGIN
                 (SELECT "skill_id", "skill_revision_id" FROM "agent_revision_skill_assignments" WHERE "agent_revision_id" = NEW."applied_agent_revision_id"
                  EXCEPT SELECT "skill_id", "skill_revision_id" FROM "agent_revision_skill_assignments" WHERE "agent_revision_id" = NEW."expected_agent_revision_id")
             ) OR EXISTS (
-                (SELECT "integration_id", "silo_id", "custody_reference_id", "allowed_tools" FROM "agent_revision_integration_assignments" WHERE "agent_revision_id" = NEW."expected_agent_revision_id"
-                 EXCEPT SELECT "integration_id", "silo_id", "custody_reference_id", "allowed_tools" FROM "agent_revision_integration_assignments" WHERE "agent_revision_id" = NEW."applied_agent_revision_id")
+                (SELECT "integration_id", "silo_id", "custody_reference_id", "tool_definitions" FROM "agent_revision_integration_assignments" WHERE "agent_revision_id" = NEW."expected_agent_revision_id"
+                 EXCEPT SELECT "integration_id", "silo_id", "custody_reference_id", "tool_definitions" FROM "agent_revision_integration_assignments" WHERE "agent_revision_id" = NEW."applied_agent_revision_id")
                 UNION ALL
-                (SELECT "integration_id", "silo_id", "custody_reference_id", "allowed_tools" FROM "agent_revision_integration_assignments" WHERE "agent_revision_id" = NEW."applied_agent_revision_id"
-                 EXCEPT SELECT "integration_id", "silo_id", "custody_reference_id", "allowed_tools" FROM "agent_revision_integration_assignments" WHERE "agent_revision_id" = NEW."expected_agent_revision_id")
+                (SELECT "integration_id", "silo_id", "custody_reference_id", "tool_definitions" FROM "agent_revision_integration_assignments" WHERE "agent_revision_id" = NEW."applied_agent_revision_id"
+                 EXCEPT SELECT "integration_id", "silo_id", "custody_reference_id", "tool_definitions" FROM "agent_revision_integration_assignments" WHERE "agent_revision_id" = NEW."expected_agent_revision_id")
             ) OR EXISTS (
                 (SELECT "scope", "subject_type", "subject_id" FROM "agent_revision_scope_attachments" WHERE "agent_revision_id" = NEW."expected_agent_revision_id"
                  EXCEPT SELECT "scope", "subject_type", "subject_id" FROM "agent_revision_scope_attachments" WHERE "agent_revision_id" = NEW."applied_agent_revision_id")
@@ -5375,13 +5375,25 @@ BEGIN
     RETURN NEW;
 END;
 $$;
-CREATE FUNCTION "has_nonempty_distinct_tool_ids"(TEXT[]) RETURNS BOOLEAN LANGUAGE sql IMMUTABLE AS $$
+CREATE FUNCTION "has_reviewed_tool_definitions"(JSONB) RETURNS BOOLEAN LANGUAGE sql IMMUTABLE AS $$
   SELECT COALESCE(
-    cardinality($1) > 0 AND NOT EXISTS (
+    jsonb_typeof($1) = 'array'
+    AND jsonb_array_length($1) > 0
+    AND NOT EXISTS (
       SELECT 1
-      FROM unnest($1) AS tool("value")
-      GROUP BY tool."value"
-      HAVING tool."value" IS NULL OR btrim(tool."value") = '' OR position(':' in tool."value") > 0 OR count(*) > 1
+      FROM jsonb_array_elements($1) AS tool("value")
+      WHERE jsonb_typeof(tool."value") <> 'object'
+        OR jsonb_typeof(tool."value"->'name') <> 'string'
+        OR btrim(tool."value"->>'name') = ''
+        OR position(':' in tool."value"->>'name') > 0
+        OR jsonb_typeof(tool."value"->'description') <> 'string'
+        OR btrim(tool."value"->>'description') = ''
+        OR jsonb_typeof(tool."value"->'parametersSchema') <> 'object'
+        OR tool."value"->'parametersSchema'->>'type' IS DISTINCT FROM 'object'
+        OR tool."value"->>'parametersSchemaDigest' !~ '^sha256:[0-9a-f]{64}$'
+    )
+    AND jsonb_array_length($1) = (
+      SELECT count(DISTINCT tool."value"->>'name') FROM jsonb_array_elements($1) AS tool("value")
     ),
     FALSE
   );
@@ -5581,8 +5593,11 @@ ALTER TABLE "approval_requests" ADD CONSTRAINT "approval_requests_decision_check
 		 ("resume_token_hash" IS NULL OR btrim("resume_token_hash") <> '') AND
 		 (("tool_invocation_row_id" IS NULL AND "final_arguments" IS NULL AND "final_arguments_digest" IS NULL) OR
 		  ("tool_invocation_row_id" IS NOT NULL AND jsonb_typeof("final_arguments") = 'object' AND "final_arguments_digest" ~ '^sha256:[0-9a-f]{64}$'))) OR
-		("state" = 'denied' AND "decided_at" IS NOT NULL AND "decided_by" IS NOT NULL AND btrim("decided_by") <> '' AND "resume_token_hash" IS NULL AND "final_arguments" IS NULL AND "final_arguments_digest" IS NULL) OR
-		("state" IN ('expired', 'cancelled') AND "decided_at" IS NOT NULL AND "resume_token_hash" IS NULL AND "final_arguments" IS NULL AND "final_arguments_digest" IS NULL)
+		("state" = 'denied' AND "decided_at" IS NOT NULL AND "decided_by" IS NOT NULL AND btrim("decided_by") <> '' AND
+		 ("resume_token_hash" IS NULL OR btrim("resume_token_hash") <> '') AND "final_arguments" IS NULL AND "final_arguments_digest" IS NULL) OR
+		("state" = 'expired' AND "decided_at" IS NOT NULL AND "decided_by" IS NULL AND
+		 ("resume_token_hash" IS NULL OR btrim("resume_token_hash") <> '') AND "final_arguments" IS NULL AND "final_arguments_digest" IS NULL) OR
+		("state" = 'cancelled' AND "decided_at" IS NOT NULL AND "decided_by" IS NULL AND "resume_token_hash" IS NULL AND "final_arguments" IS NULL AND "final_arguments_digest" IS NULL)
     );
 ALTER TABLE "action_execution_receipts" ADD CONSTRAINT "action_execution_receipts_exact_check" CHECK (
         btrim("silo_id") <> '' AND btrim("subject_id") <> '' AND btrim("audience") <> '' AND
@@ -5670,9 +5685,10 @@ CREATE UNIQUE INDEX "agent_runs_one_foreground_per_conversation"
 ALTER TABLE "conversation_run_events" ADD CONSTRAINT "conversation_run_events_sequence_check" CHECK ("sequence" > 0);
 ALTER TABLE "conversation_run_events" ADD CONSTRAINT "conversation_run_events_type_check" CHECK ("type" IN (
         'run.accepted', 'run.started', 'message.started', 'message.delta', 'message.completed',
-        'tool.requested', 'tool.approval_required', 'tool.started', 'tool.progress', 'tool.completed',
+        'tool.requested', 'tool.approval_required', 'tool.started', 'tool.progress', 'tool.completed', 'tool.failed',
+        'a2ui.rendering.begun', 'a2ui.surface.updated', 'a2ui.data_model.updated',
         'context.compaction_started', 'context.compaction_completed', 'run.usage',
-        'run.completed', 'run.failed', 'run.cancelled',
+        'run.completed', 'run.failed', 'run.cancelled', 'run.error',
         'child.run.completed', 'child.run.failed', 'child.run.cancelled'
     ));
 ALTER TABLE "conversation_run_events" ADD CONSTRAINT "conversation_run_events_payload_check" CHECK (jsonb_typeof("payload") = 'object');
@@ -5910,7 +5926,7 @@ ALTER TABLE "integration_custody_references" ADD CONSTRAINT "integration_custody
 ALTER TABLE "integration_custody_references" ADD CONSTRAINT "integration_custody_references_revocation_evidence" CHECK (
     ("state" = 'revoked' AND "revoked_at" IS NOT NULL) OR ("state" <> 'revoked' AND "revoked_at" IS NULL)
   );
-ALTER TABLE "agent_revision_integration_assignments" ADD CONSTRAINT "agent_revision_integration_assignments_allowed_tools_check" CHECK ("has_nonempty_distinct_tool_ids"("allowed_tools"));
+ALTER TABLE "agent_revision_integration_assignments" ADD CONSTRAINT "agent_revision_integration_assignments_tool_definitions_check" CHECK ("has_reviewed_tool_definitions"("tool_definitions"));
 
 -- Partial indexes
 CREATE UNIQUE INDEX "memory_fact_catalog_single_successor_key" ON "memory_fact_catalog"("supersedes_fact_id") WHERE "supersedes_fact_id" IS NOT NULL;

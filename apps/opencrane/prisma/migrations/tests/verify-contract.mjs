@@ -50,7 +50,7 @@ requireContract(
 	"migration must bind the default-owner protected source baseline",
 );
 requireContract(
-	manifest.executionMode === "automatic-when-legacy-persona-and-conversations-empty-otherwise-manual-data-mapping-required",
+	manifest.executionMode === "automatic-when-legacy-persona-conversations-approval-requests-and-integration-assignments-empty-otherwise-manual-data-mapping-required",
 	"migration execution mode must retain its conditional data boundary",
 );
 requireContract(sql.includes("pg_advisory_xact_lock"), "migration must acquire the database migration lock");
@@ -62,6 +62,16 @@ requireContract(sql.includes("ERRCODE = 'OC708'"), "migration must retain the ex
 requireContract(sql.includes("IF persona_profiles_count + persona_interviews_count"), "OC708 must be conditional on legacy runtime data");
 requireContract(sql.includes("ERRCODE = 'OC710'"), "migration must retain the explicit Conversation semantic-mapping blocker");
 requireContract(sql.includes("IF legacy_conversations_count + conversation_participants_count"), "OC710 must be conditional on legacy Conversation data");
+requireContract(sql.includes("ERRCODE = 'OC711'"), "migration must reject populated approval_requests");
+requireContract(sql.includes("ERRCODE = 'OC712'"), "migration must reject legacy integration assignments without reviewed schemas");
+requireContract(sql.includes('ADD COLUMN "tool_definitions" JSONB NOT NULL'), "migration must replace tool-name arrays with reviewed definitions");
+requireContract(!targetBaseline.includes('"allowed_tools"'), "target baseline must not retain tool-name-only authority");
+for (const eventType of ["tool.failed", "run.error", "a2ui.rendering.begun", "a2ui.surface.updated", "a2ui.data_model.updated"])
+{
+	requireContract(targetBaseline.includes(`'${eventType}'`), `target baseline must admit canonical ${eventType} events`);
+	requireContract(sql.includes(`'${eventType}'`), `migration must admit canonical ${eventType} events`);
+}
+requireContract(sql.includes("IF OLD.\"state\" IN ('approved', 'denied', 'expired')"), "terminal approval markers must remain consumable");
 requireContract(sql.includes('DROP TYPE "ConversationThreadState"'), "migration must remove the retired ConversationThread model");
 requireContract(sql.includes('CREATE TYPE "ConversationMode"'), "migration must create immutable Conversation modes");
 requireContract(sql.includes('CREATE TABLE "conversation_timeline_entries"'), "migration must create the canonical mixed timeline");

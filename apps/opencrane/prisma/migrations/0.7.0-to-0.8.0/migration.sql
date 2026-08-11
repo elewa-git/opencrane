@@ -36,7 +36,7 @@ SELECT (
         WHERE "schema_version" = '0.8.0'
           AND "source_schema_version" = '0.7.0'
           AND "source_baseline_sha256" = :'source_baseline_sha256'
-          AND "target_baseline_sha256" = 'efa0cde407286dac66ff5fdb6b45bb7f127fdf98128ebcb75b985d27a0106734'
+          AND "target_baseline_sha256" = 'a73a90dc448fb7f11310b3baaf8015a07a16e2ad3fbfda24e3de7a357ace3fef'
           AND "sql_sha256" = :'migration_sql_sha256'
           AND "migration_id" = '0.7.0-to-0.8.0') = 1
     AND (SELECT "baseline_sha256" FROM "opencrane_bootstrap"."target_baseline" WHERE "singleton" = TRUE)
@@ -117,6 +117,7 @@ DECLARE
     active_conversation_runs_count BIGINT;
     retired_channel_commands_count BIGINT;
 	approval_requests_count BIGINT;
+	integration_assignments_count BIGINT;
 BEGIN
     IF expected_baseline_sha256 IS DISTINCT FROM '25bfc5d31c4966ee697ae5aaa47edc855d25120d0829c241f213353f69e0358d' THEN
         RAISE EXCEPTION USING
@@ -214,7 +215,7 @@ BEGIN
         "persona_questions",
         "persona_soul_templates"
       IN SHARE ROW EXCLUSIVE MODE;
-	LOCK TABLE "approval_requests" IN SHARE ROW EXCLUSIVE MODE;
+	LOCK TABLE "approval_requests", "agent_revision_integration_assignments" IN SHARE ROW EXCLUSIVE MODE;
 
     LOCK TABLE
         "conversation_threads",
@@ -266,6 +267,7 @@ BEGIN
         + (SELECT count(*) FROM "channel_invocation_contexts" WHERE "action" = 'command.forward')
       INTO retired_channel_commands_count;
 	SELECT count(*) INTO approval_requests_count FROM "approval_requests";
+	SELECT count(*) INTO integration_assignments_count FROM "agent_revision_integration_assignments";
 
     IF persona_profiles_count + persona_interviews_count + persona_answers_count
         + persona_revisions_count + persona_insights_count + personal_configuration_changes_count
@@ -309,8 +311,48 @@ BEGIN
 			DETAIL = json_build_object('approval_requests', approval_requests_count)::TEXT,
 			HINT = 'Pending and terminal approvals contain authority-bound argument semantics that must not be guessed. Finish or remove them through a reviewed manual transition.';
 	END IF;
+	IF integration_assignments_count > 0 THEN
+		RAISE EXCEPTION USING
+			ERRCODE = 'OC712',
+			MESSAGE = 'automatic 0.7.0-to-0.8.0 migration requires integration assignments to be empty',
+			DETAIL = json_build_object('agent_revision_integration_assignments', integration_assignments_count)::TEXT,
+			HINT = 'Legacy tool-name arrays cannot be promoted into reviewed JSON Schema definitions. Clone the source and approve a deterministic manual mapping.';
+	END IF;
 END;
 $migration_preflight$;
+
+-- A tool name alone cannot prove the reviewed description, JSON Schema, or schema digest that the
+-- target run snapshot freezes. The preflight therefore admits this replacement only for an empty
+-- legacy assignment set instead of fabricating executable authority.
+ALTER TABLE "agent_revision_integration_assignments"
+	DROP CONSTRAINT "agent_revision_integration_assignments_allowed_tools_check",
+	DROP COLUMN "allowed_tools",
+	ADD COLUMN "tool_definitions" JSONB NOT NULL;
+DROP FUNCTION "has_nonempty_distinct_tool_ids"(TEXT[]);
+CREATE FUNCTION "has_reviewed_tool_definitions"(JSONB) RETURNS BOOLEAN LANGUAGE sql IMMUTABLE AS $$
+  SELECT COALESCE(
+    jsonb_typeof($1) = 'array'
+    AND jsonb_array_length($1) > 0
+    AND NOT EXISTS (
+      SELECT 1
+      FROM jsonb_array_elements($1) AS tool("value")
+      WHERE jsonb_typeof(tool."value") <> 'object'
+        OR jsonb_typeof(tool."value"->'name') <> 'string'
+        OR btrim(tool."value"->>'name') = ''
+        OR position(':' in tool."value"->>'name') > 0
+        OR jsonb_typeof(tool."value"->'description') <> 'string'
+        OR btrim(tool."value"->>'description') = ''
+        OR jsonb_typeof(tool."value"->'parametersSchema') <> 'object'
+        OR tool."value"->'parametersSchema'->>'type' IS DISTINCT FROM 'object'
+        OR tool."value"->>'parametersSchemaDigest' !~ '^sha256:[0-9a-f]{64}$'
+    )
+    AND jsonb_array_length($1) = (
+      SELECT count(DISTINCT tool."value"->>'name') FROM jsonb_array_elements($1) AS tool("value")
+    ),
+    FALSE
+  );
+$$;
+ALTER TABLE "agent_revision_integration_assignments" ADD CONSTRAINT "agent_revision_integration_assignments_tool_definitions_check" CHECK ("has_reviewed_tool_definitions"("tool_definitions"));
 
 -- The automatic path proved the shared approval ledger empty, so replace the retired synthetic
 -- result body with frozen review input, actor-safe projection, and exact approved replacements.
@@ -340,9 +382,10 @@ ALTER TABLE "approval_requests" ADD CONSTRAINT "approval_requests_exact_check" C
 	(("tool_invocation_row_id" IS NULL AND "reviewed_tool_arguments" IS NULL AND "reviewed_tool_schema" IS NULL AND
 	  "reviewed_tool_schema_digest" IS NULL AND "safe_proposed_arguments" IS NULL AND "response_schema" IS NULL AND
 	  "final_arguments" IS NULL AND "final_arguments_digest" IS NULL) OR
-	 ("tool_invocation_row_id" IS NOT NULL AND "catalog_id" IS NULL AND jsonb_typeof("reviewed_tool_arguments") = 'object' AND
+	 ("tool_invocation_row_id" IS NOT NULL AND "catalog_id" IS NULL AND "reviewed_tool_arguments" IS NOT NULL AND
+	  jsonb_typeof("reviewed_tool_arguments") = 'object' AND "reviewed_tool_schema" IS NOT NULL AND
 	  jsonb_typeof("reviewed_tool_schema") = 'object' AND "reviewed_tool_schema_digest" ~ '^sha256:[0-9a-f]{64}$' AND
-	  "safe_proposed_arguments" IS NOT NULL AND jsonb_typeof("response_schema") = 'object'))
+	  "safe_proposed_arguments" IS NOT NULL AND "response_schema" IS NOT NULL AND jsonb_typeof("response_schema") = 'object'))
 );
 ALTER TABLE "approval_requests" ADD CONSTRAINT "approval_requests_decision_check" CHECK (
 	("state" = 'pending' AND "decided_at" IS NULL AND "decided_by" IS NULL AND "resume_token_hash" IS NULL AND "final_arguments" IS NULL AND "final_arguments_digest" IS NULL) OR
@@ -350,8 +393,11 @@ ALTER TABLE "approval_requests" ADD CONSTRAINT "approval_requests_decision_check
 	 ("resume_token_hash" IS NULL OR btrim("resume_token_hash") <> '') AND
 	 (("tool_invocation_row_id" IS NULL AND "final_arguments" IS NULL AND "final_arguments_digest" IS NULL) OR
 	  ("tool_invocation_row_id" IS NOT NULL AND jsonb_typeof("final_arguments") = 'object' AND "final_arguments_digest" ~ '^sha256:[0-9a-f]{64}$'))) OR
-	("state" = 'denied' AND "decided_at" IS NOT NULL AND "decided_by" IS NOT NULL AND btrim("decided_by") <> '' AND "resume_token_hash" IS NULL AND "final_arguments" IS NULL AND "final_arguments_digest" IS NULL) OR
-	("state" IN ('expired', 'cancelled') AND "decided_at" IS NOT NULL AND "resume_token_hash" IS NULL AND "final_arguments" IS NULL AND "final_arguments_digest" IS NULL)
+	("state" = 'denied' AND "decided_at" IS NOT NULL AND "decided_by" IS NOT NULL AND btrim("decided_by") <> '' AND
+	 ("resume_token_hash" IS NULL OR btrim("resume_token_hash") <> '') AND "final_arguments" IS NULL AND "final_arguments_digest" IS NULL) OR
+	("state" = 'expired' AND "decided_at" IS NOT NULL AND "decided_by" IS NULL AND
+	 ("resume_token_hash" IS NULL OR btrim("resume_token_hash") <> '') AND "final_arguments" IS NULL AND "final_arguments_digest" IS NULL) OR
+	("state" = 'cancelled' AND "decided_at" IS NOT NULL AND "decided_by" IS NULL AND "resume_token_hash" IS NULL AND "final_arguments" IS NULL AND "final_arguments_digest" IS NULL)
 );
 
 CREATE OR REPLACE FUNCTION "enforce_approval_request_update"() RETURNS trigger LANGUAGE plpgsql AS $$
@@ -422,8 +468,10 @@ BEGIN
         OR NEW."expires_at" IS DISTINCT FROM OLD."expires_at" OR NEW."created_at" IS DISTINCT FROM OLD."created_at" THEN
         RAISE EXCEPTION 'ApprovalRequest proof and action bindings are immutable';
     END IF;
-    IF OLD."state" = 'approved' THEN
-        IF NEW."state" = 'approved'
+    -- A dispatched resume consumes its opaque token without changing the already-authorised result.
+    -- No other terminal-row mutation is allowed, so retry redelivery still relies on the durable command.
+    IF OLD."state" IN ('approved', 'denied', 'expired') THEN
+        IF NEW."state" = OLD."state"
             AND OLD."resume_token_hash" IS NOT NULL AND NEW."resume_token_hash" IS NULL
             AND NEW."decided_at" IS NOT DISTINCT FROM OLD."decided_at"
             AND NEW."decided_by" IS NOT DISTINCT FROM OLD."decided_by"
@@ -431,7 +479,7 @@ BEGIN
 			AND NEW."final_arguments_digest" IS NOT DISTINCT FROM OLD."final_arguments_digest" THEN
             RETURN NEW;
         END IF;
-        RAISE EXCEPTION 'an approved ApprovalRequest may only consume its resume token once';
+        RAISE EXCEPTION 'a terminal ApprovalRequest may only consume its resume token once';
     END IF;
     IF OLD."state" <> 'pending' OR NEW."state" = 'pending' THEN
         RAISE EXCEPTION 'ApprovalRequest may be decided exactly once';
@@ -710,9 +758,10 @@ CREATE UNIQUE INDEX "agent_runs_one_foreground_per_conversation"
 ALTER TABLE "conversation_run_events" ADD CONSTRAINT "conversation_run_events_sequence_check" CHECK ("sequence" > 0);
 ALTER TABLE "conversation_run_events" ADD CONSTRAINT "conversation_run_events_type_check" CHECK ("type" IN (
         'run.accepted', 'run.started', 'message.started', 'message.delta', 'message.completed',
-        'tool.requested', 'tool.approval_required', 'tool.started', 'tool.progress', 'tool.completed',
+        'tool.requested', 'tool.approval_required', 'tool.started', 'tool.progress', 'tool.completed', 'tool.failed',
+        'a2ui.rendering.begun', 'a2ui.surface.updated', 'a2ui.data_model.updated',
         'context.compaction_started', 'context.compaction_completed', 'run.usage',
-        'run.completed', 'run.failed', 'run.cancelled',
+        'run.completed', 'run.failed', 'run.cancelled', 'run.error',
         'child.run.completed', 'child.run.failed', 'child.run.cancelled'
     ));
 ALTER TABLE "conversation_run_events" ADD CONSTRAINT "conversation_run_events_payload_check" CHECK (jsonb_typeof("payload") = 'object');
@@ -1354,11 +1403,11 @@ BEGIN
                 (SELECT "skill_id", "skill_revision_id" FROM "agent_revision_skill_assignments" WHERE "agent_revision_id" = NEW."applied_agent_revision_id"
                  EXCEPT SELECT "skill_id", "skill_revision_id" FROM "agent_revision_skill_assignments" WHERE "agent_revision_id" = NEW."expected_agent_revision_id")
             ) OR EXISTS (
-                (SELECT "integration_id", "silo_id", "custody_reference_id", "allowed_tools" FROM "agent_revision_integration_assignments" WHERE "agent_revision_id" = NEW."expected_agent_revision_id"
-                 EXCEPT SELECT "integration_id", "silo_id", "custody_reference_id", "allowed_tools" FROM "agent_revision_integration_assignments" WHERE "agent_revision_id" = NEW."applied_agent_revision_id")
+                (SELECT "integration_id", "silo_id", "custody_reference_id", "tool_definitions" FROM "agent_revision_integration_assignments" WHERE "agent_revision_id" = NEW."expected_agent_revision_id"
+                 EXCEPT SELECT "integration_id", "silo_id", "custody_reference_id", "tool_definitions" FROM "agent_revision_integration_assignments" WHERE "agent_revision_id" = NEW."applied_agent_revision_id")
                 UNION ALL
-                (SELECT "integration_id", "silo_id", "custody_reference_id", "allowed_tools" FROM "agent_revision_integration_assignments" WHERE "agent_revision_id" = NEW."applied_agent_revision_id"
-                 EXCEPT SELECT "integration_id", "silo_id", "custody_reference_id", "allowed_tools" FROM "agent_revision_integration_assignments" WHERE "agent_revision_id" = NEW."expected_agent_revision_id")
+                (SELECT "integration_id", "silo_id", "custody_reference_id", "tool_definitions" FROM "agent_revision_integration_assignments" WHERE "agent_revision_id" = NEW."applied_agent_revision_id"
+                 EXCEPT SELECT "integration_id", "silo_id", "custody_reference_id", "tool_definitions" FROM "agent_revision_integration_assignments" WHERE "agent_revision_id" = NEW."expected_agent_revision_id")
             ) OR EXISTS (
                 (SELECT "scope", "subject_type", "subject_id" FROM "agent_revision_scope_attachments" WHERE "agent_revision_id" = NEW."expected_agent_revision_id"
                  EXCEPT SELECT "scope", "subject_type", "subject_id" FROM "agent_revision_scope_attachments" WHERE "agent_revision_id" = NEW."applied_agent_revision_id")
@@ -2976,7 +3025,7 @@ INSERT INTO "opencrane_migrations"."schema_history" (
     "target_baseline_sha256", "sql_sha256", "migration_id"
 ) VALUES (
     '0.8.0', '0.7.0', current_setting('opencrane.expected_source_baseline_sha256'),
-    'efa0cde407286dac66ff5fdb6b45bb7f127fdf98128ebcb75b985d27a0106734',
+    'a73a90dc448fb7f11310b3baaf8015a07a16e2ad3fbfda24e3de7a357ace3fef',
     current_setting('opencrane.expected_migration_sql_sha256'),
     '0.7.0-to-0.8.0'
 );

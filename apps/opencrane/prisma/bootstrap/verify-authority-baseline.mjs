@@ -31,6 +31,11 @@ const _REQUIRED_AUTHORITY_MARKERS = [
 	'"activity_sequence" = DEFAULT',
 	'CREATE UNIQUE INDEX "conversations_activity_sequence_key"',
 	'CREATE UNIQUE INDEX "agent_runs_one_foreground_per_conversation"',
+	'CREATE FUNCTION "has_reviewed_tool_definitions"(JSONB)',
+	'"tool_definitions" JSONB NOT NULL',
+	"'tool.failed'",
+	"'run.error'",
+	"'a2ui.rendering.begun', 'a2ui.surface.updated', 'a2ui.data_model.updated'",
 	'ALTER TABLE "conversations" ADD CONSTRAINT "conversations_identity_check"',
 	'ALTER TABLE "conversation_timeline_entries" ADD CONSTRAINT "conversation_timeline_entries_reference_shape_check"',
 ];
@@ -41,6 +46,8 @@ const _FORBIDDEN_AUTHORITY_MARKERS = [
 	'"thread_id"',
 	'"source_thread_id"',
 	'ConversationThread',
+	'"allowed_tools"',
+	'has_nonempty_distinct_tool_ids',
 ];
 
 /** Counts statements which begin at a SQL line boundary. */

@@ -63,6 +63,7 @@ grep -q 'already applied with exact history' "$WORK_DIR/retry-output.log"
 
 psql_command postgres --command 'CREATE DATABASE fresh;' >/dev/null
 psql_command fresh <"$CURRENT_BASELINE" >/dev/null
+psql_command fresh <"$ROOT/libs/backend/server/gateways/integrations/main/tests/integrations-authority.sql" >/dev/null
 
 for database in migrated fresh; do
 	psql_command "$database" <"$ROOT/apps/opencrane/prisma/migrations/tests/conversation-activity-ordering.sql" >/dev/null
@@ -124,5 +125,51 @@ psql_command populated_conversation --tuples-only --no-align --command \
 psql_command populated_conversation --tuples-only --no-align --command \
 	"SELECT count(*) FROM pg_type WHERE typname = 'ConversationMode';" \
 	| grep -qx '0'
+
+create_source_database populated_approval
+psql_command populated_approval <<'SQL' >/dev/null
+SET session_replication_role = replica;
+INSERT INTO "approval_requests" (
+    "id", "run_id", "attempt", "agent_revision_id", "agent_service_id", "silo_id",
+    "proof_key_id", "proof_key_thumbprint", "subject_id", "workload_audience",
+    "service_account_name", "namespace", "workload_kind", "workload_uid", "pod_uid",
+    "resource_kind", "resource_id", "action", "arguments_digest", "action_digest",
+    "approver_policy_revision", "effective_policy_digest", "expires_at"
+) VALUES (
+    'legacy-approval', 'legacy-run', 1, 'legacy-revision', 'legacy-service', 'legacy-silo',
+    'legacy-proof', repeat('k', 43), 'legacy-user', 'legacy-runtime',
+    'legacy-runtime', 'legacy-namespace', 'job', 'legacy-workload', 'legacy-pod',
+    'message', 'legacy-message', 'send', 'sha256:' || repeat('1', 64), 'sha256:' || repeat('2', 64),
+    'legacy-policy', 'sha256:' || repeat('3', 64), clock_timestamp() + interval '1 hour'
+);
+SET session_replication_role = origin;
+SQL
+if psql_command populated_approval --set VERBOSITY=verbose --set "source_baseline_sha256=$PROTECTED_DIGEST" --set "migration_sql_sha256=$MIGRATION_SQL_DIGEST" \
+	--file - <"$TRANSITION_ROOT/migration.sql" >"$WORK_DIR/populated-approval-output.log" 2>&1; then
+	echo "populated 0.7 approval fixture unexpectedly migrated" >&2
+	exit 1
+fi
+grep -q 'OC711' "$WORK_DIR/populated-approval-output.log"
+psql_command populated_approval --tuples-only --no-align --command \
+	'SELECT count(*) FROM "approval_requests" WHERE "id" = '\''legacy-approval'\'';' \
+	| grep -qx '1'
+
+create_source_database populated_integration_assignment
+psql_command populated_integration_assignment <<'SQL' >/dev/null
+SET session_replication_role = replica;
+INSERT INTO "agent_revision_integration_assignments" (
+    "agent_revision_id", "integration_id", "silo_id", "custody_reference_id", "allowed_tools"
+) VALUES ('legacy-revision', 'legacy-integration', 'legacy-silo', 'legacy-custody', ARRAY['calendar.read']);
+SET session_replication_role = origin;
+SQL
+if psql_command populated_integration_assignment --set VERBOSITY=verbose --set "source_baseline_sha256=$PROTECTED_DIGEST" --set "migration_sql_sha256=$MIGRATION_SQL_DIGEST" \
+	--file - <"$TRANSITION_ROOT/migration.sql" >"$WORK_DIR/populated-integration-output.log" 2>&1; then
+	echo "populated 0.7 integration assignment fixture unexpectedly migrated" >&2
+	exit 1
+fi
+grep -q 'OC712' "$WORK_DIR/populated-integration-output.log"
+psql_command populated_integration_assignment --tuples-only --no-align --command \
+	'SELECT count(*) FROM "agent_revision_integration_assignments" WHERE "agent_revision_id" = '\''legacy-revision'\'';' \
+	| grep -qx '1'
 
 echo "0.7.0-to-0.8.0 PostgreSQL migration: PASS"

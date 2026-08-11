@@ -15,6 +15,11 @@ replacement arguments that the runtime executes. Those semantics cannot be recon
 existing 0.7 approval row, so the automatic path requires `approval_requests` to be empty and fails
 with `OC711` otherwise.
 
+The 0.8 revision contract replaces integration tool-name arrays with complete reviewed tool
+definitions containing a description, object JSON Schema, and canonical schema digest. An old name
+cannot establish that authority, so the automatic path also requires
+`agent_revision_integration_assignments` to be empty and fails with `OC712` otherwise.
+
 `migration.sql` still performs the complete fail-closed preflight: it takes the shared migration
 advisory lock, requires the exact protected 0.7 bootstrap envelope digest, rejects partial/repeated
 states, verifies the old enum/table/catalog shape, locks every table that could gain persona data,
@@ -39,6 +44,6 @@ manifest. The SQL digest is supplied rather than embedded because a file cannot 
 SHA-256 without changing that digest.
 
 For a populated source, clone it and approve a deterministic manual mapping before replacing the
-`OC708` or `OC710` guard. `verify-postgres.sh` proves the supported tagged-empty path converges to the
+`OC708`, `OC710`, `OC711`, or `OC712` guard. `verify-postgres.sh` proves the supported tagged-empty path converges to the
 fresh 0.8 application schema and governed seeds, the exact completed path is retryable, and populated
 legacy persona and Conversation fixtures each roll back untouched.
