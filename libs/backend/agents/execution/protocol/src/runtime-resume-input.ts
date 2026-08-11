@@ -1,4 +1,4 @@
-import type { ResumeAttemptCommand, RuntimeToolResult } from "@opencrane/contracts";
+import type { ResumeAttemptCommand, RuntimeElicitationResult, RuntimeToolResult } from "@opencrane/contracts";
 import type { JsonValue } from "@opencrane/util";
 
 /**
@@ -20,10 +20,42 @@ export function _ParseRuntimeResumeInput(payload: unknown): ResumeAttemptCommand
 {
 	if (payload === null || typeof payload !== "object" || Array.isArray(payload)) return null;
 	const record = payload as { readonly [key: string]: JsonValue };
-	if (Object.keys(record).length !== 3 || typeof record["inputGeneration"] !== "number" || !("toolResults" in record) || !("steeringRequests" in record)) return null;
+	if (Object.keys(record).length !== 4 || typeof record["inputGeneration"] !== "number" || !("toolResults" in record) || !("steeringRequests" in record) || !("elicitationResults" in record)) return null;
 	const toolResults = _ToolResults(record["toolResults"]);
-	if (toolResults === null || !Array.isArray(record["steeringRequests"])) return null;
-	return { inputGeneration: record["inputGeneration"], toolResults, steeringRequests: record["steeringRequests"] };
+	const elicitationResults = _ElicitationResults(record["elicitationResults"]);
+	if (toolResults === null || elicitationResults === null || !Array.isArray(record["steeringRequests"])) return null;
+	return { inputGeneration: record["inputGeneration"], toolResults, steeringRequests: record["steeringRequests"], elicitationResults };
+}
+
+/** Parse exact server-owned elicitation outcomes without protected strategy payloads. */
+function _ElicitationResults(value: JsonValue): readonly RuntimeElicitationResult[] | null
+{
+	if (!Array.isArray(value)) return null;
+	const results: RuntimeElicitationResult[] = [];
+	for (const item of value)
+	{
+		if (item === null || typeof item !== "object" || Array.isArray(item)) return null;
+		const record = item as { readonly [key: string]: JsonValue };
+		const requestId = record["requestId"];
+		const requestKey = record["requestKey"];
+		const outcome = record["outcome"];
+		if (typeof requestId !== "string" || typeof requestKey !== "string" || !_ElicitationOutcome(outcome)) return null;
+		if (outcome === "answered")
+		{
+			if (Object.keys(record).length !== 4 || !("response" in record)) return null;
+			results.push({ requestId, requestKey, outcome, response: record["response"] });
+			continue;
+		}
+		if (Object.keys(record).length !== 3) return null;
+		results.push({ requestId, requestKey, outcome });
+	}
+	return results;
+}
+
+/** Whether one persisted value is a supported terminal runtime outcome. */
+function _ElicitationOutcome(value: JsonValue | undefined): value is RuntimeElicitationResult["outcome"]
+{
+	return value === "answered" || value === "declined" || value === "expired" || value === "cancelled" || value === "failed";
 }
 
 /** Parse the saved array into tool results, returning null when any entry has the wrong shape. */

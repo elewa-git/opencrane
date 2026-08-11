@@ -1,4 +1,4 @@
-import { AgentRunState, ApprovalRequestState, ExternalActionClaimKind, ExternalActionRecoveryMode, Prisma, ToolInvocationState, ToolResultDeliveryState } from "@prisma/client";
+import { AgentRunState, ApprovalRequestState, ElicitationRequestState, ExternalActionClaimKind, ExternalActionRecoveryMode, Prisma, ToolInvocationState, ToolResultDeliveryState } from "@prisma/client";
 
 import { __DigestCanonicalJson } from "./canonical-json-digest.js";
 import type { CancelPendingRunApprovalAuthorityCommand, CancelPendingRunApprovalAuthorityResult, RunApprovalCancellationRepository, RunApprovalCancellationUnitOfWork, RunCancellationToolInvocation } from "./run-approval-cancellation.types.js";
@@ -62,6 +62,7 @@ export class PrismaRunApprovalCancellationRepository implements RunApprovalCance
 	/** Close pending approvals without resume authority. */
 	async cancelPending(runId: string, attempt: number, now: Date): Promise<number>
 	{
+		await this._transaction.elicitationRequest.updateMany({ where: { runId, attempt, state: ElicitationRequestState.Requested }, data: { state: ElicitationRequestState.Cancelled, resolvedAt: now, resolvedBy: null, safeReason: "run_cancelled" } });
 		const cancelled = await this._transaction.approvalRequest.updateMany({ where: { runId, attempt, state: ApprovalRequestState.Pending }, data: { state: ApprovalRequestState.Cancelled, decidedAt: now, decidedBy: null } });
 		return cancelled.count;
 	}

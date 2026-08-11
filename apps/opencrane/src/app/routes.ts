@@ -14,7 +14,8 @@ import { resourceSharesRouter, sharesRouter } from "@opencrane/backend/server/ia
 import { thirdPartySourcesRouter } from "@opencrane/backend/server/knowledge/retrieval";
 import { spec } from "@opencrane/backend/server/api-spec";
 import { _CreateAgentServicesRouter, type ManagedRunAdmissionPort } from "@opencrane/backend/server/agents/agent-services";
-import { _CreateDeferredToolApprovalInterruptReader, _CreateDeferredToolApprovalRouter } from "@opencrane/backend/server/iam/authorization";
+import { _CreateDeferredToolApprovalInterruptReader } from "@opencrane/backend/server/iam/authorization";
+import { _CreateSelfElicitationRouter } from "@opencrane/backend/agents/execution/elicitation";
 import { _CreatePersonaOnboardingRouter } from "@opencrane/backend/agents/personal/personas";
 import { type UserOnboardingOwnerResolver } from "@opencrane/backend/server/agents/onboarding";
 import { _CreatePersonalArtifactCatalogueRouter } from "@opencrane/backend/server/agents/artifacts";
@@ -69,13 +70,13 @@ export function _RegisterRoutes(app: Express, prisma: PrismaClient, coreApi: k8s
 		{ method: "use", path: "/api/v1/me/onboarding", handler: onboarding.router },
 		{ method: "use", path: "/api/v1/me/assets", handler: _CreatePersonalArtifactCatalogueRouter(prisma, _log) },
 		{ method: "use", path: "/api/v1/me/persona", handler: _CreatePersonaOnboardingRouter(prisma, _log, onboarding.personaWorkflow) },
-		{ method: "use", path: "/api/v1/me/approvals", handler: _CreateDeferredToolApprovalRouter(prisma, _log) },
 		{ method: "use", path: "/api/v1/me/runs", handler: _CreateSteeringIngestRouter(prisma, _log) },
 		{ method: "use", path: "/api/v1/me/runs", handler: _CreateSelfRunStatusRouter(prisma, _log) },
 		{ method: "use", path: "/api/v1/me/runs", handler: _CreateSelfRunCancellationRouter(prisma, runCancellation, _log) },
 		{ method: "use", path: "/api/v1/me/configuration", handler: _CreatePersonalConfigurationRouter(prisma, _log) },
 		{ method: "use", path: "/api/v1/me/conversations", handler: _CreateSelfConversationsRouter(prisma, personalRunAdmission, _CreateConversationAttachmentAdmission, _log) },
 		{ method: "use", path: "/api/v1/me/conversations", handler: __CreateConversationAssetRouter({ resolveCaller: _ResolveConversationAssetCaller, authority: _CreateConversationAssetAuthority(prisma, process.env, artifactScannerEnabled), logger: _log }) },
+		{ method: "use", path: "/api/v1/me/conversations", handler: _CreateSelfElicitationRouter(prisma, _log) },
 		{ method: "use", path: "/api/v1/me/conversations", handler: _CreateSelfConversationReplayRouter(prisma, _log, { interrupts: _CreateDeferredToolApprovalInterruptReader(prisma), shutdownSignal: _ProcessShutdownSignal }) },
 	];
 	const gatewayRoutes: readonly RouteMount[] = [

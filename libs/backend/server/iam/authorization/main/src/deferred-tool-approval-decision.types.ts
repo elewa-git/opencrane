@@ -56,10 +56,3 @@ export type DecideDeferredToolRequestResult =
 	| { readonly outcome: "already_decided"; readonly decision: DeferredToolDecisionKinds; readonly argumentsDigest?: string }
 	| { readonly outcome: "invalid_arguments" }
 	| { readonly outcome: "conflict" };
-
-/** Atomic persistence boundary for a session-authorized deferred-tool decision. */
-export interface DeferredToolApprovalDecisionRepository
-{
-	/** Decide one request only when its durable run coordinates still match the authenticated owner. */
-	decideAtomically(command: DecideDeferredToolRequestCommand): Promise<DecideDeferredToolRequestResult>;
-}
