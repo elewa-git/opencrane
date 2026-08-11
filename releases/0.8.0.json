@@ -32,6 +32,11 @@
       "chartVersion": "0.8.0",
       "chartAppVersion": "0.8.0"
     },
+    "artifact-scanner": {
+      "root": "apps/artifact-scanner",
+      "adaptedVersion": "0.8.0",
+      "packageVersion": "0.8.0"
+    },
     "artifact-service": {
       "root": "apps/artifact-service",
       "adaptedVersion": "0.8.0",

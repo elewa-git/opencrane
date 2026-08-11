@@ -115,6 +115,9 @@
       "@opencrane/backend/channel-proxy": [
         "./libs/backend/channel-proxy/main/src/index.ts"
       ],
+      "@opencrane/backend/artifacts/scanner": [
+        "./libs/backend/artifacts/scanner/main/src/index.ts"
+      ],
       "@opencrane/util": [
         "./libs/util/src/index.ts"
       ],

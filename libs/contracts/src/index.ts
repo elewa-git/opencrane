@@ -10,6 +10,7 @@ export * from "@opencrane/models/conversation-assets";
 export * from "./approval.types.js";
 export type * from "@opencrane/models/artifacts";
 export * from "./artifact-preprocessor.types.js";
+export * from "./artifact-scanner.types.js";
 export type * from "@opencrane/models/authorization";
 export * from "./cluster-tenant.types.js";
 export * from "./grant.types.js";
