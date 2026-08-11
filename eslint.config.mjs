@@ -171,7 +171,8 @@ export default [
             { sourceTag: "scope:execution-protocol", onlyDependOnLibsWithTags: ["scope:execution-protocol", "scope:execution-inputs", "scope:execution-runs", "scope:personal-configuration", "scope:agents", "scope:auth", "scope:authorization", "scope:integrations", "scope:obot-custody", "scope:sandbox-execution", "scope:memory-gateway-client", "scope:shared"] },
             { sourceTag: "scope:agent-runtime", onlyDependOnLibsWithTags: ["scope:agent-runtime", "scope:agents", "scope:authorization", "scope:execution-protocol", "scope:sandbox-execution", "scope:memory-gateway-client", "scope:shared"] },
             { sourceTag: "scope:skills", onlyDependOnLibsWithTags: ["scope:artifacts", "scope:auth", "scope:cluster-tenants", "scope:grants", "scope:shared", "scope:skills"] },
-            { sourceTag: "scope:spend", onlyDependOnLibsWithTags: ["scope:shared", "scope:spend"] },
+			{ sourceTag: "scope:spend", onlyDependOnLibsWithTags: ["scope:shared", "scope:spend"] },
+			{ sourceTag: "scope:conversation-elicitation", onlyDependOnLibsWithTags: ["scope:conversation-elicitation", "scope:shared", "scope:web"] },
 			{ sourceTag: "scope:web", onlyDependOnLibsWithTags: ["scope:web", "scope:shared"] },
 			{ sourceTag: "scope:opencrane-ui", onlyDependOnLibsWithTags: ["scope:conversation-assets", "scope:persona-onboarding", "scope:shared", "scope:web"] },
             {

@@ -79,6 +79,13 @@ The governed persona onboarding path is split deliberately:
 - [`state/persona/adapter`](../../libs/frontend/state/persona/adapter/README.md) is the typed adapter
   over the generated signed-in-owner API.
 
+Recoverable conversation input follows the same ownership direction:
+
+- [`elements/elicitation`](../../libs/frontend/elements/elicitation/README.md) owns the four typed draft controls;
+- [`features/conversation-elicitation`](../../libs/frontend/features/conversation-elicitation/README.md) owns the recoverable card and separate submit intent;
+- [`features/conversation-activity`](../../libs/frontend/features/conversation-activity/README.md) owns safe failure disclosure and canonical deep-link intents; and
+- [`state/conversation/elicitation`](../../libs/frontend/state/conversation/elicitation/README.md) owns the generated-client gateway, command state, reconciliation, and derived Activity rows.
+
 Legacy frontend packages use `scope:web`; new capability slices use bounded ownership scopes. The
 persona onboarding feature, state port, and adapter use `scope:persona-onboarding` plus role tags
 that enforce feature → state and adapter → state/core direction. Cross-cutting core and UI elements

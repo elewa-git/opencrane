@@ -208,6 +208,15 @@
       "@opencrane/elements/a2ui": [
         "./libs/frontend/elements/a2ui/src/index.ts"
       ],
+      "@opencrane/elements/elicitation": [
+        "./libs/frontend/elements/elicitation/src/index.ts"
+      ],
+      "@opencrane/features/conversation-activity": [
+        "./libs/frontend/features/conversation-activity/src/index.ts"
+      ],
+      "@opencrane/features/conversation-elicitation": [
+        "./libs/frontend/features/conversation-elicitation/src/index.ts"
+      ],
       "@opencrane/features/onboarding": [
         "./libs/frontend/features/onboarding/src/index.ts"
       ],
@@ -241,6 +250,9 @@
       "@opencrane/features/conversation-assets": [
         "./libs/frontend/features/conversation-assets/src/index.ts"
       ],
+      "@opencrane/state/conversation/elicitation": [
+        "./libs/frontend/state/conversation/elicitation/src/index.ts"
+      ],
       "@opencrane/state/mcp/adapter": [
         "./libs/frontend/state/mcp/adapter/src/index.ts"
       ],
@@ -260,6 +272,12 @@
   "files": [],
   "references": [
     {
+      "path": "./libs/frontend/features/conversation-activity"
+    },
+    {
+      "path": "./libs/frontend/features/conversation-elicitation"
+    },
+    {
       "path": "./libs/frontend/features/notifications"
     },
     {
@@ -275,6 +293,9 @@
       "path": "./libs/frontend/elements/a2ui"
     },
     {
+      "path": "./libs/frontend/elements/elicitation"
+    },
+    {
       "path": "./libs/frontend/elements/ui"
     },
     {
@@ -282,6 +303,9 @@
     },
     {
       "path": "./libs/frontend/state/onboarding"
+    },
+    {
+      "path": "./libs/frontend/state/conversation/elicitation"
     },
     {
       "path": "./libs/frontend/state/persona/adapter"
