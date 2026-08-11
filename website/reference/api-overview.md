@@ -33,8 +33,8 @@ The current composition includes:
 |---|---|
 | `/agent-services` | Managed agent definition, revision, publication, schedules and run admission |
 | `/me/runs` | Current user's run status, steering and cancellation surfaces |
-| `/me/conversations` | Participant-bound list, create, open, message, archive, close and replay operations |
-| `/me/approvals` | Deferred action approval decisions |
+| `/me/conversations` | Participant-bound list, create, open, message, replay and recoverable elicitation operations |
+| `/me/activity/elicitations` | Derived references to recent questions and approvals; no copied transcript or protected payload |
 | `/me/persona` | Personal persona onboarding |
 | `/me/assets` | Personal artifact catalogue |
 | `/skills` | Skill catalogue and publication |

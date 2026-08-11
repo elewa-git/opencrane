@@ -42,10 +42,10 @@ runtime emits external_action candidate
 OpenCrane verifies run proof and arguments digest
        │
        ▼
-save one Preparing tool invocation ──► durable approval request when required
+save one Preparing tool invocation ──► linked participant elicitation when required
        │
        ▼
-owner approves ──► invocation becomes Ready
+selected participant approves ──► invocation becomes Ready
        │
        ▼
 server worker claims and calls Obot once
