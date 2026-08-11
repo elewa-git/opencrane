@@ -3,7 +3,7 @@ import { Prisma, type PrismaClient } from "@prisma/client";
 import type { JsonValue } from "@opencrane/util";
 
 import { PrismaToolInvocationRepository } from "./prisma-tool-invocation-repository.js";
-import { ToolInvocationStates } from "./tool-invocation-lifecycle.types.js";
+import { TOOL_INVOCATION_PREPARATION_POLICY, ToolInvocationStates } from "./tool-invocation-lifecycle.types.js";
 import { ToolInvocationEventTypes, ToolInvocationRunRecoveryEnterResults, type ToolInvocationAdmissionResult, type ToolInvocationClaim, type ToolInvocationClaimResult, type ToolInvocationCompletionResult, type ToolInvocationIntent, type ToolInvocationLifecycleEvent, type ToolInvocationLifecycleEventSink, type ToolInvocationPreparationPolicy, type ToolInvocationRecord, type ToolInvocationRecoveryEvent, type ToolInvocationRecoveryEventSink, type ToolInvocationRunRecoveryAuthority, type ToolInvocationUnitOfWork, type ToolResultDeliveryPayload } from "./tool-invocation.types.js";
 
 /** Safe failure category emitted when the provider outcome cannot be proven. */
@@ -118,7 +118,7 @@ export class PrismaToolInvocationUnitOfWork implements ToolInvocationUnitOfWork
 			if (invocation === null) return { outcome: "missing" };
 			const payload: ToolResultDeliveryPayload = { toolInvocationId: invocation.toolInvocationId, outcome: "failed", failureCode };
 			const completed = await repository.complete(claim, payload, now);
-			if (completed.outcome === "completed") await _appendLifecycleEvent(lifecycleEvents, transaction, _failedEvent(completed.invocation, completed.invocation.failureCode ?? "external_action_failed", false, 3));
+			if (completed.outcome === "completed") await _appendLifecycleEvent(lifecycleEvents, transaction, _failedEvent(completed.invocation, completed.invocation.failureCode ?? "external_action_failed", false, TOOL_INVOCATION_PREPARATION_POLICY.attemptLimit));
 			return completed;
 		});
 	}
@@ -135,7 +135,7 @@ export class PrismaToolInvocationUnitOfWork implements ToolInvocationUnitOfWork
 			if (!transition.changed || transition.invocation === null) return transition.invocation;
 			const invocation = transition.invocation;
 			const retrying = invocation.state === ToolInvocationStates.Ready || invocation.state === ToolInvocationStates.Reconciling;
-			await _appendLifecycleEvent(lifecycleEvents, transaction, _failedEvent(invocation, _AMBIGUOUS_FAILURE_CODE, retrying, 3));
+			await _appendLifecycleEvent(lifecycleEvents, transaction, _failedEvent(invocation, _AMBIGUOUS_FAILURE_CODE, retrying, TOOL_INVOCATION_PREPARATION_POLICY.attemptLimit));
 			if (invocation.state === ToolInvocationStates.RecoveryRequired) await _enterRecoveryRequired(runRecovery, recoveryEvents, transaction, invocation);
 			return invocation;
 		});
@@ -153,7 +153,7 @@ export class PrismaToolInvocationUnitOfWork implements ToolInvocationUnitOfWork
 			if (!transition.changed || transition.invocation === null) return transition.invocation;
 			const invocation = transition.invocation;
 			const retrying = invocation.state === ToolInvocationStates.Ready || invocation.state === ToolInvocationStates.Reconciling;
-			await _appendLifecycleEvent(lifecycleEvents, transaction, _failedEvent(invocation, _START_EVENT_FAILURE_CODE, retrying, 3));
+			await _appendLifecycleEvent(lifecycleEvents, transaction, _failedEvent(invocation, _START_EVENT_FAILURE_CODE, retrying, TOOL_INVOCATION_PREPARATION_POLICY.attemptLimit));
 			if (invocation.state === ToolInvocationStates.RecoveryRequired) await _enterRecoveryRequired(runRecovery, recoveryEvents, transaction, invocation);
 			return invocation;
 		});
@@ -171,7 +171,7 @@ export class PrismaToolInvocationUnitOfWork implements ToolInvocationUnitOfWork
 			if (!transition.changed || transition.invocation === null) return transition.invocation;
 			const invocation = transition.invocation;
 			const retrying = invocation.state === ToolInvocationStates.Ready || invocation.state === ToolInvocationStates.Reconciling;
-			await _appendLifecycleEvent(lifecycleEvents, transaction, _failedEvent(invocation, _EXPIRED_CLAIM_FAILURE_CODE, retrying, 3));
+			await _appendLifecycleEvent(lifecycleEvents, transaction, _failedEvent(invocation, _EXPIRED_CLAIM_FAILURE_CODE, retrying, TOOL_INVOCATION_PREPARATION_POLICY.attemptLimit));
 			if (invocation.state === ToolInvocationStates.RecoveryRequired) await _enterRecoveryRequired(runRecovery, recoveryEvents, transaction, invocation);
 			return invocation;
 		});
@@ -214,7 +214,7 @@ async function _appendLifecycleEvent(sink: ToolInvocationLifecycleEventSink, tra
 /** Append visible manual-recovery evidence or roll back the owning transition. */
 async function _appendRecoveryEvent(sink: ToolInvocationRecoveryEventSink, transaction: Prisma.TransactionClient, invocation: ToolInvocationRecord): Promise<void>
 {
-	const event: ToolInvocationRecoveryEvent = { runId: invocation.runId, expectedAttempt: invocation.attempt, toolInvocationId: invocation.toolInvocationId, preparationRetryCount: invocation.preparationAttempt, preparationRetryLimit: 3, providerOutcome: "unknown_after_dispatch" };
+	const event: ToolInvocationRecoveryEvent = { runId: invocation.runId, expectedAttempt: invocation.attempt, toolInvocationId: invocation.toolInvocationId, preparationRetryCount: invocation.preparationAttempt, preparationRetryLimit: TOOL_INVOCATION_PREPARATION_POLICY.attemptLimit, providerOutcome: "unknown_after_dispatch" };
 	if (!await sink.appendInTransaction(transaction, event)) throw new Error("tool recovery state requires its canonical recovery event");
 }
 

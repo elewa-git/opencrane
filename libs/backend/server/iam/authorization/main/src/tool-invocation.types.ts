@@ -1,6 +1,6 @@
 import type { JsonValue } from "@opencrane/util";
 
-import type { ExternalActionClaimKinds, ExternalActionRecoveryModes, ToolInvocationStates } from "./tool-invocation-lifecycle.types.js";
+import { TOOL_INVOCATION_PREPARATION_POLICY, type ExternalActionClaimKinds, type ExternalActionRecoveryModes, type ToolInvocationStates } from "./tool-invocation-lifecycle.types.js";
 
 /** Fixed product policy for provider-free preparation recovery. */
 export interface ToolInvocationPreparationPolicy
@@ -200,7 +200,7 @@ export interface ToolInvocationRecoveryEvent
 	/** Provider-free preparation attempts consumed before dispatch. */
 	readonly preparationRetryCount: number;
 	/** Fixed provider-free preparation attempt limit. */
-	readonly preparationRetryLimit: 3;
+	readonly preparationRetryLimit: typeof TOOL_INVOCATION_PREPARATION_POLICY.attemptLimit;
 	/** Fixed safe classification, never a provider message or body. */
 	readonly providerOutcome: "unknown_after_dispatch";
 }

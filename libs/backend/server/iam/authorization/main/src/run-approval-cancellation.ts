@@ -3,7 +3,7 @@ import { AgentRunState, ApprovalRequestState, ExternalActionClaimKind, ExternalA
 import { __DigestCanonicalJson } from "./canonical-json-digest.js";
 import type { CancelPendingRunApprovalAuthorityCommand, CancelPendingRunApprovalAuthorityResult, RunApprovalCancellationRepository, RunApprovalCancellationUnitOfWork, RunCancellationToolInvocation } from "./run-approval-cancellation.types.js";
 import { __PlanToolInvocationLifecycle } from "./tool-invocation-lifecycle.js";
-import { ExternalActionClaimKinds, ExternalActionRecoveryModes, ToolInvocationLifecycleActions, ToolInvocationLifecycleEvents, ToolInvocationStates } from "./tool-invocation-lifecycle.types.js";
+import { ExternalActionClaimKinds, ExternalActionRecoveryModes, TOOL_INVOCATION_PREPARATION_POLICY, ToolInvocationLifecycleActions, ToolInvocationLifecycleEvents, ToolInvocationStates } from "./tool-invocation-lifecycle.types.js";
 
 /** Provider-free or unclaimed ToolInvocation states cancellation may truthfully close. */
 const _CANCELLABLE_INVOCATION_STATES: readonly ToolInvocationState[] = [ToolInvocationState.Preparing, ToolInvocationState.AwaitingApproval, ToolInvocationState.Ready, ToolInvocationState.Reconciling, ToolInvocationState.RecoveryRequired];
@@ -71,7 +71,7 @@ export class PrismaRunApprovalCancellationRepository implements RunApprovalCance
 	{
 		for (const invocation of invocations)
 		{
-			const action = __PlanToolInvocationLifecycle({ state: invocation.state, event: ToolInvocationLifecycleEvents.Cancelled, recoveryMode: invocation.recoveryMode, claimKind: invocation.claimKind, preparationAttempt: invocation.preparationAttempt, preparationAttemptLimit: 3, withinPreparationDeadline: invocation.retryDeadlineAt.getTime() > now.getTime() });
+			const action = __PlanToolInvocationLifecycle({ state: invocation.state, event: ToolInvocationLifecycleEvents.Cancelled, recoveryMode: invocation.recoveryMode, claimKind: invocation.claimKind, preparationAttempt: invocation.preparationAttempt, preparationAttemptLimit: TOOL_INVOCATION_PREPARATION_POLICY.attemptLimit, withinPreparationDeadline: invocation.retryDeadlineAt.getTime() > now.getTime() });
 			if (action !== ToolInvocationLifecycleActions.Fail) throw new Error("run cancellation attempted to close provider-active invocation work");
 			const failed = await this._transaction.toolInvocation.updateMany({ where: { id: invocation.id, runId, attempt, state: _STATE_TO_PRISMA[invocation.state], revision: invocation.revision, claimKind: null, run: { is: { attempt, state: AgentRunState.Cancelling } } }, data: { state: ToolInvocationState.Failed, result: Prisma.DbNull, failureCode: "run_cancelled", completedAt: now, revision: { increment: 1 } } });
 			if (failed.count !== 1) throw new Error("run cancellation lost an exact cancellable invocation fence");

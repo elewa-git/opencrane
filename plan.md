@@ -427,8 +427,8 @@ The legacy 0.7 route-expiry replacement is approved and
 implemented: migrated route ids, endpoint/registration coordinates, prior revocation, and exact
 expiry evidence survive as permanently inactive rows, while startup reconciliation creates the
 sole usable stable receiver route. Fresh 0.8 and migrated 0.7 databases converge under the live
-PostgreSQL test. F1.4 remains in progress until the rebased PR head passes live CI and merges; live
-vendor-runtime qualification of Obot response behavior remains tracked separately under #337.
+PostgreSQL test. F1.4 remains in progress until the rebased PR head passes live CI and merges. #337
+remains LiteLLM-only; retirement and replacement of the remaining Obot path is tracked by #592.
 
 Track F1 closes [#351](https://github.com/elewa-git/opencrane/issues/351),
 [#600](https://github.com/elewa-git/opencrane/issues/600),

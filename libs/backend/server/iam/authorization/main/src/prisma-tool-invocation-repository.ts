@@ -4,11 +4,8 @@ import type { JsonValue } from "@opencrane/util";
 
 import { __DigestCanonicalJson } from "./canonical-json-digest.js";
 import { __PlanToolInvocationLifecycle } from "./tool-invocation-lifecycle.js";
-import { ExternalActionClaimKinds, ExternalActionRecoveryModes, ToolInvocationLifecycleActions, ToolInvocationLifecycleEvents, ToolInvocationStates } from "./tool-invocation-lifecycle.types.js";
+import { ExternalActionClaimKinds, ExternalActionRecoveryModes, TOOL_INVOCATION_PREPARATION_POLICY, ToolInvocationLifecycleActions, ToolInvocationLifecycleEvents, ToolInvocationStates } from "./tool-invocation-lifecycle.types.js";
 import type { ToolInvocationAdmissionResult, ToolInvocationClaim, ToolInvocationClaimResult, ToolInvocationCompletionResult, ToolInvocationIntent, ToolInvocationPreparationPolicy, ToolInvocationRecord, ToolInvocationTransactionRepository, ToolInvocationTransitionResult, ToolResultDeliveryPayload } from "./tool-invocation.types.js";
-
-/** Fixed maximum number of pre-dispatch attempts. */
-const _PREPARATION_ATTEMPT_LIMIT = 3;
 
 /** Map persistence states onto the dependency-light lifecycle vocabulary. */
 const _STATE_FROM_PRISMA: Readonly<Record<ToolInvocationState, ToolInvocationStates>> = {
@@ -94,6 +91,14 @@ function _recoveryKeyIsValid(intent: ToolInvocationIntent): boolean
 	return typeof intent.recoveryKey === "string" && intent.recoveryKey.length > 0 && intent.recoveryKey.length <= 256;
 }
 
+/** Require every caller to use the one approved provider-free preparation policy. */
+function _isFixedPreparationPolicy(policy: ToolInvocationPreparationPolicy): boolean
+{
+	return policy.attemptLimit === TOOL_INVOCATION_PREPARATION_POLICY.attemptLimit
+		&& policy.retryWindowMilliseconds === TOOL_INVOCATION_PREPARATION_POLICY.retryWindowMilliseconds
+		&& policy.retryDelayMilliseconds === TOOL_INVOCATION_PREPARATION_POLICY.retryDelayMilliseconds;
+}
+
 /** Return the exact persistence state owned by one claim kind. */
 function _claimedState(kind: ExternalActionClaimKinds): ToolInvocationState
 {
@@ -121,7 +126,7 @@ function _plan(row: ToolInvocationRow, event: ToolInvocationLifecycleEvents, now
 		recoveryMode: _RECOVERY_FROM_PRISMA[row.recoveryMode],
 		claimKind: _claimKind(row.claimKind),
 		preparationAttempt: row.preparationAttempt,
-		preparationAttemptLimit: _PREPARATION_ATTEMPT_LIMIT,
+		preparationAttemptLimit: TOOL_INVOCATION_PREPARATION_POLICY.attemptLimit,
 		withinPreparationDeadline: row.retryDeadlineAt.getTime() > now.getTime(),
 	});
 }
@@ -170,7 +175,7 @@ export class PrismaToolInvocationRepository implements ToolInvocationTransaction
 	/** Admit one candidate inside an existing caller-owned serializable transaction. */
 	static async admitInTransaction(transaction: Prisma.TransactionClient, intent: ToolInvocationIntent, now: Date, policy: ToolInvocationPreparationPolicy): Promise<ToolInvocationAdmissionResult>
 	{
-		if (!_recoveryKeyIsValid(intent) || policy.attemptLimit !== _PREPARATION_ATTEMPT_LIMIT || policy.retryWindowMilliseconds !== 300_000) return { outcome: "conflict" };
+		if (!_recoveryKeyIsValid(intent) || !_isFixedPreparationPolicy(policy)) return { outcome: "conflict" };
 		const key = { runId: intent.runId, attempt: intent.attempt, candidateId: intent.requestIdentity.candidateId };
 		const existing = await transaction.toolInvocation.findUnique({ where: { runId_attempt_candidateId: key } });
 		if (existing !== null) return existing.requestFingerprint === intent.requestFingerprint ? { outcome: "idempotent", invocation: _record(existing) } : { outcome: "conflict" };
@@ -271,7 +276,7 @@ export class PrismaToolInvocationRepository implements ToolInvocationTransaction
 	{
 		const invocation = await this._transaction.toolInvocation.findUnique({ where: { id: invocationId } });
 		if (invocation === null) return { changed: false, invocation: null };
-		if (policy.attemptLimit !== _PREPARATION_ATTEMPT_LIMIT || policy.retryWindowMilliseconds !== 300_000) return { changed: false, invocation: _record(invocation) };
+		if (!_isFixedPreparationPolicy(policy)) return { changed: false, invocation: _record(invocation) };
 		const action = __PlanToolInvocationLifecycle({ state: _STATE_FROM_PRISMA[invocation.state], event: ToolInvocationLifecycleEvents.PreparationFailed, recoveryMode: _RECOVERY_FROM_PRISMA[invocation.recoveryMode], claimKind: _claimKind(invocation.claimKind), preparationAttempt: invocation.preparationAttempt, preparationAttemptLimit: policy.attemptLimit, withinPreparationDeadline: invocation.retryDeadlineAt.getTime() > now.getTime() });
 		const state = _targetState(action);
 		if (state !== ToolInvocationState.Preparing && state !== ToolInvocationState.Failed) return { changed: false, invocation: _record(invocation) };

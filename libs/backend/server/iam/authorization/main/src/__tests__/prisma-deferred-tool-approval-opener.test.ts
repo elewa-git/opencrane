@@ -95,7 +95,7 @@ describe("Prisma deferred-tool approval opener", function _describeOpener()
 	it("fails an invocation when transaction recovery finds no linked approval", async function _failsUnlinkedInvocation()
 	{
 		const recoveryTransaction = { approvalRequest: { findFirst: vi.fn(async function _approval() { return null; }) } };
-		const terminalisationTransaction = { toolInvocation: { findUnique: vi.fn(async function _invocation() { return _Invocation(); }), updateMany: vi.fn(async function _fail() { return { count: 1 }; }) }, toolResultDelivery: { create: vi.fn() } };
+		const terminalisationTransaction = { approvalRequest: { findFirst: vi.fn(async function _approval() { return null; }) }, toolInvocation: { findUnique: vi.fn(async function _invocation() { return _Invocation(); }), updateMany: vi.fn(async function _fail() { return { count: 1 }; }) }, toolResultDelivery: { create: vi.fn() } };
 		const prisma = {
 			$transaction: vi.fn()
 				.mockRejectedValueOnce(new Error("connection lost"))
@@ -107,10 +107,26 @@ describe("Prisma deferred-tool approval opener", function _describeOpener()
 		expect(terminalisationTransaction.toolInvocation.updateMany).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ failureCode: "approval_defer_failed" }) }));
 	});
 
+	it("rechecks linkage before terminalising after the first recovery read fails", async function _rechecksLinkedApproval()
+	{
+		const failedReadTransaction = { approvalRequest: { findFirst: vi.fn(async function _approval() { throw new Error("recovery read unavailable"); }) } };
+		const linkedTransaction = { approvalRequest: { findFirst: vi.fn(async function _approval() { return { id: "interrupt-1" }; }) }, toolInvocation: { updateMany: vi.fn() } };
+		const prisma = {
+			$transaction: vi.fn()
+				.mockRejectedValueOnce(new Error("connection lost after commit"))
+				.mockImplementationOnce(async function _recover(callback) { return callback(failedReadTransaction); })
+				.mockImplementationOnce(async function _recheck(callback) { return callback(linkedTransaction); }),
+		};
+
+		await expect(__OpenDeferredToolApproval(prisma as never, _Command(), _Logger() as never)).resolves.toBe(true);
+		expect(linkedTransaction.approvalRequest.findFirst).toHaveBeenCalledWith({ where: { id: "interrupt-1", runId: "run-1", attempt: 1, toolInvocationRowId: "invocation-1" } });
+		expect(linkedTransaction.toolInvocation.updateMany).not.toHaveBeenCalled();
+	});
+
 	it("surfaces an unresolved invocation when recovery cannot prove or terminalise it", async function _surfacesUnresolvedRecovery()
 	{
 		const recoveryTransaction = { approvalRequest: { findFirst: vi.fn(async function _approval() { throw new Error("recovery read unavailable"); }) } };
-		const terminalisationTransaction = { toolInvocation: { updateMany: vi.fn(async function _fail() { throw new Error("terminalisation unavailable"); }) } };
+		const terminalisationTransaction = { approvalRequest: { findFirst: vi.fn(async function _approval() { return null; }) }, toolInvocation: { updateMany: vi.fn(async function _fail() { throw new Error("terminalisation unavailable"); }) } };
 		const prisma = {
 			$transaction: vi.fn()
 				.mockRejectedValueOnce(new Error("connection lost"))

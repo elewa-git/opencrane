@@ -159,14 +159,16 @@ async function _openDeferredToolApproval(command: OpenDeferredToolApprovalComman
 			logger.error({ err: recoveryReadError, ...evidence }, "deferred approval recovery read failed");
 		}
 
-		// 4. Otherwise close the invocation so the same side effect can never be dispatched ambiguously.
+		// 4. Recheck linkage and close the invocation inside one transaction. A transient failure in the
+		// first recovery read can never turn an already-committed approval into a failed invocation.
 		try
 		{
-			await transaction(async function _terminalise(repository)
+			return await transaction(async function _terminalise(repository): Promise<boolean>
 			{
-					if (!await repository.terminaliseAwaitingApproval(command.invocationId, "approval_defer_failed", command.now)) throw new Error("deferred approval invocation is no longer awaiting approval");
+				if (await repository.hasLinkedApproval(command)) return true;
+				if (!await repository.terminaliseAwaitingApproval(command.invocationId, "approval_defer_failed", command.now)) throw new Error("deferred approval invocation is no longer awaiting approval");
+				return false;
 			});
-			return false;
 		}
 		catch (terminalisationError)
 		{

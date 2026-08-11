@@ -1,3 +1,12 @@
+/**
+ * Fixed provider-free preparation policy shared by admission, scheduling, lifecycle, and events.
+ *
+ * A provider adapter has not started a request during this phase, so OpenCrane may try at most
+ * three times within five minutes with a one-second delay. Every production owner consumes this
+ * frozen value so durable state and user-visible retry evidence cannot drift.
+ */
+export const TOOL_INVOCATION_PREPARATION_POLICY = Object.freeze({ attemptLimit: 3, retryWindowMilliseconds: 300_000, retryDelayMilliseconds: 1_000 } as const);
+
 /** Durable states owned by the external-action ToolInvocation authority. */
 export enum ToolInvocationStates
 {

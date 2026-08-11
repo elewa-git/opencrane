@@ -4,7 +4,7 @@ import { AgentRunState as PrismaAgentRunState, AgentRunTerminalReason, Prisma, R
 
 import { AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, AGENT_RUNTIME_PROTOCOL_V1, MANAGED_AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, ___IsAgentRuntimeServiceAccountName, ___IsManagedAgentRuntimeServiceAccountName, type CancelAttemptCommand, type CompiledRunInput, type ResumeAttemptCommand, type RunInputSnapshot, type RuntimeAssignment, type RuntimeAssignmentIdentity, type RuntimeCandidate, type RuntimeCommand, type RuntimeCommandEnvelope, type RuntimeExternalActionCandidate, type RuntimeStreamOpen } from "@opencrane/contracts";
 import { ___DoWithTrace } from "@opencrane/backend/observability";
-import { ExternalActionRecoveryModes, __AdmitPreparingToolInvocationInTransaction, __DigestCanonicalJson, __ValidateDeferredToolArguments } from "@opencrane/backend/server/iam/authorization";
+import { ExternalActionRecoveryModes, TOOL_INVOCATION_PREPARATION_POLICY, __AdmitPreparingToolInvocationInTransaction, __DigestCanonicalJson, __ValidateDeferredToolArguments } from "@opencrane/backend/server/iam/authorization";
 import type { ToolInvocationIntent } from "@opencrane/backend/server/iam/authorization";
 
 import { _ApplyRuntimeCandidateSideEffects, _RuntimeCandidateRequiresEventReporter, RuntimeCandidateSideEffectDeniedError } from "./prisma-runtime-candidate-side-effects.js";
@@ -16,9 +16,6 @@ import { _ParseRuntimeResumeInput } from "./runtime-resume-input.js";
 import { __AdmitRuntimeCandidate, __AdmitRuntimeCommand } from "./runtime-protocol-authority.js";
 import type { RuntimeAdmissionRunState, RuntimeAttemptAuthority, RuntimeProtocolClock } from "./runtime-protocol-authority.types.js";
 import type { RunInputCompiler, RuntimeApprovalExpiry, RuntimeCandidateDispatchResult, RuntimeDispatchAuthorityConfig, RuntimeEventReporter, RuntimeStreamWorkloadIdentity } from "./prisma-runtime-dispatch-authority.types.js";
-
-/** Fixed provider-free preparation policy approved for every durable external action. */
-const _PREPARATION_POLICY = { attemptLimit: 3, retryWindowMilliseconds: 300_000, retryDelayMilliseconds: 1_000 } as const;
 
 /** Immutable durable facts loaded and locked for one connected runtime Pod. */
 interface RuntimeDispatchContext
@@ -282,7 +279,7 @@ async function _admitCandidate(prisma: PrismaClient, config: RuntimeDispatchAuth
 			{
 				const intent = await _toolInvocationIntent(transaction, context, stream.runtimeInstanceId, candidate, compileRunInput);
 				if (intent === null) return { accepted: false, reason: "external_action_invalid" };
-				const durable = await __AdmitPreparingToolInvocationInTransaction(transaction, intent, new Date(clock.nowEpochMs()), _PREPARATION_POLICY);
+				const durable = await __AdmitPreparingToolInvocationInTransaction(transaction, intent, new Date(clock.nowEpochMs()), TOOL_INVOCATION_PREPARATION_POLICY);
 				if (durable.outcome === "conflict") return { accepted: false, reason: "external_action_conflict" };
 			}
 			// 2c. Apply transaction-local canonical event effects before accepting the id.

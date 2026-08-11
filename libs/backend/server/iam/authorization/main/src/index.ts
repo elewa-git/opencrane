@@ -30,7 +30,7 @@ export { PrismaToolInvocationUnitOfWork } from "./prisma-tool-invocation-unit-of
 export { ToolInvocationEventTypes, ToolInvocationRunRecoveryEnterResults } from "./tool-invocation.types.js";
 export type { AdmitPreparingToolInvocation, ToolInvocationAdmissionResult, ToolInvocationAdmissionUnitOfWork, ToolInvocationClaim, ToolInvocationClaimResult, ToolInvocationCompletionResult, ToolInvocationIntent, ToolInvocationLifecycleEvent, ToolInvocationLifecycleEventSink, ToolInvocationPreparationPolicy, ToolInvocationRecord, ToolInvocationRecoveryEvent, ToolInvocationRecoveryEventSink, ToolInvocationRequestIdentity, ToolInvocationRunRecoveryAuthority, ToolInvocationRunRecoveryCommand, ToolInvocationRunRecoveryEnterResult, ToolInvocationTransitionResult, ToolInvocationUnitOfWork, ToolResultDeliveryPayload } from "./tool-invocation.types.js";
 export { __PlanToolInvocationLifecycle } from "./tool-invocation-lifecycle.js";
-export { ExternalActionClaimKinds, ExternalActionRecoveryModes, ToolInvocationLifecycleActions, ToolInvocationLifecycleEvents, ToolInvocationStates } from "./tool-invocation-lifecycle.types.js";
+export { ExternalActionClaimKinds, ExternalActionRecoveryModes, TOOL_INVOCATION_PREPARATION_POLICY, ToolInvocationLifecycleActions, ToolInvocationLifecycleEvents, ToolInvocationStates } from "./tool-invocation-lifecycle.types.js";
 export type { ToolInvocationLifecycleInput } from "./tool-invocation-lifecycle.types.js";
 export { PrismaRuntimeAuthorityRepository } from "./prisma-runtime-authority.js";
 export { PrismaAuthorizationGrantRepository } from "./prisma-authorization-grants.js";

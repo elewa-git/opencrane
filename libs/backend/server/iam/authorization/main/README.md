@@ -102,6 +102,8 @@ carries a concrete, currently authorized human approval subject.
   canonical lifecycle event in the same transaction; its transaction repository remains
   package-private. Runs owns the injected run-state recovery port; authorization never writes
   `AgentRun.state` directly.
+- `TOOL_INVOCATION_PREPARATION_POLICY` — the one frozen provider-free retry policy consumed by
+  admission, scheduling, lifecycle decisions, cancellation, and durable recovery events.
 - `ShareAuthorizationScopeKinds` — the four domain scope categories that sharing accepts; the
   Prisma adapter translates them explicitly and rejects any unsupported stored category.
 - Contract types: `ResolveEffectiveAccessCommand`/`Result`, `AuthorizationGrantRepository`,
