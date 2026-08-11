@@ -5,7 +5,7 @@ import type { A2UIClientEvent, Types } from "@a2ui/angular/v0_8";
 import { AG_UI_A2UI_ENVELOPE_VERSION, AgUiA2uiSurfaceStates, type AgUiA2uiOperation } from "@opencrane/contracts";
 
 import { _ToA2uiDisplayedActionIntent } from "../a2ui-action-intent.js";
-import { _AdmitA2uiSurfacePresentation } from "../a2ui-admission.js";
+import { _AdmitA2uiSurfacePresentation, _ToPinnedA2uiOperations } from "../a2ui-admission.js";
 import { _OpenCraneA2uiCatalog } from "../a2ui.catalog.js";
 import { A2uiComponentNames, type A2uiSurfacePresentation } from "../a2ui.types.js";
 
@@ -87,11 +87,26 @@ describe("A2UI display admission", function _A2uiDisplayAdmission()
 
 describe("A2UI catalogue", function _A2uiCatalogue()
 {
-	it("contains exactly the nine pinned upstream visual contracts", function _ContainsExactCatalogue()
+	it("contains exactly the eleven v4 visual contracts backed by pinned upstream renderers", function _ContainsExactCatalogue()
 	{
 		const names = Object.keys(_OpenCraneA2uiCatalog()).sort();
 		expect(names).toEqual(Object.values(A2uiComponentNames).sort());
-		expect(names).toHaveLength(9);
+		expect(names).toHaveLength(11);
+		expect(names).toContain(A2uiComponentNames.SingleChoice);
+		expect(names).toContain(A2uiComponentNames.Select);
+	});
+
+	it("maps the two accepted one-value contracts onto the pinned choice processor", function _MapsChoiceVariants()
+	{
+		const properties = { selections: { literalArray: [] }, options: [{ label: { literalString: "One" }, value: "one" }], maxAllowedSelections: 1 };
+		const operations =
+		[
+			{ surfaceUpdate: { surfaceId: "surface-pricing", components: [{ id: "single", component: { SingleChoice: properties } }, { id: "select", component: { Select: properties } }] } }
+		] as unknown as readonly AgUiA2uiOperation[];
+		const mapped = _ToPinnedA2uiOperations(operations);
+
+		expect(mapped[0]).toEqual({ surfaceUpdate: { surfaceId: "surface-pricing", components: [{ id: "single", component: { MultipleChoice: properties } }, { id: "select", component: { MultipleChoice: properties } }] } });
+		expect(operations[0]).toHaveProperty("surfaceUpdate.components.0.component.SingleChoice");
 	});
 });
 

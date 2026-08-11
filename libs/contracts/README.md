@@ -74,7 +74,7 @@ runtime from silently interpreting a frozen snapshot with different assembly rul
   `___ParseAgUiA2uiEnvelope` — the versioned CUSTOM envelope, authoritative ten-state presentation
   lifecycle, and strict parser for governed A2UI surfaces. Each envelope binds conversation, run,
   message, surface, and monotonic sequence coordinates; admits only ordered upstream
-  `beginRendering`, `surfaceUpdate`, and `dataModelUpdate` operations from the nine-name upstream
+  `beginRendering`, `surfaceUpdate`, and `dataModelUpdate` operations from the accepted eleven-name
   catalogue; and may carry one bounded display-safe reason. These are presentation facts only and
   never grant an action or let a client infer lifecycle authority.
 - `AG_UI_CHILD_RUN_ENVELOPE_VERSION` — versioned CUSTOM envelope for lossy immediate-child terminal

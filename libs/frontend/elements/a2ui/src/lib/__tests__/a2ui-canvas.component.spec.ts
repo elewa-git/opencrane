@@ -242,12 +242,13 @@ describe("A2UI canvas DOM contract", function _A2uiCanvasDomContract()
 
 	it("preserves the focused input across progressive updates with stable component ids", async function _PreservesProgressiveFocus()
 	{
-		const fixture = await _createFixture(_presentation({ state: AgUiA2uiSurfaceStates.Streaming }));
+		const initialOperations = _surfaceOperations("Apply the proposed pricing?");
+		const fixture = await _createFixture(_presentation({ state: AgUiA2uiSurfaceStates.Streaming, operations: initialOperations }));
 		const focusedInput = _requiredElement<HTMLInputElement>(fixture, "input");
 		focusedInput.focus();
 		expect(document.activeElement).toBe(focusedInput);
 
-		await _adopt(fixture, _presentation({ sequence: 2, state: AgUiA2uiSurfaceStates.Ready, operations: _surfaceOperations("Pricing evidence is ready.", false) }));
+		await _adopt(fixture, _presentation({ sequence: 2, state: AgUiA2uiSurfaceStates.Ready, operations: [...initialOperations, ..._surfaceOperations("Pricing evidence is ready.", false)] }));
 		const updatedInput = _requiredElement<HTMLInputElement>(fixture, "input");
 		expect(updatedInput).toBe(focusedInput);
 		expect(document.activeElement).toBe(focusedInput);

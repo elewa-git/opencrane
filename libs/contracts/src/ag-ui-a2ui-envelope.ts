@@ -16,7 +16,7 @@ const _MAX_A2UI_IDENTIFIER_LENGTH = 256;
 const _MAX_A2UI_REASON_LENGTH = 2000;
 
 /** Exact upstream component wrappers admitted by OpenCrane's governed catalogue. */
-const _A2UI_COMPONENT_NAMES = new Set<string>(["Text", "Button", "TextField", "MultipleChoice", "Slider", "DateTimeInput", "Image", "Card", "List"]);
+const _A2UI_COMPONENT_NAMES = new Set<string>(["Text", "Button", "TextField", "SingleChoice", "MultipleChoice", "Select", "Slider", "DateTimeInput", "Image", "Card", "List"]);
 
 /** Exact authoritative presentation states admitted across the public projection boundary. */
 const _A2UI_SURFACE_STATES = new Set<string>(Object.values(AgUiA2uiSurfaceStates));
@@ -29,7 +29,7 @@ const _VALIDATE_A2UI_OPERATION = new Ajv({ strict: false }).compile(Schemas.A2UI
  *
  * The pinned upstream schema validates complete component properties and data updates. OpenCrane's
  * additional boundary admits only its exact envelope, operation vocabulary, surface coordinate,
- * bounds, and nine-name catalogue before those values can reach a renderer.
+ * bounds, and eleven-name catalogue before those values can reach a renderer.
  */
 export function ___ParseAgUiA2uiEnvelope(value: unknown): AgUiA2uiEnvelope
 {
@@ -45,10 +45,26 @@ export function ___ParseAgUiA2uiEnvelope(value: unknown): AgUiA2uiEnvelope
 /** Whether one operation is singular, surface-bound, bounded, and catalogue-safe. */
 function _A2uiOperation(value: unknown, surfaceId: string): boolean
 {
-	if (!_Record(value) || Object.keys(value).length !== 1 || !_VALIDATE_A2UI_OPERATION(value)) return false;
+	if (!_Record(value) || Object.keys(value).length !== 1 || !_VALIDATE_A2UI_OPERATION(_UpstreamA2uiOperation(value))) return false;
 	if (value["beginRendering"] !== undefined) return _BeginRendering(value["beginRendering"], surfaceId);
 	if (value["dataModelUpdate"] !== undefined) return _DataModelUpdate(value["dataModelUpdate"], surfaceId);
 	return _SurfaceUpdate(value["surfaceUpdate"], surfaceId);
+}
+
+/** Map the two accepted one-value choice aliases onto the pinned upstream property schema. */
+function _UpstreamA2uiOperation(value: Record<string, unknown>): Record<string, unknown>
+{
+	const update = value["surfaceUpdate"];
+	if (!_Record(update) || !Array.isArray(update["components"])) return value;
+	const components = update["components"].map(function _UpstreamComponent(component): unknown
+	{
+		if (!_Record(component) || !_Record(component["component"])) return component;
+		const wrapper = component["component"];
+		const name = Object.keys(wrapper)[0];
+		if (name !== "SingleChoice" && name !== "Select") return component;
+		return { ...component, component: { MultipleChoice: wrapper[name] } };
+	});
+	return { surfaceUpdate: { ...update, components } };
 }
 
 /** Whether one begin-rendering operation uses only the pinned upstream fields. */
@@ -96,7 +112,10 @@ function _A2uiComponent(value: unknown): boolean
 	if (!_Record(value) || !_ExactKeys(value, ["id", "component"], ["weight"]) || !_Identifier(value["id"]) || !_Record(value["component"])) return false;
 	if (value["weight"] !== undefined && (typeof value["weight"] !== "number" || !Number.isFinite(value["weight"]))) return false;
 	const names = Object.keys(value["component"]);
-	return names.length === 1 && _A2UI_COMPONENT_NAMES.has(names[0] ?? "") && _Record(value["component"][names[0] ?? ""]);
+	const name = names[0] ?? "";
+	const properties = value["component"][name];
+	if (names.length !== 1 || !_A2UI_COMPONENT_NAMES.has(name) || !_Record(properties)) return false;
+	return name !== "SingleChoice" && name !== "Select" || properties["maxAllowedSelections"] === 1;
 }
 
 /** Whether a stable coordinate is present, bounded, and free from control characters. */

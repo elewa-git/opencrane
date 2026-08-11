@@ -5,7 +5,7 @@ import { MessageProcessor, Surface, type A2UIClientEvent } from "@a2ui/angular/v
 import { AgUiA2uiSurfaceStates } from "@opencrane/contracts";
 
 import { _ToA2uiDisplayedActionIntent } from "./a2ui-action-intent.js";
-import { _AdmitA2uiSurfacePresentation } from "./a2ui-admission.js";
+import { _AdmitA2uiSurfacePresentation, _ToPinnedA2uiOperations } from "./a2ui-admission.js";
 import type { A2uiDisplayedActionIntent, A2uiSurfacePresentation } from "./a2ui.types.js";
 
 /** Human-readable labels for every finite presentation lifecycle. */
@@ -68,6 +68,9 @@ export class A2uiCanvasComponent
 
 	/** Highest sequence adopted for the current stable presentation identity. */
 	private _lastSequence = -1;
+
+	/** Number of materialized operations already applied to the current vendor surface. */
+	private _appliedOperationCount = 0;
 
 	/** Monotonic presentation used by both rendering and displayed-action intent mapping. */
 	protected readonly currentPresentation = computed(function _CurrentPresentation(this: A2uiCanvasComponent): A2uiSurfacePresentation
@@ -151,6 +154,7 @@ export class A2uiCanvasComponent
 			this._processor.clearSurfaces();
 			this._presentationIdentity = identity;
 			this._lastSequence = -1;
+			this._appliedOperationCount = 0;
 		}
 
 		// 2. Ignore duplicate and stale delivery because the state layer will replay a newer canonical
@@ -163,9 +167,10 @@ export class A2uiCanvasComponent
 
 		// 3. Fail closed before the vendor processor sees an unknown component, foreign surface id, or
 		// malformed operation envelope. Unsupported content never appears in the placeholder.
-		if (presentation.state === AgUiA2uiSurfaceStates.Unsupported || !_AdmitA2uiSurfacePresentation(presentation))
+		if (presentation.state === AgUiA2uiSurfaceStates.Unsupported || presentation.operations.length < this._appliedOperationCount || !_AdmitA2uiSurfacePresentation(presentation))
 		{
 			this._processor.clearSurfaces();
+			this._appliedOperationCount = 0;
 			this._adoptedPresentation.set(presentation);
 			this._rejected.set(true);
 			return;
@@ -175,13 +180,16 @@ export class A2uiCanvasComponent
 		// rejection becomes the same non-disclosing unsupported state instead of an Angular error.
 		try
 		{
-			this._processor.processMessages([...presentation.operations]);
+			const pending = presentation.operations.slice(this._appliedOperationCount);
+			this._processor.processMessages(_ToPinnedA2uiOperations(pending));
+			this._appliedOperationCount = presentation.operations.length;
 			this._adoptedPresentation.set(presentation);
 			this._rejected.set(false);
 		}
 		catch
 		{
 			this._processor.clearSurfaces();
+			this._appliedOperationCount = 0;
 			this._adoptedPresentation.set(presentation);
 			this._rejected.set(true);
 		}

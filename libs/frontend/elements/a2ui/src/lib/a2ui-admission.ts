@@ -62,6 +62,24 @@ export function _AdmitA2uiSurfacePresentation(presentation: A2uiSurfacePresentat
 	return true;
 }
 
+/** Translate accepted v4 choice variants into the pinned upstream processor vocabulary. */
+export function _ToPinnedA2uiOperations(operations: readonly AgUiA2uiOperation[]): AgUiA2uiOperation[]
+{
+	return operations.map(function _PinnedOperation(operation): AgUiA2uiOperation
+	{
+		if (!("surfaceUpdate" in operation)) return operation;
+		const components = operation.surfaceUpdate.components.map(function _PinnedComponent(component): unknown
+		{
+			if (!_isRecord(component) || !_isRecord(component["component"])) return component;
+			const wrapper = component["component"];
+			const name = Object.keys(wrapper)[0];
+			if (name !== A2uiComponentNames.SingleChoice && name !== A2uiComponentNames.Select) return component;
+			return { ...component, component: { MultipleChoice: wrapper[name] } };
+		});
+		return { surfaceUpdate: { ...operation.surfaceUpdate, components } } as AgUiA2uiOperation;
+	});
+}
+
 /** Whether a protocol operation is singular, surface-bound, bounded, and catalogue-safe. */
 function _isAdmittedOperation(operation: AgUiA2uiOperation, surfaceId: string): boolean
 {
@@ -100,6 +118,12 @@ function _hasOnlyAdmittedComponents(components: readonly unknown[]): boolean
 		}
 		const componentNames = Object.keys(component["component"]);
 		if (componentNames.length !== 1 || !_ADMITTED_COMPONENT_NAMES.has(componentNames[0]))
+		{
+			return false;
+		}
+		const name = componentNames[0];
+		const properties = component["component"][name];
+		if ((name === A2uiComponentNames.SingleChoice || name === A2uiComponentNames.Select) && (!_isRecord(properties) || properties["maxAllowedSelections"] !== 1))
 		{
 			return false;
 		}

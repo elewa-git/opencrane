@@ -100,10 +100,13 @@ describe("AG-UI projection", function _Suite()
 		expect(Object.values(AgUiA2uiSurfaceStates)).toHaveLength(10);
 	});
 
-	it("rejects non-upstream aliases, foreign surfaces, extra fields, and unsafe reasons", function _RejectsGovernedA2uiDrift()
+	it("maps accepted choice variants onto the pinned schema and rejects protocol drift", function _RejectsGovernedA2uiDrift()
 	{
 		const base = { version: AG_UI_A2UI_ENVELOPE_VERSION, conversationId: "conversation-1", runId: "run-1", messageId: "message-1", surfaceId: "surface-1", sequence: 0, state: AgUiA2uiSurfaceStates.Streaming };
-		expect(() => ___ParseAgUiA2uiEnvelope({ ...base, operations: [{ surfaceUpdate: { surfaceId: "surface-1", components: [{ id: "choice-1", component: { SingleChoice: {} } }] } }] })).toThrow("operations");
+		const choice = { selections: { literalArray: [] }, options: [{ label: { literalString: "One" }, value: "one" }], maxAllowedSelections: 1 };
+		expect(___ParseAgUiA2uiEnvelope({ ...base, operations: [{ surfaceUpdate: { surfaceId: "surface-1", components: [{ id: "choice-1", component: { SingleChoice: choice } }, { id: "select-1", component: { Select: choice } }] } }] }).operations).toHaveLength(1);
+		expect(() => ___ParseAgUiA2uiEnvelope({ ...base, operations: [{ surfaceUpdate: { surfaceId: "surface-1", components: [{ id: "choice-1", component: { SingleChoice: { ...choice, maxAllowedSelections: 2 } } }] } }] })).toThrow("operations");
+		expect(() => ___ParseAgUiA2uiEnvelope({ ...base, operations: [{ surfaceUpdate: { surfaceId: "surface-1", components: [{ id: "choice-1", component: { Choice: choice } }] } }] })).toThrow("operations");
 		expect(() => ___ParseAgUiA2uiEnvelope({ ...base, operations: [{ beginRendering: { surfaceId: "surface-2", root: "root-1" } }] })).toThrow("operations");
 		expect(() => ___ParseAgUiA2uiEnvelope({ ...base, operations: [{ deleteSurface: { surfaceId: "surface-1" } }] })).toThrow("operations");
 		expect(() => ___ParseAgUiA2uiEnvelope({ ...base, operations: [{ dataModelUpdate: { surfaceId: "surface-1", contents: [{ key: "apiToken", valueString: "forbidden" }] } }] })).toThrow("operations");

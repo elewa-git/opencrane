@@ -13,7 +13,7 @@ this package then preserves the supplied operation order and renders one stable 
           │  typed presentation + ordered operations
           ▼
  ┌──────────────────────────────────┐
- │  <wo-a2ui-canvas>  ◄── HERE       │  render exact pinned nine-component catalogue
+ │  <wo-a2ui-canvas>  ◄── HERE       │  render exact accepted eleven-component catalogue
  └──────────────────────────────────┘
           │  coordinate-bound displayed action intent
           ▼
@@ -23,8 +23,10 @@ this package then preserves the supplied operation order and renders one stable 
 **In this flow:** the conversation projection and authenticated command path remain outside this
 presentational package.
 
-The catalogue admits exactly Text, Button, TextField, MultipleChoice, Slider, DateTimeInput, Image,
-Card, and List. Unknown or malformed components fail closed to a generic unsupported placeholder without
+The catalogue admits exactly Text, Button, TextField, SingleChoice, MultipleChoice, Select, Slider,
+DateTimeInput, Image, Card, and List. The two one-value v4 choice contracts reuse the constrained
+upstream `MultipleChoice` renderer and property schema; they do not introduce arbitrary renderer code.
+Unknown or malformed components fail closed to a generic unsupported placeholder without
 echoing payload data. Stable component ids preserve focus during progressive updates.
 
 ## Public surface
