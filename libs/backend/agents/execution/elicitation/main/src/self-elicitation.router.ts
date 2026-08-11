@@ -52,6 +52,30 @@ export function __CreateSelfElicitationRouter(dependencies: SelfElicitationRoute
 	return router;
 }
 
+/** Create the derived Activity index over canonical elicitation references. */
+export function __CreateSelfElicitationActivityRouter(dependencies: SelfElicitationRouterDependencies): Router
+{
+	const router = Router();
+	router.get("/elicitations", async function _ListActivity(request: Request, response: Response)
+	{
+		const caller = _RequireCaller(request, response, dependencies);
+		const limit = _ActivityLimit(request.query["limit"]);
+		if (caller === null) return;
+		if (limit === null) { _Respond(response, 400, "invalid_elicitation_activity_limit"); return; }
+		try
+		{
+			const elicitations = await dependencies.elicitations.listActivityOwned(caller.siloId, caller.subjectId, limit, dependencies.clock.now());
+			response.status(200).json({ elicitations });
+		}
+		catch (err)
+		{
+			dependencies.logger.error({ err, operation: "elicitation.activity", siloId: caller.siloId }, "Elicitation Activity read failed");
+			_Respond(response, 503, "elicitation_activity_unavailable");
+		}
+	});
+	return router;
+}
+
 /** Resolve the authenticated self caller or emit a bounded denial. */
 function _RequireCaller(request: Request, response: Response, dependencies: SelfElicitationRouterDependencies): SelfElicitationCaller | null
 {
@@ -66,6 +90,15 @@ function _Coordinates(request: Request): { readonly conversationId: string; read
 	const conversationId = request.params["conversationId"];
 	const requestId = request.params["requestId"];
 	return typeof conversationId === "string" && conversationId.trim().length > 0 && typeof requestId === "string" && requestId.trim().length > 0 ? { conversationId, requestId } : null;
+}
+
+/** Parse an optional bounded Activity page size. */
+function _ActivityLimit(value: unknown): number | null
+{
+	if (value === undefined) return 50;
+	if (typeof value !== "string" || !/^[1-9]\d*$/u.test(value)) return null;
+	const limit = Number(value);
+	return Number.isSafeInteger(limit) && limit <= 100 ? limit : null;
 }
 
 /** Parse the exact idempotent body without accepting authority coordinates. */

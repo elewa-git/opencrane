@@ -1,5 +1,5 @@
 import type { Interrupt, TextMessageStartEvent } from "@ag-ui/core";
-import type { AgUiA2uiEnvelope, AgUiProjectionEvent, AgUiToolRecoveryRequiredEnvelope } from "@opencrane/contracts";
+import type { AgUiA2uiEnvelope, AgUiProjectionEvent, AgUiToolRecoveryRequiredEnvelope, SafeToolTechnicalDetails } from "@opencrane/contracts";
 
 /**
  * How a conversation run is going, as far as the browser can tell.
@@ -71,6 +71,10 @@ export interface AgUiToolFailure
 {
 	/** Optional server-selected technical classification for this failed attempt. */
 	readonly code: string | null;
+	/** Whether the control plane will retry after this visible failed attempt. */
+	readonly retrying: boolean;
+	/** Provider-free details shown only after the user opens technical disclosure. */
+	readonly technicalDetails: SafeToolTechnicalDetails;
 }
 
 /** One conversation message, assembled in the browser from the stream's text events. */

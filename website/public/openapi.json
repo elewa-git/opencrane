@@ -1397,63 +1397,6 @@
           }
         }
       },
-      "SelfDeferredToolApproval": {
-        "type": "object",
-        "required": [
-          "approvalRequestId",
-          "runId",
-          "attempt",
-          "toolRevisionId",
-          "toolInvocationId",
-          "state",
-          "proposedArguments",
-          "responseSchema",
-          "expiresAt",
-          "createdAt"
-        ],
-        "properties": {
-          "approvalRequestId": {
-            "type": "string"
-          },
-          "runId": {
-            "type": "string"
-          },
-          "attempt": {
-            "type": "integer",
-            "minimum": 1
-          },
-          "toolRevisionId": {
-            "type": "string"
-          },
-          "toolInvocationId": {
-            "type": "string"
-          },
-          "state": {
-            "type": "string",
-            "enum": [
-              "pending",
-              "approved",
-              "denied",
-              "expired",
-              "cancelled"
-            ]
-          },
-          "proposedArguments": {
-            "nullable": true
-          },
-          "responseSchema": {
-            "type": "object"
-          },
-          "expiresAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "createdAt": {
-            "type": "string",
-            "format": "date-time"
-          }
-        }
-      },
       "AgentService": {
         "type": "object",
         "required": [
@@ -4631,29 +4574,42 @@
         }
       }
     },
-    "/me/approvals": {
+    "/me/activity/elicitations": {
       "get": {
-        "operationId": "listMyPendingToolApprovals",
-        "summary": "List the signed-in owner's pending tool approvals",
-        "description": "The server derives the owner and silo from the browser session and host. It returns at most fifty actionable interrupts with pre-redacted proposed arguments and an exact decision response schema derived from the frozen reviewed tool schema. It never returns secret-marked values, raw authority evidence, policy digests, or resume material.",
+        "operationId": "listMyElicitationActivity",
+        "summary": "List recent participant-input activity",
+        "description": "Derives a bounded index from canonical elicitation references. It does not copy the transcript or expose protected purpose payloads.",
         "tags": [
-          "Approvals"
+          "Conversations"
+        ],
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 50
+            }
+          }
         ],
         "responses": {
           "200": {
-            "description": "Pending owner-bound tool approvals.",
+            "description": "Recent owned elicitation references.",
             "content": {
               "application/json": {
                 "schema": {
                   "type": "object",
                   "required": [
-                    "approvals"
+                    "elicitations"
                   ],
                   "properties": {
-                    "approvals": {
+                    "elicitations": {
                       "type": "array",
                       "items": {
-                        "$ref": "#/components/schemas/SelfDeferredToolApproval"
+                        "type": "object"
                       }
                     }
                   }
@@ -4661,8 +4617,18 @@
               }
             }
           },
+          "400": {
+            "description": "The requested Activity limit is invalid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
           "401": {
-            "description": "No authenticated browser session owns the request.",
+            "description": "No authenticated browser session owns the Activity index.",
             "content": {
               "application/json": {
                 "schema": {
@@ -4672,7 +4638,7 @@
             }
           },
           "503": {
-            "description": "The product authority could not read pending approvals.",
+            "description": "The elicitation Activity index is temporarily unavailable.",
             "content": {
               "application/json": {
                 "schema": {
@@ -4684,50 +4650,49 @@
         }
       }
     },
-    "/me/approvals/{approvalRequestId}": {
+    "/me/conversations/{conversationId}/elicitations/{requestId}": {
       "get": {
-        "operationId": "getMyToolApproval",
-        "summary": "Read one tool interrupt owned by the signed-in user",
-        "description": "The approval id is the interrupt id. The response reports actor-relevant state, pre-redacted proposed arguments, and the frozen decision response schema without returning server-only reviewed arguments or resume material.",
+        "operationId": "getMyConversationElicitation",
+        "summary": "Read one participant-input request",
+        "description": "Returns the browser-safe request only to its active assigned participant. Protected purpose payloads, dataset identifiers, credentials, and resume material are never returned.",
         "tags": [
-          "Approvals"
+          "Conversations"
         ],
         "parameters": [
           {
-            "name": "approvalRequestId",
+            "name": "conversationId",
             "in": "path",
             "required": true,
             "schema": {
               "type": "string"
             },
-            "description": "Interrupt identifier for the owned approval."
+            "description": "Conversation containing the request."
+          },
+          {
+            "name": "requestId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Opaque elicitation identifier."
           }
         ],
         "responses": {
           "200": {
-            "description": "Owned tool interrupt.",
+            "description": "Owned request.",
             "content": {
               "application/json": {
                 "schema": {
                   "type": "object",
                   "required": [
-                    "approval"
+                    "elicitation"
                   ],
                   "properties": {
-                    "approval": {
-                      "$ref": "#/components/schemas/SelfDeferredToolApproval"
+                    "elicitation": {
+                      "type": "object"
                     }
                   }
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "The interrupt identifier is empty.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
                 }
               }
             }
@@ -4743,7 +4708,7 @@
             }
           },
           "404": {
-            "description": "The interrupt is absent or belongs to another actor or silo.",
+            "description": "The request is absent or belongs to another participant.",
             "content": {
               "application/json": {
                 "schema": {
@@ -4753,7 +4718,7 @@
             }
           },
           "503": {
-            "description": "The product authority could not read the interrupt.",
+            "description": "The elicitation authority is temporarily unavailable.",
             "content": {
               "application/json": {
                 "schema": {
@@ -4765,23 +4730,32 @@
         }
       }
     },
-    "/me/approvals/{approvalRequestId}/decision": {
+    "/me/conversations/{conversationId}/elicitations/{requestId}/responses": {
       "post": {
-        "operationId": "decideDeferredToolApproval",
-        "summary": "Approve or deny one pending tool action owned by the signed-in user",
-        "description": "The server derives the owner and silo from the browser session. Approval must carry one complete argument value, which the server validates against the frozen reviewed response schema; denial carries no arguments. Partial edits, run coordinates, tool results, and resume material are rejected.",
+        "operationId": "respondToMyConversationElicitation",
+        "summary": "Answer one participant-input request",
+        "description": "Submits one typed, idempotent answer. The server derives the actor, run, participant, purpose strategy, protected payload, and any verified step-up evidence.",
         "tags": [
-          "Approvals"
+          "Conversations"
         ],
         "parameters": [
           {
-            "name": "approvalRequestId",
+            "name": "conversationId",
             "in": "path",
             "required": true,
             "schema": {
               "type": "string"
             },
-            "description": "Opaque identifier for the pending approval."
+            "description": "Conversation containing the request."
+          },
+          {
+            "name": "requestId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Opaque elicitation identifier."
           }
         ],
         "requestBody": {
@@ -4789,61 +4763,39 @@
           "content": {
             "application/json": {
               "schema": {
-                "oneOf": [
-                  {
-                    "type": "object",
-                    "required": [
-                      "decision",
-                      "arguments"
-                    ],
-                    "additionalProperties": false,
-                    "properties": {
-                      "decision": {
-                        "type": "string",
-                        "const": "approved"
-                      },
-                      "arguments": {}
-                    }
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "idempotencyKey",
+                  "response"
+                ],
+                "properties": {
+                  "idempotencyKey": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
                   },
-                  {
-                    "type": "object",
-                    "required": [
-                      "decision"
-                    ],
-                    "additionalProperties": false,
-                    "properties": {
-                      "decision": {
-                        "type": "string",
-                        "const": "denied"
-                      }
-                    }
+                  "response": {
+                    "type": "object"
                   }
-                ]
+                }
               }
             }
           }
         },
         "responses": {
           "200": {
-            "description": "Decision recorded or identical terminal decision replayed.",
+            "description": "Answer accepted or replayed idempotently.",
             "content": {
               "application/json": {
                 "schema": {
                   "type": "object",
                   "required": [
-                    "approvalRequestId",
-                    "state"
+                    "response"
                   ],
                   "properties": {
-                    "approvalRequestId": {
-                      "type": "string"
-                    },
-                    "state": {
-                      "type": "string",
-                      "enum": [
-                        "approved",
-                        "denied"
-                      ]
+                    "response": {
+                      "type": "object"
                     }
                   }
                 }
@@ -4851,7 +4803,7 @@
             }
           },
           "400": {
-            "description": "The request body is not the exact decision shape, or approved arguments fail the frozen reviewed schema.",
+            "description": "The response does not match the exact request body.",
             "content": {
               "application/json": {
                 "schema": {
@@ -4870,8 +4822,18 @@
               }
             }
           },
+          "403": {
+            "description": "The caller is not the active assigned participant.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
           "404": {
-            "description": "The approval is absent, terminal in another way, or not owned by the caller.",
+            "description": "The request is absent.",
             "content": {
               "application/json": {
                 "schema": {
@@ -4881,7 +4843,7 @@
             }
           },
           "409": {
-            "description": "The approval expired before the decision.",
+            "description": "The request is terminal, expired, or conflicts with an idempotent retry.",
             "content": {
               "application/json": {
                 "schema": {
@@ -4890,8 +4852,32 @@
               }
             }
           },
+          "428": {
+            "description": "Fresh verified OpenID Connect reauthentication is required.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "error",
+                    "reauthenticatePath"
+                  ],
+                  "properties": {
+                    "error": {
+                      "type": "string",
+                      "const": "elicitation_step_up_required"
+                    },
+                    "reauthenticatePath": {
+                      "type": "string",
+                      "const": "/api/v1/auth/reauthenticate"
+                    }
+                  }
+                }
+              }
+            }
+          },
           "503": {
-            "description": "The product authority could not persist the decision.",
+            "description": "The elicitation authority is temporarily unavailable.",
             "content": {
               "application/json": {
                 "schema": {
@@ -11355,6 +11341,44 @@
                 }
               }
             }
+          }
+        }
+      }
+    },
+    "/auth/reauthenticate": {
+      "get": {
+        "operationId": "reauthenticate",
+        "summary": "Force fresh OIDC authentication for a sensitive action",
+        "tags": [
+          "Auth"
+        ],
+        "parameters": [
+          {
+            "name": "returnTo",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Local path restored after the verified callback."
+          }
+        ],
+        "responses": {
+          "302": {
+            "description": "Redirect to the configured provider with prompt=login."
+          },
+          "401": {
+            "description": "An authenticated session is required before step-up.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "OIDC is not configured."
           }
         }
       }

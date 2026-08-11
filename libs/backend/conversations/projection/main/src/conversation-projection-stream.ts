@@ -59,7 +59,7 @@ async function _StreamConversationProjection(dependencies: ConversationProjectio
 		if (!opened) { sink.open(); opened = true; }
 		cursor = await _WriteRows(sink, command.conversationId, cursor, result.rows, command.signal);
 
-		// Open approvals are an overlay: reconnect restores them without changing Last-Event-ID.
+		// Open elicitations are an overlay: reconnect restores them without changing Last-Event-ID.
 		if (dependencies.interrupts !== undefined)
 		{
 			const overlays = await dependencies.interrupts.readOpen({ conversationId: command.conversationId, siloId: command.siloId, subjectId: command.subjectId });

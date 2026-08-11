@@ -1,7 +1,7 @@
-import { ToolInvocationState, ToolResultDeliveryState, type Prisma } from "@prisma/client";
+import { ElicitationPurpose, ElicitationRequestState, ElicitationResultDeliveryState, ToolInvocationState, ToolResultDeliveryState, type Prisma } from "@prisma/client";
 
 import { __DigestCanonicalJson } from "@opencrane/backend/server/iam/authorization";
-import type { RuntimeToolResult } from "@opencrane/contracts";
+import type { RuntimeElicitationResult, RuntimeToolResult } from "@opencrane/contracts";
 import type { JsonValue } from "@opencrane/util";
 
 import type { RuntimeResumeInputLoad, RuntimeResumeInputRepository, RuntimeResumeInputUnitOfWork } from "./runtime-resume-input.types.js";
@@ -37,19 +37,54 @@ export class PrismaRuntimeResumeInputRepository implements RuntimeResumeInputRep
 		const unresolved = await this._transaction.toolInvocation.count({ where: { runId, attempt, state: { notIn: [ToolInvocationState.Succeeded, ToolInvocationState.Failed] } } });
 		if (unresolved > 0) return null;
 		const deliveries = await this._transaction.toolResultDelivery.findMany({ where: { state: ToolResultDeliveryState.Pending, invocation: { runId, attempt } }, include: { invocation: { select: { toolInvocationId: true } } }, orderBy: { createdAt: "asc" } });
+		const elicitationDeliveries = await this._transaction.elicitationResultDelivery.findMany({ where: { state: ElicitationResultDeliveryState.Pending, request: { runId, attempt } }, include: { request: { select: { id: true, requestKey: true, purpose: true, state: true } } }, orderBy: { createdAt: "asc" } });
 		const steering = await this._transaction.runtimeSteeringRequest.findMany({ where: { runId, attempt, state: "Pending" }, orderBy: { submittedAt: "asc" } });
-		if (deliveries.length === 0 && steering.length === 0) return null;
+		if (deliveries.length === 0 && elicitationDeliveries.length === 0 && steering.length === 0) return null;
 		for (const delivery of deliveries)
 		{
 			const payload = delivery.payload as unknown as JsonValue;
 			if (__DigestCanonicalJson(payload) !== delivery.payloadDigest || !_PayloadNamesInvocation(payload, delivery.invocation.toolInvocationId)) return null;
 		}
+		for (const delivery of elicitationDeliveries)
+		{
+			if (!_ElicitationPayloadIsBound(delivery.payload as unknown as JsonValue | null, delivery.payloadDigest)) return null;
+		}
 		const toolResults = deliveries.map(function _Result(row): RuntimeToolResult { return row.payload as unknown as RuntimeToolResult; });
-		return { resume: { inputGeneration, toolResults, steeringRequests: steering.map(function _Content(row) { return row.content; }) as unknown as JsonValue, elicitationResults: [] }, toolResultDeliveryIds: deliveries.map(function _Id(row) { return row.id; }), steeringRequestIds: steering.map(function _Id(row) { return row.id; }) };
+		const elicitationResults = elicitationDeliveries.map(_ElicitationResult);
+		if (elicitationResults.some(function _Invalid(result) { return result === null; })) return null;
+		return { resume: { inputGeneration, toolResults, steeringRequests: steering.map(function _Content(row) { return row.content; }) as unknown as JsonValue, elicitationResults: elicitationResults as RuntimeElicitationResult[] }, toolResultDeliveryIds: deliveries.map(function _Id(row) { return row.id; }), elicitationResultDeliveryIds: elicitationDeliveries.map(function _Id(row) { return row.id; }), steeringRequestIds: steering.map(function _Id(row) { return row.id; }) };
 	}
 }
 
-/** Return whether a saved tool result names the invocation row it is attached to. */
+/** Verify the nullable response and its digest before server-owned delivery. */
+function _ElicitationPayloadIsBound(payload: JsonValue | null, payloadDigest: string | null): boolean
+{
+	if (payload === null) return payloadDigest === null;
+	return payloadDigest !== null && __DigestCanonicalJson(payload) === payloadDigest;
+}
+
+/** Project only ordinary input content; protected strategy payloads never cross into the runtime. */
+function _ElicitationResult(row: { readonly payload: Prisma.JsonValue | null; readonly request: { readonly id: string; readonly requestKey: string; readonly purpose: ElicitationPurpose; readonly state: ElicitationRequestState } }): RuntimeElicitationResult | null
+{
+	const outcome = _ElicitationOutcome(row.request.state);
+	if (outcome === null) return null;
+	const response = row.request.purpose === ElicitationPurpose.RuntimeInput && outcome === "answered" ? row.payload as unknown as JsonValue | null : null;
+	if (row.request.purpose === ElicitationPurpose.RuntimeInput && outcome === "answered" && response === null) return null;
+	return { requestId: row.request.id, requestKey: row.request.requestKey, outcome, ...(response === null ? {} : { response }) };
+}
+
+/** Map only terminal request states into the runtime protocol. */
+function _ElicitationOutcome(state: ElicitationRequestState): RuntimeElicitationResult["outcome"] | null
+{
+	if (state === ElicitationRequestState.Answered) return "answered";
+	if (state === ElicitationRequestState.Declined) return "declined";
+	if (state === ElicitationRequestState.Expired) return "expired";
+	if (state === ElicitationRequestState.Cancelled) return "cancelled";
+	if (state === ElicitationRequestState.Failed) return "failed";
+	return null;
+}
+
+/** Bind one saved runtime result to the public invocation id of its relational owner. */
 function _PayloadNamesInvocation(payload: JsonValue, toolInvocationId: string): boolean
 {
 	return payload !== null

@@ -28,6 +28,8 @@ content never passes through the generic elicitation result.
 - `OpenElicitationCommand` — server-derived coordinates for one admitted runtime proposal.
 - `RespondToElicitationCommand` — authenticated, idempotent response command with server step-up evidence.
 - `SelfElicitationQueryRepository` — read port restricted to the active assigned participant.
+- `_CreateElicitationInterruptReader` — generic cursorless reconnect overlay for every body type.
+- `_CreateSelfElicitationActivityRouter` — bounded derived Activity references over canonical requests.
 
 ## Boundary
 
@@ -45,6 +47,9 @@ conversation, authorization, authentication, agent-model, utility, and shared co
 `elicitation.prisma` owns requests, response attempts, runtime result deliveries, and one-use
 personal-memory permission receipts. The clean baseline and adjacent upgrade SQL enforce exact
 coordinates, terminal finality, and one accepted response.
+
+Ordinary input answers are delivered to the exact runtime attempt once. Protected tool, memory, and
+A2UI payloads remain server-side; only their safe terminal outcome may cross the runtime protocol.
 
 ## See also
 

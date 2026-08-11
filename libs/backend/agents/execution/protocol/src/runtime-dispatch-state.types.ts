@@ -30,7 +30,9 @@ export interface RuntimeDispatchStateRepository
 {
 	/** Mark consumed the pending result rows carried by one saved resume command. */
 	consumeToolResultDeliveries(deliveryIds: readonly string[], consumedAt: Date): Promise<void>;
-	/** Load the saved invocation fields for a candidate that is being sent again. */
+	/** Consume the exact pending elicitation results included in one durable resume command. */
+	consumeElicitationResultDeliveries(deliveryIds: readonly string[], consumedAt: Date): Promise<void>;
+	/** Load immutable invocation evidence for one idempotently replayed candidate. */
 	findToolInvocation(runId: string, attempt: number, candidateId: string): Promise<RuntimeDispatchToolInvocation | null>;
 }
 

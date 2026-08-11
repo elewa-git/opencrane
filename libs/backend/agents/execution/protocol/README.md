@@ -78,8 +78,8 @@ are rechecked at execution, so the runtime never sees either credential or mutab
 ## Public surface
 
 - `__CreateProductionRuntimeDispatchAuthority` — constructs the ready production authority,
-  including first-party personal-session tool augmentation, durable candidate admission, saved tool
-  result resume, frozen memory dataset selection, and canonical event reporting.
+  including first-party personal-session tool augmentation, durable candidate admission, one-time
+  saved tool and elicitation result resume, frozen memory dataset selection, and canonical event reporting.
 - `__CreateProductionExternalActionWorker` — constructs the bounded process worker that prepares,
   claims, executes, reconciles, and recovers durable ToolInvocations.
 - `__CreateProductionExternalActionApprovalOpener` — binds an approval-required invocation to its

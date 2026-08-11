@@ -82,8 +82,8 @@ function _ToolRecoveryRequired(source: AgUiProjectionSourceEvent): AgUiProjectio
 /** Keep the tool-call id and failure code, and nothing from the provider's own error. */
 function _ToolFailure(source: AgUiProjectionSourceEvent): AgUiProjectionEvent
 {
-	if (typeof source.payload.toolCallId !== "string") return _Custom(source);
-	const value: AgUiToolFailureEnvelope = { eventType: RunEventTypes.ToolFailed, toolCallId: source.payload.toolCallId, ...(source.payload.failureCode === undefined ? {} : { failureCode: source.payload.failureCode }) };
+	if (typeof source.payload.toolCallId !== "string" || source.payload.toolFailure === undefined) return _Custom(source);
+	const value: AgUiToolFailureEnvelope = { eventType: RunEventTypes.ToolFailed, toolCallId: source.payload.toolCallId, ...source.payload.toolFailure, ...(source.payload.failureCode === undefined ? {} : { failureCode: source.payload.failureCode }) };
 	return { type: EventType.CUSTOM, name: AG_UI_TOOL_FAILURE_EVENT, value };
 }
 

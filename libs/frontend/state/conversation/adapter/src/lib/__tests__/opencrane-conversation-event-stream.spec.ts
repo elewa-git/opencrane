@@ -140,7 +140,7 @@ describe("OpenCraneConversationEventStream", function _Suite()
 		const controller = new AbortController();
 		const recovery = _Frame("recovery-1", { type: EventType.RUN_STARTED, threadId: "conversation-1", runId: "run-1" })
 			+ _Frame("recovery-2", { type: EventType.TOOL_CALL_START, toolCallId: "tool-1", toolCallName: "create_invoice" })
-			+ _Frame("recovery-3", { type: EventType.CUSTOM, name: AG_UI_TOOL_FAILURE_EVENT, value: { eventType: "tool.failed", toolCallId: "tool-1", failureCode: "TimeoutError" } })
+			+ _Frame("recovery-3", { type: EventType.CUSTOM, name: AG_UI_TOOL_FAILURE_EVENT, value: { eventType: "tool.failed", toolCallId: "tool-1", failureCode: "TimeoutError", retrying: false, technicalDetails: { toolIdentifier: "tool-1", toolRevision: "revision-1", failureCategory: "TimeoutError", summary: "The tool attempt failed.", occurredAt: "2026-07-23T00:00:00.000Z", retryCount: 1, retryLimit: 3 } } })
 			+ _Frame("recovery-4", { type: EventType.CUSTOM, name: AG_UI_TOOL_RECOVERY_REQUIRED_EVENT, value: _Recovery() });
 		const cancelled = _Frame("recovery-5", { type: EventType.RUN_ERROR, message: "Run cancelled: user_cancelled", code: "RUN_CANCELLED" });
 		const get = vi.fn().mockResolvedValueOnce(_Success(_Stream(recovery))).mockResolvedValueOnce(_Success(_Stream(cancelled)));

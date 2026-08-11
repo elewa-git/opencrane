@@ -90,11 +90,14 @@ function _EventIsSafe(event: ToolInvocationLifecycleEvent): boolean
 {
 	if (event.runId.length === 0 || event.runId.length > 256 || !Number.isSafeInteger(event.attempt) || event.attempt < 1 || event.payload.toolInvocationId.length === 0 || event.payload.toolInvocationId.length > 256) return false;
 	if (event.eventType !== ToolInvocationEventTypes.Failed) return true;
-	return event.payload.reason.length > 0
+	return event.payload.toolRevisionId.length > 0
+		&& event.payload.toolRevisionId.length <= 256
+		&& event.payload.reason.length > 0
 		&& event.payload.reason.length <= 128
 		&& /^[a-zA-Z0-9_.-]+$/u.test(event.payload.reason)
 		&& Number.isSafeInteger(event.payload.retryCount)
 		&& event.payload.retryCount >= 0
 		&& event.payload.retryCount <= event.payload.retryLimit
-		&& event.payload.retryLimit === 3;
+		&& event.payload.retryLimit === 3
+		&& typeof event.payload.retrying === "boolean";
 }

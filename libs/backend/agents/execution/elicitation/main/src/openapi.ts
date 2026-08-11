@@ -1,5 +1,20 @@
 /** OpenAPI paths for the single conversation-scoped elicitation surface. */
 export const _ElicitationOpenapiPaths = {
+	"/me/activity/elicitations": {
+		get: {
+			operationId: "listMyElicitationActivity",
+			summary: "List recent participant-input activity",
+			description: "Derives a bounded index from canonical elicitation references. It does not copy the transcript or expose protected purpose payloads.",
+			tags: ["Conversations"],
+			parameters: [{ name: "limit", in: "query", required: false, schema: { type: "integer", minimum: 1, maximum: 100, default: 50 } }],
+			responses: {
+				200: { description: "Recent owned elicitation references.", content: { "application/json": { schema: { type: "object", required: ["elicitations"], properties: { elicitations: { type: "array", items: { type: "object" } } } } } } },
+				400: _Error("The requested Activity limit is invalid."),
+				401: _Error("No authenticated browser session owns the Activity index."),
+				503: _Error("The elicitation Activity index is temporarily unavailable."),
+			},
+		},
+	},
 	"/me/conversations/{conversationId}/elicitations/{requestId}": {
 		get: {
 			operationId: "getMyConversationElicitation",

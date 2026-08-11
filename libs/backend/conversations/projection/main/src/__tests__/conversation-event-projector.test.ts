@@ -45,10 +45,10 @@ describe("conversation timeline projection", function _Suite()
 
 	it("shows safe tool and runtime failures without secret-bearing technical detail", function _ProjectsFailures()
 	{
-		const tool = __ProjectConversationEvent({ cursor: "c.tool", conversationId: "conversation-1", runId: "run-1", position: "2", type: "tool.failed", payload: { toolInvocationId: "tool-1", reason: "external_action_preparation_failed", errorType: "AuthenticationError", authorization: "Bearer never", responseBody: "secret" }, occurredAt: "2026-07-23T10:00:01.000Z" });
+		const tool = __ProjectConversationEvent({ cursor: "c.tool", conversationId: "conversation-1", runId: "run-1", position: "2", type: "tool.failed", payload: { toolInvocationId: "tool-1", toolRevisionId: "revision-1", reason: "external_action_preparation_failed", errorType: "AuthenticationError", retryCount: 1, retryLimit: 3, retrying: true, authorization: "Bearer never", responseBody: "secret" }, occurredAt: "2026-07-23T10:00:01.000Z" });
 		const runtime = __ProjectConversationEvent({ cursor: "c.error", conversationId: "conversation-1", runId: "run-1", position: "3", type: "run.error", payload: { reason: "model_loop_error", errorType: "AuthenticationError", detail: "Bearer never" }, occurredAt: "2026-07-23T10:00:02.000Z" });
 
-		expect(tool?.payload).toEqual({ toolCallId: "tool-1", failureCode: "AuthenticationError" });
+		expect(tool?.payload).toEqual({ toolCallId: "tool-1", failureCode: "AuthenticationError", toolFailure: { retrying: true, technicalDetails: { toolIdentifier: "tool-1", toolRevision: "revision-1", failureCategory: "AuthenticationError", summary: "Authentication failed.", occurredAt: "2026-07-23T10:00:01.000Z", retryCount: 1, retryLimit: 3 } } });
 		expect(runtime?.payload).toEqual({ failureCode: "AuthenticationError" });
 		expect(JSON.stringify([tool, runtime])).not.toContain("Bearer never");
 		expect(__ProjectConversationEvent({ cursor: "c.secret", conversationId: "conversation-1", runId: "run-1", position: "4", type: "run.error", payload: { errorType: "SecretToken123" }, occurredAt: "2026-07-23T10:00:03.000Z" })?.payload).toEqual({});

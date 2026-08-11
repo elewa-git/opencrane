@@ -95,8 +95,22 @@ class PrismaElicitationRepository implements ElicitationRepository
 	{
 		const row = await this._transaction.elicitationRequest.findFirst({ where: { id: requestId, siloId, conversationId, assignedParticipantId: subjectId, assignedParticipant: { accessEndedPosition: null } } });
 		if (row === null) return null;
-		if (row.state === ElicitationRequestState.Requested && row.expiresAt.getTime() <= now.getTime()) return { ..._Projection(row), state: ElicitationRequestStates.Expired, resolvedAt: now.toISOString(), safeReason: "response_window_expired" };
-		return _Projection(row);
+		return _ProjectionAt(row, now);
+	}
+
+	/** List still-actionable requests for one exact conversation and participant. */
+	async listOpenOwned(siloId: string, conversationId: string, subjectId: string, now: Date): Promise<readonly ConversationElicitation[]>
+	{
+		const rows = await this._transaction.elicitationRequest.findMany({ where: { siloId, conversationId, assignedParticipantId: subjectId, state: ElicitationRequestState.Requested, expiresAt: { gt: now }, assignedParticipant: { accessEndedPosition: null } }, orderBy: [{ createdAt: "asc" }, { id: "asc" }], take: 50 });
+		return rows.map(_Projection);
+	}
+
+	/** List recent requests as references to canonical conversation/run authority. */
+	async listActivityOwned(siloId: string, subjectId: string, limit: number, now: Date): Promise<readonly ConversationElicitation[]>
+	{
+		if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100) throw new TypeError("elicitation activity limit must be between one and one hundred");
+		const rows = await this._transaction.elicitationRequest.findMany({ where: { siloId, assignedParticipantId: subjectId, assignedParticipant: { accessEndedPosition: null } }, orderBy: [{ createdAt: "desc" }, { id: "desc" }], take: limit });
+		return rows.map(function _ProjectActivity(row) { return _ProjectionAt(row, now); });
 	}
 
 	/** Apply one purpose without allowing the browser to choose protected authority. */
@@ -157,6 +171,7 @@ class PrismaElicitationRepository implements ElicitationRepository
 		if (request.purpose === ElicitationPurpose.ToolApproval) await __ExpireDeferredToolApprovalBatch(this._transaction, { runId: request.runId, attempt: request.attempt, now });
 		const expired = await this._transaction.elicitationRequest.updateMany({ where: { id: request.id, state: ElicitationRequestState.Requested, expiresAt: { lte: now } }, data: { state: ElicitationRequestState.Expired, resolvedAt: now, safeReason: "response_window_expired" } });
 		if (expired.count !== 1) throw new Error("elicitation expiry lost its request fence");
+		if (request.purpose === ElicitationPurpose.RuntimeInput || request.purpose === ElicitationPurpose.A2uiAction) await this._transaction.elicitationResultDelivery.create({ data: { requestId: request.id } });
 		const pending = await this._transaction.elicitationRequest.count({ where: { runId: request.runId, attempt: request.attempt, state: ElicitationRequestState.Requested } });
 		if (pending !== 0) return;
 		const resumed = await this._transaction.agentRun.updateMany({ where: { id: request.runId, attempt: request.attempt, state: AgentRunState.WaitingForInput }, data: { state: AgentRunState.Running } });
@@ -197,6 +212,20 @@ export class PrismaElicitationUnitOfWork implements ElicitationUnitOfWork
 		return ___DoWithTrace("elicitation.read", { siloId, requestId }, function _TraceRead() { return unit._execute(function _Read(repository) { return repository.readOwned(siloId, conversationId, requestId, subjectId, now); }); });
 	}
 
+	/** Read current cursorless overlays through a short serializable snapshot. */
+	async listOpenOwned(siloId: string, conversationId: string, subjectId: string, now: Date): Promise<readonly ConversationElicitation[]>
+	{
+		const unit = this;
+		return ___DoWithTrace("elicitation.list_open", { siloId, conversationId }, function _TraceListOpen() { return unit._execute(function _List(repository) { return repository.listOpenOwned(siloId, conversationId, subjectId, now); }); });
+	}
+
+	/** Read the caller's derived Activity references through a short serializable snapshot. */
+	async listActivityOwned(siloId: string, subjectId: string, limit: number, now: Date): Promise<readonly ConversationElicitation[]>
+	{
+		const unit = this;
+		return ___DoWithTrace("elicitation.list_activity", { siloId }, function _TraceListActivity() { return unit._execute(function _List(repository) { return repository.listActivityOwned(siloId, subjectId, limit, now); }); });
+	}
+
 	/** Construct exactly one transaction-bound repository. */
 	private async _execute<TResult>(work: (repository: ElicitationRepository) => Promise<TResult>): Promise<TResult>
 	{
@@ -214,6 +243,13 @@ function _Projection(row: { id: string; conversationId: string; runId: string; a
 	if (row.resolvedAt !== null) projection = { ...projection, resolvedAt: row.resolvedAt.toISOString() };
 	if (row.safeReason !== null) projection = { ...projection, safeReason: row.safeReason };
 	return projection;
+}
+
+/** Derive deadline expiry for reads without mutating canonical request authority. */
+function _ProjectionAt(row: Parameters<typeof _Projection>[0], now: Date): ConversationElicitation
+{
+	if (row.state !== ElicitationRequestState.Requested || row.expiresAt.getTime() > now.getTime()) return _Projection(row);
+	return { ..._Projection(row), state: ElicitationRequestStates.Expired, resolvedAt: now.toISOString(), safeReason: "response_window_expired" };
 }
 
 /** Map public body kinds to persistence vocabulary. */

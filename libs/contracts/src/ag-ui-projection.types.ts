@@ -3,6 +3,7 @@ import type { BeginRenderingMessage, DataModelUpdate, SurfaceUpdateMessage } fro
 
 import type { RunEventType } from "@opencrane/models/agents";
 import type { ConversationId } from "@opencrane/models/conversations";
+import type { SafeToolTechnicalDetails } from "./conversation-elicitation.types.js";
 
 /**
  * Version tag for OpenCrane's AG-UI event projection.
@@ -134,6 +135,10 @@ export interface AgUiToolFailureEnvelope
 	readonly toolCallId: string;
 	/** Optional failure code the server picks from a fixed safe list. */
 	readonly failureCode?: string;
+	/** Whether the server will retry after surfacing this failed attempt. */
+	readonly retrying: boolean;
+	/** Explicitly typed provider-free details available behind progressive disclosure. */
+	readonly technicalDetails: SafeToolTechnicalDetails;
 }
 
 /** The reasons a provider call can be left in an unknown state after it was sent. */
@@ -183,6 +188,7 @@ export interface AgUiPublicEventPayload
 	readonly toolResult?: string;
 	readonly terminalReason?: string;
 	readonly failureCode?: string;
+	readonly toolFailure?: Omit<AgUiToolFailureEnvelope, "eventType" | "toolCallId">;
 	readonly interrupt?: Interrupt;
 	readonly a2ui?: AgUiA2uiEnvelope;
 	readonly childRun?: AgUiChildRunEnvelope;
