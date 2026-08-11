@@ -11,7 +11,7 @@ import { ConversationAssetTransferPhases, type ConversationAsset } from "../conv
 /** One safe server projection fixture. */
 function _Asset(state: ConversationAssetLifecycle = ConversationAssetLifecycle.Processing): ConversationAsset
 {
-	return { id: "asset-1", conversationId: "conversation-1", messageId: null, provenance: ConversationAssetProvenance.ParticipantUpload, state, displayName: "brief.pdf", mediaType: "application/pdf", byteLength: 5, disposition: ConversationAssetDisposition.Preview, failureCode: null, createdAt: "2026-08-11T10:00:00.000Z" };
+	return { id: "asset-1", conversationId: "conversation-1", messageId: null, provenance: ConversationAssetProvenance.ParticipantUpload, state, displayName: "brief.pdf", mediaType: "application/pdf", byteLength: 5, disposition: ConversationAssetDisposition.Preview, failureCode: null, canRemove: state === ConversationAssetLifecycle.Uploading, canRetry: false, createdAt: "2026-08-11T10:00:00.000Z" };
 }
 
 /** Minimal file with deterministic bytes for hashing in jsdom. */
@@ -36,7 +36,7 @@ describe("ConversationAssetsStore", function _Suite()
 {
 	it("rejects an unsupported batch without reserving any file", async function _RejectsSelection()
 	{
-		const gateway = { list: vi.fn().mockResolvedValue([]), reserve: vi.fn(), upload: vi.fn() };
+		const gateway = { list: vi.fn().mockResolvedValue([]), reserve: vi.fn(), upload: vi.fn(), remove: vi.fn() };
 		const store = _Store(gateway);
 		store.open("conversation-1");
 		await store.select([_File("data.sqlite", "application/vnd.sqlite3", "db")]);
@@ -47,7 +47,7 @@ describe("ConversationAssetsStore", function _Suite()
 	it("reuses the exact reservation after an ambiguous transport failure", async function _RetriesReservation()
 	{
 		const asset = _Asset();
-		const gateway = { list: vi.fn().mockResolvedValue([]), reserve: vi.fn().mockRejectedValueOnce(new Error("offline")).mockResolvedValueOnce(asset), upload: vi.fn().mockResolvedValue(asset) };
+		const gateway = { list: vi.fn().mockResolvedValue([]), reserve: vi.fn().mockRejectedValueOnce(new Error("offline")).mockResolvedValueOnce(asset), upload: vi.fn().mockResolvedValue(asset), remove: vi.fn() };
 		const store = _Store(gateway);
 		store.open("conversation-1");
 		await store.select([_File("brief.pdf", "application/pdf", "brief")]);
@@ -66,7 +66,7 @@ describe("ConversationAssetsStore", function _Suite()
 	it("retries upload bytes without reserving a second asset", async function _RetriesBytes()
 	{
 		const asset = _Asset();
-		const gateway = { list: vi.fn().mockResolvedValue([]), reserve: vi.fn().mockResolvedValue(asset), upload: vi.fn().mockRejectedValueOnce(new Error("reset")).mockResolvedValueOnce(asset) };
+		const gateway = { list: vi.fn().mockResolvedValue([]), reserve: vi.fn().mockResolvedValue(asset), upload: vi.fn().mockRejectedValueOnce(new Error("reset")).mockResolvedValueOnce(asset), remove: vi.fn() };
 		const store = _Store(gateway);
 		store.open("conversation-1");
 		await store.select([_File("brief.pdf", "application/pdf", "brief")]);
@@ -79,5 +79,31 @@ describe("ConversationAssetsStore", function _Suite()
 		expect(gateway.reserve).toHaveBeenCalledTimes(1);
 		expect(gateway.upload).toHaveBeenCalledTimes(2);
 		expect(gateway.upload.mock.calls[1]?.[2]).toBe(gateway.upload.mock.calls[0]?.[2]);
+	});
+
+	it("uses only the server-granted removal capability and adopts its tombstone", async function _RemovesAuthorizedReservation()
+	{
+		const asset = _Asset(ConversationAssetLifecycle.Uploading);
+		const removed = { ...asset, state: ConversationAssetLifecycle.Removed, displayName: "Attachment removed", canRemove: false };
+		const gateway = { list: vi.fn().mockResolvedValue([asset]), reserve: vi.fn(), upload: vi.fn(), remove: vi.fn().mockResolvedValue(removed) };
+		const store = _Store(gateway);
+		store.open("conversation-1");
+		await vi.waitFor(function _Loaded() { expect(store.assets.hasValue()).toBe(true); });
+
+		await store.remove(asset.id);
+
+		expect(gateway.remove).toHaveBeenCalledWith("conversation-1", asset.id);
+		expect(store.assets.value()).toEqual([removed]);
+	});
+
+	it("does not infer removal permission from lifecycle", async function _DoesNotInferRemoval()
+	{
+		const asset = { ..._Asset(ConversationAssetLifecycle.Uploading), canRemove: false };
+		const gateway = { list: vi.fn().mockResolvedValue([asset]), reserve: vi.fn(), upload: vi.fn(), remove: vi.fn() };
+		const store = _Store(gateway);
+		store.open("conversation-1");
+		await vi.waitFor(function _Loaded() { expect(store.assets.hasValue()).toBe(true); });
+		await store.remove(asset.id);
+		expect(gateway.remove).not.toHaveBeenCalled();
 	});
 });

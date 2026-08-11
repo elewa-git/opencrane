@@ -1160,6 +1160,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/me/conversations/{conversationId}/assets/{assetId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Remove one unlinked upload reservation
+         * @description Removal succeeds only while the returned canRemove capability is true. The response is a metadata-only tombstone.
+         */
+        delete: operations["removeMyConversationAsset"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/agent-services": {
         parameters: {
             query?: never;
@@ -6484,6 +6504,8 @@ export interface operations {
                             /** @enum {string|null} */
                             disposition: "preview" | "download" | null;
                             failureCode: string | null;
+                            canRemove: boolean;
+                            canRetry: boolean;
                             /** Format: date-time */
                             createdAt: string;
                         }[];
@@ -6550,6 +6572,8 @@ export interface operations {
                             /** @enum {string|null} */
                             disposition: "preview" | "download" | null;
                             failureCode: string | null;
+                            canRemove: boolean;
+                            canRetry: boolean;
                             /** Format: date-time */
                             createdAt: string;
                         };
@@ -6579,6 +6603,8 @@ export interface operations {
                             /** @enum {string|null} */
                             disposition: "preview" | "download" | null;
                             failureCode: string | null;
+                            canRemove: boolean;
+                            canRetry: boolean;
                             /** Format: date-time */
                             createdAt: string;
                         };
@@ -6668,6 +6694,8 @@ export interface operations {
                             /** @enum {string|null} */
                             disposition: "preview" | "download" | null;
                             failureCode: string | null;
+                            canRemove: boolean;
+                            canRetry: boolean;
                             /** Format: date-time */
                             createdAt: string;
                         };
@@ -6682,6 +6710,79 @@ export interface operations {
                 content?: never;
             };
             /** @description Upload unavailable or conflicting. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {string} */
+                        outcome: "denied";
+                        /** @enum {string} */
+                        reason: "invalid_request" | "conversation_unavailable" | "asset_unavailable" | "upload_failed" | "idempotency_conflict";
+                    };
+                };
+            };
+            /** @description Conversation asset authority unavailable. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    removeMyConversationAsset: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversationId: string;
+                assetId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Reservation removed or exact retry returned its tombstone. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {string} */
+                        outcome: "accepted" | "idempotent";
+                        asset: {
+                            id: string;
+                            conversationId: string;
+                            messageId: string | null;
+                            /** @enum {string} */
+                            provenance: "participant_upload" | "agent_output";
+                            /** @enum {string} */
+                            state: "uploading" | "processing" | "ready" | "failed" | "cancelled" | "removed";
+                            displayName: string;
+                            mediaType: string;
+                            byteLength: number | null;
+                            /** @enum {string|null} */
+                            disposition: "preview" | "download" | null;
+                            failureCode: string | null;
+                            canRemove: boolean;
+                            canRetry: boolean;
+                            /** Format: date-time */
+                            createdAt: string;
+                        };
+                    };
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Removal is unavailable at this lifecycle point. */
             409: {
                 headers: {
                     [name: string]: unknown;

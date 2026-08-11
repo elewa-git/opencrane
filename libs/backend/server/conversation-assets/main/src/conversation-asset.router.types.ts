@@ -7,6 +7,7 @@ export interface ConversationAssetAuthority
 {
 	reserveUpload(caller: ConversationAssetCaller, conversationId: string, request: ReserveConversationAssetRequest): Promise<ConversationAssetResult>;
 	upload(caller: ConversationAssetCaller, conversationId: string, assetId: string, bytes: AsyncIterable<Uint8Array>): Promise<ConversationAssetResult>;
+	remove(caller: ConversationAssetCaller, conversationId: string, assetId: string): Promise<ConversationAssetResult>;
 	list(caller: ConversationAssetCaller, conversationId: string): Promise<readonly ConversationAssetView[]>;
 }
 

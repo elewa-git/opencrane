@@ -5,7 +5,7 @@ import { ControlPlaneApiService } from "@opencrane/core";
 
 import { OpenCraneConversationAssetsGateway } from "../opencrane-conversation-assets-gateway.js";
 
-const _ASSET = { id: "asset-1", conversationId: "conversation-1", messageId: null, provenance: "participant_upload" as const, state: "processing" as const, displayName: "brief.pdf", mediaType: "application/pdf", byteLength: 5, disposition: "preview" as const, failureCode: null, createdAt: "2026-08-11T10:00:00.000Z" };
+const _ASSET = { id: "asset-1", conversationId: "conversation-1", messageId: null, provenance: "participant_upload" as const, state: "processing" as const, displayName: "brief.pdf", mediaType: "application/pdf", byteLength: 5, disposition: "preview" as const, failureCode: null, canRemove: false, canRetry: false, createdAt: "2026-08-11T10:00:00.000Z" };
 
 /** Construct the adapter with controlled generated-client methods. */
 function _Gateway(client: object): OpenCraneConversationAssetsGateway
@@ -22,6 +22,14 @@ describe("OpenCraneConversationAssetsGateway", function _Suite()
 		const assets = await _Gateway({ GET }).list("conversation-1");
 		expect(GET).toHaveBeenCalledWith("/me/conversations/{conversationId}/assets", { params: { path: { conversationId: "conversation-1" } } });
 		expect(assets).toEqual([_ASSET]);
+	});
+
+	it("uses the typed removal path and returns its sanitized tombstone", async function _Removes()
+	{
+		const removed = { ..._ASSET, state: "removed" as const, displayName: "Attachment removed" };
+		const DELETE = vi.fn().mockResolvedValue({ data: { outcome: "accepted", asset: removed }, error: undefined });
+		expect(await _Gateway({ DELETE }).remove("conversation-1", "asset-1")).toEqual(removed);
+		expect(DELETE).toHaveBeenCalledWith("/me/conversations/{conversationId}/assets/{assetId}", { params: { path: { conversationId: "conversation-1", assetId: "asset-1" } } });
 	});
 
 	it("sends File bytes without JSON serialization", async function _UploadsExactBytes()

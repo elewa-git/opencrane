@@ -40,10 +40,18 @@ export class OpenCraneConversationAssetsGateway implements ConversationAssetsGat
 		if (error !== undefined || data === undefined) throw new Error("The file upload failed.");
 		return _Asset(data.asset);
 	}
+
+	/** @inheritdoc */
+	public async remove(conversationId: string, assetId: string): Promise<ConversationAsset>
+	{
+		const { data, error } = await this._api.client.DELETE("/me/conversations/{conversationId}/assets/{assetId}", { params: { path: { conversationId, assetId } } });
+		if (error !== undefined || data === undefined) throw new Error("The file could not be removed.");
+		return _Asset(data.asset);
+	}
 }
 
 /** Convert generated literals to the owning string-backed enums after the schema validated them. */
-function _Asset(asset: { readonly id: string; readonly conversationId: string; readonly messageId: string | null; readonly provenance: "participant_upload" | "agent_output"; readonly state: "uploading" | "processing" | "ready" | "failed" | "cancelled" | "removed"; readonly displayName: string; readonly mediaType: string; readonly byteLength: number | null; readonly disposition: "preview" | "download" | null; readonly failureCode: string | null; readonly createdAt: string }): ConversationAsset
+function _Asset(asset: { readonly id: string; readonly conversationId: string; readonly messageId: string | null; readonly provenance: "participant_upload" | "agent_output"; readonly state: "uploading" | "processing" | "ready" | "failed" | "cancelled" | "removed"; readonly displayName: string; readonly mediaType: string; readonly byteLength: number | null; readonly disposition: "preview" | "download" | null; readonly failureCode: string | null; readonly canRemove: boolean; readonly canRetry: boolean; readonly createdAt: string }): ConversationAsset
 {
 	return { ...asset, provenance: asset.provenance as ConversationAssetProvenance, state: asset.state as ConversationAssetLifecycle, disposition: asset.disposition as ConversationAssetDisposition | null };
 }

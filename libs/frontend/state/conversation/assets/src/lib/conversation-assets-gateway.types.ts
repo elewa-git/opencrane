@@ -8,6 +8,7 @@ export interface ConversationAssetsGateway
 	list(conversationId: string): Promise<readonly ConversationAsset[]>;
 	reserve(conversationId: string, request: ReserveConversationAssetUpload): Promise<ConversationAsset>;
 	upload(conversationId: string, assetId: string, file: File): Promise<ConversationAsset>;
+	remove(conversationId: string, assetId: string): Promise<ConversationAsset>;
 }
 
 /** Component-injected conversation file gateway. */

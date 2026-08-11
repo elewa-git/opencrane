@@ -133,7 +133,7 @@ export default [
             { sourceTag: "scope:cluster-tenants", onlyDependOnLibsWithTags: ["scope:auth", "scope:cluster-tenants", "scope:k8s-api", "scope:shared"] },
 			{ sourceTag: "scope:conversation-projection", onlyDependOnLibsWithTags: ["scope:conversation-projection", "scope:shared"] },
 			{ sourceTag: "scope:conversations", onlyDependOnLibsWithTags: ["scope:agents", "scope:auth", "scope:channel-targets", "scope:conversation-projection", "scope:conversations", "scope:execution-admission", "scope:execution-runs", "scope:shared"] },
-			{ sourceTag: "scope:conversation-assets", onlyDependOnLibsWithTags: ["scope:artifacts", "scope:auth", "scope:conversations", "scope:conversation-assets", "scope:execution-runs", "scope:shared"] },
+			{ sourceTag: "scope:conversation-assets", onlyDependOnLibsWithTags: ["scope:artifacts", "scope:auth", "scope:conversations", "scope:conversation-assets", "scope:execution-runs", "scope:shared", "scope:web"] },
 			{ sourceTag: "scope:personal-configuration", onlyDependOnLibsWithTags: ["scope:agent-services", "scope:agents", "scope:auth", "scope:personal-configuration", "scope:shared"] },
 			{ sourceTag: "scope:user-onboarding", onlyDependOnLibsWithTags: ["scope:user-onboarding", "scope:shared"] },
             { sourceTag: "scope:grants", onlyDependOnLibsWithTags: ["scope:auth", "scope:authorization", "scope:grants", "scope:shared"] },
@@ -172,7 +172,7 @@ export default [
             { sourceTag: "scope:skills", onlyDependOnLibsWithTags: ["scope:artifacts", "scope:auth", "scope:cluster-tenants", "scope:grants", "scope:shared", "scope:skills"] },
             { sourceTag: "scope:spend", onlyDependOnLibsWithTags: ["scope:shared", "scope:spend"] },
 			{ sourceTag: "scope:web", onlyDependOnLibsWithTags: ["scope:web", "scope:shared"] },
-			{ sourceTag: "scope:opencrane-ui", onlyDependOnLibsWithTags: ["scope:persona-onboarding", "scope:shared", "scope:web"] },
+			{ sourceTag: "scope:opencrane-ui", onlyDependOnLibsWithTags: ["scope:conversation-assets", "scope:persona-onboarding", "scope:shared", "scope:web"] },
             {
               sourceTag: "scope:opencrane",
               onlyDependOnLibsWithTags: [

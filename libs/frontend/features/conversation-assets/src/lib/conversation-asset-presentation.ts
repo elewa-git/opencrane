@@ -1,19 +1,31 @@
-import { ConversationAssetDisposition, ConversationAssetLifecycle, ConversationAssetProvenance, ConversationAssetTransferPhases, type ConversationAsset, type PendingConversationAssetUpload } from "@opencrane/state/conversation/assets";
+import { ConversationAssetDisposition, ConversationAssetLifecycle, ConversationAssetProvenance, ConversationAssetSelectionFailures, ConversationAssetTransferPhases, type ConversationAsset, type ConversationAssetSelectionFailure, type PendingConversationAssetUpload } from "@opencrane/state/conversation/assets";
 
-import { ConversationAssetPresentationStates, type ConversationAssetPresentation } from "./conversation-asset-presentation.types.js";
+import { ConversationAssetPresentationStates, type ConversationAssetPresentation, type ConversationAssetSelectionFeedback } from "./conversation-asset-presentation.types.js";
 
 /** Map one durable server asset to finite presentation without predicting a later state. */
 export function __ConversationAssetPresentation(asset: ConversationAsset): ConversationAssetPresentation
 {
 	const state = _DurableState(asset.state);
-	return { id: asset.id, messageId: asset.messageId, provenance: asset.provenance, displayName: asset.displayName, mediaType: asset.mediaType, byteLength: asset.byteLength, disposition: asset.disposition, state, detail: _StateDetail(state), canRetry: state === ConversationAssetPresentationStates.Failed, canRemove: false };
+	return { id: asset.id, messageId: asset.messageId, provenance: asset.provenance, displayName: asset.displayName, mediaType: asset.mediaType, byteLength: asset.byteLength, disposition: asset.disposition, state, detail: _StateDetail(state), canRetry: asset.canRetry, canRemove: asset.canRemove, uploadProgressPercent: null };
 }
 
 /** Map one browser-local intent while omitting its retained File bytes. */
 export function __PendingConversationAssetPresentation(upload: PendingConversationAssetUpload): ConversationAssetPresentation
 {
 	const state = _PendingState(upload.phase);
-	return { id: upload.idempotencyKey, messageId: null, provenance: ConversationAssetProvenance.ParticipantUpload, displayName: upload.displayName, mediaType: upload.mediaType, byteLength: upload.byteLength, disposition: _Disposition(upload.mediaType), state, detail: _StateDetail(state), canRetry: state === ConversationAssetPresentationStates.Failed, canRemove: upload.canRemove };
+	return { id: upload.idempotencyKey, messageId: null, provenance: ConversationAssetProvenance.ParticipantUpload, displayName: upload.displayName, mediaType: upload.mediaType, byteLength: upload.byteLength, disposition: _Disposition(upload.mediaType), state, detail: _StateDetail(state), canRetry: state === ConversationAssetPresentationStates.Failed, canRemove: upload.canRemove, uploadProgressPercent: upload.uploadProgressPercent };
+}
+
+/** Map typed selection rejection to stable user-facing feedback without transport details. */
+export function __ConversationAssetSelectionFeedback(failure: ConversationAssetSelectionFailure): ConversationAssetSelectionFeedback
+{
+	switch (failure)
+	{
+		case ConversationAssetSelectionFailures.TooManyFiles: return { kind: failure, message: "You can add up to 10 files to one message." };
+		case ConversationAssetSelectionFailures.TotalTooLarge: return { kind: failure, message: "Files in one message can total up to 200 MB." };
+		case ConversationAssetSelectionFailures.UnsupportedMediaType: return { kind: failure, message: "One or more files use an unsupported type." };
+	}
+	throw new Error("Unsupported conversation asset selection failure.");
 }
 
 /** Format a bounded human byte count for chips, cards, and Files rows. */

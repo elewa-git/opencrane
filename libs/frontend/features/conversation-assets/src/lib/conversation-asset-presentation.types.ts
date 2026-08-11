@@ -1,4 +1,4 @@
-import type { ConversationAssetDisposition, ConversationAssetProvenance } from "@opencrane/state/conversation/assets";
+import type { ConversationAssetDisposition, ConversationAssetProvenance, ConversationAssetSelectionFailure } from "@opencrane/state/conversation/assets";
 
 /** Finite visible file states, including non-disclosing reference failures. */
 export enum ConversationAssetPresentationStates
@@ -40,6 +40,14 @@ export interface ConversationAssetPresentation
 	readonly detail: string;
 	readonly canRetry: boolean;
 	readonly canRemove: boolean;
+	readonly uploadProgressPercent: number | null;
+}
+
+/** Safe plain-language feedback for a rejected message-level file selection. */
+export interface ConversationAssetSelectionFeedback
+{
+	readonly kind: ConversationAssetSelectionFailure;
+	readonly message: string;
 }
 
 /** Parent-owned action request carrying only the displayed stable coordinate. */

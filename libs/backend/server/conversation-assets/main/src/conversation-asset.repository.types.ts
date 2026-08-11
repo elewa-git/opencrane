@@ -12,5 +12,6 @@ export interface ConversationAssetRepository
 	reserve(caller: ConversationAssetCaller, conversationId: string, request: ReserveConversationAssetRequest): Promise<ConversationAssetResult>;
 	readUploadTarget(caller: ConversationAssetCaller, conversationId: string, assetId: string): Promise<ConversationAssetUploadTarget | null>;
 	finalize(caller: ConversationAssetCaller, conversationId: string, assetId: string, promotion: ArtifactPromotionReceiptClaims, receiptDigest: string): Promise<ConversationAssetResult>;
+	remove(caller: ConversationAssetCaller, conversationId: string, assetId: string): Promise<ConversationAssetResult>;
 	list(caller: ConversationAssetCaller, conversationId: string): Promise<readonly ConversationAssetView[]>;
 }

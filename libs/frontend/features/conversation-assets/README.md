@@ -21,10 +21,18 @@ details.
 - `ConversationFilesPanelComponent` and `ConversationFileRowComponent`.
 - Pure presentation mappers and typed retry/remove/open/preview/download/focus intents.
 
+The tray also presents empty-batch selection feedback and an indeterminate progressbar when the
+browser transport cannot report a reliable upload percentage.
+
 ## Boundary
 
 [#351](https://github.com/elewa-git/opencrane/issues/351) mounts these components in the workspace.
 This package deliberately adds no temporary route and injects no gateway or store.
+
+## Dependency direction
+
+Tagged `scope:conversation-assets` and `layer:frontend`, it may compose the conversation-file state,
+pure file policy, and generic frontend elements. It never imports a server implementation or app.
 
 ## See also
 

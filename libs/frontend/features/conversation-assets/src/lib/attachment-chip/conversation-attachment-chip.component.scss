@@ -24,4 +24,6 @@
 	&__type { flex: none; color: var(--oc-ink-muted); font-size: var(--oc-text-2xs); }
 	&__name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 	&__status { flex: none; color: var(--oc-ink-muted); font-size: var(--oc-text-2xs); }
+	&__progress { flex: none; width: 48px; height: 3px; border-radius: var(--oc-radius-round); background: var(--oc-border-subtle); overflow: hidden; }
+	&__progress span { display: block; height: 100%; border-radius: inherit; background: var(--oc-accent-active); }
 }

@@ -9,6 +9,16 @@
 	<span class="wo-attachment-chip__name">{{ item().displayName }}</span>
 	@if (item().state === states.Ready) {
 		<i class="pi pi-check wo-attachment-chip__status" aria-hidden="true"></i>
+	} @else if (item().state === states.Uploading) {
+		<span
+			class="wo-attachment-chip__progress"
+			role="progressbar"
+			aria-label="Upload progress"
+			[attr.aria-valuenow]="item().uploadProgressPercent"
+			[attr.aria-valuetext]="item().uploadProgressPercent === null ? 'Uploading' : item().uploadProgressPercent + '% uploaded'"
+		>
+			<span [style.width.%]="item().uploadProgressPercent ?? 40"></span>
+		</span>
 	} @else {
 		<span class="wo-attachment-chip__status">{{ item().detail }}</span>
 	}

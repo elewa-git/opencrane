@@ -4,7 +4,7 @@
   "projectType": "library",
   "sourceRoot": "libs/frontend/features/conversation-assets/src",
   "prefix": "wo",
-  "tags": ["scope:web", "layer:frontend", "type:lib", "frontend-role:feature"],
+  "tags": ["scope:conversation-assets", "layer:frontend", "type:lib", "frontend-role:feature"],
   "targets": {
     "lint": { "executor": "nx:run-commands", "options": { "command": "tsc -p tsconfig.json --noEmit", "cwd": "libs/frontend/features/conversation-assets" } },
     "test": { "executor": "nx:run-commands", "options": { "command": "vitest run", "cwd": "libs/frontend/features/conversation-assets" } }

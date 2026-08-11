@@ -4,7 +4,7 @@ import { ConversationAssetDisposition, ConversationAssetLifecycle, ConversationA
 const _ConversationAssetSchema = {
 	type: "object",
 	additionalProperties: false,
-	required: ["id", "conversationId", "messageId", "provenance", "state", "displayName", "mediaType", "byteLength", "disposition", "failureCode", "createdAt"],
+	required: ["id", "conversationId", "messageId", "provenance", "state", "displayName", "mediaType", "byteLength", "disposition", "failureCode", "canRemove", "canRetry", "createdAt"],
 	properties: {
 		id: { type: "string" },
 		conversationId: { type: "string" },
@@ -16,6 +16,8 @@ const _ConversationAssetSchema = {
 		byteLength: { type: ["integer", "null"], minimum: 1 },
 		disposition: { type: ["string", "null"], enum: [ConversationAssetDisposition.Preview, ConversationAssetDisposition.Download, null] },
 		failureCode: { type: ["string", "null"] },
+		canRemove: { type: "boolean" },
+		canRetry: { type: "boolean" },
 		createdAt: { type: "string", format: "date-time" },
 	},
 } as const;
@@ -80,6 +82,21 @@ export const _ConversationAssetsOpenapiPaths = {
 				202: { description: "Exact bytes accepted into quarantine.", content: { "application/json": { schema: _ConversationAssetCommandSchema } } },
 				401: { description: "Authentication required." },
 				409: { description: "Upload unavailable or conflicting.", content: { "application/json": { schema: _ConversationAssetDeniedSchema } } },
+				503: { description: "Conversation asset authority unavailable." },
+			},
+		},
+	},
+	"/me/conversations/{conversationId}/assets/{assetId}": {
+		delete: {
+			operationId: "removeMyConversationAsset",
+			summary: "Remove one unlinked upload reservation",
+			description: "Removal succeeds only while the returned canRemove capability is true. The response is a metadata-only tombstone.",
+			tags: ["Conversation assets"],
+			parameters: [{ name: "conversationId", in: "path", required: true, schema: { type: "string" } }, { name: "assetId", in: "path", required: true, schema: { type: "string" } }],
+			responses: {
+				200: { description: "Reservation removed or exact retry returned its tombstone.", content: { "application/json": { schema: _ConversationAssetCommandSchema } } },
+				401: { description: "Authentication required." },
+				409: { description: "Removal is unavailable at this lifecycle point.", content: { "application/json": { schema: _ConversationAssetDeniedSchema } } },
 				503: { description: "Conversation asset authority unavailable." },
 			},
 		},

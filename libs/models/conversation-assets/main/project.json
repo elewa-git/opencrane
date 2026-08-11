@@ -6,8 +6,7 @@
   "tags": [
     "type:lib",
     "layer:model",
-    "scope:conversation-assets",
-    "scope:shared"
+    "scope:conversation-assets"
   ],
   "targets": {
     "lint": {

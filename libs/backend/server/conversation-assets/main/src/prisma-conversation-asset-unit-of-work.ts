@@ -43,6 +43,12 @@ export class PrismaConversationAssetUnitOfWork implements ConversationAssetUnitO
 		return this._transaction(function _List(repository) { return repository.list(caller, conversationId); }, Prisma.TransactionIsolationLevel.RepeatableRead);
 	}
 
+	/** Revokes one server-authorized unlinked upload reservation. */
+	async remove(caller: ConversationAssetCaller, conversationId: string, assetId: string): Promise<ConversationAssetResult>
+	{
+		return this._transaction(function _Remove(repository) { return repository.remove(caller, conversationId, assetId); }, Prisma.TransactionIsolationLevel.Serializable);
+	}
+
 	/** Creates the transaction-scoped repository exactly once per operation. */
 	private _transaction<Result>(work: (repository: PrismaConversationAssetRepository) => Promise<Result>, isolationLevel: Prisma.TransactionIsolationLevel): Promise<Result>
 	{

@@ -1,10 +1,15 @@
-@if (items().length > 0) {
-	<section class="wo-attachment-tray" aria-label="Message attachments" aria-live="polite">
-		<div class="wo-attachment-tray__items" role="list">
-			@for (item of items(); track item.id) {
-				<span role="listitem"><wo-conversation-attachment-chip [item]="item" (actionRequested)="request($event)" /></span>
-			}
-		</div>
-		<span class="wo-attachment-tray__count wo-mono">{{ readyCount() }} of {{ items().length }} ready</span>
+@if (items().length > 0 || feedback() !== null) {
+	<section class="wo-attachment-tray" [attr.aria-label]="label()" aria-live="polite">
+		@if (feedback(); as selectionFeedback) {
+			<p class="wo-attachment-tray__feedback" role="alert">{{ selectionFeedback.message }}</p>
+		}
+		@if (items().length > 0) {
+			<div class="wo-attachment-tray__items" role="list">
+				@for (item of items(); track item.id) {
+					<span role="listitem"><wo-conversation-attachment-chip [item]="item" (actionRequested)="request($event)" /></span>
+				}
+			</div>
+			<span class="wo-attachment-tray__count wo-mono">{{ readyCount() }} of {{ items().length }} ready</span>
+		}
 	</section>
 }

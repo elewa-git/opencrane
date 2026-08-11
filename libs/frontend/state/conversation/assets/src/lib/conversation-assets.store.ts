@@ -23,6 +23,7 @@ export class ConversationAssetsStore
 	private readonly _gateway = inject(CONVERSATION_ASSETS_GATEWAY);
 	private readonly _conversationId = signal<string | undefined>(undefined);
 	private readonly _intents = signal<readonly ConversationAssetUploadIntent[]>([]);
+	private readonly _removingAssetIds = signal<ReadonlySet<string>>(new Set());
 
 	/** Pure server projection keyed by the selected conversation. */
 	public readonly assets = resource({ params: this._conversationId, loader: ({ params }) => this._gateway.list(params) });
@@ -69,6 +70,27 @@ export class ConversationAssetsStore
 		const intent = this._intent(idempotencyKey);
 		if (intent?.assetId !== null) return;
 		this._intents.update(current => current.filter(candidate => candidate.idempotencyKey !== idempotencyKey));
+	}
+
+	/** Remove one exact server reservation only when the server granted that capability. */
+	public async remove(assetId: string): Promise<void>
+	{
+		const conversationId = this._conversationId();
+		if (conversationId === undefined || !this.assets.hasValue() || this._removingAssetIds().has(assetId)) return;
+		const asset = this.assets.value().find(candidate => candidate.id === assetId);
+		if (asset?.canRemove !== true) return;
+		this._removingAssetIds.update(current => new Set([...current, assetId]));
+		try
+		{
+			const removed = await this._gateway.remove(conversationId, assetId);
+			if (this._conversationId() !== conversationId) return;
+			this._intents.update(current => current.filter(candidate => candidate.assetId !== assetId));
+			this._adopt(removed);
+		}
+		finally
+		{
+			this._removingAssetIds.update(current => new Set([...current].filter(candidate => candidate !== assetId)));
+		}
 	}
 
 	/** Explicitly reload lifecycle changes such as scan completion or failure. */
@@ -145,5 +167,5 @@ function _TransferFailureCode(intent: ConversationAssetUploadIntent): PendingCon
 /** Strip browser File bytes from the feature-facing local projection. */
 function _PendingUpload(intent: ConversationAssetUploadIntent): PendingConversationAssetUpload
 {
-	return { idempotencyKey: intent.idempotencyKey, displayName: intent.file.name, mediaType: intent.mediaType, byteLength: intent.file.size, phase: intent.phase, canRemove: intent.assetId === null, failureCode: intent.failureCode };
+	return { idempotencyKey: intent.idempotencyKey, displayName: intent.file.name, mediaType: intent.mediaType, byteLength: intent.file.size, phase: intent.phase, canRemove: intent.assetId === null, uploadProgressPercent: null, failureCode: intent.failureCode };
 }

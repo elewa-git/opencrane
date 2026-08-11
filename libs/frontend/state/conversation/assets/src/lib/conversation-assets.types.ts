@@ -13,6 +13,8 @@ export interface ConversationAsset
 	readonly byteLength: number | null;
 	readonly disposition: ConversationAssetDisposition | null;
 	readonly failureCode: string | null;
+	readonly canRemove: boolean;
+	readonly canRetry: boolean;
 	readonly createdAt: string;
 }
 
@@ -45,8 +47,18 @@ export interface PendingConversationAssetUpload
 	readonly byteLength: number;
 	readonly phase: ConversationAssetTransferPhases;
 	readonly canRemove: boolean;
+	/** Percentage when the transport can report it, otherwise null for indeterminate progress. */
+	readonly uploadProgressPercent: number | null;
 	readonly failureCode: "hash_failed" | "reservation_failed" | "upload_failed" | null;
 }
 
 /** Complete selection-level rejection before any reservation starts. */
-export type ConversationAssetSelectionFailure = "too_many_files" | "total_too_large" | "unsupported_media_type";
+export enum ConversationAssetSelectionFailures
+{
+	TooManyFiles = "too_many_files",
+	TotalTooLarge = "total_too_large",
+	UnsupportedMediaType = "unsupported_media_type"
+}
+
+/** One typed selection-level rejection. */
+export type ConversationAssetSelectionFailure = `${ConversationAssetSelectionFailures}`;

@@ -37,6 +37,10 @@ export interface ConversationAssetView
 	readonly byteLength: number | null;
 	readonly disposition: ConversationAssetDisposition | null;
 	readonly failureCode: string | null;
+	/** Whether this exact caller may remove the unlinked server reservation now. */
+	readonly canRemove: boolean;
+	/** Whether this exact caller may retry a server-owned terminal operation now. */
+	readonly canRetry: boolean;
 	readonly createdAt: string;
 }
 

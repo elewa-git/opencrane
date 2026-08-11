@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, input, output } from "@angular/core";
 
 import { ConversationAttachmentChipComponent } from "../attachment-chip/conversation-attachment-chip.component.js";
-import { ConversationAssetPresentationStates, type ConversationAssetActionIntent, type ConversationAssetPresentation } from "../conversation-asset-presentation.types.js";
+import { ConversationAssetPresentationStates, type ConversationAssetActionIntent, type ConversationAssetPresentation, type ConversationAssetSelectionFeedback } from "../conversation-asset-presentation.types.js";
 
 /** Composer tray that announces upload changes and re-emits typed chip intents. */
 @Component({
@@ -15,6 +15,8 @@ import { ConversationAssetPresentationStates, type ConversationAssetActionIntent
 export class ConversationAttachmentTrayComponent
 {
 	public readonly items = input<readonly ConversationAssetPresentation[]>([]);
+	public readonly feedback = input<ConversationAssetSelectionFeedback | null>(null);
+	public readonly label = input("Message attachments");
 	public readonly actionRequested = output<ConversationAssetActionIntent>();
 	public readonly readyCount = computed(() => this.items().filter(item => item.state === ConversationAssetPresentationStates.Ready).length);
 
