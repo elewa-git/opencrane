@@ -90,13 +90,13 @@ describe("REDACT_PATHS", function _redactSuite()
   {
     const { logger, records } = _redactingLogger();
     logger.info({
-      command: { kind: "resume_attempt", payload: { deferredToolResults: [{ approvalRequestId: "approval-1", decision: "approved", arguments: { calendarId: "private" }, argumentsDigest: "sha256:approved" }] } },
+      command: { kind: "resume_attempt", payload: { toolResults: [{ toolInvocationId: "tool-1", outcome: "succeeded", result: { accessToken: "private" } }] } },
       candidate: { kind: "external_action", candidateId: "candidate-1", toolRevisionId: "integration:calendar:read", arguments: { calendarId: "private" }, argumentsDigest: "sha256:candidate" },
       diagnostics: { argumentCount: 2, argumentsDigest: "sha256:diagnostic" },
     }, "runtime protocol");
-    const command = records[0]?.["command"] as { payload: { deferredToolResults: Array<Record<string, unknown>> } };
+    const command = records[0]?.["command"] as { payload: { toolResults: Array<Record<string, unknown>> } };
     const candidate = records[0]?.["candidate"] as Record<string, unknown>;
-    expect(command.payload.deferredToolResults[0]).toEqual({ approvalRequestId: "approval-1", decision: "approved", arguments: "[Redacted]", argumentsDigest: "sha256:approved" });
+    expect(command.payload.toolResults[0]).toEqual({ toolInvocationId: "tool-1", outcome: "succeeded", result: "[Redacted]" });
     expect(candidate).toEqual({ kind: "external_action", candidateId: "candidate-1", toolRevisionId: "integration:calendar:read", arguments: "[Redacted]", argumentsDigest: "sha256:candidate" });
     expect(records[0]?.["diagnostics"]).toEqual({ argumentCount: 2, argumentsDigest: "sha256:diagnostic" });
   });

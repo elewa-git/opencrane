@@ -27,6 +27,7 @@ const _SENSITIVE_FIELD_NAMES = new Set([
 	"reviewedtoolarguments",
 	"finalarguments",
 	"arguments",
+	"result",
 ]);
 
 /** Return whether an object can be projected without changing framework-owned runtime behavior. */
