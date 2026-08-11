@@ -13,7 +13,8 @@ const _A2UI_EVENT_TYPES = new Set<string>([RunEventTypes.A2uiRenderingBegun, Run
 export function _RuntimeEventPayloadIsSafe(eventType: string, payload: JsonValue): boolean
 {
 	if (!_Bounded(payload) || !_Record(payload)) return false;
-	if (eventType === RunEventTypes.RunStarted || eventType === RunEventTypes.RunResumed) return _Exact(payload, []);
+	if (eventType === RunEventTypes.RunStarted) return _Exact(payload, ["promptCompilerVersion"]) && _Identifier(payload["promptCompilerVersion"]);
+	if (eventType === RunEventTypes.RunResumed) return _Exact(payload, ["inputGeneration"]) && _Counter(payload["inputGeneration"]);
 	if (eventType === RunEventTypes.MessageStarted) return _Exact(payload, ["messageId", "role"]) && _Identifier(payload["messageId"]) && payload["role"] === "assistant";
 	if (eventType === RunEventTypes.MessageDelta) return _Exact(payload, ["messageId", "delta"]) && _Identifier(payload["messageId"]) && typeof payload["delta"] === "string";
 	if (eventType === RunEventTypes.MessageCompleted) return _Exact(payload, ["messageId"]) && _Identifier(payload["messageId"]);

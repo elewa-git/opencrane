@@ -27,10 +27,30 @@ describe("PrismaRuntimeEventReporter", function _Suite()
 		vi.mocked(transaction.agentRun.findUnique).mockResolvedValue({ id: "run-1", attempt: 2, state: AgentRunState.Assigned, conversationId: "conversation-1" } as never);
 		const reporter = new PrismaRuntimeEventReporter();
 
-		await expect(reporter.reportInTransaction(transaction, { runId: "run-1", attempt: 2, eventType: "run.started", payload: {} })).resolves.toEqual({ outcome: "reported" });
+		await expect(reporter.reportInTransaction(transaction, { runId: "run-1", attempt: 2, eventType: "run.started", payload: { promptCompilerVersion: "v1" } })).resolves.toEqual({ outcome: "reported" });
 		expect(transaction.agentRun.updateMany).toHaveBeenCalledWith({ where: { id: "run-1", attempt: 2, state: AgentRunState.Assigned }, data: { state: AgentRunState.Running, startedAt: expect.any(Date) } });
 		expect(vi.mocked(transaction.agentRun.updateMany).mock.invocationCallOrder[0]).toBeLessThan(vi.mocked(transaction.conversationRunEvent.create).mock.invocationCallOrder[0]!);
-		expect(transaction.conversationRunEvent.create).toHaveBeenCalledWith({ data: expect.objectContaining({ runId: "run-1", sequence: 4, type: "run.started", payload: {} }) });
+		expect(transaction.conversationRunEvent.create).toHaveBeenCalledWith({ data: expect.objectContaining({ runId: "run-1", sequence: 4, type: "run.started", payload: { promptCompilerVersion: "v1" } }) });
+	});
+
+	it("starts a managed run without inventing a conversation event", async function _StartsConversationlessRun()
+	{
+		const transaction = _Transaction();
+		vi.mocked(transaction.agentRun.findUnique).mockResolvedValue({ id: "run-1", attempt: 2, state: AgentRunState.Assigned, conversationId: null } as never);
+		const reporter = new PrismaRuntimeEventReporter();
+
+		await expect(reporter.reportInTransaction(transaction, { runId: "run-1", attempt: 2, eventType: "run.started", payload: { promptCompilerVersion: "v1" } })).resolves.toEqual({ outcome: "reported" });
+		expect(transaction.agentRun.updateMany).toHaveBeenCalledWith({ where: { id: "run-1", attempt: 2, state: AgentRunState.Assigned }, data: { state: AgentRunState.Running, startedAt: expect.any(Date) } });
+		expect(transaction.conversationRunEvent.create).not.toHaveBeenCalled();
+	});
+
+	it("persists run.resumed only with the runtime's exact input generation", async function _ResumesRunningAttempt()
+	{
+		const transaction = _Transaction();
+		const reporter = new PrismaRuntimeEventReporter();
+
+		await expect(reporter.reportInTransaction(transaction, { runId: "run-1", attempt: 2, eventType: "run.resumed", payload: { inputGeneration: 3 } })).resolves.toEqual({ outcome: "reported" });
+		expect(transaction.conversationRunEvent.create).toHaveBeenCalledWith({ data: expect.objectContaining({ runId: "run-1", sequence: 4, type: "run.resumed", payload: { inputGeneration: 3 } }) });
 	});
 
 	it("denies duplicate starts and resumes outside the running lifecycle", async function _RejectsInvalidLifecycleEvent()
@@ -39,9 +59,9 @@ describe("PrismaRuntimeEventReporter", function _Suite()
 		vi.mocked(transaction.agentRun.updateMany).mockResolvedValue({ count: 0 });
 		const reporter = new PrismaRuntimeEventReporter();
 
-		await expect(reporter.reportInTransaction(transaction, { runId: "run-1", attempt: 2, eventType: "run.started", payload: {} })).resolves.toEqual({ outcome: "denied", reason: "run_not_assigned" });
+		await expect(reporter.reportInTransaction(transaction, { runId: "run-1", attempt: 2, eventType: "run.started", payload: { promptCompilerVersion: "v1" } })).resolves.toEqual({ outcome: "denied", reason: "run_not_assigned" });
 		vi.mocked(transaction.agentRun.findUnique).mockResolvedValue({ id: "run-1", attempt: 2, state: AgentRunState.WaitingForApproval, conversationId: "conversation-1" } as never);
-		await expect(reporter.reportInTransaction(transaction, { runId: "run-1", attempt: 2, eventType: "run.resumed", payload: {} })).resolves.toEqual({ outcome: "denied", reason: "run_not_running" });
+		await expect(reporter.reportInTransaction(transaction, { runId: "run-1", attempt: 2, eventType: "run.resumed", payload: { inputGeneration: 1 } })).resolves.toEqual({ outcome: "denied", reason: "run_not_running" });
 		expect(transaction.conversationRunEvent.create).not.toHaveBeenCalled();
 	});
 
@@ -50,6 +70,8 @@ describe("PrismaRuntimeEventReporter", function _Suite()
 		const transaction = _Transaction();
 		const reporter = new PrismaRuntimeEventReporter();
 		await expect(reporter.reportInTransaction(transaction, { runId: "run-1", attempt: 2, eventType: "framework.internal", payload: {} })).resolves.toEqual({ outcome: "denied", reason: "invalid_event" });
+		await expect(reporter.reportInTransaction(transaction, { runId: "run-1", attempt: 2, eventType: "run.started", payload: {} })).resolves.toEqual({ outcome: "denied", reason: "invalid_payload" });
+		await expect(reporter.reportInTransaction(transaction, { runId: "run-1", attempt: 2, eventType: "run.resumed", payload: { inputGeneration: -1 } })).resolves.toEqual({ outcome: "denied", reason: "invalid_payload" });
 		await expect(reporter.reportInTransaction(transaction, { runId: "run-1", attempt: 2, eventType: "run.error", payload: { accessToken: "never" } })).resolves.toEqual({ outcome: "denied", reason: "invalid_payload" });
 		await expect(reporter.reportInTransaction(transaction, { runId: "run-1", attempt: 2, eventType: "run.error", payload: { reason: "model_loop_error", detail: "Bearer never" } })).resolves.toEqual({ outcome: "denied", reason: "invalid_payload" });
 		await expect(reporter.reportInTransaction(transaction, { runId: "run-1", attempt: 2, eventType: "message.delta", payload: { messageId: "message-1", delta: "x".repeat(33_000) } })).resolves.toEqual({ outcome: "denied", reason: "invalid_payload" });

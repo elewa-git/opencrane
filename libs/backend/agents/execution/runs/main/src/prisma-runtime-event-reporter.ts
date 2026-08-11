@@ -51,8 +51,6 @@ class PrismaRuntimeEventAppendRepository implements RuntimeEventAppendRepository
 	{
 		const run = await this._transaction.agentRun.findUnique({ where: { id: command.runId } });
 		if (run === null || run.attempt !== command.attempt) return { outcome: "denied", reason: "run_not_running" };
-		if (run.conversationId === null) return { outcome: "denied", reason: "conversation_unavailable" };
-		if (_A2UI_EVENT_TYPES.has(command.eventType) && !_A2uiMatches(command.payload, run.conversationId, run.id)) return { outcome: "denied", reason: "invalid_payload" };
 		if (command.eventType === RunEventTypes.RunStarted)
 		{
 			const startedAt = new Date();
@@ -60,6 +58,13 @@ class PrismaRuntimeEventAppendRepository implements RuntimeEventAppendRepository
 			if (transitioned.count !== 1) return { outcome: "denied", reason: "run_not_assigned" };
 		}
 		else if (run.state !== AgentRunState.Running) return { outcome: "denied", reason: "run_not_running" };
+		// Managed and scheduled runs intentionally have no conversation stream. Their lifecycle still
+		// advances under this authority, while user-visible runtime output remains conversation-bound.
+		if (run.conversationId === null)
+		{
+			return command.eventType === RunEventTypes.RunStarted || command.eventType === RunEventTypes.RunResumed ? { outcome: "reported" } : { outcome: "denied", reason: "conversation_unavailable" };
+		}
+		if (_A2UI_EVENT_TYPES.has(command.eventType) && !_A2uiMatches(command.payload, run.conversationId, run.id)) return { outcome: "denied", reason: "invalid_payload" };
 		const maximum = await this._transaction.conversationRunEvent.aggregate({ where: { runId: run.id }, _max: { sequence: true } });
 		await this._transaction.conversationRunEvent.create({ data: { conversationId: run.conversationId, runId: run.id, sequence: (maximum._max.sequence ?? 0) + 1, type: command.eventType, payload: command.payload as Prisma.InputJsonValue, occurredAt: new Date() } });
 		return { outcome: "reported" };
