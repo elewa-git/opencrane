@@ -1,4 +1,5 @@
 export { __AuthorizeConversationRead } from "./conversation-read-authorization.js";
+export { __DigestChannelInvocationContext } from "./channel-invocation-context-digest.js";
 export { __ReconcileChannelTargetRoutes, __StartChannelTargetRouteReconciler } from "./channel-target-route-reconciler.js";
 export { __RandomChannelOpaqueContextSource, __ResolveChannelTarget, __SystemChannelTargetClock } from "./channel-target-resolution.js";
 export { __CreateChannelTargetsRouter } from "./channel-targets.router.js";

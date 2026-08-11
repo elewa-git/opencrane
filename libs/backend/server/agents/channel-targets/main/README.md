@@ -61,6 +61,8 @@ replay cursors, invocation contexts, and route endpoints never enter that record
 - `__ResolveChannelTarget` — the resolver use case that returns an authorized target or a denial.
 - `__AuthorizeConversationRead` — the participant, scope, and conversation-bound read policy and
   canonical decision digest.
+- `__DigestChannelInvocationContext` — the single digest authority used when an opaque bearer is
+  issued and when it is presented for one-use consumption; the raw bearer is never stored.
 - `__ExactHostSiloResolver` — exact deployment-host to silo and organization-scope binding.
 - `__ReconcileChannelTargetRoutes`, `__StartChannelTargetRouteReconciler` — one-pass convergence and
   the bounded retry/drain worker.

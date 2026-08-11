@@ -1,6 +1,7 @@
-import { createHash, randomBytes } from "node:crypto";
+import { randomBytes } from "node:crypto";
 
 import { __AuthorizeConversationRead } from "./conversation-read-authorization.js";
+import { __DigestChannelInvocationContext } from "./channel-invocation-context-digest.js";
 import type { AuthorizedChannelTargetResult, ChannelOpaqueContextSource, ChannelTargetClock, ChannelTargetResolutionDependencies, ResolveChannelTargetCommand, ResolveChannelTargetResult } from "./channel-target-resolution.types.js";
 
 /** Real wall clock for production composition. */
@@ -94,7 +95,7 @@ export async function __ResolveChannelTarget(dependencies: ChannelTargetResoluti
 	{
 		return { outcome: "denied", reason: "route_denied" };
 	}
-	const digest = `sha256:${createHash("sha256").update(invocationContext, "utf8").digest("hex")}`;
+	const digest = __DigestChannelInvocationContext(invocationContext);
 	const expiresAtEpochMs = Math.min(nowEpochMs + dependencies.config.invocationContextTtlMs, membership.trustedUntilEpochMs);
 	if (expiresAtEpochMs <= nowEpochMs)
 	{

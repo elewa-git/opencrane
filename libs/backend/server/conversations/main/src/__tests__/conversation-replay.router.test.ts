@@ -2,6 +2,8 @@ import express from "express";
 import request from "supertest";
 import { describe, expect, it, vi } from "vitest";
 
+import type { ConsumeChannelInvocationContextCommand } from "@opencrane/backend/server/agents/channel-targets";
+
 import { __EncodeConversationReplayCursor } from "../replay-cursor.js";
 import { __CreateConversationReplayRouter } from "../conversation-replay.router.js";
 import { ConversationReplayReadStatuses } from "../replay-reader.types.js";
@@ -14,17 +16,17 @@ function _Live()
 }
 
 /** Builds a one-use replay router with a caller-visible reader seam. */
-function _App(consumed: unknown, readAuthorized = vi.fn(async function _read() { return { status: ConversationReplayReadStatuses.Authorized, rows: [{ cursor: "c.one", conversationId: "conversation-1", runId: "run-1", position: "1", type: "message.delta", payload: { messageId: "message-1", delta: "hello", proof: "never-forwarded" }, occurredAt: "2026-07-23T10:00:00.000Z" }] }; }))
+function _App(consumed: unknown, readAuthorized = vi.fn(async function _read() { return { status: ConversationReplayReadStatuses.Authorized, rows: [{ cursor: "c.one", conversationId: "conversation-1", runId: "run-1", position: "1", type: "message.delta", payload: { messageId: "message-1", delta: "hello", proof: "never-forwarded" }, occurredAt: "2026-07-23T10:00:00.000Z" }] }; }), consume = vi.fn(async function _consume(_command: ConsumeChannelInvocationContextCommand) { return consumed; }))
 {
 	const app = express();
 	app.use(__CreateConversationReplayRouter({
 		..._Live(),
-		contexts: { consumeInvocationContextAtomically: async function _consume() { return consumed; } } as never,
+		contexts: { consumeInvocationContextAtomically: consume } as never,
 		repository: { readAuthorized },
 		expectedReceiverId: "receiver-1",
 		nowEpochMs: function _now() { return 1_000; },
 	}));
-	return { app, readAuthorized };
+	return { app, consume, readAuthorized };
 }
 
 describe("internal conversation replay router", function _Suite()
@@ -32,11 +34,12 @@ describe("internal conversation replay router", function _Suite()
 	it("returns a display-safe AG-UI SSE snapshot after consuming one events-read context", async function _StreamsSnapshot()
 	{
 		const consumed = { status: "consumed", context: { action: "events.read", conversationId: "conversation-1", siloId: "silo-1", subjectId: "user-1" } };
-		const { app, readAuthorized } = _App(consumed);
+		const { app, consume, readAuthorized } = _App(consumed);
 		const response = await request(app).get("/").set("authorization", "Bearer context-token");
 		expect(response.status).toBe(200);
 		expect(response.headers["content-type"]).toContain("text/event-stream");
 		expect(response.text).toContain("event: ag-ui\ndata: {\"type\":\"TEXT_MESSAGE_CONTENT\",\"messageId\":\"message-1\",\"delta\":\"hello\"}\n\n");
+		expect(consume).toHaveBeenCalledWith({ digest: "sha256:50d68c4d4e2ef6965dd350a7d4a04b6c42252e1f617df8ae2d18221067231636", expectedReceiverId: "receiver-1", nowEpochMs: 1_000 });
 		expect(readAuthorized).toHaveBeenCalledWith(expect.objectContaining({ conversationId: "conversation-1", siloId: "silo-1", subjectId: "user-1", cursor: null }));
 	});
 

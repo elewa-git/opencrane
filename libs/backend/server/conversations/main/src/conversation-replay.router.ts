@@ -1,5 +1,7 @@
 import { Router, type Request, type Response } from "express";
 
+import { __DigestChannelInvocationContext } from "@opencrane/backend/server/agents/channel-targets";
+
 import { __StreamConversationLiveReplay } from "./conversation-live-replay.js";
 import { ConversationLiveReplayOutcomes } from "./conversation-live-replay.types.js";
 import { _CreateExpressConversationLiveReplaySink } from "./express-conversation-live-replay-sink.js";
@@ -17,7 +19,7 @@ export function __CreateConversationReplayRouter(dependencies: ConversationRepla
 		if (suppliedCursor === null) { response.status(400).json({ error: "invalid_replay_request" }); return; }
 		const cursor = __DecodeConversationReplayCursor(suppliedCursor);
 		if (token === null || (suppliedCursor !== undefined && cursor === null)) { response.status(400).json({ error: "invalid_replay_request" }); return; }
-		const consumed = await dependencies.contexts.consumeInvocationContextAtomically({ digest: token, expectedReceiverId: dependencies.expectedReceiverId, nowEpochMs: dependencies.nowEpochMs() });
+		const consumed = await dependencies.contexts.consumeInvocationContextAtomically({ digest: __DigestChannelInvocationContext(token), expectedReceiverId: dependencies.expectedReceiverId, nowEpochMs: dependencies.nowEpochMs() });
 		if (consumed.status !== "consumed" || consumed.context.action !== "events.read") { response.status(403).json({ error: "replay_denied" }); return; }
 		if (cursor !== null && cursor.conversationId !== consumed.context.conversationId) { response.status(403).json({ error: "replay_denied" }); return; }
 		const abort = new AbortController();
