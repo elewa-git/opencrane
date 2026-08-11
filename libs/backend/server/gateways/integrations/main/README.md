@@ -59,7 +59,10 @@ projection consistent with it.
 ## Dependency direction
 
 Tagged `scope:integrations`: it may depend only on `scope:integrations`, `scope:obot-custody` (the
-Obot port), and `scope:shared` — never on apps or other server domains.
+Obot port), `scope:agents` (the revision-owned reviewed tool-definition contract), `scope:auth`, and
+`scope:shared` — never on apps or unrelated server domains. The agents dependency follows the
+ownership direction: an integration resolves the exact tools already frozen into an agent
+revision; it does not define or mutate that revision.
 
 ## Data & persistence
 

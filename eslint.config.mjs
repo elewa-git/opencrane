@@ -135,7 +135,8 @@ export default [
             { sourceTag: "scope:grants", onlyDependOnLibsWithTags: ["scope:auth", "scope:authorization", "scope:grants", "scope:shared"] },
             { sourceTag: "scope:groups", onlyDependOnLibsWithTags: ["scope:groups", "scope:shared"] },
             { sourceTag: "scope:http", onlyDependOnLibsWithTags: ["scope:http", "scope:shared"] },
-            { sourceTag: "scope:integrations", onlyDependOnLibsWithTags: ["scope:auth", "scope:integrations", "scope:obot-custody", "scope:shared"] },
+            { sourceTag: "scope:integrations", onlyDependOnLibsWithTags: ["scope:agents", "scope:auth", "scope:integrations", "scope:obot-custody", "scope:shared"] },
+            { sourceTag: "scope:channel-targets", onlyDependOnLibsWithTags: ["scope:auth", "scope:authorization", "scope:channel-targets", "scope:membership", "scope:shared"] },
             { sourceTag: "scope:k8s-api", onlyDependOnLibsWithTags: ["scope:k8s-api", "scope:shared"] },
             {
               sourceTag: "scope:identity",
