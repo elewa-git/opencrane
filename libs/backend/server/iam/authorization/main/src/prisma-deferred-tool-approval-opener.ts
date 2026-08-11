@@ -1,4 +1,4 @@
-import { ActionExecutionState, Prisma, type PrismaClient } from "@prisma/client";
+import { Prisma, type PrismaClient } from "@prisma/client";
 
 import { ___DoWithTrace, type Logger } from "@opencrane/backend/observability";
 
@@ -6,6 +6,7 @@ import { __DigestCanonicalJson } from "./canonical-json-digest.js";
 import { __DeferToolRequest } from "./deferred-tool-approval.js";
 import { __ProjectDeferredToolApproval, __ValidateDeferredToolArguments } from "./deferred-tool-approval-schema.js";
 import type { DeferredToolApprovalOpenRepository, DeferredToolApprovalOpenUnitOfWork, DeferToolRequestCommand, DeferToolRequestResult, OpenDeferredToolApprovalCommand } from "./deferred-tool-approval-open.types.js";
+import { __MarkToolInvocationApprovalRejectedInTransaction } from "./prisma-tool-invocation-repository.js";
 
 /** One transaction-scoped operation over the approval-open repository. */
 type ApprovalOpenTransaction = <TResult>(operation: (repository: DeferredToolApprovalOpenRepository) => Promise<TResult>) => Promise<TResult>;
@@ -28,31 +29,30 @@ class PrismaDeferredToolApprovalOpenRepository implements DeferredToolApprovalOp
 		return __DeferToolRequest(this._transaction, command);
 	}
 
-	/** Terminalise one reservation only while it remains Reserved. */
-	async markReservedFailed(reservationId: string, failureCode: string, now: Date): Promise<boolean>
+	/** Terminalise provider-free approval preparation only while it awaits approval. */
+	async terminaliseAwaitingApproval(invocationId: string, failureCode: string, now: Date): Promise<boolean>
 	{
-		const failed = await this._transaction.toolInvocation.updateMany({ where: { id: reservationId, state: ActionExecutionState.Reserved }, data: { state: ActionExecutionState.Failed, failureCode, completedAt: now } });
-		return failed.count === 1;
+		return __MarkToolInvocationApprovalRejectedInTransaction(this._transaction, invocationId, now, failureCode);
 	}
 
 	/** Read only the exact durable linkage that proves an ambiguous create committed. */
 	async hasLinkedApproval(command: OpenDeferredToolApprovalCommand): Promise<boolean>
 	{
-		const approval = await this._transaction.approvalRequest.findFirst({ where: { id: command.interruptId, runId: command.runId, attempt: command.attempt, toolInvocationRowId: command.reservationId } });
+		const approval = await this._transaction.approvalRequest.findFirst({ where: { id: command.interruptId, runId: command.runId, attempt: command.attempt, toolInvocationRowId: command.invocationId } });
 		return approval !== null;
 	}
 }
 
 /**
- * Open a pending approval for one reserved tool invocation without stranding replayable work.
+ * Open a pending approval for one prepared tool invocation without stranding replayable work.
  *
  * The create and unavailable-terminalisation paths share one transaction. If the transaction throws
  * after the database may have committed, the recovery read first treats a linked approval as proof
- * of success; only an unlinked reservation is compare-and-set to Failed. This keeps every
- * post-reservation ambiguity terminal and prevents a runtime replay from dispatching the action.
+ * of success; only an unlinked invocation is compare-and-set to Failed. This keeps every
+ * post-preparation ambiguity terminal and prevents a worker from dispatching the action.
  *
  * @param prisma - Canonical authorization persistence client.
- * @param command - Exact reserved invocation, effective policy, and server-owned time bounds.
+ * @param command - Exact prepared invocation, effective policy, and server-owned time bounds.
  * @param logger - Structured logger used when ambiguous recovery needs operator attention.
  * @returns True when an approval exists, otherwise false after best-effort terminalisation.
  * @throws When neither approval existence nor reservation terminalisation can be proven.
@@ -105,7 +105,7 @@ async function _openDeferredToolApproval(command: OpenDeferredToolApprovalComman
 	{
 		await transaction(async function _invalid(repository)
 		{
-			await repository.markReservedFailed(command.reservationId, "approval_arguments_invalid", command.now);
+				await repository.terminaliseAwaitingApproval(command.invocationId, "approval_arguments_invalid", command.now);
 		});
 		return false;
 	}
@@ -119,7 +119,7 @@ async function _openDeferredToolApproval(command: OpenDeferredToolApprovalComman
 				interruptId: command.interruptId,
 				runId: command.runId,
 				attempt: command.attempt,
-				toolInvocationRowId: command.reservationId,
+					toolInvocationRowId: command.invocationId,
 				toolRevisionId: command.toolRevisionId,
 				reviewedArguments: command.arguments,
 				argumentsDigest: command.argumentsDigest,
@@ -135,14 +135,14 @@ async function _openDeferredToolApproval(command: OpenDeferredToolApprovalComman
 			});
 			if (result.outcome !== "unavailable") return true;
 
-			// 2. A missing live workload makes the reserved invocation terminal in the same commit.
-			if (!await repository.markReservedFailed(command.reservationId, "approval_unavailable", command.now)) throw new Error("deferred approval lost its reserved invocation fence");
+			// 2. A missing live workload makes the awaiting invocation terminal in the same commit.
+			if (!await repository.terminaliseAwaitingApproval(command.invocationId, "approval_unavailable", command.now)) throw new Error("deferred approval lost its awaiting-approval invocation fence");
 			return false;
 		});
 	}
 	catch (transactionError)
 	{
-		const evidence = { runId: command.runId, attempt: command.attempt, reservationId: command.reservationId, toolInvocationId: command.toolInvocationId };
+		const evidence = { runId: command.runId, attempt: command.attempt, invocationId: command.invocationId, toolInvocationId: command.toolInvocationId };
 		logger.warn({ err: transactionError, ...evidence }, "deferred approval transaction outcome is ambiguous");
 
 		// 3. A linked approval proves an ambiguous transaction committed before its connection failed.
@@ -159,19 +159,19 @@ async function _openDeferredToolApproval(command: OpenDeferredToolApprovalComman
 			logger.error({ err: recoveryReadError, ...evidence }, "deferred approval recovery read failed");
 		}
 
-		// 4. Otherwise close the reservation so the same side effect can never be replayed ambiguously.
+		// 4. Otherwise close the invocation so the same side effect can never be dispatched ambiguously.
 		try
 		{
 			await transaction(async function _terminalise(repository)
 			{
-				if (!await repository.markReservedFailed(command.reservationId, "approval_defer_failed", command.now)) throw new Error("deferred approval reservation is no longer reserved");
+					if (!await repository.terminaliseAwaitingApproval(command.invocationId, "approval_defer_failed", command.now)) throw new Error("deferred approval invocation is no longer awaiting approval");
 			});
 			return false;
 		}
 		catch (terminalisationError)
 		{
-			logger.error({ err: terminalisationError, ...evidence }, "deferred approval recovery could not terminalise reserved invocation");
-			throw new Error("deferred approval recovery could not terminalise reserved invocation", { cause: terminalisationError });
+				logger.error({ err: terminalisationError, ...evidence }, "deferred approval recovery could not terminalise invocation");
+				throw new Error("deferred approval recovery could not terminalise invocation", { cause: terminalisationError });
 		}
 	}
 }

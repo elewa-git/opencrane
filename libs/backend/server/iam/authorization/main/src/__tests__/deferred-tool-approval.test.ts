@@ -1,12 +1,19 @@
-import { ActionExecutionState, AgentRunState, ApprovalRequestState, OrgMemberStatus, Prisma, WorkloadAssignmentState } from "@prisma/client";
+import { AgentRunState, ApprovalRequestState, ExternalActionRecoveryMode, OrgMemberStatus, Prisma, ToolInvocationState, WorkloadAssignmentState } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
 
 import { __DecideDeferredToolRequest, __DeferToolRequest, __ExpireDeferredToolApprovalBatch } from "../deferred-tool-approval.js";
 import { __DigestCanonicalJson } from "../canonical-json-digest.js";
 import { DeferredToolDecisionKinds } from "../deferred-tool-approval-decision.types.js";
 
-/** Build a transaction whose approvalRequest reads return the supplied row and writes report a count. */
-function _transaction(row: unknown, updatedCount: number, invocationRow: unknown = { id: "tool-1", runId: "run-1", attempt: 2, toolInvocationId: "call-7", toolRevisionId: "integration:search:query", argumentsDigest: __DigestCanonicalJson({ query: "original" }), state: ActionExecutionState.Reserved }, pendingCount = 0): { transaction: Prisma.TransactionClient; updateMany: ReturnType<typeof vi.fn>; invocationUpdateMany: ReturnType<typeof vi.fn>; runUpdateMany: ReturnType<typeof vi.fn>; membershipFindFirst: ReturnType<typeof vi.fn> }
+/** Build one complete awaiting-approval invocation row. */
+function _invocation(overrides: Readonly<Record<string, unknown>> = {}): Record<string, unknown>
+{
+	const argumentsValue = { query: "original" };
+	return { id: "tool-1", siloId: "silo-1", runId: "run-1", attempt: 2, agentServiceId: "service-1", agentRevisionId: "revision-1", subjectId: "user-1", runtimeInstanceId: "runtime-1", commandId: "command-1", candidateId: "candidate-1", toolInvocationId: "call-7", toolRevisionId: "integration:search:query", arguments: argumentsValue, argumentsDigest: __DigestCanonicalJson(argumentsValue), effectiveArguments: argumentsValue, effectiveArgumentsDigest: __DigestCanonicalJson(argumentsValue), requestFingerprint: "sha256:fingerprint", requestIdentity: {}, approvalRequired: true, recoveryMode: ExternalActionRecoveryMode.Manual, recoveryKey: null, state: ToolInvocationState.AwaitingApproval, preparationAttempt: 1, retryDeadlineAt: new Date("2026-07-21T09:05:00.000Z"), nextPreparationAttemptAt: new Date("2026-07-21T09:00:00.000Z"), claimAttempt: 0, claimKind: null, claimFence: 0, claimExpiresAt: null, recoveryRequiredAt: null, result: null, failureCode: null, revision: 1, createdAt: NOW, updatedAt: NOW, completedAt: null, ...overrides };
+}
+
+/** Build a transaction whose approval reads return the supplied row and writes report a count. */
+function _transaction(row: unknown, updatedCount: number, invocationRow: unknown = _invocation(), pendingCount = 0): { transaction: Prisma.TransactionClient; updateMany: ReturnType<typeof vi.fn>; invocationUpdateMany: ReturnType<typeof vi.fn>; runUpdateMany: ReturnType<typeof vi.fn>; membershipFindFirst: ReturnType<typeof vi.fn>; deliveryCreate: ReturnType<typeof vi.fn> }
 {
 	const findUnique = vi.fn().mockResolvedValue(row);
 	const updateMany = vi.fn().mockResolvedValue({ count: updatedCount });
@@ -14,14 +21,15 @@ function _transaction(row: unknown, updatedCount: number, invocationRow: unknown
 	const invocationUpdateMany = vi.fn().mockResolvedValue({ count: 1 });
 	const runUpdateMany = vi.fn().mockResolvedValue({ count: 1 });
 	const membershipFindFirst = vi.fn().mockResolvedValue({ id: "membership-1", status: OrgMemberStatus.Active });
-	return { transaction: { approvalRequest: { findUnique, updateMany, count: vi.fn().mockResolvedValue(pendingCount) }, toolInvocation: { findUnique: invocationFindUnique, updateMany: invocationUpdateMany }, orgMembership: { findFirst: membershipFindFirst }, agentRun: { findUnique: vi.fn().mockResolvedValue({ id: "run-1", attempt: 2, state: AgentRunState.WaitingForApproval }), updateMany: runUpdateMany } } as unknown as Prisma.TransactionClient, updateMany, invocationUpdateMany, runUpdateMany, membershipFindFirst };
+	const deliveryCreate = vi.fn().mockResolvedValue({ id: "delivery-1" });
+	return { transaction: { approvalRequest: { findUnique, updateMany, count: vi.fn().mockResolvedValue(pendingCount) }, toolInvocation: { findUnique: invocationFindUnique, updateMany: invocationUpdateMany }, toolResultDelivery: { create: deliveryCreate }, orgMembership: { findFirst: membershipFindFirst }, agentRun: { findUnique: vi.fn().mockResolvedValue({ id: "run-1", attempt: 2, state: AgentRunState.WaitingForApproval }), updateMany: runUpdateMany } } as unknown as Prisma.TransactionClient, updateMany, invocationUpdateMany, runUpdateMany, membershipFindFirst, deliveryCreate };
 }
 
 /** A pending deferred-tool approval bound to a tool invocation row. */
 function _pending(): unknown
 {
 	const schema = { type: "object", additionalProperties: false, required: ["query"], properties: { query: { type: "string" } } };
-	return { id: "approval-1", runId: "run-1", attempt: 2, siloId: "silo-1", subjectId: "user-1", toolInvocationRowId: "tool-1", resourceId: "integration:search:query", argumentsDigest: __DigestCanonicalJson({ query: "original" }), reviewedToolSchema: schema, reviewedToolSchemaDigest: __DigestCanonicalJson(schema), state: ApprovalRequestState.Pending, expiresAt: new Date("2026-07-22T09:00:00.000Z") };
+	return { id: "approval-1", runId: "run-1", attempt: 2, siloId: "silo-1", subjectId: "user-1", toolInvocationRowId: "tool-1", resourceId: "integration:search:query", argumentsDigest: __DigestCanonicalJson({ query: "original" }), reviewedToolArguments: { query: "original" }, reviewedToolSchema: schema, reviewedToolSchemaDigest: __DigestCanonicalJson(schema), state: ApprovalRequestState.Pending, expiresAt: new Date("2026-07-22T09:00:00.000Z") };
 }
 
 const NOW = new Date("2026-07-21T09:00:00.000Z");
@@ -35,11 +43,16 @@ function _expiryTransaction(due: readonly { id: string; runId: string; attempt: 
 	const runFindUnique = vi.fn()
 		.mockResolvedValueOnce({ id: "run-1", attempt: 2, state: AgentRunState.WaitingForApproval })
 		.mockResolvedValue({ id: "run-1", attempt: 2, state: resumed ? AgentRunState.Running : AgentRunState.WaitingForApproval });
+	const invocationFindUnique = vi.fn(async function _findInvocation(argumentsValue)
+	{
+		return _invocation({ id: argumentsValue.where.id, toolInvocationId: `call-${argumentsValue.where.id}` });
+	});
 	return {
 		transaction: {
 			agentRun: { findUnique: runFindUnique, updateMany: runUpdateMany },
 			approvalRequest: { findMany: vi.fn().mockResolvedValue(due), updateMany: approvalUpdateMany, count: vi.fn().mockResolvedValueOnce(pendingCounts[0] ?? 0).mockResolvedValueOnce(pendingCounts[1] ?? pendingCounts[0] ?? 0) },
-			toolInvocation: { updateMany: invocationUpdateMany },
+			toolInvocation: { findUnique: invocationFindUnique, updateMany: invocationUpdateMany },
+			toolResultDelivery: { create: vi.fn() },
 		} as unknown as Prisma.TransactionClient,
 		approvalUpdateMany,
 		invocationUpdateMany,
@@ -51,13 +64,14 @@ describe("deferred tool approval authority", function _suite()
 {
 	it("approves and records the complete validated replacement arguments", async function _approve()
 	{
-		const { transaction, updateMany } = _transaction(_pending(), 1);
+		const { transaction, updateMany, invocationUpdateMany } = _transaction(_pending(), 1);
 		const result = await __DecideDeferredToolRequest(transaction, { approvalRequestId: "approval-1", siloId: "silo-1", subjectId: "user-1", decision: DeferredToolDecisionKinds.Approved, arguments: { query: "edited" }, decidedBy: "user-1", now: NOW });
 		expect(result).toEqual({ outcome: "approved", argumentsDigest: __DigestCanonicalJson({ query: "edited" }) });
-		expect(updateMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ id: "approval-1", state: ApprovalRequestState.Pending, expiresAt: { gt: NOW } }), data: expect.objectContaining({ state: ApprovalRequestState.Approved, finalArguments: { query: "edited" }, finalArgumentsDigest: __DigestCanonicalJson({ query: "edited" }), resumeTokenHash: expect.stringMatching(/^sha256:/) }) }));
+		expect(updateMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ id: "approval-1", state: ApprovalRequestState.Pending, expiresAt: { gt: NOW } }), data: expect.objectContaining({ state: ApprovalRequestState.Approved, finalArguments: { query: "edited" }, finalArgumentsDigest: __DigestCanonicalJson({ query: "edited" }) }) }));
+		expect(invocationUpdateMany).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ state: ToolInvocationState.Ready, effectiveArguments: { query: "edited" }, effectiveArgumentsDigest: __DigestCanonicalJson({ query: "edited" }) }) }));
 	});
 
-	it("conflicts when the reserved tool invocation is missing or belongs to another attempt", async function _brokenReservationLink()
+	it("conflicts when the awaiting tool invocation is missing or belongs to another attempt", async function _brokenInvocationLink()
 	{
 		for (const invocationRow of [null, { id: "tool-1", runId: "run-other", attempt: 2, toolInvocationId: "call-7" }, { id: "tool-1", runId: "run-1", attempt: 9, toolInvocationId: "call-7" }])
 		{
@@ -68,13 +82,14 @@ describe("deferred tool approval authority", function _suite()
 		}
 	});
 
-	it("denies by closing the pending request without a result", async function _deny()
+	it("denies by closing the pending request with one exact failure delivery", async function _deny()
 	{
-		const { transaction, updateMany, invocationUpdateMany } = _transaction(_pending(), 1);
+		const { transaction, updateMany, invocationUpdateMany, deliveryCreate } = _transaction(_pending(), 1);
 		const result = await __DecideDeferredToolRequest(transaction, { approvalRequestId: "approval-1", siloId: "silo-1", subjectId: "user-1", decision: DeferredToolDecisionKinds.Denied, decidedBy: "user-1", now: NOW });
 		expect(result).toEqual({ outcome: "denied" });
-		expect(updateMany).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ state: ApprovalRequestState.Denied, resumeTokenHash: expect.stringMatching(/^sha256:/) }) }));
-		expect(invocationUpdateMany).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ state: ActionExecutionState.Failed, failureCode: "approval_denied" }) }));
+		expect(updateMany).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ state: ApprovalRequestState.Denied }) }));
+		expect(invocationUpdateMany).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ state: ToolInvocationState.Failed, failureCode: "approval_denied" }) }));
+		expect(deliveryCreate).toHaveBeenCalledWith({ data: expect.objectContaining({ payload: { toolInvocationId: "call-7", outcome: "failed", failureCode: "approval_denied" } }) });
 	});
 
 	it("keeps the run waiting while another request remains pending", async function _keepsBatchWaiting()
@@ -115,7 +130,7 @@ describe("deferred tool approval authority", function _suite()
 		expect(result).toEqual({ outcome: "expired" });
 		expect(updateMany).toHaveBeenCalledWith(expect.objectContaining({
 			where: expect.objectContaining({ state: ApprovalRequestState.Pending, expiresAt: { lte: NOW } }),
-			data: expect.objectContaining({ state: ApprovalRequestState.Expired, resumeTokenHash: expect.stringMatching(/^sha256:/) }),
+			data: expect.objectContaining({ state: ApprovalRequestState.Expired }),
 		}));
 	});
 
@@ -171,7 +186,7 @@ describe("deferred tool approval authority", function _suite()
 const ASSIGNMENT = { agentServiceId: "svc-1", agentRevisionId: "rev-1", siloId: "silo-1", subjectId: "user-1", audience: "opencrane-agent-runtime", serviceAccountName: "agent-runtime-1", namespace: "silo-1-runtime", workloadKind: "Job", workloadUid: "wl-1", podUid: "pod-1", state: WorkloadAssignmentState.Registered, expiresAt: new Date("2026-07-21T10:00:00.000Z") };
 const PROOF_KEY = { id: "proof-1", keyThumbprint: "thumb-1", expiresAt: new Date("2026-07-21T09:30:00.000Z"), revokedAt: null };
 
-/** Command opening a pending deferred-tool approval for a reserved invocation. */
+/** Command opening a pending deferred-tool approval for an awaiting invocation. */
 function _deferCommand(): Parameters<typeof __DeferToolRequest>[1]
 {
 	const schema = { type: "object", properties: { query: { type: "string" } } };
@@ -180,7 +195,7 @@ function _deferCommand(): Parameters<typeof __DeferToolRequest>[1]
 
 describe("defer tool request authority", function _deferSuite()
 {
-	it("opens a pending approval bound to the reserved tool invocation and live workload", async function _defers()
+	it("opens a pending approval bound to the awaiting tool invocation and live workload", async function _defers()
 	{
 		const create = vi.fn().mockResolvedValue({ id: "approval-9" });
 		const pause = vi.fn().mockResolvedValue({ count: 1 });
@@ -189,6 +204,7 @@ describe("defer tool request authority", function _deferSuite()
 			runProofKey: { findUnique: vi.fn().mockResolvedValue(PROOF_KEY) },
 			agentRun: { findUnique: vi.fn().mockResolvedValue({ id: "run-1", attempt: 2, state: AgentRunState.Running }), updateMany: pause },
 			approvalRequest: { create, findFirst: vi.fn().mockResolvedValue(null), count: vi.fn().mockResolvedValue(0) },
+			toolInvocation: { findUnique: vi.fn().mockResolvedValue(_invocation()) },
 		} as unknown as Prisma.TransactionClient;
 
 		const result = await __DeferToolRequest(transaction, _deferCommand());
@@ -207,6 +223,7 @@ describe("defer tool request authority", function _deferSuite()
 			runProofKey: { findUnique: vi.fn().mockResolvedValue(PROOF_KEY) },
 			agentRun: { findUnique: vi.fn().mockResolvedValue({ id: "run-1", attempt: 2, state: AgentRunState.WaitingForApproval }), updateMany: pause },
 			approvalRequest: { create, findFirst: vi.fn().mockResolvedValue(null), count: vi.fn().mockResolvedValue(1) },
+			toolInvocation: { findUnique: vi.fn().mockResolvedValue(_invocation()) },
 		} as unknown as Prisma.TransactionClient;
 
 		expect(await __DeferToolRequest(transaction, _deferCommand())).toEqual({ outcome: "deferred", approvalRequestId: "approval-9" });
@@ -243,6 +260,7 @@ describe("defer tool request authority", function _deferSuite()
 			workloadAssignment: { findUnique: vi.fn().mockResolvedValue(ASSIGNMENT) },
 			runProofKey: { findUnique: vi.fn().mockResolvedValue(PROOF_KEY) },
 			approvalRequest: { create: vi.fn(), findFirst: vi.fn().mockResolvedValue({ id: "approval-existing", argumentsDigest: _deferCommand().argumentsDigest, reviewedToolSchemaDigest: _deferCommand().reviewedParametersSchemaDigest }) },
+			toolInvocation: { findUnique: vi.fn().mockResolvedValue(_invocation()) },
 		} as unknown as Prisma.TransactionClient;
 
 		expect(await __DeferToolRequest(transaction, _deferCommand())).toEqual({ outcome: "already_deferred", approvalRequestId: "approval-existing" });
@@ -256,6 +274,7 @@ describe("defer tool request authority", function _deferSuite()
 			runProofKey: { findUnique: vi.fn().mockResolvedValue(PROOF_KEY) },
 			agentRun: { findUnique: vi.fn().mockResolvedValue({ id: "run-1", attempt: 2, state: AgentRunState.Running }), updateMany: vi.fn().mockResolvedValue({ count: 0 }) },
 			approvalRequest: { create, findFirst: vi.fn().mockResolvedValue(null), count: vi.fn().mockResolvedValue(0) },
+			toolInvocation: { findUnique: vi.fn().mockResolvedValue(_invocation()) },
 		} as unknown as Prisma.TransactionClient;
 
 		expect(await __DeferToolRequest(transaction, _deferCommand())).toEqual({ outcome: "unavailable" });

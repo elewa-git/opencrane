@@ -90,7 +90,7 @@ SELECT pg_temp.expect_failure(
 INSERT INTO "runtime_command_streams" ("run_id", "attempt", "runtime_instance_id", "updated_at")
 VALUES ('steering-run', 1, 'runtime-steering-1', clock_timestamp());
 INSERT INTO "runtime_dispatched_commands" ("id", "run_id", "attempt", "sequence", "command_id", "kind", "fence", "payload", "issued_at", "expires_at")
-VALUES ('steering-resume-command', 'steering-run', 1, 1, 'steering-resume-command-id', 'resume_attempt', 1, '{"inputGeneration":0,"deferredToolResults":[],"steeringRequests":[{"text":"Focus on the budget."}]}'::jsonb, clock_timestamp(), clock_timestamp() + interval '1 minute');
+VALUES ('steering-resume-command', 'steering-run', 1, 1, 'steering-resume-command-id', 'resume_attempt', 1, '{"inputGeneration":0,"toolResults":[],"steeringRequests":[{"text":"Focus on the budget."}]}'::jsonb, clock_timestamp(), clock_timestamp() + interval '1 minute');
 UPDATE "runtime_steering_requests" SET "state" = 'consumed', "consumed_at" = clock_timestamp() WHERE "id" = 'steering-request-1';
 SELECT pg_temp.expect_failure(
     'a consumed steering request is terminal',

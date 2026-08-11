@@ -51,37 +51,37 @@ failed, and cancelled runs; it is not a second runtime authority. Duplicate comm
 identifiers are idempotent; stale, expired, out-of-order, malformed, or mismatched frames are denied
 with a stable reason.
 
-An admitted external action can be replayed only before its runner creates a durable invocation
-receipt. That narrow failure returns an explicit bounded retry result from a server-owned per-candidate
-budget and deadline, so a reconnecting runtime cannot reset it. The runtime resubmits the same
-candidate identifier rather than falsely treating the action as accepted or emitting a terminal
-executor error. Once a runner records a durable refusal or result, that outcome is final and remains
-fail closed. If a frozen integration later becomes inactive, revoked, expired, or absent, the
-invocation receipt retains that bounded authority reason and the action boundary emits a
-credential-free structured event; it never collapses a policy revocation into a transport failure.
+Candidate admission creates durable `Preparing` work before the runtime can forget it. A process
+worker may retry provider-free preparation at most three times within five minutes. It then acquires
+a monotonic claim before calling a provider. An uncertain provider outcome is never treated as a
+failure that can be retried blindly: an adapter with a frozen idempotency key may repeat the exact
+request, an adapter with trustworthy readback may reconcile without repeating the effect, and every
+other adapter enters visible `RecoveryRequired`. Expired claims follow the same policy after a
+process restart.
 
 It intentionally owns no HTTP listener, Kubernetes resource, model driver, or provider credential.
-Its production factory composes the external-action runner from the durable invocation, personal
-configuration, integration, approval, clock, and fail-closed transport adapters. The runner selects
-the user-only personal upgrade tool before reserving it; every other action is reserved before its
-transport can run, and a deferred approval is bound to that exact reservation. The app supplies only
-process persistence, fixed policy values, and logging, then hands the resulting authority to the
-stream transport. An integration action has the fixed
+Its production factory composes a server-side external-action worker from the ToolInvocation unit
+of work, immutable snapshot loader, personal configuration authority, and fail-closed provider
+adapters. Current Obot, sandbox, and memory ports expose neither provider idempotency nor readback,
+so they deliberately use manual recovery. The app supplies process persistence, transports, and
+structured logging, then drains the worker before disconnecting Prisma. An integration action has the fixed
 `integration:<integrationId>:<toolName>` shape: its live custody reference and revision allow-list
 are rechecked at execution, so the runtime never sees either credential or mutable permission state.
 
 ## Public surface
 
 - `__CreateProductionRuntimeDispatchAuthority` — constructs the ready production authority,
-  including first-party personal-session tool augmentation, external-action routing, frozen memory
-  dataset selection, deferred approval recovery, retry bounds, and canonical event reporting.
+  including first-party personal-session tool augmentation, durable candidate admission, saved tool
+  result resume, frozen memory dataset selection, and canonical event reporting.
+- `__CreateProductionExternalActionWorker` — constructs the bounded process worker that prepares,
+  claims, executes, reconciles, and recovers durable ToolInvocations.
 - `_CreateSteeringIngestRouter` — the ready-to-mount Prisma composition that maps the shared
   authenticated request principal into the steering caller and supplies the queue and clock.
 - `_RuntimeSteeringOpenapiPaths` — contributes the steering contract to the server-owned API spec.
 
-Pure protocol decisions, Prisma adapters, executor construction, and their supporting types remain
-inside this package. The production external-action runner and its composition helpers are
-package-private seams for the factory, not alternate entrypoints for sibling domains.
+Pure protocol decisions, Prisma adapters, provider executor construction, and recovery strategies
+remain inside this package. Provider results are persisted before the runtime receives them; the
+runtime never receives a provider credential or calls Obot directly.
 
 ## Boundary
 
@@ -126,7 +126,7 @@ Tagged `scope:execution-protocol` (`layer:backend`): it may depend on agent, exe
 execution-input, and personal-configuration contracts, authentication, authorization, the
 integration authority, the three injected transport-port scopes, and shared contracts. Tool
 descriptors are projected only from the immutable snapshot; no decision or resume path consults a
-live catalogue. Candidate arguments and the schema digest are validated before reservation, and the
+live catalogue. Candidate arguments and the schema digest are validated before admission, and the
 same frozen schema is propagated to deferred approval. The
 authentication edge resolves only the
 backend-type-free request principal. The integration edge is read-only: it resolves and rechecks the revision's live

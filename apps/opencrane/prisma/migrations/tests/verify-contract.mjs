@@ -10,7 +10,9 @@ const transitionRoot = join(migrationRoot, "0.7.0-to-0.8.0");
 const sql = readFileSync(join(transitionRoot, "migration.sql"), "utf8");
 const manifest = JSON.parse(readFileSync(join(transitionRoot, "manifest.json"), "utf8"));
 const targetBaseline = readFileSync(join(migrationRoot, "../bootstrap/target-baseline.sql"), "utf8");
+const authorizationSchema = readFileSync(join(migrationRoot, "../schema/authorization.prisma"), "utf8");
 const conversationSchema = readFileSync(join(migrationRoot, "../schema/conversations.prisma"), "utf8");
+const runtimeSchema = readFileSync(join(migrationRoot, "../schema/runtime.prisma"), "utf8");
 const digest = createHash("sha256").update(sql).digest("hex");
 const targetDigest = createHash("sha256").update(targetBaseline).digest("hex");
 
@@ -68,6 +70,20 @@ requireContract(sql.includes("ERRCODE = 'OC711'"), "migration must reject popula
 requireContract(sql.includes("ERRCODE = 'OC712'"), "migration must reject legacy integration assignments without reviewed schemas");
 requireContract(sql.includes('ADD COLUMN "tool_definitions" JSONB NOT NULL'), "migration must replace tool-name arrays with reviewed definitions");
 requireContract(!targetBaseline.includes('"allowed_tools"'), "target baseline must not retain tool-name-only authority");
+requireContract(authorizationSchema.includes("model ToolResultDelivery"), "authorization schema must own exact tool-result delivery");
+requireContract(!runtimeSchema.includes("model RuntimeExternalActionRetry"), "runtime schema must retire the split retry budget");
+for (const source of [targetBaseline, sql])
+{
+	requireContract(source.includes('CREATE TYPE "ToolInvocationState"'), "tool invocation lifecycle must use its own durable state vocabulary");
+	requireContract(source.includes('CREATE TYPE "ExternalActionRecoveryMode"'), "tool invocation recovery strategy must be frozen before dispatch");
+	requireContract(source.includes('CREATE TABLE "tool_result_deliveries"'), "terminal tool results must use one durable delivery outbox");
+	requireContract(source.includes('"preparation_attempt" INTEGER NOT NULL DEFAULT 0'), "provider-free preparation attempts must persist on the invocation");
+	requireContract(source.includes('"retry_deadline_at" TIMESTAMP(3) NOT NULL'), "the five-minute provider-free retry deadline must persist on the invocation");
+	requireContract(!source.includes('CREATE TABLE "runtime_external_action_retries"'), "the superseded split retry authority must stay removed");
+}
+requireContract(sql.includes('DROP TABLE "runtime_external_action_retries"'), "migration must drop the superseded retry authority");
+requireContract(sql.includes('DELETE FROM "tool_invocations"'), "migration must explicitly discard the unfinished pre-release invocation format");
+requireContract(sql.includes('DROP TYPE "ActionExecutionState"') === false, "migration must retain ActionExecutionState for proof-bound action receipts");
 for (const source of [targetBaseline, sql])
 {
 	requireContract(source.includes('channel_runtime_routes_route_id_receiver_id_silo_id_agent_service_fkey') || source.includes('channel_invocation_contexts_route_id_receiver_id_silo_id_agent_service_fkey'), "invocation contexts must use a receiver-bound route foreign key");

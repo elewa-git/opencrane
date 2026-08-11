@@ -1,6 +1,6 @@
 import type { JsonValue } from "@opencrane/util";
 
-/** Exact reserved tool invocation to pause behind a new pending deferred-tool approval. */
+/** Exact prepared tool invocation to pause behind a new pending deferred-tool approval. */
 export interface DeferToolRequestCommand
 {
 	/** Interrupt id supplied by the reviewed runtime proposal and reused as the approval id. */
@@ -9,7 +9,7 @@ export interface DeferToolRequestCommand
 	readonly runId: string;
 	/** Current positive run attempt. */
 	readonly attempt: number;
-	/** Reserved ToolInvocation row id the approval gates. */
+	/** Awaiting-approval ToolInvocation row id the approval gates. */
 	readonly toolInvocationRowId: string;
 	/** Immutable tool revision being invoked, recorded as the approval's resource id. */
 	readonly toolRevisionId: string;
@@ -43,7 +43,7 @@ export type DeferToolRequestResult =
 	| { readonly outcome: "already_deferred"; readonly approvalRequestId: string }
 	| { readonly outcome: "unavailable" };
 
-/** Exact reserved external-action coordinates needed to open a deferred approval. */
+/** Exact prepared external-action coordinates needed to open a deferred approval. */
 export interface OpenDeferredToolApprovalCommand
 {
 	/** Interrupt id emitted for the reviewed proposal and reused as the approval id. */
@@ -66,8 +66,8 @@ export interface OpenDeferredToolApprovalCommand
 	readonly parametersSchemaDigest: string;
 	/** Digest of the effective capability set admitted for this attempt. */
 	readonly capabilitySetDigest: string;
-	/** Durable ToolInvocation row already reserved before approval creation. */
-	readonly reservationId: string;
+	/** Durable ToolInvocation row already awaiting approval creation. */
+	readonly invocationId: string;
 	/** Trusted server instant used for approval creation and failure terminalisation. */
 	readonly now: Date;
 	/** Hard server-owned expiry for the pending approval. */
@@ -79,15 +79,15 @@ export interface DeferredToolApprovalOpenRepository
 {
 	/** Open the approval against the exact transaction-owned workload fence. */
 	defer(command: DeferToolRequestCommand): Promise<DeferToolRequestResult>;
-	/** Compare-and-set one reserved invocation to a stable failure. */
-	markReservedFailed(reservationId: string, failureCode: string, now: Date): Promise<boolean>;
-	/** Return whether the exact interrupt is durably linked to its reservation. */
+	/** Compare-and-set one awaiting-approval invocation to a stable failure and delivery. */
+	terminaliseAwaitingApproval(invocationId: string, failureCode: string, now: Date): Promise<boolean>;
+	/** Return whether the exact interrupt is durably linked to its invocation. */
 	hasLinkedApproval(command: OpenDeferredToolApprovalCommand): Promise<boolean>;
 }
 
 /** Atomic boundary for opening and ambiguity-recovering one deferred tool approval. */
 export interface DeferredToolApprovalOpenUnitOfWork
 {
-	/** Opens an approval or proves the reservation terminal without exposing Prisma. */
+	/** Opens an approval or proves the invocation terminal without exposing Prisma. */
 	open(command: OpenDeferredToolApprovalCommand): Promise<boolean>;
 }

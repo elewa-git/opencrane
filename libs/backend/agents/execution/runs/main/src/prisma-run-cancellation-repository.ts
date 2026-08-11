@@ -5,6 +5,7 @@ import { AgentRunState, AgentRunTerminalReason, AgentServiceKind, Prisma, RunOut
 import { __CancelPendingRunApprovalAuthority } from "@opencrane/backend/server/iam/authorization";
 
 import { __DeliverChildRunCompletionInTransaction } from "./prisma-child-run-completion-repository.js";
+import { PrismaRunCancellationEventDeferralUnitOfWork } from "./prisma-run-cancellation-event-deferral-repository.js";
 import type { ClaimNextRunWorkloadCleanupResult, ConfirmRunWorkloadCleanupCommand, ConfirmRunWorkloadCleanupResult, RepairExpiredRunResult, RequestRunCancellationCommand, RequestRunCancellationResult, RunCancellationRepository, RunCancellationRepositoryConfig, RunWorkloadCleanupClaim, RunWorkloadCleanupProjection } from "./run-cancellation.types.js";
 
 /** Non-locking cleanup coordinates used only to establish canonical lock order. */
@@ -75,7 +76,7 @@ export class PrismaRunCancellationRepository implements RunCancellationRepositor
 			if (entered.count !== 1) throw new Error("run cancellation lost its lifecycle fence");
 			await transaction.workloadAssignment.updateMany({ where: { runId: run.id, attempt: run.attempt, state: { in: [WorkloadAssignmentState.PendingPod, WorkloadAssignmentState.Registered] } }, data: { state: WorkloadAssignmentState.Revoked, revokedAt: now } });
 			await transaction.runProofKey.updateMany({ where: { runId: run.id, attempt: run.attempt, revokedAt: null }, data: { revokedAt: now } });
-			await __CancelPendingRunApprovalAuthority(transaction, { runId: run.id, attempt: run.attempt, now });
+			const approvalCancellation = await __CancelPendingRunApprovalAuthority(transaction, { runId: run.id, attempt: run.attempt, now });
 			await transaction.outboxEvent.updateMany({ where: { runId: run.id, attempt: run.attempt, kind: { in: [RunOutboxEventKind.RunAttemptRequested, RunOutboxEventKind.RunWorkloadReleaseRequested] }, publishedAt: null, failedAt: null }, data: { failedAt: now, failureCode: "RUN_CANCELLED" } });
 
 			// 4. Record the cancellation request and either prove no Job can exist or schedule cleanup.
@@ -84,11 +85,12 @@ export class PrismaRunCancellationRepository implements RunCancellationRepositor
 			await transaction.outboxEvent.create({ data: { runId: run.id, attempt: run.attempt, sequence, kind: RunOutboxEventKind.RunCancellationRequested, idempotencyKey: `${run.id}:cancellation:${run.attempt}`, payload: { runId: run.id, attempt: run.attempt, requestedBy: command.requestedBy }, availableAt: now } });
 			const runtimeNamespace = _RuntimeNamespace(service.kind, config);
 			const cleanup = _CleanupProjection(run, assignment, bootstrap?.id ?? _BootstrapReference(attemptEvent.id, run, runtimeNamespace), service.workloadProfile, runtimeNamespace, "cancellation");
-			const inFlightCreateMayExist = assignment !== null || attemptEvent.claimedAt !== null;
-			if (inFlightCreateMayExist)
+			const cleanupOrClaimSettlementRequired = assignment !== null || attemptEvent.claimedAt !== null || approvalCancellation.activeClaimCount > 0;
+			if (cleanupOrClaimSettlementRequired)
 			{
 				sequence += 1;
-				const availableAt = assignment !== null ? now : new Date(Math.max(now.getTime(), attemptEvent.claimedAt!.getTime() + config.claimLeaseMilliseconds + config.orphanObservationMarginMilliseconds));
+				const createObservationEndsAt = attemptEvent.claimedAt === null ? now.getTime() : attemptEvent.claimedAt.getTime() + config.claimLeaseMilliseconds + config.orphanObservationMarginMilliseconds;
+				const availableAt = assignment !== null ? now : new Date(Math.max(now.getTime(), createObservationEndsAt));
 				await transaction.outboxEvent.create({ data: { runId: run.id, attempt: run.attempt, sequence, kind: RunOutboxEventKind.RunWorkloadCleanupRequested, idempotencyKey: `${run.id}:cleanup:${run.attempt}`, payload: cleanup as unknown as Prisma.InputJsonObject, availableAt } });
 				return { status: "cancelling", runId: run.id, attempt: run.attempt, cleanupRequired: true };
 			}
@@ -136,6 +138,7 @@ export class PrismaRunCancellationRepository implements RunCancellationRepositor
 	async confirmWorkloadCleanupAtomically(eventId: string, command: ConfirmRunWorkloadCleanupCommand): Promise<ConfirmRunWorkloadCleanupResult>
 	{
 		if (!_ConfirmationIsValid(eventId, command)) return { status: "conflict", reason: "invalid_confirmation" };
+		const config = this.config;
 		return this.prisma.$transaction(async function _confirm(transaction: Prisma.TransactionClient): Promise<ConfirmRunWorkloadCleanupResult>
 		{
 			const discoveredEvent = await transaction.outboxEvent.findUnique({ where: { id: eventId } });
@@ -156,6 +159,16 @@ export class PrismaRunCancellationRepository implements RunCancellationRepositor
 			if (event.failedAt !== null) return { status: "conflict", reason: "claim_terminal" };
 			if (event.claimedAt?.getTime() !== Date.parse(command.claimedAt) || event.deliveryCount !== command.deliveryCount) return { status: "conflict", reason: "stale_claim" };
 			if (runFinalized && run.state !== AgentRunState.Cancelling) return { status: "conflict", reason: "authority_conflict" };
+			if (runFinalized)
+			{
+				const cancellation = await __CancelPendingRunApprovalAuthority(transaction, { runId: run.id, attempt: run.attempt, now });
+				if (cancellation.activeClaimCount > 0)
+				{
+					const deferred = await new PrismaRunCancellationEventDeferralUnitOfWork(transaction).defer({ eventId: event.id, claimedAt: event.claimedAt, deliveryCount: event.deliveryCount, availableAt: new Date(now.getTime() + config.orphanObservationMarginMilliseconds) });
+					if (!deferred) throw new Error("run workload cleanup lost its active-claim deferral fence");
+					return { status: "confirmed", runId: run.id, attempt: event.attempt, runFinalized: false };
+				}
+			}
 			const published = await transaction.outboxEvent.updateMany({ where: { id: event.id, claimedAt: event.claimedAt, deliveryCount: event.deliveryCount, publishedAt: null, failedAt: null }, data: { publishedAt: now } });
 			if (published.count !== 1) throw new Error("run workload cleanup lost its confirmation fence");
 			if (runFinalized) await _FinalizeCancelledRun(transaction, run, now);
@@ -178,8 +191,8 @@ export class PrismaRunCancellationRepository implements RunCancellationRepositor
 			const workload = _ParseCleanupProjection(locked?.payload);
 			if (!locked || !now || !workload || workload.mode !== "unassigned_orphan" || workload.orphanAbsenceObservedAt !== null || locked.claimedAt?.getTime() !== Date.parse(claim.lease.claimedAt) || locked.deliveryCount !== claim.lease.deliveryCount || locked.publishedAt !== null || locked.failedAt !== null) return "conflict";
 			const payload = { ...workload, orphanAbsenceObservedAt: now.toISOString() };
-			const deferred = await transaction.outboxEvent.updateMany({ where: { id: eventId, claimedAt: locked.claimedAt, deliveryCount: locked.deliveryCount, publishedAt: null, failedAt: null }, data: { payload: payload as unknown as Prisma.InputJsonObject, availableAt: new Date(now.getTime() + config.orphanObservationMarginMilliseconds), claimedAt: null } });
-			return deferred.count === 1 ? "deferred" : "conflict";
+			const deferred = await new PrismaRunCancellationEventDeferralUnitOfWork(transaction).defer({ eventId, claimedAt: locked.claimedAt, deliveryCount: locked.deliveryCount, availableAt: new Date(now.getTime() + config.orphanObservationMarginMilliseconds), payload });
+			return deferred ? "deferred" : "conflict";
 		});
 	}
 

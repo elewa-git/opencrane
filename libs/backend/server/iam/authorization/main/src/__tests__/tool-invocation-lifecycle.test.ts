@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import { __PlanToolInvocationLifecycle } from "../tool-invocation-lifecycle.js";
-import { ExternalActionRecoveryModes, ToolInvocationLifecycleActions, ToolInvocationLifecycleEvents, ToolInvocationStates, type ToolInvocationLifecycleInput } from "../tool-invocation-lifecycle.types.js";
+import { ExternalActionClaimKinds, ExternalActionRecoveryModes, ToolInvocationLifecycleActions, ToolInvocationLifecycleEvents, ToolInvocationStates, type ToolInvocationLifecycleInput } from "../tool-invocation-lifecycle.types.js";
 
 /** Build one complete decision input while allowing the focused cell to vary. */
 function _input(overrides: Partial<ToolInvocationLifecycleInput>): ToolInvocationLifecycleInput
 {
-	return { state: ToolInvocationStates.Preparing, event: ToolInvocationLifecycleEvents.Prepared, recoveryMode: ExternalActionRecoveryModes.Manual, preparationAttempt: 1, preparationAttemptLimit: 3, withinPreparationDeadline: true, ...overrides };
+	return { state: ToolInvocationStates.Preparing, event: ToolInvocationLifecycleEvents.Prepared, recoveryMode: ExternalActionRecoveryModes.Manual, claimKind: null, preparationAttempt: 1, preparationAttemptLimit: 3, withinPreparationDeadline: true, ...overrides };
 }
 
 describe("ToolInvocation lifecycle", function _suite()
@@ -31,7 +31,7 @@ describe("ToolInvocation lifecycle", function _suite()
 
 	it("selects recovery only from the frozen trusted-adapter capability", function _recoveryStrategy()
 	{
-		const base = { state: ToolInvocationStates.Claimed, event: ToolInvocationLifecycleEvents.DispatchAmbiguous };
+		const base = { state: ToolInvocationStates.Claimed, event: ToolInvocationLifecycleEvents.DispatchAmbiguous, claimKind: ExternalActionClaimKinds.Dispatch };
 		expect(__PlanToolInvocationLifecycle(_input({ ...base, recoveryMode: ExternalActionRecoveryModes.ProviderIdempotency }))).toBe(ToolInvocationLifecycleActions.RedispatchIdempotently);
 		expect(__PlanToolInvocationLifecycle(_input({ ...base, recoveryMode: ExternalActionRecoveryModes.Reconciliation }))).toBe(ToolInvocationLifecycleActions.BeginReconciliation);
 		expect(__PlanToolInvocationLifecycle(_input({ ...base, recoveryMode: ExternalActionRecoveryModes.Manual }))).toBe(ToolInvocationLifecycleActions.RequireManualRecovery);
@@ -41,5 +41,12 @@ describe("ToolInvocation lifecycle", function _suite()
 	{
 		expect(__PlanToolInvocationLifecycle(_input({ state: ToolInvocationStates.RecoveryRequired, event: ToolInvocationLifecycleEvents.DispatchClaimed }))).toBe(ToolInvocationLifecycleActions.Reject);
 		expect(__PlanToolInvocationLifecycle(_input({ state: ToolInvocationStates.RecoveryRequired, event: ToolInvocationLifecycleEvents.Cancelled }))).toBe(ToolInvocationLifecycleActions.Fail);
+	});
+
+	it("leaves active provider claims fenced during cancellation", function _activeCancellation()
+	{
+		expect(__PlanToolInvocationLifecycle(_input({ state: ToolInvocationStates.Claimed, claimKind: ExternalActionClaimKinds.Dispatch, event: ToolInvocationLifecycleEvents.Cancelled }))).toBe(ToolInvocationLifecycleActions.Reject);
+		expect(__PlanToolInvocationLifecycle(_input({ state: ToolInvocationStates.Reconciling, claimKind: ExternalActionClaimKinds.Reconcile, event: ToolInvocationLifecycleEvents.Cancelled }))).toBe(ToolInvocationLifecycleActions.Reject);
+		expect(__PlanToolInvocationLifecycle(_input({ state: ToolInvocationStates.Reconciling, claimKind: null, event: ToolInvocationLifecycleEvents.Cancelled }))).toBe(ToolInvocationLifecycleActions.Fail);
 	});
 });

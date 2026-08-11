@@ -52,8 +52,8 @@ config.py · constants.py · observability.py support the components above.
    It translates framework events into small dictionaries; framework objects never cross the seam.
 5. `protocol/candidates.py` binds each event to the accepted command coordinates. Tool calls become
    `external_action` candidates only after resolving the exact revision from the compiled grant set.
-6. `transport/http.py` delivers each stable candidate. It retries only the control plane's explicit
-   pre-reservation response and preserves the same candidate identifier across that retry.
+6. `transport/http.py` delivers each non-terminal candidate once. Terminal delivery alone may reuse
+   its stable identifier after an ambiguous network loss.
 7. A `resume_attempt` carries exact saved tool results. `attempts/tool_results.py` maps each
    `toolInvocationId` back to the pending call recorded at proposal time
    (`attempts/pending_tools.py`) and feeds the framework that saved result. It never contacts the
@@ -71,9 +71,8 @@ config.py · constants.py · observability.py support the components above.
 - The local checkpoint is encrypted, replaceable, and bound to run coordinates. Missing, corrupt,
   foreign, or stale checkpoint data is discarded; it never overrides server state.
 - Bootstrap refusal is permanent. Exceptional and clean-close transport loss reconnect with bounded
-  jitter. Non-terminal candidate replay requires an explicit pre-reservation response from the
-  server. A terminal candidate may also replay unchanged after an ambiguous network loss; an
-  explicit HTTP refusal is permanent.
+  jitter. Non-terminal candidates are not replayed after ambiguous delivery. A terminal candidate
+  may replay unchanged after an ambiguous network loss; an explicit HTTP refusal is permanent.
 - Secrets are read at their point of use and never included in logs, spans, candidates, checkpoints,
   command-line arguments, or environment-derived error messages.
 

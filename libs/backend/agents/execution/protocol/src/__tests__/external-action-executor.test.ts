@@ -35,7 +35,7 @@ class _RecordingObotInvocation implements ObotMcpInvocationPort
 	async invokeTool(command: ObotMcpToolInvocationCommand)
 	{
 		this.commands.push(command);
-		return { content: { result: "ok" } };
+		return { content: { result: "ok" }, isError: false };
 	}
 }
 
@@ -60,6 +60,12 @@ describe("composition-root external action executor", function _suite()
 	{
 		const executor = __CreateExternalActionExecutor(_candidate("integration:calendar:calendar.read"), { ...DEPENDENCIES, obotMcpInvocation: new _RecordingObotInvocation() });
 		await expect(executor.execute()).resolves.toEqual({ result: "ok" });
+	});
+
+	it("turns MCP isError content into a typed failure without forwarding its body", async function _integrationToolFailure()
+	{
+		const executor = __CreateExternalActionExecutor(_candidate("integration:calendar:calendar.read"), { ...DEPENDENCIES, obotMcpInvocation: { invokeTool: async function _invoke() { return { content: { secret: "never-forward" }, isError: true }; } } });
+		await expect(executor.execute()).rejects.toMatchObject({ name: "IntegrationToolReturnedError", message: "integration tool returned a failure result" });
 	});
 
 	it("refuses an incomplete integration revision before resolving live custody", async function _incompleteIntegration()

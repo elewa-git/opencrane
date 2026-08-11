@@ -62,6 +62,16 @@ INSERT INTO "channel_runtime_routes" (
 ) VALUES
     ('legacy-event-route-a', 'legacy-silo', 'legacy-service-a', 'events.read', 'http://legacy-a.svc.cluster.local/events', '2026-01-01T00:00:00.000Z', '2026-01-01T01:00:00.000Z'),
     ('legacy-event-route-b', 'legacy-silo', 'legacy-service-b', 'events.read', 'http://legacy-b.svc.cluster.local/events', '2026-01-02T00:00:00.000Z', '2026-01-02T01:00:00.000Z');
+INSERT INTO "tool_invocations" (
+    "id", "silo_id", "run_id", "attempt", "agent_service_id", "agent_revision_id", "subject_id",
+    "tool_revision_id", "tool_invocation_id", "arguments_digest", "request_fingerprint"
+) VALUES (
+    'legacy-tool-invocation', 'legacy-silo', 'legacy-run', 1, 'legacy-service', 'legacy-revision', 'legacy-user',
+    'legacy:tool:revision', 'legacy-tool-call', 'sha256:' || repeat('6', 64), 'sha256:' || repeat('7', 64)
+);
+INSERT INTO "runtime_external_action_retries" (
+    "run_id", "attempt", "candidate_id", "retry_deadline_at", "updated_at"
+) VALUES ('legacy-run', 1, 'legacy-candidate', clock_timestamp() + interval '5 minutes', clock_timestamp());
 SET session_replication_role = origin;
 SQL
 psql_command migrated --set "source_baseline_sha256=$PROTECTED_DIGEST" --set "migration_sql_sha256=$MIGRATION_SQL_DIGEST" \
@@ -106,6 +116,12 @@ psql_command migrated --tuples-only --no-align --command \
 psql_command migrated --tuples-only --no-align --command \
 	"SELECT count(*) FROM \"channel_runtime_routes\" WHERE (\"id\" = 'legacy-event-route-a' AND \"legacy_expires_at\" = '2026-01-01T01:00:00.000Z') OR (\"id\" = 'legacy-event-route-b' AND \"legacy_expires_at\" = '2026-01-02T01:00:00.000Z');" \
 	| grep -qx '2'
+psql_command migrated --tuples-only --no-align --command \
+	'SELECT count(*) FROM "tool_invocations" WHERE "id" = '\''legacy-tool-invocation'\'';' \
+	| grep -qx '0'
+psql_command migrated --tuples-only --no-align --command \
+	"SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'runtime_external_action_retries';" \
+	| grep -qx '0'
 if psql_command migrated --command \
 	"UPDATE \"channel_runtime_routes\" SET \"endpoint\" = 'http://mutated.svc.cluster.local/events' WHERE \"id\" = 'legacy-event-route-a';" \
 	>"$WORK_DIR/legacy-route-update-output.log" 2>&1; then

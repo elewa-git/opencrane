@@ -80,11 +80,10 @@ envelope for one of the three canonical A2UI event types; the default Pydantic a
 the runtime never invents UI shapes. Cancel is a positive signal that suppresses any late candidate; steering is
 absorbed only at the safe pre-model-request boundary. Any executor failure surfaces as a real
 `run.failed` terminal report rather than a silent acknowledgement, and a dropped stream bounds further
-candidate emission. Non-terminal replay is allowed only for the control plane's explicit bounded
-pre-reservation response: the runtime resubmits that exact candidate id until the server accepts it,
-exhausts its durable retry budget, or the active attempt/stream is cancelled. A terminal candidate
-may also replay unchanged after an ambiguous network loss because the server may already have
-persisted it; an explicit HTTP refusal is never retried.
+candidate emission. Non-terminal candidates are delivered once; in particular, an ambiguous
+external-action delivery is never repeated by the runtime. A terminal candidate may replay unchanged
+after an ambiguous network loss because the server may already have persisted it; an explicit HTTP
+refusal is never retried.
 
 ## Boundary
 

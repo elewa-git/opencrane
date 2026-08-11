@@ -4,20 +4,17 @@ import { __AppendCompiledTool } from "@opencrane/backend/agents/execution/inputs
 import { PrismaRuntimeEventReporter } from "@opencrane/backend/agents/execution/runs";
 import { __IsUpgradeSessionAvailable, UPGRADE_SESSION_TOOL } from "@opencrane/backend/agents/personal/configuration";
 import { __ExpireDeferredToolApprovalBatch } from "@opencrane/backend/server/iam/authorization";
-import type { IntegrationAuthorityRepository } from "@opencrane/backend/server/gateways/integrations";
 import type { RunInputSnapshot } from "@opencrane/contracts";
-import type { Logger } from "@opencrane/backend/observability";
 import type { MemoryGatewayClient } from "@opencrane/backend/server/infra/memory-gateway-client";
 
 import { __CreatePrismaRunInputCompiler } from "./prisma-run-input-compiler.js";
 import { PrismaRuntimeDispatchAuthority } from "./prisma-runtime-dispatch-authority.js";
 import type { RunInputCompiler, RuntimeApprovalExpiry, RuntimeDispatchAuthorityConfig } from "./prisma-runtime-dispatch-authority.types.js";
-import { _CreateProductionExternalActionRunner } from "./production-external-action-runner.composition.js";
 
 /** Compile ordinary grants, then append the sealed first-party upgrade intent to proven personal services. */
-function _CreateProductionRunInputCompiler(memoryGateway: MemoryGatewayClient, integrationAuthority: IntegrationAuthorityRepository | null): RunInputCompiler
+function _CreateProductionRunInputCompiler(memoryGateway: MemoryGatewayClient): RunInputCompiler
 {
-	const compile = __CreatePrismaRunInputCompiler(memoryGateway, integrationAuthority);
+	const compile = __CreatePrismaRunInputCompiler(memoryGateway);
 	return async function _compileRunInput(snapshot: RunInputSnapshot, transaction: Prisma.TransactionClient)
 	{
 		// 1. Compile the immutable snapshot before considering any first-party descriptor.
@@ -41,19 +38,16 @@ function _CreateProductionApprovalExpiry(): RuntimeApprovalExpiry
 /**
  * Construct the production runtime dispatch authority behind the workload stream.
  *
- * This factory is the sole concrete policy composition for compiled input, external actions,
- * deferred approvals, canonical event reporting, and transport ports. The app supplies process-owned
- * Prisma, configuration, and logging only; it does not reimplement execution decisions.
+ * This factory is the sole concrete policy composition for compiled input, durable external-action
+ * admission, deferred approvals, and canonical runtime event reporting. Provider execution belongs
+ * to the separate server worker and never enters runtime-stream composition.
  *
  * @param prisma - Canonical product-authority persistence client.
  * @param config - Deployment-fixed namespaces, command lifetime, and retry bounds.
- * @param log - Structured process logger used for bounded execution evidence.
- * @param memoryGateway - One authenticated memory-gateway client shared by the compiler and the runner transport.
- * @param integrationAuthority - App-constructed live custody resolver used to compile per-tool Obot
- *   addressing, or null to compile integration tools without a direct-invocation address.
+ * @param memoryGateway - One authenticated memory-gateway client used by the input compiler.
  * @returns One production dispatch authority ready for the runtime stream transport.
  */
-export function __CreateProductionRuntimeDispatchAuthority(prisma: PrismaClient, config: RuntimeDispatchAuthorityConfig, log: Logger, memoryGateway: MemoryGatewayClient, integrationAuthority: IntegrationAuthorityRepository | null = null): PrismaRuntimeDispatchAuthority
+export function __CreateProductionRuntimeDispatchAuthority(prisma: PrismaClient, config: RuntimeDispatchAuthorityConfig, memoryGateway: MemoryGatewayClient): PrismaRuntimeDispatchAuthority
 {
-	return new PrismaRuntimeDispatchAuthority(prisma, config, _CreateProductionRunInputCompiler(memoryGateway, integrationAuthority), _CreateProductionExternalActionRunner(prisma, log, memoryGateway), new PrismaRuntimeEventReporter(), undefined, undefined, _CreateProductionApprovalExpiry());
+	return new PrismaRuntimeDispatchAuthority(prisma, config, _CreateProductionRunInputCompiler(memoryGateway), new PrismaRuntimeEventReporter(), undefined, _CreateProductionApprovalExpiry());
 }

@@ -142,6 +142,13 @@ running attempt, serialises terminal writers on the run, and commits the lifecyc
 conversation event, and any child-to-parent completion delivery together. Runtime Pods have no
 `run.cancelled` authority: cancellation continues to flow through the server-owned cleanup process.
 
+`PrismaToolInvocationRunRecoveryAuthority` is the transaction-bound bridge through which the
+authorization domain may change run recovery posture. It compare-and-sets only the exact attempt
+from `Running` to `RecoveryRequired`, or back to `Running` after authorization has proved no tool
+invocation still needs recovery. A cancelling, cancelled, terminal, or stale attempt is never
+overwritten. Its typed enter result distinguishes an already-entered recovery state, cancellation
+that safely supersedes the recovery event, and a real authority conflict that must roll back.
+
 Poisoned or expired release authority uses the same generic cleanup event after failing the run, so
 physical residue is not confused with user cancellation and a suspended Job is never left for an
 inapplicable terminal TTL to discover.
@@ -156,6 +163,8 @@ uncertainty fails closed.
 `PrismaRuntimeEventReporter` is the transaction-scoped admission bridge for runtime output. The
 first exact `run.started` proposal is the sole authority that atomically moves the assigned attempt
 to `Running` and appends its event; `run.resumed` is accepted only for the still-running attempt.
+While a run is `Cancelling`, the reporter accepts only completion or bounded failure evidence from
+an already-acquired provider claim; it rejects `tool.started`, so cancellation cannot grant new work.
 The reporter rejects arbitrary names, oversized payloads, secret-shaped fields, stale attempts, and
 mis-bound A2UI envelopes before appending a contiguous canonical `ConversationRunEvent`. Each event
 also has an exact key and value vocabulary, so a compromised runtime cannot persist provider text or
@@ -187,6 +196,8 @@ credential material under an innocuous field name such as `detail`.
   to the shared durable cancellation authority.
 - `PrismaRuntimeTerminalReporter` — commits a protocol-approved terminal result through the run
   authority.
+- `PrismaToolInvocationRunRecoveryAuthority` — changes only the exact run attempt's recovery state
+  inside the authorization-owned invocation transaction.
 - `_SelfRunStatusOpenapiPaths` — contributes the self-run status contract to the server API spec.
 
 Retry, child-run, cleanup, status, and dispatch support types remain package-private.

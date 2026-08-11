@@ -71,9 +71,9 @@ def candidate(
 ) -> dict[str, object]:
     """Build one event candidate with a fresh replay identity.
 
-    Candidate delivery may retry this exact dictionary, but callers must never call this constructor
-    again for the retry. Reusing the original ``candidateId`` is what lets the control plane treat a
-    lost response as idempotent replay rather than a second event.
+    Ordinary delivery sends this dictionary once. The terminal gate may reuse the exact dictionary
+    after an ambiguous network loss; callers must never create a replacement for that replay because
+    the stable ``candidateId`` is the control plane's idempotency coordinate.
     """
     return {
         **coordinates,

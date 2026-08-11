@@ -3,10 +3,18 @@
 import "./app/instrument.js";
 
 import { __CreateManagedRunAdmissionPort, __CreatePersonalRunAdmissionPort, __ReadRunAdmissionConcurrencyPolicy, _CreateRunAdmissionCapacityGate } from "@opencrane/backend/agents/execution/admission";
-import { GatewayMemoryFactSelector } from "@opencrane/backend/agents/execution/protocol";
+import { GatewayMemoryFactSelector, PrismaExternalActionExecutionContextUnitOfWork, __CreateProductionExternalActionWorker, type ExternalActionWorker } from "@opencrane/backend/agents/execution/protocol";
+import { PrismaToolInvocationLifecycleEventUnitOfWork, PrismaToolInvocationRunRecoveryAuthority, PrismaToolRecoveryEventReporter } from "@opencrane/backend/agents/execution/runs";
+import { PrismaUpgradeSessionProposalUnitOfWork } from "@opencrane/backend/agents/personal/configuration";
 import { _CreateManagedExecutionEvidenceAuthority } from "@opencrane/backend/server/agents/agent-services";
+import { PrismaToolInvocationUnitOfWork } from "@opencrane/backend/server/iam/authorization";
 import { _CreateFleetMembershipEvidenceConfig } from "@opencrane/backend/server/iam/membership";
+import { PrismaIntegrationAuthorityRepository, __SystemIntegrationAuthorityClock } from "@opencrane/backend/server/gateways/integrations";
 import { ___BindConsole } from "@opencrane/backend/observability";
+import type { MemoryGatewayClient } from "@opencrane/backend/server/infra/memory-gateway-client";
+import type { ObotMcpInvocationPort } from "@opencrane/backend/server/infra/obot-custody";
+import { __UnavailableSandboxJobExecutor } from "@opencrane/backend/server/infra/sandbox-execution";
+import type { PrismaClient } from "@prisma/client";
 
 import { _ReadProcessConfig } from "./app/config.js";
 import { _ReconcileChannelTargetRoutes, _StartChannelTargetRouteReconciler } from "./app/channel-target-composition.js";
@@ -21,6 +29,25 @@ import { _CreateArtifactUploadGateway } from "./infra/artifacts/artifact-upload.
 import { ___CreatePrismaClient } from "./infra/db/db.js";
 import { _CreateMemoryGatewayClient } from "./infra/memory/memory-gateway-client.factory.js";
 import { _CreateObotAdapters } from "./infra/obot/obot-adapters.factory.js";
+
+/** Compose the required server worker that executes every admitted external action. */
+function _CreateExternalActionWorker(prisma: PrismaClient, memoryGateway: MemoryGatewayClient, obotInvocation: ObotMcpInvocationPort): ExternalActionWorker
+{
+	const lifecycleEvents = new PrismaToolInvocationLifecycleEventUnitOfWork(prisma);
+	return __CreateProductionExternalActionWorker({
+		invocations: new PrismaToolInvocationUnitOfWork(prisma, lifecycleEvents, new PrismaToolRecoveryEventReporter(), new PrismaToolInvocationRunRecoveryAuthority()),
+		contexts: new PrismaExternalActionExecutionContextUnitOfWork(prisma),
+		events: lifecycleEvents,
+		transports: {
+			integrations: new PrismaIntegrationAuthorityRepository(prisma, new __SystemIntegrationAuthorityClock()),
+			obotMcpInvocation: obotInvocation,
+			sandboxExecutor: new __UnavailableSandboxJobExecutor(),
+			memoryGateway,
+		},
+		personalConfiguration: new PrismaUpgradeSessionProposalUnitOfWork(prisma),
+		log: _log,
+	});
+}
 
 /**
  * Compose the process once, from telemetry through coordinated shutdown.
@@ -51,6 +78,7 @@ async function _Main(): Promise<void>
 
 	// 4. Compose the server-owned Obot custody and action transport without exposing it to runtimes.
 	const obot = _CreateObotAdapters(config.obot);
+	const externalActions = _CreateExternalActionWorker(prisma, memoryGateway, obot.invocation);
 	const channelTargetRoutes = _StartChannelTargetRouteReconciler(prisma, config.runtime.channelTargets);
 
 	// 5. Build separate transport surfaces; only the internal app receives workload-only routes.
@@ -60,7 +88,7 @@ async function _Main(): Promise<void>
 	const internalApp = _CreateInternalApp(prisma, kubernetes.authApi, config.runtime, memoryGateway, authentication.sessionMiddleware);
 
 	// 6. Start listeners and workers under one drain order so shared dependencies close exactly once.
-	_StartProcessLifecycle(publicApp, internalApp, prisma, kubernetes.batchApi, managedRunAdmission, runCancellation, config, channelTargetRoutes, unbindConsole);
+	_StartProcessLifecycle(publicApp, internalApp, prisma, kubernetes.batchApi, managedRunAdmission, runCancellation, config, channelTargetRoutes, unbindConsole, externalActions);
 }
 
 void _Main().catch(function _fatalStartupError(err: unknown)

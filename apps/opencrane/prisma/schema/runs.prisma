@@ -10,6 +10,7 @@ enum AgentRunState {
   Assigned           @map("assigned")
   Running            @map("running")
   WaitingForApproval @map("waiting_for_approval")
+  RecoveryRequired   @map("recovery_required")
   Cancelling         @map("cancelling")
   Completed          @map("completed")
   Failed             @map("failed")

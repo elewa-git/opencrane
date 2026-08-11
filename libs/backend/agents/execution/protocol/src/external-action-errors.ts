@@ -17,3 +17,14 @@ export class IntegrationAssignmentUnavailableError extends Error
 		this.reason = reason;
 	}
 }
+
+/** Typed safe failure when the provider completed the call with an MCP tool-level error. */
+export class IntegrationToolReturnedError extends Error
+{
+	/** Creates a bounded failure without retaining the provider's error content. */
+	constructor()
+	{
+		super("integration tool returned a failure result");
+		this.name = "IntegrationToolReturnedError";
+	}
+}

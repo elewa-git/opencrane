@@ -11,6 +11,8 @@ export enum DeferredToolApprovalRunStates
 	Running = "running",
 	/** Paused while one or more approvals remain pending. */
 	WaitingForApproval = "waiting_for_approval",
+	/** Paused because an external provider outcome needs explicit recovery. */
+	RecoveryRequired = "recovery_required",
 	/** Closing after server-authoritative cancellation. */
 	Cancelling = "cancelling",
 	/** Completed successfully. */

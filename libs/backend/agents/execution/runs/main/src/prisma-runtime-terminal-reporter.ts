@@ -1,7 +1,7 @@
-import { AgentRunState, AgentRunTerminalReason, Prisma } from "@prisma/client";
+import { AgentRunState, AgentRunTerminalReason, Prisma, ToolInvocationState, ToolResultDeliveryState } from "@prisma/client";
 
 import { __DeliverChildRunCompletionInTransaction } from "./prisma-child-run-completion-repository.js";
-import type { RuntimeTerminalEventType, RuntimeTerminalReportCommand, RuntimeTerminalReporter, RuntimeTerminalReportResult } from "./runtime-terminal-reporter.types.js";
+import type { RuntimeTerminalEventType, RuntimeTerminalPendingToolRepository, RuntimeTerminalPendingToolUnitOfWork, RuntimeTerminalReportCommand, RuntimeTerminalReporter, RuntimeTerminalReportResult } from "./runtime-terminal-reporter.types.js";
 
 /** Prisma authority that turns a fenced runtime result into the sole terminal run outcome. */
 export class PrismaRuntimeTerminalReporter implements RuntimeTerminalReporter
@@ -14,6 +14,11 @@ export class PrismaRuntimeTerminalReporter implements RuntimeTerminalReporter
 		await transaction.$queryRaw(Prisma.sql`SELECT "id" FROM "agent_runs" WHERE "id" = ${command.runId} FOR UPDATE`);
 		const run = await transaction.agentRun.findUnique({ where: { id: command.runId } });
 		if (run === null || run.attempt !== command.attempt || run.state !== AgentRunState.Running) return { outcome: "denied", reason: "run_not_running" };
+		if (command.eventType === "run.completed")
+		{
+			const hasPendingTools = await new PrismaRuntimeTerminalPendingToolUnitOfWork(transaction).hasPending(run.id, run.attempt);
+			if (hasPendingTools) return { outcome: "denied", reason: "tool_results_pending" };
+		}
 
 		const terminal = _terminal(command.eventType);
 		const now = new Date();
@@ -30,6 +35,46 @@ export class PrismaRuntimeTerminalReporter implements RuntimeTerminalReporter
 		// durable suppression instead when the parent stream is intentionally unavailable.
 		if (run.parentRunId !== null) await __DeliverChildRunCompletionInTransaction(transaction, { childRunId: run.id });
 		return { outcome: "reported" };
+	}
+}
+
+/** Transaction unit that owns construction of the terminal pending-tool repository. */
+class PrismaRuntimeTerminalPendingToolUnitOfWork implements RuntimeTerminalPendingToolUnitOfWork
+{
+	/** Exact caller-owned terminal-report transaction. */
+	private readonly transaction: Prisma.TransactionClient;
+
+	/** Construct the read model over the caller-owned terminal transaction. */
+	constructor(transaction: Prisma.TransactionClient)
+	{
+		this.transaction = transaction;
+	}
+
+	/** Delegate the completion fence to the transaction-bound repository. */
+	hasPending(runId: string, attempt: number): Promise<boolean>
+	{
+		return new PrismaRuntimeTerminalPendingToolRepository(this.transaction).hasPending(runId, attempt);
+	}
+}
+
+/** Prisma read model for invocation and result-delivery completion fences. */
+class PrismaRuntimeTerminalPendingToolRepository implements RuntimeTerminalPendingToolRepository
+{
+	/** Exact terminal-report transaction. */
+	private readonly transaction: Prisma.TransactionClient;
+
+	/** Bind completion reads to the transaction that may terminalise the run. */
+	constructor(transaction: Prisma.TransactionClient)
+	{
+		this.transaction = transaction;
+	}
+
+	/** Require every invocation to be terminal and every saved result to be consumed. */
+	async hasPending(runId: string, attempt: number): Promise<boolean>
+	{
+		const unresolvedInvocations = await this.transaction.toolInvocation.count({ where: { runId, attempt, state: { notIn: [ToolInvocationState.Succeeded, ToolInvocationState.Failed] } } });
+		const pendingResults = await this.transaction.toolResultDelivery.count({ where: { state: ToolResultDeliveryState.Pending, invocation: { runId, attempt } } });
+		return unresolvedInvocations > 0 || pendingResults > 0;
 	}
 }
 

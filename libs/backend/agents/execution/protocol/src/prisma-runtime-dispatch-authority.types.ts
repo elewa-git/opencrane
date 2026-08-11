@@ -1,6 +1,6 @@
 import type { Prisma, RuntimeCommandKind } from "@prisma/client";
 
-import type { CompiledRunInput, CompiledToolDefinition, RunInputSnapshot, RuntimeExternalActionCandidate } from "@opencrane/contracts";
+import type { CompiledRunInput, RunInputSnapshot } from "@opencrane/contracts";
 import type { JsonValue } from "@opencrane/util";
 
 import type { RuntimeAdmissionRunState } from "./runtime-protocol-authority.types.js";
@@ -24,10 +24,6 @@ export interface RuntimeDispatchAuthorityConfig
 	readonly managedRuntimeNamespace: string;
 	/** Hard lifetime stamped on each minted command frame, bounded by the durable assignment lease. */
 	readonly commandTtlMilliseconds: number;
-	/** Maximum server-recorded pre-reservation retries for one external-action candidate. */
-	readonly externalActionRetryLimit: number;
-	/** Hard server-owned window in which one external-action candidate may use its retry budget. */
-	readonly externalActionRetryWindowMilliseconds: number;
 }
 
 /** Verified workload identity handed to the dispatch authority by the app-owned transport. */
@@ -41,33 +37,6 @@ export interface RuntimeStreamWorkloadIdentity
 	readonly serviceAccountName: string;
 	/** Kubernetes Pod UID asserted by TokenReview for this projected token. */
 	readonly podUid: string;
-}
-
-/**
- * Composition-root port that reserves and dispatches an admitted external-action candidate.
- *
- * The dispatch authority admits the candidate against the live fence, then hands it to this injected
- * runner so the concrete MCP/artifact/memory/sandbox transports stay in the app root and never leak
- * into `scope:execution-protocol`. The runner performs reserve-before-dispatch via
- * `__ExecuteExternalAction`. It returns `"completed"` only after a durable invocation result exists,
- * returns `"denied"` for a durable fail-closed refusal, and throws only before reservation when the
- * runtime may safely replay the exact admitted candidate.
- */
-export type RuntimeExternalActionRunnerResult =
-	| { readonly outcome: "completed" | "denied" }
-	| { readonly outcome: "retryable"; readonly error: unknown };
-
-/**
- * Result from the composition root after attempting one admitted external action.
- *
- * `retryable` proves that no ToolInvocation reservation was created. Every outcome after a
- * reservation — including deferred-approval creation or executor persistence failures — is instead
- * `denied`, so an admitted candidate can never re-dispatch an already-reserved side effect.
- */
-export interface RuntimeExternalActionRunner
-{
-	/** Reserve and dispatch one admitted external-action candidate against its validated tools. */
-	run(candidate: RuntimeExternalActionCandidate, snapshot: RunInputSnapshot, compiledTools: readonly CompiledToolDefinition[]): Promise<RuntimeExternalActionRunnerResult>;
 }
 
 /** Terminal lifecycle persistence supplied by the composition root without reversing library dependencies. */
@@ -100,8 +69,4 @@ export interface RuntimeCandidateDispatchResult
 	readonly accepted: boolean;
 	/** Machine-readable reason when the candidate was rejected. */
 	readonly reason?: string;
-	/** Whether the runtime must retry this exact candidate rather than terminalising its attempt. */
-	readonly retryable?: boolean;
-	/** Server-bounded delay before retrying the same candidate identifier. */
-	readonly retryAfterMilliseconds?: number;
 }

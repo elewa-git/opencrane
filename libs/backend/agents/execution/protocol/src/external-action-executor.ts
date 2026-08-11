@@ -1,8 +1,7 @@
-import { RunInputSnapshotIdentityKinds, type RunInputSnapshot, type RuntimeExternalActionCandidate } from "@opencrane/contracts";
+import { RunInputSnapshotIdentityKinds, type RunInputSnapshot } from "@opencrane/contracts";
 import type { JsonValue } from "@opencrane/util";
 
-import type { ExternalActionExecutor } from "./external-action-authority.types.js";
-import { ExternalActionRevisionKinds, type ExternalActionExecutorDependencies } from "./external-action-executor.types.js";
+import { ExternalActionRevisionKinds, type DurableExternalActionCommand, type ExternalActionExecutor, type ExternalActionExecutorDependencies } from "./external-action-executor.types.js";
 import { _ExecuteIntegrationExternalAction, UnsupportedExternalActionError } from "./integration-external-action-executor.js";
 import { _ExecuteMemoryExternalAction, MemoryScopeUnavailableError } from "./memory-external-action-executor.js";
 import { _ExecuteSandboxExternalAction } from "./sandbox-external-action-executor.js";
@@ -36,14 +35,14 @@ export function __PersonalMemoryDatasetId(snapshot: RunInputSnapshot): string | 
  * The factory owns transport selection only. Each selected executor owns its single external seam:
  * the integration executor rechecks live custody through Obot, the sandbox executor submits the
  * immutable invocation tuple, and the memory executor uses only the snapshot-frozen dataset. All
- * unavailable transports and unknown revision kinds throw so `__ExecuteExternalAction` records the
- * reserved invocation as failed instead of fabricating a successful result.
+ * unavailable transports and unknown revision kinds throw so the durable server worker records the
+ * admitted invocation as failed instead of fabricating a successful result.
  *
  * @param candidate - Runtime external-action candidate whose tool revision selects the transport.
  * @param dependencies - Injected concrete transports and correlation identity.
  * @returns An executor whose `execute` performs exactly one routed, fail-closed tool call.
  */
-export function __CreateExternalActionExecutor(candidate: RuntimeExternalActionCandidate, dependencies: ExternalActionExecutorDependencies): ExternalActionExecutor<JsonValue>
+export function __CreateExternalActionExecutor(candidate: DurableExternalActionCommand, dependencies: ExternalActionExecutorDependencies): ExternalActionExecutor<JsonValue>
 {
 	return {
 		async execute(): Promise<JsonValue>

@@ -38,6 +38,12 @@ const _REQUIRED_AUTHORITY_MARKERS = [
 	'CREATE UNIQUE INDEX "agent_runs_one_foreground_per_conversation"',
 	'CREATE FUNCTION "has_reviewed_tool_definitions"(JSONB)',
 	'"tool_definitions" JSONB NOT NULL',
+	'CREATE TYPE "ToolInvocationState" AS ENUM (\'preparing\', \'awaiting_approval\', \'ready\', \'claimed\', \'reconciling\', \'succeeded\', \'failed\', \'recovery_required\');',
+	'CREATE TABLE "tool_result_deliveries"',
+	'CREATE FUNCTION "enforce_tool_invocation_lifecycle"()',
+	'CREATE TRIGGER "tool_invocations_lifecycle_guard"',
+	'ALTER TABLE "tool_invocations" ADD CONSTRAINT "tool_invocations_identity_check"',
+	'ALTER TABLE "tool_result_deliveries" ADD CONSTRAINT "tool_result_deliveries_exact_check"',
 	"'tool.failed'",
 	"'run.error'",
 	"'a2ui.rendering.begun', 'a2ui.surface.updated', 'a2ui.data_model.updated'",
@@ -53,6 +59,7 @@ const _FORBIDDEN_AUTHORITY_MARKERS = [
 	'ConversationThread',
 	'"allowed_tools"',
 	'has_nonempty_distinct_tool_ids',
+	'runtime_external_action_retries',
 ];
 
 /** Counts statements which begin at a SQL line boundary. */

@@ -62,6 +62,8 @@ export enum ToolInvocationLifecycleEvents
 	DispatchProvenNotStarted = "dispatch_proven_not_started",
 	/** Dispatch began but its provider outcome cannot be proven. */
 	DispatchAmbiguous = "dispatch_ambiguous",
+	/** A dispatch claim lease expired without proving a provider outcome. */
+	DispatchClaimExpired = "dispatch_claim_expired",
 	/** Worker acquired a monotonic provider-readback claim. */
 	ReconcileClaimed = "reconcile_claimed",
 	/** Provider readback confirmed successful completion. */
@@ -72,6 +74,10 @@ export enum ToolInvocationLifecycleEvents
 	ReconcileAbsent = "reconcile_absent",
 	/** Provider readback could not establish an outcome. */
 	ReconcileInconclusive = "reconcile_inconclusive",
+	/** Adapter proved no provider readback request started after claiming reconciliation. */
+	ReconcileProvenNotStarted = "reconcile_proven_not_started",
+	/** A non-mutating reconciliation claim expired before its result became durable. */
+	ReconcileClaimExpired = "reconcile_claim_expired",
 	/** Server-authoritative cancellation closed the invocation. */
 	Cancelled = "cancelled",
 }
@@ -103,6 +109,8 @@ export enum ToolInvocationLifecycleActions
 	RequireManualRecovery = "require_manual_recovery",
 	/** Acquire a fenced reconciliation claim. */
 	ClaimReconciliation = "claim_reconciliation",
+	/** Return a proven-not-started or expired readback claim to unclaimed reconciliation. */
+	RetryReconciliation = "retry_reconciliation",
 	/** Reject an invalid State x Event combination without mutation. */
 	Reject = "reject",
 }
@@ -116,6 +124,8 @@ export interface ToolInvocationLifecycleInput
 	readonly event: ToolInvocationLifecycleEvents;
 	/** Frozen trusted-adapter recovery capability. */
 	readonly recoveryMode: ExternalActionRecoveryModes;
+	/** Active exact provider claim, or null when no provider I/O may still be in flight. */
+	readonly claimKind: ExternalActionClaimKinds | null;
 	/** Number of provider-free preparation attempts already consumed. */
 	readonly preparationAttempt: number;
 	/** Maximum provider-free preparation attempts, fixed at three in production. */

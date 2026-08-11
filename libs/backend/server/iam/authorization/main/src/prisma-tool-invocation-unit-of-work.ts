@@ -1,0 +1,254 @@
+import { Prisma, type PrismaClient } from "@prisma/client";
+
+import type { JsonValue } from "@opencrane/util";
+
+import { PrismaToolInvocationRepository } from "./prisma-tool-invocation-repository.js";
+import { ToolInvocationStates } from "./tool-invocation-lifecycle.types.js";
+import { ToolInvocationEventTypes, ToolInvocationRunRecoveryEnterResults, type ToolInvocationAdmissionResult, type ToolInvocationClaim, type ToolInvocationClaimResult, type ToolInvocationCompletionResult, type ToolInvocationIntent, type ToolInvocationLifecycleEvent, type ToolInvocationLifecycleEventSink, type ToolInvocationPreparationPolicy, type ToolInvocationRecord, type ToolInvocationRecoveryEvent, type ToolInvocationRecoveryEventSink, type ToolInvocationRunRecoveryAuthority, type ToolInvocationUnitOfWork, type ToolResultDeliveryPayload } from "./tool-invocation.types.js";
+
+/** Safe failure category emitted when the provider outcome cannot be proven. */
+const _AMBIGUOUS_FAILURE_CODE = "external_action_provider_outcome_ambiguous";
+/** Safe failure category emitted when a provider claim lease expires. */
+const _EXPIRED_CLAIM_FAILURE_CODE = "external_action_claim_expired";
+/** Safe failure category emitted when the start event could not be persisted. */
+const _START_EVENT_FAILURE_CODE = "external_action_start_event_failed";
+
+/** Process-scoped transaction owner for the complete ToolInvocation lifecycle. */
+export class PrismaToolInvocationUnitOfWork implements ToolInvocationUnitOfWork
+{
+	/** Canonical product-authority client that opens serializable units of work. */
+	private readonly _prisma: PrismaClient;
+	/** Canonical lifecycle event sink that shares every transition transaction. */
+	private readonly _lifecycleEvents: ToolInvocationLifecycleEventSink;
+	/** Canonical manual-recovery event sink that shares recovery transactions. */
+	private readonly _recoveryEvents: ToolInvocationRecoveryEventSink;
+	/** Runs-owned state authority participating in the same recovery transaction. */
+	private readonly _runRecovery: ToolInvocationRunRecoveryAuthority;
+
+	/** Construct the unit with explicit persistence and event authorities. */
+	constructor(prisma: PrismaClient, lifecycleEvents: ToolInvocationLifecycleEventSink, recoveryEvents: ToolInvocationRecoveryEventSink, runRecovery: ToolInvocationRunRecoveryAuthority)
+	{
+		this._prisma = prisma;
+		this._lifecycleEvents = lifecycleEvents;
+		this._recoveryEvents = recoveryEvents;
+		this._runRecovery = runRecovery;
+	}
+
+	/** Admit one candidate as durable Preparing work. */
+	async admit(intent: ToolInvocationIntent, now: Date, policy: ToolInvocationPreparationPolicy): Promise<ToolInvocationAdmissionResult>
+	{
+		return this._execute(async function _admit(repository)
+		{
+			return repository.admit(intent, now, policy);
+		});
+	}
+
+	/** Load one invocation from its accepted candidate coordinates. */
+	async findByCandidate(runId: string, attempt: number, candidateId: string): Promise<ToolInvocationRecord | null>
+	{
+		return this._execute(async function _find(repository)
+		{
+			return repository.findByCandidate(runId, attempt, candidateId);
+		});
+	}
+
+	/** Return at most one runnable invocation for its exact current run attempt. */
+	async findNextRunnable(now: Date): Promise<ToolInvocationRecord | null>
+	{
+		return this._execute(async function _findRunnable(repository)
+		{
+			return repository.findNextRunnable(now);
+		});
+	}
+
+	/** Record provider-free preparation success under its observed revision. */
+	async markPrepared(invocationId: string, expectedRevision: number, now: Date): Promise<ToolInvocationRecord | null>
+	{
+		return this._execute(async function _prepared(repository)
+		{
+			return repository.markPrepared(invocationId, expectedRevision, now);
+		});
+	}
+
+	/** Consume one preparation failure and append its safe lifecycle event atomically. */
+	async recordPreparationFailure(invocationId: string, expectedRevision: number, now: Date, policy: ToolInvocationPreparationPolicy, failureCode: string): Promise<ToolInvocationRecord | null>
+	{
+		return this.recordPreparationFailureWithEvent(invocationId, expectedRevision, now, policy, failureCode);
+	}
+
+	/** Consume one preparation failure and append its safe lifecycle event atomically. */
+	async recordPreparationFailureWithEvent(invocationId: string, expectedRevision: number, now: Date, policy: ToolInvocationPreparationPolicy, failureCode: string): Promise<ToolInvocationRecord | null>
+	{
+		const lifecycleEvents = this._lifecycleEvents;
+		return this._execute(async function _preparationFailure(repository, transaction)
+		{
+			const transition = await repository.recordPreparationFailure(invocationId, expectedRevision, now, policy, failureCode);
+			if (!transition.changed || transition.invocation === null) return transition.invocation;
+			const invocation = transition.invocation;
+			await _appendLifecycleEvent(lifecycleEvents, transaction, _failedEvent(invocation, invocation.failureCode ?? "external_action_preparation_failed", invocation.state === ToolInvocationStates.Preparing, policy.attemptLimit));
+			return invocation;
+		});
+	}
+
+	/** Acquire one exact provider-operation claim. */
+	async claim(invocationId: string, kind: ToolInvocationClaim["kind"], now: Date, leaseMilliseconds: number): Promise<ToolInvocationClaimResult>
+	{
+		return this._execute(async function _claim(repository)
+		{
+			return repository.claim(invocationId, kind, now, leaseMilliseconds);
+		});
+	}
+
+	/** Complete success, result delivery, and the canonical completion event atomically. */
+	async completeSucceeded(claim: ToolInvocationClaim, result: JsonValue, now: Date): Promise<ToolInvocationCompletionResult>
+	{
+		return this.completeSucceededWithEvent(claim, result, now);
+	}
+
+	/** Complete success, result delivery, and the canonical completion event atomically. */
+	async completeSucceededWithEvent(claim: ToolInvocationClaim, result: JsonValue, now: Date): Promise<ToolInvocationCompletionResult>
+	{
+		const lifecycleEvents = this._lifecycleEvents;
+		return this._execute(async function _completeSuccess(repository, transaction)
+		{
+			const invocation = await _toolInvocation(repository, claim.invocationId);
+			if (invocation === null) return { outcome: "missing" };
+			const payload: ToolResultDeliveryPayload = { toolInvocationId: invocation.toolInvocationId, outcome: "succeeded", result };
+			const completed = await repository.complete(claim, payload, now);
+			if (completed.outcome === "completed") await _appendLifecycleEvent(lifecycleEvents, transaction, _completedEvent(completed.invocation));
+			return completed;
+		});
+	}
+
+	/** Complete failure, result delivery, and the canonical failure event atomically. */
+	async completeFailed(claim: ToolInvocationClaim, failureCode: string, now: Date): Promise<ToolInvocationCompletionResult>
+	{
+		return this.completeFailedWithEvent(claim, failureCode, now);
+	}
+
+	/** Complete failure, result delivery, and the canonical failure event atomically. */
+	async completeFailedWithEvent(claim: ToolInvocationClaim, failureCode: string, now: Date): Promise<ToolInvocationCompletionResult>
+	{
+		const lifecycleEvents = this._lifecycleEvents;
+		return this._execute(async function _completeFailure(repository, transaction)
+		{
+			const invocation = await _toolInvocation(repository, claim.invocationId);
+			if (invocation === null) return { outcome: "missing" };
+			const payload: ToolResultDeliveryPayload = { toolInvocationId: invocation.toolInvocationId, outcome: "failed", failureCode };
+			const completed = await repository.complete(claim, payload, now);
+			if (completed.outcome === "completed") await _appendLifecycleEvent(lifecycleEvents, transaction, _failedEvent(completed.invocation, completed.invocation.failureCode ?? "external_action_failed", false, 3));
+			return completed;
+		});
+	}
+
+	/** Apply ambiguous recovery policy and append its safe lifecycle event atomically. */
+	async completeAmbiguous(claim: ToolInvocationClaim, now: Date): Promise<ToolInvocationRecord | null>
+	{
+		return this.completeAmbiguousWithEvent(claim, now);
+	}
+
+	/** Apply ambiguous recovery policy and append its safe lifecycle event atomically. */
+	async completeAmbiguousWithEvent(claim: ToolInvocationClaim, now: Date): Promise<ToolInvocationRecord | null>
+	{
+		const lifecycleEvents = this._lifecycleEvents;
+		const recoveryEvents = this._recoveryEvents;
+		const runRecovery = this._runRecovery;
+		return this._execute(async function _completeAmbiguous(repository, transaction)
+		{
+			const transition = await repository.completeAmbiguous(claim, now);
+			if (!transition.changed || transition.invocation === null) return transition.invocation;
+			const invocation = transition.invocation;
+			const retrying = invocation.state === ToolInvocationStates.Ready || invocation.state === ToolInvocationStates.Reconciling;
+			await _appendLifecycleEvent(lifecycleEvents, transaction, _failedEvent(invocation, _AMBIGUOUS_FAILURE_CODE, retrying, 3));
+			if (invocation.state === ToolInvocationStates.RecoveryRequired) await _enterRecoveryRequired(runRecovery, recoveryEvents, transaction, invocation);
+			return invocation;
+		});
+	}
+
+	/** Release an exact pre-dispatch claim and append its safe failure status atomically. */
+	async releaseClaimBeforeDispatch(claim: ToolInvocationClaim, now: Date): Promise<ToolInvocationRecord | null>
+	{
+		const lifecycleEvents = this._lifecycleEvents;
+		const recoveryEvents = this._recoveryEvents;
+		const runRecovery = this._runRecovery;
+		return this._execute(async function _releaseClaim(repository, transaction)
+		{
+			const transition = await repository.releaseClaimBeforeDispatch(claim, now);
+			if (!transition.changed || transition.invocation === null) return transition.invocation;
+			const invocation = transition.invocation;
+			const retrying = invocation.state === ToolInvocationStates.Ready || invocation.state === ToolInvocationStates.Reconciling;
+			await _appendLifecycleEvent(lifecycleEvents, transaction, _failedEvent(invocation, _START_EVENT_FAILURE_CODE, retrying, 3));
+			if (invocation.state === ToolInvocationStates.RecoveryRequired) await _enterRecoveryRequired(runRecovery, recoveryEvents, transaction, invocation);
+			return invocation;
+		});
+	}
+
+	/** Recover one expired claim under frozen provider capability without repeating its effect. */
+	async recoverExpiredClaim(invocationId: string, now: Date): Promise<ToolInvocationRecord | null>
+	{
+		const lifecycleEvents = this._lifecycleEvents;
+		const recoveryEvents = this._recoveryEvents;
+		const runRecovery = this._runRecovery;
+		return this._execute(async function _recoverExpiredClaim(repository, transaction)
+		{
+			const transition = await repository.recoverExpiredClaim(invocationId, now);
+			if (!transition.changed || transition.invocation === null) return transition.invocation;
+			const invocation = transition.invocation;
+			const retrying = invocation.state === ToolInvocationStates.Ready || invocation.state === ToolInvocationStates.Reconciling;
+			await _appendLifecycleEvent(lifecycleEvents, transaction, _failedEvent(invocation, _EXPIRED_CLAIM_FAILURE_CODE, retrying, 3));
+			if (invocation.state === ToolInvocationStates.RecoveryRequired) await _enterRecoveryRequired(runRecovery, recoveryEvents, transaction, invocation);
+			return invocation;
+		});
+	}
+
+	/** Execute one operation against exactly one transaction-scoped repository instance. */
+	private async _execute<TResult>(operation: (repository: PrismaToolInvocationRepository, transaction: Prisma.TransactionClient) => Promise<TResult>): Promise<TResult>
+	{
+		return this._prisma.$transaction(async function _transaction(transaction): Promise<TResult>
+		{
+			return operation(new PrismaToolInvocationRepository(transaction), transaction);
+		}, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+	}
+}
+
+/** Load one invocation when only its database identity is available. */
+async function _toolInvocation(repository: PrismaToolInvocationRepository, invocationId: string): Promise<ToolInvocationRecord | null>
+{
+	return repository.findById(invocationId);
+}
+
+/** Build one secret-free canonical completion event. */
+function _completedEvent(invocation: ToolInvocationRecord): ToolInvocationLifecycleEvent
+{
+	return { runId: invocation.runId, attempt: invocation.attempt, eventType: ToolInvocationEventTypes.Completed, payload: { toolInvocationId: invocation.toolInvocationId } };
+}
+
+/** Build one secret-free canonical failure or retry event. */
+function _failedEvent(invocation: ToolInvocationRecord, reason: string, retrying: boolean, retryLimit: number): ToolInvocationLifecycleEvent
+{
+	return { runId: invocation.runId, attempt: invocation.attempt, eventType: ToolInvocationEventTypes.Failed, payload: { toolInvocationId: invocation.toolInvocationId, reason, retryCount: invocation.preparationAttempt, retryLimit, retrying } };
+}
+
+/** Append one lifecycle event or roll back the owning transition. */
+async function _appendLifecycleEvent(sink: ToolInvocationLifecycleEventSink, transaction: Prisma.TransactionClient, event: ToolInvocationLifecycleEvent): Promise<void>
+{
+	if (!await sink.appendInTransaction(transaction, event)) throw new Error("tool invocation transition requires its canonical lifecycle event");
+}
+
+/** Append visible manual-recovery evidence or roll back the owning transition. */
+async function _appendRecoveryEvent(sink: ToolInvocationRecoveryEventSink, transaction: Prisma.TransactionClient, invocation: ToolInvocationRecord): Promise<void>
+{
+	const event: ToolInvocationRecoveryEvent = { runId: invocation.runId, expectedAttempt: invocation.attempt, toolInvocationId: invocation.toolInvocationId, preparationRetryCount: invocation.preparationAttempt, preparationRetryLimit: 3, providerOutcome: "unknown_after_dispatch" };
+	if (!await sink.appendInTransaction(transaction, event)) throw new Error("tool recovery state requires its canonical recovery event");
+}
+
+/** Couple the authorization transition to the runs-owned recovery state and visible event. */
+async function _enterRecoveryRequired(authority: ToolInvocationRunRecoveryAuthority, sink: ToolInvocationRecoveryEventSink, transaction: Prisma.TransactionClient, invocation: ToolInvocationRecord): Promise<void>
+{
+	const outcome = await authority.enterRecoveryRequiredInTransaction(transaction, { runId: invocation.runId, attempt: invocation.attempt });
+	// Cancelling is the only valid outcome that suppresses the recovery event. The invocation's
+	// claim-clearing evidence still commits so cancellation can finish without repeating provider I/O.
+	if (outcome === ToolInvocationRunRecoveryEnterResults.Cancelling) return;
+	if (outcome === ToolInvocationRunRecoveryEnterResults.Conflict) throw new Error("tool recovery state conflicts with its owning run attempt");
+	await _appendRecoveryEvent(sink, transaction, invocation);
+}

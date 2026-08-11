@@ -1,5 +1,22 @@
-import type { RunInputSnapshot, RuntimeExternalActionCandidate } from "@opencrane/contracts";
+import type { RunInputSnapshot } from "@opencrane/contracts";
 import type { JsonValue } from "@opencrane/util";
+
+/** Durable built-in action fields accepted after runtime candidate admission. */
+export interface UpgradeSessionInvocation
+{
+	/** Run that owns the requested future configuration change. */
+	readonly runId: string;
+	/** Attempt that admitted the action. */
+	readonly attempt: number;
+	/** Immutable built-in tool revision. */
+	readonly toolRevisionId: string;
+	/** Invocation coordinate retained for audit correlation. */
+	readonly toolInvocationId: string;
+	/** Digest of the canonical proposed patch. */
+	readonly argumentsDigest: string;
+	/** Canonical validated proposed patch. */
+	readonly arguments: JsonValue;
+}
 
 /** Result returned to the ToolInvocation ledger for one accepted upgrade-session request. */
 export interface UpgradeSessionProposalReceipt
@@ -14,5 +31,8 @@ export interface UpgradeSessionProposalReceipt
 export interface UpgradeSessionProposalRepository
 {
 	/** Resolves the canonical profile for the snapshot's personal subject. */
-	proposeUpgradeSession(candidate: RuntimeExternalActionCandidate, snapshot: RunInputSnapshot, now: string): Promise<UpgradeSessionProposalReceipt>;
+	proposeUpgradeSession(candidate: UpgradeSessionInvocation, snapshot: RunInputSnapshot, now: string): Promise<UpgradeSessionProposalReceipt>;
 }
+
+/** Process-scoped transaction owner for one durable upgrade-session proposal. */
+export interface UpgradeSessionProposalUnitOfWork extends UpgradeSessionProposalRepository {}

@@ -1,4 +1,4 @@
-import { AgentRunState, Prisma, WorkloadAssignmentState } from "@prisma/client";
+import { AgentRunState, ExternalActionRecoveryMode, Prisma, ToolInvocationState, WorkloadAssignmentState } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
 
 import { __OpenDeferredToolApproval } from "../prisma-deferred-tool-approval-opener.js";
@@ -16,7 +16,14 @@ function _Command()
 	const now = new Date("2026-07-29T00:00:00.000Z");
 	const argumentsValue = { calendarId: "primary" };
 	const parametersSchema = { type: "object", additionalProperties: false, required: ["calendarId"], properties: { calendarId: { type: "string" } } };
-	return { interruptId: "interrupt-1", runId: "run-1", attempt: 1, toolInvocationId: "invoke-1", toolRevisionId: "integration:calendar:read", arguments: argumentsValue, argumentsDigest: __DigestCanonicalJson(argumentsValue), parametersSchema, parametersSchemaDigest: __DigestCanonicalJson(parametersSchema), capabilitySetDigest: "sha256:capabilities", reservationId: "reservation-1", now, expiresAt: new Date(now.getTime() + 60_000) };
+	return { interruptId: "interrupt-1", runId: "run-1", attempt: 1, toolInvocationId: "invoke-1", toolRevisionId: "integration:calendar:read", arguments: argumentsValue, argumentsDigest: __DigestCanonicalJson(argumentsValue), parametersSchema, parametersSchemaDigest: __DigestCanonicalJson(parametersSchema), capabilitySetDigest: "sha256:capabilities", invocationId: "invocation-1", now, expiresAt: new Date(now.getTime() + 60_000) };
+}
+
+/** Build the complete awaiting-approval invocation returned by the transaction repository. */
+function _Invocation()
+{
+	const argumentsValue = { calendarId: "primary" };
+	return { id: "invocation-1", siloId: "silo-1", runId: "run-1", attempt: 1, agentServiceId: "service-1", agentRevisionId: "revision-1", subjectId: "subject-1", runtimeInstanceId: "runtime-1", commandId: "command-1", candidateId: "candidate-1", toolRevisionId: "integration:calendar:read", toolInvocationId: "invoke-1", arguments: argumentsValue, argumentsDigest: __DigestCanonicalJson(argumentsValue), effectiveArguments: argumentsValue, effectiveArgumentsDigest: __DigestCanonicalJson(argumentsValue), requestFingerprint: "sha256:fingerprint", requestIdentity: {}, approvalRequired: true, recoveryMode: ExternalActionRecoveryMode.Manual, recoveryKey: null, state: ToolInvocationState.AwaitingApproval, preparationAttempt: 1, retryDeadlineAt: new Date("2026-07-29T00:05:00.000Z"), nextPreparationAttemptAt: new Date("2026-07-29T00:00:00.000Z"), claimAttempt: 0, claimKind: null, claimFence: 0, claimExpiresAt: null, recoveryRequiredAt: null, result: null, failureCode: null, revision: 1, createdAt: new Date("2026-07-29T00:00:00.000Z"), updatedAt: new Date("2026-07-29T00:00:00.000Z"), completedAt: null };
 }
 
 /** Build a live workload transaction that can create one linked approval. */
@@ -27,7 +34,8 @@ function _LiveTransaction()
 		runProofKey: { findUnique: vi.fn(async function _proof() { return { id: "proof-1", keyThumbprint: "thumbprint-1", expiresAt: new Date("2026-07-29T00:01:30.000Z"), revokedAt: null }; }) },
 		agentRun: { findUnique: vi.fn(async function _run() { return { id: "run-1", attempt: 1, state: AgentRunState.Running }; }), updateMany: vi.fn(async function _pause() { return { count: 1 }; }) },
 		approvalRequest: { create: vi.fn(async function _create() { return { id: "approval-1" }; }), findFirst: vi.fn(async function _existing() { return null; }), count: vi.fn(async function _pending() { return 0; }) },
-		toolInvocation: { updateMany: vi.fn() },
+			toolInvocation: { findUnique: vi.fn(async function _invocation() { return _Invocation(); }), updateMany: vi.fn() },
+		toolResultDelivery: { create: vi.fn(async function _delivery() { return { id: "delivery-1" }; }) },
 	};
 }
 
@@ -43,7 +51,7 @@ describe("Prisma deferred-tool approval opener", function _describeOpener()
 		};
 
 		await expect(__OpenDeferredToolApproval(prisma as never, _Command(), _Logger() as never)).resolves.toBe(true);
-		expect(transaction.approvalRequest.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ id: "interrupt-1", toolInvocationRowId: "reservation-1", reviewedToolArguments: { calendarId: "primary" }, reviewedToolSchema: expect.any(Object), actionDigest: expect.stringMatching(/^sha256:/) }) }));
+		expect(transaction.approvalRequest.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ id: "interrupt-1", toolInvocationRowId: "invocation-1", reviewedToolArguments: { calendarId: "primary" }, reviewedToolSchema: expect.any(Object), actionDigest: expect.stringMatching(/^sha256:/) }) }));
 		expect(prisma.$transaction).toHaveBeenCalledWith(expect.any(Function), { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 	});
 
@@ -58,7 +66,7 @@ describe("Prisma deferred-tool approval opener", function _describeOpener()
 		expect(transaction.toolInvocation.updateMany).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ failureCode: "approval_arguments_invalid" }) }));
 	});
 
-	it("terminalises the reservation when no live workload can own the approval", async function _terminalisesUnavailable()
+	it("terminalises the invocation when no live workload can own the approval", async function _terminalisesUnavailable()
 	{
 		const transaction = _LiveTransaction();
 		transaction.workloadAssignment.findUnique.mockResolvedValueOnce(null as never);
@@ -81,13 +89,13 @@ describe("Prisma deferred-tool approval opener", function _describeOpener()
 		const logger = _Logger();
 		await expect(__OpenDeferredToolApproval(prisma as never, _Command(), logger as never)).resolves.toBe(true);
 		expect(prisma.$transaction).toHaveBeenCalledTimes(2);
-		expect(logger.warn).toHaveBeenCalledWith(expect.objectContaining({ err: expect.any(Error), runId: "run-1", reservationId: "reservation-1" }), expect.stringContaining("ambiguous"));
+		expect(logger.warn).toHaveBeenCalledWith(expect.objectContaining({ err: expect.any(Error), runId: "run-1", invocationId: "invocation-1" }), expect.stringContaining("ambiguous"));
 	});
 
-	it("fails a reservation when transaction recovery finds no linked approval", async function _failsUnlinkedReservation()
+	it("fails an invocation when transaction recovery finds no linked approval", async function _failsUnlinkedInvocation()
 	{
 		const recoveryTransaction = { approvalRequest: { findFirst: vi.fn(async function _approval() { return null; }) } };
-		const terminalisationTransaction = { toolInvocation: { updateMany: vi.fn(async function _fail() { return { count: 1 }; }) } };
+		const terminalisationTransaction = { toolInvocation: { findUnique: vi.fn(async function _invocation() { return _Invocation(); }), updateMany: vi.fn(async function _fail() { return { count: 1 }; }) }, toolResultDelivery: { create: vi.fn() } };
 		const prisma = {
 			$transaction: vi.fn()
 				.mockRejectedValueOnce(new Error("connection lost"))
@@ -99,7 +107,7 @@ describe("Prisma deferred-tool approval opener", function _describeOpener()
 		expect(terminalisationTransaction.toolInvocation.updateMany).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ failureCode: "approval_defer_failed" }) }));
 	});
 
-	it("surfaces an unresolved reservation when recovery cannot prove or terminalise it", async function _surfacesUnresolvedRecovery()
+	it("surfaces an unresolved invocation when recovery cannot prove or terminalise it", async function _surfacesUnresolvedRecovery()
 	{
 		const recoveryTransaction = { approvalRequest: { findFirst: vi.fn(async function _approval() { throw new Error("recovery read unavailable"); }) } };
 		const terminalisationTransaction = { toolInvocation: { updateMany: vi.fn(async function _fail() { throw new Error("terminalisation unavailable"); }) } };
@@ -112,7 +120,7 @@ describe("Prisma deferred-tool approval opener", function _describeOpener()
 		const logger = _Logger();
 
 		await expect(__OpenDeferredToolApproval(prisma as never, _Command(), logger as never)).rejects.toThrow("could not terminalise");
-		expect(logger.error).toHaveBeenCalledWith(expect.objectContaining({ err: expect.any(Error), runId: "run-1", attempt: 1, reservationId: "reservation-1" }), expect.stringContaining("could not terminalise"));
+		expect(logger.error).toHaveBeenCalledWith(expect.objectContaining({ err: expect.any(Error), runId: "run-1", attempt: 1, invocationId: "invocation-1" }), expect.stringContaining("could not terminalise"));
 		expect(JSON.stringify(logger.error.mock.calls)).not.toContain("transactionError");
 	});
 });

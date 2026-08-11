@@ -2,7 +2,6 @@ import * as k8s from "@kubernetes/client-node";
 import type { PrismaClient } from "@prisma/client";
 
 import { _IssueAttemptLiteLlmKey } from "@opencrane/backend/server/gateways/model-routing";
-import { PrismaIntegrationAuthorityRepository, __SystemIntegrationAuthorityClock, type IntegrationAuthorityRepository } from "@opencrane/backend/server/gateways/integrations";
 import { _RegisterInternalAgentRuntimeStream } from "@opencrane/backend/server/infra/agent-runtime-stream";
 import { PrismaRunDispatchRepository, __CreateAgentControllerRunDispatchRouter, type AttemptModelKeyMintRequest, type MintedAttemptModelKey } from "@opencrane/backend/agents/execution/runs";
 import { PrismaSkillWorkloadUnitOfWork, _CreateSkillWorkloadExecutionAuthority, __CreateSkillAuthoringCompletionRouter, __CreateSkillAuthoringInputRouter, __CreateSkillWorkloadBootstrapRouter, __CreateSkillWorkloadDispatchRouter } from "@opencrane/backend/agents/skills/execution";
@@ -119,16 +118,15 @@ function _CreateSkillWorkloadRuntimeComposition(prisma: PrismaClient, tokenRevie
  * @param namespaces - Validated server, personal-runtime, and managed-runtime identity planes.
  * @param tokenReviewer - Reviewer constrained to the two runtime identity planes.
  * @param memoryGateway - Authenticated memory-gateway client shared by compile-time recall and the action transport.
- * @param integrationAuthority - Shared live custody resolver used only by server-side actions.
  * @returns Runtime bootstrap and stream routers.
  */
-function _CreateRuntimeProtocolComposition(prisma: PrismaClient, config: InternalRuntimeConfig, namespaces: RuntimeIdentityNamespaces, tokenReviewer: ReturnType<typeof _CreateRuntimeTokenReviewer>, memoryGateway: MemoryGatewayClient, integrationAuthority: IntegrationAuthorityRepository): RuntimeProtocolComposition
+function _CreateRuntimeProtocolComposition(prisma: PrismaClient, config: InternalRuntimeConfig, namespaces: RuntimeIdentityNamespaces, tokenReviewer: ReturnType<typeof _CreateRuntimeTokenReviewer>, memoryGateway: MemoryGatewayClient): RuntimeProtocolComposition
 {
 	const runtimeDispatchAuthority = __CreateProductionRuntimeDispatchAuthority(prisma, {
 		personalRuntimeNamespace: namespaces.personalRuntimeNamespace,
 		managedRuntimeNamespace: namespaces.managedRuntimeNamespace,
 		commandTtlMilliseconds: config.commandTtlMilliseconds,
-	}, _log, memoryGateway, integrationAuthority);
+	}, memoryGateway);
 	return {
 		runtimeBootstrap: __CreateRuntimeBootstrapRouter({
 			tokenReviewer,
@@ -220,14 +218,11 @@ export function _CreateInternalRuntimeComposition(prisma: PrismaClient, authApi:
 	const skillWorkloadUnitOfWork = new PrismaSkillWorkloadUnitOfWork(prisma, config.claimLeaseMilliseconds);
 	const skillWorkloadAuthority = _CreateSkillWorkloadExecutionAuthority(skillWorkloadUnitOfWork);
 
-	// 3. The server resolves provider addressing only inside its action-execution authority.
-	const integrationAuthority = new PrismaIntegrationAuthorityRepository(prisma, new __SystemIntegrationAuthorityClock());
-
-	// 4. Compose only named routers; `routes.ts` remains the single readable map of internal paths.
+	// 3. Compose only named routers; `routes.ts` remains the single readable map of internal paths.
 	return {
 		..._CreateControllerRuntimeComposition(prisma, config, namespaces, controllerTokenReviewer, skillWorkloadAuthority),
 		..._CreateSkillWorkloadRuntimeComposition(prisma, skillWorkloadTokenReviewer, skillWorkloadAuthority),
-		..._CreateRuntimeProtocolComposition(prisma, config, namespaces, runtimeTokenReviewer, memoryGateway, integrationAuthority),
+		..._CreateRuntimeProtocolComposition(prisma, config, namespaces, runtimeTokenReviewer, memoryGateway),
 		..._CreateOptionalRuntimeComposition(prisma, authApi, config, namespaces.serverNamespace),
 	};
 }

@@ -6,7 +6,7 @@
   "database": {
     "schemaVersion": "0.8.0",
     "baselinePath": "apps/opencrane/prisma/bootstrap/target-baseline.sql",
-    "baselineSha256": "e207d79c3022a68f4311b098968c2b008478df440e5f60b39e6c46c0e20fe8b3"
+    "baselineSha256": "814a3a2127c35405d9b54d97f9f877b0aa616d624aed51c53d496d04cc8aea44"
   },
   "projects": {
     "@opencrane/website": {

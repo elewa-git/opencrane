@@ -17,7 +17,7 @@ export interface RuntimeTerminalReportCommand
 /** Result of turning one admitted terminal runtime report into durable run evidence. */
 export type RuntimeTerminalReportResult =
 	| { readonly outcome: "reported" }
-	| { readonly outcome: "denied"; readonly reason: "run_not_running" };
+	| { readonly outcome: "denied"; readonly reason: "run_not_running" | "tool_results_pending" };
 
 /** Transaction-scoped port from the protocol fence to the canonical run authority. */
 export interface RuntimeTerminalReporter
@@ -25,3 +25,13 @@ export interface RuntimeTerminalReporter
 	/** Persist one terminal report inside the caller's assignment-and-stream transaction. */
 	reportInTransaction(transaction: Prisma.TransactionClient, command: RuntimeTerminalReportCommand): Promise<RuntimeTerminalReportResult>;
 }
+
+/** Transaction-bound read model for tool work that must finish before run completion. */
+export interface RuntimeTerminalPendingToolRepository
+{
+	/** Return whether any invocation or undelivered result still blocks successful completion. */
+	hasPending(runId: string, attempt: number): Promise<boolean>;
+}
+
+/** Transaction owner that constructs the pending-tool repository. */
+export interface RuntimeTerminalPendingToolUnitOfWork extends RuntimeTerminalPendingToolRepository {}

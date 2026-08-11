@@ -8,7 +8,6 @@ import { ___CloneCanonicalJson, type JsonValue } from "@opencrane/util";
 import { __CompileRunInput } from "@opencrane/backend/agents/execution/inputs";
 import type { PromptCompilerRepositories } from "@opencrane/backend/agents/execution/inputs";
 import type { MemoryGatewayClient } from "@opencrane/backend/server/infra/memory-gateway-client";
-import type { IntegrationAuthorityRepository } from "@opencrane/backend/server/gateways/integrations";
 
 import { ExternalActionRevisionKinds } from "./external-action-executor.types.js";
 import type { RunInputCompiler } from "./prisma-runtime-dispatch-authority.types.js";
@@ -28,28 +27,24 @@ const _MINIMUM_STATEMENT_RECALL_RESULTS = 32;
  * statements are the one network read: they resolve through the injected memory gateway and every
  * statement is verified against the digest frozen in the snapshot, so a redelivered frame either
  * carries byte-identical memory text or the compile fails closed.
- * Integration addressing is the other live read: the injected authority resolves each assignment's
- * current custody reference without broadening the snapshot's frozen tool definitions.
- *
- * @param memoryGateway - Authenticated read-only memory-gateway client shared with the action runner.
- * @param integrationAuthority - Optional live custody resolver; null omits Obot addressing entirely.
+ * @param memoryGateway - Authenticated read-only memory-gateway client shared with the action worker.
  * @returns A compiler bound to per-attempt transaction reads and digest-verified gateway recall.
  */
-export function __CreatePrismaRunInputCompiler(memoryGateway: MemoryGatewayClient, integrationAuthority: IntegrationAuthorityRepository | null = null): RunInputCompiler
+export function __CreatePrismaRunInputCompiler(memoryGateway: MemoryGatewayClient): RunInputCompiler
 {
 	return function _compile(snapshot: RunInputSnapshot, transaction: Prisma.TransactionClient): Promise<CompiledRunInput>
 	{
-		return __CompileRunInput(snapshot, _repositories(memoryGateway, snapshot, transaction, integrationAuthority));
+		return __CompileRunInput(snapshot, _repositories(memoryGateway, snapshot, transaction));
 	};
 }
 
 /** Assemble the control-plane read ports over one locked transaction client and the snapshot's frozen policy. */
-function _repositories(memoryGateway: MemoryGatewayClient, snapshot: RunInputSnapshot, transaction: Prisma.TransactionClient, integrationAuthority: IntegrationAuthorityRepository | null): PromptCompilerRepositories
+function _repositories(memoryGateway: MemoryGatewayClient, snapshot: RunInputSnapshot, transaction: Prisma.TransactionClient): PromptCompilerRepositories
 {
 	return {
 		loadPersonaInstructions(personaRevisionId: string | null): Promise<string> { return _loadPersonaInstructions(transaction, personaRevisionId); },
 		loadMessages(messageIds: readonly string[]): Promise<readonly CompiledMessage[]> { return _loadMessages(transaction, messageIds); },
-		loadToolDefinitions(integrationAssignments: readonly RunInputSnapshotIntegrationAssignment[]): Promise<readonly CompiledToolDefinition[]> { return _loadToolDefinitions(integrationAssignments, snapshot, integrationAuthority); },
+		loadToolDefinitions(integrationAssignments: readonly RunInputSnapshotIntegrationAssignment[]): Promise<readonly CompiledToolDefinition[]> { return _loadToolDefinitions(integrationAssignments); },
 		loadMemoryFactStatements(memoryFacts: readonly MemoryFactReference[]): Promise<readonly string[]> { return _loadMemoryFactStatements(memoryGateway, snapshot, memoryFacts); },
 		loadArtifactSummaries(artifactRevisionIds: readonly string[]): Promise<readonly string[]> { return _loadArtifactSummaries(transaction, artifactRevisionIds); },
 		loadSkillSummaries(skillRevisionIds: readonly string[]): Promise<readonly string[]> { return _loadSkillSummaries(transaction, skillRevisionIds); },
@@ -149,35 +144,21 @@ function _messageContent(blocks: Prisma.JsonValue): string
  * until an explicit per-tool approval policy exists. Schema and digest come only from the admitted
  * snapshot; compilation never consults a mutable catalogue or synthesises a permissive fallback.
  *
- * When the injected integration authority is present, each assignment additionally resolves its
- * live custody reference into non-secret `obotMcpServerId` ADDRESSING for the runtime's direct
- * approved-invocation data plane. An unavailable assignment simply omits the id — the tool remains
- * proposable, and an approved invocation then fails closed at execution rather than at compile.
  */
-async function _loadToolDefinitions(integrationAssignments: readonly RunInputSnapshotIntegrationAssignment[], snapshot: RunInputSnapshot, integrationAuthority: IntegrationAuthorityRepository | null): Promise<readonly CompiledToolDefinition[]>
+async function _loadToolDefinitions(integrationAssignments: readonly RunInputSnapshotIntegrationAssignment[]): Promise<readonly CompiledToolDefinition[]>
 {
 	const tools: CompiledToolDefinition[] = [];
 	for (const assignment of integrationAssignments)
 	{
 		if (!__AreReviewedIntegrationToolDefinitionsValid(assignment.toolDefinitions as readonly ReviewedIntegrationToolDefinition[])) throw new Error("snapshot integration tool definitions are invalid");
-		// 1. Resolve addressing once per assignment; the id is Obot's MCP server id, not a credential.
-		const obotMcpServerId = await _resolveObotMcpServerId(assignment.integrationId, snapshot, integrationAuthority);
 		for (const tool of assignment.toolDefinitions)
 		{
-			// 2. Compile one definition per allowed tool with the frozen revision id and addressing.
+			// Compile one definition per allowed tool. Provider addressing stays in the server authority.
 			const toolRevisionId = `${ExternalActionRevisionKinds.Integration}:${assignment.integrationId}:${tool.name}`;
-			tools.push({ name: toolRevisionId, toolRevisionId, description: tool.description, requiresApproval: true, parametersSchema: ___CloneCanonicalJson(tool.parametersSchema), parametersSchemaDigest: tool.parametersSchemaDigest, ...(obotMcpServerId === null ? {} : { obotMcpServerId }) });
+			tools.push({ name: toolRevisionId, toolRevisionId, description: tool.description, requiresApproval: true, parametersSchema: ___CloneCanonicalJson(tool.parametersSchema), parametersSchemaDigest: tool.parametersSchemaDigest });
 		}
 	}
 	return tools;
-}
-
-/** Resolve one assignment's live custody reference into Obot MCP addressing, or null fail-open-free. */
-async function _resolveObotMcpServerId(integrationId: string, snapshot: RunInputSnapshot, integrationAuthority: IntegrationAuthorityRepository | null): Promise<string | null>
-{
-	if (integrationAuthority === null) return null;
-	const resolved = await integrationAuthority.resolveAssignment({ siloId: snapshot.siloId, agentRevisionId: snapshot.agentRevisionId, integrationId });
-	return resolved.outcome === "resolved" ? resolved.assignment.obotCustodyReference : null;
 }
 
 /** Resolve one-line availability summaries for the immutable artifact revisions offered to the run. */

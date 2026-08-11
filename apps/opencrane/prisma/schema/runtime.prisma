@@ -39,28 +39,9 @@ model RuntimeCommandStream {
   createdAt            DateTime                   @default(now()) @map("created_at")
   updatedAt           DateTime                    @updatedAt @map("updated_at")
   commands             RuntimeDispatchedCommand[]
-  externalActionRetries RuntimeExternalActionRetry[]
 
   @@id([runId, attempt])
   @@map("runtime_command_streams")
-}
-
-/// Server-owned retry budget for an admitted action that proved it failed before reservation. One
-/// row survives runtime reconnects, so a restarted or malicious client cannot reset the bounded
-/// retry window by resubmitting the same candidate id.
-model RuntimeExternalActionRetry {
-  runId           String               @map("run_id")
-  attempt         Int
-  candidateId     String               @map("candidate_id")
-  retryCount      Int                  @default(0) @map("retry_count")
-  retryDeadlineAt DateTime             @map("retry_deadline_at")
-  createdAt       DateTime             @default(now()) @map("created_at")
-  updatedAt       DateTime             @updatedAt @map("updated_at")
-  stream          RuntimeCommandStream @relation(fields: [runId, attempt], references: [runId, attempt], onDelete: Restrict)
-
-  @@id([runId, attempt, candidateId])
-  @@index([runId, attempt, retryDeadlineAt])
-  @@map("runtime_external_action_retries")
 }
 
 /// Ordered steering-boundary ledger for one attempt. The runtime claims a boundary only at a safe

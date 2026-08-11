@@ -1,6 +1,6 @@
 import { RuntimeCommandKind, type Prisma } from "@prisma/client";
 
-import { PrismaRuntimeDeferredResumeRepository } from "./prisma-runtime-deferred-resume-repository.js";
+import { PrismaRuntimeResumeInputRepository } from "./prisma-runtime-resume-input-repository.js";
 import type { RuntimeApprovalExpiry, RuntimeCommandDecisionUnitOfWork } from "./prisma-runtime-dispatch-authority.types.js";
 import type { RuntimeAdmissionRunState } from "./runtime-protocol-authority.types.js";
 
@@ -28,8 +28,8 @@ export class PrismaRuntimeCommandDecisionUnitOfWork implements RuntimeCommandDec
 	/**
 	 * Choose the next command from durable state and marker evidence.
 	 *
-	 * Start and cancel are unique. The first resume may carry approval or steering. Later resumes
-	 * require a fresh approval marker, proving another WaitingForApproval cycle completed; steering
+	 * Start and cancel are unique. The first resume may carry a saved tool result or steering. Later resumes
+	 * require a fresh result delivery, proving another tool batch completed; steering
 	 * alone cannot supersede an active executor loop.
 	 */
 	async decide(context: { readonly runId: string; readonly attempt: number; readonly runState: RuntimeAdmissionRunState }, commands: readonly { readonly kind: RuntimeCommandKind }[]): Promise<RuntimeCommandKind | null>
@@ -39,9 +39,9 @@ export class PrismaRuntimeCommandDecisionUnitOfWork implements RuntimeCommandDec
 		if ((context.runState === "assigned" || context.runState === "running") && !hasStart) return RuntimeCommandKind.StartAttempt;
 		if (context.runState !== "running" || !hasStart) return null;
 
-		const loaded = await new PrismaRuntimeDeferredResumeRepository(this._transaction).load(context.runId, context.attempt, 0);
+		const loaded = await new PrismaRuntimeResumeInputRepository(this._transaction).load(context.runId, context.attempt, 0);
 		if (loaded === null) return null;
 		const hasResume = commands.some(function _IsResume(row) { return row.kind === RuntimeCommandKind.ResumeAttempt; });
-		return hasResume && loaded.approvalIds.length === 0 ? null : RuntimeCommandKind.ResumeAttempt;
+		return hasResume && loaded.toolResultDeliveryIds.length === 0 ? null : RuntimeCommandKind.ResumeAttempt;
 	}
 }

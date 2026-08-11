@@ -1,4 +1,4 @@
-import { ExternalActionRecoveryModes, ToolInvocationLifecycleActions, ToolInvocationLifecycleEvents, ToolInvocationStates, type ToolInvocationLifecycleInput } from "./tool-invocation-lifecycle.types.js";
+import { ExternalActionClaimKinds, ExternalActionRecoveryModes, ToolInvocationLifecycleActions, ToolInvocationLifecycleEvents, ToolInvocationStates, type ToolInvocationLifecycleInput } from "./tool-invocation-lifecycle.types.js";
 
 /** Handler signature owned by one durable ToolInvocation state. */
 type ToolInvocationStateHandler = (input: ToolInvocationLifecycleInput) => ToolInvocationLifecycleActions;
@@ -35,14 +35,14 @@ function _ready(input: ToolInvocationLifecycleInput): ToolInvocationLifecycleAct
 function _claimed(input: ToolInvocationLifecycleInput): ToolInvocationLifecycleActions
 {
 	if (input.event === ToolInvocationLifecycleEvents.DispatchSucceeded) return ToolInvocationLifecycleActions.Succeed;
-	if (input.event === ToolInvocationLifecycleEvents.DispatchRejected || input.event === ToolInvocationLifecycleEvents.Cancelled) return ToolInvocationLifecycleActions.Fail;
+	if (input.event === ToolInvocationLifecycleEvents.DispatchRejected) return ToolInvocationLifecycleActions.Fail;
 	if (input.event === ToolInvocationLifecycleEvents.DispatchProvenNotStarted)
 	{
-		return input.preparationAttempt < input.preparationAttemptLimit && input.withinPreparationDeadline
+		return input.preparationAttempt + 1 < input.preparationAttemptLimit && input.withinPreparationDeadline
 			? ToolInvocationLifecycleActions.Redispatch
 			: ToolInvocationLifecycleActions.Fail;
 	}
-	if (input.event !== ToolInvocationLifecycleEvents.DispatchAmbiguous) return ToolInvocationLifecycleActions.Reject;
+	if (input.event !== ToolInvocationLifecycleEvents.DispatchAmbiguous && input.event !== ToolInvocationLifecycleEvents.DispatchClaimExpired) return ToolInvocationLifecycleActions.Reject;
 	if (input.recoveryMode === ExternalActionRecoveryModes.ProviderIdempotency) return ToolInvocationLifecycleActions.RedispatchIdempotently;
 	if (input.recoveryMode === ExternalActionRecoveryModes.Reconciliation) return ToolInvocationLifecycleActions.BeginReconciliation;
 	return ToolInvocationLifecycleActions.RequireManualRecovery;
@@ -51,10 +51,19 @@ function _claimed(input: ToolInvocationLifecycleInput): ToolInvocationLifecycleA
 /** Interpret provider-readback outcomes without granting a provider dispatch. */
 function _reconciling(input: ToolInvocationLifecycleInput): ToolInvocationLifecycleActions
 {
-	if (input.event === ToolInvocationLifecycleEvents.ReconcileClaimed) return ToolInvocationLifecycleActions.ClaimReconciliation;
+	if (input.event === ToolInvocationLifecycleEvents.ReconcileClaimed && input.claimKind === null) return ToolInvocationLifecycleActions.ClaimReconciliation;
+	if (input.event === ToolInvocationLifecycleEvents.Cancelled && input.claimKind === null) return ToolInvocationLifecycleActions.Fail;
+	if (input.claimKind !== ExternalActionClaimKinds.Reconcile) return ToolInvocationLifecycleActions.Reject;
 	if (input.event === ToolInvocationLifecycleEvents.ReconcileSucceeded) return ToolInvocationLifecycleActions.Succeed;
-	if (input.event === ToolInvocationLifecycleEvents.ReconcileFailed || input.event === ToolInvocationLifecycleEvents.Cancelled) return ToolInvocationLifecycleActions.Fail;
+	if (input.event === ToolInvocationLifecycleEvents.ReconcileFailed) return ToolInvocationLifecycleActions.Fail;
 	if (input.event === ToolInvocationLifecycleEvents.ReconcileAbsent) return ToolInvocationLifecycleActions.Redispatch;
+	if (input.event === ToolInvocationLifecycleEvents.ReconcileProvenNotStarted)
+	{
+		return input.preparationAttempt + 1 < input.preparationAttemptLimit && input.withinPreparationDeadline
+			? ToolInvocationLifecycleActions.RetryReconciliation
+			: ToolInvocationLifecycleActions.RequireManualRecovery;
+	}
+	if (input.event === ToolInvocationLifecycleEvents.ReconcileClaimExpired) return ToolInvocationLifecycleActions.RetryReconciliation;
 	if (input.event === ToolInvocationLifecycleEvents.ReconcileInconclusive) return ToolInvocationLifecycleActions.RequireManualRecovery;
 	return ToolInvocationLifecycleActions.Reject;
 }
@@ -88,5 +97,8 @@ export function __PlanToolInvocationLifecycle(input: ToolInvocationLifecycleInpu
 {
 	if (!Number.isSafeInteger(input.preparationAttempt) || input.preparationAttempt < 0) return ToolInvocationLifecycleActions.Reject;
 	if (!Number.isSafeInteger(input.preparationAttemptLimit) || input.preparationAttemptLimit < 1) return ToolInvocationLifecycleActions.Reject;
+	if (input.state === ToolInvocationStates.Claimed && input.claimKind !== ExternalActionClaimKinds.Dispatch) return ToolInvocationLifecycleActions.Reject;
+	if (input.state === ToolInvocationStates.Reconciling && input.claimKind !== null && input.claimKind !== ExternalActionClaimKinds.Reconcile) return ToolInvocationLifecycleActions.Reject;
+	if (input.state !== ToolInvocationStates.Claimed && input.state !== ToolInvocationStates.Reconciling && input.claimKind !== null) return ToolInvocationLifecycleActions.Reject;
 	return _STATE_HANDLERS[input.state](input);
 }
