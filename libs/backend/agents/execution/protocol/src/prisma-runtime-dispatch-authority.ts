@@ -239,7 +239,8 @@ async function _nextCommand(prisma: PrismaClient, config: RuntimeDispatchAuthori
 
 		// 3. Redeliver a stored command the transport has not yet re-sent on this connection.
 		const targetSequence = afterSequence + 1;
-		const stored = commands.find(function _atTarget(row) { return row.sequence === targetSequence; });
+		// Cancellation supersedes stale work; the durable cancel retains one unambiguous newer sequence.
+		const stored = context.runState === "cancelling" ? commands.find(function _UnobservedCancel(row) { return row.kind === RuntimeCommandKind.CancelAttempt && row.sequence > afterSequence; }) : commands.find(function _AtTarget(row) { return row.sequence === targetSequence; });
 		if (stored)
 		{
 			// Rebuild the exact body from immutable state (or the stored resume payload) so a redelivered
@@ -250,7 +251,7 @@ async function _nextCommand(prisma: PrismaClient, config: RuntimeDispatchAuthori
 			const admission = __AdmitRuntimeCommand({ authority, command: envelope, clock });
 			return admission.outcome === "idempotent" ? envelope : null;
 		}
-		if (targetSequence !== stream.nextCommandSequence) return null;
+		if (context.runState !== "cancelling" && targetSequence !== stream.nextCommandSequence) return null;
 
 		// 4. Decide whether a new lifecycle command is due, mint it, and admit it before persisting.
 		const kind = await decisionUnitOfWork.decide(context, commands);

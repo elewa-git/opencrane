@@ -118,7 +118,7 @@ browser connection therefore cannot drop an instruction or force a model turn to
 | `Running` before any resume | approval marker or queued steering | Mint one resume and consume exactly those markers. |
 | `Running` after a prior resume | fresh approval marker | Mint the next batch resume. |
 | `Running` after a prior resume | steering only | Remain idle; do not supersede the active loop. |
-| `Cancelling` | any stale approval or steering marker | Cancellation wins; mint at most the one positive stop command. |
+| `Cancelling` | any stale approval, steering marker, or reconnect frontier | Cancellation wins; skip stored start/resume delivery and mint or redeliver the sole newer positive stop command. |
 
 ## Dependency direction
 

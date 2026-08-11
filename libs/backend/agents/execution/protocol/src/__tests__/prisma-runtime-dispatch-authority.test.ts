@@ -320,6 +320,36 @@ describe("PrismaRuntimeDispatchAuthority", function _describeDispatchAuthority()
 		expect(late.accepted).toBe(false);
 	});
 
+	it("supersedes stale start delivery with one monotonic cancel on reconnect", async function _SupersedesStaleStart()
+	{
+		const context = _authority({ runState: "Running" });
+		await context.authority.__NextCommand(_identity, _open, 0);
+		context.run.state = "Cancelling";
+
+		const cancel = await context.authority.__NextCommand(_identity, _open, 0);
+		const redelivered = await context.authority.__NextCommand(_identity, _open, 0);
+
+		expect(cancel?.kind).toBe("cancel_attempt");
+		expect(cancel?.sequence).toBe(2);
+		expect(redelivered).toEqual(cancel);
+		expect(context.commands.map(function _Sequence(row) { return row.sequence; })).toEqual([1, 2]);
+		expect(await context.authority.__NextCommand(_identity, _open, 2)).toBeNull();
+	});
+
+	it("skips stored start and resume frames when cancellation wins", async function _SupersedesStaleResume()
+	{
+		const context = _authority({ runState: "Running", approvedDeferredResults: [{ ok: true }] });
+		await context.authority.__NextCommand(_identity, _open, 0);
+		await context.authority.__NextCommand(_identity, _open, 1);
+		context.run.state = "Cancelling";
+
+		const cancel = await context.authority.__NextCommand(_identity, _open, 0);
+
+		expect(cancel?.kind).toBe("cancel_attempt");
+		expect(cancel?.sequence).toBe(3);
+		expect(context.commands.map(function _Kind(row) { return row.kind; })).toEqual(["StartAttempt", "ResumeAttempt", "CancelAttempt"]);
+	});
+
 	it("mints a resume_attempt carrying the approved deferred results after start", async function _mintsResume()
 	{
 		const context = _authority({ runState: "Running", approvedDeferredResults: [{ ok: true }] });
