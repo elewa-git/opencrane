@@ -116,15 +116,17 @@ moves the run to `Cancelled`. The runtime protocol and channel-target admission 
 `cancelling` the same way they close on a terminal state. Bootstrap exchange and the full runtime
 command lifecycle now land: the dispatch authority mints `start_attempt`, `resume_attempt`, and a
 positive `cancel_attempt` stop signal (with exactly-once terminal reporting under a race); the runtime
-surfaces model tool calls as external-action candidates validated against the immutable snapshot and
-reserved before dispatch through an injected tool-invocation authority. A tool grant flagged
-`requiresApproval` defers: the reserved invocation opens a pending `ApprovalRequest`, so the
-pause is reachable end to end. The owner-bound approval-DECISION and steering-INGEST APIs are built:
+surfaces model tool calls as external-action candidates that the server validates against the
+immutable snapshot and admits into the durable ToolInvocation lifecycle before any provider request.
+A tool grant flagged `requiresApproval` enters `AwaitingApproval` and opens a pending
+`ApprovalRequest`, so the pause is reachable end to end. The owner-bound approval-DECISION and
+steering-INGEST APIs are built:
 an owner may decide only their own pending tool approval or queue bounded text only to their own live
-run. The deferred-tool DECIDE authority and steering queue feed one fenced, single-use resume
-command for each completed approval batch; later batches require a fresh durable marker, so
-concurrent steering cannot supersede an active executor loop. The runtime absorbs queued steering
-only at safe pre-model boundaries. The
+run. The approval authority persists approved effective arguments or a terminal failure, and the
+server-owned worker records one durable result delivery before a fenced resume command can carry it
+back to the runtime. Later results and steering requests remain independently consumable, so
+concurrent input cannot supersede an active executor loop. The runtime absorbs queued steering only
+at safe pre-model boundaries. The
 runtime also writes encrypted, version-tagged, replaceable LOCAL checkpoints subordinate to canonical
 state (no server-side checkpoint model). The MCP and sandbox execution ports remain fail-closed in
 the production composition root. The authenticated memory transport IS composed: the server mounts
@@ -132,12 +134,12 @@ its audience-bound projected token and shares one gateway client between admissi
 Admission-time recall freezes gateway-selected fact references (id + content digest, never text)
 into the personal `RunInputSnapshot`, and compile-time statement loading re-resolves and
 digest-verifies every reference before inlining it — so redelivered `start_attempt` frames stay
-byte-identical or fail closed. Mid-run recall through the external-action executor remains gated:
-`AgentRuntimeProtocol v1` has no attempt-fenced ephemeral tool-result channel, and persisted
-`ToolInvocation` receipts must not duplicate Cognee fact content. Record, correction, forgetting,
-and scoped injection also remain fail-closed pending a recoverable gateway write lifecycle.
+byte-identical or fail closed. Mid-run recall now uses the same server-owned ToolInvocation worker and
+durable, attempt-fenced result delivery as integration tools; persisted receipts must not duplicate
+Cognee fact content. Record, correction, forgetting, and scoped injection remain fail-closed pending
+a recoverable gateway write lifecycle.
 
-**MEMORY TRANSPORT COMPOSED; ADMISSION+COMPILE RECALL LIVE; MID-RUN RECALL AND WRITES STILL GATED**
+**MEMORY TRANSPORT COMPOSED; ADMISSION+COMPILE RECALL LIVE; DURABLE MID-RUN RESULTS BUILT; WRITES STILL GATED**
 
 The offline conformance harness and fault-injection matrix are built and CI-runnable (runtime protocol/reliability, attempt-scoped
 credential rejection, observability evidence). The live-LiteLLM conformance leg and driver-adoption
@@ -171,12 +173,12 @@ catch-up, overlap/backoff/suspension, idempotent run creation through the existi
 `ManagedRunAdmissionPort` with `trigger: schedule`), the `AgentServiceSchedule` model + management
 API, the connector-scoped managed identity (`managed-agent-runtime-*` SA class + distinct token
 audience, the launcher's selectable identity profile, and the chart-only `apps/managed-agent-runtime`
-plane), execution authority via the reserve-before-dispatch tool boundary with the Obot transports
+plane), execution authority via the durable ToolInvocation lifecycle with the Obot transports
 composed (authenticated custody provisioning plus server-owned, allow-listed action execution;
 provider addressing and credentials never enter a runtime Job), the scoped-memory
 contract freezes the gateway-native dataset selected by admitted authority while the authenticated
-read transport is built but not connected to runtime execution pending attempt-fenced ephemeral
-result delivery, and the attach-authority + runtime
+read transport returns through the same durable attempt-fenced result delivery, and the
+attach-authority + runtime
 effective-access intersection over the grant compiler (closes the slice-5 deferral; scope-isolation
 tested). Scoped injection and personal record/correct/forget remain fail-closed pending a durable,
 recoverable gateway write lifecycle. NOT done — a NAMED LATER GATE: **create and qualify the harvesting central agent against
@@ -405,13 +407,21 @@ The latest architecture wave leaves the OpenCrane app as typed assembly only: fi
 signed membership selection, conversation-read policy, exact host binding, and bounded route
 reconciliation now live in their owning libraries. A verified producer/consumer mismatch was also
 closed by sharing one digest authority between invocation-context issuance and replay consumption;
-the raw bearer remains absent from persistence and logs. Focused package tests, policy gates, and
-independent correctness/security review pass at this checkpoint.
+the raw bearer remains absent from persistence and logs. Focused package tests and policy gates pass
+for the committed projection work at this checkpoint.
 Durable recovery for irreversible external actions now has product approval: OpenCrane may retry
 only bounded internal preparation before dispatch; after dispatch it must replay saved success,
 check the provider when supported, or stop visibly in **Needs recovery** without sending the action
 again. The durable ToolInvocation claim, result replay, provider-check strategy, and user-visible
-recovery state remain the implementation gate. The legacy 0.7 route-expiry replacement is approved and
+recovery state remain the implementation gate. Server-owned Obot invocation, credential isolation,
+safe result redaction, lifecycle-event ownership, and the provider-free replay digest check are now
+implemented and covered by focused tests. The exact State×Event planner owns every invocation
+transition; claim kind, fence and revision prevent overlapping dispatch/reconciliation; approved
+argument edits become the effective provider request; and cancellation waits for in-flight claims to
+settle without admitting new work. The final architecture recheck passes, fresh and upgraded 0.8
+databases converge under live PostgreSQL qualification, and package, ownership, style and release
+gates pass. Independent post-commit correctness/security review remains required before merge.
+The legacy 0.7 route-expiry replacement is approved and
 implemented: migrated route ids, endpoint/registration coordinates, prior revocation, and exact
 expiry evidence survive as permanently inactive rows, while startup reconciliation creates the
 sole usable stable receiver route. Fresh 0.8 and migrated 0.7 databases converge under the live

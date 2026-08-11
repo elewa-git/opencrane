@@ -80,7 +80,8 @@ cannot widen its own reach.
 
 - An unregistered or ungranted tool revision is denied.
 - An arguments-digest mismatch is denied.
-- A required approval pauses the run at the durable reservation.
+- A required approval pauses the invocation in `AwaitingApproval`; approval binds the effective
+  arguments before it can become runnable.
 - Without the Obot mount, custody provisioning and server-side invocation fail closed and an approved
   integration tool ends in a typed loop error.
 - A runtime-authored `tool.completed` report is refused; only the server worker can complete an action.

@@ -30,7 +30,8 @@ Integration credentials and provider addressing never enter the runtime or brows
 ::: info
 The registration, grant, approval, durable invocation, custody and server execution authorities are present.
 The Obot transports compose only when the deployment mounts the Obot service credential; without
-it execution fails closed after reservation. Live-Obot qualification remains gated on issue #337.
+it server preparation fails closed before a provider request starts. Live-Obot qualification
+remains gated on issue #337.
 :::
 
 ::: tip

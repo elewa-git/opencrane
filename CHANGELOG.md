@@ -105,12 +105,12 @@ follows [Keep a Changelog](https://keepachangelog.com/); the project uses
   triggers a rolling restart automatically. Before this, a BYOK key registration had no effect
   until the pod was manually recycled.
 
-- **Approved agent tool calls now execute directly against Obot, with no server in the data
-  path.** Each run attempt is issued a short-lived Obot API key scoped to exactly that attempt's
-  MCP server ids (minted at dispatch, revoked with the attempt); the runtime pairs it with the
-  tool's Obot MCP server id to call Obot's connection proxy directly, so the underlying
-  integration credential never leaves Obot and never transits OpenCrane. The recorded tool-call
-  receipt carries only a content digest, never the tool payload.
+- **Approved agent tool calls now execute through a recoverable server-owned action boundary.**
+  Runtimes submit attempt-fenced candidates without receiving provider addresses or credentials;
+  OpenCrane validates the frozen tool grant, applies any approved argument edits, and invokes the
+  allow-listed Obot MCP tool from server custody. Definite results resume the run exactly once,
+  internal preparation retries are bounded, and an uncertain provider outcome stops visibly for
+  recovery instead of sending the action again.
 
 - **Personal-agent runs can recall organisation and personal memory through a locked-down memory
   gateway.** A dedicated `memory-gateway` app is the only process allowed to reach the silo's
