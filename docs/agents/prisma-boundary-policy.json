@@ -340,6 +340,20 @@
 		"constructs": []
 	  },
 	  {
+		"path": "libs/backend/server/iam/authorization/main/src/run-approval-cancellation.ts",
+		"adapter": "PrismaRunApprovalCancellationRepository",
+		"contract": "RunApprovalCancellationRepository",
+		"contractImportPath": "./run-approval-cancellation.types.js",
+		"constructs": []
+	  },
+	  {
+		"path": "libs/backend/agents/execution/protocol/src/prisma-runtime-deferred-resume-repository.ts",
+		"adapter": "PrismaRuntimeDeferredResumeRepository",
+		"contract": "RuntimeDeferredResumeRepository",
+		"contractImportPath": "./runtime-deferred-resume.types.js",
+		"constructs": []
+	  },
+	  {
 		"path": "libs/backend/server/iam/authorization/main/src/prisma-self-deferred-tool-approval-list-repository.ts",
 		"adapter": "PrismaSelfDeferredToolApprovalListRepository",
 		"contract": "SelfDeferredToolApprovalListRepository",
@@ -594,6 +608,30 @@
 		"constructs": [
 		  {
 			"adapter": "PrismaDeferredToolApprovalOpenRepository",
+			"importPath": "<same-file>"
+		  }
+		]
+	  },
+	  {
+		"path": "libs/backend/server/iam/authorization/main/src/run-approval-cancellation.ts",
+		"adapter": "PrismaRunApprovalCancellationUnitOfWork",
+		"contract": "RunApprovalCancellationUnitOfWork",
+		"contractImportPath": "./run-approval-cancellation.types.js",
+		"constructs": [
+		  {
+			"adapter": "PrismaRunApprovalCancellationRepository",
+			"importPath": "<same-file>"
+		  }
+		]
+	  },
+	  {
+		"path": "libs/backend/agents/execution/protocol/src/prisma-runtime-deferred-resume-repository.ts",
+		"adapter": "PrismaRuntimeDeferredResumeUnitOfWork",
+		"contract": "RuntimeDeferredResumeUnitOfWork",
+		"contractImportPath": "./runtime-deferred-resume.types.js",
+		"constructs": [
+		  {
+			"adapter": "PrismaRuntimeDeferredResumeRepository",
 			"importPath": "<same-file>"
 		  }
 		]

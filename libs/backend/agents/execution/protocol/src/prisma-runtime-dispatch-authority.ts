@@ -6,8 +6,9 @@ import { AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, AGENT_RUNTIME_PROTOCOL_V1, MANA
 import { ___CreateLogger, ___DoWithTrace, type Logger } from "@opencrane/backend/observability";
 
 import { _ApplyRuntimeCandidateSideEffects, _RuntimeCandidateRequiresTerminalReporter } from "./prisma-runtime-candidate-side-effects.js";
+import { PrismaRuntimeDeferredResumeUnitOfWork } from "./prisma-runtime-deferred-resume-repository.js";
 import { __ProjectRuntimeInputSnapshot } from "./runtime-input-snapshot-projector.js";
-import { _LoadDeferredResume, _ParseDeferredResumePayload } from "./runtime-deferred-resume.js";
+import { _ParseDeferredResumePayload } from "./runtime-deferred-resume.js";
 import { __AdmitRuntimeCandidate, __AdmitRuntimeCommand } from "./runtime-protocol-authority.js";
 import type { RuntimeAdmissionRunState, RuntimeAttemptAuthority, RuntimeProtocolClock } from "./runtime-protocol-authority.types.js";
 import type { RunInputCompiler, RuntimeCandidateDispatchResult, RuntimeDispatchAuthorityConfig, RuntimeExternalActionRunner, RuntimeStreamWorkloadIdentity, RuntimeTerminalReporter } from "./prisma-runtime-dispatch-authority.types.js";
@@ -526,7 +527,7 @@ async function _mintCommandExtras(transaction: Prisma.TransactionClient, context
 		return { compiledInput, resume: null, resumeApprovalIds: [], resumeSteeringRequestIds: [], cancelReason: "cancelled" };
 	}
 	if (kind === RuntimeCommandKind.CancelAttempt) return { compiledInput: null, resume: null, resumeApprovalIds: [], resumeSteeringRequestIds: [], cancelReason: _cancelReason(context.terminalReason) };
-	const loaded = await _LoadDeferredResume(transaction, context.runId, context.attempt, inputGeneration);
+	const loaded = await new PrismaRuntimeDeferredResumeUnitOfWork(transaction).load(context.runId, context.attempt, inputGeneration);
 	if (loaded === null) return null;
 	return { compiledInput: null, resume: loaded.resume, resumeApprovalIds: loaded.approvalIds, resumeSteeringRequestIds: loaded.steeringRequestIds, cancelReason: "cancelled" };
 }
@@ -580,7 +581,7 @@ async function _decideKind(transaction: Prisma.TransactionClient, context: Runti
 	if (runState === "running" && hasStart)
 	{
 		if (commands.some(function _isResume(row) { return row.kind === RuntimeCommandKind.ResumeAttempt; })) return null;
-		const loaded = await _LoadDeferredResume(transaction, context.runId, context.attempt, 0);
+		const loaded = await new PrismaRuntimeDeferredResumeUnitOfWork(transaction).load(context.runId, context.attempt, 0);
 		if (loaded !== null) return RuntimeCommandKind.ResumeAttempt;
 	}
 	return null;

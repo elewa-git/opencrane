@@ -1,12 +1,8 @@
-import { ApprovalRequestState, type Prisma } from "@prisma/client";
-
 import type { DeferredToolResumeResult, ResumeAttemptCommand } from "@opencrane/contracts";
 import type { JsonValue } from "@opencrane/util";
 
-import type { RuntimeDeferredResumeLoad } from "./runtime-deferred-resume.types.js";
-
 /** Parse a persisted resume payload back into the exact frame it was minted from. */
-export function _ParseDeferredResumePayload(payload: Prisma.JsonValue | null): ResumeAttemptCommand | null
+export function _ParseDeferredResumePayload(payload: unknown): ResumeAttemptCommand | null
 {
 	if (payload === null || typeof payload !== "object" || Array.isArray(payload)) return null;
 	const record = payload as { readonly [key: string]: JsonValue };
@@ -41,19 +37,4 @@ function _DeferredToolResults(value: JsonValue): readonly DeferredToolResumeResu
 		else return null;
 	}
 	return results;
-}
-
-/** Load every single-use approval marker and pending steering item for one atomic resume body. */
-export async function _LoadDeferredResume(transaction: Prisma.TransactionClient, runId: string, attempt: number, inputGeneration: number): Promise<RuntimeDeferredResumeLoad | null>
-{
-	const approvals = await transaction.approvalRequest.findMany({ where: { runId, attempt, state: ApprovalRequestState.Approved, toolInvocationRowId: { not: null }, resumeTokenHash: { not: null } }, orderBy: { id: "asc" }, include: { toolInvocation: { select: { toolInvocationId: true } } } });
-	const steering = await transaction.runtimeSteeringRequest.findMany({ where: { runId, attempt, state: "Pending" }, orderBy: { submittedAt: "asc" } });
-	if (approvals.length === 0 && steering.length === 0) return null;
-	const deferredToolResults = approvals.map(function _Result(row): DeferredToolResumeResult
-	{
-		if (row.toolInvocation === null || row.finalArguments === null || typeof row.finalArgumentsDigest !== "string") throw new Error("approved deferred tool request has incomplete resume authority");
-		return { approvalRequestId: row.id, decision: "approved", toolInvocationId: row.toolInvocation.toolInvocationId, arguments: row.finalArguments as JsonValue, argumentsDigest: row.finalArgumentsDigest };
-	});
-	const steeringRequests = steering.map(function _Content(row): JsonValue { return row.content as JsonValue; });
-	return { resume: { inputGeneration, deferredToolResults, steeringRequests }, approvalIds: approvals.map(function _Id(row) { return row.id; }), steeringRequestIds: steering.map(function _Id(row) { return row.id; }) };
 }
