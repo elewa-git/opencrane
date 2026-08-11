@@ -13,6 +13,7 @@ model ChannelRuntimeRoute {
   endpoint           String
   isCurrent          Boolean                    @default(true) @map("is_current")
   registeredAt       DateTime                   @default(now()) @map("registered_at")
+  legacyExpiresAt    DateTime?                  @map("legacy_expires_at")
   revokedAt          DateTime?                  @map("revoked_at")
   invocationContexts ChannelInvocationContext[]
 

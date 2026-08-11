@@ -599,13 +599,14 @@ CREATE TABLE "action_execution_receipts" (
 -- CreateTable
 CREATE TABLE "channel_runtime_routes" (
     "id" TEXT NOT NULL,
+    "receiver_id" TEXT NOT NULL,
     "silo_id" TEXT NOT NULL,
     "agent_service_id" TEXT NOT NULL,
     "action" "ChannelInvocationAction" NOT NULL,
     "endpoint" TEXT NOT NULL,
     "is_current" BOOLEAN NOT NULL DEFAULT true,
     "registered_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "expires_at" TIMESTAMP(3) NOT NULL,
+    "legacy_expires_at" TIMESTAMP(3),
     "revoked_at" TIMESTAMP(3),
 
     CONSTRAINT "channel_runtime_routes_pkey" PRIMARY KEY ("id")
@@ -621,6 +622,7 @@ CREATE TABLE "channel_invocation_contexts" (
     "agent_service_id" TEXT NOT NULL,
     "action" "ChannelInvocationAction" NOT NULL,
     "route_id" TEXT NOT NULL,
+    "receiver_id" TEXT NOT NULL,
     "membership_revision" INTEGER NOT NULL,
     "authorization_digest" TEXT NOT NULL,
     "expires_at" TIMESTAMP(3) NOT NULL,
@@ -1910,10 +1912,13 @@ CREATE INDEX "action_execution_receipts_run_id_attempt_state_idx" ON "action_exe
 CREATE INDEX "action_execution_receipts_replay_mode_state_idx" ON "action_execution_receipts"("replay_mode", "state");
 
 -- CreateIndex
-CREATE INDEX "channel_runtime_routes_current_lookup_idx" ON "channel_runtime_routes"("silo_id", "agent_service_id", "action", "is_current", "expires_at");
+CREATE INDEX "channel_runtime_routes_current_lookup_idx" ON "channel_runtime_routes"("silo_id", "agent_service_id", "action", "is_current");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "channel_runtime_routes_exact_target_key" ON "channel_runtime_routes"("id", "silo_id", "agent_service_id", "action");
+CREATE UNIQUE INDEX "channel_runtime_routes_exact_target_key" ON "channel_runtime_routes"("id", "receiver_id", "silo_id", "agent_service_id", "action");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "channel_runtime_routes_receiver_service_key" ON "channel_runtime_routes"("receiver_id", "silo_id", "agent_service_id", "action");
 
 -- CreateIndex
 CREATE INDEX "org_memberships_subject_idx" ON "org_memberships"("subject");
@@ -2700,7 +2705,7 @@ ALTER TABLE "skill_workload_bootstraps" ADD CONSTRAINT "skill_workload_bootstrap
 
 
 -- AddForeignKey
-ALTER TABLE "channel_invocation_contexts" ADD CONSTRAINT "channel_invocation_contexts_route_id_silo_id_agent_service_fkey" FOREIGN KEY ("route_id", "silo_id", "agent_service_id", "action") REFERENCES "channel_runtime_routes"("id", "silo_id", "agent_service_id", "action") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "channel_invocation_contexts" ADD CONSTRAINT "channel_invocation_contexts_route_id_receiver_id_silo_id_agent_service_fkey" FOREIGN KEY ("route_id", "receiver_id", "silo_id", "agent_service_id", "action") REFERENCES "channel_runtime_routes"("id", "receiver_id", "silo_id", "agent_service_id", "action") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "conversations" ADD CONSTRAINT "conversations_id_context_revision_id_fkey" FOREIGN KEY ("id", "context_revision_id") REFERENCES "conversation_context_revisions"("conversation_id", "id") ON DELETE RESTRICT ON UPDATE CASCADE;
@@ -2763,7 +2768,21 @@ ALTER TABLE "run_input_snapshots" ADD CONSTRAINT "run_input_snapshots_run_input_
 
 -- Channel-target constraints cannot be represented by Prisma relations/indexes alone.
 ALTER TABLE "channel_runtime_routes" ADD CONSTRAINT "channel_runtime_routes_endpoint_nonempty" CHECK (length(btrim("endpoint")) > 0);
-ALTER TABLE "channel_runtime_routes" ADD CONSTRAINT "channel_runtime_routes_expiry_after_registration" CHECK ("expires_at" > "registered_at");
+ALTER TABLE "channel_runtime_routes" ADD CONSTRAINT "channel_runtime_routes_receiver_nonempty" CHECK (length(btrim("receiver_id")) > 0);
+ALTER TABLE "channel_runtime_routes" ADD CONSTRAINT "channel_runtime_routes_state_check" CHECK (
+    ("is_current" = TRUE AND "revoked_at" IS NULL AND "legacy_expires_at" IS NULL)
+    OR ("is_current" = FALSE AND "revoked_at" IS NOT NULL)
+);
+ALTER TABLE "channel_runtime_routes" ADD CONSTRAINT "channel_runtime_routes_legacy_evidence_check" CHECK (
+    ("legacy_expires_at" IS NULL AND "receiver_id" NOT LIKE 'legacy-route-v0:%')
+    OR (
+        "legacy_expires_at" IS NOT NULL
+        AND "legacy_expires_at" > "registered_at"
+        AND "receiver_id" = 'legacy-route-v0:' || "id"
+        AND "is_current" = FALSE
+        AND "revoked_at" IS NOT NULL
+    )
+);
 ALTER TABLE "channel_runtime_routes" ADD CONSTRAINT "channel_runtime_routes_service_fkey"
     FOREIGN KEY ("agent_service_id", "silo_id") REFERENCES "agent_services"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
 CREATE UNIQUE INDEX "channel_runtime_routes_one_current_target"
@@ -2775,6 +2794,31 @@ ALTER TABLE "channel_invocation_contexts" ADD CONSTRAINT "channel_invocation_con
     FOREIGN KEY ("conversation_id", "silo_id", "agent_service_id") REFERENCES "conversations"("id", "silo_id", "agent_service_id") ON DELETE RESTRICT ON UPDATE CASCADE;
 ALTER TABLE "channel_invocation_contexts" ADD CONSTRAINT "channel_invocation_contexts_participant_fkey"
     FOREIGN KEY ("conversation_id", "subject_id") REFERENCES "conversation_participants"("conversation_id", "user_id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+CREATE FUNCTION "enforce_channel_runtime_route_evidence"() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+    IF TG_OP = 'DELETE' THEN
+        RAISE EXCEPTION 'ChannelRuntimeRoute evidence cannot be deleted';
+    END IF;
+    IF TG_OP = 'INSERT' THEN
+        IF NEW."legacy_expires_at" IS NOT NULL OR NEW."receiver_id" LIKE 'legacy-route-v0:%' THEN
+            RAISE EXCEPTION 'legacy ChannelRuntimeRoute evidence can only be created by a reviewed migration';
+        END IF;
+        RETURN NEW;
+    END IF;
+    IF OLD."legacy_expires_at" IS NOT NULL OR OLD."receiver_id" LIKE 'legacy-route-v0:%' THEN
+        RAISE EXCEPTION 'legacy ChannelRuntimeRoute evidence is immutable';
+    END IF;
+    IF NEW."legacy_expires_at" IS NOT NULL OR NEW."receiver_id" LIKE 'legacy-route-v0:%' THEN
+        RAISE EXCEPTION 'legacy ChannelRuntimeRoute evidence cannot be added at runtime';
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER "channel_runtime_routes_evidence_guard"
+    BEFORE INSERT OR UPDATE OR DELETE ON "channel_runtime_routes"
+    FOR EACH ROW EXECUTE FUNCTION "enforce_channel_runtime_route_evidence"();
 
 -- Cross-domain transcript and persona provenance constraints are deliberately database-enforced.
 ALTER TABLE "agent_runs" ADD CONSTRAINT "agent_runs_conversation_fkey"

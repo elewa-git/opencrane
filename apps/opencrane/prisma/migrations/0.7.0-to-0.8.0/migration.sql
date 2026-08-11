@@ -27,6 +27,14 @@ SELECT
     AND to_regtype('public."UserOnboardingState"') IS NOT NULL
     AND to_regtype('public."ConversationMode"') IS NOT NULL
     AND to_regtype('public."ConversationLifecycle"') IS NOT NULL
+    AND EXISTS (SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'channel_runtime_routes'
+          AND column_name = 'receiver_id' AND data_type = 'text' AND is_nullable = 'NO')
+    AND EXISTS (SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'channel_runtime_routes'
+          AND column_name = 'legacy_expires_at' AND data_type = 'timestamp without time zone' AND is_nullable = 'YES')
+    AND (SELECT count(*) FROM pg_trigger
+        WHERE NOT tgisinternal AND tgname = 'channel_runtime_routes_evidence_guard') = 1
     AS target_objects_exist
 \gset
 \if :target_objects_exist
@@ -36,7 +44,7 @@ SELECT (
         WHERE "schema_version" = '0.8.0'
           AND "source_schema_version" = '0.7.0'
           AND "source_baseline_sha256" = :'source_baseline_sha256'
-          AND "target_baseline_sha256" = '503442ee8f567c61016ccbde60621f577bc39ac4b36816ec2c09c04c0d291bb6'
+          AND "target_baseline_sha256" = 'e207d79c3022a68f4311b098968c2b008478df440e5f60b39e6c46c0e20fe8b3'
           AND "sql_sha256" = :'migration_sql_sha256'
           AND "migration_id" = '0.7.0-to-0.8.0') = 1
     AND (SELECT "baseline_sha256" FROM "opencrane_bootstrap"."target_baseline" WHERE "singleton" = TRUE)
@@ -68,6 +76,15 @@ SELECT (
             'persona_question_choices_draft_only', 'persona_scoring_policies_immutable',
             'persona_soul_templates_immutable', 'user_onboarding_bootstrap_content_revisions_immutable'
         )) = 4
+    AND NOT EXISTS (
+        SELECT 1 FROM "channel_runtime_routes"
+        WHERE ("legacy_expires_at" IS NULL AND "receiver_id" LIKE 'legacy-route-v0:%')
+           OR ("legacy_expires_at" IS NOT NULL AND (
+                "receiver_id" <> 'legacy-route-v0:' || "id"
+                OR "is_current" = TRUE
+                OR "revoked_at" IS NULL
+           ))
+    )
 ) AS migration_already_applied
 \gset
 \else
@@ -115,6 +132,7 @@ DECLARE
     conversation_run_events_count BIGINT;
     conversation_context_revisions_count BIGINT;
     active_conversation_runs_count BIGINT;
+    legacy_invocation_contexts_count BIGINT;
     retired_channel_commands_count BIGINT;
 	approval_requests_count BIGINT;
 	integration_assignments_count BIGINT;
@@ -183,6 +201,19 @@ BEGIN
         RAISE EXCEPTION USING
             ERRCODE = 'OC705',
             MESSAGE = '0.8.0 Conversation schema is partial or the exact legacy conversation source is absent';
+    END IF;
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'channel_runtime_routes'
+          AND column_name = 'expires_at' AND data_type = 'timestamp without time zone' AND is_nullable = 'NO'
+    ) OR EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'channel_runtime_routes'
+          AND column_name IN ('receiver_id', 'legacy_expires_at')
+    ) THEN
+        RAISE EXCEPTION USING
+            ERRCODE = 'OC705',
+            MESSAGE = 'channel runtime routes are not the exact 0.7.0 lease-based source shape';
     END IF;
 
     IF NOT EXISTS (
@@ -262,6 +293,7 @@ BEGIN
     SELECT count(*) INTO active_conversation_runs_count
       FROM "agent_runs"
       WHERE "thread_id" IS NOT NULL AND "state" NOT IN ('completed', 'failed', 'cancelled');
+    SELECT count(*) INTO legacy_invocation_contexts_count FROM "channel_invocation_contexts";
     SELECT
         (SELECT count(*) FROM "channel_runtime_routes" WHERE "action" = 'command.forward')
         + (SELECT count(*) FROM "channel_invocation_contexts" WHERE "action" = 'command.forward')
@@ -288,7 +320,8 @@ BEGIN
     END IF;
     IF legacy_conversations_count + conversation_participants_count + conversation_messages_count
         + conversation_run_events_count + conversation_context_revisions_count
-        + active_conversation_runs_count + retired_channel_commands_count > 0 THEN
+        + active_conversation_runs_count + legacy_invocation_contexts_count
+        + retired_channel_commands_count > 0 THEN
         RAISE EXCEPTION USING
             ERRCODE = 'OC710',
             MESSAGE = 'automatic 0.7.0-to-0.8.0 migration requires a manual Conversation data-mapping plan',
@@ -300,6 +333,7 @@ BEGIN
                 'run_events_without_canonical_position', conversation_run_events_count,
                 'context_revisions_without_canonical_timeline', conversation_context_revisions_count,
                 'active_conversation_runs', active_conversation_runs_count,
+                'legacy_invocation_contexts', legacy_invocation_contexts_count,
                 'retired_channel_commands', retired_channel_commands_count
             )::TEXT,
             HINT = 'Mode, lifecycle, participant visibility, cross-source timeline order, foreground-run authority, and retired command admission must not be guessed. Clone the source and approve a deterministic manual mapping.';
@@ -542,6 +576,30 @@ CASCADE;
 
 DROP TYPE "ConversationThreadState";
 
+-- Event routes remain immutable operational evidence, but their lease expiry is not promoted into
+-- current receiver authority. Every admitted legacy row receives a deterministic reserved receiver
+-- coordinate and one shared retirement instant; its id, endpoint, and registration time survive.
+DROP INDEX "channel_runtime_routes_current_lookup_idx";
+DROP INDEX "channel_runtime_routes_exact_target_key";
+DROP INDEX "channel_runtime_routes_one_current_target";
+ALTER TABLE "channel_runtime_routes"
+    DROP CONSTRAINT "channel_runtime_routes_expiry_after_registration";
+ALTER TABLE "channel_runtime_routes"
+    RENAME COLUMN "expires_at" TO "legacy_expires_at";
+ALTER TABLE "channel_runtime_routes"
+    ALTER COLUMN "legacy_expires_at" DROP NOT NULL;
+ALTER TABLE "channel_runtime_routes" ADD COLUMN "receiver_id" TEXT;
+WITH migration_retirement AS MATERIALIZED (
+    SELECT date_trunc('milliseconds', clock_timestamp())::TIMESTAMP(3) AS "retired_at"
+)
+UPDATE "channel_runtime_routes" AS route
+SET
+    "receiver_id" = 'legacy-route-v0:' || route."id",
+    "is_current" = FALSE,
+    "revoked_at" = COALESCE(route."revoked_at", migration_retirement."retired_at")
+FROM migration_retirement;
+ALTER TABLE "channel_runtime_routes" ALTER COLUMN "receiver_id" SET NOT NULL;
+
 ALTER TYPE "ChannelInvocationAction" RENAME TO "ChannelInvocationAction_old";
 CREATE TYPE "ChannelInvocationAction" AS ENUM ('events.read');
 ALTER TABLE "channel_runtime_routes" ALTER COLUMN "action" TYPE "ChannelInvocationAction"
@@ -570,6 +628,7 @@ CREATE TABLE "channel_invocation_contexts" (
     "agent_service_id" TEXT NOT NULL,
     "action" "ChannelInvocationAction" NOT NULL,
     "route_id" TEXT NOT NULL,
+    "receiver_id" TEXT NOT NULL,
     "membership_revision" INTEGER NOT NULL,
     "authorization_digest" TEXT NOT NULL,
     "expires_at" TIMESTAMP(3) NOT NULL,
@@ -665,6 +724,11 @@ CREATE TABLE "conversation_context_revisions" (
 );
 
 CREATE UNIQUE INDEX "channel_invocation_contexts_digest_key" ON "channel_invocation_contexts"("digest");
+CREATE INDEX "channel_runtime_routes_current_lookup_idx" ON "channel_runtime_routes"("silo_id", "agent_service_id", "action", "is_current");
+CREATE UNIQUE INDEX "channel_runtime_routes_exact_target_key" ON "channel_runtime_routes"("id", "receiver_id", "silo_id", "agent_service_id", "action");
+CREATE UNIQUE INDEX "channel_runtime_routes_receiver_service_key" ON "channel_runtime_routes"("receiver_id", "silo_id", "agent_service_id", "action");
+CREATE UNIQUE INDEX "channel_runtime_routes_one_current_target"
+    ON "channel_runtime_routes"("silo_id", "agent_service_id", "action") WHERE "is_current" = TRUE AND "revoked_at" IS NULL;
 CREATE INDEX "channel_invocation_contexts_digest_expiry_idx" ON "channel_invocation_contexts"("digest", "expires_at");
 CREATE INDEX "channel_invocation_contexts_route_expiry_idx" ON "channel_invocation_contexts"("route_id", "expires_at");
 CREATE INDEX "channel_invocation_contexts_subject_conversation_idx" ON "channel_invocation_contexts"("subject_id", "silo_id", "conversation_id", "created_at");
@@ -692,7 +756,7 @@ CREATE UNIQUE INDEX "conversation_context_revisions_conversation_id_id_key" ON "
 CREATE INDEX "agent_runs_conversation_id_accepted_at_idx" ON "agent_runs"("conversation_id", "accepted_at");
 CREATE UNIQUE INDEX "agent_runs_conversation_id_id_key" ON "agent_runs"("conversation_id", "id");
 
-ALTER TABLE "channel_invocation_contexts" ADD CONSTRAINT "channel_invocation_contexts_route_id_silo_id_agent_service_fkey" FOREIGN KEY ("route_id", "silo_id", "agent_service_id", "action") REFERENCES "channel_runtime_routes"("id", "silo_id", "agent_service_id", "action") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "channel_invocation_contexts" ADD CONSTRAINT "channel_invocation_contexts_route_id_receiver_id_silo_id_agent_service_fkey" FOREIGN KEY ("route_id", "receiver_id", "silo_id", "agent_service_id", "action") REFERENCES "channel_runtime_routes"("id", "receiver_id", "silo_id", "agent_service_id", "action") ON DELETE RESTRICT ON UPDATE CASCADE;
 ALTER TABLE "conversations" ADD CONSTRAINT "conversations_id_context_revision_id_fkey" FOREIGN KEY ("id", "context_revision_id") REFERENCES "conversation_context_revisions"("conversation_id", "id") ON DELETE RESTRICT ON UPDATE CASCADE;
 ALTER TABLE "conversations" ADD CONSTRAINT "conversations_agent_service_id_silo_id_fkey" FOREIGN KEY ("agent_service_id", "silo_id") REFERENCES "agent_services"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
 ALTER TABLE "conversation_participants" ADD CONSTRAINT "conversation_participants_conversation_id_fkey" FOREIGN KEY ("conversation_id") REFERENCES "conversations"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
@@ -708,10 +772,50 @@ ALTER TABLE "run_input_snapshots" ADD CONSTRAINT "run_input_snapshots_run_id_inp
 ALTER TABLE "channel_invocation_contexts" ADD CONSTRAINT "channel_invocation_contexts_digest_format" CHECK ("digest" ~ '^sha256:[0-9a-f]{64}$');
 ALTER TABLE "channel_invocation_contexts" ADD CONSTRAINT "channel_invocation_contexts_membership_revision_positive" CHECK ("membership_revision" > 0);
 ALTER TABLE "channel_invocation_contexts" ADD CONSTRAINT "channel_invocation_contexts_expiry_after_creation" CHECK ("expires_at" > "created_at");
+ALTER TABLE "channel_runtime_routes" ADD CONSTRAINT "channel_runtime_routes_receiver_nonempty" CHECK (length(btrim("receiver_id")) > 0);
+ALTER TABLE "channel_runtime_routes" ADD CONSTRAINT "channel_runtime_routes_state_check" CHECK (
+    ("is_current" = TRUE AND "revoked_at" IS NULL AND "legacy_expires_at" IS NULL)
+    OR ("is_current" = FALSE AND "revoked_at" IS NOT NULL)
+);
+ALTER TABLE "channel_runtime_routes" ADD CONSTRAINT "channel_runtime_routes_legacy_evidence_check" CHECK (
+    ("legacy_expires_at" IS NULL AND "receiver_id" NOT LIKE 'legacy-route-v0:%')
+    OR (
+        "legacy_expires_at" IS NOT NULL
+        AND "legacy_expires_at" > "registered_at"
+        AND "receiver_id" = 'legacy-route-v0:' || "id"
+        AND "is_current" = FALSE
+        AND "revoked_at" IS NOT NULL
+    )
+);
 ALTER TABLE "channel_invocation_contexts" ADD CONSTRAINT "channel_invocation_contexts_conversation_fkey"
     FOREIGN KEY ("conversation_id", "silo_id", "agent_service_id") REFERENCES "conversations"("id", "silo_id", "agent_service_id") ON DELETE RESTRICT ON UPDATE CASCADE;
 ALTER TABLE "channel_invocation_contexts" ADD CONSTRAINT "channel_invocation_contexts_participant_fkey"
     FOREIGN KEY ("conversation_id", "subject_id") REFERENCES "conversation_participants"("conversation_id", "user_id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+CREATE OR REPLACE FUNCTION "enforce_channel_runtime_route_evidence"() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+    IF TG_OP = 'DELETE' THEN
+        RAISE EXCEPTION 'ChannelRuntimeRoute evidence cannot be deleted';
+    END IF;
+    IF TG_OP = 'INSERT' THEN
+        IF NEW."legacy_expires_at" IS NOT NULL OR NEW."receiver_id" LIKE 'legacy-route-v0:%' THEN
+            RAISE EXCEPTION 'legacy ChannelRuntimeRoute evidence can only be created by a reviewed migration';
+        END IF;
+        RETURN NEW;
+    END IF;
+    IF OLD."legacy_expires_at" IS NOT NULL OR OLD."receiver_id" LIKE 'legacy-route-v0:%' THEN
+        RAISE EXCEPTION 'legacy ChannelRuntimeRoute evidence is immutable';
+    END IF;
+    IF NEW."legacy_expires_at" IS NOT NULL OR NEW."receiver_id" LIKE 'legacy-route-v0:%' THEN
+        RAISE EXCEPTION 'legacy ChannelRuntimeRoute evidence cannot be added at runtime';
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER "channel_runtime_routes_evidence_guard"
+    BEFORE INSERT OR UPDATE OR DELETE ON "channel_runtime_routes"
+    FOR EACH ROW EXECUTE FUNCTION "enforce_channel_runtime_route_evidence"();
 ALTER TABLE "agent_runs" ADD CONSTRAINT "agent_runs_conversation_fkey"
     FOREIGN KEY ("conversation_id", "silo_id", "agent_service_id") REFERENCES "conversations"("id", "silo_id", "agent_service_id") ON DELETE RESTRICT ON UPDATE CASCADE;
 ALTER TABLE "conversation_messages" ADD CONSTRAINT "conversation_messages_run_id_fkey"
@@ -3025,7 +3129,7 @@ INSERT INTO "opencrane_migrations"."schema_history" (
     "target_baseline_sha256", "sql_sha256", "migration_id"
 ) VALUES (
     '0.8.0', '0.7.0', current_setting('opencrane.expected_source_baseline_sha256'),
-    '503442ee8f567c61016ccbde60621f577bc39ac4b36816ec2c09c04c0d291bb6',
+    'e207d79c3022a68f4311b098968c2b008478df440e5f60b39e6c46c0e20fe8b3',
     current_setting('opencrane.expected_migration_sql_sha256'),
     '0.7.0-to-0.8.0'
 );

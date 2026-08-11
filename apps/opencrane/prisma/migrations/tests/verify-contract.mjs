@@ -50,7 +50,7 @@ requireContract(
 	"migration must bind the default-owner protected source baseline",
 );
 requireContract(
-	manifest.executionMode === "automatic-when-legacy-persona-conversations-approval-requests-and-integration-assignments-empty-otherwise-manual-data-mapping-required",
+	manifest.executionMode === "automatic-when-legacy-persona-conversations-channel-invocation-contexts-approval-requests-and-integration-assignments-empty-otherwise-manual-data-mapping-required",
 	"migration execution mode must retain its conditional data boundary",
 );
 requireContract(sql.includes("pg_advisory_xact_lock"), "migration must acquire the database migration lock");
@@ -62,10 +62,26 @@ requireContract(sql.includes("ERRCODE = 'OC708'"), "migration must retain the ex
 requireContract(sql.includes("IF persona_profiles_count + persona_interviews_count"), "OC708 must be conditional on legacy runtime data");
 requireContract(sql.includes("ERRCODE = 'OC710'"), "migration must retain the explicit Conversation semantic-mapping blocker");
 requireContract(sql.includes("IF legacy_conversations_count + conversation_participants_count"), "OC710 must be conditional on legacy Conversation data");
+requireContract(sql.includes('SELECT count(*) INTO legacy_invocation_contexts_count FROM "channel_invocation_contexts"'), "migration must explicitly count every legacy invocation context before replacing the table");
+requireContract(sql.includes("+ active_conversation_runs_count + legacy_invocation_contexts_count"), "OC710 must reject every legacy invocation context before destructive replacement");
 requireContract(sql.includes("ERRCODE = 'OC711'"), "migration must reject populated approval_requests");
 requireContract(sql.includes("ERRCODE = 'OC712'"), "migration must reject legacy integration assignments without reviewed schemas");
 requireContract(sql.includes('ADD COLUMN "tool_definitions" JSONB NOT NULL'), "migration must replace tool-name arrays with reviewed definitions");
 requireContract(!targetBaseline.includes('"allowed_tools"'), "target baseline must not retain tool-name-only authority");
+for (const source of [targetBaseline, sql])
+{
+	requireContract(source.includes('channel_runtime_routes_route_id_receiver_id_silo_id_agent_service_fkey') || source.includes('channel_invocation_contexts_route_id_receiver_id_silo_id_agent_service_fkey'), "invocation contexts must use a receiver-bound route foreign key");
+	requireContract(source.includes("legacy-route-v0:"), "legacy receiver namespace must remain explicit");
+	requireContract(source.includes('CREATE TRIGGER "channel_runtime_routes_evidence_guard"'), "route evidence mutations must remain trigger-guarded");
+}
+requireContract(targetBaseline.includes('"legacy_expires_at" TIMESTAMP(3)'), "fresh route expiry must survive only as nullable legacy evidence");
+requireContract(targetBaseline.includes('"receiver_id" TEXT NOT NULL'), "fresh routes must bind a stable receiver");
+requireContract(!targetBaseline.includes('channel_runtime_routes_expiry_after_registration'), "fresh route expiry must not remain active routing authority");
+requireContract(sql.includes('RENAME COLUMN "expires_at" TO "legacy_expires_at"'), "migration must preserve route expiry under its legacy evidence name");
+requireContract(sql.includes('ALTER COLUMN "receiver_id" SET NOT NULL'), "migrated routes must bind a stable receiver");
+requireContract(sql.includes('DROP CONSTRAINT "channel_runtime_routes_expiry_after_registration"'), "migration must retire the route-expiry authority constraint");
+requireContract(sql.includes('"receiver_id" = \'legacy-route-v0:\' || route."id"'), "migration must derive deterministic legacy receiver ids from preserved route ids");
+requireContract(sql.includes('date_trunc(\'milliseconds\', clock_timestamp())::TIMESTAMP(3) AS "retired_at"'), "migration must retire every legacy route at one shared instant");
 for (const eventType of ["tool.failed", "run.error", "a2ui.rendering.begun", "a2ui.surface.updated", "a2ui.data_model.updated"])
 {
 	requireContract(targetBaseline.includes(`'${eventType}'`), `target baseline must admit canonical ${eventType} events`);
@@ -113,6 +129,7 @@ requireContract(sql.includes("COMMIT;\nSELECT pg_advisory_unlock"), "migration m
 requireContract(sql.trimEnd().endsWith("\\endif"), "migration retry branch must remain explicit");
 
 const authorityFunctions = [
+	"enforce_channel_runtime_route_evidence",
 	"enforce_conversation_lifecycle",
 	"enforce_conversation_timeline_entry",
 	"enforce_persona_question_set_lifecycle",

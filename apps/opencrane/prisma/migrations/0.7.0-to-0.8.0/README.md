@@ -24,12 +24,17 @@ cannot establish that authority, so the automatic path also requires
 advisory lock, requires the exact protected 0.7 bootstrap envelope digest, rejects partial/repeated
 states, verifies the old enum/table/catalog shape, locks every table that could gain persona data,
 and reports the row counts that a manual mapping must address. If any legacy runtime persona data
-exists it aborts with `OC708`; if any legacy Conversation aggregate, active conversation-bound run,
-or retired `command.forward` route exists it aborts with `OC710`. Both guards run before changing
-schema or data. When those sources are empty, the migration replaces the governed 0.7 persona
-catalog and legacy conversation tables, preserves unrelated rows and unbound runs, applies the
-reviewed authority functions, triggers, constraints, and 0.8 seeds, and records the transition in
-schema history.
+exists it aborts with `OC708`; if any legacy Conversation aggregate, invocation context, active
+conversation-bound run, or retired `command.forward` route exists it aborts with `OC710`. Both
+guards run before changing schema or data. Existing `events.read` route rows are not discarded: the
+migration preserves their ids, endpoints, registration times, and former expiry as nullable
+`legacy_expires_at` evidence, assigns the deterministic `legacy-route-v0:<route-id>` receiver, and
+retires every previously unrevoked row at one migration timestamp while preserving any earlier
+revocation evidence. The reserved receiver namespace and evidence trigger
+keep those rows immutable and prevent runtime code from manufacturing more. When the guarded
+sources are empty, the migration replaces the governed 0.7 persona catalog and legacy conversation
+tables, preserves unrelated rows and unbound runs, applies the reviewed authority functions,
+triggers, constraints, and 0.8 seeds, and records the transition in schema history.
 An exact completed history row plus the current governed catalog makes a deploy retry a successful
 no-op. Any history/catalog mismatch is ambiguous and fails closed instead of replaying DDL.
 Retry detection runs under the same session advisory lock as the transition and also binds the
@@ -45,5 +50,6 @@ SHA-256 without changing that digest.
 
 For a populated source, clone it and approve a deterministic manual mapping before replacing the
 `OC708`, `OC710`, `OC711`, or `OC712` guard. `verify-postgres.sh` proves the supported tagged-empty path converges to the
-fresh 0.8 application schema and governed seeds, the exact completed path is retryable, and populated
-legacy persona and Conversation fixtures each roll back untouched.
+fresh 0.8 application schema and governed seeds, preserved event-route evidence is retired without
+identity loss, the exact completed path is retryable, and populated legacy persona, Conversation,
+and invocation-context fixtures each roll back untouched.

@@ -15,6 +15,9 @@ const _MAXIMUM_ARTIFACT_OUTPUT_BYTES = 64 * 1_024 * 1_024;
 /** Default artifact-preprocessor output body limit. */
 const _DEFAULT_ARTIFACT_OUTPUT_BYTES = 16 * 1_024 * 1_024;
 
+/** Receiver namespace reserved for immutable migrated route evidence. */
+const _LEGACY_CHANNEL_ROUTE_RECEIVER_PREFIX = "legacy-route-v0:";
+
 /** Read one bounded whole-number setting from the startup environment. */
 function _readBoundedInteger(name: string, fallback: number, minimum: number, maximum: number): number
 {
@@ -123,6 +126,7 @@ function _readChannelTargetConfig(): ChannelTargetRuntimeConfig | null
 	};
 	if (Object.values(values).every(value => value.length === 0)) return null;
 	if (Object.values(values).some(value => value.length === 0)) throw new Error("channel target resolver configuration must be complete");
+	if (values.receiverId.startsWith(_LEGACY_CHANNEL_ROUTE_RECEIVER_PREFIX)) throw new Error("CHANNEL_REPLAY_RECEIVER_ID uses the reserved legacy route namespace");
 	return { ...values, invocationContextTtlMilliseconds: _readBoundedSeconds("CHANNEL_INVOCATION_CONTEXT_TTL_SECONDS", 60, 1, 300) };
 }
 

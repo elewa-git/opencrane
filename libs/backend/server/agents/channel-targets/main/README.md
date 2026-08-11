@@ -93,7 +93,10 @@ server authorities.
 
 Owns `ChannelRuntimeRoute` and `ChannelInvocationContext` in
 `apps/opencrane/prisma/schema/channel-targets.prisma`. A companion SQL authority test lives in
-`tests/channel-targets-authority.sql`.
+`tests/channel-targets-authority.sql`. Current routes have a stable, runtime-configured receiver and
+no expiry. The `legacy-route-v0:` receiver namespace is reserved for migrated 0.7 evidence: those
+rows preserve their original id, endpoint, registration time, and former expiry, remain retired,
+and cannot be inserted, changed, or deleted through the runtime authority.
 
 ## See also
 
