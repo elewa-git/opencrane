@@ -1,4 +1,5 @@
 import type { AuthorizationScope } from "@opencrane/models/authorization";
+import type { SignedFleetMembershipAssertionAuthority } from "@opencrane/backend/server/iam/membership";
 
 /** Stable proxy operation presented to OpenCrane for resolution. */
 export type ChannelResolutionAction = "events.read";
@@ -55,16 +56,11 @@ export interface VerifiedChannelWorkloadIdentity
 	readonly audiences: readonly string[];
 }
 
-/** Fail-closed TokenReview result. */
-export type ChannelWorkloadIdentityDecision =
-	| { readonly outcome: "trusted"; readonly identity: VerifiedChannelWorkloadIdentity }
-	| { readonly outcome: "denied"; readonly reason: string };
-
 /** TokenReview boundary implemented by the OpenCrane Kubernetes adapter. */
 export interface ChannelWorkloadIdentityPort
 {
-	/** Reviews one projected token for the fixed OpenCrane audience. */
-	review(token: string, audience: "opencrane"): Promise<ChannelWorkloadIdentityDecision>;
+	/** Reviews one projected token against the adapter's fixed audience and workload subject. */
+	__Review(token: string): Promise<VerifiedChannelWorkloadIdentity | null>;
 }
 
 /** Verified browser subject produced by OpenCrane-owned identity validation. */
@@ -92,18 +88,6 @@ export interface TrustedHostSiloPort
 {
 	/** Resolves one exact trusted host; unknown or ambiguous hosts return null. */
 	resolveExactHost(trustedHost: string): Promise<TrustedHostSiloBinding | null>;
-}
-
-/** Current signed membership result for one exact human and silo. */
-export type ChannelMembershipDecision =
-	| { readonly outcome: "trusted"; readonly revision: number; readonly trustedUntilEpochMs: number }
-	| { readonly outcome: "denied"; readonly reason: string };
-
-/** Signed fleet-membership boundary. */
-export interface ChannelMembershipPort
-{
-	/** Requires the current signed membership revision for the exact scope. */
-	verifyCurrentMembership(subjectId: string, siloId: string, scope: AuthorizationScope, nowEpochMs: number): Promise<ChannelMembershipDecision>;
 }
 
 /** Current canonical conversation coordinates needed before action authorization. */
@@ -148,13 +132,6 @@ export interface AuthorizeChannelActionsCommand
 export type ChannelActionAuthorizationDecision =
 	| { readonly outcome: "allowed"; readonly authorizationDigest: string }
 	| { readonly outcome: "denied"; readonly reason: string };
-
-/** Product authorization facade for channel actions. */
-export interface ChannelActionAuthorizationPort
-{
-	/** Allows only when every requested action is currently authorized. */
-	authorize(command: AuthorizeChannelActionsCommand): Promise<ChannelActionAuthorizationDecision>;
-}
 
 /** Atomic invocation-context issuance request. */
 export interface IssueChannelInvocationContextCommand
@@ -293,9 +270,7 @@ export interface ChannelTargetResolutionDependencies
 	/** Exact host registration port. */
 	readonly hostSilo: TrustedHostSiloPort;
 	/** Signed membership authority. */
-	readonly membership: ChannelMembershipPort;
-	/** Product action authorization facade. */
-	readonly authorization: ChannelActionAuthorizationPort;
+	readonly membership: SignedFleetMembershipAssertionAuthority;
 	/** Canonical conversation, route, and context repository. */
 	readonly repository: ChannelTargetAuthorityRepository;
 	/** Trusted clock. */

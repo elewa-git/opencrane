@@ -117,6 +117,13 @@ export type VerifyFleetMembershipResult =
 	| { readonly outcome: "trusted"; readonly revision: number; readonly trustedUntilEpochMs: number }
 	| { readonly outcome: "denied"; readonly reason: FleetMembershipTrustReason | "missing_revision" | "signature_verifier_failed" | "acceptance_conflict"; readonly revision: number };
 
+/** Current signed-assertion authority consumed by product admission boundaries. */
+export interface SignedFleetMembershipAssertionAuthority
+{
+	/** Selects one exact signed assertion and verifies its current membership evidence. */
+	verifyCurrentMembership(subjectId: string, siloId: string, scope: AuthorizationScope, nowEpochMs: number): Promise<VerifyFleetMembershipResult>;
+}
+
 /** Stable result that exposes only signed evidence produced by current membership verification. */
 export type VerifyFleetMembershipEvidenceResult =
 	| { readonly outcome: "trusted"; readonly evidence: TrustedFleetMembershipEvidence }

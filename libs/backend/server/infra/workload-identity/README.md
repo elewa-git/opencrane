@@ -26,9 +26,9 @@ identity for the next transport or backend authority.
 [execution runs](../../../agents/execution/runs/main/README.md) ·
 [skill execution](../../../agents/skills/execution/main/README.md)
 
-It owns four adapters: the fixed agent-controller identity, the fixed artifact-preprocessor
-identity, skill workers whose exact coordinates are checked by durable bootstrap authority, and the
-mutually exclusive personal/managed runtime identities. Invariant: an unauthenticated review, wrong
+It owns five adapters: the fixed agent-controller identity, the fixed artifact-preprocessor identity,
+the deployment-fixed channel-proxy identity, skill workers whose exact coordinates are checked by
+durable bootstrap authority, and the mutually exclusive personal/managed runtime identities. Invariant: an unauthenticated review, wrong
 audience, unexpected namespace or ServiceAccount, missing bound Pod UID, or ambiguous runtime
 audience returns no identity. The raw token and full Kubernetes response never leave this package.
 
@@ -37,6 +37,8 @@ audience returns no identity. The raw token and full Kubernetes response never l
 - `_CreateAgentControllerTokenReviewer` — binds controller dispatch to one namespace, audience, and
   ServiceAccount.
 - `_CreateArtifactPreprocessorTokenReviewer` — binds preprocessing to its isolated worker namespace.
+- `_CreateChannelProxyTokenReviewer` — binds channel resolution to one deployment-selected audience,
+  namespace, and ServiceAccount without duplicating Kubernetes TokenReview in the application root.
 - `_CreateSkillWorkloadTokenReviewer` — verifies a server-selected audience and returns the bound
   worker coordinates for later bootstrap checks.
 - `_CreateRuntimeTokenReviewer` — separates personal and managed runtime audience, namespace, and

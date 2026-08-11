@@ -1,5 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
 
+import { __AuthorizeConversationRead } from "./conversation-read-authorization.js";
 import type { AuthorizedChannelTargetResult, ChannelOpaqueContextSource, ChannelTargetClock, ChannelTargetResolutionDependencies, ResolveChannelTargetCommand, ResolveChannelTargetResult } from "./channel-target-resolution.types.js";
 
 /** Real wall clock for production composition. */
@@ -34,13 +35,13 @@ export async function __ResolveChannelTarget(dependencies: ChannelTargetResoluti
 	}
 
 	// 2. TokenReview the channel-proxy token and require the exact audience, KSA, namespace, and username.
-	const workload = await dependencies.workloadIdentity.review(command.workloadToken, dependencies.config.workloadAudience);
+	const workload = await dependencies.workloadIdentity.__Review(command.workloadToken);
 	const expectedUsername = `system:serviceaccount:${dependencies.config.channelProxyNamespace}:${dependencies.config.channelProxyServiceAccountName}`;
-	if (workload.outcome !== "trusted"
-		|| workload.identity.serviceAccountName !== dependencies.config.channelProxyServiceAccountName
-		|| workload.identity.namespace !== dependencies.config.channelProxyNamespace
-		|| workload.identity.username !== expectedUsername
-		|| !workload.identity.audiences.includes(dependencies.config.workloadAudience))
+	if (workload === null
+		|| workload.serviceAccountName !== dependencies.config.channelProxyServiceAccountName
+		|| workload.namespace !== dependencies.config.channelProxyNamespace
+		|| workload.username !== expectedUsername
+		|| !workload.audiences.includes(dependencies.config.workloadAudience))
 	{
 		return { outcome: "denied", reason: "workload_denied" };
 	}
@@ -66,13 +67,13 @@ export async function __ResolveChannelTarget(dependencies: ChannelTargetResoluti
 
 	// 5. Require an open agent session bound to the same silo, service, and explicit participant.
 	const conversation = await dependencies.repository.getConversationAuthority(command.conversationId);
-	if (conversation === null || conversation.mode !== "agent_session" || conversation.lifecycle !== "open" || conversation.siloId !== hostBinding.siloId || !conversation.agentServiceId.trim() || !conversation.participantUserIds.includes(subjectId))
+	if (conversation === null || conversation.mode !== "agent_session" || conversation.lifecycle !== "open" || conversation.siloId !== hostBinding.siloId || !conversation.agentServiceId.trim())
 	{
 		return { outcome: "denied", reason: "conversation_denied" };
 	}
 
 	// 6. Authorize the event-read action without manufacturing command or run authority.
-	const authorization = await dependencies.authorization.authorize({
+	const authorization = __AuthorizeConversationRead(conversation, {
 		subjectId,
 		siloId: hostBinding.siloId,
 		conversationId: conversation.conversationId,

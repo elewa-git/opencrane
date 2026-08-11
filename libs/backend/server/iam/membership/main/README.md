@@ -63,6 +63,9 @@ expired, is not stale, and is the newest accepted. If any check is uncertain, th
   model. `fleet` reloads an independent projected Ed25519 public key. `standalone` requires no
   Fleet key and denies every presented revision until a local issuer exists; an OIDC session is
   never treated as membership. It is neutral to personal and managed agents.
+- `SignedFleetMembershipAssertionVerifier` — the current signed-membership adapter used by product
+  boundaries. It selects the sole exact subject, silo, and scope assertion from the
+  trusted revision instead of accepting an assertion identifier from an application or request.
 - Contract types: `VerifyFleetMembershipCommand`/`Result`, `FleetMembershipAuthorityRepository`,
   `FleetMembershipSignatureVerifier`, `FleetMembershipAcceptance`/`Result`,
   `FleetMembershipEvidenceConfig`, and `TrustedFleetMembershipEvidence`.
