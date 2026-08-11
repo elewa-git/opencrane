@@ -121,8 +121,10 @@ reserved before dispatch through an injected tool-invocation authority. A tool g
 `requiresApproval` defers: the reserved invocation opens a pending `ApprovalRequest`, so the
 pause is reachable end to end. The owner-bound approval-DECISION and steering-INGEST APIs are built:
 an owner may decide only their own pending tool approval or queue bounded text only to their own live
-run. The deferred-tool DECIDE authority and steering queue feed a fenced, single-use resume command;
-the runtime absorbs the queued steering only at safe pre-model boundaries. The
+run. The deferred-tool DECIDE authority and steering queue feed one fenced, single-use resume
+command for each completed approval batch; later batches require a fresh durable marker, so
+concurrent steering cannot supersede an active executor loop. The runtime absorbs queued steering
+only at safe pre-model boundaries. The
 runtime also writes encrypted, version-tagged, replaceable LOCAL checkpoints subordinate to canonical
 state (no server-side checkpoint model). The MCP and sandbox execution ports remain fail-closed in
 the production composition root. The authenticated memory transport IS composed: the server mounts
@@ -329,7 +331,7 @@ component-manager validated the supplement against the live catalogue and return
 | F1.1 — model and design contract | Freeze mode vocabulary, strategy ownership, lifecycle, parent/child coordinates, terminology, route hierarchy, finite visual states, and the no-secret disclosure contract | [#600](https://github.com/elewa-git/opencrane/issues/600), [#601](https://github.com/elewa-git/opencrane/issues/601), [#351](https://github.com/elewa-git/opencrane/issues/351) | User stories, architecture decision, component/state map, and committed desktop/compact wireframes agree before schema or routed-page work starts |
 | F1.2 — conversation authority and ordinary messaging | Add immutable modes, mode strategies, conditional agent binding, participant/join authority, canonical mixed timeline, list/create/open APIs, and idempotent direct/group message admission | [#600](https://github.com/elewa-git/opencrane/issues/600) | Agent-session input cannot bypass runs; ordinary direct/group messages cannot create runs; foreign, closed, wrong-mode, and replay attempts fail closed |
 | F1.3 — onboarding handoff | Retain the completed bootstrap exchange as the selected closed/read-only workspace conversation and expose Start a new chat without rewriting onboarding evidence | [#602](https://github.com/elewa-git/opencrane/issues/602), [#351](https://github.com/elewa-git/opencrane/issues/351) | Completion, refresh, direct navigation, attempted write, and incomplete-user API/route denial pass end to end |
-| F1.4 — canonical live delivery | Extend finite replay into authorized snapshot-to-live conversation delivery across ordinary messages and run events; pin AG-UI, reconnect/interrupt semantics, terminal projection, and the versioned A2UI envelope | [#319](https://github.com/elewa-git/opencrane/issues/319), [#351](https://github.com/elewa-git/opencrane/issues/351) | No gaps or duplicates; opaque cursors recover open elicitation; failure/cancellation stay truthful; raw authority/runtime payloads remain server-side |
+| F1.4 — canonical live delivery — **IN PROGRESS** | Extend finite replay into authorized snapshot-to-live conversation delivery across ordinary messages and run events; pin AG-UI, reconnect/interrupt semantics, terminal projection, and the versioned A2UI envelope | [#319](https://github.com/elewa-git/opencrane/issues/319), [#351](https://github.com/elewa-git/opencrane/issues/351) | No gaps or duplicates; opaque cursors recover open elicitation; failure/cancellation stay truthful; raw authority/runtime payloads remain server-side |
 | F1.5 — group Agent threads and parent communication | Admit `@agent`, create the child agent session, stream its serial runs, project the parent summary, deliver safe results upward, and navigate through stable breadcrumbs | [#601](https://github.com/elewa-git/opencrane/issues/601), [#351](https://github.com/elewa-git/opencrane/issues/351) | One mention creates one child and first run; parent/child keep independent history and unread state; access loss, deep links, back/scroll restoration, and immediate-parent-only delivery pass |
 | F1.6 — conversation assets | Add governed upload/attach/preview/download, finalized agent-output receipts, inline asset cards, and the Files index | [#603](https://github.com/elewa-git/opencrane/issues/603), [#351](https://github.com/elewa-git/opencrane/issues/351) | Upload, scan/process, failure/retry, inaccessible/expired, ready, and durable-created-output journeys pass without exposing storage internals |
 | F1.7 — tools, elicitation, approvals, and A2UI | Render honest tool/retry state with sanitized disclosure; unify approval, single-choice, multiple-choice, and free-text requests; route A2UI actions through authenticated command authority | [#604](https://github.com/elewa-git/opencrane/issues/604), [#319](https://github.com/elewa-git/opencrane/issues/319), [#351](https://github.com/elewa-git/opencrane/issues/351) | Duplicate, foreign, expired, stale-run, and unauthorized responses fail closed; reconnect restores unresolved input; keyboard, focus, screen-reader, and reduced-motion contracts pass |
@@ -376,6 +378,14 @@ requesting independent review. Review findings are resolved in later `🐛` comm
 the branch is not kept uncommitted while waiting for a reviewer. Before publication, re-read the
 live PR graph, stack only on genuine dependencies, and prove that each `base...head` diff contains
 exactly one issue's incremental work.
+
+Current F1.4 checkpoint: #319 has committed snapshot-to-live replay, reconnect and interrupt
+overlays, canonical runtime-event persistence, exact runtime payload contracts, per-approval-batch
+resume, truthful tool/run failure projection, governed A2UI and child-run envelopes, stateless
+receiver-bound channel relay, and database/release authority. Confirmed protocol review blockers are
+being repaired in follow-up commits before publication. The legacy 0.7 route-expiry replacement is
+held behind explicit destructive-migration approval; no route ids or prior expiry evidence will be
+discarded when that transition is authorized.
 
 Track F1 closes [#351](https://github.com/elewa-git/opencrane/issues/351),
 [#600](https://github.com/elewa-git/opencrane/issues/600),
