@@ -745,7 +745,7 @@ INSERT INTO "capability_catalog_revisions" (
 );
 UPDATE "agent_runs" SET "state" = 'running', "started_at" = clock_timestamp()
 WHERE "id" = 'run-race-action-authority';
-UPDATE "agent_runs" SET "state" = 'waiting_for_approval' WHERE "id" = 'run-race-action-authority';
+UPDATE "agent_runs" SET "state" = 'waiting_for_input' WHERE "id" = 'run-race-action-authority';
 INSERT INTO "approval_requests" (
   "id", "run_id", "attempt", "agent_revision_id", "agent_service_id", "silo_id",
   "proof_key_id", "proof_key_thumbprint", "subject_id", "workload_audience",
@@ -801,7 +801,7 @@ if [[ "$approval_race_state" != "cancelled" ]]; then
   echo "FAIL: stale concurrent approval decision ended $approval_race_state instead of cancelled" >&2
   exit 1
 fi
-echo 'PASS: approval decision waits for run authority and cancels after the run leaves WaitingForApproval'
+echo 'PASS: approval decision waits for run authority and cancels after the run leaves WaitingForInput'
 
 (
   set +e

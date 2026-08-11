@@ -10,7 +10,7 @@ export enum DeferredToolApprovalRunStates
 	/** Executing and able to open an approval batch. */
 	Running = "running",
 	/** Paused while one or more approvals remain pending. */
-	WaitingForApproval = "waiting_for_approval",
+	WaitingForInput = "waiting_for_input",
 	/** Paused because an external provider outcome needs explicit recovery. */
 	RecoveryRequired = "recovery_required",
 	/** Closing after server-authoritative cancellation. */
@@ -39,13 +39,13 @@ export enum DeferredToolApprovalLifecycleEvents
 /** Exhaustive persistence actions selected from run state, event, and pending cardinality. */
 export enum DeferredToolApprovalLifecycleActions
 {
-	/** Move Running to WaitingForApproval before creating the first approval. */
+	/** Move Running to WaitingForInput before creating the first approval. */
 	PauseAndOpen = "pause_and_open",
-	/** Keep WaitingForApproval while adding another approval to the current batch. */
+	/** Keep WaitingForInput while adding another approval to the current batch. */
 	OpenInBatch = "open_in_batch",
-	/** Keep WaitingForApproval because at least one request is still pending. */
+	/** Keep WaitingForInput because at least one request is still pending. */
 	KeepWaiting = "keep_waiting",
-	/** Move WaitingForApproval to Running because the batch is fully resolved. */
+	/** Move WaitingForInput to Running because the batch is fully resolved. */
 	Resume = "resume",
 	/** Close pending rows under a cancellation transaction without resuming the run. */
 	Cancel = "cancel",

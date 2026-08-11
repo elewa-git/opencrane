@@ -1346,7 +1346,7 @@
               "queued",
               "assigned",
               "running",
-              "waiting_for_approval",
+              "waiting_for_input",
               "recovery_required",
               "cancelling",
               "completed",

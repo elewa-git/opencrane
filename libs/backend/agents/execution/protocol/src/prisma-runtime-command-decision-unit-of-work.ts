@@ -39,7 +39,7 @@ export class PrismaRuntimeCommandDecisionUnitOfWork implements RuntimeCommandDec
 	 */
 	async expireWaiting(context: { readonly runId: string; readonly attempt: number; readonly runState: RuntimeAdmissionRunState }, approvalExpiry: RuntimeApprovalExpiry | null, now: Date): Promise<"not_required" | "applied" | "unavailable">
 	{
-		if (context.runState !== "waiting_for_approval") return "not_required";
+		if (context.runState !== "waiting_for_input") return "not_required";
 		if (approvalExpiry === null) return "unavailable";
 		await approvalExpiry.expireInTransaction(this._transaction, { runId: context.runId, attempt: context.attempt, now });
 		return "applied";

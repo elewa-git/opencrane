@@ -304,7 +304,7 @@ export class PrismaToolInvocationRepository implements ToolInvocationTransaction
 		if (invocation === null || __DigestCanonicalJson(invocation.arguments as JsonValue) !== __DigestCanonicalJson(expectedArguments)) return false;
 		if (_plan(invocation, ToolInvocationLifecycleEvents.Approved, invocation.createdAt) !== ToolInvocationLifecycleActions.Approve) return false;
 		const updated = await transaction.toolInvocation.updateMany({
-			where: { id: invocationId, state: ToolInvocationState.AwaitingApproval, argumentsDigest: expectedArgumentsDigest, revision: invocation.revision, run: { is: { attempt: invocation.attempt, state: "WaitingForApproval" } } },
+			where: { id: invocationId, state: ToolInvocationState.AwaitingApproval, argumentsDigest: expectedArgumentsDigest, revision: invocation.revision, run: { is: { attempt: invocation.attempt, state: "WaitingForInput" } } },
 			data: { state: ToolInvocationState.Ready, effectiveArguments: effectiveArguments as Prisma.InputJsonValue, effectiveArgumentsDigest, failureCode: null, revision: { increment: 1 } },
 		});
 		return updated.count === 1;
@@ -324,7 +324,7 @@ export class PrismaToolInvocationRepository implements ToolInvocationTransaction
 		if (_plan(invocation, ToolInvocationLifecycleEvents.ApprovalRejected, now) !== ToolInvocationLifecycleActions.Fail) return false;
 		const safeFailureCode = _safeFailureCode(failureCode);
 		const updated = await transaction.toolInvocation.updateMany({
-			where: { id: invocationId, state: ToolInvocationState.AwaitingApproval, revision: invocation.revision, run: { is: { attempt: invocation.attempt, state: "WaitingForApproval" } } },
+			where: { id: invocationId, state: ToolInvocationState.AwaitingApproval, revision: invocation.revision, run: { is: { attempt: invocation.attempt, state: "WaitingForInput" } } },
 			data: { state: ToolInvocationState.Failed, failureCode: safeFailureCode, completedAt: now, revision: { increment: 1 } },
 		});
 		if (updated.count !== 1) return false;

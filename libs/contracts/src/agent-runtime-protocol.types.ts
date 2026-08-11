@@ -4,6 +4,7 @@ import type { JsonValue } from "@opencrane/util";
 import type { CompiledRunInput } from "./compiled-run-input.types.js";
 import type { RunInputSnapshot } from "./run-input-snapshot.types.js";
 import type { RuntimeAssignment } from "./runtime-assignment.types.js";
+import type { RuntimeElicitationProposal } from "./conversation-elicitation.types.js";
 
 /** The only wire-protocol version the runtime boundary accepts today; a frame declaring anything else is rejected. */
 export const AGENT_RUNTIME_PROTOCOL_V1 = "opencrane.agent-runtime/v1";
@@ -123,6 +124,21 @@ export interface ResumeAttemptCommand
 	readonly toolResults: readonly RuntimeToolResult[];
 	/** Steering text the owner wrote, delivered once at this fenced command. */
 	readonly steeringRequests: JsonValue;
+	/** Exact server-owned elicitation results whose one-time delivery rows were consumed. */
+	readonly elicitationResults: readonly RuntimeElicitationResult[];
+}
+
+/** Exact elicitation outcome delivered after the server accepts participant input. */
+export interface RuntimeElicitationResult
+{
+	/** Stable server-owned request coordinate. */
+	readonly requestId: string;
+	/** Runtime caller-stable request key. */
+	readonly requestKey: string;
+	/** Accepted answer body or a terminal refusal marker. */
+	readonly outcome: "answered" | "declined" | "expired" | "cancelled" | "failed";
+	/** Answer content only for ordinary runtime input; protected strategy results stay server-side. */
+	readonly response?: JsonValue;
 }
 
 /** Command that stops one attempt. The server decides the final state, not the runtime. */
@@ -186,5 +202,14 @@ export interface RuntimeExternalActionCandidate extends RuntimeCandidateCoordina
 	readonly arguments: JsonValue;
 }
 
-/** Everything a runtime may return to the control plane. Nothing in it is stored until the control plane admits it. */
-export type RuntimeCandidate = RuntimeEventCandidate | RuntimeExternalActionCandidate;
+/** Runtime proposal for participant input, never authority to choose the respondent. */
+export interface RuntimeElicitationCandidate extends RuntimeCandidateCoordinates
+{
+	/** Candidate category requiring generic elicitation admission. */
+	readonly kind: "elicitation";
+	/** Bounded proposal interpreted and bound by the server. */
+	readonly proposal: RuntimeElicitationProposal;
+}
+
+/** Candidate union returned by the runtime to the control-plane authority. */
+export type RuntimeCandidate = RuntimeEventCandidate | RuntimeExternalActionCandidate | RuntimeElicitationCandidate;

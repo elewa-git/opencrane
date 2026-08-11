@@ -671,7 +671,7 @@ function _toAdmissionRunState(state: PrismaAgentRunState): RuntimeAdmissionRunSt
 		case PrismaAgentRunState.Queued: return "queued";
 		case PrismaAgentRunState.Assigned: return "assigned";
 		case PrismaAgentRunState.Running: return "running";
-		case PrismaAgentRunState.WaitingForApproval: return "waiting_for_approval";
+		case PrismaAgentRunState.WaitingForInput: return "waiting_for_input";
 		case PrismaAgentRunState.Cancelling: return "cancelling";
 		case PrismaAgentRunState.Completed: return "completed";
 		case PrismaAgentRunState.Failed: return "failed";

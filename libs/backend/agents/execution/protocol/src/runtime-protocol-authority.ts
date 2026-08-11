@@ -21,7 +21,7 @@ function _isTerminalForAdmission(state: RuntimeAdmissionRunState): boolean
 		&& state !== "queued"
 		&& state !== "assigned"
 		&& state !== "running"
-		&& state !== "waiting_for_approval";
+		&& state !== "waiting_for_input";
 }
 
 /**

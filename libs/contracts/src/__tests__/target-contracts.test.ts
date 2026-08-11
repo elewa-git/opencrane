@@ -47,7 +47,7 @@ describe("canonical model exports", function ()
       requestIdempotencyKey: "request-1",
       lineage: { rootRunId: "run-1", parentRunId: null },
       attempt: 1,
-      state: "waiting_for_approval",
+      state: "waiting_for_input",
       effectiveContractDigest: "sha256:contract",
       inputSnapshotDigest: "sha256:input",
       acceptedAt: "2026-07-18T09:00:00.000Z",

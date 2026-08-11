@@ -167,6 +167,7 @@ export default [
             { sourceTag: "scope:providers", onlyDependOnLibsWithTags: ["scope:auth", "scope:cluster-tenants", "scope:model-routing", "scope:providers", "scope:shared"] },
             { sourceTag: "scope:retrieval", onlyDependOnLibsWithTags: ["scope:retrieval", "scope:shared"] },
             { sourceTag: "scope:execution-runs", onlyDependOnLibsWithTags: ["scope:agents", "scope:auth", "scope:authorization", "scope:conversations", "scope:execution-runs", "scope:shared"] },
+            { sourceTag: "scope:execution-elicitation", onlyDependOnLibsWithTags: ["scope:agents", "scope:auth", "scope:authorization", "scope:conversations", "scope:execution-elicitation", "scope:execution-runs", "scope:shared"] },
             { sourceTag: "scope:execution-protocol", onlyDependOnLibsWithTags: ["scope:execution-protocol", "scope:execution-inputs", "scope:execution-runs", "scope:personal-configuration", "scope:agents", "scope:auth", "scope:authorization", "scope:integrations", "scope:obot-custody", "scope:sandbox-execution", "scope:memory-gateway-client", "scope:shared"] },
             { sourceTag: "scope:agent-runtime", onlyDependOnLibsWithTags: ["scope:agent-runtime", "scope:agents", "scope:authorization", "scope:execution-protocol", "scope:sandbox-execution", "scope:memory-gateway-client", "scope:shared"] },
             { sourceTag: "scope:skills", onlyDependOnLibsWithTags: ["scope:artifacts", "scope:auth", "scope:cluster-tenants", "scope:grants", "scope:shared", "scope:skills"] },

@@ -36,7 +36,7 @@ what is active, waiting, complete, failed, or cancelled.
 
 Acceptance criteria:
 
-- Canonical states are `accepted`, `queued`, `assigned`, `running`, `waiting_for_approval`,
+- Canonical states are `accepted`, `queued`, `assigned`, `running`, `waiting_for_input`,
   `recovery_required`, `cancelling`, `completed`, `failed`, and `cancelled`.
 - Terminal reason text is stable and user-safe. Safe technical context, such as an authentication
   failure or a failed tool call, may be disclosed behind details controls; credentials, tokens,
