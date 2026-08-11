@@ -70,16 +70,20 @@ attempt-scoped virtual key mounted as a group-readable Secret, performs zero imp
 driven with `agent.iter()` and per-node `node.stream(run.ctx)` calls (never the `run_stream()`
 final-output shortcut).
 Raw framework events are normalized into stable protocol candidates while the attempt is active:
-output text, usage, and errors become bounded `event` candidates, while a model tool call becomes a
-bounded `external_action` candidate whose `toolRevisionId` is resolved from the compiled grant set
+output text becomes a canonical message start/delta/end lifecycle; usage and credential-free error
+classification become bounded `event` candidates; and a model tool call first reports
+`tool.requested` before becoming a bounded `external_action` candidate whose `toolRevisionId` is resolved from the compiled grant set
 and whose `argumentsDigest` is a deterministic `sha256:<hex>` the control plane re-derives. Pydantic
 AI types, ids, and checkpoints never cross that seam. Resume delivers control-plane approval
 decisions (`{approvalRequestId, decision, toolInvocationId}`): the runtime maps each approved
 decision back to its recorded pending call, re-checks the compiled allow-list and Obot addressing,
 executes it against `/mcp-connect/<serverId>/mcp` with the mounted attempt key (`src/tools/obot_mcp.py`),
-reports `tool.completed { toolInvocationId, resultDigest }`, and feeds only the resulting per-call
+reports `tool.started` followed by `tool.completed { toolInvocationId, resultDigest }` or an explicit
+`tool.failed`, and feeds only the resulting per-call
 mapping into the framework; a denial feeds an explicit refusal and every failure is a typed loop
-error, never a fabricated result. Cancel is a positive signal that suppresses any late candidate; steering is
+error, never a fabricated result. A neutral adapter may also supply a complete versioned A2UI
+envelope for one of the three canonical A2UI event types; the default Pydantic adapter emits none and
+the runtime never invents UI shapes. Cancel is a positive signal that suppresses any late candidate; steering is
 absorbed only at the safe pre-model-request boundary. Any executor failure surfaces as a real
 `run.failed` terminal report rather than a silent acknowledgement, and a dropped stream bounds further
 candidate emission. Non-terminal replay is allowed only for the control plane's explicit bounded

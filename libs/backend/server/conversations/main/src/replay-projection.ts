@@ -2,6 +2,8 @@ import { AG_UI_CHILD_RUN_ENVELOPE_VERSION, ___ParseAgUiA2uiEnvelope, type AgUiCh
 
 import type { ConversationReplayEventRow, ConversationReplayProjectionResult } from "./replay-projection.types.js";
 
+const _SAFE_FAILURE_CODES = new Set(["AuthenticationError", "ConnectionError", "HTTPError", "ModelLoopError", "OSError", "PermissionError", "RuntimeError", "TimeoutError", "URLError", "ValueError", "invalid_deferred_result", "malformed_tool_call", "model_loop_error", "obot_invocation_failed", "tool_not_allowed", "unknown_tool", "unknown_tool_invocation"]);
+
 /** Redact one canonical timeline row into only the fields the AG-UI projection contract allows. */
 export function __ProjectConversationReplayEvent(row: ConversationReplayEventRow): ConversationReplayProjectionResult
 {
@@ -15,12 +17,33 @@ function _SafePayload(type: string, payload: Readonly<Record<string, unknown>>, 
 	if (type === "message.started" || type === "message.completed") return _Strings(payload, ["messageId"]);
 	if (type === "message.delta") return _Strings(payload, ["messageId", "delta"]);
 	if (type === "tool.requested") return _Strings(payload, ["toolCallId", "toolCallName"]);
-	if (type === "tool.completed") return _Strings(payload, ["toolCallId"]);
+	if (type === "tool.started" || type === "tool.completed") return _Tool(payload);
+	if (type === "tool.failed") return _Failure(payload, true);
+	if (type === "run.error") return _Failure(payload, false);
 	if (type === "run.failed" || type === "run.cancelled") return _Strings(payload, ["terminalReason", "failureCode"]);
 	if (type === "conversation.message") return _Message(payload);
 	if (type === "a2ui.rendering.begun" || type === "a2ui.surface.updated" || type === "a2ui.data_model.updated") return _A2ui(payload, conversationId, runId);
 	if (type === "child.run.completed" || type === "child.run.failed" || type === "child.run.cancelled") return _ChildRun(type, payload, runId);
 	return {};
+}
+
+/** Select display-safe tool coordinates while retaining no result, arguments, or invocation detail. */
+function _Tool(payload: Readonly<Record<string, unknown>>): AgUiPublicEventPayload
+{
+	const toolCallId = payload["toolCallId"] ?? payload["toolInvocationId"];
+	return typeof toolCallId === "string" ? { toolCallId } : {};
+}
+
+/** Surface a bounded failure classification without forwarding provider messages or raw details. */
+function _Failure(payload: Readonly<Record<string, unknown>>, tool: boolean): AgUiPublicEventPayload
+{
+	const candidateFailureCode = typeof payload["errorType"] === "string" ? payload["errorType"] : payload["reason"];
+	const failureCode = typeof candidateFailureCode === "string" && _SAFE_FAILURE_CODES.has(candidateFailureCode) ? candidateFailureCode : undefined;
+	const toolCallId = payload["toolCallId"] ?? payload["toolInvocationId"];
+	return {
+		...(tool && typeof toolCallId === "string" ? { toolCallId } : {}),
+		...(failureCode === undefined ? {} : { failureCode })
+	};
 }
 
 /** Select the text-only projection of one canonical ordinary message. */

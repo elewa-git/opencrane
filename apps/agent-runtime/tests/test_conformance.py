@@ -146,8 +146,8 @@ class ConformanceStreamingTests(unittest.TestCase):
             {"type": "output_text", "text": "two "},
             {"type": "usage", "inputTokens": 11, "outputTokens": 4},
         ])
-        self.assertEqual(_event_types(emitted), ["run.started", "run.output_text", "run.output_text", "run.usage", "run.completed"])
-        self.assertEqual([candidate["payload"].get("text") for candidate in emitted if candidate.get("eventType") == "run.output_text"], ["one ", "two "])
+        self.assertEqual(_event_types(emitted), ["run.started", "message.started", "message.delta", "message.delta", "run.usage", "message.completed", "run.completed"])
+        self.assertEqual([candidate["payload"].get("delta") for candidate in emitted if candidate.get("eventType") == "message.delta"], ["one ", "two "])
         usage = next(candidate for candidate in emitted if candidate.get("eventType") == "run.usage")
         self.assertEqual(usage["payload"], {"inputTokens": 11, "outputTokens": 4})
 
@@ -155,7 +155,7 @@ class ConformanceStreamingTests(unittest.TestCase):
         """A long slow stream keeps per-event bounded candidates in order without accumulation."""
         deltas = [{"type": "output_text", "text": f"chunk-{index}"} for index in range(64)]
         emitted = _run_start(_start_command(), deltas)
-        texts = [candidate["payload"]["text"] for candidate in emitted if candidate.get("eventType") == "run.output_text"]
+        texts = [candidate["payload"]["delta"] for candidate in emitted if candidate.get("eventType") == "message.delta"]
         self.assertEqual(texts, [f"chunk-{index}" for index in range(64)])
         # Each streamed delta is its own bounded candidate; the runtime never concatenates a growing buffer.
         self.assertTrue(all(len(text) <= 32 for text in texts))
@@ -202,8 +202,8 @@ class ConformanceToolCallTests(unittest.TestCase):
         """Unparseable arguments surface a ``malformed_tool_call`` error, never an external action."""
         emitted = _run_start(_start_command(), [{"type": "tool_call", "toolName": "search", "toolCallId": "call-bad", "arguments": '{"q":'}])
         self.assertNotIn("external_action", [candidate["kind"] for candidate in emitted])
-        error = next(candidate for candidate in emitted if candidate.get("eventType") == "run.error")
-        self.assertEqual(error["payload"], {"reason": "malformed_tool_call", "toolCallId": "call-bad"})
+        error = next(candidate for candidate in emitted if candidate.get("eventType") == "tool.failed")
+        self.assertEqual(error["payload"], {"reason": "malformed_tool_call", "toolInvocationId": "call-bad"})
 
 
 def _integration_compiled_input() -> dict:
@@ -260,10 +260,10 @@ class ConformanceApprovalResumeTests(unittest.TestCase):
         self.assertEqual(obot_calls, [{"base_url": "http://obot.silo.svc.cluster.local:8080", "key": "ok1-attempt-key", "mcp_server_id": "srv-9", "tool_name": "create_issue", "arguments": {"title": "edited"}, "timeout_s": 30.0}])
         self.assertEqual(captured["deferred"], {"call-approve": tool_result})
         completed = next(candidate for candidate in resume_emitted if candidate.get("eventType") == "tool.completed")
-        self.assertEqual(completed["payload"], {"toolInvocationId": "call-approve", "resultDigest": _arguments_digest(tool_result)})
+        self.assertEqual(completed["payload"], {"toolInvocationId": "call-approve", "toolCallId": "call-approve", "resultDigest": _arguments_digest(tool_result)})
         # The digest-only receipt candidate never carries the tool content itself.
         self.assertNotIn("created", json.dumps(completed))
-        self.assertEqual(_event_types(resume_emitted), ["run.resumed", "tool.completed", "run.output_text", "run.usage", "run.completed"])
+        self.assertEqual(_event_types(resume_emitted), ["run.resumed", "tool.started", "tool.completed", "message.started", "message.delta", "run.usage", "message.completed", "run.completed"])
 
     def test_denied_resume_feeds_a_refusal_without_contacting_obot(self) -> None:
         """A denied decision becomes an explicit refusal result and Obot is never reached."""
@@ -301,7 +301,7 @@ class ConformanceApprovalResumeTests(unittest.TestCase):
             _execute_resume_attempt(_resume_command([_approved("approval-1", "call-unconfigured", {})]), "instance-conf", resume_emitted.append, resume_event_source=_resume_source)
 
         self.assertEqual(captured["deferred"], {"call-unconfigured": {"error": "obot_unavailable"}})
-        error = next(candidate for candidate in resume_emitted if candidate.get("eventType") == "run.error")
+        error = next(candidate for candidate in resume_emitted if candidate.get("eventType") == "tool.failed")
         self.assertEqual(error["payload"], {"reason": "obot_invocation_failed", "toolInvocationId": "call-unconfigured"})
 
     def test_unknown_invocation_and_obot_failure_fail_closed(self) -> None:
@@ -332,7 +332,7 @@ class ConformanceApprovalResumeTests(unittest.TestCase):
             "call-fails": {"error": "obot_invocation_failed", "errorType": "RuntimeError"},
             "call-never-proposed": {"error": "unknown_tool_invocation"},
         })
-        reasons = [candidate["payload"].get("reason") for candidate in resume_emitted if candidate.get("eventType") == "run.error"]
+        reasons = [candidate["payload"].get("reason") for candidate in resume_emitted if candidate.get("eventType") == "tool.failed"]
         self.assertEqual(sorted(reasons), ["obot_invocation_failed", "unknown_tool_invocation"])
         self.assertNotIn("proxy body must never surface", json.dumps(resume_emitted))
 
@@ -364,8 +364,8 @@ class ConformanceCancellationTests(unittest.TestCase):
 
         emitted: list[dict] = []
         _execute_start_attempt(_start_command(), "instance-conf", emitted.append, event_source=_source, cancel_event=cancel_event)
-        self.assertEqual(_event_types(emitted), ["run.started", "run.output_text"])
-        self.assertEqual(emitted[1]["payload"]["text"], "before")
+        self.assertEqual(_event_types(emitted), ["run.started", "message.started", "message.delta"])
+        self.assertEqual(emitted[2]["payload"]["delta"], "before")
 
 
 class ConformanceProviderFaultTests(unittest.TestCase):

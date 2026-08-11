@@ -16,9 +16,8 @@ from ..observability import log, run_evidence, trace
 from ..protocol.candidates import (
     candidate,
     command_coordinates,
-    normalize_event,
-    tool_call_candidate,
 )
+from ..protocol.event_projector import RuntimeEventProjector
 from .deferred_results import resolve_deferred_tool_results
 from .pending_tools import record_pending_tool_call
 from .terminal import TerminalGate
@@ -71,6 +70,7 @@ def execute_start_attempt(
         checkpoint_cipher,
     )
     steering_buffer: list[str] = []
+    projector = RuntimeEventProjector(coordinates, compiled_input, post_candidate, record_pending_tool_call)
     with trace(
         "agent_runtime.start_attempt",
         runId=coordinates["runId"],
@@ -82,12 +82,9 @@ def execute_start_attempt(
                     # Cancellation is checked again after the source yields so a racing provider
                     # response cannot become a late candidate.
                     break
-                _dispatch_neutral_event(
-                    coordinates,
-                    compiled_input,
-                    neutral_event,
-                    post_candidate,
-                )
+                projector.emit(neutral_event)
+            if not cancel_event.is_set():
+                projector.complete_message()
             if terminal_gate.post_completion(
                 post_candidate,
                 candidate(coordinates, "run.completed", {}),
@@ -180,6 +177,7 @@ def execute_resume_attempt(
         post_candidate,
     )
     steering_buffer = [item["text"].strip() for item in steering_requests]
+    projector = RuntimeEventProjector(coordinates, compiled_input, post_candidate, record_pending_tool_call)
     with trace(
         "agent_runtime.resume_attempt",
         runId=coordinates["runId"],
@@ -195,12 +193,9 @@ def execute_resume_attempt(
                 if cancel_event.is_set():
                     # A resume is subject to the same late-output suppression as a fresh attempt.
                     break
-                _dispatch_neutral_event(
-                    coordinates,
-                    compiled_input,
-                    neutral_event,
-                    post_candidate,
-                )
+                projector.emit(neutral_event)
+            if not cancel_event.is_set():
+                projector.complete_message()
             if terminal_gate.post_completion(
                 post_candidate,
                 candidate(coordinates, "run.completed", {}),
@@ -244,36 +239,6 @@ def execute_cancel_attempt(
     payload = command.get("payload")
     reason = payload.get("reason") if isinstance(payload, dict) else None
     run_evidence(coordinates, "cancelled", reason=reason)
-
-
-def _dispatch_neutral_event(
-    coordinates: dict[str, object],
-    compiled_input: dict[str, object],
-    neutral_event: dict[str, object],
-    post_candidate: Callable[[dict[str, object]], None],
-) -> None:
-    """Route one neutral event through the only candidate-construction seam.
-
-    Tool calls require compiled-grant resolution and therefore use ``tool_call_candidate``. Other
-    supported event types use the ordinary event constructor. Unknown events produce no candidate.
-    """
-    if neutral_event.get("type") == "tool_call":
-        proposal = tool_call_candidate(coordinates, compiled_input, neutral_event)
-        if proposal.get("kind") == "external_action":
-            # Remember the concrete call so an approved resume can execute it directly against
-            # Obot; the candidate itself carries only identifiers the server needs to govern it.
-            record_pending_tool_call(
-                str(coordinates["runId"]),
-                int(coordinates["attempt"]),  # type: ignore[arg-type]
-                str(proposal["toolInvocationId"]),
-                str(neutral_event.get("toolName")),
-                proposal["arguments"],
-            )
-        post_candidate(proposal)
-        return
-    normalized = normalize_event(neutral_event)
-    if normalized is not None:
-        post_candidate(candidate(coordinates, normalized[0], normalized[1]))
 
 
 def _snapshot_input_generation(payload: dict[str, object]) -> object:

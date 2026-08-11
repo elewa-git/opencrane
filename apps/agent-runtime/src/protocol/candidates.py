@@ -13,6 +13,28 @@ import uuid
 from ..constants import PROTOCOL_VERSION
 from ..observability import log
 
+MAX_TEXT_DELTA_LENGTH = 16_384
+MAX_COUNTER_VALUE = 2_147_483_647
+
+_A2UI_EVENT_TYPES = {
+    "a2ui_rendering_begun": "a2ui.rendering.begun",
+    "a2ui_surface_updated": "a2ui.surface.updated",
+    "a2ui_data_model_updated": "a2ui.data_model.updated",
+}
+
+_SAFE_ERROR_TYPES = {
+    "AuthenticationError",
+    "ConnectionError",
+    "HTTPError",
+    "ModelLoopError",
+    "OSError",
+    "PermissionError",
+    "RuntimeError",
+    "TimeoutError",
+    "URLError",
+    "ValueError",
+}
+
 
 def command_coordinates(
     command: dict[str, object],
@@ -138,8 +160,8 @@ def tool_call_candidate(
     except json.JSONDecodeError:
         return candidate(
             coordinates,
-            "run.error",
-            {"reason": "malformed_tool_call", "toolCallId": tool_call_id},
+            "tool.failed",
+            {"reason": "malformed_tool_call", "toolInvocationId": tool_call_id},
         )
     tool_revision_id = resolve_tool_revision(compiled_input, tool_name)
     if tool_revision_id is None:
@@ -147,8 +169,8 @@ def tool_call_candidate(
         # dynamically grant that tool.
         return candidate(
             coordinates,
-            "run.error",
-            {"reason": "unknown_tool", "toolCallId": tool_call_id},
+            "tool.failed",
+            {"reason": "unknown_tool", "toolInvocationId": tool_call_id},
         )
     return external_action_candidate(
         coordinates,
@@ -161,6 +183,7 @@ def tool_call_candidate(
 
 def normalize_event(
     neutral_event: dict[str, object],
+    message_id: str = "assistant-message",
 ) -> tuple[str, dict[str, object]] | None:
     """Map supported non-tool events onto stable protocol names and bounded payloads.
 
@@ -171,7 +194,13 @@ def normalize_event(
     kind = neutral_event.get("type")
     if kind == "output_text":
         text = neutral_event.get("text")
-        return ("run.output_text", {"text": text if isinstance(text, str) else ""})
+        return (
+            "message.delta",
+            {
+                "messageId": message_id,
+                "delta": text[:MAX_TEXT_DELTA_LENGTH] if isinstance(text, str) else "",
+            },
+        )
     if kind == "usage":
         return (
             "run.usage",
@@ -181,18 +210,30 @@ def normalize_event(
             },
         )
     if kind == "error":
-        message = neutral_event.get("message")
         return (
             "run.error",
             {
                 "reason": "model_loop_error",
-                "detail": message if isinstance(message, str) else "",
+                "errorType": _safe_error_type(neutral_event.get("errorType")),
             },
         )
+    if isinstance(kind, str) and kind in _A2UI_EVENT_TYPES:
+        envelope = neutral_event.get("payload")
+        # The neutral adapter may forward a complete versioned A2UI envelope. This seam never
+        # derives framework-specific UI shapes or fills absent coordinates on its behalf.
+        if isinstance(envelope, dict):
+            return (_A2UI_EVENT_TYPES[kind], {"a2ui": dict(envelope)})
+        log("framework_event_dropped", event_type=kind)
+        return None
     log("framework_event_dropped", event_type=kind if isinstance(kind, str) else "")
     return None
 
 
 def _non_negative_int(value: object) -> int:
     """Coerce an untrusted framework usage counter to a safe non-negative integer."""
-    return value if isinstance(value, int) and value >= 0 else 0
+    return min(value, MAX_COUNTER_VALUE) if isinstance(value, int) and value >= 0 else 0
+
+
+def _safe_error_type(value: object) -> str:
+    """Return a bounded class-like error label without provider messages or secret-bearing detail."""
+    return value if isinstance(value, str) and value in _SAFE_ERROR_TYPES else "ModelLoopError"

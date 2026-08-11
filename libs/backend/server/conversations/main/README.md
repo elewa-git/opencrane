@@ -45,6 +45,11 @@ events, and projects an allow-listed Agent User Interface (AG-UI) server-sent ev
 as a bounded custom event, but proofs, credentials, fences, and provider metadata never cross the
 browser boundary.
 
+Message lifecycle and tool coordinates are reduced to their display identifiers. A failed tool or
+nonterminal runtime error may expose a bounded failure classification such as
+`AuthenticationError`, while raw messages, provider response bodies, arguments, result content,
+authorization material, and secret-shaped fields remain behind the disclosure boundary.
+
 Governed A2UI replay adopts only the exact `opencrane.a2ui.v1` envelope bound to the replayed
 conversation and run. It preserves ordered upstream `beginRendering`, `surfaceUpdate`, and
 `dataModelUpdate` operations, admits only the nine upstream component wrappers, and forwards the

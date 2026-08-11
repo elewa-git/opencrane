@@ -41,6 +41,17 @@ describe("conversation timeline projection", function _Suite()
 		expect(projected?.payload).toEqual({ messageId: "message-1", delta: "hello" });
 	});
 
+	it("shows safe tool and runtime failures without secret-bearing technical detail", function _ProjectsFailures()
+	{
+		const tool = __ProjectConversationReplayEvent({ cursor: "c.tool", conversationId: "conversation-1", runId: "run-1", position: "2", type: "tool.failed", payload: { toolInvocationId: "tool-1", reason: "obot_invocation_failed", errorType: "AuthenticationError", authorization: "Bearer never", responseBody: "secret" }, occurredAt: "2026-07-23T10:00:01.000Z" });
+		const runtime = __ProjectConversationReplayEvent({ cursor: "c.error", conversationId: "conversation-1", runId: "run-1", position: "3", type: "run.error", payload: { reason: "model_loop_error", errorType: "AuthenticationError", detail: "Bearer never" }, occurredAt: "2026-07-23T10:00:02.000Z" });
+
+		expect(tool?.payload).toEqual({ toolCallId: "tool-1", failureCode: "AuthenticationError" });
+		expect(runtime?.payload).toEqual({ failureCode: "AuthenticationError" });
+		expect(JSON.stringify([tool, runtime])).not.toContain("Bearer never");
+		expect(__ProjectConversationReplayEvent({ cursor: "c.secret", conversationId: "conversation-1", runId: "run-1", position: "4", type: "run.error", payload: { errorType: "SecretToken123" }, occurredAt: "2026-07-23T10:00:03.000Z" })?.payload).toEqual({});
+	});
+
 	it("drops unsupported payloads and invalid canonical rows", function _FailsClosed()
 	{
 		expect(__ProjectConversationReplayEvent({ cursor: "c.cursor", conversationId: "conversation-1", runId: "run-1", position: "1", type: "run.usage", payload: { providerKey: "secret" }, occurredAt: "2026-07-23T10:00:00.000Z" })?.payload).toEqual({});

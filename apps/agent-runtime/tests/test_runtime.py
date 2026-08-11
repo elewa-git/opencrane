@@ -190,7 +190,7 @@ class RuntimeRetryDelayTests(unittest.TestCase):
         def _post(_url: str, _token: str, body: dict, _timeout: float) -> int:
             nonlocal attempts
             attempts += 1
-            if body.get("kind") == "external_action" and attempts == 2:
+            if body.get("kind") == "external_action" and attempts == 3:
                 raise HTTPError("https://control.example/candidates", 503, "retry", {}, io.BytesIO(b'{"accepted":false,"reason":"external_action_dispatch_retryable","retryable":true,"retryAfterMilliseconds":1}'))
             return 202
 
@@ -200,8 +200,8 @@ class RuntimeRetryDelayTests(unittest.TestCase):
 
         _execute_start_attempt(_start_command(), "instance-1", _post_candidate, event_source=lambda _compiled, _cancel, _steer: iter([{"type": "tool_call", "toolName": "alpha", "toolCallId": "t1", "arguments": "{}"}]))
 
-        self.assertEqual(attempts, 4)
-        self.assertEqual([candidate.get("eventType") for candidate in posted], ["run.started", None, "run.completed"])
+        self.assertEqual(attempts, 5)
+        self.assertEqual([candidate.get("eventType") for candidate in posted], ["run.started", "tool.requested", None, "run.completed"])
 
 
 class RuntimeThumbprintTests(unittest.TestCase):
@@ -255,8 +255,20 @@ class RuntimeNormalizerTests(unittest.TestCase):
     """Validate the neutral-event normalizer that keeps framework types out of candidates."""
 
     def test_output_text_event(self) -> None:
-        """A text delta becomes a bounded ``run.output_text`` payload."""
-        self.assertEqual(_normalize_event({"type": "output_text", "text": "hello"}), ("run.output_text", {"text": "hello"}))
+        """A text delta becomes a bounded canonical message payload."""
+        self.assertEqual(_normalize_event({"type": "output_text", "text": "hello"}, "message-1"), ("message.delta", {"messageId": "message-1", "delta": "hello"}))
+
+    def test_error_event_omits_provider_detail(self) -> None:
+        """A framework error exposes only a bounded type, never its provider message."""
+        normalized = _normalize_event({"type": "error", "message": "Bearer secret-value", "errorType": "AuthenticationError"})
+        self.assertEqual(normalized, ("run.error", {"reason": "model_loop_error", "errorType": "AuthenticationError"}))
+        self.assertNotIn("secret-value", str(normalized))
+
+    def test_complete_a2ui_envelope_passes_through_without_shape_invention(self) -> None:
+        """A neutral adapter may forward a complete envelope, while an absent envelope is dropped."""
+        envelope = {"version": "v0.9", "runId": "r1", "conversationId": "conversation-1", "surfaceId": "main", "components": []}
+        self.assertEqual(_normalize_event({"type": "a2ui_surface_updated", "payload": envelope}), ("a2ui.surface.updated", {"a2ui": envelope}))
+        self.assertIsNone(_normalize_event({"type": "a2ui_surface_updated"}))
 
     def test_usage_event_coerces_counters(self) -> None:
         """Usage counters normalize to non-negative integers, defaulting unknown values to zero."""
@@ -302,15 +314,15 @@ class RuntimeToolCallCandidateTests(unittest.TestCase):
         event = {"type": "tool_call", "toolName": "ghost", "toolCallId": "t9", "arguments": "{}"}
         candidate = _tool_call_candidate(self._coordinates(), _compiled_input(), event)
         self.assertEqual(candidate["kind"], "event")
-        self.assertEqual(candidate["eventType"], "run.error")
-        self.assertEqual(candidate["payload"], {"reason": "unknown_tool", "toolCallId": "t9"})
+        self.assertEqual(candidate["eventType"], "tool.failed")
+        self.assertEqual(candidate["payload"], {"reason": "unknown_tool", "toolInvocationId": "t9"})
 
     def test_malformed_arguments_become_error(self) -> None:
-        """Unparseable tool arguments become a ``run.error`` rather than an external action."""
+        """Unparseable tool arguments become ``tool.failed`` rather than an external action."""
         event = {"type": "tool_call", "toolName": "alpha", "toolCallId": "t1", "arguments": '{"q":'}
         candidate = _tool_call_candidate(self._coordinates(), _compiled_input(), event)
-        self.assertEqual(candidate["eventType"], "run.error")
-        self.assertEqual(candidate["payload"], {"reason": "malformed_tool_call", "toolCallId": "t1"})
+        self.assertEqual(candidate["eventType"], "tool.failed")
+        self.assertEqual(candidate["payload"], {"reason": "malformed_tool_call", "toolInvocationId": "t1"})
 
     def test_missing_tool_fields_become_error(self) -> None:
         """A tool call missing its name or id is malformed and never an external action."""
@@ -455,8 +467,8 @@ class RuntimeExecutorTests(unittest.TestCase):
         ]
         _execute_start_attempt(_start_command(), "instance-1", emitted.append, event_source=lambda _compiled, _cancel, _steer: iter(fixture))
         kinds = [candidate["kind"] for candidate in emitted]
-        self.assertEqual(kinds, ["event", "event", "external_action", "event", "event"])
-        self.assertEqual([emitted[0]["eventType"], emitted[1]["eventType"], emitted[3]["eventType"], emitted[4]["eventType"]], ["run.started", "run.output_text", "run.usage", "run.completed"])
+        self.assertEqual(kinds, ["event", "event", "event", "event", "external_action", "event", "event", "event"])
+        self.assertEqual([candidate.get("eventType") for candidate in emitted], ["run.started", "message.started", "message.delta", "tool.requested", None, "run.usage", "message.completed", "run.completed"])
         self.assertTrue(all(candidate["runId"] == "r1" and candidate["fence"] == 2 for candidate in emitted))
 
     def test_tool_call_surfaces_external_action_with_resolved_revision(self) -> None:
@@ -464,7 +476,8 @@ class RuntimeExecutorTests(unittest.TestCase):
         emitted: list[dict] = []
         fixture = [{"type": "tool_call", "toolName": "zulu", "toolCallId": "t2", "arguments": '{"n":1}'}]
         _execute_start_attempt(_start_command(), "instance-1", emitted.append, event_source=lambda _compiled, _cancel, _steer: iter(fixture))
-        action = emitted[1]
+        self.assertEqual(emitted[1]["eventType"], "tool.requested")
+        action = emitted[2]
         self.assertEqual(action["kind"], "external_action")
         self.assertEqual(action["toolRevisionId"], "rev-zulu")
         self.assertEqual(action["toolInvocationId"], "t2")
@@ -475,8 +488,8 @@ class RuntimeExecutorTests(unittest.TestCase):
         emitted: list[dict] = []
         fixture = [{"type": "tool_call", "toolName": "ghost", "toolCallId": "t9", "arguments": "{}"}]
         _execute_start_attempt(_start_command(), "instance-1", emitted.append, event_source=lambda _compiled, _cancel, _steer: iter(fixture))
-        self.assertEqual([candidate.get("eventType") for candidate in emitted], ["run.started", "run.error", "run.completed"])
-        self.assertEqual(emitted[1]["payload"], {"reason": "unknown_tool", "toolCallId": "t9"})
+        self.assertEqual([candidate.get("eventType") for candidate in emitted], ["run.started", "tool.failed", "run.completed"])
+        self.assertEqual(emitted[1]["payload"], {"reason": "unknown_tool", "toolInvocationId": "t9"})
 
     def test_cancel_suppresses_late_output_and_completion(self) -> None:
         """Once cancellation fires mid-stream, no later candidate (or completion) is emitted."""
@@ -488,8 +501,8 @@ class RuntimeExecutorTests(unittest.TestCase):
             yield {"type": "output_text", "text": "after"}
 
         _execute_start_attempt(_start_command(), "instance-1", emitted.append, event_source=_source, cancel_event=threading.Event())
-        self.assertEqual([candidate["eventType"] for candidate in emitted], ["run.started", "run.output_text"])
-        self.assertEqual(emitted[1]["payload"]["text"], "before")
+        self.assertEqual([candidate["eventType"] for candidate in emitted], ["run.started", "message.started", "message.delta"])
+        self.assertEqual(emitted[2]["payload"]["delta"], "before")
 
     def test_missing_compiled_input_is_a_terminal_failure(self) -> None:
         """A start command without compiled input surfaces `run.failed`, never a silent ack."""
@@ -545,7 +558,7 @@ class RuntimeResumeCancelTests(unittest.TestCase):
         self.assertEqual(captured["deferred"], {"t1": {"ok": True}})
         self.assertEqual(captured["compiledInput"], {})
         event_types = [candidate["eventType"] for candidate in emitted]
-        self.assertEqual(event_types, ["run.resumed", "run.output_text", "run.usage", "run.completed"])
+        self.assertEqual(event_types, ["run.resumed", "message.started", "message.delta", "run.usage", "message.completed", "run.completed"])
         self.assertEqual(emitted[0]["payload"], {"inputGeneration": 7})
 
     def test_resume_seeds_queued_steering_before_the_next_safe_boundary(self) -> None:
@@ -616,7 +629,7 @@ class RuntimeResumeCancelTests(unittest.TestCase):
             _execute_cancel_attempt(_cancel_command(), "instance-1", cancel_event=cancel_event)
 
         _execute_start_attempt(_start_command(), "instance-1", emitted.append, event_source=_source, cancel_event=cancel_event, terminal_gate=gate)
-        terminals = [candidate["eventType"] for candidate in emitted if candidate["eventType"] in ("run.completed", "run.error", "run.cancelled")]
+        terminals = [candidate["eventType"] for candidate in emitted if candidate["eventType"] in ("run.completed", "run.failed", "run.cancelled")]
         self.assertEqual(terminals, [])
 
     def test_completion_then_late_cancel_keeps_the_single_terminal(self) -> None:
@@ -626,7 +639,7 @@ class RuntimeResumeCancelTests(unittest.TestCase):
         gate = _TerminalGate(cancel_event)
         _execute_start_attempt(_start_command(), "instance-1", emitted.append, event_source=lambda _compiled, _cancel, _steer: iter([]), cancel_event=cancel_event, terminal_gate=gate)
         _execute_cancel_attempt(_cancel_command(), "instance-1", cancel_event=cancel_event)
-        terminals = [candidate["eventType"] for candidate in emitted if candidate["eventType"] in ("run.completed", "run.error", "run.cancelled")]
+        terminals = [candidate["eventType"] for candidate in emitted if candidate["eventType"] in ("run.completed", "run.failed", "run.cancelled")]
         self.assertEqual(terminals, ["run.completed"])
 
     def test_failed_completion_delivery_retries_the_same_terminal_candidate(self) -> None:

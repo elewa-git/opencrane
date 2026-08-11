@@ -10,7 +10,7 @@ mapping the Pydantic adapter feeds back into the framework as deferred tool resu
 
 Failures are typed and fail closed: a denied decision becomes a refusal result, and a missing
 pending call, missing Obot configuration, allow-list mismatch, or Obot transport failure becomes a
-typed error result plus a bounded ``run.error`` candidate carrying no message text.
+typed error result plus a bounded ``tool.failed`` candidate carrying no message text.
 """
 
 from urllib.error import HTTPError, URLError
@@ -55,7 +55,7 @@ def resolve_deferred_tool_results(
             or arguments_digest(approved_arguments) != approved_arguments_digest
         ):
             take_pending_tool_call(str(coordinates["runId"]), int(coordinates["attempt"]), tool_invocation_id)  # type: ignore[arg-type]
-            post_candidate(candidate(coordinates, "run.error", {"reason": "invalid_deferred_result", "toolInvocationId": tool_invocation_id}))
+            post_candidate(candidate(coordinates, "tool.failed", {"reason": "invalid_deferred_result", "toolInvocationId": tool_invocation_id}))
             results[tool_invocation_id] = {"error": "invalid_deferred_result"}
             continue
         results[tool_invocation_id] = _execute_approved_call(coordinates, compiled_input, tool_invocation_id, approved_arguments, post_candidate)
@@ -72,7 +72,7 @@ def _execute_approved_call(
     """Execute one authoritative replacement argument object and report its digest-only completion."""
     pending = take_pending_tool_call(str(coordinates["runId"]), int(coordinates["attempt"]), tool_invocation_id)  # type: ignore[arg-type]
     if pending is None:
-        post_candidate(candidate(coordinates, "run.error", {"reason": "unknown_tool_invocation", "toolInvocationId": tool_invocation_id}))
+        post_candidate(candidate(coordinates, "tool.failed", {"reason": "unknown_tool_invocation", "toolInvocationId": tool_invocation_id}))
         return {"error": "unknown_tool_invocation"}
 
     # Direct execution is optional deployment capability: without both settings, approved
@@ -80,16 +80,17 @@ def _execute_approved_call(
     base_url = optional_environment("OPENCRANE_RUNTIME_OBOT_URL")
     key_path = optional_environment("OPENCRANE_RUNTIME_OBOT_KEY_PATH")
     if base_url is None or key_path is None:
-        post_candidate(candidate(coordinates, "run.error", {"reason": "obot_invocation_failed", "toolInvocationId": tool_invocation_id}))
+        post_candidate(candidate(coordinates, "tool.failed", {"reason": "obot_invocation_failed", "toolInvocationId": tool_invocation_id}))
         return {"error": "obot_unavailable"}
 
     # Defense in depth: the approved name must still resolve in the immutable compiled grant set,
     # carry Obot addressing, and follow the integration revision grammar for its bare MCP name.
     addressing = _tool_addressing(compiled_input, pending.get("toolName"))
     if addressing is None:
-        post_candidate(candidate(coordinates, "run.error", {"reason": "tool_not_allowed", "toolInvocationId": tool_invocation_id}))
+        post_candidate(candidate(coordinates, "tool.failed", {"reason": "tool_not_allowed", "toolInvocationId": tool_invocation_id}))
         return {"error": "tool_not_allowed"}
     mcp_server_id, mcp_tool_name = addressing
+    post_candidate(candidate(coordinates, "tool.started", {"toolInvocationId": tool_invocation_id, "toolCallId": tool_invocation_id}))
 
     try:
         result = obot_mcp.invoke_tool(
@@ -102,12 +103,12 @@ def _execute_approved_call(
         )
     except (HTTPError, URLError, OSError, RuntimeError, ValueError) as error:
         # Type name only: Obot errors and URLs never enter a candidate or the model context verbatim.
-        post_candidate(candidate(coordinates, "run.error", {"reason": "obot_invocation_failed", "toolInvocationId": tool_invocation_id, "errorType": type(error).__name__}))
+        post_candidate(candidate(coordinates, "tool.failed", {"reason": "obot_invocation_failed", "toolInvocationId": tool_invocation_id, "errorType": type(error).__name__}))
         return {"error": "obot_invocation_failed", "errorType": type(error).__name__}
 
     # Digest-only receipt: the server marks the reservation Succeeded from this candidate without
     # the tool content ever transiting or being persisted by the control plane.
-    post_candidate(candidate(coordinates, "tool.completed", {"toolInvocationId": tool_invocation_id, "resultDigest": arguments_digest(result)}))
+    post_candidate(candidate(coordinates, "tool.completed", {"toolInvocationId": tool_invocation_id, "toolCallId": tool_invocation_id, "resultDigest": arguments_digest(result)}))
     return result
 
 

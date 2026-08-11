@@ -118,7 +118,7 @@ class FaultTerminalGateTests(unittest.TestCase):
         gate = _TerminalGate(cancel_event)
         _execute_start_attempt(_start_command(), "instance-fault", emitted.append, event_source=lambda _c, _x, _s: iter([]), cancel_event=cancel_event, terminal_gate=gate)
         _execute_cancel_attempt(_cancel_command(), "instance-fault", cancel_event=cancel_event)
-        terminals = [candidate["eventType"] for candidate in emitted if candidate["eventType"] in ("run.completed", "run.error", "run.cancelled")]
+        terminals = [candidate["eventType"] for candidate in emitted if candidate["eventType"] in ("run.completed", "run.failed", "run.cancelled")]
         self.assertEqual(terminals, ["run.completed"])
 
     def test_cancel_in_the_check_then_act_window_posts_no_runtime_terminal(self) -> None:
@@ -132,7 +132,7 @@ class FaultTerminalGateTests(unittest.TestCase):
             _execute_cancel_attempt(_cancel_command(), "instance-fault", cancel_event=cancel_event)
 
         _execute_start_attempt(_start_command(), "instance-fault", emitted.append, event_source=_source, cancel_event=cancel_event, terminal_gate=gate)
-        terminals = [candidate["eventType"] for candidate in emitted if candidate["eventType"] in ("run.completed", "run.error", "run.cancelled")]
+        terminals = [candidate["eventType"] for candidate in emitted if candidate["eventType"] in ("run.completed", "run.failed", "run.cancelled")]
         self.assertEqual(terminals, [])
 
 
@@ -156,7 +156,7 @@ class FaultStreamLossTests(unittest.TestCase):
 
         emitted: list[dict] = []
         _execute_start_attempt(_start_command(), "instance-fault", emitted.append, event_source=_source, cancel_event=cancel_event)
-        self.assertEqual([candidate.get("eventType") for candidate in emitted], ["run.started", "run.output_text"])
+        self.assertEqual([candidate.get("eventType") for candidate in emitted], ["run.started", "message.started", "message.delta"])
 
     def test_reconnect_backoff_is_bounded_so_a_dead_peer_cannot_cause_a_retry_storm(self) -> None:
         """Reconnect delay is capped regardless of attempt count, so retries never grow without bound."""
@@ -188,8 +188,8 @@ class FaultStaleAuthorityTests(unittest.TestCase):
     def test_ungranted_or_altered_tool_revision_is_a_hard_unknown_tool_error(self) -> None:
         """A tool naming a revision outside the compiled grant set is a hard error, never an action."""
         candidate = _tool_call_candidate(_coordinates(), _compiled_input(), {"type": "tool_call", "toolName": "exfiltrate", "toolCallId": "call-x", "arguments": "{}"})
-        self.assertEqual(candidate["eventType"], "run.error")
-        self.assertEqual(candidate["payload"], {"reason": "unknown_tool", "toolCallId": "call-x"})
+        self.assertEqual(candidate["eventType"], "tool.failed")
+        self.assertEqual(candidate["payload"], {"reason": "unknown_tool", "toolInvocationId": "call-x"})
 
     def test_changed_arguments_change_the_digest(self) -> None:
         """A single changed argument changes the digest so a mutated replay cannot reuse the authority row."""
