@@ -23,7 +23,7 @@ CREATE TYPE "ArtifactKind" AS ENUM ('document', 'generated', 'skill', 'upload');
 CREATE TYPE "ArtifactState" AS ENUM ('active', 'deletion_pending', 'deleted');
 
 -- CreateEnum
-CREATE TYPE "ArtifactRevisionState" AS ENUM ('published', 'deletion_pending', 'purged');
+CREATE TYPE "ArtifactRevisionState" AS ENUM ('quarantined', 'published', 'rejected', 'deletion_pending', 'purged');
 
 -- CreateEnum
 CREATE TYPE "ArtifactIndexState" AS ENUM ('pending', 'indexed', 'failed', 'removal_pending', 'removed');
@@ -36,6 +36,15 @@ CREATE TYPE "ArtifactUploadLeaseState" AS ENUM ('active', 'promoted', 'finalized
 
 -- CreateEnum
 CREATE TYPE "ArtifactPreprocessJobState" AS ENUM ('pending', 'claimed', 'completed', 'retryable_failed', 'terminal_failed');
+
+-- CreateEnum
+CREATE TYPE "ArtifactScanJobState" AS ENUM ('pending', 'claimed', 'clean', 'rejected', 'retryable_failed', 'terminal_failed');
+
+-- CreateEnum
+CREATE TYPE "ConversationAssetProvenance" AS ENUM ('participant_upload', 'agent_output');
+
+-- CreateEnum
+CREATE TYPE "ConversationAssetState" AS ENUM ('uploading', 'processing', 'ready', 'failed', 'cancelled', 'removed');
 
 -- CreateEnum
 CREATE TYPE "AuditDecisionOutcome" AS ENUM ('allow', 'deny', 'error');
@@ -6717,3 +6726,109 @@ INSERT INTO "user_onboarding_bootstrap_questions" ("content_revision_id", "ordin
     ('bootstrap-analyst-v1', 1, $prompt_analyst_1$What is your primary domain or area of work?$prompt_analyst_1$),
     ('bootstrap-analyst-v1', 2, $prompt_analyst_2$What level of detail do you typically want in an initial response?$prompt_analyst_2$),
     ('bootstrap-analyst-v1', 3, $prompt_analyst_3$What standards or references should I use as authoritative in your field?$prompt_analyst_3$);
+
+-- CreateTable
+CREATE TABLE "artifact_scan_jobs" (
+    "id" TEXT NOT NULL,
+    "artifact_revision_id" TEXT NOT NULL,
+    "state" "ArtifactScanJobState" NOT NULL DEFAULT 'pending',
+    "attempt" INTEGER NOT NULL DEFAULT 0,
+    "claim_fence" TEXT,
+    "claim_expires_at" TIMESTAMP(3),
+    "next_attempt_at" TIMESTAMP(3),
+    "failure_code" TEXT,
+    "scanner_version" TEXT,
+    "completed_at" TIMESTAMP(3),
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
+    CONSTRAINT "artifact_scan_jobs_pkey" PRIMARY KEY ("id")
+);
+
+CREATE TABLE "conversation_asset_output_tickets" (
+    "id" TEXT NOT NULL,
+    "silo_id" TEXT NOT NULL,
+    "conversation_id" TEXT NOT NULL,
+    "run_id" TEXT NOT NULL,
+    "run_attempt" INTEGER NOT NULL,
+    "idempotency_key" TEXT NOT NULL,
+    "finalized_content_address" TEXT,
+    "expires_at" TIMESTAMP(3) NOT NULL,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "conversation_asset_output_tickets_pkey" PRIMARY KEY ("id")
+);
+
+CREATE TABLE "conversation_assets" (
+    "id" TEXT NOT NULL,
+    "silo_id" TEXT NOT NULL,
+    "conversation_id" TEXT NOT NULL,
+    "message_id" TEXT,
+    "run_id" TEXT,
+    "run_attempt" INTEGER,
+    "artifact_id" TEXT,
+    "revision_id" TEXT,
+    "upload_lease_id" TEXT,
+    "output_ticket_id" TEXT,
+    "provenance" "ConversationAssetProvenance" NOT NULL,
+    "state" "ConversationAssetState" NOT NULL,
+    "display_name" TEXT NOT NULL,
+    "media_type" TEXT NOT NULL,
+    "byte_length" BIGINT,
+    "failure_code" TEXT,
+    "created_by_user_id" TEXT,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
+    "removed_at" TIMESTAMP(3),
+    CONSTRAINT "conversation_assets_pkey" PRIMARY KEY ("id")
+);
+
+CREATE UNIQUE INDEX "artifact_scan_jobs_artifact_revision_id_key" ON "artifact_scan_jobs"("artifact_revision_id");
+CREATE INDEX "artifact_scan_jobs_state_next_attempt_at_claim_expires_at_idx" ON "artifact_scan_jobs"("state", "next_attempt_at", "claim_expires_at");
+CREATE UNIQUE INDEX "conversation_asset_output_tickets_run_id_run_attempt_idempo_key" ON "conversation_asset_output_tickets"("run_id", "run_attempt", "idempotency_key");
+CREATE INDEX "conversation_asset_output_tickets_conversation_id_created_a_idx" ON "conversation_asset_output_tickets"("conversation_id", "created_at");
+CREATE UNIQUE INDEX "conversation_assets_upload_lease_id_key" ON "conversation_assets"("upload_lease_id");
+CREATE UNIQUE INDEX "conversation_assets_output_ticket_id_key" ON "conversation_assets"("output_ticket_id");
+CREATE UNIQUE INDEX "conversation_assets_conversation_id_id_key" ON "conversation_assets"("conversation_id", "id");
+CREATE INDEX "conversation_assets_conversation_id_state_created_at_idx" ON "conversation_assets"("conversation_id", "state", "created_at");
+CREATE INDEX "conversation_assets_message_id_idx" ON "conversation_assets"("message_id");
+CREATE INDEX "conversation_assets_run_id_run_attempt_idx" ON "conversation_assets"("run_id", "run_attempt");
+CREATE INDEX "conversation_assets_artifact_id_revision_id_idx" ON "conversation_assets"("artifact_id", "revision_id");
+
+ALTER TABLE "artifact_scan_jobs" ADD CONSTRAINT "artifact_scan_jobs_artifact_revision_id_fkey" FOREIGN KEY ("artifact_revision_id") REFERENCES "artifact_revisions"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "conversation_asset_output_tickets" ADD CONSTRAINT "conversation_asset_output_tickets_conversation_id_silo_id_fkey" FOREIGN KEY ("conversation_id", "silo_id") REFERENCES "conversations"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "conversation_asset_output_tickets" ADD CONSTRAINT "conversation_asset_output_tickets_conversation_id_run_id_fkey" FOREIGN KEY ("conversation_id", "run_id") REFERENCES "agent_runs"("conversation_id", "id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "conversation_assets" ADD CONSTRAINT "conversation_assets_conversation_id_silo_id_fkey" FOREIGN KEY ("conversation_id", "silo_id") REFERENCES "conversations"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "conversation_assets" ADD CONSTRAINT "conversation_assets_conversation_id_message_id_fkey" FOREIGN KEY ("conversation_id", "message_id") REFERENCES "conversation_messages"("conversation_id", "id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "conversation_assets" ADD CONSTRAINT "conversation_assets_conversation_id_run_id_fkey" FOREIGN KEY ("conversation_id", "run_id") REFERENCES "agent_runs"("conversation_id", "id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "conversation_assets" ADD CONSTRAINT "conversation_assets_artifact_id_silo_id_fkey" FOREIGN KEY ("artifact_id", "silo_id") REFERENCES "artifacts"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "conversation_assets" ADD CONSTRAINT "conversation_assets_artifact_id_revision_id_fkey" FOREIGN KEY ("artifact_id", "revision_id") REFERENCES "artifact_revisions"("artifact_id", "id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "conversation_assets" ADD CONSTRAINT "conversation_assets_upload_lease_id_fkey" FOREIGN KEY ("upload_lease_id") REFERENCES "artifact_upload_leases"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "conversation_assets" ADD CONSTRAINT "conversation_assets_output_ticket_id_fkey" FOREIGN KEY ("output_ticket_id") REFERENCES "conversation_asset_output_tickets"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+ALTER TABLE "artifact_scan_jobs" ADD CONSTRAINT "artifact_scan_jobs_state_check" CHECK (
+    ("state" IN ('pending', 'retryable_failed') AND "claim_fence" IS NULL AND "claim_expires_at" IS NULL AND "completed_at" IS NULL)
+    OR ("state" = 'claimed' AND "claim_fence" IS NOT NULL AND "claim_expires_at" IS NOT NULL AND "completed_at" IS NULL)
+    OR ("state" IN ('clean', 'rejected', 'terminal_failed') AND "claim_fence" IS NULL AND "claim_expires_at" IS NULL AND "completed_at" IS NOT NULL)
+);
+ALTER TABLE "conversation_asset_output_tickets" ADD CONSTRAINT "conversation_asset_output_tickets_identity_check" CHECK (
+    "run_attempt" > 0
+    AND length(btrim("idempotency_key")) BETWEEN 1 AND 128
+    AND ("finalized_content_address" IS NULL OR "finalized_content_address" ~ '^sha256:[0-9a-f]{64}$')
+);
+ALTER TABLE "conversation_assets" ADD CONSTRAINT "conversation_assets_identity_check" CHECK (
+    length(btrim("display_name")) BETWEEN 1 AND 255
+    AND length(btrim("media_type")) BETWEEN 1 AND 255
+    AND ("byte_length" IS NULL OR "byte_length" > 0)
+    AND (("run_id" IS NULL AND "run_attempt" IS NULL) OR ("run_id" IS NOT NULL AND "run_attempt" > 0))
+);
+ALTER TABLE "conversation_assets" ADD CONSTRAINT "conversation_assets_provenance_check" CHECK (
+    ("provenance" = 'participant_upload' AND "created_by_user_id" IS NOT NULL AND "output_ticket_id" IS NULL)
+    OR ("provenance" = 'agent_output' AND "created_by_user_id" IS NULL AND "run_id" IS NOT NULL AND "run_attempt" > 0 AND "output_ticket_id" IS NOT NULL)
+);
+ALTER TABLE "conversation_assets" ADD CONSTRAINT "conversation_assets_lifecycle_check" CHECK (
+    ("state" = 'uploading' AND "upload_lease_id" IS NOT NULL AND "revision_id" IS NULL AND "failure_code" IS NULL)
+    OR ("state" = 'processing' AND "artifact_id" IS NOT NULL AND "revision_id" IS NOT NULL AND "failure_code" IS NULL)
+    OR ("state" = 'ready' AND "artifact_id" IS NOT NULL AND "revision_id" IS NOT NULL AND "byte_length" IS NOT NULL AND "failure_code" IS NULL)
+    OR ("state" = 'failed' AND "failure_code" IS NOT NULL)
+    OR ("state" = 'cancelled' AND "removed_at" IS NOT NULL)
+    OR ("state" = 'removed' AND "removed_at" IS NOT NULL)
+);

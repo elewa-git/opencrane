@@ -6,6 +6,7 @@ export * from "./ag-ui-projection.types.js";
 export * from "./ag-ui-a2ui-envelope.js";
 export * from "@opencrane/models/agents";
 export * from "@opencrane/models/conversations";
+export * from "@opencrane/models/conversation-assets";
 export * from "./approval.types.js";
 export type * from "@opencrane/models/artifacts";
 export * from "./artifact-preprocessor.types.js";

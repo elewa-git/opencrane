@@ -172,4 +172,4 @@ and other shared packages — never on apps, backend domains, or the frontend/se
 
 - Parent index: [OpenCrane](../../README.md)
 - Siblings: [util](../util/README.md) · [observability](../backend/observability/README.md)
-- Re-exported models: [models/agents](../models/agents/main/README.md) · [models/conversations](../models/conversations/main/README.md) · [models/artifacts](../models/artifacts/main/README.md) · [models/authorization](../models/authorization/main/README.md)
+- Re-exported models: [models/agents](../models/agents/main/README.md) · [models/conversations](../models/conversations/main/README.md) · [models/conversation-assets](../models/conversation-assets/main/README.md) · [models/artifacts](../models/artifacts/main/README.md) · [models/authorization](../models/authorization/main/README.md)

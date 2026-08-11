@@ -127,6 +127,9 @@
       "@opencrane/models/conversations": [
         "./libs/models/conversations/main/src/index.ts"
       ],
+      "@opencrane/models/conversation-assets": [
+        "./libs/models/conversation-assets/main/src/index.ts"
+      ],
       "@opencrane/models/artifacts": [
         "./libs/models/artifacts/main/src/index.ts"
       ],

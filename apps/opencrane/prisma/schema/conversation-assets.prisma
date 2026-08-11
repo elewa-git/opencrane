@@ -1,0 +1,71 @@
+enum ConversationAssetProvenance {
+  ParticipantUpload @map("participant_upload")
+  AgentOutput       @map("agent_output")
+}
+
+enum ConversationAssetState {
+  Uploading  @map("uploading")
+  Processing @map("processing")
+  Ready      @map("ready")
+  Failed     @map("failed")
+  Cancelled  @map("cancelled")
+  Removed    @map("removed")
+}
+
+/// Browser-safe conversation linkage to one upload or immutable checked revision.
+model ConversationAsset {
+  id                String                      @id @default(cuid())
+  siloId            String                      @map("silo_id")
+  conversationId    String                      @map("conversation_id")
+  messageId         String?                     @map("message_id")
+  runId             String?                     @map("run_id")
+  runAttempt        Int?                        @map("run_attempt")
+  artifactId        String?                     @map("artifact_id")
+  revisionId        String?                     @map("revision_id")
+  uploadLeaseId     String?                     @unique @map("upload_lease_id")
+  outputTicketId    String?                     @unique @map("output_ticket_id")
+  provenance        ConversationAssetProvenance
+  state             ConversationAssetState
+  displayName       String                      @map("display_name")
+  mediaType         String                      @map("media_type")
+  byteLength        BigInt?                     @map("byte_length")
+  failureCode       String?                     @map("failure_code")
+  createdByUserId   String?                     @map("created_by_user_id")
+  createdAt         DateTime                    @default(now()) @map("created_at")
+  updatedAt         DateTime                    @updatedAt @map("updated_at")
+  removedAt         DateTime?                   @map("removed_at")
+  conversation      Conversation                @relation(fields: [conversationId, siloId], references: [id, siloId], onDelete: Restrict)
+  message           ConversationMessage?        @relation(fields: [conversationId, messageId], references: [conversationId, id], onDelete: Restrict)
+  run               AgentRun?                   @relation(fields: [conversationId, runId], references: [conversationId, id], onDelete: Restrict)
+  artifact          Artifact?                   @relation(fields: [artifactId, siloId], references: [id, siloId], onDelete: Restrict)
+  revision          ArtifactRevision?           @relation(fields: [artifactId, revisionId], references: [artifactId, id], onDelete: Restrict)
+  uploadLease       ArtifactUploadLease?         @relation(fields: [uploadLeaseId], references: [id], onDelete: Restrict)
+  outputTicket      ConversationAssetOutputTicket? @relation(fields: [outputTicketId], references: [id], onDelete: Restrict)
+
+  @@unique([conversationId, id])
+  @@index([conversationId, state, createdAt])
+  @@index([messageId])
+  @@index([runId, runAttempt])
+  @@index([artifactId, revisionId])
+  @@map("conversation_assets")
+}
+
+/// One retry-stable authority to publish exactly one generated conversation asset.
+model ConversationAssetOutputTicket {
+  id                     String             @id @default(cuid())
+  siloId                 String             @map("silo_id")
+  conversationId         String             @map("conversation_id")
+  runId                  String             @map("run_id")
+  runAttempt             Int                @map("run_attempt")
+  idempotencyKey         String             @map("idempotency_key")
+  finalizedContentAddress String?            @map("finalized_content_address")
+  expiresAt              DateTime           @map("expires_at")
+  createdAt              DateTime           @default(now()) @map("created_at")
+  conversation           Conversation       @relation(fields: [conversationId, siloId], references: [id, siloId], onDelete: Restrict)
+  run                    AgentRun           @relation(fields: [conversationId, runId], references: [conversationId, id], onDelete: Restrict)
+  asset                  ConversationAsset?
+
+  @@unique([runId, runAttempt, idempotencyKey])
+  @@index([conversationId, createdAt])
+  @@map("conversation_asset_output_tickets")
+}

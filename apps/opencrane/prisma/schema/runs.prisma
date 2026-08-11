@@ -90,6 +90,8 @@ model AgentRun {
   childReservation         ChildRunReservation?         @relation("ChildRunReservationChild")
   childCompletionDelivery  ChildRunCompletionDelivery?  @relation("ChildRunCompletionDeliveryChild")
   receivedChildCompletions ChildRunCompletionDelivery[] @relation("ChildRunCompletionDeliveryParent")
+  conversationAssets       ConversationAsset[]
+  conversationAssetTickets ConversationAssetOutputTicket[]
 
   @@unique([siloId, requestIdempotencyKey])
   @@unique([id, agentServiceId, agentRevisionId])
