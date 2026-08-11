@@ -89,9 +89,9 @@ search-only route verifies an audience-bound server ServiceAccount token with To
 enforces the request-shape contract (one bounded query, `CHUNKS`, exactly one UUID dataset, bounded
 `top_k`). The server presents that projected `opencrane-memory-gateway` token: recall is live at
 admission (fact references frozen into the snapshot) and at compile time (digest-verified statement
-inlining into the prompt). Mid-run runtime recall remains fail-closed until an attempt-fenced
-ephemeral result channel exists; memory writes also remain fail-closed until a recoverable write
-authority exists.
+inlining into the prompt). Mid-run recall can use the same durable server-worker result channel as
+other external actions; memory writes remain fail-closed until their recoverable write authority is
+implemented and qualified.
 
 ## Storage
 

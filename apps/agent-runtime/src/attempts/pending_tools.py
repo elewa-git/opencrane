@@ -25,7 +25,7 @@ def record_pending_tool_call(
     tool_name: str,
     arguments: object,
 ) -> None:
-    """Remember one proposed tool call so an approved resume can execute it.
+    """Remember one proposed tool call so a saved terminal result can resolve it.
 
     Beyond the bounded ceiling new entries are dropped: the later resume then fails closed for that
     invocation instead of this registry growing without limit.

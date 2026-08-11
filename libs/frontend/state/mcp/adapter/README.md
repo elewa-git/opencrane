@@ -29,8 +29,8 @@ list the directory).
 **In this flow:** [core](../../core/README.md) · [gateways](../../gateways/README.md) · [features/tools](../../../features/tools/README.md)
 
 Invariant: **credentials are write-only.** `setCredential` is the only path a secret enters, and no
-read method ever returns credential material — the agent only receives a connection URL, never a
-token. Uninstalling a server also clears its stored credential.
+read method ever returns credential material. The agent runtime receives neither a provider URL nor
+a token. Uninstalling a server also clears its stored credential.
 
 ## Public surface
 

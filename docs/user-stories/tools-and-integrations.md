@@ -120,10 +120,10 @@ allow-list **so that** connection metadata corresponds to real capability.
 
 Acceptance criteria:
 
-- Readiness requires custody, exact integration assignment, allowed tool, runtime transport, and any
+- Readiness requires custody, exact integration assignment, allowed tool, server transport, and any
   required approval.
 - Unavailable transport is a visible failed/unavailable state, never fake success.
-- The UI shows digest-safe receipts rather than credentials or proof material.
+- The UI shows saved, secret-safe success or failure details rather than credentials or proof material.
 
-Status: `API blocked` in the current production composition; the external-action runner uses an
-unavailable Obot invocation adapter.
+Status: `API built`; the durable server worker executes through the configured Obot custody adapter,
+stores one terminal result, and enters visible recovery instead of blindly repeating an unknown outcome.

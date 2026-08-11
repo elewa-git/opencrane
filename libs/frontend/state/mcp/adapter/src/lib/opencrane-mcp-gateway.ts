@@ -20,7 +20,7 @@ import { McpAccessPolicyWire, McpInstalledWire, McpServerWire, _MapAccessPolicy,
  *
  * **Security:** {@link setCredential} is the only secret-bearing call and is
  * write-only — the values are POSTed and never read back. No read method returns
- * credential material, and the agent only ever receives a connection URL.
+ * credential material. Neither the agent runtime nor the browser receives a provider URL or secret.
  */
 @Injectable()
 export class OpenCraneMcpGateway implements McpGateway

@@ -13,8 +13,8 @@ import { McpAccessPolicy, McpDirectory, McpInstalledServer, McpServer } from "@o
  *
  * **Security contract.** {@link setCredential} is the only path a secret enters,
  * and it is write-only: a stored credential is never returned by any read
- * method. The agent/LLM/chat never sees a token — it only ever receives a
- * connection URL — so no method here exposes raw credential material.
+ * method. The agent/LLM/chat never sees a token or provider URL, so no method here exposes raw
+ * credential material or provider addressing.
  */
 export interface McpGateway
 {

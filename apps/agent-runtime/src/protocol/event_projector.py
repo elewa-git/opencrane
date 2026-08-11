@@ -66,7 +66,7 @@ class RuntimeEventProjector:
         self._message_started = False
 
     def _emit_tool_call(self, neutral_event: dict[str, object]) -> None:
-        """Emit request before action and retain only approved-resume lookup state locally."""
+        """Emit a request and retain only the identity needed to match its saved result."""
         proposal = tool_call_candidate(
             self._coordinates,
             self._compiled_input,
