@@ -3,10 +3,13 @@ import { AG_UI_A2UI_ENVELOPE_VERSION, AG_UI_INTERRUPTS_CLEARED_EVENT, AG_UI_TOOL
 
 import { AgUiMessageStatuses, AgUiRunStatuses, AgUiToolStatuses, type AgUiMessageView, type AgUiStreamRecord, type AgUiStreamState } from "./ag-ui-stream.types.js";
 
+/** Maximum complete progressive history retained for one governed surface. */
+const _MAX_MATERIALIZED_A2UI_OPERATIONS = 256;
+
 /** Construct empty state that requires an authoritative stream before displaying content. */
 export function __CreateAgUiStreamState(): AgUiStreamState
 {
-	return { cursor: null, seenCursors: new Map(), runId: null, runStatus: AgUiRunStatuses.Idle, runFailure: null, interrupts: [], messages: {}, tools: {}, surfaces: new Map(), customEvents: [], accessRevoked: false };
+	return { cursor: null, seenCursors: new Map(), runId: null, runStatus: AgUiRunStatuses.Idle, runFailure: null, interrupts: [], messages: {}, tools: {}, surfaces: new Map(), surfaceFingerprints: new Map(), customEvents: [], accessRevoked: false };
 }
 
 /** Purge all projected content and reconnect coordinates after proven access loss. */
@@ -51,7 +54,7 @@ function _ReduceEvent(state: AgUiStreamState, event: AgUiProjectionEvent): AgUiS
 		case EventType.TEXT_MESSAGE_END:
 			return _CompleteMessage(state, event.messageId);
 		case EventType.TOOL_CALL_START:
-			return { ...state, tools: { ...state.tools, [event.toolCallId]: { id: event.toolCallId, name: event.toolCallName, arguments: "", status: AgUiToolStatuses.Requested, result: null, failureCode: null } } };
+			return { ...state, tools: { ...state.tools, [event.toolCallId]: { id: event.toolCallId, name: event.toolCallName, arguments: "", status: AgUiToolStatuses.Requested, result: null, failureCode: null, failures: [] } } };
 		case EventType.TOOL_CALL_ARGS:
 			return _AppendToolArguments(state, event.toolCallId, event.delta);
 		case EventType.TOOL_CALL_END:
@@ -108,7 +111,8 @@ function _CompleteTool(state: AgUiStreamState, toolCallId: string): AgUiStreamSt
 {
 	const tool = state.tools[toolCallId];
 	if (tool === undefined) throw new Error("AG-UI tool end has no active tool call");
-	return { ...state, tools: { ...state.tools, [toolCallId]: { ...tool, status: AgUiToolStatuses.Completed, failureCode: null } } };
+	const status = tool.failures.length === 0 ? AgUiToolStatuses.Completed : AgUiToolStatuses.Recovered;
+	return { ...state, tools: { ...state.tools, [toolCallId]: { ...tool, status } } };
 }
 
 /** Attach a display-safe result only to a known tool call. */
@@ -116,7 +120,8 @@ function _ResultTool(state: AgUiStreamState, toolCallId: string, content: string
 {
 	const tool = state.tools[toolCallId];
 	if (tool === undefined) throw new Error("AG-UI tool result has no known tool call");
-	return { ...state, tools: { ...state.tools, [toolCallId]: { ...tool, status: AgUiToolStatuses.Completed, result: content, failureCode: null } } };
+	const status = tool.failures.length === 0 ? AgUiToolStatuses.Completed : AgUiToolStatuses.Recovered;
+	return { ...state, tools: { ...state.tools, [toolCallId]: { ...tool, status, result: content } } };
 }
 
 /** Apply OpenCrane custom display signals without adopting raw authority payloads. */
@@ -136,7 +141,8 @@ function _ToolFailure(state: AgUiStreamState, value: unknown, name: string): AgU
 	if (!_IsToolFailure(value)) throw new Error("AG-UI tool failure is invalid");
 	const tool = state.tools[value.toolCallId];
 	if (tool === undefined) throw new Error("AG-UI tool failure has no known tool call");
-	const failed = { ...tool, status: AgUiToolStatuses.Failed, failureCode: value.failureCode ?? null };
+	const failureCode = value.failureCode ?? null;
+	const failed = { ...tool, status: AgUiToolStatuses.Failed, failureCode, failures: [...tool.failures, { code: failureCode }] };
 	return { ...state, tools: { ...state.tools, [value.toolCallId]: failed }, customEvents: [...state.customEvents, name] };
 }
 
@@ -155,13 +161,23 @@ function _A2uiSurface(state: AgUiStreamState, envelope: AgUiA2uiEnvelope, name: 
 {
 	const identity = _A2uiSurfaceIdentity(envelope);
 	const previous = state.surfaces.get(identity);
+	const fingerprint = JSON.stringify(envelope);
+	const previousFingerprint = state.surfaceFingerprints.get(identity);
 	if (previous !== undefined && envelope.sequence < previous.sequence) throw new Error("governed A2UI surface sequence regressed");
+	if (previous !== undefined && envelope.sequence > previous.sequence + 1) throw new Error("governed A2UI surface sequence has a gap");
 	if (previous !== undefined && envelope.sequence === previous.sequence)
 	{
-		if (JSON.stringify(previous) !== JSON.stringify(envelope)) throw new Error("governed A2UI surface sequence changed payload");
+		if (previousFingerprint !== fingerprint) throw new Error("governed A2UI surface sequence changed payload");
 		return state;
 	}
-	return { ...state, surfaces: new Map(state.surfaces).set(identity, envelope), customEvents: [...state.customEvents, name] };
+	const materialized = previous === undefined ? envelope : { ...envelope, operations: [...previous.operations, ...envelope.operations] };
+	if (materialized.operations.length > _MAX_MATERIALIZED_A2UI_OPERATIONS) throw new Error("governed A2UI surface history is too large");
+	return {
+		...state,
+		surfaces: new Map(state.surfaces).set(identity, materialized),
+		surfaceFingerprints: new Map(state.surfaceFingerprints).set(identity, fingerprint),
+		customEvents: [...state.customEvents, name]
+	};
 }
 
 /** Build one collision-safe key from every stable coordinate that selects a governed surface. */

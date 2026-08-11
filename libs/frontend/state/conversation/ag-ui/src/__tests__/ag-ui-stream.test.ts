@@ -44,7 +44,7 @@ describe("AG-UI stream state", function _Suite()
 
 		expect(state.runStatus).toBe(AgUiRunStatuses.Succeeded);
 		expect(state.messages["message-1"]).toMatchObject({ text: "hello", status: AgUiMessageStatuses.Completed });
-		expect(state.tools["tool-1"]).toMatchObject({ arguments: "{\"q\":\"hello\"}", status: AgUiToolStatuses.Completed, result: "done", failureCode: null });
+		expect(state.tools["tool-1"]).toMatchObject({ arguments: "{\"q\":\"hello\"}", status: AgUiToolStatuses.Completed, result: "done", failureCode: null, failures: [] });
 		expect(__AgUiResumeCursor(state)).toBe("cursor-8");
 	});
 
@@ -54,11 +54,22 @@ describe("AG-UI stream state", function _Suite()
 		state = __ReduceAgUiStream(state, _Record("cursor-tool-2", { type: EventType.CUSTOM, name: AG_UI_TOOL_FAILURE_EVENT, value: { eventType: "tool.failed", toolCallId: "tool-1", failureCode: "AuthenticationError" } }));
 
 		expect(state.tools["tool-1"]).toMatchObject({ status: AgUiToolStatuses.Failed, failureCode: "AuthenticationError", result: null });
+		expect(state.tools["tool-1"]?.failures).toEqual([{ code: "AuthenticationError" }]);
 		expect(state.customEvents).toContain(AG_UI_TOOL_FAILURE_EVENT);
 		expect(function _SecretExtension(): void
 		{
 			__ReduceAgUiStream(state, _Record("cursor-tool-3", { type: EventType.CUSTOM, name: AG_UI_TOOL_FAILURE_EVENT, value: { eventType: "tool.failed", toolCallId: "tool-1", failureCode: "AuthenticationError", detail: "secret" } }));
 		}).toThrow("tool failure is invalid");
+	});
+
+	it("retains a failed attempt when a later tool result recovers", function _ToolRecovery()
+	{
+		let state = __ReduceAgUiStream(__CreateAgUiStreamState(), _Record("cursor-tool-1", { type: EventType.TOOL_CALL_START, toolCallId: "tool-1", toolCallName: "search" }));
+		state = __ReduceAgUiStream(state, _Record("cursor-tool-2", { type: EventType.CUSTOM, name: AG_UI_TOOL_FAILURE_EVENT, value: { eventType: "tool.failed", toolCallId: "tool-1", failureCode: "AuthenticationError" } }));
+		state = __ReduceAgUiStream(state, _Record("cursor-tool-3", { type: EventType.TOOL_CALL_RESULT, toolCallId: "tool-1", messageId: "tool-message-1", role: "tool", content: "recovered" }));
+
+		expect(state.tools["tool-1"]).toMatchObject({ status: AgUiToolStatuses.Recovered, result: "recovered", failureCode: "AuthenticationError" });
+		expect(state.tools["tool-1"]?.failures).toEqual([{ code: "AuthenticationError" }]);
 	});
 
 	it("suppresses exact duplicate cursors and rejects cursor payload mutation", function _RejectsMutation()
@@ -144,11 +155,12 @@ describe("AG-UI stream state", function _Suite()
 		state = __ReduceAgUiStream(state, _A2uiRecord("cursor-a2ui-3", second));
 
 		expect([...progressed.surfaces.values()][0]).toMatchObject({ sequence: 1, state: AgUiA2uiSurfaceStates.Expired, reason: "The server-declared action window expired" });
+		expect([...progressed.surfaces.values()][0]?.operations).toEqual([...first.operations as readonly unknown[], ...second.operations as readonly unknown[]]);
 		expect(state.surfaces).toEqual(progressed.surfaces);
 		expect(state.customEvents).toEqual([AG_UI_A2UI_ENVELOPE_VERSION, AG_UI_A2UI_ENVELOPE_VERSION]);
 	});
 
-	it("rejects same-sequence mutation and sequence regression", function _RejectsA2uiSequenceDrift()
+	it("rejects same-sequence mutation, regression, and sequence gaps", function _RejectsA2uiSequenceDrift()
 	{
 		const initial = _A2ui(2, AgUiA2uiSurfaceStates.Ready, [{ beginRendering: { surfaceId: "surface-1", root: "root-1" } }]);
 		const state = __ReduceAgUiStream(__CreateAgUiStreamState(), _A2uiRecord("cursor-a2ui-1", initial));
@@ -160,6 +172,10 @@ describe("AG-UI stream state", function _Suite()
 		{
 			__ReduceAgUiStream(state, _A2uiRecord("cursor-a2ui-3", _A2ui(1, AgUiA2uiSurfaceStates.Streaming, [{ beginRendering: { surfaceId: "surface-1", root: "root-1" } }])));
 		}).toThrow("sequence regressed");
+		expect(function _SequenceGap(): void
+		{
+			__ReduceAgUiStream(state, _A2uiRecord("cursor-a2ui-4", _A2ui(4, AgUiA2uiSurfaceStates.Ready, [{ beginRendering: { surfaceId: "surface-1", root: "root-1" } }])));
+		}).toThrow("sequence has a gap");
 	});
 
 	it("keeps surfaces with one reused surface id separate across full coordinates", function _KeysA2uiByFullIdentity()

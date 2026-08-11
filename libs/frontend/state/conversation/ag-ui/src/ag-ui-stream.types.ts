@@ -40,6 +40,15 @@ export enum AgUiToolStatuses
 	Completed = "completed",
 	/** The authoritative stream reported a failure, including before later model recovery. */
 	Failed = "failed",
+	/** The tool later completed, while retaining the earlier visible failure evidence. */
+	Recovered = "recovered",
+}
+
+/** One safe failure retained in a tool call's visible lifecycle history. */
+export interface AgUiToolFailure
+{
+	/** Optional server-selected technical classification for this failed attempt. */
+	readonly code: string | null;
 }
 
 /** Browser-owned view of one safe conversation message. */
@@ -70,6 +79,8 @@ export interface AgUiToolView
 	readonly result: string | null;
 	/** Optional server-selected technical classification for a failure. */
 	readonly failureCode: string | null;
+	/** Ordered failure evidence retained even when a later attempt recovers. */
+	readonly failures: readonly AgUiToolFailure[];
 }
 
 /** Safe failure selected by the server-owned AG-UI projection. */
@@ -102,6 +113,8 @@ export interface AgUiStreamState
 	readonly tools: Readonly<Record<string, AgUiToolView>>;
 	/** Governed A2UI surfaces keyed by their complete stable presentation identity. */
 	readonly surfaces: ReadonlyMap<string, AgUiA2uiEnvelope>;
+	/** Latest source-envelope fingerprints used to detect same-sequence mutation after materialization. */
+	readonly surfaceFingerprints: ReadonlyMap<string, string>;
 	/** Names of custom display signals; their authority-bearing source payloads stay server-side. */
 	readonly customEvents: readonly string[];
 	/** Whether authority loss purged this in-memory projection. */

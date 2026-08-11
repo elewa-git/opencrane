@@ -27,12 +27,15 @@ feature.
 Malformed records and invalid lifecycle sequences fail closed. Exact duplicate cursors are ignored;
 a duplicate cursor carrying different data is rejected. Cursorless open-interrupt overlays replace
 the current interrupt set without advancing the durable cursor. An access-revoked overlay purges all
-projected content and reconnect coordinates immediately.
+projected content and reconnect coordinates immediately. Tool attempts remain visibly failed when
+the model retries; if a later attempt succeeds, the view becomes `recovered` while retaining the
+ordered safe failure classifications.
 
 Governed `opencrane.a2ui.v1` custom events are validated against the exact shared envelope,
-three-operation vocabulary, and nine-name upstream catalogue. Surfaces are keyed by conversation,
-run, message, and surface identity. Higher authoritative sequences replace their prior projection;
-same-sequence mutation and regression fail closed. The reducer stores the server-selected ten-state
+three-operation vocabulary, and constrained upstream-backed catalogue. Surfaces are keyed by conversation,
+run, message, and surface identity. Consecutive authoritative sequences append to one bounded,
+materialized operation history so a newly mounted canvas can reconstruct the complete surface;
+same-sequence mutation, regression, and gaps fail closed. The reducer stores the server-selected ten-state
 lifecycle and display-safe reason without inferring action authority or a next state locally.
 
 ## Public surface
