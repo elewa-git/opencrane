@@ -9,10 +9,11 @@ capture_recovery_command_output()
   local command_output
   local command_status
   shift
-  set +e
-  command_output="$("$@")"
-  command_status=$?
-  set -e
+  if command_output="$("$@")"; then
+    command_status=0
+  else
+    command_status=$?
+  fi
   printf -v "$output_name" '%s' "$command_output"
   return "$command_status"
 }
@@ -22,10 +23,11 @@ capture_pre_fence_main_release_revision()
   local listed_releases
   local release_status
   local status_result
-  set +e
-  release_status="$(helm status "$RELEASE" -n "$NAMESPACE" -o json)"
-  status_result=$?
-  set -e
+  if release_status="$(helm status "$RELEASE" -n "$NAMESPACE" -o json)"; then
+    status_result=0
+  else
+    status_result=$?
+  fi
   if (( status_result != 0 )); then
     if ! listed_releases="$(helm list --namespace "$NAMESPACE" --filter "^${RELEASE}$" --output json)"; then
       err "Unable to determine whether an OpenCrane Helm release exists before migration."
@@ -106,8 +108,7 @@ fence_existing_opencrane_server()
     return 1
   fi
   log "Fencing the existing OpenCrane server through its Helm release before database mutation…"
-  set +e
-  helm upgrade "$RELEASE" "$CHART_DIR" \
+  if helm upgrade "$RELEASE" "$CHART_DIR" \
     --namespace "$NAMESPACE" \
     --force-conflicts \
     --reuse-values \
@@ -117,18 +118,21 @@ fence_existing_opencrane_server()
     --set-string migrationFence.fromReleaseVersion="$FROM_RELEASE_VERSION" \
     --set-string migrationFence.toReleaseVersion="$RELEASE_VERSION" \
     --wait \
-    --timeout "${TIMEOUT}s"
-  command_status=$?
-  set -e
+    --timeout "${TIMEOUT}s"; then
+    command_status=0
+  else
+    command_status=$?
+  fi
   if (( command_status != 0 )); then
     err "OpenCrane server Helm fence failed."
     return "$command_status"
   fi
-  set +e
-  capture_recovery_command_output server_deployment_inventory kubectl get deployment "$server_deployment" \
-    -n "$NAMESPACE" --ignore-not-found -o name
-  command_status=$?
-  set -e
+  if capture_recovery_command_output server_deployment_inventory kubectl get deployment "$server_deployment" \
+    -n "$NAMESPACE" --ignore-not-found -o name; then
+    command_status=0
+  else
+    command_status=$?
+  fi
   if (( command_status != 0 )); then
     err "Unable to read the fenced OpenCrane server deployment."
     return "$command_status"
@@ -137,11 +141,12 @@ fence_existing_opencrane_server()
     err "Helm release '$RELEASE' exists but its server deployment is absent after fencing."
     return 1
   fi
-  set +e
-  capture_recovery_command_output deployment_uid kubectl get deployment "$server_deployment" \
-    -n "$NAMESPACE" -o jsonpath='{.metadata.uid}'
-  command_status=$?
-  set -e
+  if capture_recovery_command_output deployment_uid kubectl get deployment "$server_deployment" \
+    -n "$NAMESPACE" -o jsonpath='{.metadata.uid}'; then
+    command_status=0
+  else
+    command_status=$?
+  fi
   if (( command_status != 0 )); then
     err "Unable to read the fenced OpenCrane server Deployment UID."
     return "$command_status"
@@ -149,78 +154,86 @@ fence_existing_opencrane_server()
   [[ -n "$deployment_uid" ]] || { err "Fenced OpenCrane server deployment has no readable UID."; return 1; }
   fence_deadline="$(( $(date +%s) + TIMEOUT ))"
   while true; do
-    set +e
-    capture_recovery_command_output desired_replicas kubectl get deployment "$server_deployment" \
-      -n "$NAMESPACE" -o jsonpath='{.spec.replicas}'
-    command_status=$?
-    set -e
+    if capture_recovery_command_output desired_replicas kubectl get deployment "$server_deployment" \
+      -n "$NAMESPACE" -o jsonpath='{.spec.replicas}'; then
+      command_status=0
+    else
+      command_status=$?
+    fi
     if (( command_status != 0 )); then
       err "Unable to read the fenced OpenCrane server desired replicas."
       return "$command_status"
     fi
-    set +e
-    capture_recovery_command_output live_replicas kubectl get deployment "$server_deployment" \
-      -n "$NAMESPACE" -o jsonpath='{.status.replicas}'
-    command_status=$?
-    set -e
+    if capture_recovery_command_output live_replicas kubectl get deployment "$server_deployment" \
+      -n "$NAMESPACE" -o jsonpath='{.status.replicas}'; then
+      command_status=0
+    else
+      command_status=$?
+    fi
     if (( command_status != 0 )); then
       err "Unable to read the fenced OpenCrane server live replicas."
       return "$command_status"
     fi
-    set +e
-    capture_recovery_command_output server_pod_inventory kubectl get pods -n "$NAMESPACE" \
-      --selector "app.kubernetes.io/instance=${RELEASE},app.kubernetes.io/component=opencrane-server" -o json
-    command_status=$?
-    set -e
+    if capture_recovery_command_output server_pod_inventory kubectl get pods -n "$NAMESPACE" \
+      --selector "app.kubernetes.io/instance=${RELEASE},app.kubernetes.io/component=opencrane-server" -o json; then
+      command_status=0
+    else
+      command_status=$?
+    fi
     if (( command_status != 0 )); then
       err "Unable to inventory OpenCrane server pods after fencing."
       return "$command_status"
     fi
-    set +e
-    capture_recovery_command_output server_replica_set_inventory kubectl get replicasets -n "$NAMESPACE" \
-      --selector "app.kubernetes.io/instance=${RELEASE},app.kubernetes.io/component=opencrane-server" -o json
-    command_status=$?
-    set -e
+    if capture_recovery_command_output server_replica_set_inventory kubectl get replicasets -n "$NAMESPACE" \
+      --selector "app.kubernetes.io/instance=${RELEASE},app.kubernetes.io/component=opencrane-server" -o json; then
+      command_status=0
+    else
+      command_status=$?
+    fi
     if (( command_status != 0 )); then
       err "Unable to inventory OpenCrane server replica sets after fencing."
       return "$command_status"
     fi
-    set +e
-    capture_recovery_command_output server_job_inventory kubectl get jobs -n "$NAMESPACE" \
-      --selector "app.kubernetes.io/instance=${RELEASE},app.kubernetes.io/component=opencrane-server" -o json
-    command_status=$?
-    set -e
+    if capture_recovery_command_output server_job_inventory kubectl get jobs -n "$NAMESPACE" \
+      --selector "app.kubernetes.io/instance=${RELEASE},app.kubernetes.io/component=opencrane-server" -o json; then
+      command_status=0
+    else
+      command_status=$?
+    fi
     if (( command_status != 0 )); then
       err "Unable to inventory OpenCrane server jobs after fencing."
       return "$command_status"
     fi
-    set +e
-    jq -e --arg deployment_uid "$deployment_uid" '
+    if jq -e --arg deployment_uid "$deployment_uid" '
       .items | all(
         (.spec.replicas // 0) == 0
         and any(.metadata.ownerReferences[]?; .kind == "Deployment" and .uid == $deployment_uid)
       )
-    ' <<<"$server_replica_set_inventory" >/dev/null
-    command_status=$?
-    set -e
+    ' <<<"$server_replica_set_inventory" >/dev/null; then
+      command_status=0
+    else
+      command_status=$?
+    fi
     if (( command_status != 0 )); then
       err "A server replica set is foreign-owned or remains scaled above zero after fencing."
       return "$command_status"
     fi
-    set +e
-    active_pod_count="$(jq -er '[.items[] | select(.status.phase == "Pending" or .status.phase == "Running" or .status.phase == "Unknown")] | length' \
-      <<<"$server_pod_inventory")"
-    command_status=$?
-    set -e
+    if active_pod_count="$(jq -er '[.items[] | select(.status.phase == "Pending" or .status.phase == "Running" or .status.phase == "Unknown")] | length' \
+      <<<"$server_pod_inventory")"; then
+      command_status=0
+    else
+      command_status=$?
+    fi
     if (( command_status != 0 )); then
       err "Unable to classify OpenCrane server pod activity after fencing."
       return "$command_status"
     fi
-    set +e
-    nonterminal_job_count="$(jq -er '[.items[] | select(all(.status.conditions[]?; .type != "Complete" and .type != "Failed"))] | length' \
-      <<<"$server_job_inventory")"
-    command_status=$?
-    set -e
+    if nonterminal_job_count="$(jq -er '[.items[] | select(all(.status.conditions[]?; .type != "Complete" and .type != "Failed"))] | length' \
+      <<<"$server_job_inventory")"; then
+      command_status=0
+    else
+      command_status=$?
+    fi
     if (( command_status != 0 )); then
       err "Unable to classify OpenCrane server Job activity after fencing."
       return "$command_status"
@@ -241,11 +254,12 @@ database_migration_job_is_terminal_or_absent()
 {
   local command_status
   local migration_job
-  set +e
-  capture_recovery_command_output migration_job kubectl get job "${POSTGRES_RELEASE}-database-migration" \
-    -n "$NAMESPACE" --ignore-not-found -o json
-  command_status=$?
-  set -e
+  if capture_recovery_command_output migration_job kubectl get job "${POSTGRES_RELEASE}-database-migration" \
+    -n "$NAMESPACE" --ignore-not-found -o json; then
+    command_status=0
+  else
+    command_status=$?
+  fi
   if (( command_status != 0 )); then
     err "Unable to determine whether the database migration Job is still active."
     return "$command_status"
@@ -271,27 +285,30 @@ recover_failed_database_transition()
   local classification_status
   local convergence_outcome
   local policy_status
-  set +e
-  database_migration_job_is_terminal_or_absent
-  job_status=$?
-  set -e
+  if database_migration_job_is_terminal_or_absent; then
+    job_status=0
+  else
+    job_status=$?
+  fi
   if (( job_status != 0 )); then
     return "$original_status"
   fi
 
-  set +e
-  classify_database_convergence_state
-  classification_status=$?
-  set -e
+  if classify_database_convergence_state; then
+    classification_status=0
+  else
+    classification_status=$?
+  fi
   if (( classification_status != 0 )); then
     err "Database state could not be reclassified after failure; the server fence remains active."
     return "$original_status"
   fi
-  set +e
-  convergence_outcome="$(resolve_database_convergence_outcome failed_transition \
-    "$DATABASE_LIVE_CONVERGENCE_STATE")"
-  policy_status=$?
-  set -e
+  if convergence_outcome="$(resolve_database_convergence_outcome failed_transition \
+    "$DATABASE_LIVE_CONVERGENCE_STATE")"; then
+    policy_status=0
+  else
+    policy_status=$?
+  fi
   if (( policy_status != 0 )); then
     err "Database convergence policy rejected the post-failure state; the server fence remains active."
     return "$original_status"
@@ -326,10 +343,11 @@ recover_failed_database_transition()
 run_guarded_post_fence_stage()
 {
   local stage_status
-  set +e
-  "$@"
-  stage_status=$?
-  set -e
+  if "$@"; then
+    stage_status=0
+  else
+    stage_status=$?
+  fi
   if (( stage_status == 0 )); then
     return 0
   fi

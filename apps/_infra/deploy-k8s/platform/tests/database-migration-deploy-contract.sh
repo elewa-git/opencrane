@@ -53,6 +53,11 @@ grep -q 'install_postgres_release false false' "$ORCHESTRATOR"
 grep -q 'install_postgres_release true true' "$ORCHESTRATOR"
 grep -q -- '--set "migration.enabled=$migration_enabled"' "$ORCHESTRATOR"
 grep -q -- '--set "privileges.enabled=$privileges_enabled"' "$ORCHESTRATOR"
+if rg -n '^[[:space:]]*set[[:space:]]+[-+]e([[:space:];]|$)' \
+  "$ORCHESTRATOR" "$RECOVERY" "$FINALIZATION"; then
+  echo "database transition modules must not mutate their caller's errexit option" >&2
+  exit 1
+fi
 
 # The deploy timeout is the single operator-owned budget. Both Helm hook Jobs inherit it, while
 # Helm receives the Job deadline grace plus a final status-propagation margin. This prevents
@@ -418,7 +423,6 @@ done
 
 STATE_CALLS="$TEST_DIR/unreadable.calls"
 export STATE_CALLS
-set +e
 (
   source "$RECOVERY"
   source "$ORCHESTRATOR"
@@ -429,12 +433,17 @@ set +e
   fence_existing_opencrane_server() { printf '%s\n' fence >>"$STATE_CALLS"; }
   log() { :; }
   err() { :; }
-  run_database_release_transition
+  [[ "$-" == *e* ]]
+  if run_database_release_transition; then
+    echo "unreadable live convergence evidence unexpectedly succeeded" >&2
+    exit 1
+  else
+    unreadable_status=$?
+  fi
+  [[ "$-" == *e* ]]
+  [[ "$unreadable_status" == "19" ]]
+  [[ ! -s "$STATE_CALLS" ]]
 )
-unreadable_status=$?
-set -e
-[[ "$unreadable_status" == "19" ]]
-[[ ! -s "$STATE_CALLS" ]]
 
 # Exercise the successful live-source branch through its public orchestration function. This proves
 # classification -> exact SQL publication -> revision capture -> fence -> backup -> migration.
@@ -566,7 +575,6 @@ done
 # Unreadable recovery evidence leaves the fence active and does not mask the original status.
 RECOVERY_CALLS="$TEST_DIR/recovery-unreadable.calls"
 export RECOVERY_CALLS
-set +e
 (
   source "$RECOVERY"
   source "$ORCHESTRATOR"
@@ -575,12 +583,17 @@ set +e
   helm() { printf 'helm %s\n' "$*" >>"$RECOVERY_CALLS"; }
   log() { :; }
   err() { :; }
-  recover_failed_database_transition 23
+  [[ "$-" == *e* ]]
+  if recover_failed_database_transition 23; then
+    echo "unreadable recovery evidence unexpectedly succeeded" >&2
+    exit 1
+  else
+    recovery_status=$?
+  fi
+  [[ "$-" == *e* ]]
+  [[ "$recovery_status" == "23" ]]
+  [[ ! -s "$RECOVERY_CALLS" ]]
 )
-recovery_status=$?
-set -e
-[[ "$recovery_status" == "23" ]]
-[[ ! -s "$RECOVERY_CALLS" ]]
 
 # Active and non-active-but-nonterminal migration Jobs both block reclassification and rollback.
 for job_state in active unknown; do
