@@ -15,6 +15,8 @@ def resolve_tool_results(
     post_candidate,
 ) -> dict[str, object] | None:
     """Validate and consume exact saved tool results, or reject the whole batch."""
+    # Keep validation output separate from registry state. Only after the complete wire batch has a
+    # recognised terminal shape may this function consume the corresponding pending calls.
     validated: list[tuple[str, object]] = []
     tool_invocation_ids: list[str] = []
     # Validate every result before touching the pending-call registry. This keeps malformed commands
@@ -25,6 +27,8 @@ def resolve_tool_results(
             return None
         tool_invocation_id = entry["toolInvocationId"]
         outcome = entry.get("outcome")
+        # Success requires an explicit result member, including when its value is null. Absence is not
+        # silently converted into a provider result because the server owns the terminal receipt.
         if outcome == "succeeded" and "result" in entry:
             validated.append((tool_invocation_id, entry["result"]))
         else:
@@ -32,9 +36,13 @@ def resolve_tool_results(
             if outcome != "failed" or not isinstance(failure_code, str) or not failure_code:
                 post_candidate(candidate(coordinates, "run.error", {"reason": "invalid_tool_result"}))
                 return None
+            # Feed only the stable failure code back to the model. Provider messages and execution
+            # detail remain behind the control-plane boundary and cannot leak into model context.
             validated.append((tool_invocation_id, {"error": failure_code}))
         tool_invocation_ids.append(tool_invocation_id)
 
+    # Pending-call identity is checked after structural validation and consumed atomically. This is
+    # the replay fence that rejects duplicate, foreign-attempt, and never-proposed results.
     pending = take_pending_tool_calls(
         str(coordinates["runId"]),
         int(coordinates["attempt"]),
@@ -44,6 +52,8 @@ def resolve_tool_results(
         post_candidate(candidate(coordinates, "run.error", {"reason": "unknown_tool_result"}))
         return None
 
+    # The model adapter receives only invocation-to-result mappings. Stored tool names and arguments
+    # are correlation evidence; replaying them here could be mistaken for authority to execute again.
     results: dict[str, object] = {}
     for tool_invocation_id, result in validated:
         results[tool_invocation_id] = result

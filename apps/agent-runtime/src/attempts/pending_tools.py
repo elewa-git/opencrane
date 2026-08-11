@@ -14,7 +14,11 @@ import threading
 # Upper bound on simultaneously pending proposed calls; a run beyond this is already pathological.
 _MAX_PENDING_TOOL_CALLS = 256
 
+# The lock protects validation and consumption as one operation. The GIL is not an authority or an
+# atomicity contract, and stream dispatch may overlap worker completion on different threads.
 _LOCK = threading.Lock()
+# Keys include run and attempt so a provider-chosen call id cannot alias a call from another fenced
+# execution. Stored values are model-loop correlation data, never approval or execution receipts.
 _PENDING: dict[tuple[str, int, str], dict[str, object]] = {}
 
 
@@ -31,8 +35,12 @@ def record_pending_tool_call(
     invocation instead of this registry growing without limit.
     """
     with _LOCK:
+        # Capacity is checked while holding the same lock as insertion. Concurrent proposals cannot
+        # both observe free capacity and push the process registry past its defensive ceiling.
         if len(_PENDING) >= _MAX_PENDING_TOOL_CALLS:
             return
+        # Below the ceiling, re-recording the same composite identity replaces only ephemeral
+        # correlation data. Durable idempotency and action execution remain control-plane concerns.
         _PENDING[(run_id, attempt, tool_invocation_id)] = {"toolName": tool_name, "arguments": arguments}
 
 
@@ -47,9 +55,13 @@ def take_pending_tool_calls(
     partially consume state and make a later byte-identical redelivery impossible to validate.
     """
     with _LOCK:
+        # Build the full key set before any lookup or deletion. Batch validation must be all-or-none
+        # because resume commands can be redelivered after transport loss.
         keys = [(run_id, attempt, tool_invocation_id) for tool_invocation_id in tool_invocation_ids]
         if len(keys) != len(set(keys)) or any(key not in _PENDING for key in keys):
             return None
+        # Copy first, then delete while still locked. No concurrent resume can consume a subset between
+        # validation and removal, and a successful batch is available to the model exactly once.
         pending = {key[2]: _PENDING[key] for key in keys}
         for key in keys:
             del _PENDING[key]
