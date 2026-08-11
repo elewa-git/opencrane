@@ -10,6 +10,7 @@ describe("exact host silo resolution", function _DescribeExactHostSiloResolution
 
 		await expect(resolver.resolveExactHost("acme.example.com")).resolves.toEqual({ siloId: "silo-1", authorizationScope: { kind: "organization", organizationId: "silo-1" } });
 		await expect(resolver.resolveExactHost("other.example.com")).resolves.toBeNull();
+		await expect(resolver.resolveExactHost("Acme.example.com")).resolves.toBeNull();
 	});
 
 	it("rejects incomplete or non-canonical deployment coordinates", function _RejectsInvalidConfig()
