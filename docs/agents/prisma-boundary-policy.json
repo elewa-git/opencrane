@@ -613,6 +613,18 @@
 		]
 	  },
 	  {
+		"path": "libs/backend/agents/execution/protocol/src/prisma-runtime-command-decision-unit-of-work.ts",
+		"adapter": "PrismaRuntimeCommandDecisionUnitOfWork",
+		"contract": "RuntimeCommandDecisionUnitOfWork",
+		"contractImportPath": "./prisma-runtime-dispatch-authority.types.js",
+		"constructs": [
+		  {
+			"adapter": "PrismaRuntimeDeferredResumeRepository",
+			"importPath": "./prisma-runtime-deferred-resume-repository.js"
+		  }
+		]
+	  },
+	  {
 		"path": "libs/backend/server/iam/authorization/main/src/run-approval-cancellation.ts",
 		"adapter": "PrismaRunApprovalCancellationUnitOfWork",
 		"contract": "RunApprovalCancellationUnitOfWork",

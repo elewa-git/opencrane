@@ -6,12 +6,13 @@ import { AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, AGENT_RUNTIME_PROTOCOL_V1, MANA
 import { ___CreateLogger, ___DoWithTrace, type Logger } from "@opencrane/backend/observability";
 
 import { _ApplyRuntimeCandidateSideEffects, _RuntimeCandidateRequiresTerminalReporter } from "./prisma-runtime-candidate-side-effects.js";
+import { PrismaRuntimeCommandDecisionUnitOfWork } from "./prisma-runtime-command-decision-unit-of-work.js";
 import { PrismaRuntimeDeferredResumeUnitOfWork } from "./prisma-runtime-deferred-resume-repository.js";
 import { __ProjectRuntimeInputSnapshot } from "./runtime-input-snapshot-projector.js";
 import { _ParseDeferredResumePayload } from "./runtime-deferred-resume.js";
 import { __AdmitRuntimeCandidate, __AdmitRuntimeCommand } from "./runtime-protocol-authority.js";
 import type { RuntimeAdmissionRunState, RuntimeAttemptAuthority, RuntimeProtocolClock } from "./runtime-protocol-authority.types.js";
-import type { RunInputCompiler, RuntimeCandidateDispatchResult, RuntimeDispatchAuthorityConfig, RuntimeExternalActionRunner, RuntimeStreamWorkloadIdentity, RuntimeTerminalReporter } from "./prisma-runtime-dispatch-authority.types.js";
+import type { RunInputCompiler, RuntimeApprovalExpiry, RuntimeCandidateDispatchResult, RuntimeDispatchAuthorityConfig, RuntimeExternalActionRunner, RuntimeStreamWorkloadIdentity, RuntimeTerminalReporter } from "./prisma-runtime-dispatch-authority.types.js";
 
 /** Fixed retry delay returned before an admitted action has a durable invocation receipt. */
 const _EXTERNAL_ACTION_DISPATCH_RETRY_AFTER_MILLISECONDS = 1_000;
@@ -101,9 +102,11 @@ export class PrismaRuntimeDispatchAuthority
 	private readonly log: Logger;
 	/** Optional composition-root bridge to the canonical terminal run authority. */
 	private readonly terminalReporter: RuntimeTerminalReporter | null;
+	/** Optional production bridge to the deferred-approval expiry authority. */
+	private readonly approvalExpiry: RuntimeApprovalExpiry | null;
 
 	/** Creates a dispatch adapter over canonical Postgres with a bounded command lifetime. */
-	constructor(prisma: PrismaClient, config: RuntimeDispatchAuthorityConfig, compileRunInput: RunInputCompiler, externalActionRunner?: RuntimeExternalActionRunner, terminalReporter?: RuntimeTerminalReporter, clock?: RuntimeProtocolClock, log: Logger = ___CreateLogger("runtime-dispatch"))
+	constructor(prisma: PrismaClient, config: RuntimeDispatchAuthorityConfig, compileRunInput: RunInputCompiler, externalActionRunner?: RuntimeExternalActionRunner, terminalReporter?: RuntimeTerminalReporter, clock?: RuntimeProtocolClock, log: Logger = ___CreateLogger("runtime-dispatch"), approvalExpiry?: RuntimeApprovalExpiry)
 	{
 		if (!_configIsValid(config)) throw new Error("runtime dispatch authority requires distinct bounded runtime namespaces and command lifetime");
 		this.prisma = prisma;
@@ -113,6 +116,7 @@ export class PrismaRuntimeDispatchAuthority
 		this.clock = clock ?? { nowEpochMs(): number { return Date.now(); } };
 		this.log = log;
 		this.terminalReporter = terminalReporter ?? null;
+		this.approvalExpiry = approvalExpiry ?? null;
 	}
 
 	/** Returns the next server-issued command after the supplied sequence, or null while idle. */
@@ -123,9 +127,10 @@ export class PrismaRuntimeDispatchAuthority
 		const config = this.config;
 		const clock = this.clock;
 		const compileRunInput = this.compileRunInput;
+		const approvalExpiry = this.approvalExpiry;
 		return ___DoWithTrace("runtime_dispatch.command.next", { namespace: identity.namespace }, async function _traceNext(): Promise<RuntimeCommandEnvelope | null>
 		{
-			return _nextCommand(prisma, config, clock, compileRunInput, identity, open, afterSequence);
+			return _nextCommand(prisma, config, clock, compileRunInput, approvalExpiry, identity, open, afterSequence);
 		});
 	}
 
@@ -204,14 +209,25 @@ function _IsNamespace(value: string): boolean
 }
 
 /** Mint or redeliver one command for the connected runtime inside a single locked transaction. */
-async function _nextCommand(prisma: PrismaClient, config: RuntimeDispatchAuthorityConfig, clock: RuntimeProtocolClock, compileRunInput: RunInputCompiler, identity: RuntimeStreamWorkloadIdentity, open: RuntimeStreamOpen, afterSequence: number): Promise<RuntimeCommandEnvelope | null>
+async function _nextCommand(prisma: PrismaClient, config: RuntimeDispatchAuthorityConfig, clock: RuntimeProtocolClock, compileRunInput: RunInputCompiler, approvalExpiry: RuntimeApprovalExpiry | null, identity: RuntimeStreamWorkloadIdentity, open: RuntimeStreamOpen, afterSequence: number): Promise<RuntimeCommandEnvelope | null>
 {
 	if (!Number.isSafeInteger(afterSequence) || afterSequence < 0) return null;
 	return prisma.$transaction(async function _dispatch(transaction: Prisma.TransactionClient): Promise<RuntimeCommandEnvelope | null>
 	{
 		// 1. Load and lock the live assignment, run, and snapshot before any authority decision.
-		const context = await _loadContext(transaction, config, identity);
+		let context = await _loadContext(transaction, config, identity);
 		if (context === null) return null;
+		// A waiting attempt cannot advance until its server-owned deadlines are applied. Expiry shares
+		// this transaction and run lock with dispatch, then context is reloaded so cancellation or the
+		// final pending approval determines the command from durable state rather than stale memory.
+		const decisionUnitOfWork = new PrismaRuntimeCommandDecisionUnitOfWork(transaction);
+		const expiry = await decisionUnitOfWork.expireWaiting(context, approvalExpiry, new Date(clock.nowEpochMs()));
+		if (expiry === "unavailable") return null;
+		if (expiry === "applied")
+		{
+			context = await _loadContext(transaction, config, identity);
+			if (context === null) return null;
+		}
 
 		// 2. Bind the stream to the connecting runtime instance so a stale instance cannot be served.
 		const runtimeInstanceId = await _bindRuntimeInstance(transaction, context, open.runtimeInstanceId);
@@ -237,7 +253,7 @@ async function _nextCommand(prisma: PrismaClient, config: RuntimeDispatchAuthori
 		if (targetSequence !== stream.nextCommandSequence) return null;
 
 		// 4. Decide whether a new lifecycle command is due, mint it, and admit it before persisting.
-		const kind = await _decideKind(transaction, context, commands);
+		const kind = await decisionUnitOfWork.decide(context, commands);
 		if (kind === null) return null;
 		const nowEpochMs = clock.nowEpochMs();
 		const extras = await _mintCommandExtras(transaction, context, kind, stream.inputGeneration, compileRunInput);
@@ -559,32 +575,6 @@ function _commandId(context: RuntimeDispatchContext, sequence: number): string
 {
 	const canonical = JSON.stringify(["opencrane-runtime-command-id-v1", context.runId, context.attempt, sequence, context.assignmentDigest]);
 	return `command-${createHash("sha256").update(canonical, "utf8").digest("hex").slice(0, 32)}`;
-}
-
-/**
- * Choose the next lifecycle command that is due, or none.
- *
- * `start_attempt` is minted once while the run is assigned or running. `cancel_attempt` is minted
- * once while the run is `cancelling` as a POSITIVE stop signal the runtime acts on immediately; it is
- * additive to — never a replacement for — the fence bump and stream loss that already bound a
- * cancelled attempt, so cancellation still holds if the runtime never receives the frame.
- * `resume_attempt` is minted while the run is running once at least one approved deferred-tool result
- * or queued steering request is ready and no resume has yet been dispatched. The sole-resume fence
- * prevents a second executor loop from running concurrently for the same attempt.
- */
-async function _decideKind(transaction: Prisma.TransactionClient, context: RuntimeDispatchContext, commands: readonly DispatchedCommandRow[]): Promise<RuntimeCommandKind | null>
-{
-	const runState = context.runState;
-	const hasStart = commands.some(function _isStart(row) { return row.kind === RuntimeCommandKind.StartAttempt; });
-	if (runState === "cancelling") return commands.some(function _isCancel(row) { return row.kind === RuntimeCommandKind.CancelAttempt; }) ? null : RuntimeCommandKind.CancelAttempt;
-	if ((runState === "assigned" || runState === "running") && !hasStart) return RuntimeCommandKind.StartAttempt;
-	if (runState === "running" && hasStart)
-	{
-		if (commands.some(function _isResume(row) { return row.kind === RuntimeCommandKind.ResumeAttempt; })) return null;
-		const loaded = await new PrismaRuntimeDeferredResumeUnitOfWork(transaction).load(context.runId, context.attempt, 0);
-		if (loaded !== null) return RuntimeCommandKind.ResumeAttempt;
-	}
-	return null;
 }
 
 /** Maps a Prisma run-state enum member to the lowercase admission-fence run state. */

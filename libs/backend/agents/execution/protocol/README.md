@@ -101,12 +101,23 @@ baseline. It reads the assignment, run, and immutable snapshot rows owned by the
 conversation domains. Terminal state remains written by the injected execution-run authority, never
 by this transport/protocol package directly.
 
-`RuntimeSteeringRequest` holds each owner-authored instruction before the runtime observes it. A
-request can be accepted only before the attempt's single fenced resume command is minted; that command
-consumes every pending request and seeds the runtime's pre-model buffer. This prevents a second
-executor loop from running concurrently for the same attempt. Its queue is deliberately separate from
+`RuntimeSteeringRequest` holds each owner-authored instruction before the runtime observes it. The
+first fenced resume command may consume every pending request and seed the runtime's pre-model buffer.
+Steering alone cannot mint another resume while that executor loop may still be active. A later
+deferred-tool approval marker may mint a later resume because the intervening
+`Running → WaitingForApproval → Running` cycle proves the previous loop paused at a governed tool
+boundary. Each command consumes only its exact durable markers, so reconnect redelivers the stored
+frame byte-for-byte without reopening the batch. Its queue is deliberately separate from
 `RuntimeSteeringBoundary`, which remains the sole authority that can advance input generation. A lost
 browser connection therefore cannot drop an instruction or force a model turn to change mid-flight.
+
+| Durable run state | New evidence | Command-poll outcome |
+| --- | --- | --- |
+| `WaitingForApproval` | one or more deadlines are due | Expire due rows in the held transaction; remain idle until the batch has no pending row. |
+| `Running` before any resume | approval marker or queued steering | Mint one resume and consume exactly those markers. |
+| `Running` after a prior resume | fresh approval marker | Mint the next batch resume. |
+| `Running` after a prior resume | steering only | Remain idle; do not supersede the active loop. |
+| `Cancelling` | any stale approval or steering marker | Cancellation wins; mint at most the one positive stop command. |
 
 ## Dependency direction
 

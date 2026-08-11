@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import { AGENT_RUNTIME_PROTOCOL_V1, type CompiledRunInput, type RuntimeCandidate, type RuntimeCommandEnvelope } from "@opencrane/contracts";
 
 import { PrismaRuntimeDispatchAuthority } from "../prisma-runtime-dispatch-authority.js";
-import type { RunInputCompiler, RuntimeExternalActionRunner, RuntimeStreamWorkloadIdentity, RuntimeTerminalReporter } from "../prisma-runtime-dispatch-authority.types.js";
+import type { RunInputCompiler, RuntimeApprovalExpiry, RuntimeExternalActionRunner, RuntimeStreamWorkloadIdentity, RuntimeTerminalReporter } from "../prisma-runtime-dispatch-authority.types.js";
 import type { RuntimeProtocolClock } from "../runtime-protocol-authority.types.js";
 
 /** Fixed reviewed identity for the registered runtime Pod under test. */
@@ -92,6 +92,8 @@ interface FakeOptions
 	readonly logger?: Logger;
 	/** Optional terminal lifecycle bridge supplied by the composition root. */
 	readonly terminalReporter?: RuntimeTerminalReporter;
+	/** Optional transaction-scoped approval expiry bridge supplied by the composition root. */
+	readonly approvalExpiry?: RuntimeApprovalExpiry;
 	/** Optional trusted clock for retry-window expiry assertions. */
 	readonly clock?: RuntimeProtocolClock;
 	/** Approved deferred-tool results available for a resume frame. */
@@ -105,7 +107,7 @@ interface FakeOptions
 }
 
 /** Minimal in-memory Prisma double covering only the reads and writes the adapter performs. */
-function _fakePrisma(options: FakeOptions): { prisma: PrismaClient; queryRaw: ReturnType<typeof vi.fn>; streams: FakeStreamRow[]; commands: FakeCommandRow[]; retries: FakeExternalActionRetryRow[]; approvals: { id: string; state: string; finalArguments: unknown; finalArgumentsDigest: string; toolInvocation: { toolInvocationId: string }; resumeTokenHash: string | null }[]; steeringRequests: { id: string; content: unknown; state: string }[]; toolInvocations: { id: string; runId: string; attempt: number; toolInvocationId: string; requestFingerprint: string; state: string; result: unknown }[] }
+function _fakePrisma(options: FakeOptions): { prisma: PrismaClient; queryRaw: ReturnType<typeof vi.fn>; run: { state: string }; streams: FakeStreamRow[]; commands: FakeCommandRow[]; retries: FakeExternalActionRetryRow[]; approvals: { id: string; state: string; finalArguments: unknown; finalArgumentsDigest: string; toolInvocation: { toolInvocationId: string }; resumeTokenHash: string | null }[]; steeringRequests: { id: string; content: unknown; state: string }[]; toolInvocations: { id: string; runId: string; attempt: number; toolInvocationId: string; requestFingerprint: string; state: string; result: unknown }[] }
 {
 	const streams: FakeStreamRow[] = [];
 	const commands: FakeCommandRow[] = [];
@@ -217,7 +219,7 @@ function _fakePrisma(options: FakeOptions): { prisma: PrismaClient; queryRaw: Re
 			},
 		},
 	};
-	return { prisma: client as unknown as PrismaClient, queryRaw, streams, commands, retries, approvals, steeringRequests, toolInvocations };
+	return { prisma: client as unknown as PrismaClient, queryRaw, run, streams, commands, retries, approvals, steeringRequests, toolInvocations };
 }
 
 /** Deterministic fake compiler: same snapshot digest always yields byte-identical compiled input. */
@@ -230,7 +232,7 @@ const _compileRunInput: RunInputCompiler = async function _compile(snapshot): Pr
 function _authority(options: FakeOptions)
 {
 	const fake = _fakePrisma(options);
-	return { authority: new PrismaRuntimeDispatchAuthority(fake.prisma, { personalRuntimeNamespace: "runtime-ns", managedRuntimeNamespace: "managed-runtime-ns", commandTtlMilliseconds: 60_000, externalActionRetryLimit: 3, externalActionRetryWindowMilliseconds: 30_000 }, _compileRunInput, options.externalActionRunner, options.terminalReporter, options.clock ?? _clock, options.logger), ...fake };
+	return { authority: new PrismaRuntimeDispatchAuthority(fake.prisma, { personalRuntimeNamespace: "runtime-ns", managedRuntimeNamespace: "managed-runtime-ns", commandTtlMilliseconds: 60_000, externalActionRetryLimit: 3, externalActionRetryWindowMilliseconds: 30_000 }, _compileRunInput, options.externalActionRunner, options.terminalReporter, options.clock ?? _clock, options.logger, options.approvalExpiry), ...fake };
 }
 
 /** Build a runtime event candidate bound to a dispatched command. */
@@ -365,6 +367,55 @@ describe("PrismaRuntimeDispatchAuthority", function _describeDispatchAuthority()
 		const redelivered = await context.authority.__NextCommand(_identity, _open, 1);
 
 		expect(redelivered).toEqual(resume);
+	});
+
+	it("mints a later resume only when a new approval batch produces a fresh marker", async function _resumesLaterApprovalBatch()
+	{
+		const context = _authority({ runState: "Running", approvedDeferredResults: [{ batch: 1 }] });
+		await context.authority.__NextCommand(_identity, _open, 0);
+		await context.authority.__NextCommand(_identity, _open, 1);
+		context.approvals.push({ id: "approval-later", state: "Approved", finalArguments: { batch: 2 }, finalArgumentsDigest: "sha256:approved-later", toolInvocation: { toolInvocationId: "invocation-later" }, resumeTokenHash: "hash-later" });
+
+		const later = await context.authority.__NextCommand(_identity, _open, 2);
+
+		expect(later?.kind).toBe("resume_attempt");
+		expect(later?.kind === "resume_attempt" ? later.payload.deferredToolResults : null).toEqual([{ approvalRequestId: "approval-later", decision: "approved", toolInvocationId: "invocation-later", arguments: { batch: 2 }, argumentsDigest: "sha256:approved-later" }]);
+		expect(context.commands.filter(row => row.kind === "ResumeAttempt")).toHaveLength(2);
+	});
+
+	it("does not mint a second resume for steering without a new approval pause", async function _rejectsConcurrentSteeringResume()
+	{
+		const context = _authority({ runState: "Running", pendingSteeringRequests: [{ text: "First." }] });
+		await context.authority.__NextCommand(_identity, _open, 0);
+		await context.authority.__NextCommand(_identity, _open, 1);
+		context.steeringRequests.push({ id: "steering-later", content: { text: "Do not interrupt the active loop." }, state: "Pending" });
+
+		expect(await context.authority.__NextCommand(_identity, _open, 2)).toBeNull();
+		expect(context.steeringRequests[1]?.state).toBe("Pending");
+	});
+
+	it("expires a waiting batch inside command polling before minting its resume", async function _expiresWaitingBatch()
+	{
+		let resumeRun = function _noop(): void {};
+		const expiry = { expireInTransaction: vi.fn(async function _expire() { resumeRun(); return { expiredCount: 1, resumed: true }; }) };
+		const context = _authority({ runState: "WaitingForApproval", approvedDeferredResults: [{ expired: true }], approvalExpiry: expiry });
+		resumeRun = function _resume(): void { context.run.state = "Running"; };
+		context.streams.push({ runId: "run-1", attempt: 1, fence: 1, inputGeneration: 0, runtimeInstanceId: "instance-1", nextCommandSequence: 2, acceptedCandidateIds: [] });
+		context.commands.push({ runId: "run-1", attempt: 1, sequence: 1, commandId: "command-start", kind: "StartAttempt", fence: 1, issuedAt: new Date("2026-07-20T00:00:30.000Z"), expiresAt: new Date("2026-07-20T00:01:30.000Z") });
+
+		const resume = await context.authority.__NextCommand(_identity, _open, 1);
+
+		expect(expiry.expireInTransaction).toHaveBeenCalledWith(expect.anything(), { runId: "run-1", attempt: 1, now: new Date("2026-07-20T00:01:00.000Z") });
+		expect(resume?.kind).toBe("resume_attempt");
+	});
+
+	it("keeps a partially expired approval batch waiting and mints no command", async function _keepsWaitingAfterPartialExpiry()
+	{
+		const expiry = { expireInTransaction: vi.fn().mockResolvedValue({ expiredCount: 1, resumed: false }) };
+		const context = _authority({ runState: "WaitingForApproval", approvalExpiry: expiry });
+
+		expect(await context.authority.__NextCommand(_identity, _open, 0)).toBeNull();
+		expect(context.commands).toHaveLength(0);
 	});
 
 	it("rejects redelivery when a persisted resume payload is not an exact result array", async function _rejectsMalformedResumeRedelivery()

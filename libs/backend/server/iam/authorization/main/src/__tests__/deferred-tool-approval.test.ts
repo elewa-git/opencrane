@@ -1,7 +1,7 @@
 import { ActionExecutionState, AgentRunState, ApprovalRequestState, OrgMemberStatus, Prisma, WorkloadAssignmentState } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
 
-import { __DecideDeferredToolRequest, __DeferToolRequest } from "../deferred-tool-approval.js";
+import { __DecideDeferredToolRequest, __DeferToolRequest, __ExpireDeferredToolApprovalBatch } from "../deferred-tool-approval.js";
 import { __DigestCanonicalJson } from "../canonical-json-digest.js";
 import { DeferredToolDecisionKinds } from "../deferred-tool-approval.types.js";
 
@@ -25,6 +25,27 @@ function _pending(): unknown
 }
 
 const NOW = new Date("2026-07-21T09:00:00.000Z");
+
+/** Build a transaction for one command-poll expiry sweep over already-selected due rows. */
+function _expiryTransaction(due: readonly { id: string; runId: string; attempt: number; toolInvocationRowId: string }[], pendingCounts: readonly number[], resumed: boolean): { readonly transaction: Prisma.TransactionClient; readonly approvalUpdateMany: ReturnType<typeof vi.fn>; readonly invocationUpdateMany: ReturnType<typeof vi.fn>; readonly runUpdateMany: ReturnType<typeof vi.fn> }
+{
+	const approvalUpdateMany = vi.fn().mockResolvedValue({ count: 1 });
+	const invocationUpdateMany = vi.fn().mockResolvedValue({ count: 1 });
+	const runUpdateMany = vi.fn().mockResolvedValue({ count: 1 });
+	const runFindUnique = vi.fn()
+		.mockResolvedValueOnce({ id: "run-1", attempt: 2, state: AgentRunState.WaitingForApproval })
+		.mockResolvedValue({ id: "run-1", attempt: 2, state: resumed ? AgentRunState.Running : AgentRunState.WaitingForApproval });
+	return {
+		transaction: {
+			agentRun: { findUnique: runFindUnique, updateMany: runUpdateMany },
+			approvalRequest: { findMany: vi.fn().mockResolvedValue(due), updateMany: approvalUpdateMany, count: vi.fn().mockResolvedValueOnce(pendingCounts[0] ?? 0).mockResolvedValueOnce(pendingCounts[1] ?? pendingCounts[0] ?? 0) },
+			toolInvocation: { updateMany: invocationUpdateMany },
+		} as unknown as Prisma.TransactionClient,
+		approvalUpdateMany,
+		invocationUpdateMany,
+		runUpdateMany,
+	};
+}
 
 describe("deferred tool approval authority", function _suite()
 {
@@ -96,6 +117,28 @@ describe("deferred tool approval authority", function _suite()
 			where: expect.objectContaining({ state: ApprovalRequestState.Pending, expiresAt: { lte: NOW } }),
 			data: expect.objectContaining({ state: ApprovalRequestState.Expired, resumeTokenHash: expect.stringMatching(/^sha256:/) }),
 		}));
+	});
+
+	it("expires every due request and resumes only after the batch is empty", async function _expiresDueBatch()
+	{
+		const due = [
+			{ id: "approval-1", runId: "run-1", attempt: 2, toolInvocationRowId: "tool-1" },
+			{ id: "approval-2", runId: "run-1", attempt: 2, toolInvocationRowId: "tool-2" },
+		];
+		const context = _expiryTransaction(due, [1, 0], true);
+
+		await expect(__ExpireDeferredToolApprovalBatch(context.transaction, { runId: "run-1", attempt: 2, now: NOW })).resolves.toEqual({ expiredCount: 2, resumed: true });
+		expect(context.approvalUpdateMany).toHaveBeenCalledTimes(2);
+		expect(context.invocationUpdateMany).toHaveBeenCalledTimes(2);
+		expect(context.runUpdateMany).toHaveBeenCalledTimes(1);
+	});
+
+	it("keeps a mixed due and future batch waiting after expiring only the due row", async function _keepsFutureApprovalWaiting()
+	{
+		const context = _expiryTransaction([{ id: "approval-due", runId: "run-1", attempt: 2, toolInvocationRowId: "tool-due" }], [1], false);
+
+		await expect(__ExpireDeferredToolApprovalBatch(context.transaction, { runId: "run-1", attempt: 2, now: NOW })).resolves.toEqual({ expiredCount: 1, resumed: false });
+		expect(context.runUpdateMany).not.toHaveBeenCalled();
 	});
 
 	it("fails closed when the owner membership was suspended before decision", async function _suspendedMembership()
