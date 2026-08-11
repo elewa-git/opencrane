@@ -24,10 +24,13 @@ this package then preserves the supplied operation order and renders one stable 
 presentational package.
 
 The catalogue admits exactly Text, Button, TextField, SingleChoice, MultipleChoice, Select, Slider,
-DateTimeInput, Image, Card, and List. The two one-value v4 choice contracts reuse the constrained
-upstream `MultipleChoice` renderer and property schema; they do not introduce arbitrary renderer code.
-Unknown or malformed components fail closed to a generic unsupported placeholder without
-echoing payload data. Stable component ids preserve focus during progressive updates.
+DateTimeInput, Image, Card, and List. OpenCrane owns narrow dynamic-renderer adapters for the three
+choice contracts and DateTimeInput because pinned v0.8 collapses multiple selection and strips the
+labels those controls need. The adapters retain the public protocol names and render native radio,
+bounded-checkbox, select, and labelled date/time semantics. They inherit only the upstream non-visual
+processor/action boundary; their templates and styles remain package-owned. Unknown or malformed
+components fail closed to a generic unsupported placeholder without echoing payload data. Stable
+component ids preserve focus during progressive updates.
 
 ## Public surface
 
@@ -38,6 +41,11 @@ echoing payload data. Stable component ids preserve focus during progressive upd
 - `A2uiSurfacePresentation` and `A2uiDisplayedActionIntent` — the finite display contract shared
   with the host. Envelope version, operations, and lifecycle state use the canonical
   `AG_UI_A2UI_ENVELOPE_VERSION`, `AgUiA2uiOperation`, and `AgUiA2uiSurfaceStates` contracts.
+
+The accessible choice and date/time adapters are internal catalogue entries, not additional public
+exports. Their `input` and `change` events update only surface-local display data. The canvas drops
+those local event names; only an explicit displayed action such as Button can become a coordinate-
+bound `A2uiDisplayedActionIntent` for later server authorization.
 
 ## Boundary
 

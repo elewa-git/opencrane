@@ -9,6 +9,7 @@ import { BrowserDynamicTestingModule, platformBrowserDynamicTesting } from "@ang
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 
 import { AG_UI_A2UI_ENVELOPE_VERSION, AgUiA2uiSurfaceStates, type AgUiA2uiOperation } from "@opencrane/contracts";
+import { toSanitizedMarkdownHtml } from "@opencrane/state/conversation/render";
 
 import { A2uiCanvasComponent } from "../a2ui-canvas.component.js";
 import { provideOpenCraneA2ui } from "../a2ui.providers.js";
@@ -19,6 +20,18 @@ const _CANVAS_TEMPLATE = readFileSync(join(process.cwd(), "src/lib/a2ui-canvas.c
 
 /** Real component styles resolved with the template so TestBed exercises the production component. */
 const _CANVAS_STYLES = readFileSync(join(process.cwd(), "src/lib/a2ui-canvas.component.scss"), "utf8");
+
+/** Package-owned accessible choice template compiled with the dynamic renderer. */
+const _CHOICE_TEMPLATE = readFileSync(join(process.cwd(), "src/lib/a2ui-choice.component.html"), "utf8");
+
+/** Package-owned choice styles compiled with the dynamic renderer. */
+const _CHOICE_STYLES = readFileSync(join(process.cwd(), "src/lib/a2ui-choice.component.scss"), "utf8");
+
+/** Package-owned accessible date/time template compiled with the dynamic renderer. */
+const _DATE_TIME_TEMPLATE = readFileSync(join(process.cwd(), "src/lib/a2ui-date-time.component.html"), "utf8");
+
+/** Package-owned date/time styles compiled with the dynamic renderer. */
+const _DATE_TIME_STYLES = readFileSync(join(process.cwd(), "src/lib/a2ui-date-time.component.scss"), "utf8");
 
 /** Canonical lifecycle label, busy state, and server/browser authority cases. */
 const _STATE_CASES: readonly (readonly [AgUiA2uiSurfaceStates, string, boolean])[] =
@@ -89,6 +102,29 @@ function _surfaceOperations(copy: string, includeBeginRendering = true): readonl
 	return operations;
 }
 
+/** Exercise the distinct accessible semantics of every admitted choice and date/time control. */
+function _controlOperations(): readonly AgUiA2uiOperation[]
+{
+	const options = [{ label: { literalString: "Current" }, value: "current" }, { label: { literalString: "Proposed" }, value: "proposed" }, { label: { literalString: "Deferred" }, value: "deferred" }];
+	return [
+		{
+			surfaceUpdate:
+			{
+				surfaceId: "surface-pricing",
+				components:
+				[
+					{ id: "controls", component: { List: { children: { explicitList: ["single", "multiple", "select", "date-time"] }, direction: "vertical", alignment: "stretch" } } },
+					{ id: "single", component: { SingleChoice: { selections: { literalArray: ["current"] }, options, maxAllowedSelections: 1 } } },
+					{ id: "multiple", component: { MultipleChoice: { selections: { literalArray: ["current"] }, options, maxAllowedSelections: 2 } } },
+					{ id: "select", component: { Select: { selections: { literalArray: ["proposed"] }, options, maxAllowedSelections: 1 } } },
+					{ id: "date-time", component: { DateTimeInput: { value: { literalString: "2026-08-18T09:30" }, enableDate: true, enableTime: true } } }
+				]
+			}
+		},
+		{ beginRendering: { surfaceId: "surface-pricing", root: "controls" } }
+	] as readonly AgUiA2uiOperation[];
+}
+
 /** Build one full-coordinate presentation while allowing a focused test to replace fields. */
 function _presentation(overrides: Partial<A2uiSurfacePresentation> = {}): A2uiSurfacePresentation
 {
@@ -105,16 +141,10 @@ function _presentation(overrides: Partial<A2uiSurfacePresentation> = {}): A2uiSu
 	};
 }
 
-/** Test-only sanitizer proving the required port without allowing story or test HTML execution. */
-function _sanitize(markdown: string): string
-{
-	return markdown.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
-}
-
 /** Create and settle the production component with its real A2UI providers. */
 async function _createFixture(presentation: A2uiSurfacePresentation): Promise<ComponentFixture<_A2uiCanvasTestHostComponent>>
 {
-	TestBed.configureTestingModule({ imports: [_A2uiCanvasTestHostComponent], providers: [...provideOpenCraneA2ui(_sanitize), { provide: PLATFORM_ID, useValue: "server" }] });
+	TestBed.configureTestingModule({ imports: [_A2uiCanvasTestHostComponent], providers: [...provideOpenCraneA2ui(toSanitizedMarkdownHtml), { provide: PLATFORM_ID, useValue: "server" }] });
 	const fixture = TestBed.createComponent(_A2uiCanvasTestHostComponent);
 	fixture.componentInstance.presentation.set(presentation);
 	fixture.detectChanges();
@@ -152,6 +182,22 @@ beforeAll(async function _InitializeAngularTesting()
 		if (url.endsWith("a2ui-canvas.component.scss"))
 		{
 			return _CANVAS_STYLES;
+		}
+		if (url.endsWith("a2ui-choice.component.html"))
+		{
+			return _CHOICE_TEMPLATE;
+		}
+		if (url.endsWith("a2ui-choice.component.scss"))
+		{
+			return _CHOICE_STYLES;
+		}
+		if (url.endsWith("a2ui-date-time.component.html"))
+		{
+			return _DATE_TIME_TEMPLATE;
+		}
+		if (url.endsWith("a2ui-date-time.component.scss"))
+		{
+			return _DATE_TIME_STYLES;
 		}
 		return "";
 	});
@@ -253,6 +299,48 @@ describe("A2UI canvas DOM contract", function _A2uiCanvasDomContract()
 		expect(updatedInput).toBe(focusedInput);
 		expect(document.activeElement).toBe(focusedInput);
 		expect((fixture.nativeElement as HTMLElement).textContent).toContain("Pricing evidence is ready.");
+	});
+
+	it("renders heading usage hints through the production sanitized markdown pipeline", async function _RendersSanitizedHeading()
+	{
+		const fixture = await _createFixture(_presentation());
+		const heading = _requiredElement<HTMLHeadingElement>(fixture, "h3");
+		expect(heading.textContent).toBe("Apply the proposed pricing?");
+		expect((fixture.nativeElement as HTMLElement).textContent).not.toContain("### Apply");
+	});
+
+	it("renders distinct accessible control semantics while keeping local changes outside governed intents", async function _RendersAccessibleControls()
+	{
+		const fixture = await _createFixture(_presentation({ operations: _controlOperations() }));
+		const root = fixture.nativeElement as HTMLElement;
+		const fieldsets = root.querySelectorAll("fieldset");
+		expect(fieldsets).toHaveLength(2);
+		expect(fieldsets[0]?.querySelector("legend")?.textContent).toContain("Single choice");
+		expect(fieldsets[1]?.querySelector("legend")?.textContent).toContain("Multiple choice");
+		expect(fieldsets[0]?.querySelectorAll("input[type='radio']")).toHaveLength(3);
+		expect(fieldsets[1]?.querySelectorAll("input[type='checkbox']")).toHaveLength(3);
+
+		const select = _requiredElement<HTMLSelectElement>(fixture, "wo-a2ui-choice select");
+		const selectLabel = root.querySelector<HTMLLabelElement>(`label[for='${select.id}']`);
+		expect(selectLabel?.textContent).toContain("Select");
+		expect(select.value).toBe("proposed");
+
+		const dateTime = _requiredElement<HTMLInputElement>(fixture, "input[type='datetime-local']");
+		const dateTimeLabel = root.querySelector<HTMLLabelElement>(`label[for='${dateTime.id}']`);
+		expect(dateTimeLabel?.textContent).toContain("Date and time");
+
+		const checkboxes = [...fieldsets[1]!.querySelectorAll<HTMLInputElement>("input[type='checkbox']")];
+		checkboxes[1]!.click();
+		fixture.detectChanges();
+		await fixture.whenStable();
+		expect(checkboxes[2]!.disabled).toBe(true);
+		expect(fixture.componentInstance.intents).toEqual([]);
+
+		select.value = "deferred";
+		select.dispatchEvent(new Event("change"));
+		fixture.detectChanges();
+		await fixture.whenStable();
+		expect(fixture.componentInstance.intents).toEqual([]);
 	});
 
 	it("ignores duplicate and stale sequences for both rendering and lifecycle", async function _RejectsStaleSequence()

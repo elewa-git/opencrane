@@ -87,7 +87,7 @@ describe("A2UI display admission", function _A2uiDisplayAdmission()
 
 describe("A2UI catalogue", function _A2uiCatalogue()
 {
-	it("contains exactly the eleven v4 visual contracts backed by pinned upstream renderers", function _ContainsExactCatalogue()
+	it("contains exactly the eleven v4 visual contracts backed by pinned or owned protocol renderers", function _ContainsExactCatalogue()
 	{
 		const names = Object.keys(_OpenCraneA2uiCatalog()).sort();
 		expect(names).toEqual(Object.values(A2uiComponentNames).sort());
@@ -96,7 +96,7 @@ describe("A2UI catalogue", function _A2uiCatalogue()
 		expect(names).toContain(A2uiComponentNames.Select);
 	});
 
-	it("maps the two accepted one-value contracts onto the pinned choice processor", function _MapsChoiceVariants()
+	it("preserves all three public choice names through the pinned processor boundary", function _PreservesChoiceVariants()
 	{
 		const properties = { selections: { literalArray: [] }, options: [{ label: { literalString: "One" }, value: "one" }], maxAllowedSelections: 1 };
 		const operations =
@@ -105,8 +105,31 @@ describe("A2UI catalogue", function _A2uiCatalogue()
 		] as unknown as readonly AgUiA2uiOperation[];
 		const mapped = _ToPinnedA2uiOperations(operations);
 
-		expect(mapped[0]).toEqual({ surfaceUpdate: { surfaceId: "surface-pricing", components: [{ id: "single", component: { MultipleChoice: properties } }, { id: "select", component: { MultipleChoice: properties } }] } });
+		expect(mapped[0]).toEqual(operations[0]);
 		expect(operations[0]).toHaveProperty("surfaceUpdate.components.0.component.SingleChoice");
+		expect(mapped[0]).toHaveProperty("surfaceUpdate.components.1.component.Select");
+	});
+
+	it("keeps multiple choice distinct while enforcing one selection for its two v4 aliases", function _ConstrainsChoiceSemantics()
+	{
+		const options = [{ label: { literalString: "One" }, value: "one" }, { label: { literalString: "Two" }, value: "two" }];
+		const operation = function _ChoiceOperation(name: A2uiComponentNames, maxAllowedSelections: number, selections: readonly string[] = ["one"]): AgUiA2uiOperation
+		{
+			return { surfaceUpdate: { surfaceId: "surface-pricing", components: [{ id: "choice", component: { [name]: { selections: { literalArray: selections }, options, maxAllowedSelections } } }] } } as unknown as AgUiA2uiOperation;
+		};
+
+		expect(_AdmitA2uiSurfacePresentation(_presentation({ operations: [operation(A2uiComponentNames.SingleChoice, 1)] }))).toBe(true);
+		expect(_AdmitA2uiSurfacePresentation(_presentation({ operations: [operation(A2uiComponentNames.Select, 1)] }))).toBe(true);
+		expect(_AdmitA2uiSurfacePresentation(_presentation({ operations: [operation(A2uiComponentNames.MultipleChoice, 2)] }))).toBe(true);
+		expect(_AdmitA2uiSurfacePresentation(_presentation({ operations: [operation(A2uiComponentNames.SingleChoice, 2)] }))).toBe(false);
+		expect(_AdmitA2uiSurfacePresentation(_presentation({ operations: [operation(A2uiComponentNames.Select, 2)] }))).toBe(false);
+		expect(_AdmitA2uiSurfacePresentation(_presentation({ operations: [operation(A2uiComponentNames.SingleChoice, 1, ["one", "two"])] }))).toBe(false);
+		expect(_AdmitA2uiSurfacePresentation(_presentation({ operations: [operation(A2uiComponentNames.Select, 1, ["one", "two"])] }))).toBe(false);
+
+		const mapped = _ToPinnedA2uiOperations([operation(A2uiComponentNames.SingleChoice, 1), operation(A2uiComponentNames.MultipleChoice, 2), operation(A2uiComponentNames.Select, 1)]);
+		expect(mapped[0]).toHaveProperty("surfaceUpdate.components.0.component.SingleChoice.maxAllowedSelections", 1);
+		expect(mapped[1]).toHaveProperty("surfaceUpdate.components.0.component.MultipleChoice.maxAllowedSelections", 2);
+		expect(mapped[2]).toHaveProperty("surfaceUpdate.components.0.component.Select.maxAllowedSelections", 1);
 	});
 });
 

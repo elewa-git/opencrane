@@ -2,6 +2,7 @@ import { applicationConfig } from "@storybook/angular";
 import type { Meta, StoryObj } from "@storybook/angular";
 
 import { AG_UI_A2UI_ENVELOPE_VERSION, AgUiA2uiSurfaceStates, type AgUiA2uiOperation } from "@opencrane/contracts";
+import { toSanitizedMarkdownHtml } from "@opencrane/state/conversation/render";
 
 import { A2uiCanvasComponent } from "../a2ui-canvas.component.js";
 import { provideOpenCraneA2ui } from "../a2ui.providers.js";
@@ -27,11 +28,37 @@ const _SURFACE_OPERATIONS: readonly AgUiA2uiOperation[] =
 	{ beginRendering: { surfaceId: "surface-pricing", root: "pricing-form" } }
 ];
 
-/** Escape story markdown to demonstrate the same required sanitizer port as production. */
-function _sanitizeStoryMarkdown(markdown: string): string
-{
-	return markdown.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
-}
+/** Stable inline image used to exercise the admitted image renderer without network input. */
+const _CATALOGUE_IMAGE = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='96' height='48' viewBox='0 0 96 48'%3E%3Crect width='96' height='48' rx='6' fill='%23e9f8fb'/%3E%3Cpath d='M16 32l12-12 9 9 12-15 30 28H16z' fill='%230db5cc'/%3E%3C/svg%3E";
+
+/** Representative operations that render every component admitted by the v4 catalogue. */
+const _CATALOGUE_OPERATIONS: readonly AgUiA2uiOperation[] =
+[
+	{
+		surfaceUpdate:
+		{
+			surfaceId: "surface-catalogue",
+			components:
+			[
+				{ id: "catalogue-root", component: { List: { children: { explicitList: ["catalogue-title", "catalogue-card", "catalogue-text-field", "single-choice", "multiple-choice", "select-choice", "catalogue-slider", "catalogue-date", "image-title", "catalogue-image", "catalogue-button"] }, direction: "vertical", alignment: "stretch" } } },
+				{ id: "catalogue-title", component: { Text: { text: { literalString: "Approved interactive components" }, usageHint: "h3" } } },
+				{ id: "catalogue-card-copy", component: { Text: { text: { literalString: "Card groups related evidence without granting action authority." }, usageHint: "body" } } },
+				{ id: "catalogue-card", component: { Card: { child: "catalogue-card-copy" } } },
+				{ id: "catalogue-text-field", component: { TextField: { label: { literalString: "Review note" }, text: { literalString: "Evidence checked" }, textFieldType: "shortText" } } },
+				{ id: "single-choice", component: { SingleChoice: { selections: { literalArray: ["current"] }, options: [{ label: { literalString: "Current agreement" }, value: "current" }, { label: { literalString: "New proposal" }, value: "proposal" }], maxAllowedSelections: 1 } } },
+				{ id: "multiple-choice", component: { MultipleChoice: { selections: { literalArray: ["research"] }, options: [{ label: { literalString: "Research" }, value: "research" }, { label: { literalString: "Security" }, value: "security" }, { label: { literalString: "Delivery" }, value: "delivery" }], maxAllowedSelections: 2 } } },
+				{ id: "select-choice", component: { Select: { selections: { literalArray: ["weekly"] }, options: [{ label: { literalString: "Weekly" }, value: "weekly" }, { label: { literalString: "Monthly" }, value: "monthly" }], maxAllowedSelections: 1 } } },
+				{ id: "catalogue-slider", component: { Slider: { label: { literalString: "Confidence" }, value: { literalNumber: 72 }, minValue: 0, maxValue: 100 } } },
+				{ id: "catalogue-date", component: { DateTimeInput: { value: { literalString: "2026-08-18T09:30" }, enableDate: true, enableTime: true } } },
+				{ id: "image-title", component: { Text: { text: { literalString: "Image" }, usageHint: "body" } } },
+				{ id: "catalogue-image", component: { Image: { url: { literalString: _CATALOGUE_IMAGE }, altText: { literalString: "Abstract cyan landscape sample" }, fit: "contain", usageHint: "smallFeature" } } },
+				{ id: "catalogue-button-label", component: { Text: { text: { literalString: "Request review" }, usageHint: "body" } } },
+				{ id: "catalogue-button", component: { Button: { child: "catalogue-button-label", primary: true, action: { name: "request-review", context: [{ key: "catalogue", value: { literalString: "v4" } }] } } } }
+			]
+		}
+	},
+	{ beginRendering: { surfaceId: "surface-catalogue", root: "catalogue-root" } }
+];
 
 /** Build a complete visual presentation for one finite lifecycle fixture. */
 function _storyPresentation(state: AgUiA2uiSurfaceStates, reason?: string): A2uiSurfacePresentation
@@ -64,7 +91,7 @@ const meta: Meta<A2uiCanvasComponent> =
 	title: "Foundation/A2UI canvas",
 	component: A2uiCanvasComponent,
 	tags: ["autodocs", "visual-test"],
-	decorators: [applicationConfig({ providers: [...provideOpenCraneA2ui(_sanitizeStoryMarkdown)] })],
+	decorators: [applicationConfig({ providers: [...provideOpenCraneA2ui(toSanitizedMarkdownHtml)] })],
 	parameters:
 	{
 		docs:
@@ -112,3 +139,32 @@ export const Unauthorized: Story = _lifecycleStory(AgUiA2uiSurfaceStates.Unautho
 
 /** Unsupported content fails closed without echoing rejected provider payload or reason. */
 export const Unsupported: Story = _lifecycleStory(AgUiA2uiSurfaceStates.Unsupported, "The browser rejected or cannot render the admitted component shape. It exposes only a generic placeholder; server and raw provider details remain outside the DOM.", "This reason is deliberately not displayed.");
+
+/** Every admitted v4 component renders through its exact constrained protocol-backed contract. */
+export const Catalogue: Story =
+{
+	args:
+	{
+		presentation:
+		{
+			version: AG_UI_A2UI_ENVELOPE_VERSION,
+			conversationId: "conversation-story",
+			runId: "run-story",
+			messageId: "message-catalogue",
+			surfaceId: "surface-catalogue",
+			sequence: 1,
+			state: AgUiA2uiSurfaceStates.Ready,
+			operations: _CATALOGUE_OPERATIONS
+		}
+	},
+	parameters:
+	{
+		docs:
+		{
+			description:
+			{
+				story: "The complete eleven-component admission contract in one deterministic surface. Package-owned adapters retain distinct radio, bounded-checkbox, select, and labelled date/time semantics where the pinned renderer is incomplete. The canvas displays and emits intent only; server authorization remains outside the story."
+			}
+		}
+	}
+};

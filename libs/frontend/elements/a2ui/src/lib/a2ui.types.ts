@@ -13,11 +13,11 @@ export enum A2uiComponentNames
 	Button = "Button",
 	/** A bounded text entry control. */
 	TextField = "TextField",
-	/** A one-value choice displayed through the constrained upstream choice renderer. */
+	/** A one-value radio group rendered through the package-owned accessible protocol adapter. */
 	SingleChoice = "SingleChoice",
-	/** A many-value choice rendered with the upstream MultipleChoice shape. */
+	/** A bounded checkbox group rendered through the package-owned accessible protocol adapter. */
 	MultipleChoice = "MultipleChoice",
-	/** A one-value long-list selector displayed through the constrained upstream choice renderer. */
+	/** A one-value native selector rendered through the package-owned accessible protocol adapter. */
 	Select = "Select",
 	/** A bounded numeric input. */
 	Slider = "Slider",

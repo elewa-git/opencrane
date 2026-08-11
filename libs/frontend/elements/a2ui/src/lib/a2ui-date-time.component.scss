@@ -1,0 +1,18 @@
+:host {
+	display: block;
+}
+
+.a2ui-date-time {
+	display: grid;
+	gap: var(--oc-space-2);
+}
+
+.a2ui-date-time input {
+	width: fit-content;
+	max-width: 100%;
+	padding: var(--oc-space-2);
+	color: var(--oc-ink-strong);
+	background: var(--oc-surface-raised);
+	border: 1px solid var(--oc-border-default);
+	border-radius: var(--oc-radius-chip);
+}

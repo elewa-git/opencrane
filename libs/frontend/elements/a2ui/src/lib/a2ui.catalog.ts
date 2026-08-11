@@ -1,5 +1,7 @@
-import { Button, Card, DateTimeInput, Image, List, MultipleChoice, Slider, Text, TextField, type Catalog } from "@a2ui/angular/v0_8";
+import { Button, Card, Image, List, Slider, Text, TextField, type Catalog } from "@a2ui/angular/v0_8";
 
+import { A2uiChoiceComponent } from "./a2ui-choice.component.js";
+import { A2uiDateTimeComponent } from "./a2ui-date-time.component.js";
 import { A2uiComponentNames } from "./a2ui.types.js";
 
 /** Load the upstream text renderer. */
@@ -11,14 +13,14 @@ function _loadButton(): typeof Button { return Button; }
 /** Load the upstream text-field renderer. */
 function _loadTextField(): typeof TextField { return TextField; }
 
-/** Load the upstream choice renderer shared by the three admitted choice contracts. */
-function _loadChoice(): typeof MultipleChoice { return MultipleChoice; }
+/** Load the package-owned accessible renderer shared by the three distinct choice contracts. */
+function _loadChoice(): typeof A2uiChoiceComponent { return A2uiChoiceComponent; }
 
 /** Load the upstream numeric-slider renderer. */
 function _loadSlider(): typeof Slider { return Slider; }
 
-/** Load the upstream date-time renderer. */
-function _loadDateTimeInput(): typeof DateTimeInput { return DateTimeInput; }
+/** Load the package-owned accessible adapter for the pinned date-time contract. */
+function _loadDateTimeInput(): typeof A2uiDateTimeComponent { return A2uiDateTimeComponent; }
 
 /** Load the upstream image renderer. */
 function _loadImage(): typeof Image { return Image; }

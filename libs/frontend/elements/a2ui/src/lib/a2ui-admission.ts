@@ -62,22 +62,10 @@ export function _AdmitA2uiSurfacePresentation(presentation: A2uiSurfacePresentat
 	return true;
 }
 
-/** Translate accepted v4 choice variants into the pinned upstream processor vocabulary. */
+/** Preserve accepted v4 operations for the pinned processor and package-owned catalogue adapters. */
 export function _ToPinnedA2uiOperations(operations: readonly AgUiA2uiOperation[]): AgUiA2uiOperation[]
 {
-	return operations.map(function _PinnedOperation(operation): AgUiA2uiOperation
-	{
-		if (!("surfaceUpdate" in operation)) return operation;
-		const components = operation.surfaceUpdate.components.map(function _PinnedComponent(component): unknown
-		{
-			if (!_isRecord(component) || !_isRecord(component["component"])) return component;
-			const wrapper = component["component"];
-			const name = Object.keys(wrapper)[0];
-			if (name !== A2uiComponentNames.SingleChoice && name !== A2uiComponentNames.Select) return component;
-			return { ...component, component: { MultipleChoice: wrapper[name] } };
-		});
-		return { surfaceUpdate: { ...operation.surfaceUpdate, components } } as AgUiA2uiOperation;
-	});
+	return [...operations];
 }
 
 /** Whether a protocol operation is singular, surface-bound, bounded, and catalogue-safe. */
@@ -123,12 +111,51 @@ function _hasOnlyAdmittedComponents(components: readonly unknown[]): boolean
 		}
 		const name = componentNames[0];
 		const properties = component["component"][name];
-		if ((name === A2uiComponentNames.SingleChoice || name === A2uiComponentNames.Select) && (!_isRecord(properties) || properties["maxAllowedSelections"] !== 1))
+		if (_isChoiceName(name) && !_isAdmittedChoiceProperties(name, properties))
 		{
 			return false;
 		}
 	}
 	return true;
+}
+
+/** Whether a component name selects one of the three finite choice contracts. */
+function _isChoiceName(name: string): name is A2uiComponentNames.SingleChoice | A2uiComponentNames.MultipleChoice | A2uiComponentNames.Select
+{
+	return name === A2uiComponentNames.SingleChoice || name === A2uiComponentNames.MultipleChoice || name === A2uiComponentNames.Select;
+}
+
+/** Whether choice properties are bounded, renderer-safe, and respect the declared selection limit. */
+function _isAdmittedChoiceProperties(name: A2uiComponentNames.SingleChoice | A2uiComponentNames.MultipleChoice | A2uiComponentNames.Select, value: unknown): boolean
+{
+	if (!_isRecord(value) || !Array.isArray(value["options"]) || !_isRecord(value["selections"]))
+	{
+		return false;
+	}
+	const limit = value["maxAllowedSelections"];
+	if (name !== A2uiComponentNames.MultipleChoice && limit !== 1)
+	{
+		return false;
+	}
+	if (limit !== undefined && (!Number.isSafeInteger(limit) || Number(limit) < 1))
+	{
+		return false;
+	}
+	for (const option of value["options"])
+	{
+		if (!_isRecord(option) || typeof option["value"] !== "string" || !_isIdentifier(option["value"]) || !_isRecord(option["label"]))
+		{
+			return false;
+		}
+	}
+	const selections = value["selections"];
+	const literal = selections["literalArray"];
+	if (literal !== undefined && (!Array.isArray(literal) || literal.some(function _NotSelection(item): boolean { return typeof item !== "string"; })))
+	{
+		return false;
+	}
+	const effectiveLimit = limit === undefined ? value["options"].length : Number(limit);
+	return !Array.isArray(literal) || literal.length <= effectiveLimit;
 }
 
 /** Whether a stable coordinate or action identifier is present and bounded. */
