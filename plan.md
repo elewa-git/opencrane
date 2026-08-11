@@ -296,6 +296,10 @@ The accepted product contract is:
   `AgentRun` records.
 - an authorized `@agent` message in a group creates one linked child Conversation in
   `agent_session` mode and its first run. The UI calls this an **Agent thread**, not a subagent.
+- the child freezes the approved persona of the participant who wrote the `@agent` message. It never
+  attaches that participant's personal memory automatically; memory use requires an explicit ask
+  that warns approved memory-derived content will be visible to the active parent participants.
+  Child visibility mirrors those active parent participants.
 - an Agent thread can communicate status, questions, approvals, safe results, failures, and durable
   asset references to its immediate parent through typed, append-only, idempotent delivery. Runtime
   subagents and recursive governed child runs remain the separate authority in
@@ -307,12 +311,16 @@ The accepted product contract is:
   reopens; archive remains a separate user-applied visibility state.
 - attached and agent-created assets have distinct provenance. A created asset becomes durable only
   after finalization and survives retry, refresh, and conversation closure.
+- one message admits at most ten files sharing a 200 MB total limit. A dedicated scanner must pass
+  each file before use. One server-issued output ticket can finalize exactly one generated asset;
+  reconnect returns the same asset and conflicting bytes fail visibly.
 - tool failure remains visible while retrying and after recovery. Plain-language state is primary;
   sanitized tool, error category, provider response, time, and retry details are progressively
   disclosed. Tokens, credentials, cookies, authorization headers, keys, proofs, and raw secrets never
   reach the browser.
 - one recoverable elicitation contract renders approvals, single choice, multiple choice, and bounded
-  free text. Consequential A2UI actions use that authority; rendered UI never grants permission.
+  free text, including explicit personal-memory permission. Consequential A2UI actions use that
+  authority; rendered UI never grants permission.
 
 The accepted paper/origami workspace language remains the visual source. The repository-owned
 [canonical design context target](./docs/ui-design/README.md) contains the current workspace, A2UI,
@@ -395,10 +403,12 @@ independent correctness/security review pass at this checkpoint.
 Independent protocol review still blocks completion on durable recovery for irreversible external
 actions: immutable candidate disposition, pre-dispatch retry eligibility, leased claims, terminal
 compare-and-swap, ToolInvocation reconciliation, and an exact replay/outbox path remain subject to
-explicit authority-model approval. The legacy 0.7 route-expiry replacement is likewise held behind
-explicit destructive-migration approval; no route ids or prior expiry evidence will be discarded
-when that transition is authorized. Neither approval-gated change is treated as complete or hidden
-by the otherwise-green projection work.
+explicit authority-model approval. The legacy 0.7 route-expiry replacement is now approved and
+implemented: migrated route ids, endpoint/registration coordinates, prior revocation, and exact
+expiry evidence survive as permanently inactive rows, while startup reconciliation creates the
+sole usable stable receiver route. Fresh 0.8 and migrated 0.7 databases converge under the live
+PostgreSQL test. The remaining recovery decision is not treated as complete or hidden by the
+otherwise-green projection work.
 
 Track F1 closes [#351](https://github.com/elewa-git/opencrane/issues/351),
 [#600](https://github.com/elewa-git/opencrane/issues/600),
