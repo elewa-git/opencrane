@@ -766,6 +766,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/me/runs/{runId}/cancellation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cancel the exact personal run attempt observed by its signed-in owner
+         * @description The server derives owner and silo from the browser session, rejects stale attempts, and never exposes whether a foreign run exists.
+         */
+        post: operations["cancelMyRun"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/me/persona": {
         parameters: {
             query?: never;
@@ -1811,13 +1831,19 @@ export interface components {
             runId: string;
             attempt: number;
             /** @enum {string} */
-            state: "accepted" | "queued" | "assigned" | "running" | "waiting_for_approval" | "cancelling" | "completed" | "failed" | "cancelled";
+            state: "accepted" | "queued" | "assigned" | "running" | "waiting_for_approval" | "recovery_required" | "cancelling" | "completed" | "failed" | "cancelled";
             conversationId: string | null;
             agentRevisionId: string;
             /** Format: date-time */
             acceptedAt: string;
             /** Format: date-time */
             finishedAt: string | null;
+        };
+        SelfRunCancellation: {
+            runId: string;
+            attempt: number;
+            /** @enum {string} */
+            state: "cancelling" | "cancelled";
         };
         SelfDeferredToolApproval: {
             approvalRequestId: string;
@@ -4388,6 +4414,99 @@ export interface operations {
                 };
             };
             /** @description Run status could not be read. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    cancelMyRun: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Opaque run identifier. */
+                runId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description Attempt last observed by the browser. */
+                    expectedAttempt: number;
+                };
+            };
+        };
+        responses: {
+            /** @description The run was already, or is now, fully cancelled. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SelfRunCancellation"];
+                };
+            };
+            /** @description Cancellation is fenced while physical cleanup completes. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SelfRunCancellation"];
+                };
+            };
+            /** @description The identifier or request body is malformed. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description No browser session owns the request. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The browser request failed CSRF protection. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The run is absent or not owned by the caller. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The attempt is stale, terminal, or could not be safely fenced. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Cancellation authority is temporarily unavailable. */
             503: {
                 headers: {
                     [name: string]: unknown;
