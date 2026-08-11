@@ -11,6 +11,8 @@ export enum RunEventTypes
 	RunAccepted = "run.accepted",
 	/** Assigned runtime began executing the run. */
 	RunStarted = "run.started",
+	/** Runtime resumed execution after a control-plane-authorized pause. */
+	RunResumed = "run.resumed",
 	/** Runtime began assembling a user-visible message. */
 	MessageStarted = "message.started",
 	/** Runtime appended a bounded message delta. */

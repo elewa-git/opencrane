@@ -153,8 +153,10 @@ uncertainty fails closed.
 
 ## Public surface
 
-`PrismaRuntimeEventReporter` is the transaction-scoped admission bridge for nonterminal runtime
-output. It rejects arbitrary names, oversized payloads, secret-shaped fields, stale attempts, and
+`PrismaRuntimeEventReporter` is the transaction-scoped admission bridge for runtime output. The
+first exact `run.started` proposal is the sole authority that atomically moves the assigned attempt
+to `Running` and appends its event; `run.resumed` is accepted only for the still-running attempt.
+The reporter rejects arbitrary names, oversized payloads, secret-shaped fields, stale attempts, and
 mis-bound A2UI envelopes before appending a contiguous canonical `ConversationRunEvent`. Each event
 also has an exact key and value vocabulary, so a compromised runtime cannot persist provider text or
 credential material under an innocuous field name such as `detail`.

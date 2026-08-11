@@ -19,7 +19,7 @@ export interface RuntimeEventReportCommand
 }
 
 /** Result of canonical event persistence. */
-export type RuntimeEventReportResult = { readonly outcome: "reported" } | { readonly outcome: "denied"; readonly reason: "invalid_event" | "invalid_payload" | "run_not_running" | "conversation_unavailable" };
+export type RuntimeEventReportResult = { readonly outcome: "reported" } | { readonly outcome: "denied"; readonly reason: "invalid_event" | "invalid_payload" | "run_not_assigned" | "run_not_running" | "conversation_unavailable" };
 
 /** Transaction-scoped port from protocol admission to canonical run-event persistence. */
 export interface RuntimeEventReporter
