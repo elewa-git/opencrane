@@ -2,8 +2,8 @@ import { ChangeDetectionStrategy, Component, computed, input, output } from "@an
 import { ButtonModule } from "primeng/button";
 import { MessageModule } from "primeng/message";
 
-import { ElicitationBodyKinds, ElicitationRequestStates, type ConversationElicitation, type ElicitationApprovalBody, type ElicitationFreeTextBody, type ElicitationMultipleChoiceBody, type ElicitationResponseValue, type ElicitationSingleChoiceBody } from "@opencrane/contracts";
 import { ElicitationApprovalComponent, ElicitationFreeTextComponent, ElicitationMultipleChoiceComponent, ElicitationSingleChoiceComponent } from "@opencrane/elements/elicitation";
+import { ElicitationBodyKinds, ElicitationRequestStates, type ConversationElicitation, type ElicitationApprovalBody, type ElicitationFreeTextBody, type ElicitationMultipleChoiceBody, type ElicitationResponseValue, type ElicitationSingleChoiceBody } from "@opencrane/state/conversation/elicitation";
 
 /** Validate the exact controlled draft against the current authoritative body and command state. */
 export function _CanSubmitElicitation(elicitation: ConversationElicitation, draft: ElicitationResponseValue | null, busy: boolean): boolean
@@ -65,6 +65,15 @@ export class ConversationElicitationCardComponent
 		const path = this.stepUpPath();
 		if (path !== null) this.stepUpRequested.emit(path);
 	}
+
+	/** Wrap a presentational approval draft in the exact response discriminant. */
+	protected selectApproval(approved: boolean): void { this.draftSelected.emit({ kind: ElicitationBodyKinds.Approval, approved }); }
+	/** Wrap a presentational single selection in the exact response discriminant. */
+	protected selectSingleChoice(selection: string): void { this.draftSelected.emit({ kind: ElicitationBodyKinds.SingleChoice, selection }); }
+	/** Wrap presentational multiple selections in the exact response discriminant. */
+	protected selectMultipleChoice(selections: readonly string[]): void { this.draftSelected.emit({ kind: ElicitationBodyKinds.MultipleChoice, selections }); }
+	/** Wrap a presentational text draft in the exact response discriminant. */
+	protected selectFreeText(text: string): void { this.draftSelected.emit({ kind: ElicitationBodyKinds.FreeText, text }); }
 
 	/** Controlled approval selection. */
 	protected approvalValue(): boolean | null { const draft = this.draft(); return draft?.kind === ElicitationBodyKinds.Approval ? draft.approved : null; }

@@ -5,7 +5,6 @@ import { BrowserDynamicTestingModule, platformBrowserDynamicTesting } from "@ang
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { CONVERSATION_ELICITATION_VERSION, ElicitationBodyKinds, ElicitationPurposes, ElicitationRequestStates, type ConversationElicitation, type ElicitationResponseProjection } from "@opencrane/contracts";
-import { AgUiToolStatuses } from "@opencrane/state/conversation/ag-ui";
 
 import { __MapToolActivity } from "../conversation-activity.mapper.js";
 import { ConversationActivityKinds } from "../conversation-activity.types.js";
@@ -83,7 +82,7 @@ describe("ConversationElicitationStore", function _StoreSuite()
 
 	it("keeps every failed tool attempt visible while a later retry is active", function _VisibleRetryFailure()
 	{
-		const rows = __MapToolActivity("conversation-1", "run-1", { id: "tool-call-1", name: "Search", status: AgUiToolStatuses.Failed, arguments: "{}", result: null, failureCode: "authentication", recovery: null, failures: [{ code: "authentication", retrying: true, technicalDetails: { toolIdentifier: "search", toolRevision: "r3", failureCategory: "authentication", providerCode: "invalid_token", httpStatus: 401, occurredAt: "2026-08-11T08:00:00.000Z", retryCount: 1, retryLimit: 3 } }] });
+		const rows = __MapToolActivity("conversation-1", "run-1", { id: "tool-call-1", name: "Search", failures: [{ retrying: true, technicalDetails: { toolIdentifier: "search", toolRevision: "r3", failureCategory: "authentication", providerCode: "invalid_token", httpStatus: 401, occurredAt: "2026-08-11T08:00:00.000Z", retryCount: 1, retryLimit: 3 } }] });
 
 		expect(rows).toHaveLength(1);
 		expect(rows[0]).toMatchObject({ kind: ConversationActivityKinds.ToolFailure, retrying: true, technicalDetails: { providerCode: "invalid_token", httpStatus: 401 } });

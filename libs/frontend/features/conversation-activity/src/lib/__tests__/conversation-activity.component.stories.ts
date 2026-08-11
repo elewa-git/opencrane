@@ -1,7 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/angular";
 
-import { ElicitationRequestStates } from "@opencrane/contracts";
-import { ConversationActivityKinds, type ConversationActivityRow } from "@opencrane/state/conversation/elicitation";
+import { ConversationActivityKinds, ElicitationRequestStates, type ConversationActivityRow } from "@opencrane/state/conversation/elicitation";
 
 import { ConversationActivityComponent } from "../conversation-activity.component.js";
 

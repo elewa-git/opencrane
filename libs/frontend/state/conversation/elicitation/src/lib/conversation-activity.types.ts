@@ -16,6 +16,26 @@ export interface ConversationActivityTarget
 	readonly toolCallId?: string;
 }
 
+/** One visible failed attempt accepted by the derived Activity mapper. */
+export interface ToolFailureActivityAttempt
+{
+	/** Whether the control plane will retry after this failed attempt. */
+	readonly retrying: boolean;
+	/** Explicit browser-safe fields selected by server adapter vocabularies. */
+	readonly technicalDetails: SafeToolTechnicalDetails;
+}
+
+/** Minimal safe tool view consumed by Activity without depending on another state package. */
+export interface ToolFailureActivitySource
+{
+	/** Stable tool-call coordinate. */
+	readonly id: string;
+	/** Display-safe tool label. */
+	readonly name: string;
+	/** Ordered safe failed attempts. */
+	readonly failures: readonly ToolFailureActivityAttempt[];
+}
+
 /** Browser-only row derived from canonical references, never a copied transcript. */
 export type ConversationActivityRow =
 	| { readonly kind: ConversationActivityKinds.Elicitation; readonly id: string; readonly label: string; readonly occurredAt: string; readonly status: ElicitationRequestStates; readonly target: ConversationActivityTarget }

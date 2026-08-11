@@ -1,9 +1,9 @@
 <article class="elicitation-card" [attr.data-request-id]="elicitation().requestId">
 	@if (elicitation().state === states.Requested) {
-		@if (approvalBody(); as body) { <wo-elicitation-approval [body]="body" [value]="approvalValue()" [disabled]="busy()" (valueChange)="draftSelected.emit($event)" /> }
-		@if (singleChoiceBody(); as body) { <wo-elicitation-single-choice [body]="body" [value]="singleChoiceValue()" [disabled]="busy()" (valueChange)="draftSelected.emit($event)" /> }
-		@if (multipleChoiceBody(); as body) { <wo-elicitation-multiple-choice [body]="body" [value]="multipleChoiceValue()" [disabled]="busy()" (valueChange)="draftSelected.emit($event)" /> }
-		@if (freeTextBody(); as body) { <wo-elicitation-free-text [body]="body" [value]="freeTextValue()" [disabled]="busy()" (valueChange)="draftSelected.emit($event)" /> }
+		@if (approvalBody(); as body) { <wo-elicitation-approval [body]="body" [value]="approvalValue()" [disabled]="busy()" (valueChange)="selectApproval($event)" /> }
+		@if (singleChoiceBody(); as body) { <wo-elicitation-single-choice [body]="body" [value]="singleChoiceValue()" [disabled]="busy()" (valueChange)="selectSingleChoice($event)" /> }
+		@if (multipleChoiceBody(); as body) { <wo-elicitation-multiple-choice [body]="body" [value]="multipleChoiceValue()" [disabled]="busy()" (valueChange)="selectMultipleChoice($event)" /> }
+		@if (freeTextBody(); as body) { <wo-elicitation-free-text [body]="body" [value]="freeTextValue()" [disabled]="busy()" (valueChange)="selectFreeText($event)" /> }
 		@if (error(); as message) { <p-message severity="error" [text]="message" /> }
 		<div class="elicitation-card__actions">
 			@if (stepUpPath()) { <p-button label="Sign in again" severity="secondary" icon="pi pi-lock" (onClick)="recover()" /> }

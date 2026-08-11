@@ -28,13 +28,13 @@ In this flow: the feature owns submission, while the server remains the decision
 
 ## Boundary
 
-The components depend only on Angular and shared contracts. They never import state, features, an
+The components depend only on Angular and local presentational types. They never import state, features, an
 application, or a backend package. Prompts and disclosed consequences are rendered as text, never
 as trusted markup.
 
 ## Dependency direction
 
-Features may import this package; it depends only on Angular and `@opencrane/contracts`.
+Features may import this package; it depends only on Angular.
 
 ## Consumer
 

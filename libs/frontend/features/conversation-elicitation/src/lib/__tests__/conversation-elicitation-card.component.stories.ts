@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/angular";
 
-import { CONVERSATION_ELICITATION_VERSION, ElicitationBodyKinds, ElicitationPurposes, ElicitationRequestStates, type ConversationElicitation } from "@opencrane/contracts";
+import { CONVERSATION_ELICITATION_VERSION, ElicitationBodyKinds, ElicitationPurposes, ElicitationRequestStates, type ConversationElicitation } from "@opencrane/state/conversation/elicitation";
 
 import { ConversationElicitationCardComponent } from "../conversation-elicitation-card.component.js";
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { CONVERSATION_ELICITATION_VERSION, ElicitationBodyKinds, ElicitationPurposes, ElicitationRequestStates, type ConversationElicitation } from "@opencrane/contracts";
+import { CONVERSATION_ELICITATION_VERSION, ElicitationBodyKinds, ElicitationPurposes, ElicitationRequestStates, type ConversationElicitation } from "@opencrane/state/conversation/elicitation";
 
 import { _CanSubmitElicitation } from "../conversation-elicitation-card.component.js";
 

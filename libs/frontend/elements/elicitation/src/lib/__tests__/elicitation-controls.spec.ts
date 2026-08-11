@@ -4,8 +4,6 @@ import { TestBed } from "@angular/core/testing";
 import { BrowserDynamicTestingModule, platformBrowserDynamicTesting } from "@angular/platform-browser-dynamic/testing";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { ElicitationBodyKinds } from "@opencrane/contracts";
-
 import { ElicitationApprovalComponent } from "../elicitation-approval.component.js";
 
 beforeAll(function _InitializeAngularTesting() { TestBed.initTestEnvironment(BrowserDynamicTestingModule, platformBrowserDynamicTesting()); });
@@ -19,6 +17,6 @@ describe("ElicitationApprovalComponent", function _ApprovalSuite()
 		let emitted: unknown = null;
 		component.valueChange.subscribe(function _Capture(value) { emitted = value; });
 		component.select(true);
-		expect(emitted).toEqual({ kind: ElicitationBodyKinds.Approval, approved: true });
+		expect(emitted).toBe(true);
 	});
 });

@@ -4,7 +4,7 @@
   "projectType": "library",
   "sourceRoot": "libs/frontend/elements/elicitation/src",
   "prefix": "wo",
-  "tags": ["scope:conversation-elicitation", "type:lib", "layer:frontend", "frontend-role:element"],
+  "tags": ["scope:conversation-elicitation", "type:lib", "layer:frontend", "frontend-role:elements"],
   "targets": {
     "lint": { "executor": "nx:run-commands", "options": { "command": "tsc -p tsconfig.lint.json", "cwd": "libs/frontend/elements/elicitation" } },
     "test": { "executor": "nx:run-commands", "options": { "command": "vitest run --passWithNoTests", "cwd": "libs/frontend/elements/elicitation" } }
