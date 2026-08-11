@@ -43,7 +43,7 @@ RUN npm ci --omit=dev --workspace=apps/opencrane
 # Shared conversation contracts keep these packages external in the compiled server bundle.
 # Resolve their public runtime entrypoints now so a production image cannot build without them.
 RUN node --input-type=module --eval \
-    "await Promise.all([import('ajv'), import('@a2ui/web_core/v0_8')])"
+    "await Promise.all([import('ajv'), import('@a2ui/web_core/v0_8'), import('@ag-ui/core'), import('@noble/hashes/sha2.js'), import('@opentelemetry/core'), import('openid-client')])"
 
 COPY --from=build /generated-prisma /tmp/generated-prisma
 # Retrieve the generated Prisma client for the runtime stage

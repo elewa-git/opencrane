@@ -20,7 +20,7 @@ RUN npm ci --omit=dev --workspace=apps/agent-controller
 # Shared conversation contracts keep these packages external in the compiled controller bundle.
 # Resolve their public runtime entrypoints now so a production image cannot build without them.
 RUN node --input-type=module --eval \
-    "await Promise.all([import('ajv'), import('@a2ui/web_core/v0_8')])"
+    "await Promise.all([import('ajv'), import('@a2ui/web_core/v0_8'), import('@ag-ui/core'), import('@noble/hashes/sha2.js'), import('@opentelemetry/core'), import('openapi-fetch')])"
 
 COPY --from=build /app/dist/apps/agent-controller dist/apps/agent-controller
 
