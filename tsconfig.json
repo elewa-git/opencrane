@@ -31,6 +31,9 @@
       "@opencrane/backend/server/agents/artifacts": [
         "./libs/backend/server/agents/artifacts/main/src/index.ts"
       ],
+      "@opencrane/backend/server/conversation-assets": [
+        "./libs/backend/server/conversation-assets/main/src/index.ts"
+      ],
       "@opencrane/backend/artifacts/store": [
         "./libs/backend/artifacts/store/main/src/index.ts"
       ],

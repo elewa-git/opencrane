@@ -20,6 +20,7 @@ import { type UserOnboardingOwnerResolver } from "@opencrane/backend/server/agen
 import { _CreatePersonalArtifactCatalogueRouter } from "@opencrane/backend/server/agents/artifacts";
 import { _CreatePersonalConfigurationRouter } from "@opencrane/backend/agents/personal/configuration";
 import { _CreateSelfConversationReplayRouter, _CreateSelfConversationsRouter } from "@opencrane/backend/server/conversations";
+import { _CreateConversationAttachmentAdmission, __CreateConversationAssetRouter } from "@opencrane/backend/server/conversation-assets";
 import { _CreateSelfRunCancellationRouter, _CreateSelfRunStatusRouter, type RunCancellationRepository } from "@opencrane/backend/agents/execution/runs";
 import type { PersonalRunAdmissionPort } from "@opencrane/backend/agents/execution/admission";
 import { _CreateSkillCatalogueRouter } from "@opencrane/backend/server/agents/skills";
@@ -35,6 +36,7 @@ import type { RouteMount, SharesRouteOptions } from "./routes.types.js";
 import { _CreateUserOnboardingComposition } from "./user-onboarding-composition.js";
 import { _ProcessShutdownSignal } from "./process-shutdown.js";
 import { ___CreateDbHealthProbe } from "../infra/db/db.js";
+import { _CreateConversationAssetAuthority } from "../infra/artifacts/artifact-upload.factory.js";
 
 /**
  * Register the authenticated product API from functional route lists.
@@ -71,7 +73,8 @@ export function _RegisterRoutes(app: Express, prisma: PrismaClient, coreApi: k8s
 		{ method: "use", path: "/api/v1/me/runs", handler: _CreateSelfRunStatusRouter(prisma, _log) },
 		{ method: "use", path: "/api/v1/me/runs", handler: _CreateSelfRunCancellationRouter(prisma, runCancellation, _log) },
 		{ method: "use", path: "/api/v1/me/configuration", handler: _CreatePersonalConfigurationRouter(prisma, _log) },
-		{ method: "use", path: "/api/v1/me/conversations", handler: _CreateSelfConversationsRouter(prisma, personalRunAdmission, _log) },
+		{ method: "use", path: "/api/v1/me/conversations", handler: _CreateSelfConversationsRouter(prisma, personalRunAdmission, _CreateConversationAttachmentAdmission, _log) },
+		{ method: "use", path: "/api/v1/me/conversations", handler: __CreateConversationAssetRouter({ resolveCaller: _ResolveConversationAssetCaller, authority: _CreateConversationAssetAuthority(prisma), logger: _log }) },
 		{ method: "use", path: "/api/v1/me/conversations", handler: _CreateSelfConversationReplayRouter(prisma, _log, { interrupts: _CreateDeferredToolApprovalInterruptReader(prisma), shutdownSignal: _ProcessShutdownSignal }) },
 	];
 	const gatewayRoutes: readonly RouteMount[] = [
@@ -108,6 +111,13 @@ export function _RegisterRoutes(app: Express, prisma: PrismaClient, coreApi: k8s
 
 /** Resolve the onboarding owner only from the authenticated user on the request, never from the request body. */
 const _ResolveUserOnboardingOwner: UserOnboardingOwnerResolver = function _Owner(request)
+{
+	const principal = _ResolveRequestPrincipal(request);
+	return principal === null ? null : { siloId: principal.siloId, subjectId: principal.subjectId };
+};
+
+/** Resolve conversation-file authority only from the verified browser principal. */
+const _ResolveConversationAssetCaller = function _ConversationAssetCaller(request: Parameters<typeof _ResolveRequestPrincipal>[0])
 {
 	const principal = _ResolveRequestPrincipal(request);
 	return principal === null ? null : { siloId: principal.siloId, subjectId: principal.subjectId };

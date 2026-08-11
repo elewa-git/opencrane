@@ -6768,6 +6768,7 @@ CREATE TABLE "conversation_assets" (
     "revision_id" TEXT,
     "upload_lease_id" TEXT,
     "output_ticket_id" TEXT,
+    "idempotency_key" TEXT NOT NULL,
     "provenance" "ConversationAssetProvenance" NOT NULL,
     "state" "ConversationAssetState" NOT NULL,
     "display_name" TEXT NOT NULL,
@@ -6788,6 +6789,7 @@ CREATE INDEX "conversation_asset_output_tickets_conversation_id_created_a_idx" O
 CREATE UNIQUE INDEX "conversation_assets_upload_lease_id_key" ON "conversation_assets"("upload_lease_id");
 CREATE UNIQUE INDEX "conversation_assets_output_ticket_id_key" ON "conversation_assets"("output_ticket_id");
 CREATE UNIQUE INDEX "conversation_assets_conversation_id_id_key" ON "conversation_assets"("conversation_id", "id");
+CREATE UNIQUE INDEX "conversation_assets_conversation_id_idempotency_key_key" ON "conversation_assets"("conversation_id", "idempotency_key");
 CREATE INDEX "conversation_assets_conversation_id_state_created_at_idx" ON "conversation_assets"("conversation_id", "state", "created_at");
 CREATE INDEX "conversation_assets_message_id_idx" ON "conversation_assets"("message_id");
 CREATE INDEX "conversation_assets_run_id_run_attempt_idx" ON "conversation_assets"("run_id", "run_attempt");
@@ -6816,6 +6818,7 @@ ALTER TABLE "conversation_asset_output_tickets" ADD CONSTRAINT "conversation_ass
 );
 ALTER TABLE "conversation_assets" ADD CONSTRAINT "conversation_assets_identity_check" CHECK (
     length(btrim("display_name")) BETWEEN 1 AND 255
+    AND length(btrim("idempotency_key")) BETWEEN 1 AND 128
     AND length(btrim("media_type")) BETWEEN 1 AND 255
     AND ("byte_length" IS NULL OR "byte_length" > 0)
     AND (("run_id" IS NULL AND "run_attempt" IS NULL) OR ("run_id" IS NOT NULL AND "run_attempt" > 0))

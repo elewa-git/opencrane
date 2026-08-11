@@ -5,6 +5,7 @@ import { __DecideConversationCommand, ConversationCommandActions, ConversationCo
 import { ConversationAuthorityOutcomes, ConversationWriteDenialReasons } from "./conversation-authority.types.js";
 import type { ConversationCaller, ConversationDetail, ConversationWriteDenial, CreateConversationRequest, CreateConversationResult, MutateConversationResult, SubmitConversationMessageRequest } from "./conversation-authority.types.js";
 import type { ConversationMutationRepository } from "./prisma-conversation-mutation-repository.types.js";
+import type { ConversationAttachmentAdmissionPort } from "./conversation-message-admission.types.js";
 import { PrismaConversationQueryRepository } from "./prisma-conversation-query-repository.js";
 
 /** Exhaustive adapter mapping from model-owned creation modes to Prisma's generated enum. */
@@ -86,18 +87,19 @@ export class PrismaConversationMutationRepository implements ConversationMutatio
 	}
 
 	/** Revalidates the mode strategy and persists one ordinary direct/group message. */
-	async admitOrdinaryMessage(caller: ConversationCaller, conversationId: string, messageId: string, request: SubmitConversationMessageRequest): Promise<{ readonly outcome: ConversationAuthorityOutcomes.Accepted } | { readonly outcome: ConversationAuthorityOutcomes.Denied; readonly reason: ConversationWriteDenial }>
+	async admitOrdinaryMessage(caller: ConversationCaller, conversationId: string, messageId: string, request: SubmitConversationMessageRequest, attachments: ConversationAttachmentAdmissionPort): Promise<{ readonly outcome: ConversationAuthorityOutcomes.Accepted } | { readonly outcome: ConversationAuthorityOutcomes.Denied; readonly reason: ConversationWriteDenial }>
 	{
 		const context = await this.query.loadCommandContext(caller, conversationId);
 		if (context === null) return { outcome: ConversationAuthorityOutcomes.Denied, reason: ConversationWriteDenialReasons.ConversationUnavailable };
 		const decision = __DecideConversationCommand({ ...context, command: { kind: ConversationCommandKinds.SubmitMessage } });
 		if (!decision.allowed || decision.action !== ConversationCommandActions.AdmitOrdinaryMessage) return { outcome: ConversationAuthorityOutcomes.Denied, reason: context.lifecycle === ConversationLifecycles.Closed ? ConversationWriteDenialReasons.ConversationClosed : ConversationWriteDenialReasons.CommandNotSupported };
 		await this.transaction.conversationMessage.create({ data: _messageData(messageId, conversationId, caller.subjectId, request, null) });
+		await attachments.bindReadyAssets(caller, conversationId, messageId, request.blocks);
 		return { outcome: ConversationAuthorityOutcomes.Accepted };
 	}
 
 	/** Persists a user message inside run admission's sole final transaction. */
-	async persistAgentMessage(caller: ConversationCaller, conversationId: string, messageId: string, runId: string, request: SubmitConversationMessageRequest): Promise<void>
+	async persistAgentMessage(caller: ConversationCaller, conversationId: string, messageId: string, runId: string, request: SubmitConversationMessageRequest, attachments: ConversationAttachmentAdmissionPort): Promise<void>
 	{
 		// 1. Revalidate current silo membership and participant access inside run admission's final transaction.
 		const context = await this.query.loadCommandContext(caller, conversationId);
@@ -109,6 +111,7 @@ export class PrismaConversationMutationRepository implements ConversationMutatio
 
 		// 3. Persist the message only after every caller and immutable-mode fence remains valid.
 		await this.transaction.conversationMessage.create({ data: _messageData(messageId, conversationId, caller.subjectId, request, runId) });
+		await attachments.bindReadyAssets(caller, conversationId, messageId, request.blocks);
 	}
 }
 

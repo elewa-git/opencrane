@@ -56,7 +56,7 @@ SELECT (
         WHERE "schema_version" = '0.8.0'
           AND "source_schema_version" = '0.7.0'
           AND "source_baseline_sha256" = :'source_baseline_sha256'
-          AND "target_baseline_sha256" = '4ffed86af2e87bc1dc27dd88fff8f7a0164136760dfa8d275482a3f5d7746356'
+          AND "target_baseline_sha256" = '32797f3ab1a6b2960c5761890b0605a1467430758abedf7bf4396f41a59e1d57'
           AND "sql_sha256" = :'migration_sql_sha256'
           AND "migration_id" = '0.7.0-to-0.8.0') = 1
     AND (SELECT "baseline_sha256" FROM "opencrane_bootstrap"."target_baseline" WHERE "singleton" = TRUE)
@@ -3370,6 +3370,7 @@ CREATE TABLE "conversation_assets" (
     "revision_id" TEXT,
     "upload_lease_id" TEXT,
     "output_ticket_id" TEXT,
+    "idempotency_key" TEXT NOT NULL,
     "provenance" "ConversationAssetProvenance" NOT NULL,
     "state" "ConversationAssetState" NOT NULL,
     "display_name" TEXT NOT NULL,
@@ -3390,6 +3391,7 @@ CREATE INDEX "conversation_asset_output_tickets_conversation_id_created_a_idx" O
 CREATE UNIQUE INDEX "conversation_assets_upload_lease_id_key" ON "conversation_assets"("upload_lease_id");
 CREATE UNIQUE INDEX "conversation_assets_output_ticket_id_key" ON "conversation_assets"("output_ticket_id");
 CREATE UNIQUE INDEX "conversation_assets_conversation_id_id_key" ON "conversation_assets"("conversation_id", "id");
+CREATE UNIQUE INDEX "conversation_assets_conversation_id_idempotency_key_key" ON "conversation_assets"("conversation_id", "idempotency_key");
 CREATE INDEX "conversation_assets_conversation_id_state_created_at_idx" ON "conversation_assets"("conversation_id", "state", "created_at");
 CREATE INDEX "conversation_assets_message_id_idx" ON "conversation_assets"("message_id");
 CREATE INDEX "conversation_assets_run_id_run_attempt_idx" ON "conversation_assets"("run_id", "run_attempt");
@@ -3418,6 +3420,7 @@ ALTER TABLE "conversation_asset_output_tickets" ADD CONSTRAINT "conversation_ass
 );
 ALTER TABLE "conversation_assets" ADD CONSTRAINT "conversation_assets_identity_check" CHECK (
     length(btrim("display_name")) BETWEEN 1 AND 255
+    AND length(btrim("idempotency_key")) BETWEEN 1 AND 128
     AND length(btrim("media_type")) BETWEEN 1 AND 255
     AND ("byte_length" IS NULL OR "byte_length" > 0)
     AND (("run_id" IS NULL AND "run_attempt" IS NULL) OR ("run_id" IS NOT NULL AND "run_attempt" > 0))
@@ -3454,7 +3457,7 @@ INSERT INTO "opencrane_migrations"."schema_history" (
     "target_baseline_sha256", "sql_sha256", "migration_id"
 ) VALUES (
     '0.8.0', '0.7.0', current_setting('opencrane.expected_source_baseline_sha256'),
-    '4ffed86af2e87bc1dc27dd88fff8f7a0164136760dfa8d275482a3f5d7746356',
+    '32797f3ab1a6b2960c5761890b0605a1467430758abedf7bf4396f41a59e1d57',
     current_setting('opencrane.expected_migration_sql_sha256'),
     '0.7.0-to-0.8.0'
 );

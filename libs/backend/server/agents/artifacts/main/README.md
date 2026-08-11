@@ -55,6 +55,10 @@ trusted server process:
         └── derived text revision + immutable lineage ◄── broker text bytes
 ```
 
+Conversation uploads instead enter a quarantined revision. The dedicated scanner receives only a
+fenced attempt and brokered bytes. A clean verdict publishes the exact revision; a rejection or
+terminal scanner failure leaves it unavailable and gives the participant only a stable failure.
+
 **In this flow:** [skills](../../skills/main/README.md) · [agent-services](../../agent-services/main/README.md) *(both pin artifacts)*
 
 Invariant: this domain never touches artifact bytes — no upload, no download, no hashing of content
@@ -88,6 +92,8 @@ authorised artifact-deletion lifecycle once no active job needs those rows.
 - `_CreateArtifactPreprocessAuthority` and `__CreateArtifactPreprocessorRouter` — durable job
   fencing and the TokenReview-protected broker-only worker protocol. Each lifecycle transition has
   its own private transaction; no transaction crosses TokenReview, byte brokering, or promotion.
+- `PrismaArtifactScanUnitOfWork` and `__CreateArtifactScannerRouter` — quarantine publication,
+  bounded retries, and the TokenReview-protected scanner protocol.
 - `_CreateArtifactCatalogueRepository` — read-only active/published catalogue facts for internal
   lease issuance; it never acquires publication or preprocessing locks.
 - `ArtifactPreprocessSourceLeaseIssuer` — the narrow durable port that lets app composition issue

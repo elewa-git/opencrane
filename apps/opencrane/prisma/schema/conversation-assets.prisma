@@ -24,6 +24,7 @@ model ConversationAsset {
   revisionId        String?                     @map("revision_id")
   uploadLeaseId     String?                     @unique @map("upload_lease_id")
   outputTicketId    String?                     @unique @map("output_ticket_id")
+  idempotencyKey    String                      @map("idempotency_key")
   provenance        ConversationAssetProvenance
   state             ConversationAssetState
   displayName       String                      @map("display_name")
@@ -43,6 +44,7 @@ model ConversationAsset {
   outputTicket      ConversationAssetOutputTicket? @relation(fields: [outputTicketId], references: [id], onDelete: Restrict)
 
   @@unique([conversationId, id])
+  @@unique([conversationId, idempotencyKey])
   @@index([conversationId, state, createdAt])
   @@index([messageId])
   @@index([runId, runAttempt])

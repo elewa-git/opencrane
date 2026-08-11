@@ -7,6 +7,7 @@ import { __SignArtifactWriteLease, __VerifyArtifactPromotionReceipt } from "@ope
 import { _CreateArtifactCatalogueRepository, _CreateArtifactPreprocessAuthority, _CreateArtifactUploadAuthority, __CompleteArtifactPreprocessJob, __IssueArtifactPreprocessOutputLease, __IssueArtifactReadLease, __UploadArtifact, IssueArtifactReadLeaseOutcomes, type ArtifactPreprocessOutputBroker, type ArtifactUploadResult, type VerifiedArtifactUploadCommand } from "@opencrane/backend/server/agents/artifacts";
 import type { SkillAuthoringArtifactReader, SkillAuthoringInputRecord } from "@opencrane/backend/agents/skills/execution";
 import { ___DoWithTrace } from "@opencrane/backend/observability";
+import { PrismaConversationAssetUnitOfWork } from "@opencrane/backend/server/conversation-assets";
 import { ___ParseAndValidateJson } from "@opencrane/util";
 
 import { _ReadArtifactMountedPem } from "./artifact-mounted-key.loader.js";
@@ -30,6 +31,19 @@ export function _CreateArtifactUploadGateway(prisma: PrismaClient, environment: 
 			}, command);
 		},
 	};
+}
+
+/** Build the participant conversation-file authority without exposing its write leases. */
+export function _CreateConversationAssetAuthority(prisma: PrismaClient, environment: NodeJS.ProcessEnv = process.env): PrismaConversationAssetUnitOfWork
+{
+	const serviceUrl = _InternalArtifactServiceUrl(environment.ARTIFACT_SERVICE_URL ?? "");
+	const leasePrivateKey = _ReadArtifactMountedPem(environment.ARTIFACT_LEASE_PRIVATE_KEY_PATH, "ARTIFACT_LEASE_PRIVATE_KEY_PATH");
+	const receiptPublicKey = _ReadArtifactMountedPem(environment.ARTIFACT_RECEIPT_PUBLIC_KEY_PATH, "ARTIFACT_RECEIPT_PUBLIC_KEY_PATH");
+	return new PrismaConversationAssetUnitOfWork(prisma, _CreateArtifactServicePromotionPort(serviceUrl), {
+		signLease(claims) { return __SignArtifactWriteLease(claims, leasePrivateKey, Math.floor(Date.now() / 1_000)); },
+		verifyReceipt(compact) { return __VerifyArtifactPromotionReceipt(compact, receiptPublicKey); },
+		digestReceipt(compact) { return `sha256:${createHash("sha256").update(compact, "utf8").digest("hex")}`; }
+	});
 }
 
 /** Build the sole app-owned HTTP client for artifact-service promotion. */
