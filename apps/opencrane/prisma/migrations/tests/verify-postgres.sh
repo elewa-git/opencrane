@@ -103,6 +103,9 @@ psql_command migrated --tuples-only --no-align --command \
 psql_command migrated --tuples-only --no-align --command \
 	"SELECT count(*) FROM \"channel_runtime_routes\" WHERE (\"id\" = 'legacy-event-route-a' AND \"endpoint\" = 'http://legacy-a.svc.cluster.local/events' AND \"registered_at\" = '2026-01-01T00:00:00.000Z') OR (\"id\" = 'legacy-event-route-b' AND \"endpoint\" = 'http://legacy-b.svc.cluster.local/events' AND \"registered_at\" = '2026-01-02T00:00:00.000Z');" \
 	| grep -qx '2'
+psql_command migrated --tuples-only --no-align --command \
+	"SELECT count(*) FROM \"channel_runtime_routes\" WHERE (\"id\" = 'legacy-event-route-a' AND \"legacy_expires_at\" = '2026-01-01T01:00:00.000Z') OR (\"id\" = 'legacy-event-route-b' AND \"legacy_expires_at\" = '2026-01-02T01:00:00.000Z');" \
+	| grep -qx '2'
 if psql_command migrated --command \
 	"UPDATE \"channel_runtime_routes\" SET \"endpoint\" = 'http://mutated.svc.cluster.local/events' WHERE \"id\" = 'legacy-event-route-a';" \
 	>"$WORK_DIR/legacy-route-update-output.log" 2>&1; then

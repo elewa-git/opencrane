@@ -33,8 +33,20 @@ SELECT
     AND EXISTS (SELECT 1 FROM information_schema.columns
         WHERE table_schema = 'public' AND table_name = 'channel_runtime_routes'
           AND column_name = 'legacy_expires_at' AND data_type = 'timestamp without time zone' AND is_nullable = 'YES')
-    AND (SELECT count(*) FROM pg_trigger
-        WHERE NOT tgisinternal AND tgname = 'channel_runtime_routes_evidence_guard') = 1
+    AND (SELECT count(*) FROM pg_constraint
+        WHERE conrelid = to_regclass('public.channel_runtime_routes')
+          AND convalidated
+          AND conname IN (
+              'channel_runtime_routes_state_check',
+              'channel_runtime_routes_legacy_evidence_check'
+          )) = 2
+    AND (SELECT count(*)
+        FROM pg_trigger AS route_trigger
+        JOIN pg_proc AS trigger_function ON trigger_function.oid = route_trigger.tgfoid
+        WHERE NOT route_trigger.tgisinternal
+          AND route_trigger.tgrelid = to_regclass('public.channel_runtime_routes')
+          AND route_trigger.tgname = 'channel_runtime_routes_evidence_guard'
+          AND trigger_function.proname = 'enforce_channel_runtime_route_evidence') = 1
     AS target_objects_exist
 \gset
 \if :target_objects_exist
