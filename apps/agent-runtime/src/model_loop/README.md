@@ -23,9 +23,12 @@ framework-neutral events
 | `openai_container_files.py` | Retrieves queued OpenAI container files once with the attempt-scoped client and returns no provider metadata. |
 | `generated_output_policy.py` | Owns the provider-neutral file limits, byte classification, safe names, batch validation, and output order. |
 | `checkpoints.py` | Replaces encrypted checkpoints and validates their server coordinates. |
+| `histories.py` | Retains bounded same-process Pydantic message history for exact deferred-tool resume. |
 
-The loop cannot execute tools or make its local checkpoint authoritative. It hands every neutral
-event to the protocol step. Completed Pydantic `FilePart` values become neutral generated-output
+The loop cannot execute tools or make its local checkpoint authoritative. Server-compiled tool
+schemas are exposed through Pydantic AI's execution-free `ExternalToolset`; every proposed call is
+handed back as a neutral event and must cross server admission, approval, and worker authority.
+Completed Pydantic `FilePart` values become neutral generated-output
 events only after the whole response stays within ten files, 200 MiB total, and the approved media
 types. The immutable compiled route alone enables pinned PNG image generation or code execution.
 Code-execution annotations first become private container-file references in the provider adapter.

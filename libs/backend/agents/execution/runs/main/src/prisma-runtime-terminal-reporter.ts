@@ -1,6 +1,7 @@
 import { AgentRunState, AgentRunTerminalReason, Prisma, ToolInvocationState, ToolResultDeliveryState } from "@prisma/client";
 
 import { __DeliverChildRunCompletionInTransaction } from "./prisma-child-run-completion-repository.js";
+import { RuntimeRunFailureReasons } from "./runtime-event-reporter.types.js";
 import type { RuntimeTerminalEventType, RuntimeTerminalPendingToolRepository, RuntimeTerminalPendingToolUnitOfWork, RuntimeTerminalReportCommand, RuntimeTerminalReporter, RuntimeTerminalReportResult } from "./runtime-terminal-reporter.types.js";
 
 /** Prisma authority that turns a fenced runtime result into the sole terminal run outcome. */
@@ -13,7 +14,8 @@ export class PrismaRuntimeTerminalReporter implements RuntimeTerminalReporter
 		await transaction.$queryRaw(Prisma.sql`SELECT pg_advisory_xact_lock(hashtextextended(${command.runId}, 0))`);
 		await transaction.$queryRaw(Prisma.sql`SELECT "id" FROM "agent_runs" WHERE "id" = ${command.runId} FOR UPDATE`);
 		const run = await transaction.agentRun.findUnique({ where: { id: command.runId } });
-		if (run === null || run.attempt !== command.attempt || run.state !== AgentRunState.Running) return { outcome: "denied", reason: "run_not_running" };
+		const sourceState = run === null || run.attempt !== command.attempt ? null : _TerminalSourceState(run.state, command);
+		if (run === null || sourceState === null) return { outcome: "denied", reason: "run_not_running" };
 		// A runtime failure can follow a lost response after external-action admission committed. Keep
 		// both terminal outcomes behind the durable tool fence so server-owned work can still settle.
 		const hasPendingTools = await new PrismaRuntimeTerminalPendingToolUnitOfWork(transaction).hasPending(run.id, run.attempt);
@@ -21,7 +23,7 @@ export class PrismaRuntimeTerminalReporter implements RuntimeTerminalReporter
 
 		const terminal = _terminal(command.eventType);
 		const now = new Date();
-		const updated = await transaction.agentRun.updateMany({ where: { id: run.id, attempt: run.attempt, state: AgentRunState.Running }, data: { state: terminal.state, terminalReason: terminal.reason, finishedAt: now } });
+		const updated = await transaction.agentRun.updateMany({ where: { id: run.id, attempt: run.attempt, state: sourceState }, data: { state: terminal.state, terminalReason: terminal.reason, finishedAt: now } });
 		if (updated.count !== 1) return { outcome: "denied", reason: "run_not_running" };
 
 		if (run.conversationId !== null)
@@ -37,7 +39,16 @@ export class PrismaRuntimeTerminalReporter implements RuntimeTerminalReporter
 	}
 }
 
-/** Builds the pending-tool repository on the caller's terminal-report transaction. */
+/** Select the exact lifecycle source state authorised by this accepted runtime command. */
+function _TerminalSourceState(runState: AgentRunState, command: RuntimeTerminalReportCommand): AgentRunState | null
+{
+	if (runState === AgentRunState.Running) return AgentRunState.Running;
+	if (runState !== AgentRunState.Assigned || command.eventType !== "run.failed" || !command.sourceIsStartAttempt) return null;
+	if (command.payload === null || typeof command.payload !== "object" || Array.isArray(command.payload)) return null;
+	return (command.payload as { readonly reason?: unknown }).reason === RuntimeRunFailureReasons.CompiledInputCoordinateMismatch ? AgentRunState.Assigned : null;
+}
+
+/** Transaction unit that owns construction of the terminal pending-tool repository. */
 class PrismaRuntimeTerminalPendingToolUnitOfWork implements RuntimeTerminalPendingToolUnitOfWork
 {
 	/** The transaction the caller opened for this terminal report. */

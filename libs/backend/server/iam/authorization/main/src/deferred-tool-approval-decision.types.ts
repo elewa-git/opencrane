@@ -9,6 +9,23 @@ export enum DeferredToolDecisionKinds
 	Denied = "denied",
 }
 
+/** Stable result vocabulary for one transaction-bound deferred-tool decision. */
+export enum DeferredToolDecisionOutcomes
+{
+	/** The reviewed arguments were accepted. */
+	Approved = "approved",
+	/** The reviewer refused the action. */
+	Denied = "denied",
+	/** The decision window closed before this answer. */
+	Expired = "expired",
+	/** The same terminal decision was already durable. */
+	AlreadyDecided = "already_decided",
+	/** Replacement arguments failed the reviewed schema. */
+	InvalidArguments = "invalid_arguments",
+	/** Durable authority disagreed with this decision request. */
+	Conflict = "conflict",
+}
+
 /** Exact pending deferred-tool request being decided at a trusted server instant. */
 export interface DecideDeferredToolRequestCommand
 {
@@ -50,9 +67,9 @@ export interface ExpireDeferredToolApprovalBatchResult
 
 /** Result of atomically deciding one pending deferred tool request. */
 export type DecideDeferredToolRequestResult =
-	| { readonly outcome: "approved"; readonly argumentsDigest: string }
-	| { readonly outcome: "denied" }
-	| { readonly outcome: "expired" }
-	| { readonly outcome: "already_decided"; readonly decision: DeferredToolDecisionKinds; readonly argumentsDigest?: string }
-	| { readonly outcome: "invalid_arguments" }
-	| { readonly outcome: "conflict" };
+	| { readonly outcome: DeferredToolDecisionOutcomes.Approved; readonly argumentsDigest: string }
+	| { readonly outcome: DeferredToolDecisionOutcomes.Denied }
+	| { readonly outcome: DeferredToolDecisionOutcomes.Expired }
+	| { readonly outcome: DeferredToolDecisionOutcomes.AlreadyDecided; readonly decision: DeferredToolDecisionKinds; readonly argumentsDigest?: string }
+	| { readonly outcome: DeferredToolDecisionOutcomes.InvalidArguments }
+	| { readonly outcome: DeferredToolDecisionOutcomes.Conflict };

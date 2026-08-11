@@ -1,13 +1,10 @@
-import { createHash } from "node:crypto";
-
 import type { Prisma } from "@prisma/client";
 
-import { GeneratedOutputCapability, type CompiledMessage, type CompiledModelRoute, type CompiledRunInput, type CompiledToolDefinition, type MemoryFactReference, type RunInputSnapshot, type RunInputSnapshotIntegrationAssignment } from "@opencrane/contracts";
+import { GeneratedOutputCapability, type CompiledMessage, type CompiledModelRoute, type CompiledRunInput, type CompiledToolDefinition, type RunInputSnapshot, type RunInputSnapshotIntegrationAssignment } from "@opencrane/contracts";
 import { __AreReviewedIntegrationToolDefinitionsValid, type ReviewedIntegrationToolDefinition } from "@opencrane/models/agents";
-import { ___CloneCanonicalJson, type JsonValue } from "@opencrane/util";
+import { ___CloneCanonicalJson, ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 import { __CompileRunInput } from "@opencrane/backend/agents/execution/inputs";
 import type { PromptCompilerRepositories } from "@opencrane/backend/agents/execution/inputs";
-import type { MemoryGatewayClient } from "@opencrane/backend/server/infra/memory-gateway-client";
 
 import { ExternalActionRevisionKinds } from "./external-action-executor.types.js";
 import type { RunInputCompiler } from "./prisma-runtime-dispatch-authority.types.js";
@@ -15,96 +12,38 @@ import type { RunInputCompiler } from "./prisma-runtime-dispatch-authority.types
 /** Maps stored message roles to the lowercase roles the compiled input uses. */
 const _MESSAGE_ROLE: Record<string, CompiledMessage["role"]> = { User: "user", Assistant: "assistant", Tool: "tool", System: "system" };
 
-/** Fewest results to ask the memory gateway for when looking up frozen facts again. */
-const _MINIMUM_STATEMENT_RECALL_RESULTS = 32;
-
 /**
  * Build the {@link RunInputCompiler} the dispatch authority calls when it creates `start_attempt`.
  *
- * It gives the prompt compiler read functions that run on the same locked Prisma transaction that
- * loaded the snapshot, so every read is of a record that cannot change and the compiled output stays
- * byte-for-byte the same across restarts and re-sent commands. Memory-fact statements are the one
- * network read: they come from the injected memory gateway, and every statement is checked against
- * the digest frozen in the snapshot, so a re-sent command either carries exactly the same memory
- * text or the compile fails.
- *
- * Called by: `_CreateProductionRunInputCompiler` in production-runtime-dispatch.ts, which appends
- * the built-in upgrade-session tool on top of the result.
- *
- * @param memoryGateway - Read-only memory-gateway client, shared with the action worker.
- * @returns A compiler that reads inside the attempt's transaction and digest-checks gateway recall.
- * @throws From the returned compiler: when a frozen memory fact is missing or its text no longer
- * matches its digest, or the snapshot's memory policy names no dataset. No command is created.
- * @see RunInputCompiler for the byte-for-byte rule every implementation must meet.
+ * It binds the deterministic prompt compiler to control-plane read ports backed by the same locked
+ * Prisma transaction that loaded the snapshot, so every read is of an immutable record and the
+ * compiled output stays byte-identical across restarts and idempotent redeliveries. Personal-memory
+ * query coordinates remain outside the compiled payload; recall can begin only through the declared
+ * memory tool after its exact elicitation receipt is accepted.
+ * @returns A compiler bound only to per-attempt transaction reads.
  */
-export function __CreatePrismaRunInputCompiler(memoryGateway: MemoryGatewayClient): RunInputCompiler
+export function __CreatePrismaRunInputCompiler(): RunInputCompiler
 {
-	return function _compile(snapshot: RunInputSnapshot, transaction: Prisma.TransactionClient): Promise<CompiledRunInput>
+	return function _compile(snapshot: RunInputSnapshot, attempt: number, transaction: Prisma.TransactionClient): Promise<CompiledRunInput>
 	{
-		return __CompileRunInput(snapshot, _repositories(memoryGateway, snapshot, transaction));
+		return __CompileRunInput(snapshot, attempt, _repositories(transaction));
 	};
 }
 
-/** Build the read functions the prompt compiler calls, over one locked transaction and the snapshot's frozen policy. */
-function _repositories(memoryGateway: MemoryGatewayClient, snapshot: RunInputSnapshot, transaction: Prisma.TransactionClient): PromptCompilerRepositories
+/** Assemble the control-plane read ports over one locked transaction client. */
+function _repositories(transaction: Prisma.TransactionClient): PromptCompilerRepositories
 {
 	return {
 		loadPersonaInstructions(personaRevisionId: string | null): Promise<string> { return _loadPersonaInstructions(transaction, personaRevisionId); },
 		loadMessages(messageIds: readonly string[]): Promise<readonly CompiledMessage[]> { return _loadMessages(transaction, messageIds); },
 		loadToolDefinitions(integrationAssignments: readonly RunInputSnapshotIntegrationAssignment[]): Promise<readonly CompiledToolDefinition[]> { return _loadToolDefinitions(integrationAssignments); },
-		loadMemoryFactStatements(memoryFacts: readonly MemoryFactReference[]): Promise<readonly string[]> { return _loadMemoryFactStatements(memoryGateway, snapshot, memoryFacts); },
 		loadArtifactSummaries(artifactRevisionIds: readonly string[]): Promise<readonly string[]> { return _loadArtifactSummaries(transaction, artifactRevisionIds); },
 		loadSkillSummaries(skillRevisionIds: readonly string[]): Promise<readonly string[]> { return _loadSkillSummaries(transaction, skillRevisionIds); },
 		resolveModelRoute(modelRoute: JsonValue): Promise<CompiledModelRoute> { return _resolveModelRoute(transaction, modelRoute); },
 	};
 }
 
-/**
- * Look up the facts frozen in the snapshot, and check each one's text against its stored digest.
- *
- * Every reference must resolve to text whose `sha256:` digest equals the frozen `contentDigest`. A
- * missing fact or changed text throws, so a `start_attempt` command is never created with a partial
- * or altered memory section. The text is used only to compile the prompt and is never saved.
- */
-async function _loadMemoryFactStatements(memoryGateway: MemoryGatewayClient, snapshot: RunInputSnapshot, memoryFacts: readonly MemoryFactReference[]): Promise<readonly string[]>
-{
-	// 1. No frozen facts means no network read at all.
-	if (memoryFacts.length === 0) return [];
-
-	// 2. Refuse unless the snapshot's policy gives the dataset and the query text. The dataset always
-	//    comes from the snapshot, never from a subject id or a tool argument.
-	const policy = _personalMemoryPolicy(snapshot.memoryQueryPolicy);
-
-	// 3. Re-run the same query but ask for more results, so a change in ranking cannot hide a frozen fact.
-	const result = await memoryGateway.query({ siloId: snapshot.siloId, cogneeDatasetId: policy.cogneeDatasetId, subjectId: snapshot.identitySnapshot.executionSubjectId, query: policy.queryText, maxResults: Math.max(memoryFacts.length * 4, _MINIMUM_STATEMENT_RECALL_RESULTS) });
-	const contentByFactId = new Map(result.facts.map(function _entry(fact) { return [fact.factId, fact.content] as const; }));
-
-	// 4. Verify every reference against its frozen digest; one mismatch fails the whole compile.
-	return memoryFacts.map(function _statement(reference): string
-	{
-		const content = contentByFactId.get(reference.factId);
-		if (content === undefined || `sha256:${createHash("sha256").update(content, "utf8").digest("hex")}` !== reference.contentDigest)
-		{
-			throw new Error("memory fact statement failed digest verification");
-		}
-		return content;
-	});
-}
-
-/** Read the dataset id and query text out of the snapshot's memory policy, throwing when either is missing. */
-function _personalMemoryPolicy(memoryQueryPolicy: JsonValue): { cogneeDatasetId: string; queryText: string }
-{
-	const policy: { readonly [key: string]: JsonValue } = memoryQueryPolicy && typeof memoryQueryPolicy === "object" && !Array.isArray(memoryQueryPolicy) ? memoryQueryPolicy as { readonly [key: string]: JsonValue } : {};
-	const cogneeDatasetId = typeof policy["cogneeDatasetId"] === "string" ? policy["cogneeDatasetId"].trim() : "";
-	const queryText = typeof policy["queryText"] === "string" ? policy["queryText"].trim() : "";
-	if (policy["scope"] !== "personal" || cogneeDatasetId.length === 0 || queryText.length === 0)
-	{
-		throw new Error("snapshot memory policy cannot resolve frozen fact references");
-	}
-	return { cogneeDatasetId, queryText };
-}
-
-/** Return the persona revision's instruction text, or an empty string when the run has no persona. */
+/** Resolve the approved persona revision's compiled instruction text, or empty when non-personal. */
 async function _loadPersonaInstructions(transaction: Prisma.TransactionClient, personaRevisionId: string | null): Promise<string>
 {
 	if (personaRevisionId === null) return "";
@@ -142,14 +81,13 @@ function _messageContent(blocks: Prisma.JsonValue): string
 }
 
 /**
- * Turn the integrations the snapshot allows into the tool definitions the agent may call.
+ * Resolve immutable integration allowances into compiled tool definitions the bounded loop may propose.
  *
- * Each tool is named with its integration, giving an `integration:<id>:<tool>` revision id. That
- * revision id reaches the external-action code, which checks the integration's live custody
- * reference and its allow-list again on its own. Third-party actions always require an approval,
- * until there is a per-tool approval policy. Schema and digest come only from the admitted
- * snapshot; compiling never reads a catalogue that can change, and never invents a permissive
- * fallback.
+ * Each tool keeps an `integration:<id>:<tool>` revision id while receiving a provider-safe,
+ * collision-resistant model-visible name. The exact revision id reaches the external-action boundary, which independently rechecks its
+ * live custody reference and the revision's allow-list. Third-party actions require an approval
+ * until an explicit per-tool approval policy exists. Schema and digest come only from the admitted
+ * snapshot; compilation never consults a mutable catalogue or synthesises a permissive fallback.
  */
 async function _loadToolDefinitions(integrationAssignments: readonly RunInputSnapshotIntegrationAssignment[]): Promise<readonly CompiledToolDefinition[]>
 {
@@ -161,13 +99,22 @@ async function _loadToolDefinitions(integrationAssignments: readonly RunInputSna
 		{
 			// One definition per allowed tool. How to reach the provider is decided later, on the server.
 			const toolRevisionId = `${ExternalActionRevisionKinds.Integration}:${assignment.integrationId}:${tool.name}`;
-			tools.push({ name: toolRevisionId, toolRevisionId, description: tool.description, requiresApproval: true, parametersSchema: ___CloneCanonicalJson(tool.parametersSchema), parametersSchemaDigest: tool.parametersSchemaDigest });
+			tools.push({ name: _modelToolName(toolRevisionId), toolRevisionId, description: tool.description, requiresApproval: true, parametersSchema: ___CloneCanonicalJson(tool.parametersSchema), parametersSchemaDigest: tool.parametersSchemaDigest });
 		}
 	}
+	if (new Set(tools.map(function _Name(tool): string { return tool.name; })).size !== tools.length) throw new Error("compiled model-visible tool names collide");
 	return tools;
 }
 
-/** Build a one-line summary for each artifact revision offered to the run. */
+/** Derive a readable provider-safe name while retaining a digest suffix for collision resistance. */
+function _modelToolName(toolRevisionId: string): string
+{
+	const digestSuffix = ___DigestCanonicalJson(toolRevisionId).slice("sha256:".length, "sha256:".length + 12);
+	const readable = toolRevisionId.replace(/[^A-Za-z0-9_-]+/g, "_").replace(/^_+|_+$/g, "") || "tool";
+	return `${readable.slice(0, 51)}_${digestSuffix}`;
+}
+
+/** Resolve one-line availability summaries for the immutable artifact revisions offered to the run. */
 async function _loadArtifactSummaries(transaction: Prisma.TransactionClient, artifactRevisionIds: readonly string[]): Promise<readonly string[]>
 {
 	if (artifactRevisionIds.length === 0) return [];

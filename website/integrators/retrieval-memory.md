@@ -13,7 +13,7 @@ authority**. A runtime can request memory actions only through the control plane
 |---|---|
 | Cognee | Durable memory content and retrieval |
 | OpenCrane agent-memory catalogue | Dataset identity, digest, provenance, consent and sensitivity metadata |
-| Personal-memory selector | Selects a verified user's dataset and gateway-selected fact references for one run snapshot |
+| Personal-memory selector | Selects a verified user's dataset coordinates for one run snapshot |
 | Runtime | Proposes a memory action; never selects another user's dataset |
 
 OpenCrane does not duplicate fact text in its product database. The catalogue records a content
@@ -44,12 +44,10 @@ explicit user statement. Explicit statements must identify the same authenticate
 the target personal dataset.
 
 ::: info Current transport status
-Reads are live through the authenticated private gateway: admission freezes gateway-selected fact
-references (fact id and `sha256:` content digest, never fact text) into the run snapshot, and the
-compile step re-resolves each reference and verifies it against the frozen digest before inlining —
-a mismatch or missing fact fails the compile closed rather than producing a partial prompt. Mid-run
-memory actions can use the same durable server-worker result channel as other external actions. No
-memory write transport is implemented yet.
+Admission freezes only the verified gateway-native dataset coordinates. The model may propose a
+bounded query through the approval-required `memory_recall` tool, but recalled content is not yet
+delivered back to the model. Safe transient content delivery is deferred to
+[#601](https://github.com/elewa-git/opencrane/issues/601). No memory write transport is implemented yet.
 :::
 
 ::: tip
@@ -59,9 +57,10 @@ its governance record was not accepted.
 
 ## Retrieval during a run
 
-The control plane freezes the memory query policy and selected memory facts in the
-`RunInputSnapshot`. When runtime recall is connected, further memory reads or writes must remain
-governed external actions subject to the same approval, receipt and audit boundaries as other tools.
+The control plane freezes only the verified dataset coordinates in the `RunInputSnapshot`. The
+model chooses the query through the approval-required `memory_recall` tool. Further memory reads or
+writes remain governed external actions subject to the same approval, receipt and audit boundaries
+as other tools; content delivery remains deferred to [#601](https://github.com/elewa-git/opencrane/issues/601).
 
 ## Failure posture
 

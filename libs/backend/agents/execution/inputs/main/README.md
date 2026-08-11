@@ -7,7 +7,7 @@
 This package is part of the **shared execution flow** used by both personal and managed agents.
 Before an agent runtime executes a run, the platform freezes *everything* that run is allowed to see
 and use into one immutable record — the
-**`RunInputSnapshot`**: which messages, which persona, which memory facts, which tools and budgets,
+**`RunInputSnapshot`**: which messages, which persona, which memory query coordinates, which tools and budgets,
 and which verified identity. This package owns the **assembly** of that snapshot: it gathers each
 input from an injected authority, validates the combination, and hands the finished snapshot to the
 run-admission transaction that persists it. After that instant nothing about the run's input can
@@ -64,8 +64,9 @@ caller input.
   readers with the caller-owned identity and final skill-eligibility authorities.
 - `__CreatePrismaPersonalSessionAssemblyAuthorities` — composes the corresponding personal-run
   readers, including one transaction-scoped personal-memory repository shared by the preference
-  and memory-scope sources. It freezes only the verified user's active Cognee dataset identifier
-  and consented catalog fact identifiers; it never reads fact content or calls Cognee.
+  and memory-scope sources. It freezes only the verified user's active Cognee dataset coordinates.
+  Admission never stores the recall query, reads fact content, or calls Cognee. The model chooses a
+  query only through the approval-required `memory_recall` tool; safe content delivery is deferred to #601.
 - `PersonalExecutionIdentityEnvelopeSource` — selects the sole current personal-scope assertion
   from signed fleet membership, re-reads that exact verified revision after its high-watermark is
   advanced, and digests the user's still-valid, unrevoked personal grants in the admission
@@ -75,8 +76,9 @@ caller input.
   `skill_unavailable`.
 - `AssembleRunInputSnapshotResult` / `SessionAssemblyRefusalReason` — the all-or-nothing outcome and
   its refusal vocabulary.
-- `__CompileRunInput` / `__AppendCompiledTool` — deterministic expansion of a sealed snapshot into
-  runtime-owned prompt input, with a version stamp that makes a compiler change visible in evidence.
+- `__CompileRunInput` / `__AppendCompiledTool` — deterministic expansion of a sealed snapshot and
+  authoritative live attempt into runtime-owned prompt input, with both coordinates digest-sealed
+  and a version stamp that makes a compiler change visible in evidence.
 - `PromptCompilerRepositories` — injected read ports used only to dereference snapshot-authorized
   content while compiling.
 
@@ -89,8 +91,9 @@ Consumed by the run-admission path in the OpenCrane app, which composes the port
 authority adapters. It does not select a runtime driver, approve a persona, issue capabilities, or
 read mutable workspace files — and it never touches storage directly: every read goes through a
 port, and the only write goes through the [runs](../../runs/main/README.md) package's
-`RunAdmissionRepository`. The deterministic compiler reads only content already named by the sealed
-snapshot; it cannot add a new tool, memory record, or policy. Fail-closed throughout: malformed coordinates, a stale membership, a
+`RunAdmissionRepository`. The deterministic compiler reads only non-memory content already named by
+the sealed snapshot; memory dataset coordinates never enter compiled input. It
+cannot add a new tool, memory record, or policy. Fail-closed throughout: malformed coordinates, a stale membership, a
 non-canonical digest, or any single source refusal denies the run.
 
 The OpenCrane app composes both managed and personal admission variants. The participant-owned
@@ -98,7 +101,7 @@ conversation route derives the subject and silo from the authenticated session a
 personal assembly path re-resolves the open `agent_session`, its AgentService, and the exact signed
 membership assertion inside the admission transaction. The message body contains only bounded
 content blocks and an idempotency key. The conversation ID comes from the route; user, silo, service,
-dataset, memory fact, and membership coordinates never come from the browser.
+dataset and membership coordinates never come from the browser.
 
 There is no public run-start endpoint. Direct and group messages never enter this package; only an
 agent-session message or an internal managed trigger can request snapshot assembly.

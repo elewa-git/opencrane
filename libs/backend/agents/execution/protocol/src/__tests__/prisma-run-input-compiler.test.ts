@@ -1,20 +1,11 @@
-import { createHash } from "node:crypto";
-
 import { describe, expect, it, vi } from "vitest";
 
 import { PROMPT_COMPILER_VERSION, RunInputSnapshotIdentityKinds, type RunInputSnapshot } from "@opencrane/contracts";
-import { __UnavailableMemoryGatewayClient } from "@opencrane/backend/server/infra/memory-gateway-client";
 import { ___DigestCanonicalJson } from "@opencrane/util";
 
 import { __CreatePrismaRunInputCompiler } from "../prisma-run-input-compiler.js";
 
-/** Compute the canonical digest frozen for one fact's content. */
-function _digest(content: string): string
-{
-	return `sha256:${createHash("sha256").update(content, "utf8").digest("hex")}`;
-}
-
-/** Build a snapshot whose memory policy gives the dataset id and the query text. */
+/** Build a snapshot whose frozen memory policy names the exact recall coordinates. */
 function _snapshot(overrides: Partial<RunInputSnapshot> = {}): RunInputSnapshot
 {
 	return {
@@ -29,8 +20,7 @@ function _snapshot(overrides: Partial<RunInputSnapshot> = {}): RunInputSnapshot
 		preferenceFactIds: [],
 		artifactRevisionIds: [],
 		skillRevisionIds: [],
-		memoryFacts: [{ datasetId: "dataset-1", factId: "fact-a", contentDigest: _digest("first fact"), provenance: [] }, { datasetId: "dataset-1", factId: "fact-b", contentDigest: _digest("second fact"), provenance: [] }],
-		memoryQueryPolicy: { scope: "personal", datasetId: "dataset-1", cogneeDatasetId: "cognee-personal-1", queryText: "what did we decide", maxFacts: 8 },
+		memoryQueryPolicy: { scope: "personal", datasetId: "dataset-1", cogneeDatasetId: "cognee-personal-1", queryText: "private recall query", maxFacts: 8 },
 		integrationAssignments: [],
 		modelRoute: { alias: "silo-default" },
 		budgetPolicy: {},
@@ -56,73 +46,48 @@ function _transaction(modelDefinition: unknown = null): never
 	} as never;
 }
 
-describe("__CreatePrismaRunInputCompiler memory statements", function _describePrismaRunInputCompiler()
+describe("__CreatePrismaRunInputCompiler", function _describePrismaRunInputCompiler()
 {
 	it("freezes the registered model's generated-output capability into the compiled route", async function _FreezesGeneratedOutputCapability()
 	{
 		const transaction = _transaction({ publicModelName: "silo-default", generatedOutputCapabilities: ["image_png", "code_execution_files", "unknown"] });
-		const compiled = await __CreatePrismaRunInputCompiler(new __UnavailableMemoryGatewayClient())(_snapshot({ memoryFacts: [], memoryQueryPolicy: { scope: "none" } }), transaction);
+		const compiled = await __CreatePrismaRunInputCompiler()(_snapshot({ memoryQueryPolicy: { scope: "none" } }), 1, transaction);
 
 		expect(compiled.model.generatedOutputCapabilities).toEqual(["image_png", "code_execution_files"]);
 	});
 
-	it("inlines digest-verified statements in the sorted frozen reference order", async function _inlinesVerifiedStatements()
+	it("never projects memory references or recall queries into compiled input", async function _ExcludesMemoryCoordinates()
 	{
-		const query = vi.fn().mockResolvedValue({ facts: [{ factId: "fact-b", content: "second fact" }, { factId: "fact-a", content: "first fact" }, { factId: "fact-unrelated", content: "noise" }] });
-		const compiled = await __CreatePrismaRunInputCompiler({ query } as never)(_snapshot(), _transaction());
-
-		expect(compiled.instructions).toContain("Durable memory available for this run:\n- first fact\n- second fact");
-		expect(query).toHaveBeenCalledWith({ siloId: "silo-1", cogneeDatasetId: "cognee-personal-1", subjectId: "user-1", query: "what did we decide", maxResults: 32 });
-	});
-
-	it("fails closed when recalled content no longer matches a frozen digest", async function _failsOnDigestDrift()
-	{
-		const query = vi.fn().mockResolvedValue({ facts: [{ factId: "fact-a", content: "first fact" }, { factId: "fact-b", content: "tampered fact" }] });
-
-		await expect(__CreatePrismaRunInputCompiler({ query } as never)(_snapshot(), _transaction())).rejects.toThrow(/failed digest verification/);
-	});
-
-	it("fails closed when a frozen fact reference is missing from recall", async function _failsOnMissingFact()
-	{
-		const query = vi.fn().mockResolvedValue({ facts: [{ factId: "fact-a", content: "first fact" }] });
-
-		await expect(__CreatePrismaRunInputCompiler({ query } as never)(_snapshot(), _transaction())).rejects.toThrow(/failed digest verification/);
-	});
-
-	it("fails closed when the frozen policy lacks personal recall coordinates", async function _failsOnMissingPolicy()
-	{
-		const query = vi.fn();
-
-		await expect(__CreatePrismaRunInputCompiler({ query } as never)(_snapshot({ memoryQueryPolicy: { scope: "none" } }), _transaction())).rejects.toThrow(/cannot resolve frozen fact references/);
-		expect(query).not.toHaveBeenCalled();
-	});
-
-	it("never contacts the gateway for a snapshot with no frozen fact references", async function _compilesOfflineWithoutFacts()
-	{
-		const compiled = await __CreatePrismaRunInputCompiler(new __UnavailableMemoryGatewayClient())(_snapshot({ memoryFacts: [], memoryQueryPolicy: { scope: "none" } }), _transaction());
+		const compiled = await __CreatePrismaRunInputCompiler()(_snapshot(), 1, _transaction());
+		const serialized = JSON.stringify(compiled);
 
 		expect(compiled.instructions).not.toContain("Durable memory");
+		expect(serialized).not.toContain("private-fact-reference");
+		expect(serialized).not.toContain("private recall query");
 	});
 
 	it("projects the exact frozen tool schema and digest without a live catalogue lookup", async function _ProjectsFrozenToolSchema()
 	{
 		const parametersSchema = { type: "object", additionalProperties: false, required: ["query"], properties: { query: { type: "string" } } } as const;
-		const snapshot = _snapshot({ memoryFacts: [], memoryQueryPolicy: { scope: "none" }, integrationAssignments: [{ integrationId: "search", toolDefinitions: [{ name: "query", description: "Search records", parametersSchema, parametersSchemaDigest: ___DigestCanonicalJson(parametersSchema) }] }] });
+		const snapshot = _snapshot({ memoryQueryPolicy: { scope: "none" }, integrationAssignments: [{ integrationId: "search", toolDefinitions: [{ name: "query", description: "Search records", parametersSchema, parametersSchemaDigest: ___DigestCanonicalJson(parametersSchema) }] }] });
 
-		const compiled = await __CreatePrismaRunInputCompiler(new __UnavailableMemoryGatewayClient())(snapshot, _transaction());
+		const compiled = await __CreatePrismaRunInputCompiler()(snapshot, 1, _transaction());
+		const revision = "integration:search:query";
+		const providerSafeName = `integration_search_query_${___DigestCanonicalJson(revision).slice(7, 19)}`;
 
-		expect(compiled.tools).toEqual([{ name: "integration:search:query", toolRevisionId: "integration:search:query", description: "Search records", requiresApproval: true, parametersSchema, parametersSchemaDigest: ___DigestCanonicalJson(parametersSchema) }]);
+		expect(compiled.tools).toEqual([{ name: providerSafeName, toolRevisionId: revision, description: "Search records", requiresApproval: true, parametersSchema, parametersSchemaDigest: ___DigestCanonicalJson(parametersSchema) }]);
+		expect(compiled.tools[0]?.name).toMatch(/^[A-Za-z0-9_-]{1,64}$/);
 	});
 
 	it("fails closed when a frozen tool schema is missing or changed without a new digest", async function _RejectsToolSchemaDrift()
 	{
 		const reviewedSchema = { type: "object", additionalProperties: false } as const;
 		const definition = { name: "query", description: "Search records", parametersSchema: reviewedSchema, parametersSchemaDigest: ___DigestCanonicalJson(reviewedSchema) };
-		const base = { memoryFacts: [], memoryQueryPolicy: { scope: "none" } } as const;
+		const base = { memoryQueryPolicy: { scope: "none" } } as const;
 		const missing = _snapshot({ ...base, integrationAssignments: [{ integrationId: "search", toolDefinitions: [{ ...definition, parametersSchema: undefined } as never] }] });
 		const mutated = _snapshot({ ...base, integrationAssignments: [{ integrationId: "search", toolDefinitions: [{ ...definition, parametersSchema: { type: "object", additionalProperties: true } }] }] });
 
-		await expect(__CreatePrismaRunInputCompiler(new __UnavailableMemoryGatewayClient())(missing, _transaction())).rejects.toThrow(/tool definitions are invalid/);
-		await expect(__CreatePrismaRunInputCompiler(new __UnavailableMemoryGatewayClient())(mutated, _transaction())).rejects.toThrow(/tool definitions are invalid/);
+		await expect(__CreatePrismaRunInputCompiler()(missing, 1, _transaction())).rejects.toThrow(/tool definitions are invalid/);
+		await expect(__CreatePrismaRunInputCompiler()(mutated, 1, _transaction())).rejects.toThrow(/tool definitions are invalid/);
 	});
 });

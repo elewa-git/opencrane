@@ -51,6 +51,8 @@ def _compiled_input() -> dict:
     """Compiled input fixing exactly one granted tool revision for revision-fault scenarios."""
     return {
         "promptCompilerVersion": "v1",
+        "runId": "run-fault",
+        "attempt": 2,
         "instructions": "",
         "messages": [{"role": "user", "content": "hi"}],
         "tools": [{"name": "search", "toolRevisionId": "rev-search", "description": "", "parametersSchema": {}}],

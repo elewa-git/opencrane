@@ -11,6 +11,7 @@ const sql = readFileSync(join(transitionRoot, "migration.sql"), "utf8");
 const manifest = JSON.parse(readFileSync(join(transitionRoot, "manifest.json"), "utf8"));
 const targetBaseline = readFileSync(join(migrationRoot, "../bootstrap/target-baseline.sql"), "utf8");
 const authorizationSchema = readFileSync(join(migrationRoot, "../schema/authorization.prisma"), "utf8");
+const elicitationSchema = readFileSync(join(migrationRoot, "../schema/elicitation.prisma"), "utf8");
 const conversationSchema = readFileSync(join(migrationRoot, "../schema/conversations.prisma"), "utf8");
 const runtimeSchema = readFileSync(join(migrationRoot, "../schema/runtime.prisma"), "utf8");
 const digest = createHash("sha256").update(sql).digest("hex");
@@ -72,6 +73,19 @@ requireContract(sql.includes('ADD COLUMN "tool_definitions" JSONB NOT NULL'), "m
 requireContract(!targetBaseline.includes('"allowed_tools"'), "target baseline must not retain tool-name-only authority");
 requireContract(authorizationSchema.includes("model ToolResultDelivery"), "authorization schema must own exact tool-result delivery");
 requireContract(!runtimeSchema.includes("model RuntimeExternalActionRetry"), "runtime schema must retire the split retry budget");
+requireContract(elicitationSchema.includes("toolInvocationRevision Int"), "memory permission must bind the exact invocation revision");
+requireContract(elicitationSchema.includes("inputSnapshotDigest    String"), "memory permission must bind the frozen input snapshot digest");
+requireContract(elicitationSchema.includes("personaRevisionId      String"), "memory permission must bind the frozen persona revision");
+for (const source of [targetBaseline, sql])
+{
+	requireContract(source.includes('CREATE FUNCTION "enforce_personal_memory_permission_authority"()'), "memory permission must retain its relational authority trigger");
+	requireContract(source.includes('CREATE TRIGGER "personal_memory_permission_receipts_authority"'), "memory permission trigger must protect inserts and consumption");
+	requireContract(source.includes('"tool_invocation_id" TEXT NOT NULL'), "memory permission must retain its exact ToolInvocation foreign key");
+	requireContract(source.includes('"tool_invocation_revision" INTEGER NOT NULL'), "memory permission must retain its exact invocation revision");
+	requireContract(source.includes('"input_snapshot_digest" TEXT NOT NULL'), "memory permission must retain the frozen input snapshot digest");
+	requireContract(source.includes('"persona_revision_id" TEXT NOT NULL'), "memory permission must retain the frozen persona revision");
+	requireContract(!source.includes('"subject_id" TEXT NOT NULL, "execution_subject_id" TEXT NOT NULL, "purpose_digest"'), "memory permission must not retain the ambiguous participant field");
+}
 for (const source of [targetBaseline, sql])
 {
 	requireContract(source.includes('CREATE TYPE "ToolInvocationState"'), "tool invocation lifecycle must use its own durable state vocabulary");

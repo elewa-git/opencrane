@@ -1,4 +1,4 @@
-import type { CompiledMessage, CompiledModelRoute, CompiledToolDefinition, MemoryFactReference, RunInputSnapshotIntegrationAssignment } from "@opencrane/contracts";
+import type { CompiledMessage, CompiledModelRoute, CompiledToolDefinition, RunInputSnapshotIntegrationAssignment } from "@opencrane/contracts";
 import type { JsonValue } from "@opencrane/util";
 
 /**
@@ -23,15 +23,6 @@ export interface PromptCompilerRepositories
 	 * payload or its digest.
 	 */
 	loadToolDefinitions(integrationAssignments: readonly RunInputSnapshotIntegrationAssignment[]): Promise<readonly CompiledToolDefinition[]>;
-	/**
-	 * Resolve durable memory-fact statements included in the prompt for the given references.
-	 *
-	 * The references arrive sorted by `factId` and carry the digests frozen at admission. An
-	 * implementation must verify every returned statement against its reference's `contentDigest`
-	 * and throw on any mismatch or missing fact, so a redelivered `start_attempt` frame can never
-	 * carry drifted memory text or a silently partial prompt.
-	 */
-	loadMemoryFactStatements(memoryFacts: readonly MemoryFactReference[]): Promise<readonly string[]>;
 	/** Resolve one-line availability summaries for the immutable artifact revisions offered to the run. */
 	loadArtifactSummaries(artifactRevisionIds: readonly string[]): Promise<readonly string[]>;
 	/** Resolve one-line availability summaries for the immutable skill revisions offered to the run. */

@@ -1,6 +1,5 @@
 import type { ObotMcpInvocationPort } from "@opencrane/backend/server/infra/obot-custody";
 import type { SandboxJobExecutor } from "@opencrane/backend/server/infra/sandbox-execution";
-import type { MemoryGatewayClient } from "@opencrane/backend/server/infra/memory-gateway-client";
 import type { IntegrationAuthorityRepository, ResolveIntegrationAssignmentResult } from "@opencrane/backend/server/gateways/integrations";
 import type { JsonValue } from "@opencrane/util";
 
@@ -94,8 +93,6 @@ export interface ExternalActionExecutorDependencies
 	readonly obotMcpInvocation: ObotMcpInvocationPort;
 	/** Sandbox Job transport backing sandboxed tool calls (fail-closed until verified). */
 	readonly sandboxExecutor: SandboxJobExecutor;
-	/** Memory-gateway transport backing memory tool calls (fail-closed until verified). */
-	readonly memoryGateway: MemoryGatewayClient;
 }
 
 /** Transports shared by every action; the identity fields stay per-invocation. */

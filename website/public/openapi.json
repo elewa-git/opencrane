@@ -4602,6 +4602,7 @@
               "application/json": {
                 "schema": {
                   "type": "object",
+                  "additionalProperties": false,
                   "required": [
                     "elicitations"
                   ],
@@ -4609,7 +4610,232 @@
                     "elicitations": {
                       "type": "array",
                       "items": {
-                        "type": "object"
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "version",
+                          "requestId",
+                          "conversationId",
+                          "runId",
+                          "attempt",
+                          "assignedParticipantId",
+                          "purpose",
+                          "state",
+                          "body",
+                          "requiresStepUp",
+                          "requestedAt",
+                          "expiresAt"
+                        ],
+                        "properties": {
+                          "version": {
+                            "const": "opencrane.elicitation.v1"
+                          },
+                          "requestId": {
+                            "type": "string"
+                          },
+                          "conversationId": {
+                            "type": "string"
+                          },
+                          "runId": {
+                            "type": "string"
+                          },
+                          "attempt": {
+                            "type": "integer",
+                            "minimum": 1
+                          },
+                          "assignedParticipantId": {
+                            "type": "string"
+                          },
+                          "purpose": {
+                            "type": "string",
+                            "enum": [
+                              "runtime_input",
+                              "tool_approval",
+                              "personal_memory_permission",
+                              "a2ui_action"
+                            ]
+                          },
+                          "state": {
+                            "type": "string",
+                            "enum": [
+                              "requested",
+                              "answered",
+                              "declined",
+                              "expired",
+                              "cancelled"
+                            ]
+                          },
+                          "body": {
+                            "oneOf": [
+                              {
+                                "type": "object",
+                                "additionalProperties": false,
+                                "required": [
+                                  "kind",
+                                  "prompt",
+                                  "action",
+                                  "target",
+                                  "dataUse",
+                                  "consequence"
+                                ],
+                                "properties": {
+                                  "kind": {
+                                    "const": "approval"
+                                  },
+                                  "prompt": {
+                                    "type": "string"
+                                  },
+                                  "action": {
+                                    "type": "string"
+                                  },
+                                  "target": {
+                                    "type": "string"
+                                  },
+                                  "dataUse": {
+                                    "type": "string"
+                                  },
+                                  "externalSystem": {
+                                    "type": "string"
+                                  },
+                                  "consequence": {
+                                    "type": "string"
+                                  },
+                                  "cost": {
+                                    "type": "string"
+                                  }
+                                }
+                              },
+                              {
+                                "type": "object",
+                                "additionalProperties": false,
+                                "required": [
+                                  "kind",
+                                  "prompt",
+                                  "choices"
+                                ],
+                                "properties": {
+                                  "kind": {
+                                    "const": "single_choice"
+                                  },
+                                  "prompt": {
+                                    "type": "string"
+                                  },
+                                  "choices": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "object",
+                                      "additionalProperties": false,
+                                      "required": [
+                                        "value",
+                                        "label"
+                                      ],
+                                      "properties": {
+                                        "value": {
+                                          "type": "string"
+                                        },
+                                        "label": {
+                                          "type": "string"
+                                        },
+                                        "description": {
+                                          "type": "string"
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              },
+                              {
+                                "type": "object",
+                                "additionalProperties": false,
+                                "required": [
+                                  "kind",
+                                  "prompt",
+                                  "choices",
+                                  "minimumSelections",
+                                  "maximumSelections"
+                                ],
+                                "properties": {
+                                  "kind": {
+                                    "const": "multiple_choice"
+                                  },
+                                  "prompt": {
+                                    "type": "string"
+                                  },
+                                  "choices": {
+                                    "type": "array",
+                                    "items": {
+                                      "type": "object",
+                                      "additionalProperties": false,
+                                      "required": [
+                                        "value",
+                                        "label"
+                                      ],
+                                      "properties": {
+                                        "value": {
+                                          "type": "string"
+                                        },
+                                        "label": {
+                                          "type": "string"
+                                        },
+                                        "description": {
+                                          "type": "string"
+                                        }
+                                      }
+                                    }
+                                  },
+                                  "minimumSelections": {
+                                    "type": "integer"
+                                  },
+                                  "maximumSelections": {
+                                    "type": "integer"
+                                  }
+                                }
+                              },
+                              {
+                                "type": "object",
+                                "additionalProperties": false,
+                                "required": [
+                                  "kind",
+                                  "prompt",
+                                  "maximumLength",
+                                  "allowEmpty"
+                                ],
+                                "properties": {
+                                  "kind": {
+                                    "const": "free_text"
+                                  },
+                                  "prompt": {
+                                    "type": "string"
+                                  },
+                                  "maximumLength": {
+                                    "type": "integer"
+                                  },
+                                  "allowEmpty": {
+                                    "type": "boolean"
+                                  }
+                                }
+                              }
+                            ]
+                          },
+                          "requiresStepUp": {
+                            "type": "boolean"
+                          },
+                          "requestedAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "expiresAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "resolvedAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "safeReason": {
+                            "type": "string"
+                          }
+                        }
                       }
                     }
                   }
@@ -4685,12 +4911,238 @@
               "application/json": {
                 "schema": {
                   "type": "object",
+                  "additionalProperties": false,
                   "required": [
                     "elicitation"
                   ],
                   "properties": {
                     "elicitation": {
-                      "type": "object"
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "version",
+                        "requestId",
+                        "conversationId",
+                        "runId",
+                        "attempt",
+                        "assignedParticipantId",
+                        "purpose",
+                        "state",
+                        "body",
+                        "requiresStepUp",
+                        "requestedAt",
+                        "expiresAt"
+                      ],
+                      "properties": {
+                        "version": {
+                          "const": "opencrane.elicitation.v1"
+                        },
+                        "requestId": {
+                          "type": "string"
+                        },
+                        "conversationId": {
+                          "type": "string"
+                        },
+                        "runId": {
+                          "type": "string"
+                        },
+                        "attempt": {
+                          "type": "integer",
+                          "minimum": 1
+                        },
+                        "assignedParticipantId": {
+                          "type": "string"
+                        },
+                        "purpose": {
+                          "type": "string",
+                          "enum": [
+                            "runtime_input",
+                            "tool_approval",
+                            "personal_memory_permission",
+                            "a2ui_action"
+                          ]
+                        },
+                        "state": {
+                          "type": "string",
+                          "enum": [
+                            "requested",
+                            "answered",
+                            "declined",
+                            "expired",
+                            "cancelled"
+                          ]
+                        },
+                        "body": {
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "additionalProperties": false,
+                              "required": [
+                                "kind",
+                                "prompt",
+                                "action",
+                                "target",
+                                "dataUse",
+                                "consequence"
+                              ],
+                              "properties": {
+                                "kind": {
+                                  "const": "approval"
+                                },
+                                "prompt": {
+                                  "type": "string"
+                                },
+                                "action": {
+                                  "type": "string"
+                                },
+                                "target": {
+                                  "type": "string"
+                                },
+                                "dataUse": {
+                                  "type": "string"
+                                },
+                                "externalSystem": {
+                                  "type": "string"
+                                },
+                                "consequence": {
+                                  "type": "string"
+                                },
+                                "cost": {
+                                  "type": "string"
+                                }
+                              }
+                            },
+                            {
+                              "type": "object",
+                              "additionalProperties": false,
+                              "required": [
+                                "kind",
+                                "prompt",
+                                "choices"
+                              ],
+                              "properties": {
+                                "kind": {
+                                  "const": "single_choice"
+                                },
+                                "prompt": {
+                                  "type": "string"
+                                },
+                                "choices": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "additionalProperties": false,
+                                    "required": [
+                                      "value",
+                                      "label"
+                                    ],
+                                    "properties": {
+                                      "value": {
+                                        "type": "string"
+                                      },
+                                      "label": {
+                                        "type": "string"
+                                      },
+                                      "description": {
+                                        "type": "string"
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            },
+                            {
+                              "type": "object",
+                              "additionalProperties": false,
+                              "required": [
+                                "kind",
+                                "prompt",
+                                "choices",
+                                "minimumSelections",
+                                "maximumSelections"
+                              ],
+                              "properties": {
+                                "kind": {
+                                  "const": "multiple_choice"
+                                },
+                                "prompt": {
+                                  "type": "string"
+                                },
+                                "choices": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "additionalProperties": false,
+                                    "required": [
+                                      "value",
+                                      "label"
+                                    ],
+                                    "properties": {
+                                      "value": {
+                                        "type": "string"
+                                      },
+                                      "label": {
+                                        "type": "string"
+                                      },
+                                      "description": {
+                                        "type": "string"
+                                      }
+                                    }
+                                  }
+                                },
+                                "minimumSelections": {
+                                  "type": "integer"
+                                },
+                                "maximumSelections": {
+                                  "type": "integer"
+                                }
+                              }
+                            },
+                            {
+                              "type": "object",
+                              "additionalProperties": false,
+                              "required": [
+                                "kind",
+                                "prompt",
+                                "maximumLength",
+                                "allowEmpty"
+                              ],
+                              "properties": {
+                                "kind": {
+                                  "const": "free_text"
+                                },
+                                "prompt": {
+                                  "type": "string"
+                                },
+                                "maximumLength": {
+                                  "type": "integer"
+                                },
+                                "allowEmpty": {
+                                  "type": "boolean"
+                                }
+                              }
+                            }
+                          ]
+                        },
+                        "requiresStepUp": {
+                          "type": "boolean"
+                        },
+                        "requestedAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "expiresAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "resolvedAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "safeReason": {
+                          "type": "string"
+                        }
+                      }
                     }
                   }
                 }
@@ -4776,7 +5228,75 @@
                     "maxLength": 200
                   },
                   "response": {
-                    "type": "object"
+                    "oneOf": [
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "kind",
+                          "approved"
+                        ],
+                        "properties": {
+                          "kind": {
+                            "const": "approval"
+                          },
+                          "approved": {
+                            "type": "boolean"
+                          }
+                        }
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "kind",
+                          "selection"
+                        ],
+                        "properties": {
+                          "kind": {
+                            "const": "single_choice"
+                          },
+                          "selection": {
+                            "type": "string"
+                          }
+                        }
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "kind",
+                          "selections"
+                        ],
+                        "properties": {
+                          "kind": {
+                            "const": "multiple_choice"
+                          },
+                          "selections": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        }
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "kind",
+                          "text"
+                        ],
+                        "properties": {
+                          "kind": {
+                            "const": "free_text"
+                          },
+                          "text": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    ]
                   }
                 }
               }
@@ -4790,12 +5310,42 @@
               "application/json": {
                 "schema": {
                   "type": "object",
+                  "additionalProperties": false,
                   "required": [
                     "response"
                   ],
                   "properties": {
                     "response": {
-                      "type": "object"
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "requestId",
+                        "state",
+                        "idempotent",
+                        "resolvedAt"
+                      ],
+                      "properties": {
+                        "requestId": {
+                          "type": "string"
+                        },
+                        "state": {
+                          "type": "string",
+                          "enum": [
+                            "requested",
+                            "answered",
+                            "declined",
+                            "expired",
+                            "cancelled"
+                          ]
+                        },
+                        "idempotent": {
+                          "type": "boolean"
+                        },
+                        "resolvedAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        }
+                      }
                     }
                   }
                 }

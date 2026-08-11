@@ -5,14 +5,33 @@ import type { RuntimeTerminalReporter } from "./runtime-terminal-reporter.types.
 /** Existing transaction shape owned by the run authority. */
 type RuntimeEventTransaction = Parameters<RuntimeTerminalReporter["reportInTransaction"]>[0];
 
-/** An event the runtime proposes for the run's event stream, already checked against the fence. */
+/** Stable safe failure reasons a runtime may expose without technical details or secrets. */
+export enum RuntimeRunFailureReasons
+{
+	/** Compiled input belongs to a different run or attempt than the accepted command. */
+	CompiledInputCoordinateMismatch = "compiled_input_coordinate_mismatch",
+	/** The bounded executor failed outside a more specific public category. */
+	ExecutorFailed = "executor_failed",
+	/** Owner steering delivered on resume could not be interpreted safely. */
+	InvalidResumeSteering = "invalid_resume_steering",
+	/** Saved tool results delivered on resume violated their public contract. */
+	InvalidToolResults = "invalid_tool_results",
+	/** A start command did not contain the required compiled input. */
+	MissingCompiledInput = "missing_compiled_input",
+	/** A resume command did not contain its required payload. */
+	MissingResumePayload = "missing_resume_payload",
+}
+
+/** Already-fenced runtime event proposed to the canonical run stream. */
 export interface RuntimeEventReportCommand
 {
 	/** The run this event belongs to. */
 	readonly runId: string;
 	/** The attempt this event belongs to. */
 	readonly attempt: number;
-	/** Event name from the runtime; it must match one of the allowed names. */
+	/** Whether the exact accepted command authorising this candidate was start_attempt. */
+	readonly sourceIsStartAttempt: boolean;
+	/** Untrusted event name that must match the canonical runtime vocabulary. */
 	readonly eventType: string;
 	/** Untrusted bounded JSON payload. */
 	readonly payload: JsonValue;

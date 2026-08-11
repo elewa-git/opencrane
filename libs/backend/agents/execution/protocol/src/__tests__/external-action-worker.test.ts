@@ -1,6 +1,7 @@
-import { ExternalActionClaimKinds, ExternalActionRecoveryModes, ToolInvocationEventTypes, ToolInvocationStates, type ToolInvocationClaim, type ToolInvocationClaimResult, type ToolInvocationCompletionResult, type ToolInvocationPreparationPolicy, type ToolInvocationRecord } from "@opencrane/backend/server/iam/authorization";
+import { ExternalActionClaimKinds, ExternalActionRecoveryModes, ToolInvocationClaimOutcomes, ToolInvocationEventTypes, ToolInvocationStates, type ToolInvocationClaim, type ToolInvocationClaimResult, type ToolInvocationCompletionResult, type ToolInvocationPreparationPolicy, type ToolInvocationRecord } from "@opencrane/backend/server/iam/authorization";
 import type { Logger } from "@opencrane/backend/observability";
 import type { RunInputSnapshot } from "@opencrane/contracts";
+import { PERSONAL_MEMORY_RECALL_TOOL_REVISION } from "@opencrane/models/agents";
 import type { JsonValue } from "@opencrane/util";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -220,7 +221,7 @@ class _Invocations implements ExternalActionWorkerUnitOfWork
 		this.claims.push(kind);
 		const state = kind === ExternalActionClaimKinds.Dispatch ? ToolInvocationStates.Claimed : ToolInvocationStates.Reconciling;
 		const invocation = { ...this.invocation, state, claimKind: kind, claimFence: 1 };
-		return { outcome: "claimed", claim: { invocationId: invocation.id, kind, fence: 1, revision: invocation.revision + 1 }, invocation };
+		return { outcome: ToolInvocationClaimOutcomes.Claimed, claim: { invocationId: invocation.id, kind, fence: 1, revision: invocation.revision + 1 }, invocation };
 	}
 	/** Commit one successful provider result. */
 	async completeSucceeded(_claim: ToolInvocationClaim, result: JsonValue, _now: Date): Promise<ToolInvocationCompletionResult> { this.successes.push(result); this.lifecycleEvents.push({ runId: this.invocation.runId, attempt: this.invocation.attempt, eventType: ToolInvocationEventTypes.Completed, payload: { toolInvocationId: this.invocation.toolInvocationId } }); return { outcome: "winner", invocation: this.invocation }; }
@@ -240,12 +241,13 @@ class _Invocations implements ExternalActionWorkerUnitOfWork
 }
 
 /** Build complete worker dependencies around a selected invocation and adapter. */
-function _dependencies(invocation: ExternalActionWorkerInvocation, adapter: PreparedExternalActionAdapter, context: ExternalActionExecutionContext | null = _context()): { readonly value: ExternalActionWorkerDependencies; readonly invocations: _Invocations; readonly adapters: _Adapters; readonly events: ExternalActionWorkerEvent[]; readonly approvalOpen: ReturnType<typeof vi.fn>; readonly logWarn: ReturnType<typeof vi.fn> }
+function _dependencies(invocation: ExternalActionWorkerInvocation, adapter: PreparedExternalActionAdapter, context: ExternalActionExecutionContext | null = _context()): { readonly value: ExternalActionWorkerDependencies; readonly invocations: _Invocations; readonly adapters: _Adapters; readonly events: ExternalActionWorkerEvent[]; readonly approvalOpen: ReturnType<typeof vi.fn>; readonly memoryPermissionOpen: ReturnType<typeof vi.fn>; readonly logWarn: ReturnType<typeof vi.fn> }
 {
 	const invocations = new _Invocations(invocation);
 	const adapters = new _Adapters(adapter);
 	const events: ExternalActionWorkerEvent[] = [];
 	const approvalOpen = vi.fn(async function _open() { return true; });
+	const memoryPermissionOpen = vi.fn(async function _open() { return true; });
 	const logWarn = vi.fn();
 	return {
 		value: {
@@ -254,6 +256,7 @@ function _dependencies(invocation: ExternalActionWorkerInvocation, adapter: Prep
 			contexts: new _Contexts(context),
 			adapters,
 			approvals: { open: approvalOpen },
+			personalMemoryPermissions: { openMemoryPermission: memoryPermissionOpen, verifyMemoryPermission: async function _verify() { return { outcome: "authorized" as never }; } },
 			events: { append: async function _append(event: ExternalActionWorkerEvent) { events.push(event); } },
 			clock: { now: function _now() { return _NOW; } },
 			policy: { preparationAttemptLimit: 3, preparationRetryWindowMilliseconds: 300_000, preparationRetryDelayMilliseconds: 1_000, providerClaimLeaseMilliseconds: 30_000 },
@@ -263,6 +266,7 @@ function _dependencies(invocation: ExternalActionWorkerInvocation, adapter: Prep
 		adapters,
 		events,
 		approvalOpen,
+		memoryPermissionOpen,
 		logWarn,
 	};
 }
@@ -298,6 +302,18 @@ describe("external action worker", function _suite()
 		await expect(new ExternalActionWorker(dependencies.value).runOnce()).resolves.toBe(true);
 		expect(dependencies.approvalOpen).toHaveBeenCalledWith(invocation, _context(), _NOW);
 		expect(dependencies.adapters.prepareCount).toBe(0);
+		expect(adapter.dispatchKeys).toEqual([]);
+	});
+
+	it("opens personal-memory elicitation without dispatching Cognee when no receipt exists", async function _opensMemoryPermission()
+	{
+		const adapter = new _Adapter(ExternalActionRecoveryModes.Manual);
+		const invocation = { ..._invocation(ToolInvocationStates.AwaitingApproval), toolRevisionId: PERSONAL_MEMORY_RECALL_TOOL_REVISION, approvalRequired: true };
+		const dependencies = _dependencies(invocation, adapter);
+
+		await expect(new ExternalActionWorker(dependencies.value).runOnce()).resolves.toBe(true);
+		expect(dependencies.memoryPermissionOpen).toHaveBeenCalledWith(invocation, _context().snapshot, _NOW);
+		expect(dependencies.approvalOpen).not.toHaveBeenCalled();
 		expect(adapter.dispatchKeys).toEqual([]);
 	});
 

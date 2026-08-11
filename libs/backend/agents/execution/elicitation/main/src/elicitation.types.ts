@@ -1,5 +1,30 @@
 import type { ConversationElicitation, ElicitationBody, ElicitationPurposes, ElicitationResponseProjection, SubmitElicitationResponse } from "@opencrane/contracts";
+import type { RunInputSnapshot } from "@opencrane/contracts";
+import type { ToolInvocationClaim, ToolInvocationRecord } from "@opencrane/backend/server/iam/authorization";
 import type { JsonValue } from "@opencrane/util";
+
+/** Stable fail-closed result of checking one exact personal-memory permission receipt. */
+export enum PersonalMemoryPermissionVerificationOutcomes
+{
+	/** The current active receipt matches every immutable invocation and snapshot coordinate. */
+	Authorized = "authorized",
+	/** Permission is absent, stale, expired, consumed, or bound to different authority. */
+	Denied = "denied",
+}
+
+/** Result of checking personal-memory permission without reading any remembered fact content. */
+export type PersonalMemoryPermissionVerificationResult =
+	| { readonly outcome: PersonalMemoryPermissionVerificationOutcomes.Authorized }
+	| { readonly outcome: PersonalMemoryPermissionVerificationOutcomes.Denied };
+
+/** Production gate that opens and verifies one execution-user memory permission. */
+export interface PersonalMemoryPermissionAuthority
+{
+	/** Open or replay the request for the exact awaiting invocation and immutable snapshot. */
+	openMemoryPermission(invocation: ToolInvocationRecord, snapshot: RunInputSnapshot, now: Date): Promise<boolean>;
+	/** Verify the exact accepted receipt and current dispatch claim without consuming either. */
+	verifyMemoryPermission(invocation: ToolInvocationRecord, claim: ToolInvocationClaim, snapshot: RunInputSnapshot, now: Date): Promise<PersonalMemoryPermissionVerificationResult>;
+}
 
 /** Server-derived coordinates for opening one runtime-proposed request. */
 export interface OpenElicitationCommand
@@ -79,4 +104,4 @@ export interface ElicitationUnitOfWork extends SelfElicitationQueryRepository
 }
 
 /** Transaction-bound persistence authority constructed only by the unit of work. */
-export interface ElicitationRepository extends ElicitationUnitOfWork {}
+export interface ElicitationRepository extends ElicitationUnitOfWork, PersonalMemoryPermissionAuthority {}

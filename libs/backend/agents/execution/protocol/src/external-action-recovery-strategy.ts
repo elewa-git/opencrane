@@ -16,7 +16,7 @@ class _ProviderIdempotencyStrategy implements ExternalActionRecoveryStrategy
 	execute(adapter: PreparedExternalActionAdapter, invocation: ToolInvocationRecord, claim: ToolInvocationClaim): Promise<ExternalActionProviderOutcome>
 	{
 		if (claim.kind !== ExternalActionClaimKinds.Dispatch || invocation.state !== ToolInvocationStates.Claimed) throw new Error("idempotency strategy requires a dispatch claim");
-		return adapter.dispatch(_recoveryKey(invocation));
+		return adapter.dispatch(_recoveryKey(invocation), invocation, claim);
 	}
 }
 
@@ -27,8 +27,8 @@ class _ProviderReconciliationStrategy implements ExternalActionRecoveryStrategy
 	execute(adapter: PreparedExternalActionAdapter, invocation: ToolInvocationRecord, claim: ToolInvocationClaim): Promise<ExternalActionProviderOutcome>
 	{
 		const recoveryKey = _recoveryKey(invocation);
-		if (claim.kind === ExternalActionClaimKinds.Dispatch) return adapter.dispatch(recoveryKey);
-		if (claim.kind === ExternalActionClaimKinds.Reconcile) return adapter.reconcile(recoveryKey);
+		if (claim.kind === ExternalActionClaimKinds.Dispatch) return adapter.dispatch(recoveryKey, invocation, claim);
+		if (claim.kind === ExternalActionClaimKinds.Reconcile) return adapter.reconcile(recoveryKey, invocation, claim);
 		throw new Error("reconciliation strategy received an unsupported claim");
 	}
 }
@@ -36,11 +36,11 @@ class _ProviderReconciliationStrategy implements ExternalActionRecoveryStrategy
 /** Executes once and never retries or reads back after an uncertain provider outcome. */
 class _ManualRecoveryStrategy implements ExternalActionRecoveryStrategy
 {
-	/** Allow only a Dispatch claim; manual recovery never makes a second provider call. */
-	execute(adapter: PreparedExternalActionAdapter, _invocation: ToolInvocationRecord, claim: ToolInvocationClaim): Promise<ExternalActionProviderOutcome>
+	/** Permit only the first fenced dispatch; manual recovery has no automatic second operation. */
+	execute(adapter: PreparedExternalActionAdapter, invocation: ToolInvocationRecord, claim: ToolInvocationClaim): Promise<ExternalActionProviderOutcome>
 	{
 		if (claim.kind !== ExternalActionClaimKinds.Dispatch) throw new Error("manual recovery cannot reconcile automatically");
-		return adapter.dispatch(null);
+		return adapter.dispatch(null, invocation, claim);
 	}
 }
 

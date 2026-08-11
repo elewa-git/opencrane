@@ -98,6 +98,12 @@ carries a concrete, currently authorized human approval subject.
   canonical lifecycle event in the same transaction; its transaction repository remains
   package-private. Runs owns the injected run-state recovery port; authorization never writes
   `AgentRun.state` directly.
+- `ToolInvocationAdmissionOutcomes`, `ToolInvocationClaimOutcomes`, `ToolResultDeliveryOutcomes`,
+  and `DeferredToolDecisionOutcomes` are stable transaction result vocabularies shared by the
+  authorization owner and its protocol consumers.
+- `PrismaToolInvocationElicitationRepository` — binds the narrow ToolInvocation read,
+  approve/reject, safe failure-delivery, and active dispatch-claim checks to an existing elicitation
+  transaction without exporting the full persistence repository.
 - `TOOL_INVOCATION_PREPARATION_POLICY` — the one frozen provider-free retry policy consumed by
   admission, scheduling, lifecycle decisions, cancellation, and durable recovery events.
 - `ShareAuthorizationScopeKinds` — the four domain scope categories that sharing accepts; the

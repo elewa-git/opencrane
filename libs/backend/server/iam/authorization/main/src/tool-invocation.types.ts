@@ -121,9 +121,20 @@ export interface ToolInvocationRecord
 }
 
 /** Result of atomic candidate and Preparing-invocation admission. */
+export enum ToolInvocationAdmissionOutcomes
+{
+	/** A new preparing invocation became durable. */
+	Admitted = "admitted",
+	/** The exact invocation was already durable. */
+	Idempotent = "idempotent",
+	/** Existing durable authority disagreed with the candidate. */
+	Conflict = "conflict",
+}
+
+/** Result of atomic candidate and Preparing-invocation admission. */
 export type ToolInvocationAdmissionResult =
-	| { readonly outcome: "admitted" | "idempotent"; readonly invocation: ToolInvocationRecord }
-	| { readonly outcome: "conflict" };
+	| { readonly outcome: ToolInvocationAdmissionOutcomes.Admitted | ToolInvocationAdmissionOutcomes.Idempotent; readonly invocation: ToolInvocationRecord }
+	| { readonly outcome: ToolInvocationAdmissionOutcomes.Conflict };
 
 /** Proof that this worker may run one provider operation, for as long as its fence still matches the row. */
 export interface ToolInvocationClaim
@@ -139,10 +150,30 @@ export interface ToolInvocationClaim
 }
 
 /** Outcome of claiming prepared work. */
+export enum ToolInvocationClaimOutcomes
+{
+	/** This worker acquired the exact fenced provider claim. */
+	Claimed = "claimed",
+	/** Another durable transition already won. */
+	Winner = "winner",
+	/** The invocation no longer exists. */
+	Missing = "missing",
+}
+
+/** Outcome of claiming prepared work. */
 export type ToolInvocationClaimResult =
-	| { readonly outcome: "claimed"; readonly claim: ToolInvocationClaim; readonly invocation: ToolInvocationRecord }
-	| { readonly outcome: "winner"; readonly invocation: ToolInvocationRecord }
-	| { readonly outcome: "missing" };
+	| { readonly outcome: ToolInvocationClaimOutcomes.Claimed; readonly claim: ToolInvocationClaim; readonly invocation: ToolInvocationRecord }
+	| { readonly outcome: ToolInvocationClaimOutcomes.Winner; readonly invocation: ToolInvocationRecord }
+	| { readonly outcome: ToolInvocationClaimOutcomes.Missing };
+
+/** Stable result categories delivered back to the runtime. */
+export enum ToolResultDeliveryOutcomes
+{
+	/** The provider returned a canonical result. */
+	Succeeded = "succeeded",
+	/** The provider returned or proved a terminal failure. */
+	Failed = "failed",
+}
 
 /** Result body stored for the runtime, written before the server creates the command that delivers it. */
 export type ToolResultDeliveryPayload =

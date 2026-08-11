@@ -27,7 +27,6 @@ import { _CreateSkillCatalogueRouter } from "@opencrane/backend/server/agents/sk
 import { _CreateSteeringIngestRouter } from "@opencrane/backend/agents/execution/protocol";
 import { _ResolveRequestPrincipal } from "@opencrane/backend/server/infra/auth";
 import { _CheckDbHealth, _OpenapiRouter, _RateLimit } from "@opencrane/backend/server/infra/http";
-import type { MemoryGatewayClient } from "@opencrane/backend/server/infra/memory-gateway-client";
 
 import type { InternalRuntimeConfig } from "./config.types.js";
 import { _log } from "./log.js";
@@ -149,11 +148,10 @@ export function _CreateRateLimitedSharesRouter(prisma: PrismaClient, options?: S
  * @param prisma - The main product database client.
  * @param authApi - Kubernetes TokenReview client for workload identity.
  * @param config - Frozen workload-facing configuration shared with workers and body parsing.
- * @param memoryGateway - Process-wide authenticated memory-gateway client.
  */
-export function _RegisterInternalRoutes(app: Express, prisma: PrismaClient, authApi: k8s.AuthenticationV1Api, config: InternalRuntimeConfig, memoryGateway: MemoryGatewayClient): void
+export function _RegisterInternalRoutes(app: Express, prisma: PrismaClient, authApi: k8s.AuthenticationV1Api, config: InternalRuntimeConfig): void
 {
-	const runtime = _CreateInternalRuntimeComposition(prisma, authApi, config, memoryGateway);
+	const runtime = _CreateInternalRuntimeComposition(prisma, authApi, config);
 	const internalControllerRoutes: readonly RouteMount[] = [
 		{ method: "use", path: "/api/internal/agent-controller", handler: runtime.agentControllerRunDispatch },
 		{ method: "use", path: "/api/internal/agent-controller", handler: runtime.skillWorkloadDispatch },

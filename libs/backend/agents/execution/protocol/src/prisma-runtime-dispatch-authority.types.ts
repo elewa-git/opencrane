@@ -8,32 +8,11 @@ import type { RuntimeAdmissionRunState } from "./runtime-protocol-authority.type
 /**
  * Turns an immutable snapshot into the literal input carried on `start_attempt`.
  *
- * Injected rather than imported, so the dispatch authority never depends on the prompt compiler.
- * The authority calls it inside the same locked transaction that loaded the snapshot, so it reads
- * only records that cannot change.
- *
- * The one hard requirement on any implementation: for a given snapshot it must return byte-for-byte
- * the same output every time, on the first send and on every re-send. A command re-sent after a
- * reconnect is rebuilt by calling this again, and the runtime is entitled to treat the repeat as the
- * same command, so an implementation that returned something slightly different would silently
- * change a running attempt's instructions. The runtime does not look inside the payload.
- *
- * Called by: `_mintCommandExtras` and `_storedCommandExtras` in
- * prisma-runtime-dispatch-authority.ts, and `_toolInvocationIntent` there when it revalidates an
- * external action's arguments against the granted tool schema. Implemented by
- * `__CreatePrismaRunInputCompiler` (prisma-run-input-compiler.ts), wrapped by
- * `_CreateProductionRunInputCompiler` (production-runtime-dispatch.ts).
- *
- * @param snapshot - The immutable snapshot admitted for this attempt.
- * @param transaction - The locked transaction that loaded the snapshot; every read must use it.
- * @returns The compiled input to send with `start_attempt`.
- * @throws Whatever the implementation throws when an input cannot be resolved - for example a
- * memory fact whose text no longer matches its frozen digest. On the `start_attempt` path nothing
- * catches it, so no command is sent and nothing is saved; on the external-action path
- * `_toolInvocationIntent` catches it and refuses the candidate with `external_action_invalid`.
- * @see PrismaRuntimeDispatchAuthority for the caller that depends on the byte-for-byte rule.
+ * The dispatch authority calls it inside the same locked transaction that loads the snapshot, so it
+ * reads only immutable records and must return byte-identical output for a given snapshot and live
+ * attempt on every mint and idempotent redelivery. The runtime treats the returned payload as opaque.
  */
-export type RunInputCompiler = (snapshot: RunInputSnapshot, transaction: Prisma.TransactionClient) => Promise<CompiledRunInput>;
+export type RunInputCompiler = (snapshot: RunInputSnapshot, attempt: number, transaction: Prisma.TransactionClient) => Promise<CompiledRunInput>;
 
 /**
  * Deployment-fixed settings for creating and expiring runtime commands.
@@ -82,17 +61,8 @@ export interface RuntimeStreamWorkloadIdentity
 /** Terminal lifecycle persistence supplied by the composition root without reversing library dependencies. */
 export interface RuntimeEventReporter
 {
-	/**
-	 * Check one runtime-proposed event and save it, using the caller's transaction.
-	 *
-	 * @param transaction - The candidate transaction; the event must be written on it so acceptance
-	 * and the event commit together.
-	 * @param command - Run, attempt, event type, and payload the runtime asked to record.
-	 * @returns `reported` when the event is durable and the candidate may be accepted. `denied` when
-	 * it must not be: the caller refuses the whole candidate with `reason` and rolls the transaction
-	 * back, so the runtime is never told an event was recorded when it was not.
-	 */
-	reportInTransaction(transaction: Prisma.TransactionClient, command: { readonly runId: string; readonly attempt: number; readonly eventType: string; readonly payload: JsonValue }): Promise<{ readonly outcome: "reported" | "denied"; readonly reason?: string }>;
+	/** Validate and persist an already-fenced canonical runtime event in the current transaction. */
+	reportInTransaction(transaction: Prisma.TransactionClient, command: { readonly runId: string; readonly attempt: number; readonly sourceIsStartAttempt: boolean; readonly eventType: string; readonly payload: JsonValue }): Promise<{ readonly outcome: "reported" | "denied"; readonly reason?: string }>;
 }
 
 /**

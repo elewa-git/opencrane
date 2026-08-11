@@ -2,27 +2,15 @@ import { ___ParseAgUiA2uiEnvelope } from "@opencrane/contracts";
 import { RunEventTypes } from "@opencrane/models/agents";
 import type { JsonValue } from "@opencrane/util";
 
+import { RuntimeRunFailureReasons } from "./runtime-event-reporter.types.js";
+
 const _SECRET_FIELD = /token|secret|password|authorization|cookie|credential|proof|private.?key/iu;
 const _ERROR_TYPES = new Set(["AuthenticationError", "ConnectionError", "HTTPError", "ModelLoopError", "OSError", "PermissionError", "RuntimeError", "TimeoutError", "URLError", "ValueError"]);
 const _RUN_ERROR_REASONS = new Set(["invalid_tool_result", "malformed_tool_call", "model_loop_error", "unknown_tool_result"]);
-const _RUN_FAILURE_REASONS = new Set(["executor_failed", "invalid_resume_steering", "invalid_tool_results", "missing_compiled_input", "missing_resume_payload"]);
-/**
- * Checks that an event reported by the runtime carries exactly the payload its type is allowed to carry.
- *
- * Two rounds of checks, in this order. First the limits that apply to every payload whatever its type:
- * total size, nesting depth, and no key whose name looks like a secret. Then the exact set of keys this
- * one event type may contain, and the type of each value.
- *
- * The list below is the whole allowance. An event type that is missing from it is refused, so a newly
- * added event type cannot reach the database until someone writes its shape here on purpose. That is
- * also how tool events stay out: the tool worker writes those, because only it knows what the provider
- * really did, so the runtime is not allowed to claim them.
- *
- * @param eventType - Event type the runtime claims this payload belongs to.
- * @param payload - Untrusted payload as it arrived from the runtime.
- * @returns True when the payload is safe to persist, false to refuse the event.
- * @see RunEventTypes for what each event means and the payload each one takes.
- */
+const _RUN_FAILURE_REASONS = new Set<string>(Object.values(RuntimeRunFailureReasons));
+const _A2UI_EVENT_TYPES = new Set<string>([RunEventTypes.A2uiRenderingBegun, RunEventTypes.A2uiSurfaceUpdated, RunEventTypes.A2uiDataModelUpdated]);
+
+/** Enforce global bounds and the exact public payload shape of one runtime-owned event. */
 export function _RuntimeEventPayloadIsSafe(eventType: string, payload: JsonValue): boolean
 {
 	if (!_Bounded(payload) || !_Record(payload)) return false;

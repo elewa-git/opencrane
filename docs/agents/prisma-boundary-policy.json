@@ -92,7 +92,12 @@
 		"adapter": "PrismaElicitationRepository",
 		"contract": "ElicitationRepository",
 		"contractImportPath": "./elicitation.types.js",
-		"constructs": []
+		"constructs": [
+		  {
+			"adapter": "PrismaToolInvocationElicitationRepository",
+			"importPath": "@opencrane/backend/server/iam/authorization"
+		  }
+		]
 	  },
       {
         "path": "libs/backend/agents/personal/personas/main/src/interview/prisma-persona-interview-repository.ts",
@@ -393,6 +398,13 @@
 		"adapter": "PrismaToolInvocationRepository",
 		"contract": "ToolInvocationTransactionRepository",
 		"contractImportPath": "./tool-invocation.types.js",
+		"constructs": []
+	  },
+	  {
+		"path": "libs/backend/server/iam/authorization/main/src/prisma-tool-invocation-elicitation-repository.ts",
+		"adapter": "PrismaToolInvocationElicitationRepository",
+		"contract": "ToolInvocationElicitationRepository",
+		"contractImportPath": "./tool-invocation-elicitation-authority.types.js",
 		"constructs": []
 	  },
 	  {

@@ -157,7 +157,7 @@ model RunInputSnapshot {
   messageIds              String[]  @default([]) @map("message_ids")
   preferenceFactIds       String[]  @default([]) @map("preference_fact_ids")
   artifactRevisionIds     String[]  @default([]) @map("artifact_revision_ids")
-  memoryFacts             Json      @map("memory_facts")
+  retiredMemoryFacts      Json      @default("[]") @map("memory_facts")
   identitySnapshot        Json      @map("identity_snapshot")
   modelRoute              Json      @map("model_route")
   integrationAssignments  Json      @map("integration_assignments")

@@ -28,21 +28,9 @@ export enum RunEventTypes
 	MessageCompleted = "message.completed",
 	/** The runtime asked to call a tool. Asking is not permission to run it. Payload: `toolCallId` and `toolCallName`. */
 	ToolRequested = "tool.requested",
-	/** A tool call is waiting for someone to approve or reject it. The runtime cannot report this one. */
-	ToolApprovalRequired = "tool.approval_required",
 	/** Runtime requested participant input through the generic authority. */
 	ElicitationRequested = "elicitation.requested",
-	/** The assigned participant supplied an accepted answer. */
-	ElicitationAnswered = "elicitation.answered",
-	/** The assigned participant declined the request. */
-	ElicitationDeclined = "elicitation.declined",
-	/** The server-owned response window ended. */
-	ElicitationExpired = "elicitation.expired",
-	/** Cancellation closed an unresolved request. */
-	ElicitationCancelled = "elicitation.cancelled",
-	/** The request ended without a safe answer or decline. */
-	ElicitationFailed = "elicitation.failed",
-	/** A tool call started. Only the tool worker may report this, because only it knows the call really began. */
+	/** Governed tool execution started. */
 	ToolStarted = "tool.started",
 	/** A running tool call reported progress. The runtime cannot report this one. */
 	ToolProgress = "tool.progress",

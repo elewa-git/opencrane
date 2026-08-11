@@ -80,7 +80,6 @@ function _ElicitationOutcome(state: ElicitationRequestState): RuntimeElicitation
 	if (state === ElicitationRequestState.Declined) return "declined";
 	if (state === ElicitationRequestState.Expired) return "expired";
 	if (state === ElicitationRequestState.Cancelled) return "cancelled";
-	if (state === ElicitationRequestState.Failed) return "failed";
 	return null;
 }
 

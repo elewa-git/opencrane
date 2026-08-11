@@ -11,7 +11,6 @@ import { PrismaRevisionBudgetPolicySource, PrismaRevisionToolPolicySource } from
 import { PrismaRunAuthoritySource } from "./prisma-run-authority-source.js";
 import { PrismaConversationContextRepository } from "./prisma-conversation-context-repository.js";
 import { TransactionBoundConversationContextSource } from "./prisma-conversation-context-source.js";
-import type { PersonalMemoryFactSelector } from "./memory-fact-selector.types.js";
 import type { IdentityEnvelopeSource, SessionAssemblyAuthorities, SkillRevisionEligibilitySource } from "./session-assembly.types.js";
 
 /**
@@ -47,29 +46,16 @@ export function __CreatePrismaManagedSessionAssemblyAuthorities(admission: RunAd
 }
 
 /**
- * Builds the personal-run set of input sources.
+ * Composes the personal-run variant with transaction-scoped memory-coordinate readers.
  *
- * The caller supplies the identity and skill-eligibility sources, because signed membership and
- * grant policy are owned elsewhere.
- *
- * The one thing this factory owns — and the easy thing to get wrong — is the link between personal
- * assembly and identity-bound memory: the Cognee dataset id and the preference ids (ids only, no
- * text) are both read through adapters bound to the same admission transaction, and the injected
- * selector takes only fact references the gateway allows from that same dataset. Bind either reader
- * to a different client and the memory a run gets could belong to a state the rest of the snapshot
- * never saw.
- *
- * Called by: `__CreatePersonalRunAdmissionPort` (execution/admission/main/src/personal-run-admission.composition.ts).
- *
- * @param admission - Opens the admission transaction and saves the run and snapshot.
- * @param identityEnvelope - Pass {@link PersonalExecutionIdentityEnvelopeSource}.
- * @param skillEligibility - Pass {@link PrismaSkillRevisionEligibilitySource}.
- * @param memoryFactSelector - The gateway-backed fact selector. It must throw on transport failure;
- * see {@link PersonalMemoryFactSelector}.
- * @returns The full source set for {@link __AssembleRunInputSnapshot}. Do not mix these with
- * managed sources.
+ * The caller supplies the user identity and skill-eligibility authorities because their signed
+ * membership and grant policies remain owned elsewhere. This factory owns only the otherwise easy
+ * to miss link between personal session assembly and identity-bound memory selection: both the
+ * frozen Cognee dataset coordinate, bounded query, and content-free preference identifiers are
+ * read through adapters bound to the same admission transaction. Recall remains unreachable until
+ * the declared memory tool obtains an exact accepted permission receipt.
  */
-export function __CreatePrismaPersonalSessionAssemblyAuthorities(admission: RunAdmissionRepository, identityEnvelope: IdentityEnvelopeSource, skillEligibility: SkillRevisionEligibilitySource, memoryFactSelector: PersonalMemoryFactSelector): SessionAssemblyAuthorities
+export function __CreatePrismaPersonalSessionAssemblyAuthorities(admission: RunAdmissionRepository, identityEnvelope: IdentityEnvelopeSource, skillEligibility: SkillRevisionEligibilitySource): SessionAssemblyAuthorities
 {
 	// Keep all common session inputs identical to managed admission; only personal identity-scoped inputs differ.
 	return {
@@ -78,7 +64,7 @@ export function __CreatePrismaPersonalSessionAssemblyAuthorities(admission: RunA
 		approvedPersona: new PrismaApprovedPersonaSource(),
 		conversationContext: new TransactionBoundConversationContextSource(_CreateConversationContextRepository),
 		preferenceFacts: new PersonalMemoryPreferenceFactSource(_CreatePersonalMemory),
-		memoryScope: new PersonalMemoryScopeSource(_CreatePersonalMemory, memoryFactSelector),
+		memoryScope: new PersonalMemoryScopeSource(_CreatePersonalMemory),
 		toolPolicy: new PrismaRevisionToolPolicySource(),
 		skillEligibility,
 		budgetPolicy: new PrismaRevisionBudgetPolicySource(),

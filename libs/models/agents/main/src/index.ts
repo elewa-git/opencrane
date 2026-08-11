@@ -3,6 +3,7 @@ export { __DigestAgentRevisionContent } from "./agent-revision-content.js";
 export { __AreReviewedIntegrationToolDefinitionsValid, __IsReviewedIntegrationToolDefinitionValid } from "./agent-tool-definition.validator.js";
 export type { AgentRevisionDiff, RevisionLineDiff, RevisionScalarChange, RevisionSetChange, RevisionWidening, RevisionWideningKind } from "./agent-revision-diff.types.js";
 export type { AgentBudget, AgentRevision, AgentRevisionContent, AgentRevisionState, IntegrationAssignmentReference, ReviewedIntegrationToolDefinition, SkillRevisionReference } from "./agent-revision.types.js";
+export { AgentRunStates } from "./agent-run.types.js";
 export type { AgentRun, AgentRunLineage, AgentRunState, AgentRunTerminalReason, AgentRunTrigger } from "./agent-run.types.js";
 export { AgentServiceKinds, AgentServiceStates } from "./agent-service.types.js";
 export type { AgentService, AgentServiceKind, AgentServiceState } from "./agent-service.types.js";
@@ -10,4 +11,5 @@ export type { GrantScope, GrantSubjectType, RevisionScopeAttachment } from "./sc
 export type { AgentRevisionId, AgentRunId, AgentServiceId, PersonaProfileId, PersonaRevisionId, SiloId, UserId } from "./identifiers.types.js";
 export { RunEventTypes } from "./run-event.types.js";
 export type { RunEvent, RunEventType } from "./run-event.types.js";
+export { PERSONAL_MEMORY_RECALL_TOOL_NAME, PERSONAL_MEMORY_RECALL_TOOL_REVISION } from "./tool-revision.constants.js";
 export { __CanAppendRunEvent, __IsAgentRevisionTransitionAllowed, __IsAgentRunTransitionAllowed, __IsAgentServiceTransitionAllowed } from "./state-transitions.js";

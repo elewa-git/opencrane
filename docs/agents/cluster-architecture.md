@@ -102,11 +102,10 @@ no file can remain indefinitely in Processing.
 The release deploys `memory-gateway` as the only NetworkPolicy-admitted path to private Cognee. Its
 search-only route verifies an audience-bound server ServiceAccount token with TokenReview and also
 enforces the request-shape contract (one bounded query, `CHUNKS`, exactly one UUID dataset, bounded
-`top_k`). The server presents that projected `opencrane-memory-gateway` token: recall is live at
-admission (fact references frozen into the snapshot) and at compile time (digest-verified statement
-inlining into the prompt). Mid-run recall can use the same durable server-worker result channel as
-other external actions; memory writes remain fail-closed until their recoverable write authority is
-implemented and qualified.
+`top_k`). Admission freezes only the verified dataset coordinates. The model chooses a query through
+the approval-required `memory_recall` tool, which currently stops at `safe_delivery_required` before
+Cognee is called. #601 must add a transient, claim-fenced content-delivery path; memory writes remain
+fail-closed until their recoverable write authority is implemented and qualified.
 
 ## Storage
 

@@ -33,7 +33,7 @@ export class PrismaRuntimeEventReporter implements RuntimeEventReporter
 		if (!_RuntimeEventPayloadIsSafe(command.eventType, command.payload)) return { outcome: "denied", reason: "invalid_payload" };
 		if (command.eventType === RunEventTypes.RunCompleted || command.eventType === RunEventTypes.RunFailed)
 		{
-			return new PrismaRuntimeTerminalReporter().reportInTransaction(transaction, { runId: command.runId, attempt: command.attempt, eventType: command.eventType });
+			return new PrismaRuntimeTerminalReporter().reportInTransaction(transaction, { runId: command.runId, attempt: command.attempt, sourceIsStartAttempt: command.sourceIsStartAttempt, eventType: command.eventType, payload: command.payload });
 		}
 		return new PrismaRuntimeEventAppendUnitOfWork(transaction).append(command);
 	}

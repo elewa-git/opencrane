@@ -2,8 +2,6 @@ import type { PrismaClient } from "@prisma/client";
 import type { AuthenticationV1Api } from "@kubernetes/client-node";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { __UnavailableMemoryGatewayClient } from "@opencrane/backend/server/infra/memory-gateway-client";
-
 import { _CreateInternalRuntimeComposition } from "../runtime-composition.js";
 import type { InternalRuntimeConfig } from "../config.types.js";
 
@@ -69,7 +67,7 @@ describe("_CreateInternalRuntimeComposition", function _internalRuntimeCompositi
 
 	it("keeps disabled optional planes unmounted while composing every mandatory caller plane", function _composesRequiredPlanes()
 	{
-		const composition = _CreateInternalRuntimeComposition({} as PrismaClient, {} as AuthenticationV1Api, _RuntimeConfig(), new __UnavailableMemoryGatewayClient());
+		const composition = _CreateInternalRuntimeComposition({} as PrismaClient, {} as AuthenticationV1Api, _RuntimeConfig());
 
 		expect(composition.agentControllerRunDispatch).toEqual(expect.any(Function));
 		expect(composition.skillWorkloadDispatch).toEqual(expect.any(Function));
@@ -89,7 +87,7 @@ describe("_CreateInternalRuntimeComposition", function _internalRuntimeCompositi
 	{
 		const config = { ..._RuntimeConfig(), artifactPreprocessorEnabled: true, artifactPreprocessorNamespace: "opencrane-server" };
 
-		expect(function _composeCrossedWorkerPlane() { _CreateInternalRuntimeComposition({} as PrismaClient, {} as AuthenticationV1Api, config, new __UnavailableMemoryGatewayClient()); }).toThrow(/different from POD_NAMESPACE/);
+		expect(function _composeCrossedWorkerPlane() { _CreateInternalRuntimeComposition({} as PrismaClient, {} as AuthenticationV1Api, config); }).toThrow(/different from POD_NAMESPACE/);
 	});
 
 	it("refuses an enabled scanner plane that crosses into the trusted server namespace", function _rejectsCrossedScannerPlane()
@@ -112,7 +110,7 @@ describe("_CreateInternalRuntimeComposition", function _internalRuntimeCompositi
 			channelTargets: { channelProxyServiceAccountName: "channel-proxy", invocationContextTtlMilliseconds: 60_000, receiverEndpoint: "http://opencrane-server.opencrane-server.svc.cluster.local:8081/api/internal/conversation-replay", receiverId: "internal-channel-replay", siloId: "silo-1", trustedHost: "acme.example.com" },
 		};
 
-		const composition = _CreateInternalRuntimeComposition({} as PrismaClient, {} as AuthenticationV1Api, config, new __UnavailableMemoryGatewayClient());
+		const composition = _CreateInternalRuntimeComposition({} as PrismaClient, {} as AuthenticationV1Api, config);
 
 		expect(composition.artifactPreprocessor).toEqual(expect.any(Function));
 		expect(composition.artifactScanner).toEqual(expect.any(Function));
@@ -131,13 +129,13 @@ describe("_CreateInternalRuntimeComposition", function _internalRuntimeCompositi
 	{
 		const config = { ..._RuntimeConfig(), artifactPreprocessorEnabled: true, artifactPreprocessorNamespace: undefined };
 
-		expect(function _composeWorkerWithoutNamespace() { _CreateInternalRuntimeComposition({} as PrismaClient, {} as AuthenticationV1Api, config, new __UnavailableMemoryGatewayClient()); }).toThrow(/restricted workload namespace must be valid/);
+		expect(function _composeWorkerWithoutNamespace() { _CreateInternalRuntimeComposition({} as PrismaClient, {} as AuthenticationV1Api, config); }).toThrow(/restricted workload namespace must be valid/);
 	});
 
 	it("refuses runtime planes that collapse into one identity namespace", function _rejectsCollapsedRuntimePlanes()
 	{
 		const config = { ..._RuntimeConfig(), managedRuntimeNamespace: "personal-runtime" };
 
-		expect(function _composeCollapsedRuntimePlanes() { _CreateInternalRuntimeComposition({} as PrismaClient, {} as AuthenticationV1Api, config, new __UnavailableMemoryGatewayClient()); }).toThrow(/different from/);
+		expect(function _composeCollapsedRuntimePlanes() { _CreateInternalRuntimeComposition({} as PrismaClient, {} as AuthenticationV1Api, config); }).toThrow(/different from/);
 	});
 });

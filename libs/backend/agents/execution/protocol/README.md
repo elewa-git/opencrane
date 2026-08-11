@@ -26,7 +26,10 @@ For runtime events, the app injects the canonical run-event authority into that 
 allowed message, tool, usage, safe error, A2UI, or terminal event is persisted before its candidate
 id may advance. Unknown event names and unsafe or oversized payloads fail closed without accepting
 the candidate id. `run.completed` and `run.failed` additionally become one durable run outcome and
-child-to-parent notification. A runtime cannot cancel itself; cancellation remains server-owned.
+child-to-parent notification. The adapter also passes the exact accepted command kind to that run
+authority, allowing only a `start_attempt` coordinate mismatch to fail an assigned run before
+`run.started`; resume failures still require the run to be running. A runtime cannot cancel itself;
+cancellation remains server-owned.
 The package-private candidate-side-effect adapter keeps those event writes and digest-only
 `tool.completed` receipts inside the already-admitted transaction; it never dispatches provider I/O.
 
@@ -68,9 +71,15 @@ worker pass recovers the same request without calling the provider.
 
 It intentionally owns no HTTP listener, Kubernetes resource, model driver, or provider credential.
 Its production factory composes a server-side external-action worker from the ToolInvocation unit
-of work, immutable snapshot loader, personal configuration authority, and fail-closed provider
-adapters. Current Obot, sandbox, and memory ports expose neither provider idempotency nor readback,
-so they deliberately use manual recovery. The app supplies process persistence, transports, and
+of work, immutable snapshot loader, personal configuration authority, execution-user memory
+permission authority, and fail-closed provider adapters. Current Obot and sandbox ports expose
+neither provider idempotency nor readback, so they deliberately use manual recovery. Every recovery
+strategy forwards the claimed invocation and monotonic claim instead of dropping that authority.
+Personal-memory recall first opens its exact elicitation receipt, then verifies that receipt against
+the current unexpired dispatch claim after acquisition. It stops with
+`safe_delivery_required` before Cognee until recalled content has a transient delivery path that
+cannot enter ToolInvocation results, outboxes, runtime commands, events, logs, Activity, or A2UI.
+The app supplies process persistence, transports, and
 structured logging, then drains the worker before disconnecting Prisma. An integration action has the fixed
 `integration:<integrationId>:<toolName>` shape: its live custody reference and revision allow-list
 are rechecked at execution, so the runtime never sees either credential or mutable permission state.
@@ -79,7 +88,8 @@ are rechecked at execution, so the runtime never sees either credential or mutab
 
 - `__CreateProductionRuntimeDispatchAuthority` — constructs the ready production authority,
   including first-party personal-session tool augmentation, durable candidate admission, one-time
-  saved tool and elicitation result resume, frozen memory dataset selection, and canonical event reporting.
+  saved tool and elicitation result resume, and canonical event reporting. Personal snapshots expose
+  a sealed, approval-required `memory:recall` descriptor; the compiler has no memory-gateway port.
 - `__CreateProductionExternalActionWorker` — constructs the bounded process worker that prepares,
   claims, executes, reconciles, and recovers durable ToolInvocations.
 - `__CreateProductionExternalActionApprovalOpener` — binds an approval-required invocation to its
@@ -101,7 +111,11 @@ cancellation and durable events remain with their canonical authorities.
 ## Data & persistence
 
 The compiler adapter reads the immutable persona, conversation, artifact, skill, and model-route
-records needed to compile a dispatch, and turns the snapshot's integration assignments directly
+records needed to compile a dispatch. It never persists a recall query or memory content in compiled
+input. The model chooses a query through the approval-required `memory_recall` tool; safe transient
+content delivery is deferred to #601. The adapter seals the current fenced run attempt into the
+compiled input without mutating the stored snapshot and rejects any compiler result whose run or
+attempt disagrees with dispatch authority. It turns the snapshot's integration assignments directly
 into approval-required tool descriptors. The dispatch adapter owns two Postgres models in
 `runtime.prisma`: `RuntimeCommandStream` (one per run
 attempt — the lease fence, the bound runtime instance, the next command sequence, and accepted

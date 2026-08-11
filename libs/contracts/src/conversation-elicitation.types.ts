@@ -16,19 +16,6 @@ export enum ElicitationRequestStates
 	Expired = "expired",
 	/** Run cancellation closed the request. */
 	Cancelled = "cancelled",
-	/** The authority could not safely continue the request. */
-	Failed = "failed",
-}
-
-/** Durable lifecycle of one idempotent response submission. */
-export enum ElicitationResponseAttemptStates
-{
-	/** The server is validating and applying the response atomically. */
-	Submitting = "submitting",
-	/** The response became the request's authoritative outcome. */
-	Accepted = "accepted",
-	/** The response was refused without changing request authority. */
-	Rejected = "rejected",
 }
 
 /** Supported interaction bodies rendered with one lifecycle contract. */

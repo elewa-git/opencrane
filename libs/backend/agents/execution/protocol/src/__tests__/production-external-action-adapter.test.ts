@@ -1,9 +1,10 @@
-import { ExternalActionRecoveryModes, ToolInvocationStates } from "@opencrane/backend/server/iam/authorization";
+import { ExternalActionClaimKinds, ExternalActionRecoveryModes, ToolInvocationStates, type ToolInvocationClaim } from "@opencrane/backend/server/iam/authorization";
+import { PersonalMemoryPermissionVerificationOutcomes } from "@opencrane/backend/agents/execution/elicitation";
 import { UPGRADE_SESSION_TOOL_REVISION } from "@opencrane/backend/agents/personal/configuration";
-import { __UnavailableMemoryGatewayClient } from "@opencrane/backend/server/infra/memory-gateway-client";
 import { __UnavailableObotMcpInvocationAdapter } from "@opencrane/backend/server/infra/obot-custody";
 import { __UnavailableSandboxJobExecutor } from "@opencrane/backend/server/infra/sandbox-execution";
 import type { RunInputSnapshot } from "@opencrane/contracts";
+import { PERSONAL_MEMORY_RECALL_TOOL_REVISION } from "@opencrane/models/agents";
 import { ___DigestCanonicalJson } from "@opencrane/util";
 import { describe, expect, it, vi } from "vitest";
 
@@ -24,17 +25,24 @@ function _context(): ExternalActionExecutionContext
 	return { snapshot: { runId: "run-1", siloId: "silo-1", agentServiceId: "service-1", agentRevisionId: "revision-1", personaRevisionId: "persona-1", conversationId: "conversation-1", identitySnapshot: { kind: "user", executionSubjectId: "user-1" }, memoryQueryPolicy: null } as unknown as RunInputSnapshot };
 }
 
+/** Advance one prepared invocation into the exact dispatch claim passed to the adapter. */
+function _claimed(invocation: ExternalActionWorkerInvocation): { readonly invocation: ExternalActionWorkerInvocation; readonly claim: ToolInvocationClaim }
+{
+	const claimedInvocation = { ...invocation, state: ToolInvocationStates.Claimed, claimKind: ExternalActionClaimKinds.Dispatch, claimFence: 1, claimExpiresAt: new Date("2026-08-11T10:01:00.000Z"), revision: invocation.revision + 1 };
+	return { invocation: claimedInvocation, claim: { invocationId: invocation.id, kind: ExternalActionClaimKinds.Dispatch, fence: 1, revision: claimedInvocation.revision } };
+}
+
 /** Build a factory with fail-closed transports and an optional built-in proposal hook. */
-function _factory(proposeUpgradeSession = vi.fn().mockResolvedValue({ changeId: "change-1" })): ProductionExternalActionAdapterFactory
+function _factory(proposeUpgradeSession = vi.fn().mockResolvedValue({ changeId: "change-1" }), verifyMemoryPermission = vi.fn().mockResolvedValue({ outcome: PersonalMemoryPermissionVerificationOutcomes.Denied })): ProductionExternalActionAdapterFactory
 {
 	return new ProductionExternalActionAdapterFactory({
 		transports: {
 			integrations: { resolveAssignment: async function _resolve() { return { outcome: "unavailable" as const, reason: "revoked" as const }; } },
 			obotMcpInvocation: new __UnavailableObotMcpInvocationAdapter(),
 			sandboxExecutor: new __UnavailableSandboxJobExecutor(),
-			memoryGateway: new __UnavailableMemoryGatewayClient(),
 		},
 		personalConfiguration: { proposeUpgradeSession },
+		personalMemoryPermissions: { openMemoryPermission: vi.fn(), verifyMemoryPermission },
 		now: function _now() { return new Date("2026-08-11T10:00:00.000Z"); },
 	});
 }
@@ -49,8 +57,10 @@ describe("production external action adapter", function _suite()
 
 	it("returns a bounded failure when live integration authority refuses before dispatch", async function _revokedIntegration()
 	{
-		const adapter = _factory().prepare(_invocation("integration:calendar:calendar.read"), _context());
-		await expect(adapter.dispatch(null)).resolves.toEqual({ kind: ExternalActionProviderOutcomeKinds.Failed, failureCode: "integration_assignment_revoked" });
+		const invocation = _invocation("integration:calendar:calendar.read");
+		const adapter = _factory().prepare(invocation, _context());
+		const claimed = _claimed(invocation);
+		await expect(adapter.dispatch(null, claimed.invocation, claimed.claim)).resolves.toEqual({ kind: ExternalActionProviderOutcomeKinds.Failed, failureCode: "integration_assignment_revoked" });
 	});
 
 	it("executes the built-in personal action from durable fields rather than runtime coordinates", async function _builtIn()
@@ -58,7 +68,8 @@ describe("production external action adapter", function _suite()
 		const proposeUpgradeSession = vi.fn().mockResolvedValue({ changeId: "change-1" });
 		const invocation = _invocation(UPGRADE_SESSION_TOOL_REVISION);
 		const adapter = _factory(proposeUpgradeSession).prepare(invocation, _context());
-		await expect(adapter.dispatch(null)).resolves.toEqual({ kind: ExternalActionProviderOutcomeKinds.Succeeded, result: { changeId: "change-1" } });
+		const claimed = _claimed(invocation);
+		await expect(adapter.dispatch(null, claimed.invocation, claimed.claim)).resolves.toEqual({ kind: ExternalActionProviderOutcomeKinds.Succeeded, result: { changeId: "change-1" } });
 		expect(proposeUpgradeSession).toHaveBeenCalledWith(expect.objectContaining({ runId: "run-1", toolInvocationId: "tool-1", arguments: { query: "approved" }, argumentsDigest: ___DigestCanonicalJson({ query: "approved" }) }), _context().snapshot, "2026-08-11T10:00:00.000Z");
 	});
 
@@ -66,5 +77,26 @@ describe("production external action adapter", function _suite()
 	{
 		const invocation = { ..._invocation("integration:calendar:calendar.read"), effectiveArguments: { query: "changed" } };
 		expect(function _prepare() { _factory().prepare(invocation, _context()); }).toThrow("effective arguments failed integrity validation");
+	});
+
+	it("denies a stale personal-memory receipt before Cognee can be called", async function _staleMemoryReceipt()
+	{
+		const verifyMemoryPermission = vi.fn().mockResolvedValue({ outcome: PersonalMemoryPermissionVerificationOutcomes.Denied });
+		const invocation = _invocation(PERSONAL_MEMORY_RECALL_TOOL_REVISION);
+		const context = _context();
+		const adapter = _factory(undefined, verifyMemoryPermission).prepare(invocation, context);
+		const claimed = _claimed(invocation);
+		await expect(adapter.dispatch(null, claimed.invocation, claimed.claim)).resolves.toEqual({ kind: ExternalActionProviderOutcomeKinds.Failed, failureCode: "memory_permission_unavailable" });
+		expect(verifyMemoryPermission).toHaveBeenCalledWith(claimed.invocation, claimed.claim, context.snapshot, new Date("2026-08-11T10:00:00.000Z"));
+	});
+
+	it("stops at safe delivery after exact permission without persisting fact content", async function _authorizedMemoryReceipt()
+	{
+		const verifyMemoryPermission = vi.fn().mockResolvedValue({ outcome: PersonalMemoryPermissionVerificationOutcomes.Authorized });
+		const invocation = _invocation(PERSONAL_MEMORY_RECALL_TOOL_REVISION);
+		const adapter = _factory(undefined, verifyMemoryPermission).prepare(invocation, _context());
+		const claimed = _claimed(invocation);
+		await expect(adapter.dispatch(null, claimed.invocation, claimed.claim)).resolves.toEqual({ kind: ExternalActionProviderOutcomeKinds.Failed, failureCode: "safe_delivery_required" });
+		expect(verifyMemoryPermission).toHaveBeenCalledOnce();
 	});
 });
