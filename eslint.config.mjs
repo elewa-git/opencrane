@@ -164,7 +164,7 @@ export default [
             { sourceTag: "scope:retrieval", onlyDependOnLibsWithTags: ["scope:retrieval", "scope:shared"] },
             { sourceTag: "scope:execution-runs", onlyDependOnLibsWithTags: ["scope:agents", "scope:auth", "scope:authorization", "scope:conversations", "scope:execution-runs", "scope:shared"] },
             { sourceTag: "scope:execution-protocol", onlyDependOnLibsWithTags: ["scope:execution-protocol", "scope:execution-inputs", "scope:execution-runs", "scope:personal-configuration", "scope:agents", "scope:auth", "scope:authorization", "scope:integrations", "scope:obot-custody", "scope:sandbox-execution", "scope:memory-gateway-client", "scope:shared"] },
-            { sourceTag: "scope:agent-runtime", onlyDependOnLibsWithTags: ["scope:agent-runtime", "scope:agents", "scope:authorization", "scope:execution-protocol", "scope:obot-custody", "scope:sandbox-execution", "scope:memory-gateway-client", "scope:shared"] },
+            { sourceTag: "scope:agent-runtime", onlyDependOnLibsWithTags: ["scope:agent-runtime", "scope:agents", "scope:authorization", "scope:execution-protocol", "scope:sandbox-execution", "scope:memory-gateway-client", "scope:shared"] },
             { sourceTag: "scope:skills", onlyDependOnLibsWithTags: ["scope:artifacts", "scope:auth", "scope:cluster-tenants", "scope:grants", "scope:shared", "scope:skills"] },
             { sourceTag: "scope:spend", onlyDependOnLibsWithTags: ["scope:shared", "scope:spend"] },
 			{ sourceTag: "scope:web", onlyDependOnLibsWithTags: ["scope:web", "scope:shared"] },
