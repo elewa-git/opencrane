@@ -121,6 +121,7 @@ export class ConversationAssetsStore
 				this._patch(idempotencyKey, { phase: ConversationAssetTransferPhases.Reserving, failureCode: null });
 				const reserved = await this._gateway.reserve(conversationId, { idempotencyKey, displayName: intent.file.name, mediaType: intent.mediaType, byteLength: intent.file.size, contentAddress: intent.contentAddress ?? "" });
 				if (!this._isScopeCurrent(conversationId, scopeGeneration)) return;
+				if (reserved.conversationId !== conversationId) throw new Error("Conversation asset reservation scope mismatch.");
 				this._patch(idempotencyKey, { assetId: reserved.id });
 				this._adopt(reserved, conversationId, scopeGeneration);
 			}
@@ -129,6 +130,7 @@ export class ConversationAssetsStore
 			this._patch(idempotencyKey, { phase: ConversationAssetTransferPhases.Uploading, failureCode: null });
 			const uploaded = await this._gateway.upload(conversationId, intent.assetId, intent.file);
 			if (!this._isScopeCurrent(conversationId, scopeGeneration)) return;
+			if (uploaded.conversationId !== conversationId) throw new Error("Conversation asset upload scope mismatch.");
 			this._adopt(uploaded, conversationId, scopeGeneration);
 			this._intents.update(current => current.filter(candidate => candidate.idempotencyKey !== idempotencyKey));
 		}

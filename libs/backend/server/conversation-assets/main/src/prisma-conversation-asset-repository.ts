@@ -19,8 +19,7 @@ export class PrismaConversationAssetRepository implements ConversationAssetRepos
 	async reserve(caller: ConversationAssetCaller, conversationId: string, request: ReserveConversationAssetRequest): Promise<ConversationAssetResult>
 	{
 		if (!await this._canAccessConversation(caller, conversationId)) return { outcome: "denied", reason: "conversation_unavailable" };
-		const existing = await this.transaction.conversationAsset.findUnique({ where: { conversationId_idempotencyKey: { conversationId, idempotencyKey: request.idempotencyKey } } });
-		if (existing !== null && existing.createdByUserId !== caller.subjectId) return { outcome: "denied", reason: "asset_unavailable" };
+		const existing = await this.transaction.conversationAsset.findUnique({ where: { conversationId_createdByUserId_idempotencyKey: { conversationId, createdByUserId: caller.subjectId, idempotencyKey: request.idempotencyKey } } });
 		if (existing !== null) return _ReservationMatches(existing, request) ? { outcome: "idempotent", asset: _View(existing, caller.subjectId) } : { outcome: "denied", reason: "idempotency_conflict" };
 		const artifactId = randomUUID();
 		const leaseId = randomUUID();

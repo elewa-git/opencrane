@@ -24,11 +24,23 @@ describe("PrismaConversationAssetRepository access continuity", function _Suite(
 		expect(transaction.conversationAsset.findUnique).not.toHaveBeenCalled();
 	});
 
-	it("does not disclose another participant's matching retry coordinate", async function _HidesForeignCoordinate()
+	it("scopes the same retry key independently to each participant", async function _ScopesRetryCoordinate()
 	{
-		const transaction = { ..._Access(true), conversationAsset: { findUnique: vi.fn().mockResolvedValue({ createdByUserId: "user-2" }) } };
-		const result = await new PrismaConversationAssetRepository(transaction as never).reserve(_CALLER, "conversation-1", { idempotencyKey: "upload-1", displayName: "brief.pdf", mediaType: "application/pdf", byteLength: 5, contentAddress: _ADDRESS });
-		expect(result).toEqual({ outcome: "denied", reason: "asset_unavailable" });
+		const createdAt = new Date("2026-08-11T10:00:00.000Z");
+		const transaction = {
+			..._Access(true), artifact: { create: vi.fn() }, artifactUploadLease: { create: vi.fn() },
+			conversationAsset: {
+				findUnique: vi.fn().mockResolvedValue(null),
+				create: vi.fn().mockImplementation(async function _Create({ data }: { readonly data: Record<string, unknown> }) { return { ...data, messageId: null, revisionId: null, failureCode: null, createdAt }; })
+			}
+		};
+		const repository = new PrismaConversationAssetRepository(transaction as never);
+		const request = { idempotencyKey: "upload-1", displayName: "brief.pdf", mediaType: "application/pdf", byteLength: 5, contentAddress: _ADDRESS };
+
+		expect((await repository.reserve(_CALLER, "conversation-1", request)).outcome).toBe("accepted");
+		expect((await repository.reserve({ ..._CALLER, subjectId: "user-2" }, "conversation-1", request)).outcome).toBe("accepted");
+		expect(transaction.conversationAsset.findUnique).toHaveBeenNthCalledWith(1, { where: { conversationId_createdByUserId_idempotencyKey: { conversationId: "conversation-1", createdByUserId: "user-1", idempotencyKey: "upload-1" } } });
+		expect(transaction.conversationAsset.findUnique).toHaveBeenNthCalledWith(2, { where: { conversationId_createdByUserId_idempotencyKey: { conversationId: "conversation-1", createdByUserId: "user-2", idempotencyKey: "upload-1" } } });
 	});
 
 	it("does not issue an upload target after participant access ends", async function _DeniesRevokedTarget()

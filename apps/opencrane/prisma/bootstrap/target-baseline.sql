@@ -6789,7 +6789,7 @@ CREATE INDEX "conversation_asset_output_tickets_conversation_id_created_a_idx" O
 CREATE UNIQUE INDEX "conversation_assets_upload_lease_id_key" ON "conversation_assets"("upload_lease_id");
 CREATE UNIQUE INDEX "conversation_assets_output_ticket_id_key" ON "conversation_assets"("output_ticket_id");
 CREATE UNIQUE INDEX "conversation_assets_conversation_id_id_key" ON "conversation_assets"("conversation_id", "id");
-CREATE UNIQUE INDEX "conversation_assets_conversation_id_idempotency_key_key" ON "conversation_assets"("conversation_id", "idempotency_key");
+CREATE UNIQUE INDEX "conversation_assets_participant_idempotency_key" ON "conversation_assets"("conversation_id", "created_by_user_id", "idempotency_key");
 CREATE INDEX "conversation_assets_conversation_id_state_created_at_idx" ON "conversation_assets"("conversation_id", "state", "created_at");
 CREATE INDEX "conversation_assets_message_id_idx" ON "conversation_assets"("message_id");
 CREATE INDEX "conversation_assets_run_id_run_attempt_idx" ON "conversation_assets"("run_id", "run_attempt");

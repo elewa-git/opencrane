@@ -145,4 +145,68 @@ describe("ConversationAssetsStore", function _Suite()
 		await selection;
 		await vi.waitFor(function _LoadedNewScope() { expect(gateway.list).toHaveBeenCalledWith("conversation-2"); expect(store.assets.value()).toEqual([]); });
 	});
+
+	it("discards an old reservation after switching away and back", async function _DiscardsOldGeneration()
+	{
+		const deferred = _Deferred<ConversationAsset>();
+		const gateway = { list: vi.fn().mockResolvedValue([]), reserve: vi.fn().mockReturnValue(deferred.promise), upload: vi.fn(), remove: vi.fn() };
+		const store = _Store(gateway);
+		store.open("conversation-1");
+		const selection = store.select([_File("brief.pdf", "application/pdf", "brief")]);
+		await vi.waitFor(function _Reserved() { expect(gateway.reserve).toHaveBeenCalledOnce(); });
+
+		store.open("conversation-2");
+		store.open("conversation-1");
+		deferred.resolve(_Asset());
+		await selection;
+		await vi.waitFor(function _ReloadedOriginalScope() { expect(gateway.list).toHaveBeenLastCalledWith("conversation-1"); expect(store.assets.value()).toEqual([]); });
+		expect(gateway.upload).not.toHaveBeenCalled();
+	});
+
+	it("discards an old upload after switching away and back", async function _DiscardsOldUploadGeneration()
+	{
+		const deferred = _Deferred<ConversationAsset>();
+		const gateway = { list: vi.fn().mockResolvedValue([]), reserve: vi.fn().mockResolvedValue(_Asset(ConversationAssetLifecycle.Uploading)), upload: vi.fn().mockReturnValue(deferred.promise), remove: vi.fn() };
+		const store = _Store(gateway);
+		store.open("conversation-1");
+		const selection = store.select([_File("brief.pdf", "application/pdf", "brief")]);
+		await vi.waitFor(function _Uploading() { expect(gateway.upload).toHaveBeenCalledOnce(); });
+
+		store.open("conversation-2");
+		store.open("conversation-1");
+		deferred.resolve(_Asset(ConversationAssetLifecycle.Processing));
+		await selection;
+		await vi.waitFor(function _ReloadedOriginalScope() { expect(gateway.list).toHaveBeenLastCalledWith("conversation-1"); expect(store.assets.value()).toEqual([]); });
+	});
+
+	it("discards a removal tombstone after switching conversations", async function _DiscardsLateRemoval()
+	{
+		const asset = _Asset(ConversationAssetLifecycle.Uploading);
+		const deferred = _Deferred<ConversationAsset>();
+		const gateway = { list: vi.fn().mockImplementation(async function _List(conversationId: string) { return conversationId === "conversation-1" ? [asset] : []; }), reserve: vi.fn(), upload: vi.fn(), remove: vi.fn().mockReturnValue(deferred.promise) };
+		const store = _Store(gateway);
+		store.open("conversation-1");
+		await vi.waitFor(function _Loaded() { expect(store.assets.hasValue()).toBe(true); expect(store.assets.value()).toEqual([asset]); });
+		const removal = store.remove(asset.id);
+		await vi.waitFor(function _Removing() { expect(gateway.remove).toHaveBeenCalledOnce(); });
+
+		store.open("conversation-2");
+		deferred.resolve({ ...asset, state: ConversationAssetLifecycle.Removed, displayName: "Attachment removed", canRemove: false });
+		await removal;
+		await vi.waitFor(function _LoadedNewScope() { expect(store.assets.value()).toEqual([]); });
+	});
+
+	it("rejects a gateway asset for another conversation", async function _RejectsWrongConversation()
+	{
+		const gateway = { list: vi.fn().mockResolvedValue([]), reserve: vi.fn().mockResolvedValue({ ..._Asset(ConversationAssetLifecycle.Uploading), conversationId: "conversation-2" }), upload: vi.fn(), remove: vi.fn() };
+		const store = _Store(gateway);
+		store.open("conversation-1");
+		await vi.waitFor(function _Loaded() { expect(store.assets.hasValue()).toBe(true); });
+
+		await store.select([_File("brief.pdf", "application/pdf", "brief")]);
+
+		expect(store.assets.value()).toEqual([]);
+		expect(gateway.upload).not.toHaveBeenCalled();
+		expect(store.pendingUploads()[0]).toMatchObject({ phase: ConversationAssetTransferPhases.Failed, failureCode: "reservation_failed" });
+	});
 });

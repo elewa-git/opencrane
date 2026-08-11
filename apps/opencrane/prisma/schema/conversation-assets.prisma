@@ -44,7 +44,7 @@ model ConversationAsset {
   outputTicket      ConversationAssetOutputTicket? @relation(fields: [outputTicketId], references: [id], onDelete: Restrict)
 
   @@unique([conversationId, id])
-  @@unique([conversationId, idempotencyKey])
+  @@unique([conversationId, createdByUserId, idempotencyKey], map: "conversation_assets_participant_idempotency_key")
   @@index([conversationId, state, createdAt])
   @@index([messageId])
   @@index([runId, runAttempt])
