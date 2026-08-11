@@ -1,0 +1,30 @@
+<section class="activity" aria-labelledby="conversation-activity-title">
+	<h2 id="conversation-activity-title">Activity</h2>
+	@if (rows().length === 0) { <p class="activity__empty">No open requests or tool failures.</p> }
+	<ul>
+		@for (row of rows(); track row.id) {
+			<li>
+				<div class="activity__summary">
+					<span class="activity__marker" [class.activity__marker--failed]="row.kind === kinds.ToolFailure" aria-hidden="true"></span>
+					<div><strong>{{ row.label }}</strong><small>{{ row.occurredAt }}</small></div>
+					@if (row.kind === kinds.ToolFailure && row.retrying) { <span class="activity__retrying">Retrying</span> }
+					@if (row.kind === kinds.Elicitation) { <span class="activity__state">{{ row.status }}</span> }
+					<p-button label="Open" [text]="true" size="small" (onClick)="targetRequested.emit(row.target)" />
+				</div>
+				@if (row.kind === kinds.ToolFailure) {
+					<details>
+						<summary>Technical details</summary>
+						<dl>
+							<div><dt>Tool</dt><dd>{{ row.technicalDetails.toolIdentifier }} ({{ row.technicalDetails.toolRevision }})</dd></div>
+							@if (row.technicalDetails.externalSystem; as externalSystem) { <div><dt>System</dt><dd>{{ externalSystem }}</dd></div> }
+							@if (row.technicalDetails.failureCategory; as category) { <div><dt>Category</dt><dd>{{ category }}</dd></div> }
+							@if (row.technicalDetails.providerCode; as providerCode) { <div><dt>Code</dt><dd>{{ providerCode }}</dd></div> }
+							@if (row.technicalDetails.httpStatus; as httpStatus) { <div><dt>HTTP status</dt><dd>{{ httpStatus }}</dd></div> }
+							<div><dt>Attempts</dt><dd>{{ row.technicalDetails.retryCount }} of {{ row.technicalDetails.retryLimit }}</dd></div>
+						</dl>
+					</details>
+				}
+			</li>
+		}
+	</ul>
+</section>

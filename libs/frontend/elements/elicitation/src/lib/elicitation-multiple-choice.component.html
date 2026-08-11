@@ -1,0 +1,10 @@
+<fieldset class="elicitation-control" [disabled]="disabled()">
+	<legend>{{ body().prompt }}</legend>
+	<p class="elicitation-control__hint">Choose {{ body().minimumSelections }} to {{ body().maximumSelections }}.</p>
+	@for (choice of body().choices; track choice.value) {
+		<label class="elicitation-control__option">
+			<input type="checkbox" [value]="choice.value" [checked]="selected(choice.value)" [disabled]="optionDisabled(choice.value)" (change)="toggle(choice.value)" />
+			<span><strong>{{ choice.label }}</strong>@if (choice.description) { <small>{{ choice.description }}</small> }</span>
+		</label>
+	}
+</fieldset>

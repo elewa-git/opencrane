@@ -1,0 +1,7 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": { "outDir": "../../../../../dist/out-tsc", "types": [], "composite": true, "tsBuildInfoFile": "../../../../../dist/out-tsc/libs/frontend/state/conversation/elicitation/tsconfig.lib.tsbuildinfo" },
+  "include": ["src/**/*.ts"],
+  "exclude": ["src/**/*.spec.ts"],
+  "references": [{ "path": "../../../core" }, { "path": "../ag-ui/tsconfig.lib.json" }, { "path": "../../../../contracts" }]
+}

@@ -1,0 +1,14 @@
+:host { display: block; }
+.elicitation-control { display: grid; gap: var(--oc-space-3); margin: 0; padding: 0; border: 0; color: var(--oc-ink-strong); }
+.elicitation-control h3, .elicitation-control legend { margin: 0; font-size: var(--oc-text-md); font-weight: 600; }
+.elicitation-control fieldset { display: flex; gap: var(--oc-space-4); margin: 0; padding: 0; border: 0; }
+.elicitation-control__disclosure { display: grid; gap: var(--oc-space-2); margin: 0; padding: var(--oc-space-3); border: 1px solid var(--oc-border-subtle); border-radius: var(--oc-radius-card); background: var(--oc-surface-subtle); }
+.elicitation-control__disclosure div { display: grid; grid-template-columns: minmax(7rem, 0.35fr) 1fr; gap: var(--oc-space-2); }
+.elicitation-control__disclosure dt { color: var(--oc-ink-muted); }
+.elicitation-control__disclosure dd { margin: 0; overflow-wrap: anywhere; }
+.elicitation-control__option { display: flex; align-items: flex-start; gap: var(--oc-space-2); padding: var(--oc-space-2); border: 1px solid var(--oc-border-subtle); border-radius: var(--oc-radius-chip); }
+.elicitation-control__option span { display: grid; gap: var(--oc-space-1); }
+.elicitation-control__option small, .elicitation-control__hint { color: var(--oc-ink-muted); }
+.elicitation-control textarea { width: 100%; min-height: 6rem; padding: var(--oc-space-3); resize: vertical; color: inherit; background: var(--oc-surface-raised); border: 1px solid var(--oc-border-default); border-radius: var(--oc-radius-chip); }
+@media (max-width: 640px) { .elicitation-control__disclosure div { grid-template-columns: 1fr; } }
+@media (prefers-reduced-motion: reduce) { :host, :host * { scroll-behavior: auto; transition: none; } }

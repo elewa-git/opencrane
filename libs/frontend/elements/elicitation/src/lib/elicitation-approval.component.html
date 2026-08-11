@@ -1,0 +1,16 @@
+<section class="elicitation-control" aria-labelledby="elicitation-approval-prompt">
+	<h3 id="elicitation-approval-prompt">{{ body().prompt }}</h3>
+	<dl class="elicitation-control__disclosure">
+		<div><dt>Action</dt><dd>{{ body().action }}</dd></div>
+		<div><dt>Target</dt><dd>{{ body().target }}</dd></div>
+		<div><dt>Data used</dt><dd>{{ body().dataUse }}</dd></div>
+		@if (body().externalSystem; as externalSystem) { <div><dt>External system</dt><dd>{{ externalSystem }}</dd></div> }
+		<div><dt>What happens</dt><dd>{{ body().consequence }}</dd></div>
+		@if (body().cost; as cost) { <div><dt>Cost</dt><dd>{{ cost }}</dd></div> }
+	</dl>
+	<fieldset [disabled]="disabled()">
+		<legend>Your decision</legend>
+		<label><input type="radio" name="elicitation-approval" [checked]="value() === true" (change)="select(true)" /> Approve</label>
+		<label><input type="radio" name="elicitation-approval" [checked]="value() === false" (change)="select(false)" /> Deny</label>
+	</fieldset>
+</section>

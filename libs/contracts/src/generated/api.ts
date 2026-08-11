@@ -4154,7 +4154,64 @@ export interface operations {
                 };
                 content: {
                     "application/json": {
-                        elicitations: Record<string, never>[];
+                        elicitations: {
+                            /** @constant */
+                            version: "opencrane.elicitation.v1";
+                            requestId: string;
+                            conversationId: string;
+                            runId: string;
+                            attempt: number;
+                            assignedParticipantId: string;
+                            /** @enum {string} */
+                            purpose: "runtime_input" | "tool_approval" | "personal_memory_permission" | "a2ui_action";
+                            /** @enum {string} */
+                            state: "requested" | "answered" | "declined" | "expired" | "cancelled" | "failed";
+                            body: {
+                                /** @constant */
+                                kind: "approval";
+                                prompt: string;
+                                action: string;
+                                target: string;
+                                dataUse: string;
+                                externalSystem?: string;
+                                consequence: string;
+                                cost?: string;
+                            } | {
+                                /** @constant */
+                                kind: "single_choice";
+                                prompt: string;
+                                choices: {
+                                    value: string;
+                                    label: string;
+                                    description?: string;
+                                }[];
+                            } | {
+                                /** @constant */
+                                kind: "multiple_choice";
+                                prompt: string;
+                                choices: {
+                                    value: string;
+                                    label: string;
+                                    description?: string;
+                                }[];
+                                minimumSelections: number;
+                                maximumSelections: number;
+                            } | {
+                                /** @constant */
+                                kind: "free_text";
+                                prompt: string;
+                                maximumLength: number;
+                                allowEmpty: boolean;
+                            };
+                            requiresStepUp: boolean;
+                            /** Format: date-time */
+                            requestedAt: string;
+                            /** Format: date-time */
+                            expiresAt: string;
+                            /** Format: date-time */
+                            resolvedAt?: string;
+                            safeReason?: string;
+                        }[];
                     };
                 };
             };
@@ -4208,7 +4265,64 @@ export interface operations {
                 };
                 content: {
                     "application/json": {
-                        elicitation: Record<string, never>;
+                        elicitation: {
+                            /** @constant */
+                            version: "opencrane.elicitation.v1";
+                            requestId: string;
+                            conversationId: string;
+                            runId: string;
+                            attempt: number;
+                            assignedParticipantId: string;
+                            /** @enum {string} */
+                            purpose: "runtime_input" | "tool_approval" | "personal_memory_permission" | "a2ui_action";
+                            /** @enum {string} */
+                            state: "requested" | "answered" | "declined" | "expired" | "cancelled" | "failed";
+                            body: {
+                                /** @constant */
+                                kind: "approval";
+                                prompt: string;
+                                action: string;
+                                target: string;
+                                dataUse: string;
+                                externalSystem?: string;
+                                consequence: string;
+                                cost?: string;
+                            } | {
+                                /** @constant */
+                                kind: "single_choice";
+                                prompt: string;
+                                choices: {
+                                    value: string;
+                                    label: string;
+                                    description?: string;
+                                }[];
+                            } | {
+                                /** @constant */
+                                kind: "multiple_choice";
+                                prompt: string;
+                                choices: {
+                                    value: string;
+                                    label: string;
+                                    description?: string;
+                                }[];
+                                minimumSelections: number;
+                                maximumSelections: number;
+                            } | {
+                                /** @constant */
+                                kind: "free_text";
+                                prompt: string;
+                                maximumLength: number;
+                                allowEmpty: boolean;
+                            };
+                            requiresStepUp: boolean;
+                            /** Format: date-time */
+                            requestedAt: string;
+                            /** Format: date-time */
+                            expiresAt: string;
+                            /** Format: date-time */
+                            resolvedAt?: string;
+                            safeReason?: string;
+                        };
                     };
                 };
             };
@@ -4257,7 +4371,23 @@ export interface operations {
             content: {
                 "application/json": {
                     idempotencyKey: string;
-                    response: Record<string, never>;
+                    response: {
+                        /** @constant */
+                        kind: "approval";
+                        approved: boolean;
+                    } | {
+                        /** @constant */
+                        kind: "single_choice";
+                        selection: string;
+                    } | {
+                        /** @constant */
+                        kind: "multiple_choice";
+                        selections: string[];
+                    } | {
+                        /** @constant */
+                        kind: "free_text";
+                        text: string;
+                    };
                 };
             };
         };
@@ -4269,7 +4399,14 @@ export interface operations {
                 };
                 content: {
                     "application/json": {
-                        response: Record<string, never>;
+                        response: {
+                            requestId: string;
+                            /** @enum {string} */
+                            state: "requested" | "answered" | "declined" | "expired" | "cancelled" | "failed";
+                            idempotent: boolean;
+                            /** Format: date-time */
+                            resolvedAt: string;
+                        };
                     };
                 };
             };
