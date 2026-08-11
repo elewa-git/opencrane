@@ -1,6 +1,7 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 
 import type { ArtifactServicePromotionPort, ArtifactUploadCryptoPort } from "@opencrane/backend/server/agents/artifacts";
+import { ___DoWithTrace } from "@opencrane/backend/observability";
 import { ___DecideConversationAssetBatch } from "@opencrane/models/conversation-assets";
 import { ___IsSha256ContentAddress } from "@opencrane/models/artifacts";
 
@@ -22,31 +23,34 @@ export class PrismaConversationAssetUnitOfWork implements ConversationAssetUnitO
 	async reserveUpload(caller: ConversationAssetCaller, conversationId: string, request: ReserveConversationAssetRequest): Promise<ConversationAssetResult>
 	{
 		if (!_ValidReservation(request)) return { outcome: "denied", reason: "invalid_request" };
-		return this._transaction(function _Reserve(repository) { return repository.reserve(caller, conversationId, request); }, Prisma.TransactionIsolationLevel.Serializable);
+		return ___DoWithTrace("conversation.asset.reserve", { conversationId }, () => this._transaction(function _Reserve(repository) { return repository.reserve(caller, conversationId, request); }, Prisma.TransactionIsolationLevel.Serializable));
 	}
 
 	/** Promotes exact bytes outside a transaction, then quarantines the receipt atomically. */
 	async upload(caller: ConversationAssetCaller, conversationId: string, assetId: string, bytes: AsyncIterable<Uint8Array>): Promise<ConversationAssetResult>
 	{
-		const target = await this._transaction(function _Read(repository) { return repository.readUploadTarget(caller, conversationId, assetId); }, Prisma.TransactionIsolationLevel.RepeatableRead);
-		if (target === null) return { outcome: "denied", reason: "asset_unavailable" };
-		const receipt = await this.service.promote(this.crypto.signLease(target.lease), bytes);
-		const promotion = this.crypto.verifyReceipt(receipt.receipt);
-		if (promotion === null || promotion.leaseId !== target.lease.leaseId || promotion.contentAddress !== target.lease.expectedContentAddress || promotion.byteLength !== target.lease.expectedByteLength || promotion.mediaType !== target.lease.mediaType) return { outcome: "denied", reason: "upload_failed" };
-		const receiptDigest = this.crypto.digestReceipt(receipt.receipt);
-		return this._transaction(function _Finalize(repository) { return repository.finalize(caller, conversationId, assetId, promotion, receiptDigest); }, Prisma.TransactionIsolationLevel.Serializable);
+		return ___DoWithTrace("conversation.asset.upload", { conversationId, assetId }, async () =>
+		{
+			const target = await this._transaction(function _Read(repository) { return repository.readUploadTarget(caller, conversationId, assetId); }, Prisma.TransactionIsolationLevel.RepeatableRead);
+			if (target === null) return { outcome: "denied", reason: "asset_unavailable" };
+			const receipt = await this.service.promote(this.crypto.signLease(target.lease), bytes);
+			const promotion = this.crypto.verifyReceipt(receipt.receipt);
+			if (promotion === null || promotion.leaseId !== target.lease.leaseId || promotion.contentAddress !== target.lease.expectedContentAddress || promotion.byteLength !== target.lease.expectedByteLength || promotion.mediaType !== target.lease.mediaType) return { outcome: "denied", reason: "upload_failed" };
+			const receiptDigest = this.crypto.digestReceipt(receipt.receipt);
+			return this._transaction(function _Finalize(repository) { return repository.finalize(caller, conversationId, assetId, promotion, receiptDigest); }, Prisma.TransactionIsolationLevel.Serializable);
+		});
 	}
 
 	/** Lists current browser-safe asset metadata. */
 	async list(caller: ConversationAssetCaller, conversationId: string): Promise<readonly ConversationAssetView[]>
 	{
-		return this._transaction(function _List(repository) { return repository.list(caller, conversationId); }, Prisma.TransactionIsolationLevel.RepeatableRead);
+		return ___DoWithTrace("conversation.asset.list", { conversationId }, () => this._transaction(function _List(repository) { return repository.list(caller, conversationId); }, Prisma.TransactionIsolationLevel.RepeatableRead));
 	}
 
 	/** Revokes one server-authorized unlinked upload reservation. */
 	async remove(caller: ConversationAssetCaller, conversationId: string, assetId: string): Promise<ConversationAssetResult>
 	{
-		return this._transaction(function _Remove(repository) { return repository.remove(caller, conversationId, assetId); }, Prisma.TransactionIsolationLevel.Serializable);
+		return ___DoWithTrace("conversation.asset.remove", { conversationId, assetId }, () => this._transaction(function _Remove(repository) { return repository.remove(caller, conversationId, assetId); }, Prisma.TransactionIsolationLevel.Serializable));
 	}
 
 	/** Creates the transaction-scoped repository exactly once per operation. */

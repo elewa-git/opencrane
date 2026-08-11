@@ -56,10 +56,13 @@ async function _ReadSource(config: ArtifactScannerRemoteConfig, claim: ArtifactS
 /** Submit one fenced result or failure. */
 async function _SendJson(config: ArtifactScannerRemoteConfig, path: string, command: ArtifactScannerResultCommand | ArtifactScannerFailureCommand, signal: AbortSignal): Promise<void>
 {
-	return ___DoWithTrace("artifact-scanner.result.report", { jobId: command.jobId, attempt: command.attempt }, async function _ReportResult(): Promise<void>
+	const isFailure = "failureCode" in command;
+	const operation = isFailure ? "artifact-scanner.failure.report" : "artifact-scanner.result.report";
+	const fields = isFailure ? { jobId: command.jobId, attempt: command.attempt, failureCode: command.failureCode } : { jobId: command.jobId, attempt: command.attempt };
+	return ___DoWithTrace(operation, fields, async function _ReportOutcome(): Promise<void>
 	{
 		const response = await fetch(`${config.openCraneInternalUrl}${path}`, { method: "PUT", headers: await _Headers(config), body: JSON.stringify(command), signal: AbortSignal.any([signal, AbortSignal.timeout(config.requestTimeoutMilliseconds)]) });
-		if (response.status !== 204) throw new Error(`artifact scan result failed with HTTP ${response.status}`);
+		if (response.status !== 204) throw new Error(`artifact scan report failed with HTTP ${response.status}`);
 	});
 }
 

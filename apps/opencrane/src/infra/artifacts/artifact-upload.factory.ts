@@ -52,9 +52,12 @@ export function _CreateArtifactServicePromotionPort(serviceUrl: string): { promo
 	return {
 		async promote(lease: string, bytes: AsyncIterable<Uint8Array>): Promise<{ readonly receipt: string }>
 		{
-			const response = await fetch(`${serviceUrl}/v1/artifacts/promote`, { method: "POST", headers: { "x-opencrane-artifact-lease": lease }, body: Readable.toWeb(Readable.from(bytes)) as unknown as BodyInit, duplex: "half" } as RequestInit);
-			if (!response.ok) throw new Error(`artifact service promotion failed with ${response.status}`);
-			return ___ParseAndValidateJson(await response.text(), "artifact service promotion response", _PromotionReceipt);
+			return ___DoWithTrace("artifact.promote.fetch", {}, async function _Promote(): Promise<{ readonly receipt: string }>
+			{
+				const response = await fetch(`${serviceUrl}/v1/artifacts/promote`, { method: "POST", headers: { "x-opencrane-artifact-lease": lease }, body: Readable.toWeb(Readable.from(bytes)) as unknown as BodyInit, duplex: "half" } as RequestInit);
+				if (!response.ok) throw new Error(`artifact service promotion failed with ${response.status}`);
+				return ___ParseAndValidateJson(await response.text(), "artifact service promotion response", _PromotionReceipt);
+			});
 		},
 	};
 }

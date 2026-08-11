@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { rm } from "node:fs/promises";
 import { join } from "node:path";
 
-import { ___DoWithTrace } from "@opencrane/backend/observability";
+import { ___DoWithTrace, ___GetActiveSpan } from "@opencrane/backend/observability";
 import type { ArtifactScannerClaimCommand, ArtifactScannerFailureCommand, ArtifactScannerJobClaim } from "@opencrane/contracts";
 
 import type { ArtifactScannerDependencies } from "./scanner.types.js";
@@ -41,7 +41,15 @@ export async function __ProcessArtifactScanJob(dependencies: ArtifactScannerDepe
 			catch (err) { return _ReportFailure(dependencies, { ...command, failureCode: "source_read_failed" }, err, signal); }
 			// 2. The pinned offline engine scans the complete local file.
 			let verdict;
-			try { verdict = await dependencies.scanner.scan(sourcePath, dependencies.scanTimeoutMilliseconds, signal); }
+			try
+			{
+				verdict = await ___DoWithTrace("artifact-scanner.malware.scan", { jobId: command.jobId, attempt: command.attempt, sourceByteLength: claim.sourceByteLength }, async function _Scan()
+				{
+					const outcome = await dependencies.scanner.scan(sourcePath, dependencies.scanTimeoutMilliseconds, signal);
+					___GetActiveSpan()?.setAttribute("outcome", outcome);
+					return outcome;
+				});
+			}
 			catch (err) { return _ReportFailure(dependencies, { ...command, failureCode: "scanner_failed" }, err, signal); }
 			// 3. The server alone publishes or rejects the revision through the fence.
 			await dependencies.remote.reportResult({ ...command, verdict, scannerVersion: dependencies.scanner.version }, signal);
@@ -54,15 +62,18 @@ export async function __ProcessArtifactScanJob(dependencies: ArtifactScannerDepe
 	});
 }
 
-/** Report one bounded failure and preserve the original failure. */
-async function _ReportFailure(dependencies: ArtifactScannerDependencies, command: ArtifactScannerFailureCommand, failure: unknown, signal: AbortSignal): Promise<never>
+/** Report one bounded handled failure exactly once with safe retry coordinates. */
+async function _ReportFailure(dependencies: ArtifactScannerDependencies, command: ArtifactScannerFailureCommand, _failure: unknown, signal: AbortSignal): Promise<void>
 {
 	if (!signal.aborted)
 	{
-		try { await dependencies.remote.reportFailure(command, signal); }
-		catch (err) { dependencies.logger.warn({ err, jobId: command.jobId, attempt: command.attempt }, "artifact scan failure report was not accepted"); }
+		try
+		{
+			await dependencies.remote.reportFailure(command, signal);
+			dependencies.logger.warn({ jobId: command.jobId, attempt: command.attempt, failureCode: command.failureCode }, "artifact scan failed and was reported for fenced retry");
+		}
+		catch (err) { dependencies.logger.warn({ err, jobId: command.jobId, attempt: command.attempt, failureCode: command.failureCode }, "artifact scan failure report was not accepted"); }
 	}
-	throw failure;
 }
 
 /** Extract current claim coordinates. */
