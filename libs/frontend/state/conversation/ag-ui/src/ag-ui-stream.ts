@@ -109,20 +109,22 @@ function _AppendToolArguments(state: AgUiStreamState, toolCallId: string, delta:
 	return { ...state, tools: { ...state.tools, [toolCallId]: { ...tool, arguments: tool.arguments + delta } } };
 }
 
-/** Mark one known tool request complete. */
+/** Mark one known tool request complete unless durable recovery evidence owns its status. */
 function _CompleteTool(state: AgUiStreamState, toolCallId: string): AgUiStreamState
 {
 	const tool = state.tools[toolCallId];
 	if (tool === undefined) throw new Error("AG-UI tool end has no active tool call");
+	if (tool.status === AgUiToolStatuses.NeedsRecovery || tool.recovery !== null) return state;
 	const status = tool.failures.length === 0 && tool.recovery === null ? AgUiToolStatuses.Completed : AgUiToolStatuses.Recovered;
 	return { ...state, tools: { ...state.tools, [toolCallId]: { ...tool, status } } };
 }
 
-/** Attach a display-safe result only to a known tool call. */
+/** Attach a display-safe result only to a known tool call without unresolved recovery evidence. */
 function _ResultTool(state: AgUiStreamState, toolCallId: string, content: string): AgUiStreamState
 {
 	const tool = state.tools[toolCallId];
 	if (tool === undefined) throw new Error("AG-UI tool result has no known tool call");
+	if (tool.status === AgUiToolStatuses.NeedsRecovery || tool.recovery !== null) return state;
 	const status = tool.failures.length === 0 && tool.recovery === null ? AgUiToolStatuses.Completed : AgUiToolStatuses.Recovered;
 	return { ...state, tools: { ...state.tools, [toolCallId]: { ...tool, status, result: content } } };
 }

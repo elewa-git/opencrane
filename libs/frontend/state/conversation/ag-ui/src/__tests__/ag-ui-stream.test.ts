@@ -111,6 +111,32 @@ describe("AG-UI stream state", function _Suite()
 		expect(state.tools["tool-1"]).toMatchObject({ status: AgUiToolStatuses.NeedsRecovery, failures: [{ code: "TimeoutError" }], recovery: _Recovery() });
 	});
 
+	it("rejects a tool end as proof of recovery", function _RejectsToolEndAfterRecoveryRequirement()
+	{
+		let state = __ReduceAgUiStream(__CreateAgUiStreamState(), _Record("cursor-recovery-end-1", { type: EventType.RUN_STARTED, threadId: "conversation-1", runId: "run-1" }));
+		state = __ReduceAgUiStream(state, _Record("cursor-recovery-end-2", { type: EventType.TOOL_CALL_START, toolCallId: "tool-1", toolCallName: "create_invoice" }));
+		state = __ReduceAgUiStream(state, _Record("cursor-recovery-end-3", { type: EventType.CUSTOM, name: AG_UI_TOOL_RECOVERY_REQUIRED_EVENT, value: _Recovery() }));
+		const recoveryTool = state.tools["tool-1"];
+		state = __ReduceAgUiStream(state, _Record("cursor-recovery-end-4", { type: EventType.TOOL_CALL_END, toolCallId: "tool-1" }));
+
+		expect(state.cursor).toBe("cursor-recovery-end-4");
+		expect(state.tools["tool-1"]).toBe(recoveryTool);
+		expect(state.tools["tool-1"]).toMatchObject({ status: AgUiToolStatuses.NeedsRecovery, result: null, recovery: _Recovery() });
+	});
+
+	it("rejects a tool result as proof of recovery", function _RejectsToolResultAfterRecoveryRequirement()
+	{
+		let state = __ReduceAgUiStream(__CreateAgUiStreamState(), _Record("cursor-recovery-result-1", { type: EventType.RUN_STARTED, threadId: "conversation-1", runId: "run-1" }));
+		state = __ReduceAgUiStream(state, _Record("cursor-recovery-result-2", { type: EventType.TOOL_CALL_START, toolCallId: "tool-1", toolCallName: "create_invoice" }));
+		state = __ReduceAgUiStream(state, _Record("cursor-recovery-result-3", { type: EventType.CUSTOM, name: AG_UI_TOOL_RECOVERY_REQUIRED_EVENT, value: _Recovery() }));
+		const recoveryTool = state.tools["tool-1"];
+		state = __ReduceAgUiStream(state, _Record("cursor-recovery-result-4", { type: EventType.TOOL_CALL_RESULT, toolCallId: "tool-1", messageId: "tool-message-1", role: "tool", content: "done" }));
+
+		expect(state.cursor).toBe("cursor-recovery-result-4");
+		expect(state.tools["tool-1"]).toBe(recoveryTool);
+		expect(state.tools["tool-1"]).toMatchObject({ status: AgUiToolStatuses.NeedsRecovery, result: null, recovery: _Recovery() });
+	});
+
 	it("rejects malformed and secret-bearing recovery envelopes without changing state", function _RejectsUnsafeRecovery()
 	{
 		let state = __ReduceAgUiStream(__CreateAgUiStreamState(), _Record("cursor-unsafe-1", { type: EventType.RUN_STARTED, threadId: "conversation-1", runId: "run-1" }));
