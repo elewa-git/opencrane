@@ -72,7 +72,7 @@ export interface SelfRunCancellationRouterDependencies
 	/** Resolves server-derived browser identity. */
 	resolveCaller(request: Request): SelfRunCancellationCaller | null;
 	/** Cancels only runs owned by that identity. */
-	cancellation: SelfRunCancellationPort;
+	cancellation: SelfRunCancellationRepository;
 	/** Records unexpected failures without request or provider data. */
 	logger: Logger;
 }
