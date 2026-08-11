@@ -322,6 +322,10 @@ The accepted product contract is:
   request starts. After dispatch, replay a saved success or check the provider when that is possible.
   If neither can prove the outcome, never guess or send the action again: stop the run in a visible,
   cancellable **Needs recovery** state.
+- #319 owns the durable recovery state, sanitized stream projection, and expected-attempt-fenced
+  cancellation API. The deployed SPA still has no conversation workspace route, so the actual
+  **Needs recovery** card and cancel control mount with the workspace in #351; #319 must not claim
+  that an unmounted reducer or Storybook fixture is already user-visible.
 - one recoverable elicitation contract renders approvals, single choice, multiple choice, and bounded
   free text, including explicit personal-memory permission. Consequential A2UI actions use that
   authority; rendered UI never grants permission.
