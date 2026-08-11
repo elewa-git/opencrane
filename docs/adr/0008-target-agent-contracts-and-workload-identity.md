@@ -1,11 +1,13 @@
 # ADR 0008 — Agent contracts and workload identity
 
 - **Status:** Accepted; artifact-read and prompt-compiler placement clarified by
-  [ADR 0011](0011-single-run-input-and-artifact-read-authorities.md)
+  [ADR 0011](0011-single-run-input-and-artifact-read-authorities.md); the universal `Thread` aggregate
+  and run-hierarchy clause superseded by [ADR 0012](0012-conversation-modes-and-agent-thread-authority.md)
 - **Date:** 2026-07-18
 - **Task:** `#245`
 - **Related:** [product contract](../design/personal-agent-platform-product-contract.md) ·
-  [platform architecture](../design/personal-agent-platform-architecture.md)
+  [platform architecture](../design/personal-agent-platform-architecture.md) ·
+  [ADR 0012](0012-conversation-modes-and-agent-thread-authority.md)
 
 ## Context
 
