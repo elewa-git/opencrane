@@ -60,14 +60,15 @@ Internally, the source is grouped by responsibility:
 - `__IsUpgradeSessionAvailable` checks whether a frozen run can receive that tool descriptor.
 - `UpgradeSessionInvocation` and `UpgradeSessionProposalRepository` form the narrow server-worker
   contract for proposing that future change after runtime admission.
-- `PrismaUpgradeSessionProposalUnitOfWork` maps a durable admitted invocation to one transaction;
-  its transaction-bound repository resolves the owner profile and inserts proposal evidence.
+- `PrismaUpgradeSessionProposalUnitOfWork` validates the durable admitted invocation, resolves its
+  owner profile, and records the future-session proposal under one transaction.
 - `PrismaPersonalConfigurationPersonaRefreshRepository` is the transaction-scoped bridge that a
   persona unit of work uses to claim and apply an accepted refresh without taking over the
   configuration delegate.
 
-All use cases, persistence contracts, transaction-scoped repositories, result vocabularies, and
-HTTP handler factories remain internal to the package, except the narrow persona-refresh bridge.
+All use cases, transaction-scoped repository details, result vocabularies, and HTTP handler
+factories remain internal. The public persistence surface is limited to the runtime upgrade-session
+contract and unit of work, plus the narrow persona-refresh bridge.
 
 ## Boundary
 

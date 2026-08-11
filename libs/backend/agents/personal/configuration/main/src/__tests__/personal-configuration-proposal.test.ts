@@ -26,37 +26,37 @@ describe("personal configuration proposals", function _PersonalConfigurationProp
 	it("persists a provenance-bound request without changing a current run", async function _Proposes()
 	{
 		let accepted: unknown;
-		const result = await __ProposePersonalConfigurationChange({ proposeAtomically: async function _Propose(command) { accepted = command; return { status: PersonalConfigurationProposalCodes.Proposed, changeId: "change-1" } as const; } }, _Command({ sourceMessageId: null }));
+		const result = await __ProposePersonalConfigurationChange({ propose: async function _Propose(command) { accepted = command; return { status: PersonalConfigurationProposalCodes.Proposed, changeId: "change-1" } as const; } }, _Command({ sourceMessageId: null }));
 		expect(result).toEqual({ outcome: PersonalConfigurationProposalCodes.Proposed, changeId: "change-1" });
 		expect(accepted).toMatchObject({ sourceConversationId: "conversation-1", sourceRunId: "run-1", sourceMessageId: null, expectedPersonaRevisionId: "persona-1", expectedAgentRevisionId: "agent-1" });
 	});
 
 	it.each(_INVALID_COMMANDS)("refuses $label before persistence", async function _RejectsInvalidCommand(testCase)
 	{
-		const proposeAtomically = vi.fn(async function _Propose() { return { status: PersonalConfigurationProposalCodes.Proposed, changeId: "unexpected" } as const; });
-		const result = await __ProposePersonalConfigurationChange({ proposeAtomically }, testCase.command);
+		const propose = vi.fn(async function _Propose() { return { status: PersonalConfigurationProposalCodes.Proposed, changeId: "unexpected" } as const; });
+		const result = await __ProposePersonalConfigurationChange({ propose }, testCase.command);
 
 		expect(result).toEqual({ outcome: PersonalConfigurationProposalCodes.Denied, reason: PersonalConfigurationProposalCodes.InvalidCommand });
-		expect(proposeAtomically).not.toHaveBeenCalled();
+		expect(propose).not.toHaveBeenCalled();
 	});
 
 	it("refuses malformed proposal evidence before persistence", async function _RejectsMalformed()
 	{
 		let called = false;
-		const result = await __ProposePersonalConfigurationChange({ proposeAtomically: async function _propose() { called = true; return { status: PersonalConfigurationProposalCodes.Proposed, changeId: "unexpected" } as const; } }, _Command({ requestedPatchDigest: "not-a-digest" }));
+		const result = await __ProposePersonalConfigurationChange({ propose: async function _propose() { called = true; return { status: PersonalConfigurationProposalCodes.Proposed, changeId: "unexpected" } as const; } }, _Command({ requestedPatchDigest: "not-a-digest" }));
 		expect(result).toEqual({ outcome: PersonalConfigurationProposalCodes.Denied, reason: PersonalConfigurationProposalCodes.InvalidCommand });
 		expect(called).toBe(false);
 	});
 
 	it("refuses a valid-looking digest for a different patch", async function _RejectsMismatchedDigest()
 	{
-		const result = await __ProposePersonalConfigurationChange({ proposeAtomically: async function _propose() { return { status: PersonalConfigurationProposalCodes.Proposed, changeId: "unexpected" } as const; } }, _Command({ requestedPatchDigest: `sha256:${"a".repeat(64)}` }));
+		const result = await __ProposePersonalConfigurationChange({ propose: async function _propose() { return { status: PersonalConfigurationProposalCodes.Proposed, changeId: "unexpected" } as const; } }, _Command({ requestedPatchDigest: `sha256:${"a".repeat(64)}` }));
 		expect(result).toEqual({ outcome: PersonalConfigurationProposalCodes.Denied, reason: PersonalConfigurationProposalCodes.InvalidCommand });
 	});
 
 	it("rejects a patch with an extra field that no later authority may interpret", async function _RejectsExtraPatchField()
 	{
-		const result = await __ProposePersonalConfigurationChange({ proposeAtomically: async function _propose() { return { status: PersonalConfigurationProposalCodes.Proposed, changeId: "unexpected" } as const; } }, _Command({ requestedPatch: { kind: "model_alias", modelAlias: "careful-model", budget: 10 } as never }));
+		const result = await __ProposePersonalConfigurationChange({ propose: async function _propose() { return { status: PersonalConfigurationProposalCodes.Proposed, changeId: "unexpected" } as const; } }, _Command({ requestedPatch: { kind: "model_alias", modelAlias: "careful-model", budget: 10 } as never }));
 		expect(result).toEqual({ outcome: PersonalConfigurationProposalCodes.Denied, reason: PersonalConfigurationProposalCodes.InvalidCommand });
 	});
 });

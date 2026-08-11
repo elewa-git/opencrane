@@ -1,7 +1,7 @@
 import { AgentServiceKind, ConversationMode, Prisma } from "@prisma/client";
 
 import { PersonalConfigurationProposalCodes, type ProposePersonalConfigurationChangeCommand } from "./personal-configuration-proposal.types.js";
-import type { PersonalConfigurationProposalPersistenceResult, PersonalConfigurationProposalRepository } from "./personal-configuration-proposal-unit-of-work.types.js";
+import type { PersonalConfigurationProposalPersistenceResult, PersonalConfigurationProposalRepository } from "./personal-configuration-proposal-repository.types.js";
 
 /** Prisma repository that proves proposal provenance inside its owning transaction. */
 export class PrismaPersonalConfigurationProposalRepository implements PersonalConfigurationProposalRepository
