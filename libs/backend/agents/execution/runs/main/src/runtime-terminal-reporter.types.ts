@@ -26,10 +26,10 @@ export interface RuntimeTerminalReporter
 	reportInTransaction(transaction: Prisma.TransactionClient, command: RuntimeTerminalReportCommand): Promise<RuntimeTerminalReportResult>;
 }
 
-/** Transaction-bound read model for tool work that must finish before run completion. */
+/** Transaction-bound read model for tool work that must finish before any runtime terminal report. */
 export interface RuntimeTerminalPendingToolRepository
 {
-	/** Return whether any invocation or undelivered result still blocks successful completion. */
+	/** Return whether any invocation or undelivered result still blocks terminalisation. */
 	hasPending(runId: string, attempt: number): Promise<boolean>;
 }
 

@@ -14,11 +14,10 @@ export class PrismaRuntimeTerminalReporter implements RuntimeTerminalReporter
 		await transaction.$queryRaw(Prisma.sql`SELECT "id" FROM "agent_runs" WHERE "id" = ${command.runId} FOR UPDATE`);
 		const run = await transaction.agentRun.findUnique({ where: { id: command.runId } });
 		if (run === null || run.attempt !== command.attempt || run.state !== AgentRunState.Running) return { outcome: "denied", reason: "run_not_running" };
-		if (command.eventType === "run.completed")
-		{
-			const hasPendingTools = await new PrismaRuntimeTerminalPendingToolUnitOfWork(transaction).hasPending(run.id, run.attempt);
-			if (hasPendingTools) return { outcome: "denied", reason: "tool_results_pending" };
-		}
+		// A runtime failure can follow a lost response after external-action admission committed. Keep
+		// both terminal outcomes behind the durable tool fence so server-owned work can still settle.
+		const hasPendingTools = await new PrismaRuntimeTerminalPendingToolUnitOfWork(transaction).hasPending(run.id, run.attempt);
+		if (hasPendingTools) return { outcome: "denied", reason: "tool_results_pending" };
 
 		const terminal = _terminal(command.eventType);
 		const now = new Date();
