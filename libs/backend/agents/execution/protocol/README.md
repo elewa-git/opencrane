@@ -59,6 +59,13 @@ request, an adapter with trustworthy readback may reconcile without repeating th
 other adapter enters visible `RecoveryRequired`. Expired claims follow the same policy after a
 process restart.
 
+Approval-required preparation stops in `AwaitingApproval`. The production worker derives the exact
+tool schema and capability-set digest from the admitted immutable snapshot, verifies the schema
+digest again, and asks the authorization authority to create the approval and pause the run in one
+transaction. The interrupt id is stable but opaque, and the server gives every request a fixed
+15-minute decision window. If the process stops between preparation and approval creation, the next
+worker pass recovers the same request without calling the provider.
+
 It intentionally owns no HTTP listener, Kubernetes resource, model driver, or provider credential.
 Its production factory composes a server-side external-action worker from the ToolInvocation unit
 of work, immutable snapshot loader, personal configuration authority, and fail-closed provider
@@ -75,6 +82,8 @@ are rechecked at execution, so the runtime never sees either credential or mutab
   result resume, frozen memory dataset selection, and canonical event reporting.
 - `__CreateProductionExternalActionWorker` — constructs the bounded process worker that prepares,
   claims, executes, reconciles, and recovers durable ToolInvocations.
+- `__CreateProductionExternalActionApprovalOpener` — binds an approval-required invocation to its
+  frozen schema and opens or recovers the canonical bounded approval request.
 - `_CreateSteeringIngestRouter` — the ready-to-mount Prisma composition that maps the shared
   authenticated request principal into the steering caller and supplies the queue and clock.
 - `_RuntimeSteeringOpenapiPaths` — contributes the steering contract to the server-owned API spec.

@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { __DecideDeferredToolRequest, __DeferToolRequest, __ExpireDeferredToolApprovalBatch } from "../deferred-tool-approval.js";
 import { __DigestCanonicalJson } from "../canonical-json-digest.js";
+import { __ProjectDeferredToolApproval } from "../deferred-tool-approval-schema.js";
 import { DeferredToolDecisionKinds } from "../deferred-tool-approval-decision.types.js";
 
 /** Build one complete awaiting-approval invocation row. */
@@ -29,7 +30,8 @@ function _transaction(row: unknown, updatedCount: number, invocationRow: unknown
 function _pending(): unknown
 {
 	const schema = { type: "object", additionalProperties: false, required: ["query"], properties: { query: { type: "string" } } };
-	return { id: "approval-1", runId: "run-1", attempt: 2, siloId: "silo-1", subjectId: "user-1", toolInvocationRowId: "tool-1", resourceId: "integration:search:query", argumentsDigest: __DigestCanonicalJson({ query: "original" }), reviewedToolArguments: { query: "original" }, reviewedToolSchema: schema, reviewedToolSchemaDigest: __DigestCanonicalJson(schema), state: ApprovalRequestState.Pending, expiresAt: new Date("2026-07-22T09:00:00.000Z") };
+	const projection = __ProjectDeferredToolApproval(schema, { query: "original" });
+	return { id: "approval-1", runId: "run-1", attempt: 2, siloId: "silo-1", subjectId: "user-1", toolInvocationRowId: "tool-1", resourceId: "integration:search:query", argumentsDigest: __DigestCanonicalJson({ query: "original" }), reviewedToolArguments: { query: "original" }, reviewedToolSchema: schema, reviewedToolSchemaDigest: __DigestCanonicalJson(schema), safeProposedArguments: projection.proposedArguments, responseSchema: projection.responseSchema, state: ApprovalRequestState.Pending, expiresAt: new Date("2026-07-22T09:00:00.000Z") };
 }
 
 const NOW = new Date("2026-07-21T09:00:00.000Z");
@@ -90,6 +92,29 @@ describe("deferred tool approval authority", function _suite()
 		expect(updateMany).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ state: ApprovalRequestState.Denied }) }));
 		expect(invocationUpdateMany).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ state: ToolInvocationState.Failed, failureCode: "approval_denied" }) }));
 		expect(deliveryCreate).toHaveBeenCalledWith({ data: expect.objectContaining({ payload: { toolInvocationId: "call-7", outcome: "failed", failureCode: "approval_denied" } }) });
+	});
+
+	it("enforces a secret-bearing schema's denial-only policy inside the decision authority", async function _secretDenialOnly()
+	{
+		const schema = { type: "object", additionalProperties: false, required: ["token"], properties: { token: { type: "string", writeOnly: true } } };
+		const reviewedArguments = { token: "server-secret" };
+		const projection = __ProjectDeferredToolApproval(schema, reviewedArguments);
+		const approval = { ..._pending() as object, argumentsDigest: __DigestCanonicalJson(reviewedArguments), reviewedToolArguments: reviewedArguments, reviewedToolSchema: schema, reviewedToolSchemaDigest: __DigestCanonicalJson(schema), safeProposedArguments: projection.proposedArguments, responseSchema: projection.responseSchema };
+		const invocation = _invocation({ arguments: reviewedArguments, argumentsDigest: __DigestCanonicalJson(reviewedArguments) });
+		const { transaction, updateMany, invocationUpdateMany } = _transaction(approval, 1, invocation);
+
+		await expect(__DecideDeferredToolRequest(transaction, { approvalRequestId: "approval-1", siloId: "silo-1", subjectId: "user-1", decision: DeferredToolDecisionKinds.Approved, arguments: { token: "replacement" }, decidedBy: "user-1", now: NOW })).resolves.toEqual({ outcome: "invalid_arguments" });
+		expect(updateMany).not.toHaveBeenCalled();
+		expect(invocationUpdateMany).not.toHaveBeenCalled();
+	});
+
+	it("rejects a handcrafted approval whose persisted response policy differs from its frozen schema", async function _forgedResponsePolicy()
+	{
+		const approval = { ..._pending() as object, responseSchema: { type: "object", properties: { decision: { const: "approved" } } } };
+		const { transaction, updateMany } = _transaction(approval, 1);
+
+		await expect(__DecideDeferredToolRequest(transaction, { approvalRequestId: "approval-1", siloId: "silo-1", subjectId: "user-1", decision: DeferredToolDecisionKinds.Approved, arguments: { query: "edited" }, decidedBy: "user-1", now: NOW })).resolves.toEqual({ outcome: "conflict" });
+		expect(updateMany).not.toHaveBeenCalled();
 	});
 
 	it("keeps the run waiting while another request remains pending", async function _keepsBatchWaiting()

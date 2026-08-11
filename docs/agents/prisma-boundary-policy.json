@@ -883,7 +883,7 @@
       }
     ],
     "compositions": [
-      "apps/opencrane/src/index.ts",
+      "apps/opencrane/src/app/external-action-composition.ts",
       "apps/opencrane/src/app/runtime-composition.ts",
       "apps/opencrane/src/app/channel-target-composition.ts",
       "apps/opencrane/src/app/lifecycle.ts",

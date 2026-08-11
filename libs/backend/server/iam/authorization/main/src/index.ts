@@ -9,7 +9,7 @@ export { __CancelPendingRunApprovalAuthority } from "./run-approval-cancellation
 export type { CancelPendingRunApprovalAuthorityCommand, CancelPendingRunApprovalAuthorityResult } from "./run-approval-cancellation.types.js";
 export { __DecideDeferredToolRequest, __DeferToolRequest, __ExpireDeferredToolApprovalBatch } from "./deferred-tool-approval.js";
 export { __PlanDeferredToolApprovalLifecycle } from "./deferred-tool-approval-lifecycle.js";
-export { __ProjectDeferredToolApproval, __ValidateDeferredToolArguments } from "./deferred-tool-approval-schema.js";
+export { __IsDeferredToolApprovalReplacementAllowed, __ProjectDeferredToolApproval, __ValidateDeferredToolArguments } from "./deferred-tool-approval-schema.js";
 export { DeferredToolDecisionKinds } from "./deferred-tool-approval-decision.types.js";
 export type { DecideDeferredToolRequestCommand, DecideDeferredToolRequestResult, DeferredToolApprovalDecisionRepository, ExpireDeferredToolApprovalBatchCommand, ExpireDeferredToolApprovalBatchResult } from "./deferred-tool-approval-decision.types.js";
 export { DeferredToolApprovalStates } from "./deferred-tool-approval-interrupt.types.js";

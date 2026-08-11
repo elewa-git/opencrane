@@ -11,6 +11,7 @@ export function __CreateProductionExternalActionWorker(dependencies: ProductionE
 		contexts: dependencies.contexts,
 		events: dependencies.events,
 		adapters: new ProductionExternalActionAdapterFactory({ transports: dependencies.transports, personalConfiguration: dependencies.personalConfiguration, now: function _now() { return new Date(); } }),
+		approvals: dependencies.approvals,
 		clock: { now: function _now() { return new Date(); } },
 		policy: { preparationAttemptLimit: 3, preparationRetryWindowMilliseconds: 300_000, preparationRetryDelayMilliseconds: 1_000, providerClaimLeaseMilliseconds: 30_000 },
 		log: dependencies.log,

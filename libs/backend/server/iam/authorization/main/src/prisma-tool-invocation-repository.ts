@@ -235,6 +235,7 @@ export class PrismaToolInvocationRepository implements ToolInvocationTransaction
 						run: { is: { state: "Running" } },
 						OR: [
 							{ state: ToolInvocationState.Preparing, nextPreparationAttemptAt: { lte: now } },
+							{ state: ToolInvocationState.AwaitingApproval, claimKind: null },
 							{ state: ToolInvocationState.Ready, claimKind: null, claimExpiresAt: null },
 							{ state: ToolInvocationState.Reconciling, claimKind: null, claimExpiresAt: null },
 							{ state: { in: [ToolInvocationState.Claimed, ToolInvocationState.Reconciling] }, claimKind: { not: null }, claimExpiresAt: { lte: now } },

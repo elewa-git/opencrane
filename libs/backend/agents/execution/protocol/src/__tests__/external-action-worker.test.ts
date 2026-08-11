@@ -183,7 +183,12 @@ class _Invocations implements ExternalActionWorkerUnitOfWork
 	/** Return the configured row as runnable work. */
 	async findNextRunnable(_now: Date): Promise<ToolInvocationRecord | null> { return this.invocation; }
 	/** Record provider-free preparation success. */
-	async markPrepared(_invocationId: string, _expectedRevision: number, _now: Date): Promise<ToolInvocationRecord | null> { this.prepared += 1; return this.invocation; }
+	async markPrepared(_invocationId: string, _expectedRevision: number, _now: Date): Promise<ToolInvocationRecord | null>
+	{
+		this.prepared += 1;
+		const state = this.invocation.approvalRequired ? ToolInvocationStates.AwaitingApproval : ToolInvocationStates.Ready;
+		return { ...this.invocation, state, revision: this.invocation.revision + 1 };
+	}
 	/** Record one bounded provider-free preparation failure. */
 	async recordPreparationFailure(_invocationId: string, _expectedRevision: number, _now: Date, policy: ToolInvocationPreparationPolicy, _failureCode: string): Promise<ToolInvocationRecord | null> { this.preparationFailures.push(policy); return this.invocation; }
 	/** Record preparation failure and its retry-visible event as one fake transaction. */
@@ -225,11 +230,12 @@ class _Invocations implements ExternalActionWorkerUnitOfWork
 }
 
 /** Build complete worker dependencies around a selected invocation and adapter. */
-function _dependencies(invocation: ExternalActionWorkerInvocation, adapter: PreparedExternalActionAdapter, context: ExternalActionExecutionContext | null = _context()): { readonly value: ExternalActionWorkerDependencies; readonly invocations: _Invocations; readonly adapters: _Adapters; readonly events: ExternalActionWorkerEvent[]; readonly logWarn: ReturnType<typeof vi.fn> }
+function _dependencies(invocation: ExternalActionWorkerInvocation, adapter: PreparedExternalActionAdapter, context: ExternalActionExecutionContext | null = _context()): { readonly value: ExternalActionWorkerDependencies; readonly invocations: _Invocations; readonly adapters: _Adapters; readonly events: ExternalActionWorkerEvent[]; readonly approvalOpen: ReturnType<typeof vi.fn>; readonly logWarn: ReturnType<typeof vi.fn> }
 {
 	const invocations = new _Invocations(invocation);
 	const adapters = new _Adapters(adapter);
 	const events: ExternalActionWorkerEvent[] = [];
+	const approvalOpen = vi.fn(async function _open() { return true; });
 	const logWarn = vi.fn();
 	return {
 		value: {
@@ -237,6 +243,7 @@ function _dependencies(invocation: ExternalActionWorkerInvocation, adapter: Prep
 			invocations,
 			contexts: new _Contexts(context),
 			adapters,
+			approvals: { open: approvalOpen },
 			events: { append: async function _append(event: ExternalActionWorkerEvent) { events.push(event); } },
 			clock: { now: function _now() { return _NOW; } },
 			policy: { preparationAttemptLimit: 3, preparationRetryWindowMilliseconds: 300_000, preparationRetryDelayMilliseconds: 1_000, providerClaimLeaseMilliseconds: 30_000 },
@@ -245,6 +252,7 @@ function _dependencies(invocation: ExternalActionWorkerInvocation, adapter: Prep
 		invocations,
 		adapters,
 		events,
+		approvalOpen,
 		logWarn,
 	};
 }
@@ -257,6 +265,40 @@ describe("external action worker", function _suite()
 		const dependencies = _dependencies(_invocation(ToolInvocationStates.Preparing), adapter);
 		await expect(new ExternalActionWorker(dependencies.value).runOnce()).resolves.toBe(true);
 		expect(dependencies.invocations.prepared).toBe(1);
+		expect(adapter.dispatchKeys).toEqual([]);
+	});
+
+	it("opens an approval immediately after provider-free preparation requires one", async function _opensApproval()
+	{
+		const adapter = new _Adapter(ExternalActionRecoveryModes.Manual);
+		const invocation = { ..._invocation(ToolInvocationStates.Preparing), approvalRequired: true };
+		const dependencies = _dependencies(invocation, adapter);
+
+		await expect(new ExternalActionWorker(dependencies.value).runOnce()).resolves.toBe(true);
+		expect(dependencies.approvalOpen).toHaveBeenCalledWith(expect.objectContaining({ state: ToolInvocationStates.AwaitingApproval, approvalRequired: true }), _context(), _NOW);
+		expect(adapter.dispatchKeys).toEqual([]);
+	});
+
+	it("recovers an awaiting approval left between preparation and approval creation", async function _recoversApprovalGap()
+	{
+		const adapter = new _Adapter(ExternalActionRecoveryModes.Manual);
+		const invocation = { ..._invocation(ToolInvocationStates.AwaitingApproval), approvalRequired: true };
+		const dependencies = _dependencies(invocation, adapter);
+
+		await expect(new ExternalActionWorker(dependencies.value).runOnce()).resolves.toBe(true);
+		expect(dependencies.approvalOpen).toHaveBeenCalledWith(invocation, _context(), _NOW);
+		expect(dependencies.adapters.prepareCount).toBe(0);
+		expect(adapter.dispatchKeys).toEqual([]);
+	});
+
+	it("never dispatches when approval opening cannot prove an outcome", async function _approvalOpenFailure()
+	{
+		const adapter = new _Adapter(ExternalActionRecoveryModes.Manual);
+		const invocation = { ..._invocation(ToolInvocationStates.AwaitingApproval), approvalRequired: true };
+		const dependencies = _dependencies(invocation, adapter);
+		dependencies.approvalOpen.mockRejectedValueOnce(new Error("approval recovery unavailable"));
+
+		await expect(new ExternalActionWorker(dependencies.value).runOnce()).rejects.toThrow("approval recovery unavailable");
 		expect(adapter.dispatchKeys).toEqual([]);
 	});
 

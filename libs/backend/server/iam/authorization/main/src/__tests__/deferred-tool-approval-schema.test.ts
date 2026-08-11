@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { JsonValue } from "@opencrane/util";
 
-import { __ProjectDeferredToolApproval, __ValidateDeferredToolArguments } from "../deferred-tool-approval-schema.js";
+import { __IsDeferredToolApprovalReplacementAllowed, __ProjectDeferredToolApproval, __ValidateDeferredToolArguments } from "../deferred-tool-approval-schema.js";
 
 /** Frozen reviewed schema used to prove secret-safe projection and full replacement validation. */
 const SCHEMA = {
@@ -28,6 +28,7 @@ describe("deferred tool approval schema", function _suite()
 		expect(JSON.stringify(projection)).not.toContain("secret-example");
 		expect(JSON.stringify(projection)).not.toContain("secret-const");
 		expect(projection.responseSchema).toEqual({ oneOf: [{ type: "object", additionalProperties: false, required: ["decision"], properties: { decision: { const: "denied" } } }] });
+		expect(__IsDeferredToolApprovalReplacementAllowed(SCHEMA)).toBe(false);
 	});
 
 	it("follows local refs and every schema combinator before admitting actor-visible details", function _FollowsReferences()

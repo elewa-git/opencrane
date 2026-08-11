@@ -47,7 +47,7 @@ describe("PrismaToolInvocationRepository", function _suite()
 		const repository = new PrismaToolInvocationRepository({ toolInvocation: { findMany } } as unknown as Prisma.TransactionClient);
 		await expect(repository.findNextRunnable(new Date("2026-08-11T10:00:01.000Z"))).resolves.toEqual(expect.objectContaining({ id: "current" }));
 		expect(findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { OR: expect.arrayContaining([
-			expect.objectContaining({ run: { is: { state: AgentRunState.Running } }, OR: expect.arrayContaining([expect.objectContaining({ state: ToolInvocationState.Ready, claimKind: null })]) }),
+			expect.objectContaining({ run: { is: { state: AgentRunState.Running } }, OR: expect.arrayContaining([expect.objectContaining({ state: ToolInvocationState.AwaitingApproval, claimKind: null }), expect.objectContaining({ state: ToolInvocationState.Ready, claimKind: null })]) }),
 			expect.objectContaining({ run: { is: { state: AgentRunState.Cancelling } }, state: { in: [ToolInvocationState.Claimed, ToolInvocationState.Reconciling] }, claimKind: { not: null }, claimExpiresAt: { lte: expect.any(Date) } }),
 		]) } }));
 	});

@@ -71,6 +71,13 @@ export interface ExternalActionAdapterFactory
 	prepare(invocation: ExternalActionWorkerInvocation, context: ExternalActionExecutionContext): PreparedExternalActionAdapter;
 }
 
+/** Server-owned boundary that opens one durable approval from immutable invocation authority. */
+export interface ExternalActionApprovalOpener
+{
+	/** Open or recover the exact approval required before this invocation may become Ready. */
+	open(invocation: ExternalActionWorkerInvocation, context: ExternalActionExecutionContext, now: Date): Promise<boolean>;
+}
+
 /** Trusted wall clock used for leases, deadlines, and recovery evidence. */
 export interface ExternalActionWorkerClock
 {
@@ -112,6 +119,8 @@ export interface ExternalActionWorkerDependencies
 	readonly contexts: ExternalActionExecutionContextLoader;
 	/** Provider-free adapter factory. */
 	readonly adapters: ExternalActionAdapterFactory;
+	/** Durable approval opener used only after preparation selected AwaitingApproval. */
+	readonly approvals: ExternalActionApprovalOpener;
 	/** Server-owned canonical tool lifecycle events. */
 	readonly events: ExternalActionWorkerEventSink;
 	/** Trusted server clock. */

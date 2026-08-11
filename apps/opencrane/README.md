@@ -94,6 +94,8 @@ its resources to the lifecycle owner.
   one authenticated, bounded Obot session. With no Obot configuration both ports refuse closed.
 - `src/app/background-workers.ts` owns schedule ticks, durable external-action passes, expired-run
   repair, and fenced cleanup loops; shutdown drains any active provider pass before Prisma closes.
+- `src/app/external-action-composition.ts` binds that worker to the immutable execution snapshot,
+  canonical tool lifecycle unit of work, deferred-approval authority, and private provider ports.
 - `src/app/lifecycle.ts` starts both listeners, stops producers first, drains requests, disconnects
   Prisma, and flushes telemetry.
 - `prisma/schema/*.prisma` defines the product's durable domain models.

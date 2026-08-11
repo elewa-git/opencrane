@@ -4,7 +4,7 @@ import { ___CloneCanonicalJson, type JsonValue } from "@opencrane/util";
 
 import { __DigestCanonicalJson } from "./canonical-json-digest.js";
 import { __PlanDeferredToolApprovalLifecycle } from "./deferred-tool-approval-lifecycle.js";
-import { __ValidateDeferredToolArguments } from "./deferred-tool-approval-schema.js";
+import { __IsDeferredToolApprovalReplacementAllowed, __ProjectDeferredToolApproval, __ValidateDeferredToolArguments } from "./deferred-tool-approval-schema.js";
 import { DeferredToolDecisionKinds, type DecideDeferredToolRequestCommand, type DecideDeferredToolRequestResult, type ExpireDeferredToolApprovalBatchCommand, type ExpireDeferredToolApprovalBatchResult } from "./deferred-tool-approval-decision.types.js";
 import { DeferredToolApprovalLifecycleActions, DeferredToolApprovalLifecycleEvents, DeferredToolApprovalRunStates } from "./deferred-tool-approval-lifecycle.types.js";
 import type { DeferToolRequestCommand, DeferToolRequestResult } from "./deferred-tool-approval-open.types.js";
@@ -155,6 +155,13 @@ export async function __DecideDeferredToolRequest(transaction: Prisma.Transactio
 	const run = await transaction.agentRun.findUnique({ where: { id: approval.runId } });
 	const invocation = await __FindToolInvocationInTransaction(transaction, approval.toolInvocationRowId);
 	if (membership === null || run === null || run.attempt !== approval.attempt || run.state !== AgentRunState.WaitingForApproval || invocation === null || invocation.runId !== approval.runId || invocation.attempt !== approval.attempt || invocation.toolRevisionId !== approval.resourceId || invocation.argumentsDigest !== approval.argumentsDigest) return { outcome: "conflict" };
+	if (approval.reviewedToolArguments === null || approval.reviewedToolSchema === null || approval.reviewedToolSchemaDigest === null || approval.responseSchema === null) return { outcome: "conflict" };
+	const reviewedSchema = approval.reviewedToolSchema as JsonValue;
+	const reviewedArguments = approval.reviewedToolArguments as JsonValue;
+	if (__DigestCanonicalJson(reviewedSchema) !== approval.reviewedToolSchemaDigest || !__ValidateDeferredToolArguments(reviewedSchema, reviewedArguments)) return { outcome: "conflict" };
+	const projection = __ProjectDeferredToolApproval(reviewedSchema, reviewedArguments);
+	if (__DigestCanonicalJson(approval.safeProposedArguments as JsonValue) !== __DigestCanonicalJson(projection.proposedArguments) || __DigestCanonicalJson(approval.responseSchema as JsonValue) !== __DigestCanonicalJson(projection.responseSchema)) return { outcome: "conflict" };
+	const replacementAllowed = __IsDeferredToolApprovalReplacementAllowed(reviewedSchema);
 
 	// 2. A previously decided request replays idempotently or conflicts on a differing outcome.
 	const priorDecision = _decisionOf(approval.state);
@@ -187,8 +194,8 @@ export async function __DecideDeferredToolRequest(transaction: Prisma.Transactio
 	}
 
 	// 4. Validate the frozen schema and proposed arguments before an actor replacement becomes effective.
-	if (invocation.state !== ToolInvocationStates.AwaitingApproval || approval.reviewedToolArguments === null || approval.reviewedToolSchema === null || approval.reviewedToolSchemaDigest === null || __DigestCanonicalJson(approval.reviewedToolSchema as JsonValue) !== approval.reviewedToolSchemaDigest) return { outcome: "conflict" };
-	if (command.arguments === undefined || command.arguments === null || typeof command.arguments !== "object" || Array.isArray(command.arguments) || !__ValidateDeferredToolArguments(approval.reviewedToolSchema as JsonValue, command.arguments)) return { outcome: "invalid_arguments" };
+	if (invocation.state !== ToolInvocationStates.AwaitingApproval) return { outcome: "conflict" };
+	if (!replacementAllowed || command.arguments === undefined || command.arguments === null || typeof command.arguments !== "object" || Array.isArray(command.arguments) || !__ValidateDeferredToolArguments(reviewedSchema, command.arguments)) return { outcome: "invalid_arguments" };
 	const finalArguments = ___CloneCanonicalJson(command.arguments);
 	const finalArgumentsDigest = __DigestCanonicalJson(finalArguments);
 

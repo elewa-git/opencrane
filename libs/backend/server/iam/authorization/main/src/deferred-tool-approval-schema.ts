@@ -133,10 +133,16 @@ export function __ValidateDeferredToolArguments(parametersSchema: JsonValue, arg
 	}
 }
 
+/** Return whether the frozen schema permits an actor-supplied replacement rather than denial only. */
+export function __IsDeferredToolApprovalReplacementAllowed(parametersSchema: JsonValue): boolean
+{
+	return !_containsSecretSchema(parametersSchema, parametersSchema);
+}
+
 /** Derive detached, actor-safe proposed arguments and the exact decision-body schema. */
 export function __ProjectDeferredToolApproval(parametersSchema: JsonValue, argumentsValue: JsonValue): DeferredToolApprovalProjection
 {
-	if (_containsSecretSchema(parametersSchema, parametersSchema))
+	if (!__IsDeferredToolApprovalReplacementAllowed(parametersSchema))
 	{
 		return {
 			proposedArguments: null,

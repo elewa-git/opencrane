@@ -53,6 +53,9 @@ policy evidence, and resume material never cross the API. Approval requires one 
 value, validates it server-side against the frozen schema, then atomically records the normalized
 value and digest. Denial records no arguments, but it does create one single-use refusal marker so
 the runtime receives the decision instead of silently losing the pending tool call.
+Before accepting a decision, the authority recomputes the frozen schema digest and the actor-safe
+projection. A schema that contains a secret is denial-only: a forged approval body cannot turn that
+request into provider dispatch, while an authenticated denial still closes it normally.
 Managed-service execution cannot silently substitute its `agent-service:*` execution identity for a
 human approver. An approval-required managed action fails closed at opening until the admitted run
 carries a concrete, currently authorized human approval subject.

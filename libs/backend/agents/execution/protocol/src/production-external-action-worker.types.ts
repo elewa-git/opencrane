@@ -1,7 +1,7 @@
 import type { UpgradeSessionProposalRepository } from "@opencrane/backend/agents/personal/configuration";
 import type { Logger } from "@opencrane/backend/observability";
 
-import type { ExternalActionExecutionContextLoader, ExternalActionWorkerEventSink, ExternalActionWorkerUnitOfWork, ToolInvocationWorkSource } from "./external-action-worker.types.js";
+import type { ExternalActionApprovalOpener, ExternalActionExecutionContextLoader, ExternalActionWorkerEventSink, ExternalActionWorkerUnitOfWork, ToolInvocationWorkSource } from "./external-action-worker.types.js";
 import type { ProductionExternalActionTransports } from "./external-action-executor.types.js";
 
 /** Combined persistence authority required by the process worker. */
@@ -18,6 +18,8 @@ export interface ProductionExternalActionWorkerDependencies
 	readonly events: ExternalActionWorkerEventSink;
 	/** Existing server-owned integration, sandbox, and memory transports. */
 	readonly transports: ProductionExternalActionTransports;
+	/** Server-owned deferred approval authority composed outside the provider adapter. */
+	readonly approvals: ExternalActionApprovalOpener;
 	/** Built-in personal configuration proposal authority. */
 	readonly personalConfiguration: UpgradeSessionProposalRepository;
 	/** Structured credential-free evidence sink. */

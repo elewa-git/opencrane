@@ -63,6 +63,7 @@ export class ExternalActionWorker
 			const invocation = await dependencies.source.findNextRunnable(now);
 			if (invocation === null) return false;
 			if (invocation.state === ToolInvocationStates.Preparing) return _prepare(invocation, now, dependencies);
+			if (invocation.state === ToolInvocationStates.AwaitingApproval) return _openApproval(invocation, now, dependencies);
 			if (invocation.state === ToolInvocationStates.Ready) return _execute(invocation, ExternalActionClaimKinds.Dispatch, now, dependencies);
 			if (invocation.state === ToolInvocationStates.Reconciling) return _execute(invocation, ExternalActionClaimKinds.Reconcile, now, dependencies);
 			if (invocation.state === ToolInvocationStates.Claimed)
@@ -79,19 +80,21 @@ export class ExternalActionWorker
 /** Complete provider-free preparation or consume one bounded preparation attempt. */
 async function _prepare(invocation: ExternalActionWorkerInvocation, now: Date, dependencies: ExternalActionWorkerDependencies): Promise<boolean>
 {
+	let context: ExternalActionExecutionContext;
+	let prepared: ToolInvocationRecord | null;
 	try
 	{
 		// 1. Load the canonical immutable snapshot so mutable runtime state cannot replace authority.
-		const context = await dependencies.contexts.load(invocation.runId, invocation.attempt);
-		if (context === null || !_contextMatchesInvocation(context, invocation)) throw new Error(_PREPARATION_FAILURE_CODE);
+		const loadedContext = await dependencies.contexts.load(invocation.runId, invocation.attempt);
+		if (loadedContext === null || !_contextMatchesInvocation(loadedContext, invocation)) throw new Error(_PREPARATION_FAILURE_CODE);
+		context = loadedContext;
 
 		// 2. Construct the adapter before changing state; this step must not start a provider request.
 		const adapter = dependencies.adapters.prepare(invocation, context);
 		if (adapter.recoveryMode !== invocation.recoveryMode) throw new Error(_PREPARATION_FAILURE_CODE);
 
 		// 3. Mark the invocation ready or awaiting approval only after all provider-free work succeeds.
-		await dependencies.invocations.markPrepared(invocation.id, invocation.revision, now);
-		return true;
+		prepared = await dependencies.invocations.markPrepared(invocation.id, invocation.revision, now);
 	}
 	catch
 	{
@@ -103,6 +106,21 @@ async function _prepare(invocation: ExternalActionWorkerInvocation, now: Date, d
 		dependencies.log.warn({ runId: invocation.runId, attempt: invocation.attempt, toolInvocationId: invocation.toolInvocationId, preparationAttempt: invocation.preparationAttempt + 1, failureKind: _PREPARATION_FAILURE_CODE }, "external action preparation failed before provider dispatch");
 		return true;
 	}
+	if (prepared?.state === ToolInvocationStates.AwaitingApproval) return _openApproval(prepared, now, dependencies, context);
+	return true;
+}
+
+/** Open or recover one approval without granting provider dispatch on an unresolved result. */
+async function _openApproval(invocation: ExternalActionWorkerInvocation, now: Date, dependencies: ExternalActionWorkerDependencies, preparedContext?: ExternalActionExecutionContext): Promise<boolean>
+{
+	// 1. Reload the immutable snapshot after a crash-gap recovery so approval never trusts process memory.
+	const context = preparedContext ?? await dependencies.contexts.load(invocation.runId, invocation.attempt);
+	if (context === null || !_contextMatchesInvocation(context, invocation)) throw new Error("external action approval context is unavailable");
+
+	// 2. Let the approval authority atomically pause the run and create or recover the exact request.
+	const opened = await dependencies.approvals.open(invocation, context, now);
+	if (!opened) dependencies.log.warn({ runId: invocation.runId, attempt: invocation.attempt, toolInvocationId: invocation.toolInvocationId, failureKind: "external_action_approval_unavailable" }, "external action approval could not be opened and was closed without provider dispatch");
+	return true;
 }
 
 /** Acquire one monotonic claim, invoke its frozen strategy, and commit only a definite outcome. */
