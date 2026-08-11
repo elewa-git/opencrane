@@ -361,6 +361,13 @@
 		"constructs": []
 	  },
 	  {
+		"path": "libs/backend/agents/execution/runs/main/src/prisma-tool-recovery-event-reporter.ts",
+		"adapter": "PrismaToolRecoveryEventAppendRepository",
+		"contract": "ToolRecoveryEventAppendRepository",
+		"contractImportPath": "./tool-recovery-event-reporter.types.js",
+		"constructs": []
+	  },
+	  {
 		"path": "libs/backend/agents/execution/runs/main/src/prisma-self-run-cancellation-repository.ts",
 		"adapter": "PrismaSelfRunCancellationRepository",
 		"contract": "SelfRunCancellationRepository",
@@ -670,6 +677,18 @@
 		"constructs": [
 		  {
 			"adapter": "PrismaRuntimeEventAppendRepository",
+			"importPath": "<same-file>"
+		  }
+		]
+	  },
+	  {
+		"path": "libs/backend/agents/execution/runs/main/src/prisma-tool-recovery-event-reporter.ts",
+		"adapter": "PrismaToolRecoveryEventAppendUnitOfWork",
+		"contract": "ToolRecoveryEventAppendUnitOfWork",
+		"contractImportPath": "./tool-recovery-event-reporter.types.js",
+		"constructs": [
+		  {
+			"adapter": "PrismaToolRecoveryEventAppendRepository",
 			"importPath": "<same-file>"
 		  }
 		]

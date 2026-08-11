@@ -9,6 +9,7 @@ export * from "./prisma-runtime-terminal-reporter.js";
 export * from "./prisma-runtime-event-reporter.js";
 export * from "./prisma-tool-recovery-event-reporter.js";
 export * from "./runtime-event-reporter.types.js";
+export * from "./tool-recovery-event-reporter.types.js";
 export * from "./prisma-self-run-status.router.js";
 export * from "./run-admission-concurrency.js";
 export { RunAdmissionConcurrencyDenialReasons, RunAdmissionConcurrencyOutcomes } from "./run-admission-concurrency.types.js";
