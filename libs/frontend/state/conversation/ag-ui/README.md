@@ -38,9 +38,19 @@ materialized operation history so a newly mounted canvas can reconstruct the com
 same-sequence mutation, regression, and gaps fail closed. The reducer stores the server-selected ten-state
 lifecycle and display-safe reason without inferring action authority or a next state locally.
 
+The supported AG-UI packages are exact-pinned together at `@ag-ui/core` **0.0.57** and
+`@ag-ui/client` **0.0.57**; both are MIT-licensed upstream packages. The OpenCrane projection
+version remains `opencrane.ag-ui.v1`. Conformance tests drive the actual pinned `AbstractAgent`
+lifecycle through completion, tool calls, approval edits, denial, expiry, failure, cancellation,
+A2UI, and reconnect/resume. Production transport deliberately remains the cookie-authorized
+OpenCrane GET replay adapter: using the client's POST-oriented `HttpAgent` would create a second run
+and command path outside OpenCrane authority. The generic client resolves `RUN_ERROR` delivery, so
+this reducer remains the explicit owner of failed versus cancelled browser state.
+
 ## Public surface
 
-- `__DecodeAgUiSseRecord` — validates one complete record with pinned `@ag-ui/core` schemas.
+- `__DecodeAgUiSseRecord` — validates one complete record with pinned `@ag-ui/core` schemas and is
+  exercised through the matching pinned `@ag-ui/client` lifecycle.
 - `__ReduceAgUiStream` / `__CreateAgUiStreamState` — builds immutable browser view state while
   preserving truthful success, interruption, failure, and cancellation terminals, display-safe
   tool-failure classifications, plus monotonic governed A2UI surfaces.

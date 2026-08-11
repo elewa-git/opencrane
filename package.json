@@ -89,6 +89,7 @@
   "dependencies": {
     "@a2ui/angular": "0.10.2",
     "@a2ui/web_core": "0.10.3",
+    "@ag-ui/client": "0.0.57",
     "@ag-ui/core": "0.0.57",
     "@angular/animations": "^21.2.19",
     "@angular/cdk": "^21.2.14",
