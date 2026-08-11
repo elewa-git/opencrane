@@ -99,6 +99,7 @@ export default [
                 "scope:audit",
                 "scope:authorization",
                 "scope:conversations",
+                "scope:conversation-assets",
                 "scope:execution-protocol",
                 "scope:execution-admission",
                 "scope:execution-runs",

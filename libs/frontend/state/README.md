@@ -18,6 +18,7 @@ owns the client-side stores and caches that hold fetched data.
 | [`conversation/render`](./conversation/render/README.md) | Vendored render view-models. |
 | [`conversation/ag-ui`](./conversation/ag-ui/README.md) | Safe projected-event browser state. |
 | [`assets/adapter`](./assets/adapter/README.md) | Live owner-bound personal-asset catalogue gateway. |
+| [`conversation/assets`](./conversation/assets/README.md) | Component-scoped conversation upload, retry, and safe lifecycle state. |
 | [`mcp/adapter`](./mcp/adapter/README.md) | Live MCP gateway. |
 | [`onboarding`](./onboarding/README.md) | Server-backed persona onboarding orchestration. |
 | [`persona`](./persona/README.md) | Personal-persona browser adapters. |

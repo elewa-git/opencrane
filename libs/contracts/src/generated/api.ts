@@ -1116,6 +1116,50 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/me/conversations/{conversationId}/assets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List one conversation's safe file metadata
+         * @description Returns participant-visible metadata only. Storage coordinates, leases, receipts, and scanner evidence never cross this boundary.
+         */
+        get: operations["listMyConversationAssets"];
+        put?: never;
+        /**
+         * Reserve one governed conversation upload
+         * @description The browser supplies an exact retry key and content digest. The server keeps the storage lease hidden and returns safe metadata only.
+         */
+        post: operations["reserveMyConversationAssetUpload"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/conversations/{conversationId}/assets/{assetId}/content": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Upload exact bytes into quarantine
+         * @description A successful response means the bytes entered quarantine, not that preview or download is ready.
+         */
+        put: operations["uploadMyConversationAssetContent"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/agent-services": {
         parameters: {
             query?: never;
@@ -6400,6 +6444,258 @@ export interface operations {
                 content?: never;
             };
             /** @description Conversation authority unavailable. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    listMyConversationAssets: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Conversation asset metadata in stable creation order. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        assets: {
+                            id: string;
+                            conversationId: string;
+                            messageId: string | null;
+                            /** @enum {string} */
+                            provenance: "participant_upload" | "agent_output";
+                            /** @enum {string} */
+                            state: "uploading" | "processing" | "ready" | "failed" | "cancelled" | "removed";
+                            displayName: string;
+                            mediaType: string;
+                            byteLength: number | null;
+                            /** @enum {string|null} */
+                            disposition: "preview" | "download" | null;
+                            failureCode: string | null;
+                            /** Format: date-time */
+                            createdAt: string;
+                        }[];
+                    };
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Conversation asset authority unavailable. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    reserveMyConversationAssetUpload: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    idempotencyKey: string;
+                    displayName: string;
+                    mediaType: string;
+                    byteLength: number;
+                    contentAddress: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Exact reservation retry returned the same asset. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {string} */
+                        outcome: "accepted" | "idempotent";
+                        asset: {
+                            id: string;
+                            conversationId: string;
+                            messageId: string | null;
+                            /** @enum {string} */
+                            provenance: "participant_upload" | "agent_output";
+                            /** @enum {string} */
+                            state: "uploading" | "processing" | "ready" | "failed" | "cancelled" | "removed";
+                            displayName: string;
+                            mediaType: string;
+                            byteLength: number | null;
+                            /** @enum {string|null} */
+                            disposition: "preview" | "download" | null;
+                            failureCode: string | null;
+                            /** Format: date-time */
+                            createdAt: string;
+                        };
+                    };
+                };
+            };
+            /** @description Upload reserved. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {string} */
+                        outcome: "accepted" | "idempotent";
+                        asset: {
+                            id: string;
+                            conversationId: string;
+                            messageId: string | null;
+                            /** @enum {string} */
+                            provenance: "participant_upload" | "agent_output";
+                            /** @enum {string} */
+                            state: "uploading" | "processing" | "ready" | "failed" | "cancelled" | "removed";
+                            displayName: string;
+                            mediaType: string;
+                            byteLength: number | null;
+                            /** @enum {string|null} */
+                            disposition: "preview" | "download" | null;
+                            failureCode: string | null;
+                            /** Format: date-time */
+                            createdAt: string;
+                        };
+                    };
+                };
+            };
+            /** @description Invalid reservation body. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {string} */
+                        outcome: "denied";
+                        /** @enum {string} */
+                        reason: "invalid_request" | "conversation_unavailable" | "asset_unavailable" | "upload_failed" | "idempotency_conflict";
+                    };
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Conversation, retry, or asset conflict. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {string} */
+                        outcome: "denied";
+                        /** @enum {string} */
+                        reason: "invalid_request" | "conversation_unavailable" | "asset_unavailable" | "upload_failed" | "idempotency_conflict";
+                    };
+                };
+            };
+            /** @description Conversation asset authority unavailable. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    uploadMyConversationAssetContent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversationId: string;
+                assetId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/octet-stream": string;
+            };
+        };
+        responses: {
+            /** @description Exact bytes accepted into quarantine. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {string} */
+                        outcome: "accepted" | "idempotent";
+                        asset: {
+                            id: string;
+                            conversationId: string;
+                            messageId: string | null;
+                            /** @enum {string} */
+                            provenance: "participant_upload" | "agent_output";
+                            /** @enum {string} */
+                            state: "uploading" | "processing" | "ready" | "failed" | "cancelled" | "removed";
+                            displayName: string;
+                            mediaType: string;
+                            byteLength: number | null;
+                            /** @enum {string|null} */
+                            disposition: "preview" | "download" | null;
+                            failureCode: string | null;
+                            /** Format: date-time */
+                            createdAt: string;
+                        };
+                    };
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Upload unavailable or conflicting. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {string} */
+                        outcome: "denied";
+                        /** @enum {string} */
+                        reason: "invalid_request" | "conversation_unavailable" | "asset_unavailable" | "upload_failed" | "idempotency_conflict";
+                    };
+                };
+            };
+            /** @description Conversation asset authority unavailable. */
             503: {
                 headers: {
                     [name: string]: unknown;

@@ -232,6 +232,9 @@
       "@opencrane/state/conversation/ag-ui": [
         "./libs/frontend/state/conversation/ag-ui/src/index.ts"
       ],
+      "@opencrane/state/conversation/assets": [
+        "./libs/frontend/state/conversation/assets/src/index.ts"
+      ],
       "@opencrane/state/mcp/adapter": [
         "./libs/frontend/state/mcp/adapter/src/index.ts"
       ],

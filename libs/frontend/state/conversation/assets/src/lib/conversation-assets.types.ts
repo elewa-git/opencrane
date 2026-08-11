@@ -1,0 +1,52 @@
+import type { ConversationAssetDisposition, ConversationAssetLifecycle, ConversationAssetProvenance } from "@opencrane/models/conversation-assets";
+
+/** Safe durable file metadata returned for one authorized conversation. */
+export interface ConversationAsset
+{
+	readonly id: string;
+	readonly conversationId: string;
+	readonly messageId: string | null;
+	readonly provenance: ConversationAssetProvenance;
+	readonly state: ConversationAssetLifecycle;
+	readonly displayName: string;
+	readonly mediaType: string;
+	readonly byteLength: number | null;
+	readonly disposition: ConversationAssetDisposition | null;
+	readonly failureCode: string | null;
+	readonly createdAt: string;
+}
+
+/** Retry-stable reservation sent before file bytes. */
+export interface ReserveConversationAssetUpload
+{
+	readonly idempotencyKey: string;
+	readonly displayName: string;
+	readonly mediaType: string;
+	readonly byteLength: number;
+	readonly contentAddress: string;
+}
+
+/** Local transfer phase before the server owns the durable lifecycle. */
+export enum ConversationAssetTransferPhases
+{
+	Selected = "selected",
+	Hashing = "hashing",
+	Reserving = "reserving",
+	Uploading = "uploading",
+	Failed = "failed"
+}
+
+/** Display-safe local upload projection retaining no file bytes. */
+export interface PendingConversationAssetUpload
+{
+	readonly idempotencyKey: string;
+	readonly displayName: string;
+	readonly mediaType: string;
+	readonly byteLength: number;
+	readonly phase: ConversationAssetTransferPhases;
+	readonly canRemove: boolean;
+	readonly failureCode: "hash_failed" | "reservation_failed" | "upload_failed" | null;
+}
+
+/** Complete selection-level rejection before any reservation starts. */
+export type ConversationAssetSelectionFailure = "too_many_files" | "total_too_large" | "unsupported_media_type";
