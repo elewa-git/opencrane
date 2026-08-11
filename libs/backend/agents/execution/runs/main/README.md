@@ -153,6 +153,10 @@ uncertainty fails closed.
 
 ## Public surface
 
+`PrismaRuntimeEventReporter` is the transaction-scoped admission bridge for nonterminal runtime
+output. It rejects arbitrary names, oversized payloads, secret-shaped fields, stale attempts, and
+mis-bound A2UI envelopes before appending a contiguous canonical `ConversationRunEvent`.
+
 - `__DigestRunInputSnapshot(snapshot)` — compute the canonical SHA-256 identity of all frozen run
   inputs without digesting the self-referential `digest` field.
 - `PrismaRunAdmissionRepository` — serialise duplicate requests and atomically persist the initial

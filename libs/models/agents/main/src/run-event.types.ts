@@ -27,6 +27,16 @@ export enum RunEventTypes
 	ToolProgress = "tool.progress",
 	/** Governed tool execution completed. */
 	ToolCompleted = "tool.completed",
+	/** Governed tool execution failed without exposing provider or credential details. */
+	ToolFailed = "tool.failed",
+	/** Runtime reported a display-safe nonterminal problem while the run remained active. */
+	RunError = "run.error",
+	/** Runtime began one versioned governed A2UI rendering surface. */
+	A2uiRenderingBegun = "a2ui.rendering.begun",
+	/** Runtime supplied an ordered versioned update to a governed A2UI surface. */
+	A2uiSurfaceUpdated = "a2ui.surface.updated",
+	/** Runtime supplied an ordered versioned update to governed A2UI data. */
+	A2uiDataModelUpdated = "a2ui.data_model.updated",
 	/** Runtime began compacting the run's conversation context. */
 	ContextCompactionStarted = "context.compaction_started",
 	/** Runtime completed context compaction. */

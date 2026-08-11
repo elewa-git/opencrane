@@ -41,6 +41,8 @@ persistence; a wrong answer here can only refuse a legal move, never invent one.
 - Lifecycle types: `AgentService`/`…State`, `AgentRevision`/`…State`, `AgentRun`/`…State`,
   `AgentServiceKinds`, `AgentServiceStates`, `AgentRevisionContent`, `RevisionScopeAttachment`, `GrantScope`,
   `GrantSubjectType`, `RunEvent`, `RunEventTypes`, and the agent/run `*Id` identifier aliases.
+- `RunEventTypes` is the closed durable vocabulary for streamed messages, tool lifecycle and failure,
+  usage, display-safe runtime errors, terminal outcomes, and versioned governed A2UI updates.
 - Revision invariants: `__DigestAgentRevisionContent`, `__DiffAgentRevisions`, and the
   `AgentRevisionDiff` result types.
 - `__Is…TransitionAllowed`, `__CanAppendRunEvent` — the guard functions over the transition tables.

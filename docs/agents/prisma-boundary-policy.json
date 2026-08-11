@@ -354,6 +354,13 @@
 		"constructs": []
 	  },
 	  {
+		"path": "libs/backend/agents/execution/runs/main/src/prisma-runtime-event-reporter.ts",
+		"adapter": "PrismaRuntimeEventAppendRepository",
+		"contract": "RuntimeEventAppendRepository",
+		"contractImportPath": "./runtime-event-reporter.types.js",
+		"constructs": []
+	  },
+	  {
 		"path": "libs/backend/server/iam/authorization/main/src/prisma-self-deferred-tool-approval-list-repository.ts",
 		"adapter": "PrismaSelfDeferredToolApprovalListRepository",
 		"contract": "SelfDeferredToolApprovalListRepository",
@@ -644,6 +651,18 @@
 		"constructs": [
 		  {
 			"adapter": "PrismaRuntimeDeferredResumeRepository",
+			"importPath": "<same-file>"
+		  }
+		]
+	  },
+	  {
+		"path": "libs/backend/agents/execution/runs/main/src/prisma-runtime-event-reporter.ts",
+		"adapter": "PrismaRuntimeEventAppendUnitOfWork",
+		"contract": "RuntimeEventAppendUnitOfWork",
+		"contractImportPath": "./runtime-event-reporter.types.js",
+		"constructs": [
+		  {
+			"adapter": "PrismaRuntimeEventAppendRepository",
 			"importPath": "<same-file>"
 		  }
 		]
