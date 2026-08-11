@@ -24,6 +24,7 @@ export class ConversationAssetsStore
 	private readonly _conversationId = signal<string | undefined>(undefined);
 	private readonly _intents = signal<readonly ConversationAssetUploadIntent[]>([]);
 	private readonly _removingAssetIds = signal<ReadonlySet<string>>(new Set());
+	private _scopeGeneration = 0;
 
 	/** Pure server projection keyed by the selected conversation. */
 	public readonly assets = resource({ params: this._conversationId, loader: ({ params }) => this._gateway.list(params) });
@@ -38,7 +39,7 @@ export class ConversationAssetsStore
 	public open(conversationId: string): void
 	{
 		if (conversationId.trim().length === 0) throw new Error("Conversation id is required.");
-		if (this._conversationId() !== conversationId) { this._intents.set([]); this.selectionFailure.set(null); this._conversationId.set(conversationId); }
+		if (this._conversationId() !== conversationId) { this._scopeGeneration += 1; this._intents.set([]); this.selectionFailure.set(null); this._conversationId.set(conversationId); }
 	}
 
 	/** Validate the whole message selection, then transfer independent files concurrently. */
@@ -76,6 +77,7 @@ export class ConversationAssetsStore
 	public async remove(assetId: string): Promise<void>
 	{
 		const conversationId = this._conversationId();
+		const scopeGeneration = this._scopeGeneration;
 		if (conversationId === undefined || !this.assets.hasValue() || this._removingAssetIds().has(assetId)) return;
 		const asset = this.assets.value().find(candidate => candidate.id === assetId);
 		if (asset?.canRemove !== true) return;
@@ -83,9 +85,9 @@ export class ConversationAssetsStore
 		try
 		{
 			const removed = await this._gateway.remove(conversationId, assetId);
-			if (this._conversationId() !== conversationId) return;
+			if (!this._isScopeCurrent(conversationId, scopeGeneration)) return;
 			this._intents.update(current => current.filter(candidate => candidate.assetId !== assetId));
-			this._adopt(removed);
+			this._adopt(removed, conversationId, scopeGeneration);
 		}
 		finally
 		{
@@ -100,6 +102,7 @@ export class ConversationAssetsStore
 	private async _transfer(idempotencyKey: string): Promise<void>
 	{
 		const conversationId = this._conversationId();
+		const scopeGeneration = this._scopeGeneration;
 		let intent = this._intent(idempotencyKey);
 		if (conversationId === undefined || intent === undefined) return;
 		try
@@ -108,7 +111,7 @@ export class ConversationAssetsStore
 			{
 				this._patch(idempotencyKey, { phase: ConversationAssetTransferPhases.Hashing, failureCode: null });
 				const contentAddress = await _ConversationAssetContentAddress(intent.file);
-				if (this._intent(idempotencyKey) === undefined) return;
+				if (!this._isScopeCurrent(conversationId, scopeGeneration) || this._intent(idempotencyKey) === undefined) return;
 				this._patch(idempotencyKey, { contentAddress });
 			}
 			intent = this._intent(idempotencyKey);
@@ -117,18 +120,21 @@ export class ConversationAssetsStore
 			{
 				this._patch(idempotencyKey, { phase: ConversationAssetTransferPhases.Reserving, failureCode: null });
 				const reserved = await this._gateway.reserve(conversationId, { idempotencyKey, displayName: intent.file.name, mediaType: intent.mediaType, byteLength: intent.file.size, contentAddress: intent.contentAddress ?? "" });
+				if (!this._isScopeCurrent(conversationId, scopeGeneration)) return;
 				this._patch(idempotencyKey, { assetId: reserved.id });
-				this._adopt(reserved);
+				this._adopt(reserved, conversationId, scopeGeneration);
 			}
 			intent = this._intent(idempotencyKey);
 			if (intent === undefined || intent.assetId === null) return;
 			this._patch(idempotencyKey, { phase: ConversationAssetTransferPhases.Uploading, failureCode: null });
 			const uploaded = await this._gateway.upload(conversationId, intent.assetId, intent.file);
-			this._adopt(uploaded);
+			if (!this._isScopeCurrent(conversationId, scopeGeneration)) return;
+			this._adopt(uploaded, conversationId, scopeGeneration);
 			this._intents.update(current => current.filter(candidate => candidate.idempotencyKey !== idempotencyKey));
 		}
 		catch
 		{
+			if (!this._isScopeCurrent(conversationId, scopeGeneration)) return;
 			const failed = this._intent(idempotencyKey);
 			if (failed === undefined) return;
 			const failureCode = _TransferFailureCode(failed);
@@ -137,8 +143,9 @@ export class ConversationAssetsStore
 	}
 
 	/** Adopt one server-returned asset without predicting its lifecycle. */
-	private _adopt(asset: ConversationAsset): void
+	private _adopt(asset: ConversationAsset, conversationId: string, scopeGeneration: number): void
 	{
+		if (asset.conversationId !== conversationId || !this._isScopeCurrent(conversationId, scopeGeneration)) return;
 		if (!this.assets.hasValue()) { this.assets.reload(); return; }
 		const current = this.assets.value();
 		const index = current.findIndex(candidate => candidate.id === asset.id);
@@ -148,6 +155,9 @@ export class ConversationAssetsStore
 
 	/** Read one exact intent. */
 	private _intent(idempotencyKey: string): ConversationAssetUploadIntent | undefined { return this._intents().find(candidate => candidate.idempotencyKey === idempotencyKey); }
+
+	/** Reject late command results after any conversation scope transition. */
+	private _isScopeCurrent(conversationId: string, scopeGeneration: number): boolean { return this._conversationId() === conversationId && this._scopeGeneration === scopeGeneration; }
 
 	/** Replace only explicitly named intent fields. */
 	private _patch(idempotencyKey: string, patch: Partial<ConversationAssetUploadIntent>): void

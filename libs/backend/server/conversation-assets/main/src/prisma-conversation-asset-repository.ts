@@ -18,9 +18,10 @@ export class PrismaConversationAssetRepository implements ConversationAssetRepos
 	/** Reserves one logical artifact, hidden write lease, and browser asset row. */
 	async reserve(caller: ConversationAssetCaller, conversationId: string, request: ReserveConversationAssetRequest): Promise<ConversationAssetResult>
 	{
-		const existing = await this.transaction.conversationAsset.findUnique({ where: { conversationId_idempotencyKey: { conversationId, idempotencyKey: request.idempotencyKey } } });
-		if (existing !== null) return _ReservationMatches(existing, request) ? { outcome: "idempotent", asset: _View(existing, caller.subjectId) } : { outcome: "denied", reason: "idempotency_conflict" };
 		if (!await this._canAccessConversation(caller, conversationId)) return { outcome: "denied", reason: "conversation_unavailable" };
+		const existing = await this.transaction.conversationAsset.findUnique({ where: { conversationId_idempotencyKey: { conversationId, idempotencyKey: request.idempotencyKey } } });
+		if (existing !== null && existing.createdByUserId !== caller.subjectId) return { outcome: "denied", reason: "asset_unavailable" };
+		if (existing !== null) return _ReservationMatches(existing, request) ? { outcome: "idempotent", asset: _View(existing, caller.subjectId) } : { outcome: "denied", reason: "idempotency_conflict" };
 		const artifactId = randomUUID();
 		const leaseId = randomUUID();
 		await this.transaction.artifact.create({ data: { id: artifactId, siloId: caller.siloId, ownerPrincipalId: caller.subjectId, kind: ArtifactKind.Upload } });
@@ -32,6 +33,7 @@ export class PrismaConversationAssetRepository implements ConversationAssetRepos
 	/** Reads one live hidden upload lease. */
 	async readUploadTarget(caller: ConversationAssetCaller, conversationId: string, assetId: string): Promise<ConversationAssetUploadTarget | null>
 	{
+		if (!await this._canAccessConversation(caller, conversationId)) return null;
 		const asset = await this.transaction.conversationAsset.findFirst({ where: { id: assetId, siloId: caller.siloId, conversationId, createdByUserId: caller.subjectId, state: ConversationAssetState.Uploading }, include: { uploadLease: true } });
 		const lease = asset?.uploadLease;
 		if (lease === null || lease === undefined || lease.state !== ArtifactUploadLeaseState.Active || lease.expiresAt <= new Date() || lease.expectedContentAddress === null || lease.expectedByteLength === null) return null;
@@ -41,6 +43,7 @@ export class PrismaConversationAssetRepository implements ConversationAssetRepos
 	/** Converts a verified promotion into a quarantined revision and scan job. */
 	async finalize(caller: ConversationAssetCaller, conversationId: string, assetId: string, promotion: import("@opencrane/backend/artifacts/authorization").ArtifactPromotionReceiptClaims, receiptDigest: string): Promise<ConversationAssetResult>
 	{
+		if (!await this._canAccessConversation(caller, conversationId)) return { outcome: "denied", reason: "conversation_unavailable" };
 		const asset = await this.transaction.conversationAsset.findFirst({ where: { id: assetId, siloId: caller.siloId, conversationId, createdByUserId: caller.subjectId } });
 		if (asset === null) return { outcome: "denied", reason: "asset_unavailable" };
 		if (asset.state === ConversationAssetState.Processing || asset.state === ConversationAssetState.Ready) return { outcome: "idempotent", asset: _View(asset, caller.subjectId) };

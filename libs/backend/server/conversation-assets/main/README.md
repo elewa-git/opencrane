@@ -41,7 +41,7 @@ frontend and unrelated server domains do not import its persistence adapters.
 
 ## Data & persistence
 
-Owns `ConversationAsset` in `apps/opencrane/prisma/schema/conversations.prisma`. It creates the
+Owns `ConversationAsset` in `apps/opencrane/prisma/schema/conversation-assets.prisma`. It creates the
 quarantined `ArtifactRevision` and `ArtifactScanJob` through the artifact domain's reviewed schema
 and transaction contract rather than taking ownership of those models.
 

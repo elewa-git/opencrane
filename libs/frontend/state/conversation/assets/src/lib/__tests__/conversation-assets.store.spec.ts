@@ -28,6 +28,14 @@ function _Store(gateway: ConversationAssetsGateway): ConversationAssetsStore
 	return TestBed.inject(ConversationAssetsStore);
 }
 
+/** Controlled promise for conversation-switch race tests. */
+function _Deferred<Value>(): { readonly promise: Promise<Value>; readonly resolve: (value: Value) => void }
+{
+	let resolvePromise: ((value: Value) => void) | undefined;
+	const promise = new Promise<Value>(function _Create(resolve) { resolvePromise = resolve; });
+	return { promise, resolve: function _Resolve(value) { if (resolvePromise === undefined) throw new Error("Deferred promise is unavailable."); resolvePromise(value); } };
+}
+
 beforeAll(function _InitializeAngularTesting() { TestBed.initTestEnvironment(BrowserDynamicTestingModule, platformBrowserDynamicTesting()); });
 afterAll(function _ResetAngularTesting() { TestBed.resetTestEnvironment(); });
 afterEach(function _ResetTestBed() { TestBed.resetTestingModule(); });
@@ -105,5 +113,36 @@ describe("ConversationAssetsStore", function _Suite()
 		await vi.waitFor(function _Loaded() { expect(store.assets.hasValue()).toBe(true); });
 		await store.remove(asset.id);
 		expect(gateway.remove).not.toHaveBeenCalled();
+	});
+
+	it("discards a reservation that completes after switching conversations", async function _DiscardsLateReservation()
+	{
+		const deferred = _Deferred<ConversationAsset>();
+		const gateway = { list: vi.fn().mockResolvedValue([]), reserve: vi.fn().mockReturnValue(deferred.promise), upload: vi.fn(), remove: vi.fn() };
+		const store = _Store(gateway);
+		store.open("conversation-1");
+		const selection = store.select([_File("brief.pdf", "application/pdf", "brief")]);
+		await vi.waitFor(function _Reserved() { expect(gateway.reserve).toHaveBeenCalledOnce(); });
+
+		store.open("conversation-2");
+		deferred.resolve(_Asset());
+		await selection;
+		await vi.waitFor(function _LoadedNewScope() { expect(gateway.list).toHaveBeenCalledWith("conversation-2"); expect(store.assets.value()).toEqual([]); });
+		expect(gateway.upload).not.toHaveBeenCalled();
+	});
+
+	it("discards an upload that completes after switching conversations", async function _DiscardsLateUpload()
+	{
+		const deferred = _Deferred<ConversationAsset>();
+		const gateway = { list: vi.fn().mockResolvedValue([]), reserve: vi.fn().mockResolvedValue(_Asset(ConversationAssetLifecycle.Uploading)), upload: vi.fn().mockReturnValue(deferred.promise), remove: vi.fn() };
+		const store = _Store(gateway);
+		store.open("conversation-1");
+		const selection = store.select([_File("brief.pdf", "application/pdf", "brief")]);
+		await vi.waitFor(function _Uploading() { expect(gateway.upload).toHaveBeenCalledOnce(); });
+
+		store.open("conversation-2");
+		deferred.resolve(_Asset(ConversationAssetLifecycle.Processing));
+		await selection;
+		await vi.waitFor(function _LoadedNewScope() { expect(gateway.list).toHaveBeenCalledWith("conversation-2"); expect(store.assets.value()).toEqual([]); });
 	});
 });
