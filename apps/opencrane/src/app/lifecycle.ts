@@ -46,7 +46,7 @@ function _startHttpServers(publicApp: Express, internalApp: Express, config: Ope
  * Workload routes stay on a separate socket throughout the lifecycle; shutdown stops producers
  * before closing listeners and database state, then flushes telemetry as the final I/O boundary.
  */
-export function _StartProcessLifecycle(publicApp: Express, internalApp: Express, prisma: PrismaClient, batchApi: k8s.BatchV1Api, managedRunAdmission: ManagedRunAdmissionPort, runCancellation: RunCancellationRepository, config: OpenCraneProcessConfig, channelTargetRoutes: ChannelTargetRouteReconciler, unbindConsole: () => void, externalActions: ExternalActionWorker): void
+export function _StartProcessLifecycle(publicApp: Express, internalApp: Express, prisma: PrismaClient, batchApi: k8s.BatchV1Api, managedRunAdmission: ManagedRunAdmissionPort, runCancellation: RunCancellationRepository, config: OpenCraneProcessConfig, channelTargetRoutes: ChannelTargetRouteReconciler, unbindConsole: () => void, externalActions: ExternalActionWorker, stopObot: () => void): void
 {
 	// 1. Bind both transport surfaces before starting the loops that serve or repair their work.
 	const servers = _startHttpServers(publicApp, internalApp, config);
@@ -66,8 +66,10 @@ export function _StartProcessLifecycle(publicApp: Express, internalApp: Express,
 
 		try
 		{
-			// 1. End long-lived streams before the ten-second hard-exit and telemetry-flush fence.
+			// 1. End long-lived streams and abort active Obot transport before the ten-second hard-exit
+			// fence, so provider work can commit an ambiguous outcome before its worker drains.
 			_BeginProcessShutdown();
+			stopObot();
 			// 2. Stop producers and drain active cleanup before its Kubernetes and Prisma ports close.
 			await Promise.all([backgroundWorkers.stop(), channelTargetRoutes.stop()]);
 			// 3. Stop both listeners together so public and workload traffic drain as one process.
@@ -83,7 +85,9 @@ export function _StartProcessLifecycle(publicApp: Express, internalApp: Express,
 		}
 		finally
 		{
-			// 6. Restore console last so no shutdown log can escape the structured logger.
+			// 6. Cancel the hard guard and restore console last so no shutdown log can escape the
+			// structured logger before the clean exit.
+			clearTimeout(hardExit);
 			unbindConsole();
 			process.exit(0);
 		}

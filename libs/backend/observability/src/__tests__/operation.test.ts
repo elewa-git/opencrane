@@ -5,7 +5,7 @@ import { BasicTracerProvider, InMemorySpanExporter, SimpleSpanProcessor } from "
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { ___GetContext } from "../context.js";
-import { ___DoWithoutTrace, ___DoWithTrace } from "../operation.js";
+import { ___DoWithoutTrace, ___DoWithTrace, ___MarkActiveSpanFailed } from "../operation.js";
 
 /** Captures spans emitted by ___DoWithTrace for assertion. */
 const _exporter = new InMemorySpanExporter();
@@ -108,6 +108,21 @@ describe("___DoWithTrace", function _withOperationSuite()
       return ___GetContext()?.requestId;
     });
     expect(seen).toBe("req-42");
+  });
+
+  it("retains a safe explicit failure when a typed operation outcome resolves", async function _typedFailure()
+  {
+    _exporter.reset();
+    await expect(___DoWithTrace("provider.dispatch", {}, async function _work()
+    {
+      ___MarkActiveSpanFailed();
+      return { kind: "failed" };
+    })).resolves.toEqual({ kind: "failed" });
+
+    const spans = _exporter.getFinishedSpans();
+    expect(spans).toHaveLength(1);
+    expect(spans[0]?.status).toEqual({ code: SpanStatusCode.ERROR, message: "operation_failed" });
+    expect(spans[0]?.events.some(function _isException(event) { return event.name === "exception"; })).toBe(false);
   });
 });
 

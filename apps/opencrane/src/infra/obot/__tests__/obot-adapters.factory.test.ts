@@ -11,6 +11,7 @@ describe("OpenCrane Obot adapter composition", function _ObotAdaptersSuite()
 		const adapters = _CreateObotAdapters(null);
 		await expect(adapters.custody.revoke("custody-1")).rejects.toBeInstanceOf(ObotCustodyUnavailableError);
 		await expect(adapters.invocation.invokeTool({ siloId: "silo-1", integrationId: "calendar", obotCustodyReference: "custody-1", toolName: "calendar.read", arguments: {}, allowedToolNames: ["calendar.read"] })).rejects.toBeInstanceOf(ObotMcpInvocationUnavailableError);
+		expect(function _StopUnavailable() { adapters.stop(); }).not.toThrow();
 	});
 
 	it("validates configured Obot addressing while composing both real adapters", function _ConfiguredAdapters()
@@ -23,5 +24,6 @@ describe("OpenCrane Obot adapter composition", function _ObotAdaptersSuite()
 		const adapters = _CreateObotAdapters({ gatewayUrl: "http://oc-mcp-gateway.silo.svc.cluster.local:8080", serviceTokenPath: "/var/run/opencrane/obot/token", requestTimeoutMilliseconds: 30_000 });
 		expect(adapters.custody).not.toBeInstanceOf(__UnavailableObotCustodyAdapter);
 		expect(adapters.invocation).not.toBeInstanceOf(__UnavailableObotMcpInvocationAdapter);
+		expect(function _StopConfigured() { adapters.stop(); adapters.stop(); }).not.toThrow();
 	});
 });

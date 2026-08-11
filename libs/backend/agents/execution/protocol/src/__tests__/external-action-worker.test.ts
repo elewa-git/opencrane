@@ -313,6 +313,26 @@ describe("external action worker", function _suite()
 		expect([...dependencies.events, ...dependencies.invocations.lifecycleEvents].map(function _type(event) { return event.eventType; })).toEqual(["tool.started", "tool.failed"]);
 	});
 
+	it("logs a bounded definite provider failure after its durable outcome commits", async function _definiteFailure()
+	{
+		const adapter: PreparedExternalActionAdapter = {
+			recoveryMode: ExternalActionRecoveryModes.Manual,
+			async dispatch() { return { kind: ExternalActionProviderOutcomeKinds.Failed, failureCode: "AuthenticationError" }; },
+			async reconcile() { return { kind: ExternalActionProviderOutcomeKinds.Ambiguous }; },
+		};
+		const dependencies = _dependencies(_invocation(ToolInvocationStates.Ready), adapter);
+		await new ExternalActionWorker(dependencies.value).runOnce();
+		expect(dependencies.logWarn).toHaveBeenCalledWith(expect.objectContaining({ runId: "run-1", toolInvocationId: "tool-call-1", claimKind: ExternalActionClaimKinds.Dispatch, failureKind: "AuthenticationError" }), "external action provider returned a definite failure");
+	});
+
+	it("does not open a worker span for an idle poll", async function _idlePoll()
+	{
+		const dependencies = _dependencies(_invocation(ToolInvocationStates.Ready), new _Adapter(ExternalActionRecoveryModes.Manual));
+		const worker = new ExternalActionWorker({ ...dependencies.value, source: new _Source(null) });
+		await expect(worker.runOnce()).resolves.toBe(false);
+		expect(dependencies.adapters.prepareCount).toBe(0);
+	});
+
 	it("uses the exact frozen idempotency key for a provider-idempotent dispatch", async function _idempotentDispatch()
 	{
 		const adapter = new _Adapter(ExternalActionRecoveryModes.ProviderIdempotency);

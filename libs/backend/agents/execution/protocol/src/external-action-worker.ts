@@ -58,10 +58,10 @@ export class ExternalActionWorker
 	{
 		const dependencies = this.dependencies;
 		const now = dependencies.clock.now();
-		return ___DoWithTrace("external_action.worker.run", {}, async function _run()
+		const invocation = await dependencies.source.findNextRunnable(now);
+		if (invocation === null) return false;
+		return ___DoWithTrace("external_action.worker.run", { runId: invocation.runId, attempt: invocation.attempt, toolInvocationId: invocation.toolInvocationId, state: invocation.state, recoveryMode: invocation.recoveryMode }, async function _run()
 		{
-			const invocation = await dependencies.source.findNextRunnable(now);
-			if (invocation === null) return false;
 			if (invocation.state === ToolInvocationStates.Preparing) return _prepare(invocation, now, dependencies);
 			if (invocation.state === ToolInvocationStates.AwaitingApproval) return _openApproval(invocation, now, dependencies);
 			if (invocation.state === ToolInvocationStates.Ready) return _execute(invocation, ExternalActionClaimKinds.Dispatch, now, dependencies);
@@ -178,6 +178,7 @@ async function _execute(invocation: ExternalActionWorkerInvocation, kind: Extern
 	if (outcome.kind === ExternalActionProviderOutcomeKinds.Failed)
 	{
 		await dependencies.invocations.completeFailed(claimed.claim, outcome.failureCode, dependencies.clock.now());
+		dependencies.log.warn({ runId: invocation.runId, attempt: invocation.attempt, toolInvocationId: invocation.toolInvocationId, recoveryMode: invocation.recoveryMode, claimKind: claimed.claim.kind, failureKind: outcome.failureCode }, "external action provider returned a definite failure");
 		return true;
 	}
 	await _completeAmbiguous(claimed.claim, claimed.invocation, dependencies);

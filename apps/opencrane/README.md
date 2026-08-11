@@ -96,8 +96,8 @@ its resources to the lifecycle owner.
   repair, and fenced cleanup loops; shutdown drains any active provider pass before Prisma closes.
 - `src/app/external-action-composition.ts` binds that worker to the immutable execution snapshot,
   canonical tool lifecycle unit of work, deferred-approval authority, and private provider ports.
-- `src/app/lifecycle.ts` starts both listeners, stops producers first, drains requests, disconnects
-  Prisma, and flushes telemetry.
+- `src/app/lifecycle.ts` starts both listeners, aborts active Obot exchanges before draining workers,
+  drains requests, disconnects Prisma, and flushes telemetry.
 - `prisma/schema/*.prisma` defines the product's durable domain models.
 - `prisma/bootstrap/target-baseline.sql` defines a clean OpenCrane database. Its focused source
   verifiers prove the seeded persona and onboarding-bootstrap content against the reviewed files in

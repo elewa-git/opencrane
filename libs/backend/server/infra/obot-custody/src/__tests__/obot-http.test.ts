@@ -101,6 +101,25 @@ describe("Obot HTTP session", function _SessionSuite()
 		expect(recorded[0]).toMatchObject({ path: "/api/mcp-servers", method: "POST", body: { catalogEntryID: "cat-1" }, authorization: "Bearer obot-service-token", tracingSuppressed: true });
 	});
 
+	it("aborts an active exchange when process shutdown begins", async function _ShutdownAbort()
+	{
+		const shutdown = new AbortController();
+		let notifyStarted: (() => void) | undefined;
+		const started = new Promise<void>(function _Started(resolve) { notifyStarted = resolve; });
+		const fetchRequest: ObotFetch = function _Fetch(_input, init)
+		{
+			notifyStarted?.();
+			return new Promise<Response>(function _UntilAbort(_resolve, reject)
+			{
+				init?.signal?.addEventListener("abort", function _Abort() { reject(init.signal?.reason); }, { once: true });
+			});
+		};
+		const request = _session([], function _never() { return _json(null); }, { fetch: fetchRequest, shutdownSignal: shutdown.signal }).request("/api/me", "GET");
+		await started;
+		shutdown.abort();
+		await expect(request).rejects.toMatchObject({ name: "ObotTransportError", code: "timeout" });
+	});
+
 	it("maps timeouts, network faults, statuses, oversize, and malformed JSON to typed failures", async function _FailureTaxonomy()
 	{
 		const timeoutError = new Error("timed out");

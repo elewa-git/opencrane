@@ -166,6 +166,13 @@ function _McpSessionId(value: string | null): string | null
 	return value;
 }
 
+/** Combine the per-exchange deadline with the process shutdown fence. */
+function _RequestSignal(timeoutMilliseconds: number, shutdownSignal?: AbortSignal): AbortSignal
+{
+	const timeoutSignal = AbortSignal.timeout(timeoutMilliseconds);
+	return shutdownSignal === undefined ? timeoutSignal : AbortSignal.any([timeoutSignal, shutdownSignal]);
+}
+
 /**
  * Create the authenticated Obot session used by server-owned custody and action adapters.
  *
@@ -208,7 +215,7 @@ export function __CreateObotSession(options: ObotHttpOptions): ObotSession
 			{
 				response = await ___DoWithoutTrace(function _fetchSensitiveEndpoint()
 				{
-					return fetchRequest(new URL(path, baseUrl), { method, headers, body: body === undefined ? undefined : JSON.stringify(body), signal: AbortSignal.timeout(options.requestTimeoutMilliseconds), redirect: "error" });
+					return fetchRequest(new URL(path, baseUrl), { method, headers, body: body === undefined ? undefined : JSON.stringify(body), signal: _RequestSignal(options.requestTimeoutMilliseconds, options.shutdownSignal), redirect: "error" });
 				});
 			}
 			catch (error)
@@ -251,7 +258,7 @@ export function __CreateObotSession(options: ObotHttpOptions): ObotSession
 			{
 				response = await ___DoWithoutTrace(function _fetchSensitiveMcpEndpoint()
 				{
-					return fetchRequest(new URL(path, baseUrl), { method: "POST", headers, body: JSON.stringify(body), signal: AbortSignal.timeout(options.requestTimeoutMilliseconds), redirect: "error" });
+					return fetchRequest(new URL(path, baseUrl), { method: "POST", headers, body: JSON.stringify(body), signal: _RequestSignal(options.requestTimeoutMilliseconds, options.shutdownSignal), redirect: "error" });
 				});
 			}
 			catch (error)

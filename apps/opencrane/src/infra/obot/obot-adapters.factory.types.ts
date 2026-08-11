@@ -7,4 +7,6 @@ export interface ObotAdapters
 	readonly custody: ObotCustodyPort;
 	/** Server-side tool invocation authority; unavailable when Obot is not configured. */
 	readonly invocation: ObotMcpInvocationPort;
+	/** Abort active Obot exchanges before workers and telemetry drain during process shutdown. */
+	readonly stop: () => void;
 }

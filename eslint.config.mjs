@@ -199,6 +199,7 @@ export default [
                 "scope:personal-personas",
                 "scope:providers",
                 "scope:retrieval",
+                "scope:sandbox-execution",
                 "scope:shared",
                 "scope:skills",
                 "scope:spend",

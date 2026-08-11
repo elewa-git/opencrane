@@ -15,7 +15,8 @@ import type { ObotAdapters } from "./obot-adapters.factory.types.js";
  */
 export function _CreateObotAdapters(config: OpenCraneObotConfig | null): ObotAdapters
 {
-	if (config === null) return { custody: new __UnavailableObotCustodyAdapter(), invocation: new __UnavailableObotMcpInvocationAdapter() };
-	const session = __CreateObotSession({ baseUrl: config.gatewayUrl, requestTimeoutMilliseconds: config.requestTimeoutMilliseconds, serviceTokenFile: config.serviceTokenPath });
-	return { custody: __CreateHttpObotCustodyAdapter(session), invocation: __CreateHttpObotMcpInvocationAdapter(session) };
+	if (config === null) return { custody: new __UnavailableObotCustodyAdapter(), invocation: new __UnavailableObotMcpInvocationAdapter(), stop: function _StopUnavailable() {} };
+	const shutdown = new AbortController();
+	const session = __CreateObotSession({ baseUrl: config.gatewayUrl, requestTimeoutMilliseconds: config.requestTimeoutMilliseconds, serviceTokenFile: config.serviceTokenPath, shutdownSignal: shutdown.signal });
+	return { custody: __CreateHttpObotCustodyAdapter(session), invocation: __CreateHttpObotMcpInvocationAdapter(session), stop: function _StopObot() { shutdown.abort(); } };
 }

@@ -39,6 +39,8 @@ without exporting query-bearing URLs or executable payloads.
 - `___BindConsole` — route `console.*` into structured logs.
 - `___RequestContext` — Express per-request context + span middleware.
 - `___DoWithTrace`, `___GetActiveSpan` — wrap work in an OTEL span.
+- `___MarkActiveSpanFailed` — retain an accurate failed span when an adapter returns a bounded typed
+  failure instead of throwing; it records no exception or caller-controlled status text.
 - `___DoWithoutTrace` — suppress automatic child spans for an outbound address that itself carries
   sensitive custody material, while retaining its surrounding OpenCrane operation span.
 - `___StartTelemetry`, `___ShutdownTelemetry` — OTEL SDK lifecycle (also at `/telemetry`).

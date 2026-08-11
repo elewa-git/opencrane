@@ -1,6 +1,6 @@
 import { ExternalActionRecoveryModes, __DigestCanonicalJson } from "@opencrane/backend/server/iam/authorization";
 import { UPGRADE_SESSION_TOOL_REVISION } from "@opencrane/backend/agents/personal/configuration";
-import { ___DoWithTrace } from "@opencrane/backend/observability";
+import { ___DoWithTrace, ___MarkActiveSpanFailed } from "@opencrane/backend/observability";
 import { MemoryGatewayUnavailableError } from "@opencrane/backend/server/infra/memory-gateway-client";
 import { ObotMcpAuthenticationError, ObotMcpAuthorizationError, ObotMcpInvocationUnavailableError, ObotMcpToolNotAllowedError } from "@opencrane/backend/server/infra/obot-custody";
 import { SandboxExecutionUnavailableError } from "@opencrane/backend/server/infra/sandbox-execution";
@@ -64,6 +64,7 @@ class _ManualPreparedExternalActionAdapter implements PreparedExternalActionAdap
 			catch (error)
 			{
 				const failureCode = _provenPreDispatchFailure(error);
+				___MarkActiveSpanFailed();
 				return failureCode === null
 					? { kind: ExternalActionProviderOutcomeKinds.Ambiguous }
 					: { kind: ExternalActionProviderOutcomeKinds.Failed, failureCode };

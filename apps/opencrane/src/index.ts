@@ -62,7 +62,7 @@ async function _Main(): Promise<void>
 	const internalApp = _CreateInternalApp(prisma, kubernetes.authApi, config.runtime, memoryGateway, authentication.sessionMiddleware);
 
 	// 6. Start listeners and workers under one drain order so shared dependencies close exactly once.
-	_StartProcessLifecycle(publicApp, internalApp, prisma, kubernetes.batchApi, managedRunAdmission, runCancellation, config, channelTargetRoutes, unbindConsole, externalActions);
+	_StartProcessLifecycle(publicApp, internalApp, prisma, kubernetes.batchApi, managedRunAdmission, runCancellation, config, channelTargetRoutes, unbindConsole, externalActions, obot.stop);
 }
 
 void _Main().catch(function _fatalStartupError(err: unknown)

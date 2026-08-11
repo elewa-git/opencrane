@@ -46,7 +46,8 @@ error; provider error bodies never leave the transport. A valid MCP `isError: tr
 a typed tool failure for the durable worker to record, rather than being mistaken for success.
 
 **Transport discipline** (`__CreateObotSession`): a release-local `*.svc.cluster.local` HTTP origin
-only, the mounted service credential re-read per call, `AbortSignal.timeout`, `redirect: "error"`,
+only, the mounted service credential re-read per call, a per-request timeout plus process-shutdown
+abort signal, `redirect: "error"`,
 bounded 256 KiB reads, `___DoWithoutTrace` around every fetch, and a bounded failure taxonomy
 (`timeout | network | oversize | http_<status>`) as the ONLY detail carried out — remote bodies and
 credentials never appear in an error. The exact Obot response shapes are not contract-pinned (live
