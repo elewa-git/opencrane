@@ -43,7 +43,7 @@ export class PrismaSteeringRequestRepository implements SteeringRequestRepositor
 			await transaction.$queryRaw(Prisma.sql`SELECT "id" FROM "agent_runs" WHERE "id" = ${command.runId} FOR UPDATE`);
 			const run = await transaction.agentRun.findFirst({ where: { id: command.runId, siloId: command.siloId, delegatedUserId: command.subjectId }, select: { attempt: true, state: true } });
 			if (run === null) return { outcome: "not_found_or_not_owner" };
-			if (run.state !== AgentRunState.Assigned && run.state !== AgentRunState.Running && run.state !== AgentRunState.WaitingForApproval) return { outcome: "run_not_steerable" };
+			if (run.state !== AgentRunState.Assigned && run.state !== AgentRunState.Running && run.state !== AgentRunState.WaitingForInput) return { outcome: "run_not_steerable" };
 			const priorResume = await transaction.runtimeDispatchedCommand.findFirst({ where: { runId: command.runId, attempt: run.attempt, kind: RuntimeCommandKind.ResumeAttempt }, select: { id: true } });
 			if (priorResume !== null) return { outcome: "run_not_steerable" };
 			const content = command.content === null ? Prisma.JsonNull : command.content as Prisma.InputJsonValue;

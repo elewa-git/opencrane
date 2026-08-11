@@ -59,7 +59,7 @@ SELECT (
         WHERE "schema_version" = '0.8.0'
           AND "source_schema_version" = '0.7.0'
           AND "source_baseline_sha256" = :'source_baseline_sha256'
-          AND "target_baseline_sha256" = '32797f3ab1a6b2960c5761890b0605a1467430758abedf7bf4396f41a59e1d57'
+          AND "target_baseline_sha256" = 'b32befa61b0cb25eca09c057a9900575880022f98be078e384c4ff9162d1db34'
           AND "sql_sha256" = :'migration_sql_sha256'
           AND "migration_id" = '0.7.0-to-0.8.0') = 1
     AND (SELECT "baseline_sha256" FROM "opencrane_bootstrap"."target_baseline" WHERE "singleton" = TRUE)
@@ -3354,6 +3354,168 @@ INSERT INTO "user_onboarding_bootstrap_questions" ("content_revision_id", "ordin
     ('bootstrap-analyst-v1', 2, $prompt_analyst_2$What level of detail do you typically want in an initial response?$prompt_analyst_2$),
     ('bootstrap-analyst-v1', 3, $prompt_analyst_3$What standards or references should I use as authoritative in your field?$prompt_analyst_3$);
 
+-- Generic conversation elicitation replaces browser-facing approval-only authority. The retained
+-- ApprovalRequest remains the tool-specific audit row and keeps its opaque resume-token evidence.
+CREATE TYPE "ElicitationRequestState" AS ENUM ('requested', 'answered', 'declined', 'expired', 'cancelled', 'failed');
+CREATE TYPE "ElicitationResponseAttemptState" AS ENUM ('submitting', 'accepted', 'rejected');
+CREATE TYPE "ElicitationBodyKind" AS ENUM ('approval', 'single_choice', 'multiple_choice', 'free_text');
+CREATE TYPE "ElicitationPurpose" AS ENUM ('runtime_input', 'tool_approval', 'personal_memory_permission', 'a2ui_action');
+CREATE TYPE "ElicitationResultDeliveryState" AS ENUM ('pending', 'consumed');
+
+ALTER TABLE "approval_requests" ADD COLUMN "elicitation_request_id" TEXT;
+CREATE UNIQUE INDEX "approval_requests_elicitation_request_id_key" ON "approval_requests"("elicitation_request_id");
+CREATE UNIQUE INDEX "agent_runs_id_attempt_key" ON "agent_runs"("id", "attempt");
+
+CREATE TABLE "elicitation_requests" (
+    "id" TEXT NOT NULL, "silo_id" TEXT NOT NULL, "conversation_id" TEXT NOT NULL,
+    "run_id" TEXT NOT NULL, "attempt" INTEGER NOT NULL,
+    "assigned_participant_id" TEXT NOT NULL, "request_key" TEXT NOT NULL,
+    "purpose" "ElicitationPurpose" NOT NULL, "body_kind" "ElicitationBodyKind" NOT NULL,
+    "body" JSONB NOT NULL, "body_digest" TEXT NOT NULL, "purpose_payload" JSONB,
+    "purpose_payload_digest" TEXT NOT NULL, "state" "ElicitationRequestState" NOT NULL DEFAULT 'requested',
+    "requires_step_up" BOOLEAN NOT NULL DEFAULT false, "expires_at" TIMESTAMP(3) NOT NULL,
+    "resolved_at" TIMESTAMP(3), "resolved_by" TEXT, "safe_reason" TEXT,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "elicitation_requests_pkey" PRIMARY KEY ("id")
+);
+CREATE TABLE "elicitation_response_attempts" (
+    "id" TEXT NOT NULL, "request_id" TEXT NOT NULL, "idempotency_key" TEXT NOT NULL,
+    "responding_subject_id" TEXT NOT NULL, "response" JSONB NOT NULL, "response_digest" TEXT NOT NULL,
+    "state" "ElicitationResponseAttemptState" NOT NULL DEFAULT 'submitting',
+    "verified_step_up_at" TIMESTAMP(3), "rejection_reason" TEXT,
+    "submitted_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP, "completed_at" TIMESTAMP(3),
+    CONSTRAINT "elicitation_response_attempts_pkey" PRIMARY KEY ("id")
+);
+CREATE TABLE "elicitation_result_deliveries" (
+    "id" TEXT NOT NULL, "request_id" TEXT NOT NULL,
+    "state" "ElicitationResultDeliveryState" NOT NULL DEFAULT 'pending', "payload" JSONB,
+    "payload_digest" TEXT, "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "consumed_at" TIMESTAMP(3), CONSTRAINT "elicitation_result_deliveries_pkey" PRIMARY KEY ("id")
+);
+CREATE TABLE "personal_memory_permission_receipts" (
+    "id" TEXT NOT NULL, "request_id" TEXT NOT NULL, "run_id" TEXT NOT NULL, "attempt" INTEGER NOT NULL,
+    "subject_id" TEXT NOT NULL, "execution_subject_id" TEXT NOT NULL, "purpose_digest" TEXT NOT NULL,
+    "query_digest" TEXT NOT NULL, "invocation_key" TEXT NOT NULL, "consumed_by_tool_invocation_id" TEXT,
+    "expires_at" TIMESTAMP(3) NOT NULL, "consumed_at" TIMESTAMP(3),
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "personal_memory_permission_receipts_pkey" PRIMARY KEY ("id")
+);
+
+CREATE INDEX "elicitation_requests_conversation_id_state_created_at_idx" ON "elicitation_requests"("conversation_id", "state", "created_at");
+CREATE INDEX "elicitation_requests_assigned_participant_id_state_expires__idx" ON "elicitation_requests"("assigned_participant_id", "state", "expires_at");
+CREATE INDEX "elicitation_requests_run_id_attempt_state_idx" ON "elicitation_requests"("run_id", "attempt", "state");
+CREATE UNIQUE INDEX "elicitation_requests_run_id_attempt_request_key_key" ON "elicitation_requests"("run_id", "attempt", "request_key");
+CREATE UNIQUE INDEX "elicitation_requests_id_run_id_attempt_key" ON "elicitation_requests"("id", "run_id", "attempt");
+CREATE INDEX "elicitation_response_attempts_request_id_state_submitted_at_idx" ON "elicitation_response_attempts"("request_id", "state", "submitted_at");
+CREATE UNIQUE INDEX "elicitation_response_attempts_request_id_idempotency_key_key" ON "elicitation_response_attempts"("request_id", "idempotency_key");
+CREATE UNIQUE INDEX "elicitation_response_attempts_one_accepted_per_request" ON "elicitation_response_attempts"("request_id") WHERE "state" = 'accepted';
+CREATE UNIQUE INDEX "elicitation_result_deliveries_request_id_key" ON "elicitation_result_deliveries"("request_id");
+CREATE INDEX "elicitation_result_deliveries_state_created_at_idx" ON "elicitation_result_deliveries"("state", "created_at");
+CREATE UNIQUE INDEX "personal_memory_permission_receipts_request_id_key" ON "personal_memory_permission_receipts"("request_id");
+CREATE UNIQUE INDEX "personal_memory_permission_receipts_consumed_by_tool_invoca_key" ON "personal_memory_permission_receipts"("consumed_by_tool_invocation_id");
+CREATE INDEX "personal_memory_permission_receipts_run_id_attempt_subject__idx" ON "personal_memory_permission_receipts"("run_id", "attempt", "subject_id", "expires_at");
+CREATE UNIQUE INDEX "personal_memory_permission_receipts_run_id_attempt_invocati_key" ON "personal_memory_permission_receipts"("run_id", "attempt", "invocation_key");
+CREATE UNIQUE INDEX "personal_memory_permission_receipts_request_id_run_id_attem_key" ON "personal_memory_permission_receipts"("request_id", "run_id", "attempt");
+
+ALTER TABLE "elicitation_requests" ADD CONSTRAINT "elicitation_requests_conversation_id_fkey" FOREIGN KEY ("conversation_id") REFERENCES "conversations"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "elicitation_requests" ADD CONSTRAINT "elicitation_requests_run_id_attempt_fkey" FOREIGN KEY ("run_id", "attempt") REFERENCES "agent_runs"("id", "attempt") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "elicitation_requests" ADD CONSTRAINT "elicitation_requests_conversation_id_assigned_participant__fkey" FOREIGN KEY ("conversation_id", "assigned_participant_id") REFERENCES "conversation_participants"("conversation_id", "user_id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "elicitation_response_attempts" ADD CONSTRAINT "elicitation_response_attempts_request_id_fkey" FOREIGN KEY ("request_id") REFERENCES "elicitation_requests"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "elicitation_result_deliveries" ADD CONSTRAINT "elicitation_result_deliveries_request_id_fkey" FOREIGN KEY ("request_id") REFERENCES "elicitation_requests"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "personal_memory_permission_receipts" ADD CONSTRAINT "personal_memory_permission_receipts_request_id_run_id_atte_fkey" FOREIGN KEY ("request_id", "run_id", "attempt") REFERENCES "elicitation_requests"("id", "run_id", "attempt") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "personal_memory_permission_receipts" ADD CONSTRAINT "personal_memory_permission_receipts_consumed_by_tool_invoc_fkey" FOREIGN KEY ("consumed_by_tool_invocation_id") REFERENCES "tool_invocations"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "approval_requests" ADD CONSTRAINT "approval_requests_elicitation_request_id_fkey" FOREIGN KEY ("elicitation_request_id") REFERENCES "elicitation_requests"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+ALTER TABLE "elicitation_requests" ADD CONSTRAINT "elicitation_requests_exact_check" CHECK (
+    btrim("id") <> '' AND btrim("silo_id") <> '' AND btrim("conversation_id") <> ''
+    AND btrim("run_id") <> '' AND "attempt" > 0 AND btrim("assigned_participant_id") <> '' AND btrim("request_key") <> ''
+    AND jsonb_typeof("body") = 'object' AND "body_digest" ~ '^sha256:[0-9a-f]{64}$'
+    AND "purpose_payload_digest" ~ '^sha256:[0-9a-f]{64}$' AND "expires_at" > "created_at"
+    AND (("state" = 'requested' AND "resolved_at" IS NULL AND "resolved_by" IS NULL AND "safe_reason" IS NULL)
+      OR ("state" IN ('answered', 'declined') AND "resolved_at" IS NOT NULL AND btrim("resolved_by") <> '')
+      OR ("state" IN ('expired', 'cancelled', 'failed') AND "resolved_at" IS NOT NULL AND "resolved_by" IS NULL))
+);
+ALTER TABLE "elicitation_response_attempts" ADD CONSTRAINT "elicitation_response_attempts_exact_check" CHECK (
+    btrim("id") <> '' AND btrim("request_id") <> '' AND btrim("idempotency_key") <> '' AND btrim("responding_subject_id") <> ''
+    AND jsonb_typeof("response") = 'object' AND "response_digest" ~ '^sha256:[0-9a-f]{64}$'
+    AND (("state" = 'submitting' AND "completed_at" IS NULL AND "rejection_reason" IS NULL)
+      OR ("state" = 'accepted' AND "completed_at" IS NOT NULL AND "rejection_reason" IS NULL)
+      OR ("state" = 'rejected' AND "completed_at" IS NOT NULL AND btrim("rejection_reason") <> ''))
+);
+ALTER TABLE "elicitation_result_deliveries" ADD CONSTRAINT "elicitation_result_deliveries_exact_check" CHECK (
+    btrim("id") <> '' AND btrim("request_id") <> ''
+    AND (("payload" IS NULL AND "payload_digest" IS NULL) OR ("payload" IS NOT NULL AND "payload_digest" ~ '^sha256:[0-9a-f]{64}$'))
+    AND (("state" = 'pending' AND "consumed_at" IS NULL) OR ("state" = 'consumed' AND "consumed_at" IS NOT NULL))
+);
+ALTER TABLE "personal_memory_permission_receipts" ADD CONSTRAINT "personal_memory_permission_receipts_exact_check" CHECK (
+    btrim("id") <> '' AND btrim("request_id") <> '' AND btrim("run_id") <> '' AND "attempt" > 0
+    AND btrim("subject_id") <> '' AND btrim("execution_subject_id") <> ''
+    AND "purpose_digest" ~ '^sha256:[0-9a-f]{64}$' AND "query_digest" ~ '^sha256:[0-9a-f]{64}$'
+    AND btrim("invocation_key") <> '' AND "expires_at" > "created_at"
+    AND (("consumed_by_tool_invocation_id" IS NULL AND "consumed_at" IS NULL)
+      OR ("consumed_by_tool_invocation_id" IS NOT NULL AND "consumed_at" IS NOT NULL))
+);
+
+CREATE FUNCTION "enforce_elicitation_request_authority"() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE current_silo TEXT; current_conversation TEXT; current_attempt INTEGER; current_state "AgentRunState"; participant_ended BIGINT;
+BEGIN
+    IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'ElicitationRequest rows cannot be deleted'; END IF;
+    IF TG_OP = 'INSERT' THEN
+        SELECT "silo_id", "conversation_id", "attempt", "state" INTO current_silo, current_conversation, current_attempt, current_state
+          FROM "agent_runs" WHERE "id" = NEW."run_id" FOR UPDATE;
+        SELECT "access_ended_position" INTO participant_ended FROM "conversation_participants"
+          WHERE "conversation_id" = NEW."conversation_id" AND "user_id" = NEW."assigned_participant_id" FOR UPDATE;
+        IF current_silo IS DISTINCT FROM NEW."silo_id" OR current_conversation IS DISTINCT FROM NEW."conversation_id"
+            OR current_attempt IS DISTINCT FROM NEW."attempt" OR current_state IS DISTINCT FROM 'waiting_for_input'
+            OR NOT FOUND OR participant_ended IS NOT NULL OR NEW."state" <> 'requested'
+            OR NEW."created_at" > clock_timestamp() OR NEW."expires_at" <= clock_timestamp() THEN
+            RAISE EXCEPTION 'ElicitationRequest requires the exact waiting run and active assigned participant';
+        END IF;
+        RETURN NEW;
+    END IF;
+    IF NEW."id" IS DISTINCT FROM OLD."id" OR NEW."silo_id" IS DISTINCT FROM OLD."silo_id"
+        OR NEW."conversation_id" IS DISTINCT FROM OLD."conversation_id" OR NEW."run_id" IS DISTINCT FROM OLD."run_id"
+        OR NEW."attempt" IS DISTINCT FROM OLD."attempt" OR NEW."assigned_participant_id" IS DISTINCT FROM OLD."assigned_participant_id"
+        OR NEW."request_key" IS DISTINCT FROM OLD."request_key" OR NEW."purpose" IS DISTINCT FROM OLD."purpose"
+        OR NEW."body_kind" IS DISTINCT FROM OLD."body_kind" OR NEW."body" IS DISTINCT FROM OLD."body"
+        OR NEW."body_digest" IS DISTINCT FROM OLD."body_digest" OR NEW."purpose_payload" IS DISTINCT FROM OLD."purpose_payload"
+        OR NEW."purpose_payload_digest" IS DISTINCT FROM OLD."purpose_payload_digest"
+        OR NEW."requires_step_up" IS DISTINCT FROM OLD."requires_step_up" OR NEW."expires_at" IS DISTINCT FROM OLD."expires_at"
+        OR NEW."created_at" IS DISTINCT FROM OLD."created_at" OR OLD."state" <> 'requested' OR NEW."state" = 'requested' THEN
+        RAISE EXCEPTION 'ElicitationRequest may resolve exactly once without changing authority coordinates';
+    END IF;
+    RETURN NEW;
+END;
+$$;
+CREATE FUNCTION "enforce_elicitation_response_attempt_authority"() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE request_row "elicitation_requests"%ROWTYPE; participant_ended BIGINT;
+BEGIN
+    IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'ElicitationResponseAttempt rows cannot be deleted'; END IF;
+    IF TG_OP = 'INSERT' THEN
+        SELECT * INTO request_row FROM "elicitation_requests" WHERE "id" = NEW."request_id" FOR UPDATE;
+        SELECT "access_ended_position" INTO participant_ended FROM "conversation_participants"
+          WHERE "conversation_id" = request_row."conversation_id" AND "user_id" = NEW."responding_subject_id" FOR UPDATE;
+        IF request_row."id" IS NULL OR request_row."state" <> 'requested' OR request_row."expires_at" <= clock_timestamp()
+            OR request_row."assigned_participant_id" IS DISTINCT FROM NEW."responding_subject_id" OR NOT FOUND OR participant_ended IS NOT NULL
+            OR NEW."state" <> 'submitting' OR (request_row."requires_step_up" AND
+              (NEW."verified_step_up_at" IS NULL OR NEW."verified_step_up_at" < request_row."created_at" OR NEW."verified_step_up_at" > clock_timestamp())) THEN
+            RAISE EXCEPTION 'ElicitationResponseAttempt lacks current participant or step-up authority';
+        END IF;
+        RETURN NEW;
+    END IF;
+    IF NEW."id" IS DISTINCT FROM OLD."id" OR NEW."request_id" IS DISTINCT FROM OLD."request_id"
+        OR NEW."idempotency_key" IS DISTINCT FROM OLD."idempotency_key" OR NEW."responding_subject_id" IS DISTINCT FROM OLD."responding_subject_id"
+        OR NEW."response" IS DISTINCT FROM OLD."response" OR NEW."response_digest" IS DISTINCT FROM OLD."response_digest"
+        OR NEW."verified_step_up_at" IS DISTINCT FROM OLD."verified_step_up_at" OR NEW."submitted_at" IS DISTINCT FROM OLD."submitted_at"
+        OR OLD."state" <> 'submitting' OR NEW."state" NOT IN ('accepted', 'rejected') THEN
+        RAISE EXCEPTION 'ElicitationResponseAttempt may complete exactly once';
+    END IF;
+    RETURN NEW;
+END;
+$$;
+CREATE TRIGGER "elicitation_requests_authority" BEFORE INSERT OR UPDATE OR DELETE ON "elicitation_requests" FOR EACH ROW EXECUTE FUNCTION "enforce_elicitation_request_authority"();
+CREATE TRIGGER "elicitation_response_attempts_authority" BEFORE INSERT OR UPDATE OR DELETE ON "elicitation_response_attempts" FOR EACH ROW EXECUTE FUNCTION "enforce_elicitation_response_attempt_authority"();
+
 -- CreateTable
 CREATE TABLE "artifact_scan_jobs" (
     "id" TEXT NOT NULL,
@@ -3544,7 +3706,7 @@ INSERT INTO "opencrane_migrations"."schema_history" (
     "target_baseline_sha256", "sql_sha256", "migration_id"
 ) VALUES (
     '0.8.0', '0.7.0', current_setting('opencrane.expected_source_baseline_sha256'),
-    '32797f3ab1a6b2960c5761890b0605a1467430758abedf7bf4396f41a59e1d57',
+    'b32befa61b0cb25eca09c057a9900575880022f98be078e384c4ff9162d1db34',
     current_setting('opencrane.expected_migration_sql_sha256'),
     '0.7.0-to-0.8.0'
 );

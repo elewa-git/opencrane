@@ -89,6 +89,19 @@ export interface AgUiA2uiEnvelope
 	readonly state: AgUiA2uiSurfaceStates;
 	readonly operations: readonly AgUiA2uiOperation[];
 	readonly reason?: string;
+	/** Server-projected displayed action binding; presentation alone never grants authority. */
+	readonly actionBinding?: AgUiA2uiActionBinding;
+}
+
+/** One displayed A2UI action bound to an already-admitted elicitation request. */
+export interface AgUiA2uiActionBinding
+{
+	/** Display-only action identifier from the reviewed surface. */
+	readonly displayedActionId: string;
+	/** Exact component that emitted the display intent. */
+	readonly sourceComponentId: string;
+	/** Existing elicitation request on the same conversation, run, and attempt. */
+	readonly elicitationRequestId: string;
 }
 
 /** How a child run ended, as reported to its immediate parent run. */

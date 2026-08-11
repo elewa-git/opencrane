@@ -187,11 +187,11 @@ and expiry carry an explicit refusal and never execute the awaiting invocation.
 
 | Run state | Event | Pending after event | Action | Atomic owner |
 |---|---|---:|---|---|
-| `Running` | open | 0 before create | move to `WaitingForApproval`, then create | approval-open unit of work |
-| `WaitingForApproval` | open | one or more | add to the current batch | approval-open unit of work |
-| `WaitingForApproval` | decision or expiry | one or more | remain waiting | approval-decision or expiry unit of work |
-| `WaitingForApproval` | decision or expiry | 0 | move to `Running`; make the batch resumable | approval-decision or expiry unit of work |
-| `Running` or `WaitingForApproval` | cancellation | any | cancel pending rows without resume authority | caller-owned cancellation transaction |
+| `Running` | open | 0 before create | move to `WaitingForInput`, then create | approval-open unit of work |
+| `WaitingForInput` | open | one or more | add to the current batch | approval-open unit of work |
+| `WaitingForInput` | decision or expiry | one or more | remain waiting | approval-decision or expiry unit of work |
+| `WaitingForInput` | decision or expiry | 0 | move to `Running`; make the batch resumable | approval-decision or expiry unit of work |
+| `Running` or `WaitingForInput` | cancellation | any | cancel pending rows without resume authority | caller-owned cancellation transaction |
 | any other state | open, decision, or expiry | any | reject | exhaustive lifecycle state registry |
 
 Multiple requests may share one pause. The dispatcher consumes all resolved rows in deterministic

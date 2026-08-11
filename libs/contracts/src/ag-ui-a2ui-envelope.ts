@@ -52,13 +52,24 @@ const _VALIDATE_A2UI_OPERATION = new Ajv({ strict: false }).compile(Schemas.A2UI
  */
 export function ___ParseAgUiA2uiEnvelope(value: unknown): AgUiA2uiEnvelope
 {
-	if (!_Record(value) || !_ExactKeys(value, ["version", "conversationId", "runId", "messageId", "surfaceId", "sequence", "state", "operations"], ["reason"])) throw new TypeError("invalid governed A2UI envelope");
+	if (!_Record(value) || !_ExactKeys(value, ["version", "conversationId", "runId", "messageId", "surfaceId", "sequence", "state", "operations"], ["reason", "actionBinding"])) throw new TypeError("invalid governed A2UI envelope");
 	if (value["version"] !== AG_UI_A2UI_ENVELOPE_VERSION || !_Identifier(value["conversationId"]) || !_Identifier(value["runId"]) || !_Identifier(value["messageId"]) || !_Identifier(value["surfaceId"])) throw new TypeError("invalid governed A2UI coordinates");
 	if (!Number.isSafeInteger(value["sequence"]) || (value["sequence"] as number) < 0 || typeof value["state"] !== "string" || !_A2UI_SURFACE_STATES.has(value["state"])) throw new TypeError("invalid governed A2UI lifecycle");
 	if (value["reason"] !== undefined && (typeof value["reason"] !== "string" || value["reason"].length > _MAX_A2UI_REASON_LENGTH || /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/u.test(value["reason"]))) throw new TypeError("invalid governed A2UI reason");
+	if (value["actionBinding"] !== undefined && !_ActionBinding(value["actionBinding"])) throw new TypeError("invalid governed A2UI action binding");
 	if (!Array.isArray(value["operations"]) || value["operations"].length === 0 || value["operations"].length > _MAX_A2UI_OPERATIONS || value["operations"].some(function _Invalid(operation): boolean { return !_A2uiOperation(operation, value["surfaceId"] as string); })) throw new TypeError("invalid governed A2UI operations");
 	if (_HasSecretField(value)) throw new TypeError("governed A2UI envelope contains a sensitive field");
 	return value as unknown as AgUiA2uiEnvelope;
+}
+
+/** Whether one display action names only its exact existing server-side elicitation request. */
+function _ActionBinding(value: unknown): boolean
+{
+	return _Record(value)
+		&& _ExactKeys(value, ["displayedActionId", "sourceComponentId", "elicitationRequestId"], [])
+		&& _Identifier(value["displayedActionId"])
+		&& _Identifier(value["sourceComponentId"])
+		&& _Identifier(value["elicitationRequestId"]);
 }
 
 /** Whether an operation has exactly one member, targets this `surfaceId`, stays within the size caps, and uses only catalogue components. */

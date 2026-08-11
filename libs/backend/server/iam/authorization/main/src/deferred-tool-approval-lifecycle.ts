@@ -35,7 +35,7 @@ const _STATE_HANDLERS: Readonly<Record<DeferredToolApprovalRunStates, DeferredTo
 	[DeferredToolApprovalRunStates.Queued]: _closed,
 	[DeferredToolApprovalRunStates.Assigned]: _closed,
 	[DeferredToolApprovalRunStates.Running]: _running,
-	[DeferredToolApprovalRunStates.WaitingForApproval]: _waiting,
+	[DeferredToolApprovalRunStates.WaitingForInput]: _waiting,
 	[DeferredToolApprovalRunStates.RecoveryRequired]: _closed,
 	[DeferredToolApprovalRunStates.Cancelling]: _closed,
 	[DeferredToolApprovalRunStates.Completed]: _closed,

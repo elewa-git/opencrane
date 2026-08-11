@@ -60,7 +60,7 @@ describe("PrismaRuntimeEventReporter", function _Suite()
 		const reporter = new PrismaRuntimeEventReporter();
 
 		await expect(reporter.reportInTransaction(transaction, { runId: "run-1", attempt: 2, eventType: "run.started", payload: { promptCompilerVersion: "v1" } })).resolves.toEqual({ outcome: "denied", reason: "run_not_assigned" });
-		vi.mocked(transaction.agentRun.findUnique).mockResolvedValue({ id: "run-1", attempt: 2, state: AgentRunState.WaitingForApproval, conversationId: "conversation-1" } as never);
+		vi.mocked(transaction.agentRun.findUnique).mockResolvedValue({ id: "run-1", attempt: 2, state: AgentRunState.WaitingForInput, conversationId: "conversation-1" } as never);
 		await expect(reporter.reportInTransaction(transaction, { runId: "run-1", attempt: 2, eventType: "run.resumed", payload: { inputGeneration: 1 } })).resolves.toEqual({ outcome: "denied", reason: "run_not_running" });
 		expect(transaction.conversationRunEvent.create).not.toHaveBeenCalled();
 	});

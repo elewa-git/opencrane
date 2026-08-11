@@ -440,7 +440,7 @@ describe("PrismaRuntimeDispatchAuthority", function _describeDispatchAuthority()
 	{
 		let resumeRun = function _noop(): void {};
 		const expiry = { expireInTransaction: vi.fn(async function _expire() { resumeRun(); return { expiredCount: 1, resumed: true }; }) };
-		const context = _authority({ runState: "WaitingForApproval", savedToolResults: [{ expired: true }], approvalExpiry: expiry });
+		const context = _authority({ runState: "WaitingForInput", savedToolResults: [{ expired: true }], approvalExpiry: expiry });
 		resumeRun = function _resume(): void { context.run.state = "Running"; };
 		context.streams.push({ runId: "run-1", attempt: 1, fence: 1, inputGeneration: 0, runtimeInstanceId: "instance-1", nextCommandSequence: 2, acceptedCandidateIds: [] });
 		context.commands.push({ runId: "run-1", attempt: 1, sequence: 1, commandId: "command-start", kind: "StartAttempt", fence: 1, issuedAt: new Date("2026-07-20T00:00:30.000Z"), expiresAt: new Date("2026-07-20T00:01:30.000Z") });
@@ -454,7 +454,7 @@ describe("PrismaRuntimeDispatchAuthority", function _describeDispatchAuthority()
 	it("keeps a partially expired approval batch waiting and mints no command", async function _keepsWaitingAfterPartialExpiry()
 	{
 		const expiry = { expireInTransaction: vi.fn().mockResolvedValue({ expiredCount: 1, resumed: false }) };
-		const context = _authority({ runState: "WaitingForApproval", approvalExpiry: expiry });
+		const context = _authority({ runState: "WaitingForInput", approvalExpiry: expiry });
 
 		expect(await context.authority.__NextCommand(_identity, _open, 0)).toBeNull();
 		expect(context.commands).toHaveLength(0);

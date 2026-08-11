@@ -115,7 +115,7 @@ execution-run authority, never by this transport/protocol package directly.
 first fenced resume command may consume every pending request and seed the runtime's pre-model buffer.
 Steering alone cannot mint another resume while that executor loop may still be active. A later
 deferred-tool approval marker may mint a later resume because the intervening
-`Running → WaitingForApproval → Running` cycle proves the previous loop paused at a governed tool
+`Running → WaitingForInput → Running` cycle proves the previous loop paused at a governed tool
 boundary. Each command consumes only its exact durable markers, so reconnect redelivers the stored
 frame byte-for-byte without reopening the batch. Its queue is deliberately separate from
 `RuntimeSteeringBoundary`, which remains the sole authority that can advance input generation. A lost
@@ -123,7 +123,7 @@ browser connection therefore cannot drop an instruction or force a model turn to
 
 | Durable run state | New evidence | Command-poll outcome |
 | --- | --- | --- |
-| `WaitingForApproval` | one or more deadlines are due | Expire due rows in the held transaction; remain idle until the batch has no pending row. |
+| `WaitingForInput` | one or more deadlines are due | Expire due rows in the held transaction; remain idle until the batch has no pending row. |
 | `Running` before any resume | approval marker or queued steering | Mint one resume and consume exactly those markers. |
 | `Running` after a prior resume | fresh approval marker | Mint the next batch resume. |
 | `Running` after a prior resume | steering only | Remain idle; do not supersede the active loop. |

@@ -1903,7 +1903,7 @@ export interface components {
             runId: string;
             attempt: number;
             /** @enum {string} */
-            state: "accepted" | "queued" | "assigned" | "running" | "waiting_for_approval" | "recovery_required" | "cancelling" | "completed" | "failed" | "cancelled";
+            state: "accepted" | "queued" | "assigned" | "running" | "waiting_for_input" | "recovery_required" | "cancelling" | "completed" | "failed" | "cancelled";
             conversationId: string | null;
             agentRevisionId: string;
             /** Format: date-time */
