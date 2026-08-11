@@ -412,21 +412,23 @@ for the committed projection work at this checkpoint.
 Durable recovery for irreversible external actions now has product approval: OpenCrane may retry
 only bounded internal preparation before dispatch; after dispatch it must replay saved success,
 check the provider when supported, or stop visibly in **Needs recovery** without sending the action
-again. The durable ToolInvocation claim, result replay, provider-check strategy, and user-visible
-recovery state remain the implementation gate. Server-owned Obot invocation, credential isolation,
-safe result redaction, lifecycle-event ownership, and the provider-free replay digest check are now
-implemented and covered by focused tests. The exact State×Event planner owns every invocation
-transition; claim kind, fence and revision prevent overlapping dispatch/reconciliation; approved
-argument edits become the effective provider request; and cancellation waits for in-flight claims to
-settle without admitting new work. The final architecture recheck passes, fresh and upgraded 0.8
-databases converge under live PostgreSQL qualification, and package, ownership, style and release
-gates pass. Independent post-commit correctness/security review remains required before merge.
+again. That recovery model is implemented through a transaction-bound ToolInvocation unit of work:
+durable claims, result replay, provider-check strategy, and the visible recovery projection share one
+canonical lifecycle authority. Server-owned Obot invocation, credential isolation, safe result
+redaction, lifecycle-event ownership, and the provider-free replay digest check are covered by
+focused tests. The exact State×Event planner owns every invocation transition; claim kind, fence and
+revision prevent overlapping dispatch/reconciliation; approved argument edits become the effective
+provider request; and cancellation waits for in-flight claims to settle without admitting new work.
+Provider failures now retain failed spans without exporting raw exceptions, idle polls create no
+trace noise, and process shutdown aborts Obot before draining durable work. Correctness, security,
+architecture, observability, and residue rechecks pass; fresh and upgraded 0.8 databases converge
+under live PostgreSQL qualification; and package, ownership, style, boundary, and release gates pass.
 The legacy 0.7 route-expiry replacement is approved and
 implemented: migrated route ids, endpoint/registration coordinates, prior revocation, and exact
 expiry evidence survive as permanently inactive rows, while startup reconciliation creates the
 sole usable stable receiver route. Fresh 0.8 and migrated 0.7 databases converge under the live
-PostgreSQL test. Recovery implementation is not treated as complete or hidden by the otherwise-green
-projection work.
+PostgreSQL test. F1.4 remains in progress until the rebased PR head passes live CI and merges; live
+vendor-runtime qualification of Obot response behavior remains tracked separately under #337.
 
 Track F1 closes [#351](https://github.com/elewa-git/opencrane/issues/351),
 [#600](https://github.com/elewa-git/opencrane/issues/600),
