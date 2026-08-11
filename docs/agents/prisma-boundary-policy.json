@@ -674,6 +674,22 @@
         ]
       },
       {
+        "path": "libs/backend/server/conversations/main/src/prisma-conversation-message-admission-unit-of-work.ts",
+        "adapter": "PrismaConversationMessageAdmissionUnitOfWork",
+        "contract": "ConversationMessageAdmissionUnitOfWork",
+        "contractImportPath": "./conversation-message-admission.types.js",
+        "constructs": [
+          {
+            "adapter": "PrismaConversationMutationRepository",
+            "importPath": "./prisma-conversation-mutation-repository.js"
+          },
+          {
+            "adapter": "PrismaConversationQueryRepository",
+            "importPath": "./prisma-conversation-query-repository.js"
+          }
+        ]
+      },
+      {
         "path": "libs/backend/server/conversations/main/src/prisma-conversation-replay-unit-of-work.ts",
         "adapter": "PrismaConversationReplayUnitOfWork",
         "contract": "ConversationReplayUnitOfWork",
