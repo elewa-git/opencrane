@@ -14,7 +14,7 @@ export * from "./run-admission-concurrency.js";
 export { RunAdmissionConcurrencyDenialReasons, RunAdmissionConcurrencyOutcomes } from "./run-admission-concurrency.types.js";
 export type { RunAdmissionConcurrencyPolicy, RunAdmissionConcurrencyResult } from "./run-admission-concurrency.types.js";
 export * from "./run-admission.types.js";
-export * from "./run-cancellation.types.js";
+export type { RunCancellationRepository } from "./run-cancellation.types.js";
 export * from "./run-dispatch.router.js";
 export * from "./run-input-snapshot-digest.js";
 export * from "./runtime-workload-cleanup.js";
