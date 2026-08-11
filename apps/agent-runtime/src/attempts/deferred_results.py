@@ -25,16 +25,11 @@ from .pending_tools import take_pending_tool_call
 def resolve_deferred_tool_results(
     coordinates: dict[str, object],
     compiled_input: dict[str, object],
-    deferred_tool_results: object,
+    deferred_tool_results: list[object],
     post_candidate,
-) -> object:
+) -> dict[str, object]:
     """Execute the authorized decisions and return the framework's deferred-results mapping.
-
-    A non-list payload is passed through untouched so an unexpected control-plane shape surfaces at
-    the framework seam instead of being silently repaired here.
     """
-    if not isinstance(deferred_tool_results, list):
-        return deferred_tool_results
     results: dict[str, object] = {}
     for entry in deferred_tool_results:
         if not isinstance(entry, dict) or not isinstance(entry.get("toolInvocationId"), str):

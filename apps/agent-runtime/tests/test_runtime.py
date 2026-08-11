@@ -86,7 +86,7 @@ def _resume_command() -> dict:
         "commandId": "c2",
         "fence": 2,
         "assignment": {"runId": "r1", "attempt": 1},
-        "payload": {"inputGeneration": 7, "deferredToolResults": {"t1": {"ok": True}}, "steeringRequests": []},
+        "payload": {"inputGeneration": 7, "deferredToolResults": [], "steeringRequests": []},
     }
 
 
@@ -555,11 +555,22 @@ class RuntimeResumeCancelTests(unittest.TestCase):
             return iter([{"type": "output_text", "text": "resumed"}, {"type": "usage", "inputTokens": 1, "outputTokens": 2}])
 
         _execute_resume_attempt(_resume_command(), "instance-1", emitted.append, resume_event_source=_resume_source)
-        self.assertEqual(captured["deferred"], {"t1": {"ok": True}})
+        self.assertEqual(captured["deferred"], {})
         self.assertEqual(captured["compiledInput"], {})
         event_types = [candidate["eventType"] for candidate in emitted]
         self.assertEqual(event_types, ["run.resumed", "message.started", "message.delta", "run.usage", "message.completed", "run.completed"])
         self.assertEqual(emitted[0]["payload"], {"inputGeneration": 7})
+
+    def test_resume_rejects_non_array_deferred_results(self) -> None:
+        """Resume fails closed before recovery when deferred results violate the exact contract."""
+        emitted: list[dict] = []
+        command = _resume_command()
+        command["payload"]["deferredToolResults"] = {"t1": {"ok": True}}
+
+        _execute_resume_attempt(command, "instance-1", emitted.append)
+
+        self.assertEqual([candidate["eventType"] for candidate in emitted], ["run.failed"])
+        self.assertEqual(emitted[0]["payload"], {"reason": "invalid_deferred_results"})
 
     def test_resume_seeds_queued_steering_before_the_next_safe_boundary(self) -> None:
         """Resume passes validated owner steering to the executor's pre-model buffer."""

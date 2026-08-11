@@ -62,12 +62,6 @@ export function _AdmitA2uiSurfacePresentation(presentation: A2uiSurfacePresentat
 	return true;
 }
 
-/** Preserve accepted v4 operations for the pinned processor and package-owned catalogue adapters. */
-export function _ToPinnedA2uiOperations(operations: readonly AgUiA2uiOperation[]): AgUiA2uiOperation[]
-{
-	return [...operations];
-}
-
 /** Whether a protocol operation is singular, surface-bound, bounded, and catalogue-safe. */
 function _isAdmittedOperation(operation: AgUiA2uiOperation, surfaceId: string): boolean
 {

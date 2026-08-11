@@ -139,6 +139,12 @@ def execute_resume_attempt(
     input_generation = payload.get("inputGeneration")
     deferred_tool_results = payload.get("deferredToolResults")
     steering_requests = payload.get("steeringRequests")
+    if not isinstance(deferred_tool_results, list):
+        terminal_gate.post_completion(
+            post_candidate,
+            candidate(coordinates, "run.failed", {"reason": "invalid_deferred_results"}),
+        )
+        return
     if (
         not isinstance(steering_requests, list)
         or any(

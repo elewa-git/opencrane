@@ -5,7 +5,7 @@ import { MessageProcessor, Surface, type A2UIClientEvent } from "@a2ui/angular/v
 import { AgUiA2uiSurfaceStates } from "@opencrane/contracts";
 
 import { _ToA2uiDisplayedActionIntent } from "./a2ui-action-intent.js";
-import { _AdmitA2uiSurfacePresentation, _ToPinnedA2uiOperations } from "./a2ui-admission.js";
+import { _AdmitA2uiSurfacePresentation } from "./a2ui-admission.js";
 import type { A2uiDisplayedActionIntent, A2uiSurfacePresentation } from "./a2ui.types.js";
 
 /** Human-readable labels for every finite presentation lifecycle. */
@@ -181,7 +181,7 @@ export class A2uiCanvasComponent
 		try
 		{
 			const pending = presentation.operations.slice(this._appliedOperationCount);
-			this._processor.processMessages(_ToPinnedA2uiOperations(pending));
+			this._processor.processMessages(pending);
 			this._appliedOperationCount = presentation.operations.length;
 			this._adoptedPresentation.set(presentation);
 			this._rejected.set(false);

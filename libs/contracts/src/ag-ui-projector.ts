@@ -1,12 +1,6 @@
 import { EventType } from "@ag-ui/core";
 import { RunEventTypes } from "@opencrane/models/agents";
-import { AG_UI_A2UI_ENVELOPE_VERSION, AG_UI_CHILD_RUN_ENVELOPE_VERSION, AG_UI_TOOL_FAILURE_EVENT, type AgUiProjectionEvent, type AgUiProjectionSourceEvent, type AgUiSseRecord, type AgUiToolFailureEnvelope } from "./ag-ui-projection.types.js";
-
-/** Project one server-authorized canonical event into the small, display-safe AG-UI subset. */
-export function __ProjectAgUiEvent(source: AgUiProjectionSourceEvent): AgUiSseRecord
-{
-	return { ...(source.cursor === undefined ? {} : { id: source.cursor }), event: "ag-ui", data: __ProjectAgUiEvents(source)[0] ?? _Custom(source) };
-}
+import { AG_UI_A2UI_ENVELOPE_VERSION, AG_UI_CHILD_RUN_ENVELOPE_VERSION, AG_UI_TOOL_FAILURE_EVENT, type AgUiProjectionEvent, type AgUiProjectionSourceEvent, type AgUiToolFailureEnvelope } from "./ag-ui-projection.types.js";
 
 /** Project one canonical row into its deterministic ordered AG-UI subframes. */
 export function __ProjectAgUiEvents(source: AgUiProjectionSourceEvent): readonly AgUiProjectionEvent[]
