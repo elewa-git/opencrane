@@ -1,6 +1,8 @@
 import { randomUUID } from "node:crypto";
 
-import { ArtifactRevisionState, ArtifactScanJobState, ConversationAssetState, type Prisma } from "@prisma/client";
+import { ArtifactRevisionState, ArtifactScanJobState, ArtifactState, ConversationAssetState, type Prisma } from "@prisma/client";
+
+import { ___IsSha256ContentAddress } from "@opencrane/models/artifacts";
 
 import { ArtifactScannerVerdict, type ArtifactScannerFailureCommand, type ArtifactScannerJobClaim, type ArtifactScannerResultCommand } from "@opencrane/contracts";
 
@@ -9,20 +11,27 @@ import type { ArtifactScanRepository, ArtifactScanSourceRead } from "./artifact-
 /** Transaction-scoped scan job and quarantine publication repository. */
 export class PrismaArtifactScanRepository implements ArtifactScanRepository
 {
+	/** Transaction client fixed to one surrounding unit of work. */
 	private readonly transaction: Prisma.TransactionClient;
+	/** Claim duration proven to cover download, scan, and result-report deadlines. */
+	private readonly claimLeaseMilliseconds: number;
 
 	/** Binds every delegate to one already-open transaction. */
-	constructor(transaction: Prisma.TransactionClient) { this.transaction = transaction; }
+	constructor(transaction: Prisma.TransactionClient, claimLeaseMilliseconds: number)
+	{
+		this.transaction = transaction;
+		this.claimLeaseMilliseconds = claimLeaseMilliseconds;
+	}
 
 	/** Claims one eligible quarantined revision. */
 	async claim(): Promise<ArtifactScannerJobClaim | null>
 	{
 		const now = await this._databaseNow();
-		const job = await this.transaction.artifactScanJob.findFirst({ where: { OR: [{ state: ArtifactScanJobState.Pending }, { state: ArtifactScanJobState.RetryableFailed, nextAttemptAt: { lte: now } }, { state: ArtifactScanJobState.Claimed, claimExpiresAt: { lte: now } }] }, include: { artifactRevision: true }, orderBy: [{ createdAt: "asc" }, { id: "asc" }] });
-		if (job === null || job.artifactRevision.state !== ArtifactRevisionState.Quarantined) return null;
+		const job = await this.transaction.artifactScanJob.findFirst({ where: { artifactRevision: { state: ArtifactRevisionState.Quarantined }, OR: [{ state: ArtifactScanJobState.Pending }, { state: ArtifactScanJobState.RetryableFailed, nextAttemptAt: { lte: now } }, { state: ArtifactScanJobState.Claimed, claimExpiresAt: { lte: now } }] }, include: { artifactRevision: true }, orderBy: [{ createdAt: "asc" }, { id: "asc" }] });
+		if (job === null) return null;
 		const attempt = job.attempt + 1;
 		const claimFence = randomUUID();
-		const expiresAt = new Date(now.getTime() + 60_000);
+		const expiresAt = new Date(now.getTime() + this.claimLeaseMilliseconds);
 		const changed = await this.transaction.artifactScanJob.updateMany({ where: { id: job.id, attempt: job.attempt, state: job.state }, data: { state: ArtifactScanJobState.Claimed, attempt, claimFence, claimExpiresAt: expiresAt, nextAttemptAt: null, failureCode: null } });
 		if (changed.count !== 1) throw new Error("Artifact scan claim conflict");
 		return { lease: { jobId: job.id, attempt, claimFence, expiresAt: expiresAt.toISOString() }, sourceMediaType: job.artifactRevision.mediaType, sourceByteLength: Number(job.artifactRevision.byteLength) };
@@ -32,9 +41,26 @@ export class PrismaArtifactScanRepository implements ArtifactScanRepository
 	async readSource(command: { readonly jobId: string; readonly attempt: number; readonly claimFence: string }): Promise<ArtifactScanSourceRead | null>
 	{
 		const now = await this._databaseNow();
-		const job = await this.transaction.artifactScanJob.findFirst({ where: { id: command.jobId, state: ArtifactScanJobState.Claimed, attempt: command.attempt, claimFence: command.claimFence, claimExpiresAt: { gt: now } }, include: { artifactRevision: true } });
-		if (job === null || job.artifactRevision.state !== ArtifactRevisionState.Quarantined) return null;
-		return { contentAddress: job.artifactRevision.contentAddress, mediaType: job.artifactRevision.mediaType, byteLength: Number(job.artifactRevision.byteLength) };
+		const job = await this.transaction.artifactScanJob.findFirst({ where: { id: command.jobId, state: ArtifactScanJobState.Claimed, attempt: command.attempt, claimFence: command.claimFence, claimExpiresAt: { gt: now } }, include: { artifactRevision: { include: { artifact: true } } } });
+		const byteLength = job === null ? 0 : Number(job.artifactRevision.byteLength);
+		if (job === null || job.claimExpiresAt === null || job.artifactRevision.state !== ArtifactRevisionState.Quarantined || job.artifactRevision.artifact.state !== ArtifactState.Active || !___IsSha256ContentAddress(job.artifactRevision.contentAddress) || !Number.isSafeInteger(byteLength) || byteLength <= 0) return null;
+		const expiresAtEpochSeconds = Math.floor(job.claimExpiresAt.getTime() / 1_000);
+		if (expiresAtEpochSeconds <= Math.floor(now.getTime() / 1_000)) return null;
+		return {
+			readLease: {
+				leaseId: randomUUID(),
+				siloId: job.artifactRevision.artifact.siloId,
+				artifactId: job.artifactRevision.artifactId,
+				artifactRevisionId: job.artifactRevision.id,
+				contentAddress: job.artifactRevision.contentAddress,
+				byteLength,
+				mediaType: job.artifactRevision.mediaType,
+				action: "artifact.read",
+				expiresAtEpochSeconds,
+			},
+			mediaType: job.artifactRevision.mediaType,
+			byteLength,
+		};
 	}
 
 	/** Publishes clean bytes or terminally rejects unsafe bytes. */
@@ -58,8 +84,8 @@ export class PrismaArtifactScanRepository implements ArtifactScanRepository
 		const job = await this.transaction.artifactScanJob.findUnique({ where: { id: command.jobId } });
 		if (job === null) return "stale";
 		if (job.state === ArtifactScanJobState.RetryableFailed || job.state === ArtifactScanJobState.TerminalFailed) return "idempotent";
-		if (job.state !== ArtifactScanJobState.Claimed || job.attempt !== command.attempt || job.claimFence !== command.claimFence) return "stale";
 		const now = await this._databaseNow();
+		if (job.state !== ArtifactScanJobState.Claimed || job.attempt !== command.attempt || job.claimFence !== command.claimFence || job.claimExpiresAt === null || job.claimExpiresAt <= now) return "stale";
 		const terminal = job.attempt >= 3;
 		const state = terminal ? ArtifactScanJobState.TerminalFailed : ArtifactScanJobState.RetryableFailed;
 		const nextAttemptAt = terminal ? null : new Date(now.getTime() + 5_000);

@@ -8,10 +8,18 @@ import { PrismaArtifactScanRepository } from "./prisma-artifact-scan-repository.
 /** Transaction owner for each short fenced scanner lifecycle operation. */
 export class PrismaArtifactScanUnitOfWork implements ArtifactScanUnitOfWork
 {
+	/** Canonical product database client. */
 	private readonly prisma: PrismaClient;
+	/** Duration of every scanner claim created by repositories in this unit of work. */
+	private readonly claimLeaseMilliseconds: number;
 
 	/** Creates the scanner unit of work. */
-	constructor(prisma: PrismaClient) { this.prisma = prisma; }
+	constructor(prisma: PrismaClient, claimLeaseMilliseconds: number)
+	{
+		if (!Number.isSafeInteger(claimLeaseMilliseconds) || claimLeaseMilliseconds < 60_000 || claimLeaseMilliseconds > 300_000) throw new Error("artifact scanner claim lease must be from 60 through 300 seconds");
+		this.prisma = prisma;
+		this.claimLeaseMilliseconds = claimLeaseMilliseconds;
+	}
 
 	/** Claims one job in a serializable transaction. */
 	claim(): Promise<ArtifactScannerJobClaim | null> { return this._write(function _Claim(repository) { return repository.claim(); }); }
@@ -40,9 +48,10 @@ export class PrismaArtifactScanUnitOfWork implements ArtifactScanUnitOfWork
 	/** Creates the transaction-scoped repository exactly once per operation. */
 	private _transaction<Result>(work: (repository: PrismaArtifactScanRepository) => Promise<Result>, isolationLevel: Prisma.TransactionIsolationLevel): Promise<Result>
 	{
+		const claimLeaseMilliseconds = this.claimLeaseMilliseconds;
 		return this.prisma.$transaction(async function _Transaction(transaction)
 		{
-			return work(new PrismaArtifactScanRepository(transaction));
+			return work(new PrismaArtifactScanRepository(transaction, claimLeaseMilliseconds));
 		}, { isolationLevel });
 	}
 }

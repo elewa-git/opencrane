@@ -4,6 +4,7 @@ import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 
 import type { ArtifactScannerClaimCommand, ArtifactScannerFailureCommand, ArtifactScannerJobClaim, ArtifactScannerResultCommand } from "@opencrane/contracts";
+import { ___DoWithTrace } from "@opencrane/backend/observability";
 
 import type { ArtifactScannerRemote, ArtifactScannerRemoteConfig } from "./scanner.types.js";
 
@@ -21,36 +22,45 @@ export function _CreateArtifactScannerRemote(config: ArtifactScannerRemoteConfig
 /** Claim one scan job. */
 async function _Claim(config: ArtifactScannerRemoteConfig, signal: AbortSignal): Promise<ArtifactScannerJobClaim | null>
 {
-	const response = await fetch(`${config.openCraneInternalUrl}/api/internal/artifact-scanner/jobs:claim`, { method: "POST", headers: await _Headers(config), signal: AbortSignal.any([signal, AbortSignal.timeout(config.requestTimeoutMilliseconds)]) });
-	if (response.status === 204) return null;
-	if (!response.ok) throw new Error(`artifact scan claim failed with HTTP ${response.status}`);
-	const value = await response.json() as ArtifactScannerJobClaim;
-	if (!_ValidClaim(value)) throw new Error("artifact scan claim had an invalid shape");
-	return value;
+	return ___DoWithTrace("artifact-scanner.job.claim", {}, async function _ClaimJob(): Promise<ArtifactScannerJobClaim | null>
+	{
+		const response = await fetch(`${config.openCraneInternalUrl}/api/internal/artifact-scanner/jobs:claim`, { method: "POST", headers: await _Headers(config), signal: AbortSignal.any([signal, AbortSignal.timeout(config.requestTimeoutMilliseconds)]) });
+		if (response.status === 204) return null;
+		if (!response.ok) throw new Error(`artifact scan claim failed with HTTP ${response.status}`);
+		const value = await response.json() as ArtifactScannerJobClaim;
+		if (!_ValidClaim(value)) throw new Error("artifact scan claim had an invalid shape");
+		return value;
+	});
 }
 
 /** Read exact source bytes with no storage coordinate exposure. */
 async function _ReadSource(config: ArtifactScannerRemoteConfig, claim: ArtifactScannerJobClaim, destinationPath: string, maximumBytes: number, signal: AbortSignal): Promise<void>
 {
-	if (claim.sourceByteLength > maximumBytes) throw new Error("artifact scan source exceeds configured maximum");
-	const response = await fetch(`${config.openCraneInternalUrl}/api/internal/artifact-scanner/jobs/${encodeURIComponent(claim.lease.jobId)}/source`, { method: "POST", headers: await _Headers(config, claim.lease), signal: AbortSignal.any([signal, AbortSignal.timeout(config.requestTimeoutMilliseconds)]) });
-	if (!response.ok || response.body === null) throw new Error(`artifact scan source failed with HTTP ${response.status}`);
-	let byteLength = 0;
-	const bound = new Transform({ transform(chunk: Uint8Array, _encoding, callback)
+	return ___DoWithTrace("artifact-scanner.source.read", { jobId: claim.lease.jobId, attempt: claim.lease.attempt, sourceByteLength: claim.sourceByteLength }, async function _ReadClaimedSource(): Promise<void>
 	{
-		byteLength += chunk.byteLength;
-		if (byteLength > claim.sourceByteLength || byteLength > maximumBytes) callback(new Error("artifact scan source exceeded claim"));
-		else callback(null, chunk);
-	} });
-	await pipeline(Readable.fromWeb(response.body as never), bound, createWriteStream(destinationPath, { flags: "wx", mode: 0o600 }), { signal });
-	if (byteLength !== claim.sourceByteLength) throw new Error("artifact scan source length did not match claim");
+		if (claim.sourceByteLength > maximumBytes) throw new Error("artifact scan source exceeds configured maximum");
+		const response = await fetch(`${config.openCraneInternalUrl}/api/internal/artifact-scanner/jobs/${encodeURIComponent(claim.lease.jobId)}/source`, { method: "POST", headers: await _Headers(config, claim.lease), signal: AbortSignal.any([signal, AbortSignal.timeout(config.requestTimeoutMilliseconds)]) });
+		if (!response.ok || response.body === null) throw new Error(`artifact scan source failed with HTTP ${response.status}`);
+		let byteLength = 0;
+		const bound = new Transform({ transform(chunk: Uint8Array, _encoding, callback)
+		{
+			byteLength += chunk.byteLength;
+			if (byteLength > claim.sourceByteLength || byteLength > maximumBytes) callback(new Error("artifact scan source exceeded claim"));
+			else callback(null, chunk);
+		} });
+		await pipeline(Readable.fromWeb(response.body as never), bound, createWriteStream(destinationPath, { flags: "wx", mode: 0o600 }), { signal });
+		if (byteLength !== claim.sourceByteLength) throw new Error("artifact scan source length did not match claim");
+	});
 }
 
 /** Submit one fenced result or failure. */
 async function _SendJson(config: ArtifactScannerRemoteConfig, path: string, command: ArtifactScannerResultCommand | ArtifactScannerFailureCommand, signal: AbortSignal): Promise<void>
 {
-	const response = await fetch(`${config.openCraneInternalUrl}${path}`, { method: "PUT", headers: await _Headers(config), body: JSON.stringify(command), signal: AbortSignal.any([signal, AbortSignal.timeout(config.requestTimeoutMilliseconds)]) });
-	if (response.status !== 204) throw new Error(`artifact scan result failed with HTTP ${response.status}`);
+	return ___DoWithTrace("artifact-scanner.result.report", { jobId: command.jobId, attempt: command.attempt }, async function _ReportResult(): Promise<void>
+	{
+		const response = await fetch(`${config.openCraneInternalUrl}${path}`, { method: "PUT", headers: await _Headers(config), body: JSON.stringify(command), signal: AbortSignal.any([signal, AbortSignal.timeout(config.requestTimeoutMilliseconds)]) });
+		if (response.status !== 204) throw new Error(`artifact scan result failed with HTTP ${response.status}`);
+	});
 }
 
 /** Read the rotating token for every request. */

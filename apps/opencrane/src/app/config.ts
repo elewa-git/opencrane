@@ -168,6 +168,9 @@ export function _ReadProcessConfig(): OpenCraneProcessConfig
 		obot: _readObotConfig(),
 		publicPort: Number(process.env.PORT ?? "8080"),
 		runtime: {
+			artifactScannerEnabled: process.env.ARTIFACT_SCANNER_ENABLED === "true",
+			artifactScannerClaimLeaseMilliseconds: _readBoundedSeconds("ARTIFACT_SCANNER_CLAIM_LEASE_SECONDS", 300, 60, 300),
+			artifactScannerNamespace: process.env.ARTIFACT_SCANNER_NAMESPACE?.trim(),
 			artifactPreprocessorEnabled: process.env.ARTIFACT_PREPROCESSOR_ENABLED === "true",
 			artifactPreprocessorMaximumOutputBytes: _readArtifactPreprocessorBodyLimit(),
 			artifactPreprocessorNamespace: process.env.ARTIFACT_PREPROCESSOR_NAMESPACE?.trim(),

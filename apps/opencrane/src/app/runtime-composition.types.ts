@@ -20,6 +20,8 @@ export interface InternalRuntimeComposition
 	readonly skillAuthoringCompletion: Router;
 	/** Optional preprocessor router, present only when the restricted worker plane is enabled. */
 	readonly artifactPreprocessor: Router | null;
+	/** Optional malware-scanner router, present only when its isolated worker plane is enabled. */
+	readonly artifactScanner: Router | null;
 	/** Optional router that enforces replay policy; the controller decides whether it is mounted. */
 	readonly conversationReplay: Router | null;
 	/** Router that resolves a browser channel for a workload-authenticated caller, alongside the replay receiver. */
@@ -46,4 +48,4 @@ export type SkillWorkloadRuntimeComposition = Pick<
 export type RuntimeProtocolComposition = Pick<InternalRuntimeComposition, "runtimeBootstrap" | "runtimeStream">;
 
 /** The subset of routers built by the optional worker and replay composition step. */
-export type OptionalRuntimeComposition = Pick<InternalRuntimeComposition, "artifactPreprocessor" | "channelTargetResolver" | "conversationReplay">;
+export type OptionalRuntimeComposition = Pick<InternalRuntimeComposition, "artifactPreprocessor" | "artifactScanner" | "channelTargetResolver" | "conversationReplay">;

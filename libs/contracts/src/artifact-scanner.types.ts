@@ -1,3 +1,9 @@
+/** Audience accepted only for the isolated malware-scanner workload. */
+export const ARTIFACT_SCANNER_PROJECTED_TOKEN_AUDIENCE = "opencrane-artifact-scanner";
+
+/** Fixed ServiceAccount used only by the isolated malware-scanner workload. */
+export const ARTIFACT_SCANNER_SERVICE_ACCOUNT_NAME = "artifact-scanner";
+
 /** Retry-stable coordinates for one server-owned artifact scan claim. */
 export interface ArtifactScannerClaimCommand
 {

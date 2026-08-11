@@ -45,6 +45,7 @@
     { "path": "apps/opencrane/src/infra/artifacts/artifact-upload.factory.ts", "owner": "apps/opencrane", "classification": "route-composition" },
     { "path": "apps/opencrane/src/infra/artifacts/artifact-mounted-key.loader.ts", "owner": "apps/opencrane", "classification": "artifact-broker-composition" },
     { "path": "apps/opencrane/src/infra/artifacts/artifact-preprocess-source-broker.factory.ts", "owner": "apps/opencrane", "classification": "artifact-broker-composition" },
+    { "path": "apps/opencrane/src/infra/artifacts/artifact-scan-source-broker.factory.ts", "owner": "apps/opencrane", "classification": "artifact-broker-composition" },
     { "path": "apps/opencrane/src/infra/artifacts/artifact-read-lease-signer.factory.ts", "owner": "apps/opencrane", "classification": "artifact-broker-composition" },
     { "path": "apps/opencrane/src/infra/artifacts/artifact-service-read-port.factory.ts", "owner": "apps/opencrane", "classification": "artifact-broker-composition" },
     { "path": "apps/opencrane/src/infra/memory/memory-gateway-client.factory.ts", "owner": "apps/opencrane", "classification": "process-composition" },
@@ -92,6 +93,13 @@
     { "path": "apps/artifact-preprocessor/src/instrument.ts", "owner": "apps/artifact-preprocessor", "classification": "process-instrumentation" },
     { "path": "apps/artifact-preprocessor/src/log.ts", "owner": "apps/artifact-preprocessor", "classification": "process-logging" },
     { "path": "apps/artifact-preprocessor/vitest.config.ts", "owner": "apps/artifact-preprocessor", "classification": "test-config" },
+
+    { "path": "apps/artifact-scanner/src/config.ts", "owner": "apps/artifact-scanner", "classification": "app-config" },
+    { "path": "apps/artifact-scanner/src/config.types.ts", "owner": "apps/artifact-scanner", "classification": "app-config" },
+    { "path": "apps/artifact-scanner/src/index.ts", "owner": "apps/artifact-scanner", "classification": "process-entrypoint" },
+    { "path": "apps/artifact-scanner/src/instrument.ts", "owner": "apps/artifact-scanner", "classification": "process-instrumentation" },
+    { "path": "apps/artifact-scanner/src/log.ts", "owner": "apps/artifact-scanner", "classification": "process-logging" },
+    { "path": "apps/artifact-scanner/vitest.config.ts", "owner": "apps/artifact-scanner", "classification": "test-config" },
 
     { "path": "apps/agent-controller/src/config.ts", "owner": "apps/agent-controller", "classification": "app-config" },
     { "path": "apps/agent-controller/src/config.types.ts", "owner": "apps/agent-controller", "classification": "app-config" },

@@ -164,9 +164,10 @@ export function _RegisterInternalRoutes(app: Express, prisma: PrismaClient, auth
 		{ method: "use", path: "/api/internal/agent-runtime", handler: runtime.runtimeStream },
 	];
 	const internalWorkerRoutes = _OptionalRoute("/api/internal/artifact-preprocessor", runtime.artifactPreprocessor);
+	const internalScannerRoutes = _OptionalRoute("/api/internal/artifact-scanner", runtime.artifactScanner);
 	const internalChannelTargetRoutes = _OptionalRoute("/api/internal/channel-targets:resolve", runtime.channelTargetResolver);
 	const internalReplayRoutes = _OptionalRoute("/api/internal/conversation-replay", runtime.conversationReplay);
-	_MountRouteAreas(app, [internalControllerRoutes, internalRuntimeRoutes, internalWorkerRoutes, internalChannelTargetRoutes, internalReplayRoutes]);
+	_MountRouteAreas(app, [internalControllerRoutes, internalRuntimeRoutes, internalWorkerRoutes, internalScannerRoutes, internalChannelTargetRoutes, internalReplayRoutes]);
 }
 
 /** Return a one-entry route list for a router, or an empty list when the router is null. */

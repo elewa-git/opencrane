@@ -30,7 +30,8 @@ It supplies the outer layers of the request pipeline:
 It owns: a **global error handler** that turns thrown errors into consistent HTTP responses; a
 Zod-backed **public request-body wrapper** that hands parsed models to authorized route handlers and
 returns bounded, form-mappable field issues; a sanitized malformed-JSON response that never logs the
-raw caller body; a `/healthz` **liveness/readiness probe** that checks the database is reachable (a
+raw caller body; a sanitized payload-too-large response that honours each route's byte ceiling
+without logging retained caller bytes; a `/healthz` **liveness/readiness probe** that checks the database is reachable (a
 probe is the small endpoint the cluster polls to know the process is alive); a **per-IP rate limiter** (caps how many
 requests one client address may make); **transport-security** middleware (security response headers);
 a **trusted-proxy** parser (works out the real client IP when the server runs behind a load balancer,

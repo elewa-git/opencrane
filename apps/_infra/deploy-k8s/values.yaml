@@ -272,6 +272,34 @@ artifactPreprocessor:
       cpu: 1000m
       memory: 512Mi
 
+# -- Outbound-only malware scanner. It receives brokered quarantined bytes, scans them against the
+# definitions pinned into its immutable image, and returns only a clean/rejected outcome.
+artifactScanner:
+  enabled: false
+  # -- Isolated restricted namespace. Empty derives `<release-fullname>-artifact-scanning` and it
+  # must never equal the trusted server namespace.
+  namespace: ""
+  image:
+    repository: ghcr.io/elewa-git/opencrane-artifact-scanner
+    digest: ""
+    pullPolicy: IfNotPresent
+  replicas: 1
+  projectedTokenTtlSeconds: 600
+  claimLeaseSeconds: 300
+  scratchSize: 256Mi
+  scannerVersion: "clamav-1.5.2-pinned-definitions"
+  pollIntervalMs: 1000
+  requestTimeoutMs: 30000
+  maximumSourceBytes: 209715200
+  scanTimeoutMs: 120000
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: 2000m
+      memory: 1536Mi
+
 # -- Managed runtime-plane chart. It creates no long-lived workload: only the dedicated namespace,
 # connector-scoped identity, and default-deny policy used by controller-created managed Jobs.
 managedAgentRuntimePlane:

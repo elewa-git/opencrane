@@ -30,7 +30,7 @@ export async function __RunArtifactScanner(dependencies: ArtifactScannerDependen
 /** Read and scan one server-selected quarantined revision. */
 export async function __ProcessArtifactScanJob(dependencies: ArtifactScannerDependencies, claim: ArtifactScannerJobClaim, signal: AbortSignal): Promise<void>
 {
-	await ___DoWithTrace("artifact_scanner.job.process", { jobId: claim.lease.jobId, attempt: claim.lease.attempt, sourceByteLength: claim.sourceByteLength }, async function _process()
+	await ___DoWithTrace("artifact-scanner.job.process", { jobId: claim.lease.jobId, attempt: claim.lease.attempt, sourceByteLength: claim.sourceByteLength }, async function _process()
 	{
 		const sourcePath = join(dependencies.scratchDirectory, `${randomUUID()}.scan`);
 		const command = _ClaimCommand(claim);

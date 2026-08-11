@@ -1,6 +1,6 @@
 import { Router, type Request, type Response } from "express";
 
-import { ArtifactScannerVerdict, type ArtifactScannerClaimCommand, type ArtifactScannerFailureCommand, type ArtifactScannerResultCommand } from "@opencrane/contracts";
+import { ARTIFACT_SCANNER_PROJECTED_TOKEN_AUDIENCE, ARTIFACT_SCANNER_SERVICE_ACCOUNT_NAME, ArtifactScannerVerdict, type ArtifactScannerClaimCommand, type ArtifactScannerFailureCommand, type ArtifactScannerResultCommand } from "@opencrane/contracts";
 
 import type { ArtifactScannerRouterDependencies } from "./artifact-scanning.types.js";
 
@@ -21,8 +21,9 @@ async function _Handle(request: Request, response: Response, dependencies: Artif
 	try
 	{
 		const token = request.header("authorization")?.match(/^Bearer (.+)$/u)?.[1];
-		const identity = token ? await dependencies.tokenReviewer.review(token, "opencrane-artifact-scanner") : null;
-		if (identity === null || identity.namespace !== dependencies.expectedNamespace || identity.serviceAccountName !== "artifact-scanner") { response.status(401).json({ error: "unauthorized" }); return; }
+		const identity = token ? await dependencies.tokenReviewer.__Review(token) : null;
+		const expectedUsername = `system:serviceaccount:${dependencies.expectedNamespace}:${ARTIFACT_SCANNER_SERVICE_ACCOUNT_NAME}`;
+		if (identity === null || identity.username !== expectedUsername || identity.namespace !== dependencies.expectedNamespace || identity.serviceAccountName !== ARTIFACT_SCANNER_SERVICE_ACCOUNT_NAME || !identity.audiences.includes(ARTIFACT_SCANNER_PROJECTED_TOKEN_AUDIENCE)) { response.status(401).json({ error: "unauthorized" }); return; }
 		await work();
 	}
 	catch (err)

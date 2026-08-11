@@ -68,6 +68,20 @@ spec:
         - protocol: TCP
           port: {{ .Values.clustertenantManager.service.internalPort }}
     {{- end }}
+    {{- if .Values.artifactScanner.enabled }}
+    # The dedicated scanner can reach only the brokered internal API.
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ include "opencrane.artifactScanner.namespace" . }}
+          podSelector:
+            matchLabels:
+              {{- include "opencrane.selectorLabels" . | nindent 14 }}
+              app.kubernetes.io/component: artifact-scanner
+      ports:
+        - protocol: TCP
+          port: {{ .Values.clustertenantManager.service.internalPort }}
+    {{- end }}
     # The controller authenticates its fixed KSA and projected audience before it may claim or
     # commit an assignment; this rule exposes only the internal listener at the L3/4 floor.
     - from:

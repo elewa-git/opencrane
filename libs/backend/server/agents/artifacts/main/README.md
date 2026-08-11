@@ -141,6 +141,10 @@ The preprocessor router is mounted only on the internal listener when the worker
 NetworkPolicy admits the exact dedicated namespace, and TokenReview binds the fixed ServiceAccount
 and audience. App composition alone may exchange brokered bytes with artifact-service.
 
+The scanner router follows the same internal-only rule in its own restricted namespace and with a
+different fixed audience. It allocates read facts only under a live scan fence, keeps the signed
+lease inside the server, and accepts no result or failure after database-owned claim expiry.
+
 ## Dependency direction
 
 Tagged `scope:artifacts`: it may depend only on `scope:artifacts` (the byte store, filesystem, and
@@ -150,7 +154,7 @@ resolution), and `scope:shared` — never on apps or other server domains.
 ## Data & persistence
 
 Owns `Artifact`, `ArtifactRevision`, `ArtifactRevisionParent`, `ArtifactUploadLease`,
-`ArtifactPreprocessJob`, and `ArtifactOutboxEvent` in
+`ArtifactPreprocessJob`, `ArtifactScanJob`, and `ArtifactOutboxEvent` in
 `apps/opencrane/prisma/schema/artifacts.prisma`. A companion SQL authority test in
 `tests/artifact-authority.sql` proves job fencing, exact output binding, lease finalization, and
 immutable source lineage. Production TypeScript uses only typed Prisma delegates; PostgreSQL-specific
@@ -160,4 +164,4 @@ clock and nonblocking claim semantics remain in the reviewed clean target baseli
 
 - Parent index: [agents](../../README.md)
 - Siblings: [skills](../../skills/main/README.md) · [agent-services](../../agent-services/main/README.md) · [channel-targets](../../channel-targets/main/README.md)
-- Worker library: [artifact preprocessor](../../../../artifacts/preprocessor/main/README.md)
+- Worker libraries: [artifact preprocessor](../../../../artifacts/preprocessor/main/README.md) · [artifact scanner](../../../../artifacts/scanner/main/README.md)

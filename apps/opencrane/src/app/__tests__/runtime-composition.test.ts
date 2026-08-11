@@ -26,10 +26,20 @@ vi.mock("../../infra/artifacts/artifact-preprocess-source-broker.factory.js", fu
 	};
 });
 
+vi.mock("../../infra/artifacts/artifact-scan-source-broker.factory.js", function _MockArtifactScanSourceBrokerFactory()
+{
+	return {
+		_CreateArtifactScanSourceBroker: function _CreateArtifactScanSourceBroker() { return {}; },
+	};
+});
+
 /** Build the smallest valid workload-facing configuration used by composition tests. */
 function _RuntimeConfig(): InternalRuntimeConfig
 {
 	return {
+		artifactScannerEnabled: false,
+		artifactScannerClaimLeaseMilliseconds: 300_000,
+		artifactScannerNamespace: undefined,
 		artifactPreprocessorEnabled: false,
 		artifactPreprocessorMaximumOutputBytes: 1_024,
 		artifactPreprocessorNamespace: undefined,
@@ -68,6 +78,7 @@ describe("_CreateInternalRuntimeComposition", function _internalRuntimeCompositi
 		expect(composition.runtimeBootstrap).toEqual(expect.any(Function));
 		expect(composition.runtimeStream).toEqual(expect.any(Function));
 		expect(composition.artifactPreprocessor).toBeNull();
+		expect(composition.artifactScanner).toBeNull();
 		expect(composition.channelTargetResolver).toBeNull();
 		expect(composition.conversationReplay).toBeNull();
 	});
@@ -79,6 +90,13 @@ describe("_CreateInternalRuntimeComposition", function _internalRuntimeCompositi
 		expect(function _composeCrossedWorkerPlane() { _CreateInternalRuntimeComposition({} as PrismaClient, {} as AuthenticationV1Api, config, new __UnavailableMemoryGatewayClient()); }).toThrow(/different from POD_NAMESPACE/);
 	});
 
+	it("refuses an enabled scanner plane that crosses into the trusted server namespace", function _rejectsCrossedScannerPlane()
+	{
+		const config = { ..._RuntimeConfig(), artifactScannerEnabled: true, artifactScannerNamespace: "opencrane-server" };
+
+		expect(function _composeCrossedScannerPlane() { _CreateInternalRuntimeComposition({} as PrismaClient, {} as AuthenticationV1Api, config, new __UnavailableMemoryGatewayClient()); }).toThrow(/different from POD_NAMESPACE/);
+	});
+
 	it("composes both optional planes only after their concrete boundaries are configured", function _composesOptionalPlanes()
 	{
 		vi.stubEnv("OPENCRANE_MEMBERSHIP_MODE", "standalone");
@@ -87,14 +105,24 @@ describe("_CreateInternalRuntimeComposition", function _internalRuntimeCompositi
 			..._RuntimeConfig(),
 			artifactPreprocessorEnabled: true,
 			artifactPreprocessorNamespace: "artifact-preprocessor",
+			artifactScannerEnabled: true,
+			artifactScannerNamespace: "artifact-scanner",
 			channelTargets: { channelProxyServiceAccountName: "channel-proxy", invocationContextTtlMilliseconds: 60_000, receiverEndpoint: "http://opencrane-server.opencrane-server.svc.cluster.local:8081/api/internal/conversation-replay", receiverId: "internal-channel-replay", siloId: "silo-1", trustedHost: "acme.example.com" },
 		};
 
 		const composition = _CreateInternalRuntimeComposition({} as PrismaClient, {} as AuthenticationV1Api, config, new __UnavailableMemoryGatewayClient());
 
 		expect(composition.artifactPreprocessor).toEqual(expect.any(Function));
+		expect(composition.artifactScanner).toEqual(expect.any(Function));
 		expect(composition.channelTargetResolver).toEqual(expect.any(Function));
 		expect(composition.conversationReplay).toEqual(expect.any(Function));
+	});
+
+	it("refuses an enabled scanner plane without a separate namespace", function _rejectsScannerWithoutNamespace()
+	{
+		const config = { ..._RuntimeConfig(), artifactScannerEnabled: true, artifactScannerNamespace: undefined };
+
+		expect(function _composeScannerWithoutNamespace() { _CreateInternalRuntimeComposition({} as PrismaClient, {} as AuthenticationV1Api, config, new __UnavailableMemoryGatewayClient()); }).toThrow(/restricted workload namespace must be valid/);
 	});
 
 	it("refuses an enabled worker plane without a separate namespace", function _rejectsWorkerWithoutNamespace()

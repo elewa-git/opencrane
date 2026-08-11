@@ -20,6 +20,9 @@ dependencies:
 - name: opencrane-artifact-preprocessor
   repository: file://../../artifact-preprocessor/helm
   version: 0.8.0
+- name: opencrane-artifact-scanner
+  repository: file://../../artifact-scanner/helm
+  version: 0.8.0
 - name: opencrane-agent-controller
   repository: file://../../agent-controller/helm
   version: 0.8.0
@@ -41,5 +44,5 @@ dependencies:
 - name: opencrane-obot
   repository: file://../obot/helm
   version: 0.8.0
-digest: sha256:016aa6f4286d1c35f1f46cfa93189072222395fdd0c553ef1530807780ad16de
-generated: "2026-08-10T13:41:28.091187+03:00"
+digest: sha256:ed5aac19c97a4ab9ae2f4d7511e9fa15aaa24a1dcf74e4f8df51b3ea7b61398d
+generated: "2026-08-11T23:48:06.065929+03:00"

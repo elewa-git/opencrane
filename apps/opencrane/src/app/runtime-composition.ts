@@ -10,11 +10,12 @@ import { PrismaRuntimeBootstrapExchange, __CreateRuntimeBootstrapRouter } from "
 import { CONVERSATION_PROJECTION_CLOCK, CONVERSATION_PROJECTION_LIMITS } from "@opencrane/backend/conversations/projection";
 import { _CreateConversationReplayRepository, __CreateConversationReplayRouter } from "@opencrane/backend/server/conversations";
 import { PrismaChannelTargetAuthorityUnitOfWork } from "@opencrane/backend/server/agents/channel-targets";
-import { _CreateArtifactPreprocessAuthority, __CreateArtifactPreprocessorRouter } from "@opencrane/backend/server/agents/artifacts";
-import { _CreateAgentControllerTokenReviewer, _CreateArtifactPreprocessorTokenReviewer, _CreateRuntimeTokenReviewer, _CreateSkillWorkloadTokenReviewer, _ValidateIsolatedWorkloadNamespace, _ValidateRuntimeIdentityNamespaces, type RuntimeIdentityNamespaces } from "@opencrane/backend/server/infra/workload-identity";
+import { _CreateArtifactPreprocessAuthority, PrismaArtifactScanUnitOfWork, __CreateArtifactPreprocessorRouter, __CreateArtifactScannerRouter } from "@opencrane/backend/server/agents/artifacts";
+import { _CreateAgentControllerTokenReviewer, _CreateArtifactPreprocessorTokenReviewer, _CreateArtifactScannerTokenReviewer, _CreateRuntimeTokenReviewer, _CreateSkillWorkloadTokenReviewer, _ValidateIsolatedWorkloadNamespace, _ValidateRuntimeIdentityNamespaces, type RuntimeIdentityNamespaces } from "@opencrane/backend/server/infra/workload-identity";
 import type { MemoryGatewayClient } from "@opencrane/backend/server/infra/memory-gateway-client";
 
 import { _CreateArtifactPreprocessSourceBroker } from "../infra/artifacts/artifact-preprocess-source-broker.factory.js";
+import { _CreateArtifactScanSourceBroker } from "../infra/artifacts/artifact-scan-source-broker.factory.js";
 import { _CreateArtifactPreprocessOutputBroker, _CreateSkillAuthoringArtifactReader } from "../infra/artifacts/artifact-upload.factory.js";
 import { _CreateChannelTargetResolver } from "./channel-target-composition.js";
 import type { InternalRuntimeConfig } from "./config.types.js";
@@ -163,6 +164,9 @@ function _CreateOptionalRuntimeComposition(prisma: PrismaClient, authApi: k8s.Au
 	const artifactPreprocessorNamespace = config.artifactPreprocessorEnabled
 		? _ValidateIsolatedWorkloadNamespace(config.artifactPreprocessorNamespace, serverNamespace)
 		: null;
+	const artifactScannerNamespace = config.artifactScannerEnabled
+		? _ValidateIsolatedWorkloadNamespace(config.artifactScannerNamespace, serverNamespace)
+		: null;
 	const artifactPreprocessRepository = _CreateArtifactPreprocessAuthority(prisma);
 	return {
 		channelTargetResolver: config.channelTargets === null
@@ -187,6 +191,15 @@ function _CreateOptionalRuntimeComposition(prisma: PrismaClient, authApi: k8s.Au
 				repository: artifactPreprocessRepository,
 				sourceBroker: _CreateArtifactPreprocessSourceBroker(artifactPreprocessRepository),
 				outputBroker: _CreateArtifactPreprocessOutputBroker(prisma, config.artifactPreprocessorMaximumOutputBytes),
+				logger: _log,
+			}),
+		artifactScanner: artifactScannerNamespace === null
+			? null
+			: __CreateArtifactScannerRouter({
+				authority: new PrismaArtifactScanUnitOfWork(prisma, config.artifactScannerClaimLeaseMilliseconds),
+				tokenReviewer: _CreateArtifactScannerTokenReviewer(authApi, artifactScannerNamespace),
+				sourceBroker: _CreateArtifactScanSourceBroker(),
+				expectedNamespace: artifactScannerNamespace,
 				logger: _log,
 			}),
 	};
