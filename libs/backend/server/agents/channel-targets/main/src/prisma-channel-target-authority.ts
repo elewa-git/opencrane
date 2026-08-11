@@ -2,7 +2,7 @@ import { ChannelInvocationAction, ConversationLifecycle, ConversationMode, Prism
 
 import { ___DoWithTrace, ___GetActiveSpan } from "@opencrane/backend/observability";
 
-import type { ChannelConversationAuthority, ChannelTargetAuthorityRepository, ChannelTargetAuthorityUnitOfWork, ConsumeChannelInvocationContextCommand, ConsumeChannelInvocationContextResult, IssueChannelInvocationContextCommand, IssueChannelInvocationContextResult } from "./channel-target-resolution.types.js";
+import type { ChannelConversationAuthority, ChannelTargetAuthorityRepository, ChannelTargetAuthorityUnitOfWork, ConsumeChannelInvocationContextCommand, ConsumeChannelInvocationContextResult, IssueChannelInvocationContextCommand, IssueChannelInvocationContextResult, ReconcileChannelRuntimeRoutesCommand } from "./channel-target-resolution.types.js";
 
 /** Accepts only credential-free HTTP(S) endpoints inside configured runtime DNS suffixes. */
 function _endpointIsAllowed(endpoint: string, allowedSuffixes: readonly string[]): boolean
@@ -41,31 +41,41 @@ export class PrismaChannelTargetAuthorityUnitOfWork implements ChannelTargetAuth
 		return this._withRepository(function _Read(repository) { return repository.getConversationAuthority(conversationId); });
 	}
 
+	/** Reconciles one stable receiver into distinct service-owned route rows at process startup. */
+	async reconcileRuntimeRoutes(command: ReconcileChannelRuntimeRoutesCommand): Promise<number>
+	{
+		if (!command.receiverId.trim() || !_endpointIsAllowed(command.endpoint, command.allowedRouteHostSuffixes))
+		{
+			throw new Error("channel runtime receiver configuration is invalid");
+		}
+		const self = this;
+		return ___DoWithTrace("channel.routes.reconcile", {}, async function _ReconcileRoutes()
+		{
+			const count = await self._withRepository(function _Reconcile(repository) { return repository.reconcileRuntimeRoutes(command); });
+			___GetActiveSpan()?.setAttribute("route_count", count);
+			return count;
+		});
+	}
+
 	/** Rechecks every mutable authority coordinate while persisting only the opaque digest. */
 	async issueInvocationContextAtomically(command: IssueChannelInvocationContextCommand): Promise<IssueChannelInvocationContextResult>
 	{
 		const self = this;
 		return ___DoWithTrace("channel.context.issue", {}, async function _IssueContext()
 		{
-			// 1. Run the authority transaction inside the operation span without attaching its command.
 			const result = await self._withRepository(function _Issue(repository) { return repository.issueInvocationContextAtomically(command); });
-
-			// 2. Retain only the terminal category; identifiers, digests, and endpoints stay out of OTLP.
 			___GetActiveSpan()?.setAttribute("outcome", result.status);
 			return result;
 		});
 	}
 
-	/** Consumes one digest while requiring the receiving runtime's exact active event route. */
+	/** Consumes one digest while requiring the stable receiver and exact active service route. */
 	async consumeInvocationContextAtomically(command: ConsumeChannelInvocationContextCommand): Promise<ConsumeChannelInvocationContextResult>
 	{
 		const self = this;
 		return ___DoWithTrace("channel.context.consume", {}, async function _ConsumeContext()
 		{
-			// 1. Consume the bearer digest inside the operation span without attaching its command.
 			const result = await self._withRepository(function _Consume(repository) { return repository.consumeInvocationContextAtomically(command); });
-
-			// 2. Retain only the terminal category; the presented digest and returned authority stay private.
 			___GetActiveSpan()?.setAttribute("outcome", result.status);
 			return result;
 		});
@@ -108,6 +118,26 @@ class PrismaChannelTargetAuthorityTransactionRepository implements ChannelTarget
 		};
 	}
 
+	/** Reconciles the configured receiver and retires any previously current receiver atomically. */
+	async reconcileRuntimeRoutes(command: ReconcileChannelRuntimeRoutesCommand): Promise<number>
+	{
+		const services = await this.transaction.agentService.findMany({ select: { id: true, siloId: true } });
+		const registeredAt = new Date();
+		for (const service of services)
+		{
+			await this.transaction.channelRuntimeRoute.updateMany({
+				where: { siloId: service.siloId, agentServiceId: service.id, action: ChannelInvocationAction.EventsRead, isCurrent: true, receiverId: { not: command.receiverId } },
+				data: { isCurrent: false, revokedAt: registeredAt },
+			});
+			await this.transaction.channelRuntimeRoute.upsert({
+				where: { receiverId_siloId_agentServiceId_action: { receiverId: command.receiverId, siloId: service.siloId, agentServiceId: service.id, action: ChannelInvocationAction.EventsRead } },
+				create: { receiverId: command.receiverId, siloId: service.siloId, agentServiceId: service.id, action: ChannelInvocationAction.EventsRead, endpoint: command.endpoint },
+				update: { endpoint: command.endpoint, isCurrent: true, revokedAt: null, registeredAt },
+			});
+		}
+		return services.length;
+	}
+
 	/** Rechecks every mutable authority coordinate while persisting only the opaque digest. */
 	async issueInvocationContextAtomically(command: IssueChannelInvocationContextCommand): Promise<IssueChannelInvocationContextResult>
 	{
@@ -126,16 +156,14 @@ class PrismaChannelTargetAuthorityTransactionRepository implements ChannelTarget
 		}
 
 		const routes = await this.transaction.channelRuntimeRoute.findMany({
-			where: { siloId: command.siloId, agentServiceId: command.agentServiceId, action: ChannelInvocationAction.EventsRead, isCurrent: true, revokedAt: null, expiresAt: { gt: new Date(command.nowEpochMs) } },
+			where: { receiverId: command.receiverId, siloId: command.siloId, agentServiceId: command.agentServiceId, action: ChannelInvocationAction.EventsRead, isCurrent: true, revokedAt: null },
 			take: 2,
 		});
 		if (routes.length === 0) return { status: "route_unavailable" } as const;
 		if (routes.length !== 1) return { status: "route_ambiguous" } as const;
 		const route = routes[0]!;
-		if (!_endpointIsAllowed(route.endpoint, command.allowedRouteHostSuffixes) || route.expiresAt.getTime() < command.expiresAtEpochMs)
-		{
-			return { status: "route_unavailable" } as const;
-		}
+		if (!_endpointIsAllowed(route.endpoint, command.allowedRouteHostSuffixes)) return { status: "route_unavailable" } as const;
+
 		const context = await this.transaction.channelInvocationContext.create({
 			data: {
 				digest: command.digest,
@@ -145,33 +173,34 @@ class PrismaChannelTargetAuthorityTransactionRepository implements ChannelTarget
 				agentServiceId: command.agentServiceId,
 				action: ChannelInvocationAction.EventsRead,
 				routeId: route.id,
+				receiverId: route.receiverId,
 				membershipRevision: command.membershipRevision,
 				authorizationDigest: command.authorizationDigest,
 				expiresAt: new Date(command.expiresAtEpochMs),
 			},
 		});
-		return { status: "issued", context: { id: context.id, routeId: route.id, endpoint: route.endpoint } } as const;
+		return { status: "issued", context: { id: context.id, routeId: route.id, receiverId: route.receiverId, endpoint: route.endpoint } } as const;
 	}
 
-	/** Consumes one digest while requiring the receiving runtime's exact active event route. */
+	/** Consumes one digest while requiring the stable receiver and exact active service route. */
 	async consumeInvocationContextAtomically(command: ConsumeChannelInvocationContextCommand): Promise<ConsumeChannelInvocationContextResult>
 	{
 		const context = await this.transaction.channelInvocationContext.findUnique({ where: { digest: command.digest }, include: { route: true } });
 		if (context === null) return { status: "denied", reason: "not_found" } as const;
-		if (context.routeId !== command.expectedRouteId) return { status: "denied", reason: "route_mismatch" } as const;
+		if (context.receiverId !== command.expectedReceiverId || context.route.receiverId !== command.expectedReceiverId) return { status: "denied", reason: "receiver_mismatch" } as const;
+		if (context.route.id !== context.routeId || context.route.siloId !== context.siloId || context.route.agentServiceId !== context.agentServiceId || context.route.action !== context.action) return { status: "denied", reason: "route_mismatch" } as const;
 		if (context.revokedAt !== null) return { status: "denied", reason: "revoked" } as const;
 		if (context.consumedAt !== null) return { status: "denied", reason: "replayed" } as const;
 		if (context.expiresAt.getTime() <= command.nowEpochMs) return { status: "denied", reason: "expired" } as const;
-		if (context.action !== ChannelInvocationAction.EventsRead || !context.route.isCurrent || context.route.revokedAt !== null || context.route.expiresAt.getTime() <= command.nowEpochMs)
-		{
-			return { status: "denied", reason: "route_inactive" } as const;
-		}
+		if (context.action !== ChannelInvocationAction.EventsRead || !context.route.isCurrent || context.route.revokedAt !== null) return { status: "denied", reason: "route_inactive" } as const;
 
 		const consumed = await this.transaction.channelInvocationContext.updateMany({ where: { id: context.id, consumedAt: null, revokedAt: null, expiresAt: { gt: new Date(command.nowEpochMs) } }, data: { consumedAt: new Date(command.nowEpochMs) } });
 		if (consumed.count !== 1) return { status: "denied", reason: "replayed" } as const;
 		return {
 			status: "consumed",
 			context: {
+				routeId: context.routeId,
+				receiverId: context.receiverId,
 				subjectId: context.subjectId,
 				siloId: context.siloId,
 				conversationId: context.conversationId,

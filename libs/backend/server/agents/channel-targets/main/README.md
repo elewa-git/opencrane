@@ -20,7 +20,7 @@ participant-owned conversation API; this package exposes no parallel command pat
         ▼
  ┌────────────────────────────────────────────┐
  │  channel-targets  ◄── HERE                  │  proxy workload identity trusted?
- │                                             │  browser user identity trusted (cookie, no bearer fallback)?
+ │                                             │  browser session identity trusted by OpenCrane?
  │                                             │  host → silo · live membership · open conversation · read allowed?
  └────────────────────────────────────────────┘
         │  authorized endpoint + single-use invocation context (only its digest is stored)
@@ -32,11 +32,16 @@ participant-owned conversation API; this package exposes no parallel command pat
 
 The resolver runs an ordered set of independent checks. It confirms the proxy's own workload token
 (via a Kubernetes identity review, requiring the exact audience, service account, and namespace);
-resolves the browser user from a cookie first and refuses to fall back to a bearer token if a cookie
-is present but invalid; binds the already-origin-checked host to exactly one registered *silo* (a
-customer's isolated tenancy) and a current signed membership; requires an active conversation bound to the
-same silo and a participant whose access has not ended; and only then authorises
-`conversation.read`. The optional replay cursor is forwarded as a resume hint but grants no access.
+requires the browser user already verified by OpenCrane's shared signed-cookie session middleware;
+binds the already-origin-checked host to exactly one registered *silo* (a customer's isolated
+tenancy) and a current membership; requires an open agent-session conversation bound to the same
+silo and a participant whose access has not ended; and only then authorises `conversation.read`.
+The optional replay cursor is forwarded as a resume hint but grants no access.
+
+The application reconciles one route row per AgentService at startup. Every row has its own route id
+but may name the same stable replay `receiverId`; an invocation context binds both identities plus
+the exact silo, service, and action. Consumption rechecks that complete tuple and the route's current
+and revoked state, so a receiver id can never masquerade as per-service route evidence.
 
 Invariant: it stores only the *digest* of the invocation context, never the token itself, and the
 context expires at the sooner of its configured lifetime or the membership's own expiry. The issued
@@ -52,8 +57,8 @@ reason, and a mistake here can only ever refuse a legitimate request — never o
   cryptographically-random context source injected into the resolver.
 - `PrismaChannelTargetAuthorityUnitOfWork` — the Postgres-backed atomic authority.
 - Types: `ResolveChannelTargetCommand`/`Result`, `ChannelTargetResolutionDependencies` (the injected
-  ports: workload identity, delegated browser identity, host→silo, membership, authorization,
-  repository, clock), and the per-check decision and config types.
+  ports: workload identity, host→silo, membership, authorization, repository, clock), and the
+  per-check decision and config types.
 
 ## Boundary
 

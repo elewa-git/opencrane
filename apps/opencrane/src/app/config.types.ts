@@ -1,5 +1,16 @@
 import type { StandaloneFirstUserAdmissionConfig } from "@opencrane/backend/server/iam/identity";
 
+/** Deployment-fixed channel resolver and replay receiver coordinates. */
+export interface ChannelTargetRuntimeConfig
+{
+	readonly channelProxyServiceAccountName: string;
+	readonly invocationContextTtlMilliseconds: number;
+	readonly receiverEndpoint: string;
+	readonly receiverId: string;
+	readonly siloId: string;
+	readonly trustedHost: string;
+}
+
 /** Startup snapshot used to compose workload identity, dispatch, and worker routes. */
 export interface InternalRuntimeConfig
 {
@@ -11,8 +22,8 @@ export interface InternalRuntimeConfig
 	readonly artifactPreprocessorNamespace: string | undefined;
 	/** Maximum time a controller claim remains valid. */
 	readonly claimLeaseMilliseconds: number;
-	/** Optional controller-selected replay route identifier. */
-	readonly channelReplayRouteId: string | null;
+	/** Complete resolver and replay configuration, or null when the channel boundary is disabled. */
+	readonly channelTargets: ChannelTargetRuntimeConfig | null;
 	/** Maximum age of a runtime command before it is refused. */
 	readonly commandTtlMilliseconds: number;
 	/** Delay before recovering an unacknowledged runtime command. */

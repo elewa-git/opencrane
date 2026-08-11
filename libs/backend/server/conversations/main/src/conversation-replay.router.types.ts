@@ -15,7 +15,7 @@ export interface ConversationReplayRouterDependencies
 	/** Process shutdown signal that drains the stream before telemetry flush. */
 	readonly shutdownSignal?: AbortSignal;
 	/** Route selected only by server configuration. */
-	readonly expectedRouteId: string;
+	readonly expectedReceiverId: string;
 	/** Trusted server clock. */
 	readonly nowEpochMs: () => number;
 }

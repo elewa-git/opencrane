@@ -17,6 +17,7 @@ import type { MemoryGatewayClient } from "@opencrane/backend/server/infra/memory
 
 import { _CreateArtifactPreprocessSourceBroker } from "../infra/artifacts/artifact-preprocess-source-broker.factory.js";
 import { _CreateArtifactPreprocessOutputBroker, _CreateSkillAuthoringArtifactReader } from "../infra/artifacts/artifact-upload.factory.js";
+import { _CreateChannelTargetResolver } from "./channel-target-composition.js";
 import type { InternalRuntimeConfig } from "./config.types.js";
 import { _ProcessShutdownSignal } from "./process-shutdown.js";
 import { _log } from "./log.js";
@@ -203,7 +204,10 @@ function _CreateOptionalRuntimeComposition(prisma: PrismaClient, authApi: k8s.Au
 		: null;
 	const artifactPreprocessRepository = _CreateArtifactPreprocessAuthority(prisma);
 	return {
-		conversationReplay: config.channelReplayRouteId === null
+		channelTargetResolver: config.channelTargets === null
+			? null
+			: _CreateChannelTargetResolver(prisma, authApi, config.channelTargets, serverNamespace),
+		conversationReplay: config.channelTargets === null
 			? null
 			: __CreateConversationReplayRouter({
 				contexts: new PrismaChannelTargetAuthorityUnitOfWork(prisma),
@@ -211,7 +215,7 @@ function _CreateOptionalRuntimeComposition(prisma: PrismaClient, authApi: k8s.Au
 				clock: CONVERSATION_LIVE_REPLAY_CLOCK,
 				limits: CONVERSATION_LIVE_REPLAY_LIMITS,
 				shutdownSignal: _ProcessShutdownSignal,
-				expectedRouteId: config.channelReplayRouteId,
+				expectedReceiverId: config.channelTargets.receiverId,
 				nowEpochMs: function _nowEpochMs() { return Date.now(); },
 			}),
 		artifactPreprocessor: artifactPreprocessorNamespace === null

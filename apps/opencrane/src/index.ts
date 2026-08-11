@@ -9,12 +9,13 @@ import { _CreateFleetMembershipEvidenceConfig } from "@opencrane/backend/server/
 import { ___BindConsole } from "@opencrane/backend/observability";
 
 import { _ReadProcessConfig } from "./app/config.js";
+import { _ReconcileChannelTargetRoutes } from "./app/channel-target-composition.js";
 import { _CreateInternalApp } from "./app/internal-app.js";
 import { _BootstrapInitialModel } from "./app/initial-model-bootstrap.js";
 import { _CreateKubernetesClients } from "./app/kubernetes-clients.js";
 import { _StartProcessLifecycle } from "./app/lifecycle.js";
 import { _log } from "./app/log.js";
-import { _CreatePublicApp } from "./app/public-app.js";
+import { _CreatePublicApp, _CreatePublicAuthentication } from "./app/public-app.js";
 import { _CreateArtifactUploadGateway } from "./infra/artifacts/artifact-upload.factory.js";
 import { ___CreatePrismaClient } from "./infra/db/db.js";
 import { _CreateMemoryGatewayClient } from "./infra/memory/memory-gateway-client.factory.js";
@@ -37,6 +38,7 @@ async function _Main(): Promise<void>
 	const kubernetes = _CreateKubernetesClients();
 	const memoryGateway = _CreateMemoryGatewayClient(config.runtime);
 	await _BootstrapInitialModel({ prisma, coreApi: kubernetes.coreApi, config: config.initialModelBootstrap, namespace: config.runtime.serverNamespace });
+	await _ReconcileChannelTargetRoutes(prisma, config.runtime.channelTargets);
 
 	// 3. Compose one shared capacity gate and deployment-selected membership evidence for every run
 	//    entrypoint. Standalone has no key mount and remains deny-only until a local issuer exists.
@@ -50,9 +52,10 @@ async function _Main(): Promise<void>
 	const obot = _CreateObotAdapters(config.obot);
 
 	// 5. Build separate transport surfaces; only the internal app receives workload-only routes.
-	const publicApp = _CreatePublicApp(prisma, kubernetes.customApi, kubernetes.coreApi, managedRunAdmission, personalRunAdmission, config.authWatchNamespace, config.runtime.serverNamespace, obot.custody, config.standaloneFirstUserAdmission);
+	const authentication = _CreatePublicAuthentication(prisma, kubernetes.customApi, config.standaloneFirstUserAdmission);
+	const publicApp = _CreatePublicApp(prisma, kubernetes.coreApi, managedRunAdmission, personalRunAdmission, config.runtime.serverNamespace, obot.custody, authentication);
 	publicApp.locals.artifactUploadGateway = _CreateArtifactUploadGateway(prisma);
-	const internalApp = _CreateInternalApp(prisma, kubernetes.authApi, config.runtime, memoryGateway, obot.attemptKeys);
+	const internalApp = _CreateInternalApp(prisma, kubernetes.authApi, config.runtime, memoryGateway, authentication.sessionMiddleware, obot.attemptKeys);
 
 	// 6. Start listeners and workers under one drain order so shared dependencies close exactly once.
 	_StartProcessLifecycle(publicApp, internalApp, prisma, kubernetes.batchApi, managedRunAdmission, config, unbindConsole);

@@ -9,15 +9,15 @@ import type { ChannelTargetResolutionDependencies } from "../channel-target-reso
 function _App()
 {
 	const dependencies: ChannelTargetResolutionDependencies = {
-		config: { workloadAudience: "opencrane", channelProxyServiceAccountName: "channel-proxy", channelProxyNamespace: "silo-a", invocationContextTtlMs: 60_000, allowedRouteHostSuffixes: [".svc.cluster.local"] },
+		config: { workloadAudience: "opencrane", channelProxyServiceAccountName: "channel-proxy", channelProxyNamespace: "silo-a", invocationContextTtlMs: 60_000, allowedRouteHostSuffixes: [".svc.cluster.local"], receiverId: "conversation-replay-v1", receiverEndpoint: "http://agent-runtime.silo-a.svc.cluster.local:8080/v1/commands" },
 		workloadIdentity: { review: async function _Review() { return { outcome: "trusted", identity: { username: "system:serviceaccount:silo-a:channel-proxy", serviceAccountName: "channel-proxy", namespace: "silo-a", audiences: ["opencrane"] } }; } },
-		delegatedIdentity: { resolveCookie: async function _ResolveCookie() { return { outcome: "trusted", identity: { subjectId: "user-1", source: "cookie", trustworthySubject: true } }; }, resolveBearer: async function _ResolveBearer() { return { outcome: "denied", reason: "unexpected_bearer" }; } },
 		hostSilo: { resolveExactHost: async function _ResolveExactHost() { return { siloId: "silo-1", authorizationScope: { kind: "organization", organizationId: "org-1" } }; } },
 		membership: { verifyCurrentMembership: async function _VerifyCurrentMembership() { return { outcome: "trusted", revision: 1, trustedUntilEpochMs: 2_000_000 }; } },
 		authorization: { authorize: async function _Authorize() { return { outcome: "allowed", authorizationDigest: `sha256:${"a".repeat(64)}` }; } },
 		repository: {
 			getConversationAuthority: async function _GetConversationAuthority() { return { conversationId: "conversation-1", siloId: "silo-1", agentServiceId: "service-1", mode: "agent_session", lifecycle: "open", participantUserIds: ["user-1"] }; },
-			issueInvocationContextAtomically: async function _IssueInvocationContext() { return { status: "issued", context: { id: "context-1", routeId: "route-1", endpoint: "http://agent-runtime.silo-a.svc.cluster.local:8080/v1/events" } }; },
+			reconcileRuntimeRoutes: async function _ReconcileRuntimeRoutes() { return 0; },
+			issueInvocationContextAtomically: async function _IssueInvocationContext() { return { status: "issued", context: { id: "context-1", routeId: "route-1", receiverId: "conversation-replay-v1", endpoint: "http://agent-runtime.silo-a.svc.cluster.local:8080/v1/events" } }; },
 			consumeInvocationContextAtomically: async function _ConsumeInvocationContext() { return { status: "denied", reason: "not_found" }; },
 		},
 		clock: { nowEpochMs: function _NowEpochMs() { return 1_000_000; } },
@@ -25,6 +25,11 @@ function _App()
 	};
 	const app = express();
 	app.use(express.json());
+	app.use(function _VerifiedSession(request, _response, next)
+	{
+		request.session = { authUser: { sub: "user-1" } } as never;
+		next();
+	});
 	app.use(__CreateChannelTargetsRouter(dependencies));
 	return app;
 }

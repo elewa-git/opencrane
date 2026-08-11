@@ -21,7 +21,7 @@ function _App(consumed: unknown, readAuthorized = vi.fn(async function _read() {
 		..._Live(),
 		contexts: { consumeInvocationContextAtomically: async function _consume() { return consumed; } } as never,
 		repository: { readAuthorized },
-		expectedRouteId: "route-1",
+		expectedReceiverId: "receiver-1",
 		nowEpochMs: function _now() { return 1_000; },
 	}));
 	return { app, readAuthorized };
@@ -44,7 +44,7 @@ describe("internal conversation replay router", function _Suite()
 	{
 		const consume = vi.fn(async function _consume() { return { status: "denied", reason: "not_found" }; });
 		const app = express();
-		app.use(__CreateConversationReplayRouter({ ..._Live(), contexts: { consumeInvocationContextAtomically: consume } as never, repository: { readAuthorized: async function _read() { return { status: ConversationReplayReadStatuses.Authorized, rows: [] }; } }, expectedRouteId: "route-1", nowEpochMs: function _now() { return 1_000; } }));
+		app.use(__CreateConversationReplayRouter({ ..._Live(), contexts: { consumeInvocationContextAtomically: consume } as never, repository: { readAuthorized: async function _read() { return { status: ConversationReplayReadStatuses.Authorized, rows: [] }; } }, expectedReceiverId: "receiver-1", nowEpochMs: function _now() { return 1_000; } }));
 		const response = await request(app).get("/?cursor=not-a-cursor").set("authorization", "Bearer context-token");
 		expect(response.status).toBe(400);
 		expect(consume).not.toHaveBeenCalled();

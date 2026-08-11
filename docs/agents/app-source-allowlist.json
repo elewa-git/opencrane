@@ -27,6 +27,8 @@
     { "path": "apps/opencrane/src/app/log.ts", "owner": "apps/opencrane", "classification": "process-logging" },
     { "path": "apps/opencrane/src/app/process-shutdown.ts", "owner": "apps/opencrane", "classification": "process-composition" },
     { "path": "apps/opencrane/src/app/public-app.ts", "owner": "apps/opencrane", "classification": "process-composition" },
+    { "path": "apps/opencrane/src/app/public-app.types.ts", "owner": "apps/opencrane", "classification": "process-composition" },
+    { "path": "apps/opencrane/src/app/channel-target-composition.ts", "owner": "apps/opencrane", "classification": "route-composition" },
     { "path": "apps/opencrane/src/app/routes.ts", "owner": "apps/opencrane", "classification": "route-composition" },
     { "path": "apps/opencrane/src/app/routes.types.ts", "owner": "apps/opencrane", "classification": "route-composition" },
     { "path": "apps/opencrane/src/app/runtime-composition.ts", "owner": "apps/opencrane", "classification": "route-composition" },

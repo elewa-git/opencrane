@@ -30,3 +30,13 @@ When the value is empty (the default) nothing renders and the application compos
 unavailable Obot adapters: custody provisioning refuses and no run attempt carries an Obot key. The
 server NetworkPolicy adds matching `mcp-gateway` egress for the management API only; tool payloads
 flow runtime→Obot and never transit this Deployment.
+
+## Channel target and replay wiring
+
+When `channelProxy.enabled=true`, the Deployment renders the complete resolver contract: the exact
+channel-proxy ServiceAccount, the public control-plane host, the silo id, a stable replay receiver,
+and the release-local internal replay endpoint. OpenCrane mounts the same signed-session middleware
+on both listeners, TokenReviews the proxy's projected `opencrane` token, and accepts browser identity
+only from that verified session. At startup it reconciles one `events.read` route row per existing
+AgentService. Those rows share `channelProxy.replayReceiverId` but retain distinct route ids, so
+revocation and consumption remain bound to exact per-service evidence.

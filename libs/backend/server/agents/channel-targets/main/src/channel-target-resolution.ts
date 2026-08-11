@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
 
-import type { AuthorizedChannelTargetResult, ChannelOpaqueContextSource, ChannelTargetClock, ChannelTargetResolutionDependencies, DelegatedBrowserIdentityDecision, ResolveChannelTargetCommand, ResolveChannelTargetResult } from "./channel-target-resolution.types.js";
+import type { AuthorizedChannelTargetResult, ChannelOpaqueContextSource, ChannelTargetClock, ChannelTargetResolutionDependencies, ResolveChannelTargetCommand, ResolveChannelTargetResult } from "./channel-target-resolution.types.js";
 
 /** Real wall clock for production composition. */
 export class __SystemChannelTargetClock implements ChannelTargetClock
@@ -45,13 +45,12 @@ export async function __ResolveChannelTarget(dependencies: ChannelTargetResoluti
 		return { outcome: "denied", reason: "workload_denied" };
 	}
 
-	// 3. Resolve the browser cookie first. A present-but-invalid cookie never falls back to bearer.
-	const delegatedIdentity = await _resolveDelegatedIdentity(dependencies, command);
-	if (delegatedIdentity.outcome !== "trusted" || !delegatedIdentity.identity.trustworthySubject || !delegatedIdentity.identity.subjectId.trim())
+	// 3. Require the human subject already verified by the shared OpenCrane session middleware.
+	if (!command.delegatedIdentity.trustworthySubject || command.delegatedIdentity.source !== "cookie" || !command.delegatedIdentity.subjectId.trim())
 	{
 		return { outcome: "denied", reason: "identity_denied" };
 	}
-	const subjectId = delegatedIdentity.identity.subjectId;
+	const subjectId = command.delegatedIdentity.subjectId;
 
 	// 4. Bind the already origin-checked host to one registered silo and current signed membership.
 	const hostBinding = await dependencies.hostSilo.resolveExactHost(command.trustedHost);
@@ -100,7 +99,7 @@ export async function __ResolveChannelTarget(dependencies: ChannelTargetResoluti
 	{
 		return { outcome: "denied", reason: "membership_denied" };
 	}
-	const issued = await dependencies.repository.issueInvocationContextAtomically({ digest, subjectId, siloId: hostBinding.siloId, conversationId: conversation.conversationId, agentServiceId: conversation.agentServiceId, action: command.action, membershipRevision: membership.revision, authorizationDigest: authorization.authorizationDigest, nowEpochMs, expiresAtEpochMs, allowedRouteHostSuffixes: dependencies.config.allowedRouteHostSuffixes });
+	const issued = await dependencies.repository.issueInvocationContextAtomically({ digest, subjectId, siloId: hostBinding.siloId, conversationId: conversation.conversationId, agentServiceId: conversation.agentServiceId, action: command.action, membershipRevision: membership.revision, authorizationDigest: authorization.authorizationDigest, nowEpochMs, expiresAtEpochMs, allowedRouteHostSuffixes: dependencies.config.allowedRouteHostSuffixes, receiverId: dependencies.config.receiverId });
 	if (issued.status !== "issued" || !_endpointIsAllowed(issued.context.endpoint, dependencies.config.allowedRouteHostSuffixes))
 	{
 		return { outcome: "denied", reason: "route_denied" };
@@ -108,24 +107,6 @@ export async function __ResolveChannelTarget(dependencies: ChannelTargetResoluti
 
 	const target: AuthorizedChannelTargetResult = { subjectId, endpoint: issued.context.endpoint, invocationContext, expiresAt: new Date(expiresAtEpochMs).toISOString() };
 	return { outcome: "authorized", target };
-}
-
-/** Resolves cookie before bearer and refuses cross-mechanism fallback. */
-async function _resolveDelegatedIdentity(dependencies: ChannelTargetResolutionDependencies, command: ResolveChannelTargetCommand): Promise<DelegatedBrowserIdentityDecision>
-{
-	if (command.cookie?.trim())
-	{
-		const decision = await dependencies.delegatedIdentity.resolveCookie(command.cookie);
-		if (decision.outcome === "trusted" && decision.identity.source !== "cookie") return { outcome: "denied", reason: "identity_source_mismatch" };
-		return decision;
-	}
-	if (command.delegatedAuthorization?.trim())
-	{
-		const decision = await dependencies.delegatedIdentity.resolveBearer(command.delegatedAuthorization);
-		if (decision.outcome === "trusted" && decision.identity.source !== "bearer") return { outcome: "denied", reason: "identity_source_mismatch" };
-		return decision;
-	}
-	return { outcome: "denied", reason: "missing_identity" };
 }
 
 /** Validates target-neutral request structure without interpreting credentials. */
@@ -150,7 +131,9 @@ function _configIsValid(dependencies: ChannelTargetResolutionDependencies, nowEp
 		&& dependencies.config.invocationContextTtlMs > 0
 		&& dependencies.config.invocationContextTtlMs <= 300_000
 		&& dependencies.config.allowedRouteHostSuffixes.length > 0
-		&& dependencies.config.allowedRouteHostSuffixes.every(suffix => suffix.startsWith(".") && suffix.length > 1);
+		&& dependencies.config.allowedRouteHostSuffixes.every(suffix => suffix.startsWith(".") && suffix.length > 1)
+		&& dependencies.config.receiverId.trim().length > 0
+		&& _endpointIsAllowed(dependencies.config.receiverEndpoint, dependencies.config.allowedRouteHostSuffixes);
 }
 
 /** Accepts only credential-free HTTP(S) endpoints within configured internal DNS suffixes. */

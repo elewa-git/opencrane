@@ -1,6 +1,6 @@
 import * as k8s from "@kubernetes/client-node";
 import type { PrismaClient } from "@prisma/client";
-import express, { type Express } from "express";
+import express, { type Express, type RequestHandler } from "express";
 
 import { ___RequestContext } from "@opencrane/backend/observability";
 import { _ErrorHandler } from "@opencrane/backend/server/infra/http";
@@ -15,10 +15,10 @@ import { _CreateHttpRequestLogger } from "./telemetry.js";
 /**
  * Build the workload-facing Express application.
  *
- * This app has no browser-session middleware because it is reachable only through the internal
- * Service and NetworkPolicy. Routes that cross a workload identity boundary perform TokenReview.
+ * It shares the public listener's signed-session middleware only so channel-proxy can delegate the
+ * browser cookie. Every resolver request independently TokenReviews the proxy workload identity.
  */
-export function _CreateInternalApp(prisma: PrismaClient, authApi: k8s.AuthenticationV1Api, config: InternalRuntimeConfig, memoryGateway: MemoryGatewayClient, obotAttemptKeys: ObotAttemptKeyIssuer | null = null): Express
+export function _CreateInternalApp(prisma: PrismaClient, authApi: k8s.AuthenticationV1Api, config: InternalRuntimeConfig, memoryGateway: MemoryGatewayClient, sessionMiddleware: readonly RequestHandler[], obotAttemptKeys: ObotAttemptKeyIssuer | null = null): Express
 {
 	const app = express();
 
@@ -27,6 +27,7 @@ export function _CreateInternalApp(prisma: PrismaClient, authApi: k8s.Authentica
 	app.use("/api/internal/agent-runtime", express.json({ limit: 64 * 1_024, strict: true }));
 	app.use("/api/internal/artifact-preprocessor/jobs/:jobId/output", express.raw({ type: "text/plain", limit: config.artifactPreprocessorMaximumOutputBytes }));
 	app.use(express.json());
+	app.use(...sessionMiddleware);
 
 	// 2. Correlate every internal request without treating correlation as authentication.
 	app.use(___RequestContext());

@@ -675,6 +675,7 @@
     ],
     "compositions": [
       "apps/opencrane/src/app/runtime-composition.ts",
+      "apps/opencrane/src/app/channel-target-composition.ts",
       "libs/backend/agents/personal/configuration/main/src/prisma-personal-configuration.router.ts",
 		"libs/backend/agents/personal/personas/main/src/http/prisma-persona-onboarding.router.ts",
 		"libs/backend/agents/personal/personas/main/src/profile/prisma-persona-workflow-evidence.ts",
