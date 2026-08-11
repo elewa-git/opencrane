@@ -318,6 +318,10 @@ The accepted product contract is:
   sanitized tool, error category, provider response, time, and retry details are progressively
   disclosed. Tokens, credentials, cookies, authorization headers, keys, proofs, and raw secrets never
   reach the browser.
+- retry internal preparation at most three times within five minutes, and only before a provider
+  request starts. After dispatch, replay a saved success or check the provider when that is possible.
+  If neither can prove the outcome, never guess or send the action again: stop the run in a visible,
+  cancellable **Needs recovery** state.
 - one recoverable elicitation contract renders approvals, single choice, multiple choice, and bounded
   free text, including explicit personal-memory permission. Consequential A2UI actions use that
   authority; rendered UI never grants permission.
@@ -400,15 +404,16 @@ reconciliation now live in their owning libraries. A verified producer/consumer 
 closed by sharing one digest authority between invocation-context issuance and replay consumption;
 the raw bearer remains absent from persistence and logs. Focused package tests, policy gates, and
 independent correctness/security review pass at this checkpoint.
-Independent protocol review still blocks completion on durable recovery for irreversible external
-actions: immutable candidate disposition, pre-dispatch retry eligibility, leased claims, terminal
-compare-and-swap, ToolInvocation reconciliation, and an exact replay/outbox path remain subject to
-explicit authority-model approval. The legacy 0.7 route-expiry replacement is now approved and
+Durable recovery for irreversible external actions now has product approval: OpenCrane may retry
+only bounded internal preparation before dispatch; after dispatch it must replay saved success,
+check the provider when supported, or stop visibly in **Needs recovery** without sending the action
+again. The durable ToolInvocation claim, result replay, provider-check strategy, and user-visible
+recovery state remain the implementation gate. The legacy 0.7 route-expiry replacement is approved and
 implemented: migrated route ids, endpoint/registration coordinates, prior revocation, and exact
 expiry evidence survive as permanently inactive rows, while startup reconciliation creates the
 sole usable stable receiver route. Fresh 0.8 and migrated 0.7 databases converge under the live
-PostgreSQL test. The remaining recovery decision is not treated as complete or hidden by the
-otherwise-green projection work.
+PostgreSQL test. Recovery implementation is not treated as complete or hidden by the otherwise-green
+projection work.
 
 Track F1 closes [#351](https://github.com/elewa-git/opencrane/issues/351),
 [#600](https://github.com/elewa-git/opencrane/issues/600),

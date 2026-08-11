@@ -17,6 +17,10 @@ ENV NODE_ENV=production
 COPY package.json package-lock.json ./
 COPY apps/memory-gateway/package.json apps/memory-gateway/
 RUN npm ci --omit=dev --workspace=apps/memory-gateway
+# Shared conversation contracts keep these packages external in the compiled gateway bundle.
+# Resolve their public runtime entrypoints now so a production image cannot build without them.
+RUN node --input-type=module --eval \
+    "await Promise.all([import('ajv'), import('@a2ui/web_core/v0_8')])"
 
 COPY --from=build /app/dist/apps/memory-gateway dist/apps/memory-gateway
 USER 1000:1000
