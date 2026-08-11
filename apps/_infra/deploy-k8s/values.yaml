@@ -875,7 +875,7 @@ mcpGateway:
   service:
     port: 8080
   # -- Name of a pre-provisioned Secret (key `token`) carrying the Obot service credential the
-  #    opencrane-server presents for custody provisioning and per-attempt Obot key minting. The
+  #    opencrane-server presents for custody provisioning and server-owned tool execution. The
   #    chart never renders this Secret. Empty (default) leaves the Obot management transport OFF:
   #    no env/volume renders and the server composes fail-closed unavailable adapters.
   serviceTokenExistingSecret: ""

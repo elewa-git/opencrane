@@ -1,9 +1,8 @@
 # MCP gateway
 
 OpenCrane keeps **MCP registration, authorisation, approvals and receipts** in the control plane
-while Obot keeps custody of integration credentials and serves the invocation data plane: after an
-approval, the runtime calls Obot's MCP proxy directly with a short-lived, attempt-scoped key, so
-tool payloads never transit the OpenCrane server.
+while Obot keeps custody of integration credentials. After durable admission and any required
+approval, a server worker calls Obot; the isolated model runtime never receives provider access.
 
 > See also: [Governed agent runtime](/integrators/agent-runtime) (external-action flow),
 > [Control access](/guide/permissions) (grants), and
@@ -15,10 +14,10 @@ tool payloads never transit the OpenCrane server.
 |---|---|
 | OpenCrane MCP registry | Definitions, revisions and organisation-scoped publication |
 | Custody provisioning route | Hands an integration credential to Obot; stores only the opaque reference |
-| Run input compiler | Freezes the allowed tool revisions and their Obot MCP server addressing for one run |
-| OpenCrane action executor | Re-derives arguments, reserves the invocation and gates the approval |
-| Attempt key mint | Issues one Obot API key per run attempt, scoped to the assigned MCP server ids |
-| Runtime Job | Emits an action candidate, executes the approved call against Obot, reports a digest |
+| Run input compiler | Freezes only the model-visible allowed tool revisions for one run |
+| Durable action authority | Saves the request before work, gates approval and owns recovery |
+| Server action worker | Resolves current Obot addressing and executes one fenced provider operation |
+| Runtime Job | Emits an action candidate and later consumes the exact saved server result |
 
 An MCP registration does not by itself grant an agent access. The acting subject and agent
 service must both pass membership and grant resolution before the tool revision enters the
@@ -29,14 +28,10 @@ run's compiled capability set.
 Two planes with different traffic:
 
 - **Control plane (server → Obot, service credential):** custody provisioning creates and
-  configures an MCP server in Obot (the credential travels write-only and only here), and each
-  claimed run attempt mints one Obot API key scoped to the exact MCP server ids of the run's
-  integration assignments, expiring with the assignment lease. The key rides the claim into a
-  per-attempt Kubernetes Secret; it is never persisted or logged.
-- **Data plane (runtime → Obot, attempt key):** after an approval the runtime performs the MCP
-  `initialize` + `tools/call` exchange against `/mcp-connect/<serverId>/mcp` itself. The compiled
-  tool definition carries the `obotMcpServerId` as non-secret addressing; the allow-list plus the
-  key's server scoping remain the authority.
+  configures an MCP server in Obot; the credential travels write-only and only here.
+- **Action execution (server → Obot):** after durable admission and approval, a server worker
+  resolves the current assignment and performs the MCP call. Provider addressing and credentials
+  never enter the runtime pod.
 
 ## Invocation flow
 
@@ -47,27 +42,28 @@ runtime emits external_action candidate
 OpenCrane verifies run proof and arguments digest
        │
        ▼
-reserve one tool invocation ──► durable approval request
+save one Preparing tool invocation ──► durable approval request when required
        │
        ▼
-owner approves ──► resume names the approved toolInvocationId
+owner approves ──► invocation becomes Ready
        │
        ▼
-runtime calls Obot MCP proxy directly (attempt-scoped key)
+server worker claims and calls Obot once
        │
        ▼
-runtime reports tool.completed { resultDigest }
+server stores the exact success or safe failure result
        │
        ▼
-reservation marked Succeeded with the digest-only receipt
+one saved-result delivery resumes the runtime
 ```
 
-OpenCrane reserves the invocation before any external I/O, and the durable receipt records only a
-SHA-256 digest of the canonical result — never the tool content. A duplicate completion for the
-same invocation is refused rather than rewriting the receipt.
+OpenCrane saves the invocation before any external I/O. Preparation may retry at most three times
+within five minutes, and only before provider dispatch starts. Once dispatch may have started, the
+worker uses the adapter's trusted recovery strategy; if it cannot prove the outcome, the run enters
+a visible, cancellable recovery state instead of repeating the action.
 
 ::: info Current transport status
-The custody, attempt-key and direct-invocation transports are composed when the deployment mounts
+The custody and server-side invocation transports are composed when the deployment mounts
 the Obot service credential (`mcpGateway.serviceTokenExistingSecret`); without it the server
 composes fail-closed unavailable adapters. Qualification against a live Obot deployment remains
 gated on issue #337, so the exact Obot response shapes are validated defensively rather than
@@ -75,10 +71,9 @@ contract-pinned.
 :::
 
 ::: warning
-Integration credentials never leave Obot. The runtime holds only an attempt-scoped Obot key —
-scoped to the exact MCP server ids of its integration assignments and expiring with the assignment
-lease — never the Obot service credential or any provider secret. Approvals, allow-lists and
-digest-only receipts stay server-side; a model response cannot widen its own reach.
+Integration credentials never leave Obot, and the runtime receives no Obot key, address or provider
+secret. Approvals, allow-lists, provider calls and saved results stay server-side; a model response
+cannot widen its own reach.
 :::
 
 ## Failure posture
@@ -86,9 +81,10 @@ digest-only receipts stay server-side; a model response cannot widen its own rea
 - An unregistered or ungranted tool revision is denied.
 - An arguments-digest mismatch is denied.
 - A required approval pauses the run at the durable reservation.
-- Without the Obot mount, custody provisioning and key minting fail closed and an approved
+- Without the Obot mount, custody provisioning and server-side invocation fail closed and an approved
   integration tool ends in a typed loop error.
-- An unknown or duplicate `tool.completed` report is refused; receipts are digest-only.
+- A runtime-authored `tool.completed` report is refused; only the server worker can complete an action.
+- An unknown provider outcome is never retried blindly; the run visibly needs recovery.
 - A late result from a cancelled or replaced attempt is not accepted.
 
 Source: [`libs/backend/server/infra/obot-custody`](https://github.com/elewa-git/opencrane/blob/main/libs/backend/server/infra/obot-custody/README.md)
