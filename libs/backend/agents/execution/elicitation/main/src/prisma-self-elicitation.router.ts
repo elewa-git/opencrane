@@ -12,7 +12,7 @@ import type { SelfElicitationCaller } from "./self-elicitation.router.types.js";
 function _ResolveCaller(request: Parameters<typeof _ResolveRequestPrincipal>[0]): SelfElicitationCaller | null
 {
 	const principal = _ResolveRequestPrincipal(request);
-	return principal === null ? null : { subjectId: principal.subjectId, siloId: principal.siloId, verifiedStepUpAt: null };
+	return principal === null ? null : { subjectId: principal.subjectId, siloId: principal.siloId, verifiedStepUpAt: principal.verifiedAuthenticationAt };
 }
 
 /** Compose the Prisma-backed self elicitation API. */

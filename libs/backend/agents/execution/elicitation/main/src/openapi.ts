@@ -30,7 +30,7 @@ export const _ElicitationOpenapiPaths = {
 				403: _Error("The caller is not the active assigned participant."),
 				404: _Error("The request is absent."),
 				409: _Error("The request is terminal, expired, or conflicts with an idempotent retry."),
-				428: _Error("Fresh verified OpenID Connect reauthentication is required."),
+				428: { description: "Fresh verified OpenID Connect reauthentication is required.", content: { "application/json": { schema: { type: "object", required: ["error", "reauthenticatePath"], properties: { error: { type: "string", const: "elicitation_step_up_required" }, reauthenticatePath: { type: "string", const: "/api/v1/auth/reauthenticate" } } } } } },
 				503: _Error("The elicitation authority is temporarily unavailable."),
 			},
 		},

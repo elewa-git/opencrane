@@ -753,6 +753,19 @@ export const spec = {
         },
       },
     },
+    "/auth/reauthenticate": {
+      get: {
+        operationId: "reauthenticate",
+        summary: "Force fresh OIDC authentication for a sensitive action",
+        tags: ["Auth"],
+        parameters: [{ name: "returnTo", in: "query", required: false, schema: { type: "string" }, description: "Local path restored after the verified callback." }],
+        responses: {
+          302: { description: "Redirect to the configured provider with prompt=login." },
+          401: unauthorized("An authenticated session is required before step-up."),
+          503: { description: "OIDC is not configured." },
+        },
+      },
+    },
 
     "/auth/callback": {
       get: {

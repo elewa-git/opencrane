@@ -35,6 +35,8 @@ export function _ResolveRequestPrincipal(request: Request): RequestPrincipal | n
   const subjectId = subject || email;
   const siloId = _ClusterTenantFromHost(_RequestHost(request)) ?? "";
   if (!subjectId || !siloId) return null;
+	const authenticatedAt = new Date(authUser.authenticatedAt);
+	const verifiedAuthenticationAt = Number.isFinite(authenticatedAt.getTime()) ? authenticatedAt : null;
 
-  return { subjectId, siloId, isOrgAdmin: authUser.isOrgAdmin === true };
+  return { subjectId, siloId, isOrgAdmin: authUser.isOrgAdmin === true, verifiedAuthenticationAt };
 }

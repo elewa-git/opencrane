@@ -104,6 +104,7 @@ class PrismaElicitationRepository implements ElicitationRepository
 	{
 		if (request.purpose === ElicitationPurpose.ToolApproval) return this._applyToolApproval(request.id, response, subjectId, now);
 		if (request.purpose === ElicitationPurpose.PersonalMemoryPermission) return this._applyMemoryPermission(request, response, subjectId, now);
+		if (request.purpose === ElicitationPurpose.A2uiAction) return this._applyA2uiAction(request, response);
 		await this._transaction.elicitationResultDelivery.create({ data: { requestId: request.id, payload: response as unknown as Prisma.InputJsonValue, payloadDigest: __DigestCanonicalJson(response as unknown as JsonValue) } });
 		return true;
 	}
@@ -125,7 +126,7 @@ class PrismaElicitationRepository implements ElicitationRepository
 	{
 		if (response.kind !== ElicitationBodyKinds.Approval) return false;
 		if (!response.approved) return true;
-		if (!_Record(request.purposePayload)) return false;
+		if (!_Record(request.purposePayload) || __DigestCanonicalJson(request.purposePayload as JsonValue) !== request.purposePayloadDigest) return false;
 		const executionSubjectId = request.purposePayload["executionSubjectId"];
 		const queryDigest = request.purposePayload["queryDigest"];
 		const invocationKey = request.purposePayload["invocationKey"];
@@ -134,6 +135,19 @@ class PrismaElicitationRepository implements ElicitationRepository
 		const expiry = new Date(expiresAt);
 		if (!Number.isFinite(expiry.getTime()) || expiry.getTime() <= now.getTime()) return false;
 		await this._transaction.personalMemoryPermissionReceipt.create({ data: { requestId: request.id, runId: request.runId, attempt: request.attempt, subjectId: request.assignedParticipantId, executionSubjectId, purposeDigest: request.purposePayloadDigest, queryDigest, invocationKey, expiresAt: expiry } });
+		return true;
+	}
+
+	/** Bind a display-only A2UI answer back to the server-owned action coordinates. */
+	private async _applyA2uiAction(request: { id: string; purposePayload: Prisma.JsonValue | null; purposePayloadDigest: string }, response: ElicitationResponseValue): Promise<boolean>
+	{
+		if (!_Record(request.purposePayload) || __DigestCanonicalJson(request.purposePayload as JsonValue) !== request.purposePayloadDigest) return false;
+		const displayedActionId = request.purposePayload["displayedActionId"];
+		const sourceComponentId = request.purposePayload["sourceComponentId"];
+		const actionDigest = request.purposePayload["actionDigest"];
+		if (typeof displayedActionId !== "string" || displayedActionId.length === 0 || typeof sourceComponentId !== "string" || sourceComponentId.length === 0 || typeof actionDigest !== "string" || actionDigest.length === 0) return false;
+		const payload = { kind: "a2ui_action", displayedActionId, sourceComponentId, actionDigest, response };
+		await this._transaction.elicitationResultDelivery.create({ data: { requestId: request.id, payload, payloadDigest: __DigestCanonicalJson(payload) } });
 		return true;
 	}
 

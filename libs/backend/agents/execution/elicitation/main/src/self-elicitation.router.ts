@@ -38,7 +38,7 @@ export function __CreateSelfElicitationRouter(dependencies: SelfElicitationRoute
 			const result = await dependencies.elicitations.respond({ siloId: caller.siloId, conversationId: coordinates.conversationId, requestId: coordinates.requestId, subjectId: caller.subjectId, verifiedStepUpAt: caller.verifiedStepUpAt, submission, now: dependencies.clock.now() });
 			if (result.outcome === "accepted") { response.status(200).json({ response: result.projection }); return; }
 			if (result.outcome === "invalid_response") { _Respond(response, 400, "invalid_elicitation_response"); return; }
-			if (result.outcome === "step_up_required") { _Respond(response, 428, "elicitation_step_up_required"); return; }
+			if (result.outcome === "step_up_required") { response.status(428).json({ error: "elicitation_step_up_required", reauthenticatePath: "/api/v1/auth/reauthenticate" }); return; }
 			if (result.outcome === "expired" || result.outcome === "conflict") { _Respond(response, 409, `elicitation_${result.outcome}`); return; }
 			if (result.outcome === "unauthorized") { _Respond(response, 403, "elicitation_response_forbidden"); return; }
 			_Respond(response, 404, "elicitation_not_found");
