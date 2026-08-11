@@ -48,11 +48,14 @@ context expires at the sooner of its configured lifetime or the membership's own
 endpoint must be a credential-free HTTP(S) address inside a configured internal DNS suffix. Every
 check is fail-closed: a missing, altered, or expired fact yields a `denied` outcome with a stable
 reason, and a mistake here can only ever refuse a legitimate request — never over-grant.
+An unexpected authority exception returns `authority_unavailable` and emits structured error
+evidence with only the safe action and conversation coordinate. Workload tokens, browser cookies,
+replay cursors, invocation contexts, and route endpoints never enter that record.
 
 ## Public surface
 
 - `__ResolveChannelTarget` — the resolver use case that returns an authorized target or a denial.
-- `__CreateChannelTargetsRouter` — the HTTP router mounting the resolver.
+- `__CreateChannelTargetsRouter` — the HTTP router mounting the resolver with the app-owned logger.
 - `__SystemChannelTargetClock`, `__RandomChannelOpaqueContextSource` — the production clock and
   cryptographically-random context source injected into the resolver.
 - `PrismaChannelTargetAuthorityUnitOfWork` — the Postgres-backed atomic authority.

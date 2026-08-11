@@ -1,10 +1,10 @@
 import { EventType } from "@ag-ui/core";
 import { describe, expect, it } from "vitest";
 
-import { AG_UI_A2UI_ENVELOPE_VERSION, AG_UI_INTERRUPTS_CLEARED_EVENT, AgUiA2uiSurfaceStates } from "@opencrane/contracts";
+import { AG_UI_A2UI_ENVELOPE_VERSION, AG_UI_INTERRUPTS_CLEARED_EVENT, AG_UI_TOOL_FAILURE_EVENT, AgUiA2uiSurfaceStates } from "@opencrane/contracts";
 
 import { __DecodeAgUiSseRecord } from "../ag-ui-sse-decoder.js";
-import { AgUiMessageStatuses, AgUiRunStatuses, type AgUiStreamRecord } from "../ag-ui-stream.types.js";
+import { AgUiMessageStatuses, AgUiRunStatuses, AgUiToolStatuses, type AgUiStreamRecord } from "../ag-ui-stream.types.js";
 import { __AgUiResumeCursor, __CreateAgUiStreamState, __ReduceAgUiStream } from "../ag-ui-stream.js";
 
 /** Decode one valid pinned projection frame or fail the focused test immediately. */
@@ -44,8 +44,21 @@ describe("AG-UI stream state", function _Suite()
 
 		expect(state.runStatus).toBe(AgUiRunStatuses.Succeeded);
 		expect(state.messages["message-1"]).toMatchObject({ text: "hello", status: AgUiMessageStatuses.Completed });
-		expect(state.tools["tool-1"]).toMatchObject({ arguments: "{\"q\":\"hello\"}", complete: true, result: "done" });
+		expect(state.tools["tool-1"]).toMatchObject({ arguments: "{\"q\":\"hello\"}", status: AgUiToolStatuses.Completed, result: "done", failureCode: null });
 		expect(__AgUiResumeCursor(state)).toBe("cursor-8");
+	});
+
+	it("keeps a failed tool visibly failed with only its safe technical classification", function _ToolFailure()
+	{
+		let state = __ReduceAgUiStream(__CreateAgUiStreamState(), _Record("cursor-tool-1", { type: EventType.TOOL_CALL_START, toolCallId: "tool-1", toolCallName: "search" }));
+		state = __ReduceAgUiStream(state, _Record("cursor-tool-2", { type: EventType.CUSTOM, name: AG_UI_TOOL_FAILURE_EVENT, value: { eventType: "tool.failed", toolCallId: "tool-1", failureCode: "AuthenticationError" } }));
+
+		expect(state.tools["tool-1"]).toMatchObject({ status: AgUiToolStatuses.Failed, failureCode: "AuthenticationError", result: null });
+		expect(state.customEvents).toContain(AG_UI_TOOL_FAILURE_EVENT);
+		expect(function _SecretExtension(): void
+		{
+			__ReduceAgUiStream(state, _Record("cursor-tool-3", { type: EventType.CUSTOM, name: AG_UI_TOOL_FAILURE_EVENT, value: { eventType: "tool.failed", toolCallId: "tool-1", failureCode: "AuthenticationError", detail: "secret" } }));
+		}).toThrow("tool failure is invalid");
 	});
 
 	it("suppresses exact duplicate cursors and rejects cursor payload mutation", function _RejectsMutation()

@@ -1,7 +1,7 @@
 import { EventType } from "@ag-ui/core";
-import { AG_UI_A2UI_ENVELOPE_VERSION, AG_UI_INTERRUPTS_CLEARED_EVENT, ___ParseAgUiA2uiEnvelope, type AgUiA2uiEnvelope, type AgUiProjectionEvent } from "@opencrane/contracts";
+import { AG_UI_A2UI_ENVELOPE_VERSION, AG_UI_INTERRUPTS_CLEARED_EVENT, AG_UI_TOOL_FAILURE_EVENT, ___ParseAgUiA2uiEnvelope, type AgUiA2uiEnvelope, type AgUiProjectionEvent, type AgUiToolFailureEnvelope } from "@opencrane/contracts";
 
-import { AgUiMessageStatuses, AgUiRunStatuses, type AgUiMessageView, type AgUiStreamRecord, type AgUiStreamState } from "./ag-ui-stream.types.js";
+import { AgUiMessageStatuses, AgUiRunStatuses, AgUiToolStatuses, type AgUiMessageView, type AgUiStreamRecord, type AgUiStreamState } from "./ag-ui-stream.types.js";
 
 /** Construct empty state that requires an authoritative stream before displaying content. */
 export function __CreateAgUiStreamState(): AgUiStreamState
@@ -51,7 +51,7 @@ function _ReduceEvent(state: AgUiStreamState, event: AgUiProjectionEvent): AgUiS
 		case EventType.TEXT_MESSAGE_END:
 			return _CompleteMessage(state, event.messageId);
 		case EventType.TOOL_CALL_START:
-			return { ...state, tools: { ...state.tools, [event.toolCallId]: { id: event.toolCallId, name: event.toolCallName, arguments: "", complete: false, result: null } } };
+			return { ...state, tools: { ...state.tools, [event.toolCallId]: { id: event.toolCallId, name: event.toolCallName, arguments: "", status: AgUiToolStatuses.Requested, result: null, failureCode: null } } };
 		case EventType.TOOL_CALL_ARGS:
 			return _AppendToolArguments(state, event.toolCallId, event.delta);
 		case EventType.TOOL_CALL_END:
@@ -99,7 +99,7 @@ function _CompleteMessage(state: AgUiStreamState, messageId: string): AgUiStream
 function _AppendToolArguments(state: AgUiStreamState, toolCallId: string, delta: string): AgUiStreamState
 {
 	const tool = state.tools[toolCallId];
-	if (tool === undefined || tool.complete) throw new Error("AG-UI tool arguments have no active tool call");
+	if (tool === undefined || tool.status !== AgUiToolStatuses.Requested) throw new Error("AG-UI tool arguments have no active tool call");
 	return { ...state, tools: { ...state.tools, [toolCallId]: { ...tool, arguments: tool.arguments + delta } } };
 }
 
@@ -108,7 +108,7 @@ function _CompleteTool(state: AgUiStreamState, toolCallId: string): AgUiStreamSt
 {
 	const tool = state.tools[toolCallId];
 	if (tool === undefined) throw new Error("AG-UI tool end has no active tool call");
-	return { ...state, tools: { ...state.tools, [toolCallId]: { ...tool, complete: true } } };
+	return { ...state, tools: { ...state.tools, [toolCallId]: { ...tool, status: AgUiToolStatuses.Completed, failureCode: null } } };
 }
 
 /** Attach a display-safe result only to a known tool call. */
@@ -116,7 +116,7 @@ function _ResultTool(state: AgUiStreamState, toolCallId: string, content: string
 {
 	const tool = state.tools[toolCallId];
 	if (tool === undefined) throw new Error("AG-UI tool result has no known tool call");
-	return { ...state, tools: { ...state.tools, [toolCallId]: { ...tool, complete: true, result: content } } };
+	return { ...state, tools: { ...state.tools, [toolCallId]: { ...tool, status: AgUiToolStatuses.Completed, result: content, failureCode: null } } };
 }
 
 /** Apply OpenCrane custom display signals without adopting raw authority payloads. */
@@ -125,8 +125,29 @@ function _Custom(state: AgUiStreamState, name: string, value: unknown): AgUiStre
 	if (name === "opencrane.access_revoked") return __RevokeAgUiStreamAccess();
 	if (name === AG_UI_INTERRUPTS_CLEARED_EVENT) return { ...state, interrupts: [], customEvents: [...state.customEvents, name] };
 	if (name === "opencrane.message_terminal") return _MessageTerminal(state, value, name);
+	if (name === AG_UI_TOOL_FAILURE_EVENT) return _ToolFailure(state, value, name);
 	if (name === AG_UI_A2UI_ENVELOPE_VERSION) return _A2uiSurface(state, ___ParseAgUiA2uiEnvelope(value), name);
 	return { ...state, customEvents: [...state.customEvents, name] };
+}
+
+/** Mark one known tool failed while retaining only the server-selected safe classification. */
+function _ToolFailure(state: AgUiStreamState, value: unknown, name: string): AgUiStreamState
+{
+	if (!_IsToolFailure(value)) throw new Error("AG-UI tool failure is invalid");
+	const tool = state.tools[value.toolCallId];
+	if (tool === undefined) throw new Error("AG-UI tool failure has no known tool call");
+	const failed = { ...tool, status: AgUiToolStatuses.Failed, failureCode: value.failureCode ?? null };
+	return { ...state, tools: { ...state.tools, [value.toolCallId]: failed }, customEvents: [...state.customEvents, name] };
+}
+
+/** Validate the exact display-safe tool-failure envelope without trusting arbitrary CUSTOM data. */
+function _IsToolFailure(value: unknown): value is AgUiToolFailureEnvelope
+{
+	if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
+	const candidate = value as Record<string, unknown>;
+	const keys = Object.keys(candidate);
+	if (keys.some(function _Unknown(key): boolean { return key !== "eventType" && key !== "toolCallId" && key !== "failureCode"; })) return false;
+	return candidate["eventType"] === "tool.failed" && typeof candidate["toolCallId"] === "string" && (candidate["failureCode"] === undefined || typeof candidate["failureCode"] === "string");
 }
 
 /** Adopt only an authoritative monotonic surface envelope under its complete stable identity. */

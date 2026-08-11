@@ -79,6 +79,9 @@ runtime from silently interpreting a frozen snapshot with different assembly rul
   never grant an action or let a client infer lifecycle authority.
 - `AG_UI_CHILD_RUN_ENVELOPE_VERSION` — versioned CUSTOM envelope for lossy immediate-child terminal
   updates. It never exposes child context or sibling data.
+- `AG_UI_TOOL_FAILURE_EVENT` / `AgUiToolFailureEnvelope` — display-safe failed-tool marker carrying
+  only the public call id and an optional server-selected technical classification, never provider
+  text, raw arguments, credentials, or retry authority.
 - Hand-written DTOs/enums: `Grant`/`GrantScope`/`GrantAccess`, `Group`, `ClusterTenant*`,
   `McpServer*`/`Mcp*` operator types (MCP — the Model Context Protocol for connecting external tools),
   model-routing types, `Memory*`, `Approval`, `ThirdPartySource*`, `RuntimeAssignment`,

@@ -1,7 +1,7 @@
 import { EventSchemas } from "@ag-ui/core";
 import { describe, expect, it } from "vitest";
 
-import { AG_UI_A2UI_ENVELOPE_VERSION, AG_UI_PROJECTION_VERSION, AgUiA2uiSurfaceStates, ___ParseAgUiA2uiEnvelope, __EncodeAgUiSseRecord, __ProjectAgUiEvent, type AgUiProjectionSourceEvent } from "../index.js";
+import { AG_UI_A2UI_ENVELOPE_VERSION, AG_UI_PROJECTION_VERSION, AG_UI_TOOL_FAILURE_EVENT, AgUiA2uiSurfaceStates, ___ParseAgUiA2uiEnvelope, __EncodeAgUiSseRecord, __ProjectAgUiEvent, type AgUiProjectionSourceEvent } from "../index.js";
 
 /** Construct one server-authorized safe source event for projection tests. */
 function _Source(eventType: AgUiProjectionSourceEvent["eventType"], payload: AgUiProjectionSourceEvent["payload"] = {}): AgUiProjectionSourceEvent
@@ -36,6 +36,11 @@ describe("AG-UI projection", function _Suite()
 		expect(__ProjectAgUiEvent(_Source("message.completed", { messageId: "message-1" })).data).toEqual({ type: "TEXT_MESSAGE_END", messageId: "message-1" });
 		expect(__ProjectAgUiEvent(_Source("tool.requested", { toolCallId: "tool-1", toolCallName: "search" })).data).toEqual({ type: "TOOL_CALL_START", toolCallId: "tool-1", toolCallName: "search" });
 		expect(__ProjectAgUiEvent(_Source("tool.completed", { toolCallId: "tool-1", toolResult: "AWS_SECRET_ACCESS_KEY=never-forwarded" })).data).toEqual({ type: "TOOL_CALL_END", toolCallId: "tool-1" });
+	});
+
+	it("projects tool failure with safe coordinates and technical classification", function _ProjectsToolFailure()
+	{
+		expect(__ProjectAgUiEvent(_Source("tool.failed", { toolCallId: "tool-1", failureCode: "AuthenticationError" })).data).toEqual({ type: "CUSTOM", name: AG_UI_TOOL_FAILURE_EVENT, value: { eventType: "tool.failed", toolCallId: "tool-1", failureCode: "AuthenticationError" } });
 	});
 
 	it("retains every unsupported or incomplete canonical event as a payload-free custom signal", function _ProjectsCustom()

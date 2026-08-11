@@ -31,6 +31,17 @@ export enum AgUiMessageStatuses
 	Cancelled = "cancelled",
 }
 
+/** Browser-visible lifecycle for one projected tool call. */
+export enum AgUiToolStatuses
+{
+	/** The tool call was requested and may still progress. */
+	Requested = "requested",
+	/** The authoritative stream reported successful completion. */
+	Completed = "completed",
+	/** The authoritative stream reported a failure, including before later model recovery. */
+	Failed = "failed",
+}
+
 /** Browser-owned view of one safe conversation message. */
 export interface AgUiMessageView
 {
@@ -53,10 +64,12 @@ export interface AgUiToolView
 	readonly name: string;
 	/** Incremental JSON arguments emitted by the projection. */
 	readonly arguments: string;
-	/** Whether the tool request ended. */
-	readonly complete: boolean;
+	/** Truthful projected tool lifecycle. */
+	readonly status: AgUiToolStatuses;
 	/** Display-safe tool result, when emitted. */
 	readonly result: string | null;
+	/** Optional server-selected technical classification for a failure. */
+	readonly failureCode: string | null;
 }
 
 /** Safe failure selected by the server-owned AG-UI projection. */

@@ -120,7 +120,7 @@ export function _CreateChannelTargetResolver(prisma: PrismaClient, authApi: k8s.
 		clock: new __SystemChannelTargetClock(),
 		opaqueContext: new __RandomChannelOpaqueContextSource(),
 	};
-	return __CreateChannelTargetsRouter(dependencies);
+	return __CreateChannelTargetsRouter(dependencies, _log);
 }
 
 /** Reconcile service-specific replay routes before either listener accepts traffic. */

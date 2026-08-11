@@ -39,11 +39,11 @@ lifecycle and display-safe reason without inferring action authority or a next s
 
 - `__DecodeAgUiSseRecord` — validates one complete record with pinned `@ag-ui/core` schemas.
 - `__ReduceAgUiStream` / `__CreateAgUiStreamState` — builds immutable browser view state while
-  preserving truthful success, interruption, failure, and cancellation terminals plus monotonic
-  governed A2UI surfaces.
+  preserving truthful success, interruption, failure, and cancellation terminals, display-safe
+  tool-failure classifications, plus monotonic governed A2UI surfaces.
 - `__AgUiResumeCursor` — returns only the latest durable server cursor for reconnect.
 - `__RevokeAgUiStreamAccess` — purges all projected content and reconnect coordinates after access loss.
-- `AgUiRunStatuses` / `AgUiMessageStatuses` — the browser's explicit projection lifecycle.
+- `AgUiRunStatuses` / `AgUiMessageStatuses` / `AgUiToolStatuses` — the browser's explicit projection lifecycle.
 
 ## Boundary
 

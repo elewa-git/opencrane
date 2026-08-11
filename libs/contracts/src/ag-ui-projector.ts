@@ -1,6 +1,6 @@
 import { EventType } from "@ag-ui/core";
 import { RunEventTypes } from "@opencrane/models/agents";
-import { AG_UI_A2UI_ENVELOPE_VERSION, AG_UI_CHILD_RUN_ENVELOPE_VERSION, type AgUiProjectionEvent, type AgUiProjectionSourceEvent, type AgUiSseRecord } from "./ag-ui-projection.types.js";
+import { AG_UI_A2UI_ENVELOPE_VERSION, AG_UI_CHILD_RUN_ENVELOPE_VERSION, AG_UI_TOOL_FAILURE_EVENT, type AgUiProjectionEvent, type AgUiProjectionSourceEvent, type AgUiSseRecord, type AgUiToolFailureEnvelope } from "./ag-ui-projection.types.js";
 
 /** Project one server-authorized canonical event into the small, display-safe AG-UI subset. */
 export function __ProjectAgUiEvent(source: AgUiProjectionSourceEvent): AgUiSseRecord
@@ -55,11 +55,21 @@ function _Project(source: AgUiProjectionSourceEvent): AgUiProjectionEvent
 		case RunEventTypes.ToolCompleted:
 			if (typeof source.payload.toolCallId !== "string") return _Custom(source);
 			return { type: EventType.TOOL_CALL_END, toolCallId: source.payload.toolCallId };
+		case RunEventTypes.ToolFailed:
+			return _ToolFailure(source);
 		default:
 			if (source.payload.a2ui !== undefined) return { type: EventType.CUSTOM, name: AG_UI_A2UI_ENVELOPE_VERSION, value: source.payload.a2ui };
 			if (source.payload.childRun !== undefined) return { type: EventType.CUSTOM, name: AG_UI_CHILD_RUN_ENVELOPE_VERSION, value: source.payload.childRun };
 			return _Custom(source);
 	}
+}
+
+/** Preserve one safe tool coordinate and classification without exposing provider detail. */
+function _ToolFailure(source: AgUiProjectionSourceEvent): AgUiProjectionEvent
+{
+	if (typeof source.payload.toolCallId !== "string") return _Custom(source);
+	const value: AgUiToolFailureEnvelope = { eventType: RunEventTypes.ToolFailed, toolCallId: source.payload.toolCallId, ...(source.payload.failureCode === undefined ? {} : { failureCode: source.payload.failureCode }) };
+	return { type: EventType.CUSTOM, name: AG_UI_TOOL_FAILURE_EVENT, value };
 }
 
 /** Keep terminal details useful while limiting them to the server-selected reason vocabulary. */

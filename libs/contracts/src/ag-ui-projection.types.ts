@@ -16,6 +16,9 @@ export const AG_UI_CHILD_RUN_ENVELOPE_VERSION = "opencrane.child_run.v1";
 /** Cursorless custom marker that authoritatively clears the current open-interrupt overlay. */
 export const AG_UI_INTERRUPTS_CLEARED_EVENT = "opencrane.interrupts_cleared";
 
+/** Display-safe custom marker for one canonical tool failure that may precede later model work. */
+export const AG_UI_TOOL_FAILURE_EVENT = "opencrane.tool_failed";
+
 /**
  * Authoritative browser presentation lifecycle for one governed A2UI surface.
  *
@@ -76,6 +79,17 @@ export interface AgUiChildRunEnvelope
 	readonly state: AgUiChildRunState;
 	readonly terminalReason?: string;
 	readonly finishedAt: string;
+}
+
+/** Display-safe technical classification for one failed tool call. */
+export interface AgUiToolFailureEnvelope
+{
+	/** Canonical source event name; it carries no action or retry authority. */
+	readonly eventType: "tool.failed";
+	/** Stable public tool-call coordinate already introduced by TOOL_CALL_START. */
+	readonly toolCallId: string;
+	/** Optional server-selected classification from the fixed safe vocabulary. */
+	readonly failureCode?: string;
 }
 
 /** Safe, user-facing fragments selected by the server-owned event reader. */
