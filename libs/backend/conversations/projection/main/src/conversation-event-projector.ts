@@ -1,4 +1,4 @@
-import { AG_UI_CHILD_RUN_ENVELOPE_VERSION, AgUiToolRecoveryProviderOutcomes, RunEventTypes, ___ParseAgUiA2uiEnvelope, type AgUiChildRunEnvelope, type AgUiPublicEventPayload } from "@opencrane/contracts";
+import { AG_UI_CHILD_RUN_ENVELOPE_VERSION, AgUiToolRecoveryProviderOutcomes, RunEventTypes, ___ParseAgUiA2uiEnvelope, type AgUiChildRunEnvelope, type AgUiPublicEventPayload, type SafeToolTechnicalDetails } from "@opencrane/contracts";
 
 import type { ConversationEventProjectionResult, ConversationProjectionEventRow } from "./conversation-event-projector.types.js";
 
@@ -19,11 +19,11 @@ const _SAFE_FAILURE_CODES = new Set(["AuthenticationError", "ConnectionError", "
 export function __ProjectConversationEvent(row: ConversationProjectionEventRow): ConversationEventProjectionResult
 {
 	if (!row.cursor || !row.conversationId || !/^[1-9]\d*$/u.test(row.position) || !row.type || Number.isNaN(Date.parse(row.occurredAt))) return null;
-	return { cursor: row.cursor, conversationId: row.conversationId, ...(row.runId === null ? {} : { runId: row.runId }), position: row.position, eventType: row.type, occurredAt: row.occurredAt, payload: _SafePayload(row.type, row.payload, row.conversationId, row.runId) };
+	return { cursor: row.cursor, conversationId: row.conversationId, ...(row.runId === null ? {} : { runId: row.runId }), position: row.position, eventType: row.type, occurredAt: row.occurredAt, payload: _SafePayload(row.type, row.payload, row.conversationId, row.runId, row.occurredAt) };
 }
 
 /** Select only schema-free display fields needed by known projected event types. */
-function _SafePayload(type: string, payload: Readonly<Record<string, unknown>>, conversationId: string, runId: string | null): AgUiPublicEventPayload
+function _SafePayload(type: string, payload: Readonly<Record<string, unknown>>, conversationId: string, runId: string | null, occurredAt: string): AgUiPublicEventPayload
 {
 	switch (type)
 	{
@@ -38,7 +38,7 @@ function _SafePayload(type: string, payload: Readonly<Record<string, unknown>>, 
 		case RunEventTypes.ToolCompleted:
 			return _Tool(payload);
 		case RunEventTypes.ToolFailed:
-			return _Failure(payload, true);
+			return _ToolFailure(payload, occurredAt);
 		case RunEventTypes.ToolRecoveryRequired:
 			return _ToolRecovery(payload);
 		case RunEventTypes.RunError:
@@ -55,6 +55,30 @@ function _SafePayload(type: string, payload: Readonly<Record<string, unknown>>, 
 	}
 	if (type === "child.run.completed" || type === "child.run.failed" || type === "child.run.cancelled") return _ChildRun(type, payload, runId);
 	return {};
+}
+
+/** Project a visible failure on every attempt, including attempts the server will retry. */
+function _ToolFailure(payload: Readonly<Record<string, unknown>>, occurredAt: string): AgUiPublicEventPayload
+{
+	const base = _Failure(payload, true);
+	const toolCallId = base.toolCallId;
+	const toolRevision = payload["toolRevisionId"];
+	const retryCount = payload["retryCount"];
+	const retryLimit = payload["retryLimit"];
+	const retrying = payload["retrying"];
+	if (toolCallId === undefined || typeof toolRevision !== "string" || !Number.isSafeInteger(retryCount) || (retryCount as number) < 0 || retryLimit !== 3 || typeof retrying !== "boolean") return base;
+	const technicalDetails: SafeToolTechnicalDetails = { toolIdentifier: toolCallId, toolRevision, ...(base.failureCode === undefined ? {} : { failureCategory: base.failureCode, summary: _FailureSummary(base.failureCode) }), occurredAt, retryCount: retryCount as number, retryLimit };
+	return { ...base, toolFailure: { retrying, technicalDetails } };
+}
+
+/** Map fixed server categories to plain-language summaries without provider text. */
+function _FailureSummary(failureCode: string): string
+{
+	if (failureCode === "AuthenticationError") return "Authentication failed.";
+	if (failureCode === "PermissionError") return "The external system denied permission.";
+	if (failureCode === "TimeoutError") return "The external system did not respond in time.";
+	if (failureCode === "external_action_provider_outcome_ambiguous") return "The external result could not be confirmed.";
+	return "The tool attempt failed.";
 }
 
 /** Admit only fixed safe recovery evidence; provider bodies and arbitrary detail are discarded. */

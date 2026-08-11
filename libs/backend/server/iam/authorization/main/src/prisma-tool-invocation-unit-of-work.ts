@@ -202,7 +202,7 @@ function _completedEvent(invocation: ToolInvocationRecord): ToolInvocationLifecy
 /** Build one secret-free canonical failure or retry event. */
 function _failedEvent(invocation: ToolInvocationRecord, reason: string, retrying: boolean, retryLimit: number): ToolInvocationLifecycleEvent
 {
-	return { runId: invocation.runId, attempt: invocation.attempt, eventType: ToolInvocationEventTypes.Failed, payload: { toolInvocationId: invocation.toolInvocationId, reason, retryCount: invocation.preparationAttempt, retryLimit, retrying } };
+	return { runId: invocation.runId, attempt: invocation.attempt, eventType: ToolInvocationEventTypes.Failed, payload: { toolInvocationId: invocation.toolInvocationId, toolRevisionId: invocation.toolRevisionId, reason, retryCount: invocation.preparationAttempt, retryLimit, retrying } };
 }
 
 /** Append one lifecycle event or roll back the owning transition. */

@@ -67,6 +67,6 @@ export class PrismaRuntimeCommandDecisionUnitOfWork implements RuntimeCommandDec
 		const loaded = await new PrismaRuntimeResumeInputRepository(this._transaction).load(context.runId, context.attempt, 0);
 		if (loaded === null) return null;
 		const hasResume = commands.some(function _IsResume(row) { return row.kind === RuntimeCommandKind.ResumeAttempt; });
-		return hasResume && loaded.toolResultDeliveryIds.length === 0 ? null : RuntimeCommandKind.ResumeAttempt;
+		return hasResume && loaded.toolResultDeliveryIds.length === 0 && loaded.elicitationResultDeliveryIds.length === 0 ? null : RuntimeCommandKind.ResumeAttempt;
 	}
 }

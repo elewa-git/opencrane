@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { ElicitationBodyKinds } from "@opencrane/contracts";
 
-import { __CreateSelfElicitationRouter } from "../self-elicitation.router.js";
+import { __CreateSelfElicitationActivityRouter, __CreateSelfElicitationRouter } from "../self-elicitation.router.js";
 import type { SelfElicitationRouterDependencies } from "../self-elicitation.router.types.js";
 
 /** Build self-only ports with one trusted caller. */
@@ -12,11 +12,17 @@ function _Dependencies(overrides: Partial<SelfElicitationRouterDependencies> = {
 {
 	return {
 		resolveCaller: function _Caller() { return { siloId: "silo-1", subjectId: "user-1", verifiedStepUpAt: null }; },
-		elicitations: { open: vi.fn(), readOwned: vi.fn().mockResolvedValue(null), respond: vi.fn().mockResolvedValue({ outcome: "accepted", projection: { requestId: "request-1", state: "answered", idempotent: false, resolvedAt: "2026-08-11T10:00:00.000Z" } }) },
+		elicitations: _Elicitations(),
 		clock: { now: function _Now() { return new Date("2026-08-11T10:00:00.000Z"); } },
 		logger: { error: vi.fn() } as never,
 		...overrides,
 	};
+}
+
+/** Build one complete generic authority double. */
+function _Elicitations(overrides: Record<string, unknown> = {}): SelfElicitationRouterDependencies["elicitations"]
+{
+	return { open: vi.fn(), readOwned: vi.fn().mockResolvedValue(null), listOpenOwned: vi.fn().mockResolvedValue([]), listActivityOwned: vi.fn().mockResolvedValue([]), respond: vi.fn().mockResolvedValue({ outcome: "accepted", projection: { requestId: "request-1", state: "answered", idempotent: false, resolvedAt: "2026-08-11T10:00:00.000Z" } }), ...overrides } as SelfElicitationRouterDependencies["elicitations"];
 }
 
 /** Mount the conversation-scoped route exactly as production does. */
@@ -33,7 +39,7 @@ describe("__CreateSelfElicitationRouter", function _Suite()
 	it("reads only through session-derived ownership", async function _Reads()
 	{
 		const elicitation = { requestId: "request-1" } as never;
-		const dependencies = _Dependencies({ elicitations: { open: vi.fn(), readOwned: vi.fn().mockResolvedValue(elicitation), respond: vi.fn() } });
+		const dependencies = _Dependencies({ elicitations: _Elicitations({ readOwned: vi.fn().mockResolvedValue(elicitation) }) });
 		const response = await request(_App(dependencies)).get("/api/v1/me/conversations/conversation-1/elicitations/request-1");
 		expect(response.status).toBe(200);
 		expect(response.body).toEqual({ elicitation: { requestId: "request-1" } });
@@ -54,11 +60,22 @@ describe("__CreateSelfElicitationRouter", function _Suite()
 	{
 		for (const [outcome, status] of [["step_up_required", 428], ["conflict", 409], ["expired", 409], ["unauthorized", 403]] as const)
 		{
-			const dependencies = _Dependencies({ elicitations: { open: vi.fn(), readOwned: vi.fn(), respond: vi.fn().mockResolvedValue({ outcome }) } });
+			const dependencies = _Dependencies({ elicitations: _Elicitations({ respond: vi.fn().mockResolvedValue({ outcome }) }) });
 			const response = await request(_App(dependencies)).post("/api/v1/me/conversations/conversation-1/elicitations/request-1/responses").send({ idempotencyKey: "retry-1", response: { kind: ElicitationBodyKinds.FreeText, text: "answer" } });
 			expect(response.status).toBe(status);
 			if (outcome === "step_up_required") expect(response.body).toEqual({ error: "elicitation_step_up_required", reauthenticatePath: "/api/v1/auth/reauthenticate" });
 		}
+	});
+
+	it("lists a bounded derived Activity index through session ownership", async function _Activity()
+	{
+		const dependencies = _Dependencies({ elicitations: _Elicitations({ listActivityOwned: vi.fn().mockResolvedValue([{ requestId: "request-1" }]) }) });
+		const app = express();
+		app.use("/api/v1/me/activity", __CreateSelfElicitationActivityRouter(dependencies));
+		const response = await request(app).get("/api/v1/me/activity/elicitations?limit=25");
+		expect(response.status).toBe(200);
+		expect(response.body).toEqual({ elicitations: [{ requestId: "request-1" }] });
+		expect(dependencies.elicitations.listActivityOwned).toHaveBeenCalledWith("silo-1", "user-1", 25, new Date("2026-08-11T10:00:00.000Z"));
 	});
 
 	it("requires a browser session for reads and answers", async function _RequiresSession()

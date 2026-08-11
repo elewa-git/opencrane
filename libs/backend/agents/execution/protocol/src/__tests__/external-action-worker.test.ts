@@ -211,7 +211,7 @@ class _Invocations implements ExternalActionWorkerUnitOfWork
 	async recordPreparationFailure(_invocationId: string, _expectedRevision: number, _now: Date, policy: ToolInvocationPreparationPolicy, failureCode: string): Promise<ToolInvocationRecord | null>
 	{
 		this.preparationFailures.push(policy);
-		this.lifecycleEvents.push({ runId: this.invocation.runId, attempt: this.invocation.attempt, eventType: ToolInvocationEventTypes.Failed, payload: { toolInvocationId: this.invocation.toolInvocationId, reason: failureCode, retryCount: this.invocation.preparationAttempt + 1, retryLimit: policy.attemptLimit, retrying: true } });
+		this.lifecycleEvents.push({ runId: this.invocation.runId, attempt: this.invocation.attempt, eventType: ToolInvocationEventTypes.Failed, payload: { toolInvocationId: this.invocation.toolInvocationId, toolRevisionId: this.invocation.toolRevisionId, reason: failureCode, retryCount: this.invocation.preparationAttempt + 1, retryLimit: policy.attemptLimit, retrying: true } });
 		return this.invocation;
 	}
 	/** Acquire one exact provider-operation claim. */
@@ -225,16 +225,16 @@ class _Invocations implements ExternalActionWorkerUnitOfWork
 	/** Commit one successful provider result. */
 	async completeSucceeded(_claim: ToolInvocationClaim, result: JsonValue, _now: Date): Promise<ToolInvocationCompletionResult> { this.successes.push(result); this.lifecycleEvents.push({ runId: this.invocation.runId, attempt: this.invocation.attempt, eventType: ToolInvocationEventTypes.Completed, payload: { toolInvocationId: this.invocation.toolInvocationId } }); return { outcome: "winner", invocation: this.invocation }; }
 	/** Commit one proven provider failure. */
-	async completeFailed(_claim: ToolInvocationClaim, failureCode: string, _now: Date): Promise<ToolInvocationCompletionResult> { this.lifecycleEvents.push({ runId: this.invocation.runId, attempt: this.invocation.attempt, eventType: ToolInvocationEventTypes.Failed, payload: { toolInvocationId: this.invocation.toolInvocationId, reason: failureCode, retryCount: this.invocation.preparationAttempt, retryLimit: 3, retrying: false } }); return { outcome: "winner", invocation: this.invocation }; }
-	/** Record a result the provider did not prove. */
-	async completeAmbiguous(claim: ToolInvocationClaim, _now: Date): Promise<ToolInvocationRecord | null> { this.ambiguous.push(claim); this.lifecycleEvents.push({ runId: this.invocation.runId, attempt: this.invocation.attempt, eventType: ToolInvocationEventTypes.Failed, payload: { toolInvocationId: this.invocation.toolInvocationId, reason: "external_action_provider_outcome_ambiguous", retryCount: this.invocation.preparationAttempt, retryLimit: 3, retrying: this.invocation.recoveryMode !== ExternalActionRecoveryModes.Manual } }); return this.invocation; }
+	async completeFailed(_claim: ToolInvocationClaim, failureCode: string, _now: Date): Promise<ToolInvocationCompletionResult> { this.lifecycleEvents.push({ runId: this.invocation.runId, attempt: this.invocation.attempt, eventType: ToolInvocationEventTypes.Failed, payload: { toolInvocationId: this.invocation.toolInvocationId, toolRevisionId: this.invocation.toolRevisionId, reason: failureCode, retryCount: this.invocation.preparationAttempt, retryLimit: 3, retrying: false } }); return { outcome: "winner", invocation: this.invocation }; }
+	/** Record an ambiguous result for frozen recovery policy. */
+	async completeAmbiguous(claim: ToolInvocationClaim, _now: Date): Promise<ToolInvocationRecord | null> { this.ambiguous.push(claim); this.lifecycleEvents.push({ runId: this.invocation.runId, attempt: this.invocation.attempt, eventType: ToolInvocationEventTypes.Failed, payload: { toolInvocationId: this.invocation.toolInvocationId, toolRevisionId: this.invocation.toolRevisionId, reason: "external_action_provider_outcome_ambiguous", retryCount: this.invocation.preparationAttempt, retryLimit: 3, retrying: this.invocation.recoveryMode !== ExternalActionRecoveryModes.Manual } }); return this.invocation; }
 	/** Recover one expired provider claim without dispatching. */
 	async recoverExpiredClaim(_invocationId: string, _now: Date): Promise<ToolInvocationRecord | null> { this.expiredRecoveries += 1; return this.invocation; }
 	/** Release the claim and record the failure event a later retry will see. */
 	async releaseClaimBeforeDispatch(claim: ToolInvocationClaim, _now: Date): Promise<ToolInvocationRecord | null>
 	{
 		this.releasedClaims.push(claim);
-		this.lifecycleEvents.push({ runId: this.invocation.runId, attempt: this.invocation.attempt, eventType: ToolInvocationEventTypes.Failed, payload: { toolInvocationId: this.invocation.toolInvocationId, reason: "external_action_start_event_failed", retryCount: this.invocation.preparationAttempt + 1, retryLimit: 3, retrying: true } });
+		this.lifecycleEvents.push({ runId: this.invocation.runId, attempt: this.invocation.attempt, eventType: ToolInvocationEventTypes.Failed, payload: { toolInvocationId: this.invocation.toolInvocationId, toolRevisionId: this.invocation.toolRevisionId, reason: "external_action_start_event_failed", retryCount: this.invocation.preparationAttempt + 1, retryLimit: 3, retrying: true } });
 		return this.invocation;
 	}
 }

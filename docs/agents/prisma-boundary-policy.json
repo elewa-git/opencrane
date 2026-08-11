@@ -465,13 +465,6 @@
 		"contractImportPath": "./self-run-cancellation.types.js",
 		"constructs": []
 	  },
-	  {
-		"path": "libs/backend/server/iam/authorization/main/src/prisma-self-deferred-tool-approval-list-repository.ts",
-		"adapter": "PrismaSelfDeferredToolApprovalListRepository",
-		"contract": "SelfDeferredToolApprovalListRepository",
-		"contractImportPath": "./deferred-tool-approval-interrupt.types.js",
-		"constructs": []
-	  },
       {
         "path": "libs/backend/server/iam/authorization/main/src/prisma-share-authorization-repository.ts",
         "adapter": "PrismaShareAuthorizationRepository",
@@ -955,18 +948,6 @@
 		  }
 		]
 	  },
-	  {
-		"path": "libs/backend/server/iam/authorization/main/src/prisma-self-deferred-tool-approval-list-repository.ts",
-		"adapter": "PrismaSelfDeferredToolApprovalReadUnitOfWork",
-		"contract": "SelfDeferredToolApprovalReadUnitOfWork",
-		"contractImportPath": "./deferred-tool-approval-interrupt.types.js",
-		"constructs": [
-		  {
-			"adapter": "PrismaSelfDeferredToolApprovalListRepository",
-			"importPath": "<same-file>"
-		  }
-		]
-	  },
       {
         "path": "libs/backend/server/gateways/mcp/main/src/core/prisma-mcp-server-mutation-unit-of-work.ts",
         "adapter": "PrismaMcpServerMutationUnitOfWork",
@@ -999,11 +980,11 @@
 		"libs/backend/server/conversations/main/src/prisma-self-conversation-replay.router.ts",
 		"libs/backend/server/conversations/main/src/prisma-self-conversations.router.ts",
 		"libs/backend/agents/execution/elicitation/main/src/prisma-self-elicitation.router.ts",
+		"libs/backend/agents/execution/elicitation/main/src/prisma-elicitation-interrupt-reader.ts",
 		"libs/backend/agents/execution/runs/main/src/prisma-self-run-cancellation.router.ts",
 		"libs/backend/server/agents/onboarding/main/src/prisma-user-onboarding-repository.ts",
 		"libs/backend/server/agents/skills/main/src/prisma-skill-catalogue.router.ts",
 		"libs/backend/server/iam/identity/main/src/oidc.service.ts",
-		"libs/backend/server/iam/authorization/main/src/prisma-deferred-tool-approval-interrupt-reader.ts",
 		"libs/backend/server/gateways/integrations/main/src/integration-custody.router.ts"
     ]
   },

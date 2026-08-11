@@ -179,7 +179,7 @@ export enum ToolInvocationEventTypes
 export type ToolInvocationLifecycleEvent =
 	| { readonly runId: string; readonly attempt: number; readonly eventType: ToolInvocationEventTypes.Started; readonly payload: { readonly toolInvocationId: string } }
 	| { readonly runId: string; readonly attempt: number; readonly eventType: ToolInvocationEventTypes.Completed; readonly payload: { readonly toolInvocationId: string } }
-	| { readonly runId: string; readonly attempt: number; readonly eventType: ToolInvocationEventTypes.Failed; readonly payload: { readonly toolInvocationId: string; readonly reason: string; readonly retryCount: number; readonly retryLimit: number; readonly retrying: boolean } };
+	| { readonly runId: string; readonly attempt: number; readonly eventType: ToolInvocationEventTypes.Failed; readonly payload: { readonly toolInvocationId: string; readonly toolRevisionId: string; readonly reason: string; readonly retryCount: number; readonly retryLimit: number; readonly retrying: boolean } };
 
 /** Appends tool lifecycle events using the caller's transaction. */
 export interface ToolInvocationLifecycleEventSink

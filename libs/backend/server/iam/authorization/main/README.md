@@ -74,18 +74,17 @@ carries a concrete, currently authorized human approval subject.
 - `__CancelPendingRunApprovalAuthority` — closes pending approvals and only provider-free or
   unclaimed invocations for an exact run attempt on a caller-owned database transaction. Active
   provider claims remain fenced until their definite result or recovery decision becomes durable.
-- `PrismaSelfDeferredToolApprovalListRepository` — the internal safe-projection adapter retained for
-  tool audit and live-event evidence. Browser reads and decisions now use the conversation-scoped
-  elicitation authority; reviewed arguments, proof data, policy digests, and resume material remain
-  internal here.
+- `ApprovalRequest` remains internal tool audit evidence. Browser reads, live overlays, and decisions
+  use the conversation-scoped elicitation authority; reviewed arguments, proof data, policy digests,
+  and resume material remain internal here.
 - `__OpenDeferredToolApproval` — atomically links an awaiting ToolInvocation to its approval, then
   recovers an ambiguous commit or terminalises the invocation so it cannot be replayed.
 - `__ProjectDeferredToolApproval`, `__ValidateDeferredToolArguments` — derive the secret-safe actor
   projection and validate a complete approved replacement against the frozen reviewed tool schema.
 - Deferred-approval contracts are split by authority: `DeferredToolApprovalLifecycle*` owns the
-  exhaustive run-state table; `DeferredToolApprovalInterrupt*` and `SelfDeferredToolApproval*` own
-  internal safe projections; `DeferredToolDecision*` owns decision and expiry commands; and
-  `DeferredToolApprovalOpen*` owns invocation-linked opening and ambiguous-commit recovery.
+  exhaustive run-state table; `DeferredToolDecision*` owns decision and expiry commands;
+  `DeferredToolApprovalOpen*` owns invocation-linked opening and ambiguous-commit recovery; and the
+  schema helper owns the pre-redacted internal projection stored with audit evidence.
 - `__DigestCanonicalJson` — an authorization-domain wrapper over the shared environment-neutral
   canonical JSON hash, preserving one SHA-256 implementation across server and browser consumers.
 - `PrismaRuntimeAuthorityRepository`, `PrismaAuthorizationGrantRepository` — the database-backed

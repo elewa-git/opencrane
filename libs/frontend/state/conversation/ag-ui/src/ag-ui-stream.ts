@@ -249,7 +249,7 @@ function _ToolFailure(state: AgUiStreamState, value: unknown, name: string): AgU
 	const tool = state.tools[value.toolCallId];
 	if (tool === undefined) throw new Error("AG-UI tool failure has no known tool call");
 	const failureCode = value.failureCode ?? null;
-	const failed = { ...tool, status: AgUiToolStatuses.Failed, failureCode, failures: [...tool.failures, { code: failureCode }] };
+	const failed = { ...tool, status: AgUiToolStatuses.Failed, failureCode, failures: [...tool.failures, { code: failureCode, retrying: value.retrying, technicalDetails: value.technicalDetails }] };
 	return { ...state, tools: { ...state.tools, [value.toolCallId]: failed }, customEvents: [...state.customEvents, name] };
 }
 
@@ -259,8 +259,22 @@ function _IsToolFailure(value: unknown): value is AgUiToolFailureEnvelope
 	if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
 	const candidate = value as Record<string, unknown>;
 	const keys = Object.keys(candidate);
-	if (keys.some(function _Unknown(key): boolean { return key !== "eventType" && key !== "toolCallId" && key !== "failureCode"; })) return false;
-	return candidate["eventType"] === "tool.failed" && typeof candidate["toolCallId"] === "string" && (candidate["failureCode"] === undefined || typeof candidate["failureCode"] === "string");
+	if (keys.some(function _Unknown(key): boolean { return key !== "eventType" && key !== "toolCallId" && key !== "failureCode" && key !== "retrying" && key !== "technicalDetails"; })) return false;
+	return candidate["eventType"] === "tool.failed" && _BoundedIdentifier(candidate["toolCallId"]) && (candidate["failureCode"] === undefined || typeof candidate["failureCode"] === "string") && typeof candidate["retrying"] === "boolean" && _IsSafeToolTechnicalDetails(candidate["technicalDetails"]);
+}
+
+/** Admit only the exact progressive-disclosure fields selected by the server. */
+function _IsSafeToolTechnicalDetails(value: unknown): value is AgUiToolFailureEnvelope["technicalDetails"]
+{
+	if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
+	const candidate = value as Record<string, unknown>;
+	const required = ["toolIdentifier", "toolRevision", "occurredAt", "retryCount", "retryLimit"];
+	const optional = ["externalSystem", "failureCategory", "providerCode", "httpStatus", "summary"];
+	if (required.some(function _Missing(key) { return !Object.hasOwn(candidate, key); }) || Object.keys(candidate).some(function _Unknown(key) { return !required.includes(key) && !optional.includes(key); })) return false;
+	if (!_BoundedIdentifier(candidate["toolIdentifier"]) || !_BoundedIdentifier(candidate["toolRevision"]) || !_CanonicalInstant(candidate["occurredAt"])) return false;
+	if (!Number.isSafeInteger(candidate["retryCount"]) || (candidate["retryCount"] as number) < 0 || candidate["retryLimit"] !== 3 || (candidate["retryCount"] as number) > 3) return false;
+	if (candidate["httpStatus"] !== undefined && (!Number.isSafeInteger(candidate["httpStatus"]) || (candidate["httpStatus"] as number) < 100 || (candidate["httpStatus"] as number) > 599)) return false;
+	return optional.filter(function _StringField(key) { return key !== "httpStatus"; }).every(function _BoundedOptional(key) { const field = candidate[key]; return field === undefined || _BoundedIdentifier(field); });
 }
 
 /**

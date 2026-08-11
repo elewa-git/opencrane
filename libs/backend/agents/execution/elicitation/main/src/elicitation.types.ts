@@ -63,6 +63,10 @@ export interface SelfElicitationQueryRepository
 {
 	/** Read one request only when the caller remains its active assigned participant. */
 	readOwned(siloId: string, conversationId: string, requestId: string, subjectId: string, now: Date): Promise<ConversationElicitation | null>;
+	/** List current cursorless overlays for one exact owned conversation. */
+	listOpenOwned(siloId: string, conversationId: string, subjectId: string, now: Date): Promise<readonly ConversationElicitation[]>;
+	/** List recent canonical request references for the caller's derived Activity index. */
+	listActivityOwned(siloId: string, subjectId: string, limit: number, now: Date): Promise<readonly ConversationElicitation[]>;
 }
 
 /** Atomic authority for request creation and one response/resume decision. */

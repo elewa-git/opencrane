@@ -1,4 +1,4 @@
-import { ToolResultDeliveryState, type Prisma } from "@prisma/client";
+import { ElicitationResultDeliveryState, ToolResultDeliveryState, type Prisma } from "@prisma/client";
 
 import type { RuntimeDispatchStateRepository, RuntimeDispatchStateUnitOfWork, RuntimeDispatchToolInvocation } from "./runtime-dispatch-state.types.js";
 
@@ -39,16 +39,14 @@ export class PrismaRuntimeDispatchStateRepository implements RuntimeDispatchStat
 		if (consumed.count !== deliveryIds.length) throw new Error("runtime dispatch lost a saved-result delivery fence");
 	}
 
-	/**
-	 * Load just the fields needed to check that a repeated candidate is identical to the first one.
-	 *
-	 * @param runId - Run that owns the invocation.
-	 * @param attempt - Attempt the candidate was admitted under.
-	 * @param candidateId - The candidate id the runtime is offering again.
-	 * @returns The saved fields, or null when no invocation was ever recorded for that candidate.
-	 * Either way the caller must refuse a repeat that does not match, with
-	 * `external_action_replay_conflict`.
-	 */
+	/** Consume every exact elicitation result or abort on a lost marker fence. */
+	async consumeElicitationResultDeliveries(deliveryIds: readonly string[], consumedAt: Date): Promise<void>
+	{
+		const consumed = await this.transaction.elicitationResultDelivery.updateMany({ where: { id: { in: [...deliveryIds] }, state: ElicitationResultDeliveryState.Pending }, data: { state: ElicitationResultDeliveryState.Consumed, consumedAt } });
+		if (consumed.count !== deliveryIds.length) throw new Error("runtime dispatch lost an elicitation-result delivery fence");
+	}
+
+	/** Load only the immutable fields needed to prove an idempotent candidate replay. */
 	findToolInvocation(runId: string, attempt: number, candidateId: string): Promise<RuntimeDispatchToolInvocation | null>
 	{
 		return this.transaction.toolInvocation.findUnique({ where: { runId_attempt_candidateId: { runId, attempt, candidateId } }, select: { runtimeInstanceId: true, commandId: true, toolRevisionId: true, toolInvocationId: true, argumentsDigest: true, requestFingerprint: true } });
@@ -82,7 +80,13 @@ export class PrismaRuntimeDispatchStateUnitOfWork implements RuntimeDispatchStat
 		return this._repository().consumeToolResultDeliveries(deliveryIds, consumedAt);
 	}
 
-	/** Load the saved invocation fields, so candidate admission never touches Prisma itself. */
+	/** Consume the exact elicitation deliveries carried by the newly durable command. */
+	consumeElicitationResultDeliveries(deliveryIds: readonly string[], consumedAt: Date): Promise<void>
+	{
+		return this._repository().consumeElicitationResultDeliveries(deliveryIds, consumedAt);
+	}
+
+	/** Load immutable invocation evidence without exposing Prisma to candidate admission. */
 	findToolInvocation(runId: string, attempt: number, candidateId: string): Promise<RuntimeDispatchToolInvocation | null>
 	{
 		return this._repository().findToolInvocation(runId, attempt, candidateId);

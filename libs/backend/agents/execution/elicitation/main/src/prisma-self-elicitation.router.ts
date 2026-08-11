@@ -5,7 +5,7 @@ import type { Logger } from "pino";
 import { _ResolveRequestPrincipal } from "@opencrane/backend/server/infra/auth";
 
 import { PrismaElicitationUnitOfWork } from "./prisma-elicitation-unit-of-work.js";
-import { __CreateSelfElicitationRouter } from "./self-elicitation.router.js";
+import { __CreateSelfElicitationActivityRouter, __CreateSelfElicitationRouter } from "./self-elicitation.router.js";
 import type { SelfElicitationCaller } from "./self-elicitation.router.types.js";
 
 /** Map trusted browser-session facts into the elicitation caller contract. */
@@ -19,4 +19,10 @@ function _ResolveCaller(request: Parameters<typeof _ResolveRequestPrincipal>[0])
 export function _CreateSelfElicitationRouter(prisma: PrismaClient, logger: Logger): Router
 {
 	return __CreateSelfElicitationRouter({ resolveCaller: _ResolveCaller, elicitations: new PrismaElicitationUnitOfWork(prisma), clock: { now(): Date { return new Date(); } }, logger });
+}
+
+/** Compose the Prisma-backed derived Activity index. */
+export function _CreateSelfElicitationActivityRouter(prisma: PrismaClient, logger: Logger): Router
+{
+	return __CreateSelfElicitationActivityRouter({ resolveCaller: _ResolveCaller, elicitations: new PrismaElicitationUnitOfWork(prisma), clock: { now(): Date { return new Date(); } }, logger });
 }

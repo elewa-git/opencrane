@@ -57,7 +57,8 @@ describe("AG-UI projection", function _Suite()
 
 	it("projects tool failure with safe coordinates and technical classification", function _ProjectsToolFailure()
 	{
-		expect(_ProjectOne(_Source("tool.failed", { toolCallId: "tool-1", failureCode: "AuthenticationError" }))).toEqual({ type: "CUSTOM", name: AG_UI_TOOL_FAILURE_EVENT, value: { eventType: "tool.failed", toolCallId: "tool-1", failureCode: "AuthenticationError" } });
+		const technicalDetails = { toolIdentifier: "tool-1", toolRevision: "revision-1", failureCategory: "AuthenticationError", summary: "Authentication failed.", occurredAt: "2026-07-23T00:00:00.000Z", retryCount: 1, retryLimit: 3 };
+		expect(_ProjectOne(_Source("tool.failed", { toolCallId: "tool-1", failureCode: "AuthenticationError", toolFailure: { retrying: true, technicalDetails } }))).toEqual({ type: "CUSTOM", name: AG_UI_TOOL_FAILURE_EVENT, value: { eventType: "tool.failed", toolCallId: "tool-1", failureCode: "AuthenticationError", retrying: true, technicalDetails } });
 	});
 
 	it("projects recovery as a distinct nonterminal custom event with only fixed safe evidence", function _ProjectsToolRecovery()

@@ -90,6 +90,8 @@ interface FakeOptions
 	readonly clock?: RuntimeProtocolClock;
 	/** Finished tool results a resume command can carry. */
 	readonly savedToolResults?: readonly JsonValue[];
+	/** Saved terminal elicitation results available for a resume frame. */
+	readonly savedElicitationResults?: readonly { readonly requestId: string; readonly requestKey: string; readonly purpose: string; readonly state: string; readonly payload: JsonValue | null }[];
 	/** Owner steering requests waiting for the next fenced resume command. */
 	readonly pendingSteeringRequests?: readonly unknown[];
 	/** Use a managed-service identity, with its own workload identity, instead of a user one. */
@@ -106,6 +108,10 @@ function _fakePrisma(options: FakeOptions)
 	{
 		const payload = { toolInvocationId: `invocation-${index}`, outcome: "succeeded", result };
 		return { id: `delivery-${index}`, toolInvocationId: `row-${index}`, state: "Pending", payload, payloadDigest: ___DigestCanonicalJson(payload), invocation: { toolInvocationId: `invocation-${index}` }, createdAt: new Date(`2026-07-20T00:00:0${index}.000Z`), consumedAt: null as Date | null };
+	});
+	const elicitationResultDeliveries = [...(options.savedElicitationResults ?? [])].map(function _row(result, index)
+	{
+		return { id: `elicitation-delivery-${index}`, state: "Pending", payload: result.payload, payloadDigest: result.payload === null ? null : ___DigestCanonicalJson(result.payload), request: { id: result.requestId, requestKey: result.requestKey, purpose: result.purpose, state: result.state }, createdAt: new Date(`2026-07-20T00:00:1${index}.000Z`), consumedAt: null as Date | null };
 	});
 	for (const [index] of resultDeliveries.entries())
 	{
@@ -205,8 +211,17 @@ function _fakePrisma(options: FakeOptions)
 				return { count };
 			},
 		},
+		elicitationResultDelivery: {
+			async findMany() { return elicitationResultDeliveries.filter(row => row.state === "Pending"); },
+			async updateMany(args: { where: { id: { in: string[] }; state: string }; data: { state: string; consumedAt: Date } })
+			{
+				let count = 0;
+				for (const row of elicitationResultDeliveries.filter(candidate => args.where.id.in.includes(candidate.id) && candidate.state === args.where.state)) { row.state = args.data.state; row.consumedAt = args.data.consumedAt; count += 1; }
+				return { count };
+			},
+		},
 	};
-	return { prisma: client as unknown as PrismaClient, queryRaw, run, streams, commands, resultDeliveries, steeringRequests, toolInvocations };
+	return { prisma: client as unknown as PrismaClient, queryRaw, run, streams, commands, resultDeliveries, elicitationResultDeliveries, steeringRequests, toolInvocations };
 }
 
 /** Deterministic fake compiler: same snapshot digest always yields byte-identical compiled input. */
@@ -348,6 +363,27 @@ describe("PrismaRuntimeDispatchAuthority", function _describeDispatchAuthority()
 		expect(start?.kind).toBe("start_attempt");
 		expect(resume?.kind).toBe("resume_attempt");
 		expect(resume?.kind === "resume_attempt" ? resume.payload.toolResults : null).toEqual([{ toolInvocationId: "invocation-0", outcome: "succeeded", result: { ok: true } }]);
+	});
+
+	it("delivers ordinary elicitation input once and consumes its exact marker", async function _MintsElicitationResume()
+	{
+		const response = { kind: "free_text", text: "Use option B" };
+		const context = _authority({ runState: "Running", savedElicitationResults: [{ requestId: "request-1", requestKey: "question-1", purpose: "RuntimeInput", state: "Answered", payload: response }] });
+		await context.authority.__NextCommand(_identity, _open, 0);
+		const resume = await context.authority.__NextCommand(_identity, _open, 1);
+
+		expect(resume?.kind === "resume_attempt" ? resume.payload.elicitationResults : null).toEqual([{ requestId: "request-1", requestKey: "question-1", outcome: "answered", response }]);
+		expect(context.elicitationResultDeliveries[0]?.state).toBe("Consumed");
+		expect(await context.authority.__NextCommand(_identity, _open, 2)).toBeNull();
+	});
+
+	it("does not expose a protected A2UI result payload to the runtime", async function _ProtectsA2uiResult()
+	{
+		const context = _authority({ runState: "Running", savedElicitationResults: [{ requestId: "request-1", requestKey: "action-1", purpose: "A2uiAction", state: "Answered", payload: { actionDigest: "sha256:protected", response: { kind: "approval", approved: true } } }] });
+		await context.authority.__NextCommand(_identity, _open, 0);
+		const resume = await context.authority.__NextCommand(_identity, _open, 1);
+
+		expect(resume?.kind === "resume_attempt" ? resume.payload.elicitationResults : null).toEqual([{ requestId: "request-1", requestKey: "action-1", outcome: "answered" }]);
 	});
 
 	it("mints one fenced resume carrying pending steering and consumes it only after persistence", async function _mintsSteeringResume()

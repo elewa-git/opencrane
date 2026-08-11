@@ -646,6 +646,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/me/activity/elicitations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List recent participant-input activity
+         * @description Derives a bounded index from canonical elicitation references. It does not copy the transcript or expose protected purpose payloads.
+         */
+        get: operations["listMyElicitationActivity"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/me/conversations/{conversationId}/elicitations/{requestId}": {
         parameters: {
             query?: never;
@@ -4112,6 +4132,57 @@ export interface operations {
                         data: components["schemas"]["AuditEntry"][];
                         pagination: components["schemas"]["Pagination"];
                     };
+                };
+            };
+        };
+    };
+    listMyElicitationActivity: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Recent owned elicitation references. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        elicitations: Record<string, never>[];
+                    };
+                };
+            };
+            /** @description The requested Activity limit is invalid. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description No authenticated browser session owns the Activity index. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The elicitation Activity index is temporarily unavailable. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
                 };
             };
         };
