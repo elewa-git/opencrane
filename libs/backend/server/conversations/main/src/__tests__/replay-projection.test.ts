@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { AG_UI_A2UI_ENVELOPE_VERSION, AgUiA2uiSurfaceStates } from "@opencrane/contracts";
+import { AG_UI_A2UI_ENVELOPE_VERSION, AgUiA2uiSurfaceStates, AgUiToolRecoveryProviderOutcomes } from "@opencrane/contracts";
 
 import { __ProjectConversationReplayEvent } from "../replay-projection.js";
 import type { ConversationReplayEventRow } from "../replay-projection.types.js";
@@ -52,6 +52,13 @@ describe("conversation timeline projection", function _Suite()
 		expect(runtime?.payload).toEqual({ failureCode: "AuthenticationError" });
 		expect(JSON.stringify([tool, runtime])).not.toContain("Bearer never");
 		expect(__ProjectConversationReplayEvent({ cursor: "c.secret", conversationId: "conversation-1", runId: "run-1", position: "4", type: "run.error", payload: { errorType: "SecretToken123" }, occurredAt: "2026-07-23T10:00:03.000Z" })?.payload).toEqual({});
+	});
+
+	it("projects only fixed recovery evidence and strips provider detail", function _ProjectsRecovery()
+	{
+		const recovery = __ProjectConversationReplayEvent({ cursor: "c.recovery", conversationId: "conversation-1", runId: "run-1", position: "4", type: "tool.recovery_required", payload: { toolInvocationId: "tool-1", expectedAttempt: 2, preparationRetryCount: 1, preparationRetryLimit: 3, providerOutcome: AgUiToolRecoveryProviderOutcomes.UnknownAfterDispatch, providerBody: "secret", arguments: { password: "never" } }, occurredAt: "2026-07-23T10:00:03.000Z" });
+		expect(recovery?.payload).toEqual({ toolRecovery: { eventType: "tool.recovery_required", expectedAttempt: 2, toolCallId: "tool-1", recoveryCategory: "manual_action_required", preparationRetryCount: 1, preparationRetryLimit: 3, providerOutcome: AgUiToolRecoveryProviderOutcomes.UnknownAfterDispatch } });
+		expect(JSON.stringify(recovery)).not.toContain("secret");
 	});
 
 	it("drops unsupported payloads and invalid canonical rows", function _FailsClosed()

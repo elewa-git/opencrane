@@ -1,4 +1,4 @@
-import { AG_UI_CHILD_RUN_ENVELOPE_VERSION, ___ParseAgUiA2uiEnvelope, type AgUiChildRunEnvelope, type AgUiPublicEventPayload } from "@opencrane/contracts";
+import { AG_UI_CHILD_RUN_ENVELOPE_VERSION, AgUiToolRecoveryProviderOutcomes, ___ParseAgUiA2uiEnvelope, type AgUiChildRunEnvelope, type AgUiPublicEventPayload } from "@opencrane/contracts";
 
 import type { ConversationReplayEventRow, ConversationReplayProjectionResult } from "./replay-projection.types.js";
 
@@ -19,12 +19,26 @@ function _SafePayload(type: string, payload: Readonly<Record<string, unknown>>, 
 	if (type === "tool.requested") return _Strings(payload, ["toolCallId", "toolCallName"]);
 	if (type === "tool.started" || type === "tool.completed") return _Tool(payload);
 	if (type === "tool.failed") return _Failure(payload, true);
+	if (type === "tool.recovery_required") return _ToolRecovery(payload);
 	if (type === "run.error") return _Failure(payload, false);
 	if (type === "run.failed" || type === "run.cancelled") return _Strings(payload, ["terminalReason", "failureCode"]);
 	if (type === "conversation.message") return _Message(payload);
 	if (type === "a2ui.rendering.begun" || type === "a2ui.surface.updated" || type === "a2ui.data_model.updated") return _A2ui(payload, conversationId, runId);
 	if (type === "child.run.completed" || type === "child.run.failed" || type === "child.run.cancelled") return _ChildRun(type, payload, runId);
 	return {};
+}
+
+/** Admit only fixed safe recovery evidence; provider bodies and arbitrary detail are discarded. */
+function _ToolRecovery(payload: Readonly<Record<string, unknown>>): AgUiPublicEventPayload
+{
+	const expectedAttempt = payload["expectedAttempt"];
+	const toolCallId = payload["toolCallId"] ?? payload["toolInvocationId"];
+	const preparationRetryCount = payload["preparationRetryCount"];
+	const preparationRetryLimit = payload["preparationRetryLimit"];
+	const providerOutcome = payload["providerOutcome"];
+	if (!Number.isSafeInteger(expectedAttempt) || (expectedAttempt as number) < 1 || typeof toolCallId !== "string" || !Number.isSafeInteger(preparationRetryCount) || (preparationRetryCount as number) < 0 || preparationRetryLimit !== 3) return {};
+	if (providerOutcome !== undefined && !Object.values(AgUiToolRecoveryProviderOutcomes).includes(providerOutcome as AgUiToolRecoveryProviderOutcomes)) return {};
+	return { toolRecovery: { eventType: "tool.recovery_required", expectedAttempt: expectedAttempt as number, toolCallId, recoveryCategory: "manual_action_required", preparationRetryCount: preparationRetryCount as number, preparationRetryLimit, ...(providerOutcome === undefined ? {} : { providerOutcome: providerOutcome as AgUiToolRecoveryProviderOutcomes }) } };
 }
 
 /** Select display-safe tool coordinates while retaining no result, arguments, or invocation detail. */

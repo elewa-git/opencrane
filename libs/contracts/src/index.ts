@@ -2,7 +2,7 @@ export { ___CreateControlPlaneClient, type paths } from "./client.js";
 export { type ControlPlaneClient } from "./client.types.js";
 export { API_ERROR_LIMITS, ApiValidationIssueLocations, type ApiErrorEnvelope, type ApiValidationIssue } from "./api-error.types.js";
 export { ___ParseApiErrorEnvelope } from "./api-error.validator.js";
-export { AG_UI_A2UI_ENVELOPE_VERSION, AG_UI_CHILD_RUN_ENVELOPE_VERSION, AG_UI_INTERRUPTS_CLEARED_EVENT, AG_UI_PROJECTION_VERSION, AG_UI_TOOL_FAILURE_EVENT, AgUiA2uiSurfaceStates, type AgUiA2uiEnvelope, type AgUiA2uiOperation, type AgUiChildRunEnvelope, type AgUiChildRunState, type AgUiProjectionEvent, type AgUiProjectionSourceEvent, type AgUiPublicEventPayload, type AgUiSseRecord, type AgUiToolFailureEnvelope } from "./ag-ui-projection.types.js";
+export { AG_UI_A2UI_ENVELOPE_VERSION, AG_UI_CHILD_RUN_ENVELOPE_VERSION, AG_UI_INTERRUPTS_CLEARED_EVENT, AG_UI_PROJECTION_VERSION, AG_UI_TOOL_FAILURE_EVENT, AG_UI_TOOL_RECOVERY_REQUIRED_EVENT, AgUiA2uiSurfaceStates, AgUiToolRecoveryProviderOutcomes, type AgUiA2uiEnvelope, type AgUiA2uiOperation, type AgUiChildRunEnvelope, type AgUiChildRunState, type AgUiProjectionEvent, type AgUiProjectionSourceEvent, type AgUiPublicEventPayload, type AgUiSseRecord, type AgUiToolFailureEnvelope, type AgUiToolRecoveryRequiredEnvelope } from "./ag-ui-projection.types.js";
 export { __EncodeAgUiSseRecord } from "./ag-ui-sse.js";
 export { ___ParseAgUiA2uiEnvelope } from "./ag-ui-a2ui-envelope.js";
 export { __ProjectAgUiEvents } from "./ag-ui-projector.js";

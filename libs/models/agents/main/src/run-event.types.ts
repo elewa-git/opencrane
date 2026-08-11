@@ -31,6 +31,8 @@ export enum RunEventTypes
 	ToolCompleted = "tool.completed",
 	/** Governed tool execution failed without exposing provider or credential details. */
 	ToolFailed = "tool.failed",
+	/** Provider outcome is ambiguous and this cancellable run needs explicit recovery. */
+	ToolRecoveryRequired = "tool.recovery_required",
 	/** Runtime reported a display-safe nonterminal problem while the run remained active. */
 	RunError = "run.error",
 	/** Runtime began one versioned governed A2UI rendering surface. */

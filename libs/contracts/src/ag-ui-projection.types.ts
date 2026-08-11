@@ -19,6 +19,9 @@ export const AG_UI_INTERRUPTS_CLEARED_EVENT = "opencrane.interrupts_cleared";
 /** Display-safe custom marker for one canonical tool failure that may precede later model work. */
 export const AG_UI_TOOL_FAILURE_EVENT = "opencrane.tool_failed";
 
+/** Display-safe custom marker for a cancellable run whose provider outcome needs recovery. */
+export const AG_UI_TOOL_RECOVERY_REQUIRED_EVENT = "opencrane.tool_recovery_required";
+
 /**
  * Authoritative browser presentation lifecycle for one governed A2UI surface.
  *
@@ -92,6 +95,40 @@ export interface AgUiToolFailureEnvelope
 	readonly failureCode?: string;
 }
 
+/** Fixed safe causes a provider effect can remain unresolved after dispatch began. */
+export enum AgUiToolRecoveryProviderOutcomes
+{
+	/** Dispatch began but no trusted success or failure acknowledgement survived. */
+	UnknownAfterDispatch = "unknown_after_dispatch",
+	/** A dispatch claim expired after provider dispatch may have begun. */
+	ClaimLeaseExpired = "claim_lease_expired",
+	/** Trusted provider readback could not establish a terminal outcome. */
+	ReconciliationInconclusive = "reconciliation_inconclusive",
+}
+
+/** Exact browser-safe projection of one durable manual-recovery requirement. */
+export interface AgUiToolRecoveryRequiredEnvelope
+{
+	/** Canonical source event; this is not a failure, terminal, or elicitation event. */
+	readonly eventType: "tool.recovery_required";
+	/** Public run coordinate already visible in the conversation stream. */
+	readonly runId: string;
+	/** Attempt fence a cancellation request must still match. */
+	readonly expectedAttempt: number;
+	/** Stable public tool-call coordinate already introduced by TOOL_CALL_START. */
+	readonly toolCallId: string;
+	/** Canonical event instant from the durable run-event row. */
+	readonly occurredAt: string;
+	/** Fixed user-action category; it grants no retry or provider authority. */
+	readonly recoveryCategory: "manual_action_required";
+	/** Provider-free preparation attempts consumed before dispatch began. */
+	readonly preparationRetryCount: number;
+	/** Fixed provider-free preparation attempt limit. */
+	readonly preparationRetryLimit: 3;
+	/** Optional fixed classification of the ambiguous provider outcome. */
+	readonly providerOutcome?: AgUiToolRecoveryProviderOutcomes;
+}
+
 /** Safe, user-facing fragments selected by the server-owned event reader. */
 export interface AgUiPublicEventPayload
 {
@@ -108,6 +145,7 @@ export interface AgUiPublicEventPayload
 	readonly interrupt?: Interrupt;
 	readonly a2ui?: AgUiA2uiEnvelope;
 	readonly childRun?: AgUiChildRunEnvelope;
+	readonly toolRecovery?: Omit<AgUiToolRecoveryRequiredEnvelope, "runId" | "occurredAt">;
 }
 
 /** One already-authorized canonical event made safe for protocol projection. */

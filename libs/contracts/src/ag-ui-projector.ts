@@ -1,6 +1,6 @@
 import { EventType } from "@ag-ui/core";
 import { RunEventTypes } from "@opencrane/models/agents";
-import { AG_UI_A2UI_ENVELOPE_VERSION, AG_UI_CHILD_RUN_ENVELOPE_VERSION, AG_UI_TOOL_FAILURE_EVENT, type AgUiProjectionEvent, type AgUiProjectionSourceEvent, type AgUiToolFailureEnvelope } from "./ag-ui-projection.types.js";
+import { AG_UI_A2UI_ENVELOPE_VERSION, AG_UI_CHILD_RUN_ENVELOPE_VERSION, AG_UI_TOOL_FAILURE_EVENT, AG_UI_TOOL_RECOVERY_REQUIRED_EVENT, type AgUiProjectionEvent, type AgUiProjectionSourceEvent, type AgUiToolFailureEnvelope, type AgUiToolRecoveryRequiredEnvelope } from "./ag-ui-projection.types.js";
 
 /** Project one canonical row into its deterministic ordered AG-UI subframes. */
 export function __ProjectAgUiEvents(source: AgUiProjectionSourceEvent): readonly AgUiProjectionEvent[]
@@ -51,11 +51,21 @@ function _Project(source: AgUiProjectionSourceEvent): AgUiProjectionEvent
 			return { type: EventType.TOOL_CALL_END, toolCallId: source.payload.toolCallId };
 		case RunEventTypes.ToolFailed:
 			return _ToolFailure(source);
+		case RunEventTypes.ToolRecoveryRequired:
+			return _ToolRecoveryRequired(source);
 		default:
 			if (source.payload.a2ui !== undefined) return { type: EventType.CUSTOM, name: AG_UI_A2UI_ENVELOPE_VERSION, value: source.payload.a2ui };
 			if (source.payload.childRun !== undefined) return { type: EventType.CUSTOM, name: AG_UI_CHILD_RUN_ENVELOPE_VERSION, value: source.payload.childRun };
 			return _Custom(source);
 	}
+}
+
+/** Project only the exact server-redacted recovery envelope; incomplete rows stay payload-free. */
+function _ToolRecoveryRequired(source: AgUiProjectionSourceEvent): AgUiProjectionEvent
+{
+	if (source.runId === undefined || source.payload.toolRecovery === undefined) return _Custom(source);
+	const value: AgUiToolRecoveryRequiredEnvelope = { ...source.payload.toolRecovery, runId: source.runId, occurredAt: source.occurredAt };
+	return { type: EventType.CUSTOM, name: AG_UI_TOOL_RECOVERY_REQUIRED_EVENT, value };
 }
 
 /** Preserve one safe tool coordinate and classification without exposing provider detail. */

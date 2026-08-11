@@ -1,7 +1,7 @@
 import { EventSchemas } from "@ag-ui/core";
 import { describe, expect, it } from "vitest";
 
-import { AG_UI_A2UI_ENVELOPE_VERSION, AG_UI_PROJECTION_VERSION, AG_UI_TOOL_FAILURE_EVENT, AgUiA2uiSurfaceStates, ___ParseAgUiA2uiEnvelope, __EncodeAgUiSseRecord, __ProjectAgUiEvents, type AgUiProjectionEvent, type AgUiProjectionSourceEvent, type AgUiSseRecord } from "../index.js";
+import { AG_UI_A2UI_ENVELOPE_VERSION, AG_UI_PROJECTION_VERSION, AG_UI_TOOL_FAILURE_EVENT, AG_UI_TOOL_RECOVERY_REQUIRED_EVENT, AgUiA2uiSurfaceStates, AgUiToolRecoveryProviderOutcomes, ___ParseAgUiA2uiEnvelope, __EncodeAgUiSseRecord, __ProjectAgUiEvents, type AgUiProjectionEvent, type AgUiProjectionSourceEvent, type AgUiSseRecord } from "../index.js";
 
 /** Construct one server-authorized safe source event for projection tests. */
 function _Source(eventType: AgUiProjectionSourceEvent["eventType"], payload: AgUiProjectionSourceEvent["payload"] = {}): AgUiProjectionSourceEvent
@@ -55,6 +55,12 @@ describe("AG-UI projection", function _Suite()
 	it("projects tool failure with safe coordinates and technical classification", function _ProjectsToolFailure()
 	{
 		expect(_ProjectOne(_Source("tool.failed", { toolCallId: "tool-1", failureCode: "AuthenticationError" }))).toEqual({ type: "CUSTOM", name: AG_UI_TOOL_FAILURE_EVENT, value: { eventType: "tool.failed", toolCallId: "tool-1", failureCode: "AuthenticationError" } });
+	});
+
+	it("projects recovery as a distinct nonterminal custom event with only fixed safe evidence", function _ProjectsToolRecovery()
+	{
+		const toolRecovery = { eventType: "tool.recovery_required" as const, expectedAttempt: 2, toolCallId: "tool-1", recoveryCategory: "manual_action_required" as const, preparationRetryCount: 1, preparationRetryLimit: 3 as const, providerOutcome: AgUiToolRecoveryProviderOutcomes.UnknownAfterDispatch };
+		expect(_ProjectOne(_Source("tool.recovery_required", { toolRecovery }))).toEqual({ type: "CUSTOM", name: AG_UI_TOOL_RECOVERY_REQUIRED_EVENT, value: { ...toolRecovery, runId: "run-3", occurredAt: "2026-07-23T00:00:00.000Z" } });
 	});
 
 	it("retains every unsupported or incomplete canonical event as a payload-free custom signal", function _ProjectsCustom()
