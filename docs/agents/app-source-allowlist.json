@@ -113,6 +113,7 @@
     { "path": "apps/agent-runtime/src/model_loop/driver.py", "owner": "apps/agent-runtime", "classification": "process-composition" },
     { "path": "apps/agent-runtime/src/observability.py", "owner": "apps/agent-runtime", "classification": "process-instrumentation" },
     { "path": "apps/agent-runtime/src/protocol/candidates.py", "owner": "apps/agent-runtime", "classification": "process-composition" },
+    { "path": "apps/agent-runtime/src/protocol/event_projector.py", "owner": "apps/agent-runtime", "classification": "process-composition" },
     { "path": "apps/agent-runtime/src/runtime.py", "owner": "apps/agent-runtime", "classification": "process-entrypoint" },
     { "path": "apps/agent-runtime/src/transport/http.py", "owner": "apps/agent-runtime", "classification": "process-composition" },
     { "path": "apps/agent-runtime/src/transport/stream.py", "owner": "apps/agent-runtime", "classification": "process-composition" },
