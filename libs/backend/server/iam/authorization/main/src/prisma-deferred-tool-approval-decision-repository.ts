@@ -1,4 +1,4 @@
-import type { PrismaClient } from "@prisma/client";
+import { Prisma, type PrismaClient } from "@prisma/client";
 import { ___DoWithTrace } from "@opencrane/backend/observability";
 
 import { __DecideDeferredToolRequest } from "./deferred-tool-approval.js";
@@ -27,7 +27,7 @@ export class PrismaDeferredToolApprovalDecisionRepository implements DeferredToo
 				return await prisma.$transaction(async function _decide(transaction): Promise<DecideDeferredToolRequestResult>
 				{
 					return __DecideDeferredToolRequest(transaction, command);
-				});
+				}, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 			}
 			catch (error)
 			{

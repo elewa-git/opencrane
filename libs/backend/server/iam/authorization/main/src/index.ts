@@ -7,7 +7,7 @@ export { __ConsumeRuntimeBootstrap, __ExecuteCapabilityAction } from "./runtime-
 export type { ActionReplayMode, CapabilityActionExecutor, CapabilityActionFailureResult, CapabilityActionIntent, CapabilityActionReceipt, CapabilityActionReceiptRepository, CapabilityActionReservationResult, CapabilityActionSuccessResult, ConsumeRuntimeBootstrapResult, ExecuteCapabilityActionCommand, ExecuteCapabilityActionResult, RuntimeBootstrapClaim, RuntimeBootstrapConsumptionResult, RuntimeBootstrapExpectation, RuntimeBootstrapFailureReason, RuntimeBootstrapRepository } from "./runtime-proof.types.js";
 export { __CancelPendingRunApprovalAuthority } from "./run-approval-cancellation.js";
 export type { CancelPendingRunApprovalAuthorityCommand, CancelPendingRunApprovalAuthorityResult } from "./run-approval-cancellation.types.js";
-export { __DecideDeferredToolRequest, __DeferToolRequest } from "./deferred-tool-approval.js";
+export { __DecideDeferredToolRequest, __DeferToolRequest, __ExpireDeferredToolApprovalBatch } from "./deferred-tool-approval.js";
 export { __PlanDeferredToolApprovalLifecycle } from "./deferred-tool-approval-lifecycle.js";
 export { __ProjectDeferredToolApproval, __ValidateDeferredToolArguments } from "./deferred-tool-approval-schema.js";
 export { DeferredToolApprovalLifecycleActions, DeferredToolApprovalLifecycleEvents, DeferredToolApprovalRunStates, DeferredToolApprovalStates, DeferredToolDecisionKinds } from "./deferred-tool-approval.types.js";
