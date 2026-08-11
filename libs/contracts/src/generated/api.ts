@@ -1324,6 +1324,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/auth/reauthenticate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Force fresh OIDC authentication for a sensitive action */
+        get: operations["reauthenticate"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/callback": {
         parameters: {
             query?: never;
@@ -4236,7 +4253,12 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Error"];
+                    "application/json": {
+                        /** @constant */
+                        error: "elicitation_step_up_required";
+                        /** @constant */
+                        reauthenticatePath: "/api/v1/auth/reauthenticate";
+                    };
                 };
             };
             /** @description The elicitation authority is temporarily unavailable. */
@@ -7219,6 +7241,43 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["Error"];
                 };
+            };
+        };
+    };
+    reauthenticate: {
+        parameters: {
+            query?: {
+                /** @description Local path restored after the verified callback. */
+                returnTo?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Redirect to the configured provider with prompt=login. */
+            302: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description An authenticated session is required before step-up. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description OIDC is not configured. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

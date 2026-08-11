@@ -57,6 +57,7 @@ describe("__CreateSelfElicitationRouter", function _Suite()
 			const dependencies = _Dependencies({ elicitations: { open: vi.fn(), readOwned: vi.fn(), respond: vi.fn().mockResolvedValue({ outcome }) } });
 			const response = await request(_App(dependencies)).post("/api/v1/me/conversations/conversation-1/elicitations/request-1/responses").send({ idempotencyKey: "retry-1", response: { kind: ElicitationBodyKinds.FreeText, text: "answer" } });
 			expect(response.status).toBe(status);
+			if (outcome === "step_up_required") expect(response.body).toEqual({ error: "elicitation_step_up_required", reauthenticatePath: "/api/v1/auth/reauthenticate" });
 		}
 	});
 

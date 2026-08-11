@@ -63,6 +63,31 @@ export function ___AuthRouter(authService: OidcAuthService, _prisma: PrismaClien
     }
   });
 
+  /** Force a fresh provider authentication before returning to one sensitive action. */
+  router.get("/reauthenticate", async function _reauthenticate(req, res, next)
+  {
+    try
+    {
+      if (!authService.isEnabled())
+      {
+        res.status(503).json({ error: "OIDC is not configured for this opencrane-ui instance" });
+        return;
+      }
+      if (!req.session.authUser)
+      {
+        res.status(401).json({ error: "authentication_required" });
+        return;
+      }
+      const returnTo = typeof req.query.returnTo === "string" ? req.query.returnTo : "/";
+      const loginUrl = await authService.buildLoginUrl(req, returnTo, { prompt: "login" });
+      res.redirect(302, loginUrl);
+    }
+    catch (err)
+    {
+      next(err);
+    }
+  });
+
   /** Complete the OIDC callback and redirect back into the SPA. */
   router.get("/callback", async function _callback(req, res, next)
   {

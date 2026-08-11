@@ -75,4 +75,13 @@ describe("PrismaElicitationUnitOfWork", function _Suite()
 		expect(transaction.personalMemoryPermissionReceipt.create).toHaveBeenCalledWith({ data: expect.objectContaining({ requestId: "request-1", runId: "run-1", attempt: 2, executionSubjectId: "user-1", queryDigest: "sha256:query", invocationKey: "memory-call-1" }) });
 		expect(transaction.elicitationResultDelivery.create).not.toHaveBeenCalled();
 	});
+
+	it("returns a display-only A2UI answer with only its protected server binding", async function _A2uiBinding()
+	{
+		const payload = { displayedActionId: "action-1", sourceComponentId: "card-1", actionDigest: "sha256:action" };
+		const request = _Request({ purpose: ElicitationPurpose.A2uiAction, purposePayload: payload, purposePayloadDigest: __DigestCanonicalJson(payload) });
+		const transaction = _ResponseTransaction(request);
+		await expect(_Unit(transaction).respond({ siloId: "silo-1", conversationId: "conversation-1", requestId: "request-1", subjectId: "user-1", verifiedStepUpAt: null, submission: { idempotencyKey: "retry-1", response: { kind: ElicitationBodyKinds.FreeText, text: "Confirmed" } }, now: NOW })).resolves.toMatchObject({ outcome: "accepted" });
+		expect(transaction.elicitationResultDelivery.create).toHaveBeenCalledWith({ data: expect.objectContaining({ requestId: "request-1", payload: { kind: "a2ui_action", displayedActionId: "action-1", sourceComponentId: "card-1", actionDigest: "sha256:action", response: { kind: ElicitationBodyKinds.FreeText, text: "Confirmed" } } }) });
+	});
 });
