@@ -15,11 +15,11 @@ change — a retry, an audit, or a replay all see the exact same record, identif
 (a SHA-256 fingerprint of the canonical content).
 
 ```
- run request  (runId · silo · service · thread? · subject · idempotency key)
+ run request  (runId · silo · service · conversation? · subject · idempotency key)
           │  __AssembleRunInputSnapshot
           ▼
  ┌─────────────────────────────────────────┐
- │   execution/inputs  ◄── HERE              │  load run/persona/thread/preferences/
+ │   execution/inputs  ◄── HERE              │  load run/persona/conversation/preferences/
  │   · orchestrates 9 authority loads        │  memory/tools/skill eligibility/budget/identity,
  │   · compiles + digests the one snapshot   │  the runs package's admission transaction
  │   · compiles deterministic runtime input  │
@@ -33,7 +33,8 @@ change — a retry, an audit, or a replay all see the exact same record, identif
 function, and the durable rows)* · [membership](../../../../server/iam/membership/main/README.md)
 *(supplies the signed fleet-membership evidence behind the identity envelope)*
 
-Every input is loaded through a port (`RunAuthoritySource`, `ApprovedPersonaSource`, …) inside the
+Every input is loaded through a port (`RunAuthoritySource`, `ApprovedPersonaSource`, and the other
+named sources) inside the
 **same database transaction** that admits the run, so a permission revoked or a membership expired a
 millisecond before commit can never leak into the frozen record. In particular, the required
 `SkillRevisionEligibilitySource` locks every skill assignment and verifies that each skill returned
@@ -91,12 +92,15 @@ port, and the only write goes through the [runs](../../runs/main/README.md) pack
 snapshot; it cannot add a new tool, memory record, or policy. Fail-closed throughout: malformed coordinates, a stale membership, a
 non-canonical digest, or any single source refusal denies the run.
 
-The OpenCrane app composes both managed and personal admission variants. The personal route derives
-the subject and silo from the authenticated session and host, resolves the participant-bound thread
-and AgentService server-side, verifies the exact signed membership assertion with the mounted
-Ed25519 key ring, and computes the capability digest in the admission transaction. Its
-`POST /api/v1/me/runs` body contains only `threadId` and `requestIdempotencyKey`—never user, silo,
-service, dataset, memory fact, or membership coordinates.
+The OpenCrane app composes both managed and personal admission variants. The participant-owned
+conversation route derives the subject and silo from the authenticated session and host, then the
+personal assembly path re-resolves the open `agent_session`, its AgentService, and the exact signed
+membership assertion inside the admission transaction. The message body contains only bounded
+content blocks and an idempotency key. The conversation ID comes from the route; user, silo, service,
+dataset, memory fact, and membership coordinates never come from the browser.
+
+There is no public run-start endpoint. Direct and group messages never enter this package; only an
+agent-session message or an internal managed trigger can request snapshot assembly.
 
 ## Dependency direction
 

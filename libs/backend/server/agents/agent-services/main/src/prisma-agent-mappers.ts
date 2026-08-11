@@ -157,7 +157,7 @@ export function _mapRun(row: AgentRunRow): AgentRun
 		siloId: row.siloId,
 		agentServiceId: row.agentServiceId,
 		agentRevisionId: row.agentRevisionId,
-		threadId: row.threadId,
+		conversationId: row.conversationId,
 		trigger: _runTrigger(row.trigger),
 		delegatedUserId: row.delegatedUserId,
 		requestIdempotencyKey: row.requestIdempotencyKey,

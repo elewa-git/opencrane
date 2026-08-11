@@ -1,10 +1,9 @@
 import { readFileSync } from "node:fs";
 
 const _BASELINE = new URL("./target-baseline.sql", import.meta.url);
-const _MINIMUM_FUNCTIONS = 75;
-const _MINIMUM_TRIGGERS = 80;
-// Five legacy foreign keys are intentionally removed with Grant/McpServerGrant, leaving 199.
-const _MINIMUM_CONSTRAINTS = 199;
+const _MINIMUM_FUNCTIONS = 90;
+const _MINIMUM_TRIGGERS = 101;
+const _MINIMUM_CONSTRAINTS = 235;
 const _REQUIRED_AUTHORITY_MARKERS = [
 	'CREATE FUNCTION "enforce_authorization_grant_update"()',
 	'CREATE TRIGGER "authorization_grants_immutable"',
@@ -24,9 +23,24 @@ const _REQUIRED_AUTHORITY_MARKERS = [
 	'"completion_provenance" IS NOT DISTINCT FROM \'existing_user_migration\'',
 	'"completion_migration_revision" IS NOT NULL AND btrim("completion_migration_revision") <> \'\'',
 	'"completion_migration_batch" IS NOT NULL AND btrim("completion_migration_batch") <> \'\'',
+	'CREATE TYPE "ConversationMode" AS ENUM (\'agent_session\', \'direct\', \'group\');',
+	'CREATE TYPE "ChannelInvocationAction" AS ENUM (\'events.read\');',
+	'CREATE FUNCTION "enforce_conversation_timeline_entry"()',
+	'CREATE TRIGGER "conversation_timeline_entries_allocate"',
+	'"activity_sequence" BIGINT GENERATED ALWAYS AS IDENTITY NOT NULL',
+	'"activity_sequence" = DEFAULT',
+	'CREATE UNIQUE INDEX "conversations_activity_sequence_key"',
+	'CREATE UNIQUE INDEX "agent_runs_one_foreground_per_conversation"',
+	'ALTER TABLE "conversations" ADD CONSTRAINT "conversations_identity_check"',
+	'ALTER TABLE "conversation_timeline_entries" ADD CONSTRAINT "conversation_timeline_entries_reference_shape_check"',
 ];
 const _FORBIDDEN_AUTHORITY_MARKERS = [
 	'NEW."state" IN (\'survey_in_progress\', \'completed\')',
+	'command.forward',
+	'conversation_threads',
+	'"thread_id"',
+	'"source_thread_id"',
+	'ConversationThread',
 ];
 
 /** Counts statements which begin at a SQL line boundary. */

@@ -41,7 +41,7 @@ dispatches provider I/O.
  run / conversation / action authorities decide and persist the proposal
 ```
 
-**In this flow:** [execution/runs](../runs/main/README.md) · [conversation replay](../../../server/agents/conversation-replay/main/README.md)
+**In this flow:** [execution/runs](../runs/main/README.md) · [conversation replay](../../../server/conversations/main/README.md)
 
 Invariant: an executor can only propose a result for a command OpenCrane already accepted for the
 exact current attempt and lease. The `cancelling` run state closes command, event-candidate, and

@@ -12,7 +12,7 @@ function _child(overrides: Record<string, unknown> = {})
 /** Builds a live conversation-bound parent able to receive a child result event. */
 function _parent(overrides: Record<string, unknown> = {})
 {
-	return { id: "parent-1", rootRunId: "root-1", siloId: "silo-1", threadId: "thread-1", ...overrides };
+	return { id: "parent-1", rootRunId: "root-1", siloId: "silo-1", conversationId: "conversation-1", ...overrides };
 }
 
 /** Builds a transaction-backed repository with independently controlled authority rows. */
@@ -32,7 +32,7 @@ describe("PrismaChildRunCompletionRepository", function _describeCompletionDeliv
 		await expect(repository.deliverAtomically({ childRunId: "child-1" })).resolves.toEqual({ outcome: "delivered", parentRunId: "parent-1", parentEventSequence: 5 });
 		expect(transaction.childRunCompletionDelivery.create).toHaveBeenCalledWith({ data: { childRunId: "child-1", parentRunId: "parent-1", parentEventSequence: 5, outcome: ChildRunCompletionDeliveryOutcome.Delivered } });
 		expect(transaction.childRunCompletionDelivery.create.mock.invocationCallOrder[0]).toBeLessThan(transaction.conversationRunEvent.create.mock.invocationCallOrder[0]!);
-		expect(transaction.conversationRunEvent.create).toHaveBeenCalledWith({ data: expect.objectContaining({ runId: "parent-1", sequence: 5, type: "child.run.completed", payload: expect.objectContaining({ childRunId: "child-1", childState: "completed" }) }) });
+		expect(transaction.conversationRunEvent.create).toHaveBeenCalledWith({ data: expect.objectContaining({ conversationId: "conversation-1", runId: "parent-1", sequence: 5, type: "child.run.completed", payload: expect.objectContaining({ childRunId: "child-1", childState: "completed" }) }) });
 	});
 
 	it("returns the existing receipt instead of appending the child twice", async function _deduplicates()
@@ -53,7 +53,7 @@ describe("PrismaChildRunCompletionRepository", function _describeCompletionDeliv
 
 	it("durably suppresses delivery when the parent has no conversation stream", async function _recordsNoParentStream()
 	{
-		const { repository, transaction } = _repository(_child(), _parent({ threadId: null }), { childRunId: "child-1", parentRunId: "parent-1", rootRunId: "root-1" });
+		const { repository, transaction } = _repository(_child(), _parent({ conversationId: null }), { childRunId: "child-1", parentRunId: "parent-1", rootRunId: "root-1" });
 
 		await expect(repository.deliverAtomically({ childRunId: "child-1" })).resolves.toEqual({ outcome: "suppressed", parentRunId: "parent-1", reason: "no_parent_stream" });
 		expect(transaction.childRunCompletionDelivery.create).toHaveBeenCalledWith({ data: { childRunId: "child-1", parentRunId: "parent-1", parentEventSequence: null, outcome: ChildRunCompletionDeliveryOutcome.NoParentStream } });

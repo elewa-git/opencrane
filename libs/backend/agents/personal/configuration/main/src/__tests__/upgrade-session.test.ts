@@ -7,7 +7,7 @@ import { __IsUpgradeSessionAvailable, UPGRADE_SESSION_TOOL } from "../upgrade-se
 /** Build the smallest immutable snapshot needed to test personal-tool eligibility. */
 function _Snapshot(overrides: Partial<RunInputSnapshot> = {}): RunInputSnapshot
 {
-	return { runId: "run-1", siloId: "silo-1", agentServiceId: "service-1", agentRevisionId: "agent-1", snapshotVersion: 1, threadId: "thread-1", messageIds: [], personaRevisionId: "persona-1", preferenceFactIds: [], artifactRevisionIds: [], skillRevisionIds: [], memoryFacts: [], memoryQueryPolicy: {}, integrationAssignments: [], modelRoute: {}, budgetPolicy: {}, identitySnapshot: { kind: RunInputSnapshotIdentityKinds.User, executionSubjectId: "user-1", organizationId: "org-1", fleetMembershipRevision: 1, fleetMembershipIssuer: "issuer", fleetMembershipIssuerKeyId: "key", fleetMembershipAssertionId: "assertion", fleetMembershipPayloadDigest: "sha256:payload", fleetMembershipTrustedUntil: "2026-07-23T01:00:00.000Z" }, capabilitySetDigest: "sha256:capability", effectiveContractDigest: "sha256:contract", promptCompilerVersion: "test", digest: "sha256:snapshot", compiledAt: "2026-07-23T00:00:00.000Z", ...overrides };
+	return { runId: "run-1", siloId: "silo-1", agentServiceId: "service-1", agentRevisionId: "agent-1", snapshotVersion: 1, conversationId: "conversation-1", messageIds: [], personaRevisionId: "persona-1", preferenceFactIds: [], artifactRevisionIds: [], skillRevisionIds: [], memoryFacts: [], memoryQueryPolicy: {}, integrationAssignments: [], modelRoute: {}, budgetPolicy: {}, identitySnapshot: { kind: RunInputSnapshotIdentityKinds.User, executionSubjectId: "user-1", organizationId: "org-1", fleetMembershipRevision: 1, fleetMembershipIssuer: "issuer", fleetMembershipIssuerKeyId: "key", fleetMembershipAssertionId: "assertion", fleetMembershipPayloadDigest: "sha256:payload", fleetMembershipTrustedUntil: "2026-07-23T01:00:00.000Z" }, capabilitySetDigest: "sha256:capability", effectiveContractDigest: "sha256:contract", promptCompilerVersion: "test", digest: "sha256:snapshot", compiledAt: "2026-07-23T00:00:00.000Z", ...overrides };
 }
 
 describe("upgrade_session tool", function _UpgradeSessionSuite()
@@ -16,7 +16,7 @@ describe("upgrade_session tool", function _UpgradeSessionSuite()
 	{
 		expect(__IsUpgradeSessionAvailable(_Snapshot())).toBe(true);
 		expect(__IsUpgradeSessionAvailable(_Snapshot({ personaRevisionId: null }))).toBe(false);
-		expect(__IsUpgradeSessionAvailable(_Snapshot({ threadId: null }))).toBe(false);
+		expect(__IsUpgradeSessionAvailable(_Snapshot({ conversationId: null }))).toBe(false);
 	});
 
 	it("is first-party and never opens deferred approval for the invocation", function _Descriptor()

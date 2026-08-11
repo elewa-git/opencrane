@@ -33,7 +33,7 @@ The current composition includes:
 |---|---|
 | `/agent-services` | Managed agent definition, revision, publication, schedules and run admission |
 | `/me/runs` | Current user's run status, steering and cancellation surfaces |
-| `/me/conversations` | Authorised conversation replay |
+| `/me/conversations` | Participant-bound list, create, open, message, archive, close and replay operations |
 | `/me/approvals` | Deferred action approval decisions |
 | `/me/persona` | Personal persona onboarding |
 | `/me/assets` | Personal artifact catalogue |

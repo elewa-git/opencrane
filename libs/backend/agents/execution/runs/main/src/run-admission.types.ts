@@ -1,6 +1,7 @@
 import type { Prisma } from "@prisma/client";
 import type { RunInputSnapshot } from "@opencrane/contracts";
-import type { AgentRevisionId, AgentRunId, AgentServiceId, AgentServiceKind, SiloId, ThreadId } from "@opencrane/models/agents";
+import type { AgentRevisionId, AgentRunId, AgentServiceId, AgentServiceKind, SiloId } from "@opencrane/models/agents";
+import type { ConversationId, MessageContentBlock, MessageId } from "@opencrane/models/conversations";
 
 /** Immutable run, service, and revision facts accepted at the initial admission boundary. */
 export interface InitialRunAuthority
@@ -34,10 +35,14 @@ export interface RunAdmissionCommandCoordinates
 	readonly siloId: SiloId;
 	/** AgentService locked before any authority input is revalidated. */
 	readonly agentServiceId: AgentServiceId;
-	/** Conversation thread permanently bound to the admitted input snapshot, or null for non-conversational work. */
-	readonly threadId: ThreadId | null;
+	/** Conversation permanently bound to the admitted input snapshot, or null for non-conversational work. */
+	readonly conversationId: ConversationId | null;
 	/** User-visible key making duplicate transport delivery return the first admission. */
 	readonly requestIdempotencyKey: string;
+	/** Server-allocated input message included in a conversational user snapshot before its atomic insert. */
+	readonly inputMessageId?: MessageId;
+	/** Validated participant content staged until the run row exists in the same transaction. */
+	readonly inputMessageBlocks?: readonly MessageContentBlock[];
 }
 
 /** Initial admission requested by a human whose signed membership authorises an interactive run. */
@@ -93,12 +98,26 @@ export interface RunAdmissionBuild
 /** Callback result for a transaction-fenced admission compilation. */
 export type RunAdmissionBuildResult<TDenial> = { readonly outcome: "ready"; readonly value: RunAdmissionBuild } | { readonly outcome: "denied"; readonly reason: TDenial };
 
+/** Stable run-owned denials emitted by the first durable admission fence. */
+export enum RunAdmissionDenialReasons
+{
+	/** A same-key row or recovered snapshot belongs to another durable authority scope. */
+	AuthorityConflict = "authority_conflict",
+	/** Another non-terminal foreground run already owns the command's exact conversation. */
+	ActiveRun = "active_run",
+	/** Persistence failed without a safely classifiable durable outcome. */
+	PersistenceUnavailable = "persistence_unavailable",
+}
+
 /** Durable outcome of either accepting or deduplicating one logical run. */
-export type RunAdmissionResult<TDenial> = { readonly outcome: "accepted" | "idempotent"; readonly snapshot: RunInputSnapshot } | { readonly outcome: "denied"; readonly reason: TDenial | "persistence_unavailable" | "authority_conflict" };
+export type RunAdmissionResult<TDenial> = { readonly outcome: "accepted" | "idempotent"; readonly snapshot: RunInputSnapshot } | { readonly outcome: "denied"; readonly reason: TDenial | RunAdmissionDenialReasons };
+
+/** Optional same-transaction persistence owned by the caller of initial run admission. */
+export type RunAdmissionCommit = (transaction: RunAdmissionTransaction, value: RunAdmissionBuild) => Promise<void>;
 
 /** Run-owned boundary that serializes idempotency, final authority reads, and initial dispatch. */
 export interface RunAdmissionRepository
 {
 	/** Resolves a duplicate before compilation or accepts one complete run/snapshot/outbox transaction. */
-	admit<TDenial>(command: RunAdmissionCommand, build: (transaction: RunAdmissionTransaction) => Promise<RunAdmissionBuildResult<TDenial>>): Promise<RunAdmissionResult<TDenial>>;
+	admit<TDenial>(command: RunAdmissionCommand, build: (transaction: RunAdmissionTransaction) => Promise<RunAdmissionBuildResult<TDenial>>, commit?: RunAdmissionCommit): Promise<RunAdmissionResult<TDenial>>;
 }

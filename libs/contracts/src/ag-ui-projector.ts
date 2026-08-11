@@ -1,3 +1,4 @@
+import { RunEventTypes } from "@opencrane/models/agents";
 import type { AgUiProjectionEvent, AgUiProjectionSourceEvent, AgUiSseRecord } from "./ag-ui-projection.types.js";
 
 /** Project one server-authorized canonical event into the small, display-safe AG-UI subset. */
@@ -11,21 +12,21 @@ function _Project(source: AgUiProjectionSourceEvent): AgUiProjectionEvent
 {
 	switch (source.eventType)
 	{
-		case "run.accepted":
-		case "run.started":
-			return { type: "RUN_STARTED", threadId: source.threadId, runId: source.runId };
-		case "run.completed":
-		case "run.cancelled":
-			return { type: "RUN_FINISHED", threadId: source.threadId, runId: source.runId };
-		case "message.started":
+		case RunEventTypes.RunAccepted:
+		case RunEventTypes.RunStarted:
+			return { type: "RUN_STARTED", threadId: source.conversationId, runId: source.runId };
+		case RunEventTypes.RunCompleted:
+		case RunEventTypes.RunCancelled:
+			return { type: "RUN_FINISHED", threadId: source.conversationId, runId: source.runId };
+		case RunEventTypes.MessageStarted:
 			return typeof source.payload.messageId === "string" ? { type: "TEXT_MESSAGE_START", messageId: source.payload.messageId, role: "assistant" } : _Custom(source);
-		case "message.delta":
+		case RunEventTypes.MessageDelta:
 			return typeof source.payload.messageId === "string" && typeof source.payload.delta === "string" ? { type: "TEXT_MESSAGE_CONTENT", messageId: source.payload.messageId, delta: source.payload.delta } : _Custom(source);
-		case "message.completed":
+		case RunEventTypes.MessageCompleted:
 			return typeof source.payload.messageId === "string" ? { type: "TEXT_MESSAGE_END", messageId: source.payload.messageId } : _Custom(source);
-		case "tool.requested":
+		case RunEventTypes.ToolRequested:
 			return typeof source.payload.toolCallId === "string" && typeof source.payload.toolCallName === "string" ? { type: "TOOL_CALL_START", toolCallId: source.payload.toolCallId, toolCallName: source.payload.toolCallName } : _Custom(source);
-		case "tool.completed":
+		case RunEventTypes.ToolCompleted:
 			if (typeof source.payload.toolCallId !== "string") return _Custom(source);
 			return { type: "TOOL_CALL_END", toolCallId: source.payload.toolCallId };
 		default:

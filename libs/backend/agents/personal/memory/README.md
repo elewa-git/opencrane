@@ -17,8 +17,8 @@ before OpenCrane freezes its inputs.
 | [main](./main/README.md) | Identity-bound active-dataset and personal-preference selection inside the existing admission transaction. |
 
 ```
- POST /api/v1/me/runs  { threadId · requestIdempotencyKey }
-                 │ session subject + host silo + participant thread
+ POST /api/v1/me/conversations/:conversationId/messages  { conversationId · requestIdempotencyKey }
+                 │ session subject + host silo + participant conversation
                  ▼
  ┌───────────────────────────────┐
  │ personal memory/main ◄── HERE  │  select dataset + fact coordinates

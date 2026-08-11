@@ -1,0 +1,27 @@
+{
+  "name": "models-conversations",
+  "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
+  "projectType": "library",
+  "sourceRoot": "libs/models/conversations/main/src",
+  "tags": [
+    "type:lib",
+    "layer:model",
+    "scope:conversations"
+  ],
+  "targets": {
+    "lint": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "tsc -p tsconfig.json --noEmit",
+        "cwd": "libs/models/conversations/main"
+      }
+    },
+    "test": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "vitest run",
+        "cwd": "libs/models/conversations/main"
+      }
+    }
+  }
+}

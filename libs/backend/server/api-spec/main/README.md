@@ -18,6 +18,10 @@ and the cross-cutting endpoints that belong to no single domain — the auth flo
 `/auth/callback`, `/auth/me`, …) and the
 `/openapi.json` document itself.
 
+The conversation domain contributes the participant-owned list, create, open, message, archive,
+close, and replay paths. Generated clients therefore receive `conversationId` as the durable API
+coordinate; the standardized AG-UI projector alone retains its wire-level `threadId` field.
+
 Used by the running server, which serves this document at `/openapi.json`, and by the SDK/client
 generation step, which reads it to emit the typed contracts client. Editing a route means editing its
 domain's fragment, then regenerating the client from this composed spec.
@@ -40,7 +44,7 @@ top level under `server/` — not inside any one domain group — because it mus
 ## Dependency direction
 
 Tagged `scope:api-spec`: it may depend on `scope:shared` and on the route-owning capability scopes it
-aggregates — `access-tokens`, `audit`, `awareness`, `grants`, `groups`, `mcp`, `metrics`,
+aggregates — `access-tokens`, `audit`, `awareness`, `conversations`, `grants`, `groups`, `mcp`, `metrics`,
 `model-routing`, `policies`, `projection`, `providers`, `retrieval`, `skills`, `spend`, and `tenants`
 — and never on apps. Nothing else depends on it in reverse.
 

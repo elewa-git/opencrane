@@ -20,10 +20,10 @@ export class PrismaRuntimeTerminalReporter implements RuntimeTerminalReporter
 		const updated = await transaction.agentRun.updateMany({ where: { id: run.id, attempt: run.attempt, state: AgentRunState.Running }, data: { state: terminal.state, terminalReason: terminal.reason, finishedAt: now } });
 		if (updated.count !== 1) return { outcome: "denied", reason: "run_not_running" };
 
-		if (run.threadId !== null)
+		if (run.conversationId !== null)
 		{
 			const maximum = await transaction.conversationRunEvent.aggregate({ where: { runId: run.id }, _max: { sequence: true } });
-			await transaction.conversationRunEvent.create({ data: { runId: run.id, sequence: (maximum._max.sequence ?? 0) + 1, type: command.eventType, payload: { terminalReason: terminal.payloadReason }, occurredAt: now } });
+			await transaction.conversationRunEvent.create({ data: { conversationId: run.conversationId, runId: run.id, sequence: (maximum._max.sequence ?? 0) + 1, type: command.eventType, payload: { terminalReason: terminal.payloadReason }, occurredAt: now } });
 		}
 
 		// A terminal child must notify its parent in this same transaction; the delivery helper records a

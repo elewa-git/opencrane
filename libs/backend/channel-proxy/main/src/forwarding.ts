@@ -1,123 +1,7 @@
 import { ___DoWithTrace } from "@opencrane/backend/observability";
-import { ___ParseAndValidateJson } from "@opencrane/util";
 
 import type { AuthorizedChannelTarget, ChannelProxyDependencies, DelegatedSession } from "./channel-proxy.types.js";
 import { __HasForgedIdentityHeaders, __ValidateOrigin } from "./origin-policy.js";
-
-/** Headers that the target protocol allows back to an HTTP command caller. */
-const _COMMAND_RESPONSE_HEADERS = ["content-type", "etag", "location", "retry-after"];
-
-/** Forward one authenticated HTTP command to the exact route authorized by OpenCrane. */
-export async function __ForwardCommand(request: Request, dependencies: ChannelProxyDependencies): Promise<Response>
-{
-	const session = _ValidatePublicRequest(request, dependencies);
-	if (session instanceof Response)
-	{
-		return session;
-	}
-	if (request.method !== "POST")
-	{
-		return _Problem(405, "method_not_allowed");
-	}
-	if (!_ContentTypeIsJson(request.headers.get("content-type")))
-	{
-		return _Problem(415, "json_required");
-	}
-
-	// 1. Bound public input before asking the authority or contacting a runtime.
-	const declaredLength = Number(request.headers.get("content-length") ?? "0");
-	if (Number.isFinite(declaredLength) && declaredLength > dependencies.config.maxCommandBytes)
-	{
-		return _Problem(413, "command_too_large");
-	}
-	const body = new Uint8Array(await request.arrayBuffer());
-	if (body.byteLength > dependencies.config.maxCommandBytes)
-	{
-		return _Problem(413, "command_too_large");
-	}
-	const command = _CommandCoordinates(body, request.headers.get("idempotency-key"));
-	if (command === null)
-	{
-		return _Problem(400, "invalid_command");
-	}
-
-	// 2. Delegate identity, membership, resource and action decisions to OpenCrane.
-	let target: AuthorizedChannelTarget;
-	try
-	{
-		target = await ___DoWithTrace("channel.authority.resolve", { action: "command.forward" }, function _resolveTarget()
-		{
-			return dependencies.resolver.resolve({ session, action: "command.forward", threadId: command.threadId, requestIdempotencyKey: command.requestIdempotencyKey }, request.signal);
-		});
-	}
-	catch
-	{
-		return _Problem(503, "authority_unavailable");
-	}
-	if (!dependencies.rateLimiter.allow(target.subjectId))
-	{
-		return _Problem(429, "rate_limited");
-	}
-
-	// 3. Forward only the bounded payload and short-lived context to the exact internal target.
-	const endpoint = _ValidateTarget(target, dependencies.config.allowedTargetHostSuffixes);
-	if (!endpoint)
-	{
-		return _Problem(502, "invalid_authorized_target");
-	}
-	const timeout = new AbortController();
-	let timedOut = false;
-	const timeoutHandle = setTimeout(function _abortTimedOutCommand()
-	{
-		timedOut = true;
-		timeout.abort(new DOMException("command target timeout", "TimeoutError"));
-	}, dependencies.config.commandTimeoutMs);
-	try
-	{
-		const signal = AbortSignal.any([request.signal, timeout.signal]);
-		const upstream = await ___DoWithTrace("channel.command.forward", { bodyBytes: body.byteLength, targetHost: endpoint.hostname }, function _forwardTarget()
-		{
-			return dependencies.fetch(endpoint, {
-				method: "POST",
-				headers: { "content-type": request.headers.get("content-type") ?? "application/json", authorization: `Bearer ${target.invocationContext}` },
-				body,
-				signal,
-			});
-		});
-		const responseBody = await _ReadBoundedBody(upstream, dependencies.config.maxCommandResponseBytes);
-		return new Response(responseBody, { status: upstream.status, headers: _PickHeaders(upstream.headers, _COMMAND_RESPONSE_HEADERS) });
-	}
-	catch
-	{
-		return _Problem(timedOut ? 504 : 502, "target_unavailable");
-	}
-	finally
-	{
-		clearTimeout(timeoutHandle);
-	}
-}
-
-/** Parses only the command coordinates required before the proxy asks OpenCrane to authorize a route. */
-function _CommandCoordinates(body: Uint8Array, requestIdempotencyKey: string | null): { readonly threadId: string; readonly requestIdempotencyKey: string } | null
-{
-	try
-	{
-		return ___ParseAndValidateJson(new TextDecoder().decode(body), "channel command body", _CommandCoordinatesFromUnknown, requestIdempotencyKey);
-	}
-	catch
-	{
-		return null;
-	}
-}
-
-/** Validate the command coordinates required before asking OpenCrane to authorize a route. */
-function _CommandCoordinatesFromUnknown(value: unknown, requestIdempotencyKey: string | null): { readonly threadId: string; readonly requestIdempotencyKey: string } | null
-{
-	if (!value || typeof value !== "object" || Array.isArray(value)) return null;
-	const record = value as Record<string, unknown>;
-	if (typeof record.threadId !== "string" || !_OpaqueIdentifierAllowed(record.threadId) || !requestIdempotencyKey || !_OpaqueIdentifierAllowed(requestIdempotencyKey)) return null;
-	return { threadId: record.threadId, requestIdempotencyKey };
-}
 
 /** Relay one authenticated SSE event stream from its persisted replay cursor. */
 export async function __RelayEvents(request: Request, dependencies: ChannelProxyDependencies): Promise<Response>
@@ -133,10 +17,10 @@ export async function __RelayEvents(request: Request, dependencies: ChannelProxy
 	}
 
 	const url = new URL(request.url);
-	const threadId = url.searchParams.get("threadId") ?? "";
+	const conversationId = url.searchParams.get("conversationId") ?? "";
 	const queryCursor = url.searchParams.get("cursor");
 	const headerCursor = request.headers.get("last-event-id");
-	if (!_OpaqueIdentifierAllowed(threadId) || (queryCursor !== null && !_OpaqueIdentifierAllowed(queryCursor)) || (headerCursor !== null && !_OpaqueIdentifierAllowed(headerCursor)))
+	if (!_OpaqueIdentifierAllowed(conversationId) || (queryCursor !== null && !_OpaqueIdentifierAllowed(queryCursor)) || (headerCursor !== null && !_OpaqueIdentifierAllowed(headerCursor)))
 	{
 		return _Problem(400, "invalid_replay_coordinates");
 	}
@@ -146,13 +30,13 @@ export async function __RelayEvents(request: Request, dependencies: ChannelProxy
 	}
 	const cursor = queryCursor ?? headerCursor ?? undefined;
 
-	// 1. Authorize the exact thread and cursor through OpenCrane before opening a stream.
+	// 1. Authorize the exact conversation and cursor through OpenCrane before opening a stream.
 	let target: AuthorizedChannelTarget;
 	try
 	{
 		target = await ___DoWithTrace("channel.authority.resolve", { action: "events.read", hasCursor: cursor !== undefined }, function _resolveTarget()
 		{
-			return dependencies.resolver.resolve({ session, action: "events.read", threadId, cursor }, request.signal);
+			return dependencies.resolver.resolve({ session, action: "events.read", conversationId, cursor }, request.signal);
 		});
 	}
 	catch
@@ -204,7 +88,7 @@ export async function __RelayEvents(request: Request, dependencies: ChannelProxy
 	return new Response(body, { status: 200, headers: { "content-type": "text/event-stream", "cache-control": "no-store", connection: "keep-alive" } });
 }
 
-/** Validate same-origin and delegated-session preconditions shared by both public ports. */
+/** Validate the public event port's same-origin and delegated-session preconditions. */
 function _ValidatePublicRequest(request: Request, dependencies: ChannelProxyDependencies): DelegatedSession | Response
 {
 	if (__HasForgedIdentityHeaders(request.headers))
@@ -347,52 +231,6 @@ async function _ReadWithIdleBound(reader: ReadableStreamDefaultReader<Uint8Array
 	});
 }
 
-/** Read an HTTP command response without allowing an upstream to exhaust proxy memory. */
-async function _ReadBoundedBody(response: Response, maxBytes: number): Promise<ArrayBuffer | null>
-{
-	const declaredLength = Number(response.headers.get("content-length") ?? "0");
-	if (Number.isFinite(declaredLength) && declaredLength > maxBytes)
-	{
-		await response.body?.cancel();
-		throw new Error("command response exceeds configured byte bound");
-	}
-	if (!response.body)
-	{
-		return null;
-	}
-	const reader = response.body.getReader();
-	const chunks: Uint8Array[] = [];
-	let total = 0;
-	while (true)
-	{
-		const result = await reader.read();
-		if (result.done)
-		{
-			return _AppendChunks(chunks, total).buffer;
-		}
-		total += result.value.byteLength;
-		if (total > maxBytes)
-		{
-			await reader.cancel();
-			throw new Error("command response exceeds configured byte bound");
-		}
-		chunks.push(result.value);
-	}
-}
-
-/** Join bounded response chunks into a fresh ArrayBuffer-backed byte array. */
-function _AppendChunks(chunks: readonly Uint8Array[], total: number): Uint8Array<ArrayBuffer>
-{
-	const result = new Uint8Array(total);
-	let offset = 0;
-	for (const chunk of chunks)
-	{
-		result.set(chunk, offset);
-		offset += chunk.byteLength;
-	}
-	return result;
-}
-
 /** Append two byte arrays without exposing shared mutable storage. */
 function _AppendBytes(left: Uint8Array<ArrayBufferLike>, right: Uint8Array<ArrayBufferLike>): Uint8Array<ArrayBufferLike>
 {
@@ -425,31 +263,10 @@ function _OpaqueIdentifierAllowed(value: string): boolean
 	return value.length > 0 && value.length <= 200 && /^[A-Za-z0-9._:-]+$/.test(value);
 }
 
-/** Identify a JSON media type, including structured suffix forms. */
-function _ContentTypeIsJson(value: string | null): boolean
-{
-	return typeof value === "string" && /^(application\/json|application\/[A-Za-z0-9!#$&^_.+-]+\+json)(?:\s*;|$)/i.test(value);
-}
-
 /** Identify an SSE response without accepting generic text. */
 function _ContentTypeIsSse(value: string | null): boolean
 {
 	return typeof value === "string" && /^text\/event-stream(?:\s*;|$)/i.test(value);
-}
-
-/** Copy only explicitly protocol-owned upstream response headers. */
-function _PickHeaders(source: Headers, names: readonly string[]): Headers
-{
-	const result = new Headers();
-	for (const name of names)
-	{
-		const value = source.get(name);
-		if (value !== null)
-		{
-			result.set(name, value);
-		}
-	}
-	return result;
 }
 
 /** Return a small non-sensitive JSON error body. */

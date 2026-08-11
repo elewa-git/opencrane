@@ -59,7 +59,7 @@ export class __OpenCraneTargetResolver implements ChannelTargetResolver
 			const response = await this.options.fetch(new URL("/api/internal/channel-targets:resolve", this.options.baseUrl), {
 				method: "POST",
 				headers,
-			body: JSON.stringify({ action: request.action, trustedHost: request.session.trustedHost, threadId: request.threadId, requestIdempotencyKey: request.requestIdempotencyKey, cursor: request.cursor }),
+				body: JSON.stringify({ action: request.action, trustedHost: request.session.trustedHost, conversationId: request.conversationId, cursor: request.cursor }),
 				signal: combined,
 			});
 			if (!response.ok)

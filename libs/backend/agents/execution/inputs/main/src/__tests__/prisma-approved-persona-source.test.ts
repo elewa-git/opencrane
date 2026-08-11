@@ -14,7 +14,7 @@ function _PersonalRun(overrides: Partial<InitialRunAuthority> = {}): InitialRunA
 /** Creates the narrow command whose subject owns the personal profile. */
 function _Command(overrides: Record<string, unknown> = {})
 {
-	return { runId: "run-1", siloId: "silo-1", agentServiceId: "service-1", threadId: null, identityKind: "user", trigger: "interactive", executionSubjectId: "user-1", requestIdempotencyKey: "request-1", ...overrides } as never;
+	return { runId: "run-1", siloId: "silo-1", agentServiceId: "service-1", conversationId: null, identityKind: "user", trigger: "interactive", executionSubjectId: "user-1", requestIdempotencyKey: "request-1", ...overrides } as never;
 }
 
 /** Creates the admission transaction facade for persona profile lookup. */

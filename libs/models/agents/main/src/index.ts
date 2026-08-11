@@ -6,6 +6,7 @@ export type { AgentRun, AgentRunLineage, AgentRunState, AgentRunTerminalReason, 
 export { AgentServiceKinds, AgentServiceStates } from "./agent-service.types.js";
 export type { AgentService, AgentServiceKind, AgentServiceState } from "./agent-service.types.js";
 export type { GrantScope, GrantSubjectType, RevisionScopeAttachment } from "./scope-attachment.types.js";
-export type { AgentRevisionId, AgentRunId, AgentServiceId, MessageId, PersonaProfileId, PersonaRevisionId, SiloId, ThreadId, UserId } from "./identifiers.types.js";
-export type { Message, MessageContentBlock, MessageProvenance, MessageRole, MessageState, RunEvent, RunEventType, Thread, ThreadState } from "./transcript.types.js";
-export { __CanAppendRunEvent, __IsAgentRevisionTransitionAllowed, __IsAgentRunTransitionAllowed, __IsAgentServiceTransitionAllowed, __IsMessageTransitionAllowed, __IsThreadTransitionAllowed } from "./state-transitions.js";
+export type { AgentRevisionId, AgentRunId, AgentServiceId, PersonaProfileId, PersonaRevisionId, SiloId, UserId } from "./identifiers.types.js";
+export { RunEventTypes } from "./run-event.types.js";
+export type { RunEvent, RunEventType } from "./run-event.types.js";
+export { __CanAppendRunEvent, __IsAgentRevisionTransitionAllowed, __IsAgentRunTransitionAllowed, __IsAgentServiceTransitionAllowed } from "./state-transitions.js";

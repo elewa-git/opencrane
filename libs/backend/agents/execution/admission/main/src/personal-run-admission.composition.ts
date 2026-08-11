@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import type { PrismaClient } from "@prisma/client";
 
 import { __AssembleRunInputSnapshot, __CreatePrismaPersonalSessionAssemblyAuthorities, PersonalExecutionIdentityEnvelopeSource, PrismaSkillRevisionEligibilitySource, type PersonalMemoryFactSelector } from "@opencrane/backend/agents/execution/inputs";
+import { ___CreateLogger } from "@opencrane/backend/observability";
 import { PrismaRunAdmissionRepository } from "@opencrane/backend/agents/execution/runs";
 import type { FleetMembershipEvidenceConfig } from "@opencrane/backend/server/iam/membership";
 
@@ -25,18 +26,21 @@ export function __CreatePersonalRunAdmissionPort(prisma: PrismaClient, capacityG
 	return __CreatePersonalRunAdmissionPortWithGate({
 		repository: personalAdmissionRepository,
 		capacityGate,
-		assemble: async function _assemble(command, authority)
+		logger: ___CreateLogger("personal-run-admission"),
+		assemble: async function _assemble(command, authority, commit)
 		{
 			return __AssembleRunInputSnapshot({
 				runId: randomUUID(),
 				siloId: command.siloId,
 				agentServiceId: authority.agentServiceId,
-				threadId: command.threadId,
+				conversationId: command.conversationId,
+				inputMessageId: command.inputMessageId,
+				inputMessageBlocks: command.inputMessageBlocks,
 				identityKind: "user",
 				trigger: "interactive",
 				executionSubjectId: command.executionSubjectId,
 				requestIdempotencyKey: command.requestIdempotencyKey,
-			}, authorities);
+			}, authorities, commit);
 		},
 	});
 }

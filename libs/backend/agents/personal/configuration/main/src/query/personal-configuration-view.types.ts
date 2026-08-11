@@ -25,7 +25,7 @@ export interface PersonalConfigurationChangeView
 	/** Current durable proposal lifecycle state. */
 	readonly state: PersonalConfigurationChangeViewStates;
 	/** Conversation source that prompted the proposal. */
-	readonly sourceThreadId: string;
+	readonly sourceConversationId: string;
 	/** Run source that recorded the proposal. */
 	readonly sourceRunId: string;
 	/** Server time the proposal was created. */

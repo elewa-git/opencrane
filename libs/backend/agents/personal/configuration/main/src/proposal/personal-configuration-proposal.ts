@@ -7,7 +7,7 @@ import { PersonalConfigurationProposalCodes, type PersonalConfigurationChangeRep
 export async function __ProposePersonalConfigurationChange(repository: PersonalConfigurationChangeRepository, command: ProposePersonalConfigurationChangeCommand): Promise<ProposePersonalConfigurationChangeResult>
 {
 	// 1. Refuse caller-controlled empty identities or malformed evidence before persistence can be queried.
-	if (!_valid(command.siloId) || !_valid(command.userId) || !_valid(command.personaProfileId) || !_valid(command.agentServiceId) || !_valid(command.sourceThreadId) || !_valid(command.sourceRunId) || (command.sourceMessageId !== null && !_valid(command.sourceMessageId)) || !_IsPersonalConfigurationPatch(command.requestedPatch) || _DigestPatch(command.requestedPatch) !== command.requestedPatchDigest || Number.isNaN(Date.parse(command.proposedAt)))
+	if (!_valid(command.siloId) || !_valid(command.userId) || !_valid(command.personaProfileId) || !_valid(command.agentServiceId) || !_valid(command.sourceConversationId) || !_valid(command.sourceRunId) || (command.sourceMessageId !== null && !_valid(command.sourceMessageId)) || !_IsPersonalConfigurationPatch(command.requestedPatch) || _DigestPatch(command.requestedPatch) !== command.requestedPatchDigest || Number.isNaN(Date.parse(command.proposedAt)))
 	{
 		return { outcome: PersonalConfigurationProposalCodes.Denied, reason: PersonalConfigurationProposalCodes.InvalidCommand };
 	}

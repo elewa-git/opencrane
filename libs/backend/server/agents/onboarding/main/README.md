@@ -90,4 +90,4 @@ ORM-side default for a database column with no SQL default.
 
 - [Server agent capabilities](../../README.md)
 - [Persona authority](../../../../agents/personal/personas/main/README.md)
-- [Conversation replay](../../conversation-replay/main/README.md)
+- [Conversations](../../../conversations/main/README.md)

@@ -117,7 +117,7 @@ sharedPlatform:
 # -- Channel trust-boundary settings
 channelProxy:
   # -- Standalone target channel trust boundary. It delegates all identity, membership,
-  #    thread, and runtime-target decisions to OpenCrane.
+  #    conversation, and runtime-target decisions to OpenCrane.
   enabled: true
   image:
     repository: ghcr.io/elewa-git/opencrane-channel-proxy
@@ -133,12 +133,9 @@ channelProxy:
   targetHostSuffixes:
     - .svc.cluster.local
   resolverTimeoutMs: 3000
-  commandTimeoutMs: 30000
   streamConnectTimeoutMs: 5000
   streamDurationMs: 300000
   streamIdleTimeoutMs: 45000
-  maxCommandBytes: 1048576
-  maxCommandResponseBytes: 1048576
   maxEventBytes: 262144
   rateLimit: 120
   rateWindowMs: 60000

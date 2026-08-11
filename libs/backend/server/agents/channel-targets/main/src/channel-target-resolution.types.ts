@@ -1,10 +1,10 @@
 import type { AuthorizationScope } from "@opencrane/models/authorization";
 
 /** Stable proxy operation presented to OpenCrane for resolution. */
-export type ChannelResolutionAction = "command.forward" | "events.read";
+export type ChannelResolutionAction = "events.read";
 
 /** Product authorization actions required by a proxy operation. */
-export type ChannelAuthorizedAction = "agent.run.start" | "thread.message.create" | "thread.read";
+export type ChannelAuthorizedAction = "conversation.read";
 
 /** Trusted input assembled only by the internal HTTP adapter. */
 export interface ResolveChannelTargetCommand
@@ -19,10 +19,8 @@ export interface ResolveChannelTargetCommand
 	readonly trustedHost: string;
 	/** Target-neutral proxy operation. */
 	readonly action: ChannelResolutionAction;
-	/** Existing canonical thread selected by the browser. */
-	readonly threadId: string;
-	/** Opaque client delivery key that a real command-admission authority must deduplicate. */
-	readonly requestIdempotencyKey?: string;
+	/** Existing canonical conversation selected by the browser. */
+	readonly conversationId: string;
 	/** Optional persisted replay cursor for event reads. */
 	readonly cursor?: string;
 }
@@ -120,31 +118,33 @@ export interface ChannelMembershipPort
 	verifyCurrentMembership(subjectId: string, siloId: string, scope: AuthorizationScope, nowEpochMs: number): Promise<ChannelMembershipDecision>;
 }
 
-/** Current canonical thread coordinates needed before action authorization. */
-export interface ChannelThreadAuthority
+/** Current canonical conversation coordinates needed before action authorization. */
+export interface ChannelConversationAuthority
 {
-	/** Canonical thread identifier. */
-	readonly threadId: string;
-	/** Silo that owns the thread. */
+	/** Canonical conversation identifier. */
+	readonly conversationId: string;
+	/** Silo that owns the conversation. */
 	readonly siloId: string;
-	/** AgentService bound immutably to the thread. */
+	/** AgentService bound immutably to the conversation. */
 	readonly agentServiceId: string;
-	/** Current thread lifecycle. */
-	readonly state: "active" | "archived";
-	/** Users explicitly participating in the thread. */
+	/** Immutable mode eligible for runtime event projection. */
+	readonly mode: "agent_session";
+	/** Current conversation lifecycle. */
+	readonly lifecycle: "open" | "closed";
+	/** Users explicitly participating in the conversation. */
 	readonly participantUserIds: readonly string[];
 }
 
-/** Exact authorization request after membership and thread binding. */
+/** Exact authorization request after membership and conversation binding. */
 export interface AuthorizeChannelActionsCommand
 {
 	/** Verified human subject. */
 	readonly subjectId: string;
 	/** Host-selected silo. */
 	readonly siloId: string;
-	/** Canonical bound thread. */
-	readonly threadId: string;
-	/** AgentService bound to the thread. */
+	/** Canonical bound conversation. */
+	readonly conversationId: string;
+	/** AgentService bound to the conversation. */
 	readonly agentServiceId: string;
 	/** Independent authorization scope selected by the trusted host. */
 	readonly scope: AuthorizationScope;
@@ -168,52 +168,21 @@ export interface ChannelActionAuthorizationPort
 	authorize(command: AuthorizeChannelActionsCommand): Promise<ChannelActionAuthorizationDecision>;
 }
 
-/** Request to the real interactive-run creation authority. */
-export interface PrepareInteractiveRunCommand
-{
-	/** Verified delegated human subject. */
-	readonly subjectId: string;
-	/** Silo containing the run. */
-	readonly siloId: string;
-	/** Canonical thread receiving the user command. */
-	readonly threadId: string;
-	/** AgentService executed for the command. */
-	readonly agentServiceId: string;
-	/** Authorization evidence accepted for run creation. */
-	readonly authorizationDigest: string;
-	/** Stable transport key that the run authority must bind to the durable user command. */
-	readonly requestIdempotencyKey: string;
-}
-
-/** Explicit outcome from the real run authority. */
-export type PrepareInteractiveRunResult =
-	| { readonly outcome: "ready"; readonly runId: string }
-	| { readonly outcome: "denied" | "unavailable"; readonly reason: string };
-
-/** Run creation port; no default or fake implementation is permitted. */
-export interface ChannelRunStartPort
-{
-	/** Creates or resumes the real run and returns its durable identifier. */
-	prepareInteractiveRun(command: PrepareInteractiveRunCommand): Promise<PrepareInteractiveRunResult>;
-}
-
 /** Atomic invocation-context issuance request. */
 export interface IssueChannelInvocationContextCommand
 {
 	/** SHA-256 digest of the opaque context returned to channel-proxy. */
 	readonly digest: string;
-	/** Verified human subject and required thread participant. */
+	/** Verified human subject and required conversation participant. */
 	readonly subjectId: string;
 	/** Expected host-selected silo. */
 	readonly siloId: string;
-	/** Expected canonical thread. */
-	readonly threadId: string;
-	/** Expected thread-bound AgentService. */
+	/** Expected canonical conversation. */
+	readonly conversationId: string;
+	/** Expected conversation-bound AgentService. */
 	readonly agentServiceId: string;
 	/** Exact channel operation being authorized. */
 	readonly action: ChannelResolutionAction;
-	/** Durable run created for a command, or null for event reads. */
-	readonly runId: string | null;
 	/** Signed membership revision accepted by authorization. */
 	readonly membershipRevision: number;
 	/** Digest of the exact authorization decision. */
@@ -240,7 +209,7 @@ export interface IssuedChannelInvocationContext
 /** Atomic issuance outcome. */
 export type IssueChannelInvocationContextResult =
 	| { readonly status: "issued"; readonly context: IssuedChannelInvocationContext }
-	| { readonly status: "thread_conflict" | "participant_conflict" | "run_conflict" | "route_unavailable" | "route_ambiguous" };
+	| { readonly status: "conversation_conflict" | "participant_conflict" | "route_unavailable" | "route_ambiguous" };
 
 /** Online runtime-PEP consumption request. */
 export interface ConsumeChannelInvocationContextCommand
@@ -260,14 +229,12 @@ export interface ConsumedChannelInvocationContext
 	readonly subjectId: string;
 	/** Bound silo. */
 	readonly siloId: string;
-	/** Bound thread. */
-	readonly threadId: string;
+	/** Bound conversation. */
+	readonly conversationId: string;
 	/** Bound AgentService. */
 	readonly agentServiceId: string;
 	/** Bound operation. */
 	readonly action: ChannelResolutionAction;
-	/** Durable run for commands, or null for event reads. */
-	readonly runId: string | null;
 	/** Authorization evidence digest. */
 	readonly authorizationDigest: string;
 }
@@ -275,18 +242,21 @@ export interface ConsumedChannelInvocationContext
 /** One-time online consumption outcome. */
 export type ConsumeChannelInvocationContextResult =
 	| { readonly status: "consumed"; readonly context: ConsumedChannelInvocationContext }
-	| { readonly status: "denied"; readonly reason: "not_found" | "route_mismatch" | "expired" | "revoked" | "replayed" | "route_inactive" | "run_inactive" };
+	| { readonly status: "denied"; readonly reason: "not_found" | "route_mismatch" | "expired" | "revoked" | "replayed" | "route_inactive" };
 
-/** Durable thread, route, and invocation-context authority. */
+/** Durable conversation, route, and invocation-context authority. */
 export interface ChannelTargetAuthorityRepository
 {
-	/** Loads current thread coordinates for pre-authorization checks. */
-	getThreadAuthority(threadId: string): Promise<ChannelThreadAuthority | null>;
-	/** Rechecks thread, participant, run, and selected route while inserting the digest. */
+	/** Loads current conversation coordinates for pre-authorization checks. */
+	getConversationAuthority(conversationId: string): Promise<ChannelConversationAuthority | null>;
+	/** Rechecks conversation, participant, and selected route while inserting the digest. */
 	issueInvocationContextAtomically(command: IssueChannelInvocationContextCommand): Promise<IssueChannelInvocationContextResult>;
 	/** Consumes one digest once while rechecking the exact registered route online. */
 	consumeInvocationContextAtomically(command: ConsumeChannelInvocationContextCommand): Promise<ConsumeChannelInvocationContextResult>;
 }
+
+/** Owns the serializable transaction that fences one channel-target authority operation. */
+export interface ChannelTargetAuthorityUnitOfWork extends ChannelTargetAuthorityRepository {}
 
 /** Injectable wall clock. */
 export interface ChannelTargetClock
@@ -317,9 +287,7 @@ export interface ChannelTargetResolutionDependencies
 	readonly membership: ChannelMembershipPort;
 	/** Product action authorization facade. */
 	readonly authorization: ChannelActionAuthorizationPort;
-	/** Required real run-start authority. */
-	readonly runStart: ChannelRunStartPort;
-	/** Canonical thread, route, and context repository. */
+	/** Canonical conversation, route, and context repository. */
 	readonly repository: ChannelTargetAuthorityRepository;
 	/** Trusted clock. */
 	readonly clock: ChannelTargetClock;
@@ -343,4 +311,4 @@ export interface AuthorizedChannelTargetResult
 /** Stable fail-closed resolution outcome. */
 export type ResolveChannelTargetResult =
 	| { readonly outcome: "authorized"; readonly target: AuthorizedChannelTargetResult }
-	| { readonly outcome: "denied"; readonly reason: "invalid_request" | "workload_denied" | "identity_denied" | "host_denied" | "membership_denied" | "thread_denied" | "authorization_denied" | "run_denied" | "run_unavailable" | "route_denied" };
+	| { readonly outcome: "denied"; readonly reason: "invalid_request" | "workload_denied" | "identity_denied" | "host_denied" | "membership_denied" | "conversation_denied" | "authorization_denied" | "route_denied" };

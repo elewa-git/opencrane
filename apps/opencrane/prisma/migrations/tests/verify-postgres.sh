@@ -65,6 +65,7 @@ psql_command postgres --command 'CREATE DATABASE fresh;' >/dev/null
 psql_command fresh <"$CURRENT_BASELINE" >/dev/null
 
 for database in migrated fresh; do
+	psql_command "$database" <"$ROOT/apps/opencrane/prisma/migrations/tests/conversation-activity-ordering.sql" >/dev/null
 	docker exec "$CONTAINER" pg_dump --username postgres --dbname "$database" \
 		--schema-only --no-owner --no-privileges \
 		--exclude-schema opencrane_bootstrap --exclude-schema opencrane_migrations \
@@ -102,6 +103,26 @@ psql_command populated --tuples-only --no-align --command \
 	| grep -qx '1'
 psql_command populated --tuples-only --no-align --command \
 	"SELECT count(*) FROM pg_type WHERE typname = 'PersonaColour';" \
+	| grep -qx '0'
+
+create_source_database populated_conversation
+psql_command populated_conversation <<'SQL' >/dev/null
+SET session_replication_role = replica;
+INSERT INTO "conversation_threads" ("id", "silo_id", "agent_service_id", "updated_at")
+VALUES ('conversation-legacy', 'silo-legacy', 'agent-service-legacy', clock_timestamp());
+SET session_replication_role = origin;
+SQL
+if psql_command populated_conversation --set VERBOSITY=verbose --set "source_baseline_sha256=$PROTECTED_DIGEST" --set "migration_sql_sha256=$MIGRATION_SQL_DIGEST" \
+	--file - <"$TRANSITION_ROOT/migration.sql" >"$WORK_DIR/populated-conversation-output.log" 2>&1; then
+	echo "populated 0.7 Conversation fixture unexpectedly migrated" >&2
+	exit 1
+fi
+grep -q 'OC710' "$WORK_DIR/populated-conversation-output.log"
+psql_command populated_conversation --tuples-only --no-align --command \
+	'SELECT count(*) FROM "conversation_threads" WHERE "id" = '\''conversation-legacy'\'';' \
+	| grep -qx '1'
+psql_command populated_conversation --tuples-only --no-align --command \
+	"SELECT count(*) FROM pg_type WHERE typname = 'ConversationMode';" \
 	| grep -qx '0'
 
 echo "0.7.0-to-0.8.0 PostgreSQL migration: PASS"

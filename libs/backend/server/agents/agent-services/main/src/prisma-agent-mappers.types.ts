@@ -44,7 +44,7 @@ export interface AgentRunRow
 	readonly siloId: string;
 	readonly agentServiceId: string;
 	readonly agentRevisionId: string;
-	readonly threadId: string | null;
+	readonly conversationId: string | null;
 	readonly trigger: string;
 	readonly delegatedUserId: string | null;
 	readonly requestIdempotencyKey: string;

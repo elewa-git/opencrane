@@ -46,9 +46,9 @@ and never calls Cognee.
 ## Boundary
 
 Consumed by the production personal-run path through
-[execution admission](../../../execution/admission/main/README.md). `POST /api/v1/me/runs` accepts
-only a `threadId` and `requestIdempotencyKey`; the authenticated session supplies the subject, the
-trusted host supplies the silo, and the server re-resolves the participant-bound thread and personal
+[execution admission](../../../execution/admission/main/README.md). `POST /api/v1/me/conversations/:conversationId/messages` accepts
+only a `conversationId` and `requestIdempotencyKey`; the authenticated session supplies the subject, the
+trusted host supplies the silo, and the server re-resolves the participant-bound conversation and personal
 agent service. Inside the final admission transaction, execution inputs verify the exact signed fleet
 membership and current grants, load the approved persona, and use the dedicated personal-session
 factory to select the dataset and preference coordinates owned here.

@@ -9,14 +9,14 @@ import { PrismaRunAdmissionRepository } from "../prisma-run-admission-repository
 function _snapshot(): RunInputSnapshot
 {
 	return {
-		runId: "run-1", siloId: "silo-1", agentServiceId: "service-1", agentRevisionId: "revision-1", snapshotVersion: 1, threadId: "thread-1", messageIds: ["message-1"], personaRevisionId: "persona-1", preferenceFactIds: ["preference-1"], artifactRevisionIds: ["artifact-1"], skillRevisionIds: ["skill-1"], memoryFacts: [{ datasetId: "dataset-1", factId: "fact-1", contentDigest: `sha256:${"e".repeat(64)}`, provenance: [{ sourceKind: MemoryFactProvenanceSourceKinds.Message, sourceId: "message-1", capturedAt: "2026-07-20T00:00:00.000Z" }] }], memoryQueryPolicy: { scope: "personal" }, integrationAssignments: [{ integrationId: "integration-1", allowedTools: ["search"] }], modelRoute: { alias: "target" }, budgetPolicy: { maxTokens: 1000 }, identitySnapshot: { kind: RunInputSnapshotIdentityKinds.User, executionSubjectId: "user-1", organizationId: "org-1", fleetMembershipRevision: 4, fleetMembershipIssuer: "opencrane-fleet", fleetMembershipIssuerKeyId: "key-1", fleetMembershipAssertionId: "assertion-1", fleetMembershipPayloadDigest: `sha256:${"d".repeat(64)}`, fleetMembershipTrustedUntil: "2026-07-20T01:00:00.000Z" }, capabilitySetDigest: `sha256:${"a".repeat(64)}`, effectiveContractDigest: `sha256:${"b".repeat(64)}`, promptCompilerVersion: "prompt-v1", digest: `sha256:${"c".repeat(64)}`, compiledAt: "2026-07-20T00:00:00.000Z",
+		runId: "run-1", siloId: "silo-1", agentServiceId: "service-1", agentRevisionId: "revision-1", snapshotVersion: 1, conversationId: "conversation-1", messageIds: ["message-1"], personaRevisionId: "persona-1", preferenceFactIds: ["preference-1"], artifactRevisionIds: ["artifact-1"], skillRevisionIds: ["skill-1"], memoryFacts: [{ datasetId: "dataset-1", factId: "fact-1", contentDigest: `sha256:${"e".repeat(64)}`, provenance: [{ sourceKind: MemoryFactProvenanceSourceKinds.Message, sourceId: "message-1", capturedAt: "2026-07-20T00:00:00.000Z" }] }], memoryQueryPolicy: { scope: "personal" }, integrationAssignments: [{ integrationId: "integration-1", allowedTools: ["search"] }], modelRoute: { alias: "target" }, budgetPolicy: { maxTokens: 1000 }, identitySnapshot: { kind: RunInputSnapshotIdentityKinds.User, executionSubjectId: "user-1", organizationId: "org-1", fleetMembershipRevision: 4, fleetMembershipIssuer: "opencrane-fleet", fleetMembershipIssuerKeyId: "key-1", fleetMembershipAssertionId: "assertion-1", fleetMembershipPayloadDigest: `sha256:${"d".repeat(64)}`, fleetMembershipTrustedUntil: "2026-07-20T01:00:00.000Z" }, capabilitySetDigest: `sha256:${"a".repeat(64)}`, effectiveContractDigest: `sha256:${"b".repeat(64)}`, promptCompilerVersion: "prompt-v1", digest: `sha256:${"c".repeat(64)}`, compiledAt: "2026-07-20T00:00:00.000Z",
 	};
 }
 
 /** Creates a target initial-admission command matching the canonical test snapshot. */
 function _command()
 {
-	return { runId: "run-1", siloId: "silo-1", agentServiceId: "service-1", threadId: "thread-1", identityKind: RunInputSnapshotIdentityKinds.User, trigger: "interactive", executionSubjectId: "user-1", requestIdempotencyKey: "request-1" } as const;
+	return { runId: "run-1", siloId: "silo-1", agentServiceId: "service-1", conversationId: "conversation-1", identityKind: RunInputSnapshotIdentityKinds.User, trigger: "interactive", executionSubjectId: "user-1", requestIdempotencyKey: "request-1" } as const;
 }
 
 /** Creates the immutable authority facts that are revalidated within the admission transaction. */
@@ -29,8 +29,8 @@ describe("PrismaRunAdmissionRepository", function _describeAdmissionRepository()
 {
 	it("admits a scheduled managed run without accepting a user-shaped execution subject", async function _admitsManagedService()
 	{
-		const snapshot = { ..._snapshot(), threadId: null, personaRevisionId: null, memoryQueryPolicy: { scope: "none" }, identitySnapshot: { kind: RunInputSnapshotIdentityKinds.Service, executionSubjectId: "agent-service:service-1", agentServiceId: "service-1", effectiveScopeAttachments: [], effectiveScopeAttachmentDigest: `sha256:${"f".repeat(64)}`, organizationId: "org-1", fleetMembershipRevision: 4, fleetMembershipIssuer: "opencrane-fleet", fleetMembershipIssuerKeyId: "key-1", fleetMembershipAssertionId: "assertion-1", fleetMembershipPayloadDigest: `sha256:${"d".repeat(64)}`, fleetMembershipTrustedUntil: "2026-07-20T01:00:00.000Z" } } as RunInputSnapshot;
-		const command = { runId: "run-1", siloId: "silo-1", agentServiceId: "service-1", threadId: null, identityKind: RunInputSnapshotIdentityKinds.Service, trigger: "schedule", requestIdempotencyKey: "schedule:service-1:slot-1" } as const;
+		const snapshot = { ..._snapshot(), conversationId: null, personaRevisionId: null, memoryQueryPolicy: { scope: "none" }, identitySnapshot: { kind: RunInputSnapshotIdentityKinds.Service, executionSubjectId: "agent-service:service-1", agentServiceId: "service-1", effectiveScopeAttachments: [], effectiveScopeAttachmentDigest: `sha256:${"f".repeat(64)}`, organizationId: "org-1", fleetMembershipRevision: 4, fleetMembershipIssuer: "opencrane-fleet", fleetMembershipIssuerKeyId: "key-1", fleetMembershipAssertionId: "assertion-1", fleetMembershipPayloadDigest: `sha256:${"d".repeat(64)}`, fleetMembershipTrustedUntil: "2026-07-20T01:00:00.000Z" } } as RunInputSnapshot;
+		const command = { runId: "run-1", siloId: "silo-1", agentServiceId: "service-1", conversationId: null, identityKind: RunInputSnapshotIdentityKinds.Service, trigger: "schedule", requestIdempotencyKey: "schedule:service-1:slot-1" } as const;
 		const authority = { ..._authority(), agentKind: AgentServiceKinds.Managed, trigger: "schedule", delegatedUserId: null } as const;
 		const transaction = { $queryRaw: vi.fn().mockResolvedValue([]), agentRun: { findUnique: vi.fn().mockResolvedValue(null), create: vi.fn().mockResolvedValue({ id: "run-1" }) }, runInputSnapshot: { create: vi.fn().mockResolvedValue({ id: "snapshot-1" }) }, outboxEvent: { createMany: vi.fn().mockResolvedValue({ count: 2 }) } };
 		const prisma = { $transaction: vi.fn(async function _transaction(callback: (client: typeof transaction) => Promise<unknown>) { return callback(transaction); }) } as unknown as PrismaClient;
@@ -53,15 +53,36 @@ describe("PrismaRunAdmissionRepository", function _describeAdmissionRepository()
 		expect(transaction.outboxEvent.createMany).toHaveBeenCalledWith({ data: [expect.objectContaining({ sequence: 1, kind: "RunAccepted", idempotencyKey: "run-1:accepted" }), expect.objectContaining({ sequence: 2, kind: "RunAttemptRequested", idempotencyKey: "run-1:attempt:1" })] });
 	});
 
-	it("returns a null-thread snapshot before a later retry can load or compile a new request instant", async function _returnsIdempotent()
+	it("runs caller-owned persistence after run rows inside the same serializable transaction", async function _RunsCommitParticipant()
 	{
-		const snapshot = { ..._snapshot(), threadId: null };
-		const transaction = { $queryRaw: vi.fn().mockResolvedValue([]), agentRun: { findUnique: vi.fn().mockResolvedValue({ id: snapshot.runId, siloId: snapshot.siloId, agentServiceId: snapshot.agentServiceId, threadId: snapshot.threadId, trigger: "Interactive", delegatedUserId: snapshot.identitySnapshot.executionSubjectId, inputSnapshotDigest: snapshot.digest }), create: vi.fn() }, runInputSnapshot: { findUnique: vi.fn().mockResolvedValue({ ...snapshot, compiledAt: new Date(snapshot.compiledAt) }), create: vi.fn() }, outboxEvent: { createMany: vi.fn() } };
+		const order: string[] = [];
+		const transaction = {
+			$queryRaw: vi.fn().mockResolvedValue([]),
+			agentRun: { findUnique: vi.fn().mockResolvedValue(null), create: vi.fn(async function _CreateRun() { order.push("run"); }) },
+			runInputSnapshot: { create: vi.fn(async function _CreateSnapshot() { order.push("snapshot"); }) },
+			outboxEvent: { createMany: vi.fn(async function _CreateOutbox() { order.push("outbox"); }) },
+		};
+		const prisma = { $transaction: vi.fn(async function _Transaction(callback: (client: typeof transaction) => Promise<unknown>, options: { readonly isolationLevel: Prisma.TransactionIsolationLevel }) { expect(options.isolationLevel).toBe(Prisma.TransactionIsolationLevel.Serializable); return callback(transaction); }) } as unknown as PrismaClient;
+		const repository = new PrismaRunAdmissionRepository(prisma);
+
+		await expect(repository.admit(_command(), async function _Build() { return { outcome: "ready", value: { authority: _authority(), snapshot: _snapshot() } } as const; }, async function _Commit(transactionContext, value)
+		{
+			expect(transactionContext.prisma).toBe(transaction);
+			expect(value.snapshot.runId).toBe("run-1");
+			order.push("message");
+		})).resolves.toMatchObject({ outcome: "accepted" });
+		expect(order).toEqual(["run", "snapshot", "outbox", "message"]);
+	});
+
+	it("returns a null-conversation snapshot before a later retry can load or compile a new request instant", async function _returnsIdempotent()
+	{
+		const snapshot = { ..._snapshot(), conversationId: null };
+		const transaction = { $queryRaw: vi.fn().mockResolvedValue([]), agentRun: { findUnique: vi.fn().mockResolvedValue({ id: snapshot.runId, siloId: snapshot.siloId, agentServiceId: snapshot.agentServiceId, conversationId: snapshot.conversationId, trigger: "Interactive", delegatedUserId: snapshot.identitySnapshot.executionSubjectId, inputSnapshotDigest: snapshot.digest }), create: vi.fn() }, runInputSnapshot: { findUnique: vi.fn().mockResolvedValue({ ...snapshot, compiledAt: new Date(snapshot.compiledAt) }), create: vi.fn() }, outboxEvent: { createMany: vi.fn() } };
 		const prisma = { $transaction: vi.fn(async function _transaction(callback: (client: typeof transaction) => Promise<unknown>) { return callback(transaction); }) } as unknown as PrismaClient;
 		const repository = new PrismaRunAdmissionRepository(prisma, { now: function _now() { return new Date("2026-07-20T00:05:00.000Z"); } });
 		let compiled = false;
 
-		await expect(repository.admit({ ..._command(), threadId: null }, async function _build() { compiled = true; return { outcome: "ready", value: { authority: _authority(), snapshot } } as const; })).resolves.toEqual({ outcome: "idempotent", snapshot });
+		await expect(repository.admit({ ..._command(), conversationId: null }, async function _build() { compiled = true; return { outcome: "ready", value: { authority: _authority(), snapshot } } as const; })).resolves.toEqual({ outcome: "idempotent", snapshot });
 		expect(compiled).toBe(false);
 		expect(transaction.agentRun.create).not.toHaveBeenCalled();
 		expect(transaction.runInputSnapshot.create).not.toHaveBeenCalled();
@@ -69,12 +90,12 @@ describe("PrismaRunAdmissionRepository", function _describeAdmissionRepository()
 
 	it.each([
 		["another agent service", { agentServiceId: "service-2" }],
-		["another conversation thread", { threadId: "thread-2" }],
+		["another conversation conversation", { conversationId: "conversation-2" }],
 		["another execution subject", { delegatedUserId: "user-2" }],
 	])("denies a same-silo delivery key already used by %s", async function _deniesCrossScopeDuplicate(_description: string, difference: object)
 	{
 		const snapshot = _snapshot();
-		const transaction = { $queryRaw: vi.fn().mockResolvedValue([]), agentRun: { findUnique: vi.fn().mockResolvedValue({ id: snapshot.runId, siloId: snapshot.siloId, agentServiceId: snapshot.agentServiceId, threadId: snapshot.threadId, trigger: "Interactive", delegatedUserId: snapshot.identitySnapshot.executionSubjectId, inputSnapshotDigest: snapshot.digest, ...difference }), create: vi.fn() }, runInputSnapshot: { findUnique: vi.fn(), create: vi.fn() }, outboxEvent: { createMany: vi.fn() } };
+		const transaction = { $queryRaw: vi.fn().mockResolvedValue([]), agentRun: { findUnique: vi.fn().mockResolvedValue({ id: snapshot.runId, siloId: snapshot.siloId, agentServiceId: snapshot.agentServiceId, conversationId: snapshot.conversationId, trigger: "Interactive", delegatedUserId: snapshot.identitySnapshot.executionSubjectId, inputSnapshotDigest: snapshot.digest, ...difference }), create: vi.fn() }, runInputSnapshot: { findUnique: vi.fn(), create: vi.fn() }, outboxEvent: { createMany: vi.fn() } };
 		const prisma = { $transaction: vi.fn(async function _transaction(callback: (client: typeof transaction) => Promise<unknown>) { return callback(transaction); }) } as unknown as PrismaClient;
 		const repository = new PrismaRunAdmissionRepository(prisma);
 		const build = vi.fn();
@@ -89,7 +110,7 @@ describe("PrismaRunAdmissionRepository", function _describeAdmissionRepository()
 	{
 		const duplicateError = new Prisma.PrismaClientKnownRequestError("duplicate run admission", { code: "P2002", clientVersion: "6.19.3" });
 		const snapshot = _snapshot();
-		const prisma = { $transaction: vi.fn().mockRejectedValue(duplicateError), agentRun: { findUnique: vi.fn().mockResolvedValue({ id: snapshot.runId, siloId: snapshot.siloId, agentServiceId: snapshot.agentServiceId, threadId: snapshot.threadId, trigger: "Interactive", delegatedUserId: "user-2", inputSnapshotDigest: snapshot.digest }) }, runInputSnapshot: { findUnique: vi.fn() } } as unknown as PrismaClient;
+		const prisma = { $transaction: vi.fn().mockRejectedValue(duplicateError), agentRun: { findUnique: vi.fn().mockResolvedValue({ id: snapshot.runId, siloId: snapshot.siloId, agentServiceId: snapshot.agentServiceId, conversationId: snapshot.conversationId, trigger: "Interactive", delegatedUserId: "user-2", inputSnapshotDigest: snapshot.digest }) }, runInputSnapshot: { findUnique: vi.fn() } } as unknown as PrismaClient;
 		const repository = new PrismaRunAdmissionRepository(prisma);
 
 		await expect(repository.admit(_command(), async function _unexpectedBuild() { throw new Error("unexpected build"); })).resolves.toEqual({ outcome: "denied", reason: "authority_conflict" });
@@ -110,16 +131,32 @@ describe("PrismaRunAdmissionRepository", function _describeAdmissionRepository()
 	{
 		const duplicateError = new Prisma.PrismaClientKnownRequestError("duplicate run admission", { code: "P2002", clientVersion: "6.19.3" });
 		const snapshot = _snapshot();
-		const prisma = { $transaction: vi.fn().mockRejectedValue(duplicateError), agentRun: { findUnique: vi.fn().mockResolvedValue({ id: snapshot.runId, siloId: snapshot.siloId, agentServiceId: snapshot.agentServiceId, threadId: snapshot.threadId, trigger: "Interactive", delegatedUserId: snapshot.identitySnapshot.executionSubjectId, inputSnapshotDigest: snapshot.digest }) }, runInputSnapshot: { findUnique: vi.fn().mockResolvedValue({ ...snapshot, compiledAt: new Date(snapshot.compiledAt) }) } } as unknown as PrismaClient;
+		const prisma = { $transaction: vi.fn().mockRejectedValue(duplicateError), agentRun: { findUnique: vi.fn().mockResolvedValue({ id: snapshot.runId, siloId: snapshot.siloId, agentServiceId: snapshot.agentServiceId, conversationId: snapshot.conversationId, trigger: "Interactive", delegatedUserId: snapshot.identitySnapshot.executionSubjectId, inputSnapshotDigest: snapshot.digest }) }, runInputSnapshot: { findUnique: vi.fn().mockResolvedValue({ ...snapshot, compiledAt: new Date(snapshot.compiledAt) }) } } as unknown as PrismaClient;
 		const repository = new PrismaRunAdmissionRepository(prisma);
 
 		await expect(repository.admit(_command(), async function _unexpectedBuild() { throw new Error("unexpected build"); })).resolves.toEqual({ outcome: "idempotent", snapshot });
 	});
 
+	it("does not misclassify an unknown unique conflict when no same-key or active-conversation row exists", async function _keepsUnknownConflictUnavailable()
+	{
+		const duplicateError = new Prisma.PrismaClientKnownRequestError("another unique authority failed", { code: "P2002", clientVersion: "6.19.3" });
+		const error = vi.fn();
+		const log = { error } as unknown as Logger;
+		const prisma = {
+			$transaction: vi.fn().mockRejectedValue(duplicateError),
+			agentRun: { findUnique: vi.fn().mockResolvedValue(null) },
+			runInputSnapshot: { findUnique: vi.fn() },
+		} as unknown as PrismaClient;
+		const repository = new PrismaRunAdmissionRepository(prisma, undefined, log);
+
+		await expect(repository.admit(_command(), async function _unexpectedBuild() { throw new Error("unexpected build"); })).resolves.toEqual({ outcome: "denied", reason: "persistence_unavailable" });
+		expect(error).toHaveBeenCalledWith({ err: duplicateError, runId: "run-1", siloId: "silo-1", agentServiceId: "service-1", failureKind: "transaction_failed" }, "run admission persistence failed");
+	});
+
 	it("denies a recovered snapshot that names another execution subject", async function _deniesSnapshotSubjectMismatch()
 	{
 		const snapshot = { ..._snapshot(), identitySnapshot: { ..._snapshot().identitySnapshot, executionSubjectId: "user-2" } };
-		const transaction = { $queryRaw: vi.fn().mockResolvedValue([]), agentRun: { findUnique: vi.fn().mockResolvedValue({ id: snapshot.runId, siloId: snapshot.siloId, agentServiceId: snapshot.agentServiceId, threadId: snapshot.threadId, trigger: "Interactive", delegatedUserId: "user-1", inputSnapshotDigest: snapshot.digest }), create: vi.fn() }, runInputSnapshot: { findUnique: vi.fn().mockResolvedValue({ ...snapshot, compiledAt: new Date(snapshot.compiledAt) }), create: vi.fn() }, outboxEvent: { createMany: vi.fn() } };
+		const transaction = { $queryRaw: vi.fn().mockResolvedValue([]), agentRun: { findUnique: vi.fn().mockResolvedValue({ id: snapshot.runId, siloId: snapshot.siloId, agentServiceId: snapshot.agentServiceId, conversationId: snapshot.conversationId, trigger: "Interactive", delegatedUserId: "user-1", inputSnapshotDigest: snapshot.digest }), create: vi.fn() }, runInputSnapshot: { findUnique: vi.fn().mockResolvedValue({ ...snapshot, compiledAt: new Date(snapshot.compiledAt) }), create: vi.fn() }, outboxEvent: { createMany: vi.fn() } };
 		const prisma = { $transaction: vi.fn(async function _transaction(callback: (client: typeof transaction) => Promise<unknown>) { return callback(transaction); }) } as unknown as PrismaClient;
 		const repository = new PrismaRunAdmissionRepository(prisma);
 

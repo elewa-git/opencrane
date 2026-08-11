@@ -10,7 +10,7 @@ import type { SessionAssemblyCommand } from "../session-assembly.types.js";
 /** Builds a final-admission command whose silo and subject came from trusted server context. */
 function _Command(): SessionAssemblyCommand
 {
-	return { runId: "run-1", siloId: "silo-1", agentServiceId: "service-1", threadId: "thread-1", identityKind: "user", trigger: "interactive", executionSubjectId: "user-1", requestIdempotencyKey: "request-1" };
+	return { runId: "run-1", siloId: "silo-1", agentServiceId: "service-1", conversationId: "conversation-1", identityKind: "user", trigger: "interactive", executionSubjectId: "user-1", requestIdempotencyKey: "request-1" };
 }
 
 /** Builds the run authority whose personal kind is required for a browser-session admission. */
@@ -34,7 +34,7 @@ function _Transaction(row = _Revision()): RunAdmissionTransaction
 			verifiedFleetMembershipRevision: { findFirst: vi.fn().mockResolvedValue(row) },
 			highestAcceptedFleetMembership: { findUnique: vi.fn().mockResolvedValue(null), upsert: vi.fn().mockResolvedValue({ revision: 7 }) },
 			auditDecision: { create: vi.fn().mockResolvedValue({ id: "audit-1" }) },
-			authorizationGrant: { findMany: vi.fn().mockResolvedValue([{ catalogId: "catalog-1", catalogRevision: 3, catalogDigest: `sha256:${"c".repeat(64)}`, capabilityId: "conversation:run", resourceKind: "thread", resourceId: "thread-1", effect: "allow", priority: 10, validFrom: new Date(8000), expiresAt: null }]) },
+			authorizationGrant: { findMany: vi.fn().mockResolvedValue([{ catalogId: "catalog-1", catalogRevision: 3, catalogDigest: `sha256:${"c".repeat(64)}`, capabilityId: "conversation:run", resourceKind: "conversation", resourceId: "conversation-1", effect: "allow", priority: 10, validFrom: new Date(8000), expiresAt: null }]) },
 		} as never,
 		admittedAt: new Date(10000).toISOString(),
 		admittedAtEpochMs: 10000,

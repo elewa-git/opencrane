@@ -64,18 +64,12 @@ spec:
               value: {{ join "," .Values.channelProxy.targetHostSuffixes | quote }}
             - name: CHANNEL_PROXY_RESOLVER_TIMEOUT_MS
               value: {{ .Values.channelProxy.resolverTimeoutMs | quote }}
-            - name: CHANNEL_PROXY_COMMAND_TIMEOUT_MS
-              value: {{ .Values.channelProxy.commandTimeoutMs | quote }}
             - name: CHANNEL_PROXY_STREAM_CONNECT_TIMEOUT_MS
               value: {{ .Values.channelProxy.streamConnectTimeoutMs | quote }}
             - name: CHANNEL_PROXY_STREAM_DURATION_MS
               value: {{ .Values.channelProxy.streamDurationMs | quote }}
             - name: CHANNEL_PROXY_STREAM_IDLE_TIMEOUT_MS
               value: {{ .Values.channelProxy.streamIdleTimeoutMs | quote }}
-            - name: CHANNEL_PROXY_MAX_COMMAND_BYTES
-              value: {{ .Values.channelProxy.maxCommandBytes | quote }}
-            - name: CHANNEL_PROXY_MAX_COMMAND_RESPONSE_BYTES
-              value: {{ .Values.channelProxy.maxCommandResponseBytes | quote }}
             - name: CHANNEL_PROXY_MAX_EVENT_BYTES
               value: {{ .Values.channelProxy.maxEventBytes | quote }}
             - name: CHANNEL_PROXY_RATE_LIMIT

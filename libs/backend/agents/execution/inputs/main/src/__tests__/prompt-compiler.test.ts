@@ -15,7 +15,7 @@ function _snapshot(overrides: Partial<RunInputSnapshot> = {}): RunInputSnapshot
 		agentServiceId: "svc-1",
 		agentRevisionId: "rev-1",
 		snapshotVersion: 1,
-		threadId: "thread-1",
+		conversationId: "conversation-1",
 		messageIds: ["m-1", "m-2"],
 		personaRevisionId: "persona-1",
 		preferenceFactIds: [],

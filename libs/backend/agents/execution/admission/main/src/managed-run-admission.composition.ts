@@ -52,7 +52,7 @@ export function __CreateManagedRunAdmissionPort(prisma: PrismaClient, capacityGa
 			runId: randomUUID(),
 			siloId: command.siloId,
 			agentServiceId: command.agentServiceId,
-			threadId: null,
+			conversationId: null,
 			identityKind: "service",
 			trigger: command.trigger,
 			requestIdempotencyKey: command.requestIdempotencyKey,

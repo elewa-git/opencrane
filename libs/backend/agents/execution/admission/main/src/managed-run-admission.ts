@@ -1,5 +1,5 @@
-import { RunInputSnapshotAdmissionOutcomes, SessionAssemblyOutcomes } from "@opencrane/backend/agents/execution/inputs";
-import { RunAdmissionConcurrencyGate, RunAdmissionConcurrencyOutcomes, type RunAdmissionCommand, type RunAdmissionConcurrencyPolicy, type RunAdmissionConcurrencyResult } from "@opencrane/backend/agents/execution/runs";
+import { RunInputSnapshotAdmissionOutcomes, SessionAssemblyOutcomes, type SessionAssemblyRefusalReason } from "@opencrane/backend/agents/execution/inputs";
+import { RunAdmissionConcurrencyGate, RunAdmissionConcurrencyOutcomes, RunAdmissionDenialReasons, type RunAdmissionCommand, type RunAdmissionConcurrencyPolicy, type RunAdmissionConcurrencyResult } from "@opencrane/backend/agents/execution/runs";
 import { ManagedRunAdmissionOutcomes, type ManagedRunAdmissionPort, type ManagedRunAdmissionResult, type ManagedRunNowCommand } from "@opencrane/backend/server/agents/agent-services";
 
 import type { ManagedSnapshotAssembler, RunAdmissionCapacityGate } from "./managed-run-admission.types.js";
@@ -32,13 +32,23 @@ export function _CreateManagedRunAdmissionPortWithGate(assemble: ManagedSnapshot
 				async function _admitAfterCapacityGrant()
 				{
 					const result = await assemble(command);
-					if (result.outcome === SessionAssemblyOutcomes.Denied) return { outcome: ManagedRunAdmissionOutcomes.Denied, reason: result.reason } as const;
+					if (result.outcome === SessionAssemblyOutcomes.Denied)
+					{
+						if (_isActiveRunDenial(result.reason)) return { outcome: ManagedRunAdmissionOutcomes.Denied, reason: RunAdmissionDenialReasons.PersistenceUnavailable } as const;
+						return { outcome: ManagedRunAdmissionOutcomes.Denied, reason: result.reason } as const;
+					}
 					return { outcome: result.admissionOutcome === RunInputSnapshotAdmissionOutcomes.Accepted ? ManagedRunAdmissionOutcomes.Accepted : ManagedRunAdmissionOutcomes.Idempotent, runId: result.snapshot.runId } as const;
 				},
 			);
 			return bounded.outcome === RunAdmissionConcurrencyOutcomes.Rejected ? { outcome: ManagedRunAdmissionOutcomes.Denied, reason: bounded.reason } : bounded.value;
 		},
 	};
+}
+
+/** Narrows the conversation-only denial so managed admission retains its non-conversation contract. */
+function _isActiveRunDenial(reason: SessionAssemblyRefusalReason): reason is RunAdmissionDenialReasons.ActiveRun
+{
+	return reason === RunAdmissionDenialReasons.ActiveRun;
 }
 
 /** Apply a process ceiling before silo and exact-service fairness gates. */

@@ -10,12 +10,15 @@ The whole deployment view is in [`cluster-architecture.md`](./cluster-architectu
 OpenCrane owns the durable product record:
 
 ```text
-Thread -> AgentRun -> ordered RunEvent
-             |
-             +-> immutable RunInputSnapshot
-             +-> approvals and tool invocations
-             +-> workload assignment and cleanup
-             +-> governed artifact references
+Conversation -> ordered ConversationTimelineEntry
+     |
+     +-> direct/group Message (no run)
+     +-> agent_session -> AgentRun -> ordered RunEvent
+                              |
+                              +-> immutable RunInputSnapshot
+                              +-> approvals and tool invocations
+                              +-> workload assignment and cleanup
+                              +-> governed artifact references
 ```
 
 PostgreSQL is authoritative for agents, revisions, runs, conversations, approvals, memberships,

@@ -7,7 +7,7 @@
 This package is the brain of `channel-proxy`, the internet-facing edge service that stands between a
 user's browser and OpenCrane's internal runtime. It sits on a **trust boundary**: everything arriving
 from the browser is untrusted, and nothing internal is exposed directly. Its job is to let a
-browser send a command to its agent, or read the agent's event stream, without ever letting the
+browser read an authorized conversation event stream without ever letting the
 browser reach — or lie about — an internal address or identity.
 
 ```
@@ -21,7 +21,7 @@ browser reach — or lie about — an internal address or identity.
  │   ask OpenCrane to resolve an authorised target │
  │   rate-limit the returned subject               │
  └──────────────────────────────────────────────┘
-          │  bounded POST forward  /  bounded SSE relay
+          │  bounded SSE relay
           ▼
  exact internal endpoint  (allowlisted host suffix, short-lived invocation context)
 ```
@@ -38,22 +38,19 @@ resolver**, which returns a short-lived route (endpoint + invocation context) an
 It re-validates that route (internal `http:`, an allowlisted host suffix, no embedded credentials, not
 expired) before touching it.
 
-Forwarding is **bounded** in every dimension: command bodies and responses are size-capped, requests
-are deadline-bounded, and the **SSE** relay (server-sent events — a long-lived stream the server pushes
+Forwarding is **bounded** in every dimension: the **SSE** relay (server-sent events — a long-lived stream the server pushes
 events down) enforces total duration, idle-gap, and single-event byte limits, cancelling upstream the
 instant the browser disconnects. Invariant: a request reaches an internal service only after it proves
 same-origin, carries no forged identity, resolves to an allowlisted live target, and stays within every
 bound — otherwise it gets a small non-sensitive error and nothing is forwarded.
 
-Every `POST /v1/commands` body must contain one opaque `threadId`, and the request must carry an
-opaque `Idempotency-Key` header. The proxy sends only those coordinates to OpenCrane before it asks for
-a route, while keeping the rest of the command body opaque. This prevents a retry from being routed
-without a canonical conversation or a durable delivery key.
+Every `GET /v1/events` request names one opaque `conversationId`. The proxy sends only that coordinate
+and its optional replay cursor to OpenCrane before it asks for a route. Message and run admission use
+the product conversation API; this edge package exposes no parallel command authority.
 
 ## Public surface
 
-- `__ForwardCommand(request, dependencies)` — validate, authorise, rate-limit, then forward one bounded POST command.
-- `__RelayEvents(request, dependencies)` — the same gate, then relay a bounded SSE event stream from its replay cursor.
+- `__RelayEvents(request, dependencies)` — validate, authorise, rate-limit, then relay a bounded SSE event stream from its replay cursor.
 - `__ValidateOrigin` / `__HasForgedIdentityHeaders` — the origin-policy and forged-header checks.
 - `__FixedWindowRateLimiter` — a per-subject fixed-window rate limiter.
 - `__OpenCraneTargetResolver` / `__CHANNEL_PROXY_TOKEN_PATH` — the workload-authenticated client for OpenCrane's target authority, and its default token path.

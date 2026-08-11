@@ -32,9 +32,6 @@ export function _ReadConfig(environment: NodeJS.ProcessEnv = process.env): Chann
 		proxy: {
 			allowedOrigins: new Set(origins),
 			allowedTargetHostSuffixes: suffixes,
-			maxCommandBytes: _PositiveInteger(environment.CHANNEL_PROXY_MAX_COMMAND_BYTES, 1_048_576, "CHANNEL_PROXY_MAX_COMMAND_BYTES"),
-			maxCommandResponseBytes: _PositiveInteger(environment.CHANNEL_PROXY_MAX_COMMAND_RESPONSE_BYTES, 1_048_576, "CHANNEL_PROXY_MAX_COMMAND_RESPONSE_BYTES"),
-			commandTimeoutMs: _PositiveInteger(environment.CHANNEL_PROXY_COMMAND_TIMEOUT_MS, 30_000, "CHANNEL_PROXY_COMMAND_TIMEOUT_MS"),
 			streamConnectTimeoutMs: _PositiveInteger(environment.CHANNEL_PROXY_STREAM_CONNECT_TIMEOUT_MS, 5_000, "CHANNEL_PROXY_STREAM_CONNECT_TIMEOUT_MS"),
 			streamDurationMs: _PositiveInteger(environment.CHANNEL_PROXY_STREAM_DURATION_MS, 300_000, "CHANNEL_PROXY_STREAM_DURATION_MS"),
 			streamIdleTimeoutMs: _PositiveInteger(environment.CHANNEL_PROXY_STREAM_IDLE_TIMEOUT_MS, 45_000, "CHANNEL_PROXY_STREAM_IDLE_TIMEOUT_MS"),

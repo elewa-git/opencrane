@@ -28,12 +28,12 @@ export class OpenCraneConversationReplayReader implements ConversationReplayRead
 	private readonly _api = inject(ControlPlaneApiService);
 
 	/** @inheritdoc */
-	public async replay(threadId: string, cursor?: string): Promise<AgUiStreamState>
+	public async replay(conversationId: string, cursor?: string): Promise<AgUiStreamState>
 	{
-		if (threadId.trim().length === 0) throw new Error("conversation thread id is required");
-		const { data, error } = await this._api.client.GET("/me/conversations/{threadId}/events", {
+		if (conversationId.trim().length === 0) throw new Error("conversation id is required");
+		const { data, error } = await this._api.client.GET("/me/conversations/{conversationId}/events", {
 			params: {
-				path: { threadId },
+				path: { conversationId },
 				...(cursor === undefined ? {} : { query: { cursor }, header: { "Last-Event-ID": cursor } })
 			},
 			parseAs: "text"

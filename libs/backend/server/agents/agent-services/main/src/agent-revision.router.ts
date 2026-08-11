@@ -113,7 +113,7 @@ function _denialStatus(reason: AgentRevisionLifecycleDenial): number
 		case "run_not_admittable":
 		case "revision_unavailable":
 		case "persona_unavailable":
-		case "thread_unavailable":
+		case "conversation_unavailable":
 		case "memory_scope_unavailable":
 		case "tool_policy_unavailable":
 		case "skill_unavailable":
@@ -420,7 +420,7 @@ function _runDenialStatus(reason: AgentRevisionLifecycleDenial): number
 	if (reason === "service_not_runnable") return 409;
 	if (reason === "membership_stale" || reason === "persistence_unavailable") return 503;
 	if (reason === "memory_unavailable" || reason === "admission_concurrency_limited") return 503;
-	if (reason === "authority_conflict" || reason === "run_not_admittable" || reason === "revision_unavailable" || reason === "persona_unavailable" || reason === "thread_unavailable" || reason === "memory_scope_unavailable" || reason === "tool_policy_unavailable" || reason === "skill_unavailable" || reason === "budget_unavailable" || reason === "identity_unavailable") return 409;
+	if (reason === "authority_conflict" || reason === "run_not_admittable" || reason === "revision_unavailable" || reason === "persona_unavailable" || reason === "conversation_unavailable" || reason === "memory_scope_unavailable" || reason === "tool_policy_unavailable" || reason === "skill_unavailable" || reason === "budget_unavailable" || reason === "identity_unavailable") return 409;
 	return 400;
 }
 

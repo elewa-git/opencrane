@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { __CanAppendRunEvent, __IsAgentRevisionTransitionAllowed, __IsAgentRunTransitionAllowed, __IsAgentServiceTransitionAllowed, __IsMessageTransitionAllowed, __IsThreadTransitionAllowed } from "../index.js";
+import { __CanAppendRunEvent, __IsAgentRevisionTransitionAllowed, __IsAgentRunTransitionAllowed, __IsAgentServiceTransitionAllowed } from "../index.js";
 import type { RunEvent } from "../index.js";
 
 /** Creates a minimal immutable event for append-order tests. */
@@ -58,19 +58,6 @@ describe("agent model state transitions", function _stateTransitionSuite()
 		expect(__IsAgentRunTransitionAllowed("completed", "running")).toBe(false);
 		expect(__IsAgentRunTransitionAllowed("failed", "queued")).toBe(false);
 		expect(__IsAgentRunTransitionAllowed("cancelled", "running")).toBe(false);
-	});
-
-	it("models thread reopening without permitting message resurrection", function _transcriptTransitions()
-	{
-		expect(__IsThreadTransitionAllowed("active", "archived")).toBe(true);
-		expect(__IsThreadTransitionAllowed("archived", "active")).toBe(true);
-		expect(__IsThreadTransitionAllowed("active", "active")).toBe(false);
-		expect(__IsMessageTransitionAllowed("pending", "streaming")).toBe(true);
-		expect(__IsMessageTransitionAllowed("pending", "completed")).toBe(true);
-		expect(__IsMessageTransitionAllowed("streaming", "completed")).toBe(true);
-		expect(__IsMessageTransitionAllowed("streaming", "failed")).toBe(true);
-		expect(__IsMessageTransitionAllowed("completed", "streaming")).toBe(false);
-		expect(__IsMessageTransitionAllowed("failed", "completed")).toBe(false);
 	});
 
 	it("requires one-based contiguous same-run event sequences", function _runEventOrdering()

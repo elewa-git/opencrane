@@ -207,7 +207,7 @@ export class PrismaRunCancellationRepository implements RunCancellationRepositor
 			const maximum = await transaction.outboxEvent.aggregate({ where: { runId: run.id }, _max: { sequence: true } });
 			await transaction.outboxEvent.create({ data: { runId: run.id, attempt: run.attempt, sequence: (maximum._max.sequence ?? 0) + 1, kind: RunOutboxEventKind.RunWorkloadCleanupRequested, idempotencyKey: `${run.id}:cleanup:${run.attempt}`, payload: _CleanupProjection(run, assignment, bootstrap?.id ?? `runtime-repair:${run.id}:${run.attempt}`, service.workloadProfile, assignment.namespace, "runtime_lease_expired") as unknown as Prisma.InputJsonObject, availableAt: now } });
 			await __DeliverChildRunCompletionInTransaction(transaction, { childRunId: run.id });
-			if (run.threadId !== null) { const maximum = await transaction.conversationRunEvent.aggregate({ where: { runId: run.id }, _max: { sequence: true } }); await transaction.conversationRunEvent.create({ data: { runId: run.id, sequence: (maximum._max.sequence ?? 0) + 1, type: "run.failed", payload: { terminalReason: "runtime_failure", failureCode: "RUN_RUNTIME_LEASE_EXPIRED" }, occurredAt: now } }); }
+			if (run.conversationId !== null) { const maximum = await transaction.conversationRunEvent.aggregate({ where: { runId: run.id }, _max: { sequence: true } }); await transaction.conversationRunEvent.create({ data: { conversationId: run.conversationId, runId: run.id, sequence: (maximum._max.sequence ?? 0) + 1, type: "run.failed", payload: { terminalReason: "runtime_failure", failureCode: "RUN_RUNTIME_LEASE_EXPIRED" }, occurredAt: now } }); }
 			return { status: "repaired", runId: run.id, attempt: run.attempt };
 		});
 	}
@@ -288,14 +288,14 @@ function _ConfirmationMatches(event: OutboxEvent, workload: RunWorkloadCleanupPr
 }
 
 /** Enter the sole Cancelled terminal state and append its canonical conversation event. */
-async function _FinalizeCancelledRun(transaction: Prisma.TransactionClient, run: Pick<AgentRun, "id" | "attempt" | "threadId">, now: Date): Promise<void>
+async function _FinalizeCancelledRun(transaction: Prisma.TransactionClient, run: Pick<AgentRun, "id" | "attempt" | "conversationId">, now: Date): Promise<void>
 {
 	const finalized = await transaction.agentRun.updateMany({ where: { id: run.id, attempt: run.attempt, state: AgentRunState.Cancelling }, data: { state: AgentRunState.Cancelled, terminalReason: AgentRunTerminalReason.UserCancelled, finishedAt: now } });
 	if (finalized.count !== 1) throw new Error("run cancellation lost its cleanup confirmation fence");
 	await __DeliverChildRunCompletionInTransaction(transaction, { childRunId: run.id });
-	if (run.threadId !== null)
+	if (run.conversationId !== null)
 	{
 		const maximum = await transaction.conversationRunEvent.aggregate({ where: { runId: run.id }, _max: { sequence: true } });
-		await transaction.conversationRunEvent.create({ data: { runId: run.id, sequence: (maximum._max.sequence ?? 0) + 1, type: "run.cancelled", payload: { terminalReason: "user_cancelled" }, occurredAt: now } });
+		await transaction.conversationRunEvent.create({ data: { conversationId: run.conversationId, runId: run.id, sequence: (maximum._max.sequence ?? 0) + 1, type: "run.cancelled", payload: { terminalReason: "user_cancelled" }, occurredAt: now } });
 	}
 }

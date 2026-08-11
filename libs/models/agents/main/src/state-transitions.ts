@@ -1,7 +1,7 @@
 import type { AgentRevisionState } from "./agent-revision.types.js";
 import type { AgentRunState } from "./agent-run.types.js";
 import type { AgentServiceState } from "./agent-service.types.js";
-import type { MessageState, RunEvent, ThreadState } from "./transcript.types.js";
+import type { RunEvent } from "./run-event.types.js";
 
 /** Legal next states for each agent-service lifecycle state. */
 const _AGENT_SERVICE_TRANSITIONS: Readonly<Record<AgentServiceState, readonly AgentServiceState[]>> = {
@@ -32,21 +32,6 @@ const _AGENT_RUN_TRANSITIONS: Readonly<Record<AgentRunState, readonly AgentRunSt
 	cancelled: [],
 };
 
-/** Legal next states for each canonical thread state. */
-const _THREAD_TRANSITIONS: Readonly<Record<ThreadState, readonly ThreadState[]>> = {
-	active: ["archived"],
-	archived: ["active"],
-};
-
-/** Legal next states for each message assembly state. */
-const _MESSAGE_TRANSITIONS: Readonly<Record<MessageState, readonly MessageState[]>> = {
-	pending: ["streaming", "completed", "failed", "cancelled"],
-	streaming: ["completed", "failed", "cancelled"],
-	completed: [],
-	failed: [],
-	cancelled: [],
-};
-
 /** Determines whether an agent service may move directly to the requested state. */
 export function __IsAgentServiceTransitionAllowed(current: AgentServiceState, next: AgentServiceState): boolean
 {
@@ -63,18 +48,6 @@ export function __IsAgentRevisionTransitionAllowed(current: AgentRevisionState, 
 export function __IsAgentRunTransitionAllowed(current: AgentRunState, next: AgentRunState): boolean
 {
 	return _AGENT_RUN_TRANSITIONS[current].includes(next);
-}
-
-/** Determines whether a canonical thread may move directly to the requested state. */
-export function __IsThreadTransitionAllowed(current: ThreadState, next: ThreadState): boolean
-{
-	return _THREAD_TRANSITIONS[current].includes(next);
-}
-
-/** Determines whether a transcript message may move directly to the requested assembly state. */
-export function __IsMessageTransitionAllowed(current: MessageState, next: MessageState): boolean
-{
-	return _MESSAGE_TRANSITIONS[current].includes(next);
 }
 
 /**

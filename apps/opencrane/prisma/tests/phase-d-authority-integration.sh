@@ -84,8 +84,8 @@ INSERT INTO "agent_services" (
   "id", "silo_id", "kind", "name",
   "workload_profile", "updated_at"
 ) VALUES (
-  'dispatch-lock-service', 'dispatch-lock-silo', 'personal', 'Dispatch lock service',
-  'personal-default', clock_timestamp()
+  'dispatch-lock-service', 'dispatch-lock-silo', 'managed', 'Dispatch lock service',
+  'managed-agent', clock_timestamp()
 );
 INSERT INTO "agent_revisions" (
   "id", "agent_service_id", "revision", "state", "digest", "prompt_policy_version",
@@ -100,14 +100,14 @@ WHERE "id" = 'dispatch-lock-revision';
 UPDATE "agent_services"
 SET "state" = 'active', "active_revision_id" = 'dispatch-lock-revision'
 WHERE "id" = 'dispatch-lock-service';
-INSERT INTO "conversation_threads" ("id", "silo_id", "agent_service_id", "updated_at")
-VALUES ('dispatch-lock-thread', 'dispatch-lock-silo', 'dispatch-lock-service', clock_timestamp());
+INSERT INTO "conversations" ("id", "silo_id", "agent_service_id", "mode", "updated_at")
+VALUES ('dispatch-lock-conversation', 'dispatch-lock-silo', 'dispatch-lock-service', 'agent_session', clock_timestamp());
 INSERT INTO "agent_runs" (
-  "id", "silo_id", "agent_service_id", "agent_revision_id", "thread_id", "trigger",
+  "id", "silo_id", "agent_service_id", "agent_revision_id", "conversation_id", "trigger",
   "request_idempotency_key", "root_run_id", "effective_contract_digest", "input_snapshot_digest"
 ) VALUES (
   'dispatch-lock-run', 'dispatch-lock-silo', 'dispatch-lock-service', 'dispatch-lock-revision',
-  'dispatch-lock-thread', 'interactive', 'dispatch-lock-request', 'dispatch-lock-run',
+  'dispatch-lock-conversation', 'interactive', 'dispatch-lock-request', 'dispatch-lock-run',
   'sha256:' || repeat('f', 64), 'sha256:' || repeat('0', 64)
 );
 INSERT INTO "run_outbox_events" (
@@ -125,8 +125,8 @@ SET application_name = 'phase-e-dispatch-event-holder';
 BEGIN;
 SELECT pg_advisory_xact_lock(hashtextextended('dispatch-lock-run', 0));
 SELECT pg_sleep(3);
-INSERT INTO "conversation_run_events" ("run_id", "sequence", "type", "payload", "occurred_at")
-VALUES ('dispatch-lock-run', 1, 'run.started', '{}', clock_timestamp());
+INSERT INTO "conversation_run_events" ("conversation_id", "run_id", "sequence", "type", "payload", "occurred_at")
+VALUES ('dispatch-lock-conversation', 'dispatch-lock-run', 1, 'run.started', '{}', clock_timestamp());
 COMMIT;
 SQL
   echo "$?" >"$RACE_DIR/dispatch-event-holder.status"
@@ -149,9 +149,9 @@ WHERE "id" = 'dispatch-lock-outbox';
 UPDATE "agent_runs"
 SET "state" = 'failed', "terminal_reason" = 'invalid_input', "finished_at" = clock_timestamp()
 WHERE "id" = 'dispatch-lock-run';
-INSERT INTO "conversation_run_events" ("run_id", "sequence", "type", "payload", "occurred_at")
+INSERT INTO "conversation_run_events" ("conversation_id", "run_id", "sequence", "type", "payload", "occurred_at")
 VALUES (
-  'dispatch-lock-run', 2, 'run.failed',
+  'dispatch-lock-conversation', 'dispatch-lock-run', 2, 'run.failed',
   '{"terminalReason":"invalid_input","failureCode":"RUN_DISPATCH_SNAPSHOT_INVALID"}',
   clock_timestamp()
 );
@@ -447,10 +447,10 @@ wait_for_holder_sleeping 'phase-d-run-rollover'
   run_psql >"$RACE_DIR/run-after-rollover.out" 2>&1 <<'SQL'
 SET application_name = 'phase-d-run-after-rollover';
 INSERT INTO "agent_runs" (
-  "id", "silo_id", "agent_service_id", "agent_revision_id", "thread_id", "trigger",
+  "id", "silo_id", "agent_service_id", "agent_revision_id", "conversation_id", "trigger",
   "request_idempotency_key", "root_run_id", "effective_contract_digest", "input_snapshot_digest"
 ) VALUES (
-  'run-race-superseded', 'silo-race', 'svc-race-run-rollover', 'rev-race-run-rollover-1', 'thread-race-superseded', 'interactive',
+  'run-race-superseded', 'silo-race', 'svc-race-run-rollover', 'rev-race-run-rollover-1', 'conversation-race-superseded', 'interactive',
   'request-race-superseded', 'run-race-superseded', 'sha256:' || repeat('9', 64),
   'sha256:' || repeat('a', 64)
 );
@@ -492,8 +492,8 @@ INSERT INTO "agent_revisions" (
 UPDATE "agent_services"
 SET "state" = 'active', "active_revision_id" = 'rev-race-run-first'
 WHERE "id" = 'svc-race-run-first';
-INSERT INTO "conversation_threads" ("id", "silo_id", "agent_service_id", "updated_at")
-VALUES ('thread-race-before-retirement', 'silo-race', 'svc-race-run-first', clock_timestamp());
+INSERT INTO "conversations" ("id", "silo_id", "agent_service_id", "mode", "updated_at")
+VALUES ('conversation-race-before-retirement', 'silo-race', 'svc-race-run-first', 'agent_session', clock_timestamp());
 SQL
 
 (
@@ -502,20 +502,20 @@ SQL
 SET application_name = 'phase-d-run-first';
 BEGIN;
 INSERT INTO "agent_runs" (
-  "id", "silo_id", "agent_service_id", "agent_revision_id", "thread_id", "trigger",
+  "id", "silo_id", "agent_service_id", "agent_revision_id", "conversation_id", "trigger",
   "request_idempotency_key", "root_run_id", "effective_contract_digest", "input_snapshot_digest"
 ) VALUES (
-  'run-race-before-retirement', 'silo-race', 'svc-race-run-first', 'rev-race-run-first', 'thread-race-before-retirement', 'interactive',
+  'run-race-before-retirement', 'silo-race', 'svc-race-run-first', 'rev-race-run-first', 'conversation-race-before-retirement', 'interactive',
   'request-race-before-retirement', 'run-race-before-retirement', 'sha256:' || repeat('c', 64),
   'sha256:' || repeat('d', 64)
 );
 INSERT INTO "run_input_snapshots" (
-  "run_id", "snapshot_version", "silo_id", "agent_service_id", "agent_revision_id",
-  "effective_contract_digest", "thread_id", "memory_facts", "identity_snapshot", "model_route",
-  "memory_query_policy", "budget_policy", "capability_set_digest", "prompt_compiler_version", "input_digest"
+  "id", "run_id", "snapshot_version", "silo_id", "agent_service_id", "agent_revision_id",
+  "effective_contract_digest", "conversation_id", "memory_facts", "identity_snapshot", "model_route",
+  "integration_assignments", "memory_query_policy", "budget_policy", "capability_set_digest", "prompt_compiler_version", "input_digest"
 ) VALUES (
-  'run-race-before-retirement', 1, 'silo-race', 'svc-race-run-first', 'rev-race-run-first',
-  'sha256:' || repeat('c', 64), 'thread-race-before-retirement', '[]', '{}', '{}', '{}', '{}',
+  'run-race-before-retirement-input', 'run-race-before-retirement', 1, 'silo-race', 'svc-race-run-first', 'rev-race-run-first',
+  'sha256:' || repeat('c', 64), 'conversation-race-before-retirement', '[]', '{}', '{}', '{}', '{}', '{}',
   'sha256:' || repeat('e', 64), 'prompt-v1', 'sha256:' || repeat('d', 64)
 );
 SELECT pg_sleep(3);
@@ -683,24 +683,24 @@ INSERT INTO "agent_revisions" (
 );
 UPDATE "agent_services" SET "state" = 'active', "active_revision_id" = 'rev-race-action-authority'
 WHERE "id" = 'svc-race-action-authority';
-INSERT INTO "conversation_threads" ("id", "silo_id", "agent_service_id", "updated_at")
-VALUES ('thread-race-action-authority', 'silo-race-action', 'svc-race-action-authority', clock_timestamp());
+INSERT INTO "conversations" ("id", "silo_id", "agent_service_id", "mode", "updated_at")
+VALUES ('conversation-race-action-authority', 'silo-race-action', 'svc-race-action-authority', 'agent_session', clock_timestamp());
 BEGIN;
 INSERT INTO "agent_runs" (
-  "id", "silo_id", "agent_service_id", "agent_revision_id", "thread_id", "trigger",
+  "id", "silo_id", "agent_service_id", "agent_revision_id", "conversation_id", "trigger",
   "request_idempotency_key", "root_run_id", "effective_contract_digest", "input_snapshot_digest"
 ) VALUES (
   'run-race-action-authority', 'silo-race-action', 'svc-race-action-authority',
-  'rev-race-action-authority', 'thread-race-action-authority', 'interactive', 'request-race-action-authority',
+  'rev-race-action-authority', 'conversation-race-action-authority', 'interactive', 'request-race-action-authority',
   'run-race-action-authority', 'sha256:' || repeat('1', 64), 'sha256:' || repeat('2', 64)
 );
 INSERT INTO "run_input_snapshots" (
-  "run_id", "snapshot_version", "silo_id", "agent_service_id", "agent_revision_id",
-  "effective_contract_digest", "thread_id", "memory_facts", "identity_snapshot", "model_route",
-  "memory_query_policy", "budget_policy", "capability_set_digest", "prompt_compiler_version", "input_digest"
+  "id", "run_id", "snapshot_version", "silo_id", "agent_service_id", "agent_revision_id",
+  "effective_contract_digest", "conversation_id", "memory_facts", "identity_snapshot", "model_route",
+  "integration_assignments", "memory_query_policy", "budget_policy", "capability_set_digest", "prompt_compiler_version", "input_digest"
 ) VALUES (
-  'run-race-action-authority', 1, 'silo-race-action', 'svc-race-action-authority', 'rev-race-action-authority',
-  'sha256:' || repeat('1', 64), 'thread-race-action-authority', '[]', '{}', '{}', '{}', '{}',
+  'run-race-action-authority-input', 'run-race-action-authority', 1, 'silo-race-action', 'svc-race-action-authority', 'rev-race-action-authority',
+  'sha256:' || repeat('1', 64), 'conversation-race-action-authority', '[]', '{}', '{}', '{}', '{}', '{}',
   'sha256:' || repeat('3', 64), 'prompt-v1', 'sha256:' || repeat('2', 64)
 );
 COMMIT;

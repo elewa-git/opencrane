@@ -8,7 +8,7 @@ import { PrismaRevisionBudgetPolicySource, PrismaRevisionToolPolicySource } from
 /** Fixed active managed authority shared by policy source tests. */
 const _RUN = { agentServiceId: "service-1", agentRevisionId: "revision-1", agentKind: AgentServiceKinds.Managed, effectiveContractDigest: `sha256:${"a".repeat(64)}`, promptCompilerVersion: "v1", trigger: "managed_invocation", delegatedUserId: null, rootRunId: "run-1", parentRunId: null } as const;
 /** Fixed session-assembly command scoped to the active managed service. */
-const _COMMAND: RunAdmissionCommand = { runId: "run-1", siloId: "silo-1", agentServiceId: "service-1", threadId: null, identityKind: "service", trigger: "managed_invocation", requestIdempotencyKey: "request-1" };
+const _COMMAND: RunAdmissionCommand = { runId: "run-1", siloId: "silo-1", agentServiceId: "service-1", conversationId: null, identityKind: "service", trigger: "managed_invocation", requestIdempotencyKey: "request-1" };
 
 /** Creates a transaction facade around one revision and its directly referenced authorities. */
 function _Transaction(revision: unknown, skills: unknown[] = [], artifacts: unknown[] = []): RunAdmissionTransaction

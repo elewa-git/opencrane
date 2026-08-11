@@ -19,9 +19,9 @@ import { _CreatePersonaOnboardingRouter } from "@opencrane/backend/agents/person
 import { type UserOnboardingOwnerResolver } from "@opencrane/backend/server/agents/onboarding";
 import { _CreatePersonalArtifactCatalogueRouter } from "@opencrane/backend/server/agents/artifacts";
 import { _CreatePersonalConfigurationRouter } from "@opencrane/backend/agents/personal/configuration";
-import { _CreateSelfConversationReplayRouter } from "@opencrane/backend/server/agents/conversation-replay";
+import { _CreateSelfConversationReplayRouter, _CreateSelfConversationsRouter } from "@opencrane/backend/server/conversations";
 import { _CreateSelfRunStatusRouter } from "@opencrane/backend/agents/execution/runs";
-import { __CreatePersonalRunAdmissionRouter, type PersonalRunAdmissionPort } from "@opencrane/backend/agents/execution/admission";
+import type { PersonalRunAdmissionPort } from "@opencrane/backend/agents/execution/admission";
 import { _CreateSkillCatalogueRouter } from "@opencrane/backend/server/agents/skills";
 import { _CreateSteeringIngestRouter } from "@opencrane/backend/agents/execution/protocol";
 import { _ResolveRequestPrincipal } from "@opencrane/backend/server/infra/auth";
@@ -65,10 +65,10 @@ export function _RegisterRoutes(app: Express, prisma: PrismaClient, coreApi: k8s
 		{ method: "use", path: "/api/v1/me/assets", handler: _CreatePersonalArtifactCatalogueRouter(prisma, _log) },
 		{ method: "use", path: "/api/v1/me/persona", handler: _CreatePersonaOnboardingRouter(prisma, _log, onboarding.personaWorkflow) },
 		{ method: "use", path: "/api/v1/me/approvals", handler: _CreateDeferredToolApprovalRouter(prisma, _log) },
-		{ method: "use", path: "/api/v1/me/runs", handler: __CreatePersonalRunAdmissionRouter({ resolveCaller: _ResolveRequestPrincipal, admission: personalRunAdmission, logger: _log }) },
 		{ method: "use", path: "/api/v1/me/runs", handler: _CreateSteeringIngestRouter(prisma, _log) },
 		{ method: "use", path: "/api/v1/me/runs", handler: _CreateSelfRunStatusRouter(prisma, _log) },
 		{ method: "use", path: "/api/v1/me/configuration", handler: _CreatePersonalConfigurationRouter(prisma, _log) },
+		{ method: "use", path: "/api/v1/me/conversations", handler: _CreateSelfConversationsRouter(prisma, personalRunAdmission, _log) },
 		{ method: "use", path: "/api/v1/me/conversations", handler: _CreateSelfConversationReplayRouter(prisma, _log) },
 	];
 	const gatewayRoutes: readonly RouteMount[] = [

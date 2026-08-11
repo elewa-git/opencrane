@@ -10,6 +10,7 @@ const transitionRoot = join(migrationRoot, "0.7.0-to-0.8.0");
 const sql = readFileSync(join(transitionRoot, "migration.sql"), "utf8");
 const manifest = JSON.parse(readFileSync(join(transitionRoot, "manifest.json"), "utf8"));
 const targetBaseline = readFileSync(join(migrationRoot, "../bootstrap/target-baseline.sql"), "utf8");
+const conversationSchema = readFileSync(join(migrationRoot, "../schema/conversations.prisma"), "utf8");
 const digest = createHash("sha256").update(sql).digest("hex");
 const targetDigest = createHash("sha256").update(targetBaseline).digest("hex");
 
@@ -49,7 +50,7 @@ requireContract(
 	"migration must bind the default-owner protected source baseline",
 );
 requireContract(
-	manifest.executionMode === "automatic-when-legacy-persona-empty-otherwise-manual-data-mapping-required",
+	manifest.executionMode === "automatic-when-legacy-persona-and-conversations-empty-otherwise-manual-data-mapping-required",
 	"migration execution mode must retain its conditional data boundary",
 );
 requireContract(sql.includes("pg_advisory_xact_lock"), "migration must acquire the database migration lock");
@@ -59,6 +60,36 @@ requireContract(sql.includes("opencrane_migrations.schema_history"), "migration 
 requireContract(sql.includes("LOCK TABLE"), "migration must lock persona mutation sources before counting them");
 requireContract(sql.includes("ERRCODE = 'OC708'"), "migration must retain the explicit semantic-mapping blocker");
 requireContract(sql.includes("IF persona_profiles_count + persona_interviews_count"), "OC708 must be conditional on legacy runtime data");
+requireContract(sql.includes("ERRCODE = 'OC710'"), "migration must retain the explicit Conversation semantic-mapping blocker");
+requireContract(sql.includes("IF legacy_conversations_count + conversation_participants_count"), "OC710 must be conditional on legacy Conversation data");
+requireContract(sql.includes('DROP TYPE "ConversationThreadState"'), "migration must remove the retired ConversationThread model");
+requireContract(sql.includes('CREATE TYPE "ConversationMode"'), "migration must create immutable Conversation modes");
+requireContract(sql.includes('CREATE TABLE "conversation_timeline_entries"'), "migration must create the canonical mixed timeline");
+requireContract(
+	conversationSchema.includes('updatedAt            DateTime                      @default(now()) @map("updated_at")'),
+	"Conversation activity time must be database-defaulted rather than Prisma-managed",
+);
+requireContract(!conversationSchema.includes('updatedAt            DateTime                      @updatedAt'), "Conversation activity time must not be Prisma-managed");
+requireContract(
+	conversationSchema.includes('activitySequence     BigInt                        @default(autoincrement()) @unique @map("activity_sequence")'),
+	"Conversation list order must use one database-generated global activity sequence",
+);
+requireContract(
+	targetBaseline.includes('"updated_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP'),
+	"target Conversation activity time must retain its database default",
+);
+requireContract(
+	sql.includes('"updated_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP'),
+	"migrated Conversation activity time must retain its database default",
+);
+for (const source of [targetBaseline, sql])
+{
+	requireContract(source.includes('"activity_sequence" BIGINT GENERATED ALWAYS AS IDENTITY NOT NULL'), "Conversation activity sequence must be generated-always database identity");
+	requireContract(source.includes('CREATE UNIQUE INDEX "conversations_activity_sequence_key"'), "Conversation activity sequence must remain globally unique");
+	requireContract(source.includes('"activity_sequence" = DEFAULT'), "canonical appends must allocate the next generated-always global activity sequence");
+	requireContract(source.includes('conversations_silo_id_mode_lifecycle_activity_sequence_idx'), "Conversation catalogue index must order by global activity sequence");
+	requireContract(!source.includes("conversation_activity_at + INTERVAL '1 millisecond'"), "per-conversation synthetic timestamp ordering must stay retired");
+}
 requireContract(sql.includes('CREATE SCHEMA "opencrane_migrations"'), "successful migration must create schema history authority");
 requireContract(sql.includes("'0.8.0', '0.7.0'"), "schema history must bind the exact transition");
 requireContract(sql.includes("migration_history_exists"), "migration must detect a prior completed transition");
@@ -72,6 +103,8 @@ requireContract(sql.includes("COMMIT;\nSELECT pg_advisory_unlock"), "migration m
 requireContract(sql.trimEnd().endsWith("\\endif"), "migration retry branch must remain explicit");
 
 const authorityFunctions = [
+	"enforce_conversation_lifecycle",
+	"enforce_conversation_timeline_entry",
 	"enforce_persona_question_set_lifecycle",
 	"enforce_persona_question_mutation",
 	"enforce_persona_interview_lifecycle",

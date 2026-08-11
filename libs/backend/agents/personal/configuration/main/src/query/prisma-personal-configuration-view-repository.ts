@@ -13,7 +13,7 @@ interface PersonalConfigurationViewRow
 	/** Database lifecycle state. */
 	readonly state: PersonalConfigurationChangeState;
 	/** Conversation provenance. */
-	readonly sourceThreadId: string;
+	readonly sourceConversationId: string;
 	/** Run provenance. */
 	readonly sourceRunId: string;
 	/** Trusted creation instant. */
@@ -39,7 +39,7 @@ export class PrismaPersonalConfigurationViewRepository implements PersonalConfig
 	/** List the latest fifty proposals belonging to one exact owner and silo. */
 	async listOwned(siloId: string, userId: string): Promise<readonly PersonalConfigurationChangeView[]>
 	{
-		const changes = await this.prisma.personalConfigurationChange.findMany({ where: { siloId, userId }, orderBy: [{ proposedAt: "desc" }, { id: "desc" }], take: 50, select: { id: true, requestedPatch: true, state: true, sourceThreadId: true, sourceRunId: true, proposedAt: true, decidedAt: true, rejectionReason: true } });
+		const changes = await this.prisma.personalConfigurationChange.findMany({ where: { siloId, userId }, orderBy: [{ proposedAt: "desc" }, { id: "desc" }], take: 50, select: { id: true, requestedPatch: true, state: true, sourceConversationId: true, sourceRunId: true, proposedAt: true, decidedAt: true, rejectionReason: true } });
 		return changes.map(_toChangeView);
 	}
 }
@@ -48,7 +48,7 @@ export class PrismaPersonalConfigurationViewRepository implements PersonalConfig
 function _toChangeView(change: PersonalConfigurationViewRow): PersonalConfigurationChangeView
 {
 	if (!_IsPersonalConfigurationPatch(change.requestedPatch)) throw new Error("personal configuration change has unsupported patch shape");
-	return { changeId: change.id, requestedPatch: change.requestedPatch, state: _viewState(change.state), sourceThreadId: change.sourceThreadId, sourceRunId: change.sourceRunId, proposedAt: change.proposedAt.toISOString(), decidedAt: change.decidedAt?.toISOString() ?? null, rejectionReason: change.rejectionReason };
+	return { changeId: change.id, requestedPatch: change.requestedPatch, state: _viewState(change.state), sourceConversationId: change.sourceConversationId, sourceRunId: change.sourceRunId, proposedAt: change.proposedAt.toISOString(), decidedAt: change.decidedAt?.toISOString() ?? null, rejectionReason: change.rejectionReason };
 }
 
 /** Convert the database lifecycle enum to its stable owner-visible vocabulary. */

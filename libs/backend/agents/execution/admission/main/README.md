@@ -4,13 +4,13 @@
 
 ## What it owns
 
-This package is the entry into the shared execution flow for both a user's personal conversation
-and a managed agent. An authenticated request has already established its identity before it
-arrives here. Admission then composes current evidence, immutable input assembly, the durable run
-repository, and one app-owned process-local capacity boundary.
+This package is the internal entry into the shared execution flow for both an agent-session message
+and a managed agent. The conversation authority or managed invocation has already established the
+request shape before it arrives here. Admission composes current evidence, immutable input
+assembly, the durable run repository, and one app-owned process-local capacity boundary.
 
 ```
- authenticated request ............. browser or service identity + current evidence
+ conversation message / managed trigger .... server-derived identity + current evidence
                  │
                  ▼
  ┌────────────────────────────────────────┐
@@ -32,10 +32,23 @@ granted only when the process, silo, and exact agent service all have capacity. 
 overloaded, or inconsistent input produces a denial before unbounded persistence work begins.
 
 Personal admission has two bounded stages. A synthetic per-silo preflight lane first limits its
-duplicate-key and participant-thread reads, before a browser request can touch PostgreSQL. Once
+duplicate-key and participant-conversation reads before interactive traffic can touch PostgreSQL. Once
 that lane has derived the real personal AgentService, the normal process/silo/service gate limits
-the final transaction that rechecks all mutable authority and persists the snapshot. The first lane
-does not grant product authority; it is overload protection for the read path.
+the final transaction that rechecks all mutable authority. A caller-supplied transaction callback
+then persists the canonical input message beside the run, immutable snapshot, and first dispatch
+intent in that same commit. The first lane does not grant product authority; it is overload
+protection for the read path.
+
+Message idempotency keys are public conversation-local coordinates. Before personal admission reads
+or writes the silo-global `AgentRun` keyspace, it hashes the conversation id and public key with a
+domain separator. The same key therefore deduplicates exact retries inside one conversation without
+conflicting with an independent message in another conversation; managed-run keys keep their existing
+server-owned semantics. If a different key races to start a second foreground run in the same agent
+session, the final durable fence returns `active_run` after revalidating that conversation instead of
+misreporting the partial-unique-index conflict as a persistence outage. If the database reports the
+unique loss before the final reader can classify it, the still-bounded personal recovery reader
+returns `active_run` only after a fresh participant, lifecycle, mode, and non-terminal-run check;
+unclassified failures remain `persistence_unavailable`.
 
 ## Public surface
 
@@ -44,16 +57,12 @@ does not grant product authority; it is overload protection for the read path.
   shared gate.
 - `__CreatePersonalRunAdmissionPort(prisma, capacityGate, membershipEvidence)` composes the
   personal port from neutral mounted-key fleet-membership trust. It derives an AgentService from a
-  participant-owned thread and verifies exactly one signed personal membership assertion in the
-  final admission transaction.
+  participant-owned open agent session and verifies exactly one signed personal membership assertion
+  in the final admission transaction.
 - `_CreateRunAdmissionCapacityGate(policy)` creates the one hierarchical process/silo/service gate
   injected into both personal and managed ports.
-- `__CreatePersonalRunAdmissionRouter(dependencies)` adapts the exact two-field browser request to
-  the personal port; session principal and host-derived silo are the only identity coordinates.
-- `_PersonalRunAdmissionOpenapiPaths` contributes the `POST /api/v1/me/runs` request and response
-  contract to the server-owned API specification.
 - `PersonalRunAdmissionPort` and `RunAdmissionCapacityGate` are the only cross-package port types;
-  repository, router-dependency, and preflight types remain internal implementation detail.
+  repository and preflight types remain internal implementation detail.
 - `__ReadRunAdmissionConcurrencyPolicy(environment?)` reads and validates the two bounded capacity
   settings. The optional map exists for deterministic configuration tests; production uses
   `process.env`.
@@ -61,8 +70,10 @@ does not grant product authority; it is overload protection for the read path.
 ## Boundary
 
 Consumed by the OpenCrane server composition root, which creates one shared gate and passes it to
-the personal API, run-now router, and scheduler. This package does not authenticate HTTP requests,
-authorize agent service publication, schedule work, dispatch Kubernetes Jobs, or execute a run. It
+the conversation authority, managed run-now path, and scheduler. This package has no public browser
+router or OpenAPI path: interactive execution begins only at
+`POST /api/v1/me/conversations/:conversationId/messages`. It does not authenticate HTTP requests,
+authorise agent service publication, schedule work, dispatch Kubernetes Jobs, or execute a run. It
 accepts server-owned identity evidence and delegates durable snapshot and run rules to their owning
 packages.
 

@@ -15,8 +15,8 @@ function _Run(): InitialRunAuthority
 function _Command(identityKind: "user" | "service" = "service")
 {
 	return identityKind === "service"
-		? { runId: "run-1", siloId: "silo-1", agentServiceId: "service-1", threadId: null, identityKind, trigger: "managed_invocation", requestIdempotencyKey: "request-1" } as never
-		: { runId: "run-1", siloId: "silo-1", agentServiceId: "service-1", threadId: null, identityKind, trigger: "interactive", executionSubjectId: "user-1", requestIdempotencyKey: "request-1" } as never;
+		? { runId: "run-1", siloId: "silo-1", agentServiceId: "service-1", conversationId: null, identityKind, trigger: "managed_invocation", requestIdempotencyKey: "request-1" } as never
+		: { runId: "run-1", siloId: "silo-1", agentServiceId: "service-1", conversationId: null, identityKind, trigger: "interactive", executionSubjectId: "user-1", requestIdempotencyKey: "request-1" } as never;
 }
 
 /** Creates a transaction facade for proving the adapter forwards the exact transaction fence. */

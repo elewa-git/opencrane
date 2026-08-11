@@ -9,8 +9,8 @@ This package reads a signed-in participant's already-authorised, display-safe co
 from the canonical replay API. It does not open an agent-runtime connection, mint a pod credential,
 or submit a chat command: those concerns belong to the owned execution boundary, not the browser.
 
-Reading a thread sends one cookie-session request to
-`GET /api/v1/me/conversations/:threadId/events`. The server derives the caller and silo from the
+Reading a conversation sends one cookie-session request to
+`GET /api/v1/me/conversations/:conversationId/events`. The server derives the caller and silo from the
 session, applies participant membership, and returns bounded AG-UI server-sent events (SSE). The
 reader validates every record with the shared AG-UI state package before reducing it into browser
 view state.
@@ -20,7 +20,7 @@ view state.
         │ asks for one authorised replay
         ▼
  OpenCraneConversationReplayReader  ◄── HERE
-        │ GET /me/conversations/:threadId/events
+        │ GET /me/conversations/:conversationId/events
         ▼
  conversation/ag-ui ......... validates + reduces safe SSE records
 ```
@@ -33,7 +33,7 @@ authorization state.
 
 ## Public surface
 
-- `OpenCraneConversationReplayReader` — the cookie-session reader for one canonical thread replay.
+- `OpenCraneConversationReplayReader` — the cookie-session reader for one canonical conversation replay.
 - `__ReadConversationReplay` — validates and reduces one finite AG-UI SSE body.
 - `ConversationReplayReader` — the narrow reader contract for consumers that need a replaceable API seam.
 
@@ -41,7 +41,7 @@ authorization state.
 
 Consumed directly by a green conversation feature or by a feature-owned provider. It depends on the
 shared `ControlPlaneApiService` only for the session-bound generated API client, and delegates all
-SSE validation to `conversation/ag-ui`. It deliberately does not list threads, cache messages,
+SSE validation to `conversation/ag-ui`. It deliberately does not list conversations, cache messages,
 maintain a socket, or expose agent commands.
 
 ## Dependency direction

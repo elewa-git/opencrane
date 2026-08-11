@@ -123,8 +123,8 @@ synchronously combines three existing product authorities:
 3. persist the run and admission outcome in the canonical transaction.
 
 Personal admission uses the same immutable snapshot transaction after deriving the caller's subject,
-silo, participant-bound thread, and personal AgentService from trusted server authorities. Its only
-browser-controlled values are its thread identifier and retry key. One process-local capacity gate
+silo, participant-bound `Conversation`, and personal AgentService from trusted server authorities. Its
+only browser-controlled values are its `conversationId` and retry key. One process-local capacity gate
 protects the database pool and is shared by personal and managed paths, including run-now requests
 and the scheduler. The reusable composition lives in
 [`execution/admission`](../../libs/backend/agents/execution/admission/main/README.md); this app only
@@ -145,8 +145,10 @@ another deployable's source.
 ## Data & persistence
 
 PostgreSQL owns the durable product record: agent services and revisions, runs and immutable input
-snapshots, conversation threads and ordered events, approvals, artifacts, skills, membership,
-grants, provider configuration, spend, and audit evidence.
+snapshots, the `Conversation -> canonical timeline` authority, approvals, artifacts, skills,
+membership, grants, provider configuration, spend, and audit evidence. An `agent_session`
+conversation conditionally owns serial `AgentRun -> ordered RunEvent` streams; direct and group
+messages create no run.
 
 Database triggers protect lifecycle and proof bindings that Prisma cannot express alone. Runtime
 Jobs hold attempt-scoped scratch and checkpoints; they do not replace the server's run,

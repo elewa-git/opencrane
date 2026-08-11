@@ -24,8 +24,8 @@ It is one step in the inbound flow, and it composes the domain library
 process here is just wiring (config, logging, HTTP server, shutdown) around that library's logic.
 
 ```
- outside channel  (Slack · Teams · browser SSE)   ← untrusted
-        │  POST /v1/commands   ·   GET /v1/events
+ browser SSE client   ← untrusted
+        │  GET /v1/events?conversationId=…
         ▼
  ┌────────────────────────────┐
  │   channel-proxy  ◄── HERE   │  origin allowlist · byte + time bounds · rate limit
@@ -39,8 +39,8 @@ process here is just wiring (config, logging, HTTP server, shutdown) around that
 · [opencrane server](../opencrane/README.md)
 
 The proxy fails closed at every bound: the exact HTTPS origins it accepts, the internal DNS suffix a
-target must end in, a per-window request-rate cap, and hard caps on command body size, response size,
-stream duration and idle time. Invalid configuration (a non-HTTPS origin, a target host that is not
+target must end in, a per-window request-rate cap, and hard stream duration, idle-time, and event-size
+bounds. Invalid configuration (a non-HTTPS origin, a target host that is not
 in-cluster) aborts startup rather than running with a weakened boundary. It never invents trusted
 identity headers, so a downstream cannot be tricked into believing the caller is already
 authenticated. If it is wrong, the worst case is a refused or truncated request — never an
@@ -51,12 +51,9 @@ unbounded or spoofed one reaching the server.
 `Entrypoint: src/index.ts` (`_Main`) — reads and validates config, opens the HTTP listener, and binds
 bounded `SIGTERM`/`SIGINT` shutdown that drains in-flight requests and flushes telemetry.
 
-HTTP endpoints served: `POST /v1/commands` (bounded command forwarding), `GET /v1/events`
-(server-sent-event relay), and `/livez` · `/readyz` health probes. Any other path is `404`.
-
-Commands are JSON envelopes that include an opaque `threadId` and use the standard `Idempotency-Key`
-request header. The proxy validates those routing coordinates before asking OpenCrane to authorize a
-target; it otherwise leaves the command payload uninterpreted.
+HTTP endpoints served: `GET /v1/events` (server-sent-event relay) and `/livez` · `/readyz` health
+probes. Any other path is `404`. The event request names an opaque `conversationId`; OpenCrane
+validates that coordinate before returning a target.
 
 The composed library also contains a pure, versioned AG-UI event encoder for a future
 server-authorized replay reader. This app does not expose it yet: `GET /v1/events` remains an opaque
@@ -88,8 +85,6 @@ out of bounds.
 | `CHANNEL_PROXY_ALLOWED_ORIGINS` | Comma-separated exact default-port HTTPS origins | *(required, ≥1)* |
 | `CHANNEL_PROXY_TARGET_HOST_SUFFIXES` | Allowed internal DNS suffixes (each begins with `.`) | `.svc.cluster.local` |
 | `CHANNEL_PROXY_RATE_LIMIT` / `CHANNEL_PROXY_RATE_WINDOW_MS` | Fixed-window request cap and window | `120` / `60000` |
-| `CHANNEL_PROXY_MAX_COMMAND_BYTES` / `CHANNEL_PROXY_MAX_COMMAND_RESPONSE_BYTES` | Command body / response byte caps | `1048576` each |
-| `CHANNEL_PROXY_COMMAND_TIMEOUT_MS` | Command forward timeout | `30000` |
 | `CHANNEL_PROXY_STREAM_CONNECT_TIMEOUT_MS` / `_STREAM_DURATION_MS` / `_STREAM_IDLE_TIMEOUT_MS` | SSE relay connect / total / idle bounds | `5000` / `300000` / `45000` |
 | `CHANNEL_PROXY_MAX_EVENT_BYTES` | Per-event byte cap on the SSE relay | `262144` |
 
