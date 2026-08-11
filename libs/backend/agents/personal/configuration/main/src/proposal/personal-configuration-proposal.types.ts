@@ -1,6 +1,6 @@
 import type { PersonalConfigurationPatch } from "./personal-configuration-patch.types.js";
 
-/** Stable proposal outcomes and persistence statuses owned by this package. */
+/** Stable proposal outcomes and denial reasons owned by this package. */
 export enum PersonalConfigurationProposalCodes
 {
 	/** A durable future-revision proposal was recorded. */
@@ -44,12 +44,11 @@ export interface ProposePersonalConfigurationChangeCommand
 	readonly proposedAt: string;
 }
 
-/** In-transaction reasons why the proposal authority may deny a future-session change. */
+/** Validation reason why the proposal authority may deny a future-session change. */
 export type PersonalConfigurationProposalDenialReason =
-	| PersonalConfigurationProposalCodes.InvalidCommand
-	| PersonalConfigurationProposalCodes.ProvenanceConflict;
+	PersonalConfigurationProposalCodes.InvalidCommand;
 
-/** Atomic persistence result for one durable proposal. */
+/** Domain outcome for one proposal request. */
 export type ProposePersonalConfigurationChangeResult =
 	| { readonly outcome: PersonalConfigurationProposalCodes.Proposed; readonly changeId: string }
 	| { readonly outcome: PersonalConfigurationProposalCodes.Denied; readonly reason: PersonalConfigurationProposalDenialReason };

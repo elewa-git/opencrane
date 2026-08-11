@@ -35,15 +35,16 @@ that must coordinate more than one repository.
 [execution inputs](../../../execution/inputs/main/README.md) ·
 [agent services](../../../../server/agents/agent-services/main/README.md)
 
-Invariant: a proposal is immutable provenance, not mutable session state. Before a proposal is
-recorded or applied, the authority rebinds its user, conversation, run, persona, service, and active
-revision evidence. Missing, stale, or cross-owner evidence fails closed.
+Invariant: a proposal is immutable provenance, not mutable session state. On insert, the reviewed
+database trigger locks and rebinds its user, conversation, run, persona, service, active revisions,
+agent-session mode, current participant access, and optional source message. Missing, stale, or
+cross-owner evidence fails closed.
 The stored `sourceConversationId` is provenance only: it names the participant-bound conversation
 that produced the proposal and never grants access to that conversation or changes its lifecycle.
 
 Internally, the source is grouped by responsibility:
 
-- `proposal/` validates patches, proves source provenance, and inserts the journal record;
+- `proposal/` validates patches and inserts the journal record through the database-owned provenance authority;
 - `decision/` owns the owner's accept-or-reject transition;
 - `query/` maps bounded owner-visible proposal history;
 - `materialization/` uses lifecycle state and patch-kind strategies to coordinate personal configuration and agent-service repositories in one UoW;
@@ -88,7 +89,8 @@ does not import a deployable app or another personal specialisation.
 Owns `PersonalConfigurationChange`. Proposal insertion and model materialisation use separate UoWs;
 the latter binds personal-configuration and agent-service repositories to one serialisable Prisma
 transaction. Persona refresh uses a configuration-owned repository bound to the persona aggregate's
-transaction. Queries and owner decisions use capability-specific repositories with no shared
+transaction. The proposal repository is an insert-only adapter; the locking database trigger owns
+its atomic provenance fence. Queries and owner decisions use capability-specific repositories with no shared
 multi-purpose Prisma adapter.
 
 ## See also

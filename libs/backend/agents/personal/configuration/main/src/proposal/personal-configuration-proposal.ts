@@ -7,10 +7,23 @@ export async function __ProposePersonalConfigurationChange(repository: PersonalC
 {
 	// 1. Parse the complete caller-controlled command before persistence can be queried.
 	const parsed = _ParsePersonalConfigurationProposalCommand(command);
-	if (parsed === null) return { outcome: PersonalConfigurationProposalCodes.Denied, reason: PersonalConfigurationProposalCodes.InvalidCommand };
+	if (parsed === null) return _invalidCommand();
 
-	// 2. Insert through the transaction-scoped authority so source ownership cannot race a proposal.
-	const result = await repository.propose(parsed);
-	if (result.status === PersonalConfigurationProposalCodes.Proposed) return { outcome: PersonalConfigurationProposalCodes.Proposed, changeId: result.changeId };
-	return { outcome: PersonalConfigurationProposalCodes.Denied, reason: result.status };
+	// 2. Insert through the database-guarded transaction authority.
+	const receipt = await repository.propose(parsed);
+	return _proposed(receipt.changeId);
+}
+
+/** Returns the stable denial for caller-controlled evidence outside the closed command model. */
+function _invalidCommand(): ProposePersonalConfigurationChangeResult
+{
+	const result: ProposePersonalConfigurationChangeResult = { outcome: PersonalConfigurationProposalCodes.Denied, reason: PersonalConfigurationProposalCodes.InvalidCommand };
+	return result;
+}
+
+/** Returns the stable domain result for one durable proposal receipt. */
+function _proposed(changeId: string): ProposePersonalConfigurationChangeResult
+{
+	const result: ProposePersonalConfigurationChangeResult = { outcome: PersonalConfigurationProposalCodes.Proposed, changeId };
+	return result;
 }

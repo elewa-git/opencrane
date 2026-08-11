@@ -1,7 +1,7 @@
 import { AgentConfigPatchKinds } from "@opencrane/contracts";
 import { describe, expect, it, vi } from "vitest";
 
-import type { PersonalConfigurationProposalPersistenceResult } from "../proposal/personal-configuration-proposal-repository.types.js";
+import type { PersonalConfigurationProposalPersistenceReceipt } from "../proposal/personal-configuration-proposal-repository.types.js";
 import { PersonalConfigurationProposalCodes } from "../proposal/personal-configuration-proposal.types.js";
 import { _ProposeUpgradeSession } from "../upgrade-session/upgrade-session-proposal.js";
 import type { PersonalUpgradeSessionCandidate, PersonalUpgradeSessionSnapshot } from "../upgrade-session/upgrade-session.types.js";
@@ -38,10 +38,17 @@ function _profiles(profileId: string | null = "profile-1")
 	return { readOwnerProfileId: vi.fn(async function _ReadOwnerProfileId() { return profileId; }) };
 }
 
-/** Builds the transaction-scoped proposal authority used by pure orchestration tests. */
-function _proposals(result: PersonalConfigurationProposalPersistenceResult = { status: PersonalConfigurationProposalCodes.Proposed, changeId: "change-1" })
+/** Builds one durable proposal receipt for the transaction-scoped authority. */
+function _proposalReceipt(changeId = "change-1"): PersonalConfigurationProposalPersistenceReceipt
 {
-	return { propose: vi.fn(async function _Propose() { return result; }) };
+	const receipt: PersonalConfigurationProposalPersistenceReceipt = { changeId };
+	return receipt;
+}
+
+/** Builds the transaction-scoped proposal authority used by pure orchestration tests. */
+function _proposals()
+{
+	return { propose: vi.fn(async function _Propose() { return _proposalReceipt(); }) };
 }
 
 describe("upgrade-session proposal orchestration", function _UpgradeSessionProposalSuite()
@@ -77,12 +84,5 @@ describe("upgrade-session proposal orchestration", function _UpgradeSessionPropo
 
 		await expect(_ProposeUpgradeSession(profiles, proposals, _candidate(), _snapshot(), "2026-08-01T00:00:00.000Z")).resolves.toBeNull();
 		expect(proposals.propose).not.toHaveBeenCalled();
-	});
-
-	it("preserves a transaction-scoped provenance denial", async function _PreservesProposalDenial()
-	{
-		const result = await _ProposeUpgradeSession(_profiles(), _proposals({ status: PersonalConfigurationProposalCodes.ProvenanceConflict }), _candidate(), _snapshot(), "2026-08-01T00:00:00.000Z");
-
-		expect(result).toEqual({ outcome: PersonalConfigurationProposalCodes.Denied, reason: PersonalConfigurationProposalCodes.ProvenanceConflict });
 	});
 });

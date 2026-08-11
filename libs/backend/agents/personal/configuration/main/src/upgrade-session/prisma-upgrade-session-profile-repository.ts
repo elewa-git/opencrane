@@ -5,7 +5,7 @@ import type { UpgradeSessionProfileReadCommand, UpgradeSessionProfileRepository 
 /** Transaction-scoped Prisma reader for the personal profile bound to an upgrade session. */
 export class PrismaUpgradeSessionProfileRepository implements UpgradeSessionProfileRepository
 {
-	/** Transaction that also owns the later proposal provenance checks and insert. */
+	/** Transaction that also owns the later trigger-guarded proposal insert. */
 	private readonly transaction: Prisma.TransactionClient;
 
 	/** Creates the owner-profile reader inside the upgrade-session proposal transaction. */

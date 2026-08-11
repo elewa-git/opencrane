@@ -33,17 +33,13 @@ function _snapshot(personaRevisionId: string | null = "persona-1", conversationI
 }
 
 /** Builds the exact database seams used by the upgrade-session proposal transaction. */
-function _database(ownerProfileId: string | null = "profile-1", activePersonaRevisionId = "persona-1", createError: Error | null = null)
+function _database(ownerProfileId: string | null = "profile-1", createError: Error | null = null)
 {
 	let traceFields: Record<string, unknown> | undefined;
 	const transaction = {
 		personaProfile: {
 			findUnique: vi.fn(async function _FindOwnerProfile() { return ownerProfileId === null ? null : { id: ownerProfileId }; }),
-			findFirst: vi.fn(async function _FindProfileRevision() { return { activeRevisionId: activePersonaRevisionId }; }),
 		},
-		conversation: { findFirst: vi.fn(async function _FindConversation() { return { agentServiceId: "service-1" }; }) },
-		agentRun: { findFirst: vi.fn(async function _FindRun() { return { id: "run-1" }; }) },
-		agentService: { findFirst: vi.fn(async function _FindService() { return { activeRevisionId: "agent-1" }; }) },
 		personalConfigurationChange: { create: vi.fn(async function _CreateProposal() { if (createError !== null) throw createError; return { id: "change-1" }; }) },
 	};
 	const prisma = { $transaction: vi.fn(async function _RunTransaction(work: (value: unknown) => Promise<unknown>) { traceFields = ___GetContext()?.extra; return work(transaction); }) };
@@ -70,8 +66,7 @@ describe("Prisma upgrade-session proposal UoW", function _PrismaUpgradeSessionPr
 		expect(database.prisma.$transaction).toHaveBeenCalledOnce();
 		expect(database.traceFields()).toEqual({ operation: "personal_configuration.propose", siloId: "silo-1", userId: "user-1", sourceRunId: "run-1" });
 		expect(logging.error).not.toHaveBeenCalled();
-		expect(database.transaction.personaProfile.findUnique.mock.invocationCallOrder[0]).toBeLessThan(database.transaction.personaProfile.findFirst.mock.invocationCallOrder[0] ?? 0);
-		expect(database.transaction.personaProfile.findFirst.mock.invocationCallOrder[0]).toBeLessThan(database.transaction.personalConfigurationChange.create.mock.invocationCallOrder[0] ?? 0);
+		expect(database.transaction.personaProfile.findUnique.mock.invocationCallOrder[0]).toBeLessThan(database.transaction.personalConfigurationChange.create.mock.invocationCallOrder[0] ?? 0);
 	});
 
 	it("rejects a snapshot without a personal revision before transaction creation", async function _RejectsMissingPersona()
@@ -107,25 +102,13 @@ describe("Prisma upgrade-session proposal UoW", function _PrismaUpgradeSessionPr
 		expect(logging.error).not.toHaveBeenCalled();
 	});
 
-	it("reports an unavailable owner profile without entering proposal provenance checks", async function _RejectsMissingProfile()
+	it("reports an unavailable owner profile without attempting the proposal insert", async function _RejectsMissingProfile()
 	{
 		const database = _database(null);
 		const logging = _logger();
 		const unitOfWork = new PrismaUpgradeSessionProposalUnitOfWork(database.prisma as never, logging.logger as never);
 
 		await expect(unitOfWork.proposeUpgradeSession(_candidate(), _snapshot(), "2026-08-01T00:00:00.000Z")).rejects.toThrow("personal profile is unavailable");
-		expect(database.transaction.personaProfile.findFirst).not.toHaveBeenCalled();
-		expect(database.transaction.personalConfigurationChange.create).not.toHaveBeenCalled();
-		expect(logging.error).not.toHaveBeenCalled();
-	});
-
-	it("preserves a transaction-scoped provenance denial", async function _RejectsChangedRevision()
-	{
-		const database = _database("profile-1", "persona-2");
-		const logging = _logger();
-		const unitOfWork = new PrismaUpgradeSessionProposalUnitOfWork(database.prisma as never, logging.logger as never);
-
-		await expect(unitOfWork.proposeUpgradeSession(_candidate(), _snapshot(), "2026-08-01T00:00:00.000Z")).rejects.toThrow(`proposal denied: ${PersonalConfigurationProposalCodes.ProvenanceConflict}`);
 		expect(database.transaction.personalConfigurationChange.create).not.toHaveBeenCalled();
 		expect(logging.error).not.toHaveBeenCalled();
 	});
@@ -133,7 +116,7 @@ describe("Prisma upgrade-session proposal UoW", function _PrismaUpgradeSessionPr
 	it("maps the database trigger fence to the same provenance denial", async function _MapsTriggerFence()
 	{
 		const conflict = new Prisma.PrismaClientKnownRequestError("proposal provenance conflict", { code: "P0001", clientVersion: "test" });
-		const database = _database("profile-1", "persona-1", conflict);
+		const database = _database("profile-1", conflict);
 		const logging = _logger();
 		const unitOfWork = new PrismaUpgradeSessionProposalUnitOfWork(database.prisma as never, logging.logger as never);
 
