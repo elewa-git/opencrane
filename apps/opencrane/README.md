@@ -90,7 +90,10 @@ its resources to the lifecycle owner.
   mounted lease keys, exact same-silo `artifact-service` route, and durable artifact authority into
   source, read, upload, and output brokers; those pieces are inseparable from this process's private
   configuration and do not expose a reusable ArtifactStore client.
-- `src/app/background-workers.ts` owns schedule ticks, expired-run repair, and fenced cleanup loops.
+- `src/infra/obot/*` composes custody and server-side Model Context Protocol (MCP) invocation over
+  one authenticated, bounded Obot session. With no Obot configuration both ports refuse closed.
+- `src/app/background-workers.ts` owns schedule ticks, durable external-action passes, expired-run
+  repair, and fenced cleanup loops; shutdown drains any active provider pass before Prisma closes.
 - `src/app/lifecycle.ts` starts both listeners, stops producers first, drains requests, disconnects
   Prisma, and flushes telemetry.
 - `prisma/schema/*.prisma` defines the product's durable domain models.
@@ -168,6 +171,7 @@ are:
 | `OIDC_*` | Organisation sign-in, callbacks, and server-side session protection | required |
 | `OPENCRANE_STANDALONE_FIRST_USER_*` | Optional one-time standalone Owner admission: a configured verified email may claim the host-selected silo under its stable OIDC subject | disabled |
 | `OPENCRANE_INITIAL_MODEL_*` | Optional first provider key; the server persists its custody reference and requires LiteLLM registration before readiness | disabled |
+| `OBOT_GATEWAY_URL`, `OBOT_SERVICE_TOKEN_PATH`, `OBOT_TIMEOUT_SECONDS` | Release-local credential custody and server-side external tool execution | disabled together |
 | `POD_NAMESPACE` | Trusted namespace of this server and controller identity | `default` |
 | `AGENT_RUNTIME_PERSONAL_NAMESPACE` | Personal runtime Job boundary | required |
 | `AGENT_RUNTIME_MANAGED_NAMESPACE` | Managed runtime Job boundary | required |

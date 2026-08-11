@@ -27,6 +27,10 @@ function _sessionDouble(recorded: _RecordedCall[], answers: Record<string, () =>
 			if (answer === undefined) throw new ObotTransportError("http_404");
 			return answer();
 		},
+		async mcpRequest(): Promise<never>
+		{
+			throw new Error("MCP exchange is outside this custody test");
+		},
 	};
 }
 

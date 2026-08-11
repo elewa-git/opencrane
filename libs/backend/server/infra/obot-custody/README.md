@@ -1,4 +1,4 @@
-# @opencrane/backend/server/infra/obot-custody — the Obot custody, attempt-key + MCP-invocation ports
+# @opencrane/backend/server/infra/obot-custody — Obot custody and server invocation ports
 
 > [backend](../../../README.md) › [server](../../README.md) › [infra](../README.md) › obot-custody
 
@@ -6,24 +6,23 @@
 
 This library owns the **boundaries** for working with Obot without ever holding a raw secret in
 OpenCrane: **custody** (handing an integration's credential to Obot to keep, receiving only an
-opaque reference), **attempt keys** (minting one short-lived Obot API key per run attempt, scoped
-to exactly the attempt's MCP server ids), and **MCP invocation** (the legacy server-side call
-port). *Obot* is the external tool-connection system OpenCrane runs alongside (see
+opaque reference) and **MCP invocation** from the trusted server action worker. *Obot* is the
+external tool-connection system OpenCrane runs alongside (see
 `apps/_infra/obot`). Each boundary is a **port** — a runtime-neutral contract — and the custody
-and attempt-key ports now also ship authenticated HTTP adapters over one shared session.
+and invocation ports use authenticated HTTP adapters over one shared session.
 
 ```
- integrations gateway (org admin supplies a credential)     run dispatch (per attempt)
-          │  ProvisionObotCustodyCommand                          │  IssueObotAttemptKeyCommand
+ integrations gateway (org admin supplies a credential)     server action worker
+          │  ProvisionObotCustodyCommand                          │  ObotMcpToolInvocationCommand
           ▼                                                       ▼
  ┌─────────────────────────────────────────────────────────────────────────┐
  │  obot-custody  ◄── HERE                                                  │
- │  ObotCustodyPort · ObotAttemptKeyIssuer · ObotMcpInvocationPort          │
+ │  ObotCustodyPort · ObotMcpInvocationPort                                 │
  │  __CreateObotSession → one bearer-authenticated, bounded HTTP exchange   │
  └─────────────────────────────────────────────────────────────────────────┘
-          │  ProvisionedObotCustody (opaque reference)            │ { key, keyId } (transient)
+          │  ProvisionedObotCustody (opaque reference)            │ bounded tool result
           ▼                                                       ▼
- remote Obot management API (/api/mcp-servers, /api/api-keys)
+ remote Obot APIs (/api/mcp-servers · /mcp-connect/<id>/mcp)
 ```
 
 **Custody** (`__CreateHttpObotCustodyAdapter`): `provision` creates the remote MCP server from a
@@ -34,17 +33,17 @@ custody reference is only ever real if Obot minted it; the platform never synthe
 fail-closed `__UnavailableObotCustodyAdapter` remains the default when the transport is not
 configured.
 
-**The custody reference doubles as Obot's MCP server id.** It is not a credential: the compiled run
-input carries it to the runtime as `CompiledToolDefinition.obotMcpServerId` ADDRESSING, and the
-runtime pairs it with an attempt-scoped, server-scoped key to execute an approved call directly
-against Obot's `/mcp-connect/<id>/mcp` proxy. The underlying integration credential never leaves
-Obot; allow-lists and key scoping remain the authority.
+**The custody reference doubles as Obot's MCP server id.** It is not a credential, but it still
+stays behind server-owned action execution. The server resolves it only after durable admission and
+authorization; the runtime receives neither Obot addressing nor Obot credentials.
 
-**Attempt keys** (`__CreateHttpObotAttemptKeyIssuer`): `issueAttemptKey` posts
-`{ name, expiresAt, mcpServerIds }` and validates the returned key value (accepting either the
-`key` or `token` field spelling, never guessing) plus the key id used only for revocation.
-`revokeAttemptKey` treats 404 as already revoked. The key expires with the attempt assignment
-lease and can reach only the named MCP server ids.
+**Invocation** (`__CreateHttpObotMcpInvocationAdapter`): the server worker supplies the live custody
+reference, immutable tool allow-list, and validated arguments. The adapter checks the allow-list
+before transport, performs the Model Context Protocol (MCP) initialize exchange, echoes only the
+validated session id, then calls the admitted tool. It accepts bounded JSON or server-sent event
+responses and returns only the validated `content` value. Invalid shapes raise a static protocol
+error; provider error bodies never leave the transport. A valid MCP `isError: true` result remains
+a typed tool failure for the durable worker to record, rather than being mistaken for success.
 
 **Transport discipline** (`__CreateObotSession`): a release-local `*.svc.cluster.local` HTTP origin
 only, the mounted service credential re-read per call, `AbortSignal.timeout`, `redirect: "error"`,
@@ -54,29 +53,27 @@ credentials never appear in an error. The exact Obot response shapes are not con
 qualification is gated on issue #337), so every consumed field is validated and anything
 unrecognised raises a typed `ObotProtocolError`.
 
-The MCP-invocation port (`ObotMcpInvocationPort`) survives as the server-side contract with only
-its fail-closed `__UnavailableObotMcpInvocationAdapter`: the invocation data plane moved to the
-runtime, so the server never proxies tool payloads. `__AssertToolAllowed` remains the single
-allow-list enforcement point for any implementation.
+The MCP-invocation port (`ObotMcpInvocationPort`) is the server-side action boundary. Its complete
+handshake runs under the safe `obot.mcp.invoke` operation span, while the credential-bearing HTTP
+children stay suppressed. `__AssertToolAllowed` remains the single allow-list enforcement point for
+every implementation.
 
 ## Public surface
 
 - `ObotCustodyPort`, `ProvisionObotCustodyCommand`, `ProvisionedObotCustody`, `ObotCustodyCredential`.
 - `__CreateHttpObotCustodyAdapter` — the authenticated custody transport.
-- `ObotAttemptKeyIssuer`, `IssueObotAttemptKeyCommand`, `IssuedObotAttemptKey`,
-  `__CreateHttpObotAttemptKeyIssuer` — attempt-scoped key minting and revocation.
+- `__CreateHttpObotMcpInvocationAdapter` — authenticated, allow-listed server-side tool invocation.
 - `__CreateObotSession`, `ObotSession`, `ObotHttpOptions`, `ObotTransportError`, `ObotProtocolError`,
-  `ObotTransportFailureCode` — the shared bounded exchange.
+  `ObotTransportFailureCode`, `ObotMcpExchangeResponse` — the shared bounded exchange.
 - `__UnavailableObotCustodyAdapter`, `ObotCustodyUnavailableError` — the fail-closed default.
 - `ObotMcpInvocationPort`, `ObotMcpToolInvocationCommand`, `ObotMcpToolResult`, `__AssertToolAllowed`,
-  `__UnavailableObotMcpInvocationAdapter`, `ObotMcpInvocationUnavailableError`, `ObotMcpToolNotAllowedError`.
+  `__UnavailableObotMcpInvocationAdapter`, `ObotMcpInvocationUnavailableError`,
+  `ObotMcpToolNotAllowedError`, `ObotMcpAuthenticationError`, `ObotMcpAuthorizationError`.
 
 ## Boundary
 
 Consumed by the `integrations` backend gateway (custody route), the app root's Obot adapter factory,
-and the run-dispatch attempt-key issuer. It stores nothing and holds no secret beyond the single
-in-flight call; minted keys ride the claim response into a per-attempt Kubernetes Secret and are
-never persisted or logged.
+and the server action worker. It stores nothing and holds no secret beyond a single in-flight call.
 
 ## Dependency direction
 

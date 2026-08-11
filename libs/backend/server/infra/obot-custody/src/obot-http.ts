@@ -133,8 +133,41 @@ function _ParseJson(text: string): unknown
 	}
 }
 
+/** Parse the first complete data frame from an MCP server-sent event response. */
+function _ParseEventStream(text: string): unknown
+{
+	const dataLines: string[] = [];
+	for (const rawLine of text.split(/\r?\n/u))
+	{
+		if (rawLine.length === 0 && dataLines.length > 0) break;
+		if (rawLine.startsWith("data:")) dataLines.push(rawLine.slice("data:".length).trimStart());
+	}
+	if (dataLines.length === 0) throw new ObotProtocolError("Obot MCP event stream carried no data frame");
+	return _ParseJson(dataLines.join("\n"));
+}
+
+/** Parse an MCP response body according to its validated media type. */
+function _ParseMcpBody(text: string, contentType: string): unknown
+{
+	const mediaType = contentType.split(";", 1)[0]?.trim().toLowerCase();
+	if (mediaType === "application/json") return _ParseJson(text);
+	if (mediaType === "text/event-stream") return _ParseEventStream(text);
+	throw new ObotProtocolError("Obot MCP response used an unsupported content type");
+}
+
+/** Validate an Obot MCP session header before it can be replayed into a later request. */
+function _McpSessionId(value: string | null): string | null
+{
+	if (value === null) return null;
+	if (value.length === 0 || value.length > 1_024 || /[\u0000-\u001f\u007f]/u.test(value))
+	{
+		throw new ObotProtocolError("Obot MCP response returned an invalid session id");
+	}
+	return value;
+}
+
 /**
- * Create the authenticated Obot management session used by custody and attempt-key adapters.
+ * Create the authenticated Obot session used by server-owned custody and action adapters.
  *
  * Every exchange presents the freshly read Obot service credential as a bearer token, applies one
  * hard timeout, refuses redirects, and bounds the response read. Every fetch runs with automatic
@@ -191,6 +224,53 @@ export function __CreateObotSession(options: ObotHttpOptions): ObotSession
 			{
 				const text = await _ReadBoundedText(response);
 				return text.trim().length === 0 ? null : _ParseJson(text);
+			}
+			catch (error)
+			{
+				return _ThrowTransportFailure(error);
+			}
+		},
+
+		async mcpRequest(path: string, body: unknown, sessionId?: string)
+		{
+			// 1. Present the server-owned service credential and the prior MCP session id only to the
+			// release-local Obot endpoint; neither value is returned to the caller or traced.
+			const headers = new Headers({ accept: "application/json, text/event-stream", "content-type": "application/json" });
+			headers.set("authorization", `Bearer ${await readServiceToken()}`);
+			if (sessionId !== undefined)
+			{
+				const validatedSessionId = _McpSessionId(sessionId);
+				if (validatedSessionId === null) throw new ObotProtocolError("Obot MCP request carried no session id");
+				headers.set("mcp-session-id", validatedSessionId);
+			}
+
+			// 2. Run the exchange through the same bounded transport and suppressed child-trace seam used
+			// for custody calls, so credentials and the tool endpoint cannot enter automatic HTTP spans.
+			let response: Response;
+			try
+			{
+				response = await ___DoWithoutTrace(function _fetchSensitiveMcpEndpoint()
+				{
+					return fetchRequest(new URL(path, baseUrl), { method: "POST", headers, body: JSON.stringify(body), signal: AbortSignal.timeout(options.requestTimeoutMilliseconds), redirect: "error" });
+				});
+			}
+			catch (error)
+			{
+				return _ThrowTransportFailure(error);
+			}
+			if (!response.ok)
+			{
+				await response.body?.cancel();
+				throw new ObotTransportError(`http_${response.status}`);
+			}
+
+			// 3. Parse only the bounded JSON-RPC frame and validated session header. Raw bytes, response
+			// headers, and remote error details never cross the session boundary.
+			try
+			{
+				const text = await _ReadBoundedText(response);
+				if (text.trim().length === 0) throw new ObotProtocolError("Obot MCP response body was empty");
+				return { payload: _ParseMcpBody(text, response.headers.get("content-type") ?? ""), sessionId: _McpSessionId(response.headers.get("mcp-session-id")) };
 			}
 			catch (error)
 			{

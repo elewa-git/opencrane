@@ -29,6 +29,8 @@ export interface ObotMcpToolResult
 {
 	/** Result payload as returned by Obot; opaque to OpenCrane. */
 	readonly content: JsonValue;
+	/** Whether the MCP provider completed the call with a tool-level failure result. */
+	readonly isError: boolean;
 }
 
 /**
