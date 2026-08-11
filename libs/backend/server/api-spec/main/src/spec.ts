@@ -10,6 +10,7 @@
  * The generated openapi.json is a dist artifact, not source.
  */
 
+import { _AuthStepUpOpenapiPaths } from "./auth-openapi-paths.js";
 import { _DomainOpenapiPaths } from "./domain-openapi-paths.js";
 import { _ErrorEnvelopeSchema, _ValidationIssueSchema } from "./error-schemas.js";
 import { _ModelDefinitionSchema, _ModelDefinitionWriteSchema } from "./model-definition-schemas.js";
@@ -739,20 +740,7 @@ export const spec = {
         },
       },
     },
-    "/auth/reauthenticate": {
-      get: {
-        operationId: "reauthenticate",
-        summary: "Force fresh OIDC authentication for a sensitive action",
-        tags: ["Auth"],
-        parameters: [{ name: "returnTo", in: "query", required: false, schema: { type: "string" }, description: "Local path restored after the verified callback." }],
-        responses: {
-          302: { description: "Redirect to the configured provider with prompt=login." },
-          401: unauthorized("An authenticated session is required before step-up."),
-          503: { description: "OIDC is not configured." },
-        },
-      },
-    },
-
+    ..._AuthStepUpOpenapiPaths,
     "/auth/callback": {
       get: {
         operationId: "completeOidcLogin",
