@@ -18,8 +18,8 @@ export class ConversationRunStore
 	private readonly _busy = signal(false);
 	/** Browser-safe run command error. */
 	private readonly _error = signal<string | null>(null);
-	/** Last run coordinate whose status read started. */
-	private _requestedRunId: string | null = null;
+	/** Last run and streamed lifecycle coordinate whose status read started. */
+	private _requestedObservation: string | null = null;
 
 	/** Public current run projection. */
 	public readonly run = this._run.asReadonly();
@@ -36,17 +36,23 @@ export class ConversationRunStore
 	/** Whether the current run can start a new attempt. */
 	public readonly canRetry = computed(this._CanRetry.bind(this));
 
-	/** Read status only when a stream names a different run. */
-	public async observe(runId: string, conversationId: string): Promise<void>
+	/** Refresh status whenever the stream advances this run to a different lifecycle. */
+	public async observe(runId: string, conversationId: string, streamLifecycle: string): Promise<void>
 	{
-		if (runId === this._requestedRunId) return;
-		this._requestedRunId = runId;
+		const observation = `${runId}:${streamLifecycle}`;
+		if (observation === this._requestedObservation) return;
+		this._requestedObservation = observation;
 		try
 		{
 			const run = await this._gateway.run(runId);
-			if (runId === this._requestedRunId && run.conversationId === conversationId) this._run.set(run);
+			if (observation === this._requestedObservation && run.conversationId === conversationId) this._run.set(run);
 		}
-		catch (error) { if (runId === this._requestedRunId) this._error.set(_Message(error, "OpenCrane could not load run status.")); }
+		catch (error)
+		{
+			if (observation !== this._requestedObservation) return;
+			this._requestedObservation = null;
+			this._error.set(_Message(error, "OpenCrane could not load run status."));
+		}
 	}
 
 	/** Keep the steering control separate from ordinary participant input. */
@@ -89,7 +95,7 @@ export class ConversationRunStore
 	/** Drop all selected run state after route change or access loss. */
 	public clear(): void
 	{
-		this._requestedRunId = null;
+		this._requestedObservation = null;
 		this._run.set(null);
 		this._steeringDraft.set("");
 		this._error.set(null);

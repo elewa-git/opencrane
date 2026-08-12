@@ -258,7 +258,7 @@ export class ConversationWorkspaceStore
 		if (update.state.accessRevoked) { this._PurgeAccess(); return; }
 		const runId = update.state.runId;
 		const selected = this._selected();
-		if (runId !== null && selected !== null) void this.runs.observe(runId, selected.id);
+		if (runId !== null && selected !== null) void this.runs.observe(runId, selected.id, update.state.runStatus);
 	}
 
 	/** Keep the last good snapshot visible after a bounded stream failure. */
