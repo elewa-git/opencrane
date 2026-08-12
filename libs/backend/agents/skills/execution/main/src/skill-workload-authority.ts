@@ -5,25 +5,25 @@ import type { SkillWorkloadAssignmentCommand, SkillWorkloadClaim, SkillWorkloadP
 import type { SkillWorkloadExecutionAuthority } from "./skill-workload-authority.types.js";
 import { _SkillWorkloadPersistenceConflictError, type SkillWorkloadExecutionUnitOfWork, type SkillWorkloadExecutionWork } from "./skill-workload-unit-of-work.types.js";
 
-/** Application authority coordinating each governed skill-execution transition through one unit of work. */
+/** Runs every skill-execution state change inside one transaction. */
 export class _SkillWorkloadExecutionAuthority implements SkillWorkloadExecutionAuthority
 {
-	/** Opaque transaction boundary; Prisma is deliberately unavailable beyond this field. */
+	/** The only way this class opens a transaction. Prisma itself is not reachable from here. */
 	private readonly unitOfWork: SkillWorkloadExecutionUnitOfWork;
 
-	/** Creates the application authority from the sole persistence unit of work. */
+	/** Stores the unit of work that every transaction below runs through. */
 	constructor(unitOfWork: SkillWorkloadExecutionUnitOfWork)
 	{
 		this.unitOfWork = unitOfWork;
 	}
 
-	/** Claims one controller-visible workload within one fenced durable transaction. */
+	/** Claims one workload for the controller, inside one transaction. */
 	async claimNextAtomically(): Promise<SkillWorkloadClaim | null>
 	{
 		return this._runConflictAs(function _Claim(transaction): Promise<SkillWorkloadClaim | null> { return transaction.assignments.claimNext(); }, null);
 	}
 
-	/** Commits the exact controller claim and immutable Job UID in one durable transaction. */
+	/** Records the Kubernetes Job UID against the claim the controller was given, in one transaction. */
 	async commitAssignmentAtomically(workloadId: string, command: SkillWorkloadAssignmentCommand): Promise<"assigned" | "idempotent" | "conflict">
 	{
 		return this._runConflictAs(function _Assign(transaction): Promise<"assigned" | "idempotent" | "conflict"> { return transaction.assignments.commitAssignment(workloadId, command); }, "conflict");
@@ -41,37 +41,37 @@ export class _SkillWorkloadExecutionAuthority implements SkillWorkloadExecutionA
 		return this._runConflictAs(function _CommitRelease(transaction): Promise<"released" | "idempotent" | "conflict"> { return transaction.releases.commitRelease(workloadId, command); }, "conflict");
 	}
 
-	/** Registers only the first Pod Kubernetes proves belongs to the released Job. */
+	/** Records the first Pod, but only when Kubernetes has shown it belongs to the released Job. */
 	async registerFirstPodAtomically(workloadId: string, command: SkillWorkloadPodRegistrationCommand): Promise<"registered" | "idempotent" | "conflict">
 	{
 		return this._runConflictAs(function _RegisterFirstPod(transaction): Promise<"registered" | "idempotent" | "conflict"> { return transaction.releases.registerFirstPod(workloadId, command); }, "conflict");
 	}
 
-	/** Selects bootstrap identity fences in a short read transaction before external TokenReview. */
+	/** Reads the worker identity the bootstrap expects, in a short read transaction, before the router calls TokenReview. */
 	loadUnconsumedByReferenceHash(referenceHash: string): Promise<SkillWorkloadBootstrapRecord | null>
 	{
 		return this.unitOfWork.run(function _LoadBootstrap(transaction): Promise<SkillWorkloadBootstrapRecord | null> { return transaction.bootstraps.loadUnconsumed(referenceHash); });
 	}
 
-	/** Atomically consumes the bootstrap after the router independently TokenReviews the selected identity. */
+	/** Marks the bootstrap used, after the router has TokenReviewed the worker separately. */
 	async consumeAtomically(referenceHash: string, identity: SkillWorkloadBootstrapIdentity): Promise<"consumed" | "conflict">
 	{
 		return this._runConflictAs(function _ConsumeBootstrap(transaction): Promise<"consumed" | "conflict"> { return transaction.bootstraps.consume(referenceHash, identity); }, "conflict");
 	}
 
-	/** Commits bounded authoring evidence and the terminal workload state as one transaction. */
+	/** Stores the authoring reports and the workload's final state in one transaction. */
 	async completeAtomically(command: SkillAuthoringCompletionCommand, identity: SkillWorkloadBootstrapIdentity): Promise<"completed" | "conflict">
 	{
 		return this._runConflictAs(function _CompleteAuthoring(transaction): Promise<"completed" | "conflict"> { return transaction.authoringCompletions.complete(command, identity); }, "conflict");
 	}
 
-	/** Selects source coordinates transactionally, releasing the transaction before ArtifactStore I/O begins. */
+	/** Reads the artifact ids in a transaction, then closes it before any ArtifactStore call. */
 	loadForWorker(workloadId: string, identity: SkillWorkloadBootstrapIdentity): Promise<SkillAuthoringInputRecord | null>
 	{
 		return this.unitOfWork.run(function _LoadAuthoringInput(transaction): Promise<SkillAuthoringInputRecord | null> { return transaction.authoringInputs.load(workloadId, identity); });
 	}
 
-	/** Runs one durable operation while translating only an exhausted rolled-back conflict. */
+	/** Runs one transaction. Turns a rolled-back conflict into the supplied fallback value, and rethrows anything else. */
 	private async _runConflictAs<Result>(work: SkillWorkloadExecutionWork<Result>, conflict: Result): Promise<Result>
 	{
 		try
@@ -86,7 +86,7 @@ export class _SkillWorkloadExecutionAuthority implements SkillWorkloadExecutionA
 	}
 }
 
-/** Creates the narrow application authority consumed by the four internal HTTP boundaries. */
+/** Creates the authority used by the four internal HTTP routes. */
 export function _CreateSkillWorkloadExecutionAuthority(unitOfWork: SkillWorkloadExecutionUnitOfWork): SkillWorkloadExecutionAuthority
 {
 	return new _SkillWorkloadExecutionAuthority(unitOfWork);

@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-/** Shared controller wire grammar consumed by run and skill-workload validators. */
+/** The field rules both the run-attempt and skill-workload controller validators build on, so the two APIs cannot drift apart on what an id or an instant looks like. */
 
 /** Return whether one value is a bounded, non-empty identifier without ASCII control characters. */
 function _IsBoundedIdentifier(value: unknown): value is string
@@ -40,7 +40,7 @@ export const _AgentControllerMillisecondInstantSchema = z.custom<string>(_IsMill
 /** Empty server-owned claim command; strictness rejects caller-selected extensions. */
 const _EmptyCommandSchema = z.object({}).strict();
 
-/** Parse one Zod model and retain stable field-path diagnostics for authority adapters. */
+/** Parse against a Zod model, keeping the failing field path so an HTTP adapter can report which field was wrong. */
 export function _ParseAgentControllerModel<T>(schema: z.ZodType<T>, value: unknown, sourceName: string): T
 {
 	const parsed = schema.safeParse(value);
@@ -58,7 +58,7 @@ export function _ParseAgentControllerCommand<T>(schema: z.ZodType<T>, value: unk
 	return parsed.success ? parsed.data : null;
 }
 
-/** Return whether a server-owned claim command contains no caller-selected fields. */
+/** Return whether a claim request body is empty. A claim carries no caller-supplied fields, so any field at all means the request is malformed. */
 export function ___IsEmptyAgentControllerCommand(value: unknown): boolean
 {
 	return _EmptyCommandSchema.safeParse(value).success;

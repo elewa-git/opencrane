@@ -16,13 +16,13 @@ const _START_EVENT_FAILURE_CODE = "external_action_start_event_failed";
 /** Process-scoped transaction owner for the complete ToolInvocation lifecycle. */
 export class PrismaToolInvocationUnitOfWork implements ToolInvocationUnitOfWork
 {
-	/** Canonical product-authority client that opens serializable units of work. */
+	/** Product-authority client that opens serializable units of work. */
 	private readonly _prisma: PrismaClient;
-	/** Canonical lifecycle event sink that shares every transition transaction. */
+	/** Writes run events for state changes, using the same transaction as the change itself. */
 	private readonly _lifecycleEvents: ToolInvocationLifecycleEventSink;
-	/** Canonical manual-recovery event sink that shares recovery transactions. */
+	/** Writes manual-recovery events, using the same transaction as the recovery change. */
 	private readonly _recoveryEvents: ToolInvocationRecoveryEventSink;
-	/** Runs-owned state authority participating in the same recovery transaction. */
+	/** Changes the run's state, implemented by the runs package and called inside this recovery transaction. */
 	private readonly _runRecovery: ToolInvocationRunRecoveryAuthority;
 
 	/** Construct the unit with explicit persistence and event authorities. */
@@ -93,7 +93,7 @@ export class PrismaToolInvocationUnitOfWork implements ToolInvocationUnitOfWork
 		});
 	}
 
-	/** Complete success, result delivery, and the canonical completion event atomically. */
+	/** Record success, its result delivery, and the completion event in one transaction. */
 	async completeSucceeded(claim: ToolInvocationClaim, result: JsonValue, now: Date): Promise<ToolInvocationCompletionResult>
 	{
 		const lifecycleEvents = this._lifecycleEvents;
@@ -108,7 +108,7 @@ export class PrismaToolInvocationUnitOfWork implements ToolInvocationUnitOfWork
 		});
 	}
 
-	/** Complete failure, result delivery, and the canonical failure event atomically. */
+	/** Record failure, its result delivery, and the failure event in one transaction. */
 	async completeFailed(claim: ToolInvocationClaim, failureCode: string, now: Date): Promise<ToolInvocationCompletionResult>
 	{
 		const lifecycleEvents = this._lifecycleEvents;

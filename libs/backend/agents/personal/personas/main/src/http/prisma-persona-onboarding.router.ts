@@ -7,7 +7,7 @@ import { __CreatePersonaOnboardingRouter } from "./persona-onboarding.router.js"
 import type { PersonaOnboardingCaller, PersonaOnboardingWorkflowPort } from "./persona-onboarding.router.types.js";
 import { PrismaPersonaPersistenceUnitOfWork } from "../profile/prisma-persona-persistence-unit-of-work.js";
 
-/** Maps authenticated request facts to the caller contract owned by persona onboarding. */
+/** Turns the authenticated request principal into the caller shape persona onboarding expects; null when the request is not authenticated. */
 function _resolveCaller(request: Parameters<typeof _ResolveRequestPrincipal>[0]): PersonaOnboardingCaller | null
 {
 	const principal = _ResolveRequestPrincipal(request);
@@ -15,15 +15,19 @@ function _resolveCaller(request: Parameters<typeof _ResolveRequestPrincipal>[0])
 }
 
 /**
- * Composes the Prisma-backed self-only persona onboarding router.
- * This is the sole persistence composition seam for the persona HTTP boundary. It constructs one
- * aggregate unit of work and supplies it through lifecycle-specific ports. The unit of work creates
- * each repository inside its exact transaction callback, while the route-level router remains
- * dependent only on ports.
+ * Builds the persona onboarding router with its Prisma-backed persistence.
  *
- * @param prisma - Canonical product-authority client.
- * @param logger - Process logger supplied by the app composition root.
- * @returns The configured persona onboarding router.
+ * This is the only place the persona HTTP routes are wired to Prisma. It builds one unit of work and
+ * passes it in as each of the lifecycle ports. The unit of work creates each repository inside its own
+ * transaction callback, so the router itself only ever sees ports.
+ *
+ * Called by: `apps/opencrane/src/app/routes.ts`, which mounts the result at /api/v1/me/persona.
+ *
+ * @param prisma - Prisma client for the product database.
+ * @param logger - Logger supplied by the app's composition root.
+ * @param workflow - Port notified after an interview starts and after a persona is approved.
+ * @returns An Express router to mount below /me/persona.
+ * @see PersonaPersistenceUnitOfWork
  */
 export function _CreatePersonaOnboardingRouter(prisma: PrismaClient, logger: Logger, workflow: PersonaOnboardingWorkflowPort): Router
 {

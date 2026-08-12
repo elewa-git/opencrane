@@ -64,7 +64,7 @@ export interface LedgerEntry
 	status: string | null;
 }
 
-/** Lifecycle supplied by the canvas-document authority. */
+/** Whether a canvas document is still a draft or is the published version for its scope. */
 export enum CanvasDocumentLifecycles
 {
 	/** An editable document that has not become the published reference. */
@@ -73,12 +73,12 @@ export enum CanvasDocumentLifecycles
 	Published = "published"
 }
 
-/** Save state supplied by the canvas-document owner; the renderer never fabricates it. */
+/** How a save is going. The renderer only displays this; it never sets it itself. */
 export enum CanvasDocumentSaveStates
 {
 	/** No save request is in flight. */
 	Idle = "idle",
-	/** The owner is admitting a requested save. */
+	/** A save is in progress. */
 	Saving = "saving",
 	/** The owner confirmed that the supplied document was saved. */
 	Saved = "saved",
@@ -150,7 +150,7 @@ export interface CanvasDocument
 	title: string;
 	/** Lifecycle supplied by the document authority. */
 	lifecycle: CanvasDocumentLifecycles;
-	/** Bounded provenance summary shown above the document content. */
+	/** Short line above the document saying where its content came from. */
 	provenance: string;
 	/** Source-supplied metadata values displayed below the heading. */
 	metadata: readonly string[];
@@ -164,6 +164,6 @@ export interface CanvasDocument
 	risks: readonly CanvasRisk[];
 	/** Number of citations that grounded this document. */
 	citationCount: number;
-	/** Scope levels from which the document's citations were admitted. */
+	/** The scope levels the document's citations came from. */
 	citationScopes: readonly ScopeLevel[];
 }

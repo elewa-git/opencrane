@@ -10,6 +10,7 @@ import { _log } from "./log.js";
  * an agent that cannot call a model.
  *
  * @param dependencies - Composed product persistence, Secret-custody, and deployment configuration dependencies.
+ * @see _ProvisionByokKey
  */
 export async function _BootstrapInitialModel(dependencies: InitialModelBootstrapDependencies): Promise<void>
 {

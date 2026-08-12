@@ -197,7 +197,7 @@ function _OwnerKey(owner: UserOnboardingOwner): { siloId: string; userId: string
 	return { siloId: owner.siloId, userId: owner.subjectId };
 }
 
-/** Translate the Prisma-owned enum into the package's stable domain vocabulary. */
+/** Translate Prisma's generated enum into this package's own enum, so a Prisma rename cannot reach the API. */
 function _ProjectState(state: UserOnboardingState): UserOnboardingStates
 {
 	const states: Record<UserOnboardingState, UserOnboardingStates> = {
@@ -210,7 +210,7 @@ function _ProjectState(state: UserOnboardingState): UserOnboardingStates
 	return states[state];
 }
 
-/** Translate nullable Prisma completion provenance into the stable domain vocabulary. */
+/** Translate Prisma's nullable `completionProvenance` column into this package's own enum. */
 function _ProjectCompletionProvenance(provenance: UserOnboardingCompletionProvenance | null): UserOnboardingCompletionProvenances | null
 {
 	if (provenance === null) return null;
@@ -245,21 +245,21 @@ function _ProjectUserOnboarding(row: Prisma.UserOnboardingGetPayload<Record<stri
 	};
 }
 
-/** Map the public colour vocabulary to Prisma's generated enum. */
+/** Map the public colour enum onto Prisma's generated colour enum. */
 function _PrismaColour(colour: UserOnboardingPersonaColours): PersonaColour
 {
 	const colours: Record<UserOnboardingPersonaColours, PersonaColour> = { [UserOnboardingPersonaColours.Red]: PersonaColour.Red, [UserOnboardingPersonaColours.Yellow]: PersonaColour.Yellow, [UserOnboardingPersonaColours.Green]: PersonaColour.Green, [UserOnboardingPersonaColours.Blue]: PersonaColour.Blue };
 	return colours[colour];
 }
 
-/** Map the public archetype vocabulary to Prisma's generated enum. */
+/** Map the public archetype enum onto Prisma's generated archetype enum. */
 function _PrismaArchetype(archetype: UserOnboardingBootstrapArchetypes): UserOnboardingBootstrapArchetype
 {
 	const archetypes: Record<UserOnboardingBootstrapArchetypes, UserOnboardingBootstrapArchetype> = { [UserOnboardingBootstrapArchetypes.Commander]: UserOnboardingBootstrapArchetype.Commander, [UserOnboardingBootstrapArchetypes.Catalyst]: UserOnboardingBootstrapArchetype.Catalyst, [UserOnboardingBootstrapArchetypes.Anchor]: UserOnboardingBootstrapArchetype.Anchor, [UserOnboardingBootstrapArchetypes.Analyst]: UserOnboardingBootstrapArchetype.Analyst };
 	return archetypes[archetype];
 }
 
-/** Map Prisma's generated archetype enum into the stable API vocabulary. */
+/** Map Prisma's generated archetype enum onto the public API enum. */
 function _ProjectArchetype(archetype: UserOnboardingBootstrapArchetype): UserOnboardingBootstrapArchetypes
 {
 	const archetypes: Record<UserOnboardingBootstrapArchetype, UserOnboardingBootstrapArchetypes> = { [UserOnboardingBootstrapArchetype.Commander]: UserOnboardingBootstrapArchetypes.Commander, [UserOnboardingBootstrapArchetype.Catalyst]: UserOnboardingBootstrapArchetypes.Catalyst, [UserOnboardingBootstrapArchetype.Anchor]: UserOnboardingBootstrapArchetypes.Anchor, [UserOnboardingBootstrapArchetype.Analyst]: UserOnboardingBootstrapArchetypes.Analyst };
@@ -272,7 +272,7 @@ function _ProjectContent(content: Prisma.UserOnboardingBootstrapContentRevisionG
 	return { id: content.id, revision: content.revision, archetype: _ProjectArchetype(content.archetype), primaryColour: _ProjectColour(content.primaryColour), sourceLabel: content.sourceLabel, digest: content.digest, opening: content.opening, questions: content.questions.map(function _Question(question) { return { ordinal: question.ordinal, prompt: question.prompt }; }) };
 }
 
-/** Map Prisma's generated colour enum into the stable API vocabulary. */
+/** Map Prisma's generated colour enum onto the public API enum. */
 function _ProjectColour(colour: PersonaColour): UserOnboardingPersonaColours
 {
 	const colours: Record<PersonaColour, UserOnboardingPersonaColours> = { [PersonaColour.Red]: UserOnboardingPersonaColours.Red, [PersonaColour.Yellow]: UserOnboardingPersonaColours.Yellow, [PersonaColour.Green]: UserOnboardingPersonaColours.Green, [PersonaColour.Blue]: UserOnboardingPersonaColours.Blue };

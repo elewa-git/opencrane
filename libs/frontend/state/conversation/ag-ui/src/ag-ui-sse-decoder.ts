@@ -5,7 +5,24 @@ import { ___ParseAndValidateJson } from "@opencrane/util";
 
 import type { AgUiStreamRecord } from "./ag-ui-stream.types.js";
 
-/** Decode one complete AG-UI SSE record, rejecting malformed or non-projection input. */
+/**
+ * Decodes one complete SSE frame into a record, or returns null to skip it.
+ *
+ * Returns null — never throws — for anything this stream does not handle: a malformed field line,
+ * more than one `id`, an `id` containing a newline, a missing or non-"ag-ui" `event`, no `data`, or
+ * data that is not a supported projection event. The caller should ignore a null and keep reading;
+ * a null is not a reason to fail the stream.
+ *
+ * Called by: OpenCraneConversationEventStream (state/conversation/adapter), once per frame split
+ * out of the response body.
+ *
+ * @param frame - One complete SSE frame, LF- or CRLF-delimited, without its trailing blank line.
+ * @returns The decoded record, or `null` meaning skip this frame.
+ * @see AG-UI protocol docs — the event schemas validated here (@ag-ui/core 0.0.57):
+ *   https://docs.ag-ui.com
+ * @see WHATWG HTML server-sent events — the frame grammar being parsed (field lines, `id`,
+ *   `event`, `data`, comment lines beginning `:`)
+ */
 export function __DecodeAgUiSseRecord(frame: string): AgUiStreamRecord | null
 {
 	const fields = new Map<string, string[]>();
@@ -33,7 +50,7 @@ export function __DecodeAgUiSseRecord(frame: string): AgUiStreamRecord | null
 	catch { return null; }
 }
 
-/** Return one exact-pinned supported projection event or reject the transport value. */
+/** Parse one event and check it is a type this reducer supports; throws otherwise. */
 function _ProjectionEvent(value: unknown): AgUiProjectionEvent
 {
 	const parsed = EventSchemas.safeParse(value);

@@ -37,7 +37,7 @@ function _resolveLocalReference(root: JsonValue, reference: string): JsonValue |
 	return current;
 }
 
-/** Conservatively discover secret annotations through local refs and schema combinators. */
+/** Look for secret markings anywhere in the schema, following local `$ref` links and `allOf`/`anyOf`/`oneOf` branches; a reference that cannot be resolved counts as secret. */
 function _containsSecretSchema(schema: JsonValue, root: JsonValue, visitedReferences = new Set<string>()): boolean
 {
 	if (Array.isArray(schema)) return schema.some(entry => _containsSecretSchema(entry, root, visitedReferences));
@@ -71,7 +71,7 @@ function _containsSecretSchema(schema: JsonValue, root: JsonValue, visitedRefere
 	return false;
 }
 
-/** Remove value-bearing annotations from a secret schema while retaining its input shape. */
+/** Strip the keywords in `_SECRET_VALUE_KEYWORDS` (`const`, `default`, `enum`, `example`, `examples`) from a secret schema, keeping the rest of its shape. */
 function _safeSchema(schema: JsonValue, inheritedSecret = false): JsonValue
 {
 	if (Array.isArray(schema)) return schema.map(function _project(entry) { return _safeSchema(entry, inheritedSecret); });
@@ -139,7 +139,7 @@ export function __IsDeferredToolApprovalReplacementAllowed(parametersSchema: Jso
 	return !_containsSecretSchema(parametersSchema, parametersSchema);
 }
 
-/** Derive detached, actor-safe proposed arguments and the exact decision-body schema. */
+/** Builds the redacted proposed arguments and the decision-body schema shown to the approver. */
 export function __ProjectDeferredToolApproval(parametersSchema: JsonValue, argumentsValue: JsonValue): DeferredToolApprovalProjection
 {
 	if (!__IsDeferredToolApprovalReplacementAllowed(parametersSchema))

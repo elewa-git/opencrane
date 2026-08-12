@@ -5,13 +5,21 @@ import { PrismaAgentRevisionModelSelectionRepository } from "@opencrane/backend/
 import type { PersonalConfigurationMaterializationTransaction, PersonalConfigurationMaterializationUnitOfWork, PersonalConfigurationMaterializationWork } from "./personal-configuration-materialization-unit-of-work.types.js";
 import { PrismaPersonalConfigurationMaterializationRepository } from "./prisma-personal-configuration-materialization.js";
 
-/** Maximum complete unit-of-work attempts used to resolve expected concurrency conflicts. */
+/** How many times the whole operation may be attempted when a conflict rolls it back. */
 const _MATERIALIZATION_ATTEMPT_LIMIT = 3;
 
 /** Prisma/PostgreSQL conflict codes that are safe to retry because the transaction rolled back. */
 const _RETRYABLE_MATERIALIZATION_CODES = new Set(["P0001", "P2002", "P2004", "P2034"]);
 
-/** Prisma implementation of the cross-domain personal materialisation unit of work. */
+/**
+ * Opens the Serializable transaction in which the proposal and the agent revision both change.
+ *
+ * Owns isolation and retries so the materialiser can concentrate on the order of writes.
+ *
+ * Constructed by: `_CreatePersonalConfigurationRouter`.
+ *
+ * @implements PersonalConfigurationMaterializationUnitOfWork
+ */
 export class PrismaPersonalConfigurationMaterializationUnitOfWork implements PersonalConfigurationMaterializationUnitOfWork
 {
 	/** Canonical product-authority database client. */
@@ -24,11 +32,17 @@ export class PrismaPersonalConfigurationMaterializationUnitOfWork implements Per
 	}
 
 	/**
-	 * Runs the complete cross-domain operation in one retry-safe serializable transaction.
+	 * Runs the whole operation in one Serializable transaction, retrying it when it is safe to.
 	 *
-	 * Each retry reconstructs both transaction-scoped repositories, ensuring no partial revision or
-	 * proposal state survives P0001, P2002, P2004, or P2034. Unexpected errors and an exhausted
-	 * attempt budget propagate to the application materializer for stable result translation.
+	 * Every retry builds both repositories again, so no half-written revision or proposal state
+	 * survives a P0001, P2002, P2004 or P2034 rollback — all four mean PostgreSQL discarded the
+	 * transaction, which is why they are the only codes retried.
+	 *
+	 * @param work - Runs once per attempt, so it must be safe to repeat.
+	 * @returns Whatever the work returned on the attempt that committed.
+	 * @throws Error for any other failure, and for a retryable conflict still present after the
+	 * third attempt, so {@link _PersonalConfigurationMaterializer} can log it once and return
+	 * `PersistenceUnavailable`.
 	 */
 	async run<Result>(work: PersonalConfigurationMaterializationWork<Result>): Promise<Result>
 	{
@@ -36,7 +50,7 @@ export class PrismaPersonalConfigurationMaterializationUnitOfWork implements Per
 		{
 			try
 			{
-				// 1. Bind both capability repositories to one transaction so neither can commit alone.
+				// 1. Build both repositories on one transaction, so neither can commit without the other.
 				return await this.prisma.$transaction(async function _RunTransaction(transaction): Promise<Result>
 				{
 					const repositories: PersonalConfigurationMaterializationTransaction = {
@@ -48,10 +62,10 @@ export class PrismaPersonalConfigurationMaterializationUnitOfWork implements Per
 			}
 			catch (error)
 			{
-				// 2. Retry only known rolled-back conflicts while a complete fresh attempt remains.
+				// 2. Retry only the conflicts that rolled the transaction back, and only while attempts remain.
 				if (_IsRetryableMaterializationConflict(error) && attempt < _MATERIALIZATION_ATTEMPT_LIMIT) continue;
 
-				// 3. Preserve the final error so the application boundary can log and translate it once.
+				// 3. Rethrow the last error so the materialiser logs and translates it once.
 				throw error;
 			}
 		}

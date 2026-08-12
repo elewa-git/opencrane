@@ -1,4 +1,4 @@
-/** Safety margin ensuring whole-second Kubernetes deadline rounding cannot extend authority. */
+/** One extra second subtracted, so rounding to whole seconds can never let a Job run past its expiry. */
 const _RELEASE_DEADLINE_SAFETY_SECONDS = 1;
 
 /**

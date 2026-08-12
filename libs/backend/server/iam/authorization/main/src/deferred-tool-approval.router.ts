@@ -10,7 +10,7 @@ type ParsedDecision =
 	| { readonly decision: DeferredToolDecisionKinds.Approved; readonly arguments: JsonValue }
 	| { readonly decision: DeferredToolDecisionKinds.Denied };
 
-/** Create the browser-session-authenticated, self-only deferred-tool approval router. */
+/** Creates the approval router: the caller is identified by their browser session and can only act on their own approvals. */
 export function __CreateDeferredToolApprovalRouter(dependencies: DeferredToolApprovalRouterDependencies): Router
 {
 	const router = Router();
@@ -115,7 +115,7 @@ function _decision(body: unknown): ParsedDecision | null
 	return { decision, arguments: argumentsValue as JsonValue };
 }
 
-/** Return whether one path or header coordinate contains a non-empty identifier. */
+/** Returns whether the value contains anything other than whitespace. */
 function _isNonEmptyString(value: string): boolean
 {
 	return value.trim().length > 0;

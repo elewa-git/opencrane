@@ -44,7 +44,7 @@ async function _IssueAttemptModelKey(request: AttemptModelKeyMintRequest): Promi
  * Both routers run in the trusted server namespace. Keeping their repositories together makes the
  * shared claim lease explicit without giving either controller endpoint runtime-stream authority.
  *
- * @param prisma - Canonical product-authority database client.
+ * @param prisma - The main product database client.
  * @param config - Frozen leases, assignment limits, and outbox-retention settings.
  * @param namespaces - Validated server, personal-runtime, and managed-runtime identity planes.
  * @param tokenReviewer - Reviewer fixed to the sole agent-controller ServiceAccount.
@@ -82,7 +82,7 @@ function _CreateControllerRuntimeComposition(prisma: PrismaClient, config: Inter
  * The reviewer validates a projected identity but leaves workload selection to the repositories,
  * so the server does not turn a controller claim into a broader worker credential.
  *
- * @param prisma - Canonical product-authority database client.
+ * @param prisma - The main product database client.
  * @param tokenReviewer - Reviewer that exposes only a validated skill workload identity.
  * @returns Skill bootstrap, input, and completion routers.
  */
@@ -114,7 +114,7 @@ function _CreateSkillWorkloadRuntimeComposition(prisma: PrismaClient, tokenRevie
  * Bootstrap and streaming must apply the same plane boundary. The durable dispatch authority stays
  * here because it owns the server-side interpretation of runtime candidates, never the runtime Job.
  *
- * @param prisma - Canonical product-authority database client.
+ * @param prisma - The main product database client.
  * @param config - Frozen command time-to-live and recovery settings.
  * @param namespaces - Validated server, personal-runtime, and managed-runtime identity planes.
  * @param tokenReviewer - Reviewer constrained to the two runtime identity planes.
@@ -152,7 +152,7 @@ function _CreateRuntimeProtocolComposition(prisma: PrismaClient, config: Interna
  * Each optional route validates its own deployment switch before a router exists. A missing switch
  * therefore leaves the capability unreachable instead of mounting a partially configured endpoint.
  *
- * @param prisma - Canonical product-authority database client.
+ * @param prisma - The main product database client.
  * @param authApi - Kubernetes TokenReview client for worker identity.
  * @param config - Frozen worker and replay configuration.
  * @param serverNamespace - Namespace containing the trusted server identity.
@@ -199,7 +199,7 @@ function _CreateOptionalRuntimeComposition(prisma: PrismaClient, authApi: k8s.Au
  * composition binds concrete authorities, while the route registry shows exactly which internal
  * area receives each router.
  *
- * @param prisma - Canonical product-authority database client.
+ * @param prisma - The main product database client.
  * @param authApi - Kubernetes TokenReview client for workload identity.
  * @param config - Frozen startup configuration shared with the internal body parser and workers.
  * @param memoryGateway - Process-wide authenticated memory-gateway client built once at startup.

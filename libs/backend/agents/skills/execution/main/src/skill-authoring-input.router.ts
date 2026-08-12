@@ -11,9 +11,13 @@ const _AUTHORING_AUDIENCE = "opencrane-skill-authoring";
 const _MAX_AUTHORING_ARCHIVE_BYTES = 16 * 1024 * 1024;
 
 /**
- * Build the projected-token and NetworkPolicy-protected authoring-only immutable skill-input boundary.
+ * Build the route that streams a draft skill's source bytes to its authoring worker.
+ *
+ * Only an authoring worker can reach it: NetworkPolicy limits which Pods may connect, and the route
+ * TokenReviews the worker's projected token before it reads anything.
+ *
  * @see apps/opencrane/helm/templates/_networkpolicy.tpl — sole worker-to-server egress allowance.
- * @see apps/agent-controller/helm/templates/_skill-workload-admission.tpl — admitted Job identity contract.
+ * @see apps/agent-controller/helm/templates/_resources.tpl — admitted Job identity contract.
  */
 export function __CreateSkillAuthoringInputRouter(dependencies: SkillAuthoringInputRouterDependencies): Router
 {
@@ -51,13 +55,13 @@ export function __CreateSkillAuthoringInputRouter(dependencies: SkillAuthoringIn
 			const first = await reader.read();
 			response.status(200).set({ "content-type": input.mediaType, "content-length": String(input.byteLength), "cache-control": "no-store" });
 			const stream = Readable.from(_ReadBytes(reader, first));
-			/** Terminate a half-written protected response without serialising its broker failure. */
+			/** Destroy a response that is already partly written, logging the error instead of putting it in the body. */
 			function _AbortStream(err: Error): void
 			{
 				dependencies.logger.error({ err, operation: "skill_authoring.input" }, "Skill authoring input stream failed");
 				response.destroy(err);
 			}
-			/** Cancel the private upstream fetch when the worker closes its internal response. */
+			/** Stop reading from ArtifactStore when the worker closes the connection. */
 			function _CancelSource(): void
 			{
 				void reader.cancel().catch(function _IgnoreCancellationFailure(): void {});
@@ -75,7 +79,7 @@ export function __CreateSkillAuthoringInputRouter(dependencies: SkillAuthoringIn
 	return router;
 }
 
-/** Yield a prefetched chunk, then relay the remaining private response while preserving its errors. */
+/** Yield the chunk already read, then the rest, letting any read error propagate. */
 async function* _ReadBytes(reader: ReadableStreamDefaultReader<Uint8Array>, first: ReadableStreamReadResult<Uint8Array>): AsyncGenerator<Uint8Array>
 {
 	if (!first.done) yield first.value;
@@ -87,13 +91,13 @@ async function* _ReadBytes(reader: ReadableStreamDefaultReader<Uint8Array>, firs
 	}
 }
 
-/** Parse one standard bearer value without accepting multiple credentials. */
+/** Read the token from a single `Bearer <token>` header, rejecting anything else. */
 function _Bearer(value: string | undefined): string | null
 {
 	return value && /^Bearer ([^\s,]+)$/u.test(value) ? /^Bearer ([^\s,]+)$/u.exec(value)?.[1] ?? null : null;
 }
 
-/** Validate a durable workload coordinate before it reaches the persistence adapter. */
+/** Check the workload id is short and free of control characters before it reaches the database. */
 function _Coordinate(value: unknown): string | null
 {
 	return typeof value === "string" && value.length > 0 && value.length <= 256 && !/[\u0000-\u001f\u007f]/.test(value) ? value : null;

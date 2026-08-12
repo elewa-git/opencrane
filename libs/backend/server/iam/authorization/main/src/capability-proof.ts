@@ -309,7 +309,7 @@ function _capabilityBindingFailure(expectation: CapabilityProofExpectation): Cap
 	if (capability.attempt !== binding.attempt) return "attempt_mismatch";
 	if (capability.proofKeyThumbprint !== binding.proofKeyThumbprint) return "proof_key_mismatch";
 
-	// 3. Policy, resource, action, and argument bindings prevent redirecting valid proof possession.
+	// 3. Policy, resource, action, and argument checks stop a valid proof being pointed at something else.
 	if (!_capabilityReferencesEqual(capability.capability, binding.capability)) return "capability_reference_mismatch";
 	if (!__AuthorizationResourcesEqual(capability.resource, binding.resource)) return "resource_mismatch";
 	if (capability.action !== binding.action) return "action_mismatch";

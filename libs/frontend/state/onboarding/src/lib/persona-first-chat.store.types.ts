@@ -1,25 +1,42 @@
-/** Finite route-instance commands that own first-chat transport admission. */
+/**
+ * Which command the first-chat store is currently running, if any.
+ *
+ * Only one command runs at a time: while this is anything other than `Idle`, the store refuses new
+ * commands rather than queueing them. The feature layer also reads it to pick the visible state —
+ * `Entering` shows the loading screen, `Answering` disables the composer, `Concluding` shows the
+ * finishing screen.
+ *
+ * @see PersonaFirstChatStore
+ */
 export enum PersonaFirstChatCommandPhases
 {
-	/** No first-chat command currently owns admission. */
+	/** Nothing is running; a new command is allowed. */
 	Idle = "idle",
-	/** The route is reading, starting, or resuming its authoritative conversation. */
+	/** Route entry is running: reading state, and starting or concluding the chat if needed. */
 	Entering = "entering",
-	/** One exact answer intent is being admitted. */
+	/** An answer is being sent. */
 	Answering = "answering",
-	/** Server-validated completion is being requested. */
+	/** The conclude call is in flight. */
 	Concluding = "concluding"
 }
 
-/** Retry-stable coordinates for one owner answer awaiting authoritative admission. */
+/**
+ * An answer the store is holding on to because sending it failed.
+ *
+ * Kept so Retry sends the identical answer, with the identical `idempotencyKey`, rather than a new
+ * one — that is what stops a retry recording a second answer. Cleared once the server accepts it,
+ * or once the server reports a conflict, because in both cases the answer is settled.
+ *
+ * @see PersonaFirstChatStore.retry
+ */
 export interface PersonaFirstChatPendingAnswer
 {
-	/** Exact conversation returned by the latest authoritative projection. */
+	/** The conversation id this answer was written against. */
 	readonly expectedConversationId: string;
-	/** Exact one-based question coordinate returned by the server. */
+	/** The question number this answer was written against. */
 	readonly expectedQuestionOrdinal: number;
-	/** Normalised non-empty owner answer retained across transport failure. */
+	/** The trimmed answer text, kept so a retry sends exactly the same thing. */
 	readonly text: string;
-	/** Conversation-local key reused only for this exact answer intent. */
+	/** Retry key. Reused on every retry of this answer; a different answer gets a new one. */
 	readonly idempotencyKey: string;
 }

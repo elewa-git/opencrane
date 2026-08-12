@@ -1,5 +1,5 @@
 /**
- * OpenTelemetry bootstrap for the canonical artifact-byte boundary.
+ * OpenTelemetry bootstrap for the artifact-service process, which owns the canonical artifact bytes.
  *
  * Imported first by the process entry point so the mounted-volume preparation and HTTP listener
  * are covered before application modules load.

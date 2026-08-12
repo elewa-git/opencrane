@@ -10,7 +10,7 @@ from .candidates import candidate, normalize_event, tool_call_candidate
 
 
 class RuntimeEventProjector:
-    """Stateful neutral-to-canonical projection for exactly one accepted command."""
+    """Projects one accepted command's neutral events into canonical candidates, keeping state across them."""
 
     def __init__(
         self,
@@ -61,7 +61,7 @@ class RuntimeEventProjector:
         self._post_candidate(candidate(self._coordinates, normalized[0], normalized[1]))
 
     def complete_message(self) -> None:
-        """Close a started message once, while leaving an interrupted partial stream open."""
+        """Close a started message once; if its stream was interrupted part-way, leave it open."""
         # No synthetic empty message is created when the model produces only usage, errors, or tools.
         if not self._message_started:
             return
@@ -77,7 +77,7 @@ class RuntimeEventProjector:
         self._message_started = False
 
     def _emit_tool_call(self, neutral_event: dict[str, object]) -> None:
-        """Emit a request and retain only the identity needed to match its saved result."""
+        """Emit the request and keep only the id needed to match its saved result later."""
         proposal = tool_call_candidate(
             self._coordinates,
             self._compiled_input,

@@ -17,19 +17,19 @@ function _Profiles()
 	};
 }
 
-/** Return one database-fenced authoring workload claim. */
+/** Return one authoring workload claim. */
 function _Claim()
 {
 	return { workloadId: "workload_1", siloId: "silo-a", kind: "authoring" as const, skillRevisionId: "revision-1", claimedAt: "2026-07-24T00:00:00.000Z", deliveryCount: 2, expiresAt: "2026-07-24T00:00:30.000Z" };
 }
 
-/** Compose an authority with fail-fast defaults for operations a test does not use. */
+/** Build an authority whose unused methods throw if a test calls them. */
 function _Authority(overrides: Partial<SkillWorkloadControllerAuthority>): SkillWorkloadControllerAuthority
 {
 	return { async __Claim() { return null; }, async __CommitAssignment() { throw new Error("unexpected assignment commit"); }, async __ClaimRelease() { return null; }, async __CommitRelease() { throw new Error("unexpected release commit"); }, async __RegisterFirstPod() { throw new Error("unexpected Pod registration"); }, ...overrides };
 }
 
-/** Compose a Kubernetes port with a fail-fast default. */
+/** Build a Kubernetes adapter whose unused methods throw if a test calls them. */
 function _Kubernetes(overrides: Partial<SkillWorkloadControllerKubernetesStore>): SkillWorkloadControllerKubernetesStore
 {
 	return { async __EnsureSuspendedJob() { throw new Error("unexpected Job"); }, async __EnsureSkillJobReleased() { throw new Error("unexpected Job release"); }, async __FindFirstSkillWorkloadPod() { throw new Error("unexpected Pod lookup"); }, ...overrides };

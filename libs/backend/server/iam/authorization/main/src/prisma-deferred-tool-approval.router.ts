@@ -9,7 +9,7 @@ import type { DeferredToolApprovalCaller } from "./deferred-tool-approval.router
 import { PrismaDeferredToolApprovalDecisionRepository } from "./prisma-deferred-tool-approval-decision-repository.js";
 import { PrismaSelfDeferredToolApprovalReadUnitOfWork } from "./prisma-self-deferred-tool-approval-list-repository.js";
 
-/** Maps authenticated request facts to the caller contract owned by approval decisions. */
+/** Reads the signed-in subject and silo from the request, or returns null when there is no session. */
 function _resolveCaller(request: Parameters<typeof _ResolveRequestPrincipal>[0]): DeferredToolApprovalCaller | null
 {
 	const principal = _ResolveRequestPrincipal(request);

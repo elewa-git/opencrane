@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# Read-only database evidence classifier. The deploy engine owns all manifest-derived inputs and
+# Classifies the live database's state, read-only. The deploy engine owns all manifest-derived inputs and
 # decides what to do with the returned state; this module never selects a version or changes state.
 
 _database_convergence_error()

@@ -12,7 +12,7 @@ export function _AgentRuntimeAttemptKeySecretName(bootstrapReference: string): s
 	return suffix.length === 32 ? `litellm-key-${suffix}` : "litellm-key-profilevalidation";
 }
 
-/** Build one immutable, Job-owned Secret carrying bounded transient attempt-key data. */
+/** Build an immutable Secret owned by the Job, holding the short-lived key data for one attempt. */
 function _BuildAgentRuntimeKeySecret(persistedJob: V1Job, workloadUid: string, secretName: string, stringData: Record<string, string>): V1Secret
 {
 	const namespace = persistedJob.metadata?.namespace;

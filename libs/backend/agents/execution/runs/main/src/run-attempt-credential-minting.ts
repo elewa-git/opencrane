@@ -18,7 +18,7 @@ export function _BuildRunAttemptCredentialMintInputs(input: RunAttemptCredential
 	};
 }
 
-/** Mint the transient model credential after the claim transaction has released every database lock. */
+/** Mints the short-lived model key, only after the claim transaction has committed and released its database locks. */
 export async function _MintRunAttemptCredentials(claimed: ClaimedAttemptWithMintInputs, issueAttemptModelKey: AttemptModelKeyIssuer): Promise<ClaimNextRunAttemptResult>
 {
 	const minted = await issueAttemptModelKey({ keyAlias: claimed.keyAlias, modelAlias: claimed.modelAlias, siloId: claimed.attempt.siloId, maxBudgetUsd: claimed.maxBudgetUsd, expirySeconds: claimed.expirySeconds });
@@ -26,7 +26,7 @@ export async function _MintRunAttemptCredentials(claimed: ClaimedAttemptWithMint
 	return { status: RunDispatchResultStatuses.Claimed, claim: { lease: claimed.lease, attempt: { ...claimed.attempt, litellmKey: minted.key } } };
 }
 
-/** Extract the single model alias frozen into the snapshot's server-selected route. */
+/** Reads the one model alias the snapshot's model route pins, or null when it is missing or malformed. */
 function _SnapshotModelAlias(modelRoute: unknown): string | null
 {
 	if (!modelRoute || typeof modelRoute !== "object" || Array.isArray(modelRoute)) return null;
@@ -36,7 +36,7 @@ function _SnapshotModelAlias(modelRoute: unknown): string | null
 	return alias.trim().length > 0 && alias.length <= 128 ? alias : null;
 }
 
-/** Derive the positive US-dollar spend ceiling from the snapshot's micro-dollar cost policy. */
+/** Converts the snapshot's budget from micro-dollars to US dollars, or null when it is missing or not positive. */
 function _SnapshotMaxBudgetUsd(budgetPolicy: unknown): number | null
 {
 	if (!budgetPolicy || typeof budgetPolicy !== "object" || Array.isArray(budgetPolicy)) return null;

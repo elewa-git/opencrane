@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# Reconciles the one namespace-local credential that lets a private first-party registry remain
+# Reconciles the one namespace-local credential that lets the cluster pull from a private first-party registry.
 # private. It never accepts credential bytes through Helm values or command arguments.
 ensure_registry_pull_secret()
 {

@@ -7,7 +7,7 @@ import type { ConversationModes, ConversationLifecycles } from "./conversation.t
  */
 export enum ConversationCommandKinds
 {
-	/** Admit new participant input through the mode-correct message path. */
+	/** Submit a new message. What that does depends on the conversation's mode. */
 	SubmitMessage = "submit_message",
 	/** Continue the currently active agent-session run with steering. */
 	SteerRun = "steer_run",
@@ -18,9 +18,11 @@ export enum ConversationCommandKinds
 }
 
 /**
- * Stable allowed actions returned by conversation strategy decisions.
+ * What a caller is permitted to do after {@link __DecideConversationCommand} allows a command.
  *
- * These actions route a command to an existing authority and never perform persistence themselves.
+ * Each value names exactly one thing to perform. The decision itself writes nothing, so the caller
+ * must carry out the named action and must not perform any other write on the strength of an
+ * allowed decision.
  */
 export enum ConversationCommandActions
 {
@@ -35,13 +37,15 @@ export enum ConversationCommandActions
 }
 
 /**
- * Stable fail-closed reasons returned by conversation strategy decisions.
+ * Why a conversation command was denied.
  *
- * Values distinguish malformed durable binding from lifecycle and mode denials for audit without granting authority.
+ * Every value means the same thing to the caller: do not write. They differ so an audit, and an
+ * HTTP layer choosing a status code, can tell a stored-data problem from a lifecycle or mode
+ * refusal. None of them means "retry and it may work".
  */
 export enum ConversationCommandDenialReasons
 {
-	/** Persisted mode and optional agent-service binding violate the exact mode invariant. */
+	/** The stored mode and agent binding disagree — an agent-session conversation with no agent, or a direct or group conversation with one. The stored row is wrong, so no retry helps. */
 	InvalidAgentBinding = "invalid_agent_binding",
 	/** Conversation lifecycle is closed and therefore denies every write. */
 	ConversationClosed = "conversation_closed",
@@ -49,9 +53,9 @@ export enum ConversationCommandDenialReasons
 	CommandNotSupportedByMode = "command_not_supported_by_mode",
 	/** Agent-session continuation has no active foreground run to target. */
 	NoActiveRun = "no_active_run",
-	/** Supplied run coordinate does not match the active foreground run. */
+	/** The command's `targetRunId` is not the conversation's active run, so the caller is steering a run that has already moved on. */
 	ActiveRunMismatch = "active_run_mismatch",
-	/** Command, mode, or lifecycle is outside the exhaustive owned vocabulary. */
+	/** The command, mode, or lifecycle is not a value this model knows — usually stored data from a newer or older version. */
 	UnsupportedCommand = "unsupported_command",
 }
 
@@ -74,7 +78,7 @@ export interface SteerRunConversationCommand
 {
 	/** Discriminant selecting active-run steering. */
 	readonly kind: ConversationCommandKinds.SteerRun;
-	/** Run coordinate that must equal the conversation's active foreground run. */
+	/** Run id that must equal the conversation's active run, or the command is denied. */
 	readonly targetRunId: string;
 }
 
@@ -83,14 +87,14 @@ export interface AnswerElicitationConversationCommand
 {
 	/** Discriminant selecting active-run elicitation response. */
 	readonly kind: ConversationCommandKinds.AnswerElicitation;
-	/** Run coordinate that must equal the conversation's active foreground run. */
+	/** Run id that must equal the conversation's active run, or the command is denied. */
 	readonly targetRunId: string;
 }
 
 /** Exhaustive commands owned by the immutable conversation-mode strategies. */
 export type ConversationCommand = SubmitMessageConversationCommand | CloseConversationCommand | SteerRunConversationCommand | AnswerElicitationConversationCommand;
 
-/** Durable facts required for a pure conversation command decision. */
+/** What {@link __DecideConversationCommand} needs: the conversation's stored mode, lifecycle, agent binding, and active run, plus the command being attempted. Read all four from storage — never from the request. */
 export interface ConversationCommandContext
 {
 	/** Immutable persisted mode selecting the behaviour strategy. */
@@ -114,7 +118,7 @@ export interface AllowedConversationCommandDecision
 	readonly action: ConversationCommandActions;
 }
 
-/** Denied pure strategy result with one stable fail-closed reason. */
+/** A denial. Perform no write; the `reason` is safe to log and to map to an HTTP status. */
 export interface DeniedConversationCommandDecision
 {
 	/** Negative result discriminant. */

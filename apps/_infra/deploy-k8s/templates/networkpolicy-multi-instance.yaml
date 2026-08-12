@@ -9,7 +9,7 @@
   The per-tenant policies (networkpolicy.yaml / networkpolicy-planes.yaml) only
   scope traffic *within* a single install; on their own they do NOT stop a pod in
   instance A's namespace from reaching a service in instance B's namespace. This
-  template adds that missing boundary: a deny-by-default ingress posture across
+  template adds that missing boundary: deny-by-default ingress across
   every namespace this instance owns, with explicit allows only for same-instance
   traffic plus the egress every pod needs (cluster DNS + intra-instance).
 
@@ -40,7 +40,7 @@ metadata:
 spec:
   # ArtifactStore, agent-controller, and the PostgreSQL pooler have stricter app policies; each
   # agent-runtime Job has a controller-built policy. Exclude them because this additive
-  # same-instance allowance would widen their deliberately tiny ingress/egress surfaces. CNPG
+  # same-instance allowance would widen their deliberately tiny ingress/egress rules. CNPG
   # identifies generated pooler pods with cnpg.io/poolerName.
   podSelector:
     matchExpressions:
@@ -76,7 +76,7 @@ spec:
           protocol: TCP
     {{- end }}
     # Allow egress to any namespace this instance owns (intra-instance traffic),
-    # so same-instance services stay reachable under the default-deny posture.
+    # so same-instance services stay reachable under the default-deny policy.
     - to:
         - namespaceSelector:
             matchExpressions:

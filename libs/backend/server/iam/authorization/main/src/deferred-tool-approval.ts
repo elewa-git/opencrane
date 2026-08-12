@@ -11,7 +11,7 @@ import type { DeferToolRequestCommand, DeferToolRequestResult } from "./deferred
 import { ToolInvocationStates } from "./tool-invocation-lifecycle.types.js";
 import { __FindToolInvocationInTransaction, __MarkToolInvocationApprovalRejectedInTransaction, __MarkToolInvocationApprovedInTransaction } from "./prisma-tool-invocation-repository.js";
 
-/** Map the two run states that may own a live approval batch into the lifecycle authority. */
+/** Converts the only two run states that can have open approvals into the lifecycle enum; anything else gives null. */
 function _approvalRunState(state: AgentRunState): DeferredToolApprovalRunStates | null
 {
 	if (state === AgentRunState.Running) return DeferredToolApprovalRunStates.Running;
@@ -179,7 +179,7 @@ export async function __DecideDeferredToolRequest(transaction: Prisma.Transactio
 		return await _ExpireDeferredToolApproval(transaction, approval, command.now) ? { outcome: "expired" } : { outcome: "conflict" };
 	}
 
-	// 3. Denial records one explicit result delivery and terminalises the awaiting action truthfully.
+	// 3. Denial writes the result delivery, then terminalises the waiting action with the real reason.
 	if (command.decision === DeferredToolDecisionKinds.Denied)
 	{
 		if (command.arguments !== undefined) return { outcome: "invalid_arguments" };
@@ -199,7 +199,7 @@ export async function __DecideDeferredToolRequest(transaction: Prisma.Transactio
 	const finalArguments = ___CloneCanonicalJson(command.arguments);
 	const finalArgumentsDigest = __DigestCanonicalJson(finalArguments);
 
-	// 5. Approve atomically and make only the normalized reviewed replacement dispatch-effective.
+	// 5. Approve in one transaction so only the normalized reviewed arguments are the ones dispatch will use.
 	const approved = await transaction.approvalRequest.updateMany({
 		where: { id: command.approvalRequestId, state: ApprovalRequestState.Pending, expiresAt: { gt: command.now } },
 		data: {
@@ -215,7 +215,7 @@ export async function __DecideDeferredToolRequest(transaction: Prisma.Transactio
 	await _FinishDeferredToolApprovalBatch(transaction, approval.runId, approval.attempt, DeferredToolApprovalLifecycleEvents.Decision);
 	return { outcome: "approved", argumentsDigest: finalArgumentsDigest };
 }
-/** Terminalise a just-expired owner-bound request after a decision compare-and-set loses its fence. */
+/** After the decision update matched no row: expire the request if its deadline has passed, otherwise report a conflict. */
 async function _conflictOrExpire(transaction: Prisma.TransactionClient, command: DecideDeferredToolRequestCommand): Promise<DecideDeferredToolRequestResult>
 {
 	const approval = await transaction.approvalRequest.findUnique({ where: { id: command.approvalRequestId } });
@@ -223,7 +223,7 @@ async function _conflictOrExpire(transaction: Prisma.TransactionClient, command:
 	return await _ExpireDeferredToolApproval(transaction, approval, command.now) ? { outcome: "expired" } : { outcome: "conflict" };
 }
 
-/** Close every due request for one waiting attempt and resume only after its final pending row. */
+/** Expires every approval past its deadline for this attempt, and resumes the run once none are left pending. */
 export async function __ExpireDeferredToolApprovalBatch(transaction: Prisma.TransactionClient, command: ExpireDeferredToolApprovalBatchCommand): Promise<ExpireDeferredToolApprovalBatchResult>
 {
 	const run = await transaction.agentRun.findUnique({ where: { id: command.runId } });
@@ -249,7 +249,7 @@ async function _ExpireDeferredToolApproval(transaction: Prisma.TransactionClient
 	return true;
 }
 
-/** Keep the run waiting while requests remain, or atomically resume after the final result marker. */
+/** Leaves the run waiting while approvals are still pending, or moves it back to Running once the last one is resolved. */
 async function _FinishDeferredToolApprovalBatch(transaction: Prisma.TransactionClient, runId: string, attempt: number, event: DeferredToolApprovalLifecycleEvents.Decision | DeferredToolApprovalLifecycleEvents.Expiry): Promise<void>
 {
 	const pendingCount = await transaction.approvalRequest.count({ where: { runId, attempt, state: ApprovalRequestState.Pending } });

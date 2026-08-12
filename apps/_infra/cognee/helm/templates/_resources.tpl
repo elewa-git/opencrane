@@ -113,7 +113,7 @@ spec:
             # `optional: true`: on first install the Secret doesn't exist yet until the
             # operator's boot-time reconcile creates it, so Cognee must start without it
             # rather than crash-loop; embedding/LLM calls fail until the key appears and this
-            # pod is restarted (same bootstrap posture already accepted for tenant LiteLLM keys).
+            # pod is restarted (same bootstrap behaviour already accepted for tenant LiteLLM keys).
             - name: LLM_PROVIDER
               value: {{ .Values.clustertenantManager.cognee.llm.provider | quote }}
             - name: LLM_MODEL

@@ -14,7 +14,7 @@ export interface AgentControllerProcessConfig
 	readonly outboxPruneIntervalMilliseconds: number;
 	/** Hard timeout independently applied to each OpenCrane or Kubernetes call. */
 	readonly requestTimeoutMilliseconds: number;
-	/** Immutable runtime profiles keyed by authority-owned profile name. */
+	/** Immutable runtime profiles, keyed by the profile name the control plane assigns. */
 	readonly profiles: AgentControllerRuntimeProfiles;
 	/** Immutable profiles for the only governed skill Job classes. */
 	readonly skillWorkloadProfiles: SkillWorkloadControllerProfiles;

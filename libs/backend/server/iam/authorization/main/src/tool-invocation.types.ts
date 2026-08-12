@@ -2,7 +2,7 @@ import type { JsonValue } from "@opencrane/util";
 
 import { TOOL_INVOCATION_PREPARATION_POLICY, type ExternalActionClaimKinds, type ExternalActionRecoveryModes, type ToolInvocationStates } from "./tool-invocation-lifecycle.types.js";
 
-/** Fixed product policy for provider-free preparation recovery. */
+/** Retry limits for the preparation phase, which runs before any provider is called. */
 export interface ToolInvocationPreparationPolicy
 {
 	/** Maximum provider-free preparation attempts. Production fixes this to three. */
@@ -13,7 +13,7 @@ export interface ToolInvocationPreparationPolicy
 	readonly retryDelayMilliseconds: number;
 }
 
-/** Trusted request identity persisted with one candidate before runtime memory is discarded. */
+/** Runtime, command, and candidate ids stored with the invocation so it outlives the runtime process. */
 export interface ToolInvocationRequestIdentity
 {
 	/** Runtime instance admitted by the current stream fence. */
@@ -24,7 +24,7 @@ export interface ToolInvocationRequestIdentity
 	readonly candidateId: string;
 }
 
-/** Complete immutable candidate authority persisted in Preparing state. */
+/** Everything about a proposed tool call that is written when the invocation is created in Preparing state. */
 export interface ToolInvocationIntent
 {
 	/** Silo that owns the run and integration authority. */
@@ -53,13 +53,13 @@ export interface ToolInvocationIntent
 	readonly requestFingerprint: string;
 	/** Whether provider dispatch must wait for authenticated approval. */
 	readonly approvalRequired: boolean;
-	/** Trusted-adapter recovery capability frozen before any provider dispatch begins. */
+	/** What the adapter may do if a dispatch outcome is unknown; fixed before the first provider call. */
 	readonly recoveryMode: ExternalActionRecoveryModes;
 	/** Stable provider idempotency/readback key, present only when the trusted mode requires it. */
 	readonly recoveryKey: string | null;
 }
 
-/** Durable ToolInvocation projection returned after every CAS decision. */
+/** The stored ToolInvocation row as callers see it, returned after every conditional update. */
 export interface ToolInvocationRecord
 {
 	/** Database identity used only inside trusted server packages. */
@@ -125,7 +125,7 @@ export type ToolInvocationAdmissionResult =
 	| { readonly outcome: "admitted" | "idempotent"; readonly invocation: ToolInvocationRecord }
 	| { readonly outcome: "conflict" };
 
-/** Fenced claim that permits exactly one provider strategy operation. */
+/** Proof that this worker may run one provider operation, for as long as its fence still matches the row. */
 export interface ToolInvocationClaim
 {
 	/** Durable invocation identity. */
@@ -144,7 +144,7 @@ export type ToolInvocationClaimResult =
 	| { readonly outcome: "winner"; readonly invocation: ToolInvocationRecord }
 	| { readonly outcome: "missing" };
 
-/** Exact runtime tool-result delivery body persisted before command minting. */
+/** Result body stored for the runtime, written before the server creates the command that delivers it. */
 export type ToolResultDeliveryPayload =
 	| { readonly toolInvocationId: string; readonly outcome: "succeeded"; readonly result: JsonValue }
 	| { readonly toolInvocationId: string; readonly outcome: "failed"; readonly failureCode: string };
@@ -164,7 +164,7 @@ export interface ToolInvocationTransitionResult
 	readonly invocation: ToolInvocationRecord | null;
 }
 
-/** Canonical run-event kinds emitted by the server-owned external-action worker. */
+/** Run-event kinds emitted by the server-owned external-action worker. */
 export enum ToolInvocationEventTypes
 {
 	/** A fenced provider operation is about to begin. */
@@ -181,14 +181,14 @@ export type ToolInvocationLifecycleEvent =
 	| { readonly runId: string; readonly attempt: number; readonly eventType: ToolInvocationEventTypes.Completed; readonly payload: { readonly toolInvocationId: string } }
 	| { readonly runId: string; readonly attempt: number; readonly eventType: ToolInvocationEventTypes.Failed; readonly payload: { readonly toolInvocationId: string; readonly reason: string; readonly retryCount: number; readonly retryLimit: number; readonly retrying: boolean } };
 
-/** Transaction-bound sink for canonical tool lifecycle events. */
+/** Appends tool lifecycle events using the caller's transaction. */
 export interface ToolInvocationLifecycleEventSink
 {
 	/** Append one lifecycle event in the invocation transition transaction. */
 	appendInTransaction(transaction: unknown, event: ToolInvocationLifecycleEvent): Promise<boolean>;
 }
 
-/** Safe server-owned evidence appended when automatic provider recovery cannot continue. */
+/** Run event written when automatic recovery gives up and a person must decide what happened. */
 export interface ToolInvocationRecoveryEvent
 {
 	/** Run entering its explicit recovery-required state. */
@@ -205,17 +205,20 @@ export interface ToolInvocationRecoveryEvent
 	readonly providerOutcome: "unknown_after_dispatch";
 }
 
-/** Transaction-bound canonical event sink injected without reversing domain ownership. */
+/**
+ * Appends recovery events using the caller's transaction, so this package does not have to depend on the runs package.
+ * @see ToolInvocationRunRecoveryAuthority
+ */
 export interface ToolInvocationRecoveryEventSink
 {
 	/** Append one recovery event in the invocation/run state transition transaction. */
 	appendInTransaction(transaction: unknown, event: ToolInvocationRecoveryEvent): Promise<boolean>;
 }
 
-/** Exact run-attempt coordinate changed only beside a ToolInvocation recovery transition. */
+/** Run and attempt whose state may change, and only in the same transaction as an invocation entering recovery. */
 export interface ToolInvocationRunRecoveryCommand
 {
-	/** Run whose automatic provider work is changing recovery posture. */
+	/** Run whose automatic provider work is changing its recovery state. */
 	readonly runId: string;
 	/** Current attempt protected by the run-state compare-and-set. */
 	readonly attempt: number;
@@ -242,7 +245,7 @@ export enum ToolInvocationRunRecoveryEnterResults
 /** Exact runs-owned decision when an invocation requires manual recovery. */
 export type ToolInvocationRunRecoveryEnterResult = ToolInvocationRunRecoveryEnterResults;
 
-/** Runs-owned state port injected into the authorization-owned invocation transaction. */
+/** Run-state operations the runs package provides, called inside this package's invocation transaction. */
 export interface ToolInvocationRunRecoveryAuthority
 {
 	/** Enter visible manual recovery in the caller-owned invocation transaction. */
@@ -256,13 +259,13 @@ interface ToolInvocationOperations
 {
 	/** Load one invocation from its accepted candidate coordinates. */
 	findByCandidate(runId: string, attempt: number, candidateId: string): Promise<ToolInvocationRecord | null>;
-	/** Return at most one invocation whose exact current run attempt permits worker progress. */
+	/** Return one invocation the worker may act on now, or null; only the run's current attempt qualifies. */
 	findNextRunnable(now: Date): Promise<ToolInvocationRecord | null>;
 	/** Record provider-free preparation success under the observed lifecycle revision. */
 	markPrepared(invocationId: string, expectedRevision: number, now: Date): Promise<ToolInvocationRecord | null>;
 	/** Consume one failed preparation attempt and append its canonical failure event atomically. */
 	recordPreparationFailure(invocationId: string, expectedRevision: number, now: Date, policy: ToolInvocationPreparationPolicy, failureCode: string): Promise<ToolInvocationRecord | null>;
-	/** Acquire a monotonic provider operation claim or return the durable CAS winner. */
+	/** Take a claim on the next provider operation, or return the stored row when another worker claimed it first. */
 	claim(invocationId: string, kind: ExternalActionClaimKinds, now: Date, leaseMilliseconds: number): Promise<ToolInvocationClaimResult>;
 	/** Complete success, delivery intent, and its canonical lifecycle event atomically. */
 	completeSucceeded(claim: ToolInvocationClaim, result: JsonValue, now: Date): Promise<ToolInvocationCompletionResult>;
@@ -288,7 +291,7 @@ export interface ToolInvocationTransactionRepository
 	findById(invocationId: string): Promise<ToolInvocationRecord | null>;
 	/** Load one invocation from its accepted candidate coordinates. */
 	findByCandidate(runId: string, attempt: number, candidateId: string): Promise<ToolInvocationRecord | null>;
-	/** Return at most one invocation whose exact current run attempt permits worker progress. */
+	/** Return one invocation the worker may act on now, or null; only the run's current attempt qualifies. */
 	findNextRunnable(now: Date): Promise<ToolInvocationRecord | null>;
 	/** Record provider-free preparation success under the observed lifecycle revision. */
 	markPrepared(invocationId: string, expectedRevision: number, now: Date): Promise<ToolInvocationRecord | null>;
@@ -310,7 +313,7 @@ export interface ToolInvocationTransactionRepository
 	recoverExpiredClaim(invocationId: string, now: Date): Promise<ToolInvocationTransitionResult>;
 }
 
-/** Transaction-bound admission owner used by the runtime candidate acceptance transaction. */
+/** Stores new invocations inside the transaction that accepts the runtime's proposed tool calls. */
 export interface ToolInvocationAdmissionUnitOfWork
 {
 	/** Admit one candidate as durable Preparing work through a transaction-bound repository. */

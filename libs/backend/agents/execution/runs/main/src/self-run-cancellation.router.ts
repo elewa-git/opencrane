@@ -41,7 +41,7 @@ export function __CreateSelfRunCancellationRouter(dependencies: SelfRunCancellat
 	return router;
 }
 
-/** Map one owner-bound result to its exact public status without exposing foreign state. */
+/** Maps the cancellation result to its HTTP status, without revealing whether another owner has this run. */
 function _RespondToCancellation(response: Response, result: SelfRunCancellationResult): void
 {
 	if (result.outcome === SelfRunCancellationOutcomes.Cancelling)

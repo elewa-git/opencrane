@@ -15,7 +15,7 @@ function _isWorkloadKind(value: string): value is "job"
 	return value === "job";
 }
 
-/** Return whether the exact audience and ServiceAccount belong to one isolated runtime class. */
+/** Returns whether the audience and ServiceAccount both belong to the same isolated runtime class. */
 function _isRuntimeWorkloadIdentity(audience: string, serviceAccountName: string): boolean
 {
 	return (audience === AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE && ___IsAgentRuntimeServiceAccountName(serviceAccountName))
@@ -103,7 +103,7 @@ export async function __StartNextRunAttempt(repository: AgentRunAuthorityReposit
 		return { outcome: "denied", reason: "agent_revision_superseded" };
 	}
 
-	// 3. Bind the atomic increment to both the run attempt and exact active service revision to close authority races.
+	// 3. Make the increment conditional on both the run attempt and the service's active revision, so two concurrent retries cannot both win.
 	const result = await repository.startNextAttemptAtomically({
 		...command,
 		expectedAgentServiceId: run.agentServiceId,

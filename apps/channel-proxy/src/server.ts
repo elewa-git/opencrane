@@ -30,7 +30,7 @@ export function _CreateServer(config: ChannelProxyProcessConfig): Server
 	});
 }
 
-/** Route probes and SSE relay without adding product authority. */
+/** Route health probes and the SSE relay; this layer makes no product decisions of its own. */
 async function _HandleRequest(request: IncomingMessage, response: ServerResponse, dependencies: ChannelProxyDependencies): Promise<void>
 {
 	const path = new URL(request.url ?? "/", "http://localhost").pathname;
@@ -78,7 +78,7 @@ async function _HandleRequest(request: IncomingMessage, response: ServerResponse
 	}
 }
 
-/** Convert Node's multi-value request headers without inventing trusted identity headers. */
+/** Convert Node's multi-value request headers, never adding an identity header of its own. */
 function _ToHeaders(source: IncomingHttpHeaders): Headers
 {
 	const result = new Headers();

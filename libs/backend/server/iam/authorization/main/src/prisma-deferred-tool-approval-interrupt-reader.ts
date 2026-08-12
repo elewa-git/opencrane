@@ -5,7 +5,7 @@ import { RunEventTypes, type AgUiProjectionSourceEvent, type AgUiPublicEventPayl
 import { PrismaSelfDeferredToolApprovalReadUnitOfWork } from "./prisma-self-deferred-tool-approval-list-repository.js";
 import type { DeferredToolApprovalInterruptReader } from "./deferred-tool-approval-interrupt.types.js";
 
-/** Compose a safe actor-only AG-UI interrupt projection over the approval authority. */
+/** Builds a reader that turns the caller's own pending approvals into AG-UI tool-approval events. */
 export function _CreateDeferredToolApprovalInterruptReader(prisma: PrismaClient): DeferredToolApprovalInterruptReader
 {
 	const approvals = new PrismaSelfDeferredToolApprovalReadUnitOfWork(prisma);

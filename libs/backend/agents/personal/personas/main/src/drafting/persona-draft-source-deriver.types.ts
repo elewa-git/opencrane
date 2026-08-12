@@ -2,19 +2,19 @@ import type { PersonaColourValues } from "../scoring/persona-scorer.types.js";
 
 import type { PersonaDraftInsightEvidence } from "./persona-draft-persistence.types.js";
 
-/** Reviewed interpolation data parsed from the immutable persona catalogue. */
+/** The directive text parsed out of the stored interpolation map. */
 export interface PersonaDraftDirectives
 {
-	/** Exact question-and-choice coordinates mapped to reviewed directive text. */
+	/** Directive text keyed by `questionId:choiceId`. */
 	readonly byChoice: Readonly<Record<string, string>>;
 	/** Reviewed directive text for each possible secondary colour. */
 	readonly secondaryBlend: Readonly<Record<PersonaColourValues, string>>;
 }
 
-/** One reviewed answer projected out of the persona transaction for pure draft derivation. */
+/** One answer copied out of the database, so draft derivation needs no database access. */
 export interface PersonaDraftSourceAnswer<Category>
 {
-	/** Immutable answer identity retained as insight provenance. */
+	/** Answer identifier, recorded on the resulting insight. */
 	readonly answerId: string;
 	/** Reviewed question identity used by the interpolation map. */
 	readonly questionId: string;
@@ -26,7 +26,7 @@ export interface PersonaDraftSourceAnswer<Category>
 	readonly category: Category;
 }
 
-/** Complete reviewed source snapshot consumed by the pure draft derivation policy. */
+/** Everything draft derivation needs, read from the database beforehand. */
 export interface PersonaDraftSourceDerivationInput<Category>
 {
 	/** Reviewed question-set identity retained on every derived insight. */
@@ -39,15 +39,15 @@ export interface PersonaDraftSourceDerivationInput<Category>
 	readonly interpolationDirectives: unknown;
 	/** Resolved secondary colour used by the reviewed blend directive. */
 	readonly secondaryColour: PersonaColourValues;
-	/** Exact completed-interview answers and provenance. */
+	/** The owner's answers from the completed interview, with the question and choice each one used. */
 	readonly answers: readonly PersonaDraftSourceAnswer<Category>[];
 }
 
-/** Pure compiled instructions and provenance insights ready for atomic persistence. */
+/** The filled-in instructions and the derived insights, ready to store. */
 export interface PersonaDraftSourceDerivationResult<Category>
 {
-	/** Exact immutable runtime instructions compiled from reviewed sources. */
+	/** The SOUL instructions with every placeholder filled in. */
 	readonly compiledInstructions: string;
-	/** Four reviewed answer-linked explanations of the derived collaboration preferences. */
+	/** Four short explanations of the owner's collaboration preferences, one per placeholder question. */
 	readonly insights: readonly PersonaDraftInsightEvidence<Category>[];
 }

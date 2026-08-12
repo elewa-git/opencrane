@@ -3,55 +3,55 @@ import type { SkillAuthoringInputRecord } from "./skill-authoring-input.types.js
 import type { SkillWorkloadBootstrapIdentity, SkillWorkloadBootstrapRecord } from "./skill-workload-bootstrap.types.js";
 import type { SkillWorkloadAssignmentCommand, SkillWorkloadClaim, SkillWorkloadPodRegistrationCommand, SkillWorkloadReleaseClaim, SkillWorkloadReleaseCommand } from "./skill-workload-claims.types.js";
 
-/** Neutral signal emitted only after a known persistence conflict has rolled back. */
+/** Thrown after a database conflict has already rolled the transaction back. */
 export class _SkillWorkloadPersistenceConflictError extends Error
 {
 }
 
-/** Transaction-scoped persistence capability for controller claim and Job-assignment transitions. */
+/** Reads and writes claims and Job assignments, inside one transaction. */
 export interface SkillWorkloadAssignmentRepository
 {
-	/** Claims one eligible workload while preserving the revision-before-workload lock order. */
+	/** Claims one workload, locking the revision before the workload so lock order is the same everywhere. */
 	claimNext(): Promise<SkillWorkloadClaim | null>;
-	/** Commits one exact claim generation to its immutable Kubernetes Job UID. */
+	/** Records the Kubernetes Job UID against the claim the controller holds. */
 	commitAssignment(workloadId: string, command: SkillWorkloadAssignmentCommand): Promise<"assigned" | "idempotent" | "conflict">;
 }
 
-/** Transaction-scoped persistence capability for the later Job release and first-Pod fence. */
+/** Reads and writes Job releases and first-Pod records, inside one transaction. */
 export interface SkillWorkloadReleaseRepository
 {
 	/** Claims one assigned workload for a single fenced Kubernetes unsuspend operation. */
 	claimNextRelease(): Promise<SkillWorkloadReleaseClaim | null>;
-	/** Commits the exact successful unsuspend operation or its immutable replay. */
+	/** Records the unsuspend, or reports `idempotent` when the same one was already recorded. */
 	commitRelease(workloadId: string, command: SkillWorkloadReleaseCommand): Promise<"released" | "idempotent" | "conflict">;
-	/** Records the sole Job-owned Pod before a bootstrap can be consumed. */
+	/** Records the Job's single Pod. Until that happens, the bootstrap cannot be used. */
 	registerFirstPod(workloadId: string, command: SkillWorkloadPodRegistrationCommand): Promise<"registered" | "idempotent" | "conflict">;
 }
 
-/** Transaction-scoped persistence capability for one hash-addressed worker bootstrap. */
+/** Reads and consumes one worker bootstrap, looked up by its reference hash, inside one transaction. */
 export interface SkillWorkloadBootstrapRepository
 {
-	/** Selects one unconsumed bootstrap without admitting a caller-selected identity. */
+	/** Finds an unused bootstrap. The caller cannot influence which identity it names. */
 	loadUnconsumed(referenceHash: string): Promise<SkillWorkloadBootstrapRecord | null>;
 	/** Consumes that bootstrap under the exact TokenReview-confirmed worker identity. */
 	consume(referenceHash: string, identity: SkillWorkloadBootstrapIdentity): Promise<"consumed" | "conflict">;
 }
 
-/** Transaction-scoped persistence capability for a terminal authoring evidence report. */
+/** Stores an authoring worker's final report, inside one transaction. */
 export interface SkillAuthoringCompletionRepository
 {
-	/** Stores bounded successful evidence and terminalises exactly one reviewed workload. */
+	/** Stores the worker's reports and moves that one workload to its final state. */
 	complete(command: SkillAuthoringCompletionCommand, identity: SkillWorkloadBootstrapIdentity): Promise<"completed" | "conflict">;
 }
 
-/** Transaction-scoped read capability selecting a source artifact for one reviewed authoring Pod. */
+/** Finds the source artifact for one authoring Pod, inside one transaction. */
 export interface SkillAuthoringInputRepository
 {
-	/** Returns the fully pinned active artifact or no record when any authority fence differs. */
+	/** Returns the pinned artifact, or null when any of the checked ids does not match. */
 	load(workloadId: string, identity: SkillWorkloadBootstrapIdentity): Promise<SkillAuthoringInputRecord | null>;
 }
 
-/** Capability repositories bound to one opaque Postgres transaction. */
+/** All five repositories, bound to the same Postgres transaction. */
 export interface SkillWorkloadExecutionTransaction
 {
 	/** Controller claim and suspended-Job assignment authority. */
@@ -66,12 +66,12 @@ export interface SkillWorkloadExecutionTransaction
 	readonly authoringInputs: SkillAuthoringInputRepository;
 }
 
-/** Work that must run with all skill-execution repositories on one transaction snapshot. */
+/** A function that does its work using all the repositories on one transaction. */
 export type SkillWorkloadExecutionWork<Result> = (transaction: SkillWorkloadExecutionTransaction) => Promise<Result>;
 
-/** Opaque durability boundary for every skill-execution authority operation. */
+/** Opens the transaction that every skill-execution operation runs inside. */
 export interface SkillWorkloadExecutionUnitOfWork
 {
-	/** Runs work after binding all capability repositories to one transaction-scoped Prisma client. */
+	/** Runs the work with every repository bound to one transaction's Prisma client. */
 	run<Result>(work: SkillWorkloadExecutionWork<Result>): Promise<Result>;
 }

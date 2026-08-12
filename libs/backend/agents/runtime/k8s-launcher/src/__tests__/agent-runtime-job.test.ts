@@ -21,7 +21,7 @@ function _Assignment(): AgentRuntimeJobAssignment
 	};
 }
 
-/** Create the release-fixed resource profile for runtime Jobs. */
+/** Create the runtime Job profile these tests reuse. */
 function _Profile(): AgentRuntimeJobProfile
 {
 	return {

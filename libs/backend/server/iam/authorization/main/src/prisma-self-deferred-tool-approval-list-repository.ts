@@ -15,7 +15,7 @@ type SafeApprovalRow = {
 	readonly attempt: number;
 	/** Frozen tool revision being reviewed. */
 	readonly resourceId: string;
-	/** Safe logical identifier from the exact linked tool invocation. */
+	/** Tool-call id from the linked invocation row. */
 	readonly toolInvocation: { readonly toolInvocationId: string } | null;
 	/** Durable approval lifecycle state. */
 	readonly state: ApprovalRequestState;
@@ -35,7 +35,7 @@ const _SAFE_SELECT = { id: true, runId: true, attempt: true, resourceId: true, s
 /** Prisma reader for the signed-in owner's approval inbox and interrupt detail. */
 export class PrismaSelfDeferredToolApprovalListRepository implements SelfDeferredToolApprovalListRepository
 {
-	/** Canonical product authority used for owner-bound approval reads. */
+	/** Prisma client used to read only the caller's own approvals. */
 	private readonly _prisma: Prisma.TransactionClient;
 
 	/** Construct the approval reader around the server-owned Prisma client. */
@@ -73,13 +73,13 @@ export class PrismaSelfDeferredToolApprovalListRepository implements SelfDeferre
 	}
 }
 
-/** Prisma UnitOfWork that snapshots active membership and actor-safe approval reads atomically. */
+/** Checks the caller's membership and reads their approvals in one serializable transaction. */
 export class PrismaSelfDeferredToolApprovalReadUnitOfWork implements SelfDeferredToolApprovalReadUnitOfWork
 {
 	/** Process-owned Prisma root used only to start exact serializable read transactions. */
 	private readonly _prisma: PrismaClient;
 
-	/** Compose the read UnitOfWork from the canonical product authority. */
+	/** Build the read UnitOfWork over the Prisma client. */
 	constructor(prisma: PrismaClient)
 	{
 		this._prisma = prisma;

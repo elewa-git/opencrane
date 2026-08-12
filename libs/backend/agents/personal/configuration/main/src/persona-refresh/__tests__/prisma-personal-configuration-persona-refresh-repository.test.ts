@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import { PersonalConfigurationPersonaRefreshClaimCodes } from "../personal-configuration-persona-refresh.types.js";
 import { PrismaPersonalConfigurationPersonaRefreshRepository } from "../prisma-personal-configuration-persona-refresh-repository.js";
 
-/** Builds the narrow transaction client needed to prove configuration-owned refresh persistence. */
+/** Builds the smallest transaction fake these repository tests need. */
 function _Transaction(change: { readonly id: string } | null = { id: "change-1" }): Prisma.TransactionClient
 {
 	return {

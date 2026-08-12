@@ -2,7 +2,18 @@ import { ___IsSha256ContentAddress } from "@opencrane/models/artifacts";
 
 import type { ArtifactStorePromotion, StageArtifactCommand, StagedArtifact, VerifiedArtifactWriteLease } from "./artifact-store.types.js";
 
-/** Validates an OpenCrane-issued lease before an adapter creates temporary bytes. */
+/**
+ * Whether a verified lease's fields are usable for staging: non-blank ids, the write action, and an
+ * expiry not in the past.
+ *
+ * A shape check, not a signature check — {@link __VerifyArtifactWriteLease} does that. Passing this
+ * does not mean the lease is authentic.
+ *
+ * No caller outside this package's tests yet.
+ * @param lease - The already-verified lease.
+ * @param nowEpochSeconds - Current time.
+ * @returns True only when every field is usable.
+ */
 export function __ValidateVerifiedArtifactWriteLease(lease: VerifiedArtifactWriteLease, nowEpochSeconds: number): boolean
 {
 	return lease.leaseId.trim().length > 0
@@ -13,7 +24,7 @@ export function __ValidateVerifiedArtifactWriteLease(lease: VerifiedArtifactWrit
 		&& lease.expiresAtEpochSeconds >= nowEpochSeconds;
 }
 
-/** Validates stage coordinates before untrusted bytes are accepted by an ArtifactStore adapter. */
+/** Whether a stage command is usable: its lease passes {@link __ValidateVerifiedArtifactWriteLease}, any expected address and length are well formed, and the media type contains a slash. */
 export function __ValidateStageArtifactCommand(command: StageArtifactCommand, nowEpochSeconds: number): boolean
 {
 	const expectedAddressIsValid = command.expectedContentAddress === null || ___IsSha256ContentAddress(command.expectedContentAddress);
@@ -25,7 +36,7 @@ export function __ValidateStageArtifactCommand(command: StageArtifactCommand, no
 		&& command.mediaType.includes("/");
 }
 
-/** Validates a staged handle before immutable promotion. */
+/** Whether a staged object is safe to promote: a well-formed content address, a non-negative byte length, and a non-empty staging handle. */
 export function __ValidateStagedArtifact(staged: StagedArtifact): boolean
 {
 	return staged.leaseId.trim().length > 0
@@ -37,7 +48,7 @@ export function __ValidateStagedArtifact(staged: StagedArtifact): boolean
 		&& staged.mediaType.includes("/");
 }
 
-/** Validates metadata returned by an idempotent canonical promotion. */
+/** Whether a promotion result is well formed, so a faulty adapter cannot cause a catalog revision to be recorded against bad metadata. */
 export function __ValidateArtifactStorePromotion(promotion: ArtifactStorePromotion): boolean
 {
 	return promotion.leaseId.trim().length > 0

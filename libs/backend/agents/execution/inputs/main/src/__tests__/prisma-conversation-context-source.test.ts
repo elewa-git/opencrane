@@ -18,7 +18,7 @@ function _Command(conversationId: string | null = "conversation-1")
 	return { runId: "run-1", siloId: "silo-1", agentServiceId: "service-1", conversationId, identityKind: "user", trigger: "interactive", executionSubjectId: "user-1", requestIdempotencyKey: "request-1", inputMessageId: "message-current", inputMessageBlocks: [{ id: "block-1", kind: "text", value: "Hello" }] } as never;
 }
 
-/** Creates the narrow transaction facade used by the transcript authority. */
+/** Creates the small stand-in transaction the conversation reader uses. */
 function _Transaction(conversation: unknown, entries: readonly unknown[] = [], membership: unknown = { clusterTenant: "silo-1" }): RunAdmissionTransaction
 {
 	return { prisma: { orgMembership: { findFirst: vi.fn().mockResolvedValue(membership) }, conversation: { findFirst: vi.fn().mockResolvedValue(conversation) }, conversationTimelineEntry: { findMany: vi.fn().mockResolvedValue(entries) } } as never, admittedAt: "2026-07-26T00:00:00.000Z", admittedAtEpochMs: Date.parse("2026-07-26T00:00:00.000Z") };
@@ -61,7 +61,7 @@ describe("TransactionBoundConversationContextSource", function _DescribeTransact
 	});
 });
 
-/** Creates the source with its exact transaction-bound Prisma repository. */
+/** Creates the source together with its transaction-bound Prisma reader. */
 function _Source(): TransactionBoundConversationContextSource
 {
 	return new TransactionBoundConversationContextSource(transaction => new PrismaConversationContextRepository(transaction.prisma));

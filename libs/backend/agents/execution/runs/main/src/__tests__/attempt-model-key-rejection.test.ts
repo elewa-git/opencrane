@@ -8,7 +8,7 @@ import type { AttemptModelKeyIssuer, AttemptModelKeyMintRequest, MintedAttemptMo
  * These prove the SECURITY ENVELOPE of the attempt-scoped virtual key minted by the slice-2 claim
  * path ({@link AttemptModelKeyIssuer}, wired to the model-routing gateway in `apps/opencrane`).
  * They run against a MOCK credential authority that stands in for LiteLLM's key enforcement — never a
- * live endpoint — so the invariants hold offline. The live-LiteLLM leg is gated on #337 (ADR 0010).
+ * live endpoint — so these rules are proved offline. The live-LiteLLM leg is gated on #337 (ADR 0010).
  *
  * Each proof mints a key bound to exactly one attempt (alias), model alias, silo, budget, and expiry,
  * then presents a call and asserts the authority refuses it unless every dimension still matches.
@@ -91,7 +91,7 @@ function _MintRequest(overrides: Partial<AttemptModelKeyMintRequest> = {}): Atte
 	return { keyAlias: "attempt-0123456789abcdef0123456789abcdef", modelAlias: "silo-default", siloId: "silo-a", maxBudgetUsd: 5, expirySeconds: 900, ...overrides };
 }
 
-/** Build one in-scope call matching a mint request; individual proofs mutate a single dimension. */
+/** Builds a call that matches the minted key; each test then changes exactly one field to prove it is refused. */
 function _CallFor(key: string, request: AttemptModelKeyMintRequest, overrides: Partial<PresentedModelCall> = {}): PresentedModelCall
 {
 	return { key, expectedKeyAlias: request.keyAlias, modelAlias: request.modelAlias, siloId: request.siloId, costUsd: 1, nowEpochMs: 1_000, ...overrides };

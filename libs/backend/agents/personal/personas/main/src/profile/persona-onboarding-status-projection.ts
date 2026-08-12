@@ -3,13 +3,13 @@ import { PersonaOnboardingStatusInterviewStates, PersonaOnboardingStatusProjecti
 import type { PersonaOnboardingStatusFacts, PersonaOnboardingStatusProjectionState } from "./persona-onboarding-status-projection.types.js";
 import type { PersonaOnboardingStatus } from "./persona-onboarding-status.types.js";
 
-/** Project one owner-visible onboarding status through an exhaustive classified source state. */
+/** Turns the loaded facts into the status the owner sees, by first working out which of the nine situations they are in. */
 export function _ProjectPersonaOnboardingStatus(facts: PersonaOnboardingStatusFacts): PersonaOnboardingStatus
 {
 	return _PROJECTION_STATES[_ClassifyProjectionState(facts)].project(facts);
 }
 
-/** Classify loaded durable facts before a projection strategy determines the owner-visible route. */
+/** Works out which situation the loaded facts describe. */
 function _ClassifyProjectionState(facts: PersonaOnboardingStatusFacts): PersonaOnboardingStatusProjectionStates
 {
 	if (!facts.hasProfile) return PersonaOnboardingStatusProjectionStates.NoProfile;
@@ -23,7 +23,7 @@ function _ClassifyProjectionState(facts: PersonaOnboardingStatusFacts): PersonaO
 /** Projection for a missing owner persona profile. */
 class _NoProfileProjectionState implements PersonaOnboardingStatusProjectionState
 {
-	/** Return the bounded initial interview route without exposing profile coordinates. */
+	/** Returns the empty starting status, revealing nothing about the profile. */
 	project(facts: PersonaOnboardingStatusFacts): PersonaOnboardingStatus
 	{
 		return _EmptyStatus();
@@ -33,7 +33,7 @@ class _NoProfileProjectionState implements PersonaOnboardingStatusProjectionStat
 /** Projection for a profile with no interview or active persona result. */
 class _NoInterviewProjectionState implements PersonaOnboardingStatusProjectionState
 {
-	/** Return the initial interview route for an owner who has no prior persona result. */
+	/** Returns the empty starting status. */
 	project(facts: PersonaOnboardingStatusFacts): PersonaOnboardingStatus
 	{
 		return _EmptyStatus();
@@ -43,7 +43,7 @@ class _NoInterviewProjectionState implements PersonaOnboardingStatusProjectionSt
 /** Projection for an active persona that has no newer interview. */
 class _ActivePersonaProjectionState implements PersonaOnboardingStatusProjectionState
 {
-	/** Return ready while retaining only the durable active revision identifier. */
+	/** Returns the ready status, carrying only the active revision id. */
 	project(facts: PersonaOnboardingStatusFacts): PersonaOnboardingStatus
 	{
 		return { ..._EmptyStatus(), state: PersonaOnboardingApiStates.Ready, personaRevisionId: facts.activeRevisionId };
@@ -53,7 +53,7 @@ class _ActivePersonaProjectionState implements PersonaOnboardingStatusProjection
 /** Projection for a draft revision awaiting owner approval. */
 class _DraftRevisionProjectionState implements PersonaOnboardingStatusProjectionState
 {
-	/** Return the review route with the validated immutable revision result. */
+	/** Returns the review status with the draft revision's result. */
 	project(facts: PersonaOnboardingStatusFacts): PersonaOnboardingStatus
 	{
 		return _RevisionStatus(facts, PersonaOnboardingApiStates.Review);
@@ -63,7 +63,7 @@ class _DraftRevisionProjectionState implements PersonaOnboardingStatusProjection
 /** Projection for an approved revision. */
 class _ApprovedRevisionProjectionState implements PersonaOnboardingStatusProjectionState
 {
-	/** Return ready with the approved immutable revision result. */
+	/** Returns the ready status with the approved revision's result. */
 	project(facts: PersonaOnboardingStatusFacts): PersonaOnboardingStatus
 	{
 		return _RevisionStatus(facts, PersonaOnboardingApiStates.Ready);
@@ -83,17 +83,17 @@ class _InterviewInProgressProjectionState implements PersonaOnboardingStatusProj
 /** Projection for a completed interview whose score cannot yet be replayed. */
 class _ScoreUnavailableProjectionState implements PersonaOnboardingStatusProjectionState
 {
-	/** Fail closed to the resumable interview route rather than inventing score state. */
+	/** Falls back to the interview status rather than making up a score. */
 	project(facts: PersonaOnboardingStatusFacts): PersonaOnboardingStatus
 	{
 		return _InterviewStatus(facts);
 	}
 }
 
-/** Projection for a completed score that requires a governed owner choice. */
+/** Status for a score that ended in a tie the owner must break. */
 class _ResolutionRequiredProjectionState implements PersonaOnboardingStatusProjectionState
 {
-	/** Return the exact next tie boundary and score evidence for owner resolution. */
+	/** Returns the next tie plus the score, so the owner can choose. */
 	project(facts: PersonaOnboardingStatusFacts): PersonaOnboardingStatus
 	{
 		return _ScoredStatus(facts, PersonaOnboardingApiStates.Resolution);
@@ -110,7 +110,7 @@ class _ScoreReadyProjectionState implements PersonaOnboardingStatusProjectionSta
 	}
 }
 
-/** Exhaustive state-strategy dispatch for every classified source state. */
+/** One projection object per situation. */
 const _PROJECTION_STATES: Readonly<Record<PersonaOnboardingStatusProjectionStates, PersonaOnboardingStatusProjectionState>> = {
 	[PersonaOnboardingStatusProjectionStates.NoProfile]: new _NoProfileProjectionState(),
 	[PersonaOnboardingStatusProjectionStates.NoInterview]: new _NoInterviewProjectionState(),
@@ -123,7 +123,7 @@ const _PROJECTION_STATES: Readonly<Record<PersonaOnboardingStatusProjectionState
 	[PersonaOnboardingStatusProjectionStates.ScoreReady]: new _ScoreReadyProjectionState(),
 };
 
-/** Return the bounded initial status before a profile or interview exists. */
+/** Returns the empty starting status. */
 function _EmptyStatus(): PersonaOnboardingStatus
 {
 	return { state: PersonaOnboardingApiStates.Interview, interviewId: null, answeredQuestionCount: 0, questionCount: 0, personaRevisionId: null, questions: [], resolution: null, result: null };
@@ -136,7 +136,7 @@ function _RevisionStatus(facts: PersonaOnboardingStatusFacts, state: PersonaOnbo
 	return { state, interviewId: facts.interview.id, answeredQuestionCount: facts.interview.answeredQuestionCount, questionCount: facts.interview.questions.length, personaRevisionId: facts.revision.id, questions: facts.interview.questions, resolution: null, result: facts.revision.result };
 }
 
-/** Build a resumable in-progress status from owner-bound interview facts. */
+/** Builds the resumable interview status. Throws when the interview facts are missing. */
 function _InterviewStatus(facts: PersonaOnboardingStatusFacts): PersonaOnboardingStatus
 {
 	if (facts.interview === null) throw new Error("interview projection requires interview facts");
@@ -150,7 +150,7 @@ function _ScoredStatus(facts: PersonaOnboardingStatusFacts, state: PersonaOnboar
 	return { state, interviewId: facts.interview.id, answeredQuestionCount: facts.interview.answeredQuestionCount, questionCount: facts.interview.questions.length, personaRevisionId: null, questions: facts.interview.questions, resolution: facts.score.resolutionRequired, result: _ScoreResult(facts.score) };
 }
 
-/** Build the bounded owner-visible result from a fully resolved score. */
+/** Builds the owner-visible result, or null while any tie is still open. */
 function _ScoreResult(score: NonNullable<PersonaOnboardingStatusFacts["score"]>): PersonaOnboardingStatus["result"]
 {
 	if (score.primary === null || score.secondary === null || score.modifier === null) return null;

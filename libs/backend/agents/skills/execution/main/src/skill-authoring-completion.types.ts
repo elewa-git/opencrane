@@ -8,11 +8,11 @@ export enum SkillAuthoringCompletionOutcomes
 {
 	/** The worker supplied both bounded passing reports. */
 	Succeeded = "succeeded",
-	/** The worker supplied one stable failure code and no unbounded output. */
+	/** The worker sent a short failure code and nothing else. */
 	Failed = "failed",
 }
 
-/** Bounded evidence from the isolated checks performed against one draft skill revision. */
+/** Result of the checks run against one draft skill revision. */
 export interface SkillAuthoringCheckReport
 {
 	/** Whether every check in this report passed. */
@@ -23,12 +23,12 @@ export interface SkillAuthoringCheckReport
 	readonly checksRun: number;
 }
 
-/** One exact authoring-worker terminal report with no caller-selected identity or workload class. */
+/** The completion report an authoring worker may send. It cannot name an identity or a workload class. */
 export type SkillAuthoringCompletionCommand =
 	| {
-		/** Durable authoring workload selected before its worker Job was released. */
+		/** Id of the authoring workload, chosen before its Job was unsuspended. */
 		readonly workloadId: string;
-		/** Records a completed candidate validation with both required reports. */
+		/** Marks this as a success. Both reports must be present. */
 		readonly outcome: SkillAuthoringCompletionOutcomes.Succeeded;
 		/** Test evidence to persist on the draft SkillRevision. */
 		readonly testReport: SkillAuthoringCheckReport;
@@ -36,9 +36,9 @@ export type SkillAuthoringCompletionCommand =
 		readonly scanResult: SkillAuthoringCheckReport;
 	}
 	| {
-		/** Durable authoring workload selected before its worker Job was released. */
+		/** Id of the authoring workload, chosen before its Job was unsuspended. */
 		readonly workloadId: string;
-		/** Records a terminal worker failure without accepting unbounded output. */
+		/** Marks this as a failure. Only the failure code is stored, never worker output. */
 		readonly outcome: SkillAuthoringCompletionOutcomes.Failed;
 		/** Stable server-recognised failure code, never a worker stack trace. */
 		readonly failureCode: string;
@@ -49,9 +49,9 @@ export interface SkillAuthoringCompletionRouterDependencies
 {
 	/** Reviews the worker's projected token against the route-owned authoring audience. */
 	readonly tokenReviewer: SkillWorkloadBootstrapTokenReviewer;
-	/** Executes the one terminal state and evidence transition through its application authority. */
+	/** Writes the final state and the two reports to the database. */
 	readonly authority: SkillAuthoringCompletionAuthority;
-	/** Emits only structured, non-sensitive authority failures. */
+	/** Logs database failures, and nothing sensitive. */
 	readonly logger: SkillWorkloadBootstrapLogger;
 }
 

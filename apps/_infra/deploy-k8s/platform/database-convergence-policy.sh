@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Exhaustive State x Event policy for live database convergence evidence. It is pure: callers own
+# Maps every (state, event) pair for live database convergence onto one outcome. It is pure: callers own
 # classification I/O and execute the returned lifecycle outcome.
 
 database_convergence_state_is_valid()

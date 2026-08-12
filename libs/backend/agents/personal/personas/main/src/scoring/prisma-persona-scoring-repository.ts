@@ -4,10 +4,10 @@ import { _ScorePersona } from "./persona-scorer.js";
 import { PersonaColourValues, PersonaModifierValues, PersonaTieKinds, type PersonaAuthoritativeScoreResult, type PersonaSelectionValue, type PersonaTieChoice, type PersonaWeightedAnswer } from "./persona-scorer.types.js";
 import { PersonaScoringPersistenceStatuses, type PersonaScoringEvidence, type PersonaScoringPersistenceResult, type PersonaScoringRepository, type ResolvePersonaTieCommand, type StoredPersonaScore } from "./persona-scoring-repository.types.js";
 
-/** Prisma adapter for immutable score vectors and append-only tie choices. */
+/** Prisma adapter that stores persona score counters and the owner's tie choices. */
 export class PrismaPersonaScoringRepository implements PersonaScoringRepository
 {
-	/** Transaction-scoped ORM capability. */
+	/** Prisma client for the caller's transaction; every read and write here uses it. */
 	private readonly transaction: Prisma.TransactionClient;
 
 	/** Bind scoring reads and writes to one persona transaction. */
@@ -16,7 +16,7 @@ export class PrismaPersonaScoringRepository implements PersonaScoringRepository
 		this.transaction = transaction;
 	}
 
-	/** Create the immutable raw score after completion, or replay its exact derivation. */
+	/** Writes the score row the first time. On later calls it recomputes the score and refuses if the stored row no longer matches. */
 	async ensureScore(interviewId: string, personaProfileId: string, userId: string): Promise<PersonaScoringPersistenceResult>
 	{
 		const evidence = await this._evidence(interviewId, personaProfileId, userId);
@@ -51,7 +51,7 @@ export class PrismaPersonaScoringRepository implements PersonaScoringRepository
 		return { status: PersonaScoringPersistenceStatuses.Ready, score };
 	}
 
-	/** Replay a previously persisted immutable score without writing from a read or approval path. */
+	/** Recomputes a stored score and checks it matches. Never writes, so the read and approval paths can call it. */
 	async readScore(interviewId: string, personaProfileId: string, userId: string): Promise<PersonaScoringPersistenceResult>
 	{
 		const evidence = await this._evidence(interviewId, personaProfileId, userId);
@@ -64,7 +64,7 @@ export class PrismaPersonaScoringRepository implements PersonaScoringRepository
 		return { status: PersonaScoringPersistenceStatuses.Ready, score };
 	}
 
-	/** Append only the exact next tie choice and return the replayed result. */
+	/** Records the owner's choice for the tie the score is waiting on, then returns the recomputed score. */
 	async resolveTie(command: ResolvePersonaTieCommand): Promise<PersonaScoringPersistenceResult>
 	{
 		const current = await this.ensureScore(command.interviewId, command.personaProfileId, command.userId);
@@ -79,7 +79,7 @@ export class PrismaPersonaScoringRepository implements PersonaScoringRepository
 		return score === null ? { status: PersonaScoringPersistenceStatuses.InvalidEvidence } : { status: PersonaScoringPersistenceStatuses.Ready, score };
 	}
 
-	/** Read the exact completed interview, weights, and resolutions from one snapshot. */
+	/** Reads the completed interview, its weighted answers, and its tie choices in one pass. Returns null when anything is missing or a choice has more than one weight. */
 	private async _evidence(interviewId: string, personaProfileId: string, userId: string): Promise<PersonaScoringEvidence | null>
 	{
 		const interview = await this.transaction.personaInterview.findFirst({ where: { id: interviewId, personaProfileId, userId, state: "Completed" }, select: { scoringPolicyId: true, scoringPolicyVersion: true, scoringPolicy: { select: { digest: true } } } });
@@ -104,7 +104,7 @@ export class PrismaPersonaScoringRepository implements PersonaScoringRepository
 	}
 }
 
-/** Require an existing immutable row to match a replayed policy, answer order, and raw vector. */
+/** Returns whether the stored score row still matches a freshly computed score: same policy, same answer order, same counters, same first-pass candidates. */
 function _StoredScoreMatches(evidence: PersonaScoringEvidence, score: PersonaAuthoritativeScoreResult, initialCandidates: PersonaAuthoritativeScoreResult["candidateEvidence"], stored: StoredPersonaScore): boolean
 {
 	return stored.scoringPolicyId === evidence.scoringPolicyId
@@ -122,13 +122,13 @@ function _StoredScoreMatches(evidence: PersonaScoringEvidence, score: PersonaAut
 		&& _SameStrings(stored.modifierCandidates, initialCandidates.modifier.map(_ToPrismaModifier));
 }
 
-/** Compare one ordered immutable string or string-enum vector. */
+/** Returns whether two string lists match in value and order. */
 function _SameStrings(left: readonly string[], right: readonly string[]): boolean
 {
 	return left.length === right.length && left.every(function _Same(value, index) { return value === right[index]; });
 }
 
-/** Convert a wire colour to the Prisma enum. */
+/** Converts a domain colour value to its Prisma enum. */
 function _ToPrismaColour(value: PersonaColourValues): PersonaColour
 {
 	const match = { red: PersonaColour.Red, yellow: PersonaColour.Yellow, green: PersonaColour.Green, blue: PersonaColour.Blue }[value];
@@ -136,7 +136,7 @@ function _ToPrismaColour(value: PersonaColourValues): PersonaColour
 	return match;
 }
 
-/** Convert a wire modifier to the Prisma enum. */
+/** Converts a domain modifier value to its Prisma enum. */
 function _ToPrismaModifier(value: PersonaModifierValues): PersonaOpennessModifier
 {
 	const match = { explorer: PersonaOpennessModifier.Explorer, guardian: PersonaOpennessModifier.Guardian }[value];
@@ -144,7 +144,7 @@ function _ToPrismaModifier(value: PersonaModifierValues): PersonaOpennessModifie
 	return match;
 }
 
-/** Convert a governed tie boundary to the Prisma enum. */
+/** Converts a tie kind to its Prisma enum. */
 function _ToPrismaTieKind(value: PersonaTieKinds): PersonaTieKind
 {
 	return { [PersonaTieKinds.Primary]: PersonaTieKind.Primary, [PersonaTieKinds.Secondary]: PersonaTieKind.Secondary, [PersonaTieKinds.Modifier]: PersonaTieKind.Modifier }[value];
@@ -156,7 +156,7 @@ function _FromPrismaTieKind(value: PersonaTieKind): PersonaTieKinds
 	return { [PersonaTieKind.Primary]: PersonaTieKinds.Primary, [PersonaTieKind.Secondary]: PersonaTieKinds.Secondary, [PersonaTieKind.Modifier]: PersonaTieKinds.Modifier }[value];
 }
 
-/** Parse one durable tie row into its exact domain-owned selection vocabulary. */
+/** Turns one stored tie row into a domain tie choice, or null when a candidate is unknown or the row mixes colours with modifiers. */
 function _StoredTieChoice(row: { readonly kind: PersonaTieKind; readonly candidates: readonly string[]; readonly selectedValue: string }): PersonaTieChoice | null
 {
 	const kind = _FromPrismaTieKind(row.kind);
@@ -167,19 +167,19 @@ function _StoredTieChoice(row: { readonly kind: PersonaTieKind; readonly candida
 	return { kind, candidates, selectedValue: row.selectedValue };
 }
 
-/** Narrow one durable string to a persona-owned selection value. */
+/** Returns whether a stored string is one of the colours or modifiers. */
 function _IsSelectionValue(value: string): value is PersonaSelectionValue
 {
 	return _IsColourValue(value) || _IsModifierValue(value);
 }
 
-/** Narrow one durable string to a persona-owned colour. */
+/** Returns whether a stored string is one of the four colours. */
 function _IsColourValue(value: string): value is PersonaColourValues
 {
 	return Object.values(PersonaColourValues).some(function _Same(candidate) { return candidate === value; });
 }
 
-/** Narrow one durable string to a persona-owned modifier. */
+/** Returns whether a stored string is Explorer or Guardian. */
 function _IsModifierValue(value: string): value is PersonaModifierValues
 {
 	return Object.values(PersonaModifierValues).some(function _Same(candidate) { return candidate === value; });

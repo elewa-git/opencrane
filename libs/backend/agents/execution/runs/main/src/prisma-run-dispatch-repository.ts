@@ -39,7 +39,7 @@ export class PrismaRunDispatchRepository implements RunDispatchRepository
 	private readonly prisma: PrismaClient;
 	/** Fixed runtime-plane namespaces and database-owned lifetime policy. */
 	private readonly config: RunDispatchRepositoryConfig;
-	/** App-injected issuer that mints the attempt-scoped model key; the master key stays server-side. */
+	/** Issuer supplied by the app that mints the attempt's model key; the master key never leaves the server. */
 	private readonly issueAttemptModelKey: AttemptModelKeyIssuer;
 	/** Creates a dispatch adapter over canonical Postgres with the injected model-key issuer. */
 	constructor(prisma: PrismaClient, config: RunDispatchRepositoryConfig, issueAttemptModelKey: AttemptModelKeyIssuer)
@@ -50,14 +50,14 @@ export class PrismaRunDispatchRepository implements RunDispatchRepository
 		this.issueAttemptModelKey = issueAttemptModelKey;
 	}
 
-	/** Claims one eligible event, loads its narrow projection, and mints its transient attempt key. */
+	/** Claims one eligible outbox event, loads the fields the controller needs, and mints the attempt's short-lived model key. */
 	async claimNextAttemptAtomically(): Promise<ClaimNextRunAttemptResult>
 	{
 		const config = this.config;
 		// 1. Claim and project under the database lock; extract the mint inputs frozen on the snapshot.
 		const claimed = await this.prisma.$transaction(async function _claim(transaction: Prisma.TransactionClient): Promise<ClaimTransactionResult>
 		{
-			// 1. Discover without locking, then establish the global service -> run -> outbox order.
+			// 1. Read the ids without locking, then take the locks in the one global order: service, run, outbox.
 			const candidates = await transaction.$queryRaw<RunOutboxCandidateRow[]>(Prisma.sql`
 				SELECT event."id" AS "eventId", event."run_id" AS "runId", run."agent_service_id" AS "agentServiceId"
 				FROM "run_outbox_events" event
@@ -83,7 +83,7 @@ export class PrismaRunDispatchRepository implements RunDispatchRepository
 			await transaction.$queryRaw(Prisma.sql`SELECT "id" FROM "agent_runs" WHERE "id" = ${candidate.runId} FOR UPDATE`);
 			await transaction.$queryRaw(Prisma.sql`SELECT "id" FROM "run_outbox_events" WHERE "id" = ${candidate.eventId} FOR UPDATE`);
 
-			// 2. Reload and revalidate every authority coordinate after all canonical locks are held.
+			// 2. Re-read and re-check every value once every lock in that order is held.
 			const service = await transaction.agentService.findUnique({ where: { id: candidate.agentServiceId } });
 			const run = await transaction.agentRun.findUnique({ where: { id: candidate.runId } });
 			const event = await transaction.outboxEvent.findUnique({ where: { id: candidate.eventId } });
@@ -115,7 +115,7 @@ export class PrismaRunDispatchRepository implements RunDispatchRepository
 				return { status: RunDispatchResultStatuses.None };
 			}
 
-			// 3. Derive the exact post-commit credential requests; invalid frozen policy fails closed.
+			// 3. Build the model-key request to use after commit; if the snapshot's route or budget is invalid, refuse.
 			const claimedAt = new Date(Math.max(now.getTime(), (event.claimedAt?.getTime() ?? -1) + 1));
 			const deliveryCount = event.deliveryCount + 1;
 			const credentials = _BuildRunAttemptCredentialMintInputs({ modelRoute: snapshot.modelRoute, budgetPolicy: snapshot.budgetPolicy, runId: run.id, attempt: run.attempt, siloId: run.siloId, deliveryCount, assignmentTtlMilliseconds: config.assignmentTtlMilliseconds });
@@ -125,7 +125,7 @@ export class PrismaRunDispatchRepository implements RunDispatchRepository
 				return { status: RunDispatchResultStatuses.None };
 			}
 
-			// 4. Advance both claim coordinates. The exact pair fences stale controller replicas.
+			// 4. Advance both the claim timestamp and the delivery generation; together they fence out an older controller replica.
 			const claimedEvent = await transaction.outboxEvent.updateMany({ where: { id: event.id, claimedAt: event.claimedAt, deliveryCount: event.deliveryCount, publishedAt: null, failedAt: null }, data: { claimedAt, deliveryCount } });
 			if (claimedEvent.count !== 1) throw new Error("run dispatch claim lost its event fence");
 			if (run.state === AgentRunState.Accepted)
@@ -181,14 +181,14 @@ export class PrismaRunDispatchRepository implements RunDispatchRepository
 		});
 	}
 
-	/** Commits an exact live claim, immutable Job UID, assignment, run state, and outbox publication. */
+	/** Commits the live claim, the Job UID, the assignment, the new run state, and the outbox publication together. */
 	async commitSuspendedJobAssignmentAtomically(eventId: string, command: AgentControllerRunAttemptAssignmentCommand): Promise<CommitRunAttemptAssignmentResult>
 	{
 		const config = this.config;
 		if (!_AssignmentCommandIsValid(eventId, command)) return { status: RunDispatchResultStatuses.Conflict, reason: "invalid_assignment" };
 		return this.prisma.$transaction(async function _commit(transaction: Prisma.TransactionClient): Promise<CommitRunAttemptAssignmentResult>
 		{
-			// 1. Pre-read only to discover lock keys. Every value is reloaded after canonical locking.
+			// 1. Read first only to find which rows to lock. Every value is re-read once those locks are held, in the shared order.
 			const discoveredEvent = await transaction.outboxEvent.findUnique({ where: { id: eventId } });
 			if (discoveredEvent === null) return { status: RunDispatchResultStatuses.Conflict, reason: "claim_not_found" };
 			const discoveredRun = await transaction.agentRun.findUnique({ where: { id: discoveredEvent.runId } });
@@ -229,7 +229,7 @@ export class PrismaRunDispatchRepository implements RunDispatchRepository
 				return { status: RunDispatchResultStatuses.Conflict, reason: "assignment_conflict" };
 			}
 
-			// 4. Require the exact unexpired database claim generation before authoritative writes begin.
+			// 4. Require the claim generation to match and its lease to be unexpired before any write happens.
 			const runtimeIdentity = _RuntimeWorkloadIdentity(service.kind);
 			if (identity.fleetMembershipTrustedUntilEpochMilliseconds <= now.getTime() || !_SnapshotIdentityMatchesService(identity, service) || service.id !== run.agentServiceId || service.state !== AgentServiceState.Active || service.siloId !== run.siloId || service.activeRevisionId !== run.agentRevisionId || service.workloadProfile !== command.expectedWorkloadProfile || !runtimeIdentity.isServiceAccountName(command.serviceAccountName))
 			{
@@ -264,7 +264,7 @@ export class PrismaRunDispatchRepository implements RunDispatchRepository
 			const assigned = await transaction.agentRun.updateMany({ where: { id: run.id, attempt: run.attempt, state: AgentRunState.Queued }, data: { state: AgentRunState.Assigned } });
 			if (assigned.count !== 1) throw new Error("run assignment commit lost its run fence");
 
-			// 7. Create an unconsumed integrity row; the opaque reference is not secret-possession evidence.
+			// 7. Create the bootstrap row unconsumed; holding its reference does not prove the holder has a secret.
 			await transaction.workloadBootstrap.create({ data: {
 				id: command.bootstrapReference,
 				runId: run.id,
@@ -295,7 +295,7 @@ export class PrismaRunDispatchRepository implements RunDispatchRepository
 				availableAt: now,
 			} });
 
-			// 9. Publish only the attempt event; release remains recoverably claimable until Pod registration.
+			// 9. Publish the attempt event only; the release row stays claimable until a Pod registers, so a crash can be recovered.
 			const published = await transaction.outboxEvent.updateMany({ where: { id: event.id, claimedAt: event.claimedAt, deliveryCount: event.deliveryCount, publishedAt: null, failedAt: null }, data: { publishedAt: now } });
 			if (published.count !== 1) throw new Error("run assignment commit lost its outbox claim fence");
 			return { status: RunDispatchResultStatuses.Committed, result: { outcome: "assigned", runId: run.id, attempt: run.attempt, workloadUid: command.workloadUid } };
@@ -311,7 +311,7 @@ export class PrismaRunDispatchRepository implements RunDispatchRepository
 		{
 			return prisma.$transaction(async function _claimRelease(transaction: Prisma.TransactionClient): Promise<ClaimNextRunWorkloadReleaseResult>
 			{
-				// 1. Include expired authority so the oldest poisoned row can be repaired before later work.
+				// 1. Include rows whose lease expired, so the oldest unusable row is repaired before newer work is claimed.
 				const candidates = await transaction.$queryRaw<RunWorkloadReleaseCandidateRow[]>(Prisma.sql`
 					SELECT event."id" AS "eventId", event."run_id" AS "runId", event."attempt" AS "attempt", run."agent_service_id" AS "agentServiceId", bootstrap."id" AS "bootstrapReference"
 					FROM "run_outbox_events" event
@@ -403,7 +403,7 @@ export class PrismaRunDispatchRepository implements RunDispatchRepository
 				await transaction.$queryRaw(Prisma.sql`SELECT "id" FROM "run_outbox_events" WHERE "id" = ${eventId} FOR UPDATE`);
 
 
-				// 2. Reload every durable row and database time after canonical locking.
+				// 2. Re-read every row, and the database clock, once those locks are held.
 				const event = await transaction.outboxEvent.findUnique({ where: { id: eventId } });
 				const run = await transaction.agentRun.findUnique({ where: { id: discoveredRun.id } });
 				const assignment = await transaction.workloadAssignment.findUnique({ where: { runId_attempt: { runId: command.runId, attempt: command.attempt } } });
@@ -416,7 +416,7 @@ export class PrismaRunDispatchRepository implements RunDispatchRepository
 				}
 
 
-				// 3. Exact registration replay wins before terminal-event checks; another Pod is permanent conflict.
+				// 3. If this exact Pod already registered, return that result before checking terminal events; a different Pod is a permanent conflict.
 				const leaseMatches = event.claimedAt !== null && event.claimedAt.getTime() === Date.parse(command.claimedAt) && event.deliveryCount === command.deliveryCount;
 				if (assignment.state === WorkloadAssignmentState.Registered || assignment.state === WorkloadAssignmentState.Revoked)
 				{
@@ -438,7 +438,7 @@ export class PrismaRunDispatchRepository implements RunDispatchRepository
 				if (!leaseMatches || now.getTime() >= event.claimedAt!.getTime() + config.claimLeaseMilliseconds) return { status: RunDispatchResultStatuses.Conflict, reason: "stale_claim" };
 
 
-				// 5. Bind the first Pod under the assignment compare-and-swap, then publish only this release.
+				// 5. Attach the first Pod with a compare-and-swap on the assignment, then publish just this release.
 				const registered = await transaction.workloadAssignment.updateMany({ where: { runId: command.runId, attempt: command.attempt, agentServiceId: command.agentServiceId, agentRevisionId: command.agentRevisionId, siloId: command.siloId, namespace: command.namespace, serviceAccountName: command.serviceAccountName, workloadKind: WorkloadKind.Job, workloadUid: command.workloadUid, workloadProfile: command.workloadProfile, state: WorkloadAssignmentState.PendingPod, podUid: null }, data: { state: WorkloadAssignmentState.Registered, podUid: command.podUid, registeredAt: now } });
 				const published = await transaction.outboxEvent.updateMany({ where: { id: event.id, claimedAt: event.claimedAt, deliveryCount: event.deliveryCount, publishedAt: null, failedAt: null }, data: { publishedAt: now } });
 				if (registered.count !== 1 || published.count !== 1) throw new Error("run workload registration lost its release fence");
@@ -448,17 +448,17 @@ export class PrismaRunDispatchRepository implements RunDispatchRepository
 	}
 }
 
-/** Terminalise one poisoned dispatch row so it cannot starve every later valid attempt. */
+/** Moves one unusable dispatch row to its terminal state, so it stops blocking every valid attempt behind it. */
 async function _TerminalizeUndispatchableAttempt(transaction: Prisma.TransactionClient, event: { id: string; claimedAt: Date | null; deliveryCount: number }, run: { id: string; attempt: number; conversationId: string | null }, now: Date, failureCode: string, terminalReason: AgentRunTerminalReason): Promise<void>
 {
-	// 1. Fence and terminalise the poisoned outbox command without violating delivery coherence.
+	// 1. Under its exact claim fence, mark the unusable outbox row failed, keeping its delivery counters consistent.
 	const claimedAt = new Date(Math.max(now.getTime(), (event.claimedAt?.getTime() ?? -1) + 1));
 	const failedEvent = await transaction.outboxEvent.updateMany({ where: { id: event.id, claimedAt: event.claimedAt, deliveryCount: event.deliveryCount, publishedAt: null, failedAt: null }, data: { claimedAt, deliveryCount: event.deliveryCount + 1, failedAt: claimedAt, failureCode } });
 	const failedRun = await transaction.agentRun.updateMany({ where: { id: run.id, attempt: run.attempt, state: { in: [AgentRunState.Accepted, AgentRunState.Queued] } }, data: { state: AgentRunState.Failed, terminalReason, finishedAt: now } });
 	if (failedEvent.count !== 1 || failedRun.count !== 1) throw new Error("undispatchable run attempt lost its terminal failure fence");
 	await __DeliverChildRunCompletionInTransaction(transaction, { childRunId: run.id });
 
-	// 2. Conversation-bound runs require their contiguous canonical terminal event in this transaction.
+	// 2. A run attached to a conversation needs its terminal event appended at the next sequence number, in this same transaction.
 	if (run.conversationId !== null)
 	{
 		const maximum = await transaction.conversationRunEvent.aggregate({ where: { runId: run.id }, _max: { sequence: true } });
@@ -466,7 +466,7 @@ async function _TerminalizeUndispatchableAttempt(transaction: Prisma.Transaction
 	}
 }
 
-/** Map one Prisma terminal enum to the canonical conversation-event payload value. */
+/** Maps one Prisma terminal reason to the string used in the conversation event payload. */
 function _TerminalReasonPayload(value: AgentRunTerminalReason): string
 {
 	if (value === AgentRunTerminalReason.PolicyDenied) return "policy_denied";
@@ -514,7 +514,7 @@ function _AssignmentCommandIsValid(eventId: string, command: AgentControllerRunA
 		&& /^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$/.test(command.workloadUid);
 }
 
-/** Parse only tagged trusted subject and signed-membership lifetime from immutable snapshot JSON. */
+/** Reads just the subject and the membership expiry out of the snapshot's identity JSON. */
 function _SnapshotExecutionIdentity(value: unknown): SnapshotExecutionIdentity | null
 {
 	if (!value || typeof value !== "object" || Array.isArray(value)) return null;
@@ -564,7 +564,7 @@ function _IsAnyRuntimeServiceAccountName(value: string): boolean
 	return ___IsAgentRuntimeServiceAccountName(value) || ___IsManagedAgentRuntimeServiceAccountName(value);
 }
 
-/** Parse the sole canonical UTC ISO-8601 representation used by snapshot and lease contracts. */
+/** Parses the single UTC ISO-8601 representation used by snapshot and lease contracts. */
 function _CanonicalUtcInstantEpochMilliseconds(value: string): number | null
 {
 	if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value)) return null;
@@ -572,13 +572,13 @@ function _CanonicalUtcInstantEpochMilliseconds(value: string): number | null
 	return Number.isFinite(epochMilliseconds) && new Date(epochMilliseconds).toISOString() === value ? epochMilliseconds : null;
 }
 
-/** Require the persisted snapshot to repeat every immutable run authority coordinate exactly. */
+/** Requires the stored snapshot to match the run row on every shared field. */
 function _SnapshotMatchesRun(snapshot: { runId: string; siloId: string; agentServiceId: string; agentRevisionId: string; effectiveContractDigest: string; digest: string; conversationId: string | null }, run: { id: string; siloId: string; agentServiceId: string; agentRevisionId: string; effectiveContractDigest: string; inputSnapshotDigest: string; conversationId: string | null }): boolean
 {
 	return snapshot.runId === run.id && snapshot.siloId === run.siloId && snapshot.agentServiceId === run.agentServiceId && snapshot.agentRevisionId === run.agentRevisionId && snapshot.effectiveContractDigest === run.effectiveContractDigest && snapshot.digest === run.inputSnapshotDigest && snapshot.conversationId === run.conversationId;
 }
 
-/** Compare an existing immutable assignment with the complete canonical command and run authority. */
+/** Compares an existing assignment against the incoming command and the run row, field by field. */
 function _AssignmentIdentityMatches(existing: { runId: string; attempt: number; agentServiceId: string; agentRevisionId: string; siloId: string; subjectId: string; audience: string; serviceAccountName: string; namespace: string; workloadKind: WorkloadKind; workloadUid: string; workloadProfile: string }, command: AgentControllerRunAttemptAssignmentCommand, run: { id: string; agentServiceId: string; agentRevisionId: string; siloId: string }, subjectId: string, audience: string): boolean
 {
 	return existing.runId === run.id && existing.attempt === command.attempt && existing.agentServiceId === run.agentServiceId && existing.agentRevisionId === run.agentRevisionId && existing.siloId === run.siloId && existing.subjectId === subjectId && existing.audience === audience && existing.serviceAccountName === command.serviceAccountName && existing.namespace === command.namespace && existing.workloadKind === WorkloadKind.Job && existing.workloadUid === command.workloadUid && existing.workloadProfile === command.expectedWorkloadProfile;
@@ -591,7 +591,7 @@ function _BootstrapReference(eventId: string, attempt: number, run: Pick<AgentRu
 	return `bootstrap-v1_${createHash("sha256").update(canonical, "utf8").digest("hex")}`;
 }
 
-/** Bind the opaque reference to every immutable assignment field with a canonical digest. */
+/** Digests the reference together with every assignment field, so neither can be swapped for another. */
 function _BootstrapClaimDigest(bootstrapReference: string, assignment: WorkloadAssignment): string
 {
 	const canonical = JSON.stringify([
@@ -657,7 +657,7 @@ function _ReleaseIdempotencyKey(runId: string, attempt: number): string
 	return `${runId}:attempt:${attempt}:workload-release`;
 }
 
-/** Verify bootstrap identity, assignment coordinates, lifetime, and canonical integrity digest. */
+/** Verifies the bootstrap's identity fields, its assignment fields, its lifetime, and its integrity digest. */
 function _BootstrapMatches(bootstrap: WorkloadBootstrap | null, bootstrapReference: string, assignment: WorkloadAssignment): boolean
 {
 	return bootstrap !== null
@@ -689,7 +689,7 @@ function _ReleaseEventMatches(event: OutboxEvent | null, assignment: WorkloadAss
 	return Object.keys(payload).length === keys.length && keys.every(key => payload[key] === expected[key]);
 }
 
-/** Revalidate an eligible release row after canonical locking and with database time. */
+/** Re-checks an eligible release row once every lock is held, using the database clock. */
 function _ReleaseAuthorityIsCurrent(event: OutboxEvent, run: AgentRun, assignment: WorkloadAssignment | null, bootstrap: WorkloadBootstrap | null, candidate: RunWorkloadReleaseCandidateRow, now: Date, claimLeaseMilliseconds: number): boolean
 {
 	return assignment !== null && bootstrap !== null
@@ -704,7 +704,7 @@ function _ReleaseAuthorityIsCurrent(event: OutboxEvent, run: AgentRun, assignmen
 		&& _BootstrapMatches(bootstrap, bootstrap.id, assignment) && _ReleaseEventMatches(event, assignment, bootstrap.id);
 }
 
-/** Classify only persistent release poison; a concurrent fresh claim is a benign retry race. */
+/** Decides whether a release row is permanently unusable; a row another worker just claimed is only a harmless race. */
 function _ReleasePoisonFailureCode(event: OutboxEvent, run: AgentRun, assignment: WorkloadAssignment | null, bootstrap: WorkloadBootstrap | null, candidate: RunWorkloadReleaseCandidateRow, now: Date, claimLeaseMilliseconds: number): string | null
 {
 	if (event.publishedAt !== null || event.failedAt !== null) return null;
@@ -721,7 +721,7 @@ function _ReleasePoisonFailureCode(event: OutboxEvent, run: AgentRun, assignment
 	return null;
 }
 
-/** Claim and fail one persistent poisoned release so a later valid row can be selected. */
+/** Claims and fails one permanently unusable release row, so a later valid row can be picked up. */
 async function _TerminalizePoisonedRelease(transaction: Prisma.TransactionClient, event: OutboxEvent, run: AgentRun, assignment: WorkloadAssignment | null, bootstrap: WorkloadBootstrap | null, now: Date, failureCode: string): Promise<void>
 {
 	// 1. Revoke any still-pending assignment before failing this exact Assigned attempt.
@@ -734,7 +734,7 @@ async function _TerminalizePoisonedRelease(transaction: Prisma.TransactionClient
 	if ((assignment !== null && revoked.count !== 1) || failedRun.count !== 1 || failed.count !== 1) throw new Error("poisoned run workload release lost its terminal failure fence");
 	await __DeliverChildRunCompletionInTransaction(transaction, { childRunId: run.id });
 
-	// 3. A committed assignment always receives exact physical cleanup authority; TTL cannot remove a suspended Job.
+	// 3. Always schedule cleanup for a committed assignment: Kubernetes TTL never deletes a suspended Job.
 	if (assignment !== null)
 	{
 		const maximum = await transaction.outboxEvent.aggregate({ where: { runId: run.id }, _max: { sequence: true } });
@@ -749,7 +749,7 @@ async function _TerminalizePoisonedRelease(transaction: Prisma.TransactionClient
 		} });
 	}
 
-	// 4. Conversation-bound runs require their contiguous canonical failure event.
+	// 4. A run attached to a conversation needs its failure event appended at the next sequence number.
 	if (run.conversationId !== null)
 	{
 		const maximum = await transaction.conversationRunEvent.aggregate({ where: { runId: run.id }, _max: { sequence: true } });

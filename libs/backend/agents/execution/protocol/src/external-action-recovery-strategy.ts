@@ -2,17 +2,17 @@ import { ExternalActionClaimKinds, ExternalActionRecoveryModes, ToolInvocationSt
 
 import type { ExternalActionProviderOutcome, ExternalActionRecoveryStrategy, PreparedExternalActionAdapter } from "./external-action-worker.types.js";
 
-/** Require the provider idempotency key frozen at admission. */
+/** Return the provider idempotency key saved at admission, throwing when there is none. */
 function _recoveryKey(invocation: ToolInvocationRecord): string
 {
 	if (invocation.recoveryKey === null) throw new Error("external action recovery key is unavailable");
 	return invocation.recoveryKey;
 }
 
-/** Repeats dispatch only through a provider adapter bound to the exact frozen idempotency key. */
+/** Retries by sending again with the saved idempotency key, so the provider treats the repeats as one call. */
 class _ProviderIdempotencyStrategy implements ExternalActionRecoveryStrategy
 {
-	/** Dispatch the exact request; the provider key makes an ambiguous repeat one logical effect. */
+	/** Send the request with the saved key, so sending it again after an unclear result still counts as one call. */
 	execute(adapter: PreparedExternalActionAdapter, invocation: ToolInvocationRecord, claim: ToolInvocationClaim): Promise<ExternalActionProviderOutcome>
 	{
 		if (claim.kind !== ExternalActionClaimKinds.Dispatch || invocation.state !== ToolInvocationStates.Claimed) throw new Error("idempotency strategy requires a dispatch claim");
@@ -23,7 +23,7 @@ class _ProviderIdempotencyStrategy implements ExternalActionRecoveryStrategy
 /** Dispatches once, then uses provider readback for every ambiguous outcome. */
 class _ProviderReconciliationStrategy implements ExternalActionRecoveryStrategy
 {
-	/** Select dispatch for Ready work and non-mutating readback for a reconciliation claim. */
+	/** Send the request for a Dispatch claim; read the result back for a Reconcile claim. */
 	execute(adapter: PreparedExternalActionAdapter, invocation: ToolInvocationRecord, claim: ToolInvocationClaim): Promise<ExternalActionProviderOutcome>
 	{
 		const recoveryKey = _recoveryKey(invocation);
@@ -36,7 +36,7 @@ class _ProviderReconciliationStrategy implements ExternalActionRecoveryStrategy
 /** Executes once and never retries or reads back after an uncertain provider outcome. */
 class _ManualRecoveryStrategy implements ExternalActionRecoveryStrategy
 {
-	/** Permit only the first fenced dispatch; manual recovery has no automatic second operation. */
+	/** Allow only a Dispatch claim; manual recovery never makes a second provider call. */
 	execute(adapter: PreparedExternalActionAdapter, _invocation: ToolInvocationRecord, claim: ToolInvocationClaim): Promise<ExternalActionProviderOutcome>
 	{
 		if (claim.kind !== ExternalActionClaimKinds.Dispatch) throw new Error("manual recovery cannot reconcile automatically");
@@ -51,7 +51,16 @@ const _PROVIDER_RECONCILIATION_STRATEGY = new _ProviderReconciliationStrategy();
 /** Stateless manual-recovery strategy shared by every worker pass. */
 const _MANUAL_RECOVERY_STRATEGY = new _ManualRecoveryStrategy();
 
-/** Select the explicit strategy frozen by trusted admission before provider dispatch. */
+/**
+ * Return the strategy for the recovery mode fixed when the invocation was admitted.
+ *
+ * Called by: `_execute` in external-action-worker.ts, on every claimed pass.
+ *
+ * @param mode - The mode saved on the invocation row, never one derived from the adapter.
+ * @returns The strategy for that mode. Anything other than provider-idempotency or reconciliation
+ * gets manual recovery, which will never make a second provider call on its own.
+ * @see ExternalActionRecoveryStrategy
+ */
 export function _ExternalActionRecoveryStrategy(mode: ExternalActionRecoveryModes): ExternalActionRecoveryStrategy
 {
 	if (mode === ExternalActionRecoveryModes.ProviderIdempotency) return _PROVIDER_IDEMPOTENCY_STRATEGY;

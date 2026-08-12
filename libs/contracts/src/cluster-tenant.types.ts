@@ -1,6 +1,10 @@
 /**
- * Isolation strength chosen per customer. Drives how the operator and the
- * provisioner seam place and fence a customer's workloads.
+ * How strongly one customer's workloads are separated from other customers'.
+ *
+ * The operator and the provisioner both read this: it decides which nodes a customer's pods may
+ * land on and, for `dedicatedCluster`, whether the request can be served at all — that tier is
+ * rejected unless an external provisioner is registered for it.
+ * @see {@link ClusterTenantProvisionerRegistry}
  */
 export enum ClusterTenantIsolationTier
 {
@@ -21,7 +25,7 @@ export enum ClusterTenantComputeMode
   Dedicated = "dedicated",
 }
 
-/** Lifecycle phase reported for a cluster tenant as it is provisioned. */
+/** How far along a cluster tenant's provisioning is. Only `ready` means workloads may be scheduled; `failed` puts the reason in `message`. */
 export enum ClusterTenantPhase
 {
   /** Accepted but not yet acted on. */
@@ -35,8 +39,10 @@ export enum ClusterTenantPhase
 }
 
 /**
- * Compute placement policy for a cluster tenant. Runtime launchers stamp the
- * resulting `nodeSelector` and tolerations onto governed workloads.
+ * Where a cluster tenant's pods are allowed to run.
+ *
+ * Runtime launchers turn this into the `nodeSelector` and tolerations they set on every workload
+ * they create. `nodePool` is required when `mode` is `dedicated` and ignored otherwise.
  */
 export interface ClusterTenantCompute
 {
@@ -100,8 +106,11 @@ export interface ClusterTenantObservedStatus
 }
 
 /**
- * Shared API contract for a cluster tenant, the first-class customer and isolation unit.
- * The control plane emits this shape and governed workload launchers use its boundary.
+ * One customer: the unit OpenCrane isolates, quotas, and provisions against.
+ *
+ * The control plane emits this shape; workload launchers read its placement and namespace to
+ * decide where a customer's pods may run. `status` is absent until the operator has reconciled
+ * the tenant at least once, so a reader must handle its absence rather than assuming `pending`.
  */
 export interface ClusterTenant
 {

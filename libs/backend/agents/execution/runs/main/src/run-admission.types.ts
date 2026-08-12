@@ -3,7 +3,7 @@ import type { RunInputSnapshot } from "@opencrane/contracts";
 import type { AgentRevisionId, AgentRunId, AgentServiceId, AgentServiceKind, SiloId } from "@opencrane/models/agents";
 import type { ConversationId, MessageContentBlock, MessageId } from "@opencrane/models/conversations";
 
-/** Immutable run, service, and revision facts accepted at the initial admission boundary. */
+/** The run, service, and revision facts accepted when a logical run is first admitted; they never change afterwards. */
 export interface InitialRunAuthority
 {
 	/** Stable AgentService executed by the logical run. */
@@ -18,7 +18,7 @@ export interface InitialRunAuthority
 	readonly promptCompilerVersion: string;
 	/** Trigger accepted for the initial logical run. */
 	readonly trigger: "interactive" | "schedule" | "managed_invocation";
-	/** Delegated user, when an interactive run acts on a human's behalf. */
+	/** The user the run is acting for, when an interactive run acts on a human's behalf. */
 	readonly delegatedUserId: string | null;
 	/** Root lineage identifier fixed when the logical run is admitted. */
 	readonly rootRunId: string;
@@ -33,7 +33,7 @@ export interface RunAdmissionCommandCoordinates
 	readonly runId: AgentRunId;
 	/** Silo containing every authority fact and the durable run. */
 	readonly siloId: SiloId;
-	/** AgentService locked before any authority input is revalidated. */
+	/** AgentService whose row is locked first, before any other input is re-read. */
 	readonly agentServiceId: AgentServiceId;
 	/** Conversation permanently bound to the admitted input snapshot, or null for non-conversational work. */
 	readonly conversationId: ConversationId | null;
@@ -68,7 +68,7 @@ export interface ServiceRunAdmissionCommand extends RunAdmissionCommandCoordinat
 /** Tagged initial admission command with no untagged execution-subject fallback. */
 export type RunAdmissionCommand = UserRunAdmissionCommand | ServiceRunAdmissionCommand;
 
-/** Transaction capability supplied to every loader at the final admission fence. */
+/** The transaction and trusted clock that every input loader uses at the final admission fence. */
 export interface RunAdmissionTransaction
 {
 	/** Prisma transaction through which all admission reads and durable writes must occur. */
@@ -86,7 +86,7 @@ export interface RunAdmissionClock
 	now(): Date;
 }
 
-/** Ready-to-persist run facts and the single immutable snapshot assembled inside the transaction. */
+/** The run facts and the one immutable snapshot, both assembled inside the transaction and ready to write. */
 export interface RunAdmissionBuild
 {
 	/** Authoritative initial-run facts revalidated while the service lock is held. */
@@ -98,10 +98,21 @@ export interface RunAdmissionBuild
 /** Callback result for a transaction-fenced admission compilation. */
 export type RunAdmissionBuildResult<TDenial> = { readonly outcome: "ready"; readonly value: RunAdmissionBuild } | { readonly outcome: "denied"; readonly reason: TDenial };
 
-/** Stable run-owned denials emitted by the first durable admission fence. */
+/**
+ * Why the database refused to admit a run, and what the caller should do about each.
+ *
+ * These come from the admission transaction itself, not from any input loader, so they mean "the
+ * run could not be created" rather than "an input was unavailable". The three are not
+ * interchangeable: `AuthorityConflict` and `ActiveRun` are permanent for this command and must be
+ * reported to the caller, while `PersistenceUnavailable` says nothing is known about whether
+ * anything committed — so it must never be presented as a refusal, and a retry must reuse the
+ * same `requestIdempotencyKey` so a run that did commit is returned instead of duplicated.
+ *
+ * @see RunAdmissionResult
+ */
 export enum RunAdmissionDenialReasons
 {
-	/** A same-key row or recovered snapshot belongs to another durable authority scope. */
+	/** A row with the same idempotency key, or a recovered snapshot, belongs to a different run, silo, or service. */
 	AuthorityConflict = "authority_conflict",
 	/** Another non-terminal foreground run already owns the command's exact conversation. */
 	ActiveRun = "active_run",
@@ -115,9 +126,38 @@ export type RunAdmissionResult<TDenial> = { readonly outcome: "accepted" | "idem
 /** Optional same-transaction persistence owned by the caller of initial run admission. */
 export type RunAdmissionCommit = (transaction: RunAdmissionTransaction, value: RunAdmissionBuild) => Promise<void>;
 
-/** Run-owned boundary that serializes idempotency, final authority reads, and initial dispatch. */
+/**
+ * The single transaction in which a logical run becomes real.
+ *
+ * It does three things in order, one caller at a time for a given idempotency key: resolves
+ * duplicates, re-reads every authority input while the service row is locked, and writes the run,
+ * its snapshot and its first dispatch outbox row. Running them one at a time is the point — it is
+ * what stops two callers with the same key from creating two runs, and what stops an input that
+ * changed mid-assembly from reaching a committed snapshot.
+ *
+ * Called by: `__AssembleRunInputSnapshot` in
+ * `execution/inputs/main/src/session-assembly.ts`, which passes its own compile step as the
+ * `build` callback. Wired by `prisma-session-assembly-authorities.ts`; implemented by
+ * `PrismaRunAdmissionRepository`.
+ */
 export interface RunAdmissionRepository
 {
-	/** Resolves a duplicate before compilation or accepts one complete run/snapshot/outbox transaction. */
+	/**
+	 * Admits one run, or returns the run a previous identical request already admitted.
+	 *
+	 * `build` runs inside the transaction, with the service row already locked, and must re-read
+	 * every input it depends on rather than trusting anything read before the call. If `build`
+	 * returns `denied`, the whole transaction is rolled back and nothing is written. `commit` runs
+	 * last, in the same transaction, for callers that need extra rows written atomically with the
+	 * run.
+	 *
+	 * @param command - Run coordinates plus the `requestIdempotencyKey` that makes a repeat safe.
+	 * @param build - Called inside the transaction to compile the snapshot; its refusal aborts the
+	 * admission with that reason.
+	 * @param commit - Optional extra writes, run in the same transaction after the run exists.
+	 * @returns `accepted` for a new run and `idempotent` for a repeat of one already admitted — both
+	 * carry the same snapshot and both mean the caller may proceed. `denied` carries either the
+	 * reason `build` gave or a {@link RunAdmissionDenialReasons} value.
+	 */
 	admit<TDenial>(command: RunAdmissionCommand, build: (transaction: RunAdmissionTransaction) => Promise<RunAdmissionBuildResult<TDenial>>, commit?: RunAdmissionCommit): Promise<RunAdmissionResult<TDenial>>;
 }

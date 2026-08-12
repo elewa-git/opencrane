@@ -1,32 +1,32 @@
-/** Sole projected-token audience accepted from the agent controller. */
+/** The only token audience OpenCrane accepts from the agent controller; a token for any other audience is rejected. */
 export const AGENT_CONTROLLER_PROJECTED_TOKEN_AUDIENCE = "opencrane-agent-controller";
 
 /** Exact Kubernetes ServiceAccount allowed to drive agent-workload reconciliation. */
 export const AGENT_CONTROLLER_SERVICE_ACCOUNT_NAME = "agent-controller";
 
-/** Stable cleanup projections persisted with runtime-workload outbox commands. */
+/** How a runtime workload's cleanup is authorized. Stored with each outbox command. */
 export enum RunWorkloadCleanupModes
 {
-	/** Cleanup is fenced by an immutable Kubernetes Job UID from durable assignment. */
+	/** Cleanup may only touch the Job whose UID was recorded when the assignment was stored. */
 	Assigned = "assigned",
-	/** Cleanup may adopt only the exact still-suspended Job created before assignment committed. */
+	/** Cleanup may take over only the Job that is still suspended and was created before the assignment committed. */
 	UnassignedOrphan = "unassigned_orphan",
 }
 
-/** Database-issued claim generation fencing one controller delivery attempt. */
+/** Proof that this controller replica currently owns one outbox event. A newer claim invalidates it. */
 export interface AgentControllerRunAttemptClaimLease
 {
 	/** Durable run-outbox event identifier. */
 	readonly eventId: string;
-	/** Exact database claim instant used as a compare-and-swap token. */
+	/** Time the database issued the claim; the commit must send it back unchanged to succeed. */
 	readonly claimedAt: string;
-	/** Monotonic delivery generation paired with the claim instant. */
+	/** Delivery counter for this event; it only increases, and the commit must send it back with the claim time. */
 	readonly deliveryCount: number;
 	/** Database-derived instant after which another controller may reclaim the event. */
 	readonly expiresAt: string;
 }
 
-/** Narrow desired-state projection needed to build one suspended runtime Job. */
+/** The minimum the controller needs to build one suspended runtime Job. */
 export interface AgentControllerRunAttemptProjection
 {
 	/** Logical run identifier. */
@@ -39,13 +39,13 @@ export interface AgentControllerRunAttemptProjection
 	readonly agentServiceId: string;
 	/** Immutable AgentRevision executed by the attempt. */
 	readonly agentRevisionId: string;
-	/** Digest of the immutable runtime input; the controller never receives its private body. */
+	/** Digest of the run's compiled input. The controller gets this digest only, never the input itself. @see CompiledRunInput */
 	readonly inputSnapshotDigest: string;
 	/** Exact Kubernetes namespace in which the attempt must run. */
 	readonly namespace: string;
-	/** Named bounded workload profile the controller must resolve. */
+	/** Name of the workload profile the controller must look up before building the Job. */
 	readonly workloadProfile: string;
-	/** Stable opaque bootstrap reference projected into the one-attempt Job; it is not a credential. */
+	/** Opaque bootstrap reference mounted into this attempt's Job. It is not a credential. @see __CreateSkillWorkloadBootstrapReference */
 	readonly bootstrapReference: string;
 	/**
 	 * Attempt-scoped LiteLLM virtual key minted by the control plane at claim time.
@@ -58,16 +58,16 @@ export interface AgentControllerRunAttemptProjection
 	readonly litellmKey: string;
 }
 
-/** One claimed outbox command and its authorised suspended-Job projection. */
+/** One claimed outbox event, together with the fields needed to build its suspended Job. */
 export interface AgentControllerRunAttemptClaim
 {
-	/** Claim generation that must accompany the eventual assignment commit. */
+	/** Claim proof the controller must send back when it commits the assignment. */
 	readonly lease: AgentControllerRunAttemptClaimLease;
-	/** Attempt coordinates safe to expose to the Kubernetes mutator. */
+	/** The attempt fields that are safe to give the Kubernetes controller. @see AgentControllerRunAttemptProjection */
 	readonly attempt: AgentControllerRunAttemptProjection;
 }
 
-/** Exact suspended Job evidence submitted for authoritative assignment. */
+/** What the controller sends back to prove it created the suspended Job. */
 export interface AgentControllerRunAttemptAssignmentCommand
 {
 	/** Exact database claim instant returned by the claim endpoint. */
@@ -90,10 +90,10 @@ export interface AgentControllerRunAttemptAssignmentCommand
 	readonly workloadUid: string;
 }
 
-/** Successful or exact-idempotent assignment response. */
+/** Response to an assignment commit, whether it committed now or replayed an identical earlier commit. */
 export interface AgentControllerRunAttemptAssignmentResult
 {
-	/** Whether this call committed the assignment or replayed its exact durable value. */
+	/** True when this call committed the assignment; false when it replayed an identical stored one. Both mean success. */
 	readonly outcome: "assigned" | "idempotent";
 	/** Logical run bound to the Job. */
 	readonly runId: string;
@@ -103,7 +103,7 @@ export interface AgentControllerRunAttemptAssignmentResult
 	readonly workloadUid: string;
 }
 
-/** Immutable workload coordinates the controller must release and register. */
+/** The stored workload facts the controller needs to unsuspend the Job and register its first Pod. */
 export interface AgentControllerRunWorkloadReleaseProjection
 {
 	/** Logical run bound to the suspended Job. */
@@ -124,22 +124,22 @@ export interface AgentControllerRunWorkloadReleaseProjection
 	readonly workloadUid: string;
 	/** Immutable workload profile stored with the assignment. */
 	readonly workloadProfile: string;
-	/** Absolute canonical UTC instant after which the assignment grants no execution authority. */
+	/** UTC time after which this assignment no longer permits execution. */
 	readonly assignmentExpiresAt: string;
 	/** Stable opaque bootstrap reference projected into the Job; it grants no authority by itself. */
 	readonly bootstrapReference: string;
 }
 
-/** One leased request to unsuspend a Job and register its first Pod. */
+/** A claimed request to unsuspend a Job and register its first Pod. */
 export interface AgentControllerRunWorkloadReleaseClaim
 {
-	/** Claim generation that fences stale controller replicas. */
+	/** Claim proof that stops an older controller replica from acting on this event. */
 	readonly lease: AgentControllerRunAttemptClaimLease;
 	/** Exact durable assignment safe for the controller to reconcile. */
 	readonly workload: AgentControllerRunWorkloadReleaseProjection;
 }
 
-/** First-Pod evidence submitted after the assigned Job creates a Pod. */
+/** What the controller sends back once the assigned Job has created its first Pod. */
 export interface AgentControllerRunWorkloadRegistrationCommand
 {
 	/** Exact database claim instant returned by the release claim endpoint. */
@@ -170,7 +170,7 @@ export interface AgentControllerRunWorkloadRegistrationCommand
 	readonly podUid: string;
 }
 
-/** Successful or exact-idempotent first-Pod registration response. */
+/** Response to a first-Pod registration, whether it registered now or replayed an identical earlier call. */
 export interface AgentControllerRunWorkloadRegistrationResult
 {
 	/** Whether this call registered the Pod or replayed its exact durable value. */
@@ -185,7 +185,7 @@ export interface AgentControllerRunWorkloadRegistrationResult
 	readonly podUid: string;
 }
 
-/** Bounded response returned after delivered run-outbox maintenance. */
+/** Response after pruning delivered run-outbox rows; it reports a capped row count only. */
 export interface AgentControllerRunOutboxPruneResult
 {
 	/** Number of retention-expired records removed in one transaction. */

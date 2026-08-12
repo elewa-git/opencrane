@@ -40,7 +40,7 @@ import { ___CreateDbHealthProbe } from "../infra/db/db.js";
  * Register the authenticated product API from functional route lists.
  *
  * @param app - Public Express listener, already protected by browser-session authentication.
- * @param prisma - Canonical product-authority database client.
+ * @param prisma - The main product database client.
  * @param coreApi - Kubernetes client used only by the provider bring-your-own-key capability.
  * @param runAdmission - Shared managed run-now and scheduler admission port.
  * @param personalRunAdmission - Shared personal browser-run admission port.
@@ -106,7 +106,7 @@ export function _RegisterRoutes(app: Express, prisma: PrismaClient, coreApi: k8s
 	return app;
 }
 
-/** Resolve the durable-onboarding owner only from the verified request principal. */
+/** Resolve the onboarding owner only from the authenticated user on the request, never from the request body. */
 const _ResolveUserOnboardingOwner: UserOnboardingOwnerResolver = function _Owner(request)
 {
 	const principal = _ResolveRequestPrincipal(request);
@@ -118,7 +118,7 @@ const _ResolveUserOnboardingOwner: UserOnboardingOwnerResolver = function _Owner
  *
  * The grants domain stays transport-agnostic; the OpenCrane app owns HTTP abuse protection.
  *
- * @param prisma - Canonical product-authority database client.
+ * @param prisma - The main product database client.
  * @param options - Optional bounded limiter tuning for an isolated application test.
  * @returns The protected sharing router.
  */
@@ -134,7 +134,7 @@ export function _CreateRateLimitedSharesRouter(prisma: PrismaClient, options?: S
  * Register the workload-facing API from explicit controller, runtime, worker, and replay lists.
  *
  * @param app - Internal Express listener, unreachable from the public ingress.
- * @param prisma - Canonical product-authority database client.
+ * @param prisma - The main product database client.
  * @param authApi - Kubernetes TokenReview client for workload identity.
  * @param config - Frozen workload-facing configuration shared with workers and body parsing.
  * @param memoryGateway - Process-wide authenticated memory-gateway client.
@@ -159,7 +159,7 @@ export function _RegisterInternalRoutes(app: Express, prisma: PrismaClient, auth
 	_MountRouteAreas(app, [internalControllerRoutes, internalRuntimeRoutes, internalWorkerRoutes, internalChannelTargetRoutes, internalReplayRoutes]);
 }
 
-/** Convert an optional capability router into a zero-or-one entry route list. */
+/** Return a one-entry route list for a router, or an empty list when the router is null. */
 function _OptionalRoute(path: string, handler: Router | null): readonly RouteMount[]
 {
 	return handler === null ? [] : [{ method: "use", path, handler }];

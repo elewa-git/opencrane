@@ -1,12 +1,21 @@
 import type { Interrupt, TextMessageStartEvent } from "@ag-ui/core";
 import type { AgUiA2uiEnvelope, AgUiProjectionEvent, AgUiToolRecoveryRequiredEnvelope } from "@opencrane/contracts";
 
-/** Browser-visible lifecycle for one projected conversation run. */
+/**
+ * How a conversation run is going, as far as the browser can tell.
+ *
+ * The distinction that matters is between `Failed` and `NeedsRecovery`. `Failed` means the run
+ * ended and may be retried. `NeedsRecovery` means an external action was started and its outcome
+ * is unknown — retrying could repeat it, so the UI must offer cancelling and nothing else.
+ * `Interrupted` is not a failure at all: the run stopped because it needs input from the user.
+ *
+ * @see AgUiToolStatuses
+ */
 export enum AgUiRunStatuses
 {
 	/** No run has been observed. */
 	Idle = "idle",
-	/** The authoritative stream started a run. */
+	/** The server stream started a run. */
 	Running = "running",
 	/** The authoritative stream completed a run successfully. */
 	Succeeded = "succeeded",
@@ -33,7 +42,16 @@ export enum AgUiMessageStatuses
 	Cancelled = "cancelled",
 }
 
-/** Browser-visible lifecycle for one projected tool call. */
+/**
+ * How a single tool call is going.
+ *
+ * `Recovered` and `Completed` both mean the call ended successfully, but `Recovered` says it failed
+ * at least once first, and those earlier failures are still listed in `failures` — a UI that hides
+ * them loses the only record. `NeedsRecovery` means the action must not be dispatched again.
+ *
+ * @see AgUiToolView
+ * @see AgUiRunStatuses
+ */
 export enum AgUiToolStatuses
 {
 	/** The tool call was requested and may still progress. */
@@ -48,14 +66,14 @@ export enum AgUiToolStatuses
 	Recovered = "recovered",
 }
 
-/** One safe failure retained in a tool call's visible lifecycle history. */
+/** One recorded failure of a tool call, kept even after a later attempt succeeds. */
 export interface AgUiToolFailure
 {
 	/** Optional server-selected technical classification for this failed attempt. */
 	readonly code: string | null;
 }
 
-/** Browser-owned view of one safe conversation message. */
+/** One conversation message, assembled in the browser from the stream's text events. */
 export interface AgUiMessageView
 {
 	/** Stable message identifier. */
@@ -64,18 +82,18 @@ export interface AgUiMessageView
 	readonly role: TextMessageStartEvent["role"];
 	/** Assembled display-safe message text. */
 	readonly text: string;
-	/** Truthful terminal or streaming state. */
+	/** Whether the message is finished or still streaming, exactly as the server reported it. */
 	readonly status: AgUiMessageStatuses;
 }
 
-/** Browser-owned view of one safe tool lifecycle. */
+/** One tool call, assembled in the browser from the stream's tool events. */
 export interface AgUiToolView
 {
 	/** Stable tool-call identifier. */
 	readonly id: string;
 	/** Display-safe tool name. */
 	readonly name: string;
-	/** Incremental JSON arguments emitted by the projection. */
+	/** The tool's arguments as JSON text, appended delta by delta; may be incomplete while streaming. */
 	readonly arguments: string;
 	/** Truthful projected tool lifecycle. */
 	readonly status: AgUiToolStatuses;
@@ -83,13 +101,13 @@ export interface AgUiToolView
 	readonly result: string | null;
 	/** Optional server-selected technical classification for a failure. */
 	readonly failureCode: string | null;
-	/** Ordered failure evidence retained even when a later attempt recovers. */
+	/** Every failure so far, in order; kept even after a later attempt recovers. */
 	readonly failures: readonly AgUiToolFailure[];
-	/** Exact display-safe recovery evidence retained after the run is cancelled or reconciled. */
+	/** Recovery details safe to show, kept after the run is cancelled or reconciled. */
 	readonly recovery: AgUiToolRecoveryRequiredEnvelope | null;
 }
 
-/** Safe failure selected by the server-owned AG-UI projection. */
+/** Why a run failed, in words the server has already made safe to display. */
 export interface AgUiRunFailure
 {
 	/** Display-safe failure message. */
@@ -98,12 +116,25 @@ export interface AgUiRunFailure
 	readonly code?: string;
 }
 
-/** Immutable reduced state for one live projected event stream. */
+/**
+ * Everything the browser knows about one live conversation, rebuilt from the event stream.
+ *
+ * Never mutated: {@link __ReduceAgUiStream} returns a new object each time. This is the single
+ * value a conversation UI renders from, and the value to pass back in when reconnecting — `cursor`
+ * and `seenCursors` are what make a reconnect resume instead of replay.
+ *
+ * `messages` and `tools` are keyed by id rather than ordered, so a view that needs chronological
+ * order must impose it. `accessRevoked` means the user lost access and everything here was
+ * deliberately cleared; show a revoked state, not an error.
+ *
+ * @see __ReduceAgUiStream
+ * @see AG-UI protocol docs — the events these views are assembled from: https://docs.ag-ui.com
+ */
 export interface AgUiStreamState
 {
-	/** Latest durable cursor accepted from the authoritative stream. */
+	/** The most recent cursor accepted from the server; what a reconnect resumes from. */
 	readonly cursor: string | null;
-	/** Fingerprints used to reject duplicated or mutated durable cursor records. */
+	/** A hash per cursor, so a repeated cursor is ignored and a cursor reused with different data throws. */
 	readonly seenCursors: ReadonlyMap<string, string>;
 	/** Current run identifier, when supplied by the stream. */
 	readonly runId: string | null;
@@ -119,20 +150,29 @@ export interface AgUiStreamState
 	readonly messages: Readonly<Record<string, AgUiMessageView>>;
 	/** Tool lifecycles assembled from safe events. */
 	readonly tools: Readonly<Record<string, AgUiToolView>>;
-	/** Governed A2UI surfaces keyed by their complete stable presentation identity. */
+	/** A2UI surfaces, keyed by their conversation, run, message and surface ids joined together. */
 	readonly surfaces: ReadonlyMap<string, AgUiA2uiEnvelope>;
-	/** Latest source-envelope fingerprints used to detect same-sequence mutation after materialization. */
+	/** A hash of each surface's last envelope, so a payload that changes without its sequence changing is caught. */
 	readonly surfaceFingerprints: ReadonlyMap<string, string>;
-	/** Names of custom display signals; their authority-bearing source payloads stay server-side. */
+	/** Names of the custom events seen; the payloads that could carry authority stay on the server. */
 	readonly customEvents: readonly string[];
-	/** Whether authority loss purged this in-memory projection. */
+	/** Whether the user lost access, in which case everything above was cleared on purpose. */
 	readonly accessRevoked: boolean;
 }
 
-/** Decoded SSE record before it is reduced into view state. */
+/**
+ * One SSE frame after decoding, ready to reduce.
+ *
+ * `id` is the server's cursor. When it is present the record is durable and advances the resume
+ * position; when it is absent the record is a temporary overlay that must not move the cursor —
+ * that is how a reconnect avoids replaying overlay state.
+ *
+ * @see __DecodeAgUiSseRecord
+ * @see __ReduceAgUiStream
+ */
 export interface AgUiStreamRecord
 {
-	/** Opaque durable SSE cursor. Cursorless records are non-durable overlays. */
+	/** The server's cursor — treat it as an opaque string and never parse it. A record without one is a temporary overlay. */
 	readonly id?: string;
 	/** Fixed versioned projection event name. */
 	readonly event: "ag-ui";

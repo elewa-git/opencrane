@@ -1,6 +1,24 @@
 import type { ChildRunAdmissionLimits, ChildRunParentAuthority, ChildRunTargetAuthorization, PrepareChildRunAdmissionCommand, PrepareChildRunAdmissionResult } from "./child-run-admission.types.js";
 
-/** Prepares a governed child run using only parent authority, fixed limits, and a carved budget. */
+/**
+ * Works out whether a parent run may spawn this child, and with what budget.
+ *
+ * Pure decision only — nothing is written. Every value comes from the parent's own facts and the
+ * server's limits, never from the spawning tool's arguments, which is what stops an agent from
+ * asking for a deeper tree, a bigger budget, or a subject it does not have.
+ *
+ * Called by: `prisma-child-run-reservation-repository.ts`, which calls it again inside the
+ * transaction that reserves the budget, so a policy change cannot race the durable admission.
+ *
+ * @param parent - The parent's lineage, subject and remaining budget, already loaded.
+ * @param command - The requested child id, target service, target revision and budget.
+ * @param limits - Server-owned depth and fan-out limits.
+ * @param targetAuthorization - Policy re-checked here rather than trusted from earlier.
+ * @returns `prepared` with the values the persistence layer must write through unchanged.
+ * `denied` names which rule stopped it: a malformed request, a limit, an exhausted parent budget,
+ * or a target the parent may not invoke — `target_authorization_unavailable` differs from
+ * `target_not_authorized` in that the policy could not be consulted at all, so it may be retried.
+ */
 export async function __PrepareChildRunAdmission(parent: ChildRunParentAuthority, command: PrepareChildRunAdmissionCommand, limits: ChildRunAdmissionLimits, targetAuthorization: ChildRunTargetAuthorization): Promise<PrepareChildRunAdmissionResult>
 {
 	// 1. Reject malformed parent authority separately, so callers cannot mistake it for a bad child request.

@@ -3,7 +3,7 @@ import { PersonalConfigurationChangeState, Prisma, type PrismaClient } from "@pr
 import { _IsPersonalConfigurationPatch } from "../proposal/personal-configuration-patch.validator.js";
 import { PersonalConfigurationChangeViewStates, type PersonalConfigurationChangeView, type PersonalConfigurationChangeViewRepository } from "./personal-configuration-view.types.js";
 
-/** Selected Prisma proposal row before mapping to the owner-visible product shape. */
+/** The proposal columns this repository selects, before they are mapped to the user-facing view. */
 interface PersonalConfigurationViewRow
 {
 	/** Durable proposal identifier. */
@@ -12,9 +12,9 @@ interface PersonalConfigurationViewRow
 	readonly requestedPatch: Prisma.JsonValue;
 	/** Database lifecycle state. */
 	readonly state: PersonalConfigurationChangeState;
-	/** Conversation provenance. */
+	/** Conversation the proposal came from. */
 	readonly sourceConversationId: string;
-	/** Run provenance. */
+	/** Run that recorded the proposal. */
 	readonly sourceRunId: string;
 	/** Trusted creation instant. */
 	readonly proposedAt: Date;
@@ -24,7 +24,7 @@ interface PersonalConfigurationViewRow
 	readonly rejectionReason: string | null;
 }
 
-/** Prisma read repository for bounded owner-visible proposal history. */
+/** Reads a user's own proposal history, capped at fifty rows. */
 export class PrismaPersonalConfigurationViewRepository implements PersonalConfigurationChangeViewRepository
 {
 	/** Canonical product-authority database client. */
@@ -44,14 +44,14 @@ export class PrismaPersonalConfigurationViewRepository implements PersonalConfig
 	}
 }
 
-/** Map one selected proposal row into the closed owner-visible product shape. */
+/** Maps one selected row to the view a user is shown, throwing when the stored patch is not a supported shape. */
 function _toChangeView(change: PersonalConfigurationViewRow): PersonalConfigurationChangeView
 {
 	if (!_IsPersonalConfigurationPatch(change.requestedPatch)) throw new Error("personal configuration change has unsupported patch shape");
 	return { changeId: change.id, requestedPatch: change.requestedPatch, state: _viewState(change.state), sourceConversationId: change.sourceConversationId, sourceRunId: change.sourceRunId, proposedAt: change.proposedAt.toISOString(), decidedAt: change.decidedAt?.toISOString() ?? null, rejectionReason: change.rejectionReason };
 }
 
-/** Convert the database lifecycle enum to its stable owner-visible vocabulary. */
+/** Converts the database state to the state a user is shown. */
 function _viewState(state: PersonalConfigurationChangeState): PersonalConfigurationChangeViewStates
 {
 	if (state === PersonalConfigurationChangeState.Proposed) return PersonalConfigurationChangeViewStates.Proposed;

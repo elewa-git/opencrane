@@ -6,7 +6,7 @@ import type { Logger } from "@opencrane/backend/observability";
 import { __CreateSteeringIngestRouter } from "../steering-ingest.router.js";
 import type { SteeringIngestRouterDependencies } from "../steering-ingest.router.types.js";
 
-/** Build one owner-authenticated router with observable steering persistence. */
+/** Build a router with an authenticated owner and a recording steering queue. */
 function _dependencies(overrides: Partial<SteeringIngestRouterDependencies> = {}): SteeringIngestRouterDependencies
 {
 	return {

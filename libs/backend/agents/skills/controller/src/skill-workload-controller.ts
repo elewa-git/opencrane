@@ -4,7 +4,7 @@ import { ___DoWithTrace } from "@opencrane/backend/observability";
 
 import { SkillWorkloadControllerReconcileOutcomes, type SkillWorkloadControllerOptions, type SkillWorkloadControllerProfiles, type SkillWorkloadControllerReconcileResult, type SkillWorkloadControllerReleaseReconcileResult } from "./skill-workload-controller.types.js";
 
-/** Require the immutable Kubernetes UID returned by the API rather than a derived identifier. */
+/** Return the Job UID Kubernetes assigned, and fail if the API did not send one. */
 function _RequireWorkloadUid(uid: string | undefined): string
 {
 	if (!uid || uid.trim().length === 0)
@@ -14,7 +14,7 @@ function _RequireWorkloadUid(uid: string | undefined): string
 	return uid;
 }
 
-/** Require the immutable Pod UID returned by Kubernetes instead of trusting a container value. */
+/** Return the Pod UID Kubernetes assigned, and fail if the API did not send one. Never take it from the container. */
 function _RequirePodUid(uid: string | undefined): string
 {
 	if (!uid || uid.trim().length === 0)
@@ -24,29 +24,29 @@ function _RequirePodUid(uid: string | undefined): string
 	return uid;
 }
 
-/** Return whether a boundary value is one non-array object with inspectable properties. */
+/** Return whether a value is a plain object — not null and not an array — so its keys can be read. */
 function _IsRecord(value: unknown): value is Readonly<Record<string, unknown>> { return typeof value === "object" && value !== null && !Array.isArray(value); }
 
 /** Return whether an object contains exactly the expected own-property names. */
 function _HasOnlyKeys(value: Readonly<Record<string, unknown>>, expected: readonly string[]): boolean { return Object.keys(value).length === expected.length && expected.every(function _HasKey(key): boolean { return Object.prototype.hasOwnProperty.call(value, key); }); }
 
-/** Canonicalize one CPU-and-memory resource map without forwarding extended Kubernetes resources. */
+/** Rebuild a resource map with only `cpu` and `memory`, dropping every other Kubernetes resource type. */
 function _ResourceMap(value: unknown): Readonly<Record<"cpu" | "memory", string>> | null
 {
 	if (!_IsRecord(value) || !_HasOnlyKeys(value, ["cpu", "memory"]) || typeof value["cpu"] !== "string" || typeof value["memory"] !== "string") return null;
 	return { cpu: value["cpu"], memory: value["memory"] };
 }
 
-/** Validate and canonicalize one untrusted deployment profile for the hardened Job builder. */
+/** Check one deployment profile field by field and rebuild it, so only known fields reach the Job builder. */
 function _SkillWorkloadJobProfile(value: unknown): SkillWorkloadJobProfile | null
 {
-	// 1. Require the fixed workload discriminant before class-specific validation can run.
+	// 1. Check the workload class first, because the checks after this depend on which class it is.
 	if (!_IsRecord(value) || !_HasOnlyKeys(value, ["kind", "image", "imagePullPolicy", "serverNamespace", "namespace", "serviceAccountName", "capabilityTokenAudience", "bootstrapUrl", "capabilityTokenPath", "bootstrapReferencePath", "scratchSize", "activeDeadlineSeconds", "ttlSecondsAfterFinished", "resources"]) || (value["kind"] !== "authoring" && value["kind"] !== "tool-runner")) return null;
 
-	// 2. Require every scalar field so the canonical builder never receives an assertion-created value.
+	// 2. Check every simple field at runtime, so the builder never gets a value that only a TypeScript cast made look valid.
 	if (typeof value["image"] !== "string" || (value["imagePullPolicy"] !== "Always" && value["imagePullPolicy"] !== "IfNotPresent" && value["imagePullPolicy"] !== "Never") || typeof value["serverNamespace"] !== "string" || typeof value["namespace"] !== "string" || typeof value["serviceAccountName"] !== "string" || typeof value["capabilityTokenAudience"] !== "string" || typeof value["bootstrapUrl"] !== "string" || typeof value["capabilityTokenPath"] !== "string" || typeof value["bootstrapReferencePath"] !== "string" || typeof value["scratchSize"] !== "string" || typeof value["activeDeadlineSeconds"] !== "number" || typeof value["ttlSecondsAfterFinished"] !== "number") return null;
 
-	// 3. Rebuild exact resource and profile objects so no unreviewed field can reach Kubernetes.
+	// 3. Copy the resource and profile fields one by one, so no extra field from the caller reaches Kubernetes.
 	const resources = value["resources"];
 	if (!_IsRecord(resources) || !_HasOnlyKeys(resources, ["requests", "limits"])) return null;
 	const requests = _ResourceMap(resources["requests"]);
@@ -55,7 +55,7 @@ function _SkillWorkloadJobProfile(value: unknown): SkillWorkloadJobProfile | nul
 	return { kind: value["kind"], image: value["image"], imagePullPolicy: value["imagePullPolicy"], serverNamespace: value["serverNamespace"], namespace: value["namespace"], serviceAccountName: value["serviceAccountName"], capabilityTokenAudience: value["capabilityTokenAudience"], bootstrapUrl: value["bootstrapUrl"], capabilityTokenPath: value["capabilityTokenPath"], bootstrapReferencePath: value["bootstrapReferencePath"], scratchSize: value["scratchSize"], activeDeadlineSeconds: value["activeDeadlineSeconds"], ttlSecondsAfterFinished: value["ttlSecondsAfterFinished"], resources: { requests, limits } };
 }
 
-/** Validate both fixed deployment profiles through the canonical hardened Job builder. */
+/** Check both deployment profiles by running each one through the Job builder. */
 export function __ValidateSkillWorkloadControllerProfiles(value: unknown): SkillWorkloadControllerProfiles
 {
 	if (typeof value !== "object" || value === null || Array.isArray(value))
@@ -85,16 +85,16 @@ export function __ValidateSkillWorkloadControllerProfiles(value: unknown): Skill
 	return profiles;
 }
 
-/** Release one exact assigned skill Job and record its first uniquely owned worker Pod. */
+/** Unsuspend one assigned skill Job, then record the first Pod that Job created. */
 export async function __ReconcileNextSkillWorkloadRelease(options: SkillWorkloadControllerOptions, signal: AbortSignal): Promise<SkillWorkloadControllerReleaseReconcileResult>
 {
 	return ___DoWithTrace("agent_controller.skill_workload.release.reconcile", {}, async function _ReconcileSkillWorkloadRelease(): Promise<SkillWorkloadControllerReleaseReconcileResult>
 	{
-		// 1. Claim the durable release fence; Kubernetes never chooses or reconstructs authority state.
+		// 1. Take a release claim from the database. Kubernetes never decides what to release, and never rebuilds this state.
 		const claim = await options.authority.__ClaimRelease(signal);
 		if (claim === null) return { outcome: SkillWorkloadControllerReconcileOutcomes.Idle };
 
-		// 2. Rebuild the exact immutable Job from deployment-owned class policy and opaque reference.
+		// 2. Rebuild the same Job manifest from the deployment profile for this class plus the bootstrap reference.
 		const profile = options.profiles[claim.kind];
 		if (!profile || profile.serverNamespace === profile.namespace)
 		{
@@ -103,12 +103,12 @@ export async function __ReconcileNextSkillWorkloadRelease(options: SkillWorkload
 		const capabilityReference = await __CreateSkillWorkloadBootstrapReference(claim.workloadId);
 		const job = __BuildGovernedSkillWorkloadJob({ jobId: claim.workloadId, siloId: claim.siloId, namespace: profile.namespace, capabilityReference }, profile);
 
-		// 3. Compare-and-swap only suspend=true to false, then durably commit that exact release fence.
+		// 3. Flip suspend from true to false with a compare-and-swap, then record the release against the same claim.
 		await options.kubernetes.__EnsureSkillJobReleased(job, claim.workloadUid, claim.expiresAt);
 		const released = await options.authority.__CommitRelease(claim.workloadId, { releaseClaimedAt: claim.releaseClaimedAt, releaseDeliveryCount: claim.releaseDeliveryCount, workloadUid: claim.workloadUid }, signal);
 		if (released === "conflict") throw new Error("governed skill workload release lost its database claim fence");
 
-		// 4. Bind the first exact Job-owned Pod before a worker may exchange its bootstrap reference.
+		// 4. Record the first Pod this Job owns. A worker cannot trade its bootstrap reference until that Pod is recorded.
 		const pod = await options.kubernetes.__FindFirstSkillWorkloadPod(job, claim.workloadUid, profile.serviceAccountName);
 		if (pod === null) return { outcome: SkillWorkloadControllerReconcileOutcomes.PendingPod, workloadId: claim.workloadId, workloadUid: claim.workloadUid };
 		const podUid = _RequirePodUid(pod.metadata?.uid);
@@ -119,25 +119,25 @@ export async function __ReconcileNextSkillWorkloadRelease(options: SkillWorkload
 	});
 }
 
-/** Reconcile at most one database-fenced governed skill workload into a durable suspended Job. */
+/** Turn at most one claimed skill workload into a suspended Kubernetes Job, and record that Job in the database. */
 export async function __ReconcileNextSkillWorkload(options: SkillWorkloadControllerOptions, signal: AbortSignal): Promise<SkillWorkloadControllerReconcileResult>
 {
 	return ___DoWithTrace("agent_controller.skill_workload.reconcile", {}, async function _ReconcileSkillWorkload(): Promise<SkillWorkloadControllerReconcileResult>
 	{
-		// 1. Read only the server-owned desired state; Kubernetes never decides which work may run.
+		// 1. Read what the OpenCrane server says should run. Kubernetes never decides which work may run.
 		const claim = await options.authority.__Claim(signal);
 		if (claim === null) return { outcome: SkillWorkloadControllerReconcileOutcomes.Idle };
 
-		// 2. Rebuild the exact hardened suspended Job from a fixed class profile and opaque reference.
+		// 2. Rebuild the same suspended Job manifest from this class's profile plus the bootstrap reference.
 		const profile = options.profiles[claim.kind];
 		const capabilityReference = await __CreateSkillWorkloadBootstrapReference(claim.workloadId);
 		const job = __BuildGovernedSkillWorkloadJob({ jobId: claim.workloadId, siloId: claim.siloId, namespace: profile.namespace, capabilityReference }, profile);
 
-		// 3. Create or exact-adopt the inert Job and accept only the API-issued immutable UID.
+		// 3. Create the suspended Job, or adopt an identical one that already exists, and use only the UID Kubernetes returned.
 		const persistedJob = await options.kubernetes.__EnsureSuspendedJob(job);
 		const workloadUid = _RequireWorkloadUid(persistedJob.metadata?.uid);
 
-		// 4. Commit the same database claim generation; a stale replica can never assign this Job.
+		// 4. Write the assignment back against the same claim, so an out-of-date controller replica cannot assign this Job.
 		const outcome = await options.authority.__CommitAssignment(claim.workloadId, { claimedAt: claim.claimedAt, deliveryCount: claim.deliveryCount, workloadUid, bootstrapReference: capabilityReference, namespace: profile.namespace }, signal);
 		if (outcome === "conflict")
 		{
@@ -148,7 +148,7 @@ export async function __ReconcileNextSkillWorkload(options: SkillWorkloadControl
 	});
 }
 
-/** Poll the skill authority until shutdown, isolating failures without replacing Kubernetes objects. */
+/** Poll for work until shutdown. A failed pass is logged and the loop continues; no Kubernetes object is ever deleted or recreated. */
 export async function __RunSkillWorkloadController(options: SkillWorkloadControllerOptions, signal: AbortSignal): Promise<void>
 {
 	if (!Number.isSafeInteger(options.pollIntervalMilliseconds) || options.pollIntervalMilliseconds < 100 || options.pollIntervalMilliseconds > 60_000)
@@ -183,13 +183,13 @@ export async function __RunSkillWorkloadController(options: SkillWorkloadControl
 	}
 }
 
-/** Wait for one poll interval without delaying shutdown behind a timer. */
+/** Wait one poll interval, but return straight away when shutdown starts, so the timer never holds shutdown up. */
 async function _Wait(milliseconds: number, signal: AbortSignal): Promise<void>
 {
 	if (signal.aborted) return;
 	await new Promise<void>(function _WaitForPoll(resolve)
 	{
-		/** Complete one delay and release the listener retained by the controller signal. */
+		/** Finish the wait and remove the abort listener, so the signal stops holding on to it. */
 		function _CompleteWait(): void
 		{
 			clearTimeout(timer);

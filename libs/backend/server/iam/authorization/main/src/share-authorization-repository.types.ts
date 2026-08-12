@@ -78,7 +78,7 @@ export interface CreateShareAuthorizationGrant
 	readonly resourceId: string;
 	/** Deterministic precedence assigned to the new share grant. */
 	readonly priority: number;
-	/** Existing principal that delegates this capability. */
+	/** Existing principal who is sharing this capability. */
 	readonly createdBy: string;
 }
 
@@ -91,12 +91,12 @@ export interface CreateOrFindShareAuthorizationGrantResult
 	readonly created: boolean;
 }
 
-/** Authorization-owned persistence seam for catalog seeding and silo-scoped sharing. */
+/** Reads and writes the capability-catalog and grant rows that sharing needs. */
 export interface ShareAuthorizationRepository
 {
 	/** Creates the fixed catalog revision once, or returns the already durable digest. */
 	ensureCatalogRevision(revision: ShareCapabilityCatalogRevision): Promise<string>;
-	/** Atomically creates one delegation or returns the existing exact authority after a concurrent conflict. */
+	/** Atomically creates one share, or returns the existing matching grant when a concurrent insert won. */
 	createOrFindExactShare(input: CreateShareAuthorizationGrant): Promise<CreateOrFindShareAuthorizationGrantResult>;
 	/** Lists only live grants for the fixed share capability created in one exact silo. */
 	listActiveShares(siloId: string, createdBy: string, catalogId: string, capabilityId: string): Promise<readonly ShareAuthorizationGrant[]>;

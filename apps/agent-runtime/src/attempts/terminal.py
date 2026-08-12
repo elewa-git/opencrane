@@ -15,10 +15,10 @@ from ..observability import log
 
 
 class TerminalGate:
-    """Guard one stable terminal candidate with a cancellation-aware lock."""
+    """Hold one terminal candidate behind a lock that also watches for cancellation."""
 
     def __init__(self, cancel_event: threading.Event) -> None:
-        """Bind the terminal writer to the same signal that stops the active model loop."""
+        """Use the same cancellation signal that stops the active model loop."""
         self._cancel_event = cancel_event
         self._lock = threading.Lock()
         self._posted = False

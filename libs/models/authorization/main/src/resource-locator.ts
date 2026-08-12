@@ -1,10 +1,13 @@
 import type { AuthorizationResourceLocator } from "./resource-locator.types.js";
 
 /**
- * Validates the canonical exact resource-locator shape.
- * Empty, padded, wildcard, accessor, and extra-field locators fail closed.
+ * Validates that a value is a resource locator naming exactly one resource.
+ *
+ * Rejects an empty or whitespace-padded value, anything containing a wildcard, an inherited or
+ * accessor property, and any extra field. A locator never covers a hierarchy or a pattern, so
+ * accepting one of those would silently widen every grant that used it.
  * @param value - Candidate locator from a grant, request, or signed capability.
- * @returns Whether the value contains exactly one canonical kind and one exact identifier.
+ * @returns True only for a plain object with exactly a resource kind and one identifier.
  */
 export function __IsAuthorizationResourceLocator(value: unknown): value is AuthorizationResourceLocator
 {
@@ -40,11 +43,13 @@ export function __IsAuthorizationResourceLocator(value: unknown): value is Autho
 }
 
 /**
- * Determines whether two locators address the same exact resource.
- * Resource identifiers never imply hierarchy or wildcard coverage.
- * @param firstResource - First exact resource locator.
- * @param secondResource - Second exact resource locator.
- * @returns Whether both the kind and identifier are byte-for-byte equal.
+ * Determines whether two locators name the same resource.
+ *
+ * Comparison is exact: an identifier that looks like a parent of another does not match it, and
+ * there is no wildcard. A caller wanting hierarchy must model it as separate grants.
+ * @param firstResource - First resource locator.
+ * @param secondResource - Second resource locator.
+ * @returns True only when kind and identifier are both exactly equal.
  */
 export function __AuthorizationResourcesEqual(
 	firstResource: AuthorizationResourceLocator,

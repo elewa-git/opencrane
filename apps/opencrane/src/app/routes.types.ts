@@ -14,18 +14,18 @@ export interface RouteMount
 	readonly handler: Router | RequestHandler;
 }
 
-/** Optional bounded limiter tuning for the rate-limited shares composition, primarily in tests. */
+/** Optional rate-limiter overrides for the shares router, used mainly by tests. */
 export interface SharesRouteOptions
 {
 	/** Shared HTTP limiter options applied before the shares router. */
 	readonly rateLimit?: RateLimitOptions;
 }
 
-/** Cohesive durable-onboarding HTTP and persona-notification composition. */
+/** The durable-onboarding HTTP routes and persona notifications, composed together. */
 export interface UserOnboardingRouteComposition
 {
 	/** Owner-only durable routing-state API. */
 	readonly router: Router;
-	/** Persona lifecycle notifications that advance initial onboarding or accept later maintenance as no-ops. */
+	/** Persona lifecycle notifications: they move initial onboarding forward, and are accepted and ignored once onboarding is done. */
 	readonly personaWorkflow: PersonaOnboardingWorkflowPort;
 }

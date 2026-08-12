@@ -2,11 +2,11 @@ import type { Grant } from "./grant.types.js";
 import { GrantScope } from "./grant.types.js";
 
 /**
- * Transport contract exposed by an MCP server registration.
+ * How an MCP server is reached over the wire.
  *
- * MCP refers to the Model Context Protocol: https://modelcontextprotocol.io/introduction
- * OpenCrane stores these values centrally so the opencrane-ui can describe
- * what the gateway plane should broker on behalf of tenants.
+ * OpenCrane stores this centrally so the gateway can be told which transport to speak when it
+ * brokers calls on a tenant's behalf. A caller never opens the transport itself.
+ * @see https://modelcontextprotocol.io/specification/2025-06-18
  */
 export enum McpServerTransport
 {
@@ -16,10 +16,11 @@ export enum McpServerTransport
 }
 
 /**
- * Lifecycle state shown for a registered MCP server.
+ * Rollout state of a registered MCP server, as shown to operators.
  *
- * The UI uses this to summarize rollout health, while the backend emits the
- * exact same values from the opencrane-ui inventory APIs.
+ * Backend and UI use the same values, so neither side needs its own mapping. This is rollout
+ * health only — it says nothing about whether a given user is entitled to the server, which is
+ * {@link McpAccessPolicy}.
  */
 export enum McpServerStatus
 {
@@ -29,7 +30,7 @@ export enum McpServerStatus
 }
 
 /**
- * OBO credential metadata linked to an MCP server.
+ * On-behalf-of credential metadata linked to an MCP server. It names a credential; it never holds one.
  *
  * The opencrane-ui owns this inventory record; the runtime gateway plane may
  * be implemented by Obot, but it consumes the rendered catalog rather than
@@ -66,7 +67,7 @@ export interface McpServer
   transport: McpServerTransport;
   /** Current rollout state. */
   status: McpServerStatus;
-  /** Capability labels surfaced to operators. */
+  /** Free-text capability labels shown to operators; they carry no access meaning. */
   capabilities: string[];
   /** Grants compiled for access decisions. */
   grants: Grant[];

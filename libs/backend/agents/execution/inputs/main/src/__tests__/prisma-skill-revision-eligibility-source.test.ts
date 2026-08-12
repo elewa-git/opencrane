@@ -2,13 +2,13 @@ import { describe, expect, it, vi } from "vitest";
 
 import { PrismaSkillRevisionEligibilitySource } from "../prisma-skill-revision-eligibility-source.js";
 
-/** Builds one final-admission transaction fake containing a locked assignment query result. */
+/** Builds a fake admission transaction that returns a fixed result for the locking query. */
 function _Transaction(rows: readonly unknown[])
 {
 	return { prisma: { $queryRaw: vi.fn().mockResolvedValue(rows) }, admittedAt: "2026-07-23T12:00:00.000Z", admittedAtEpochMs: Date.parse("2026-07-23T12:00:00.000Z") } as never;
 }
 
-/** Builds the immutable tool-policy skill coordinates proposed for one future run. */
+/** Builds the skill ids a tool policy would name for one run. */
 function _ToolPolicy(skillRevisionIds: readonly string[])
 {
 	return { modelRoute: {}, integrationAssignments: [], skillRevisionIds, artifactRevisionIds: [] };

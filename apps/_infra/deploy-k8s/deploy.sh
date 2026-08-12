@@ -91,7 +91,7 @@ fi
 [[ -n "$NAMESPACE" ]] || NAMESPACE="opencrane-${CLUSTER_TENANT}"
 
 # Human APIs are fail-closed without OIDC. Require the exact org client rather than deploying an
-# intentionally inaccessible or tokenless development posture.
+# intentionally inaccessible or tokenless development setup.
 [[ -n "${OIDC_ISSUER_URL:-}" ]] || { err "OIDC_ISSUER_URL is required."; exit 1; }
 [[ -n "${OIDC_CLIENT_ID:-}" ]] || { err "OIDC_CLIENT_ID is required for this ClusterTenant."; exit 1; }
 [[ -n "${OIDC_REDIRECT_URI:-}" ]] || export OIDC_REDIRECT_URI="https://${CLUSTER_TENANT}.${BASE_DOMAIN}/api/v1/auth/callback"

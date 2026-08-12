@@ -5,10 +5,10 @@ import { describe, expect, it, vi } from "vitest";
 import { __CreateSkillAuthoringCompletionRouter } from "../skill-authoring-completion.router.js";
 import type { SkillAuthoringCompletionRouterDependencies } from "../skill-authoring-completion.types.js";
 
-/** Bounded passed evidence from the isolated authoring worker. */
+/** A passing report body from an authoring worker. */
 const _SUCCESS = { workloadId: "workload-1", outcome: "succeeded", testReport: { passed: true, summary: "all checks passed", checksRun: 2 }, scanResult: { passed: true, summary: "no findings", checksRun: 3 } };
 
-/** Builds one route with the exact authoring Pod identity reviewed. */
+/** Builds the route with a token reviewer that returns the authoring Pod identity. */
 function _App(overrides: Partial<SkillAuthoringCompletionRouterDependencies> = {})
 {
 	const dependencies: SkillAuthoringCompletionRouterDependencies = { tokenReviewer: { __Review: vi.fn().mockResolvedValue({ namespace: "opencrane-skill-authoring", serviceAccountName: "skill-authoring-default", podUid: "pod-uid-1" }) }, authority: { completeAtomically: vi.fn().mockResolvedValue("completed") }, logger: { error: vi.fn() }, ...overrides };

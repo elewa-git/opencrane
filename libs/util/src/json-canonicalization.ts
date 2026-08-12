@@ -13,8 +13,13 @@ const LOW_SURROGATE_MAX = 0xdfff;
 const LOW_SURROGATE_MIN = 0xdc00;
 
 /**
- * Rejects lone Unicode surrogates, which RFC 8785 requires parsers to reject.
+ * Throws when a string contains an unpaired Unicode surrogate, which RFC 8785 requires be rejected.
+ *
+ * An unpaired surrogate has no valid UTF-8 encoding, so it would make the digest depend on how the
+ * runtime chose to substitute it.
  * @param value - String being prepared for canonical serialization.
+ * @throws TypeError on an unpaired surrogate.
+ * @see https://www.rfc-editor.org/rfc/rfc8785
  */
 function _assertValidUnicode(value: string): void
 {
@@ -64,7 +69,7 @@ function _serializeArray(value: readonly JsonValue[], activeContainers: WeakSet<
 		throw new TypeError("RFC 8785 JSON values must not contain reference cycles");
 	}
 
-	// 2. Data-model guard — only a dense sequence of enumerable data entries is canonicalizable.
+	// 2. Reject a sparse array or one with extra properties — neither survives a JSON round trip.
 	const ownKeys = Reflect.ownKeys(value);
 	const expectedKeyCount = value.length + 1;
 	if (ownKeys.length !== expectedKeyCount)
@@ -81,7 +86,7 @@ function _serializeArray(value: readonly JsonValue[], activeContainers: WeakSet<
 		}
 	}
 
-	// 3. Serialization — mark only the active path so repeated non-cyclic references remain valid JSON.
+	// 3. Track only the containers on the current path, so the same object appearing twice side by side is still valid — only a true cycle fails.
 	activeContainers.add(value);
 	const serializedItems = value.map(item => _serializeValue(item, activeContainers));
 	activeContainers.delete(value);
@@ -102,7 +107,7 @@ function _serializeObject(value: { readonly [key: string]: JsonValue }, activeCo
 		throw new TypeError("RFC 8785 JSON values must not contain reference cycles");
 	}
 
-	// 2. Data-model guard — class instances, symbols, and accessors are not parsed JSON values.
+	// 2. Reject class instances, symbol keys, and getters — none of them can come from parsed JSON.
 	const prototype = Object.getPrototypeOf(value) as object | null;
 	if (prototype !== Object.prototype && prototype !== null)
 	{
@@ -169,11 +174,23 @@ function _serializeValue(value: JsonValue, activeContainers: WeakSet<object>): s
 }
 
 /**
- * Canonicalizes a JSON value with the JSON Canonicalization Scheme from RFC 8785.
- * Object properties are ordered by UTF-16 code units and numbers use ECMAScript's
- * shortest round-trip representation. Invalid Unicode and non-JSON values fail closed.
+ * Canonicalizes a JSON value using the JSON Canonicalization Scheme from RFC 8785.
+ *
+ * Two values that are equal as JSON produce byte-identical text: property names are sorted by
+ * UTF-16 code unit, and numbers use ECMAScript's shortest round-trip form. That is what makes a
+ * digest over the result stable across machines and runtimes — see {@link ___DigestCanonicalJson}.
+ *
+ * It fails closed rather than guessing. Anything that could not have come from parsed JSON — a
+ * class instance, a symbol key, a getter, a sparse array, an unpaired surrogate, a non-finite
+ * number, a cycle — throws instead of being coerced.
+ *
+ * Called by: {@link ___DigestCanonicalJson}, {@link ___CloneCanonicalJson},
+ * `libs/backend/artifacts/authorization/main/src/artifact-lease.ts`,
+ * `libs/backend/server/iam/authorization/main/src/capability-proof.ts`,
+ * `libs/backend/agents/memory/main/src/prisma-memory-catalog-repository.ts`.
  * @param value - JSON value to canonicalize.
- * @returns Deterministic UTF-8-ready canonical JSON text.
+ * @returns Canonical JSON text, ready to encode as UTF-8.
+ * @throws TypeError for any value that could not have come from parsed JSON, including cycles and unpaired surrogates.
  * @see https://www.rfc-editor.org/rfc/rfc8785
  */
 export function ___CanonicalizeJson(value: JsonValue): string
@@ -182,10 +199,23 @@ export function ___CanonicalizeJson(value: JsonValue): string
 }
 
 /**
- * Deep-copies a JSON value through its RFC 8785 canonical form, so the copy is
- * detached from caller-owned references and key order is deterministic.
+ * Deep-copies a JSON value by canonicalizing it and parsing the result back.
+ *
+ * Use this when a value crosses an ownership boundary: the copy shares no references with the
+ * input, so a later mutation by the caller cannot reach it, and its key order is deterministic so
+ * it digests identically wherever it is stored.
+ *
+ * Because it round-trips through {@link ___CanonicalizeJson}, it rejects the same inputs — this is
+ * not a permissive `structuredClone`.
+ *
+ * Called by: `libs/backend/agents/execution/protocol/src/prisma-run-input-compiler.ts`,
+ * `libs/backend/agents/execution/runs/main/src/prisma-run-admission-repository.ts`,
+ * `libs/backend/server/agents/agent-services/main/src/prisma-agent-revision-writer.ts`,
+ * `libs/backend/server/infra/obot-custody/src/http-obot-mcp-invocation.ts`.
  * @param value - JSON value to copy.
- * @returns An equivalent value that shares no references with the input.
+ * @returns An equivalent value sharing no references with the input.
+ * @throws TypeError for any input {@link ___CanonicalizeJson} rejects.
+ * @see https://www.rfc-editor.org/rfc/rfc8785
  */
 export function ___CloneCanonicalJson(value: JsonValue): JsonValue
 {

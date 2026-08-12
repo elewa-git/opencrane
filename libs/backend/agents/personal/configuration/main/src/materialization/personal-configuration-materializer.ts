@@ -5,12 +5,23 @@ import { PersonalConfigurationMaterializationCodes, type MaterializePersonalConf
 import { PersonalConfigurationMaterializationResolutionOutcomes } from "./personal-configuration-materialization-state.types.js";
 import type { PersonalConfigurationMaterializationTransaction, PersonalConfigurationMaterializationUnitOfWork } from "./personal-configuration-materialization-unit-of-work.types.js";
 
-/** Application materializer that coordinates capability repositories through one unit of work. */
+/**
+ * Applies an accepted proposal by driving this package's repository and agent-services' revision
+ * repository inside one transaction.
+ *
+ * The only place the two domains are sequenced. It owns the order of operations and the
+ * translation of every failure into a stable result; the transaction, isolation level and
+ * retries belong to the unit of work it is given.
+ *
+ * Constructed by: `_CreatePersonalConfigurationRouter`.
+ *
+ * @implements PersonalConfigurationChangeMaterializationRepository
+ */
 export class _PersonalConfigurationMaterializer implements PersonalConfigurationChangeMaterializationRepository
 {
-	/** Transaction boundary supplied by the Prisma composition. */
+	/** Opens the transaction each attempt runs in; supplied by the Prisma composition. */
 	private readonly unitOfWork: PersonalConfigurationMaterializationUnitOfWork;
-	/** Redacted structured failure logger for final materialisation failures. */
+	/** Logger for a failure that survives every retry; proposal contents are never logged. */
 	private readonly logger: Logger;
 
 	/** Creates the repository-driven application materializer. */
@@ -21,12 +32,20 @@ export class _PersonalConfigurationMaterializer implements PersonalConfiguration
 	}
 
 	/**
-	 * Applies one accepted proposal through transaction-scoped capability repositories.
+	 * Applies one accepted proposal, using both repositories inside one transaction.
 	 *
-	 * Proposal/persona evidence is resolved before agent-services mutates its revision lineage. The
-	 * final proposal compare-and-set runs last, so losing either application or trigger fence rolls
-	 * back the complete cross-domain unit of work. Persistence failures retain the public fail-closed
-	 * result and are logged only after the unit of work exhausts its bounded retries.
+	 * The order is deliberate and must not be rearranged. The proposal and its persona revision
+	 * are read first, so a replay or a refusal costs no revision work. Agent-services then creates
+	 * the new revision. The proposal's compare-and-set runs last: if it loses, or if the database
+	 * trigger rejects it because the persona revision moved on, it throws, and everything
+	 * agent-services already wrote rolls back with it. That is why no revision can exist for a
+	 * proposal that is not Applied.
+	 *
+	 * @param command - Server-derived owner, proposal id and time.
+	 * @returns `Applied` with the new revision id; `NotApplicable` for a persona refresh;
+	 * `StaleProposal` or `ModelUnavailable` when agent-services refuses; or
+	 * `PersistenceUnavailable` when the transaction failed after the unit of work used up its
+	 * retries. Never throws: the failure is logged once here and returned as a result.
 	 */
 	async materializeAtomically(command: MaterializePersonalConfigurationChangeCommand): Promise<PersonalConfigurationMaterializationPersistenceResult>
 	{
@@ -34,11 +53,11 @@ export class _PersonalConfigurationMaterializer implements PersonalConfiguration
 		{
 			return await this.unitOfWork.run(async function _Materialize(transaction: PersonalConfigurationMaterializationTransaction): Promise<PersonalConfigurationMaterializationPersistenceResult>
 			{
-				// 1. Resolve owner, proposal lifecycle, and persona evidence before cross-domain writes.
+				// 1. Read the owner, the proposal's state, and its persona revision before writing anything.
 				const resolution = await transaction.proposals.resolve(command);
 				if (resolution.outcome === PersonalConfigurationMaterializationResolutionOutcomes.Terminal) return resolution.result;
 
-				// 2. Ask the agent-service repository to prepare the exact selected-model revision.
+				// 2. Ask the agent-service repository to create the revision with the chosen model.
 				const proposal = resolution.proposal;
 				const materialized = await transaction.agentRevisions.materialize({
 					siloId: command.siloId,
@@ -59,7 +78,7 @@ export class _PersonalConfigurationMaterializer implements PersonalConfiguration
 					return { status: PersonalConfigurationMaterializationCodes.ModelUnavailable };
 				}
 
-				// 3. Apply the final proposal CAS last so any lost fence rolls all prepared writes back.
+				// 3. Do the proposal's compare-and-set last, so if it loses, the new revision rolls back with it.
 				return transaction.proposals.apply(command, materialized.agentRevisionId);
 			});
 		}

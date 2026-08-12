@@ -141,8 +141,14 @@ export interface ModelDefinitionWrite
 }
 
 /**
- * A skill's model-selection posture. `pinned` uses the skill's `pinnedModel`; `auto` routes within
- * the skill's auto config; absence means the skill inherits the scope default. Mirrors Prisma `SkillModelMode`.
+ * How a skill chooses its model.
+ *
+ * `pinned` always uses the skill's own `pinnedModel`. `auto` picks within the skill's
+ * {@link AutoRoutingConfig}. Absent — not one of these two values — means the skill inherits
+ * {@link ModelRoutingDefault} for its scope, so a caller must handle absence as a third case
+ * rather than defaulting it locally.
+ *
+ * Mirrors the Prisma `SkillModelMode` enum; the two must stay equal.
  */
 export const SkillModelMode = {
   Pinned: "pinned",
@@ -152,7 +158,7 @@ export const SkillModelMode = {
 /** Union of the {@link SkillModelMode} values. */
 export type SkillModelMode = (typeof SkillModelMode)[keyof typeof SkillModelMode];
 
-/** Optimization objective for an `auto` routing decision. */
+/** What `auto` routing optimises for: cheapest model that clears the quality bar, best model within budget, or a balance set by `costQualitySlider`. */
 export const AutoRoutingObjective = {
   CheapestPassingBar: "cheapest-passing-bar",
   BestQualityWithinBudget: "best-quality-within-budget",
@@ -163,9 +169,14 @@ export const AutoRoutingObjective = {
 export type AutoRoutingObjective = (typeof AutoRoutingObjective)[keyof typeof AutoRoutingObjective];
 
 /**
- * The opt-in "auto" routing configuration surface. Stores the knobs only — the runtime optimizer
- * that consumes them (judge → OPE → propose) is a later track item (AIR.7). Auto routing applies
- * ONLY when a skill (or scope default) selects it; otherwise the explicit/pinned model is used verbatim.
+ * Settings for "auto" model routing.
+ *
+ * This type stores the settings only. The optimizer that reads them is not built yet (track item
+ * AIR.7), so setting these fields changes nothing on its own today. Auto routing applies only
+ * when a skill, or its scope default, selects `auto`; otherwise the pinned model is used exactly
+ * as given and every field here is ignored.
+ * @see {@link SkillModelMode}
+ * @see {@link ModelRoutingDefault}
  */
 export interface AutoRoutingConfig
 {
@@ -189,7 +200,7 @@ export interface AutoRoutingConfig
   explorationRate: number;
 }
 
-/** A scope-level model + auto-config default, consulted when a skill declares no posture. */
+/** The default model and auto-routing settings for one scope. Used only when a skill declares neither `pinned` nor `auto`. @see {@link SkillModelMode} */
 export interface ModelRoutingDefault
 {
   /** Stable identifier. */

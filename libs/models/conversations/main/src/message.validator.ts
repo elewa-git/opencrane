@@ -1,4 +1,4 @@
-// This validator admits untrusted durable/API values into canonical messages; it stays beside the model so provenance and completion invariants change together.
+// Turns untrusted values from storage or the API into message models. It lives beside the model so the provenance and completion rules change together with the types.
 import { z } from "zod";
 
 import { __HasValidMessageCompletion } from "./conversation-invariants.js";
@@ -10,14 +10,20 @@ const _IdentifierSchema = z.string().trim().min(1);
 /** Strict validator for one stable canonical message content block. */
 const _MessageContentBlockSchema: z.ZodType<MessageContentBlock> = z.object({ id: _IdentifierSchema, kind: z.nativeEnum(MessageContentBlockKinds), value: z.string() }).strict();
 
-/** Strict validator for one bounded, non-empty participant message payload. */
+/** Validates a message's content blocks: between 1 and 32 blocks, each value at most 32000 characters, and every block id unique. */
 const _MessageContentBlocksSchema: z.ZodType<readonly MessageContentBlock[]> = z.array(_MessageContentBlockSchema).min(1).max(32).superRefine(function _ValidateBlockValues(blocks, context)
 {
 	if (blocks.some(block => block.value.length > 32_000)) context.addIssue({ code: z.ZodIssueCode.custom, message: "message block value exceeds 32000 characters" });
 	if (new Set(blocks.map(function _BlockId(block): string { return block.id; })).size !== blocks.length) context.addIssue({ code: z.ZodIssueCode.custom, message: "message block identifiers must be unique" });
 });
 
-/** Strict input boundary that prevents participant-authored tool-output impersonation. */
+/**
+ * Validates content blocks submitted by a person, allowing only text and artifact blocks.
+ *
+ * Tool-call and tool-result blocks are refused here so a participant cannot post content that
+ * renders as if a tool produced it. Use this for participant input; use {@link ___MessageSchema}
+ * for a whole stored message.
+ */
 export const ___ParticipantInputBlocksSchema: z.ZodType<readonly MessageContentBlock[]> = _MessageContentBlocksSchema.superRefine(function _ValidateParticipantKinds(blocks, context)
 {
 	if (blocks.some(block => block.kind !== MessageContentBlockKinds.Text && block.kind !== MessageContentBlockKinds.Artifact)) context.addIssue({ code: z.ZodIssueCode.custom, message: "participant input supports only text and artifact blocks" });

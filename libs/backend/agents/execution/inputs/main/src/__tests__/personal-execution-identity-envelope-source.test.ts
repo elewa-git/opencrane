@@ -25,7 +25,7 @@ function _Revision(assertions = [{ assertionId: "assertion-1", siloId: "silo-1",
 	return { id: "membership-7", revision: 7, issuerId: "fleet-1", issuerKeyId: "key-1", siloId: "silo-1", issuedAt: new Date(9000), expiresAt: new Date(20000), payloadDigest: `sha256:${"b".repeat(64)}`, signature: "signature-7", assertions };
 }
 
-/** Builds the run-owned transaction with signed membership, high-watermark, audit, and grant seams. */
+/** Builds the fake transaction, with tables for signed membership, the high-watermark, audit rows, and grants. */
 function _Transaction(row = _Revision()): RunAdmissionTransaction
 {
 	return {
@@ -41,7 +41,7 @@ function _Transaction(row = _Revision()): RunAdmissionTransaction
 	};
 }
 
-/** Verifies only evidence whose immutable signed coordinates were selected by the server. */
+/** Fake verifier that accepts only the signed revision the server passed in. */
 class _Verifier implements FleetMembershipSignatureVerifier
 {
 	/** Returns successful verification evidence bound exactly to the signed revision argument. */

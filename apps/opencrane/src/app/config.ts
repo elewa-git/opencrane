@@ -15,7 +15,7 @@ const _MAXIMUM_ARTIFACT_OUTPUT_BYTES = 64 * 1_024 * 1_024;
 /** Default artifact-preprocessor output body limit. */
 const _DEFAULT_ARTIFACT_OUTPUT_BYTES = 16 * 1_024 * 1_024;
 
-/** Receiver namespace reserved for immutable migrated route evidence. */
+/** Receiver-id prefix reserved for migrated route rows; a configured receiver id may never use it. */
 const _LEGACY_CHANNEL_ROUTE_RECEIVER_PREFIX = "legacy-route-v0:";
 
 /** Read one bounded whole-number setting from the startup environment. */
@@ -31,7 +31,7 @@ function _readBoundedInteger(name: string, fallback: number, minimum: number, ma
 	return value;
 }
 
-/** Read one bounded seconds setting and expose milliseconds to runtime composition. */
+/** Read one bounded seconds setting and return it in milliseconds. */
 function _readBoundedSeconds(name: string, fallbackSeconds: number, minimumSeconds: number, maximumSeconds: number): number
 {
 	return _readBoundedInteger(name, fallbackSeconds, minimumSeconds, maximumSeconds) * 1_000;
@@ -53,7 +53,7 @@ function _readRequiredAbsolutePath(name: string): string
 	return value;
 }
 
-/** Read the bounded output ceiling shared with the server-side promotion broker. */
+/** Read the maximum artifact-preprocessor output size; the server-side promotion broker uses the same limit. */
 function _readArtifactPreprocessorBodyLimit(): number
 {
 	const raw = process.env.ARTIFACT_PREPROCESSOR_MAX_OUTPUT_BYTES?.trim() ?? String(_DEFAULT_ARTIFACT_OUTPUT_BYTES);
@@ -89,7 +89,7 @@ function _readInitialModelBootstrap(): InitialModelBootstrapConfig | null
 	return { provider, apiKey };
 }
 
-/** Read the all-or-nothing verified-email admission contract for one standalone silo owner. */
+/** Read the email and ClusterTenant that let one verified OIDC user claim this standalone silo's owner slot; both must be set or neither. */
 function _readStandaloneFirstUserAdmission(): StandaloneFirstUserAdmissionConfig | null
 {
 	const email = process.env.OPENCRANE_STANDALONE_FIRST_USER_EMAIL?.trim().toLowerCase() ?? "";
@@ -114,7 +114,7 @@ function _readStandaloneFirstUserAdmission(): StandaloneFirstUserAdmissionConfig
 	return { email, clusterTenant, issuer };
 }
 
-/** Read the all-or-nothing channel resolver and stable replay receiver contract. */
+/** Read the five channel resolver and replay receiver settings; all must be set or none. */
 function _readChannelTargetConfig(): ChannelTargetRuntimeConfig | null
 {
 	const values = {
@@ -133,7 +133,7 @@ function _readChannelTargetConfig(): ChannelTargetRuntimeConfig | null
 /**
  * Read the optional Obot management-transport block from the startup environment.
  *
- * Both coordinates present composes the authenticated transport; both absent leaves the feature off
+ * With both values set the authenticated transport is composed; with both absent the feature stays off
  * (fail-closed unavailable adapters). A partial block is a deployment mistake, so startup refuses it
  * rather than half-composing an authority that would fail on first use.
  */
@@ -156,7 +156,7 @@ function _readObotConfig(): OpenCraneObotConfig | null
 /**
  * Read process settings once so listeners and workers share one startup snapshot.
  *
- * Runtime namespace presence and separation remain worker invariants because those values grant
+ * The workers, not this parser, still check that runtime namespaces are present and distinct, because those values grant
  * Kubernetes cleanup authority; parsing configuration alone must not make that trust decision.
  */
 export function _ReadProcessConfig(): OpenCraneProcessConfig

@@ -1,5 +1,5 @@
 /**
- * Source kind supported by the third-party discovery surface.
+ * The kinds of upstream registry OpenCrane can discover MCP servers from.
  *
  * These values describe upstream discovery sources retained by the retrieval inventory.
  */
@@ -58,10 +58,11 @@ export interface ThirdPartySourceItem
 }
 
 /**
- * Shared contract for a third-party source returned by the opencrane-ui.
+ * One upstream registry OpenCrane discovers MCP servers from.
  *
- * The opencrane-ui remains the source of truth for approval, scheduling, and
- * audit state even when discovery is delegated to another registry or runtime.
+ * Even when another registry or runtime performs the discovery, OpenCrane stays the source of
+ * truth for approval, scheduling, and audit state — so a consumer must read those from here and
+ * never from the upstream registry.
  */
 export interface ThirdPartySource
 {

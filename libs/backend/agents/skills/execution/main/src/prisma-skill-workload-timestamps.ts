@@ -1,11 +1,12 @@
 /**
- * Non-null epoch marker that asks a reviewed database trigger to assign the authoritative timestamp.
+ * A placeholder date — the Unix epoch — that tells the `skill_workloads_authority` trigger to fill in
+ * the real timestamp from the database clock.
  *
- * This value is never interpreted as wall-clock time by application code.
+ * Application code never reads this value as a real time.
  */
 export const _SkillWorkloadTimestampProposal = new Date(0);
 
-/** Encodes only a requested lease interval for the database trigger to anchor to its own clock. */
+/** Returns the placeholder date plus the lease length. The trigger keeps only the gap between the two dates and re-anchors both to database time. */
 export function _SkillWorkloadLeaseExpiryProposal(leaseMilliseconds: number): Date
 {
 	return new Date(_SkillWorkloadTimestampProposal.getTime() + leaseMilliseconds);

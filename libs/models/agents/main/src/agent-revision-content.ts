@@ -3,16 +3,24 @@ import { ___DigestCanonicalJson, type CanonicalJsonSha256Digest, type JsonValue 
 import type { AgentRevisionContent } from "./agent-revision.types.js";
 
 /**
- * Computes the canonical digest for one numbered agent revision.
+ * Compute the content digest for one numbered agent revision.
  *
- * Every authority that creates an `AgentRevision` must call this function with the same executable
- * content it persists. Centralising the canonical projection prevents personal and managed revision
- * paths from silently hashing different fields or spellings for the same business fact.
+ * Every code path that creates an `AgentRevision` must call this with exactly the content it is
+ * about to store. Keeping it in one function is what stops the personal and managed revision paths
+ * from hashing different fields, or the same fields in a different order, for the same revision —
+ * which would make two identical revisions look different and break drift detection.
  *
- * @param agentServiceId - Stable service that owns the revision lineage.
- * @param revision - Monotonic revision number within the service.
- * @param content - Complete immutable executable content persisted on the revision.
- * @returns Canonical SHA-256 digest covering the service, number, and executable content.
+ * The digest is taken over RFC 8785 canonical JSON, so key order and number formatting cannot
+ * change the result.
+ *
+ * Called by: `libs/backend/server/agents/agent-services/main/src/agent-publication.ts`,
+ * `libs/backend/server/agents/agent-services/main/src/prisma-agent-revision-writer.ts`.
+ * @param agentServiceId - Service that owns the revision.
+ * @param revision - Revision number within that service.
+ * @param content - The exact content being stored on the revision.
+ * @returns Lowercase `sha256:<hex>` digest over the service id, revision number, and content.
+ * @see {@link AgentRevisionContent}
+ * @see https://www.rfc-editor.org/rfc/rfc8785
  */
 export function __DigestAgentRevisionContent(agentServiceId: string, revision: number, content: AgentRevisionContent): CanonicalJsonSha256Digest
 {

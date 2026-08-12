@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Cohesive deploy-owned sequencing for the PostgreSQL release. The caller supplies resolved,
+# Deploy-owned sequencing for the PostgreSQL release. The caller supplies resolved,
 # manifest-bound globals plus log/err functions. This module may fence the application Helm release
 # and reconcile the app-owned PostgreSQL chart; it never selects a migration or edits database bytes.
 

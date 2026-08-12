@@ -4,11 +4,23 @@ import { DynamicComponent, type Types } from "@a2ui/angular/v0_8";
 import type { A2uiDateTimeInputType } from "./a2ui-control.types.js";
 
 /**
- * Accessible package-owned adapter for the admitted pinned v0.8 date/time contract.
+ * Renders the v0.8 DateTimeInput component as a native date, time or datetime-local input.
  *
- * The pinned schema drops its renderer's optional label before binding. This adapter derives the
- * exact native input label from the retained date/time flags while keeping local data-model changes
- * and filtered `change` events inside the same upstream protocol boundary.
+ * Why this exists: the pinned schema drops the renderer's optional label before binding, leaving
+ * the input unlabelled. This adapter builds the label and the input type from `enableDate` and
+ * `enableTime` instead.
+ *
+ * Changing the value never sends a command. When the value is bound to a `path` the new text is
+ * written into the surface's data model; otherwise the vendor's local `change` event is emitted,
+ * which A2uiCanvasComponent filters out of action intents.
+ *
+ * Rendered by: the vendor's dynamic renderer, via _loadDateTimeInput in a2ui.catalog.ts — never
+ * placed in a template directly. Inputs are bound by the vendor: `value` (required), `enableDate`,
+ * `enableTime`.
+ *
+ * @see A2uiDateTimeInputType
+ * @see A2UI v0.8 specification — DateTimeInput and its enableDate/enableTime flags:
+ *   https://a2ui.org/specification/v0.8-a2ui/
  */
 @Component({
 	selector: "wo-a2ui-date-time",
@@ -46,10 +58,10 @@ export class A2uiDateTimeComponent extends DynamicComponent<Types.DateTimeInputN
 		this._enableTime.set(enableTime ?? false);
 	}
 
-	/** Stable accessible label/control association. */
+	/** Id linking the label to the input, unique per instance. */
 	protected readonly inputId = this.getUniqueId("a2ui-date-time");
 
-	/** Native input type derived from the protocol flags retained by the pinned schema. */
+	/** The native input type, chosen from `enableDate` and `enableTime`. */
 	protected readonly inputType = computed(function _InputType(this: A2uiDateTimeComponent): A2uiDateTimeInputType
 	{
 		if (this._enableDate() && this._enableTime()) return "datetime-local";
@@ -57,7 +69,7 @@ export class A2uiDateTimeComponent extends DynamicComponent<Types.DateTimeInputN
 		return "date";
 	}.bind(this));
 
-	/** Accessible name that describes the exact native input mode. */
+	/** Accessible name matching the input type actually rendered. */
 	protected readonly label = computed(function _InputLabel(this: A2uiDateTimeComponent): string
 	{
 		switch (this.inputType())
@@ -75,7 +87,7 @@ export class A2uiDateTimeComponent extends DynamicComponent<Types.DateTimeInputN
 		return this.resolvePrimitive(this._value()) ?? "";
 	}.bind(this));
 
-	/** Update path-bound display data or emit a governed local change event for a literal control. */
+	/** Write to the surface data model when the value is path-bound; otherwise emit the local `change` event. */
 	protected onChange(event: Event): void
 	{
 		const nextValue = (event.target as HTMLInputElement).value;

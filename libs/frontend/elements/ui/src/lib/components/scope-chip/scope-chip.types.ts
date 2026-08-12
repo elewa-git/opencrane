@@ -21,7 +21,12 @@ export enum ScopeChipTones
 	Personal = "personal"
 }
 
-/** Finite visual treatments for a scope chip's boundary and fill. */
+/**
+ * The two chip styles: outlined, or softly filled.
+ *
+ * Both take their colour from {@link SemanticTones}; this only chooses whether the colour appears as
+ * a border or as a background.
+ */
 export enum ScopeChipAppearances
 {
 	/** Transparent chip with a visible semantic outline. */

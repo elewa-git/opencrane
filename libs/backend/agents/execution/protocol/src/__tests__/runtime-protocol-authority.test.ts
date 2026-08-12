@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { __AdmitRuntimeCandidate, __AdmitRuntimeCommand } from "../runtime-protocol-authority.js";
 import type { RuntimeAttemptAuthority } from "../runtime-protocol-authority.types.js";
 
-/** Returns one current attempt authority for protocol-boundary tests. */
+/** Build the attempt authority these admission tests check against. */
 function _authority(): RuntimeAttemptAuthority
 {
 	return {
@@ -22,7 +22,7 @@ function _authority(): RuntimeAttemptAuthority
 	};
 }
 
-/** Start-command specialization that preserves the snapshot payload in protocol tests. */
+/** Start-command type that keeps its snapshot payload visible to the tests. */
 type RuntimeStartAttemptCommand = Extract<RuntimeCommandEnvelope, { readonly kind: "start_attempt" }>;
 
 /** Returns the canonical input snapshot for a start command. */

@@ -6,7 +6,7 @@ import { ___DoWithTrace } from "@opencrane/backend/observability";
 import { _AssertExactRuntimeWorkloadCleanupJob } from "./runtime-workload-cleanup-projection.js";
 import type { KubernetesRuntimeWorkloadCleanupProjection, KubernetesRuntimeWorkloadCleanupStore, KubernetesRuntimeWorkloadCleanupStoreOptions } from "./runtime-workload-cleanup-store.types.js";
 
-/** Attach one combined process-shutdown and request-deadline signal to a Kubernetes call. */
+/** Build the per-call options that cancel a Kubernetes request on process shutdown or when its deadline passes. */
 function _KubernetesRequestOptions(shutdownSignal: AbortSignal, timeoutMilliseconds: number): ConfigurationOptions
 {
 	if (!Number.isSafeInteger(timeoutMilliseconds) || timeoutMilliseconds < 1 || timeoutMilliseconds > 60_000)
@@ -39,7 +39,22 @@ function _KubernetesStatus(error: unknown): number | undefined
 	return typeof body?.code === "number" ? body.code : undefined;
 }
 
-/** Create the least-privilege Kubernetes adapter for exact runtime workload cleanup. */
+/**
+ * Create the Kubernetes half of runtime cleanup: it deletes the Job that one cleanup claim names.
+ *
+ * The adapter reads the Job, checks it against the claim, and only then asks for a delete with the
+ * Job's UID as a precondition — so a Job recreated under the same name is never hit. It holds no
+ * cleanup policy of its own: what to clean, and when absence counts as done, is decided by the
+ * durable use case that calls it.
+ *
+ * Called by: `apps/opencrane/src/app/background-workers.ts`, which passes it as the `store`
+ * dependency of `__CreateRuntimeWorkloadCleanupUseCase`.
+ * @param options - Batch client, per-request timeout, and process shutdown signal.
+ * @returns An adapter satisfying the store port; its single method is documented on the port.
+ * @throws When `requestTimeoutMilliseconds` is outside 1-60000, so a bad deployment value fails at
+ * startup instead of hanging a request later.
+ * @see {@link RuntimeWorkloadCleanupStore}
+ */
 export function __CreateKubernetesRuntimeWorkloadCleanupStore(options: KubernetesRuntimeWorkloadCleanupStoreOptions): KubernetesRuntimeWorkloadCleanupStore
 {
 	return {

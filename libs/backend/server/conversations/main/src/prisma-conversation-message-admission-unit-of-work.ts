@@ -147,7 +147,7 @@ export class PrismaConversationMessageAdmissionUnitOfWork implements Conversatio
 	}
 }
 
-/** Maps an internal run-admission refusal into the participant API vocabulary. */
+/** Maps an internal run-admission refusal onto one of the reasons the participant API returns. */
 function _runAdmissionDenial(reason: string): ConversationWriteDenial
 {
 	if (reason === PersonalRunAdmissionDenialReasons.ConversationUnavailable) return ConversationWriteDenialReasons.ConversationUnavailable;
@@ -158,7 +158,7 @@ function _runAdmissionDenial(reason: string): ConversationWriteDenial
 	return ConversationWriteDenialReasons.PersistenceUnavailable;
 }
 
-/** Maps a rejected message command into the stable participant API vocabulary. */
+/** Maps a rejected message command onto one of the reasons the participant API returns. */
 function _writeDenial(reason: ConversationCommandDenialReasons): ConversationWriteDenial
 {
 	return reason === ConversationCommandDenialReasons.ConversationClosed ? ConversationWriteDenialReasons.ConversationClosed : ConversationWriteDenialReasons.CommandNotSupported;

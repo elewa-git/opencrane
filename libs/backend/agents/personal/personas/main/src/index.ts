@@ -1,4 +1,4 @@
-/** The narrow API and composition surface for the cohesive personal persona lifecycle. */
+/** Everything this package exports: the persona onboarding router, its OpenAPI paths, and the workflow-evidence reader. */
 export { __CreatePersonaOnboardingRouter } from "./http/persona-onboarding.router.js";
 export { _CreatePersonaOnboardingRouter } from "./http/prisma-persona-onboarding.router.js";
 export { _PersonaOnboardingOpenapiPaths } from "./http/openapi.js";

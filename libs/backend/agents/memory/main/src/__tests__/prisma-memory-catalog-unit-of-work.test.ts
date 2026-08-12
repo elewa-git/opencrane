@@ -22,7 +22,7 @@ function _CorrectionCommand()
 	return { datasetId: "dataset-1", cogneeExternalId: "cognee-fact-1", contentDigest: `sha256:${"a".repeat(64)}`, consentState: MemoryFactConsentStates.Explicit, sensitivity: "ordinary", provenance: { user_statement: true, sourceKind: MemoryFactProvenanceSourceKinds.ExplicitUserFact, sourceUserId: "user-1" }, source: { artifactRevisionId: null, messageId: null, explicitUserStatement: true, explicitUserId: "user-1" }, supersedesFactId: "fact-previous", recordedBy: "user-1", idempotencyKey: "fact-1" };
 }
 
-/** Reconstructs the committed content-free delivery used for post-rollback idempotency resolution. */
+/** Builds the row that would already be committed, so the post-rollback idempotency check can compare against it. */
 function _CommittedDelivery(command: ReturnType<typeof _CorrectionCommand>)
 {
 	return { datasetId: command.datasetId, kind: MemoryOutboxEventKind.FactCorrected, fact: { cogneeExternalId: command.cogneeExternalId, contentDigest: command.contentDigest, consentState: "Explicit", sensitivity: command.sensitivity, provenance: command.provenance, sourceArtifactRevisionId: null, sourceMessageId: null, supersedesFactId: command.supersedesFactId, recordedBy: command.recordedBy } };

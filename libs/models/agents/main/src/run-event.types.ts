@@ -1,74 +1,81 @@
 import type { AgentRunId } from "./identifiers.types.js";
 
 /**
- * Stable public vocabulary of ordered events emitted by one agent run.
+ * Every kind of event one agent run can emit, in the order a reader would meet them.
  *
- * Readable values remain part of persistence and projection contracts but do not grant run authority.
+ * The string values are stored in the database and read by clients, so they cannot be renamed without
+ * a migration. Holding one of these values grants nothing on its own: an event says what happened, it
+ * does not authorise anything.
+ *
+ * Each member below records the payload it carries. Where a member says the runtime cannot report it,
+ * the server or the tool worker writes it instead, and an attempt by the runtime is refused.
+ * @see _RuntimeEventPayloadIsSafe in libs/backend/agents/execution/runs, which is where these payload
+ * rules are enforced and refused.
  */
 export enum RunEventTypes
 {
-	/** Run admission committed its immutable authority and input evidence. */
+	/** The run was admitted and its inputs were frozen. The runtime cannot report this one. */
 	RunAccepted = "run.accepted",
-	/** Assigned runtime began executing the run. */
+	/** The runtime assigned to this run began executing it. Payload: `promptCompilerVersion`. */
 	RunStarted = "run.started",
-	/** Runtime resumed execution after a control-plane-authorized pause. */
+	/** The runtime picked up again after the control plane paused it. Payload: `inputGeneration`, a counter. */
 	RunResumed = "run.resumed",
-	/** Runtime began assembling a user-visible message. */
+	/** The runtime began building a message for the user. Payload: `messageId`, and `role`, which must be `assistant`. */
 	MessageStarted = "message.started",
-	/** Runtime appended a bounded message delta. */
+	/** The runtime added the next piece of a message it is still writing. Payload: `messageId` and `delta`, the new text. */
 	MessageDelta = "message.delta",
-	/** Runtime completed a user-visible message. */
+	/** The runtime finished a message for the user. Payload: `messageId`. */
 	MessageCompleted = "message.completed",
-	/** Runtime requested one governed tool action. */
+	/** The runtime asked to call a tool. Asking is not permission to run it. Payload: `toolCallId` and `toolCallName`. */
 	ToolRequested = "tool.requested",
-	/** Tool action paused pending an explicit approval decision. */
+	/** A tool call is waiting for someone to approve or reject it. The runtime cannot report this one. */
 	ToolApprovalRequired = "tool.approval_required",
-	/** Governed tool execution started. */
+	/** A tool call started. Only the tool worker may report this, because only it knows the call really began. */
 	ToolStarted = "tool.started",
-	/** Governed tool execution reported bounded progress. */
+	/** A running tool call reported progress. The runtime cannot report this one. */
 	ToolProgress = "tool.progress",
-	/** Governed tool execution completed. */
+	/** A tool call finished. Only the tool worker may report this, because only it knows the provider's result. */
 	ToolCompleted = "tool.completed",
-	/** Governed tool execution failed without exposing provider or credential details. */
+	/** A tool call failed, with no provider message or credential in the payload. Only the tool worker may report this. */
 	ToolFailed = "tool.failed",
-	/** Provider outcome is ambiguous and this cancellable run needs explicit recovery. */
+	/** A tool call's result could not be established, so someone must decide what happened. The runtime cannot report this one. */
 	ToolRecoveryRequired = "tool.recovery_required",
-	/** Runtime reported a display-safe nonterminal problem while the run remained active. */
+	/** Something went wrong but the run carried on. Payload: `reason` from a closed list, and an optional `errorType`. */
 	RunError = "run.error",
-	/** Runtime began one versioned governed A2UI rendering surface. */
+	/** The runtime started drawing a generated UI. Payload: `a2ui`, holding the envelope. */
 	A2uiRenderingBegun = "a2ui.rendering.begun",
-	/** Runtime supplied an ordered versioned update to a governed A2UI surface. */
+	/** The runtime changed part of a generated UI. Payload: `a2ui`, holding the envelope. */
 	A2uiSurfaceUpdated = "a2ui.surface.updated",
-	/** Runtime supplied an ordered versioned update to governed A2UI data. */
+	/** The runtime changed the data behind a generated UI. Payload: `a2ui`, holding the envelope. */
 	A2uiDataModelUpdated = "a2ui.data_model.updated",
-	/** Runtime began compacting the run's conversation context. */
+	/** The runtime began shortening the conversation to fit the context window. The runtime cannot report this one. */
 	ContextCompactionStarted = "context.compaction_started",
-	/** Runtime completed context compaction. */
+	/** The runtime finished shortening the conversation. The runtime cannot report this one. */
 	ContextCompactionCompleted = "context.compaction_completed",
-	/** Runtime reported bounded usage for budget accounting. */
+	/** Token counts for billing and budget limits. Payload: `inputTokens` and `outputTokens`. */
 	RunUsage = "run.usage",
-	/** Run completed successfully. */
+	/** The run finished successfully. Payload: empty, and any key at all is refused. */
 	RunCompleted = "run.completed",
-	/** Run failed terminally. */
+	/** The run failed and will not continue. Payload: `reason` from a closed list, and an optional `errorType`. */
 	RunFailed = "run.failed",
-	/** Run reached its terminal cancelled state. */
+	/** The run was cancelled. Cancelling is the server's decision, so the runtime cannot report this one. */
 	RunCancelled = "run.cancelled",
 }
 
-/** String form of the canonical run-event enum accepted by existing event producers. */
+/** The same event types as a plain string union, for producers that hold the value rather than the enum. */
 export type RunEventType = `${RunEventTypes}`;
 
-/** Ordered immutable event emitted by one run. */
+/** One event in a run's history. Events are never edited or reordered once written. */
 export interface RunEvent
 {
-	/** Run that owns the event stream. */
+	/** Run whose history this event belongs to. */
 	readonly runId: AgentRunId;
-	/** One-based contiguous sequence within the run. */
+	/** Position in this run's history, starting at 1 with no gaps. */
 	readonly sequence: number;
-	/** Stable public event classification. */
+	/** What happened. */
 	readonly type: RunEventType;
-	/** Immutable event payload with no runtime-SDK types. */
+	/** The event's data, holding only plain JSON so no runtime SDK type can leak into storage. */
 	readonly payload: Readonly<Record<string, unknown>>;
-	/** ISO-8601 instant at which the event was persisted. */
+	/** ISO-8601 instant the event was written. */
 	readonly occurredAt: string;
 }

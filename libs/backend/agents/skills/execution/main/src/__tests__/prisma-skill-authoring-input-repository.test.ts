@@ -2,14 +2,14 @@ import { describe, expect, it, vi } from "vitest";
 
 import { PrismaSkillAuthoringInputRepository } from "../prisma-skill-authoring-input-repository.js";
 
-/** Exact reviewed worker identity that must match registration and bootstrap consumption. */
+/** Worker identity that must match both the registered Pod and the consumed bootstrap. */
 const _IDENTITY = { namespace: "opencrane-skill-authoring", serviceAccountName: "skill-authoring-default", podUid: "pod-uid-1" };
-/** Workload projection that binds one reviewed worker to one pinned draft revision. */
+/** Fake workload row linking this worker to one pinned draft revision. */
 const _WORKLOAD = { siloId: "silo-1", workloadUid: "job-uid-1", bootstrap: { workloadUid: "job-uid-1" }, skillRevision: { artifactId: "artifact-1", artifactRevisionId: "revision-1", artifactContentAddress: `sha256:${"a".repeat(64)}` } };
-/** Published active artifact projection returned for the pinned draft revision. */
+/** Fake published artifact row returned for the pinned draft revision. */
 const _REVISION = { artifactId: "artifact-1", id: "revision-1", contentAddress: `sha256:${"a".repeat(64)}`, byteLength: 13n, mediaType: "application/gzip" };
 
-/** Builds narrow delegate doubles for the immutable input selection fence. */
+/** Builds Prisma fakes for the two queries the input lookup runs. */
 function _Repository(workload: unknown, revision: unknown)
 {
 	const workloadFindFirst = vi.fn().mockResolvedValue(workload);

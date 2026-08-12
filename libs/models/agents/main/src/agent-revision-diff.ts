@@ -28,7 +28,7 @@ function _countLines(lines: readonly string[]): Map<string, number>
 	return counts;
 }
 
-/** Consumes one occurrence of a line, returning whether the counterpart still had it. */
+/** Remove one occurrence of a line from the count, returning false when the other side had none left. */
 function _consume(counts: Map<string, number>, line: string): boolean
 {
 	const remaining = counts.get(line) ?? 0;
@@ -83,31 +83,38 @@ function _scopeAttachmentKeys(revision: AgentRevision): string[]
 	return revision.scopeAttachments.map(function _key(attachment) { return `${attachment.scope}:${attachment.subjectType}:${attachment.subjectId}`; });
 }
 
-/** Flags a budget ceiling as widened when the target permits strictly more than the base. */
+/** Report a widening when the target raises this budget ceiling; a lowered or equal ceiling is not reported. */
 function _budgetWidening(field: string, before: number, after: number): RevisionWidening | null
 {
 	return after > before ? { kind: "budget", field, detail: `${field} raised from ${before} to ${after}` } : null;
 }
 
 /**
- * Compares an ordered base revision against a target revision.
+ * Compare two agent revisions so a reviewer can see what a publication would change.
  *
- * Readable text fields (the prompt-policy reference) are diffed line by line; structured
- * configuration is diffed at the field level rather than as opaque JSON. The comparison also
- * flags security-relevant widening — broader scopes, tools, credentials, or budgets — so a
- * reviewer can confirm the elevation before publication. It is a pure calculation and never reads
- * or renders secret values, only the stable references the revision persists.
+ * Text fields are diffed line by line. Structured configuration is diffed field by field rather
+ * than as one blob of JSON, so a reviewer sees which setting moved instead of a wall of text.
  *
+ * The important output is `widenings`: any change that gives the agent MORE than before — a
+ * broader scope, an extra tool, a new credential binding, or a raised budget. A publication flow
+ * must show these and get confirmation; a narrowing change is not flagged. An empty `widenings`
+ * therefore means the target grants no new power, not that nothing changed.
+ *
+ * Pure calculation: no I/O, and it reads only the references a revision stores, never a secret
+ * value.
+ *
+ * Called by: `libs/backend/server/agents/agent-services/main/src/agent-revision-lifecycle.ts`.
  * @param base - Earlier revision to compare from.
  * @param target - Later revision to compare to.
- * @returns The complete line, scalar, set, and widening comparison.
+ * @returns Line, field, collection, and widening changes. Empty `widenings` means no new power was granted.
+ * @see {@link RevisionWidening}
  */
 export function __DiffAgentRevisions(base: AgentRevision, target: AgentRevision): AgentRevisionDiff
 {
 	// 1. Diff the readable prompt/instructions reference line by line.
 	const lineDiffs = [_lineDiff("promptPolicyVersion", base.promptPolicyVersion, target.promptPolicyVersion)].filter(_isPresent);
 
-	// 2. Diff scalar configuration fields semantically.
+	// 2. Diff single-value configuration fields one at a time, not as one blob of JSON.
 	const scalarChanges = [
 		_scalarChange("personaRevisionId", base.personaRevisionId, target.personaRevisionId),
 		_scalarChange("modelDefinitionId", base.modelDefinitionId, target.modelDefinitionId),

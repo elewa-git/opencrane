@@ -5,26 +5,26 @@ import type { SkillWorkloadBootstrapIdentity } from "./skill-workload-bootstrap.
 import { _SkillWorkloadTimestampProposal } from "./prisma-skill-workload-timestamps.js";
 import { _SkillWorkloadPersistenceConflictError, type SkillAuthoringCompletionRepository } from "./skill-workload-unit-of-work.types.js";
 
-/** Prisma authority for one exact authoring worker's terminal evidence report. */
+/** Stores an authoring worker's final report and moves the workload to its final state. */
 export class PrismaSkillAuthoringCompletionRepository implements SkillAuthoringCompletionRepository
 {
-	/** Transaction-scoped ORM client supplied only by the execution unit of work. */
+	/** Prisma client for this transaction. Only the unit of work supplies it. */
 	private readonly transaction: Prisma.TransactionClient;
 
-	/** Creates the authoring completion authority over canonical Postgres. */
+	/** Stores the transaction this repository reads and writes through. */
 	constructor(transaction: Prisma.TransactionClient)
 	{
 		this.transaction = transaction;
 	}
 
-	/** Completes one bootstrap-consumed Draft authoring workload and persists only bounded evidence. */
+	/** Completes one authoring workload whose worker already consumed its bootstrap, storing only the two fixed reports. */
 	async complete(command: SkillAuthoringCompletionCommand, identity: SkillWorkloadBootstrapIdentity): Promise<"completed" | "conflict">
 	{
-		// 1. Rebind every completion fence inside the serializable transaction snapshot.
+		// 1. Re-read the workload, its bootstrap, and its revision in this transaction, and require every id to match.
 		const workload = await this.transaction.skillWorkload.findFirst({ where: { id: command.workloadId, kind: SkillWorkloadKind.Authoring, state: SkillWorkloadState.Assigned, releasedAt: { not: null }, workerPodUid: identity.podUid, bootstrap: { is: { consumedAt: { not: null }, consumedByPodUid: identity.podUid, namespace: identity.namespace, serviceAccountName: identity.serviceAccountName } } }, include: { skillRevision: true } });
 		if (workload === null || workload.skillRevision.state !== SkillRevisionState.Draft) return "conflict";
 
-		// 2. Store passed reports before terminalising the fenced row; a failure records only a stable code.
+		// 2. Write the passing reports before moving the workload to its final state. A failure stores only the failure code.
 		if (command.outcome === SkillAuthoringCompletionOutcomes.Succeeded)
 		{
 			if (!command.testReport.passed || !command.scanResult.passed) return "conflict";

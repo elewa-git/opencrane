@@ -14,7 +14,7 @@ type ApprovalOpenTransaction = <TResult>(operation: (repository: DeferredToolApp
 /** Transaction-scoped deferred approval open/recovery repository. */
 class PrismaDeferredToolApprovalOpenRepository implements DeferredToolApprovalOpenRepository
 {
-	/** Exact transaction binding; never a process-owned root client. */
+	/** The transaction every query here runs on; never the process-wide Prisma client. */
 	private readonly _transaction: Prisma.TransactionClient;
 
 	/** Bind every operation to the caller-owned transaction. */
@@ -23,19 +23,19 @@ class PrismaDeferredToolApprovalOpenRepository implements DeferredToolApprovalOp
 		this._transaction = transaction;
 	}
 
-	/** Open one approval through the canonical in-transaction authority. */
+	/** Open one approval through the repository bound to this transaction. */
 	async defer(command: DeferToolRequestCommand): Promise<DeferToolRequestResult>
 	{
 		return __DeferToolRequest(this._transaction, command);
 	}
 
-	/** Terminalise provider-free approval preparation only while it awaits approval. */
+	/** Terminalise the invocation, but only while it is still in AwaitingApproval. */
 	async terminaliseAwaitingApproval(invocationId: string, failureCode: string, now: Date): Promise<boolean>
 	{
 		return __MarkToolInvocationApprovalRejectedInTransaction(this._transaction, invocationId, now, failureCode);
 	}
 
-	/** Read only the exact durable linkage that proves an ambiguous create committed. */
+	/** Returns whether the approval row exists and points at this invocation, which proves the create committed. */
 	async hasLinkedApproval(command: OpenDeferredToolApprovalCommand): Promise<boolean>
 	{
 		const approval = await this._transaction.approvalRequest.findFirst({ where: { id: command.interruptId, runId: command.runId, attempt: command.attempt, toolInvocationRowId: command.invocationId } });
@@ -77,7 +77,7 @@ class PrismaDeferredToolApprovalOpenUnitOfWork implements DeferredToolApprovalOp
 		this._logger = logger;
 	}
 
-	/** Open one traced deferred approval and recover an ambiguous commit fail closed. */
+	/** Opens one approval inside a trace, and when the transaction outcome is unclear, resolves it without letting the action run. */
 	async open(command: OpenDeferredToolApprovalCommand): Promise<boolean>
 	{
 		const prisma = this._prisma;

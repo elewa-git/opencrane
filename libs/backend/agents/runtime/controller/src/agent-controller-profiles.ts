@@ -2,13 +2,25 @@ import { __BuildSuspendedAgentRuntimeJob } from "@opencrane/backend/agents/runti
 
 import type { AgentControllerRuntimeProfile, AgentControllerRuntimeProfiles } from "./agent-controller.types.js";
 
-/** Validate a DNS-label namespace before it becomes a Kubernetes authority boundary. */
+/** Return whether a namespace name is a valid DNS label, before it is used to isolate runtime workloads. */
 function _IsNamespace(value: string): boolean
 {
 	return value.length <= 63 && /^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/.test(value);
 }
 
-/** Resolve one exact configured profile without accepting prototype properties. */
+/**
+ * Look up one configured profile by name, ignoring anything inherited from the prototype.
+ *
+ * The name arrives from a claim, so an own-property check keeps a claim naming something like
+ * `constructor` from resolving to a JavaScript builtin instead of a profile.
+ *
+ * Called by: {@link __ReconcileNextAgentRuntimeAttempt} and {@link __ReconcileNextRuntimeRelease}.
+ * @param profiles - The validated profile map built at startup.
+ * @param name - Profile name taken from the claim (`workloadProfile`).
+ * @returns The profile for that name.
+ * @throws When no profile is configured under that name. Callers let this propagate: it means the
+ * deployment and OpenCrane disagree about which profiles exist.
+ */
 export function _ResolveAgentControllerRuntimeProfile(profiles: AgentControllerRuntimeProfiles, name: string): AgentControllerRuntimeProfile | undefined
 {
 	if (!Object.prototype.hasOwnProperty.call(profiles, name))
@@ -54,7 +66,11 @@ export function __ValidateAgentControllerRuntimeProfiles(value: unknown): AgentC
 	return profiles;
 }
 
-/** Return whether every configured profile owns one distinct namespace outside its server. */
+/**
+ * Return whether every profile has its own namespace: none shared with another profile, and none
+ * equal to the server's. Re-checked by {@link __RunAgentController} before its first poll, so a
+ * profile map built without validation still cannot start the loop.
+ */
 export function _AgentControllerProfilesAreBoundToDistinctNamespaces(profiles: AgentControllerRuntimeProfiles): boolean
 {
 	const values = Object.values(profiles);

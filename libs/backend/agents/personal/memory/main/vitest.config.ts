@@ -3,5 +3,5 @@ import tsconfigPaths from "vite-tsconfig-paths";
 
 import { _PackageCacheDir } from "../../../../../../vitest.cache.js";
 
-/** Vitest configuration for the memory catalog authority. */
+/** Vitest configuration for the personal memory package. */
 export default defineConfig({ cacheDir: _PackageCacheDir(import.meta.url), plugins: [tsconfigPaths({ projects: ["../../../../../../tsconfig.vitest.json"] })] });

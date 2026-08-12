@@ -8,7 +8,7 @@ import { _ToA2uiDisplayedActionIntent } from "./a2ui-action-intent.js";
 import { _AdmitA2uiSurfacePresentation } from "./a2ui-admission.js";
 import type { A2uiDisplayedActionIntent, A2uiSurfacePresentation } from "./a2ui.types.js";
 
-/** Human-readable labels for every finite presentation lifecycle. */
+/** The label shown for each surface state. */
 const _STATE_LABELS: Readonly<Record<AgUiA2uiSurfaceStates, string>> =
 {
 	[AgUiA2uiSurfaceStates.Streaming]: "Streaming",
@@ -24,12 +24,37 @@ const _STATE_LABELS: Readonly<Record<AgUiA2uiSurfaceStates, string>> =
 };
 
 /**
- * Render one display-safe A2UI surface and emit only server-authorizable displayed action intents.
+ * Renders one A2UI surface sent by the server, and reports user actions back as intents.
  *
- * Each instance owns a vendor message processor. It accepts one typed presentation, preserves the
- * supplied operation order, ignores duplicate or stale sequences, and keeps stable component ids in
- * place so progressive updates preserve focus. It never exposes the upstream completion subject,
- * client timestamp, raw protocol event, or arbitrary payload.
+ * Use this wherever an agent needs to put a real form in front of the user. The host owns all the
+ * state: it passes the latest {@link A2uiSurfacePresentation} into `presentation`, listens on
+ * `displayedAction`, and sends what it receives to the server. Nothing here decides whether an
+ * action is allowed — the emitted {@link A2uiDisplayedActionIntent} carries no authority, and the
+ * server re-checks it.
+ *
+ * What each instance does:
+ * - owns its own vendor `MessageProcessor`, so two canvases never see each other's surfaces;
+ * - applies the presentation's operations in the order given;
+ * - ignores a sequence it has already applied, or one older than the current one;
+ * - reuses component ids across updates, so a streaming update does not steal keyboard focus;
+ * - shows a placeholder that repeats nothing from the payload if admission or the vendor rejects
+ *   the presentation.
+ *
+ * It never passes on the vendor's completion Subject, its client timestamp, the raw protocol
+ * event, or any value outside the scalars listed in {@link A2uiDisplayedActionIntent}.
+ *
+ * Rendered by: no production parent yet — only a2ui-canvas.component.spec.ts and
+ * a2ui-canvas.component.stories.ts. A host must also provide the markdown sanitizer and the
+ * catalogue from a2ui.providers.ts.
+ *
+ * Inputs: `presentation` (required). Outputs: `displayedAction`.
+ *
+ * @see A2uiSurfacePresentation
+ * @see A2uiDisplayedActionIntent
+ * @see _AdmitA2uiSurfacePresentation
+ * @see A2UI v0.8 specification — the surface, operation and component shapes this renders:
+ *   https://a2ui.org/specification/v0.8-a2ui/
+ * @see AG-UI protocol docs — where the presentation comes from upstream: https://docs.ag-ui.com
  */
 @Component({
 	selector: "wo-a2ui-canvas",
@@ -45,22 +70,38 @@ export class A2uiCanvasComponent
 	/** Exact server projection supplied through Angular's runtime-visible TestBed input metadata. */
 	private readonly _projectedPresentation = signal<A2uiSurfacePresentation | null>(null);
 
-	/** Displayed action intent for the authenticated host; this output carries no authority itself. */
+	/**
+	 * Fires when the user activates an action on the surface.
+	 *
+	 * The host must forward the intent to the server, which decides whether to act on it. The intent
+	 * itself grants nothing: it is a report that a button was pressed, tied to the ids of the
+	 * presentation it was displayed on. Nothing is emitted unless the surface state is Ready.
+	 *
+	 * @see A2uiDisplayedActionIntent
+	 */
 	@Output() public readonly displayedAction = new EventEmitter<A2uiDisplayedActionIntent>();
 
-	/** Adopt the host's latest projected presentation into the monotonic display boundary. */
+	/**
+	 * The latest presentation from the host. Required.
+	 *
+	 * Set this on every update; the component works out itself whether anything changed. A
+	 * presentation whose `sequence` is not higher than the one already applied is ignored, so
+	 * re-setting the same value is harmless.
+	 *
+	 * @param presentation - The surface to display, as sent by the server.
+	 */
 	@Input({ required: true }) public set presentation(presentation: A2uiSurfacePresentation)
 	{
 		this._projectedPresentation.set(presentation);
 	}
 
-	/** Component-scoped upstream processor that prevents surfaces leaking across canvas instances. */
+	/** This instance's own vendor MessageProcessor, so two canvases never share surfaces. */
 	private readonly _processor = inject(MessageProcessor);
 
-	/** Whether the latest envelope or its vendor operation shape failed closed. */
+	/** Whether the latest presentation was rejected, either by the admission check or by the vendor. */
 	private readonly _rejected = signal(false);
 
-	/** Latest monotonic presentation actually adopted for the stable coordinate identity. */
+	/** The latest presentation actually applied, for the identity this instance currently holds. */
 	private readonly _adoptedPresentation = signal<A2uiSurfacePresentation | null>(null);
 
 	/** Stable identity of the presentation currently held by this component instance. */
@@ -69,10 +110,10 @@ export class A2uiCanvasComponent
 	/** Highest sequence adopted for the current stable presentation identity. */
 	private _lastSequence = -1;
 
-	/** Number of materialized operations already applied to the current vendor surface. */
+	/** How many operations have already been applied to the current vendor surface. */
 	private _appliedOperationCount = 0;
 
-	/** Monotonic presentation used by both rendering and displayed-action intent mapping. */
+	/** The presentation the template renders and that action intents are built from. */
 	protected readonly currentPresentation = computed(function _CurrentPresentation(this: A2uiCanvasComponent): A2uiSurfacePresentation
 	{
 		const presentation = this._adoptedPresentation() ?? this._projectedPresentation();
@@ -83,13 +124,13 @@ export class A2uiCanvasComponent
 		return presentation;
 	}.bind(this));
 
-	/** Current finite lifecycle label announced to assistive technology. */
+	/** The current state's label, announced to screen readers. */
 	protected readonly stateLabel = computed(function _StateLabel(this: A2uiCanvasComponent): string
 	{
 		return _STATE_LABELS[this.currentPresentation().state];
 	}.bind(this));
 
-	/** Whether a vendor surface is ready and the envelope passed the local display admission check. */
+	/** Whether the vendor has built the surface and the presentation passed the admission check. */
 	protected readonly showSurface = computed(function _ShowSurface(this: A2uiCanvasComponent): boolean
 	{
 		this._processor.version();
@@ -97,26 +138,26 @@ export class A2uiCanvasComponent
 		return !this._rejected() && presentation.state !== AgUiA2uiSurfaceStates.Unsupported && this._processor.getSurfaces().has(presentation.surfaceId);
 	}.bind(this));
 
-	/** Whether the surface must expose a safe placeholder without echoing rejected payload details. */
+	/** Whether to show the placeholder instead, which never repeats anything from a rejected payload. */
 	protected readonly showUnsupported = computed(function _ShowUnsupported(this: A2uiCanvasComponent): boolean
 	{
 		return this._rejected() || this.currentPresentation().state === AgUiA2uiSurfaceStates.Unsupported;
 	}.bind(this));
 
-	/** Whether interaction is locally enabled; only the server-projected ready state admits intent. */
+	/** Whether controls are enabled here; only the server's Ready state allows an action. */
 	protected readonly interactive = computed(function _Interactive(this: A2uiCanvasComponent): boolean
 	{
 		return !this._rejected() && this.currentPresentation().state === AgUiA2uiSurfaceStates.Ready;
 	}.bind(this));
 
-	/** Whether the current visual lifecycle is waiting on progressive data or server admission. */
+	/** Whether the surface is waiting on streaming data or on the server to accept an action. */
 	protected readonly busy = computed(function _Busy(this: A2uiCanvasComponent): boolean
 	{
 		const state = this.currentPresentation().state;
 		return state === AgUiA2uiSurfaceStates.Streaming || state === AgUiA2uiSurfaceStates.ActionPending;
 	}.bind(this));
 
-	/** Optional display-safe lifecycle explanation, suppressed for rejected/unsupported payloads. */
+	/** The reason text for the current state, when it is safe to show; hidden for rejected or unsupported payloads. */
 	protected readonly visibleReason = computed(function _VisibleReason(this: A2uiCanvasComponent): string | null
 	{
 		if (this.showUnsupported())
@@ -143,10 +184,20 @@ export class A2uiCanvasComponent
 		});
 	}
 
-	/** Adopt one new monotonic presentation sequence without rebuilding stable component identity. */
+	/**
+	 * Apply one presentation, keeping the existing component tree wherever possible.
+	 *
+	 * Runs from the constructor `effect` whenever `presentation` is set. Four cases, in order:
+	 * a different surface resets the vendor state; a sequence at or below the current one is
+	 * dropped; a presentation that fails admission clears the surface and shows the placeholder;
+	 * anything else has only its new operations handed to the vendor. A vendor throw is caught and
+	 * becomes the same placeholder, never an Angular error.
+	 *
+	 * @param presentation - The presentation to apply.
+	 */
 	private _adoptPresentation(presentation: A2uiSurfacePresentation): void
 	{
-		// 1. Reset vendor state only when the authoritative display coordinates select a different
+		// 1. Reset vendor state only when the server's ids point at a different
 		// surface; normal progressive updates retain the existing component tree and browser focus.
 		const identity = `${presentation.conversationId}\u0000${presentation.runId}\u0000${presentation.messageId}\u0000${presentation.surfaceId}`;
 		if (identity !== this._presentationIdentity)
@@ -157,7 +208,7 @@ export class A2uiCanvasComponent
 			this._appliedOperationCount = 0;
 		}
 
-		// 2. Ignore duplicate and stale delivery because the state layer will replay a newer canonical
+		// 2. Ignore a repeat or an older delivery, because the state layer will send a newer
 		// projection; processing old operations could regress visible data or rebuild focused controls.
 		if (presentation.sequence <= this._lastSequence)
 		{
@@ -195,7 +246,16 @@ export class A2uiCanvasComponent
 		}
 	}
 
-	/** Emit the narrow displayed intent and settle the upstream local completion channel. */
+	/**
+	 * Turn one vendor renderer event into an emitted intent, then close the vendor's promise.
+	 *
+	 * Subscribed in the constructor for the lifetime of the component. The vendor waits on
+	 * `event.completion`; it is completed with an empty array because the server replies later as a
+	 * new presentation, never through this channel. Events that map to null (not Ready, wrong
+	 * surface, an input/change event, an over-large payload) emit nothing but still complete.
+	 *
+	 * @param event - The vendor's client event.
+	 */
 	private _handleRendererEvent(event: A2UIClientEvent): void
 	{
 		// 1. Map from the exact current presentation so stale, non-ready, or unbounded vendor events
@@ -206,7 +266,7 @@ export class A2uiCanvasComponent
 			this.displayedAction.emit(intent);
 		}
 
-		// 2. Resolve the vendor-local promise with no server messages. Authoritative responses arrive
+		// 2. Resolve the vendor's local promise with no server messages. The server's responses arrive
 		// later as a new typed presentation; the completion Subject itself never leaves this package.
 		event.completion.next([]);
 		event.completion.complete();

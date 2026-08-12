@@ -14,23 +14,23 @@ const _MAX_RESPONSE_BYTES = 16 * 1024;
 const _CLAIM_PATH = "/api/internal/agent-controller/skill-workloads:claim";
 
 /**
- * Read one bounded skill-workload response and return only its validator-owned domain value.
+ * Read a size-limited response body and return only the value its validator accepted.
  *
- * @param response - Internal authority response whose body remains untrusted.
- * @param validate - Domain validator that binds the decoded payload to its expected contract.
- * @param validatorArguments - Request coordinates used to reject mismatched authority responses.
+ * @param response - Response from the OpenCrane server; its body is not trusted.
+ * @param validate - Checks the decoded JSON against the expected contract and returns the typed value.
+ * @param validatorArguments - The ids from the request, so a response about a different workload is rejected.
  * @returns The validated response value.
  */
 async function _ReadAndValidateJson<T, TArguments extends readonly unknown[]>(response: Response, validate: (candidate: unknown, ...arguments_: TArguments) => T, ...validatorArguments: TArguments): Promise<T>
 {
-	// 1. Stream the body through the allocation ceiling before retaining or parsing it.
+	// 1. Read the body in chunks and stop at the size limit, before keeping or parsing any of it.
 	const text = await _ReadBoundedText(response);
 
-	// 2. Parse and validate together so no untyped authority response leaves this adapter.
+	// 2. Parse and check in one step, so no unchecked response leaves this adapter.
 	return ___ParseAndValidateJson(text, "OpenCrane skill workload response", validate, ...validatorArguments);
 }
 
-/** Read one skill-workload response without allocating beyond its fixed protocol ceiling. */
+/** Read a response body, failing as soon as it goes past the 16 KiB limit. */
 async function _ReadBoundedText(response: Response): Promise<string>
 {
 	const declaredLength = response.headers.get("content-length");
@@ -62,7 +62,7 @@ async function _ReadBoundedText(response: Response): Promise<string>
 	}
 }
 
-/** Read the latest rotated projected token from its mounted file. */
+/** Read the current token from the file Kubernetes rotates. */
 function _CreateTokenReader(path: string): SkillWorkloadControllerTokenReader
 {
 	return async function _ReadToken(): Promise<string>
@@ -79,7 +79,7 @@ function _Headers(token: string): Headers
 	return new Headers({ authorization: `Bearer ${token}`, "content-type": "application/json", accept: "application/json" });
 }
 
-/** Combine process cancellation with the hard per-request timeout. */
+/** Return a signal that aborts when the process shuts down or when the request times out. */
 function _RequestSignal(signal: AbortSignal, timeoutMilliseconds: number): AbortSignal
 {
 	return AbortSignal.any([signal, AbortSignal.timeout(timeoutMilliseconds)]);
@@ -93,7 +93,7 @@ function _BaseUrl(value: string): URL
 	return parsed;
 }
 
-/** Create the projected-token-authenticated governed skill desired-state and assignment adapter. */
+/** Create the adapter that asks the OpenCrane server for claims and records assignments, authenticating with the projected token. */
 export function __CreateHttpSkillWorkloadControllerAuthority(options: SkillWorkloadControllerHttpAuthorityOptions): SkillWorkloadControllerAuthority
 {
 	const baseUrl = _BaseUrl(options.openCraneInternalUrl);

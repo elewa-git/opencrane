@@ -4,10 +4,23 @@ import { Router, type Request, type Response } from "express";
 
 import type { SteeringIngestCaller, SteeringIngestRouterDependencies } from "./steering-ingest.router.types.js";
 
-/** Largest accepted steering instruction, keeping it safe for durable event and prompt handling. */
+/** Longest steering instruction accepted, so it stays safe to store and to put in a prompt. */
 const _MAX_STEERING_CHARACTERS = 4_000;
 
-/** Create the browser-session-authenticated, self-only runtime steering ingest router. */
+/**
+ * Create the steering router: the caller needs a browser session, and may steer only their own run.
+ *
+ * The route accepts nothing but a single `text` field, and derives the owner, the silo, and the run
+ * attempt on the server. Nothing about which run or which attempt comes from the caller beyond the
+ * run id in the path, and ownership is proved inside the write transaction.
+ *
+ * Called by: `_CreateSteeringIngestRouter` (prisma-steering-ingest.router.ts), which
+ * apps/opencrane/src/app/routes.ts mounts at /api/v1/me/runs.
+ *
+ * @param dependencies - Caller resolution, the steering queue, a clock, and a logger.
+ * @returns An Express router exposing POST /:runId/steering.
+ * @see SteeringRequestRepository for which status code each outcome produces.
+ */
 export function __CreateSteeringIngestRouter(dependencies: SteeringIngestRouterDependencies): Router
 {
 	const router = Router();
@@ -38,7 +51,7 @@ export function __CreateSteeringIngestRouter(dependencies: SteeringIngestRouterD
 	return router;
 }
 
-/** Resolve one session-derived caller or write a non-disclosing authentication denial. */
+/** Return the caller from the session, or write a 401 that reveals nothing about the run. */
 function _requireCaller(request: Request, response: Response, dependencies: SteeringIngestRouterDependencies): SteeringIngestCaller | null
 {
 	const caller = dependencies.resolveCaller(request);
@@ -46,7 +59,7 @@ function _requireCaller(request: Request, response: Response, dependencies: Stee
 	return caller;
 }
 
-/** Accept one exact bounded text body rather than caller-chosen runtime coordinates or payloads. */
+/** Accept only a body of `{ text }` within the length limit; the caller cannot send any other field. */
 function _text(body: unknown): string | null
 {
 	if (body === null || typeof body !== "object" || Array.isArray(body) || Object.keys(body).length !== 1) return null;
@@ -56,7 +69,7 @@ function _text(body: unknown): string | null
 	return trimmed && trimmed.length <= _MAX_STEERING_CHARACTERS ? trimmed : null;
 }
 
-/** Digest the accepted canonical instruction without retaining a browser-supplied identifier. */
+/** Hash the accepted instruction. No browser-supplied id is kept. */
 function _digest(content: { readonly text: string }): string
 {
 	return `sha256:${createHash("sha256").update(JSON.stringify(content), "utf8").digest("hex")}`;

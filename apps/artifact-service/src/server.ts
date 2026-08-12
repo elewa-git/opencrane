@@ -61,7 +61,7 @@ export function _CreateServer(config: ArtifactServiceProcessConfig, store: Artif
 	});
 }
 
-/** Verifies one exact immutable read lease, preflights its bytes, then streams only its pinned address. */
+/** Verifies the immutable read lease, checks the stored size first, then streams bytes only from the address that lease pins. */
 async function _ReadCanonicalArtifact(request: IncomingMessage, response: ServerResponse, store: ArtifactStore, leasePublicKeyPem: string): Promise<void>
 {
 	// 1. Read the dedicated header because write authority must never open the read endpoint.
@@ -127,19 +127,19 @@ async function _WaitForWritableResponse(response: ServerResponse): Promise<boole
 	});
 }
 
-/** Adapts the app-owned OpenCrane public key to the storage-neutral lease verifier port. */
+/** Wraps this app's OpenCrane public key as the lease-verifier port, which knows nothing about storage. */
 function _leaseVerifier(leasePublicKeyPem: string): ArtifactPromotionLeaseVerifier
 {
 	return { verify(compactLease, nowEpochSeconds) { return __VerifyArtifactWriteLease(compactLease, leasePublicKeyPem, nowEpochSeconds); } };
 }
 
-/** Adapts the app-owned receipt key to the storage-neutral receipt signer port. */
+/** Wraps this app's receipt key as the receipt-signer port, which knows nothing about storage. */
 function _receiptSigner(receiptPrivateKeyPem: string): ArtifactPromotionReceiptSigner
 {
 	return { sign(claims) { return __SignArtifactPromotionReceipt(claims, receiptPrivateKeyPem); } };
 }
 
-/** Exposes only the HTTP request primitives the promotion protocol needs to bound byte ingestion. */
+/** Hands the promotion protocol only the request parts it needs in order to cap how many bytes it reads. */
 function _byteSource(request: IncomingMessage): BoundedArtifactUploadByteSource
 {
 	const contentLength = request.headers["content-length"];
@@ -152,7 +152,7 @@ function _byteSource(request: IncomingMessage): BoundedArtifactUploadByteSource
 	};
 }
 
-/** Translates stable storage-domain outcomes into the private HTTP endpoint contract. */
+/** Turns each storage-domain outcome into the status and body this private endpoint returns. */
 function _writePromotionOutcome(response: ServerResponse, outcome: PromoteArtifactUploadResult): void
 {
 	if (outcome.outcome === "promoted")

@@ -1,12 +1,16 @@
 import type { AuthorizationScope } from "./authorization-scope.types.js";
 
 /**
- * Determines whether a grant scope covers a requested scope.
- * Organization scope covers every dimension in the same organization; all
- * narrower dimensions match only their own kind and identifier.
+ * Determines whether a grant's scope is broad enough to cover a requested scope.
+ *
+ * Only one widening exists: an organization-wide grant covers every scope in the same
+ * organization. Every other scope kind — department, team, project, personal, direct-user —
+ * matches only the identical kind and identifier. A team grant does NOT cover a project in that
+ * team, and a department grant does NOT cover its teams; those need their own grants.
  * @param grantedScope - Scope carried by the grant.
- * @param requestedScope - Scope targeted by the request.
- * @returns Whether the grant covers the requested scope.
+ * @param requestedScope - Scope the request targets.
+ * @returns True only when the granted scope covers the requested one.
+ * @see {@link AuthorizationScope}
  */
 export function __AuthorizationScopeCovers(
 	grantedScope: AuthorizationScope,

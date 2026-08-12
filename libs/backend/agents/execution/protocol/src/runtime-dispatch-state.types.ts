@@ -1,4 +1,4 @@
-/** Minimal durable invocation evidence required to validate one replayed runtime candidate. */
+/** The saved invocation fields needed to check that a repeated candidate matches the first one. */
 export interface RuntimeDispatchToolInvocation
 {
 	/** Runtime process that originally proposed the invocation. */
@@ -11,18 +11,28 @@ export interface RuntimeDispatchToolInvocation
 	readonly toolInvocationId: string;
 	/** Digest of the originally proposed argument object. */
 	readonly argumentsDigest: string;
-	/** Complete request fingerprint persisted at first admission. */
+	/** Request fingerprint saved when the candidate was first accepted. */
 	readonly requestFingerprint: string;
 }
 
-/** Transaction-bound repository for runtime dispatch state owned outside the command stream. */
+/**
+ * Reads and writes the dispatch rows that live outside the command stream, on the caller's
+ * transaction.
+ *
+ * Two unrelated-looking jobs share this port because both must commit with the command or
+ * candidate decision that triggered them: consuming a resume command's tool-result rows, and
+ * reading back a saved invocation to check a repeated candidate.
+ *
+ * Called by: `_nextCommand` and `_admitCandidate` in prisma-runtime-dispatch-authority.ts.
+ * Implemented by `PrismaRuntimeDispatchStateRepository`.
+ */
 export interface RuntimeDispatchStateRepository
 {
-	/** Consume the exact pending result deliveries included in one durable resume command. */
+	/** Mark consumed the pending result rows carried by one saved resume command. */
 	consumeToolResultDeliveries(deliveryIds: readonly string[], consumedAt: Date): Promise<void>;
-	/** Load immutable invocation evidence for one idempotently replayed candidate. */
+	/** Load the saved invocation fields for a candidate that is being sent again. */
 	findToolInvocation(runId: string, attempt: number, candidateId: string): Promise<RuntimeDispatchToolInvocation | null>;
 }
 
-/** Transaction owner that keeps runtime dispatch repository construction behind one boundary. */
+/** The same operations, but it builds the repository itself from the caller's transaction. */
 export interface RuntimeDispatchStateUnitOfWork extends RuntimeDispatchStateRepository {}

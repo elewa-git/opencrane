@@ -9,7 +9,7 @@ import { PersonalConfigurationMaterializationCodes, type PersonalConfigurationCh
 import { PersonalConfigurationDecisionCodes } from "../decision/personal-configuration-decision.types.js";
 import { PersonalConfigurationChangeViewStates, type PersonalConfigurationChangeView } from "../query/personal-configuration-view.types.js";
 
-/** Builds the owner-only proposal route with a caller and observable read port. */
+/** Builds the router with a fake caller, and returns spies for the three repositories. */
 function _app(caller: unknown, listOwned = vi.fn(async function _list(): Promise<readonly PersonalConfigurationChangeView[]> { return []; }), materializeAtomically: PersonalConfigurationChangeMaterializationRepository["materializeAtomically"] = vi.fn(async function _materialize() { return { status: PersonalConfigurationMaterializationCodes.NotApplicable } as const; }))
 {
 	const app = express();

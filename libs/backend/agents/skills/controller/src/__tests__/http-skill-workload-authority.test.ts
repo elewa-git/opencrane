@@ -2,19 +2,19 @@ import { describe, expect, it, vi } from "vitest";
 
 import { __CreateHttpSkillWorkloadControllerAuthority } from "../http-skill-workload-authority.js";
 
-/** Return complete fixed adapter options with replaceable request seams. */
+/** Return adapter options whose `fetch` and token reader a test can replace. */
 function _Options(fetch: typeof globalThis.fetch)
 {
 	return { openCraneInternalUrl: "http://opencrane-server.silo-a.svc.cluster.local:3001", tokenPath: "/var/run/opencrane/tokens/opencrane.token", requestTimeoutMilliseconds: 1_000, fetch, readToken: vi.fn().mockResolvedValue("projected-token") };
 }
 
-/** Return one exact database-fenced skill workload claim response. */
+/** Return one claim response body. */
 function _Claim()
 {
 	return { workloadId: "workload-1", siloId: "silo-a", kind: "authoring", skillRevisionId: "revision-1", claimedAt: "2026-07-24T00:00:00.000Z", deliveryCount: 1, expiresAt: "2026-07-24T00:00:30.000Z" };
 }
 
-/** Return a chunked response that crosses the skill-workload allocation ceiling. */
+/** Return a chunked response larger than the 16 KiB limit. */
 function _OversizedChunkedResponse(maximumBytes: number): Response
 {
 	let chunk = 0;

@@ -1,4 +1,4 @@
-/** Stable colour dimensions used by the reviewed sorting policy. */
+/** The four persona colours the scoring policy counts. */
 export enum PersonaColourValues
 {
 	/** Fast, decisive collaboration. */
@@ -11,7 +11,7 @@ export enum PersonaColourValues
 	Blue = "blue",
 }
 
-/** Stable working-style modifiers used by the reviewed sorting policy. */
+/** The two working-style modifiers the scoring policy counts. */
 export enum PersonaModifierValues
 {
 	/** Prefers novel and creative approaches. */
@@ -20,21 +20,21 @@ export enum PersonaModifierValues
 	Guardian = "guardian",
 }
 
-/** Governed tie boundaries that may require an explicit owner choice. */
+/** The three points in scoring where two candidates can tie and the owner has to choose. */
 export enum PersonaTieKinds
 {
-	/** Highest colour counter. */
+	/** Tie for the highest colour counter. */
 	Primary = "primary",
-	/** Highest remaining colour counter. */
+	/** Tie for the highest colour counter left after the primary colour is taken out. */
 	Secondary = "secondary",
-	/** Explorer versus Guardian counter. */
+	/** Tie between the Explorer and Guardian counters. */
 	Modifier = "modifier",
 }
 
-/** Exact colour or modifier value that may participate in a governed persona selection. */
+/** Any value the owner can be asked to choose between: a colour or a modifier. */
 export type PersonaSelectionValue = PersonaColourValues | PersonaModifierValues;
 
-/** One persisted answer joined to its exact reviewed scoring weight. */
+/** One stored answer together with the scoring weights of the choice it selected. */
 export interface PersonaWeightedAnswer
 {
 	/** Durable answer identity. */
@@ -57,10 +57,10 @@ export interface PersonaWeightedAnswer
 	readonly guardian: number;
 }
 
-/** Append-only user resolution for one exact tie candidate set. */
+/** The owner's choice for one tie. Once written it is never changed. */
 export interface PersonaTieChoice
 {
-	/** Boundary being resolved. */
+	/** Which tie this choice settles. */
 	readonly kind: PersonaTieKinds;
 	/** Exact candidates shown to the owner. */
 	readonly candidates: readonly PersonaSelectionValue[];
@@ -68,7 +68,7 @@ export interface PersonaTieChoice
 	readonly selectedValue: PersonaSelectionValue;
 }
 
-/** Lossless raw colour vector. */
+/** The four raw colour counters and their sum, kept as whole numbers. */
 export interface PersonaColourScores
 {
 	/** Red counter. */
@@ -83,7 +83,7 @@ export interface PersonaColourScores
 	readonly total: number;
 }
 
-/** Lossless raw Explorer/Guardian vector. */
+/** The raw Explorer and Guardian counters and their sum, kept as whole numbers. */
 export interface PersonaOpennessScores
 {
 	/** Explorer counter. */
@@ -94,53 +94,53 @@ export interface PersonaOpennessScores
 	readonly total: number;
 }
 
-/** One unresolved governed selection boundary. */
+/** One tie the owner still has to break. */
 export interface PersonaResolutionRequired
 {
-	/** Boundary requiring the user's choice. */
+	/** Which tie needs the owner's choice. */
 	readonly kind: PersonaTieKinds;
-	/** Exact tied candidates, in stable product order. */
+	/** The tied candidates, in a fixed display order. */
 	readonly candidates: readonly PersonaSelectionValue[];
 }
 
-/** Ordered candidate evidence derived by the authoritative persona scoring policy. */
+/** The candidate list the scorer reached at each of the three ties, in order. */
 export interface PersonaScoreCandidateEvidence
 {
 	/** Highest colour candidates in stable product order. */
 	readonly primary: readonly PersonaColourValues[];
-	/** Highest remaining colour candidates, or an empty vector until primary is resolved. */
+	/** The highest colours left after the primary colour, or an empty list until the primary colour is chosen. */
 	readonly secondary: readonly PersonaColourValues[];
-	/** Modifier candidates, or an empty vector until both colour boundaries are resolved. */
+	/** The modifier candidates, or an empty list until both colours are chosen. */
 	readonly modifier: readonly PersonaModifierValues[];
 }
 
-/** Immutable inputs required to replay a previously persisted persona score. */
+/** The stored inputs needed to recompute a persona score exactly as it was first computed. */
 export interface PersonaScoreReplayEvidence
 {
 	/** Ordered immutable answer identities used in the original calculation. */
 	readonly orderedAnswerIds: readonly string[];
-	/** Ordered exact question and choice coordinates used in the original calculation. */
+	/** `questionId:choiceId` pairs, in the order the first calculation used them. */
 	readonly orderedChoiceIds: readonly string[];
 	/** Authoritative raw colour counters. */
 	readonly colours: PersonaColourScores;
 	/** Authoritative raw modifier counters. */
 	readonly openness: PersonaOpennessScores;
-	/** Exact append-only tie resolutions admitted before drafting. */
+	/** The tie choices the owner made before the draft was created. */
 	readonly tieResolutions: readonly PersonaTieChoice[];
 }
 
-/** Fully scored result, with a stable next resolution when still ambiguous. */
+/** A scored result, plus the next tie to break when the outcome is still tied. */
 export interface PersonaScoreResult
 {
 	/** Ordered immutable answer identities used in the calculation. */
 	readonly orderedAnswerIds: readonly string[];
-	/** Ordered exact question/choice coordinates used in the calculation. */
+	/** `questionId:choiceId` pairs, in the order the calculation used them. */
 	readonly orderedChoiceIds: readonly string[];
-	/** Authoritative raw colour vector. */
+	/** The colour counters as scored, with their sum. */
 	readonly colours: PersonaColourScores;
-	/** Authoritative raw modifier vector. */
+	/** The Explorer and Guardian counters as scored, with their sum. */
 	readonly openness: PersonaOpennessScores;
-	/** Exact append-only tie choices admitted while replaying this score. */
+	/** The tie choices used while recomputing this score. */
 	readonly tieResolutions: readonly PersonaTieChoice[];
 	/** Resolved primary colour, or null until its tie is resolved. */
 	readonly primary: PersonaColourValues | null;
@@ -148,29 +148,29 @@ export interface PersonaScoreResult
 	readonly secondary: PersonaColourValues | null;
 	/** Resolved working-style modifier, or null until its tie is resolved. */
 	readonly modifier: PersonaModifierValues | null;
-	/** Stable next tie boundary; null means drafting may proceed. */
+	/** The next tie the owner must break; null means a draft can be created. */
 	readonly resolutionRequired: PersonaResolutionRequired | null;
 }
 
-/** Scorer-owned result carrying the ordered evidence that persistence may store but never derive. */
+/** A score result plus the candidate list at each tie. Only the scorer works these out; the repository stores them and must never recompute them. */
 export interface PersonaAuthoritativeScoreResult extends PersonaScoreResult
 {
-	/** Ordered candidates reached while replaying the score's current append-only tie evidence. */
+	/** The candidate list at each tie, in the order scoring reached them. */
 	readonly candidateEvidence: PersonaScoreCandidateEvidence;
 }
 
-/** Exact resolved score evidence serialized into one immutable persona revision. */
+/** The finished score stored as JSON on a persona revision, with every tie already broken. */
 export interface PersonaPersistedScoreEvidence
 {
 	/** Ordered immutable answer identities used in the calculation. */
 	readonly orderedAnswerIds: readonly string[];
-	/** Ordered exact question and choice coordinates used in the calculation. */
+	/** `questionId:choiceId` pairs, in the order the calculation used them. */
 	readonly orderedChoiceIds: readonly string[];
 	/** Authoritative raw colour counters. */
 	readonly colours: PersonaColourScores;
 	/** Authoritative raw modifier counters. */
 	readonly openness: PersonaOpennessScores;
-	/** Exact append-only tie resolutions admitted before drafting. */
+	/** The tie choices the owner made before the draft was created. */
 	readonly tieResolutions: readonly PersonaTieChoice[];
 	/** Resolved primary colour. */
 	readonly primary: PersonaColourValues;

@@ -8,7 +8,7 @@ import { describe, expect, it } from "vitest";
 
 import { __AssembleRunInputSnapshot } from "../session-assembly.js";
 
-/** Fixed admission coordinates used to prove deterministic snapshot assembly. */
+/** The fixed command these tests use to check snapshot assembly is deterministic. */
 const _COMMAND: UserRunAdmissionCommand = { runId: "run-1", siloId: "silo-1", agentServiceId: "service-1", conversationId: "conversation-1", identityKind: "user", trigger: "interactive", executionSubjectId: "user-1", requestIdempotencyKey: "request-1", inputMessageId: "message-current", inputMessageBlocks: [{ id: "block-1", kind: MessageContentBlockKinds.Text, value: "Hello" }] };
 
 /** Build one reviewed integration tool definition. */
@@ -18,7 +18,7 @@ function _Tool(name: string)
 	return { name, description: `${name} description`, parametersSchema, parametersSchemaDigest: ___DigestCanonicalJson(parametersSchema) };
 }
 
-/** Builds independently fakeable authority ports with deliberately unsorted source outputs. */
+/** Builds fake source ports, each replaceable on its own, that return their lists out of order on purpose. */
 function _Authorities(onAdmission: (snapshot: RunInputSnapshot) => "accepted" | "idempotent" | "active_run" | "persistence_unavailable", personaRevisionId: string | null = "persona-1"): SessionAssemblyAuthorities
 {
 	return {

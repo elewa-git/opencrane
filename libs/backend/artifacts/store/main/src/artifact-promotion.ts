@@ -1,6 +1,27 @@
 import type { ArtifactPromotionProtocolConfig, ArtifactPromotionLeaseVerifier, ArtifactStore, BoundedArtifactUploadByteSource, PromoteArtifactUploadResult } from "./artifact-store.types.js";
 
-/** Promotes one verified, bounded artifact upload and creates its catalog-consumable receipt. */
+/**
+ * Run one artifact upload end to end: verify the lease, stage the bytes, publish them, and sign a
+ * receipt.
+ *
+ * Never throws for an expected failure — every outcome comes back as a value, so a transport maps
+ * {@link PromoteArtifactUploadResult} to a status code. An unbounded lease, one with no expected
+ * address or length, is rejected outright: without both, the bytes cannot be checked against what
+ * was authorized.
+ *
+ * The whole sequence is bounded by whichever is sooner, the configured upload duration or the
+ * lease expiry. When that deadline passes the byte source is aborted and the result is
+ * `deadline_exceeded` — staged bytes may already exist and are left for a later cleanup, and no
+ * receipt is signed, so the catalog records nothing.
+ *
+ * Called by: `apps/artifact-service/src/server.ts`.
+ * @param store - Durable byte storage.
+ * @param leaseVerifier - Verifies the caller's compact lease.
+ * @param byteSource - The lease, declared length, bytes, and the abort hook this protocol calls on deadline.
+ * @param config - Maximum upload duration, the injected clock, and the receipt signer.
+ * @returns `promoted` with the object and receipt, `rejected` with a stable reason, or `deadline_exceeded`.
+ * @see {@link ArtifactStore}
+ */
 export async function __PromoteArtifactUpload(store: ArtifactStore, leaseVerifier: ArtifactPromotionLeaseVerifier, byteSource: BoundedArtifactUploadByteSource, config: ArtifactPromotionProtocolConfig): Promise<PromoteArtifactUploadResult>
 {
 	// 1. Verify the caller's compact lease before consuming or staging any untrusted request bytes.
@@ -11,13 +32,13 @@ export async function __PromoteArtifactUpload(store: ArtifactStore, leaseVerifie
 		return { outcome: "rejected", reason: "invalid_artifact_lease" };
 	}
 
-	// 2. Reject a malformed or oversized declared body before the adapter starts durable byte I/O.
+	// 2. If the transport declared a length, reject it now when it is malformed or exceeds the lease — cheaper than discovering it mid-upload. An absent length is allowed; the bytes are still checked later.
 	if (!_declaredByteLengthIsWithinLease(byteSource.declaredByteLength, lease.expectedByteLength))
 	{
 		return { outcome: "rejected", reason: "artifact_body_exceeds_lease" };
 	}
 
-	// 3. Bound the whole stage-to-promote sequence by both process policy and lease expiry.
+	// 3. Deadline for the whole upload: the sooner of the configured limit and the lease expiry.
 	const maximumLeaseDuration = (lease.expiresAtEpochSeconds * 1_000) - nowEpochMilliseconds;
 	const maximumUploadDuration = Math.min(config.maxUploadDurationMilliseconds, maximumLeaseDuration);
 	if (maximumUploadDuration < 1)
@@ -45,14 +66,14 @@ export async function __PromoteArtifactUpload(store: ArtifactStore, leaseVerifie
 	}
 }
 
-/** Checks the transport declaration without trusting absent or malformed lengths. */
+/** Whether a declared content length is acceptable. An absent length passes, since the bytes are bounded again during staging; a non-numeric or oversized one fails. */
 function _declaredByteLengthIsWithinLease(declaredByteLength: string | null, expectedByteLength: number): boolean
 {
 	if (declaredByteLength === null) return true;
 	return /^\d+$/u.test(declaredByteLength) && Number(declaredByteLength) <= expectedByteLength;
 }
 
-/** Prevents a receipt after either timer delivery or wall-clock expiry at a protocol boundary. */
+/** Whether the deadline has passed, either because the abort timer fired or because the lease has since expired. Checked after each step so no receipt is signed for a late upload. */
 function _deadlineExceeded(deadlineExceeded: boolean, leaseExpiresAtEpochSeconds: number, nowEpochMilliseconds: number): boolean
 {
 	return deadlineExceeded || nowEpochMilliseconds >= leaseExpiresAtEpochSeconds * 1_000;

@@ -13,7 +13,7 @@ import { __ReconcileNextRuntimeRelease } from "../agent-runtime-release.js";
 /** Silent structured logger used by orchestration tests. */
 const _log = { info: function _info() {}, error: function _error() {} } as unknown as Logger;
 
-/** Return one exact configured runtime profile. */
+/** Return the personal and managed runtime profiles these tests configure. */
 function _Profiles(): AgentControllerRuntimeProfiles
 {
 	return {
@@ -67,7 +67,7 @@ function _ReleaseClaim(): AgentControllerRunWorkloadReleaseClaim
 	};
 }
 
-/** Compose a complete authority with fail-fast defaults for operations a test does not use. */
+/** Build a full authority fake; any operation a test does not override throws if it is called. */
 function _Authority(overrides: Partial<AgentControllerAuthority>): AgentControllerAuthority
 {
 	return {
@@ -79,7 +79,7 @@ function _Authority(overrides: Partial<AgentControllerAuthority>): AgentControll
 	};
 }
 
-/** Compose a complete Kubernetes port with fail-fast defaults for unused operations. */
+/** Build a full Kubernetes fake; any operation a test does not override throws if it is called. */
 function _Kubernetes(overrides: Partial<AgentControllerKubernetesStore>): AgentControllerKubernetesStore
 {
 	return {

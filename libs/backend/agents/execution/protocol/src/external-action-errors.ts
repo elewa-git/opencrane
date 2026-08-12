@@ -1,14 +1,33 @@
 import type { IntegrationAssignmentUnavailableReason } from "./external-action-executor.types.js";
 
-/** Typed fail-closed result when live integration custody no longer authorizes the frozen assignment. */
+/**
+ * Thrown when the integration's live custody no longer allows the assignment frozen in the snapshot.
+ *
+ * Raised by `_ExecuteIntegrationExternalAction` after it re-resolves the assignment and before Obot
+ * sees anything, so it proves no request reached the provider. That is why a catcher may treat it as
+ * a definite failure: `_provenPreDispatchFailure` maps it to `integration_assignment_<reason>` and
+ * the invocation is completed as failed rather than parked as ambiguous. Keeping that distinction
+ * matters - reporting it as ambiguous would leave a revoked integration waiting for a person to
+ * decide something that plainly never happened.
+ *
+ * Raised in integration-external-action-executor.ts; caught by `_provenPreDispatchFailure`
+ * (production-external-action-adapter.ts).
+ *
+ * @see IntegrationToolReturnedError for the case where the tool did run.
+ */
 export class IntegrationAssignmentUnavailableError extends Error
 {
-	/** Safe bounded authority reason suitable for durable evidence and structured logs. */
+	/** Short reason from the integration authority, safe to save and to log. */
 	readonly reason: IntegrationAssignmentUnavailableReason;
-	/** Credential-free integration identifier named by the frozen tool revision. */
+	/** Integration id taken from the tool revision. It is not a credential. */
 	readonly integrationId: string;
 
-	/** Creates a bounded failure without retaining custody handles or downstream error payloads. */
+	/**
+	 * Creates the error without keeping custody handles or the provider's error body.
+	 *
+	 * @param integrationId - Integration named by the tool revision; safe to log.
+	 * @param reason - The integration authority's short reason, safe to save as durable evidence.
+	 */
 	constructor(integrationId: string, reason: IntegrationAssignmentUnavailableReason)
 	{
 		super(`integration assignment ${integrationId} is unavailable: ${reason}`);
@@ -21,7 +40,7 @@ export class IntegrationAssignmentUnavailableError extends Error
 /** Typed safe failure when the provider completed the call with an MCP tool-level error. */
 export class IntegrationToolReturnedError extends Error
 {
-	/** Creates a bounded failure without retaining the provider's error content. */
+	/** Creates the error without keeping the provider's error content. */
 	constructor()
 	{
 		super("integration tool returned a failure result");

@@ -4,7 +4,7 @@ import { _ResolveAgentControllerRuntimeProfile } from "./agent-controller-profil
 import { AgentControllerReconcileOutcomes, type AgentControllerOptions, type AgentControllerReconcileResult } from "./agent-controller.types.js";
 import { _AgentRuntimeAttemptKeySecretName, _BuildAgentRuntimeAttemptKeySecret } from "./agent-runtime-attempt-key.js";
 
-/** Require an immutable Job UID returned by the Kubernetes API. */
+/** Return the Job UID Kubernetes assigned, or throw when it is missing. */
 function _RequireWorkloadUid(uid: string | undefined): string
 {
 	if (!uid || uid.trim().length === 0)
@@ -25,11 +25,11 @@ function _RequireWorkloadUid(uid: string | undefined): string
  */
 export async function __ReconcileNextAgentRuntimeAttempt(options: AgentControllerOptions, signal: AbortSignal): Promise<AgentControllerReconcileResult>
 {
-	// 1. Claim desired state from OpenCrane so Kubernetes never becomes business authority.
+	// 1. Take the next claim from OpenCrane, so what should run is decided there and never in Kubernetes.
 	const claim = await options.authority.__Claim(signal);
 	if (!claim) return { outcome: AgentControllerReconcileOutcomes.Idle };
 
-	// 2. Bind the claim to one immutable profile and its deployment-owned namespace.
+	// 2. Match the claim to one configured profile, and check it names that profile's own namespace.
 	const profile = _ResolveAgentControllerRuntimeProfile(options.profiles, claim.attempt.workloadProfile);
 	if (!profile || claim.attempt.namespace !== profile.namespace || profile.serverNamespace === profile.namespace)
 	{
@@ -47,7 +47,7 @@ export async function __ReconcileNextAgentRuntimeAttempt(options: AgentControlle
 	};
 	const job = __BuildSuspendedAgentRuntimeJob(assignment, profile);
 
-	// 3. Create or exact-adopt only the deterministic suspended Job and bind its API-issued UID.
+	// 3. Create the suspended Job (or accept an identical existing one) and take the UID Kubernetes gave it.
 	const persistedJob = await options.kubernetes.__EnsureSuspendedJob(job);
 	const workloadUid = _RequireWorkloadUid(persistedJob.metadata?.uid);
 

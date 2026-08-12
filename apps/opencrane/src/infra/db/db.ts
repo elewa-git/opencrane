@@ -3,19 +3,19 @@ import type { Logger } from "pino";
 
 import type { DbHealthProbeRepository, DbHealthProbeUnitOfWork } from "@opencrane/backend/server/infra/http";
 
-/** Application-owned typed database probe used by process readiness. */
+/** Checks the database answers, for the readiness route, through Prisma's typed client rather than raw SQL. */
 class _PrismaDbHealthProbeRepository implements DbHealthProbeRepository
 {
   public constructor(private readonly _prisma: Prisma.TransactionClient) {}
 
-  /** Perform request-bearing database I/O without raw Prisma access. */
+  /** Send one real query through the typed client instead of raw Prisma access. */
   public async check(): Promise<void>
   {
     await this._prisma.auditEntry.findFirst({ select: { id: true } });
   }
 }
 
-/** Selects an exact transaction for each database readiness check. */
+/** Opens a fresh transaction for each database readiness check. */
 class _PrismaDbHealthProbeUnitOfWork implements DbHealthProbeUnitOfWork
 {
   public constructor(private readonly _prisma: PrismaClient) {}

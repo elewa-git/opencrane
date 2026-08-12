@@ -3,7 +3,23 @@ import { ___ParseAndValidateJson } from "@opencrane/util";
 /** Maximum JSON response accepted from one internal controller authority call. */
 const _MAX_RESPONSE_BYTES = 64 * 1024;
 
-/** Read a response under the fixed byte ceiling before applying its endpoint-specific validator. */
+/**
+ * Read a controller response body, refusing anything over 64 KiB, then validate the text.
+ *
+ * The limit is enforced twice: once against a declared `content-length`, and again chunk by chunk
+ * while streaming, so a response that lies about or omits its length still cannot make the
+ * controller allocate without bound. The stream is cancelled as soon as the limit is passed.
+ *
+ * Called by: every method of {@link __CreateHttpAgentControllerAuthority}.
+ * @param response - The HTTP response, already known to have an acceptable status.
+ * @param validate - The endpoint's validator, applied to the parsed JSON.
+ * @param validatorArguments - Extra arguments the validator needs, such as the submitted command
+ * it must correlate the answer against.
+ * @returns The validated value.
+ * @throws When the body exceeds 64 KiB, when there is no body, when the text is not valid JSON, or
+ * when the validator rejects it.
+ * @see {@link ___ParseAndValidateJson}
+ */
 export async function _ReadAndValidateAgentControllerJson<T, TArguments extends readonly unknown[]>(response: Response, validate: (candidate: unknown, ...arguments_: TArguments) => T, ...validatorArguments: TArguments): Promise<T>
 {
 	const text = await _ReadBoundedText(response);

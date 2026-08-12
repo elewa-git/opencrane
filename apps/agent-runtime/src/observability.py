@@ -39,7 +39,7 @@ def trace(operation: str, **attributes: object):
         # prevent bootstrap in the minimal runtime image.
         from opentelemetry import trace as otel_trace
     except ImportError:
-        # Observability is deliberately non-load-bearing for the execution protocol.
+        # Nothing in the execution protocol depends on observability.
         yield None
         return
     tracer = otel_trace.get_tracer("agent-runtime")
@@ -53,7 +53,7 @@ def trace(operation: str, **attributes: object):
 
 
 def run_evidence(coordinates: dict[str, object], outcome: str, **fields: object) -> None:
-    """Emit a wide execution record bound to the command that caused the outcome.
+    """Emit one wide execution record, tagged with the command that caused the outcome.
 
     This evidence is useful for operators, but it is not a durable ``RunEvent`` and never replaces
     control-plane persistence. The coordinate projection keeps logs correlatable without copying the

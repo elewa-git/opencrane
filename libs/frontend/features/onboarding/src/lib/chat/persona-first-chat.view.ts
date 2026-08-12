@@ -3,7 +3,20 @@ import { PersonaFirstChatArchetypes, type PersonaFirstChatContentRevision, type 
 
 import { type PersonaFirstChatIdentity, PersonaFirstChatMessageRoles, type PersonaFirstChatProvenance, type PersonaFirstChatQuestion, type PersonaFirstChatQuestionOrdinal, type PersonaFirstChatTranscriptMessage, type PersonaFirstChatView } from "./persona-first-chat.types.js";
 
-/** Map one authoritative server projection into the complete presentational contract. */
+/**
+ * Turns a server snapshot into the view model the chat component renders.
+ *
+ * Pure and total: given the same snapshot it always returns the same view. It renames fields and
+ * maps enums but invents nothing — the transcript keeps the server's order, and revision labels are
+ * passed through unchanged rather than prettified, so what the user checks is what the server said.
+ *
+ * Called by: PersonaFirstChatPageComponent, which only calls it once the persona and content source
+ * are present.
+ *
+ * @param chat - The server snapshot; its persona and contentRevision must be non-null.
+ * @returns The view model for the chat component.
+ * @see PersonaFirstChatView
+ */
 export function _PersonaFirstChatView(snapshot: PersonaFirstChatSnapshot): PersonaFirstChatView | null
 {
 	if (snapshot.persona === null || snapshot.contentRevision === null) return null;
@@ -15,19 +28,19 @@ export function _PersonaFirstChatView(snapshot: PersonaFirstChatSnapshot): Perso
 	};
 }
 
-/** Map exact approved persona evidence into presentational identity. */
+/** Build the agent's display identity — name, initials and tone — from the approved persona. */
 function _Identity(persona: PersonaFirstChatPersona): PersonaFirstChatIdentity
 {
 	return { name: persona.displayName, initials: _Initials(persona.displayName), archetype: _ArchetypeTone(persona.archetype) };
 }
 
-/** Map exact persona and source coordinates without inventing friendlier revisions. */
+/** Pass the persona and question-set revision labels through unchanged; never make up a nicer label. */
 function _Provenance(persona: PersonaFirstChatPersona, contentRevision: PersonaFirstChatContentRevision): PersonaFirstChatProvenance
 {
 	return { personaRevision: persona.revisionId, scriptLabel: contentRevision.sourceLabel, scriptRevision: contentRevision.id };
 }
 
-/** Preserve canonical order while adapting only role and field names for presentation. */
+/** Keep the server's order; change only the role values and field names. */
 function _Transcript(snapshot: PersonaFirstChatSnapshot): readonly PersonaFirstChatTranscriptMessage[]
 {
 	const conversationId = snapshot.conversationId ?? "pending";
@@ -37,20 +50,20 @@ function _Transcript(snapshot: PersonaFirstChatSnapshot): readonly PersonaFirstC
 	});
 }
 
-/** Adapt one server transcript role without weakening the finite vocabulary. */
+/** Map one server role onto the local role enum; no other value is possible. */
 function _TranscriptMessage(conversationId: string, entry: PersonaFirstChatTranscriptEntry): PersonaFirstChatTranscriptMessage
 {
 	const role = entry.role === PersonaFirstChatTranscriptRoles.Assistant ? PersonaFirstChatMessageRoles.Agent : PersonaFirstChatMessageRoles.Owner;
 	return { id: `${conversationId}-${entry.ordinal}`, role, body: entry.text };
 }
 
-/** Map the exact current question into the component's bounded one-of-three contract. */
+/** Map the current question onto the component's 1-2-3 ordinal type. */
 function _Question(question: PersonaFirstChatCurrentQuestion): PersonaFirstChatQuestion
 {
 	return { id: `question-${question.ordinal}`, ordinal: _QuestionOrdinal(question.ordinal), prompt: question.text };
 }
 
-/** Reject any ordinal outside the reviewed three-question bootstrap contract. */
+/** Throw on a question number outside 1-3, rather than displaying a fourth question. */
 function _QuestionOrdinal(ordinal: number): PersonaFirstChatQuestionOrdinal
 {
 	switch (ordinal)
@@ -62,7 +75,7 @@ function _QuestionOrdinal(ordinal: number): PersonaFirstChatQuestionOrdinal
 	}
 }
 
-/** Map the reviewed bootstrap archetype onto the shared semantic visual treatment. */
+/** Map the archetype onto its shared PersonaArchetypeTones value. */
 function _ArchetypeTone(archetype: PersonaFirstChatArchetypes): PersonaArchetypeTones
 {
 	switch (archetype)
@@ -74,7 +87,7 @@ function _ArchetypeTone(archetype: PersonaFirstChatArchetypes): PersonaArchetype
 	}
 }
 
-/** Derive bounded display initials from the reviewed persona name. */
+/** Build the avatar initials from the persona's display name. */
 function _Initials(name: string): string
 {
 	return name.split(/\s+/u).filter(function _NonBlank(part) { return part.length > 0; }).slice(0, 2).map(function _First(part) { return part.charAt(0).toUpperCase(); }).join("") || "AI";

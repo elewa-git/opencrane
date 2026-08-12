@@ -134,7 +134,7 @@ spec:
             {{- with .Values.clustertenantManager.oidc }}
             {{- if .issuerUrl }}
             # OIDC is the only public human-authentication path. When it is absent the API
-            # remains fail-closed; the chart never enables a tokenless development posture.
+            # remains fail-closed; the chart never enables a tokenless development setup.
             - name: OIDC_ISSUER_URL
               value: {{ .issuerUrl | quote }}
             - name: OIDC_CLIENT_ID

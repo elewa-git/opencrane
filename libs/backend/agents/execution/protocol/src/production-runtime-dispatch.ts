@@ -11,25 +11,25 @@ import { __CreatePrismaRunInputCompiler } from "./prisma-run-input-compiler.js";
 import { PrismaRuntimeDispatchAuthority } from "./prisma-runtime-dispatch-authority.js";
 import type { RunInputCompiler, RuntimeApprovalExpiry, RuntimeDispatchAuthorityConfig } from "./prisma-runtime-dispatch-authority.types.js";
 
-/** Compile ordinary grants, then append the sealed first-party upgrade intent to proven personal services. */
+/** Compile the snapshot's tools, then add the built-in upgrade-session tool for runs whose service really is Personal. */
 function _CreateProductionRunInputCompiler(memoryGateway: MemoryGatewayClient): RunInputCompiler
 {
 	const compile = __CreatePrismaRunInputCompiler(memoryGateway);
 	return async function _compileRunInput(snapshot: RunInputSnapshot, transaction: Prisma.TransactionClient)
 	{
-		// 1. Compile the immutable snapshot before considering any first-party descriptor.
+		// 1. Compile the snapshot first, before considering the built-in tool.
 		const input = await compile(snapshot, transaction);
 
-		// 2. Exclude non-conversation and non-persona snapshots without inferring a personal service.
+		// 2. Skip snapshots that have no conversation or no persona, without guessing the service kind.
 		if (!__IsUpgradeSessionAvailable(snapshot)) return input;
 
-		// 3. Prove the service kind in the same compiler transaction and re-seal only that descriptor.
+		// 3. Confirm the service is Personal in the same transaction, and add only that one tool.
 		const service = await transaction.agentService.findFirst({ where: { id: snapshot.agentServiceId, siloId: snapshot.siloId, kind: AgentServiceKind.Personal }, select: { id: true } });
 		return service === null ? input : __AppendCompiledTool(input, UPGRADE_SESSION_TOOL);
 	};
 }
 
-/** Bind command polling to the canonical deferred-approval expiry authority. */
+/** Wire command polling to `__ExpireDeferredToolApprovalBatch`. */
 function _CreateProductionApprovalExpiry(): RuntimeApprovalExpiry
 {
 	return { expireInTransaction: __ExpireDeferredToolApprovalBatch };

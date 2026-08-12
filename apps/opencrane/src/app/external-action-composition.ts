@@ -10,7 +10,7 @@ import type { MemoryGatewayClient } from "@opencrane/backend/server/infra/memory
 import type { ObotMcpInvocationPort } from "@opencrane/backend/server/infra/obot-custody";
 import { __UnavailableSandboxJobExecutor } from "@opencrane/backend/server/infra/sandbox-execution";
 
-/** Compose the process-owned worker, approval authority, and provider transports as one unit. */
+/** Compose the external-action worker, its approval authority, and its provider transports together. */
 export function _CreateExternalActionWorker(prisma: PrismaClient, memoryGateway: MemoryGatewayClient, obotInvocation: ObotMcpInvocationPort, log: Logger): ExternalActionWorker
 {
 	const lifecycleEvents = new PrismaToolInvocationLifecycleEventUnitOfWork(prisma);

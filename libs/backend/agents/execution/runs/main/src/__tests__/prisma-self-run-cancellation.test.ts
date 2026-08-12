@@ -5,7 +5,7 @@ import { PrismaSelfRunCancellationRepository } from "../prisma-self-run-cancella
 import type { RunCancellationRepository } from "../run-cancellation.types.js";
 import { SelfRunCancellationOutcomes } from "../self-run-cancellation.types.js";
 
-/** Minimal Prisma and cancellation seams used to verify ownership fencing. */
+/** Small Prisma and cancellation doubles, used to check that one owner cannot cancel another's run. */
 function _dependencies()
 {
 	const findFirst = vi.fn();

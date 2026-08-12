@@ -9,14 +9,22 @@ import type { paths } from "./generated/api.js";
 export type { paths };
 
 /**
- * Create a typed HTTP client for the per-silo clustertenant-manager (opencrane-ui) API.
+ * Create a typed HTTP client for the per-silo control-plane API.
+ *
+ * Requests are sent same-origin with credentials, so a browser's OIDC session cookie travels
+ * with them and no token needs to be threaded through calls. Every path and response type comes
+ * from the generated OpenAPI types, so a wrong path fails to compile.
  *
  * Usage:
  *   import { ___CreateControlPlaneClient } from "@opencrane/contracts";
  *   const client = ___CreateControlPlaneClient("http://localhost:8080/api/v1");
  *   const { data, error } = await client.GET("/tenants");
  *
- * @param baseUrl - Full base URL including the /api/v1 prefix.
+ * No caller in this repo yet — grep found none outside this file, so treat it as a published
+ * entry point for consumers of `@opencrane/contracts`.
+ * @param baseUrl - Full base URL including the `/api/v1` prefix.
+ * @returns A client whose methods never throw on an HTTP error; check the returned `error`.
+ * @see {@link ControlPlaneClient}
  */
 export function ___CreateControlPlaneClient(baseUrl: string)
 {

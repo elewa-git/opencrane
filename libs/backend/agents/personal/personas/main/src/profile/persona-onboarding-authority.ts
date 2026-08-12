@@ -1,7 +1,7 @@
 import { PersonaOnboardingDenialReasons, type EnsurePersonaOnboardingCommand, type EnsurePersonaOnboardingResult, type PersonaOnboardingRepository } from "./persona-onboarding-authority.types.js";
 import { PersonaLifecycleOutcomes } from "./persona-lifecycle.types.js";
 
-/** Provision the authenticated owner's persona profile and the server-owned reviewed interview source. */
+/** Creates the owner's persona profile if it does not exist, and returns the question set and derivation sources the server chose. */
 export async function __EnsurePersonaOnboarding(repository: PersonaOnboardingRepository, command: EnsurePersonaOnboardingCommand): Promise<EnsurePersonaOnboardingResult>
 {
 	if (!command.siloId.trim() || !command.userId.trim() || Number.isNaN(Date.parse(command.provisionedAt)))

@@ -5,20 +5,20 @@ import type { JsonValue } from "@opencrane/util";
 import type { MemoryFactReference } from "./memory.types.js";
 
 /**
- * Stable execution-identity discriminants serialized in every immutable run snapshot.
+ * Says whether a run is executed by a person or by a managed service. Stored in every run snapshot.
  *
- * These values name whether verified authority belongs to a human member or managed service. They
+ * The value alone grants nothing. Admission must still attach the matching signed evidence. They
  * never grant authority by themselves; admission must still bind the matching signed evidence.
  */
 export enum RunInputSnapshotIdentityKinds
 {
-	/** Human member identity backed by verified fleet-membership evidence. */
+	/** A person, proven by verified fleet-membership evidence. */
 	User = "user",
-	/** Managed AgentService identity backed by its derived principal and admitted scopes. */
+	/** A managed AgentService, proven by its derived principal and its allowed scope attachments. */
 	Service = "service",
 }
 
-/** Signed membership evidence pinned into either kind of execution identity. */
+/** Signed membership evidence stored on both kinds of run identity. */
 export interface RunInputSnapshotFleetMembershipEvidence
 {
 	/** Organization selected by the verified fleet-membership assertion. */
@@ -33,20 +33,20 @@ export interface RunInputSnapshotFleetMembershipEvidence
 	fleetMembershipAssertionId: string;
 	/** Digest of the verified signed membership payload. */
 	fleetMembershipPayloadDigest: string;
-	/** UTC expiry after which the pinned membership evidence must not admit work. */
+	/** UTC time after which this membership evidence may no longer authorize work. */
 	fleetMembershipTrustedUntil: string;
 }
 
 /** Immutable identity for a run exercised by a human member. */
 export interface UserRunInputSnapshotIdentity extends RunInputSnapshotFleetMembershipEvidence
 {
-	/** Discriminant that prevents a service principal from being mistaken for a user. */
+	/** Tag fixed to `User`, so a service principal can never be read as a person. */
 	kind: RunInputSnapshotIdentityKinds.User;
-	/** Human subject whose verified membership and grants authorize this exact run. */
+	/** Id of the person whose verified membership and grants authorize this run. */
 	executionSubjectId: string;
 }
 
-/** One exact non-personal scope attachment admitted for a managed service. */
+/** One non-personal scope attachment allowed for a managed service. */
 export interface ManagedRunInputScopeAttachment
 {
 	/** Domain scope of the attached resource. */
@@ -60,22 +60,22 @@ export interface ManagedRunInputScopeAttachment
 /** Immutable identity for a run exercised by an active managed AgentService. */
 export interface ServiceRunInputSnapshotIdentity extends RunInputSnapshotFleetMembershipEvidence
 {
-	/** Discriminant that prevents service evidence from falling through to personal-user paths. */
+	/** Tag fixed to `Service`, so service evidence never takes a personal-user code path. */
 	kind: RunInputSnapshotIdentityKinds.Service;
 	/** Canonical derived principal in `agent-service:<AgentServiceId>` form. */
 	executionSubjectId: string;
-	/** Active managed service whose revision owns this exact execution authority. */
+	/** Id of the active managed service whose revision authorizes this run. */
 	agentServiceId: AgentServiceId;
-	/** Canonically sorted effective non-personal scope attachments admitted at run assembly. */
+	/** Non-personal scope attachments allowed when the run was assembled, sorted canonically. */
 	effectiveScopeAttachments: readonly ManagedRunInputScopeAttachment[];
-	/** SHA-256 digest binding the admitted scope-attachment set into service capability evidence. */
+	/** SHA-256 digest of the allowed scope attachments, so the set cannot change without detection. */
 	effectiveScopeAttachmentDigest: string;
 }
 
-/** Immutable, tagged execution identity resolved before a runtime receives the snapshot. */
+/** The run's identity — person or service — decided before the runtime receives the snapshot. */
 export type RunInputSnapshotIdentity = UserRunInputSnapshotIdentity | ServiceRunInputSnapshotIdentity;
 
-/** One exact reviewed integration tool definition frozen at run admission. */
+/** One reviewed integration tool, frozen when the run was admitted. */
 export interface RunInputSnapshotToolDefinition
 {
   /** Stable MCP tool name selected by the immutable revision. */
@@ -84,11 +84,11 @@ export interface RunInputSnapshotToolDefinition
   description: string;
   /** Exact JSON Schema used for model input and approval validation. */
   parametersSchema: JsonValue;
-  /** Canonical digest binding the exact schema to the admitted snapshot. */
+  /** Digest of the schema, so it cannot change after the snapshot was admitted. */
   parametersSchemaDigest: string;
 }
 
-/** Immutable integration tool allowance selected by the executing AgentRevision. */
+/** The tools one integration is allowed to expose, as chosen by the AgentRevision being executed. */
 export interface RunInputSnapshotIntegrationAssignment
 {
   /** Integration selected by the revision. */
@@ -97,7 +97,7 @@ export interface RunInputSnapshotIntegrationAssignment
   toolDefinitions: readonly RunInputSnapshotToolDefinition[];
 }
 
-/** Deterministic, immutable inputs compiled before a runtime assignment. */
+/** Everything a run needs, compiled and frozen before the runtime is assigned. */
 export interface RunInputSnapshot
 {
   /** Run receiving the snapshot. */
@@ -134,9 +134,9 @@ export interface RunInputSnapshot
   budgetPolicy: JsonValue;
 	/** Tagged execution identity and verified fleet-membership evidence. */
   identitySnapshot: RunInputSnapshotIdentity;
-  /** Digest of the effective proof-bound capability set. */
+  /** Digest of the capability set this run may exercise, each capability bound to a proof. */
   capabilitySetDigest: string;
-  /** Digest of the effective contract accepted at run admission. */
+  /** Digest of the authorization contract that was accepted when the run was admitted. */
   effectiveContractDigest: string;
   /** Version of the deterministic prompt compiler that will consume this input. */
   promptCompilerVersion: string;

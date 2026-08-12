@@ -14,7 +14,7 @@ function _digest(content: string): string
 	return `sha256:${createHash("sha256").update(content, "utf8").digest("hex")}`;
 }
 
-/** Build a snapshot whose frozen memory policy names the exact recall coordinates. */
+/** Build a snapshot whose memory policy gives the dataset id and the query text. */
 function _snapshot(overrides: Partial<RunInputSnapshot> = {}): RunInputSnapshot
 {
 	return {
@@ -44,7 +44,7 @@ function _snapshot(overrides: Partial<RunInputSnapshot> = {}): RunInputSnapshot
 	};
 }
 
-/** Build the immutable-record transaction reads the offline compile steps use. */
+/** Build the fake transaction reads the compile steps perform. */
 function _transaction(): never
 {
 	return {

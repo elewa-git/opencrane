@@ -3,7 +3,7 @@ import type { CanonicalJsonSha256Digest, JsonValue } from "@opencrane/util";
 import type { AgentRevisionId, AgentServiceId, PersonaRevisionId, UserId } from "./identifiers.types.js";
 import type { RevisionScopeAttachment } from "./scope-attachment.types.js";
 
-/** Publication state of an immutable agent revision. */
+/** Where a revision sits in review. Only `published` may execute; `draft`, `rejected`, and `retired` must never be selected for a run. */
 export type AgentRevisionState = "draft" | "published" | "rejected" | "retired";
 
 /** Immutable reference to a skill revision assigned to an agent revision. */
@@ -15,16 +15,16 @@ export interface SkillRevisionReference
 	readonly revisionId: string;
 }
 
-/** One reviewed integration tool definition frozen into an immutable agent revision. */
+/** One tool a reviewer approved, frozen into this revision so a later change to the integration catalogue cannot alter what the agent may call. */
 export interface ReviewedIntegrationToolDefinition
 {
 	/** Stable MCP tool name selected from the reviewed integration catalogue. */
 	readonly name: string;
 	/** Human-readable model guidance reviewed with the tool schema. */
 	readonly description: string;
-	/** Exact JSON Schema governing every proposed and approved argument value. */
+	/** JSON Schema that every argument must satisfy, both when the model proposes a call and when a person approves it. */
 	readonly parametersSchema: JsonValue;
-	/** Canonical digest proving the schema did not drift after revision authoring. */
+	/** Digest of the schema above. Recomputing it detects any change made after the revision was authored. */
 	readonly parametersSchemaDigest: CanonicalJsonSha256Digest;
 }
 
@@ -51,10 +51,12 @@ export interface AgentBudget
 }
 
 /**
- * Immutable executable content shared by every authority that creates an agent revision.
+ * What an agent revision actually runs: prompt policy, persona, model, budget, skills, tools,
+ * and knowledge scopes.
  *
- * Keeping this content shape below the persistence layer ensures revision authors, personal
- * configuration materialization, and digest calculation all describe the same business fact.
+ * Defined below the persistence layer on purpose, so revision authoring, personal-configuration
+ * materialization, and {@link __DigestAgentRevisionContent} all work from one shape. If they
+ * diverged, two identical revisions could hash differently.
  */
 export interface AgentRevisionContent
 {
@@ -74,7 +76,7 @@ export interface AgentRevisionContent
 	readonly scopeAttachments: readonly RevisionScopeAttachment[];
 }
 
-/** Immutable executable configuration of an agent service. */
+/** One published-or-pending version of an agent service's configuration. It never changes after creation: a change means a new revision with a new `digest`. */
 export interface AgentRevision
 {
 	/** Stable revision identifier. */
@@ -91,7 +93,7 @@ export interface AgentRevision
 	readonly changeMessage: string;
 	/** Current publication state. */
 	readonly state: AgentRevisionState;
-	/** Content digest covering every executable field. */
+	/** Digest over the fields in {@link AgentRevisionContent}, produced by {@link __DigestAgentRevisionContent}. */
 	readonly digest: string;
 	/** Versioned platform prompt-policy identifier. */
 	readonly promptPolicyVersion: string;

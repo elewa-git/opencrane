@@ -1,7 +1,7 @@
 import type { AgUiProjectionSourceEvent } from "@opencrane/contracts";
 import type { JsonValue } from "@opencrane/util";
 
-/** Safe projections persisted with an approval so reads never select server-only argument bytes. */
+/** Redacted copies stored alongside the approval, so reads never have to touch the server-only arguments. */
 export interface DeferredToolApprovalProjection
 {
 	/** Proposed arguments with schema-marked secret values omitted. */
@@ -21,7 +21,7 @@ export interface ApprovalInterruptReadCommand
 	readonly subjectId: string;
 }
 
-/** Structural interrupt reader consumed by the conversations package without a reverse dependency. */
+/** Reader the conversations package calls; it is declared here so that package need not depend on this one. */
 export interface DeferredToolApprovalInterruptReader
 {
 	/** Read current owner-bound approval overlays without advancing a conversation cursor. */

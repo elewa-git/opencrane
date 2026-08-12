@@ -99,7 +99,7 @@ export interface RuntimeBootstrapExchangeRepository extends RuntimeBootstrapRepo
 	loadBootstrapExchange(bootstrapReference: string): Promise<RuntimeBootstrapExchangeRecord | null>;
 }
 
-/** Minimal structured logger surface required by the bootstrap HTTP boundary. */
+/** The one logger method this router needs. */
 export interface RuntimeBootstrapLogger
 {
 	/** Records a failed internal operation without serialising credentials or key material. */

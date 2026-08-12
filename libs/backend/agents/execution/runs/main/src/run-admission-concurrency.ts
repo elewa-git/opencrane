@@ -2,7 +2,18 @@ import type { RunAdmissionCommand } from "./run-admission.types.js";
 import { RunAdmissionConcurrencyDenialReasons } from "./run-admission-concurrency.types.js";
 import type { RunAdmissionConcurrencyPolicy, RunAdmissionConcurrencyResult } from "./run-admission-concurrency.types.js";
 
-/** Bounds admission work by silo and service before a caller can take a PostgreSQL connection. */
+/**
+ * Keeps one silo and service from flooding admission, before any database connection is taken.
+ *
+ * Each `(siloId, agentServiceId)` pair gets its own queue. Callers beyond the active limit wait in
+ * memory in arrival order; callers beyond the waiting limit are refused outright. The ordering
+ * matters: refusing here means an overloaded service never reaches Postgres, so it cannot exhaust
+ * the connection pool for every other silo.
+ *
+ * One instance is shared per server process. Called by: `personal-run-admission.ts` and
+ * `managed-run-admission.ts` in `execution/admission`, through the `RunAdmissionCapacityGate`
+ * type; the app constructs it once and passes it to both.
+ */
 export class RunAdmissionConcurrencyGate
 {
 	/** Immutable capacity policy applied to every independent silo/service queue. */

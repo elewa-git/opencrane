@@ -2,11 +2,11 @@ import { EventType } from "@ag-ui/core";
 import { AG_UI_A2UI_ENVELOPE_VERSION, AG_UI_CHILD_RUN_ENVELOPE_VERSION, AG_UI_TOOL_FAILURE_EVENT, AG_UI_TOOL_RECOVERY_REQUIRED_EVENT, RunEventTypes, type AgUiProjectionEvent, type AgUiProjectionSourceEvent, type AgUiToolFailureEnvelope, type AgUiToolRecoveryRequiredEnvelope } from "@opencrane/contracts";
 
 /**
- * Maps one redacted source event to deterministic ordered AG-UI subframes.
+ * Turns one display-safe conversation event into the AG-UI events the client receives, in order.
  *
- * Ordinary messages expand to start, optional content and terminal events. Run events select the
- * narrowest standard event that has all required safe fields; unsupported events become payload-free
- * custom signals.
+ * A stored message can become a start event, a text event and an end event. Run events use the most
+ * specific AG-UI event whose required fields are present. Unsupported events remain visible as
+ * custom events without copying their source payload.
  *
  * Called by: `__StreamConversationProjection`.
  *
@@ -20,7 +20,7 @@ export function __ProjectAgUiEvents(source: AgUiProjectionSourceEvent): readonly
 	return [_Project(source)];
 }
 
-/** Expand one durable ordinary message into the standard streaming message vocabulary. */
+/** Expand one stored message into the standard TEXT_MESSAGE_START / CONTENT / END events. */
 function _Message(source: AgUiProjectionSourceEvent): readonly AgUiProjectionEvent[]
 {
 	const payload = source.payload;
@@ -33,7 +33,7 @@ function _Message(source: AgUiProjectionSourceEvent): readonly AgUiProjectionEve
 	return events;
 }
 
-/** Select the narrowest standard event whose required display-safe fields are available. */
+/** Pick the most specific standard event whose required fields are present; otherwise fall back to a CUSTOM event. */
 function _Project(source: AgUiProjectionSourceEvent): AgUiProjectionEvent
 {
 	switch (source.eventType)
@@ -71,7 +71,7 @@ function _Project(source: AgUiProjectionSourceEvent): AgUiProjectionEvent
 	}
 }
 
-/** Project only the exact server-redacted recovery envelope; incomplete rows stay payload-free. */
+/** Emit the server-redacted recovery payload. A row missing `runId` or `toolRecovery` becomes a CUSTOM event with no payload. */
 function _ToolRecoveryRequired(source: AgUiProjectionSourceEvent): AgUiProjectionEvent
 {
 	if (source.runId === undefined || source.payload.toolRecovery === undefined) return _Custom(source);
@@ -79,7 +79,7 @@ function _ToolRecoveryRequired(source: AgUiProjectionSourceEvent): AgUiProjectio
 	return { type: EventType.CUSTOM, name: AG_UI_TOOL_RECOVERY_REQUIRED_EVENT, value };
 }
 
-/** Preserve one safe tool coordinate and classification without exposing provider detail. */
+/** Keep the tool-call id and failure code, and nothing from the provider's own error. */
 function _ToolFailure(source: AgUiProjectionSourceEvent): AgUiProjectionEvent
 {
 	if (typeof source.payload.toolCallId !== "string") return _Custom(source);
@@ -87,13 +87,13 @@ function _ToolFailure(source: AgUiProjectionSourceEvent): AgUiProjectionEvent
 	return { type: EventType.CUSTOM, name: AG_UI_TOOL_FAILURE_EVENT, value };
 }
 
-/** Keep terminal details useful while limiting them to the server-selected reason vocabulary. */
+/** Append the server-chosen `terminalReason` to the fallback message, if there is one. */
 function _TerminalMessage(source: AgUiProjectionSourceEvent, fallback: string): string
 {
 	return source.payload.terminalReason === undefined ? fallback : `${fallback}: ${source.payload.terminalReason}`;
 }
 
-/** Keep unsupported, incomplete, and future source events observable without forwarding their payload. */
+/** Emit a CUSTOM event naming the source event type, so unsupported, incomplete, and future events stay visible without their payload leaking. */
 function _Custom(source: AgUiProjectionSourceEvent): AgUiProjectionEvent
 {
 	return { type: EventType.CUSTOM, name: `opencrane.${source.eventType.replaceAll(".", "_")}`, value: { eventType: source.eventType } };

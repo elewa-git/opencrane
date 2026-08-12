@@ -16,12 +16,12 @@ import type { PersonaPersistenceUnitOfWork } from "./persona-persistence-unit-of
 import { PrismaPersonaOnboardingRepository } from "./prisma-persona-onboarding-repository.js";
 import { PrismaPersonaOnboardingStatusRepository } from "./prisma-persona-onboarding-status-repository.js";
 
-/** Prisma implementation of the persona aggregate transaction boundary. */
+/** Runs each persona operation in its own Serializable Prisma transaction. */
 export class PrismaPersonaPersistenceUnitOfWork implements PersonaPersistenceUnitOfWork
 {
-	/** Canonical product-authority database client. */
+	/** Prisma client for the product database. */
 	private readonly prisma: PrismaClient;
-	/** App-owned structured logger for handled persistence failures. */
+	/** Logger used when a persistence failure is turned into a denial. */
 	private readonly logger: Logger;
 
 	/** Creates the transaction boundary over the canonical product database. */
@@ -173,7 +173,7 @@ export class PrismaPersonaPersistenceUnitOfWork implements PersonaPersistenceUni
 		});
 	}
 
-	/** Execute one approval operation with only its transaction-scoped repository capability. */
+	/** Runs one approval operation in a Serializable transaction, giving the callback only its repository. */
 	private async _runApproval<Result>(work: (repository: PrismaPersonaAuthorityRepository) => Promise<Result>): Promise<Result>
 	{
 		return this.prisma.$transaction(async function _RunApprovalTransaction(transaction): Promise<Result>
@@ -182,7 +182,7 @@ export class PrismaPersonaPersistenceUnitOfWork implements PersonaPersistenceUni
 		}, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 	}
 
-	/** Execute one draft operation with only its transaction-scoped repository capability. */
+	/** Runs one draft operation in a Serializable transaction, giving the callback only its repository. */
 	private async _runDraft<Result>(work: (repository: PrismaPersonaDraftRepository) => Promise<Result>): Promise<Result>
 	{
 		return this.prisma.$transaction(async function _RunDraftTransaction(transaction): Promise<Result>
@@ -191,7 +191,7 @@ export class PrismaPersonaPersistenceUnitOfWork implements PersonaPersistenceUni
 		}, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 	}
 
-	/** Execute one interview operation with only its transaction-scoped repository capability. */
+	/** Runs one interview operation in a Serializable transaction, giving the callback only its repository. */
 	private async _runInterview<Result>(work: (repository: PrismaPersonaInterviewRepository) => Promise<Result>): Promise<Result>
 	{
 		return this.prisma.$transaction(async function _RunInterviewTransaction(transaction): Promise<Result>
@@ -200,7 +200,7 @@ export class PrismaPersonaPersistenceUnitOfWork implements PersonaPersistenceUni
 		}, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 	}
 
-	/** Execute one onboarding operation with only its transaction-scoped repository capability. */
+	/** Runs one onboarding operation in a Serializable transaction, giving the callback only its repository. */
 	private async _runOnboarding<Result>(work: (repository: PrismaPersonaOnboardingRepository) => Promise<Result>): Promise<Result>
 	{
 		return this.prisma.$transaction(async function _RunOnboardingTransaction(transaction): Promise<Result>
@@ -209,7 +209,7 @@ export class PrismaPersonaPersistenceUnitOfWork implements PersonaPersistenceUni
 		}, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 	}
 
-	/** Execute one status read with only its transaction-scoped repository capability. */
+	/** Runs one status read in a Serializable transaction, giving the callback only its repository. */
 	private async _runStatus<Result>(work: (repository: PrismaPersonaOnboardingStatusRepository) => Promise<Result>): Promise<Result>
 	{
 		return this.prisma.$transaction(async function _RunStatusTransaction(transaction): Promise<Result>
@@ -219,13 +219,26 @@ export class PrismaPersonaPersistenceUnitOfWork implements PersonaPersistenceUni
 	}
 }
 
-/** Recognise only concurrent unique-key and serializable transaction-write races as interview conflicts. */
+/**
+ * Returns whether the error is a unique-key clash (P2002) or a serialization failure (P2034) — the only
+ * two errors treated as an interview conflict.
+ *
+ * Both codes are defined by Prisma's client error reference (Prisma 6, `PrismaClientKnownRequestError`).
+ * Any other error is a real fault and must keep propagating, so widening this check would silently turn
+ * a bug into a retry the owner sees as a conflict.
+ */
 function _IsInterviewConflict(error: unknown): boolean
 {
 	return error instanceof Prisma.PrismaClientKnownRequestError && (error.code === "P2002" || error.code === "P2034");
 }
 
-/** Recognise only concurrent unique-key and serializable transaction-write races as persona conflicts. */
+/**
+ * Returns whether the error is a unique-key clash (P2002) or a serialization failure (P2034) — the only
+ * two errors treated as a persona conflict.
+ *
+ * Both codes are defined by Prisma's client error reference (Prisma 6, `PrismaClientKnownRequestError`).
+ * Any other error is a real fault and must keep propagating.
+ */
 function _IsPersonaConflict(error: unknown): boolean
 {
 	return error instanceof Prisma.PrismaClientKnownRequestError && (error.code === "P2002" || error.code === "P2034");

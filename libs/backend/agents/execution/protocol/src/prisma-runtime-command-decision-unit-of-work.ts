@@ -4,19 +4,39 @@ import { PrismaRuntimeResumeInputRepository } from "./prisma-runtime-resume-inpu
 import type { RuntimeApprovalExpiry, RuntimeCommandDecisionUnitOfWork } from "./prisma-runtime-dispatch-authority.types.js";
 import type { RuntimeAdmissionRunState } from "./runtime-protocol-authority.types.js";
 
-/** Prisma transaction unit that interprets runtime command lifecycle and approval markers. */
+/**
+ * Decides the next runtime command, and closes overdue approvals, on the caller's transaction.
+ *
+ * Constructed per poll and never held, because everything it reads is only sound while the caller's
+ * run lock is held. Keeping the decision here means the dispatch authority never reads approval or
+ * tool-result tables itself.
+ *
+ * Called by: `_nextCommand` in prisma-runtime-dispatch-authority.ts, once per poll.
+ *
+ * @implements RuntimeCommandDecisionUnitOfWork
+ */
 export class PrismaRuntimeCommandDecisionUnitOfWork implements RuntimeCommandDecisionUnitOfWork
 {
-	/** Exact dispatch transaction holding the run, assignment, and command-stream fences. */
+	/** The caller's dispatch transaction, which already holds the locks on the run, the assignment, and the command stream. */
 	private readonly _transaction: Prisma.TransactionClient;
 
-	/** Bind command lifecycle reads and expiry to the caller-owned dispatch transaction. */
+	/** Read state and close approvals only on the caller's dispatch transaction. */
 	constructor(transaction: Prisma.TransactionClient)
 	{
 		this._transaction = transaction;
 	}
 
-	/** Apply server-owned approval deadlines while command polling owns a waiting run fence. */
+	/**
+	 * Close approvals whose deadline has passed, while command polling holds the run lock.
+	 *
+	 * @param context - Run, attempt, and current run state.
+	 * @param approvalExpiry - The injected expiry port, or null when none was wired.
+	 * @param now - Trusted server time.
+	 * @returns `not_required` - the run is not waiting for approval; carry on and decide a command.
+	 * `applied` - deadlines were processed, which obliges the caller to re-read the run before deciding,
+	 * because it may now be resumable or cancelling. `unavailable` - the run is waiting but no expiry
+	 * port exists, so the caller must send nothing at all rather than guess the wait is over.
+	 */
 	async expireWaiting(context: { readonly runId: string; readonly attempt: number; readonly runState: RuntimeAdmissionRunState }, approvalExpiry: RuntimeApprovalExpiry | null, now: Date): Promise<"not_required" | "applied" | "unavailable">
 	{
 		if (context.runState !== "waiting_for_approval") return "not_required";
@@ -26,11 +46,16 @@ export class PrismaRuntimeCommandDecisionUnitOfWork implements RuntimeCommandDec
 	}
 
 	/**
-	 * Choose the next command from durable state and marker evidence.
+	 * Choose the next command from the run's saved state and its pending rows.
 	 *
-	 * Start and cancel are unique. The first resume may carry a saved tool result or steering. Later resumes
-	 * require a fresh result delivery, proving another tool batch completed; steering
-	 * alone cannot supersede an active executor loop.
+	 * There is only ever one start and one cancel. The first resume may carry either a saved tool
+	 * result or steering. A later resume needs a new tool-result row, which proves another batch of
+	 * tools finished; steering on its own cannot interrupt a running agent loop.
+	 *
+	 * @param context - Run, attempt, and current run state.
+	 * @param commands - Commands already sent for this attempt, so a second start or cancel cannot be
+	 * produced.
+	 * @returns The command kind to create, or null when nothing is due - the normal idle answer.
 	 */
 	async decide(context: { readonly runId: string; readonly attempt: number; readonly runState: RuntimeAdmissionRunState }, commands: readonly { readonly kind: RuntimeCommandKind }[]): Promise<RuntimeCommandKind | null>
 	{

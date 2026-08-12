@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { __ResolvePersonalMemoryDataset } from "../personal-memory-dataset.js";
 import { PersonalMemoryDatasetResolutionDenialReasons, PersonalMemoryDatasetResolutionOutcomes } from "../personal-memory-dataset.types.js";
 
-/** Builds a repository fake exposing the exact proof-bound lookup seam. */
+/** Builds a repository fake with just the dataset lookup. */
 function _Repository(dataset: { readonly datasetId: string; readonly cogneeDatasetId: string } | null)
 {
 	return { findActivePersonalDataset: vi.fn().mockResolvedValue(dataset) };

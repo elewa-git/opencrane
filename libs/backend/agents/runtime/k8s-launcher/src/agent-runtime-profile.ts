@@ -2,10 +2,10 @@ import { AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, MANAGED_AGENT_RUNTIME_PROJECTED
 
 import { AgentRuntimeIdentityProfiles, type AgentRuntimeJobProfile } from "./agent-runtime-job.types.js";
 
-/** Hard ceiling for non-authoritative runtime-local scratch. */
+/** Largest scratch volume a profile may ask for. Nothing important is stored there. */
 const _MAX_SCRATCH_BYTES = 1_073_741_824n;
 
-/** Resolve the identity class a profile projects, defaulting to the personal runtime class. */
+/** Return the profile's identity class, treating a missing value as personal. */
 function _IdentityProfile(profile: AgentRuntimeJobProfile): AgentRuntimeIdentityProfiles
 {
 	return profile.identityProfile ?? AgentRuntimeIdentityProfiles.Personal;
@@ -17,7 +17,13 @@ function _IsIdentityServiceAccountName(profile: AgentRuntimeJobProfile, value: s
 	return _IdentityProfile(profile) === AgentRuntimeIdentityProfiles.Managed ? ___IsManagedAgentRuntimeServiceAccountName(value) : ___IsAgentRuntimeServiceAccountName(value);
 }
 
-/** Reject blank or control-character-bearing authority coordinates. */
+/**
+ * Return whether an identifier is safe to copy into Kubernetes metadata: non-empty, at most 256
+ * characters, and free of control characters.
+ *
+ * Called by: {@link _AssertAgentRuntimeJobAssignment} for every recorded coordinate, and the
+ * profile check for the image reference.
+ */
 export function _IsBoundedAgentRuntimeCoordinate(value: string): boolean
 {
 	return value.length > 0 && value.length <= 256 && !/[\u0000-\u001f\u007f]/.test(value);
@@ -52,7 +58,7 @@ function _ParseCpuMillis(value: string): number | null
  */
 export function _AssertAgentRuntimeJobProfile(profile: AgentRuntimeJobProfile): void
 {
-	// 1. Pin the image and stream to the exact in-cluster endpoint the policy will admit.
+	// 1. Require a digest-pinned image, and a stream URL on the in-cluster server the policy allows.
 	const streamUrl = URL.parse(profile.runtimeStreamUrl);
 	if (!_IsBoundedAgentRuntimeCoordinate(profile.image) || !/^[a-z0-9][a-z0-9._:/-]*@sha256:[a-f0-9]{64}$/.test(profile.image) || !streamUrl || streamUrl.protocol !== "http:" || !streamUrl.hostname.endsWith(`.${profile.serverNamespace}.svc.cluster.local`) || streamUrl.pathname !== "/api/internal/agent-runtime" || streamUrl.search !== "" || streamUrl.hash !== "" || streamUrl.username !== "" || streamUrl.password !== "")
 	{
@@ -70,19 +76,19 @@ export function _AssertAgentRuntimeJobProfile(profile: AgentRuntimeJobProfile): 
 		throw new Error("agent runtime profile requires an in-cluster LiteLLM base URL");
 	}
 
-	// 3. Bind the profile to one server namespace and one mutually exclusive runtime identity class.
+	// 3. Require one valid server namespace, and a ServiceAccount name matching this profile's identity class.
 	if (!/^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/.test(profile.serverNamespace) || profile.serverNamespace.length > 63 || !_IsIdentityServiceAccountName(profile, profile.serviceAccountName))
 	{
 		throw new Error("agent runtime profile requires one valid server namespace and bounded runtime ServiceAccount");
 	}
 
-	// 4. Require the projected-token and lifecycle bounds shared with deployment policy.
+	// 4. Require a projected-token lifetime inside the range the deployment policy also uses.
 	if (!Number.isSafeInteger(profile.projectedTokenTtlSeconds) || profile.projectedTokenTtlSeconds < 600 || profile.projectedTokenTtlSeconds > 3600)
 	{
 		throw new Error("agent runtime projected-token TTL must be between 600 and 3600 seconds");
 	}
 
-	// 5. Bound transient storage, lifecycle, CPU, and memory before the manifest reaches an adapter.
+	// 5. Cap scratch size, require a finite deadline and immediate cleanup, then check CPU and memory.
 	const scratchBytes = _ParseBinaryBytes(profile.scratchSize);
 	if (!scratchBytes || scratchBytes > _MAX_SCRATCH_BYTES || !Number.isSafeInteger(profile.activeDeadlineSeconds) || profile.activeDeadlineSeconds < 1 || profile.ttlSecondsAfterFinished !== 0)
 	{
@@ -98,7 +104,14 @@ export function _AssertAgentRuntimeJobProfile(profile: AgentRuntimeJobProfile): 
 	}
 }
 
-/** Return the projected-token audience minted for one validated identity profile. */
+/**
+ * Return the projected-token audience for this profile's identity class.
+ *
+ * Personal and managed get different audiences, which is what stops a token minted for one from
+ * being accepted as the other.
+ *
+ * Called by: the volume builder in agent-runtime-job.ts, for the Job's projected-token source.
+ */
 export function _AgentRuntimeProjectedTokenAudience(profile: AgentRuntimeJobProfile): string
 {
 	return _IdentityProfile(profile) === AgentRuntimeIdentityProfiles.Managed ? MANAGED_AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE : AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE;

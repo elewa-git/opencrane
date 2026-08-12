@@ -21,7 +21,7 @@ def environment(name: str, default: str | None = None) -> str:
     """
     # This accessor deliberately distinguishes absence/empty from malformed-but-present values.
     # Path, URL, and identifier shape validation stays with the component that owns that domain;
-    # central coercion here could make two security boundaries interpret one setting differently.
+    # converting it centrally here could make two security boundaries read one setting differently.
     value = os.environ.get(name, default)
     if not value:
         # Mention only the public configuration key. Echoing the supplied value in an exception can

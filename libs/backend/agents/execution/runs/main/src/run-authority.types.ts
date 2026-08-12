@@ -82,7 +82,7 @@ export interface StartNextRunAttemptCommand
 	readonly acceptedAt: string;
 }
 
-/** Current run and AgentService authority loaded as one consistent read snapshot. */
+/** The run and its AgentService, read together so both reflect the same moment. */
 export interface AgentRunAuthoritySnapshot
 {
 	/** Current durable state of the logical run. */
@@ -95,7 +95,7 @@ export interface AgentRunAuthoritySnapshot
 	readonly activeAgentRevisionId: AgentRevisionId | null;
 }
 
-/** Atomic retry request bound to the exact AgentService authority accepted by the domain. */
+/** A retry request carrying the AgentService facts the domain already accepted, so the increment can be conditional on them. */
 export interface AtomicStartNextRunAttemptCommand extends StartNextRunAttemptCommand
 {
 	/** AgentService identity immutable on the run and required by the compare-and-swap. */
@@ -115,12 +115,12 @@ export type AtomicRunAttemptResult =
 	| { readonly status: "agent_service_authority_conflict"; readonly currentAgentServiceState: AgentServiceState | null; readonly currentAgentServiceSiloId: SiloId | null; readonly currentActiveAgentRevisionId: AgentRevisionId | null }
 	| { readonly status: "not_found" };
 
-/** Persistence boundary that keeps one AgentRun authority while attempts increment. */
+/** Persistence boundary that keeps a single AgentRun row while its attempt counter increases. */
 export interface AgentRunAuthorityRepository
 {
 	/** Loads the run and referenced AgentService authority as one consistent read snapshot. */
 	getRunAuthority(runId: AgentRunId): Promise<AgentRunAuthoritySnapshot | null>;
-	/** Atomically increments only while both run attempt and exact active AgentService revision still match. */
+	/** Increments the attempt in one step, and only while both the run's attempt and the service's active revision still match what was read. */
 	startNextAttemptAtomically(command: AtomicStartNextRunAttemptCommand): Promise<AtomicRunAttemptResult>;
 }
 

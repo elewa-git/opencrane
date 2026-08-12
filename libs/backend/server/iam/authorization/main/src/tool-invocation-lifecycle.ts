@@ -80,7 +80,7 @@ function _recoveryRequired(input: ToolInvocationLifecycleInput): ToolInvocationL
 	return input.event === ToolInvocationLifecycleEvents.Cancelled ? ToolInvocationLifecycleActions.Fail : ToolInvocationLifecycleActions.Reject;
 }
 
-/** Exhaustive state registry; adding a durable state requires an explicit event owner. */
+/** One handler per state; adding a state to the enum will not compile until it is listed here. */
 const _STATE_HANDLERS: Readonly<Record<ToolInvocationStates, ToolInvocationStateHandler>> = {
 	[ToolInvocationStates.Preparing]: _preparing,
 	[ToolInvocationStates.AwaitingApproval]: _awaitingApproval,

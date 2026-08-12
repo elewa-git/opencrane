@@ -4,19 +4,19 @@ import type { SkillWorkloadBootstrapIdentity, SkillWorkloadBootstrapRecord } fro
 import { _SkillWorkloadTimestampProposal } from "./prisma-skill-workload-timestamps.js";
 import type { SkillWorkloadBootstrapRepository } from "./skill-workload-unit-of-work.types.js";
 
-/** Prisma authority for one exact released-and-registered governed-skill bootstrap consumption. */
+/** Reads and consumes a worker's bootstrap, only when its Job is unsuspended and its Pod is registered. */
 export class PrismaSkillWorkloadBootstrapRepository implements SkillWorkloadBootstrapRepository
 {
-	/** Transaction-scoped ORM client supplied only by the execution unit of work. */
+	/** Prisma client for this transaction. Only the unit of work supplies it. */
 	private readonly transaction: Prisma.TransactionClient;
 
-	/** Creates the one-use bootstrap authority over canonical Postgres. */
+	/** Stores the transaction this repository reads and writes through. */
 	constructor(transaction: Prisma.TransactionClient)
 	{
 		this.transaction = transaction;
 	}
 
-	/** Loads only an unconsumed record whose released workload has one canonical worker Pod. */
+	/** Loads an unused, unexpired bootstrap, and only when its workload is unsuspended and has a registered worker Pod. */
 	async loadUnconsumed(referenceHash: string): Promise<SkillWorkloadBootstrapRecord | null>
 	{
 		const now = await this._databaseNow();
@@ -25,7 +25,7 @@ export class PrismaSkillWorkloadBootstrapRepository implements SkillWorkloadBoot
 		return { workloadId: bootstrap.skillWorkloadId, referenceHash: bootstrap.referenceHash, audience: bootstrap.audience, serviceAccountName: bootstrap.serviceAccountName, namespace: bootstrap.namespace, workloadUid: bootstrap.workloadUid, podUid: bootstrap.skillWorkload.workerPodUid };
 	}
 
-	/** Consumes one bootstrap only while every release and reviewed-Pod fence still holds. */
+	/** Marks the bootstrap used, only while it is unexpired and its workload is unsuspended with this exact Pod. */
 	async consume(referenceHash: string, identity: SkillWorkloadBootstrapIdentity): Promise<"consumed" | "conflict">
 	{
 		const now = await this._databaseNow();
@@ -33,7 +33,7 @@ export class PrismaSkillWorkloadBootstrapRepository implements SkillWorkloadBoot
 		return updated.count === 1 ? "consumed" : "conflict";
 	}
 
-	/** Reads database time through the read-only typed view owned by this repository. */
+	/** Reads the current time from the `skill_authority_clock` view, never from this process. */
 	private async _databaseNow(): Promise<Date>
 	{
 		const clock = await this.transaction.skillAuthorityClock.findUnique({ where: { singleton: 1 } });

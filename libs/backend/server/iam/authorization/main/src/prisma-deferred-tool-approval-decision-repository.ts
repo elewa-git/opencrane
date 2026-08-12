@@ -7,10 +7,10 @@ import type { DecideDeferredToolRequestCommand, DecideDeferredToolRequestResult,
 /** Prisma-backed atomic persistence for session-authorized deferred-tool decisions. */
 export class PrismaDeferredToolApprovalDecisionRepository implements DeferredToolApprovalDecisionRepository
 {
-	/** Canonical product authority used to group the decision read and compare-and-set. */
+	/** Prisma client used to run the decision's read and its conditional update in one transaction. */
 	private readonly _prisma: PrismaClient;
 
-	/** Construct the repository around the server's canonical product-authority client. */
+	/** Construct the repository around the server's Prisma client. */
 	constructor(prisma: PrismaClient)
 	{
 		this._prisma = prisma;
@@ -38,7 +38,7 @@ export class PrismaDeferredToolApprovalDecisionRepository implements DeferredToo
 	}
 }
 
-/** Returns whether Postgres aborted the decision transaction because its workload authority changed. */
+/** Returns whether the database rejected the decision because the run attempt, its workload assignment, or its proof key is no longer current. */
 function _isStaleApprovalDecision(error: unknown): boolean
 {
 	return error instanceof Error && error.message.includes("ApprovalRequest decision authority is no longer current");

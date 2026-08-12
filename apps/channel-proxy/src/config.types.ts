@@ -13,6 +13,6 @@ export interface ChannelProxyProcessConfig
 	rateLimit: number;
 	/** Rate-limit window in milliseconds. */
 	rateWindowMs: number;
-	/** Core proxy policy and transport bounds. */
+	/** The proxy's policy settings and its transport limits. */
 	proxy: ChannelProxyConfig;
 }

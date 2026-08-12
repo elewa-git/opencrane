@@ -1,7 +1,7 @@
 /** Marker written instead of a value that may carry credentials or tool arguments. */
 const _REDACTED = "[Redacted]";
 
-/** Marker written when a log value exceeds the bounded recursive projection. */
+/** Marker written in place of a value nested deeper than `_MAX_DEPTH`. */
 const _TRUNCATED = "[Truncated]";
 
 /** Maximum object depth inspected before the whole remaining value is removed. */
@@ -30,14 +30,14 @@ const _SENSITIVE_FIELD_NAMES = new Set([
 	"result",
 ]);
 
-/** Return whether an object can be projected without changing framework-owned runtime behavior. */
+/** Return whether an object is a plain object, so copying it field by field cannot break something a framework owns. */
 function _isPlainRecord(value: object): boolean
 {
 	const prototype = Object.getPrototypeOf(value);
 	return prototype === Object.prototype || prototype === null;
 }
 
-/** Recursively project one JSON-like value while dropping sensitive fields at any depth. */
+/** Copy a value, dropping sensitive fields at every depth and stopping at `_MAX_DEPTH` or a cycle. */
 function _sanitizeLogValue(value: unknown, depth: number, seen: WeakSet<object>): unknown
 {
 	// 1. Preserve primitives and framework-owned special objects for pino's configured serializers.
@@ -62,12 +62,21 @@ function _sanitizeLogValue(value: unknown, depth: number, seen: WeakSet<object>)
 }
 
 /**
- * Project pino log fields without credentials, replay cursors, or executable tool arguments.
+ * Copy pino's log fields with credentials, replay cursors, and tool arguments removed.
  *
- * Non-sensitive siblings such as operation, outcome, identifiers, and argument digests remain
- * available for diagnosis. Unexpected getters fail closed by replacing the complete field set.
- * @param fields - Root pino merge object or child bindings.
- * @returns A bounded JSON-like projection safe for serialization.
+ * Runs as pino's `log` and `bindings` formatter, so every record passes through it. Sensitive
+ * field names are replaced with `[Redacted]` at any depth; their harmless siblings — operation
+ * name, outcome, identifiers, argument digests — survive, so a record stays useful for diagnosis.
+ *
+ * Fails closed: if anything throws while walking the value, such as a getter with a side effect,
+ * the entire field set is dropped and replaced with a single redacted marker rather than emitting
+ * a partly-walked object.
+ *
+ * Called by: {@link ___CreateLogger} only; it is wired in as a pino formatter and is not meant to
+ * be called directly.
+ * @param fields - Pino's merge object or child bindings.
+ * @returns A depth-limited copy safe to serialize; `{ logFields: "[Redacted]" }` when walking failed.
+ * @see {@link REDACT_PATHS}
  */
 export function _SanitizeLogFields(fields: Record<string, unknown>): Record<string, unknown>
 {

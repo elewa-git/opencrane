@@ -2,33 +2,47 @@ import { Prisma, RuntimeSteeringDisposition, type PrismaClient } from "@prisma/c
 
 import type { SteeringBoundaryClaim, SteeringBoundaryClaimResult, SteeringBoundaryRepository, SteeringDisposition } from "./steering-authority.types.js";
 
-/** Map the Prisma disposition enum to the dependency-light steering disposition literal. */
+/** Map the Prisma disposition enum to this package's string literal. */
 function _disposition(value: RuntimeSteeringDisposition): SteeringDisposition
 {
 	return value === RuntimeSteeringDisposition.Absorbed ? "absorbed" : "deferred";
 }
 
 /**
- * Prisma-backed exactly-once recorder for ordered steering boundaries.
+ * Writes each steering boundary to Postgres exactly once.
  *
- * The `(runId, attempt, boundaryId)` primary key makes recording idempotent across process death: a
- * second claim for the same boundary raises a unique-constraint violation, which is resolved by
- * returning the disposition already recorded rather than emitting a second absorb/defer. It advances
- * the attempt's input generation in the same transaction only when steering is absorbed, so the
- * command stream's generation and the boundary ledger never disagree.
+ * The `(runId, attempt, boundaryId)` primary key is what makes recording idempotent across process
+ * death: a second claim for the same boundary raises a unique-constraint violation, which is
+ * answered by returning the decision already recorded rather than writing a second absorb or defer.
+ * When steering was absorbed it also raises the attempt's input generation in the same transaction,
+ * so the command stream's generation and the boundary ledger can never disagree.
+ *
+ * Called by: no callers found - nothing constructs it yet, and index.ts does not re-export it.
+ *
+ * @implements SteeringBoundaryRepository
  */
 export class PrismaSteeringBoundaryRepository implements SteeringBoundaryRepository
 {
-	/** OpenCrane product-authority database client. */
+	/** Client for the main OpenCrane database. */
 	private readonly prisma: PrismaClient;
 
-	/** Creates the steering-boundary recorder over canonical Postgres. */
+	/** Creates the recorder over Postgres. */
 	constructor(prisma: PrismaClient)
 	{
 		this.prisma = prisma;
 	}
 
-	/** Atomically records a new boundary claim, or returns the disposition already recorded for it. */
+	/**
+	 * Record a new boundary, or return the decision already recorded for it.
+	 *
+	 * @param claim - The boundary to record, with the generation it moves from and to.
+	 * @returns `claimed` when this call wrote the row. `existing`, with the recorded disposition and
+	 * generation, when a unique-constraint violation showed an earlier process had already claimed it;
+	 * the caller must adopt those values rather than its own.
+	 * @throws {Error} When an absorbing boundary's generation update did not move exactly one row.
+	 * @throws {Prisma.PrismaClientKnownRequestError} Rethrown for any database error that is not the
+	 * duplicate-boundary case, and when the duplicate row cannot then be read back.
+	 */
 	async claim(claim: SteeringBoundaryClaim): Promise<SteeringBoundaryClaimResult>
 	{
 		try
@@ -47,9 +61,9 @@ export class PrismaSteeringBoundaryRepository implements SteeringBoundaryReposit
 						ackedAt: new Date(),
 					},
 				});
-				// Advance the per-attempt input generation only when this boundary absorbed steering.
-				// The compare-and-set on the source generation must move exactly one row, or the
-				// recorded boundary and the stream generation would silently disagree.
+				// Raise the attempt's input generation only when this boundary absorbed steering. The
+				// update matches on the generation that was read, and it must change exactly one row;
+				// otherwise the boundary just written and the stream's generation would quietly disagree.
 				if (claim.disposition === "absorbed")
 				{
 					const advanced = await transaction.runtimeCommandStream.updateMany({ where: { runId: claim.runId, attempt: claim.attempt, inputGeneration: claim.fromInputGeneration }, data: { inputGeneration: claim.toInputGeneration } });

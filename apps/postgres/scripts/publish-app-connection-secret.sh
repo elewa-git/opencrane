@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Publish the connection Secret consumed by an authority's application workload.
+# Publish the connection Secret that one logical database's application workload reads.
 #
 # CloudNativePG uses the supplied initdb owner Secret as the authority credential. It does
 # not promise a separate `<cluster>-app` Secret, so the installer owns that deterministic

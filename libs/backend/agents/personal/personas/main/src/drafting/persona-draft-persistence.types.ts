@@ -1,4 +1,4 @@
-/** One server-derived insight with the complete persisted question provenance. */
+/** One server-derived insight, together with the question and answer it came from. */
 export interface PersonaDraftInsightEvidence<Category>
 {
 	/** Exact completed-interview answer from which the statement is derived. */
