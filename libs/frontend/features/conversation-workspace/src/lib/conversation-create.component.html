@@ -1,0 +1,18 @@
+<p-dialog header="New conversation" [modal]="true" [visible]="visible()" [style]="{ width: 'min(36rem, calc(100vw - 2rem))' }" (onHide)="dismissed.emit()">
+	<p class="conversation-create__intro">Choose once. A conversation’s mode cannot change later.</p>
+	<div class="conversation-create__modes" role="radiogroup" aria-label="Conversation mode">
+		@for (option of [{ value: modes.AgentSession, label: 'Agent session', detail: 'Every message starts a governed run.' }, { value: modes.Direct, label: 'Direct', detail: 'A regular chat with one participant.' }, { value: modes.Group, label: 'Group', detail: 'A regular chat with several participants.' }]; track option.value) {
+			<label><input type="radio" name="conversation-mode" [value]="option.value" [checked]="mode() === option.value" (change)="selectMode($event)" /><span><strong>{{ option.label }}</strong><small>{{ option.detail }}</small></span></label>
+		}
+	</div>
+	@if (mode() === modes.AgentSession) {
+		@if (directory()?.personalAgentStatus === agentStatuses.Ready) { <p class="conversation-create__choice">Agent: <strong>{{ directory()?.personalAgent?.displayName }}</strong></p> }
+		@else { <p class="conversation-create__notice">Your personal Agent is unavailable. Complete or repair Agent setup before starting this mode.</p> }
+	} @else {
+		<div class="conversation-create__people"><strong>Participants</strong>
+			@if ((directory()?.participants?.length ?? 0) <= 1) { <p class="conversation-create__notice">No other participants are available.</p> }
+			@for (participant of directory()?.participants ?? []; track participant.participantRef) { @if (!participant.isSelf) { <label><input type="checkbox" [checked]="selectedParticipantRefs().has(participant.participantRef)" (change)="participantToggled.emit(participant.participantRef)" /><span>{{ participant.label }}</span></label> } }
+		</div>
+	}
+	<ng-template #footer><p-button label="Cancel" severity="secondary" [text]="true" (onClick)="dismissed.emit()" /><p-button label="Create conversation" [loading]="busy()" [disabled]="!canCreate()" (onClick)="createRequested.emit()" /></ng-template>
+</p-dialog>

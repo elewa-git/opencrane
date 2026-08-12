@@ -223,6 +223,9 @@
       "@opencrane/features/conversation-elicitation": [
         "./libs/frontend/features/conversation-elicitation/src/index.ts"
       ],
+      "@opencrane/features/conversation-workspace": [
+        "./libs/frontend/features/conversation-workspace/src/index.ts"
+      ],
       "@opencrane/features/agent-threads": [
         "./libs/frontend/features/agent-threads/src/index.ts"
       ],
@@ -289,6 +292,9 @@
   },
   "files": [],
   "references": [
+    {
+      "path": "./libs/frontend/features/conversation-workspace"
+    },
     {
       "path": "./libs/frontend/features/conversation-activity"
     },

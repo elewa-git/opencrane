@@ -1,0 +1,7 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": { "composite": false, "declaration": false, "incremental": false, "noEmit": true },
+  "include": ["src/**/*.ts"],
+  "exclude": ["**/*.spec.ts", "**/*.stories.ts"],
+  "references": []
+}
