@@ -83,7 +83,7 @@ export class AgentThreadStore
 		const generation = this._followUp.begin();
 		try
 		{
-			const next = await this._gateway.sendFollowUp(current.childConversationId, body, globalThis.crypto.randomUUID());
+			const next = await this._gateway.sendFollowUp(current.parentConversationId, current.childConversationId, body, globalThis.crypto.randomUUID());
 			if (!this._followUp.isCurrent(generation)) return false;
 			if (next.parentConversationId !== current.parentConversationId || next.childConversationId !== current.childConversationId)
 			{

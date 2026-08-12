@@ -46,7 +46,7 @@ class _FakeAgentThreadGateway implements AgentThreadGateway
 	}
 
 	/** Resolve the configured command result while recording only the body. */
-	public async sendFollowUp(_childConversationId: string, body: string): Promise<AgentThreadSnapshot>
+	public async sendFollowUp(_parentConversationId: string, _childConversationId: string, body: string): Promise<AgentThreadSnapshot>
 	{
 		this.sentBodies.push(body);
 		if (this.sendResult instanceof Error) throw this.sendResult;

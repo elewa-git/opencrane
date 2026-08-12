@@ -92,23 +92,6 @@ export enum AgentThreadSummaryStates
 	Reconnecting = "reconnecting"
 }
 
-/** Immediate-parent delivery categories safe to render in the child timeline or parent summary. */
-export enum AgentThreadDeliveryKinds
-{
-	/** Short progress update. */
-	Status = "status",
-	/** Participant question backed by a recoverable elicitation. */
-	Question = "question",
-	/** Approval request backed by a recoverable elicitation. */
-	Approval = "approval",
-	/** Display-safe result summary. */
-	Result = "result",
-	/** Truthful failure summary that claims no result. */
-	Failure = "failure",
-	/** Finalized generated asset reference. */
-	Asset = "asset"
-}
-
 /** Ordered child timeline entry categories. */
 export enum AgentThreadTimelineEntryKinds
 {
@@ -119,3 +102,6 @@ export enum AgentThreadTimelineEntryKinds
 	/** An append-only delivery to the immediate parent. */
 	Delivery = "delivery"
 }
+import { AgentThreadDeliveryKinds } from "@opencrane/contracts";
+
+export { AgentThreadDeliveryKinds };

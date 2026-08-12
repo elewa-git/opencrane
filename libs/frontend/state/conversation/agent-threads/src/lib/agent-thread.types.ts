@@ -131,7 +131,7 @@ export interface AgentThreadSnapshot
 	/** One exact ordered timeline across messages, serial run boundaries, and deliveries. */
 	readonly timeline: readonly AgentThreadTimelineEntry[];
 	/** Opaque cursor accepted only by the gateway implementation. */
-	readonly cursor: string;
+	readonly cursor: string | null;
 	/** Whether the current state permits another serial follow-up. */
 	readonly canSendFollowUp: boolean;
 }
@@ -142,5 +142,5 @@ export interface AgentThreadGateway
 	/** Read one exact authorized child projection. */
 	read(parentConversationId: string, childConversationId: string): Promise<AgentThreadSnapshot>;
 	/** Send one serial follow-up using a caller-created idempotency fence. */
-	sendFollowUp(childConversationId: string, body: string, idempotencyKey: string): Promise<AgentThreadSnapshot>;
+	sendFollowUp(parentConversationId: string, childConversationId: string, body: string, idempotencyKey: string): Promise<AgentThreadSnapshot>;
 }

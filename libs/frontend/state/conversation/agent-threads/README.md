@@ -4,13 +4,13 @@
 
 ## What it owns
 
-This package owns the browser port, view models, and component-scoped store for a group chat's child
-Agent conversation. A future generated-client adapter will translate the public OpenAPI contract into
+This package owns the browser port, generated-client adapter, view models, and component-scoped store
+for a group chat's child Agent conversation. The adapter translates the public OpenAPI contract into
 these view models; the store then handles reads, reconnects, controlled drafts, idempotent follow-ups,
 late-result fencing, and authoritative snapshot adoption.
 
 ```
- generated API adapter ── authorized snapshot ──► AgentThreadStore  ◄── HERE
+ generated API ──► OpenCraneAgentThreadGateway ──► AgentThreadStore  ◄── HERE
                                                       │ view state
                                                       ▼
                                               agent-threads feature
@@ -28,15 +28,17 @@ exposes the `access_changed` route state.
 ## Public surface
 
 - `AgentThreadGateway` is the dependency-neutral read and follow-up port.
+- `OpenCraneAgentThreadGateway` calls only generated participant routes and maps their DTOs.
 - `AgentThreadStore` owns exact-route loading, reconnect, command fencing, drafts, and purging.
 - The exported enums and view models define finite browser states without copying wire DTOs.
 - `AgentThreadGatewayError` carries only browser-safe failure categories and copy.
 
 ## Boundary
 
-There is deliberately no HTTP adapter in this package yet. The adapter must be generated from the
-backend OpenAPI contract, not built from guessed request or response shapes. This package grants no
-conversation, run, memory, or delivery authority.
+The HTTP adapter depends on the generated OpenAPI path map and sends only parent/child coordinates,
+message copy, and caller-created idempotency fences. Browser session identity remains owned by the
+shared control-plane client. This package grants no conversation, run, memory, or delivery authority
+and never receives runtime proof, provider bodies, persona content, or secret-bearing tool details.
 
 ## Dependency direction
 
