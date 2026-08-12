@@ -15,7 +15,7 @@ export function __AgentThreadSnapshot(value: unknown): AgentThreadSnapshot
 		...dto.runs.map(function _Run(run): _TimedEntry { return { occurredAt: run.acceptedAt, entry: { kind: AgentThreadTimelineEntryKinds.RunBoundary, id: `run:${run.id}`, run: { runId: run.id, ordinal: run.ordinal, state: _RunState(run.state), label: `Run ${run.ordinal}` } } }; }),
 		...dto.messages.flatMap(function _Message(message): readonly _TimedEntry[]
 		{
-			if (message.role !== "user" && message.role !== "assistant") return [];
+			if (!_IsRenderedMessage(message)) return [];
 			const authoredByAgent = message.role === "assistant";
 			const authorName = authoredByAgent ? dto.agentName : "Participant";
 			return [{ occurredAt: message.createdAt, entry: { kind: AgentThreadTimelineEntryKinds.Message, id: `message:${message.id}`, message: { id: message.id, authorName, authorInitials: _Initials(authorName), authoredByAgent, timestampLabel: _Time(message.createdAt), body: _MessageText(message.blocks) } } }];
@@ -24,11 +24,11 @@ export function __AgentThreadSnapshot(value: unknown): AgentThreadSnapshot
 	].sort(function _Chronological(left, right) { return left.occurredAt.localeCompare(right.occurredAt) || left.entry.id.localeCompare(right.entry.id); }).map(function _Entry(row) { return row.entry; });
 	const latestRun = dto.runs.at(-1);
 	const latestDelivery = dto.deliveries.at(-1);
-	const latestMessage = [...dto.messages].reverse().find(function _VisibleMessage(message) { return message.role === "user" || message.role === "assistant"; });
+	const latestMessage = [...dto.messages].reverse().find(_IsRenderedMessage);
 	const preview = latestDelivery?.detail ?? (latestMessage === undefined ? undefined : _MessageText(latestMessage.blocks));
 	const latestUpdateAt = [dto.createdAt, ...dto.messages.map(function _MessageTime(message) { return message.createdAt; }), ...dto.deliveries.map(function _DeliveryTime(delivery) { return delivery.createdAt; })].sort().at(-1) ?? dto.createdAt;
 	const result = [...dto.deliveries].reverse().find(function _Result(delivery) { return delivery.kind === "result" || delivery.kind === "asset"; });
-	const visibleThroughPosition = dto.messages.reduce(function _LatestPosition(latest, message) { return BigInt(message.position) > BigInt(latest) ? message.position : latest; }, "0");
+	const visibleThroughPosition = dto.messages.filter(_IsRenderedMessage).reduce(function _LatestPosition(latest, message) { return BigInt(message.position) > BigInt(latest) ? message.position : latest; }, "0");
 	const previewFields = preview === undefined || preview.length === 0 ? {} : { preview };
 	const resultFields = result === undefined ? {} : { resultLabel: result.label };
 	return {
@@ -48,6 +48,12 @@ export function __AgentThreadSnapshot(value: unknown): AgentThreadSnapshot
 
 /** Timeline row carrying the canonical timestamp only until the final stable ordering is resolved. */
 interface _TimedEntry { readonly occurredAt: string; readonly entry: AgentThreadTimelineEntry }
+
+/** Keep read-through coordinates aligned with roles rendered by the Agent-thread transcript. */
+function _IsRenderedMessage(message: AgentThreadSnapshotDto["messages"][number]): boolean
+{
+	return message.role === "user" || message.role === "assistant";
+}
 
 /** Map the fully validated wire run state without an unchecked assertion. */
 function _RunState(state: AgentThreadSnapshotDto["runs"][number]["state"]): AgentThreadRunStates

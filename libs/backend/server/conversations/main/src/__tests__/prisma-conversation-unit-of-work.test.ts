@@ -152,6 +152,7 @@ describe("PrismaConversationUnitOfWork", function _Suite()
 		expect(snapshot).not.toHaveProperty("participantUserIds");
 		expect(__DecodeConversationProjectionCursor(snapshot?.cursor)).toEqual({ conversationId: "child-1", position: "100" });
 		expect(findMany).toHaveBeenCalledWith(expect.objectContaining({ orderBy: { position: "asc" }, take: 100 }));
+		expect(transaction.conversationTimelineEntry.count).toHaveBeenCalledWith({ where: { conversationId: "child-1", messageId: { not: null }, message: { is: { role: { in: [ConversationMessageRole.User, ConversationMessageRole.Assistant] } } }, position: { gt: 90n } } });
 		expect(transaction.conversationAgentThread.findFirst).toHaveBeenCalledWith(expect.objectContaining({ include: expect.objectContaining({ deliveries: expect.objectContaining({ take: 100 }), childConversation: expect.objectContaining({ select: expect.objectContaining({ runs: expect.objectContaining({ take: 100 }) }) }) }) }));
 	});
 

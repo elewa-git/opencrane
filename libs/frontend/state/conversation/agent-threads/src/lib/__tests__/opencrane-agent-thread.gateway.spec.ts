@@ -33,6 +33,21 @@ describe("OpenCraneAgentThreadGateway", function _Suite()
 		expect(JSON.stringify(snapshot)).not.toContain("user-1");
 	});
 
+	it("does not advance the visible read coordinate through hidden tool or system messages", async function _IgnoresHiddenRoles()
+	{
+		const hiddenMessages =
+		[
+			{ ..._DTO.messages[0], id: "message-tool", position: "4", role: "tool" as const, source: "tool_result" as const, blocks: [{ id: "block-tool", kind: "tool_result" as const, value: "Display-safe tool result" }] },
+			{ ..._DTO.messages[0], id: "message-system", position: "5", role: "system" as const, source: "platform" as const, blocks: [{ id: "block-system", kind: "text" as const, value: "Display-safe system notice" }] }
+		];
+		const GET = vi.fn().mockResolvedValue({ data: { agentThread: { ..._DTO, messageCount: 3, messages: [..._DTO.messages, ...hiddenMessages] } }, error: undefined, response: { status: 200 } });
+
+		const snapshot = await _Gateway({ GET }).read("parent-1", "child-1");
+
+		expect(snapshot.timeline.filter(function _Message(entry) { return entry.kind === "message" })).toHaveLength(1);
+		expect(snapshot.visibleThroughPosition).toBe("2");
+	});
+
 	it("submits one serial follow-up and re-reads the exact pair", async function _Submits()
 	{
 		vi.stubGlobal("crypto", { randomUUID: vi.fn().mockReturnValue("block-1") });

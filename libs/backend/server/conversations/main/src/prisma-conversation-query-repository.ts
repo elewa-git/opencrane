@@ -11,6 +11,8 @@ import type { ConversationCommandContext, ConversationQueryRepository } from "./
 const _MESSAGE_LIMIT = 100;
 const _AGENT_THREAD_RUN_LIMIT = 100;
 const _AGENT_THREAD_DELIVERY_LIMIT = 100;
+/** Persisted roles rendered by the Agent-thread browser transcript and eligible for unread counts. */
+const _AGENT_THREAD_VISIBLE_MESSAGE_ROLES: ConversationMessageRole[] = [ConversationMessageRole.User, ConversationMessageRole.Assistant];
 
 /** Database mode enum to API mode enum. Typed as a complete record, so adding a mode to the schema without mapping it fails the build. */
 const _MODE_BY_PERSISTED_MODE: Readonly<Record<ConversationMode, ConversationModes>> = {
@@ -133,7 +135,7 @@ export class PrismaConversationQueryRepository implements ConversationQueryRepos
 		const entries = timeline.filter(function _MessageEntry(entry) { return entry.messageId !== null && entry.message !== null; });
 		const representedEntries = _RepresentedMessagePrefix(timeline);
 		const latestEntry = await this.prisma.conversationTimelineEntry.findFirst({ where: { conversationId: childConversationId }, orderBy: { position: "desc" }, select: { position: true } });
-		const unreadMessageCount = await this.prisma.conversationTimelineEntry.count({ where: { conversationId: childConversationId, messageId: { not: null }, position: { gt: participant.readThroughPosition } } });
+		const unreadMessageCount = await this.prisma.conversationTimelineEntry.count({ where: { conversationId: childConversationId, messageId: { not: null }, message: { is: { role: { in: _AGENT_THREAD_VISIBLE_MESSAGE_ROLES } } }, position: { gt: participant.readThroughPosition } } });
 		const representedPosition = representedEntries.at(-1)?.position ?? 0n;
 		const latestPosition = latestEntry?.position ?? 0n;
 		const runs = [...thread.childConversation.runs].reverse();
