@@ -17,6 +17,24 @@ Use focused project tasks while editing and the affected graph at a slice gate. 
 changes also require the matching contract scripts under `apps/*/tests` or
 `apps/_infra/deploy-k8s/platform/tests`.
 
+### Remote heavyweight validation
+
+Container-backed validation runs on GitHub Actions, not in a VM created on a developer workstation.
+Agents must never create, start, or restart Colima, Lima, Docker Desktop, Rancher Desktop, or another
+local VM-backed container runtime for repository validation unless the user explicitly requests that
+local runtime in the current task.
+
+- Keep focused validation that does not require a container runtime local.
+- Push the exact scoped commit and use the affected workflow for Docker image smokes, PostgreSQL
+  migration convergence, Storybook browser contracts, and k3d qualification.
+- Use the workflow's `heavy_qualification` dispatch input when an image smoke, k3d smoke, or both must
+  run even though the affected graph would not select them.
+- Bind reported evidence to the tested commit SHA and Actions run URL. A local Docker result is not a
+  substitute for the required remote job.
+
+If a required container-backed target has no Actions owner, wire it into the affected workflow before
+treating the target as a completion gate. Do not fill that CI gap by starting a local VM.
+
 Read [`versioning.md`](./versioning.md) before changing a chart or deploy path. A chart change must
 carry its new app/chart stamp, immutable release-manifest entry, and one-way transition record; an
 explicit no-op is required when upgrade impact was reviewed and no transformation is needed.

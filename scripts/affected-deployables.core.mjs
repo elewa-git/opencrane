@@ -44,6 +44,22 @@ export function selectAffectedDeployables(containerProjects)
 		.map(function _Descriptor(project) { return _ReleaseDescriptor(project); });
 }
 
+/** Selects deterministic image-smoke matrix entries, with explicit manual expansion when requested. */
+export function selectImageSmokeProjects(affectedProjects, allProjects, heavyQualification)
+{
+	if (heavyQualification && !["none", "image-smoke", "k3d", "all"].includes(heavyQualification))
+	{
+		throw new Error(`unsupported FORCE_HEAVY_QUALIFICATION value: ${heavyQualification}`);
+	}
+
+	const selected = heavyQualification === "image-smoke" || heavyQualification === "all"
+		? allProjects
+		: affectedProjects;
+	return [...new Set(selected)]
+		.sort(function _ByName(left, right) { return left.localeCompare(right); })
+		.map(function _MatrixEntry(project) { return { project }; });
+}
+
 /** Determines whether an affected project can change the generated API contract. */
 export function selectApiContractChanged(affectedProjects)
 {

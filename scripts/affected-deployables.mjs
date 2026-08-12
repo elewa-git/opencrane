@@ -3,7 +3,14 @@
 import { execFileSync } from "node:child_process";
 import { appendFileSync } from "node:fs";
 
-import { selectAffectedDeployables, selectApiContractChanged, selectDevelopSmokeRequired, selectForcedContainerProjects, selectGuardInputsChanged } from "./affected-deployables.core.mjs";
+import {
+  selectAffectedDeployables,
+  selectApiContractChanged,
+  selectDevelopSmokeRequired,
+  selectForcedContainerProjects,
+  selectGuardInputsChanged,
+  selectImageSmokeProjects,
+} from "./affected-deployables.core.mjs";
 
 /** Run a command and return trimmed stdout. */
 function _run(command, args)
@@ -16,6 +23,12 @@ function _AffectedProjects(target)
 {
   const targetArguments = target ? [`--withTarget=${target}`] : [];
   return JSON.parse(_run("npx", ["nx", "show", "projects", "--affected", ...targetArguments, "--json"]));
+}
+
+/** Lists all NX projects that own a named target. */
+function _Projects(target)
+{
+  return JSON.parse(_run("npx", ["nx", "show", "projects", `--withTarget=${target}`, "--json"]));
 }
 
 function _ContainerProjects()
@@ -55,6 +68,11 @@ if (!base || !head)
 const affectedProjects = _AffectedProjects();
 const affectedContainerProjects = _ContainerProjects();
 const deployables = selectAffectedDeployables(affectedContainerProjects.map(function _Config(project) { return _Project(project); }));
+const imageSmokes = selectImageSmokeProjects(
+  _AffectedProjects("image-smoke"),
+  _Projects("image-smoke"),
+  process.env.FORCE_HEAVY_QUALIFICATION,
+);
 const changedFiles = _run("git", ["diff", "--name-only", base, head]).split("\n").filter(Boolean);
 
 const apiContractChanged = selectApiContractChanged(affectedProjects);
@@ -65,6 +83,8 @@ _output("nx_base", base);
 _output("nx_head", head);
 _output("deployables", JSON.stringify({ include: deployables }));
 _output("has_deployables", String(deployables.length > 0));
+_output("image_smokes", JSON.stringify({ include: imageSmokes }));
+_output("has_image_smokes", String(imageSmokes.length > 0));
 _output("api_contract_changed", String(apiContractChanged));
 _output("develop_smoke_required", String(developSmokeRequired));
 _output("guard_inputs_changed", String(guardInputsChanged));
