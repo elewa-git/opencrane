@@ -22,31 +22,52 @@ export interface RequestRunCancellationCommand
 	readonly requestedBy: string;
 }
 
-/** Stable categories returned by durable cancellation authority. */
+/**
+ * What happened when someone asked to cancel a run.
+ *
+ * Cancelling a run is two jobs, and this status says which of them is left. First the database
+ * marks the run so no further work is accepted, which always succeeds or fails outright. Second,
+ * if a Kubernetes Job may already exist for the run, that Job has to be deleted — and that part
+ * happens later, in a separate worker pass. So `Cancelling` means "stopped, cleanup still owed"
+ * and `Cancelled` means "stopped, nothing left to delete". A caller that treats them as the same
+ * thing will report a run as fully torn down while its pod is still running.
+ *
+ * The values are the wire form the HTTP layer returns to the caller who asked for the cancellation.
+ * @see RequestRunCancellationResult for the payload carried with each status.
+ * @see RunCancellationConflictReasons for why a `Conflict` was refused.
+ */
 export enum RunCancellationResultStatuses
 {
-	/** The run is fenced while physical cleanup remains. */
+	/** The run is stopped, but a Kubernetes Job may still exist and cleanup is owed. */
 	Cancelling = "cancelling",
-	/** The run reached its final cancelled state without pending cleanup. */
+	/** The run is stopped and there is nothing left to delete. */
 	Cancelled = "cancelled",
-	/** The exact cancellation was already applied. */
+	/** This same cancellation already happened, so nothing changed. Safe to retry into. */
 	Idempotent = "idempotent",
-	/** No run exists for the supplied identifier. */
+	/** No run exists with that id. */
 	NotFound = "not_found",
-	/** Current durable authority rejected the cancellation. */
+	/** The run exists but cannot be cancelled right now. */
 	Conflict = "conflict",
 }
 
-/** Stable reasons durable cancellation authority can reject a request. */
+/**
+ * Why a cancellation was refused.
+ *
+ * Each reason is a different problem for the caller. `AttemptConflict` and `TerminalRun` mean the
+ * caller was working from a stale view of the run and should re-read it; `InvalidRequest` means the
+ * command itself was malformed and retrying it unchanged will fail the same way; `AuthorityConflict`
+ * means the run's own database rows disagreed, which is a server-side problem, not the caller's.
+ * @see RunCancellationResultStatuses.Conflict which carries one of these.
+ */
 export enum RunCancellationConflictReasons
 {
-	/** The supplied command is syntactically or semantically invalid. */
+	/** The command was malformed: a missing id, or an attempt number that is not a positive integer. */
 	InvalidRequest = "invalid_request",
-	/** The run has moved to a newer attempt. */
+	/** The run has since started a newer attempt, so the attempt the caller named is no longer current. */
 	AttemptConflict = "attempt_conflict",
-	/** The run already finished. */
+	/** The run already finished, so there is nothing to cancel. */
 	TerminalRun = "terminal_run",
-	/** Required durable facts did not agree under the cancellation fence. */
+	/** The run's own rows disagreed while cancelling, so nothing was changed. */
 	AuthorityConflict = "authority_conflict",
 }
 
@@ -148,17 +169,78 @@ export type ConfirmRunWorkloadCleanupResult =
 	| { readonly status: "idempotent"; readonly runId: string; readonly attempt: number; readonly runFinalized: boolean }
 	| { readonly status: "conflict"; readonly reason: "invalid_confirmation" | "claim_not_found" | "stale_claim" | "claim_terminal" | "authority_conflict" };
 
-/** Run-domain persistence port for cancellation and exact workload cleanup. */
+/**
+ * Every database write involved in stopping a run and deleting the Job it left behind.
+ *
+ * The methods are the steps of one flow, in order. A user cancels a run, which stops it and may
+ * queue cleanup ({@link requestCancellationAtomically}). A background worker then picks up that
+ * cleanup one item at a time ({@link claimNextWorkloadCleanupAtomically}), deletes the Job through
+ * Kubernetes, and reports back what it found ({@link confirmWorkloadCleanupAtomically}). The two
+ * odd ones out are {@link deferUnassignedOrphanAbsenceAtomically}, which handles a Job that might
+ * still be mid-creation, and {@link repairNextExpiredRunAtomically}, which cleans up after a runtime
+ * that died without saying so.
+ *
+ * Every method name ends in `Atomically` for a reason: each one does all of its work in a single
+ * database transaction. Two workers running the same method at once must not both win, so callers
+ * may run them concurrently and act on the returned status rather than locking beforehand.
+ *
+ * Called by: `_RequestSelfRunCancellation` (a user cancelling their own run),
+ * `__CreateRuntimeWorkloadCleanupUseCase` (the cleanup worker), and `_StartBackgroundWorkers` in
+ * apps/opencrane (the expired-runtime repair loop).
+ *
+ * @see PrismaRunCancellationRepository — the only implementation.
+ * @see _CreateRunCancellationAuthority — builds it for the running process.
+ */
 export interface RunCancellationRepository
 {
-	/** Fences one current attempt and schedules cleanup when physical work may exist. */
+	/**
+	 * Stops the run the caller named, and queues Job cleanup if a Job may exist.
+	 *
+	 * @param command - Run to stop, the attempt the caller believes is current, and who asked.
+	 * @returns `cancelling` when cleanup is still owed, `cancelled` when nothing is left to delete,
+	 * `idempotent` when this already happened, `not_found`, or `conflict` with a reason.
+	 * @see RunCancellationResultStatuses for what the caller must do with each status.
+	 */
 	requestCancellationAtomically(command: RequestRunCancellationCommand): Promise<RequestRunCancellationResult>;
-	/** Claims one eligible cleanup event under a database lease generation. */
+	/**
+	 * Takes ownership of the next Job that needs deleting, for a limited time.
+	 *
+	 * The claim is leased rather than permanent, so a worker that crashes mid-delete does not strand
+	 * the item: after `claimLeaseMilliseconds` another worker may claim the same one.
+	 *
+	 * @returns `claimed` with the Job's identity and the lease, or `none` when no cleanup is due.
+	 */
 	claimNextWorkloadCleanupAtomically(): Promise<ClaimNextRunWorkloadCleanupResult>;
-	/** Confirms exact deletion or authoritative absence and finalises Cancelling when applicable. */
+	/**
+	 * Records that the Job was deleted, or was confirmed already gone, and finishes the run if that
+	 * was the last thing it was waiting on.
+	 *
+	 * @param eventId - Cleanup item being confirmed, from the claim.
+	 * @param command - The lease this worker holds, plus what Kubernetes actually reported.
+	 * @returns `confirmed`, `idempotent` if another worker got there first, or `conflict` when the
+	 * lease is no longer valid — in which case this worker must stop and not retry.
+	 */
 	confirmWorkloadCleanupAtomically(eventId: string, command: ConfirmRunWorkloadCleanupCommand): Promise<ConfirmRunWorkloadCleanupResult>;
-	/** Persist a first orphan absence and defer its required second observation horizon. */
+	/**
+	 * Records a first sighting of a missing Job without acting on it yet, and schedules a second look.
+	 *
+	 * A Job that is absent right now may simply not have been created yet, because the create call can
+	 * still be in flight. Deleting the run's record on one sighting would race that create and leave a
+	 * pod nobody owns, so absence must be seen twice, `orphanObservationMarginMilliseconds` apart.
+	 *
+	 * @param eventId - Cleanup item being deferred.
+	 * @param claim - The lease this worker holds.
+	 * @returns `deferred` once the second look is scheduled, or `conflict` if the lease went stale.
+	 */
 	deferUnassignedOrphanAbsenceAtomically(eventId: string, claim: RunWorkloadCleanupClaim): Promise<"deferred" | "conflict">;
-	/** Fence and terminalise one expired registered runtime attempt without trusting runtime output. */
+	/**
+	 * Finishes one run whose runtime stopped reporting, using only what the database already knows.
+	 *
+	 * A runtime holds a lease while it works. If that lease expires the runtime is gone, but its run
+	 * is still sitting in a running state. This ends that run. Nothing the dead runtime produced is
+	 * trusted here, because a runtime that missed its lease cannot be asked what it managed to do.
+	 *
+	 * @returns `repaired` with the run it ended, or `none` when no lease has expired.
+	 */
 	repairNextExpiredRunAtomically(): Promise<RepairExpiredRunResult>;
 }

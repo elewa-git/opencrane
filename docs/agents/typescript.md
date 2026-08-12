@@ -295,6 +295,40 @@ parameter types), and only after grepping to confirm the exact exported name exi
  */
 ```
 
+### Exported types, classes and methods get heavy JSDoc
+
+A one-line label is not documentation. **Prioritise rich JSDoc on exported methods, classes, and
+types** — these are what another engineer meets first, and hovering one must be enough to use it
+correctly without opening the implementation. Give context, not a restatement of the name:
+
+- **What it does**, in plain words.
+- **Why it exists / when you hit it** — the situation that produces this, and what a caller must do
+  differently for each outcome. This is the part that is usually missing.
+- **Who calls it** — a `Called by:` line naming the real callers for an exported function or port.
+  Grep for them; never guess. It is the fastest way for a reader to find the flow this sits in.
+- **The tags**: `@param`, `@returns`, `@throws`, `@see`, `@implements`, `@deprecated`. Use
+  `@throws` whenever the function can throw, and `@returns` to spell out what each outcome means —
+  not just its type, which the signature already gives.
+- `{@link Other}` inline when naming a sibling member the reader will want next.
+
+```typescript
+// WRONG — a label. The reader still has to open the implementation to use this.
+/** Stable categories returned by durable cancellation authority. */
+export enum RunCancellationResultStatuses
+
+// CORRECT — the distinction that actually matters, and what happens if you get it wrong
+/**
+ * What happened when someone asked to cancel a run.
+ *
+ * Cancelling is two jobs, and this status says which is left: the database marks the run stopped,
+ * and then any Kubernetes Job it created has to be deleted by a later worker pass. So `Cancelling`
+ * means "stopped, cleanup still owed" and `Cancelled` means "stopped, nothing left to delete". A
+ * caller that treats them as the same will report a run as torn down while its pod still runs.
+ * @see RequestRunCancellationResult for the payload carried with each status.
+ */
+export enum RunCancellationResultStatuses
+```
+
 ### Document each enum member so hover is enough
 
 A reader hovering a member must learn what it means and what data it carries, without opening the
