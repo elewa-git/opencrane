@@ -53,7 +53,7 @@ model Conversation {
   /// Real database append time for display. Lifecycle or context updates do not advance it.
   updatedAt            DateTime                      @default(now()) @map("updated_at")
   /// Global database allocation order for list sorting. Rollbacks may leave gaps; commit order does not rewrite it.
-  activitySequence              BigInt                          @unique @default(autoincrement()) @map("activity_sequence")
+  activitySequence     BigInt                        @default(autoincrement()) @unique @map("activity_sequence")
   participants         ConversationParticipant[]
   messages             ConversationMessage[]
   runEvents            ConversationRunEvent[]
