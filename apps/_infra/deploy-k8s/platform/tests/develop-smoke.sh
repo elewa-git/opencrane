@@ -23,6 +23,10 @@ CNPG_CHART_VERSION="${CNPG_CHART_VERSION:-0.29.0}"
 KEY_DIR=""
 CSI_DIR=""
 
+# Every image this script builds carries this label so teardown can prune exactly the run's
+# images (current tags + layers orphaned by earlier runs) without touching anything else.
+SMOKE_IMAGE_LABEL="opencrane.develop-smoke=true"
+
 POSTGRES_CREDENTIALS_SECRET="develop-smoke-opencrane-postgres"
 OBOT_POSTGRES_CREDENTIALS_SECRET="develop-smoke-obot-postgres"
 LITELLM_POSTGRES_CREDENTIALS_SECRET="develop-smoke-litellm-postgres"
@@ -70,6 +74,37 @@ _diagnostics()
   echo "[develop-smoke] ===== end diagnostics ====="
 }
 
+# Remove everything the run left in the Docker daemon: the cluster, any node containers a
+# killed earlier run stranded, their named + anonymous volumes, and the label-scoped images.
+# Without this, repeated smoke runs accumulate multi-GB writable layers and dangling image
+# layers until the Docker VM disk fills.
+_teardown_cluster_storage()
+{
+  local containers volumes volume
+  containers="$(docker ps -aq --filter "name=^k3d-${CLUSTER_NAME}-" 2>/dev/null || true)"
+  volumes=""
+  if [[ -n "$containers" ]]; then
+    # shellcheck disable=SC2086
+    volumes="$(docker inspect --format \
+      '{{range .Mounts}}{{if eq .Type "volume"}}{{.Name}}{{"\n"}}{{end}}{{end}}' \
+      $containers 2>/dev/null || true)"
+  fi
+  k3d cluster delete "$CLUSTER_NAME" >/dev/null 2>&1 || true
+  if [[ -n "$containers" ]]; then
+    # shellcheck disable=SC2086
+    docker rm -f -v $containers >/dev/null 2>&1 || true
+  fi
+  while IFS= read -r volume; do
+    [[ -z "$volume" ]] && continue
+    docker volume rm "$volume" >/dev/null 2>&1 || true
+  done <<< "$volumes"
+  while IFS= read -r volume; do
+    [[ -z "$volume" ]] && continue
+    docker volume rm "$volume" >/dev/null 2>&1 || true
+  done < <(docker volume ls -q --filter "name=k3d-${CLUSTER_NAME}" 2>/dev/null || true)
+  docker image prune --all --force --filter "label=${SMOKE_IMAGE_LABEL}" >/dev/null 2>&1 || true
+}
+
 _cleanup()
 {
   local exit_code=$?
@@ -85,7 +120,7 @@ _cleanup()
   if [[ "$KEEP_CLUSTER" == "1" ]]; then
     echo "[develop-smoke] KEEP_CLUSTER=1; leaving '$CLUSTER_NAME' running"
   else
-    k3d cluster delete "$CLUSTER_NAME" >/dev/null 2>&1 || true
+    _teardown_cluster_storage
   fi
   return "$exit_code"
 }
@@ -95,7 +130,8 @@ _build_image()
   local image="$1"
   local dockerfile="$2"
   echo "[develop-smoke] Building $image"
-  _retry 3 docker build --file "$ROOT_DIR/$dockerfile" --tag "$image" "$ROOT_DIR"
+  _retry 3 docker build --file "$ROOT_DIR/$dockerfile" --tag "$image" \
+    --label "$SMOKE_IMAGE_LABEL" "$ROOT_DIR"
 }
 
 _import_image()
@@ -271,6 +307,11 @@ _assert_ingress_health()
 }
 
 trap _cleanup EXIT
+# Bash skips the EXIT trap on untrapped fatal signals — an interrupted run would strand the
+# k3d node containers and their multi-GB writable layers. Route the signals through exit.
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 for command in curl docker git helm k3d kubectl openssl; do _require_command "$command"; done
 docker info >/dev/null 2>&1 || { echo "[develop-smoke] Docker daemon is not reachable." >&2; exit 1; }
