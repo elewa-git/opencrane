@@ -13,7 +13,7 @@ import io
 import re
 import unicodedata
 import zipfile
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Literal, TypedDict
 
@@ -229,20 +229,6 @@ def openai_container_file_references(event: object) -> tuple[OpenAIContainerFile
         if not all(isinstance(value, str) and value for value in (container_id, file_id, filename)):
             raise OpenAIGeneratedOutputError("generated file reference is invalid")
         references.append(OpenAIContainerFileReference(container_id, file_id, filename))
-    return tuple(references)
-
-
-def collect_openai_container_file_references(events: Iterable[object]) -> tuple[OpenAIContainerFileReference, ...]:
-    """Collect unique final file references in provider response order."""
-    references: list[OpenAIContainerFileReference] = []
-    seen: set[tuple[str, str]] = set()
-    for event in events:
-        for reference in openai_container_file_references(event):
-            identity = (reference.container_id, reference.file_id)
-            if identity in seen:
-                continue
-            seen.add(identity)
-            references.append(reference)
     return tuple(references)
 
 

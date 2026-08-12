@@ -13,7 +13,6 @@ from src.model_loop.openai_generated_outputs import (
     OpenAIGeneratedOutputCollector as _Collector,
     OpenAIGeneratedOutputError as _OutputError,
     classify_generated_output_media as _classify_media,
-    collect_openai_container_file_references as _collect_references,
     openai_container_file_references as _references,
     openai_generated_output_configuration as _configuration,
     retrieve_openai_generated_outputs as _retrieve_outputs,
@@ -74,7 +73,7 @@ class OpenAIAnnotationBoundaryTests(unittest.TestCase):
 
         self.assertEqual(_references(partial), ())
         self.assertEqual(
-            _collect_references([partial, final, final]),
+            _references(final),
             (_Reference("container-private", "file-private", "report.pdf"),),
         )
 
