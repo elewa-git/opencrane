@@ -1,3 +1,11 @@
+const DEVELOP_SMOKE_IMAGES = [
+	"artifact-service",
+	"channel-proxy",
+	"memory-gateway",
+	"opencrane",
+	"opencrane-ui",
+];
+
 /**
  * Returns the publish descriptor owned by one container target.
  *
@@ -42,6 +50,38 @@ export function selectAffectedDeployables(containerProjects)
 	return [...containerProjects]
 		.sort(function _ByName(left, right) { return left.name.localeCompare(right.name); })
 		.map(function _Descriptor(project) { return _ReleaseDescriptor(project); });
+}
+
+/**
+ * Returns the complete image set required by the current-silo smoke.
+ *
+ * Release repositories and Dockerfiles remain app-owned target metadata. The local aliases are
+ * smoke-only names consumed by the disposable values profile.
+ *
+ * @param {object[]} containerProjects Every project that owns a container target.
+ * @returns {{ project: string, image: string, dockerfile: string }[]} Complete deterministic image set.
+ * @throws {Error} When a required current-silo owner or its release metadata is absent.
+ */
+export function selectDevelopSmokeImages(containerProjects)
+{
+	const projectsByName = new Map(containerProjects.map(function _ByName(project) { return [project.name, project]; }));
+	return DEVELOP_SMOKE_IMAGES.map(function _SmokeImage(projectName) {
+		const project = projectsByName.get(projectName);
+		if (!project)
+		{
+			throw new Error(`current-silo smoke project '${projectName}' must own a container target`);
+		}
+		return _ReleaseDescriptor(project);
+	});
+}
+
+/** Selects current-silo image owners whose transitive production inputs changed. */
+export function selectDevelopSmokeProjects(affectedContainerProjects)
+{
+	const smokeProjects = new Set(DEVELOP_SMOKE_IMAGES);
+	return [...new Set(affectedContainerProjects)]
+		.filter(function _CurrentSilo(project) { return smokeProjects.has(project); })
+		.sort(function _ByName(left, right) { return left.localeCompare(right); });
 }
 
 /**
@@ -90,11 +130,36 @@ export function selectGuardInputsChanged(changedFiles)
 }
 
 /** Determines whether a pull request changed the live deployment surface exercised by k3d. */
-export function selectDevelopSmokeRequired(changedFiles)
+export function selectDevelopSmokeRequired(changedFiles, affectedSmokeProjects = [])
 {
-	return changedFiles.some(function _DevelopSmokeInput(file) {
+	return affectedSmokeProjects.length > 0 || changedFiles.some(function _DevelopSmokeInput(file) {
 		return file.startsWith("apps/_infra/deploy-k8s/")
 			|| (file.startsWith("apps/") && (file.includes("/helm/") || file.includes("/deploy/")))
 			|| file === ".github/workflows/docker.yml";
 	});
+}
+
+/**
+ * Selects fast storage for ordinary PRs and the expansion proof for storage-sensitive changes.
+ *
+ * Protected develop pushes and explicit manual k3d qualification always retain the full clean
+ * storage proof. A pull request pays for it only when it can change that proof or the production
+ * storage/deployment owner.
+ */
+export function selectDevelopSmokeStorageMode(changedFiles, eventName, ref, heavyQualification)
+{
+	if ((eventName === "push" && ref === "refs/heads/develop")
+		|| (eventName === "workflow_dispatch" && ["k3d", "all"].includes(heavyQualification)))
+	{
+		return "full";
+	}
+
+	const fullStorageRequired = changedFiles.some(function _StorageProofInput(file) {
+		return file === ".github/workflows/docker.yml"
+			|| file.startsWith("apps/postgres/")
+			|| file === "apps/_infra/deploy-k8s/deploy.sh"
+			|| file === "apps/_infra/deploy-k8s/platform/k8s-deploy.sh"
+			|| file.startsWith("apps/_infra/deploy-k8s/platform/tests/develop-smoke");
+	});
+	return fullStorageRequired ? "full" : "fast";
 }

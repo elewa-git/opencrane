@@ -2,8 +2,8 @@
 set -euo pipefail
 
 # Blocking current-silo smoke for develop. This deliberately stays smaller than the retired
-# backup/recovery qualification: it proves the checked-out app images, production deploy entrypoint,
-# current umbrella chart, database authority boundary, TLS ingress, and every enabled Deployment.
+# backup/recovery qualification: it proves Nx-affected app images plus digest-validated baseline
+# images, the production deploy entrypoint, database authority, TLS, and enabled Deployments.
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../../.." && pwd)"
 CLUSTER_NAME="${CLUSTER_NAME:-opencrane-develop-smoke}"
@@ -20,6 +20,10 @@ TIMEOUT_SECONDS="${TIMEOUT_SECONDS:-300}"
 K3S_IMAGE="${K3S_IMAGE:-rancher/k3s:v1.30.10-k3s1}"
 CERT_MANAGER_VERSION="${CERT_MANAGER_VERSION:-v1.15.1}"
 CNPG_CHART_VERSION="${CNPG_CHART_VERSION:-0.29.0}"
+SMOKE_AFFECTED_PROJECTS="${SMOKE_AFFECTED_PROJECTS-all}"
+SMOKE_BASE_SHA="${SMOKE_BASE_SHA:-}"
+SMOKE_REGISTRY="${SMOKE_REGISTRY:-ghcr.io/elewa-git}"
+SMOKE_STORAGE_MODE="${SMOKE_STORAGE_MODE:-full}"
 KEY_DIR=""
 CSI_DIR=""
 
@@ -134,6 +138,44 @@ _build_image()
     --label "$SMOKE_IMAGE_LABEL" "$ROOT_DIR"
 }
 
+_project_is_affected()
+{
+  local project="$1"
+  [[ "$SMOKE_AFFECTED_PROJECTS" == "all" \
+    || ",${SMOKE_AFFECTED_PROJECTS}," == *",${project},"* ]]
+}
+
+_pull_baseline_image()
+{
+  local image="$1"
+  local local_image="$2"
+  local remote_repository="${SMOKE_REGISTRY}/${image}"
+  local remote_ref digest
+  [[ "$SMOKE_BASE_SHA" =~ ^[0-9a-f]{7,40}$ ]] || return 1
+  remote_ref="${remote_repository}:sha-${SMOKE_BASE_SHA}"
+  digest="$(docker buildx imagetools inspect "$remote_ref" 2>/dev/null \
+    | awk '$1 == "Digest:" { print $2; exit }')"
+  [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]] || return 1
+  echo "[develop-smoke] Reusing $image from validated base $SMOKE_BASE_SHA at $digest"
+  _retry 3 docker pull "${remote_repository}@${digest}"
+  docker tag "${remote_repository}@${digest}" "$local_image"
+}
+
+_prepare_image()
+{
+  local project="$1"
+  local local_image="$2"
+  local remote_image="$3"
+  local dockerfile="$4"
+  if _project_is_affected "$project"; then
+    echo "[develop-smoke] Nx selected $project for rebuild"
+    _build_image "$local_image" "$dockerfile"
+  elif ! _pull_baseline_image "$remote_image" "$local_image"; then
+    echo "[develop-smoke] No validated base image for $project; rebuilding safely"
+    _build_image "$local_image" "$dockerfile"
+  fi
+}
+
 _import_image()
 {
   local image="$1"
@@ -223,6 +265,16 @@ EOF
   kubectl wait --for=jsonpath='{.status.capacity.storage}'=128Mi \
     pvc/develop-smoke-expansion --timeout="${TIMEOUT_SECONDS}s"
   kubectl delete pod/develop-smoke-expansion pvc/develop-smoke-expansion --wait=true
+}
+
+_select_fast_test_storage()
+{
+  # The fast tier proves a fresh deployment, not driver expansion. Its disposable StorageClass
+  # declares the production preflight shape; the protected full tier above proves the driver
+  # actually performs the expansion.
+  kubectl patch storageclass local-path --type=merge -p '{"allowVolumeExpansion":true}' >/dev/null
+  SMOKE_STORAGE_CLASS="local-path"
+  echo "[develop-smoke] Fast storage mode uses k3d local-path without the expansion exercise"
 }
 
 _wait_for_job()
@@ -315,12 +367,21 @@ trap 'exit 143' TERM
 
 for command in curl docker git helm k3d kubectl openssl; do _require_command "$command"; done
 docker info >/dev/null 2>&1 || { echo "[develop-smoke] Docker daemon is not reachable." >&2; exit 1; }
+if [[ "$SMOKE_STORAGE_MODE" != "fast" && "$SMOKE_STORAGE_MODE" != "full" ]]; then
+  echo "[develop-smoke] SMOKE_STORAGE_MODE must be 'fast' or 'full', got '$SMOKE_STORAGE_MODE'." >&2
+  exit 1
+fi
 
-_build_image opencrane/opencrane-server:develop-smoke apps/opencrane/deploy/Dockerfile
-_build_image opencrane/opencrane-ui:develop-smoke apps/opencrane-ui/deploy/Dockerfile
-_build_image opencrane/channel-proxy:develop-smoke apps/channel-proxy/deploy/Dockerfile
-_build_image opencrane/memory-gateway:develop-smoke apps/memory-gateway/deploy/Dockerfile
-_build_image opencrane/artifact-service:develop-smoke apps/artifact-service/deploy/Dockerfile
+_prepare_image opencrane opencrane/opencrane-server:develop-smoke \
+  opencrane-server apps/opencrane/deploy/Dockerfile
+_prepare_image opencrane-ui opencrane/opencrane-ui:develop-smoke \
+  opencrane-ui apps/opencrane-ui/deploy/Dockerfile
+_prepare_image channel-proxy opencrane/channel-proxy:develop-smoke \
+  opencrane-channel-proxy apps/channel-proxy/deploy/Dockerfile
+_prepare_image memory-gateway opencrane/memory-gateway:develop-smoke \
+  opencrane-memory-gateway apps/memory-gateway/deploy/Dockerfile
+_prepare_image artifact-service opencrane/artifact-service:develop-smoke \
+  opencrane-artifact-service apps/artifact-service/deploy/Dockerfile
 
 echo "[develop-smoke] Creating disposable k3d cluster '$CLUSTER_NAME'"
 k3d cluster delete "$CLUSTER_NAME" >/dev/null 2>&1 || true
@@ -333,7 +394,12 @@ _import_image opencrane/memory-gateway:develop-smoke
 _import_image opencrane/artifact-service:develop-smoke
 
 echo "[develop-smoke] Installing external cluster prerequisites"
-_install_expandable_test_storage
+if [[ "$SMOKE_STORAGE_MODE" == "full" ]]; then
+  _install_expandable_test_storage
+  SMOKE_STORAGE_CLASS="csi-hostpath-sc"
+else
+  _select_fast_test_storage
+fi
 helm repo add jetstack https://charts.jetstack.io --force-update >/dev/null
 helm upgrade --install cert-manager jetstack/cert-manager \
   --namespace cert-manager --create-namespace --version "$CERT_MANAGER_VERSION" \
@@ -377,7 +443,7 @@ export TIMEOUT_SECONDS
   --release-version "$(jq -r '.version' "$ROOT_DIR/package.json")" \
   --from-release-version fresh \
   --image-tag develop-smoke \
-  --storage-class csi-hostpath-sc \
+  --storage-class "$SMOKE_STORAGE_CLASS" \
   --postgres-credentials-secret "$POSTGRES_CREDENTIALS_SECRET" \
   --obot-postgres-credentials-secret "$OBOT_POSTGRES_CREDENTIALS_SECRET" \
   --litellm-postgres-credentials-secret "$LITELLM_POSTGRES_CREDENTIALS_SECRET" \
@@ -396,4 +462,4 @@ kubectl wait --for=condition=Ready certificate/opencrane-clustertenant-tls \
 _assert_database_isolation
 _assert_ingress_health
 
-echo "[develop-smoke] PASS: current silo, database isolation, TLS ingress, and all enabled workloads are healthy"
+echo "[develop-smoke] PASS: current silo, database isolation, TLS ingress, all enabled workloads, and $SMOKE_STORAGE_MODE storage qualification are healthy"

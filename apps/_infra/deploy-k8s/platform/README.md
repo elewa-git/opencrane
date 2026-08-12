@@ -23,12 +23,13 @@ local source consumer.
 | `values/` | Reusable environment and multi-instance deployment profiles. |
 | `tests/` | Rendered contract checks plus the blocking disposable-k3d current-silo smoke used on `develop`. |
 
-`tests/develop-smoke.sh` exercises the real silo deploy entrypoint with images built from the checked
-out commit. It supplies only disposable OIDC and database credentials, installs pinned cert-manager,
-CloudNativePG, and the CI-only expandable hostpath CSI driver, then fails on any enabled workload,
-database-isolation, Certificate, or TLS `/healthz` failure. Set `KEEP_CLUSTER=1` for local diagnosis.
-It is intentionally a smoke gate: backup/restore and production storage, DNS, and transport remain
-separate live qualifications.
+`tests/develop-smoke.sh` exercises the real silo deploy entrypoint. It rebuilds Nx-affected images
+from the checkout and resolves unaffected owners from the exact digest of the last validated image
+set. Both tiers install pinned cert-manager and CloudNativePG and fail on workload, database,
+Certificate, or TLS health. Ordinary pull requests use fast local-path storage; `develop`, explicit
+k3d dispatches, and storage-sensitive changes install the pinned expandable hostpath CSI driver and
+exercise expansion. Set `KEEP_CLUSTER=1` for local diagnosis. Backup/restore and production storage,
+DNS, and transport remain separate live qualifications.
 
 Business logic does not belong here. Server-process infrastructure belongs in `libs/backend/server/infra`;
 backend capabilities belong in `libs/backend/server`; independently owned third-party workloads

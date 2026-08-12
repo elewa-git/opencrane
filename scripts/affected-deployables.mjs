@@ -6,7 +6,10 @@ import { appendFileSync } from "node:fs";
 import {
   selectAffectedDeployables,
   selectApiContractChanged,
+  selectDevelopSmokeImages,
+  selectDevelopSmokeProjects,
   selectDevelopSmokeRequired,
+  selectDevelopSmokeStorageMode,
   selectForcedContainerProjects,
   selectGuardInputsChanged,
   selectImageSmokeProjects,
@@ -66,8 +69,12 @@ if (!base || !head)
 }
 
 const affectedProjects = _AffectedProjects();
-const affectedContainerProjects = _ContainerProjects();
-const deployables = selectAffectedDeployables(affectedContainerProjects.map(function _Config(project) { return _Project(project); }));
+const affectedContainerProjects = _AffectedProjects("container");
+const publishContainerProjects = _ContainerProjects();
+const allContainerProjects = _Projects("container").map(function _Config(project) { return _Project(project); });
+const deployables = selectAffectedDeployables(publishContainerProjects.map(function _Config(project) { return _Project(project); }));
+const developSmokeImages = selectDevelopSmokeImages(allContainerProjects);
+const developSmokeProjects = selectDevelopSmokeProjects(affectedContainerProjects);
 const imageSmokes = selectImageSmokeProjects(
   _AffectedProjects("image-smoke"),
   _Projects("image-smoke"),
@@ -76,7 +83,13 @@ const imageSmokes = selectImageSmokeProjects(
 const changedFiles = _run("git", ["diff", "--name-only", base, head]).split("\n").filter(Boolean);
 
 const apiContractChanged = selectApiContractChanged(affectedProjects);
-const developSmokeRequired = selectDevelopSmokeRequired(changedFiles);
+const developSmokeRequired = selectDevelopSmokeRequired(changedFiles, developSmokeProjects);
+const developSmokeStorageMode = selectDevelopSmokeStorageMode(
+  changedFiles,
+  process.env.GITHUB_EVENT_NAME,
+  process.env.GITHUB_REF,
+  process.env.FORCE_HEAVY_QUALIFICATION,
+);
 const guardInputsChanged = selectGuardInputsChanged(changedFiles);
 
 _output("nx_base", base);
@@ -85,6 +98,9 @@ _output("deployables", JSON.stringify({ include: deployables }));
 _output("has_deployables", String(deployables.length > 0));
 _output("image_smokes", JSON.stringify({ include: imageSmokes }));
 _output("has_image_smokes", String(imageSmokes.length > 0));
+_output("develop_smoke_images", JSON.stringify({ include: developSmokeImages }));
+_output("develop_smoke_projects", developSmokeProjects.join(","));
 _output("api_contract_changed", String(apiContractChanged));
 _output("develop_smoke_required", String(developSmokeRequired));
+_output("develop_smoke_storage_mode", developSmokeStorageMode);
 _output("guard_inputs_changed", String(guardInputsChanged));

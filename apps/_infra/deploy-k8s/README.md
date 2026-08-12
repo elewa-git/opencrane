@@ -132,11 +132,11 @@ package imports it.
 - `npx nx run deploy-k8s:test` and `npx nx run deploy-k8s:helm-lint` build a disposable copy from
   the committed `Chart.lock`, linked to the current app-owned chart sources. They therefore validate
   the release contract without rewriting the tracked `charts/*.tgz` archives.
-- `npx nx run deploy-k8s:develop-smoke` creates a disposable k3d cluster, builds the five enabled
-  OpenCrane-owned workload images from the checkout, installs the current silo through `deploy.sh`,
-  and fails unless PostgreSQL isolation, every enabled Deployment, the self-signed Certificate, and
-  the TLS `/healthz` ingress are healthy. CI runs it for deployment-surface pull requests and every
-  push to `develop`; it never substitutes for backup/recovery or production-cluster qualification.
+- `npx nx run deploy-k8s:develop-smoke` creates a disposable k3d cluster, rebuilds Nx-affected
+  OpenCrane workloads and reuses digest-validated baseline images for unaffected owners, then
+  installs the silo through `deploy.sh`. Ordinary pull requests use fast local-path storage;
+  storage-sensitive changes, manual k3d qualification, and every `develop` push also prove pinned
+  expandable storage. Neither tier substitutes for backup/recovery or production qualification.
 
 ## Sub-docs (the deep detail)
 
