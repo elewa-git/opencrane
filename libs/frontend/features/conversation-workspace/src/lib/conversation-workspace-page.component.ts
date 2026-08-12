@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, ElementRef, afterRenderEffect, effect, input, output, signal, viewChild } from "@angular/core";
+import { ChangeDetectionStrategy, Component, ElementRef, ViewChild, afterRenderEffect, effect, input, output, signal } from "@angular/core";
 import { ButtonModule } from "primeng/button";
 import { MessageModule } from "primeng/message";
 
@@ -29,14 +29,17 @@ export class ConversationWorkspacePageComponent extends ConversationWorkspacePre
 	public readonly stepUpRequested = output<string>();
 	/** Keeps a route selection and the component-scoped store aligned. */
 	private readonly _routeSelectionEffect = effect(this._OpenRouteSelection.bind(this));
-	/** Access-change heading rendered after private conversation state is purged. */
-	private readonly _accessChangedHeading = viewChild<ElementRef<HTMLHeadingElement>>("accessChangedHeading");
-	/** Moves keyboard focus to the access-change explanation when it appears. */
-	private readonly _accessChangedFocusEffect = effect(this._FocusAccessChangedHeading.bind(this));
 	/** Restores focus after the app reports that verified sign-in has completed. */
 	private readonly _elicitationFocusEffect = afterRenderEffect(this._RestoreElicitationFocus.bind(this));
 	/** Polite result of following an Activity deep link. */
 	protected readonly activityAnnouncement = signal("");
+
+	/** Move focus when Angular creates the access-change explanation. */
+	@ViewChild("accessChangedHeading")
+	private set _AccessChangedHeading(heading: ElementRef<HTMLHeadingElement> | undefined)
+	{
+		if (this.store.routeState() === ConversationWorkspaceRouteStates.AccessChanged && heading !== undefined) globalThis.queueMicrotask(function _FocusHeading() { heading.nativeElement.focus(); });
+	}
 
 	/** Open one rail selection before asking the app to update the URL. */
 	protected async openConversation(conversationId: string): Promise<void>
@@ -80,13 +83,6 @@ export class ConversationWorkspacePageComponent extends ConversationWorkspacePre
 		const conversationId = this.conversationId();
 		if (this.store.routeState() !== this.routeStates.Ready) return;
 		if (conversationId !== null && this.store.selected()?.id !== conversationId) void this.open(conversationId);
-	}
-
-	/** Focus the access-change heading after Angular places it in the page. */
-	private _FocusAccessChangedHeading(): void
-	{
-		const heading = this._accessChangedHeading();
-		if (this.store.routeState() === ConversationWorkspaceRouteStates.AccessChanged && heading !== undefined) heading.nativeElement.focus();
 	}
 
 	/** Focus the original ask after recovery adopted its current server projection. */

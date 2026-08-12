@@ -5,7 +5,7 @@ import { ConversationEventStreamStatuses, type ConversationEventStream, type Str
 import { __CreateAgUiStreamState, type AgUiStreamState } from "@opencrane/state/conversation/ag-ui";
 import { CONVERSATION_ASSETS_GATEWAY } from "@opencrane/state/conversation/assets";
 import { ELICITATION_GATEWAY } from "@opencrane/state/conversation/elicitation";
-import { CONVERSATION_WORKSPACE_EVENT_STREAM, CONVERSATION_WORKSPACE_GATEWAY, ConversationPersonalAgentStatuses, ConversationRunStates, ConversationWorkspaceGatewayError, ConversationWorkspaceGatewayErrorKinds, type ConversationCreationDirectory, type ConversationRun, type ConversationWorkspaceDetail, type ConversationWorkspaceGateway } from "@opencrane/state/conversation/workspace";
+import { CONVERSATION_WORKSPACE_EVENT_STREAM, CONVERSATION_WORKSPACE_GATEWAY, ConversationPersonalAgentStatuses, ConversationRunStates, type ConversationCreationDirectory, type ConversationRun, type ConversationWorkspaceDetail, type ConversationWorkspaceGateway } from "@opencrane/state/conversation/workspace";
 
 import { ConversationWorkspacePageComponent } from "../conversation-workspace-page.component.js";
 
@@ -106,8 +106,8 @@ export const Desktop: Story = { tags: ["visual-test"], decorators: [_Providers(n
 export const Compact: Story = { tags: ["visual-test"], decorators: [_Providers(new _StoryGateway(_Detail()), new _StoryStream(ConversationEventStreamStatuses.Live, __CreateAgUiStreamState()))], parameters: { viewport: { defaultViewport: "mobile1" } } };
 /** Reconnect keeps the last snapshot while explaining that the draft remains local. */
 export const Reconnecting: Story = { tags: ["visual-test"], decorators: [_Providers(new _StoryGateway(_Detail()), new _StoryStream(ConversationEventStreamStatuses.Reconnecting, __CreateAgUiStreamState()))] };
-/** Access loss uses the non-disclosing purged route state. */
-export const AccessChanged: Story = { tags: ["visual-test"], decorators: [_Providers(new _StoryGateway(new ConversationWorkspaceGatewayError(ConversationWorkspaceGatewayErrorKinds.AccessChanged, "This conversation is no longer available.")), new _StoryStream(ConversationEventStreamStatuses.Live, __CreateAgUiStreamState()))] };
+/** Access loss purges a previously visible conversation through its live projection. */
+export const AccessChanged: Story = { tags: ["visual-test"], decorators: [_Providers(new _StoryGateway(_Detail()), new _StoryStream(ConversationEventStreamStatuses.Live, { ...__CreateAgUiStreamState(), accessRevoked: true }))] };
 /** Failed run remains visible with an explicit retry affordance. */
 export const FailedRun: Story = { tags: ["visual-test"], decorators: [_Providers(new _StoryGateway(_Detail(), ConversationRunStates.Failed), new _StoryStream(ConversationEventStreamStatuses.Live, { ...__CreateAgUiStreamState(), runId: "run-1" }))] };
 /** Cancelled run is truthful and offers no unsafe retry. */
