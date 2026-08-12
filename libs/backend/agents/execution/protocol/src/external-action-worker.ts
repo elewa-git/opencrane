@@ -2,7 +2,7 @@ import { ExternalActionClaimKinds, ToolInvocationEventTypes, ToolInvocationState
 import { ___DoWithTrace } from "@opencrane/backend/observability";
 
 import { _ExternalActionRecoveryStrategy } from "./external-action-recovery-strategy.js";
-import { ExternalActionProviderOutcomeKinds, type ExternalActionExecutionContext, type ExternalActionWorkerDependencies, type ExternalActionWorkerInvocation, type PreparedExternalActionAdapter } from "./external-action-worker.types.js";
+import { ExternalActionProviderOutcomeKinds, type ExternalActionExecutionContext, type ExternalActionProviderOutcome, type ExternalActionWorkerDependencies, type ExternalActionWorkerInvocation, type PreparedExternalActionAdapter } from "./external-action-worker.types.js";
 
 /** Safe durable code for a provider-free preparation failure. */
 const _PREPARATION_FAILURE_CODE = "external_action_preparation_failed";
@@ -62,19 +62,35 @@ export class ExternalActionWorker
 		if (invocation === null) return false;
 		return ___DoWithTrace("external_action.worker.run", { runId: invocation.runId, attempt: invocation.attempt, toolInvocationId: invocation.toolInvocationId, state: invocation.state, recoveryMode: invocation.recoveryMode }, async function _run()
 		{
-			if (invocation.state === ToolInvocationStates.Preparing) return _prepare(invocation, now, dependencies);
-			if (invocation.state === ToolInvocationStates.AwaitingApproval) return _openApproval(invocation, now, dependencies);
-			if (invocation.state === ToolInvocationStates.Ready) return _execute(invocation, ExternalActionClaimKinds.Dispatch, now, dependencies);
-			if (invocation.state === ToolInvocationStates.Reconciling) return _execute(invocation, ExternalActionClaimKinds.Reconcile, now, dependencies);
-			if (invocation.state === ToolInvocationStates.Claimed)
+			switch (invocation.state)
 			{
-				await dependencies.invocations.recoverExpiredClaim(invocation.id, now);
-				dependencies.log.warn({ runId: invocation.runId, attempt: invocation.attempt, toolInvocationId: invocation.toolInvocationId, recoveryMode: invocation.recoveryMode, failureKind: "external_action_expired_claim" }, "external action claim expired before a durable outcome");
-				return true;
+				case ToolInvocationStates.Preparing: return _prepare(invocation, now, dependencies);
+				case ToolInvocationStates.AwaitingApproval: return _openApproval(invocation, now, dependencies);
+				case ToolInvocationStates.Ready: return _execute(invocation, ExternalActionClaimKinds.Dispatch, now, dependencies);
+				case ToolInvocationStates.Reconciling: return _execute(invocation, ExternalActionClaimKinds.Reconcile, now, dependencies);
+				case ToolInvocationStates.Claimed: return _recoverExpiredClaim(invocation, now, dependencies);
+				// Succeeded, Failed, and RecoveryRequired are finished: the worker leaves them alone.
+				default: return false;
 			}
-			return false;
 		});
 	}
+}
+
+/**
+ * Rebuilds the run context and its provider adapter, touching no provider.
+ *
+ * Both the preparing and the claiming path need exactly this, and both need it to fail loudly:
+ * a mismatched snapshot or an adapter that cannot honour the invocation's frozen recovery mode
+ * must stop the invocation before any request could go out. Throws `_PREPARATION_FAILURE_CODE`.
+ */
+async function _rebuildAdapter(invocation: ExternalActionWorkerInvocation, dependencies: ExternalActionWorkerDependencies): Promise<{ readonly context: ExternalActionExecutionContext; readonly adapter: PreparedExternalActionAdapter }>
+{
+	// Load the frozen snapshot so mutable runtime state cannot stand in for authority.
+	const context = await dependencies.contexts.load(invocation.runId, invocation.attempt);
+	if (context === null || !_contextMatchesInvocation(context, invocation)) throw new Error(_PREPARATION_FAILURE_CODE);
+	const adapter = dependencies.adapters.prepare(invocation, context);
+	if (adapter.recoveryMode !== invocation.recoveryMode) throw new Error(_PREPARATION_FAILURE_CODE);
+	return { context, adapter };
 }
 
 /** Complete provider-free preparation or consume one bounded preparation attempt. */
@@ -84,16 +100,10 @@ async function _prepare(invocation: ExternalActionWorkerInvocation, now: Date, d
 	let prepared: ToolInvocationRecord | null;
 	try
 	{
-		// 1. Load the canonical immutable snapshot so mutable runtime state cannot replace authority.
-		const loadedContext = await dependencies.contexts.load(invocation.runId, invocation.attempt);
-		if (loadedContext === null || !_contextMatchesInvocation(loadedContext, invocation)) throw new Error(_PREPARATION_FAILURE_CODE);
-		context = loadedContext;
+		// 1. Rebuild the context and adapter first; neither step may start a provider request.
+		context = (await _rebuildAdapter(invocation, dependencies)).context;
 
-		// 2. Construct the adapter before changing state; this step must not start a provider request.
-		const adapter = dependencies.adapters.prepare(invocation, context);
-		if (adapter.recoveryMode !== invocation.recoveryMode) throw new Error(_PREPARATION_FAILURE_CODE);
-
-		// 3. Mark the invocation ready or awaiting approval only after all provider-free work succeeds.
+		// 2. Mark the invocation ready or awaiting approval only after all provider-free work succeeds.
 		prepared = await dependencies.invocations.markPrepared(invocation.id, invocation.revision, now);
 	}
 	catch
@@ -126,16 +136,12 @@ async function _openApproval(invocation: ExternalActionWorkerInvocation, now: Da
 /** Acquire one monotonic claim, invoke its frozen strategy, and commit only a definite outcome. */
 async function _execute(invocation: ExternalActionWorkerInvocation, kind: ExternalActionClaimKinds, now: Date, dependencies: ExternalActionWorkerDependencies): Promise<boolean>
 {
-	// 1. Rebuild the provider adapter before claiming; an adapter-construction failure cannot strand
-	// provider work in Claimed because no provider operation has started.
-	let context: ExternalActionExecutionContext | null;
+	// 1. Rebuild the adapter before claiming. A failure here cannot strand provider work in Claimed,
+	// because no provider operation has started yet.
 	let adapter: PreparedExternalActionAdapter;
 	try
 	{
-		context = await dependencies.contexts.load(invocation.runId, invocation.attempt);
-		if (context === null || !_contextMatchesInvocation(context, invocation)) throw new Error(_PREPARATION_FAILURE_CODE);
-		adapter = dependencies.adapters.prepare(invocation, context);
-		if (adapter.recoveryMode !== invocation.recoveryMode) throw new Error(_PREPARATION_FAILURE_CODE);
+		adapter = (await _rebuildAdapter(invocation, dependencies)).adapter;
 	}
 	catch
 	{
@@ -145,20 +151,12 @@ async function _execute(invocation: ExternalActionWorkerInvocation, kind: Extern
 	// 2. Persist the exact provider-operation fence before the adapter may start any request.
 	const claimed = await dependencies.invocations.claim(invocation.id, kind, now, dependencies.policy.providerClaimLeaseMilliseconds);
 	if (claimed.outcome !== "claimed") return claimed.outcome === "winner";
-	try
-	{
-		await dependencies.events.append({ runId: invocation.runId, attempt: invocation.attempt, eventType: ToolInvocationEventTypes.Started, payload: { toolInvocationId: invocation.toolInvocationId } });
-	}
-	catch
-	{
-		await dependencies.invocations.releaseClaimBeforeDispatch(claimed.claim, dependencies.clock.now());
-		dependencies.log.warn({ runId: invocation.runId, attempt: invocation.attempt, toolInvocationId: invocation.toolInvocationId, claimFence: claimed.claim.fence, failureKind: "external_action_start_event_unavailable" }, "external action claim released before provider dispatch");
-		return true;
-	}
+	if (!await _announceStart(invocation, claimed.claim, dependencies)) return true;
 
-	// 3. Execute the frozen recovery strategy. A thrown adapter call is ambiguous because this layer
-	// cannot prove whether a provider request crossed the transport boundary.
-	let outcome;
+	// 3. Run the frozen recovery strategy. Only this call is caught: a thrown adapter call is
+	// ambiguous because this layer cannot prove whether the request crossed the transport boundary.
+	// A later commit failure must stay loud, so it is deliberately left outside the catch.
+	let outcome: ExternalActionProviderOutcome;
 	try
 	{
 		outcome = await _ExternalActionRecoveryStrategy(invocation.recoveryMode).execute(adapter, claimed.invocation, claimed.claim);
@@ -169,19 +167,49 @@ async function _execute(invocation: ExternalActionWorkerInvocation, kind: Extern
 		return true;
 	}
 
-	// 4. Commit only a provider-originated definite result; payloads never enter logs or spans.
-	if (outcome.kind === ExternalActionProviderOutcomeKinds.Succeeded)
+	// 4. Commit the proven outcome.
+	await _commitProviderOutcome(outcome, invocation, claimed.claim, claimed.invocation, dependencies);
+	return true;
+}
+
+/** Publish the started event, releasing the claim if it fails so no request goes out unannounced. */
+async function _announceStart(invocation: ExternalActionWorkerInvocation, claim: ToolInvocationClaim, dependencies: ExternalActionWorkerDependencies): Promise<boolean>
+{
+	try
 	{
-		await dependencies.invocations.completeSucceeded(claimed.claim, outcome.result, dependencies.clock.now());
+		await dependencies.events.append({ runId: invocation.runId, attempt: invocation.attempt, eventType: ToolInvocationEventTypes.Started, payload: { toolInvocationId: invocation.toolInvocationId } });
 		return true;
 	}
-	if (outcome.kind === ExternalActionProviderOutcomeKinds.Failed)
+	catch
 	{
-		await dependencies.invocations.completeFailed(claimed.claim, outcome.failureCode, dependencies.clock.now());
-		dependencies.log.warn({ runId: invocation.runId, attempt: invocation.attempt, toolInvocationId: invocation.toolInvocationId, recoveryMode: invocation.recoveryMode, claimKind: claimed.claim.kind, failureKind: outcome.failureCode }, "external action provider returned a definite failure");
-		return true;
+		await dependencies.invocations.releaseClaimBeforeDispatch(claim, dependencies.clock.now());
+		dependencies.log.warn({ runId: invocation.runId, attempt: invocation.attempt, toolInvocationId: invocation.toolInvocationId, claimFence: claim.fence, failureKind: "external_action_start_event_unavailable" }, "external action claim released before provider dispatch");
+		return false;
 	}
-	await _completeAmbiguous(claimed.claim, claimed.invocation, dependencies);
+}
+
+/** Commit only a result the provider itself returned; payloads never enter logs or spans. */
+async function _commitProviderOutcome(outcome: ExternalActionProviderOutcome, invocation: ExternalActionWorkerInvocation, claim: ToolInvocationClaim, claimedInvocation: ToolInvocationRecord, dependencies: ExternalActionWorkerDependencies): Promise<void>
+{
+	switch (outcome.kind)
+	{
+		case ExternalActionProviderOutcomeKinds.Succeeded:
+			await dependencies.invocations.completeSucceeded(claim, outcome.result, dependencies.clock.now());
+			return;
+		case ExternalActionProviderOutcomeKinds.Failed:
+			await dependencies.invocations.completeFailed(claim, outcome.failureCode, dependencies.clock.now());
+			dependencies.log.warn({ runId: invocation.runId, attempt: invocation.attempt, toolInvocationId: invocation.toolInvocationId, recoveryMode: invocation.recoveryMode, claimKind: claim.kind, failureKind: outcome.failureCode }, "external action provider returned a definite failure");
+			return;
+		default:
+			await _completeAmbiguous(claim, claimedInvocation, dependencies);
+	}
+}
+
+/** Apply recovery policy to a claim whose lease ran out before any durable outcome landed. */
+async function _recoverExpiredClaim(invocation: ExternalActionWorkerInvocation, now: Date, dependencies: ExternalActionWorkerDependencies): Promise<boolean>
+{
+	await dependencies.invocations.recoverExpiredClaim(invocation.id, now);
+	dependencies.log.warn({ runId: invocation.runId, attempt: invocation.attempt, toolInvocationId: invocation.toolInvocationId, recoveryMode: invocation.recoveryMode, failureKind: "external_action_expired_claim" }, "external action claim expired before a durable outcome");
 	return true;
 }
 

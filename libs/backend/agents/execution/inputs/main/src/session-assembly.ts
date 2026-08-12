@@ -136,7 +136,7 @@ function _canonicalIntegrationAssignments(assignments: readonly RunInputSnapshot
 		.sort(function _byIntegration(left, right): number { return left.integrationId.localeCompare(right.integrationId); });
 }
 
-/** Canonicalises one assignment's tool definitions: cloned schemas, name-sorted. */
+/** Copies one integration's tools into a fixed order so the same tools always digest the same. */
 function _canonicalToolDefinitions(toolDefinitions: RunInputSnapshotIntegrationAssignment["toolDefinitions"]): RunInputSnapshotIntegrationAssignment["toolDefinitions"]
 {
 	return [...toolDefinitions]
