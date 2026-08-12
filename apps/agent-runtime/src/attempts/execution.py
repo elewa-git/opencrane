@@ -104,8 +104,6 @@ def execute_start_attempt(
                     # response cannot become a late candidate.
                     break
                 projector.emit(neutral_event)
-                if projector.has_pending_elicitations:
-                    break
             if cancel_event.is_set():
                 clear_model_history(str(coordinates["runId"]), int(coordinates["attempt"]))
                 clear_pending_elicitations(str(coordinates["runId"]), int(coordinates["attempt"]))
@@ -263,8 +261,6 @@ def execute_resume_attempt(
                     # A resume is subject to the same late-output suppression as a fresh attempt.
                     break
                 projector.emit(neutral_event)
-                if projector.has_pending_elicitations:
-                    break
             if cancel_event.is_set():
                 clear_model_history(str(coordinates["runId"]), int(coordinates["attempt"]))
                 clear_pending_elicitations(str(coordinates["runId"]), int(coordinates["attempt"]))
