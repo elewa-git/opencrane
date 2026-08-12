@@ -468,4 +468,13 @@ describe("persona onboarding shell orchestration", function _PersonaOnboardingSh
 		expect(_navigateByUrl).toHaveBeenCalledWith("/onboarding");
 	});
 
+	it("routes an already completed onboarding authority directly to chats", async function _CompletedRoute()
+	{
+		const ready = _ReviewSnapshot("revision-1", PersonaOnboardingStates.Ready);
+		_loadRouteState.mockResolvedValue(_RouteSnapshot(UserOnboardingRouteStates.Completed));
+		await _RenderShell(ready);
+
+		await vi.waitFor(function _WorkspaceSelected() { expect(_navigateByUrl).toHaveBeenCalledWith("/chats"); });
+	});
+
 });

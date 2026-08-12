@@ -141,7 +141,7 @@ export class PersonaOnboardingPageComponent
 				void this._router.navigateByUrl("/onboarding/chat");
 				return;
 			case UserOnboardingRouteStates.Completed:
-				void this._router.navigateByUrl("/admin");
+				void this._router.navigateByUrl("/chats");
 				return;
 			case UserOnboardingRouteStates.SurveyPending:
 			case UserOnboardingRouteStates.SurveyInProgress:

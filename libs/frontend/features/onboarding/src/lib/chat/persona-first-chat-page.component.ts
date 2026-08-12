@@ -134,7 +134,7 @@ export class PersonaFirstChatPageComponent
 				void this._router.navigateByUrl("/onboarding");
 				return;
 			case UserOnboardingRouteStates.Completed:
-				void this._router.navigateByUrl("/admin");
+				void this._router.navigateByUrl("/chats");
 				return;
 			case UserOnboardingRouteStates.BootstrapChatPending:
 			case UserOnboardingRouteStates.BootstrapChatInProgress:

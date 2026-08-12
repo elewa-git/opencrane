@@ -37,6 +37,9 @@ component-scoped store and a pure snapshot-to-view mapper. The store owns its re
 sequencing, retry identity, conflicts, and question-keyed draft; the routed page owns only typed
 intent delegation and authority-derived navigation. A failed answer retains its exact text and
 idempotency key while the browser can neither select the next question nor assert completion.
+Only a server-confirmed `Completed` state navigates to `/chats`. The normal workspace then reads the
+saved bootstrap coordinate and transcript from the same signed-in authority; this feature never
+invents or copies an onboarding conversation into an ordinary chat mode.
 
 ## Public surface
 

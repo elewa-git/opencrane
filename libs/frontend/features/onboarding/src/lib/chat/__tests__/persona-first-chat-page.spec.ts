@@ -125,7 +125,7 @@ describe("persona first-chat route shell", function _PersonaFirstChatPageSuite()
 
 		_snapshot.set(_Snapshot(UserOnboardingRouteStates.Completed));
 		TestBed.flushEffects();
-		expect(_navigateByUrl).toHaveBeenLastCalledWith("/admin");
+		expect(_navigateByUrl).toHaveBeenLastCalledWith("/chats");
 	});
 
 	it("delegates only an intent matching the currently rendered question", async function _DelegatesCurrentIntent()
