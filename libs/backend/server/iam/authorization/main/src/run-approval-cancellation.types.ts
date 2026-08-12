@@ -16,7 +16,7 @@ export interface CancelPendingRunApprovalAuthorityResult
 {
 	/** Number of Pending approvals transitioned to Cancelled. */
 	readonly cancelledCount: number;
-	/** Number of nonterminal invocations terminalised with an exact cancellation delivery. */
+	/** How many still-open invocations were terminalised, each with its own cancellation result. */
 	readonly failedInvocationCount: number;
 	/** Provider-active claims that must settle before the runs owner may finalize Cancelled. */
 	readonly activeClaimCount: number;
@@ -27,7 +27,7 @@ export interface RunCancellationToolInvocation
 {
 	/** Trusted ToolInvocation database identity. */
 	readonly id: string;
-	/** Runtime-facing tool-call coordinate embedded in the exact delivery. */
+	/** Tool-call id the runtime knows, written into the failure result. */
 	readonly toolInvocationId: string;
 	/** Durable state interpreted by the exhaustive cancellation event planner. */
 	readonly state: ToolInvocationStates;

@@ -1,7 +1,7 @@
 import type { JsonValue } from "@opencrane/util";
 
 /**
- * Literal, fully hydrated agent input produced deterministically in the control plane.
+ * Agent input with every reference already resolved to a literal value, built in the control plane.
  *
  * A {@link RunInputSnapshot} holds only immutable ID references plus a `promptCompilerVersion`. The
  * TypeScript prompt compiler dereferences those records into this literal payload — persona
@@ -11,7 +11,7 @@ import type { JsonValue } from "@opencrane/util";
  */
 export interface CompiledRunInput
 {
-	/** Deterministic prompt-compiler version that produced and must consume this payload. */
+	/** Version of the prompt compiler that built this payload; the runtime must be on the same version. */
 	readonly promptCompilerVersion: string;
 	/** Run this compiled input belongs to. */
 	readonly runId: string;
@@ -21,7 +21,7 @@ export interface CompiledRunInput
 	readonly instructions: string;
 	/** Ordered conversation turns compiled from the snapshot's message references. */
 	readonly messages: readonly CompiledMessage[];
-	/** Tool schemas the bounded model loop may propose, ordered canonically by name. */
+	/** Tool schemas the model loop may call, sorted by name. */
 	readonly tools: readonly CompiledToolDefinition[];
 	/** Resolved model route carrying no provider credential. */
 	readonly model: CompiledModelRoute;
@@ -45,15 +45,15 @@ export interface CompiledToolDefinition
 {
 	/** Stable tool name the model selects. */
 	readonly name: string;
-	/** Immutable tool revision the proposal is fixed to for later authorization. */
+	/** Tool revision this call is pinned to, so authorization later checks the same revision. */
 	readonly toolRevisionId: string;
 	/** Human-readable tool description compiled from its revision. */
 	readonly description: string;
 	/** Whether an invocation of this tool must pause for a deferred human approval before dispatch. */
 	readonly requiresApproval: boolean;
-	/** JSON-Schema parameters object validated by the adapter, never by an implicit retry. */
+	/** JSON-Schema for the tool's parameters. The adapter validates against it; a retry never re-validates on its own. */
 	readonly parametersSchema: JsonValue;
-	/** Canonical digest binding the exact parameters schema to revision and snapshot authority. */
+	/** Digest of the parameters schema, proving it matches the pinned revision and the run snapshot. @see RunInputSnapshot */
 	readonly parametersSchemaDigest: string;
 }
 
@@ -66,7 +66,7 @@ export interface CompiledModelRoute
 	readonly maxOutputTokens: number | null;
 }
 
-/** Literal aggregate limits OpenCrane enforces over the bounded loop. */
+/** Limits OpenCrane enforces across the whole attempt. */
 export interface CompiledBudget
 {
 	/** Maximum total tokens across the attempt, or null when uncapped. */

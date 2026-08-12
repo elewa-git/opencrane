@@ -13,17 +13,17 @@ export const AG_UI_A2UI_ENVELOPE_VERSION = "opencrane.a2ui.v1";
 /** Version of the lossy governed-child update carried inside a parent run stream. */
 export const AG_UI_CHILD_RUN_ENVELOPE_VERSION = "opencrane.child_run.v1";
 
-/** Cursorless custom marker that authoritatively clears the current open-interrupt overlay. */
+/** Custom event name telling the browser to clear the open-interrupt overlay. It carries no cursor, so Last-Event-ID never advances past it. */
 export const AG_UI_INTERRUPTS_CLEARED_EVENT = "opencrane.interrupts_cleared";
 
-/** Display-safe custom marker for one canonical tool failure that may precede later model work. */
+/** Custom event name for a failed tool call. The run may continue afterwards, so this is not a terminal event. */
 export const AG_UI_TOOL_FAILURE_EVENT = "opencrane.tool_failed";
 
-/** Display-safe custom marker for a cancellable run whose provider outcome needs recovery. */
+/** Custom event name for a run whose provider outcome is unknown and needs a manual recovery step. The run can still be cancelled. */
 export const AG_UI_TOOL_RECOVERY_REQUIRED_EVENT = "opencrane.tool_recovery_required";
 
 /**
- * Authoritative browser presentation lifecycle for one governed A2UI surface.
+ * The display states the server assigns to one A2UI surface in the browser.
  *
  * These serialized values describe display state only. They never authorize an action, infer a
  * canonical run transition, or let the browser select the next state.
@@ -32,7 +32,7 @@ export enum AgUiA2uiSurfaceStates
 {
 	/** Ordered surface operations are still arriving. */
 	Streaming = "streaming",
-	/** The authoritative projection declares the surface ready for a displayed action. */
+	/** The server says the surface is ready for the user to act on. */
 	Ready = "ready",
 	/** One displayed action awaits authoritative server admission. */
 	ActionPending = "action_pending",
@@ -40,7 +40,7 @@ export enum AgUiA2uiSurfaceStates
 	Submitted = "submitted",
 	/** The server rejected submitted values as invalid. */
 	ValidationError = "validation_error",
-	/** The authoritative action path failed without claiming success. */
+	/** The action failed on the server; nothing was recorded as successful. */
 	ActionFailed = "action_failed",
 	/** The server-declared action window expired. */
 	Expired = "expired",
@@ -48,14 +48,14 @@ export enum AgUiA2uiSurfaceStates
 	AlreadyUsed = "already_used",
 	/** The current actor is not authorized to use the displayed action. */
 	Unauthorized = "unauthorized",
-	/** The admitted surface cannot be rendered by this client. */
+	/** The surface passed validation but this client cannot render it. */
 	Unsupported = "unsupported",
 }
 
-/** One strictly admitted A2UI surface operation. */
+/** An A2UI surface operation that passed strict validation. */
 export type AgUiA2uiOperation = { readonly beginRendering: BeginRenderingMessage } | { readonly surfaceUpdate: SurfaceUpdateMessage } | { readonly dataModelUpdate: DataModelUpdate };
 
-/** Browser-safe A2UI projection. It carries presentation coordinates, never action authority. */
+/** Browser-safe A2UI payload. It carries display ids only, and never permission to act. */
 export interface AgUiA2uiEnvelope
 {
 	readonly version: typeof AG_UI_A2UI_ENVELOPE_VERSION;
@@ -69,10 +69,10 @@ export interface AgUiA2uiEnvelope
 	readonly reason?: string;
 }
 
-/** Terminal state of one governed child as observed by its immediate parent. */
+/** How a child run ended, as reported to its immediate parent run. */
 export type AgUiChildRunState = "completed" | "failed" | "cancelled";
 
-/** Lossy child update that deliberately excludes child context and sibling data. */
+/** Child-run update sent to the parent. It deliberately leaves out the child's own context and any sibling data. */
 export interface AgUiChildRunEnvelope
 {
 	readonly version: typeof AG_UI_CHILD_RUN_ENVELOPE_VERSION;
@@ -87,41 +87,41 @@ export interface AgUiChildRunEnvelope
 /** Display-safe technical classification for one failed tool call. */
 export interface AgUiToolFailureEnvelope
 {
-	/** Canonical source event name; it carries no action or retry authority. */
+	/** Name of the source run event. It gives the browser no permission to act or retry. */
 	readonly eventType: "tool.failed";
-	/** Stable public tool-call coordinate already introduced by TOOL_CALL_START. */
+	/** Tool-call id the client already saw on TOOL_CALL_START. */
 	readonly toolCallId: string;
-	/** Optional server-selected classification from the fixed safe vocabulary. */
+	/** Optional failure code the server picks from a fixed safe list. */
 	readonly failureCode?: string;
 }
 
-/** Fixed safe causes a provider effect can remain unresolved after dispatch began. */
+/** The reasons a provider call can be left in an unknown state after it was sent. */
 export enum AgUiToolRecoveryProviderOutcomes
 {
-	/** Dispatch began but no trusted success or failure acknowledgement survived. */
+	/** The call was sent, but no trusted success or failure reply reached us. */
 	UnknownAfterDispatch = "unknown_after_dispatch",
-	/** A dispatch claim expired after provider dispatch may have begun. */
+	/** The claim lease expired after the provider call may already have been sent. */
 	ClaimLeaseExpired = "claim_lease_expired",
-	/** Trusted provider readback could not establish a terminal outcome. */
+	/** Re-reading state from the provider still did not show whether the call succeeded or failed. */
 	ReconciliationInconclusive = "reconciliation_inconclusive",
 }
 
-/** Exact browser-safe projection of one durable manual-recovery requirement. */
+/** Browser-safe payload telling the user a stored run needs a manual recovery step. */
 export interface AgUiToolRecoveryRequiredEnvelope
 {
 	/** Canonical source event; this is not a failure, terminal, or elicitation event. */
 	readonly eventType: "tool.recovery_required";
-	/** Public run coordinate already visible in the conversation stream. */
+	/** Run id the client already saw in the conversation stream. */
 	readonly runId: string;
-	/** Attempt fence a cancellation request must still match. */
+	/** Attempt number a cancellation request must still match to be accepted. */
 	readonly expectedAttempt: number;
-	/** Stable public tool-call coordinate already introduced by TOOL_CALL_START. */
+	/** Tool-call id the client already saw on TOOL_CALL_START. */
 	readonly toolCallId: string;
 	/** Canonical event instant from the durable run-event row. */
 	readonly occurredAt: string;
-	/** Fixed user-action category; it grants no retry or provider authority. */
+	/** Fixed category of user action needed. It gives the client no permission to retry or to call the provider. */
 	readonly recoveryCategory: "manual_action_required";
-	/** Provider-free preparation attempts consumed before dispatch began. */
+	/** How many preparation attempts were used before any provider call was sent. */
 	readonly preparationRetryCount: number;
 	/** Fixed provider-free preparation attempt limit. */
 	readonly preparationRetryLimit: 3;
@@ -129,7 +129,7 @@ export interface AgUiToolRecoveryRequiredEnvelope
 	readonly providerOutcome?: AgUiToolRecoveryProviderOutcomes;
 }
 
-/** Safe, user-facing fragments selected by the server-owned event reader. */
+/** The safe, user-facing fields the server-side event reader chose to include. */
 export interface AgUiPublicEventPayload
 {
 	readonly messageId?: string;
@@ -148,10 +148,10 @@ export interface AgUiPublicEventPayload
 	readonly toolRecovery?: Omit<AgUiToolRecoveryRequiredEnvelope, "runId" | "occurredAt">;
 }
 
-/** One already-authorized canonical event made safe for protocol projection. */
+/** A stored run event that was already authorized and stripped of unsafe fields, ready to project to AG-UI. */
 export interface AgUiProjectionSourceEvent
 {
-	/** Durable cursor selected by the server-owned replay reader; overlays intentionally omit it. */
+	/** Replay cursor chosen by the server-side reader. Overlay events leave it out on purpose so Last-Event-ID does not advance. */
 	readonly cursor?: string;
 	readonly conversationId: ConversationId;
 	readonly runId?: string;
@@ -161,10 +161,10 @@ export interface AgUiProjectionSourceEvent
 	readonly payload: AgUiPublicEventPayload;
 }
 
-/** Standard events admitted by OpenCrane from the exact-pinned upstream vocabulary. */
+/** The upstream AG-UI standard events OpenCrane accepts, from the pinned event list. */
 export type AgUiProjectionEvent = RunStartedEvent | RunFinishedEvent | RunErrorEvent | TextMessageStartEvent | TextMessageContentEvent | TextMessageEndEvent | ToolCallStartEvent | ToolCallArgsEvent | ToolCallEndEvent | ToolCallResultEvent | CustomEvent;
 
-/** One SSE record ready for a server-owned authorized replay source to write. */
+/** One SSE record, ready for the server's replay endpoint to write to the wire. */
 export interface AgUiSseRecord
 {
 	/** Durable cursor. Open-interrupt overlays omit it so Last-Event-ID never advances. */

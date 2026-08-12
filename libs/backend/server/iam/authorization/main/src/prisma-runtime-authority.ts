@@ -8,7 +8,7 @@ import { __AppendAuditDecision } from "@opencrane/backend/server/iam/audit";
 import { __DigestCanonicalJson } from "./canonical-json-digest.js";
 import type { CapabilityActionFailureResult, CapabilityActionIntent, CapabilityActionReceipt, CapabilityActionReceiptRepository, CapabilityActionReservationResult, CapabilityActionSuccessResult, RuntimeBootstrapClaim, RuntimeBootstrapConsumptionResult, RuntimeBootstrapRepository } from "./runtime-proof.types.js";
 
-/** Maps a completed Prisma receipt to the dependency-light canonical receipt contract. */
+/** Maps a completed Prisma receipt onto the receipt contract, which carries no Prisma types. */
 function _receipt<TResult>(row: { jti: string; requestFingerprint: string; replayMode: string; result: Prisma.JsonValue | null }): CapabilityActionReceipt<TResult>
 {
 	return {
@@ -33,7 +33,7 @@ export class PrismaRuntimeAuthorityRepository implements RuntimeBootstrapReposit
 	/** OpenCrane product-authority database client. */
 	private readonly prisma: PrismaClient;
 
-	/** Creates the runtime authority adapter over canonical Postgres. */
+	/** Creates the runtime authority adapter over the product-authority Postgres database. */
 	constructor(prisma: PrismaClient)
 	{
 		this.prisma = prisma;
@@ -98,7 +98,7 @@ export class PrismaRuntimeAuthorityRepository implements RuntimeBootstrapReposit
 				const existing = await transaction.actionExecutionReceipt.findUnique({ where: { jti: intent.jti } });
 				if (existing !== null) return _existing<TResult>(existing);
 
-				// 2. Resolve the exact registered public proof key; the receipt trigger locks all live authority.
+				// 2. Look up the registered public proof key; a database trigger revalidates the rest.
 				const proofKey = await transaction.runProofKey.findUnique({ where: { keyThumbprint: intent.proofKeyThumbprint } });
 				if (proofKey === null) throw new Error("verified proof key is absent from current authority");
 				const receipt = await transaction.actionExecutionReceipt.create({

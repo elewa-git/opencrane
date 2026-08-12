@@ -68,7 +68,7 @@ export interface OpenDeferredToolApprovalCommand
 	readonly capabilitySetDigest: string;
 	/** Durable ToolInvocation row already awaiting approval creation. */
 	readonly invocationId: string;
-	/** Trusted server instant used for approval creation and failure terminalisation. */
+	/** Server time used both when creating the approval and when terminalising a failure. */
 	readonly now: Date;
 	/** Hard server-owned expiry for the pending approval. */
 	readonly expiresAt: Date;
@@ -77,7 +77,7 @@ export interface OpenDeferredToolApprovalCommand
 /** Transaction-scoped persistence operations used while opening or recovering one approval. */
 export interface DeferredToolApprovalOpenRepository
 {
-	/** Open the approval against the exact transaction-owned workload fence. */
+	/** Creates the approval, checking the run's live workload assignment and proof key on this transaction. */
 	defer(command: DeferToolRequestCommand): Promise<DeferToolRequestResult>;
 	/** Compare-and-set one awaiting-approval invocation to a stable failure and delivery. */
 	terminaliseAwaitingApproval(invocationId: string, failureCode: string, now: Date): Promise<boolean>;

@@ -30,7 +30,7 @@ function _orderedUniqueCapabilities(capabilities: readonly CapabilityReference[]
 	return [...unique.entries()].sort(function _compare(left, right) { return left[0].localeCompare(right[0]); }).map(entry => entry[1]);
 }
 
-/** Evaluates one side of the effective-access intersection. */
+/** Decides one capability for one subject against that subject's own grants. */
 function _decideForSubject(command: ResolveEffectiveAccessCommand, subjectId: string, capability: CapabilityReference, grants: readonly AuthorizationGrant[])
 {
 	const request: AuthorizationRequest = { siloId: command.membership.siloId, subjectId, scope: command.scope, capability, resource: command.resource, nowEpochMs: command.membership.nowEpochMs };

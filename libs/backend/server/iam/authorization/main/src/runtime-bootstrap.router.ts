@@ -73,7 +73,7 @@ export function __CreateRuntimeBootstrapRouter(dependencies: RuntimeBootstrapRou
 	return router;
 }
 
-/** TokenReview one bearer and require one exact runtime namespace and matching identity grammar. */
+/** Checks the bearer token with TokenReview, then requires an allowed runtime namespace and a runtime ServiceAccount name. */
 async function _ReviewIdentity(request: Request, dependencies: RuntimeBootstrapRouterDependencies): Promise<RuntimeBootstrapReviewedIdentity | null>
 {
 	const token = _BearerValue(request.header("authorization"));
@@ -83,7 +83,7 @@ async function _ReviewIdentity(request: Request, dependencies: RuntimeBootstrapR
 	return identity;
 }
 
-/** Accept either bounded runtime class; durable bootstrap evidence fixes which one is authoritative. */
+/** Accepts either runtime ServiceAccount name, agent runtime or managed-agent runtime; the stored bootstrap row decides which one is authoritative. */
 function _IsRuntimeServiceAccountName(value: string): boolean
 {
 	return ___IsAgentRuntimeServiceAccountName(value) || ___IsManagedAgentRuntimeServiceAccountName(value);

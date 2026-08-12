@@ -14,7 +14,7 @@ export const AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE = "opencrane-agent-runtime";
 /**
  * Sole projected-token audience accepted from first-party managed (central) agent runtimes.
  *
- * Deliberately DISTINCT from {@link AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE}: a personal runtime's
+ * Deliberately DIFFERENT from {@link AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE}: a personal runtime's
  * token must never satisfy the managed connector boundary, and vice versa, so the two workload
  * classes cannot borrow each other's network reach or downstream credentials.
  */
@@ -23,13 +23,13 @@ export const MANAGED_AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE = "opencrane-managed
 /**
  * Sole managed-agent workload profile deployed by the initial controller composition.
  *
- * Keeping the value in the shared contract prevents the definition API from admitting a profile
+ * Keeping the value in the shared contract stops the definition API from accepting a profile
  * that the controller can never resolve into an executable workload.
  */
 export const MANAGED_AGENT_RUNTIME_PROFILE_NAME = "managed-default";
 
 /**
- * Return whether a ServiceAccount belongs to the bounded first-party personal-runtime identity class.
+ * Return whether a ServiceAccount name is a personal-agent runtime name.
  * @param value - Kubernetes ServiceAccount name to validate.
  * @returns True only for a valid personal-runtime-prefixed DNS label.
  */
@@ -64,18 +64,18 @@ export type ManagedAgentRuntimeProjectedTokenAudience = typeof MANAGED_AGENT_RUN
 /** Exact workload-profile literal accepted for managed agents by the initial composition. */
 export type ManagedAgentRuntimeProfileName = typeof MANAGED_AGENT_RUNTIME_PROFILE_NAME;
 
-/** Initial message sent by a runtime after it opens its control-plane stream. */
+/** First message a runtime sends after opening its stream to the control plane. */
 export interface RuntimeStreamOpen
 {
 	/** Versioned protocol the runtime is prepared to receive. */
 	readonly protocolVersion: AgentRuntimeProtocolVersion;
 	/** Ephemeral process identifier generated at runtime start. */
 	readonly runtimeInstanceId: string;
-	/** Downward-API pod UID which must agree with the reviewed projected-token identity. */
+	/** Pod UID read from the Kubernetes Downward API. It must match the identity in the runtime's projected token. */
 	readonly podUid: string;
 }
 
-/** Immutable command coordinates shared by every runtime-directed command. */
+/** Header fields present on every command the control plane sends a runtime. */
 export interface RuntimeCommandCoordinates
 {
 	/** Versioned runtime protocol selected by the control plane. */
@@ -86,7 +86,7 @@ export interface RuntimeCommandCoordinates
 	readonly commandId: string;
 	/** Strictly monotonic command sequence for one runtime instance. */
 	readonly sequence: number;
-	/** Server-owned lease fence invalidating frames from older attempts. */
+	/** Server-owned fence number. A runtime must reject any frame whose fence is older than the current one. */
 	readonly fence: number;
 	/** ISO-8601 instant from which this command may be processed. */
 	readonly issuedAt: string;
@@ -96,10 +96,10 @@ export interface RuntimeCommandCoordinates
 	readonly assignment: RuntimeAssignment;
 }
 
-/** Starts one attempt with an exact immutable input snapshot and its compiled literal input. */
+/** Command that starts one attempt. It carries both the run snapshot and the compiled input built from it. @see RunInputSnapshot @see CompiledRunInput */
 export interface StartAttemptCommand
 {
-	/** Canonical snapshot that is the sole runtime input authority. */
+	/** The run snapshot. Nothing else may be used as run input. */
 	readonly snapshot: RunInputSnapshot;
 	/**
 	 * Control-plane-compiled literal input for the bounded model/tool loop. It is opaque to the
@@ -109,23 +109,23 @@ export interface StartAttemptCommand
 	readonly compiledInput: CompiledRunInput;
 }
 
-/** Exact server-owned tool result delivered after provider execution or a terminal refusal. */
+/** A tool result the server produced, either after calling the provider or after refusing the call outright. */
 export type RuntimeToolResult =
 	| { readonly toolInvocationId: string; readonly outcome: "succeeded"; readonly result: JsonValue }
 	| { readonly toolInvocationId: string; readonly outcome: "failed"; readonly failureCode: string };
 
-/** Resumes an attempt only with saved server-owned tool results and steering. */
+/** Command that resumes an attempt. It may carry only stored server-produced tool results and owner steering — nothing else. */
 export interface ResumeAttemptCommand
 {
-	/** Monotonic input generation that must still be current at resume. */
+	/** Input version number. The resume is rejected if it is no longer the current one. */
 	readonly inputGeneration: number;
-	/** Exact ordered tool results whose one-time delivery rows were atomically consumed. */
+	/** Tool results in order. Each one's delivery row was consumed in the same transaction, so it can never be delivered twice. */
 	readonly toolResults: readonly RuntimeToolResult[];
-	/** Owner-authored steering consumed at this server-fenced command boundary. */
+	/** Steering text the owner wrote, delivered once at this fenced command. */
 	readonly steeringRequests: JsonValue;
 }
 
-/** Stops one attempt without allowing the runtime to choose a terminal state. */
+/** Command that stops one attempt. The server decides the final state, not the runtime. */
 export interface CancelAttemptCommand
 {
 	/** Stable server-defined cancellation reason. */
@@ -141,7 +141,7 @@ export type RuntimeCommand =
 /** Complete control-plane command frame sent on the runtime-initiated stream. */
 export type RuntimeCommandEnvelope = RuntimeCommandCoordinates & RuntimeCommand;
 
-/** Coordinates required on every candidate returned by a runtime. */
+/** Header fields required on every candidate a runtime returns. */
 export interface RuntimeCandidateCoordinates
 {
 	/** Versioned runtime protocol spoken by the candidate producer. */
@@ -154,16 +154,16 @@ export interface RuntimeCandidateCoordinates
 	readonly candidateId: string;
 	/** Logical run receiving the candidate. */
 	readonly runId: AgentRunId;
-	/** Attempt whose current fence must accept the candidate. */
+	/** Attempt number this candidate belongs to; its current fence must still match. */
 	readonly attempt: number;
 	/** Server-owned lease fence carried from the accepted command. */
 	readonly fence: number;
 }
 
-/** Runtime-proposed canonical event, never a direct durable write. */
+/** An event the runtime proposes. The control plane decides whether to store it; the runtime never writes directly. */
 export interface RuntimeEventCandidate extends RuntimeCandidateCoordinates
 {
-	/** Candidate category that requires control-plane event admission. */
+	/** Tag marking this candidate as an event the control plane must approve. */
 	readonly kind: "event";
 	/** Proposed canonical event type. */
 	readonly eventType: string;
@@ -171,7 +171,7 @@ export interface RuntimeEventCandidate extends RuntimeCandidateCoordinates
 	readonly payload: JsonValue;
 }
 
-/** Runtime request for an externally authorized action, never a direct tool call. */
+/** A request from the runtime to perform an external action. The control plane authorizes and performs it; the runtime never calls the tool itself. */
 export interface RuntimeExternalActionCandidate extends RuntimeCandidateCoordinates
 {
 	/** Candidate category requiring deferred external-action authorization. */
@@ -182,7 +182,7 @@ export interface RuntimeExternalActionCandidate extends RuntimeCandidateCoordina
 	readonly toolInvocationId: string;
 	/** Digest of normalized and validated action arguments. */
 	readonly argumentsDigest: string;
-	/** Protected argument payload or reference for server-side revalidation. */
+	/** The arguments themselves, or a reference to them, so the server can validate them again. */
 	readonly arguments: JsonValue;
 }
 

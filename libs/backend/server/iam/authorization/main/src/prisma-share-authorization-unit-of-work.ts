@@ -7,7 +7,7 @@ import type { ShareAuthorizationTransaction, ShareAuthorizationUnitOfWork } from
 /** Prisma unit of work that keeps a share decision and its durable grant on one transaction client. */
 export class PrismaShareAuthorizationUnitOfWork implements ShareAuthorizationUnitOfWork
 {
-	/** Canonical product-authority client that starts share transactions. */
+	/** Product-authority client that starts share transactions. */
 	private readonly _prisma: PrismaClient;
 
 	/** Constructs the unit of work around the application-composed authority client. */

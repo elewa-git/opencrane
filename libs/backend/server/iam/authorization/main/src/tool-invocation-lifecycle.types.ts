@@ -10,7 +10,7 @@ export const TOOL_INVOCATION_PREPARATION_POLICY = Object.freeze({ attemptLimit: 
 /** Durable states owned by the external-action ToolInvocation authority. */
 export enum ToolInvocationStates
 {
-	/** Candidate is durable but provider-free preparation has not completed. */
+	/** The invocation is stored, but the work that runs before any provider call is not finished. */
 	Preparing = "preparing",
 	/** Validated invocation is paused for an authenticated approval decision. */
 	AwaitingApproval = "awaiting_approval",
@@ -18,7 +18,7 @@ export enum ToolInvocationStates
 	Ready = "ready",
 	/** One fenced worker owns the provider dispatch attempt. */
 	Claimed = "claimed",
-	/** One fenced worker may use trusted provider readback, never a blind dispatch. */
+	/** One worker may ask the provider what happened, but must not send the action again. */
 	Reconciling = "reconciling",
 	/** Canonical result and its delivery intent are durable. */
 	Succeeded = "succeeded",
@@ -39,7 +39,7 @@ export enum ExternalActionRecoveryModes
 	Manual = "manual",
 }
 
-/** Provider operation protected by the current monotonic invocation claim. */
+/** Which provider operation the current claim allows. */
 export enum ExternalActionClaimKinds
 {
 	/** Claim permits exactly one adapter dispatch call. */
@@ -91,7 +91,7 @@ export enum ToolInvocationLifecycleEvents
 	Cancelled = "cancelled",
 }
 
-/** State-owned persistence decision selected before any strategy code runs. */
+/** The database change to make, chosen before any provider code runs. */
 export enum ToolInvocationLifecycleActions
 {
 	/** Transition provider-free preparation to Ready. */
@@ -100,7 +100,7 @@ export enum ToolInvocationLifecycleActions
 	AwaitApproval = "await_approval",
 	/** Retry internal preparation under the durable attempt/deadline budget. */
 	RetryPreparation = "retry_preparation",
-	/** Terminalise a proven preparation, approval, provider, or cancellation failure. */
+	/** Terminalise a preparation, approval, provider, or cancellation failure that is already confirmed. */
 	Fail = "fail",
 	/** Transition approved work to Ready. */
 	Approve = "approve",
