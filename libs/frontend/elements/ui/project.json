@@ -35,7 +35,9 @@
 				"{workspaceRoot}/libs/frontend/features/onboarding/src/**/*",
 				"{workspaceRoot}/libs/frontend/features/context/src/**/__tests__/*.stories.ts",
 				"{workspaceRoot}/libs/frontend/features/context/src/lib/components/canvas-doc/**/*",
-				"{workspaceRoot}/libs/frontend/features/conversation-assets/src/**/*"
+				"{workspaceRoot}/libs/frontend/features/conversation-assets/src/**/*",
+				"{workspaceRoot}/libs/frontend/features/conversation-activity/src/**/*",
+				"{workspaceRoot}/libs/frontend/features/conversation-elicitation/src/**/*"
 			],
 			"options": {
 				"browserTarget": "frontend-elements-ui:build-storybook",
@@ -66,7 +68,9 @@
 				"{workspaceRoot}/libs/frontend/features/onboarding/src/**/*",
 				"{workspaceRoot}/libs/frontend/features/context/src/**/__tests__/*.stories.ts",
 				"{workspaceRoot}/libs/frontend/features/context/src/lib/components/canvas-doc/**/*",
-				"{workspaceRoot}/libs/frontend/features/conversation-assets/src/**/*"
+				"{workspaceRoot}/libs/frontend/features/conversation-assets/src/**/*",
+				"{workspaceRoot}/libs/frontend/features/conversation-activity/src/**/*",
+				"{workspaceRoot}/libs/frontend/features/conversation-elicitation/src/**/*"
 			],
 			"outputs": [
 				"{options.outputDir}"
