@@ -74,6 +74,26 @@ export function __CreateSelfConversationsRouter(dependencies: SelfConversationsR
 		}
 	});
 
+	router.get("/:parentConversationId/agent-threads/:childConversationId", async function _OpenAgentThread(request: Request, response: Response)
+	{
+		const caller = dependencies.resolveCaller(request);
+		if (caller === null) { response.status(401).json({ error: "conversation_authentication_required" }); return; }
+		const parentConversationId = _parameter(request.params["parentConversationId"]);
+		const childConversationId = _parameter(request.params["childConversationId"]);
+		if (parentConversationId === null || childConversationId === null) { response.status(400).json({ error: "invalid_agent_thread_route" }); return; }
+		try
+		{
+			const agentThread = await dependencies.authority.openAgentThread(caller, parentConversationId, childConversationId);
+			if (agentThread === null) { response.status(404).json({ error: "conversation_unavailable" }); return; }
+			response.status(200).json({ agentThread });
+		}
+		catch (err)
+		{
+			_log(dependencies.logger, err, "conversation.agent_thread.open", caller.siloId);
+			response.status(503).json({ error: "persistence_unavailable" });
+		}
+	});
+
 	router.get("/:conversationId", async function _Open(request: Request, response: Response)
 	{
 		const caller = dependencies.resolveCaller(request);

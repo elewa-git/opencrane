@@ -1,5 +1,5 @@
 import { EventType } from "@ag-ui/core";
-import { AG_UI_A2UI_ENVELOPE_VERSION, AG_UI_CHILD_RUN_ENVELOPE_VERSION, AG_UI_TOOL_FAILURE_EVENT, AG_UI_TOOL_RECOVERY_REQUIRED_EVENT, RunEventTypes, type AgUiProjectionEvent, type AgUiProjectionSourceEvent, type AgUiToolFailureEnvelope, type AgUiToolRecoveryRequiredEnvelope } from "@opencrane/contracts";
+import { AG_UI_A2UI_ENVELOPE_VERSION, AG_UI_AGENT_THREAD_PARENT_DELIVERY_EVENT, AG_UI_CHILD_RUN_ENVELOPE_VERSION, AG_UI_TOOL_FAILURE_EVENT, AG_UI_TOOL_RECOVERY_REQUIRED_EVENT, RunEventTypes, type AgUiProjectionEvent, type AgUiProjectionSourceEvent, type AgUiToolFailureEnvelope, type AgUiToolRecoveryRequiredEnvelope } from "@opencrane/contracts";
 
 /**
  * Turns one display-safe conversation event into the AG-UI events the client receives, in order.
@@ -36,7 +36,7 @@ function _Message(source: AgUiProjectionSourceEvent): readonly AgUiProjectionEve
 /** Pick the most specific standard event whose required fields are present; otherwise fall back to a CUSTOM event. */
 function _Project(source: AgUiProjectionSourceEvent): AgUiProjectionEvent
 {
-	if (source.payload.agentThreadDelivery !== undefined) return { type: EventType.CUSTOM, name: "opencrane.agent_thread_parent_delivery", value: source.payload.agentThreadDelivery };
+	if (source.payload.agentThreadDelivery !== undefined) return { type: EventType.CUSTOM, name: AG_UI_AGENT_THREAD_PARENT_DELIVERY_EVENT, value: source.payload.agentThreadDelivery };
 	switch (source.eventType)
 	{
 		case RunEventTypes.RunAccepted:

@@ -1,19 +1,4 @@
-/** Stable categories allowed to cross from one Agent thread to its immediate parent. */
-export enum AgentThreadDeliveryKinds
-{
-	/** Short progress update with no hidden execution detail. */
-	Status = "status",
-	/** Participant question backed by a recoverable elicitation. */
-	Question = "question",
-	/** Approval request backed by a recoverable elicitation. */
-	Approval = "approval",
-	/** Display-safe result summary. */
-	Result = "result",
-	/** Truthful failure summary that claims no result. */
-	Failure = "failure",
-	/** Reference to an asset that has passed its own release authority. */
-	Asset = "asset",
-}
+import type { AgentThreadDeliveryKinds } from "@opencrane/contracts";
 
 /** Stable public projection event names for Agent-thread parent communication. */
 export enum AgentThreadEventTypes

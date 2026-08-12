@@ -4,7 +4,7 @@ import { Prisma, type PrismaClient } from "@prisma/client";
 
 import { ___DoWithTrace } from "@opencrane/backend/observability";
 
-import type { ConversationCaller, ConversationDetail, ConversationSummary, ConversationUnitOfWork, CreateConversationRequest, CreateConversationResult, MutateConversationResult, SubmitConversationMessageRequest, SubmitConversationMessageResult } from "./conversation-authority.types.js";
+import type { AgentThreadSnapshotView, ConversationCaller, ConversationDetail, ConversationSummary, ConversationUnitOfWork, CreateConversationRequest, CreateConversationResult, MutateConversationResult, SubmitConversationMessageRequest, SubmitConversationMessageResult } from "./conversation-authority.types.js";
 import type { ConversationMessageAdmissionUnitOfWork } from "./conversation-message-admission.types.js";
 import { PrismaConversationMutationRepository } from "./prisma-conversation-mutation-repository.js";
 import type { ConversationMutationRepository } from "./prisma-conversation-mutation-repository.types.js";
@@ -36,7 +36,13 @@ export class PrismaConversationUnitOfWork implements ConversationUnitOfWork
 		return ___DoWithTrace("conversation.open", { siloId: caller.siloId, conversationId }, async () => this._read(function _Open(query) { return query.open(caller, conversationId); }));
 	}
 
-	/** Writes the conversation and its participant rows in one transaction, so a conversation with missing participants cannot be left behind. The mode chosen here can never change. */
+	/** Opens one child Agent-thread read model only through the exact parent-child route pair. */
+	async openAgentThread(caller: ConversationCaller, parentConversationId: string, childConversationId: string): Promise<AgentThreadSnapshotView | null>
+	{
+		return ___DoWithTrace("conversation.agent_thread.open", { siloId: caller.siloId, parentConversationId, childConversationId }, async () => this._read(function _Open(query) { return query.openAgentThread(caller, parentConversationId, childConversationId); }));
+	}
+
+	/** Writes the conversation and participant rows atomically; the selected mode can never change. */
 	async create(caller: ConversationCaller, request: CreateConversationRequest): Promise<CreateConversationResult>
 	{
 		return ___DoWithTrace("conversation.create", { siloId: caller.siloId, mode: request.mode }, async () =>

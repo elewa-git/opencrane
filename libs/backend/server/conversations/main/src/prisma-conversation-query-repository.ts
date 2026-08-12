@@ -1,12 +1,16 @@
-import { AgentRunState, ConversationLifecycle, ConversationMessageRole, ConversationMessageState, ConversationMode, OrgMemberStatus, Prisma } from "@prisma/client";
+import { AgentRunState, AgentThreadDeliveryKind, ConversationLifecycle, ConversationMessageRole, ConversationMessageState, ConversationMode, OrgMemberStatus, Prisma } from "@prisma/client";
 
 import { ConversationLifecycles, ConversationModes, MessageRoles, MessageSources, MessageStates, type MessageContentBlock } from "@opencrane/models/conversations";
+import { AgentThreadDeliveryKinds, type AgentThreadParentDelivery } from "@opencrane/backend/conversations/agent-threads";
+import { __EncodeConversationProjectionCursor } from "@opencrane/backend/conversations/projection";
 
-import type { ConversationCaller, ConversationDetail, ConversationMessageView, ConversationSummary } from "./conversation-authority.types.js";
+import { AgentThreadRunViewStates, type AgentThreadRunView, type AgentThreadSnapshotView, type ConversationCaller, type ConversationDetail, type ConversationMessageView, type ConversationSummary } from "./conversation-authority.types.js";
 import type { ConversationCommandContext, ConversationQueryRepository } from "./prisma-conversation-query-repository.types.js";
 
 /** Maximum message rows returned by one participant-bound open operation. */
 const _MESSAGE_LIMIT = 100;
+const _AGENT_THREAD_RUN_LIMIT = 100;
+const _AGENT_THREAD_DELIVERY_LIMIT = 100;
 
 /** Database mode enum to API mode enum. Typed as a complete record, so adding a mode to the schema without mapping it fails the build. */
 const _MODE_BY_PERSISTED_MODE: Readonly<Record<ConversationMode, ConversationModes>> = {
@@ -94,6 +98,65 @@ export class PrismaConversationQueryRepository implements ConversationQueryRepos
 		};
 	}
 
+	/** Composes one bounded child view from the canonical child, run, and delivery authorities. */
+	async openAgentThread(caller: ConversationCaller, parentConversationId: string, childConversationId: string): Promise<AgentThreadSnapshotView | null>
+	{
+		if (!await this.hasActiveCallerMembership(caller)) return null;
+		const thread = await this.prisma.conversationAgentThread.findFirst({
+			where: {
+				parentConversationId,
+				childConversationId,
+				siloId: caller.siloId,
+				parentConversation: { participants: { some: { userId: caller.subjectId, accessEndedPosition: null } } },
+				childConversation: { participants: { some: { userId: caller.subjectId, accessEndedPosition: null } } },
+			},
+			include: {
+				parentMessage: { select: { blocks: true, createdAt: true } },
+				parentConversation: { select: { participants: { where: { accessEndedPosition: null }, select: { userId: true } } } },
+				childConversation: {
+					select: {
+						lifecycle: true,
+						service: { select: { name: true } },
+						_count: { select: { messages: true, runs: true } },
+						participants: { where: { accessEndedPosition: null }, select: { userId: true, readThroughPosition: true } },
+						runs: { orderBy: [{ acceptedAt: "desc" }, { id: "desc" }], take: _AGENT_THREAD_RUN_LIMIT, select: { id: true, attempt: true, state: true, acceptedAt: true, finishedAt: true } },
+					},
+				},
+				deliveries: { orderBy: [{ createdAt: "desc" }, { id: "desc" }], take: _AGENT_THREAD_DELIVERY_LIMIT },
+			},
+		});
+		if (thread === null || thread.childConversation.service === null) return null;
+		const participant = thread.childConversation.participants.find(function _Caller(row) { return row.userId === caller.subjectId; });
+		if (participant === undefined) return null;
+		const activeParentUserIds = new Set(thread.parentConversation.participants.map(function _ParentUser(row) { return row.userId; }));
+		const entries = await this.prisma.conversationTimelineEntry.findMany({ where: { conversationId: childConversationId, messageId: { not: null } }, include: { message: { include: { invokedAgentThread: true } } }, orderBy: { position: "asc" }, take: _MESSAGE_LIMIT });
+		const latestEntry = await this.prisma.conversationTimelineEntry.findFirst({ where: { conversationId: childConversationId }, orderBy: { position: "desc" }, select: { position: true } });
+		const representedPosition = entries.at(-1)?.position ?? 0n;
+		const latestPosition = latestEntry?.position ?? 0n;
+		const runs = [...thread.childConversation.runs].reverse();
+		const firstRunOrdinal = thread.childConversation._count.runs - runs.length + 1;
+		return {
+			parentConversationId,
+			childConversationId,
+			rootConversationId: thread.rootConversationId,
+			parentMessageId: thread.parentMessageId,
+			agentServiceId: thread.agentServiceId,
+			agentName: thread.childConversation.service.name,
+			ask: _Text(thread.parentMessage.blocks),
+			createdAt: thread.createdAt.toISOString(),
+			lifecycle: _LIFECYCLE_BY_PERSISTED_LIFECYCLE[thread.childConversation.lifecycle],
+			participantCount: thread.childConversation.participants.filter(function _ActiveParent(row) { return activeParentUserIds.has(row.userId); }).length,
+			readThroughPosition: participant.readThroughPosition.toString(10),
+			latestPosition: latestPosition.toString(10),
+			representedThroughPosition: representedPosition.toString(10),
+			messageCount: thread.childConversation._count.messages,
+			cursor: representedPosition === 0n ? null : __EncodeConversationProjectionCursor({ conversationId: childConversationId, position: representedPosition.toString(10) }),
+			messages: entries.flatMap(function _Message(entry): readonly ConversationMessageView[] { return entry.message === null ? [] : [_messageView(entry.message, entry.position)]; }),
+			runs: runs.map(function _Run(run, index): AgentThreadRunView { return { id: run.id, ordinal: firstRunOrdinal + index, attempt: run.attempt, state: _RunState(run.state), acceptedAt: run.acceptedAt.toISOString(), finishedAt: run.finishedAt?.toISOString() ?? null }; }),
+			deliveries: [...thread.deliveries].reverse().map(_Delivery),
+		};
+	}
+
 	/** Loads exact durable mode, lifecycle, binding, and foreground-run strategy facts. */
 	async loadCommandContext(caller: ConversationCaller, conversationId: string): Promise<ConversationCommandContext | null>
 	{
@@ -151,6 +214,43 @@ function _ConversationAccess(caller: ConversationCaller): Prisma.ConversationWhe
 			{ originAgentThread: { is: { parentConversation: { participants: { some: { userId: caller.subjectId, accessEndedPosition: null } } } } } },
 		],
 	};
+}
+
+/** Extract only display-safe participant text from the immutable root message. */
+function _Text(blocks: Prisma.JsonValue): string
+{
+	if (!Array.isArray(blocks)) return "";
+	return blocks.flatMap(function _Block(block): readonly string[]
+	{
+		if (block === null || typeof block !== "object" || Array.isArray(block)) return [];
+		return block["kind"] === "text" && typeof block["value"] === "string" ? [block["value"]] : [];
+	}).join("\n");
+}
+
+/** Map one canonical run state into the finite Agent-thread UI vocabulary. */
+function _RunState(state: AgentRunState): AgentThreadRunView["state"]
+{
+	if (state === AgentRunState.Completed) return AgentThreadRunViewStates.Completed;
+	if (state === AgentRunState.Failed) return AgentThreadRunViewStates.Failed;
+	if (state === AgentRunState.Cancelled) return AgentThreadRunViewStates.Cancelled;
+	if (state === AgentRunState.WaitingForInput) return AgentThreadRunViewStates.Waiting;
+	if (state === AgentRunState.RecoveryRequired) return AgentThreadRunViewStates.Retrying;
+	if (state === AgentRunState.Running || state === AgentRunState.Assigned || state === AgentRunState.Cancelling) return AgentThreadRunViewStates.Working;
+	return AgentThreadRunViewStates.Queued;
+}
+
+/** Map one display-safe delivery without leaking runtime authority coordinates. */
+function _Delivery(row: { id: string; childConversationId: string; parentConversationId: string; runId: string; kind: AgentThreadDeliveryKind; label: string; detail: string; assetId: string | null; createdAt: Date }): AgentThreadParentDelivery
+{
+	const kinds: Readonly<Record<AgentThreadDeliveryKind, AgentThreadDeliveryKinds>> = {
+		[AgentThreadDeliveryKind.Status]: AgentThreadDeliveryKinds.Status,
+		[AgentThreadDeliveryKind.Question]: AgentThreadDeliveryKinds.Question,
+		[AgentThreadDeliveryKind.Approval]: AgentThreadDeliveryKinds.Approval,
+		[AgentThreadDeliveryKind.Result]: AgentThreadDeliveryKinds.Result,
+		[AgentThreadDeliveryKind.Failure]: AgentThreadDeliveryKinds.Failure,
+		[AgentThreadDeliveryKind.Asset]: AgentThreadDeliveryKinds.Asset,
+	};
+	return { id: row.id, childConversationId: row.childConversationId, parentConversationId: row.parentConversationId, runId: row.runId, kind: kinds[row.kind], label: row.label, detail: row.detail, assetId: row.assetId, createdAt: row.createdAt.toISOString() };
 }
 
 /** Maps one Prisma aggregate to the transport-safe participant summary. */

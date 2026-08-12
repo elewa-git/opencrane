@@ -1,5 +1,5 @@
 import { ConversationLifecycles, ConversationModes, MessageRoles, MessageSources, MessageStates, type ConversationCreationRequest, type MessageContentBlock } from "@opencrane/models/conversations";
-import type { AgentThreadOrigin, AgentThreadTarget } from "@opencrane/backend/conversations/agent-threads";
+import type { AgentThreadOrigin, AgentThreadParentDelivery, AgentThreadTarget } from "@opencrane/backend/conversations/agent-threads";
 
 /**
  * Who the caller is, as the server worked it out from the browser session.
@@ -119,6 +119,52 @@ export interface ConversationDetail extends ConversationSummary
 	readonly visibleFromPosition: string;
 	readonly accessEndedPosition: string | null;
 	readonly messages: readonly ConversationMessageView[];
+}
+
+/** One serial governed run included in the bounded Agent-thread read model. */
+export enum AgentThreadRunViewStates
+{
+	Queued = "queued",
+	Working = "working",
+	Waiting = "waiting",
+	Retrying = "retrying",
+	Completed = "completed",
+	Failed = "failed",
+	Cancelled = "cancelled",
+}
+
+/** One serial governed run included in the bounded Agent-thread read model. */
+export interface AgentThreadRunView
+{
+	readonly id: string;
+	readonly ordinal: number;
+	readonly attempt: number;
+	readonly state: AgentThreadRunViewStates;
+	readonly acceptedAt: string;
+	readonly finishedAt: string | null;
+}
+
+/** Canonical authorized child read model without participant login identifiers. */
+export interface AgentThreadSnapshotView
+{
+	readonly parentConversationId: string;
+	readonly childConversationId: string;
+	readonly rootConversationId: string;
+	readonly parentMessageId: string;
+	readonly agentServiceId: string;
+	readonly agentName: string;
+	readonly ask: string;
+	readonly createdAt: string;
+	readonly lifecycle: ConversationLifecycles;
+	readonly participantCount: number;
+	readonly readThroughPosition: string;
+	readonly latestPosition: string;
+	readonly representedThroughPosition: string;
+	readonly messageCount: number;
+	readonly cursor: string | null;
+	readonly messages: readonly ConversationMessageView[];
+	readonly runs: readonly AgentThreadRunView[];
+	readonly deliveries: readonly AgentThreadParentDelivery[];
 }
 
 /**
@@ -312,6 +358,8 @@ export interface ConversationUnitOfWork
 	 * @throws When the database is unreachable.
 	 */
 	open(caller: ConversationCaller, conversationId: string): Promise<ConversationDetail | null>;
+	/** Opens one bounded child snapshot only for current participants in both conversations. */
+	openAgentThread(caller: ConversationCaller, parentConversationId: string, childConversationId: string): Promise<AgentThreadSnapshotView | null>;
 	/**
 	 * Creates one conversation and its participant rows in a single transaction, so a
 	 * conversation with missing participants can never be left behind.

@@ -1,5 +1,5 @@
 import type { Interrupt, TextMessageStartEvent } from "@ag-ui/core";
-import type { AgUiA2uiEnvelope, AgUiProjectionEvent, AgUiToolRecoveryRequiredEnvelope, SafeToolTechnicalDetails } from "@opencrane/contracts";
+import type { AgUiA2uiEnvelope, AgUiAgentThreadParentDeliveryEnvelope, AgUiProjectionEvent, AgUiToolRecoveryRequiredEnvelope, SafeToolTechnicalDetails } from "@opencrane/contracts";
 
 /**
  * How a conversation run is going, as far as the browser can tell.
@@ -120,6 +120,9 @@ export interface AgUiRunFailure
 	readonly code?: string;
 }
 
+/** One validated display-safe Agent-thread delivery projected into an immediate parent stream. */
+export type AgUiAgentThreadParentDelivery = AgUiAgentThreadParentDeliveryEnvelope;
+
 /**
  * Everything the browser knows about one live conversation, rebuilt from the event stream.
  *
@@ -160,6 +163,8 @@ export interface AgUiStreamState
 	readonly surfaceFingerprints: ReadonlyMap<string, string>;
 	/** Names of the custom events seen; the payloads that could carry authority stay on the server. */
 	readonly customEvents: readonly string[];
+	/** Latest append-only parent deliveries keyed by delivery id for live compact summaries. */
+	readonly agentThreadParentDeliveries: Readonly<Record<string, AgUiAgentThreadParentDelivery>>;
 	/** Whether the user lost access, in which case everything above was cleared on purpose. */
 	readonly accessRevoked: boolean;
 }
