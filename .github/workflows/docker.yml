@@ -61,7 +61,7 @@ jobs:
       develop_smoke_images: ${{ steps.affected.outputs.develop_smoke_images }}
       develop_smoke_projects: ${{ steps.affected.outputs.develop_smoke_projects }}
       api_contract_changed: ${{ steps.affected.outputs.api_contract_changed }}
-      develop_smoke_required: ${{ steps.affected.outputs.develop_smoke_required }}
+      develop_smoke_can_skip: ${{ steps.develop-smoke-baseline.outputs.develop_smoke_can_skip }}
       develop_smoke_storage_mode: ${{ steps.affected.outputs.develop_smoke_storage_mode }}
       guard_inputs_changed: ${{ steps.affected.outputs.guard_inputs_changed }}
     steps:
@@ -110,6 +110,18 @@ jobs:
           FORCE_DEPLOYABLES: ${{ github.event_name == 'workflow_dispatch' && inputs.publish_deployables || '' }}
           FORCE_HEAVY_QUALIFICATION: ${{ github.event_name == 'workflow_dispatch' && inputs.heavy_qualification || '' }}
         run: node scripts/affected-deployables.mjs
+
+      # This is one positive skip proof. API failure, missing output, a base without an exact-SHA
+      # push/dispatch k3d job, affected containers, or any unclassified path all retain k3d.
+      - name: Prove the exact base current-silo baseline remains reusable
+        id: develop-smoke-baseline
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NX_BASE: ${{ steps.affected.outputs.nx_base }}
+          AFFECTED_CONTAINER_PROJECTS: ${{ steps.affected.outputs.affected_container_projects }}
+          DEPLOYMENT_INPUTS_CHANGED: ${{ steps.affected.outputs.develop_smoke_inputs_changed }}
+        run: node scripts/develop-smoke-baseline.mjs
 
   test:
     name: Build, test, and lint affected projects
@@ -311,12 +323,14 @@ jobs:
     permissions:
       contents: read
       packages: read
-    # Every accepted develop commit proves the current deployment path. Pull requests pay for the
-    # live cluster only when they move that surface, so the smoke implementation proves itself.
+    # Every accepted develop commit proves the current deployment path. A pull request skips the
+    # live cluster only when its exact base SHA already completed the same k3d job successfully.
+    # Missing or malformed proof output deliberately compares unequal to true and runs k3d.
     if: >-
       ${{
         (github.event_name == 'push' && github.ref == 'refs/heads/develop') ||
-        (github.event_name == 'pull_request' && needs.prepare.outputs.develop_smoke_required == 'true') ||
+        (github.event_name == 'pull_request' &&
+          needs.prepare.outputs.develop_smoke_can_skip != 'true') ||
         (github.event_name == 'workflow_dispatch' &&
           (inputs.heavy_qualification == 'k3d' || inputs.heavy_qualification == 'all'))
       }}
@@ -366,6 +380,11 @@ jobs:
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
+
+      # Docker's GHA cache backend requires these runtime variables for an inline buildx command.
+      # Pin the helper by commit so the remote action cannot move underneath qualification.
+      - name: Expose the GitHub Actions cache runtime
+        uses: crazy-max/ghaction-github-runtime@04d248b84655b509d8c44dc1d6f990c879747487
 
       - name: Run the current-silo smoke
         run: ./apps/_infra/deploy-k8s/platform/tests/develop-smoke.sh

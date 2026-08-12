@@ -85,6 +85,25 @@ export function selectDevelopSmokeProjects(affectedContainerProjects)
 }
 
 /**
+ * Determines whether every changed path is outside the current-silo deployment contract.
+ *
+ * This is deliberately a positive safe-path proof. An unclassified path forces k3d so a new
+ * deployment input cannot silently bypass the disposable-cluster qualification.
+ */
+export function selectDevelopSmokeInputsChanged(changedFiles)
+{
+	return changedFiles.some(function _RequiresCurrentSiloProof(file) {
+		return !(file.startsWith("website/")
+			|| file.startsWith("docs/")
+			|| file.startsWith(".agents/")
+			|| file.startsWith(".claude/")
+			|| file.startsWith(".codex/")
+			|| file.startsWith(".github/ISSUE_TEMPLATE/")
+			|| ["README.md", "CHANGELOG.md", "plan.md", "plan-done.md"].includes(file));
+	});
+}
+
+/**
  * Selects deterministic image-smoke matrix entries for `scripts/affected-deployables.mjs`.
  *
  * Automatic qualification keeps only affected owners. Manual `image-smoke` and `all`
@@ -125,16 +144,6 @@ export function selectGuardInputsChanged(changedFiles)
 			|| file === "docs/agents/workload-ownership.json"
 			|| file === "docs/agents/app-source-allowlist.json"
 			|| file.includes("/helm/")
-			|| file === ".github/workflows/docker.yml";
-	});
-}
-
-/** Determines whether a pull request changed the live deployment surface exercised by k3d. */
-export function selectDevelopSmokeRequired(changedFiles, affectedSmokeProjects = [])
-{
-	return affectedSmokeProjects.length > 0 || changedFiles.some(function _DevelopSmokeInput(file) {
-		return file.startsWith("apps/_infra/deploy-k8s/")
-			|| (file.startsWith("apps/") && (file.includes("/helm/") || file.includes("/deploy/")))
 			|| file === ".github/workflows/docker.yml";
 	});
 }

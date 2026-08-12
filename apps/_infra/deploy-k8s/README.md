@@ -133,10 +133,16 @@ package imports it.
   the committed `Chart.lock`, linked to the current app-owned chart sources. They therefore validate
   the release contract without rewriting the tracked `charts/*.tgz` archives.
 - `npx nx run deploy-k8s:develop-smoke` creates a disposable k3d cluster, rebuilds Nx-affected
-  OpenCrane workloads and reuses digest-validated baseline images for unaffected owners, then
-  installs the silo through `deploy.sh`. Ordinary pull requests use fast local-path storage;
-  storage-sensitive changes, manual k3d qualification, and every `develop` push also prove pinned
-  expandable storage. Neither tier substitutes for backup/recovery or production qualification.
+  OpenCrane workloads with per-project BuildKit caches and reuses digest-validated baseline images
+  for unaffected owners, then installs the silo through `deploy.sh`. Image preparation overlaps
+  disposable-cluster prerequisites and transfers the complete image set in one import. A pull
+  request may reuse the exact base qualification only when an exact-SHA push or manual dispatch
+  already completed the same k3d job successfully, Nx selects no container owner, and every changed path is explicitly
+  non-deployment input. This works for both `develop` and reviewed stacked bases; any missing,
+  expired, or uncertain evidence runs k3d. Ordinary pull
+  requests use fast local-path storage; storage-sensitive changes, manual k3d qualification, and
+  every `develop` push also prove pinned expandable storage. Neither tier substitutes for
+  backup/recovery or production qualification.
 
 ## Sub-docs (the deep detail)
 

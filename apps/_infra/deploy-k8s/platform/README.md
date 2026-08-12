@@ -24,12 +24,18 @@ local source consumer.
 | `tests/` | Rendered contract checks plus the blocking disposable-k3d current-silo smoke used on `develop`. |
 
 `tests/develop-smoke.sh` exercises the real silo deploy entrypoint. It rebuilds Nx-affected images
-from the checkout and resolves unaffected owners from the exact digest of the last validated image
-set. Both tiers install pinned cert-manager and CloudNativePG and fail on workload, database,
-Certificate, or TLS health. Ordinary pull requests use fast local-path storage; `develop`, explicit
-k3d dispatches, and storage-sensitive changes install the pinned expandable hostpath CSI driver and
-exercise expansion. Set `KEEP_CLUSTER=1` for local diagnosis. Backup/restore and production storage,
-DNS, and transport remain separate live qualifications.
+from the checkout through a per-project BuildKit cache and resolves unaffected owners from the exact
+digest of the last validated image set. Its sequential image lane overlaps cluster and controller
+preparation, then imports the complete image inventory in one k3d transfer. A pull request bypasses
+that cluster only when one positive proof binds its exact base SHA to a completed successful push or
+manual-dispatch k3d job, no affected container owner, and only explicitly non-deployment paths. The same evidence works
+for `develop` and reviewed feature-stack bases; unknown or unavailable evidence fails closed to
+k3d. Both tiers install pinned cert-manager and
+CloudNativePG and fail on workload, database, Certificate, or TLS health. Ordinary pull requests use
+fast local-path storage; `develop`, explicit k3d dispatches, and storage-sensitive changes install
+the pinned expandable hostpath CSI driver and exercise expansion. Set `KEEP_CLUSTER=1` for local
+diagnosis. Backup/restore and production storage, DNS, and transport remain separate live
+qualifications.
 
 Business logic does not belong here. Server-process infrastructure belongs in `libs/backend/server/infra`;
 backend capabilities belong in `libs/backend/server`; independently owned third-party workloads

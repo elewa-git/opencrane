@@ -26,6 +26,15 @@ SMOKE_REGISTRY="${SMOKE_REGISTRY:-ghcr.io/elewa-git}"
 SMOKE_STORAGE_MODE="${SMOKE_STORAGE_MODE:-full}"
 KEY_DIR=""
 CSI_DIR=""
+IMAGE_PREPARATION_PID=""
+CERT_MANAGER_INSTALL_PID=""
+SMOKE_IMAGES=(
+  opencrane/opencrane-server:develop-smoke
+  opencrane/opencrane-ui:develop-smoke
+  opencrane/channel-proxy:develop-smoke
+  opencrane/memory-gateway:develop-smoke
+  opencrane/artifact-service:develop-smoke
+)
 
 # Every image this script builds carries this label so teardown can prune exactly the run's
 # images (current tags + layers orphaned by earlier runs) without touching anything else.
@@ -112,6 +121,14 @@ _teardown_cluster_storage()
 _cleanup()
 {
   local exit_code=$?
+  local background_pid
+  for background_pid in "$IMAGE_PREPARATION_PID" "$CERT_MANAGER_INSTALL_PID"; do
+    [[ -z "$background_pid" ]] && continue
+    kill "$background_pid" >/dev/null 2>&1 || true
+    wait "$background_pid" >/dev/null 2>&1 || true
+  done
+  IMAGE_PREPARATION_PID=""
+  CERT_MANAGER_INSTALL_PID=""
   if [[ "$exit_code" -ne 0 ]]; then
     _diagnostics
   fi
@@ -131,11 +148,19 @@ _cleanup()
 
 _build_image()
 {
-  local image="$1"
-  local dockerfile="$2"
+  local project="$1"
+  local image="$2"
+  local dockerfile="$3"
+  local cache_arguments=()
+  if [[ -n "${ACTIONS_RUNTIME_TOKEN:-}" \
+    && ( -n "${ACTIONS_RESULTS_URL:-}" || -n "${ACTIONS_CACHE_URL:-}" ) ]]; then
+    cache_arguments=(
+      --cache-from "type=gha,scope=${project},timeout=2m"
+    )
+  fi
   echo "[develop-smoke] Building $image"
-  _retry 3 docker build --file "$ROOT_DIR/$dockerfile" --tag "$image" \
-    --label "$SMOKE_IMAGE_LABEL" "$ROOT_DIR"
+  _retry 3 docker buildx build --load --file "$ROOT_DIR/$dockerfile" --tag "$image" \
+    --label "$SMOKE_IMAGE_LABEL" "${cache_arguments[@]}" "$ROOT_DIR"
 }
 
 _project_is_affected()
@@ -169,18 +194,25 @@ _prepare_image()
   local dockerfile="$4"
   if _project_is_affected "$project"; then
     echo "[develop-smoke] Nx selected $project for rebuild"
-    _build_image "$local_image" "$dockerfile"
+    _build_image "$project" "$local_image" "$dockerfile"
   elif ! _pull_baseline_image "$remote_image" "$local_image"; then
     echo "[develop-smoke] No validated base image for $project; rebuilding safely"
-    _build_image "$local_image" "$dockerfile"
+    _build_image "$project" "$local_image" "$dockerfile"
   fi
 }
 
-_import_image()
+_prepare_images()
 {
-  local image="$1"
-  echo "[develop-smoke] Importing $image"
-  _retry 3 k3d image import "$image" --cluster "$CLUSTER_NAME"
+  _prepare_image opencrane opencrane/opencrane-server:develop-smoke \
+    opencrane-server apps/opencrane/deploy/Dockerfile
+  _prepare_image opencrane-ui opencrane/opencrane-ui:develop-smoke \
+    opencrane-ui apps/opencrane-ui/deploy/Dockerfile
+  _prepare_image channel-proxy opencrane/channel-proxy:develop-smoke \
+    opencrane-channel-proxy apps/channel-proxy/deploy/Dockerfile
+  _prepare_image memory-gateway opencrane/memory-gateway:develop-smoke \
+    opencrane-memory-gateway apps/memory-gateway/deploy/Dockerfile
+  _prepare_image artifact-service opencrane/artifact-service:develop-smoke \
+    opencrane-artifact-service apps/artifact-service/deploy/Dockerfile
 }
 
 _create_database_credentials()
@@ -372,26 +404,15 @@ if [[ "$SMOKE_STORAGE_MODE" != "fast" && "$SMOKE_STORAGE_MODE" != "full" ]]; the
   exit 1
 fi
 
-_prepare_image opencrane opencrane/opencrane-server:develop-smoke \
-  opencrane-server apps/opencrane/deploy/Dockerfile
-_prepare_image opencrane-ui opencrane/opencrane-ui:develop-smoke \
-  opencrane-ui apps/opencrane-ui/deploy/Dockerfile
-_prepare_image channel-proxy opencrane/channel-proxy:develop-smoke \
-  opencrane-channel-proxy apps/channel-proxy/deploy/Dockerfile
-_prepare_image memory-gateway opencrane/memory-gateway:develop-smoke \
-  opencrane-memory-gateway apps/memory-gateway/deploy/Dockerfile
-_prepare_image artifact-service opencrane/artifact-service:develop-smoke \
-  opencrane-artifact-service apps/artifact-service/deploy/Dockerfile
+# Image preparation is the longest independent lane. Start it before k3d so cluster creation and
+# external-controller readiness consume the same wall-clock time without fanning out five builds
+# against the runner's small Docker daemon.
+_prepare_images &
+IMAGE_PREPARATION_PID=$!
 
 echo "[develop-smoke] Creating disposable k3d cluster '$CLUSTER_NAME'"
 k3d cluster delete "$CLUSTER_NAME" >/dev/null 2>&1 || true
 k3d cluster create "$CLUSTER_NAME" --image "$K3S_IMAGE" --port "8443:443@loadbalancer" --wait
-
-_import_image opencrane/opencrane-server:develop-smoke
-_import_image opencrane/opencrane-ui:develop-smoke
-_import_image opencrane/channel-proxy:develop-smoke
-_import_image opencrane/memory-gateway:develop-smoke
-_import_image opencrane/artifact-service:develop-smoke
 
 echo "[develop-smoke] Installing external cluster prerequisites"
 if [[ "$SMOKE_STORAGE_MODE" == "full" ]]; then
@@ -401,13 +422,31 @@ else
   _select_fast_test_storage
 fi
 helm repo add jetstack https://charts.jetstack.io --force-update >/dev/null
+helm repo add cnpg https://cloudnative-pg.github.io/charts --force-update >/dev/null
+# These controllers own disjoint releases, namespaces, and API groups. Install them together only
+# after both repository indexes are ready so concurrent Helm processes never mutate repo state.
 helm upgrade --install cert-manager jetstack/cert-manager \
   --namespace cert-manager --create-namespace --version "$CERT_MANAGER_VERSION" \
-  --wait --timeout "${TIMEOUT_SECONDS}s" --set crds.enabled=true
-helm repo add cnpg https://cloudnative-pg.github.io/charts --force-update >/dev/null
+  --wait --timeout "${TIMEOUT_SECONDS}s" --set crds.enabled=true &
+CERT_MANAGER_INSTALL_PID=$!
 helm upgrade --install cnpg cnpg/cloudnative-pg \
   --namespace cnpg-system --create-namespace --version "$CNPG_CHART_VERSION" \
   --wait --timeout "${TIMEOUT_SECONDS}s" --set-string monitoring.podMonitor.enabled=false
+if ! wait "$CERT_MANAGER_INSTALL_PID"; then
+  CERT_MANAGER_INSTALL_PID=""
+  echo "[develop-smoke] cert-manager installation failed" >&2
+  exit 1
+fi
+CERT_MANAGER_INSTALL_PID=""
+
+if ! wait "$IMAGE_PREPARATION_PID"; then
+  IMAGE_PREPARATION_PID=""
+  echo "[develop-smoke] Image preparation failed" >&2
+  exit 1
+fi
+IMAGE_PREPARATION_PID=""
+echo "[develop-smoke] Importing the complete current-silo image set in one k3d transfer"
+_retry 3 k3d image import "${SMOKE_IMAGES[@]}" --cluster "$CLUSTER_NAME" --mode direct
 
 kubectl create namespace "$NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
 

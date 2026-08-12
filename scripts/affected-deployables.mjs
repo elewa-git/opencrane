@@ -7,8 +7,8 @@ import {
   selectAffectedDeployables,
   selectApiContractChanged,
   selectDevelopSmokeImages,
+  selectDevelopSmokeInputsChanged,
   selectDevelopSmokeProjects,
-  selectDevelopSmokeRequired,
   selectDevelopSmokeStorageMode,
   selectForcedContainerProjects,
   selectGuardInputsChanged,
@@ -83,7 +83,7 @@ const imageSmokes = selectImageSmokeProjects(
 const changedFiles = _run("git", ["diff", "--name-only", base, head]).split("\n").filter(Boolean);
 
 const apiContractChanged = selectApiContractChanged(affectedProjects);
-const developSmokeRequired = selectDevelopSmokeRequired(changedFiles, developSmokeProjects);
+const developSmokeInputsChanged = selectDevelopSmokeInputsChanged(changedFiles);
 const developSmokeStorageMode = selectDevelopSmokeStorageMode(
   changedFiles,
   process.env.GITHUB_EVENT_NAME,
@@ -100,7 +100,8 @@ _output("image_smokes", JSON.stringify({ include: imageSmokes }));
 _output("has_image_smokes", String(imageSmokes.length > 0));
 _output("develop_smoke_images", JSON.stringify({ include: developSmokeImages }));
 _output("develop_smoke_projects", developSmokeProjects.join(","));
+_output("affected_container_projects", affectedContainerProjects.join(","));
 _output("api_contract_changed", String(apiContractChanged));
-_output("develop_smoke_required", String(developSmokeRequired));
+_output("develop_smoke_inputs_changed", String(developSmokeInputsChanged));
 _output("develop_smoke_storage_mode", developSmokeStorageMode);
 _output("guard_inputs_changed", String(guardInputsChanged));
