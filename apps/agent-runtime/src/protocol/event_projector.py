@@ -45,12 +45,16 @@ class RuntimeEventProjector:
 
     @property
     def has_pending_input(self) -> bool:
-        """Whether this command proposed a tool action or participant input and must pause."""
+        """Whether this turn is waiting on something, either a tool call or a question.
+
+        The executor reads this one property and stops there, so a turn waiting on a tool and a turn
+        waiting on a participant are handled the same way: neither is reported as a finished run.
+        """
         return self._has_pending_tool_calls or self._has_pending_elicitations
 
     @property
     def has_pending_elicitations(self) -> bool:
-        """Whether the model asked its one participant-input question for this command."""
+        """Whether the model has already asked its question for this turn. It only gets one."""
         return self._has_pending_elicitations
 
     def emit(self, neutral_event: dict[str, object]) -> None:
@@ -65,6 +69,9 @@ class RuntimeEventProjector:
         if neutral_event.get("type") == "elicitation_request":
             self._emit_elicitation(neutral_event)
             return
+        # The adapter reports a question it could not read as an event of its own instead of dropping
+        # it, and that event fails the turn. The model believes it asked something and is waiting; if the
+        # run carried on as though it had not, the model would be answered by silence.
         if neutral_event.get("type") == "invalid_elicitation_request":
             raise ValueError("invalid elicitation request")
         normalized = normalize_event(neutral_event, self._message_id)
@@ -128,7 +135,16 @@ class RuntimeEventProjector:
         self._post_candidate(proposal)
 
     def _emit_elicitation(self, neutral_event: dict[str, object]) -> None:
-        """Emit one strictly bounded request and pause this local command after delivery."""
+        """Send one checked question to the server and stop reading this turn.
+
+        A turn may ask one question and no more. The participant answers a single card, and the run
+        continues from that answer, so a second question asked in the same turn has nowhere to go.
+
+        Raises:
+            ValueError: When the model asks twice in one turn, when the question does not pass
+                ``elicitation_proposal``, or when the framework gave no call id to route the answer to.
+                Each of these fails the turn rather than leaving a question nobody can answer.
+        """
         if self._has_pending_elicitations:
             raise ValueError("multiple elicitation requests in one command")
         proposal = elicitation_proposal(neutral_event)
@@ -137,11 +153,15 @@ class RuntimeEventProjector:
             # answer. The executor reports only the exception class, never model-authored fields.
             raise ValueError("invalid elicitation request")
         framework_call_id = neutral_event.get("frameworkCallId")
+        # Without a call id there is nothing to hand the answer to later, so the question would pause the
+        # run for good. Refuse now, before a card the participant can see exists.
         if not isinstance(framework_call_id, str) or not framework_call_id:
             raise ValueError("missing elicitation framework call")
         # Any assistant text explaining the question must become a complete message before the
         # participant-facing card. The executor stops reading immediately after this candidate.
         self.complete_message()
+        # Record the link first, then send the question, in that order. If recording fails there is no
+        # card yet; if sending fails the recorded link goes when the attempt ends.
         record_pending_elicitation(
             str(self._coordinates["runId"]),
             int(self._coordinates["attempt"]),
@@ -149,6 +169,8 @@ class RuntimeEventProjector:
             framework_call_id,
         )  # type: ignore[arg-type]
         self._post_candidate(elicitation_candidate(self._coordinates, proposal))
+        # Set the flag after sending, not before. If sending raises, this object must not be left saying
+        # a question is outstanding that the server never received.
         self._has_pending_elicitations = True
 
     def _start_message(self) -> None:

@@ -138,10 +138,14 @@ def elicitation_candidate(
     coordinates: dict[str, object],
     proposal: dict[str, object],
 ) -> dict[str, object]:
-    """Build one participant-input proposal for server-side authority binding.
+    """Wrap a checked question as a candidate for the server to bind and store.
 
-    Called by: ``RuntimeEventProjector`` after the neutral proposal passes the exact body and purpose
-    validator. The candidate deliberately carries no participant or absolute-expiry coordinate.
+    Called by: ``RuntimeEventProjector._emit_elicitation`` in ``event_projector.py``, after
+    ``elicitation_proposal`` has checked the question.
+
+    The candidate says nothing about who should answer or when the question expires. The server chooses
+    the participant from the conversation and sets the deadline from its own clock, because a runtime
+    that could name either would be deciding who gets asked.
     """
     return {
         **coordinates,

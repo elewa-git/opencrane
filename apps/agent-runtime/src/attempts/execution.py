@@ -62,6 +62,9 @@ def execute_start_attempt(
             candidate(coordinates, "run.failed", {"reason": "missing_compiled_input"}),
         )
         return
+    # Refuse before the model runs if the compiled input names a different run or attempt from the
+    # command. The messages of this turn are stored under these two values, so a mismatch would file
+    # them against an attempt that never produced them.
     if not _compiled_input_matches_coordinates(compiled_input, coordinates):
         terminal_gate.post_completion(
             post_candidate,
@@ -104,15 +107,21 @@ def execute_start_attempt(
                     # response cannot become a late candidate.
                     break
                 projector.emit(neutral_event)
+            # Return without closing the message when the attempt was cancelled. Leaving it open records
+            # where output actually stopped, rather than adding an ending the model never produced. The
+            # stored messages and pending questions go too, because no resume will follow.
             if cancel_event.is_set():
                 clear_model_history(str(coordinates["runId"]), int(coordinates["attempt"]))
                 clear_pending_elicitations(str(coordinates["runId"]), int(coordinates["attempt"]))
                 return
             projector.complete_message()
             if projector.has_pending_input:
-                # Tool and participant-input proposals pause the model loop. Completion belongs only
-                # after the control plane returns exact server-owned results through a later resume.
+                # A tool call or a question stops the loop here. The run is finished only once the server
+                # sends back a result and a later resume carries on from it. Keep the stored messages and
+                # the pending questions: that resume needs both to find its way back.
                 return
+            # Nothing is waiting, so this turn ended the run. Drop what was kept for a resume before
+            # reporting completion, so memory lasts no longer than the attempt does.
             clear_model_history(str(coordinates["runId"]), int(coordinates["attempt"]))
             clear_pending_elicitations(str(coordinates["runId"]), int(coordinates["attempt"]))
             if terminal_gate.post_completion(
@@ -121,8 +130,9 @@ def execute_start_attempt(
             ):
                 run_evidence(coordinates, "completed")
         except (HTTPError, URLError, OSError, RuntimeError, ValueError) as error:
-            # Report only the exception type. Messages may contain provider URLs, content, or other
-            # data that does not belong in a candidate or structured log.
+            # Report the exception type and nothing else. The message can hold provider URLs, request
+            # content, or credentials, none of which belong in a candidate or a log line.
+            # A failed attempt will get no resume, so drop the stored messages and pending questions.
             clear_model_history(str(coordinates["runId"]), int(coordinates["attempt"]))
             clear_pending_elicitations(str(coordinates["runId"]), int(coordinates["attempt"]))
             if terminal_gate.post_completion(
@@ -212,6 +222,9 @@ def execute_resume_attempt(
         input_generation,
         checkpoint_cipher,
     )
+    # Recovered input has to belong to this attempt. If it does not, the checkpoint on disk is from
+    # another run or attempt, and the messages stored under these coordinates cannot be trusted either,
+    # so they go. Pending questions stay: they were keyed from the command and are not in doubt.
     if compiled_input and not _compiled_input_matches_coordinates(compiled_input, coordinates):
         clear_model_history(str(coordinates["runId"]), int(coordinates["attempt"]))
         terminal_gate.post_completion(
@@ -261,6 +274,8 @@ def execute_resume_attempt(
                     # A resume is subject to the same late-output suppression as a fresh attempt.
                     break
                 projector.emit(neutral_event)
+            # A resumed turn follows the same rule as a fresh one: no message ending added after
+            # cancellation, and nothing kept for a resume that is not going to happen.
             if cancel_event.is_set():
                 clear_model_history(str(coordinates["runId"]), int(coordinates["attempt"]))
                 clear_pending_elicitations(str(coordinates["runId"]), int(coordinates["attempt"]))
@@ -337,7 +352,14 @@ def _compiled_input_matches_coordinates(
     compiled_input: dict[str, object],
     coordinates: dict[str, object],
 ) -> bool:
-    """Require the sealed compiler coordinates to match the admitted command exactly."""
+    """Check that the compiled input names the same run and attempt as the command.
+
+    Called by: ``execute_start_attempt`` and ``execute_resume_attempt`` in this module.
+
+    Returns:
+        ``True`` when both values match. ``False`` when either differs, which means the input was
+        compiled for a different run or attempt and this one must not use it.
+    """
     return (
         compiled_input.get("runId") == coordinates.get("runId")
         and compiled_input.get("attempt") == coordinates.get("attempt")
