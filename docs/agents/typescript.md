@@ -349,20 +349,54 @@ export enum RunCancellationResultStatuses
 export enum RunCancellationResultStatuses
 ```
 
-### Document each enum member so hover is enough
+### Enums get the most care of anything
 
-A reader hovering a member must learn what it means and what data it carries, without opening the
-validator that enforces it. Record the payload on the member.
+**Enums usually encode state**, so a vague enum comment is the most expensive kind. Someone will
+branch on these values, persist them, and compare them across a version boundary. Document an enum
+as if the reader is about to write that branch.
+
+On the **enum itself**, state all four:
+
+1. **What it is for** — the decision this enum exists to drive.
+2. **Where it is used** — which layers read it and branch on it.
+3. **Where it is stored** — the database column, the API payload, or "in memory only". If the value
+   is persisted or sent over the wire, say so plainly and say that renaming a member is a migration
+   or a breaking API change.
+4. **Whether the set is closed** — what happens when an unknown value arrives.
+
+On **every member**, say **what state it infers** — what is true of the system when a value holds,
+not a restatement of the name. Include what the holder must do next, what it may no longer do, and
+whether the state is terminal.
 
 ```typescript
-// WRONG — restates the name, and the payload is a mystery
+// WRONG — restates the name; a reader still cannot branch on it safely
 /** Runtime appended a bounded message delta. */
 MessageDelta = "message.delta",
+/** The run is fenced while physical cleanup remains. */
+Cancelling = "cancelling",
 
-// CORRECT — what happened, plus what it carries
+// CORRECT — the member says what is true, and what it obliges the caller to do
 /** The runtime added the next piece of a message it is still writing. Payload: `messageId` and `delta`, the new text. */
 MessageDelta = "message.delta",
+/** The run is stopped, but a Kubernetes Job may still exist and cleanup is owed. Not terminal: a later worker pass finishes it. */
+Cancelling = "cancelling",
 ```
+
+State the storage and stability on the enum block itself:
+
+```typescript
+/**
+ * Every kind of event one agent run can emit, in the order a reader would meet them.
+ *
+ * The string values are stored in the database and read by clients, so they cannot be renamed
+ * without a migration. Holding one of these values grants nothing on its own: an event says what
+ * happened, it does not authorise anything.
+ */
+```
+
+If the enum drives a lifecycle, also follow the state-machine rules in
+[`maintainability.md`](./maintainability.md) — a durable enum that selects two or more
+commands/events needs a State×Event table, not just good prose.
 
 ## Type And Interface File Separation
 

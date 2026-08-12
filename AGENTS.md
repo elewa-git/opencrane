@@ -14,6 +14,7 @@ This file is the canonical agent instruction file for the repository.
 | Topic | File | Read it when you are… |
 |-------|------|------------------------|
 | **TypeScript** | [`docs/agents/typescript.md`](docs/agents/typescript.md) | writing or editing any `.ts` file — bracket placement, arrow functions, JSDoc, naming, imports, type-file separation, self-review table. |
+| **Comment language** | [`docs/agents/typescript.md#comment-language`](docs/agents/typescript.md#comment-language) | writing ANY comment, in any language (`.ts`, `.py`, shell, Helm). Plain English, no verbless noun piles, heavy JSDoc on exports with `Called by:` and `@see`, and enums documented with what each member's state means. Applies to every agent that writes code, not only TypeScript work. |
 | **Angular / Frontend** | [`docs/agents/angular.md`](docs/agents/angular.md) | working in the `apps/opencrane-ui` Angular SPA or `libs/frontend/*` (ported from WeOwnAI, #152) — PrimeNG, layering, signals/resources, standalone components. |
 | **Architecture & Identity** | [`docs/agents/architecture.md`](docs/agents/architecture.md) | making IAM, identity, auth, or token-policy decisions (the IAM-first philosophy). |
 | **Kubernetes** | [`docs/agents/k8s.md`](docs/agents/k8s.md) | touching service accounts, RBAC, NetworkPolicy, or routes excluded from auth middleware. |

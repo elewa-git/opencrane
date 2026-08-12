@@ -38,6 +38,16 @@ Treat the live barrel, component usages, state fixtures, and rendered applicatio
 evidence. A README or design note describes intent but does not prove the implementation still
 matches it.
 
+## Comment language (applies whenever you write or edit code)
+
+Follow `docs/agents/typescript.md#comment-language`. Plain English; no verbless noun piles, no
+ritual modifiers, no heavy word where a plain one exists — but keep any term that names a real
+field, state, or standard, and simplify the sentence around it instead. Exported types, classes and
+methods get heavy JSDoc: what it does, what a caller must do differently per outcome, a grepped
+`Called by:` line, and `@param`/`@returns`/`@throws`/`@see`. Use `@see` with the URI for external
+specs, citing the pinned revision, and never invent a URL. For an enum, state what it is for, where
+it is used, where it is stored, and on each member what state it infers.
+
 ## Collaboration modes
 
 The caller must select one mode, or you use `PLAN` by default:

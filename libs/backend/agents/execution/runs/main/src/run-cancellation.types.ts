@@ -25,28 +25,44 @@ export interface RequestRunCancellationCommand
 /**
  * What happened when someone asked to cancel a run.
  *
- * Cancelling a run is two jobs, and this status says which of them is left. First the database
- * marks the run so no further work is accepted, which always succeeds or fails outright. Second,
- * if a Kubernetes Job may already exist for the run, that Job has to be deleted — and that part
- * happens later, in a separate worker pass. So `Cancelling` means "stopped, cleanup still owed"
- * and `Cancelled` means "stopped, nothing left to delete". A caller that treats them as the same
- * thing will report a run as fully torn down while its pod is still running.
+ * **What it is for.** Telling the caller how far the cancellation got, because cancelling is two
+ * jobs and not one. First the database marks the run so no further work is accepted, which either
+ * succeeds or fails outright. Second, if a Kubernetes Job may already exist for the run, that Job
+ * has to be deleted — and that happens later, in a separate worker pass. So `Cancelling` means
+ * "stopped, cleanup still owed" and `Cancelled` means "stopped, nothing left to delete". A caller
+ * that treats those two as the same thing will report a run as fully torn down while its pod is
+ * still running.
  *
- * The values are the wire form the HTTP layer returns to the caller who asked for the cancellation.
+ * **Where it is used.** The repository returns it, and the HTTP layer maps it to a response for
+ * whoever asked for the cancellation. Nothing branches on it inside the transaction.
+ *
+ * **Where it is stored.** Nowhere. These values are a return type only, so renaming a member needs
+ * no migration — but they do reach API clients, so it is still a breaking API change. Watch out for
+ * a coincidence here: the run's durable state is the separate Prisma `AgentRunState`, whose
+ * `Cancelling` and `Cancelled` members are stored as the very same strings `"cancelling"` and
+ * `"cancelled"`. Identical text, different enum. Do not compare a value from here against a
+ * database column, and do not assume a change to one enum covers the other.
+ *
+ * **Closed set.** Every value is listed below, and the repository returns exactly one of them.
  * @see RequestRunCancellationResult for the payload carried with each status.
  * @see RunCancellationConflictReasons for why a `Conflict` was refused.
  */
 export enum RunCancellationResultStatuses
 {
-	/** The run is stopped, but a Kubernetes Job may still exist and cleanup is owed. */
+	/**
+	 * The run is stopped and a Kubernetes Job may still exist, so cleanup is owed.
+	 *
+	 * Not terminal. No further agent work will run, but the run is not finished: a later worker pass
+	 * deletes the Job and only then moves the run to its final state.
+	 */
 	Cancelling = "cancelling",
-	/** The run is stopped and there is nothing left to delete. */
+	/** The run is stopped and nothing is left to delete. Terminal — no worker will touch it again. */
 	Cancelled = "cancelled",
-	/** This same cancellation already happened, so nothing changed. Safe to retry into. */
+	/** This same cancellation already happened, so this call changed nothing. Safe to retry into; treat it as success. */
 	Idempotent = "idempotent",
-	/** No run exists with that id. */
+	/** No run exists with that id. Retrying cannot help, because nothing will create it. */
 	NotFound = "not_found",
-	/** The run exists but cannot be cancelled right now. */
+	/** The run exists but cannot be cancelled as asked. Read the reason before deciding whether to retry. */
 	Conflict = "conflict",
 }
 

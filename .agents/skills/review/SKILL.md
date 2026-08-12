@@ -57,6 +57,16 @@ If the prompt contains `DIMENSION: <name>`, review only that modeled dimension:
 The style script remains a separate mechanical check and does not replace the
 maintainability pass.
 
+The `maintainability` pass includes **comment language and export documentation**
+(`docs/agents/typescript.md#comment-language`), which no script can check. On changed lines,
+flag: a comment that needs re-reading (verbless noun pile, ritual modifiers, invented verb);
+heavy vocabulary that has a plain equivalent — but grep first and keep any term that names a
+real field, state, or standard; an exported symbol whose JSDoc is a one-line label with no
+`Called by:`, `@param`/`@returns`/`@throws`, or per-outcome caller guidance; a `Called by:` or
+`@see` target that does not exist; and an **enum whose members do not say what state they infer**,
+or whose block omits what it is for, where it is used, and where it is stored. A comment that is
+factually wrong about the code is a `correctness` finding instead.
+
 ## Constraints
 
 - **Findings over summaries.** Lead with what is wrong, not a description of the code.

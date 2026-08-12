@@ -81,6 +81,28 @@ fresh context — do not assume the author's intent was correct.
 - Secrets: never logged, hard-coded, or returned in responses.
 
 ### DIMENSION: maintainability
+- **Comment language and export documentation** (`docs/agents/typescript.md#comment-language`). This
+  is a judgment check, not a script check. Flag, on changed lines only:
+  - A comment that needs re-reading: a verbless noun pile ("Transaction-owned construction boundary
+    for the recovery-event repository"), ritual modifiers used as decoration (`only`, `exact`, `one`,
+    `bounded`, `canonical`, `safe`, `fixed`, `held`), a compressed noun chain ("an exact idempotent
+    winner"), or an invented verb ("the durable run still *names* the exact attempt").
+  - Heavy vocabulary with a plain equivalent: `canonicalise`, `provenance`, `terminalise`,
+    `materialise`, `posture`, `vocabulary`, `substrate`, `surface` as a noun, `seam`, `coerce`.
+    **Grep before flagging** — keep the term when it names a real field, enum member, state, or
+    standard (`fence`, `Reconciling`, `ProviderIdempotency`, RFC 8785 canonicalization,
+    `Materialization`). The fix is then the sentence around the term, not the term.
+  - An exported type, class, or method whose JSDoc is a one-line label: no `Called by:`, no
+    `@param`/`@returns`/`@throws`, and no statement of what a caller must do differently per outcome.
+  - A `Called by:` line or `@see` symbol that does not exist — verify by grep; a wrong pointer is
+    worse than none. Likewise a `@see` URL for an external spec that names the wrong revision.
+  - **An enum documented without its state meaning.** Enums usually encode state, so require: what
+    the enum is for, where it is used, where it is stored (and therefore whether renaming a member
+    is a migration or a breaking API change), and on each member what is true of the system when
+    that value holds — including whether it is terminal. A member comment that restates its own name
+    is a finding.
+  - A comment that is factually WRONG about the code is a **correctness** finding, not a wording one.
+    Report it there, and propose deletion rather than rewording when the claim has no basis.
 - **Model-adjacent runtime validation.** When untrusted data becomes a named TypeScript model,
   require a Zod validator beside the model in the same folder/package (`a.types.ts` plus
   `a.validator.ts`), typed against that model and introduced by a clarifying trust-boundary comment.

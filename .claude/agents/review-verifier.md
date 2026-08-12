@@ -30,10 +30,19 @@ to one of those four.
      is it gated off, mock-only, or dead?
    - Did the caller's prompt state context (feature-flagged, not-yet-wired,
      intentionally fail-closed) that the claim ignores?
-3. **Trace one concrete input.** To CONFIRM, you must walk a specific input/state from
+3. **Documentation findings are verified differently.** A comment-language or JSDoc finding
+   (`docs/agents/typescript.md#comment-language`) has no runtime path to walk, so confirm it by
+   reading instead: quote the comment, and check the specific claim. If the finding says a term is
+   empty jargon, grep it — a term that names a real field, enum member, state, or standard (`fence`,
+   `Reconciling`, RFC 8785 canonicalization, `Materialization`) makes the finding WRONG, and the
+   term must stay. If it says a `Called by:` or `@see` target does not exist, grep for the exact
+   exported name and confirm the absence. If it says an enum member fails to state the state it
+   infers, read the member and the branches that switch on it. REFUTE any finding that would trade
+   accuracy for plainness, or that proposes text the code does not support.
+4. **Trace one concrete input.** To CONFIRM, you must walk a specific input/state from
    entry point to the bad outcome and name each step. If you cannot complete the walk,
    you cannot confirm.
-4. **Check severity honestly.** A confirmed finding can still be over-labelled —
+5. **Check severity honestly.** A confirmed finding can still be over-labelled —
    downgrade a theoretical edge case labelled Critical.
 
 Never suggest code changes. Never widen scope to other issues you notice (at most one
