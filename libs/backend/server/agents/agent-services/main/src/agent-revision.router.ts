@@ -106,7 +106,7 @@ export function __CreateAgentServicesRouter(dependencies: AgentServicesRouterDep
 		return caller;
 	}
 
-	/** Resolves an authenticated caller for read-only surfaces, or sends 401. */
+	/** Resolves the authenticated caller for the read-only routes, or sends 401. */
 	function _requireCaller(req: Request, res: Response): ManagementCaller | null
 	{
 		const caller = resolveCaller(req);
@@ -366,7 +366,7 @@ function _runDenialStatus(reason: AgentRevisionLifecycleDenial): number
 	}
 }
 
-/** Mutable schedule fields shared by the create and update surfaces. */
+/** Schedule fields that both the create and the update route accept. */
 interface _ScheduleSpec
 {
 	readonly cron: string;

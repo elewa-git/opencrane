@@ -39,7 +39,7 @@ export function ___IsSha256ContentAddress(value: unknown): value is string
 	return typeof value === "string" && ___SHA256_CONTENT_ADDRESS_PATTERN.test(value);
 }
 
-/** Determine whether immutable artifact content metadata is internally valid. */
+/** Determine whether a content reference is well formed: an accepted content address, a non-negative safe-integer byte length, and a media type containing a slash. */
 export function ___IsArtifactContentReference(value: unknown): value is ArtifactContentReference
 {
 	return _isRecord(value)
@@ -51,7 +51,7 @@ export function ___IsArtifactContentReference(value: unknown): value is Artifact
 		&& value["mediaType"].includes("/");
 }
 
-/** Determine whether a logical artifact satisfies the target model invariants. */
+/** Determine whether an artifact is well formed. A non-null `currentRevision` must also point back at this same artifact, which is the check that catches a mis-wired revision. */
 export function ___IsArtifact(value: unknown): value is Artifact
 {
 	return _isRecord(value)
@@ -71,7 +71,7 @@ export function ___IsArtifactRevisionReference(value: unknown): value is Artifac
 		&& ___IsSha256ContentAddress(value["contentAddress"]);
 }
 
-/** Determine whether an immutable artifact revision is content-addressed and well formed. */
+/** Determine whether an artifact revision is well formed. Parent ids must be unique and must not include the revision's own id, so a revision can never be its own ancestor. */
 export function ___IsArtifactRevision(value: unknown): value is ArtifactRevision
 {
 	if (!_isRecord(value) || !Array.isArray(value["parentRevisionIds"]))
@@ -100,7 +100,7 @@ export function ___IsSkillRevision(value: unknown): value is SkillRevision
 		&& _isCanonicalTimestamp(value["createdAt"]);
 }
 
-/** Determine whether a skill bundle reference matches the canonical artifact revision exactly. */
+/** Determine whether a skill revision's bundle really is the given artifact revision — same artifact, same revision, same content address. Call this before trusting a skill's bytes. */
 export function ___SkillRevisionMatchesArtifactRevision(skill: SkillRevision, artifact: ArtifactRevision): boolean
 {
 	return ___IsSkillRevision(skill)

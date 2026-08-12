@@ -28,13 +28,19 @@ interface _MinimalResponse
 }
 
 /**
- * Build the request-context middleware.
+ * Build the middleware that gives every request a correlation id.
  *
- * Reuses an inbound `x-request-id` when a caller (or upstream proxy) supplies
- * one so a correlation id can span multiple services; otherwise mints a fresh
- * UUID. The id is echoed back on the response and installed as the active
- * context for the whole request handler chain.
+ * Mount it before any route that logs, because a log line emitted outside this context carries no
+ * `requestId`. It reuses an inbound `x-request-id` when a caller or proxy sends one, so one id can
+ * span several services, and mints a UUID otherwise. The id is echoed on the response and
+ * installed as the active context for the rest of the handler chain.
+ *
+ * The inbound header is trusted as-is and used only for correlation — never treat it as identity.
+ *
+ * Called by: `apps/opencrane/src/app/public-app.ts`, `apps/opencrane/src/app/internal-app.ts`.
  * @returns An Express-compatible request handler.
+ * @see {@link ___RunWithContext}
+ * @see https://www.rfc-editor.org/rfc/rfc6648
  */
 export function ___RequestContext(): (req: _MinimalRequest, res: _MinimalResponse, next: () => void) => void
 {

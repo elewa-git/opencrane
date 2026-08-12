@@ -345,7 +345,7 @@ def _recover_compiled_input(
     rather than inheriting a stale or unverifiable grant set.
     """
     # Decrypt and validate through the checkpoint owner rather than reading the file here. Keeping a
-    # single validation seam prevents resume code from accidentally accepting weaker coordinates.
+    # single validation point prevents resume code from accidentally accepting weaker coordinates.
     try:
         state = read_checkpoint(
             coordinates["runId"],

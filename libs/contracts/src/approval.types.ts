@@ -3,7 +3,7 @@ import type { AgentRunId, UserId } from "@opencrane/models/agents";
 /** Stable identifier of an approval request. */
 export type ApprovalId = string;
 
-/** Lifecycle status of a proof-bound approval request. */
+/** Where an approval request stands. Only `Approved` permits the action, and only until it is consumed once — `Revoked` means an approval that was granted no longer counts. */
 export enum ApprovalStatus
 {
   /** Awaiting an authorized user decision. */
@@ -18,7 +18,7 @@ export enum ApprovalStatus
   Revoked = "revoked",
 }
 
-/** Proof-bound approval checkpoint for one exact action. */
+/** One paused action waiting for a person's decision. `argumentsDigest` ties the approval to the exact arguments shown to the approver, so approving cannot authorize different arguments later. */
 export interface Approval
 {
   /** Stable approval identifier. */
@@ -27,7 +27,7 @@ export interface Approval
   runId: AgentRunId;
   /** Capability requested by the run. */
   capabilityKey: string;
-  /** Digest binding action name and normalized arguments. */
+  /** Digest of the action name plus its normalized arguments. Dispatch recomputes it, so changed arguments invalidate the approval. */
   actionDigest: string;
   /** Current approval status. */
   status: ApprovalStatus;

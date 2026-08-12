@@ -58,7 +58,7 @@ export interface Grant
   subjectName: string;
   /** Allow or deny decision. */
   access: GrantAccess;
-  /** Optional precedence value surfaced when the API includes it. */
+  /** Optional precedence, present only when the API returns it. A larger number wins; absence means the caller must not infer an ordering. */
   priority?: number;
   /** Optional inline operator note. */
   note?: string;

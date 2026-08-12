@@ -35,7 +35,7 @@ def zero_retry_openai_settings() -> dict[str, int]:
     output validation retries belong to the Pydantic agent. Keeping all four names visible makes it
     difficult for a framework upgrade to reintroduce an unnoticed default retry path.
     """
-    # Keep each conceptual retry surface explicit even where the current SDK collapses two settings
+    # Keep each retry setting explicit even where the current SDK collapses two of them
     # onto one transport knob. This is a review checklist against dependency-default drift.
     return {
         "model_request_retries": 0,
@@ -136,7 +136,7 @@ def pydantic_ai_event_source(
                     async with node.stream(run.ctx) as request_stream:
                         async for event in request_stream:
                             # Check inside the stream as well: node-level cancellation alone would still
-                            # allow buffered provider deltas to cross the runtime protocol seam.
+                            # allow buffered provider deltas to cross into the runtime protocol.
                             if cancel_event.is_set():
                                 break
                             events.append(translate_framework_event(event))

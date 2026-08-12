@@ -5,7 +5,7 @@ import type { CompiledRunInput } from "./compiled-run-input.types.js";
 import type { RunInputSnapshot } from "./run-input-snapshot.types.js";
 import type { RuntimeAssignment } from "./runtime-assignment.types.js";
 
-/** The only wire-protocol version accepted by the initial runtime boundary. */
+/** The only wire-protocol version the runtime boundary accepts today; a frame declaring anything else is rejected. */
 export const AGENT_RUNTIME_PROTOCOL_V1 = "opencrane.agent-runtime/v1";
 
 /** Sole projected-token audience accepted from first-party personal-agent runtimes. */
@@ -92,7 +92,7 @@ export interface RuntimeCommandCoordinates
 	readonly issuedAt: string;
 	/** ISO-8601 hard expiry after which this command is invalid. */
 	readonly expiresAt: string;
-	/** Proof-bound workload assignment allowed to receive this command. */
+	/** The workload assignment this command is addressed to. @see {@link RuntimeAssignment} */
 	readonly assignment: RuntimeAssignment;
 }
 
@@ -132,7 +132,7 @@ export interface CancelAttemptCommand
 	readonly reason: "cancelled" | "deadline_exceeded" | "budget_exhausted" | "capability_revoked";
 }
 
-/** Versioned command union issued by the control plane to one runtime instance. */
+/** Every command the control plane can send one runtime instance. A runtime must reject any other `type`. */
 export type RuntimeCommand =
 	| { readonly kind: "start_attempt"; readonly payload: StartAttemptCommand }
 	| { readonly kind: "resume_attempt"; readonly payload: ResumeAttemptCommand }
@@ -186,5 +186,5 @@ export interface RuntimeExternalActionCandidate extends RuntimeCandidateCoordina
 	readonly arguments: JsonValue;
 }
 
-/** Candidate union returned by the runtime to the control-plane authority. */
+/** Everything a runtime may return to the control plane. Nothing in it is stored until the control plane admits it. */
 export type RuntimeCandidate = RuntimeEventCandidate | RuntimeExternalActionCandidate;

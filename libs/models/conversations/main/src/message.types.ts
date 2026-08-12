@@ -1,9 +1,10 @@
 import type { ConversationId, MessageId } from "./identifiers.types.js";
 
 /**
- * Stable author roles for canonical conversation messages.
+ * Who a message is shown as being from.
  *
- * Values are persisted and rendered, but do not prove the author's identity or authority.
+ * This is a display role only. It proves nothing: a `user` message's real author is `userId`, and
+ * an `assistant` message's is `runId`. Never authorize anything on the strength of a role.
  */
 export enum MessageRoles
 {
@@ -18,9 +19,11 @@ export enum MessageRoles
 }
 
 /**
- * Stable assembly lifecycle for a canonical conversation message.
+ * How far a message's content has got.
  *
- * Values are persisted so replay never mistakes partial output for completed content.
+ * Only `Completed` means the content is final. `Pending` and `Streaming` are partial, and
+ * `Failed` and `Cancelled` are partial forever — none of the three terminal states can resume.
+ * A renderer must not treat a streaming message as finished.
  */
 export enum MessageStates
 {
@@ -37,9 +40,10 @@ export enum MessageStates
 }
 
 /**
- * Stable content-block representations inside one canonical message.
+ * What one block of a message's content is.
  *
- * These values select rendering only; referenced assets and tools retain their own authority.
+ * The kind chooses how to render the block. An `Artifact` block holds a reference, not bytes, and
+ * a reader must still pass the artifact's own access check before fetching it.
  */
 export enum MessageContentBlockKinds
 {
@@ -54,9 +58,10 @@ export enum MessageContentBlockKinds
 }
 
 /**
- * Stable provenance sources recorded on every canonical message.
+ * Which path a message came in through.
  *
- * Values distinguish admission paths for audit and rendering but do not authenticate an author.
+ * Recorded for audit and rendering. It says how the message was admitted, not who wrote it, so it
+ * must never be used to authenticate an author — `userId` and `runId` are the identity fields.
  */
 export enum MessageSources
 {
@@ -81,7 +86,7 @@ export interface MessageContentBlock
 	readonly value: string;
 }
 
-/** Canonical durable conversation message admitted by exactly one mode strategy. */
+/** One stored message. `runId` and `userId` are the real identity fields, and `completedAt` is set exactly when `state` is terminal. */
 export interface Message
 {
 	/** Stable message identifier. */
@@ -100,7 +105,7 @@ export interface Message
 	readonly runId: string | null;
 	/** User who authored the message, or null for runtime- and platform-authored content. */
 	readonly userId: string | null;
-	/** Durable caller key that makes message admission idempotent within the conversation. */
+	/** Caller-supplied key. Re-submitting the same key in the same conversation returns the existing message instead of creating a second one. */
 	readonly idempotencyKey: string;
 	/** ISO-8601 instant at which the message was created. */
 	readonly createdAt: string;

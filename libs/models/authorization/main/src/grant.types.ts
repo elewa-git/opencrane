@@ -2,10 +2,10 @@ import type { AuthorizationScope } from "./authorization-scope.types.js";
 import type { CapabilityReference } from "./capability.types.js";
 import type { AuthorizationResourceLocator } from "./resource-locator.types.js";
 
-/** Effect applied by an authorization grant. */
+/** Whether a grant allows or denies. At the winning priority a single deny beats every allow. @see {@link __DecideAuthorization} */
 export type AuthorizationGrantEffect = "allow" | "deny";
 
-/** Prioritized capability grant for one subject and scope. */
+/** One grant: it allows or denies one capability on one resource, for one subject, within one scope, during a time window. Higher `priority` replaces lower rather than adding to it. */
 export interface AuthorizationGrant
 {
 	/** Stable grant identifier used in audit evidence. */
@@ -32,7 +32,7 @@ export interface AuthorizationGrant
 	revokedAtEpochMs: number | null;
 }
 
-/** Authorization request evaluated against grants. */
+/** One action being attempted. `nowEpochMs` is supplied by the caller, not read from the system clock, so a decision is reproducible from an audit record. */
 export interface AuthorizationRequest
 {
 	/** Stable silo identifier containing the requested action. */
@@ -49,7 +49,7 @@ export interface AuthorizationRequest
 	nowEpochMs: number;
 }
 
-/** Reason returned by deterministic grant evaluation. */
+/** Why a decision came out as it did. Safe to log; several reasons mean deny, so a caller must read `outcome` rather than inferring it from the reason. */
 export type AuthorizationDecisionReason =
 	"winning_allow"
 	| "winning_deny"
@@ -58,7 +58,7 @@ export type AuthorizationDecisionReason =
 	| "invalid_grant_priority"
 	| "invalid_grant_validity";
 
-/** Stable result vocabulary emitted by deterministic authorization evaluation. */
+/** The two possible outcomes: allow or deny. There is no third, indeterminate answer — evaluation always resolves. */
 export enum AuthorizationDecisionOutcomes
 {
 	/** At least one valid winning grant permits the exact request. */
@@ -67,7 +67,7 @@ export enum AuthorizationDecisionOutcomes
 	Deny = "deny",
 }
 
-/** Fail-closed result of deterministic grant evaluation. */
+/** The decision. `grantIds` names the grants at the winning priority, or the offending grants when the deny was caused by malformed data — so it is evidence for an audit, not a list of grants that applied. */
 export interface AuthorizationDecision
 {
 	/** Final authorization outcome. */
@@ -76,6 +76,6 @@ export interface AuthorizationDecision
 	reason: AuthorizationDecisionReason;
 	/** Grant identifiers at the winning priority or invalid boundary. */
 	grantIds: readonly string[];
-	/** Winning priority when valid matching grants exist. */
+	/** The priority that decided the outcome, or absent when no valid matching grant existed. */
 	winningPriority?: number;
 }

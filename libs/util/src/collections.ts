@@ -1,19 +1,22 @@
 /**
- * Native collection utilities replacing lodash helpers for ESM compatibility.
+ * Small collection helpers that replace the lodash functions this repo used to import.
  *
- * Each function mirrors the lodash signature it replaces so call-sites
- * need only swap the import path.
+ * lodash is CommonJS-only, which breaks the ESM build. Each function here keeps the lodash
+ * signature it replaces, so migrating a call site is only an import change.
  */
 
 /**
- * Sort an array of items by a string key or by natural string comparison.
+ * Sort a copy of an array, by one property or by the elements themselves.
  *
- * When called without a key the elements themselves are compared via
- * `String.prototype.localeCompare`, matching `_.sortBy(array)` for
- * string arrays.
+ * Values are compared with `localeCompare` after `String(...)`, matching `_.sortBy`. That means
+ * the order is locale-sensitive and numbers sort as text, so do not use this where a stable
+ * machine-readable order matters — a digest input, for example.
  *
- * @param items - Source array (not mutated).
- * @param key - Optional property name to sort by.
+ * Called by: `libs/backend/agents/execution/inputs/main/src/session-assembly.ts`,
+ * `libs/backend/server/iam/groups/main/src/core/groups.logic.ts`,
+ * `libs/backend/server/gateways/mcp/main/src/core/mcp-operator.logic.ts`.
+ * @param items - Source array; it is not mutated.
+ * @param key - Optional property to sort by; without it the elements are compared directly.
  * @returns A new sorted array.
  */
 export function ___SortBy<T>(items: T[], key?: keyof T): T[]
@@ -37,13 +40,14 @@ export function ___SortBy<T>(items: T[], key?: keyof T): T[]
 }
 
 /**
- * Test whether any element in an array satisfies a predicate.
+ * Test whether any element in an array passes a check.
  *
- * This is a thin wrapper around `Array.prototype.some` that matches the
- * lodash `_.some(collection, predicate)` call signature for arrays.
+ * A thin wrapper over `Array.prototype.some`, kept only so a lodash call site could migrate
+ * without changing shape. New code should call `.some(...)` directly.
  *
+ * No caller left in this repo — grep found none outside this file. A candidate for deletion.
  * @param items - Array to test.
- * @param predicate - Callback invoked per element.
+ * @param predicate - Called once per element.
  * @returns True when at least one element passes.
  */
 export function ___SomeArray<T>(items: T[], predicate: (item: T) => boolean): boolean
@@ -52,13 +56,14 @@ export function ___SomeArray<T>(items: T[], predicate: (item: T) => boolean): bo
 }
 
 /**
- * Test whether any entry in a plain object satisfies a predicate.
+ * Test whether any entry in a plain object passes a check.
  *
- * Mirrors the lodash `_.some(object, iteratee)` overload that passes
- * `(value, key)` to the callback.
+ * Mirrors the lodash `_.some(object, iteratee)` overload, which passes `(value, key)` rather
+ * than just the value. Only own enumerable keys are visited.
  *
+ * No caller left in this repo — grep found none outside this file. A candidate for deletion.
  * @param record - Plain object to iterate.
- * @param predicate - Callback invoked with `(value, key)`.
+ * @param predicate - Called with `(value, key)`.
  * @returns True when at least one entry passes.
  */
 export function ___SomeRecord<V>(record: Record<string, V>, predicate: (value: V, key: string) => boolean): boolean

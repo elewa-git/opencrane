@@ -4,13 +4,35 @@ import type { BeginRenderingMessage, DataModelUpdate, SurfaceUpdateMessage } fro
 import type { RunEventType } from "@opencrane/models/agents";
 import type { ConversationId } from "@opencrane/models/conversations";
 
-/** Version of OpenCrane's intentionally small AG-UI event projection. */
+/**
+ * Version tag for OpenCrane's AG-UI event projection.
+ *
+ * OpenCrane deliberately emits a small subset of the AG-UI event set, so a client
+ * must not assume every upstream event type can appear. Bump this when the set of
+ * emitted events or their field meanings change, so a client can refuse a stream
+ * it does not understand.
+ * @see https://docs.ag-ui.com
+ */
 export const AG_UI_PROJECTION_VERSION = "opencrane.ag-ui.v1";
 
-/** Version of the governed A2UI payload carried inside an AG-UI CUSTOM event. */
+/**
+ * Version tag for the A2UI payload OpenCrane carries inside an AG-UI CUSTOM event.
+ *
+ * This is also the CUSTOM event's `name`, so a client matches on this exact string to
+ * find A2UI payloads and ignores CUSTOM events with any other name.
+ * @see https://a2ui.org/specification/v0.8-a2ui/
+ * @see https://docs.ag-ui.com
+ */
 export const AG_UI_A2UI_ENVELOPE_VERSION = "opencrane.a2ui.v1";
 
-/** Version of the lossy governed-child update carried inside a parent run stream. */
+/**
+ * Version tag for the child-run update OpenCrane carries inside a parent's run stream.
+ *
+ * Also the CUSTOM event's `name`. The update is deliberately lossy: it reports only how
+ * the child ended, never the child's own context or its siblings, so a parent-side client
+ * cannot reconstruct a child conversation from it.
+ * @see {@link AgUiChildRunEnvelope}
+ */
 export const AG_UI_CHILD_RUN_ENVELOPE_VERSION = "opencrane.child_run.v1";
 
 /** Custom event name telling the browser to clear the open-interrupt overlay. It carries no cursor, so Last-Event-ID never advances past it. */
@@ -34,7 +56,7 @@ export enum AgUiA2uiSurfaceStates
 	Streaming = "streaming",
 	/** The server says the surface is ready for the user to act on. */
 	Ready = "ready",
-	/** One displayed action awaits authoritative server admission. */
+	/** The user acted and the server has not accepted or rejected it yet; keep controls disabled. */
 	ActionPending = "action_pending",
 	/** The authoritative server accepted the displayed action. */
 	Submitted = "submitted",
@@ -84,7 +106,13 @@ export interface AgUiChildRunEnvelope
 	readonly finishedAt: string;
 }
 
-/** Display-safe technical classification for one failed tool call. */
+/**
+ * Payload of the {@link AG_UI_TOOL_FAILURE_EVENT} CUSTOM event.
+ *
+ * Safe to display: it names which tool call failed and, when the server chose one, a code
+ * from a fixed list. It never carries the provider's own error text. The run may continue
+ * after this event, so a client must not treat it as terminal.
+ */
 export interface AgUiToolFailureEnvelope
 {
 	/** Name of the source run event. It gives the browser no permission to act or retry. */

@@ -250,7 +250,7 @@ def normalize_event(
         )
     if isinstance(kind, str) and kind in _A2UI_EVENT_TYPES:
         envelope = neutral_event.get("payload")
-        # The neutral adapter may forward a complete versioned A2UI envelope. This seam never
+        # The neutral adapter may forward a complete versioned A2UI envelope. This path never
         # derives framework-specific UI shapes or fills absent coordinates on its behalf.
         if isinstance(envelope, dict):
             return (_A2UI_EVENT_TYPES[kind], {"a2ui": dict(envelope)})

@@ -1,6 +1,6 @@
 import type { components } from "./generated/api.js";
 
-/** Shared public-error bounds consumed by the server projector, OpenAPI, and browser parser. */
+/** The size caps on a public error body. All three of the server error projector, the OpenAPI schema, and the browser parser read these, so changing one number changes every side at once. */
 export const API_ERROR_LIMITS = {
 	/** Maximum public error-message length. */
 	ErrorMessageLength: 500,
@@ -19,10 +19,11 @@ export const API_ERROR_LIMITS = {
 } as const;
 
 /**
- * Stable request locations used by public field-validation issues.
+ * Which part of a request a validation issue refers to.
  *
- * These values cross the HTTP boundary and let clients distinguish form fields from route and
- * query coordinates without parsing a dotted string.
+ * A client reads this instead of parsing a dotted path string, so it can map an issue onto the
+ * right form field. Only `Body` exists today; a client must therefore tolerate an unknown value
+ * rather than assuming the set is closed.
  */
 export enum ApiValidationIssueLocations
 {

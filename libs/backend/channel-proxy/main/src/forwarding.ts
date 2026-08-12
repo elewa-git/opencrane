@@ -3,7 +3,24 @@ import { ___DoWithTrace } from "@opencrane/backend/observability";
 import type { AuthorizedChannelTarget, ChannelProxyDependencies, DelegatedSession } from "./channel-proxy.types.js";
 import { __HasForgedIdentityHeaders, __ValidateOrigin } from "./origin-policy.js";
 
-/** Relay one authenticated SSE event stream from its persisted replay cursor. */
+/**
+ * Relay one browser's event stream from the conversation replay endpoint, resuming at its cursor.
+ *
+ * This proxy decides nothing about access. It checks the request is same-origin and carries a
+ * session, then asks OpenCrane to authorize the conversation and hand back a short-lived internal
+ * endpoint; OpenCrane remains the only authority. The relay is bounded on four axes — total
+ * duration, idle gap, bytes per SSE event, and per-subject rate — and a client disconnect cancels
+ * the upstream read.
+ *
+ * A cursor may arrive as the `cursor` query parameter or the `last-event-id` header. Supplying
+ * both with different values is rejected rather than resolved, so a resume can never silently
+ * start from the wrong place.
+ *
+ * Called by: `apps/channel-proxy/src/server.ts`.
+ * @param request - The browser's request; must be a same-origin GET carrying a cookie or authorization header.
+ * @param dependencies - Origin allowlist, stream bounds, the OpenCrane resolver, the rate limiter, and an injectable `fetch`.
+ * @returns The relayed SSE stream on success, or a small JSON problem body with the matching status: 400 malformed input, 401 no session, 403 origin denied, 405 wrong method, 429 rate limited, 502 upstream unusable, 503 OpenCrane unreachable.
+ */
 export async function __RelayEvents(request: Request, dependencies: ChannelProxyDependencies): Promise<Response>
 {
 	const session = _ValidatePublicRequest(request, dependencies);
@@ -88,7 +105,7 @@ export async function __RelayEvents(request: Request, dependencies: ChannelProxy
 	return new Response(body, { status: 200, headers: { "content-type": "text/event-stream", "cache-control": "no-store", connection: "keep-alive" } });
 }
 
-/** Validate the public event port's same-origin and delegated-session preconditions. */
+/** Check the request is same-origin, carries no forged identity header, and supplies a cookie or authorization value. */
 function _ValidatePublicRequest(request: Request, dependencies: ChannelProxyDependencies): DelegatedSession | Response
 {
 	if (__HasForgedIdentityHeaders(request.headers))
@@ -109,7 +126,7 @@ function _ValidatePublicRequest(request: Request, dependencies: ChannelProxyDepe
 	return { cookie, authorization, trustedHost };
 }
 
-/** Validate that OpenCrane returned a live, credential-free internal service URL. */
+/** Check OpenCrane's endpoint is an internal plain-HTTP URL on an allowed host suffix, carries no embedded credentials, and has not expired. */
 function _ValidateTarget(target: AuthorizedChannelTarget, suffixes: readonly string[]): URL | null
 {
 	try
@@ -129,7 +146,7 @@ function _ValidateTarget(target: AuthorizedChannelTarget, suffixes: readonly str
 	}
 }
 
-/** Construct a response stream that never buffers more than one bounded SSE event. */
+/** Build the relayed stream. It holds at most one SSE event in memory and aborts on the duration limit, the idle limit, an oversized event, or a client disconnect. */
 function _CreateBoundedSseBody(upstream: ReadableStream<Uint8Array>, downstreamSignal: AbortSignal, durationMs: number, idleMs: number, maxEventBytes: number): ReadableStream<Uint8Array>
 {
 	const reader = upstream.getReader();
@@ -257,7 +274,7 @@ function _FindEventBoundary(bytes: Uint8Array<ArrayBufferLike>): number
 	return -1;
 }
 
-/** Accept one compact opaque identifier without control or delimiter characters. */
+/** Whether a conversation id or cursor is safe to forward: 1-200 characters from `A-Za-z0-9._:-` only. */
 function _OpaqueIdentifierAllowed(value: string): boolean
 {
 	return value.length > 0 && value.length <= 200 && /^[A-Za-z0-9._:-]+$/.test(value);

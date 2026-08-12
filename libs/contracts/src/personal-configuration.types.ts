@@ -6,7 +6,7 @@
  */
 export enum AgentConfigPatchKinds
 {
-	/** Starts reviewed persona onboarding; it never carries replacement persona text. */
+	/** Asks to re-run persona onboarding. The proposal carries no persona text — the new persona comes from the reviewed onboarding flow, so this cannot be used to inject one. */
 	PersonaRefresh = "persona_refresh",
 	/** Selects a registered model alias for a future immutable agent revision. */
 	ModelAlias = "model_alias",

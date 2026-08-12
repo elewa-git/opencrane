@@ -12,7 +12,18 @@ import type { ArtifactPreprocessorRemote, ArtifactPreprocessorRemoteConfig } fro
 /** Maximum accepted claim response size from the private authority. */
 const _MAXIMUM_CLAIM_RESPONSE_BYTES = 16_384;
 
-/** Create the OpenCrane-only adapter that reads a rotating projected token for every call. */
+/**
+ * Build the worker's only route to the outside world: OpenCrane.
+ *
+ * Every call reads the projected ServiceAccount token from disk again, so kubelet rotation needs no
+ * restart, and every call gets its own timeout independent of any caller. The worker never learns a
+ * storage path or a storage credential — bytes are brokered through OpenCrane in both directions.
+ *
+ * Called by: `apps/artifact-preprocessor/src/index.ts`.
+ * @param config - OpenCrane origin, token path, and per-call timeout.
+ * @returns An adapter implementing claim, source read, output submit, and failure report.
+ * @see {@link ArtifactPreprocessorRemote}
+ */
 export function _CreateArtifactPreprocessorRemote(config: ArtifactPreprocessorRemoteConfig): ArtifactPreprocessorRemote
 {
 	return {
@@ -23,7 +34,7 @@ export function _CreateArtifactPreprocessorRemote(config: ArtifactPreprocessorRe
 	};
 }
 
-/** Claim one job through the TokenReview-protected OpenCrane internal route. */
+/** Ask OpenCrane for the next job, returning null when there is none. OpenCrane authenticates the worker by TokenReview on its projected token. */
 async function _Claim(config: ArtifactPreprocessorRemoteConfig, signal: AbortSignal): Promise<ArtifactPreprocessorJobClaim | null>
 {
 	return ___DoWithTrace("artifact_preprocessor.job.claim", {}, async function _claim()
@@ -43,7 +54,7 @@ async function _Claim(config: ArtifactPreprocessorRemoteConfig, signal: AbortSig
 	});
 }
 
-/** Stream server-brokered source bytes into one exclusive bounded scratch file. */
+/** Stream the source PDF from OpenCrane into a scratch file, refusing to write more than the byte limit. */
 async function _ReadSource(config: ArtifactPreprocessorRemoteConfig, claim: ArtifactPreprocessorJobClaim, destinationPath: string, maximumBytes: number, signal: AbortSignal): Promise<void>
 {
 	await ___DoWithTrace("artifact_preprocessor.source.read", { jobId: claim.lease.jobId, attempt: claim.lease.attempt, sourceByteLength: claim.sourceByteLength }, async function _read()
@@ -80,7 +91,7 @@ async function _ReadSource(config: ArtifactPreprocessorRemoteConfig, claim: Arti
 	});
 }
 
-/** Stream one bounded output to OpenCrane without exposing storage coordinates or capabilities. */
+/** Stream the converted text back to OpenCrane, which hashes, stores, and publishes it. The worker is given no storage location and no storage credential, so it cannot write to the object store itself. */
 async function _SubmitOutput(config: ArtifactPreprocessorRemoteConfig, command: ArtifactPreprocessorClaimCommand, sourcePath: string, byteLength: number, signal: AbortSignal): Promise<void>
 {
 	await ___DoWithTrace("artifact_preprocessor.output.submit", { jobId: command.jobId, attempt: command.attempt, outputByteLength: byteLength }, async function _submit()
@@ -105,7 +116,7 @@ async function _SubmitOutput(config: ArtifactPreprocessorRemoteConfig, command: 
 	});
 }
 
-/** Report one worker-observed failure through the current claim fence. */
+/** Tell OpenCrane this attempt failed, sending one fixed reason code with the current claim. OpenCrane decides whether to retry. */
 async function _ReportFailure(config: ArtifactPreprocessorRemoteConfig, command: ArtifactPreprocessorFailureCommand, signal: AbortSignal): Promise<void>
 {
 	await ___DoWithTrace("artifact_preprocessor.failure.report", { jobId: command.jobId, attempt: command.attempt, failureCode: command.failureCode }, async function _report()
@@ -123,7 +134,7 @@ async function _ReportFailure(config: ArtifactPreprocessorRemoteConfig, command:
 	});
 }
 
-/** Read and validate the mounted projected token without retaining it between calls. */
+/** Read the projected ServiceAccount token from disk and reject a blank one. It is never cached, so a rotated token is picked up on the next call. */
 async function _Authorization(config: ArtifactPreprocessorRemoteConfig): Promise<string>
 {
 	const token = (await readFile(config.tokenPath, "utf8")).trim();
@@ -131,7 +142,7 @@ async function _Authorization(config: ArtifactPreprocessorRemoteConfig): Promise
 	return `Bearer ${token}`;
 }
 
-/** Combine caller cancellation with one bounded independent HTTP deadline. */
+/** Combine the caller's cancellation with this client's own timeout, so a slow OpenCrane call cannot hang forever even when the caller never cancels. */
 function _TimeoutAbort(milliseconds: number, parent: AbortSignal): readonly [AbortSignal, () => void]
 {
 	const controller = new AbortController();
@@ -142,13 +153,13 @@ function _TimeoutAbort(milliseconds: number, parent: AbortSignal): readonly [Abo
 	return [controller.signal, function _dispose() { clearTimeout(timeout); parent.removeEventListener("abort", _Abort); }];
 }
 
-/** Extract the exact live claim coordinates accepted by later broker calls. */
+/** Pull out the three fields — `jobId`, `attempt`, `claimFence` — that every later broker call must carry. */
 function _ClaimCommand(claim: ArtifactPreprocessorJobClaim): ArtifactPreprocessorClaimCommand
 {
 	return { jobId: claim.lease.jobId, attempt: claim.lease.attempt, claimFence: claim.lease.claimFence };
 }
 
-/** Cancel an anomalous response body before surfacing its bounded protocol failure. */
+/** Cancel an unexpected response body so the socket is released, then throw a stable protocol error. */
 async function _RejectResponse(response: Response, message: string): Promise<never>
 {
 	try
@@ -162,7 +173,7 @@ async function _RejectResponse(response: Response, message: string): Promise<nev
 	throw new Error(message);
 }
 
-/** Decode one exact server-owned claim response without accepting added fields. */
+/** Decode a claim response, rejecting any unexpected field so a changed server contract fails loudly rather than being silently ignored. */
 function _ClaimFromUnknown(value: unknown): ArtifactPreprocessorJobClaim
 {
 	if (value === null || typeof value !== "object" || Array.isArray(value)) throw new Error("artifact preprocess claim was not an object");
@@ -175,13 +186,18 @@ function _ClaimFromUnknown(value: unknown): ArtifactPreprocessorJobClaim
 }
 
 /**
- * Read a bounded authority response and return only the validator-owned protocol value.
+ * Read a size-capped response body and validate it before returning anything.
  *
- * @param response - Authority response whose body remains untrusted.
- * @param maximumBytes - Hard allocation ceiling enforced before and during streaming.
- * @param validate - Protocol validator applied immediately after syntax decoding.
- * @param validatorArguments - Additional request coordinates required by the validator.
- * @returns The validated protocol value.
+ * The cap is applied twice: once to the declared `Content-Length` and again while streaming, because
+ * a declared length is not evidence. So a server that under-declares its body still cannot make
+ * this allocate more than `maximumBytes`.
+ *
+ * @param response - Response whose body is untrusted.
+ * @param maximumBytes - Hard byte ceiling, enforced before and during streaming.
+ * @param validate - Validator run immediately after JSON decoding.
+ * @param validatorArguments - Extra values the validator needs, such as the expected job id.
+ * @returns The validated value.
+ * @throws Error when the declared length is too large, the streamed body exceeds the cap, the text is not JSON, or the validator rejects it.
  */
 async function _ReadBoundedAndValidateJson<T, TArguments extends readonly unknown[]>(response: Response, maximumBytes: number, validate: (candidate: unknown, ...arguments_: TArguments) => T, ...validatorArguments: TArguments): Promise<T>
 {

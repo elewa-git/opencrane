@@ -1,7 +1,7 @@
 import type { ArtifactPreprocessorClaimCommand, ArtifactPreprocessorFailureCommand, ArtifactPreprocessorJobClaim } from "@opencrane/contracts";
 import type { Logger } from "@opencrane/backend/observability";
 
-/** Minimal OpenCrane broker surface available to the isolated worker. */
+/** The only way the worker reaches anything outside its process. Deliberately small: OpenCrane brokers both the source bytes and the output, so the worker holds no storage credential and needs no inbound network access. */
 export interface ArtifactPreprocessorRemote
 {
 	/** Claim the next eligible job, or return null when no work is ready. */
@@ -25,7 +25,7 @@ export interface ArtifactPreprocessorRemoteConfig
 	readonly requestTimeoutMilliseconds: number;
 }
 
-/** Isolated deterministic conversion port; production invokes pdftotext without a shell. */
+/** How the worker converts a PDF to text. In production this runs `pdftotext` with a fixed argument list and no shell, so a filename can never be interpreted as a command. */
 export interface PdfTextExtractor
 {
 	/** Convert one source PDF path to an output UTF-8 file under the provided wall-clock cap. */

@@ -1,4 +1,4 @@
-/** Sole projected-token audience accepted from the agent controller. */
+/** The only token audience OpenCrane accepts from the agent controller; a token for any other audience is rejected. */
 export const AGENT_CONTROLLER_PROJECTED_TOKEN_AUDIENCE = "opencrane-agent-controller";
 
 /** Exact Kubernetes ServiceAccount allowed to drive agent-workload reconciliation. */
@@ -93,7 +93,7 @@ export interface AgentControllerRunAttemptAssignmentCommand
 /** Response to an assignment commit, whether it committed now or replayed an identical earlier commit. */
 export interface AgentControllerRunAttemptAssignmentResult
 {
-	/** Whether this call committed the assignment or replayed its exact durable value. */
+	/** True when this call committed the assignment; false when it replayed an identical stored one. Both mean success. */
 	readonly outcome: "assigned" | "idempotent";
 	/** Logical run bound to the Job. */
 	readonly runId: string;

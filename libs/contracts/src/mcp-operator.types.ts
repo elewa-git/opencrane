@@ -1,5 +1,5 @@
 /**
- * Operator-API contracts for the MCP consumption + governance surface.
+ * Operator-API contracts for consuming and governing MCP servers.
  *
  * These shapes back the `/api/v1/mcp/*` API the WeOwnAI frontend targets: the
  * entitlement-scoped catalogue, per-user installs / credential connect, and the
@@ -13,12 +13,17 @@
  */
 
 /**
- * How a caller consumes a downstream MCP server. Surfaced as the `type` field on
- * {@link McpCatalogServer} and decides the initial install connection state.
+ * How a caller consumes a downstream MCP server.
+ *
+ * Returned as the `type` field on {@link McpCatalogServer}, and it decides what happens when a
+ * user installs the server: a single-user server starts at `NeedsCredential` and must collect
+ * the fields in `credentialSchema`; a multi-user server is already usable via the org-wide key;
+ * a remote-OAuth server needs an OAuth handshake instead of a form.
+ * @see https://modelcontextprotocol.io/specification/2025-06-18
  */
 export enum McpServerType
 {
-  /** Each caller authors their own credential (per-user secret). */
+  /** Each user supplies their own credential, using the fields in `credentialSchema`. */
   SingleUser = "single-user",
   /** One org-wide shared key brokered for every caller (no per-user secret). */
   MultiUser = "multi-user",
@@ -27,8 +32,11 @@ export enum McpServerType
 }
 
 /**
- * Org-admin governance lifecycle of a catalogue server. Only
- * {@link McpApprovalStatus.Published} servers reach the user-facing catalogue.
+ * Where a catalogue server sits in org-admin review.
+ *
+ * Only {@link McpApprovalStatus.Published} servers appear in the user-facing catalogue, so a
+ * read path that forgets to filter on it exposes servers an admin has not released. `Approved`
+ * is reviewed but deliberately not yet visible.
  */
 export enum McpApprovalStatus
 {
@@ -43,8 +51,11 @@ export enum McpApprovalStatus
 }
 
 /**
- * Per-user install connection state. Reports custody state only — never the
- * underlying secret material.
+ * Whether one user's install of a server is usable yet, and how it was connected.
+ *
+ * It reports only whether a credential is held and by what route — never the credential itself.
+ * `Activating` and `ActivationFailed` are both transient-looking but only the first will change
+ * on its own; a UI must offer a retry for the second.
  */
 export enum McpConnectionStatus
 {

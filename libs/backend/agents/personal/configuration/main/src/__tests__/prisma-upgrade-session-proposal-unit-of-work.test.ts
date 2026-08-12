@@ -37,7 +37,7 @@ function _snapshot(personaRevisionId: string | null = "persona-1", conversationI
 	return snapshot;
 }
 
-/** Builds the exact database seams used by the upgrade-session proposal transaction. */
+/** Builds the database doubles the upgrade-session proposal transaction talks to. */
 function _database(ownerProfileId: string | null = "profile-1", createError: Error | null = null)
 {
 	let traceFields: Record<string, unknown> | undefined;

@@ -16,10 +16,13 @@ function _deny(
 }
 
 /**
- * Checks that verification evidence is bound to every signed envelope field.
+ * Checks that the verifier's evidence describes this exact signed revision, field by field.
+ *
+ * Without this, a caller could pass evidence from a different, validly signed revision and have
+ * it accepted for this one.
  * @param revision - Signed fleet membership revision.
- * @param evidence - Explicit evidence from the signature verifier.
- * @returns Whether the evidence belongs to the exact signed envelope.
+ * @param evidence - What the signature verifier reported.
+ * @returns True only when issuer, key id, revision number, silo, digest, and signature all match.
  */
 function _verificationEvidenceMatches(
 	revision: SignedFleetMembershipRevision,
@@ -35,13 +38,25 @@ function _verificationEvidenceMatches(
 }
 
 /**
- * Evaluates a signed fleet membership revision without performing crypto or I/O.
- * The caller supplies signature-verification evidence and time. Trust fails
- * closed at the earlier of the signed expiry or configured staleness boundary.
- * @param revision - Fleet-issued signed membership revision.
- * @param evidence - Explicit evidence from a trusted signature verifier.
- * @param expectation - Silo, subject, assertion, revision, and freshness boundary.
- * @returns Deterministic trust decision.
+ * Decide whether a signed fleet-membership revision can be trusted for one subject.
+ *
+ * This function does no cryptography and no I/O. The caller verifies the signature elsewhere and
+ * passes the result in as `evidence`, and passes the current time in as part of `expectation`, so
+ * the decision is a pure function and can be replayed from an audit record.
+ *
+ * Trust ends at whichever comes first: the revision's own signed expiry, or the caller's staleness
+ * limit. A revision number lower than one already accepted for the silo is rejected, which is what
+ * stops an old signed snapshot being replayed.
+ *
+ * Fails closed. A denial deliberately exposes no identity taken from the assertion, so a caller
+ * must not read organization or subject data out of a denied result.
+ *
+ * Called by: `libs/backend/server/iam/membership/main/src/membership-authority.ts`.
+ * @param revision - The signed membership revision to evaluate.
+ * @param evidence - What a trusted signature verifier reported about that revision.
+ * @param expectation - Expected issuer, silo, subject, assertion, last-accepted revision, current time, and staleness limit.
+ * @returns A trusted decision carrying the matched organization and the time trust expires, or a denial carrying only a stable reason.
+ * @see {@link FleetMembershipTrustReason}
  */
 export function __EvaluateFleetMembershipRevision(
 	revision: SignedFleetMembershipRevision,

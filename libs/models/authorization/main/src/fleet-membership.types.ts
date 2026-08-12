@@ -1,6 +1,6 @@
 import type { AuthorizationScope } from "./authorization-scope.types.js";
 
-/** One signed claim that a subject belongs to a silo and authorization scope. */
+/** A claim that one subject belongs to one silo and one scope. It only means anything inside a signed {@link SignedFleetMembershipRevision}; on its own it is unverified data. */
 export interface FleetMembershipAssertion
 {
 	/** Stable assertion identifier referenced by authorization evaluation. */
@@ -13,7 +13,7 @@ export interface FleetMembershipAssertion
 	scope: AuthorizationScope;
 }
 
-/** Fleet-issued and signed membership snapshot. */
+/** A signed set of membership claims for one silo. Evaluate it with {@link __EvaluateFleetMembershipRevision} rather than reading `assertions` directly — the signature, expiry, and revision ordering all have to be checked first. */
 export interface SignedFleetMembershipRevision
 {
 	/** Positive, monotonically increasing revision issued by the fleet. */
@@ -36,7 +36,7 @@ export interface SignedFleetMembershipRevision
 	assertions: readonly FleetMembershipAssertion[];
 }
 
-/** Explicit evidence produced by a trusted signature verifier. */
+/** What a signature verifier reported. Passing it in keeps {@link __EvaluateFleetMembershipRevision} free of cryptography, so a caller must not fabricate these fields from the revision itself. */
 export interface FleetSignatureVerificationEvidence
 {
 	/** Whether cryptographic signature verification succeeded. */
@@ -55,7 +55,7 @@ export interface FleetSignatureVerificationEvidence
 	signature: string;
 }
 
-/** Expected trust boundary for accepting a signed fleet membership revision. */
+/** What the caller requires before trusting a revision: the issuer, silo, subject, assertion and scope it must contain, the highest revision already accepted, the current time, and the staleness limit. */
 export interface FleetMembershipTrustExpectation
 {
 	/** Fleet issuer that is trusted for this evaluation. */
@@ -70,7 +70,7 @@ export interface FleetMembershipTrustExpectation
 	scope: AuthorizationScope;
 	/** Current epoch-millisecond time supplied by the caller. */
 	nowEpochMs: number;
-	/** Highest fleet membership revision previously accepted for this silo. */
+	/** Highest revision already accepted for this silo. Anything lower is rejected, which is what stops an old signed snapshot being replayed. */
 	lastAcceptedRevision: number;
 	/** Maximum permitted age of a signed revision in milliseconds. */
 	maximumStalenessMs: number;
@@ -93,7 +93,7 @@ export type FleetMembershipTrustReason =
 	| "stale"
 	| "assertion_mismatch";
 
-/** Signed membership evidence accepted at the pure trust boundary. */
+/** A trusted result. `trustedUntil` is a hard stop: the caller must stop relying on this decision at that time, not merely refresh it eventually. */
 export interface TrustedFleetMembershipDecision
 {
 	/** Signals that every signed-envelope, time, and assertion check succeeded. */
@@ -108,7 +108,7 @@ export interface TrustedFleetMembershipDecision
 	readonly trustedUntilEpochMs: number;
 }
 
-/** Fail-closed membership denial that deliberately exposes no assertion-derived identity. */
+/** A denial. It carries the revision and a reason only — no organization, subject, or scope — so a caller cannot read identity out of a failed check. */
 export interface DeniedFleetMembershipDecision
 {
 	/** Signals that the signed membership revision cannot be trusted. */
