@@ -136,7 +136,14 @@ function _canonicalIntegrationAssignments(assignments: readonly RunInputSnapshot
 		.sort(function _byIntegration(left, right): number { return left.integrationId.localeCompare(right.integrationId); });
 }
 
-/** Copies one integration's tools into a fixed order so the same tools always digest the same. */
+/**
+ * Copies one integration's tools into a fixed shape: sorted by name, with each schema's keys
+ * put into a set order by the clone.
+ *
+ * Assembly hashes the finished snapshot, and the hash is taken over the whole thing as text.
+ * So order matters: without this step, the same tools arriving in a different order would hash
+ * to a different value, and the run would look like it had been given different inputs.
+ */
 function _canonicalToolDefinitions(toolDefinitions: RunInputSnapshotIntegrationAssignment["toolDefinitions"]): RunInputSnapshotIntegrationAssignment["toolDefinitions"]
 {
 	return [...toolDefinitions]
