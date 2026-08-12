@@ -15,6 +15,12 @@ export enum AgentThreadDeliveryKinds
 	Asset = "asset",
 }
 
+/** Stable public projection event names for Agent-thread parent communication. */
+export enum AgentThreadEventTypes
+{
+	ParentDelivery = "conversation.agent_thread.parent_delivery",
+}
+
 /** Parent-summary states derived from durable child and latest-run facts. */
 export enum AgentThreadSummaryStates
 {

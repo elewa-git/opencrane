@@ -178,6 +178,7 @@ export interface AgUiToolRecoveryRequiredEnvelope
 /** The safe, user-facing fields the server-side event reader chose to include. */
 export interface AgUiPublicEventPayload
 {
+	readonly agentThreadDelivery?: { readonly id: string; readonly childConversationId: string; readonly kind: "status" | "question" | "approval" | "result" | "failure" | "asset"; readonly label: string; readonly detail: string; readonly assetId: string | null };
 	readonly messageId?: string;
 	readonly messageRole?: "assistant" | "user" | "system" | "tool";
 	readonly messageState?: "pending" | "streaming" | "completed" | "failed" | "cancelled";

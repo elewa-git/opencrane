@@ -64,11 +64,18 @@ const _ConversationMessageBlockSchema = {
 	},
 } as const;
 
+/** Immutable breadcrumb coordinates returned for an Agent-targeted group message. */
+const _AgentThreadOriginSchema = {
+	type: "object", additionalProperties: false,
+	required: ["childConversationId", "parentConversationId", "rootConversationId", "parentMessageId", "initiatorUserId", "agentServiceId", "personaRevisionId", "firstRunId"],
+	properties: { childConversationId: { type: "string" }, parentConversationId: { type: "string" }, rootConversationId: { type: "string" }, parentMessageId: { type: "string" }, initiatorUserId: { type: "string" }, agentServiceId: { type: "string" }, personaRevisionId: { type: "string" }, firstRunId: { type: "string" } },
+} as const;
+
 /** Canonical participant-visible message schema shared by detail and submission responses. */
 const _ConversationMessageSchema = {
 	type: "object",
 	additionalProperties: false,
-	required: ["id", "position", "role", "state", "source", "blocks", "runId", "userId", "createdAt", "completedAt"],
+	required: ["id", "position", "role", "state", "source", "blocks", "runId", "userId", "createdAt", "completedAt", "agentThread"],
 	properties: {
 		id: { type: "string" },
 		position: { type: "string", pattern: "^(0|[1-9][0-9]*)$" },
@@ -80,6 +87,7 @@ const _ConversationMessageSchema = {
 		userId: { type: ["string", "null"] },
 		createdAt: { type: "string", format: "date-time" },
 		completedAt: { type: ["string", "null"], format: "date-time" },
+		agentThread: { oneOf: [{ type: "null" }, _AgentThreadOriginSchema] },
 	},
 } as const;
 
@@ -108,16 +116,16 @@ const _ConversationDetailEnvelopeSchema = {
 const _AcceptedConversationMessageEnvelopeSchema = {
 	type: "object",
 	additionalProperties: false,
-	required: ["outcome", "message"],
-	properties: { outcome: { type: "string", enum: ["accepted"] }, message: _ConversationMessageSchema },
+	required: ["outcome", "message", "agentThread"],
+	properties: { outcome: { type: "string", enum: ["accepted"] }, message: _ConversationMessageSchema, agentThread: { oneOf: [{ type: "null" }, _AgentThreadOriginSchema] } },
 } as const;
 
 /** Exact idempotent-message response, distinct from a newly accepted write. */
 const _IdempotentConversationMessageEnvelopeSchema = {
 	type: "object",
 	additionalProperties: false,
-	required: ["outcome", "message"],
-	properties: { outcome: { type: "string", enum: ["idempotent"] }, message: _ConversationMessageSchema },
+	required: ["outcome", "message", "agentThread"],
+	properties: { outcome: { type: "string", enum: ["idempotent"] }, message: _ConversationMessageSchema, agentThread: { oneOf: [{ type: "null" }, _AgentThreadOriginSchema] } },
 } as const;
 
 /**
@@ -189,6 +197,7 @@ export const _SelfConversationsOpenapiPaths = {
 										properties: { id: { type: "string" }, kind: { type: "string", enum: [MessageContentBlockKinds.Text, MessageContentBlockKinds.Artifact] }, value: { type: "string", maxLength: 32000 } },
 									},
 								},
+								agentTarget: { type: "object", additionalProperties: false, required: ["agentServiceId"], properties: { agentServiceId: { type: "string", maxLength: 128 } }, description: "In a group only, create a child Agent session using the caller's active approved persona." },
 							},
 						},
 					},

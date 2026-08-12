@@ -1,5 +1,6 @@
 import { ConversationTimelineEntryKind, OrgMemberStatus, type Prisma } from "@prisma/client";
 import { __EncodeConversationProjectionCursor, ConversationProjectionReadStatuses, type ConversationProjectionEventRow, type ConversationProjectionReadResult, type ReadConversationProjectionCommand } from "@opencrane/backend/conversations/projection";
+import { AgentThreadEventTypes } from "@opencrane/backend/conversations/agent-threads";
 import { ConversationSystemEventTypes } from "@opencrane/models/conversations";
 
 import type { ConversationReplayRepository } from "./replay-reader.types.js";
@@ -56,10 +57,11 @@ export class PrismaConversationReplayRepository implements ConversationReplayRep
 				position: boundedPosition,
 				OR: [
 					{ kind: { in: [ConversationTimelineEntryKind.RunEvent, ConversationTimelineEntryKind.Message] } },
+					{ kind: ConversationTimelineEntryKind.ParentDelivery, parentDeliveryAgentThreadId: { not: null } },
 					{ kind: ConversationTimelineEntryKind.System, payload: { equals: { eventType: ConversationSystemEventTypes.AssetsChanged } } },
 				],
 			},
-			include: { runEvent: true, message: true },
+			include: { runEvent: true, message: true, agentThreadDelivery: true },
 			orderBy: { position: "asc" },
 			take: command.limit,
 		});
@@ -76,6 +78,11 @@ export class PrismaConversationReplayRepository implements ConversationReplayRep
 			if (entry.kind === ConversationTimelineEntryKind.System && _AssetsChanged(entry.payload))
 			{
 				return [{ cursor: __EncodeConversationProjectionCursor({ conversationId: command.conversationId, position }), conversationId: command.conversationId, position, runId: null, type: ConversationSystemEventTypes.AssetsChanged, payload: {}, occurredAt: entry.occurredAt.toISOString() }];
+			}
+			if (entry.agentThreadDelivery != null)
+			{
+				const delivery = entry.agentThreadDelivery;
+				return [{ cursor: __EncodeConversationProjectionCursor({ conversationId: command.conversationId, position }), conversationId: command.conversationId, position, runId: delivery.runId, type: AgentThreadEventTypes.ParentDelivery, payload: { id: delivery.id, childConversationId: delivery.childConversationId, kind: delivery.kind, label: delivery.label, detail: delivery.detail, assetId: delivery.assetId }, occurredAt: entry.occurredAt.toISOString() }];
 			}
 			if (entry.runEvent === null || entry.runId === null) return [];
 			return [{

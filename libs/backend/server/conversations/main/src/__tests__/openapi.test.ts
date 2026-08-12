@@ -37,7 +37,7 @@ describe("participant conversation OpenAPI", function _Suite()
 			expect(schema).toMatchObject({
 				additionalProperties: false,
 				required: ["conversation"],
-				properties: { conversation: { additionalProperties: false, required: expect.arrayContaining(["visibleFromPosition", "accessEndedPosition", "messages"]), properties: { messages: { items: { additionalProperties: false, required: ["id", "position", "role", "state", "source", "blocks", "runId", "userId", "createdAt", "completedAt"] } } } } },
+				properties: { conversation: { additionalProperties: false, required: expect.arrayContaining(["visibleFromPosition", "accessEndedPosition", "messages"]), properties: { messages: { items: { additionalProperties: false, required: ["id", "position", "role", "state", "source", "blocks", "runId", "userId", "createdAt", "completedAt", "agentThread"] } } } } },
 			});
 		}
 	});
@@ -47,8 +47,8 @@ describe("participant conversation OpenAPI", function _Suite()
 		const accepted = _SuccessSchema("/me/conversations/{conversationId}/messages", "post", 201);
 		const idempotent = _SuccessSchema("/me/conversations/{conversationId}/messages", "post", 200);
 
-		expect(accepted).toMatchObject({ additionalProperties: false, required: ["outcome", "message"], properties: { outcome: { enum: ["accepted"] } } });
-		expect(idempotent).toMatchObject({ additionalProperties: false, required: ["outcome", "message"], properties: { outcome: { enum: ["idempotent"] } } });
+		expect(accepted).toMatchObject({ additionalProperties: false, required: ["outcome", "message", "agentThread"], properties: { outcome: { enum: ["accepted"] } } });
+		expect(idempotent).toMatchObject({ additionalProperties: false, required: ["outcome", "message", "agentThread"], properties: { outcome: { enum: ["idempotent"] } } });
 		expect(accepted).toMatchObject({ properties: { message: { properties: {
 			role: { enum: Object.values(MessageRoles) },
 			state: { enum: Object.values(MessageStates) },

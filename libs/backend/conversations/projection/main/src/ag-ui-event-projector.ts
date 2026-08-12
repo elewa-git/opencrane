@@ -36,6 +36,7 @@ function _Message(source: AgUiProjectionSourceEvent): readonly AgUiProjectionEve
 /** Pick the most specific standard event whose required fields are present; otherwise fall back to a CUSTOM event. */
 function _Project(source: AgUiProjectionSourceEvent): AgUiProjectionEvent
 {
+	if (source.payload.agentThreadDelivery !== undefined) return { type: EventType.CUSTOM, name: "opencrane.agent_thread_parent_delivery", value: source.payload.agentThreadDelivery };
 	switch (source.eventType)
 	{
 		case RunEventTypes.RunAccepted:

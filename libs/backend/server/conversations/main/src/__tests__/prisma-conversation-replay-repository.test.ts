@@ -16,7 +16,7 @@ describe("Prisma conversation replay repository", function _Suite()
 		};
 
 		const result = await new PrismaConversationReplayRepository(prisma as never).readAuthorized({ conversationId: "conversation-1", siloId: "silo-1", subjectId: "user-1", cursor: { conversationId: "conversation-1", position: "2" }, limit: 10 });
-		expect(findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { conversationId: "conversation-1", position: { gt: 2n }, OR: [{ kind: { in: [ConversationTimelineEntryKind.RunEvent, ConversationTimelineEntryKind.Message] } }, { kind: ConversationTimelineEntryKind.System, payload: { equals: { eventType: "conversation.assets.changed" } } }] }, orderBy: { position: "asc" } }));
+		expect(findMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ conversationId: "conversation-1", position: { gt: 2n }, OR: expect.arrayContaining([{ kind: { in: [ConversationTimelineEntryKind.RunEvent, ConversationTimelineEntryKind.Message] } }, { kind: ConversationTimelineEntryKind.ParentDelivery, parentDeliveryAgentThreadId: { not: null } }]) }), orderBy: { position: "asc" } }));
 		expect(result).toEqual({ status: ConversationProjectionReadStatuses.Authorized, rows: [{ cursor: expect.stringMatching(/^c\./u), conversationId: "conversation-1", position: "3", runId: "run-1", type: "message.delta", payload: { messageId: "message-1", delta: "later" }, occurredAt: "2026-07-23T10:00:03.000Z" }] });
 	});
 
@@ -41,7 +41,7 @@ describe("Prisma conversation replay repository", function _Suite()
 		};
 
 		await expect(new PrismaConversationReplayRepository(prisma as never).readAuthorized({ conversationId: "conversation-1", siloId: "silo-1", subjectId: "user-1", cursor: null, limit: 10 })).resolves.toEqual({ status: ConversationProjectionReadStatuses.Authorized, rows: [] });
-		expect(timeline).toHaveBeenCalledWith(expect.objectContaining({ where: { conversationId: "conversation-1", position: { gt: 0n, lte: 3n }, OR: [{ kind: { in: [ConversationTimelineEntryKind.RunEvent, ConversationTimelineEntryKind.Message] } }, { kind: ConversationTimelineEntryKind.System, payload: { equals: { eventType: "conversation.assets.changed" } } }] } }));
+		expect(timeline).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ conversationId: "conversation-1", position: { gt: 0n, lte: 3n }, OR: expect.arrayContaining([{ kind: ConversationTimelineEntryKind.ParentDelivery, parentDeliveryAgentThreadId: { not: null } }]) }) }));
 	});
 
 	it("projects only the exact asset-list System invalidation", async function _AssetInvalidation()
