@@ -7,7 +7,7 @@ import { __CreateAgUiStreamState, type AgUiStreamState } from "@opencrane/state/
 import { ConversationWorkspaceGatewayError, ConversationWorkspaceGatewayErrorKinds } from "./conversation-workspace-gateway.errors.js";
 import { CONVERSATION_WORKSPACE_EVENT_STREAM, CONVERSATION_WORKSPACE_GATEWAY } from "./conversation-workspace.gateway.js";
 import { ConversationRunStore } from "./conversation-run.store.js";
-import { ConversationCreationStates, ConversationPersonalAgentStatuses, ConversationWorkspaceRouteStates, type ConversationCreationDirectory, type ConversationSummary, type ConversationWorkspaceDetail, type CreateConversationCommand, type SubmitConversationMessageBlock, type SubmitConversationMessageCommand } from "./conversation-workspace.types.js";
+import { ConversationCreationStates, ConversationPersonalAgentStatuses, ConversationWorkspaceRouteStates, type ConversationCreationDirectory, type ConversationSummary, type ConversationWorkspaceDetail, type ConversationWorkspaceNavigationIntent, type CreateConversationCommand, type SubmitConversationMessageBlock, type SubmitConversationMessageCommand } from "./conversation-workspace.types.js";
 
 /** Component-scoped owner for workspace reads, live tailing, drafts, and commands. */
 @Injectable()
@@ -165,10 +165,11 @@ export class ConversationWorkspaceStore
 	}
 
 	/** Create the exact selected immutable mode and adopt its returned snapshot. */
-	public async create(): Promise<boolean>
+	public async create(): Promise<ConversationWorkspaceNavigationIntent | null>
 	{
 		const command = this._CreateCommand();
-		if (command === null || this._creationState() === ConversationCreationStates.Creating) return false;
+		if (command === null || this._creationState() === ConversationCreationStates.Creating) return null;
+		const generation = this._generation;
 		this._creationState.set(ConversationCreationStates.Creating);
 		this._error.set(null);
 		try
@@ -176,14 +177,14 @@ export class ConversationWorkspaceStore
 			const detail = await this._gateway.create(command);
 			this._conversations.update(current => [detail, ...current.filter(candidate => candidate.id !== detail.id)]);
 			this._creationState.set(ConversationCreationStates.Idle);
-			await this.open(detail.id);
-			return true;
+			if (generation !== this._generation) return null;
+			return { conversationId: detail.id };
 		}
 		catch (error)
 		{
 			this._creationState.set(ConversationCreationStates.Failed);
 			this._error.set(_Message(error, "OpenCrane could not create this conversation."));
-			return false;
+			return null;
 		}
 	}
 
@@ -220,21 +221,24 @@ export class ConversationWorkspaceStore
 	}
 
 	/** Archive the selected row for this participant and return to the remaining list. */
-	public async archive(): Promise<void>
+	public async archive(): Promise<ConversationWorkspaceNavigationIntent | null>
 	{
 		const selected = this._selected();
-		if (selected === null || this._conversationCommandBusy()) return;
+		if (selected === null || this._conversationCommandBusy()) return null;
+		const generation = this._generation;
 		this._conversationCommandBusy.set(true);
 		try
 		{
 			await this._gateway.archive(selected.id, true);
 			this._conversations.update(current => current.filter(candidate => candidate.id !== selected.id));
+			if (generation !== this._generation || this._selected()?.id !== selected.id) return null;
 			this._ClearSelection();
 			const next = this._conversations()[0];
-			if (next !== undefined) await this.open(next.id);
+			return { conversationId: next?.id ?? null };
 		}
-		catch (error) { this._HandleFailure(error, true); }
+		catch (error) { if (generation === this._generation) this._HandleFailure(error, true); }
 		finally { this._conversationCommandBusy.set(false); }
+		return null;
 	}
 
 	/** Permanently close the selected conversation after the server rechecks run state. */
@@ -242,9 +246,14 @@ export class ConversationWorkspaceStore
 	{
 		const selected = this._selected();
 		if (selected === null || this._conversationCommandBusy()) return;
+		const generation = this._generation;
 		this._conversationCommandBusy.set(true);
-		try { this._selected.set(await this._gateway.close(selected.id)); }
-		catch (error) { this._HandleFailure(error, true); }
+		try
+		{
+			const detail = await this._gateway.close(selected.id);
+			if (generation === this._generation && this._selected()?.id === selected.id) this._selected.set(detail);
+		}
+		catch (error) { if (generation === this._generation) this._HandleFailure(error, true); }
 		finally { this._conversationCommandBusy.set(false); }
 	}
 

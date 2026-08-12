@@ -24,7 +24,7 @@ export class ConversationWorkspacePageComponent extends ConversationWorkspacePre
 	/** Requests app-owned navigation into one child Agent session. */
 	public readonly threadRequested = output<ConversationThreadNavigationIntent>();
 	/** Reports participant selection so the app can own the canonical URL. */
-	public readonly conversationSelected = output<string>();
+	public readonly conversationSelected = output<string | null>();
 	/** Requests app-owned verified sign-in without letting the feature navigate. */
 	public readonly stepUpRequested = output<string>();
 	/** Keeps a route selection and the component-scoped store aligned. */
@@ -46,6 +46,22 @@ export class ConversationWorkspacePageComponent extends ConversationWorkspacePre
 	{
 		await this.open(conversationId);
 		if (this.store.selected()?.id === conversationId) this.conversationSelected.emit(conversationId);
+	}
+
+	/** Ask the app to select an authoritative newly created conversation. */
+	protected async create(): Promise<void>
+	{
+		const navigation = await this.store.create();
+		if (navigation === null) return;
+		this.creating.set(false);
+		this.conversationSelected.emit(navigation.conversationId);
+	}
+
+	/** Ask the app to replace an archived selection with the next authorized row. */
+	protected async archiveConversation(): Promise<void>
+	{
+		const navigation = await this.store.archive();
+		if (navigation !== null) this.conversationSelected.emit(navigation.conversationId);
 	}
 
 	/** Emit one exact child route intent from a parent message. */

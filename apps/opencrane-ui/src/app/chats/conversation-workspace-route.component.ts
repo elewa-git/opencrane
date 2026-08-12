@@ -26,7 +26,7 @@ export class ConversationWorkspaceRouteComponent
 	public constructor() { this._destroyRef.onDestroy(this._StopStepUpObserver.bind(this)); }
 
 	/** Put an authorized participant selection in the canonical app URL. */
-	protected async selectConversation(conversationId: string): Promise<void>
+	protected async selectConversation(conversationId: string | null): Promise<void>
 	{
 		await this._router.navigate(_ConversationRouteCommands(conversationId));
 	}

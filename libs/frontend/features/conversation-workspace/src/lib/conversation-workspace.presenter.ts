@@ -64,8 +64,6 @@ export class ConversationWorkspacePresenter
 	protected showCreate(): void { this.creating.set(true); }
 	/** Hide immutable-mode creation without changing its controlled selection. */
 	protected hideCreate(): void { this.creating.set(false); }
-	/** Create and close the dialog only after authoritative success. */
-	protected async create(): Promise<void> { if (await this.store.create()) this.creating.set(false); }
 	/** Select one conversation from the feature-local rail. */
 	protected async open(conversationId: string): Promise<void> { await this.store.open(conversationId); }
 	/** Keep ordinary message input controlled by the conversation store. */

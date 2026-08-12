@@ -12,9 +12,9 @@ export interface ConversationThreadRouteNavigation
 }
 
 /** Build the canonical URL segments for one selected normal conversation. */
-export function _ConversationRouteCommands(conversationId: string): readonly string[]
+export function _ConversationRouteCommands(conversationId: string | null): readonly string[]
 {
-	return ["/chats", conversationId];
+	return conversationId === null ? ["/chats"] : ["/chats", conversationId];
 }
 
 /** Build exact child-route and parent-restoration coordinates from the feature intent. */

@@ -24,7 +24,11 @@ function _Detail(id = "conversation-1"): ConversationWorkspaceDetail
 class _FakeGateway implements ConversationWorkspaceGateway
 {
 	/** Next open outcome. */
-	public openResult: ConversationWorkspaceDetail | Error = _Detail();
+	public openResult: ConversationWorkspaceDetail | Error | null = null;
+	/** Controlled archive completion for mutation race tests. */
+	public archiveResult: Promise<ConversationWorkspaceDetail> | null = null;
+	/** Controlled create completion for mutation race tests. */
+	public createResult: Promise<ConversationWorkspaceDetail> | null = null;
 	/** Created immutable-mode commands. */
 	public readonly created: CreateConversationCommand[] = [];
 	/** Submitted exact message commands. */
@@ -37,9 +41,9 @@ class _FakeGateway implements ConversationWorkspaceGateway
 	/** Return one current row. */
 	public async list() { return [_Detail()]; }
 	/** Resolve the configured open outcome. */
-	public async open(): Promise<ConversationWorkspaceDetail> { if (this.openResult instanceof Error) throw this.openResult; return this.openResult; }
+	public async open(conversationId: string): Promise<ConversationWorkspaceDetail> { if (this.openResult instanceof Error) throw this.openResult; return this.openResult ?? _Detail(conversationId); }
 	/** Record and return one created snapshot. */
-	public async create(command: CreateConversationCommand): Promise<ConversationWorkspaceDetail> { this.created.push(command); return { ..._Detail("created-1"), mode: command.mode }; }
+	public async create(command: CreateConversationCommand): Promise<ConversationWorkspaceDetail> { this.created.push(command); return this.createResult ?? { ..._Detail("created-1"), mode: command.mode }; }
 	/** Record one exact message command before returning its controlled outcome. */
 	public async send(command: SubmitConversationMessageCommand): Promise<void>
 	{
@@ -47,7 +51,7 @@ class _FakeGateway implements ConversationWorkspaceGateway
 		if (this.sendError !== null) throw this.sendError;
 	}
 	/** Return an archived snapshot. */
-	public async archive() { return { ..._Detail(), archivedAt: "2026-08-12T10:00:00.000Z" }; }
+	public async archive() { return this.archiveResult ?? { ..._Detail(), archivedAt: "2026-08-12T10:00:00.000Z" }; }
 	/** Return a closed snapshot. */
 	public async close() { return { ..._Detail(), lifecycle: ConversationLifecycles.Closed }; }
 	/** Return one run status. */
@@ -87,6 +91,14 @@ function _CreateStore(): readonly [ConversationWorkspaceStore, _FakeGateway, _Fa
 	return [TestBed.inject(ConversationWorkspaceStore), gateway, stream];
 }
 
+/** Controlled promise used to prove late mutation results cannot replace a newer selection. */
+function _Deferred<Value>(): { readonly promise: Promise<Value>; readonly resolve: (value: Value) => void }
+{
+	let resolvePromise: ((value: Value) => void) | undefined;
+	const promise = new Promise<Value>(function _Create(resolve) { resolvePromise = resolve; });
+	return { promise, resolve: function _Resolve(value) { if (resolvePromise === undefined) throw new Error("Deferred promise is unavailable."); resolvePromise(value); } };
+}
+
 beforeAll(function _InitializeAngularTesting()
 {
 	TestBed.initTestEnvironment(BrowserDynamicTestingModule, platformBrowserDynamicTesting());
@@ -120,8 +132,41 @@ describe("ConversationWorkspaceStore", function _ConversationWorkspaceStore()
 		store.selectCreationMode(ConversationModes.Direct);
 		store.toggleParticipant("other-ref");
 		expect(store.canCreate()).toBe(true);
-		expect(await store.create()).toBe(true);
+		expect(await store.create()).toEqual({ conversationId: "created-1" });
 		expect(gateway.created).toEqual([{ mode: ConversationModes.Direct, participantRefs: ["other-ref"] }]);
+		expect(store.selected()?.id).toBe("conversation-1");
+	});
+
+	it("does not navigate to a created conversation after the participant selects another row", async function _StaleCreate()
+	{
+		const [store, gateway] = _CreateStore();
+		await store.load();
+		store.selectCreationMode(ConversationModes.Direct);
+		store.toggleParticipant("other-ref");
+		const deferred = _Deferred<ConversationWorkspaceDetail>();
+		gateway.createResult = deferred.promise;
+		const creation = store.create();
+		await store.open("conversation-2");
+
+		deferred.resolve(_Detail("created-1"));
+
+		expect(await creation).toBeNull();
+		expect(store.selected()?.id).toBe("conversation-2");
+	});
+
+	it("does not clear a newer selection when an archive completes late", async function _StaleArchive()
+	{
+		const [store, gateway] = _CreateStore();
+		await store.load();
+		const deferred = _Deferred<ConversationWorkspaceDetail>();
+		gateway.archiveResult = deferred.promise;
+		const archive = store.archive();
+		await store.open("conversation-2");
+
+		deferred.resolve({ ..._Detail("conversation-1"), archivedAt: "2026-08-12T10:00:00.000Z" });
+
+		expect(await archive).toBeNull();
+		expect(store.selected()?.id).toBe("conversation-2");
 	});
 
 	it("retains a message draft while the live stream reconnects", async function _ReconnectDraft()

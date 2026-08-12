@@ -187,6 +187,13 @@ export interface SubmitConversationMessageCommand
 	readonly blocks: readonly SubmitConversationMessageBlock[];
 }
 
+/** App-owned route change requested after an authoritative workspace mutation. */
+export interface ConversationWorkspaceNavigationIntent
+{
+	/** Selected conversation, or null when no non-archived row remains. */
+	readonly conversationId: string | null;
+}
+
 /** Exact participant-visible attempt selected for retry. */
 export interface RetryConversationRunCommand
 {

@@ -8,6 +8,7 @@ describe("Conversation workspace route composition", function _ConversationWorks
 	it("keeps selected conversations on the canonical chat URL", function _SelectedConversationRoute()
 	{
 		expect(_ConversationRouteCommands("conversation-1")).toEqual(["/chats", "conversation-1"]);
+		expect(_ConversationRouteCommands(null)).toEqual(["/chats"]);
 	});
 
 	it("matches the child route before selected-conversation and index routes", function _RoutePrecedence()
