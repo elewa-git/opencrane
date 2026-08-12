@@ -120,6 +120,40 @@ describe("ConversationWorkspaceStore", function _ConversationWorkspaceStore()
 		const [store, _gateway, stream] = _CreateStore();
 		await store.load();
 		expect(store.routeState()).toBe(ConversationWorkspaceRouteStates.Ready);
+		expect(store.onboardingHistorySelected()).toBe(true);
+		expect(store.onboardingHistory().history?.id).toBe("onboarding-1");
+		expect(store.selected()).toBeNull();
+		expect(stream.starts).toBe(0);
+	});
+
+	it("rejects attempted message writes while onboarding history is selected", async function _ReadOnlyOnboardingHistory()
+	{
+		const [store, gateway] = _CreateStore();
+		await store.load();
+		store.updateDraft("Try to write into history");
+
+		expect(store.canSend()).toBe(false);
+		expect(await store.send()).toBe(false);
+		expect(gateway.sent).toEqual([]);
+	});
+
+	it("opens an authorized direct URL selection instead of retaining default history", async function _DirectSelection()
+	{
+		const [store, _gateway, stream] = _CreateStore();
+		await store.load();
+		await store.open("conversation-1");
+
+		expect(store.onboardingHistorySelected()).toBe(false);
+		expect(store.selected()?.id).toBe("conversation-1");
+		expect(stream.starts).toBe(1);
+	});
+
+	it("falls back to the first active conversation when no onboarding transcript was recorded", async function _MigratedFallback()
+	{
+		const [store, gateway, stream] = _CreateStore();
+		gateway.historyResult = { status: ConversationOnboardingHistoryStatuses.NotRecorded, history: null };
+		await store.load();
+		expect(store.onboardingHistorySelected()).toBe(false);
 		expect(store.selected()?.id).toBe("conversation-1");
 		expect(store.streamStatus()).toBe(ConversationEventStreamStatuses.Live);
 		expect(stream.starts).toBe(1);
