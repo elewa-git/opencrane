@@ -9,7 +9,7 @@ function _Run(overrides: Record<string, unknown> = {})
 	return { id: "run-1", attempt: 1, state: AgentRunState.Queued, siloId: "silo-1", agentServiceId: "service-1", agentRevisionId: "revision-1", inputSnapshotDigest: "sha256:snapshot", conversationId: "conversation-1", ...overrides };
 }
 
-/** Creates the initial attempt event whose claim proves a Kubernetes create may be in flight. */
+/** Creates the first attempt event, claimed recently enough that its Kubernetes Job may still be being created. */
 function _AttemptEvent(overrides: Record<string, unknown> = {})
 {
 	return { id: "attempt-1", runId: "run-1", attempt: 1, kind: RunOutboxEventKind.RunAttemptRequested, claimedAt: null, publishedAt: null, failedAt: null, deliveryCount: 0, ...overrides };

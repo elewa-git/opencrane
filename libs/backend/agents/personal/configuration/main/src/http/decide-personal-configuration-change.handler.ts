@@ -14,18 +14,26 @@ interface PersonalConfigurationDecisionBody
 }
 
 /**
- * Creates the self-only HTTP boundary for accepting or rejecting one proposed configuration change.
+ * Creates the route where a user accepts or rejects one of their own proposals.
  *
- * The handler derives the silo, user, and decision time from trusted server inputs; the request body
- * can express only the closed decision vocabulary. It delegates the compare-and-set transition to
- * the decision authority, then translates its stable outcomes into non-enumerating HTTP responses
- * so a caller cannot learn whether another owner has a proposal with the supplied identifier.
+ * The server supplies the silo, the user and the decision time; the body may say only
+ * `{ decision: "accepted" }` or `{ decision: "rejected", rejectionReason }`, and any extra field
+ * makes it a 400. The decision authority does the compare-and-set.
+ *
+ * A missing proposal and an already-decided one both return 404, so a caller cannot learn
+ * whether another user has a proposal with that id. Recording a decision applies nothing: a 200
+ * means consent was recorded, not that the agent changed.
+ *
+ * Called by: {@link __CreatePersonalConfigurationRouter}.
+ *
+ * @param dependencies - Repositories, clock and logger.
+ * @returns An Express handler answering 200, 400, 401, 404 or 503.
  */
 export function _CreateDecidePersonalConfigurationChangeHandler(dependencies: PersonalConfigurationRouterDependencies): RequestHandler
 {
 	return async function _DecidePersonalConfigurationChange(request: Request, response: Response): Promise<void>
 	{
-		// 1. Resolve identity and validate the only caller-controlled decision coordinates.
+		// 1. Work out who is calling, and check the two values they control: the id and the decision.
 		const caller = dependencies.resolveCaller(request);
 		const changeId = request.params["changeId"];
 		const decision = _decision(request.body);
@@ -34,11 +42,11 @@ export function _CreateDecidePersonalConfigurationChangeHandler(dependencies: Pe
 
 		try
 		{
-			// 2. Delegate the state transition to the domain authority with server-derived ownership and time.
+			// 2. Let the decision authority change the state, using the server's owner ids and clock.
 			const result = await __DecidePersonalConfigurationChange(dependencies.decisions, { siloId: caller.siloId, userId: caller.userId, changeId, decision: decision.decision, rejectionReason: decision.rejectionReason, decidedAt: dependencies.clock.now().toISOString() });
 			if (result.outcome !== PersonalConfigurationDecisionCodes.Denied) { response.status(200).json({ changeId, state: result.outcome }); return; }
 
-			// 3. Translate stable domain denials without leaking proposal ownership or database details.
+			// 3. Map denials to status codes without revealing who owns the proposal or what the database said.
 			if (result.reason === PersonalConfigurationDecisionCodes.NotFoundOrNotOwner || result.reason === PersonalConfigurationDecisionCodes.AlreadyDecided) { response.status(404).json({ error: PersonalConfigurationHttpErrors.ChangeNotFound }); return; }
 			if (result.reason === PersonalConfigurationDecisionCodes.PersistenceUnavailable) { response.status(503).json({ error: PersonalConfigurationHttpErrors.DecisionUnavailable }); return; }
 			response.status(400).json({ error: PersonalConfigurationHttpErrors.InvalidDecision });
@@ -51,7 +59,7 @@ export function _CreateDecidePersonalConfigurationChangeHandler(dependencies: Pe
 	};
 }
 
-/** Accept only the closed decision payload; callers cannot supply ownership or application fields. */
+/** Returns the decision from the body, or null; any extra field makes the body invalid. */
 function _decision(body: unknown): PersonalConfigurationDecisionBody | null
 {
 	if (body === null || typeof body !== "object" || Array.isArray(body)) return null;

@@ -2,10 +2,23 @@ import type { JsonValue } from "@opencrane/util";
 
 import type { DurableExternalActionCommand, ExternalActionExecutorDependencies } from "./external-action-executor.types.js";
 
-/** Typed failure emitted when an admitted snapshot did not authorize a personal memory dataset. */
+/**
+ * Thrown when the run's snapshot names no personal memory dataset.
+ *
+ * There is deliberately no fallback: a run admitted without a personal memory policy must not be
+ * able to reach any dataset, so asking for memory is an error rather than an empty result. Nothing
+ * has been sent, so the catcher completes the invocation as failed - `_provenPreDispatchFailure`
+ * maps it to `memory_scope_unavailable` - and it must not be retried, because the snapshot cannot
+ * change.
+ *
+ * Raised by `_ExecuteMemoryExternalAction`; caught by `_provenPreDispatchFailure`
+ * (production-external-action-adapter.ts).
+ *
+ * @see __PersonalMemoryDatasetId which decides whether a dataset exists.
+ */
 export class MemoryScopeUnavailableError extends Error
 {
-	/** Creates a failure that cannot fall back to subject-selected memory. */
+	/** Creates the error. There is deliberately no fallback to a dataset chosen from the subject. */
 	constructor()
 	{
 		super("personal memory scope is unavailable for this run snapshot");
@@ -25,8 +38,8 @@ function _stringArgument(candidate: DurableExternalActionCommand, key: string): 
 /**
  * Query only the personal dataset frozen into the admitted run snapshot.
  *
- * The subject id is correlation metadata rather than a selector: callers cannot replace the
- * snapshot's dataset through tool arguments or pick a dataset from the subject at execution time.
+ * The subject id is passed along for correlation only; it never selects anything. Callers cannot
+ * swap the snapshot's dataset through tool arguments, or pick one from the subject at run time.
  *
  * @param candidate - Admitted memory-action candidate containing an optional text query.
  * @param dependencies - Frozen dataset, subject correlation identity, and memory gateway port.

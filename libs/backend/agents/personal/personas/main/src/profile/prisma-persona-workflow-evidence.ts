@@ -2,19 +2,19 @@ import { PersonaColour, PersonaRevisionState, type Prisma, type PrismaClient } f
 
 import { PersonaWorkflowColours, type PersonaWorkflowApprovedBootstrapEvidence, type PersonaWorkflowApprovedEvidence, type PersonaWorkflowEvidenceRepository, type PersonaWorkflowOwner } from "./persona-workflow-evidence.types.js";
 
-/** Compose the owner-bound persona workflow evidence reader at the server persistence edge. */
+/** Builds the persona workflow evidence reader over a Prisma client. */
 export function _CreatePersonaWorkflowEvidenceRepository(prisma: PrismaClient): PersonaWorkflowEvidenceRepository
 {
 	return new PrismaPersonaWorkflowEvidenceRepository(prisma);
 }
 
-/** Persona-owned Prisma adapter exposing only owner-bound workflow evidence. */
+/** Prisma adapter whose every query is filtered to the given owner's silo and subject. */
 export class PrismaPersonaWorkflowEvidenceRepository implements PersonaWorkflowEvidenceRepository
 {
-	/** Canonical product database capability. */
+	/** Prisma client for the product database. */
 	private readonly prisma: Prisma.TransactionClient;
 
-	/** Bind workflow evidence reads to the persona-owned delegates. */
+	/** Stores the Prisma client that every read below uses. */
 	constructor(prisma: Prisma.TransactionClient)
 	{
 		this.prisma = prisma;
@@ -49,7 +49,7 @@ export class PrismaPersonaWorkflowEvidenceRepository implements PersonaWorkflowE
 	}
 }
 
-/** Map Prisma's generated colour enum into persona's safe workflow evidence vocabulary. */
+/** Converts a Prisma colour into the workflow colour this package exposes. */
 function _WorkflowColour(colour: PersonaColour): PersonaWorkflowColours
 {
 	const colours: Record<PersonaColour, PersonaWorkflowColours> = { [PersonaColour.Red]: PersonaWorkflowColours.Red, [PersonaColour.Yellow]: PersonaWorkflowColours.Yellow, [PersonaColour.Green]: PersonaWorkflowColours.Green, [PersonaColour.Blue]: PersonaWorkflowColours.Blue };

@@ -2,7 +2,17 @@ import { isDeepStrictEqual } from "node:util";
 
 import type { V1Job, V1Pod } from "@kubernetes/client-node";
 
-/** Build the two-label selector that excludes Pods outside the exact owned Job attempt. */
+/**
+ * Build the two-label selector that matches only Pods belonging to this exact Job attempt.
+ *
+ * Both labels are needed: the attempt name alone would still match a Pod left behind by an earlier
+ * Job of the same name, and the controller UID pins it to this Job instance.
+ *
+ * Called by: the Pod-find path in kubernetes-agent-controller-store.ts.
+ * @param jobName - The attempt's derived Job name.
+ * @param workloadUid - UID recorded at assignment.
+ * @returns A Kubernetes label selector string.
+ */
 export function _AgentRuntimePodSelector(jobName: string, workloadUid: string): string
 {
 	return `batch.kubernetes.io/controller-uid=${workloadUid},opencrane.ai/runtime-attempt=${jobName}`;
@@ -16,7 +26,23 @@ function _ExpectedPodLabels(expectedJob: V1Job, workloadUid: string): Record<str
 	return { ...authored, "batch.kubernetes.io/controller-uid": workloadUid, "batch.kubernetes.io/job-name": name, "controller-uid": workloadUid, "job-name": name };
 }
 
-/** Reject a candidate Pod unless it is the sole exact first Pod of the fenced runtime Job. */
+/**
+ * Throw unless this Pod really is the assigned Job's own first Pod.
+ *
+ * Four things must hold: it is in the Job's namespace, its labels are exactly the template's labels
+ * plus the four Kubernetes adds, it runs as the expected ServiceAccount, and it has exactly one
+ * owner — the assigned Job, by name and UID. This runs before the Pod UID is recorded, and that
+ * recorded UID is what the bootstrap exchange later checks, so registering the wrong Pod would
+ * hand an attempt's credentials to something else.
+ *
+ * Called by: the Pod-find path in kubernetes-agent-controller-store.ts, after the label-selector
+ * list has returned exactly one Pod.
+ * @param pod - The candidate Pod as Kubernetes holds it.
+ * @param expectedJob - The Job rebuilt from recorded coordinates, supplying namespace and labels.
+ * @param workloadUid - UID recorded at assignment; the Pod's owner UID must equal it.
+ * @param serviceAccountName - The ServiceAccount the Pod must be running as.
+ * @throws When any of the four checks fails. The caller must not register the Pod.
+ */
 export function _AssertExactFirstAgentRuntimePod(pod: V1Pod, expectedJob: V1Job, workloadUid: string, serviceAccountName: string): void
 {
 	const jobName = expectedJob.metadata?.name;

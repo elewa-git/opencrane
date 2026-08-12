@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { __MaterializePersonalConfigurationChange } from "../materialization/personal-configuration-materialization.js";
 import { PersonalConfigurationMaterializationCodes } from "../materialization/personal-configuration-materialization.types.js";
 
-/** Exercises the narrow command guard before a materialization transaction is requested. */
+/** Covers the input checks that run before any transaction starts. */
 describe("__MaterializePersonalConfigurationChange", function _describeMaterialization()
 {
 	it("refuses malformed owner input before it reaches persistence", async function _refusesMalformedInput()

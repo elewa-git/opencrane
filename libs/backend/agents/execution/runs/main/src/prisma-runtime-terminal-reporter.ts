@@ -37,10 +37,10 @@ export class PrismaRuntimeTerminalReporter implements RuntimeTerminalReporter
 	}
 }
 
-/** Transaction unit that owns construction of the terminal pending-tool repository. */
+/** Builds the pending-tool repository on the caller's terminal-report transaction. */
 class PrismaRuntimeTerminalPendingToolUnitOfWork implements RuntimeTerminalPendingToolUnitOfWork
 {
-	/** Exact caller-owned terminal-report transaction. */
+	/** The transaction the caller opened for this terminal report. */
 	private readonly transaction: Prisma.TransactionClient;
 
 	/** Construct the read model over the caller-owned terminal transaction. */
@@ -49,7 +49,7 @@ class PrismaRuntimeTerminalPendingToolUnitOfWork implements RuntimeTerminalPendi
 		this.transaction = transaction;
 	}
 
-	/** Delegate the completion fence to the transaction-bound repository. */
+	/** Hands the completion check to the repository bound to that transaction. */
 	hasPending(runId: string, attempt: number): Promise<boolean>
 	{
 		return new PrismaRuntimeTerminalPendingToolRepository(this.transaction).hasPending(runId, attempt);
@@ -59,10 +59,10 @@ class PrismaRuntimeTerminalPendingToolUnitOfWork implements RuntimeTerminalPendi
 /** Prisma read model for invocation and result-delivery completion fences. */
 class PrismaRuntimeTerminalPendingToolRepository implements RuntimeTerminalPendingToolRepository
 {
-	/** Exact terminal-report transaction. */
+	/** The caller's transaction for this terminal report. */
 	private readonly transaction: Prisma.TransactionClient;
 
-	/** Bind completion reads to the transaction that may terminalise the run. */
+	/** Keeps the completion reads on the same transaction that may move the run to its terminal state. */
 	constructor(transaction: Prisma.TransactionClient)
 	{
 		this.transaction = transaction;
@@ -77,7 +77,7 @@ class PrismaRuntimeTerminalPendingToolRepository implements RuntimeTerminalPendi
 	}
 }
 
-/** Map the only workload-reportable terminal types to canonical durable lifecycle values. */
+/** Maps the two terminal event types a workload may report to their stored run state and reason. */
 function _terminal(eventType: RuntimeTerminalEventType): { readonly state: "Completed" | "Failed"; readonly reason: AgentRunTerminalReason; readonly payloadReason: "success" | "runtime_failure" }
 {
 	if (eventType === "run.completed") return { state: AgentRunState.Completed, reason: AgentRunTerminalReason.Success, payloadReason: "success" };

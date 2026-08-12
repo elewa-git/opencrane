@@ -43,7 +43,23 @@ function _BaseUrl(value: string): URL
 	return parsed;
 }
 
-/** Create the projected-token-authenticated OpenCrane desired-state adapter. */
+/**
+ * Create the OpenCrane client the controller talks to, over plain in-cluster HTTP.
+ *
+ * The token file is re-read on every call, not cached, because Kubernetes rotates a projected
+ * token in place. Every response is size-capped and schema-validated before it is returned, and
+ * the two commit responses are additionally checked to describe the run, attempt, and UID that
+ * were actually submitted — so a mismatched or replayed answer becomes an error instead of being
+ * acted on.
+ *
+ * Called by: `apps/agent-controller/src/index.ts`, which passes the result as
+ * `options.authority` to {@link __RunAgentController}.
+ * @param options - Internal base URL, token path, request timeout, and test-only overrides.
+ * @returns A client satisfying the authority port; each method is documented on the port.
+ * @throws At construction, when the base URL is not a plain HTTP origin (no path, query, or
+ * credentials), when the token path is not absolute, or when the timeout is outside 1-60s.
+ * @see {@link AgentControllerAuthority}
+ */
 export function __CreateHttpAgentControllerAuthority(options: AgentControllerHttpAuthorityOptions): AgentControllerAuthority
 {
 	const baseUrl = _BaseUrl(options.openCraneInternalUrl);

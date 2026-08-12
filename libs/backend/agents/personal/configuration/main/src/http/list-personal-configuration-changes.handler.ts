@@ -3,12 +3,18 @@ import type { Request, RequestHandler, Response } from "express";
 import { PersonalConfigurationHttpErrors, type PersonalConfigurationRouterDependencies } from "./personal-configuration.router.types.js";
 
 /**
- * Creates the self-only HTTP boundary for reading a caller's recent configuration-change history.
+ * Creates the route where a user reads their own recent configuration changes.
  *
- * The handler derives both ownership coordinates from the authenticated request instead of route or
- * query input, and exposes only the bounded view returned by the read repository. Persistence
- * failure becomes one stable availability response, preventing infrastructure details from leaking
- * into the browser contract.
+ * The silo and user come from the authenticated request, never from the path or query string, so
+ * there is no way to ask for anyone else's history. The response carries at most the fifty
+ * proposals the read repository returns, newest first, with no paging.
+ *
+ * Any database failure becomes a single 503, so no infrastructure detail reaches the browser.
+ *
+ * Called by: {@link __CreatePersonalConfigurationRouter}.
+ *
+ * @param dependencies - Repositories and logger.
+ * @returns An Express handler answering 200, 401 or 503.
  */
 export function _CreateListPersonalConfigurationChangesHandler(dependencies: PersonalConfigurationRouterDependencies): RequestHandler
 {

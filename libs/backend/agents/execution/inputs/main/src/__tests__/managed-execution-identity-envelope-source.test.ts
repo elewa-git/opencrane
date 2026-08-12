@@ -19,19 +19,19 @@ function _Command(identityKind: "user" | "service" = "service")
 		: { runId: "run-1", siloId: "silo-1", agentServiceId: "service-1", conversationId: null, identityKind, trigger: "interactive", executionSubjectId: "user-1", requestIdempotencyKey: "request-1" } as never;
 }
 
-/** Creates a transaction facade for proving the adapter forwards the exact transaction fence. */
+/** Creates a stand-in transaction, to check the adapter passes the same transaction through. */
 function _Transaction(): RunAdmissionTransaction
 {
 	return { prisma: {} as never, admittedAt: "2026-07-26T00:00:00.000Z", admittedAtEpochMs: Date.parse("2026-07-26T00:00:00.000Z") };
 }
 
-/** Creates a real-looking current managed evidence authority with a replaceable response. */
+/** Creates a stub managed evidence authority whose response each test can replace. */
 function _Evidence(result: unknown): ManagedExecutionEvidenceAuthority
 {
 	return { load: vi.fn().mockResolvedValue(result) } as never;
 }
 
-/** Creates one service identity that is bound to service-1 and canonical valid digests. */
+/** Creates one service identity for service-1, with valid SHA-256 digests. */
 function _LoadedEvidence()
 {
 	return { outcome: "loaded", value: { identity: { kind: "service", executionSubjectId: "agent-service:service-1", agentServiceId: "service-1", organizationId: "org-1", fleetMembershipRevision: 4, fleetMembershipIssuer: "fleet-1", fleetMembershipIssuerKeyId: "key-1", fleetMembershipAssertionId: "assertion-1", fleetMembershipPayloadDigest: `sha256:${"a".repeat(64)}`, fleetMembershipTrustedUntil: "2026-07-27T00:00:00.000Z", effectiveScopeAttachments: [], effectiveScopeAttachmentDigest: `sha256:${"b".repeat(64)}` }, capabilitySetDigest: `sha256:${"c".repeat(64)}` } } as const;

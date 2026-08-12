@@ -5,10 +5,10 @@ import { ___DoWithTrace } from "@opencrane/backend/observability";
 
 import type { SkillWorkloadControllerKubernetesStore, SkillWorkloadControllerKubernetesStoreOptions } from "./skill-workload-controller.types.js";
 
-/** Kubernetes-generated metadata excluded from the controller-owned Job contract. */
+/** Metadata fields Kubernetes fills in itself. They are ignored when two Jobs are compared. */
 const _SERVER_METADATA_FIELDS = ["creationTimestamp", "generation", "managedFields", "resourceVersion", "selfLink", "uid"] as const;
 
-/** Attach the shutdown and request deadline to one Kubernetes client call. */
+/** Give one Kubernetes call an abort signal that fires on shutdown or when the request times out. */
 function _RequestOptions(shutdownSignal: AbortSignal, timeoutMilliseconds: number): ConfigurationOptions
 {
 	const signal = AbortSignal.any([shutdownSignal, AbortSignal.timeout(timeoutMilliseconds)]);
@@ -26,7 +26,7 @@ function _RequestOptions(shutdownSignal: AbortSignal, timeoutMilliseconds: numbe
 	return { middleware: [middleware], middlewareMergeStrategy: "append" };
 }
 
-/** Extract a generated Kubernetes HTTP status from a supported error shape. */
+/** Read the HTTP status out of a Kubernetes client error, when it carries one. */
 function _StatusCode(err: unknown): number | undefined
 {
 	if (typeof err !== "object" || err === null) return undefined;
@@ -36,7 +36,7 @@ function _StatusCode(err: unknown): number | undefined
 	return undefined;
 }
 
-/** Require the deterministic coordinates that scope every Kubernetes request. */
+/** Return the Job's name and namespace, which every Kubernetes call needs, and fail when either is missing. */
 function _Coordinates(job: V1Job): { readonly name: string; readonly namespace: string }
 {
 	const name = job.metadata?.name;
@@ -45,7 +45,7 @@ function _Coordinates(job: V1Job): { readonly name: string; readonly namespace: 
 	return { name, namespace };
 }
 
-/** Remove API bookkeeping while retaining all controller-authored metadata. */
+/** Drop the metadata fields Kubernetes fills in, keeping everything this controller wrote. */
 function _OwnedMetadata(metadata: V1ObjectMeta | undefined): V1ObjectMeta
 {
 	const owned = structuredClone(metadata ?? {});
@@ -53,7 +53,7 @@ function _OwnedMetadata(metadata: V1ObjectMeta | undefined): V1ObjectMeta
 	return owned;
 }
 
-/** Normalize only documented Kubernetes defaults and UID-generated Job selectors. */
+/** Strip the defaults Kubernetes documents and the selector labels it generates from the Job UID, so two Jobs can be compared. */
 function _NormalizedJob(job: V1Job): Record<string, unknown>
 {
 	const normalized = structuredClone(job) as unknown as Record<string, unknown>;
@@ -82,7 +82,7 @@ function _NormalizedJob(job: V1Job): Record<string, unknown>
 	return normalized;
 }
 
-/** Assert that a Job is the exact UID-bound assignment, with only release state permitted to vary. */
+/** Throw unless this Job is the assigned one, matching on UID and on the whole manifest. Only `suspend` and its deadline may differ. */
 function _AssertExactAssignedJob(current: V1Job, expected: V1Job, workloadUid: string): void
 {
 	if (current.metadata?.uid !== workloadUid || (current.spec?.suspend !== true && current.spec?.suspend !== false)) throw new Error("refusing to adopt a Job outside the exact durable skill workload assignment");
@@ -99,7 +99,7 @@ function _AssertExactAssignedJob(current: V1Job, expected: V1Job, workloadUid: s
 	if (!isDeepStrictEqual(_NormalizedJob(current), _NormalizedJob(comparable))) throw new Error("refusing to adopt a Job that differs from the assigned governed skill workload");
 }
 
-/** Require the API identity used by the conditional unsuspend patch. */
+/** Return the name, namespace, UID and resourceVersion that the unsuspend patch tests against. */
 function _ReleaseIdentity(job: V1Job): { readonly name: string; readonly namespace: string; readonly uid: string; readonly resourceVersion: string }
 {
 	const { name, namespace } = _Coordinates(job);
@@ -109,7 +109,7 @@ function _ReleaseIdentity(job: V1Job): { readonly name: string; readonly namespa
 	return { name, namespace, uid, resourceVersion };
 }
 
-/** Bound the Job's active lifetime to the database-issued release expiry. */
+/** Return an `activeDeadlineSeconds` that always ends before the release claim expires. */
 function _ReleaseDeadline(expected: V1Job, releaseExpiresAt: string, requestTimeoutMilliseconds: number): number
 {
 	const expiry = Date.parse(releaseExpiresAt);
@@ -119,7 +119,7 @@ function _ReleaseDeadline(expected: V1Job, releaseExpiresAt: string, requestTime
 	return Math.min(maximum, remaining);
 }
 
-/** Assert that a listed Pod is the one exact Job-owned worker eligible for bootstrap binding. */
+/** Throw unless this Pod is owned by the expected Job and carries the expected ServiceAccount, namespace, and labels. */
 function _AssertExactPod(pod: V1Pod, expectedJob: V1Job, workloadUid: string, serviceAccountName: string): void
 {
 	const name = expectedJob.metadata?.name;
@@ -130,7 +130,7 @@ function _AssertExactPod(pod: V1Pod, expectedJob: V1Job, workloadUid: string, se
 	if (!name || !namespace || !pod.metadata?.uid || pod.metadata.namespace !== namespace || pod.spec?.serviceAccountName !== serviceAccountName || !isDeepStrictEqual(pod.metadata?.labels, expectedLabels) || owners.length !== 1 || owners[0]?.apiVersion !== "batch/v1" || owners[0].kind !== "Job" || owners[0].name !== name || owners[0].uid !== workloadUid || owners[0].controller !== true) throw new Error("refusing to register a Pod that differs from the assigned governed skill Job");
 }
 
-/** Create the least-privilege Kubernetes adapter owned only by the governed-skill controller. */
+/** Create the Kubernetes adapter used only by the skill controller, with only the permissions it needs. */
 export function __CreateKubernetesSkillWorkloadControllerStore(options: SkillWorkloadControllerKubernetesStoreOptions): SkillWorkloadControllerKubernetesStore
 {
 	if (!Number.isSafeInteger(options.requestTimeoutMilliseconds) || options.requestTimeoutMilliseconds < 1_000 || options.requestTimeoutMilliseconds > 60_000) throw new Error("governed skill Kubernetes store requires a 1-60s request timeout");
@@ -158,14 +158,14 @@ export function __CreateKubernetesSkillWorkloadControllerStore(options: SkillWor
 			const { name, namespace } = _Coordinates(expected);
 			return ___DoWithTrace("agent_controller.skill_job.release", { name, namespace, workloadUid }, async function _ReleaseSkillJob(): Promise<V1Job>
 			{
-				// 1. Re-read and prove ownership so a colliding name can never be unsuspended.
+				// 1. Re-read the Job and check its UID, so a different Job that reused the name is never unsuspended.
 				const current = await options.batchApi.readNamespacedJob({ namespace, name }, _RequestOptions(options.shutdownSignal, options.requestTimeoutMilliseconds));
 				_AssertExactAssignedJob(current, expected, workloadUid);
 				if (current.spec?.suspend === false) return current;
-				// 2. Derive a shorter deadline from the durable release claim before changing execution state.
+				// 2. Work out a deadline that ends before the release claim does, before letting the Job run.
 				const activeDeadlineSeconds = _ReleaseDeadline(expected, releaseExpiresAt, options.requestTimeoutMilliseconds);
 				const identity = _ReleaseIdentity(current);
-				// 3. CAS UID, resource version, suspension and deadline to prevent a stale controller release.
+				// 3. Have the patch test UID, resourceVersion, suspend and deadline, so an out-of-date controller cannot unsuspend the Job.
 				const currentDeadline = current.spec?.activeDeadlineSeconds;
 				if (typeof currentDeadline !== "number" || !Number.isSafeInteger(currentDeadline)) throw new Error("assigned governed skill Job is missing its active deadline");
 				const released = await options.batchApi.patchNamespacedJob({ name: identity.name, namespace: identity.namespace, body: [{ op: "test", path: "/metadata/uid", value: identity.uid }, { op: "test", path: "/metadata/resourceVersion", value: identity.resourceVersion }, { op: "test", path: "/spec/suspend", value: true }, { op: "test", path: "/spec/activeDeadlineSeconds", value: currentDeadline }, { op: "replace", path: "/spec/activeDeadlineSeconds", value: activeDeadlineSeconds }, { op: "replace", path: "/spec/suspend", value: false }] }, _RequestOptions(options.shutdownSignal, options.requestTimeoutMilliseconds));

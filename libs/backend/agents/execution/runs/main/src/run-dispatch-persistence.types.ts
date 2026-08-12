@@ -2,7 +2,7 @@ import type { AgentControllerRunAttemptClaimLease, AgentControllerRunAttemptProj
 
 import { RunDispatchResultStatuses } from "./run-dispatch.types.js";
 
-/** Frozen credential inputs returned only after an attempt claim transaction commits. */
+/** The values needed to mint the model key, returned only once the claim transaction has committed. */
 export interface ClaimedAttemptWithMintInputs
 {
 	/** Database-issued claim generation fencing the delivery. */

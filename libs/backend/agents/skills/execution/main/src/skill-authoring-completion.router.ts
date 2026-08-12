@@ -19,7 +19,7 @@ export function __CreateSkillAuthoringCompletionRouter(dependencies: SkillAuthor
 	const router = Router();
 	router.post("/skill-authoring-workloads:complete", async function _Complete(request: Request, response: Response): Promise<void>
 	{
-		// 1. Review the route-owned authoring audience before a worker-selected coordinate reaches Postgres.
+		// 1. TokenReview against the audience this route fixes, before any worker-supplied id reaches Postgres.
 		const token = _Bearer(request.header("authorization"));
 		if (token === null)
 		{
@@ -41,7 +41,7 @@ export function __CreateSkillAuthoringCompletionRouter(dependencies: SkillAuthor
 				return;
 			}
 
-			// 2. Atomically compare the reviewed Pod to the canonical bootstrap consumer before terminalising.
+			// 2. In one transaction, check the reviewed Pod is the same Pod that consumed the bootstrap, then move the workload to its final state.
 			const outcome = await dependencies.authority.completeAtomically(command, identity);
 			if (outcome !== "completed")
 			{
@@ -59,13 +59,13 @@ export function __CreateSkillAuthoringCompletionRouter(dependencies: SkillAuthor
 	return router;
 }
 
-/** Parse one standard bearer value without accepting multiple credentials. */
+/** Read the token from a single `Bearer <token>` header, rejecting anything else. */
 function _Bearer(value: string | undefined): string | null
 {
 	return value && /^Bearer ([^\s,]+)$/u.test(value) ? /^Bearer ([^\s,]+)$/u.exec(value)?.[1] ?? null : null;
 }
 
-/** Parse the small authoring-specific terminal contract, refusing arbitrary result JSON. */
+/** Read the small completion body this route accepts, refusing any other JSON. */
 function _Command(value: unknown): SkillAuthoringCompletionCommand | null
 {
 	if (value === null || typeof value !== "object" || Array.isArray(value)) return null;
@@ -75,19 +75,19 @@ function _Command(value: unknown): SkillAuthoringCompletionCommand | null
 	return null;
 }
 
-/** Require exactly the listed keys so a worker cannot smuggle future policy through the boundary. */
+/** Require exactly these keys, so a worker cannot slip extra fields through this route. */
 function _HasKeys(value: Record<string, unknown>, expected: readonly string[]): boolean
 {
 	return Object.keys(value).length === expected.length && expected.every(function _HasKey(key): boolean { return key in value; });
 }
 
-/** Validate the durable workload coordinate before it reaches the persistence adapter. */
+/** Check the workload id is short and free of control characters before it reaches the database. */
 function _Coordinate(value: unknown): value is string
 {
 	return typeof value === "string" && value.length > 0 && value.length <= 256 && !/[\u0000-\u001f\u007f]/.test(value);
 }
 
-/** Validate bounded, reviewable evidence rather than accepting a free-form worker JSON blob. */
+/** Check the report has exactly the three expected fields, each within range, rather than accepting free-form JSON. */
 function _Report(value: unknown): value is SkillAuthoringCheckReport
 {
 	if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
@@ -104,7 +104,7 @@ function _Report(value: unknown): value is SkillAuthoringCheckReport
 		&& report["checksRun"] <= 10_000;
 }
 
-/** Restrict a terminal technical failure to a portable stable code. */
+/** Accept a failure only as a short lowercase code, never as free text. */
 function _FailureCode(value: unknown): value is string
 {
 	return typeof value === "string" && /^[a-z][a-z0-9_]{0,63}$/.test(value);

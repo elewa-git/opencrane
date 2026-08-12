@@ -3,11 +3,14 @@ import { PersonaInterviewState, PersonaRevisionState, type Prisma } from "@prism
 import { PersonaAggregateInterviewStates, type PersonaAggregateReadRepository, type PersonaDraftRevisionReadCommand, type PersonaDraftRevisionRecord, type PersonaInterviewReadCommand, type PersonaInterviewRecord, type PersonaProfileOwnerReadCommand, type PersonaProfileReadCommand, type PersonaProfileRecord } from "./persona-aggregate-read-repository.types.js";
 
 /**
- * Owns every persona-aggregate evidence read and latest-revision read used by lifecycle authorities.
+ * Reads the profile, interview, and revision rows every persona lifecycle step needs, plus the next
+ * revision number.
  *
- * The repository takes no row locks. Callers run each read inside a Serializable transaction, so a
- * concurrent writer that invalidates the read aborts with a serialization or unique-key failure
- * (P2034/P2002) that the owning authority reports as its explicit conflict outcome.
+ * This class takes no row locks. Callers run each read inside a Serializable transaction, so another
+ * writer that would invalidate a read makes the transaction fail instead — as a serialization error
+ * (P2034) or a unique-key clash (P2002) — and the calling use case reports that as a conflict. The
+ * safety comes from PostgreSQL's SERIALIZABLE isolation level, not from anything this class does, so a
+ * caller that runs these reads at a weaker isolation level loses the guarantee silently.
  */
 export class PrismaPersonaAggregateReadRepository implements PersonaAggregateReadRepository
 {
@@ -32,14 +35,14 @@ export class PrismaPersonaAggregateReadRepository implements PersonaAggregateRea
 		return this.transaction.personaProfile.findFirst({ where: { id: command.personaProfileId, userId: command.userId }, select: { siloId: true, activeRevisionId: true } });
 	}
 
-	/** Read one owner interview so answer and completion transitions share the same evidence view. */
+	/** Reads one owner's interview, so the answer and completion paths see the same fields. */
 	async readInterview(command: PersonaInterviewReadCommand): Promise<PersonaInterviewRecord | null>
 	{
 		const interview = await this.transaction.personaInterview.findFirst({ where: { id: command.interviewId, personaProfileId: command.personaProfileId, userId: command.userId }, select: { questionSetId: true, questionSetVersion: true, state: true } });
 		return interview === null ? null : { ...interview, state: _InterviewState(interview.state) };
 	}
 
-	/** Read a completed owner interview before deriving its immutable template and insight evidence. */
+	/** Reads a completed interview before its template and insights are derived. */
 	async readCompletedInterview(command: PersonaInterviewReadCommand): Promise<PersonaInterviewRecord | null>
 	{
 		const interview = await this.transaction.personaInterview.findFirst({ where: { id: command.interviewId, personaProfileId: command.personaProfileId, userId: command.userId, state: PersonaInterviewState.Completed }, select: { questionSetId: true, questionSetVersion: true, state: true } });
@@ -52,7 +55,7 @@ export class PrismaPersonaAggregateReadRepository implements PersonaAggregateRea
 		return this.transaction.personaRevision.findFirst({ where: { id: command.personaRevisionId, personaProfileId: command.personaProfileId, state: PersonaRevisionState.Draft }, select: { interviewId: true } });
 	}
 
-	/** Read the next profile-local revision; the unique profile-revision key backstops concurrent allocation. */
+	/** Returns the next revision number for a profile. If two callers pick the same number, the unique (profile, revision) key rejects the second insert. */
 	async readNextRevision(personaProfileId: string): Promise<number>
 	{
 		const latest = await this.transaction.personaRevision.findFirst({ where: { personaProfileId }, select: { revision: true }, orderBy: { revision: "desc" } });
@@ -60,7 +63,7 @@ export class PrismaPersonaAggregateReadRepository implements PersonaAggregateRea
 	}
 }
 
-/** Map Prisma's generated lifecycle state into the repository-owned contract. */
+/** Converts Prisma's interview state into this repository's enum. */
 function _InterviewState(state: PersonaInterviewState): PersonaAggregateInterviewStates
 {
 	return state === PersonaInterviewState.Completed ? PersonaAggregateInterviewStates.Completed : PersonaAggregateInterviewStates.InProgress;

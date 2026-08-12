@@ -1,9 +1,9 @@
 import { PersonaTemplateVariable, type PersonaTemplateVariables } from "./persona-draft-instruction-compiler.types.js";
 
-/** Exact reviewed placeholders accepted by every persona SOUL template. */
+/** The placeholders every persona SOUL template must contain, each exactly once. */
 const PERSONA_TEMPLATE_VARIABLES: readonly PersonaTemplateVariable[] = Object.values(PersonaTemplateVariable);
 
-/** Compile one reviewed template and fail closed on missing, duplicate, unknown, or unresolved variables. */
+/** Fills in a SOUL template's placeholders. Returns null when a placeholder is missing, repeated, unknown, or still unfilled afterwards. */
 export function _CompilePersonaDraftInstructions(templateContent: string, variables: PersonaTemplateVariables): string | null
 {
 	const runtimeTemplate = _WithoutDisplayHeading(templateContent);

@@ -1,6 +1,6 @@
 import { ___DoWithTrace, type Logger } from "@opencrane/backend/observability";
 
-/** Run one persona persistence operation with correlated tracing and exactly one unexpected-error log. */
+/** Runs one persona persistence operation inside a trace span. An error the caller does not class as expected is logged once, then rethrown either way. */
 export async function _DoPersonaPersistenceWithTrace<T>(logger: Logger, operation: string, fields: Record<string, string>, message: string, work: () => Promise<T>, isExpectedError: (err: unknown) => boolean = function _unexpected() { return false; }): Promise<T>
 {
 	return ___DoWithTrace(operation, fields, async function _tracePersistence()

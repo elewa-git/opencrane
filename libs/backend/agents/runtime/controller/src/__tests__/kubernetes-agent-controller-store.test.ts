@@ -6,7 +6,7 @@ import { __BuildSuspendedAgentRuntimeJob } from "@opencrane/backend/agents/runti
 import { __CreateKubernetesAgentControllerStore } from "../kubernetes-agent-controller-store.js";
 import type { AgentControllerBatchApi, AgentControllerCoreApi, AgentControllerKubernetesStoreOptions } from "../kubernetes-agent-controller-store.types.js";
 
-/** Add the production deadline policy and a live process signal to focused API fakes. */
+/** Wrap the API fakes in the same request timeout and shutdown signal the real process uses. */
 function _StoreOptions(options: Pick<AgentControllerKubernetesStoreOptions, "batchApi" | "coreApi">, shutdownSignal: AbortSignal = new AbortController().signal): AgentControllerKubernetesStoreOptions
 {
 	return { ...options, requestTimeoutMilliseconds: 1_000, shutdownSignal };
@@ -24,7 +24,7 @@ async function _RequestSignal(options: ConfigurationOptions | undefined): Promis
 	return signal;
 }
 
-/** Keep one fake Kubernetes exchange pending until its actual request signal aborts it. */
+/** Never resolve a fake Kubernetes call; reject only when that call's own AbortSignal fires. */
 async function _HangUntilAborted(options: ConfigurationOptions | undefined, signals: AbortSignal[]): Promise<never>
 {
 	const signal = await _RequestSignal(options);
@@ -74,7 +74,7 @@ function _PodLabels(job: V1Job, workloadUid: string): Record<string, string>
 	};
 }
 
-/** Build the unique exact first Pod owned by one assigned Job. */
+/** Build the one Pod that the assigned Job would own. */
 function _Pod(job: V1Job, workloadUid = "job-uid"): V1Pod
 {
 	return {

@@ -4,19 +4,20 @@ import { __BuildSkillWorkloadJobSpec, __SkillWorkloadJobName } from "./skill-wor
 import type { SkillWorkloadJobAssignment, SkillWorkloadJobProfile } from "./skill-workload-job.types.js";
 
 /**
- * Builds the skill-authoring Job envelope around the shared hardened pod policy.
+ * Builds the Job object for a skill-authoring workload. The Pod spec inside it comes from
+ * `__BuildSkillWorkloadJobSpec`, which both workload classes share.
  *
- * This small class-specific seam keeps the authoring image's workload identity visible to the
- * controller and workload registry. It deliberately owns metadata only; all security posture,
- * token projection, suspension, retries, and cleanup remain centralized in the shared spec.
+ * This function exists so the authoring class has its own named entry point that the controller and
+ * the workload registry can find. It sets metadata only. Everything about security — the security
+ * context, the token mounts, `suspend`, retries, and cleanup — stays in the shared spec builder.
  */
 export function __BuildSkillAuthoringWorkloadJob(assignment: SkillWorkloadJobAssignment, profile: SkillWorkloadJobProfile): V1Job
 {
 	// 1. Derive an opaque selector-safe resource name so the Job name does not reveal durable authority ids.
 	const name = __SkillWorkloadJobName(assignment, profile);
-	// 2. Retain only bounded trace coordinates and the opaque exchange reference; never project source or credentials.
+	// 2. Put only the silo id, the job id, and the bootstrap reference in annotations. Never put source code or credentials there.
 	const annotations = { "opencrane.ai/silo-id": assignment.siloId, "opencrane.ai/job-id": assignment.jobId, "opencrane.ai/capability-reference": assignment.capabilityReference };
-	// 3. Delegate the Pod security policy to the one shared builder so both workload classes stay equally constrained.
+	// 3. Let the shared spec builder set the Pod security policy, so both workload classes are locked down the same way.
 	return {
 		apiVersion: "batch/v1",
 		kind: "Job",

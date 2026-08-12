@@ -1,6 +1,6 @@
 import type { PersonaScoreResult, PersonaTieChoice, PersonaTieKinds, PersonaWeightedAnswer } from "./persona-scorer.types.js";
 
-/** Scoring inputs frozen into one completed interview. */
+/** The scoring inputs a completed interview is pinned to: its policy, its weighted answers, and the owner's tie choices. */
 export interface PersonaScoringEvidence
 {
 	/** Reviewed scoring-policy identity. */
@@ -15,7 +15,7 @@ export interface PersonaScoringEvidence
 	readonly resolutions: readonly PersonaTieChoice[];
 }
 
-/** Existing immutable score fields required for exact replay verification. */
+/** The stored score columns, compared against a freshly recomputed score. */
 export interface StoredPersonaScore
 {
 	/** Reviewed policy identity. */
@@ -36,23 +36,23 @@ export interface StoredPersonaScore
 	readonly green: number;
 	/** Raw blue counter. */
 	readonly blue: number;
-	/** Raw colour denominator. */
+	/** Sum of the four colour counters. */
 	readonly colourTotal: number;
 	/** Raw Explorer counter. */
 	readonly explorer: number;
 	/** Raw Guardian counter. */
 	readonly guardian: number;
-	/** Raw openness denominator. */
+	/** Sum of the Explorer and Guardian counters. */
 	readonly opennessTotal: number;
-	/** Exact highest-colour candidate set serialized by Prisma. */
+	/** The primary-colour candidates from the first pass, stored as Prisma enum strings. */
 	readonly primaryCandidates: readonly string[];
-	/** Exact initial secondary-colour candidate set serialized by Prisma. */
+	/** The secondary-colour candidates from the first pass, before any tie choice, stored as Prisma enum strings. */
 	readonly secondaryCandidates: readonly string[];
-	/** Exact initial modifier candidate set serialized by Prisma. */
+	/** The modifier candidates from the first pass, before any tie choice, stored as Prisma enum strings. */
 	readonly modifierCandidates: readonly string[];
 }
 
-/** Owner-bound request to append one exact tie resolution. */
+/** A request from one owner to record their choice for one tie. */
 export interface ResolvePersonaTieCommand
 {
 	/** Stable authenticated owner. */
@@ -61,20 +61,20 @@ export interface ResolvePersonaTieCommand
 	readonly personaProfileId: string;
 	/** Completed interview whose score remains ambiguous. */
 	readonly interviewId: string;
-	/** Exact governed tie boundary. */
+	/** Which tie is being settled. */
 	readonly kind: PersonaTieKinds;
 	/** Candidate selected by the owner. */
 	readonly selectedValue: string;
-	/** Trusted resolution instant. */
+	/** Server timestamp for the choice. */
 	readonly resolvedAt: string;
 }
 
-/** Scoring persistence outcomes kept separate from transport status codes. */
+/** Outcomes of a scoring read or write. The router maps these to HTTP statuses; they are never statuses themselves. */
 export enum PersonaScoringPersistenceStatuses
 {
 	/** Score and resolution evidence are available. */
 	Ready = "ready",
-	/** Owner/interview coordinates did not resolve. */
+	/** No completed interview matched this owner and interview id. */
 	NotFound = "not_found",
 	/** Interview evidence is incomplete or invalid. */
 	InvalidEvidence = "invalid_evidence",
@@ -84,18 +84,59 @@ export enum PersonaScoringPersistenceStatuses
 	AlreadyResolved = "already_resolved",
 }
 
-/** Stable result of one score read or append-only tie resolution. */
+/** Result of reading a score or recording one tie choice. */
 export type PersonaScoringPersistenceResult =
 	| { readonly status: PersonaScoringPersistenceStatuses.Ready; readonly score: PersonaScoreResult }
 	| { readonly status: Exclude<PersonaScoringPersistenceStatuses, PersonaScoringPersistenceStatuses.Ready> };
 
-/** Persona-owned persistence port for immutable scoring and append-only tie evidence. */
+/**
+ * Stores and reads persona scores and the owner's tie choices.
+ *
+ * A score row is written once, when the interview completes, and never updated. Tie choices are only
+ * added. Every read recomputes the score from the answers and compares it with the stored row, so a
+ * row that has drifted from its answers is refused rather than shown to the owner.
+ *
+ * Called by: `PrismaPersonaInterviewRepository` (completion and tie resolution),
+ * `PrismaPersonaDraftRepository` (before template selection), `PrismaPersonaAuthorityRepository`
+ * (approval preflight) and `PrismaPersonaOnboardingStatusRepository` (status reads). Implemented only
+ * by `PrismaPersonaScoringRepository`.
+ *
+ * @see PersonaScoringPersistenceStatuses
+ */
 export interface PersonaScoringRepository
 {
-	/** Create the immutable score once or replay the exact existing derivation. */
+	/**
+	 * Writes the score row the first time, or recomputes it and checks the stored row still matches.
+	 *
+	 * @param interviewId - The completed interview being scored.
+	 * @param personaProfileId - Profile that must own the interview.
+	 * @param userId - Owner that must own the profile.
+	 * @returns `Ready` with the score; check `resolutionRequired` before drafting. `NotFound` when no
+	 * completed interview matches all three arguments. `InvalidEvidence` when the answers cannot be
+	 * scored or the stored row disagrees with the recomputed score — an operator must look at it, and
+	 * retrying will not help.
+	 */
 	ensureScore(interviewId: string, personaProfileId: string, userId: string): Promise<PersonaScoringPersistenceResult>;
-	/** Replay an existing immutable score without writing from a read path. */
+	/**
+	 * Recomputes an already-stored score and checks it matches. Never writes.
+	 *
+	 * Use this from read and approval paths, which must not create a score row as a side effect.
+	 *
+	 * @param interviewId - The completed interview to read.
+	 * @param personaProfileId - Profile that must own the interview.
+	 * @param userId - Owner that must own the profile.
+	 * @returns `Ready` with the score. `NotFound` when nothing matches. `InvalidEvidence` when no score
+	 * row exists yet, or the stored row no longer matches the answers.
+	 */
 	readScore(interviewId: string, personaProfileId: string, userId: string): Promise<PersonaScoringPersistenceResult>;
-	/** Append the exact next owner tie choice and replay the resulting score. */
+	/**
+	 * Records the owner's choice for the tie the score is currently waiting on.
+	 *
+	 * @param command - Owner, profile, interview, which tie, the chosen value, and the timestamp.
+	 * @returns `Ready` with the recomputed score, which may still have a later tie open.
+	 * `InvalidResolution` when the score is not waiting on that tie, or the value is not one of its
+	 * candidates — the caller must re-read the score before asking again. `AlreadyResolved` when this
+	 * tie is already settled. `NotFound` when nothing matches.
+	 */
 	resolveTie(command: ResolvePersonaTieCommand): Promise<PersonaScoringPersistenceResult>;
 }

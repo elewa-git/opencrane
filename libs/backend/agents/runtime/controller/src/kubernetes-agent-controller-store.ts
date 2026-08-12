@@ -35,7 +35,22 @@ function _Coordinates(resource: V1Job): { readonly name: string; readonly namesp
 	return { name, namespace };
 }
 
-/** Create the least-privilege Kubernetes projection and release adapter. */
+/**
+ * Create the adapter that does everything the controller does to Kubernetes.
+ *
+ * Four operations only: create a suspended Job, create its key Secret, release the Job, find its
+ * first Pod. There is no update, no delete, and no Secret read anywhere, so the adapter cannot
+ * rewrite or remove a workload even if asked to. Whenever what it reads differs from what
+ * OpenCrane recorded it throws instead of repairing, so drift surfaces rather than being papered
+ * over. Every request carries both the process shutdown signal and its own deadline.
+ *
+ * Called by: `apps/agent-controller/src/index.ts`, which passes the result as
+ * `options.kubernetes` to {@link __RunAgentController}.
+ * @param options - Batch and Core clients, per-request timeout, and shutdown signal.
+ * @returns An adapter satisfying the Kubernetes port; each method is documented on the port.
+ * @throws At construction, when `requestTimeoutMilliseconds` is outside 1-60s.
+ * @see {@link AgentControllerKubernetesStore}
+ */
 export function __CreateKubernetesAgentControllerStore(options: AgentControllerKubernetesStoreOptions): AgentControllerKubernetesStore
 {
 	if (!Number.isSafeInteger(options.requestTimeoutMilliseconds) || options.requestTimeoutMilliseconds < 1_000 || options.requestTimeoutMilliseconds > 60_000) throw new Error("agent controller Kubernetes store requires a 1-60s request timeout");
@@ -73,7 +88,8 @@ export function __CreateKubernetesAgentControllerStore(options: AgentControllerK
 				}
 				catch (err)
 				{
-					// Create-only Role: the deterministic name and isolated writer make 409 the exact replay.
+					// The Role only allows create. The name is derived from this attempt and nothing else writes it,
+					// so a 409 can only be our own earlier create of the same Secret — safe to ignore.
 					if (_StatusCode(err) !== 409) throw err;
 				}
 			});

@@ -3,24 +3,24 @@ import type { Router } from "express";
 import type { SkillWorkloadBootstrapIdentity, SkillWorkloadBootstrapLogger, SkillWorkloadBootstrapTokenReviewer } from "./skill-workload-bootstrap.types.js";
 import type { SkillAuthoringInputAuthority } from "./skill-workload-authority.types.js";
 
-/** Immutable artifact coordinates selected only after authoring-workload fencing succeeds. */
+/** The artifact ids, read only after every workload check has passed. */
 export interface SkillAuthoringInputRecord
 {
 	/** Silo that owns the workload and the immutable artifact. */
 	readonly siloId: string;
-	/** Logical ArtifactStore catalog identity. */
+	/** ArtifactStore catalog id of the artifact. */
 	readonly artifactId: string;
 	/** Published immutable artifact revision selected by the draft skill revision. */
 	readonly artifactRevisionId: string;
 	/** Canonical SHA-256 address pinned on the draft skill revision. */
 	readonly contentAddress: string;
-	/** Exact immutable byte count that the broker must verify before forwarding. */
+	/** Byte count the artifact reader must confirm before it forwards any bytes. */
 	readonly byteLength: number;
 	/** Immutable media type that the broker must verify before forwarding. */
 	readonly mediaType: string;
 }
 
-/** Server-owned byte broker; it mints and consumes the ArtifactStore lease without exposing it to workers. */
+/** Reads artifact bytes on the server. It creates and uses the ArtifactStore lease itself, and never gives it to a worker. */
 export interface SkillAuthoringArtifactReader
 {
 	/** Returns validated immutable bytes whose metadata matches the selected input record. */
@@ -32,9 +32,9 @@ export interface SkillAuthoringInputRouterDependencies
 {
 	/** Reviews the worker projected token against the route-owned authoring audience. */
 	readonly tokenReviewer: SkillWorkloadBootstrapTokenReviewer;
-	/** Selects the only durable artifact coordinates that worker may read. */
+	/** Finds the one artifact this worker may read. */
 	readonly authority: SkillAuthoringInputAuthority;
-	/** Brokers bytes through the server without returning a lease or ArtifactStore endpoint. */
+	/** Streams the bytes through the server. It never returns a lease or an ArtifactStore URL to the worker. */
 	readonly artifactReader: SkillAuthoringArtifactReader;
 	/** Emits structured authority failures without worker credential data. */
 	readonly logger: SkillWorkloadBootstrapLogger;

@@ -28,13 +28,13 @@ function _ReleaseBody()
 	};
 }
 
-/** Exact first-Pod evidence submitted to the registration endpoint. */
+/** The first-Pod details these tests send to the registration endpoint. */
 function _Registration(): AgentControllerRunWorkloadRegistrationCommand
 {
 	return { claimedAt: "2026-07-20T00:02:00.000Z", deliveryCount: 2, runId: "run-1", attempt: 1, siloId: "silo-1", agentServiceId: "service-1", agentRevisionId: "revision-1", namespace: "silo-a-runtime", serviceAccountName: "agent-runtime-default", workloadUid: "job-uid", workloadProfile: "personal-default", bootstrapReference: "bootstrap-ref-1", podUid: "pod-uid" };
 }
 
-/** Return a chunked response that crosses the controller allocation ceiling. */
+/** Return a streamed response one byte over the size limit the adapter accepts. */
 function _OversizedChunkedResponse(maximumBytes: number): Response
 {
 	let chunk = 0;

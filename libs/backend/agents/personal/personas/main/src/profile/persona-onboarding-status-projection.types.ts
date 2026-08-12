@@ -2,21 +2,21 @@ import { PersonaOnboardingApiStates } from "./persona-lifecycle.types.js";
 import type { PersonaScoreResult } from "../scoring/persona-scorer.types.js";
 import type { PersonaOnboardingStatus, PersonaStatusQuestion, PersonaStatusResult } from "./persona-onboarding-status.types.js";
 
-/** Domain-owned revision state used only to project the owner-visible onboarding route. */
+/** Revision states, used only when working out what the owner sees. */
 export enum PersonaOnboardingStatusRevisionStates
 {
-	/** A complete immutable result remains under its owner's review. */
+	/** The result is complete and waiting for the owner to approve it. */
 	Draft = "draft",
-	/** A complete immutable result is active for the owner. */
+	/** The result is approved and active. */
 	Approved = "approved",
 }
 
-/** Domain-owned interview state used only to project the owner-visible onboarding route. */
+/** Interview states, used only when working out what the owner sees. */
 export enum PersonaOnboardingStatusInterviewStates
 {
 	/** The owner may still append answers to the reviewed interview. */
 	InProgress = "in_progress",
-	/** The interview is frozen and may yield score resolution or a draft. */
+	/** The interview is frozen, so it can now be scored or turned into a draft. */
 	Completed = "completed",
 }
 
@@ -40,11 +40,11 @@ export interface PersonaOnboardingStatusInterview
 {
 	/** Durable interview identifier. */
 	readonly id: string;
-	/** Domain-owned progress state mapped at the persistence edge. */
+	/** The interview state, converted from Prisma's enum by the adapter. */
 	readonly state: PersonaOnboardingStatusInterviewStates;
 	/** Number of immutable answers recorded for this interview. */
 	readonly answeredQuestionCount: number;
-	/** Frozen reviewed questions and selected answers for resume. */
+	/** The pinned questions plus any answer already given, so the browser can resume. */
 	readonly questions: readonly PersonaStatusQuestion[];
 }
 
@@ -53,13 +53,13 @@ export interface PersonaOnboardingStatusRevision
 {
 	/** Durable persona revision identifier. */
 	readonly id: string;
-	/** Domain-owned review or active state mapped at the persistence edge. */
+	/** The revision state, converted from Prisma's enum by the adapter. */
 	readonly state: PersonaOnboardingStatusRevisionStates;
-	/** Owner-visible result after source and score evidence validation. */
+	/** The result shown to the owner, after its stored score JSON has been checked. */
 	readonly result: PersonaStatusResult;
 }
 
-/** Classified source state selecting one owner-visible status projection strategy. */
+/** Which situation the owner is in; each one has its own projection. */
 export enum PersonaOnboardingStatusProjectionStates
 {
 	/** No profile exists for this owner yet. */
@@ -74,7 +74,7 @@ export enum PersonaOnboardingStatusProjectionStates
 	ApprovedRevision = "approved_revision",
 	/** Latest interview accepts further answers. */
 	InterviewInProgress = "interview_in_progress",
-	/** Completed interview cannot yet provide authoritative score evidence. */
+	/** The interview is completed but its score could not be read. */
 	ScoreUnavailable = "score_unavailable",
 	/** Completed score requires an owner tie decision. */
 	ResolutionRequired = "resolution_required",
@@ -82,9 +82,9 @@ export enum PersonaOnboardingStatusProjectionStates
 	ScoreReady = "score_ready",
 }
 
-/** Pure state strategy that produces one owner-visible onboarding status. */
+/** Builds the owner-visible status for one situation. */
 export interface PersonaOnboardingStatusProjectionState
 {
-	/** Produce a bounded status only from already validated domain facts. */
+	/** Builds the status from facts the adapter has already checked. */
 	project(facts: PersonaOnboardingStatusFacts): PersonaOnboardingStatus;
 }

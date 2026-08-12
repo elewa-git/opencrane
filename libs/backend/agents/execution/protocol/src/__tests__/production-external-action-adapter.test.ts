@@ -10,7 +10,7 @@ import { describe, expect, it, vi } from "vitest";
 import { ExternalActionProviderOutcomeKinds, type ExternalActionExecutionContext, type ExternalActionWorkerInvocation } from "../external-action-worker.types.js";
 import { ProductionExternalActionAdapterFactory } from "../production-external-action-adapter.js";
 
-/** Build one durable invocation accepted before provider execution. */
+/** Build one saved invocation, as it exists just before the provider is called. */
 function _invocation(toolRevisionId: string): ExternalActionWorkerInvocation
 {
 	const proposedArguments = { query: "proposed" };

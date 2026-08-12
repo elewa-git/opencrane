@@ -6,16 +6,16 @@ import { SkillWorkloadKinds } from "./skill-workload-job.types.js";
 import type { SkillWorkloadJobAssignment, SkillWorkloadJobProfile } from "./skill-workload-job.types.js";
 import { __BuildToolRunnerWorkloadJob } from "./tool-runner-workload-job.js";
 
-/** Maximum size of the non-authoritative scratch filesystem. */
+/** Maximum size of the scratch filesystem. Nothing the platform relies on is stored there. */
 const _MAX_SCRATCH_BYTES = 1_073_741_824n;
 
-/** Minimum scratch capacity for safe authoring archive extraction and offline validation output. */
+/** Smallest scratch size that still fits the unpacked authoring archive and the validation output. */
 const _MIN_AUTHORING_SCRATCH_BYTES = 134_217_728n;
 
-/** Minimum reserved memory required to load the pinned offline ClamAV signature engine. */
+/** Smallest memory request that can load the pinned ClamAV signature database. */
 const _MIN_AUTHORING_MEMORY_BYTES = 3_221_225_472n;
 
-/** Minimum memory limit required to keep the offline scan below its declared hard ceiling. */
+/** Smallest memory limit that lets the scan finish without Kubernetes killing it. */
 const _MIN_AUTHORING_MEMORY_LIMIT_BYTES = 4_294_967_296n;
 
 /** Maximum wall-clock lifetime granted to one untrusted governed-skill Job. */
@@ -33,11 +33,12 @@ const _CAPABILITY_TOKEN_PATH = "/var/run/opencrane/tokens/capability.token";
 const _BOOTSTRAP_REFERENCE_PATH = "/var/run/opencrane/bootstrap/reference";
 
 /**
- * Accepts only a deployment-owned cluster-local bootstrap endpoint with the worker protocol path.
+ * Accepts a bootstrap URL only when it is an in-cluster address ending in `.svc.cluster.local` and
+ * its path is exactly the worker route.
  *
- * The URL is not worker input: it is a constrained profile value. This validator enforces only a
- * syntactically valid uncredentialed cluster-local host and exact worker path; NetworkPolicy and
- * the receiving bootstrap route separately bind that destination to the expected service identity.
+ * The URL comes from the Helm chart, never from a worker. This function checks the shape only: a
+ * valid in-cluster host, no username or password, and the exact path. Whether that address really is
+ * the OpenCrane server is enforced elsewhere, by NetworkPolicy and by the bootstrap route itself.
  */
 function _IsBootstrapUrl(value: string): boolean
 {
@@ -54,17 +55,18 @@ function _IsBootstrapUrl(value: string): boolean
 }
 
 /**
- * Accepts a bounded printable coordinate before it is projected into Kubernetes metadata.
+ * Accepts an id only when it is short and free of control characters, before it goes into Kubernetes
+ * metadata.
  *
- * This is a size and control-character guard, not authorization. The opaque-reference grammar is
- * checked separately because an annotation must remain traceable without becoming a capability.
+ * This checks size and characters, not permissions. The shape of the bootstrap reference is checked
+ * separately, because an annotation should stay useful for tracing without becoming a credential.
  */
 function _IsBoundedCoordinate(value: string): boolean
 {
 	return value.length > 0 && value.length <= 256 && !/[\u0000-\u001f\u007f]/.test(value);
 }
 
-/** Parses a strictly positive binary Kubernetes quantity into bytes without accepting ambiguous units. */
+/** Parses a Kubernetes size such as `512Mi` into bytes. Only `Ki`, `Mi` and `Gi` are accepted. */
 function _ParseBinaryBytes(value: string): bigint | null
 {
 	const match = /^([1-9][0-9]*)(Ki|Mi|Gi)$/.exec(value);
@@ -92,17 +94,17 @@ function _ParseCpuMillis(value: string): number | null
  */
 function _AssertProfile(profile: SkillWorkloadJobProfile): void
 {
-	// 1. Derive the only identity and audience accepted for this workload class, never from Job input.
+	// 1. Work out the one ServiceAccount and token audience this class may use. Never take them from the caller.
 	const expectedServiceAccountName = profile.kind === SkillWorkloadKinds.Authoring ? "skill-authoring-default" : "tool-runner-default";
 	const expectedAudience = profile.kind === SkillWorkloadKinds.Authoring ? "opencrane-skill-authoring" : "opencrane-tool-runner";
 
-	// 2. Normalize deployment quantities before comparing resource envelopes and class-specific minima.
+	// 2. Turn the profile's sizes into numbers, so requests, limits, and this class's minimums can be compared.
 	const scratchBytes = _ParseBinaryBytes(profile.scratchSize);
 	const requestedCpu = _ParseCpuMillis(String(profile.resources.requests?.cpu ?? ""));
 	const limitedCpu = _ParseCpuMillis(String(profile.resources.limits?.cpu ?? ""));
 	const requestedMemory = _ParseBinaryBytes(String(profile.resources.requests?.memory ?? ""));
 	const limitedMemory = _ParseBinaryBytes(String(profile.resources.limits?.memory ?? ""));
-	// 3. Reject the whole profile on any widening: Kubernetes must never receive a partially safe manifest.
+	// 3. Reject the whole profile if any single check fails. Kubernetes must never get a partly-hardened manifest.
 	if (!/^[a-z0-9][a-z0-9._:/-]*@sha256:[a-f0-9]{64}$/.test(profile.image) || !["Always", "IfNotPresent", "Never"].includes(profile.imagePullPolicy) || profile.serviceAccountName !== expectedServiceAccountName || profile.capabilityTokenAudience !== expectedAudience || !_IsBootstrapUrl(profile.bootstrapUrl) || profile.capabilityTokenPath !== _CAPABILITY_TOKEN_PATH || profile.bootstrapReferencePath !== _BOOTSTRAP_REFERENCE_PATH || profile.namespace.length > 63 || !/^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/.test(profile.namespace) || profile.namespace === profile.serverNamespace || !scratchBytes || scratchBytes > _MAX_SCRATCH_BYTES || (profile.kind === SkillWorkloadKinds.Authoring && scratchBytes < _MIN_AUTHORING_SCRATCH_BYTES) || !Number.isSafeInteger(profile.activeDeadlineSeconds) || profile.activeDeadlineSeconds < 1 || profile.activeDeadlineSeconds > _MAX_ACTIVE_DEADLINE_SECONDS || profile.ttlSecondsAfterFinished !== 0 || !requestedCpu || !limitedCpu || requestedCpu > limitedCpu || limitedCpu > _MAX_CPU_MILLICORES || !requestedMemory || !limitedMemory || requestedMemory > limitedMemory || limitedMemory > _MAX_MEMORY_BYTES || (profile.kind === SkillWorkloadKinds.Authoring && (requestedMemory < _MIN_AUTHORING_MEMORY_BYTES || limitedMemory < _MIN_AUTHORING_MEMORY_LIMIT_BYTES)))
 	{
 		throw new Error("governed skill Job profile requires one fixed bootstrap endpoint, fixed audience and paths, class-bounded identity, immutable image, bounded resources, scratch, and lifetime");
@@ -110,11 +112,12 @@ function _AssertProfile(profile: SkillWorkloadJobProfile): void
 }
 
 /**
- * Validates controller-supplied durable coordinates before they become Job metadata.
+ * Checks the ids the controller supplied, before they go into Job metadata.
  *
- * Assignment data selects one already-reserved attempt, but cannot select another namespace or
- * expose a readable durable identifier through the bootstrap exchange reference. Those violations stop
- * projection before a Kubernetes object exists, rather than relying on later route rejection.
+ * The assignment names a workload the database already reserved. It may not name a namespace other
+ * than the profile's, and its bootstrap reference must be the hashed opaque form, so no readable
+ * database id ends up in an annotation. Both are rejected here, before any Kubernetes object exists,
+ * rather than being caught later by the bootstrap route.
  */
 function _AssertAssignment(assignment: SkillWorkloadJobAssignment, profile: SkillWorkloadJobProfile): void
 {
@@ -125,11 +128,12 @@ function _AssertAssignment(assignment: SkillWorkloadJobAssignment, profile: Skil
 }
 
 /**
- * Derives a selector-safe collision-resistant one-shot Job name without leaking authority ids.
+ * Builds the Job's Kubernetes name from a hash, so the name is safe in a label selector and reveals
+ * no database ids.
  *
- * The hash includes class, silo, and attempt so equivalent ids in a different tenant or workload
- * class never share a Kubernetes name. It is naming only; the internal route still binds identity
- * and durable assignment before it accepts a bootstrap acknowledgement.
+ * The hash covers the workload class, the silo, and the job id, so the same id in another silo or
+ * another class never produces the same Kubernetes name. This is naming only: the internal bootstrap
+ * route still checks the worker's identity and its stored assignment before it accepts anything.
  */
 export function __SkillWorkloadJobName(assignment: SkillWorkloadJobAssignment, profile: SkillWorkloadJobProfile): string
 {
@@ -138,34 +142,36 @@ export function __SkillWorkloadJobName(assignment: SkillWorkloadJobAssignment, p
 }
 
 /**
- * Builds one deterministic unprivileged Job carrying only an opaque capability exchange reference.
+ * Builds one unprivileged Job. The only credential-like value in it is the opaque reference the
+ * worker trades for its real capability.
  *
- * The controller must persist the chosen Kubernetes identity before unsuspending this manifest.
- * Until then, `suspend: true` prevents execution; after terminal state, retry and TTL policy ensure
- * that the attempt cannot silently continue or preserve its temporary filesystem.
+ * The controller must record the Job's Kubernetes identity in the database before it unsuspends the
+ * Job; until then `suspend: true` stops it from running. Once the Job finishes, `backoffLimit: 0`
+ * stops any retry and `ttlSecondsAfterFinished: 0` deletes the Job and its scratch filesystem.
  */
 export function __BuildGovernedSkillWorkloadJob(assignment: SkillWorkloadJobAssignment, profile: SkillWorkloadJobProfile): V1Job
 {
-	// 1. Refuse unbounded identity, image, storage, or lifetime inputs before Kubernetes can see them.
+	// 1. Reject a bad ServiceAccount, image, storage size, or lifetime before Kubernetes ever sees them.
 	_AssertProfile(profile);
 	_AssertAssignment(assignment, profile);
 
-	// 2. Select one app-owned Job class so the workload registry can inspect distinct construction anchors.
+	// 2. Pick the builder for this workload class, so each class has its own named build function.
 	return profile.kind === SkillWorkloadKinds.Authoring ? __BuildSkillAuthoringWorkloadJob(assignment, profile) : __BuildToolRunnerWorkloadJob(assignment, profile);
 }
 
 /**
- * Builds the hardened shared Job spec after a class-specific function constructs the envelope.
+ * Builds the hardened Job spec that both workload classes share. The class-specific builder makes
+ * the surrounding Job object and calls this.
  *
- * The profile and assignment have already been validated. This function must not add a second
- * execution path or encode untrusted source, arguments, artifacts, or credentials in the manifest:
- * workers obtain an exact short-lived capability only by presenting their projected token and the
- * separate opaque reference to the verified bootstrap route.
+ * The profile and assignment have already been checked. Do not add a second way to start work here,
+ * and never put source code, tool arguments, artifacts, or credentials in the manifest: a worker
+ * gets its short-lived capability only by presenting its projected token and the separate opaque
+ * reference to the bootstrap route, which verifies both.
  */
 export function __BuildSkillWorkloadJobSpec(profile: SkillWorkloadJobProfile, component: "skill-authoring" | "tool-runner", name: string, annotations: Readonly<Record<string, string>>): NonNullable<V1Job["spec"]>
 {
 	return {
-		// 1. Lifecycle invariant: controller persistence releases the Job; it never retries and immediately removes scratch.
+		// 1. Lifecycle: the Job stays suspended until the controller has recorded it in the database. backoffLimit 0 means it never retries, and ttlSecondsAfterFinished 0 deletes it — and its scratch — as soon as it finishes.
 		suspend: true,
 		backoffLimit: 0,
 		completions: 1,
@@ -175,16 +181,16 @@ export function __BuildSkillWorkloadJobSpec(profile: SkillWorkloadJobProfile, co
 		template: {
 			metadata: { labels: { "app.kubernetes.io/component": component, "opencrane.ai/skill-workload": name }, annotations },
 			spec: {
-				// 2. Identity invariant: default credentials and cluster service discovery stay unavailable to the worker.
+				// 2. Identity: no ServiceAccount token is automounted and no service-link env vars are injected, so the worker gets neither default credentials nor cluster service discovery.
 				serviceAccountName: profile.serviceAccountName,
 				automountServiceAccountToken: false,
 				enableServiceLinks: false,
 				restartPolicy: "Never",
 				terminationGracePeriodSeconds: 0,
 				securityContext: { runAsNonRoot: true, runAsUser: 65532, runAsGroup: 65532, fsGroup: 65532, seccompProfile: { type: "RuntimeDefault" } },
-				// 3. Container invariant: an immutable image runs non-privileged with a read-only root and bounded writable scratch.
+				// 3. Container: the digest-pinned image runs with no privilege escalation, all capabilities dropped, a read-only root filesystem, and one size-capped writable scratch mount.
 				containers: [{ name: component, image: profile.image, imagePullPolicy: profile.imagePullPolicy, securityContext: { allowPrivilegeEscalation: false, capabilities: { drop: ["ALL"] }, readOnlyRootFilesystem: true }, env: [{ name: "OPENCRANE_SKILL_BOOTSTRAP_URL", value: profile.bootstrapUrl }, { name: "OPENCRANE_SKILL_TOKEN_PATH", value: profile.capabilityTokenPath }, { name: "OPENCRANE_SKILL_BOOTSTRAP_REFERENCE_PATH", value: profile.bootstrapReferencePath }], resources: structuredClone(profile.resources), volumeMounts: [{ name: "capability-token", mountPath: "/var/run/opencrane/tokens", readOnly: true }, { name: "bootstrap-reference", mountPath: "/var/run/opencrane/bootstrap", readOnly: true }, { name: "scratch", mountPath: "/tmp" }] }],
-				// 4. Bootstrap invariant: the audience-bound token and opaque reference are separate read-only inputs.
+				// 4. Bootstrap: the audience-bound token and the opaque reference arrive as two separate read-only mounts.
 				volumes: [{ name: "capability-token", projected: { defaultMode: 0o440, sources: [{ serviceAccountToken: { path: "capability.token", audience: profile.capabilityTokenAudience, expirationSeconds: 600 } }] } }, { name: "bootstrap-reference", downwardAPI: { defaultMode: 0o440, items: [{ path: "reference", fieldRef: { fieldPath: "metadata.annotations['opencrane.ai/capability-reference']" } }] } }, { name: "scratch", emptyDir: { sizeLimit: profile.scratchSize } }],
 			},
 		},

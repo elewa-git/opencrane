@@ -1,13 +1,13 @@
 import { PersonaLifecycleOutcomes } from "./persona-lifecycle.types.js";
 
-/** Stable provisioning denials from the owner-profile and reviewed-catalogue authority. */
+/** Reasons onboarding provisioning refuses a request. */
 export enum PersonaOnboardingDenialReasons
 {
 	/** The request omitted an owner coordinate or trusted provisioning instant. */
 	InvalidCommand = "invalid_command",
-	/** The required reviewed onboarding catalogue is absent or not reviewed. */
+	/** The question set, scoring policy, or interpolation map is missing, or the question set is not Reviewed. */
 	CatalogueUnavailable = "catalogue_unavailable",
-	/** The persistence authority could not prove a durable provisioning result. */
+	/** The database call failed. */
 	PersistenceUnavailable = "persistence_unavailable",
 }
 
@@ -18,11 +18,11 @@ export interface EnsurePersonaOnboardingCommand
 	readonly siloId: string;
 	/** Stable authenticated subject who owns the persona profile. */
 	readonly userId: string;
-	/** Trusted instant used when a new profile or catalogue is first recorded. */
+	/** Server timestamp used when a new profile is created. */
 	readonly provisionedAt: string;
 }
 
-/** Server-owned reviewed questionnaire revision used for the first personal persona interview. */
+/** The question set and version the server picks for a persona interview. */
 export interface PersonaOnboardingQuestionSet
 {
 	/** Stable product-owned questionnaire identifier. */
@@ -31,7 +31,7 @@ export interface PersonaOnboardingQuestionSet
 	readonly version: number;
 }
 
-/** Exact reviewed derivation sources pinned when an interview starts. */
+/** The scoring policy and interpolation map an interview is pinned to when it starts. */
 export interface PersonaOnboardingDerivationSources
 {
 	/** Stable weighted-scoring policy identifier. */
@@ -49,9 +49,9 @@ export type EnsurePersonaOnboardingResult =
 	| { readonly outcome: PersonaLifecycleOutcomes.Ready; readonly personaProfileId: string; readonly questionSet: PersonaOnboardingQuestionSet; readonly derivation: PersonaOnboardingDerivationSources }
 	| { readonly outcome: PersonaLifecycleOutcomes.Denied; readonly reason: PersonaOnboardingDenialReasons };
 
-/** Product-database boundary that verifies the clean-baseline source and provisions an owner profile. */
+/** Checks that the server-owned question set and derivation sources exist, then creates the owner's profile if it is missing. */
 export interface PersonaOnboardingRepository
 {
-	/** Returns the caller profile and the reviewed onboarding source, or a fail-closed reason. */
+	/** Returns the caller's profile plus the question set and derivation sources, or a refusal reason. */
 	ensureAtomically(command: EnsurePersonaOnboardingCommand): Promise<EnsurePersonaOnboardingResult>;
 }

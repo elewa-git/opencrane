@@ -6,7 +6,22 @@ import { PersonalConfigurationMaterializationCodes, type MaterializePersonalConf
 import { _ResolvePersonalConfigurationMaterializationLifecycle, _TerminalProposalResolution } from "./personal-configuration-materialization-state.js";
 import { PersonalConfigurationMaterializationLifecycleOutcomes, PersonalConfigurationMaterializationResolutionOutcomes, type PersonalConfigurationMaterializationChange, type PersonalConfigurationMaterializationResolution } from "./personal-configuration-materialization-state.types.js";
 
-/** Resolve a persisted patch through its owning materialisation strategy. */
+/**
+ * Validates the stored patch and hands it to the strategy for its kind.
+ *
+ * A model-alias patch is checked and prepared for agent-services; a persona refresh is refused
+ * here as `NotApplicable`, because the persona approval flow applies it instead. A patch that is
+ * not a supported shape at all is also `NotApplicable`, so a row written by older code can
+ * never be half-applied.
+ *
+ * Called by: {@link PrismaPersonalConfigurationMaterializationRepository.resolve}.
+ *
+ * @param change - The stored proposal fields, with `requestedPatch` still unvalidated.
+ * @param command - Server-derived owner, proposal id and time.
+ * @param readActivePersonaRevision - Reads the owner's active persona revision; called only by
+ * a strategy that needs it.
+ * @returns `Ready` with the fields agent-services needs, or `Terminal` with a final result.
+ */
 export async function _ResolvePersonalConfigurationMaterializationStrategy(change: PersonalConfigurationMaterializationChange, command: MaterializePersonalConfigurationChangeCommand, readActivePersonaRevision: PersonalConfigurationMaterializationPersonaRevisionReader): Promise<PersonalConfigurationMaterializationResolution>
 {
 	const patch = change.requestedPatch;
@@ -24,37 +39,48 @@ export async function _ResolvePersonalConfigurationMaterializationStrategy(chang
 	}
 }
 
-/** Strategy contract for one closed personal configuration patch kind. */
+/**
+ * What every patch-kind strategy must implement.
+ *
+ * One strategy per patch kind, so adding a kind means adding a strategy rather than another
+ * branch here. A strategy may read, but must never write: all writes happen after it returns
+ * `Ready`.
+ */
 interface PersonalConfigurationMaterializationStrategy<Patch extends PersonalConfigurationPatch>
 {
-	/** Resolves the strategy's proposal evidence into a ready or terminal materialisation result. */
+	/** Decides whether this proposal is ready to materialise, or already has its final result. */
 	resolve(change: PersonalConfigurationMaterializationChange, patch: Patch, command: MaterializePersonalConfigurationChangeCommand, readActivePersonaRevision: PersonalConfigurationMaterializationPersonaRevisionReader): Promise<PersonalConfigurationMaterializationResolution>;
 }
 
-/** Reads a proposal owner's active persona revision through the owning repository adapter. */
+/**
+ * Reads the owner's currently active persona revision, or null when the profile is not theirs.
+ *
+ * Passed in rather than imported so the strategies stay independent of Prisma; the repository
+ * binds it to the materialisation transaction before calling a strategy.
+ */
 type PersonalConfigurationMaterializationPersonaRevisionReader = (personaProfileId: string, command: MaterializePersonalConfigurationChangeCommand) => Promise<string | null>;
 
-/** Model-alias strategy that prepares an immutable personal agent revision change. */
+/** Strategy for a model-alias change; it prepares the new personal agent revision. */
 class _ModelAliasMaterializationStrategy implements PersonalConfigurationMaterializationStrategy<Extract<PersonalConfigurationPatch, { readonly kind: AgentConfigPatchKinds.ModelAlias }>>
 {
-	/** Resolve accepted model-alias evidence while retaining the owner and persona fences. */
+	/** Checks the proposal's state and its persona revision before declaring it ready. */
 	async resolve(change: PersonalConfigurationMaterializationChange, patch: Extract<PersonalConfigurationPatch, { readonly kind: AgentConfigPatchKinds.ModelAlias }>, command: MaterializePersonalConfigurationChangeCommand, readActivePersonaRevision: PersonalConfigurationMaterializationPersonaRevisionReader): Promise<PersonalConfigurationMaterializationResolution>
 	{
-		// 1. Interpret lifecycle before reading later evidence so replay and refusal need no service work.
+		// 1. Read the state first, so a repeat apply or a refusal costs no further queries.
 		const lifecycle = _ResolvePersonalConfigurationMaterializationLifecycle(change);
 		if (lifecycle.outcome === PersonalConfigurationMaterializationLifecycleOutcomes.Terminal)
 		{
 			return _TerminalProposalResolution(lifecycle.result);
 		}
 
-		// 2. Reprove the persona head because a newer persona must invalidate the accepted model choice.
+		// 2. Re-read the active persona revision, because a newer persona must invalidate the accepted model choice.
 		const activePersonaRevisionId = await readActivePersonaRevision(change.personaProfileId, command);
 		if (change.expectedAgentRevisionId === null || activePersonaRevisionId !== change.expectedPersonaRevisionId)
 		{
 			return _TerminalProposalResolution({ status: PersonalConfigurationMaterializationCodes.StaleProposal });
 		}
 
-		// 3. Hand only frozen model-alias evidence to agent-services for its own revision lifecycle work.
+		// 3. Pass on only the fields agent-services needs; it owns the revision work itself.
 		return {
 			outcome: PersonalConfigurationMaterializationResolutionOutcomes.Ready,
 			proposal: {
@@ -67,17 +93,17 @@ class _ModelAliasMaterializationStrategy implements PersonalConfigurationMateria
 	}
 }
 
-/** Placeholder strategy that keeps persona refresh outside model-revision materialisation. */
+/** Strategy for a persona refresh: it does nothing here, because the persona approval flow applies it. */
 class _PersonaRefreshMaterializationStrategy implements PersonalConfigurationMaterializationStrategy<Extract<PersonalConfigurationPatch, { readonly kind: AgentConfigPatchKinds.PersonaRefresh }>>
 {
-	/** Return the stable result until persona approval owns this patch kind's materialisation. */
+	/** Always returns NotApplicable, because the persona approval flow applies this patch kind. */
 	async resolve(): Promise<PersonalConfigurationMaterializationResolution>
 	{
 		return _TerminalProposalResolution({ status: PersonalConfigurationMaterializationCodes.NotApplicable });
 	}
 }
 
-/** Sole model-alias strategy registered for immutable personal agent-revision materialisation. */
+/** The one strategy used for model-alias changes. */
 const _MODEL_ALIAS_MATERIALIZATION_STRATEGY = new _ModelAliasMaterializationStrategy();
-/** Persona refresh intentionally delegates to the persona approval authority. */
+/** The persona-refresh strategy, which leaves the work to the persona approval flow. */
 const _PERSONA_REFRESH_MATERIALIZATION_STRATEGY = new _PersonaRefreshMaterializationStrategy();

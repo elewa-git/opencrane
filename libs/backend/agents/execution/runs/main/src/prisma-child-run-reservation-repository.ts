@@ -126,7 +126,15 @@ function _snapshotData(snapshot: RunInputSnapshot): Prisma.RunInputSnapshotUnche
 	return { runId: snapshot.runId, snapshotVersion: snapshot.snapshotVersion, siloId: snapshot.siloId, agentServiceId: snapshot.agentServiceId, agentRevisionId: snapshot.agentRevisionId, effectiveContractDigest: snapshot.effectiveContractDigest, personaRevisionId: snapshot.personaRevisionId, conversationId: snapshot.conversationId, messageIds: [...snapshot.messageIds], preferenceFactIds: [...snapshot.preferenceFactIds], artifactRevisionIds: [...snapshot.artifactRevisionIds], memoryFacts: _json(snapshot.memoryFacts), identitySnapshot: _json(snapshot.identitySnapshot), modelRoute: _json(snapshot.modelRoute), integrationAssignments: _json(snapshot.integrationAssignments), skillRevisionIds: [...snapshot.skillRevisionIds], memoryQueryPolicy: _json(snapshot.memoryQueryPolicy), budgetPolicy: _json(snapshot.budgetPolicy), capabilitySetDigest: snapshot.capabilitySetDigest, promptCompilerVersion: snapshot.promptCompilerVersion, digest: snapshot.digest, compiledAt: new Date(snapshot.compiledAt) };
 }
 
-/** Makes a JSON-safe deep copy before Prisma owns an immutable snapshot field. */
+/**
+ * Deep-copies a snapshot field into canonical form before Prisma writes it.
+ *
+ * The copy shares no references with the caller's value, so nothing can mutate a field after its
+ * digest was taken.
+ *
+ * @see https://www.rfc-editor.org/rfc/rfc8785 — canonical form here is RFC 8785 canonical JSON, via
+ * `___CloneCanonicalJson`; it is the same form the snapshot digest is computed over.
+ */
 function _json(value: unknown): Prisma.InputJsonValue
 {
 	return ___CloneCanonicalJson(value as JsonValue) as Prisma.InputJsonValue;

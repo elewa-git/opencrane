@@ -180,7 +180,15 @@ function _trigger(value: InitialRunAuthority["trigger"]): "Interactive" | "Sched
 	return "ManagedInvocation";
 }
 
-/** Deep-copies JSON through canonical form before Prisma owns the durable payload. */
+/**
+ * Deep-copies the JSON into canonical form before Prisma writes it.
+ *
+ * The copy shares no references with the caller's value, so nothing can mutate the payload after
+ * its digest was taken.
+ *
+ * @see https://www.rfc-editor.org/rfc/rfc8785 — canonical form here means RFC 8785 canonical JSON,
+ * the same form the snapshot digest is computed over.
+ */
 function _json(value: unknown): Prisma.InputJsonValue
 {
 	return ___CloneCanonicalJson(value as JsonValue) as Prisma.InputJsonValue;

@@ -7,13 +7,13 @@ import { _CreateRunAdmissionCapacityGate } from "../managed-run-admission.js";
 import { __CreatePersonalRunAdmissionPortWithGate } from "../personal-run-admission.js";
 import { PersonalRunAdmissionOutcomes, PersonalRunIdempotencyOutcomes, type PersonalRunAdmissionCommand, type PersonalRunAdmissionDependencies } from "../personal-run-admission.types.js";
 
-/** Builds the only server-derived command the transport-free personal admission port accepts. */
+/** Builds the server-side command the personal admission port takes. */
 function _Command(): Parameters<ReturnType<typeof __CreatePersonalRunAdmissionPortWithGate>["admitPersonalRun"]>[0]
 {
 	return { siloId: "silo-1", executionSubjectId: "user-1", conversationId: "conversation-1", requestIdempotencyKey: "request-1", inputMessageId: "message-1", inputMessageBlocks: [{ id: "block-1", kind: MessageContentBlockKinds.Text, value: "Hello" }] };
 }
 
-/** Builds a default dependency set and lets each test replace one authority seam. */
+/** Builds a default set of dependencies, so each test can replace just one of them. */
 function _Dependencies(overrides: Partial<PersonalRunAdmissionDependencies> = {}): PersonalRunAdmissionDependencies
 {
 	return {

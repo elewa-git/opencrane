@@ -8,11 +8,22 @@ import { PrismaRuntimeTerminalReporter } from "./prisma-runtime-terminal-reporte
 import { _RuntimeEventPayloadIsSafe } from "./runtime-event-payload.js";
 import type { RuntimeEventAppendRepository, RuntimeEventAppendUnitOfWork, RuntimeEventReportCommand, RuntimeEventReporter, RuntimeEventReportResult } from "./runtime-event-reporter.types.js";
 
-/** Canonical runtime event names a workload may propose. Server-owned lifecycle events stay absent. */
+/** The event names a workload is allowed to propose. Server-owned lifecycle events are deliberately not in this list. */
 const _RUNTIME_EVENT_TYPES = new Set<string>([RunEventTypes.RunStarted, RunEventTypes.RunResumed, RunEventTypes.MessageStarted, RunEventTypes.MessageDelta, RunEventTypes.MessageCompleted, RunEventTypes.ToolRequested, RunEventTypes.RunUsage, RunEventTypes.RunError, RunEventTypes.A2uiRenderingBegun, RunEventTypes.A2uiSurfaceUpdated, RunEventTypes.A2uiDataModelUpdated, RunEventTypes.RunCompleted, RunEventTypes.RunFailed]);
 const _A2UI_EVENT_TYPES = new Set<string>([RunEventTypes.A2uiRenderingBegun, RunEventTypes.A2uiSurfaceUpdated, RunEventTypes.A2uiDataModelUpdated]);
 
-/** Production reporter that validates runtime proposals before canonical persistence. */
+/**
+ * Validates what a workload proposes as a run event, then writes it.
+ *
+ * Anything outside the allowed event names or the payload contract is refused rather than
+ * written. The two terminal event types are not appended here at all — they are routed to
+ * {@link PrismaRuntimeTerminalReporter}, which owns the run's terminal state.
+ *
+ * Called by: `execution/protocol/src/production-runtime-dispatch.ts`, which passes this into
+ * `PrismaRuntimeDispatchAuthority` as its event reporter.
+ *
+ * @implements RuntimeEventReporter
+ */
 export class PrismaRuntimeEventReporter implements RuntimeEventReporter
 {
 	/** Validate one proposal and persist it on the admission transaction. */
@@ -28,25 +39,25 @@ export class PrismaRuntimeEventReporter implements RuntimeEventReporter
 	}
 }
 
-/** Transaction-owned construction boundary for the append repository. */
+/** Builds the repository that appends the event, bound to the caller's transaction. */
 class PrismaRuntimeEventAppendUnitOfWork implements RuntimeEventAppendUnitOfWork
 {
-	/** Exact candidate-admission transaction. */
+	/** The caller's transaction for admitting this candidate. */
 	private readonly _transaction: Prisma.TransactionClient;
-	/** Bind repository construction to the candidate transaction. */
+	/** Keeps the repository on the caller's transaction. */
 	constructor(transaction: Prisma.TransactionClient) { this._transaction = transaction; }
-	/** Append through one exact transaction-bound repository. */
+	/** Appends the event through a repository bound to that transaction. */
 	async append(command: RuntimeEventReportCommand): Promise<RuntimeEventReportResult> { return new PrismaRuntimeEventAppendRepository(this._transaction).append(command); }
 }
 
-/** Prisma adapter that owns canonical event sequencing and append. */
+/** Prisma adapter that numbers the event and writes it. */
 class PrismaRuntimeEventAppendRepository implements RuntimeEventAppendRepository
 {
-	/** Exact candidate-admission transaction. */
+	/** The caller's transaction for admitting this candidate. */
 	private readonly _transaction: Prisma.TransactionClient;
 	/** Bind all reads and writes to one candidate transaction. */
 	constructor(transaction: Prisma.TransactionClient) { this._transaction = transaction; }
-	/** Lock the run, validate coordinates, and append the next contiguous event. */
+	/** Reads the run, checks it is on the expected attempt and Running, then appends the event at the next sequence number. */
 	async append(command: RuntimeEventReportCommand): Promise<RuntimeEventReportResult>
 	{
 		const run = await this._transaction.agentRun.findUnique({ where: { id: command.runId } });
@@ -71,7 +82,18 @@ class PrismaRuntimeEventAppendRepository implements RuntimeEventAppendRepository
 	}
 }
 
-/** Require a versioned A2UI envelope bound to the exact durable conversation and run. */
+/**
+ * Requires a versioned A2UI envelope whose conversation and run match this run's own.
+ *
+ * The version is OpenCrane's own envelope version (`opencrane.a2ui.v1`), not an upstream A2UI
+ * version. Rejecting a mismatched conversation or run is what stops one run's rendering payload
+ * from being written into another conversation's stream.
+ *
+ * @see https://a2ui.org/specification/v0.8-a2ui/ — the A2UI specification revision this envelope
+ * carries a payload for; upstream marks v0.8 legacy, and this repo pins `@a2ui/web_core` 0.10.3.
+ * @see https://docs.ag-ui.com — AG-UI, the event stream the envelope is delivered on; this repo
+ * pins `@ag-ui/core` 0.0.57.
+ */
 function _A2uiMatches(payload: JsonValue, conversationId: string, runId: string): boolean
 {
 	if (payload === null || typeof payload !== "object" || Array.isArray(payload)) return false;

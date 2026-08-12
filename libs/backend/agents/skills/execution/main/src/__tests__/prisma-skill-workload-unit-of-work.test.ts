@@ -5,7 +5,7 @@ import { PrismaSkillWorkloadUnitOfWork } from "../prisma-skill-workload-unit-of-
 import { _CreateSkillWorkloadExecutionAuthority } from "../skill-workload-authority.js";
 import { _SkillWorkloadPersistenceConflictError } from "../skill-workload-unit-of-work.types.js";
 
-/** Builds one root-client double that exposes a fresh transaction to each unit-of-work call. */
+/** Builds a fake PrismaClient that gives each `run` call a fresh transaction. */
 function _Prisma()
 {
 	const firstTransaction = {};

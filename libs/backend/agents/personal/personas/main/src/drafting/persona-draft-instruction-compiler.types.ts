@@ -1,8 +1,8 @@
 /**
- * Stable placeholder vocabulary shared by reviewed persona templates and draft source derivation.
+ * The placeholder names used in persona SOUL templates.
  *
- * These strings are persisted inside reviewed template content, so compiler and derivation callers
- * must consume this enum instead of defining parallel placeholder names.
+ * These strings are stored inside the template content itself, so the compiler and the derivation
+ * code must both read them from this enum rather than writing their own copies of the names.
  */
 export enum PersonaTemplateVariable
 {
@@ -18,5 +18,5 @@ export enum PersonaTemplateVariable
 	SecondaryBlend = "secondary_blend",
 }
 
-/** Reviewed directive values selected only from exact quiz choices. */
+/** The text filled into each placeholder, taken only from the owner's answers. */
 export type PersonaTemplateVariables = Readonly<Record<PersonaTemplateVariable, string>>;

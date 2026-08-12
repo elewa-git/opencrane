@@ -8,10 +8,10 @@ import { PrismaRuntimeDispatchAuthority } from "../prisma-runtime-dispatch-autho
 import type { RunInputCompiler, RuntimeApprovalExpiry, RuntimeEventReporter, RuntimeStreamWorkloadIdentity } from "../prisma-runtime-dispatch-authority.types.js";
 import type { RuntimeProtocolClock } from "../runtime-protocol-authority.types.js";
 
-/** Fixed reviewed identity for the registered runtime Pod under test. */
+/** Workload identity of the registered runtime Pod under test. */
 const _identity: RuntimeStreamWorkloadIdentity = { subject: "system:serviceaccount:runtime-ns:agent-runtime-personal", namespace: "runtime-ns", serviceAccountName: "agent-runtime-personal", podUid: "pod-1" };
 
-/** Fixed reviewed identity for a registered managed-runtime Pod. */
+/** Workload identity of a registered managed-runtime Pod. */
 const _managedIdentity: RuntimeStreamWorkloadIdentity = { subject: "system:serviceaccount:managed-runtime-ns:managed-agent-runtime-default", namespace: "managed-runtime-ns", serviceAccountName: "managed-agent-runtime-default", podUid: "pod-1" };
 
 /** Fixed stream-open message from the connecting runtime instance. */
@@ -62,7 +62,7 @@ interface FakeCommandRow
 	expiresAt: Date;
 }
 
-/** Durable invocation row created atomically with an accepted external-action candidate. */
+/** Invocation row written in the same transaction that accepts an external-action candidate. */
 interface FakeToolInvocationRow
 {
 	id: string; siloId: string; runId: string; attempt: number; agentServiceId: string; agentRevisionId: string; subjectId: string;
@@ -73,7 +73,7 @@ interface FakeToolInvocationRow
 	result: unknown; failureCode: null; revision: number; recoveryRequiredAt: null; completedAt: null;
 }
 
-/** Options controlling the durable state the fake exposes to the adapter. */
+/** Options for the database state the fake presents to the adapter. */
 interface FakeOptions
 {
 	/** Prisma run-state enum member for the owning run. */
@@ -88,11 +88,11 @@ interface FakeOptions
 	readonly approvalExpiry?: RuntimeApprovalExpiry;
 	/** Optional trusted clock for retry-window expiry assertions. */
 	readonly clock?: RuntimeProtocolClock;
-	/** Saved terminal tool results available for a resume frame. */
+	/** Finished tool results a resume command can carry. */
 	readonly savedToolResults?: readonly JsonValue[];
 	/** Owner steering requests waiting for the next fenced resume command. */
 	readonly pendingSteeringRequests?: readonly unknown[];
-	/** Use tagged managed service evidence and its distinct projected workload identity. */
+	/** Use a managed-service identity, with its own workload identity, instead of a user one. */
 	readonly managed?: boolean;
 }
 
@@ -120,7 +120,7 @@ function _fakePrisma(options: FakeOptions)
 	const snapshot = { runId: "run-1", siloId: "silo-1", agentServiceId: "svc-1", agentRevisionId: "rev-1", snapshotVersion: 1, conversationId: null, messageIds: [], personaRevisionId: null, preferenceFactIds: [], artifactRevisionIds: [], skillRevisionIds: [], memoryFacts: [], memoryQueryPolicy: {}, integrationAssignments: [], modelRoute: {}, budgetPolicy: {}, identitySnapshot: options.managed ? { kind: "service", executionSubjectId: "agent-service:svc-1", agentServiceId: "svc-1", effectiveScopeAttachmentDigest: `sha256:${"a".repeat(64)}`, organizationId: "org-1", fleetMembershipRevision: 3 } : { kind: "user", executionSubjectId: "user-1", organizationId: "org-1", fleetMembershipRevision: 3 }, capabilitySetDigest: "sha256:cap", effectiveContractDigest: "sha256:contract", promptCompilerVersion: "v1", digest: "sha256:snap", compiledAt: new Date("2026-07-20T00:00:00.000Z") };
 	const queryRaw = vi.fn().mockResolvedValue([]);
 
-	/** Return whether a stream row satisfies the guard fields present in a where clause. */
+	/** Return whether a stream row matches the fields given in a where clause. */
 	function _streamMatches(row: FakeStreamRow, where: Record<string, unknown>): boolean
 	{
 		if (row.runId !== where["runId"] || row.attempt !== where["attempt"]) return false;

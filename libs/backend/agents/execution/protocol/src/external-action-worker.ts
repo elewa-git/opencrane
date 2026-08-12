@@ -4,10 +4,10 @@ import { ___DoWithTrace } from "@opencrane/backend/observability";
 import { _ExternalActionRecoveryStrategy } from "./external-action-recovery-strategy.js";
 import { ExternalActionProviderOutcomeKinds, type ExternalActionExecutionContext, type ExternalActionProviderOutcome, type ExternalActionWorkerDependencies, type ExternalActionWorkerInvocation, type PreparedExternalActionAdapter } from "./external-action-worker.types.js";
 
-/** Safe durable code for a provider-free preparation failure. */
+/** Failure code saved when preparation fails before any provider is contacted. */
 const _PREPARATION_FAILURE_CODE = "external_action_preparation_failed";
 
-/** Validate that a loaded immutable snapshot is the invocation's exact authority context. */
+/** Return whether the loaded snapshot belongs to the same run, silo, revision, and subject as this invocation. */
 function _contextMatchesInvocation(context: ExternalActionExecutionContext, invocation: ExternalActionWorkerInvocation): boolean
 {
 	const snapshot = context.snapshot;
@@ -17,21 +17,44 @@ function _contextMatchesInvocation(context: ExternalActionExecutionContext, invo
 		&& snapshot.identitySnapshot.executionSubjectId === invocation.subjectId;
 }
 
-/** Process one durable external action at a time through fenced provider strategies. */
+/**
+ * Runs saved external actions one at a time, each under a claim.
+ *
+ * One pass handles exactly one invocation and moves it one step: prepare it, open its approval,
+ * call the provider, or recover a claim whose lease ran out. Finished invocations are left alone.
+ * Passes never overlap, so a timer tick arriving while a provider call is in flight is dropped
+ * rather than starting a second call.
+ *
+ * The safety rule running through every step: nothing reaches a provider until the claim that
+ * fences it is saved, and only an answer the provider actually gave is recorded as success or
+ * failure. Anything else is ambiguous and goes to the invocation's recovery mode.
+ *
+ * Called by: built by `__CreateProductionExternalActionWorker`
+ * (production-external-action-worker.ts); apps/opencrane/src/app/background-workers.ts drives
+ * `runOnce` on an interval and awaits `drain` at shutdown.
+ *
+ * @see ExternalActionProviderOutcomeKinds for why an unclear result is not a failure.
+ */
 export class ExternalActionWorker
 {
-	/** Worker authorities, transports, policy, and safe evidence sink. */
+	/** The ports, transports, limits, and logger this worker uses. */
 	private readonly dependencies: ExternalActionWorkerDependencies;
-	/** Active bounded pass, retained so interval ticks cannot overlap provider operations. */
+	/** The pass that is currently running, kept so a timer tick cannot start a second one while a provider call is in flight. */
 	private activePass: Promise<boolean> | null = null;
 
-	/** Create one bounded worker over explicit authority ports. */
+	/** Create the worker over its injected ports. */
 	constructor(dependencies: ExternalActionWorkerDependencies)
 	{
 		this.dependencies = dependencies;
 	}
 
-	/** Process at most one runnable invocation and return when its durable transition is complete. */
+	/**
+	 * Handle at most one invocation, and return once its state change is saved.
+	 *
+	 * @returns True when an invocation was worked on. False when there was nothing to do, or a pass
+	 * was already running - neither is an error and neither needs a retry, because the next tick will
+	 * look again.
+	 */
 	async runOnce(): Promise<boolean>
 	{
 		if (this.activePass !== null) return false;
@@ -47,13 +70,18 @@ export class ExternalActionWorker
 		}
 	}
 
-	/** Wait until the current provider pass has committed its durable outcome. */
+	/**
+	 * Wait until the pass that is running has saved its outcome.
+	 *
+	 * Called at shutdown, so the process cannot exit between a provider call and the record of what
+	 * that call did. Returns immediately when no pass is running.
+	 */
 	async drain(): Promise<void>
 	{
 		await this.activePass;
 	}
 
-	/** Execute one internal pass after the non-overlap fence has been acquired. */
+	/** Run one pass. The caller has already made sure no other pass is running. */
 	private async _runPass(): Promise<boolean>
 	{
 		const dependencies = this.dependencies;
@@ -85,7 +113,7 @@ export class ExternalActionWorker
  */
 async function _rebuildAdapter(invocation: ExternalActionWorkerInvocation, dependencies: ExternalActionWorkerDependencies): Promise<{ readonly context: ExternalActionExecutionContext; readonly adapter: PreparedExternalActionAdapter }>
 {
-	// Load the frozen snapshot so mutable runtime state cannot stand in for authority.
+	// Load the frozen snapshot, so nothing the runtime can change is used to decide what is allowed.
 	const context = await dependencies.contexts.load(invocation.runId, invocation.attempt);
 	if (context === null || !_contextMatchesInvocation(context, invocation)) throw new Error(_PREPARATION_FAILURE_CODE);
 	const adapter = dependencies.adapters.prepare(invocation, context);
@@ -93,7 +121,7 @@ async function _rebuildAdapter(invocation: ExternalActionWorkerInvocation, depen
 	return { context, adapter };
 }
 
-/** Complete provider-free preparation or consume one bounded preparation attempt. */
+/** Finish preparation without contacting a provider, or record one failed preparation attempt. */
 async function _prepare(invocation: ExternalActionWorkerInvocation, now: Date, dependencies: ExternalActionWorkerDependencies): Promise<boolean>
 {
 	let context: ExternalActionExecutionContext;
@@ -120,20 +148,20 @@ async function _prepare(invocation: ExternalActionWorkerInvocation, now: Date, d
 	return true;
 }
 
-/** Open or recover one approval without granting provider dispatch on an unresolved result. */
+/** Open the approval request, or pick up one already open, without letting the provider be called while it is undecided. */
 async function _openApproval(invocation: ExternalActionWorkerInvocation, now: Date, dependencies: ExternalActionWorkerDependencies, preparedContext?: ExternalActionExecutionContext): Promise<boolean>
 {
-	// 1. Reload the immutable snapshot after a crash-gap recovery so approval never trusts process memory.
+	// 1. Read the snapshot again: after a crash and restart, nothing held in memory can be trusted.
 	const context = preparedContext ?? await dependencies.contexts.load(invocation.runId, invocation.attempt);
 	if (context === null || !_contextMatchesInvocation(context, invocation)) throw new Error("external action approval context is unavailable");
 
-	// 2. Let the approval authority atomically pause the run and create or recover the exact request.
+	// 2. Let the approval port pause the run and create the approval request (or find the one already open) in a single transaction.
 	const opened = await dependencies.approvals.open(invocation, context, now);
 	if (!opened) dependencies.log.warn({ runId: invocation.runId, attempt: invocation.attempt, toolInvocationId: invocation.toolInvocationId, failureKind: "external_action_approval_unavailable" }, "external action approval could not be opened and was closed without provider dispatch");
 	return true;
 }
 
-/** Acquire one monotonic claim, invoke its frozen strategy, and commit only a definite outcome. */
+/** Take the claim, run the strategy for this invocation's recovery mode, and save the result only when the provider gave a definite one. */
 async function _execute(invocation: ExternalActionWorkerInvocation, kind: ExternalActionClaimKinds, now: Date, dependencies: ExternalActionWorkerDependencies): Promise<boolean>
 {
 	// 1. Rebuild the adapter before claiming. A failure here cannot strand provider work in Claimed,
@@ -148,7 +176,7 @@ async function _execute(invocation: ExternalActionWorkerInvocation, kind: Extern
 		return _failBeforeProvider(invocation, kind, now, dependencies);
 	}
 
-	// 2. Persist the exact provider-operation fence before the adapter may start any request.
+	// 2. Save the claim that fences this provider operation before the adapter may send anything.
 	const claimed = await dependencies.invocations.claim(invocation.id, kind, now, dependencies.policy.providerClaimLeaseMilliseconds);
 	if (claimed.outcome !== "claimed") return claimed.outcome === "winner";
 	if (!await _announceStart(invocation, claimed.claim, dependencies)) return true;
@@ -205,7 +233,7 @@ async function _commitProviderOutcome(outcome: ExternalActionProviderOutcome, in
 	}
 }
 
-/** Apply recovery policy to a claim whose lease ran out before any durable outcome landed. */
+/** Apply the recovery rules to a claim whose lease ran out before any result was saved. */
 async function _recoverExpiredClaim(invocation: ExternalActionWorkerInvocation, now: Date, dependencies: ExternalActionWorkerDependencies): Promise<boolean>
 {
 	await dependencies.invocations.recoverExpiredClaim(invocation.id, now);
@@ -213,7 +241,7 @@ async function _recoverExpiredClaim(invocation: ExternalActionWorkerInvocation, 
 	return true;
 }
 
-/** Close provider-free reconstruction failures without ever calling an external adapter. */
+/** Close out an invocation whose context or adapter could not be rebuilt, without calling a provider. */
 async function _failBeforeProvider(invocation: ExternalActionWorkerInvocation, kind: ExternalActionClaimKinds, now: Date, dependencies: ExternalActionWorkerDependencies): Promise<boolean>
 {
 	const claimed = await dependencies.invocations.claim(invocation.id, kind, now, dependencies.policy.providerClaimLeaseMilliseconds);
@@ -228,7 +256,7 @@ async function _failBeforeProvider(invocation: ExternalActionWorkerInvocation, k
 	return true;
 }
 
-/** Apply the frozen recovery mode without exposing provider errors or response bodies. */
+/** Record an unproven outcome under the invocation's recovery mode, without logging provider errors or response bodies. */
 async function _completeAmbiguous(claim: ToolInvocationClaim, invocation: ToolInvocationRecord, dependencies: ExternalActionWorkerDependencies): Promise<void>
 {
 	await dependencies.invocations.completeAmbiguous(claim, dependencies.clock.now());

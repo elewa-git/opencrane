@@ -28,7 +28,7 @@ const DEPENDENCIES = { siloId: "silo-1", subjectId: "user-1", cogneeDatasetId: "
 /** Test-local successful Obot port; production exports only the fail-closed unavailable adapter. */
 class _RecordingObotInvocation implements ObotMcpInvocationPort
 {
-	/** Commands that crossed the executor boundary. */
+	/** Commands the executor passed to this port. */
 	readonly commands: ObotMcpToolInvocationCommand[] = [];
 
 	/** Record one command and return a controlled opaque result. */
@@ -39,7 +39,7 @@ class _RecordingObotInvocation implements ObotMcpInvocationPort
 	}
 }
 
-/** Proves one live-custody refusal remains typed and never reaches the Obot invocation port. */
+/** Checks that a refusal from live custody keeps its error type and never reaches the Obot port. */
 async function _expectAssignmentUnavailable(reason: IntegrationAssignmentUnavailableReason): Promise<void>
 {
 	const invokeTool = vi.fn();

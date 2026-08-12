@@ -10,31 +10,31 @@ const _MODIFIER_VALUES: readonly PersonaModifierValues[] = Object.values(Persona
 /** Stable tie boundaries exposed by persona resolution schemas. */
 const _TIE_KINDS: readonly PersonaTieKinds[] = Object.values(PersonaTieKinds);
 
-/** Reusable raw-score schema preserving the authoritative denominator. */
+/** Colour-score schema, including the `total` the four counters add up to. */
 const _COLOUR_SCORES = { type: "object", required: ["red", "yellow", "green", "blue", "total"], properties: { red: { type: "integer", minimum: 0 }, yellow: { type: "integer", minimum: 0 }, green: { type: "integer", minimum: 0 }, blue: { type: "integer", minimum: 0 }, total: { type: "integer", minimum: 1 } } } as const;
 
-/** Reusable raw openness-score schema preserving the authoritative denominator. */
+/** Modifier-score schema, including the `total` the two counters add up to. */
 const _OPENNESS_SCORES = { type: "object", required: ["explorer", "guardian", "total"], properties: { explorer: { type: "integer", minimum: 0 }, guardian: { type: "integer", minimum: 0 }, total: { type: "integer", minimum: 1 } } } as const;
 
-/** Exact next governed tie boundary. */
+/** Schema for the next tie the owner must break. */
 const _RESOLUTION = { type: "object", nullable: true, required: ["kind", "candidates"], properties: { kind: { type: "string", enum: _TIE_KINDS }, candidates: { type: "array", minItems: 2, items: { type: "string", enum: [..._COLOUR_VALUES, ..._MODIFIER_VALUES] } } } } as const;
 
 /** Reviewable persona result without compiled runtime instructions. */
 const _RESULT = { type: "object", nullable: true, required: ["displayName", "primaryColour", "secondaryColour", "modifier", "colourScores", "opennessScores", "insights", "instructionPreview"], properties: { displayName: { type: "string", description: "Reviewed template name after drafting; a generic result label before a draft exists." }, primaryColour: { type: "string", enum: _COLOUR_VALUES }, secondaryColour: { type: "string", enum: _COLOUR_VALUES }, modifier: { type: "string", enum: _MODIFIER_VALUES }, colourScores: _COLOUR_SCORES, opennessScores: _OPENNESS_SCORES, insights: { type: "array", maxItems: 5, items: { type: "string" } }, instructionPreview: { type: "string", nullable: true } } } as const;
 
-/** Frozen reviewed question and choice projection used for cross-device resume. */
+/** Schema for one pinned question and its choices, so a browser can resume on any device. */
 const _QUESTION = { type: "object", required: ["id", "category", "prompt", "ordinal", "choices", "selectedChoiceId"], properties: { id: { type: "string" }, category: { type: "string" }, prompt: { type: "string" }, ordinal: { type: "integer", minimum: 1 }, choices: { type: "array", minItems: 2, items: { type: "object", required: ["id", "label", "ordinal"], properties: { id: { type: "string" }, label: { type: "string" }, ordinal: { type: "integer", minimum: 1 } } } }, selectedChoiceId: { type: "string", nullable: true } } } as const;
 
 /** Complete owner-visible persona journey status. */
 const _STATUS = { type: "object", required: ["state", "interviewId", "answeredQuestionCount", "questionCount", "personaRevisionId", "questions", "resolution", "result"], properties: { state: { type: "string", enum: [PersonaOnboardingApiStates.Interview, PersonaOnboardingApiStates.Resolution, PersonaOnboardingApiStates.Review, PersonaOnboardingApiStates.Ready] }, interviewId: { type: "string", nullable: true }, answeredQuestionCount: { type: "integer", minimum: 0 }, questionCount: { type: "integer", minimum: 0 }, personaRevisionId: { type: "string", nullable: true }, questions: { type: "array", items: _QUESTION }, resolution: _RESOLUTION, result: _RESULT } } as const;
 
-/** Generic bounded persona error. */
+/** Shared error response for every persona route. */
 const _ERROR = { description: "The owner-bound persona transition was rejected.", content: { "application/json": { schema: { type: "object", required: ["error"], properties: { error: { type: "string" } } } } } } as const;
 
 /** Reusable empty transition body. */
 const _EMPTY_BODY = { required: true, content: { "application/json": { schema: { type: "object", additionalProperties: false } } } } as const;
 
-/** OpenAPI fragment for the complete resumable owner-only persona journey. */
+/** OpenAPI paths for the routes an owner uses to complete their own persona onboarding. */
 export const _PersonaOnboardingOpenapiPaths = {
 	"/me/persona": {
 		get: {

@@ -6,13 +6,32 @@ import { ___CloneCanonicalJson, type JsonValue } from "@opencrane/util";
 
 import type { BudgetPolicyInput, BudgetPolicySource, SessionAssemblyCommand, SessionAssemblyLoad, ToolPolicyInput, ToolPolicySource } from "./session-assembly.types.js";
 
-/** Revalidates a published revision's secret-free model route, integration allowances, skills, and artifacts. */
+/**
+ * Re-checks a published revision's model route, integrations, skills, and artifacts.
+ *
+ * Takes row locks before reading, in the same order revocation takes them: revision first, then
+ * integration custody. Matching that order is what guarantees a revocation happening at the same
+ * moment either completes before this read (and is seen) or waits until the snapshot commits —
+ * never lands half-way through and leaves a snapshot naming a revoked integration.
+ *
+ * The model route it returns names a LiteLLM model alias and carries no provider credentials,
+ * because the compiled input reaches the runtime as opaque data.
+ *
+ * The custody reference it checks is the stored credential handle for an integration; an expired or
+ * not-ready one refuses the run rather than letting the runtime attempt a call it cannot authorise.
+ *
+ * @implements ToolPolicySource
+ * @see https://modelcontextprotocol.io/specification/2025-06-18 - MCP, revision 2025-06-18 as
+ * pinned by `_MCP_PROTOCOL_VERSION` in server/infra/obot-custody. The `toolDefinitions` this
+ * validates are MCP tools reaching the model.
+ * @see PrismaRevisionBudgetPolicySource - locks the same revision row in the same order.
+ */
 export class PrismaRevisionToolPolicySource implements ToolPolicySource
 {
-	/** Loads only current same-silo policy references that remain executable at the final admission fence. */
+	/** Loads the revision's tool policy, keeping only same-silo rows that are still usable inside the admission transaction. */
 	async load(command: SessionAssemblyCommand, run: InitialRunAuthority, transaction: RunAdmissionTransaction): Promise<SessionAssemblyLoad<ToolPolicyInput>>
 	{
-		// 1. Lock policy rows in revocation order, so a custody or revision change wins before a snapshot commits.
+		// 1. Lock the policy rows in the same order revocation locks them, so a custody or revision change lands first and this snapshot sees it.
 		await transaction.prisma.$queryRaw(Prisma.sql`
 			SELECT revision."id"
 			FROM "agent_revisions" revision
@@ -33,7 +52,7 @@ export class PrismaRevisionToolPolicySource implements ToolPolicySource
 			FOR UPDATE OF assignment, integration, custody
 		`);
 
-		// 2. Re-read current model, custody, and skill assignments only after their mutable authority rows are fenced.
+		// 2. Re-read the model, custody, and skill assignments only after the rows above are locked.
 		const revision = await transaction.prisma.agentRevision.findFirst({
 			where: {
 				id: run.agentRevisionId,
@@ -55,7 +74,7 @@ export class PrismaRevisionToolPolicySource implements ToolPolicySource
 				|| !__AreReviewedIntegrationToolDefinitionsValid(toolDefinitions);
 		})) return { outcome: "denied", reason: "tool_policy_unavailable" };
 
-		// 3. Verify every assigned skill and artifact remains same-silo and published before naming it in immutable input.
+		// 3. Check every assigned skill and artifact is still in this silo and still published before the snapshot names it.
 		const skillRevisionIds = revision.skillAssignments.map(function _SkillRevisionId(assignment): string { return assignment.skillRevisionId; });
 		const skills = await transaction.prisma.skillRevision.findMany({ where: { id: { in: skillRevisionIds } }, include: { skill: true } });
 		if (skills.length !== skillRevisionIds.length || skills.some(function _IsSkillUnavailable(skill): boolean { return skill.state !== SkillRevisionState.Published || skill.skill.state !== SkillState.Active || skill.skill.siloId !== command.siloId; })) return { outcome: "denied", reason: "tool_policy_unavailable" };
@@ -74,10 +93,21 @@ export class PrismaRevisionToolPolicySource implements ToolPolicySource
 	}
 }
 
-/** Reads immutable revision resource ceilings as compiler-readable per-run budget policy. */
+/**
+ * Reads the revision's resource limits and turns them into the per-run budget the compiler reads.
+ *
+ * Locks the same revision row as {@link PrismaRevisionToolPolicySource}, in the same order, so the
+ * two cannot deadlock and neither can read a revision the other is mid-publish on.
+ *
+ * Applies no defaults. A budget with a missing or non-positive limit is refused, because a run
+ * admitted without a real ceiling could consume tokens without bound. The wall-clock deadline is
+ * computed from the server's admission time, so a caller cannot extend its own run.
+ *
+ * @implements BudgetPolicySource
+ */
 export class PrismaRevisionBudgetPolicySource implements BudgetPolicySource
 {
-	/** Refuses absent, stale, malformed, or unrepresentable revision budget policy. */
+	/** Refuses a budget policy that is missing, out of date, malformed, or holds values it cannot represent. */
 	async load(command: SessionAssemblyCommand, run: InitialRunAuthority, transaction: RunAdmissionTransaction): Promise<SessionAssemblyLoad<BudgetPolicyInput>>
 	{
 		// 1. Lock the exact revision, matching the tool-policy lock order so a publication change cannot race the budget read.
@@ -92,14 +122,14 @@ export class PrismaRevisionBudgetPolicySource implements BudgetPolicySource
 			FOR UPDATE OF revision
 		`);
 
-		// 2. Revalidate published state beneath that lock, not merely the revision ID passed by an earlier caller.
+		// 2. Under that lock, check the revision is still published. Do not trust the revision id an earlier caller passed.
 		const revision = await transaction.prisma.agentRevision.findFirst({
 			where: { id: run.agentRevisionId, agentServiceId: run.agentServiceId, state: AgentRevisionState.Published, agentService: { is: { siloId: command.siloId, state: "Active", activeRevisionId: run.agentRevisionId } } },
 			select: { budget: true },
 		});
 		if (revision === null) return { outcome: "denied", reason: "budget_unavailable" };
 
-		// 3. Project only complete positive limits and the server-owned deadline; callers cannot supply defaults.
+		// 3. Keep only limits that are all present and positive, plus the server's deadline. A caller can never supply a default.
 		const budgetPolicy = _ParseBudget(revision.budget as unknown as JsonValue, transaction.admittedAtEpochMs);
 		return budgetPolicy === null ? { outcome: "denied", reason: "budget_unavailable" } : { outcome: "loaded", value: { budgetPolicy } };
 	}
@@ -111,7 +141,7 @@ function _IsModelAvailable(model: { readonly scope: ModelRoutingScope; readonly 
 	return model.scope === ModelRoutingScope.Global || (model.scope === ModelRoutingScope.ClusterTenant && model.clusterTenant === siloId);
 }
 
-/** Parses a persisted JSON budget into the snapshot policy vocabulary without applying implicit defaults. */
+/** Turns the stored JSON budget into the snapshot's budget fields, never filling in a default. */
 function _ParseBudget(value: JsonValue, admittedAtEpochMs: number): BudgetPolicyInput["budgetPolicy"] | null
 {
 	if (value === null || typeof value !== "object" || Array.isArray(value) || !Number.isSafeInteger(admittedAtEpochMs)) return null;
@@ -122,7 +152,7 @@ function _ParseBudget(value: JsonValue, admittedAtEpochMs: number): BudgetPolicy
 	return { maxModelTurns: budget.maxTurns, maxTotalTokens: budget.maxTokens, wallClockDeadlineEpochMs: deadline };
 }
 
-/** Returns whether a JSON field is an explicit positive safe-integer resource ceiling. */
+/** Returns whether a JSON value is a positive safe integer that can be used as a limit. */
 function _IsPositiveSafeInteger(value: unknown): value is number
 {
 	return typeof value === "number" && Number.isSafeInteger(value) && value > 0;

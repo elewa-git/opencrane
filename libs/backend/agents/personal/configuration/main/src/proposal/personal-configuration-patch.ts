@@ -2,7 +2,7 @@ import { AgentConfigPatchKinds } from "@opencrane/contracts";
 
 import type { PersonalConfigurationPatch } from "./personal-configuration-patch.types.js";
 
-/** Return whether a runtime value matches the closed personal configuration-patch union. */
+/** Returns whether an unknown value is one of the supported configuration patches. */
 export function _IsPersonalConfigurationPatch(value: unknown): value is PersonalConfigurationPatch
 {
 	if (value === null || typeof value !== "object" || Array.isArray(value)) return false;

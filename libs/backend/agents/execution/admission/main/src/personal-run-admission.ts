@@ -6,15 +6,15 @@ import { RunAdmissionConcurrencyOutcomes, RunAdmissionDenialReasons } from "@ope
 import type { PersonalRunAdmissionDependencies, PersonalRunAdmissionPort, PersonalRunAdmissionResult } from "./personal-run-admission.types.js";
 import { PersonalRunAdmissionDenialReasons, PersonalRunAdmissionOutcomes, PersonalRunIdempotencyOutcomes } from "./personal-run-admission.types.js";
 
-/** Non-user-visible service key that bounds preflight reads before a real service is known. */
+/** Fake service id used as the gate key for the preflight reads, which run before the real service is known. */
 const _PERSONAL_ADMISSION_PREFLIGHT_SERVICE_ID = "__personal_admission_preflight__";
 
-/** Private outcomes from the bounded read-only preflight stage. */
+/** What the read-only preflight stage can find. */
 enum _PersonalRunPreflightOutcomes
 {
 	/** A durable duplicate has already frozen the caller's original snapshot. */
 	Idempotent = "idempotent",
-	/** The idempotency key belongs to a conflicting durable authority. */
+	/** The idempotency key already belongs to a different subject, trigger, or conversation. */
 	Conflict = "conflict",
 	/** No duplicate exists but the caller has no eligible active personal conversation. */
 	ConversationUnavailable = "conversation_unavailable",
@@ -22,28 +22,44 @@ enum _PersonalRunPreflightOutcomes
 	Resolved = "resolved",
 }
 
-/** Read-only preflight result whose only authority output is a server-resolved personal service. */
+/** Result of the read-only preflight. The only thing it produces is the AgentService the server resolved. */
 type _PersonalRunPreflightResult =
 	| { readonly outcome: _PersonalRunPreflightOutcomes.Idempotent; readonly runId: string }
 	| { readonly outcome: _PersonalRunPreflightOutcomes.Conflict | _PersonalRunPreflightOutcomes.ConversationUnavailable }
 	| { readonly outcome: _PersonalRunPreflightOutcomes.Resolved; readonly agentServiceId: string };
 
 /**
- * Creates the transport-free personal run admission port.
+ * Creates the personal run admission port. It knows nothing about HTTP.
  *
- * A bounded preflight lane resolves the conversation only to derive the final AgentService fairness
- * coordinate. The immutable assembler re-reads that conversation inside its transaction, so this
- * preliminary lookup cannot grant access or survive a participant/service change.
+ * Two gated stages. The preflight read looks up the conversation for one reason only: to learn which
+ * AgentService the final capacity gate should queue against. The assembler reads that conversation
+ * again inside its own transaction, so this early lookup grants no access and is thrown away if the
+ * participant or service changed in between.
+ *
+ * The preflight is itself behind the gate, under a placeholder service id, so browser traffic cannot
+ * reach Prisma unbounded before a real service is known.
+ *
+ * If the final commit fails, it re-reads the conversation once to tell "another run got there first"
+ * apart from "the database is unhealthy" — those need different replies. If that recovery read also
+ * fails, the original failure is returned and the recovery error is logged, never swallowed.
+ *
+ * Called by: `__CreatePersonalRunAdmissionPort` (personal-run-admission.composition.ts) and
+ * `__tests__/personal-run-admission.test.ts`.
+ *
+ * @param dependencies - Repository, assembler, shared capacity gate, and logger. See
+ * {@link PersonalRunAdmissionDependencies}; the gate must be the same instance managed admission got.
+ * @returns The port the HTTP layer calls. See {@link PersonalRunAdmissionResult} for what each
+ * outcome obliges the caller to do.
  */
 export function __CreatePersonalRunAdmissionPortWithGate(dependencies: PersonalRunAdmissionDependencies): PersonalRunAdmissionPort
 {
 	return {
 		async admitPersonalRun(command, commit): Promise<PersonalRunAdmissionResult>
 		{
-			// 1. Domain-separate the conversation-local public key before any silo-global run lookup.
+			// 1. Hash the caller's key together with the conversation id, so keys from different conversations cannot collide in the silo-wide run table.
 			const scopedCommand = { ...command, requestIdempotencyKey: _conversationScopedIdempotencyKey(command.conversationId, command.requestIdempotencyKey) };
 
-			// 2. Bound all duplicate/conversation reads before browser traffic can reach Prisma.
+			// 2. Put the duplicate and conversation reads behind the capacity gate, so browser traffic cannot hit Prisma unbounded.
 			const preflight = await dependencies.capacityGate.execute(
 				{ siloId: command.siloId, agentServiceId: _PERSONAL_ADMISSION_PREFLIGHT_SERVICE_ID },
 				async function _ResolvePreflight(): Promise<_PersonalRunPreflightResult>
@@ -62,7 +78,7 @@ export function __CreatePersonalRunAdmissionPortWithGate(dependencies: PersonalR
 			if (preflight.value.outcome !== _PersonalRunPreflightOutcomes.Resolved) return { outcome: PersonalRunAdmissionOutcomes.Denied, reason: PersonalRunAdmissionDenialReasons.AuthorityConflict };
 			const agentServiceId = preflight.value.agentServiceId;
 
-			// 3. Share personal-and-managed fairness before opening the expensive final assembly transaction.
+			// 3. Take a slot from the same gate managed admission uses, before opening the expensive assembly transaction.
 			const bounded = await dependencies.capacityGate.execute(
 				{ siloId: command.siloId, agentServiceId },
 				async function _assembleAfterCapacityGrant(): Promise<AssembleRunInputSnapshotResult>
@@ -92,9 +108,9 @@ export function __CreatePersonalRunAdmissionPortWithGate(dependencies: PersonalR
 }
 
 /**
- * Namespaces a participant-visible message key before it enters the silo-global AgentRun keyspace.
- * The digest keeps stored keys bounded and prevents identical keys in different conversations from
- * conflicting while exact retries in one conversation still select the same durable run.
+ * Combines the caller's key with the conversation id before it is stored in the silo-wide AgentRun
+ * table. Hashing keeps the stored key a fixed length, stops the same key in two conversations from
+ * clashing, and still lets a retry in the same conversation find the same run.
  */
 function _conversationScopedIdempotencyKey(conversationId: string, requestIdempotencyKey: string): string
 {

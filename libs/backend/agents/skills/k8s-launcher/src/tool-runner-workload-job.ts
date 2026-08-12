@@ -4,19 +4,20 @@ import { __BuildSkillWorkloadJobSpec, __SkillWorkloadJobName } from "./skill-wor
 import type { SkillWorkloadJobAssignment, SkillWorkloadJobProfile } from "./skill-workload-job.types.js";
 
 /**
- * Builds the tool-runner Job envelope around the shared hardened pod policy.
+ * Builds the Job object for a tool-runner workload. The Pod spec inside it comes from
+ * `__BuildSkillWorkloadJobSpec`, which both workload classes share.
  *
- * This class-specific seam makes the tool runner's identity and registry label explicit without
- * giving it a separate security policy. The returned manifest intentionally contains only bounded
- * trace metadata plus an opaque exchange reference, never tool arguments, credentials, or bytes.
+ * This function gives the tool runner its own ServiceAccount and registry label without giving it a
+ * security policy of its own. The manifest it returns holds only the silo id, the job id, and the
+ * opaque bootstrap reference — never tool arguments, credentials, or tool bytes.
  */
 export function __BuildToolRunnerWorkloadJob(assignment: SkillWorkloadJobAssignment, profile: SkillWorkloadJobProfile): V1Job
 {
 	// 1. Derive an opaque selector-safe resource name so the Job name does not reveal durable authority ids.
 	const name = __SkillWorkloadJobName(assignment, profile);
-	// 2. Retain only bounded trace coordinates and the opaque exchange reference; never project source or credentials.
+	// 2. Put only the silo id, the job id, and the bootstrap reference in annotations. Never put source code or credentials there.
 	const annotations = { "opencrane.ai/silo-id": assignment.siloId, "opencrane.ai/job-id": assignment.jobId, "opencrane.ai/capability-reference": assignment.capabilityReference };
-	// 3. Delegate the Pod security policy to the one shared builder so both workload classes stay equally constrained.
+	// 3. Let the shared spec builder set the Pod security policy, so both workload classes are locked down the same way.
 	return {
 		apiVersion: "batch/v1",
 		kind: "Job",

@@ -1,7 +1,7 @@
 import type { RunWorkloadCleanupClaim } from "./run-cancellation.types.js";
 import type { RuntimeWorkloadCleanupReconcileResult, RuntimeWorkloadCleanupUseCase, RuntimeWorkloadCleanupUseCaseDependencies } from "./runtime-workload-cleanup.types.js";
 
-/** Convert a physical absence into the exact database-fenced confirmation command. */
+/** Turns "the Job is gone" into the confirmation command, carrying the claim generation that fences it. */
 function _AbsenceConfirmation(claim: RunWorkloadCleanupClaim)
 {
 	return {
@@ -43,7 +43,19 @@ async function _ReconcileNext(dependencies: RuntimeWorkloadCleanupUseCaseDepende
 	return { outcome: "absence_confirmed", eventId: claim.lease.eventId, confirmation };
 }
 
-/** Create the durable cleanup use case without binding it to Kubernetes or an app lifecycle. */
+/**
+ * Builds the cleanup pass that deletes the Kubernetes Jobs of cancelled and failed runs.
+ *
+ * The returned object runs at most one pass at a time: calling `reconcileNext` while a pass is
+ * still running returns that same pass rather than starting a second one, so two schedulers
+ * cannot double-claim. `drain` waits for a pass in flight and is meant for shutdown; it never
+ * reports the pass's error, because the scheduled caller already owns error reporting.
+ *
+ * Called by: `apps/opencrane/src/app/background-workers.ts`.
+ *
+ * @param dependencies - The durable cleanup authority and the Kubernetes adapter.
+ * @returns The use case to schedule; one call reconciles at most one cleanup event.
+ */
 export function __CreateRuntimeWorkloadCleanupUseCase(dependencies: RuntimeWorkloadCleanupUseCaseDependencies): RuntimeWorkloadCleanupUseCase
 {
 	let active: Promise<RuntimeWorkloadCleanupReconcileResult> | null = null;

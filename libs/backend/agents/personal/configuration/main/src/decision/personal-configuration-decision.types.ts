@@ -1,4 +1,15 @@
-/** Stable input and outcome codes for a proposal owner's explicit decision. */
+/**
+ * The decision a proposal owner can make, and what recording it came back with.
+ *
+ * Deciding records consent only. It changes no persona, no agent service, and no run — a later
+ * materialisation step is what actually applies an accepted change. A caller must not tell the
+ * user their agent has changed on the strength of `Accepted`.
+ *
+ * `Accepted` and `Rejected` are used both as the requested decision and as the recorded
+ * outcome. Of the refusals, only `PersistenceUnavailable` is retryable; `NotFoundOrNotOwner`
+ * and `AlreadyDecided` both mean the request will never succeed, and both are deliberately
+ * mapped to the same 404 so a caller cannot discover another owner's proposal.
+ */
 export enum PersonalConfigurationDecisionCodes
 {
 	/** The owner consented to a later immutable configuration revision. */
@@ -9,11 +20,12 @@ export enum PersonalConfigurationDecisionCodes
 	Denied = "denied",
 	/** The accepted/rejected decision payload was malformed. */
 	InvalidCommand = "invalid_command",
-	/** No still-decidable proposal belongs to the supplied user and silo. */
+	/** No proposal with this id belongs to the supplied user and silo. */
 	NotFoundOrNotOwner = "not_found_or_not_owner",
-	/** A decision already made the proposal terminal. */
+	/** The proposal was already accepted or rejected. */
 	AlreadyDecided = "already_decided",
-	/** Persistence failed before an authoritative decision result was available. */
+	/** The only retryable code: the write failed, so whether the decision was recorded is
+	 * unknown. Re-read the proposal rather than assuming it was or was not decided. */
 	PersistenceUnavailable = "persistence_unavailable",
 }
 
@@ -34,12 +46,29 @@ export interface DecidePersonalConfigurationChangeCommand
 	readonly decidedAt: string;
 }
 
-/** Stable outcome from attempting the owner decision. */
+/**
+ * What {@link __DecidePersonalConfigurationChange} returns: the recorded decision, or a denial
+ * whose reason is only worth retrying when it is `PersistenceUnavailable`.
+ */
 export type DecidePersonalConfigurationChangeResult = { readonly outcome: PersonalConfigurationDecisionCodes.Accepted | PersonalConfigurationDecisionCodes.Rejected } | { readonly outcome: PersonalConfigurationDecisionCodes.Denied; readonly reason: PersonalConfigurationDecisionCodes.InvalidCommand | PersonalConfigurationDecisionCodes.NotFoundOrNotOwner | PersonalConfigurationDecisionCodes.AlreadyDecided | PersonalConfigurationDecisionCodes.PersistenceUnavailable };
 
-/** Extension port for the explicit decision lifecycle. */
+/**
+ * Records the owner's accept-or-reject decision in the database.
+ *
+ * Called by: {@link __DecidePersonalConfigurationChange}; supplied to the router as
+ * `dependencies.decisions`.
+ *
+ * @see {@link PrismaPersonalConfigurationDecisionRepository} for the only implementation.
+ */
 export interface PersonalConfigurationChangeDecisionRepository
 {
-	/** Atomically accepts or rejects one still-proposed change owned by this user. */
+	/**
+	 * Moves the proposal to Accepted or Rejected only while it is still Proposed.
+	 *
+	 * @param command - Server-derived owner, proposal id, decision and time.
+	 * @returns The recorded decision on success; `NotFoundOrNotOwner` when no such proposal
+	 * belongs to this user; `AlreadyDecided` when it is no longer Proposed;
+	 * `PersistenceUnavailable` when the write failed. Implementations must not throw for these.
+	 */
 	decideAtomically(command: DecidePersonalConfigurationChangeCommand): Promise<{ readonly status: PersonalConfigurationDecisionCodes.Accepted | PersonalConfigurationDecisionCodes.Rejected } | { readonly status: PersonalConfigurationDecisionCodes.NotFoundOrNotOwner | PersonalConfigurationDecisionCodes.AlreadyDecided | PersonalConfigurationDecisionCodes.PersistenceUnavailable }>;
 }

@@ -6,12 +6,12 @@ import { PersonalConfigurationProposalCodes, type PersonalConfigurationChangeRep
 import type { PersonalConfigurationProposalTransaction, PersonalConfigurationProposalUnitOfWork, PersonalConfigurationProposalWork } from "./personal-configuration-proposal-unit-of-work.types.js";
 import { PrismaPersonalConfigurationProposalRepository } from "./prisma-personal-configuration-proposal-repository.js";
 
-/** Prisma unit of work that owns proposal transaction creation. */
+/** Opens the transaction each proposal insert runs in. */
 export class PrismaPersonalConfigurationProposalUnitOfWork implements PersonalConfigurationProposalUnitOfWork, PersonalConfigurationChangeRepository
 {
 	/** Canonical product-authority database client. */
 	private readonly prisma: PrismaClient;
-	/** Redacted structured logger for unexpected proposal failures. */
+	/** Logger used for unexpected proposal failures; patch contents are never logged. */
 	private readonly logger: Logger;
 
 	/** Creates the proposal unit of work over the canonical database. */
@@ -21,7 +21,7 @@ export class PrismaPersonalConfigurationProposalUnitOfWork implements PersonalCo
 		this.logger = logger;
 	}
 
-	/** Verify proposal provenance and insert immutable evidence in one transaction. */
+	/** Checks the proposal's sources and inserts it in one transaction, turning any failure into a denial. */
 	async proposeAtomically(command: ProposePersonalConfigurationChangeCommand): Promise<{ readonly status: PersonalConfigurationProposalCodes.Proposed; readonly changeId: string } | { readonly status: PersonalConfigurationProposalCodes.ProvenanceConflict } | { readonly status: PersonalConfigurationProposalCodes.PersistenceUnavailable }>
 	{
 		try
@@ -44,7 +44,7 @@ export class PrismaPersonalConfigurationProposalUnitOfWork implements PersonalCo
 		}
 	}
 
-	/** Run proposal provenance verification and insertion in one transaction. */
+	/** Runs the caller's work in one transaction with the proposal repository. */
 	async run<Result>(work: PersonalConfigurationProposalWork<Result>): Promise<Result>
 	{
 		return this.prisma.$transaction(async function _RunProposalTransaction(transaction): Promise<Result>

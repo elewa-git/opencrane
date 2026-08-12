@@ -2,13 +2,13 @@ import { PersonaApprovalDenialReasons, PersonaApprovalInterviewStates, PersonaAp
 import { PersonaLifecycleOutcomes } from "../profile/persona-lifecycle.types.js";
 import type { ApprovePersonaCommand, ApprovePersonaResult, PersonaApprovalSnapshot, PersonaAuthorityRepository } from "./persona-authority.types.js";
 
-/** Dispatch approval behaviour through the durable revision state in a verified snapshot. */
+/** Runs the approval step that belongs to the revision state in this snapshot. */
 export async function _ApprovePersonaRevisionState(repository: PersonaAuthorityRepository, snapshot: PersonaApprovalSnapshot, command: ApprovePersonaCommand): Promise<ApprovePersonaResult>
 {
 	return _REVISION_STATES[snapshot.revisionState].approve(repository, snapshot, command);
 }
 
-/** Validate immutable owner and reviewed-source evidence before a revision state may act. */
+/** Checks owner, interview state, insight count, template digest, template selection, and SOUL policy. Returns the first failing reason, or null when approval may go ahead. */
 export function _ApprovalEvidenceDenial(snapshot: PersonaApprovalSnapshot, command: ApprovePersonaCommand): PersonaApprovalDenialReasons | null
 {
 	if (snapshot.profileUserId !== command.userId || snapshot.revisionProfileId !== command.personaProfileId) return PersonaApprovalDenialReasons.WrongOwner;
@@ -20,58 +20,58 @@ export function _ApprovalEvidenceDenial(snapshot: PersonaApprovalSnapshot, comma
 	return null;
 }
 
-/** State-owned approval behaviour for one durable revision state. */
+/** Base class for the approval behaviour of one revision state. */
 abstract class _PersonaApprovalRevisionState
 {
-	/** Attempt approval from this state using only an authority-owned repository. */
+	/** Tries to approve from this state, using only the injected repository. */
 	abstract approve(repository: PersonaAuthorityRepository, snapshot: PersonaApprovalSnapshot, command: ApprovePersonaCommand): Promise<ApprovePersonaResult>;
 
 	/** Interpret a durable snapshot re-read after a losing atomic compare-and-set. */
 	abstract reconcile(snapshot: PersonaApprovalSnapshot, command: ApprovePersonaCommand): ApprovePersonaResult;
 
-	/** Interpret a durable snapshot after this request lost its atomic compare-and-set. */
+	/** Turns a freshly re-read snapshot into a result after this request lost the compare-and-set. */
 	abstract reconcileCompareAndSetConflict(snapshot: PersonaApprovalSnapshot, command: ApprovePersonaCommand): ApprovePersonaResult;
 }
 
-/** State behaviour for the only revision state that may enter the atomic approval transition. */
+/** Approval behaviour for a draft revision — the only state that may attempt the update. */
 class _DraftRevisionState extends _PersonaApprovalRevisionState
 {
-	/** Commit approval while every reviewed snapshot precondition still matches. */
+	/** Runs the approval update, passing the snapshot values that must still hold. */
 	async approve(repository: PersonaAuthorityRepository, snapshot: PersonaApprovalSnapshot, command: ApprovePersonaCommand): Promise<ApprovePersonaResult>
 	{
 		const result = await repository.approveAndActivateAtomically({ ...command, expectedRevisionState: PersonaApprovalRevisionStates.Draft, expectedInterviewState: PersonaApprovalInterviewStates.Completed, expectedInsightCount: snapshot.insightCount });
 		return _PERSISTENCE_OUTCOMES[result.status].resolve(repository, command);
 	}
 
-	/** Report conflict because the revision remained draft after another writer won or changed evidence. */
+	/** Still a draft, so another writer got there first or the evidence changed: report a conflict. */
 	reconcile(snapshot: PersonaApprovalSnapshot, command: ApprovePersonaCommand): ApprovePersonaResult
 	{
 		return _Denied(PersonaApprovalDenialReasons.Conflict);
 	}
 
-	/** Preserve conflict because the requested draft did not become the observed durable winner. */
+	/** The revision is still a draft after this request lost the compare-and-set, so report a conflict. */
 	reconcileCompareAndSetConflict(snapshot: PersonaApprovalSnapshot, command: ApprovePersonaCommand): ApprovePersonaResult
 	{
 		return _Denied(PersonaApprovalDenialReasons.Conflict);
 	}
 }
 
-/** State behaviour for an immutable revision that has already passed approval. */
+/** Approval behaviour for a revision that is already approved. */
 class _ApprovedRevisionState extends _PersonaApprovalRevisionState
 {
-	/** Resume only the exact active revision; another approved revision cannot be activated again here. */
+	/** Treats a repeat call as success only when this revision is the one already active; any other approved revision is refused. */
 	async approve(repository: PersonaAuthorityRepository, snapshot: PersonaApprovalSnapshot, command: ApprovePersonaCommand): Promise<ApprovePersonaResult>
 	{
 		return this.reconcile(snapshot, command);
 	}
 
-	/** Treat only the exact active revision as an idempotent approval result. */
+	/** Reports success when this revision is the profile's active one; otherwise refuses it as not a draft. */
 	reconcile(snapshot: PersonaApprovalSnapshot, command: ApprovePersonaCommand): ApprovePersonaResult
 	{
 		return snapshot.activeRevisionId === command.personaRevisionId ? { outcome: PersonaLifecycleOutcomes.Approved } : _Denied(PersonaApprovalDenialReasons.NotDraft);
 	}
 
-	/** Resume only this request's committed active revision; a later winner remains a CAS conflict. */
+	/** Reports success when this request's revision is the active one. If a different revision won instead, reports a conflict. */
 	reconcileCompareAndSetConflict(snapshot: PersonaApprovalSnapshot, command: ApprovePersonaCommand): ApprovePersonaResult
 	{
 		return snapshot.activeRevisionId === command.personaRevisionId ? { outcome: PersonaLifecycleOutcomes.Approved } : _Denied(PersonaApprovalDenialReasons.Conflict);
@@ -84,37 +84,37 @@ const _REVISION_STATES: Readonly<Record<PersonaApprovalRevisionStates, _PersonaA
 	[PersonaApprovalRevisionStates.Approved]: new _ApprovedRevisionState(),
 };
 
-/** Strategy for one atomic persistence outcome, separate from the revision lifecycle. */
+/** Base class for handling one outcome of the approval transaction. */
 abstract class _PersonaApprovalPersistenceOutcome
 {
-	/** Translate the exact persistence outcome without concealing the re-read authority fence. */
+	/** Turns the transaction outcome into a result, re-reading the database where that is needed. */
 	abstract resolve(repository: PersonaAuthorityRepository, command: ApprovePersonaCommand): Promise<ApprovePersonaResult>;
 }
 
 /** Successful atomic transaction outcome. */
 class _ApprovedPersistenceOutcome extends _PersonaApprovalPersistenceOutcome
 {
-	/** Report the completed lifecycle transition. */
+	/** Reports success. */
 	async resolve(repository: PersonaAuthorityRepository, command: ApprovePersonaCommand): Promise<ApprovePersonaResult>
 	{
 		return { outcome: PersonaLifecycleOutcomes.Approved };
 	}
 }
 
-/** Missing owner profile outcome at the atomic persistence boundary. */
+/** The transaction could not find the owner's profile. */
 class _NotFoundPersistenceOutcome extends _PersonaApprovalPersistenceOutcome
 {
-	/** Report the bounded missing-owner denial. */
+	/** Reports that the profile was not found. */
 	async resolve(repository: PersonaAuthorityRepository, command: ApprovePersonaCommand): Promise<ApprovePersonaResult>
 	{
 		return _Denied(PersonaApprovalDenialReasons.NotFound);
 	}
 }
 
-/** Losing atomic compare-and-set outcome that must be interpreted through a new durable snapshot. */
+/** The approval update matched no rows, so the database must be re-read before deciding what happened. */
 class _ConflictPersistenceOutcome extends _PersonaApprovalPersistenceOutcome
 {
-	/** Re-read and revalidate the durable winner before admitting idempotent recovery. */
+	/** Re-reads the snapshot and re-checks every precondition before treating the loss as an already-approved success. */
 	async resolve(repository: PersonaAuthorityRepository, command: ApprovePersonaCommand): Promise<ApprovePersonaResult>
 	{
 		const reconciled = await repository.getApprovalSnapshot(command);

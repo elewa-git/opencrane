@@ -6,7 +6,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { PrismaUpgradeSessionProposalUnitOfWork } from "../upgrade-session/prisma-upgrade-session-proposal-repository.js";
 
-/** Build the immutable personal-session snapshot consumed by the runtime bridge. */
+/** Builds the run snapshot the adapter reads. */
 function _snapshot(): RunInputSnapshot
 {
 	return { runId: "run-1", siloId: "silo-1", agentServiceId: "service-1", agentRevisionId: "agent-1", conversationId: "conversation-1", personaRevisionId: "persona-1", identitySnapshot: { kind: "user", executionSubjectId: "user-1" } } as unknown as RunInputSnapshot;
@@ -20,7 +20,7 @@ function _candidate(): RuntimeExternalActionCandidate
 	return { runId: "run-1", arguments: argumentsValue, argumentsDigest } as unknown as RuntimeExternalActionCandidate;
 }
 
-/** Build the Prisma seams used by profile resolution and proposal insertion. */
+/** Builds the Prisma fakes for the profile lookup and the proposal insert. */
 function _prisma(profile: { readonly id: string } | null = { id: "profile-1" })
 {
 	const transaction = {

@@ -1,7 +1,21 @@
 import type { Request } from "express";
 import type { Logger } from "@opencrane/backend/observability";
 
-/** Stable outcomes returned by the owner-bound cancellation use case. */
+/**
+ * What the owner is told when they cancel their own run, and what each outcome really means.
+ *
+ * Cancelling a run is two separate jobs: mark the run stopped, then delete its Kubernetes Job in a
+ * later cleanup pass. `Cancelling` means the first job is done and the second is still owed — the
+ * run will accept no more work, but its pod may still be running. `Cancelled` means both are done
+ * and nothing is left to delete. A caller that treats them as the same thing will tell the user a
+ * run has been torn down while its pod is still alive.
+ *
+ * `NotFound` deliberately covers both "no such run" and "not your run", so a caller cannot probe
+ * for other owners' runs. `AttemptConflict` means the browser was looking at an older attempt and
+ * should re-read before showing anything; `TerminalRun` means the run had already finished, so
+ * there is nothing to cancel. `AuthorityConflict` means the write could not be applied safely and
+ * `InvalidRequest` means the coordinates were rejected before any write was attempted.
+ */
 export enum SelfRunCancellationOutcomes
 {
 	/** The run is fenced and physical workload cleanup is still completing. */

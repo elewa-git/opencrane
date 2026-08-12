@@ -13,7 +13,7 @@ export class PrismaPersonaOnboardingStatusRepository implements PersonaOnboardin
 {
 	/** Transaction-scoped ORM client supplied by the persona unit of work. */
 	private readonly transaction: Prisma.TransactionClient;
-	/** Domain score replay for completed interview status. */
+	/** Score repository, used to recompute a completed interview's score. */
 	private readonly scoring: PrismaPersonaScoringRepository;
 
 	/** Construct the status reader over one caller-owned transaction. */
@@ -44,7 +44,7 @@ export class PrismaPersonaOnboardingStatusRepository implements PersonaOnboardin
 		return _ProjectPersonaOnboardingStatus({ hasProfile: true, activeRevisionId: profile.activeRevisionId, interview: statusInterview, revision: null, score });
 	}
 
-	/** Read score evidence only after the interview becomes immutable enough to support it. */
+	/** Reads the score only once the interview is completed; returns null while it is still in progress. */
 	private async _readCompletedScore(interviewId: string, personaProfileId: string, userId: string, interviewState: PersonaOnboardingStatusInterviewStates): Promise<PersonaScoreResult | null>
 	{
 		if (interviewState === PersonaOnboardingStatusInterviewStates.InProgress) return null;
@@ -53,19 +53,19 @@ export class PrismaPersonaOnboardingStatusRepository implements PersonaOnboardin
 	}
 }
 
-/** Map Prisma's interview state at the persistence edge before pure domain projection. */
+/** Converts Prisma's interview state into the projection enum. */
 function _InterviewState(state: PersonaInterviewState): PersonaOnboardingStatusInterviewStates
 {
 	return state === PersonaInterviewState.InProgress ? PersonaOnboardingStatusInterviewStates.InProgress : PersonaOnboardingStatusInterviewStates.Completed;
 }
 
-/** Map Prisma's revision state at the persistence edge before pure domain projection. */
+/** Converts Prisma's revision state into the projection enum. */
 function _RevisionState(state: PersonaRevisionState): PersonaOnboardingStatusRevisionStates
 {
 	return state === PersonaRevisionState.Draft ? PersonaOnboardingStatusRevisionStates.Draft : PersonaOnboardingStatusRevisionStates.Approved;
 }
 
-/** Build an owner-visible result from exact revision evidence. */
+/** Builds the owner-visible result from a revision row. Returns null when the stored score JSON fails to parse, disagrees with the revision's own colour columns, or the insight count is outside three to five. */
 function _RevisionResult(revision: { readonly primaryColour: PersonaColour; readonly secondaryColour: PersonaColour; readonly modifier: PersonaOpennessModifier; readonly compiledInstructions: string; readonly soulTemplate: { readonly displayName: string }; readonly scoringEvidence: Prisma.JsonValue; readonly insights: readonly { readonly statement: string }[] }): PersonaStatusResult | null
 {
 	const evidence = _ParsePersonaPersistedScoreEvidence(revision.scoringEvidence);
@@ -78,13 +78,13 @@ function _RevisionResult(revision: { readonly primaryColour: PersonaColour; read
 	return { displayName: revision.soulTemplate.displayName, primaryColour, secondaryColour, modifier, colourScores: evidence.colours, opennessScores: evidence.openness, insights: revision.insights.map(function _Insight(insight) { return insight.statement; }), instructionPreview: revision.compiledInstructions };
 }
 
-/** Map a generated Prisma colour into the persona-owned API vocabulary. */
+/** Converts a Prisma colour into the persona API value. */
 function _PersonaColour(value: PersonaColour): PersonaColourValues
 {
 	return { [PersonaColour.Red]: PersonaColourValues.Red, [PersonaColour.Yellow]: PersonaColourValues.Yellow, [PersonaColour.Green]: PersonaColourValues.Green, [PersonaColour.Blue]: PersonaColourValues.Blue }[value];
 }
 
-/** Map a generated Prisma modifier into the persona-owned API vocabulary. */
+/** Converts a Prisma modifier into the persona API value. */
 function _PersonaModifier(value: PersonaOpennessModifier): PersonaModifierValues
 {
 	return { [PersonaOpennessModifier.Explorer]: PersonaModifierValues.Explorer, [PersonaOpennessModifier.Guardian]: PersonaModifierValues.Guardian }[value];

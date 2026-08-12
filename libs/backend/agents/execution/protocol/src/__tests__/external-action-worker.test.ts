@@ -7,7 +7,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ExternalActionWorker } from "../external-action-worker.js";
 import { ExternalActionProviderOutcomeKinds, type ExternalActionAdapterFactory, type ExternalActionExecutionContext, type ExternalActionExecutionContextLoader, type ExternalActionWorkerDependencies, type ExternalActionWorkerEvent, type ExternalActionWorkerInvocation, type ExternalActionWorkerUnitOfWork, type PreparedExternalActionAdapter, type ToolInvocationWorkSource } from "../external-action-worker.types.js";
 
-/** Operation names opened through the observability seam during one focused worker test. */
+/** Trace span names recorded during one worker test. */
 const _traceOperations = vi.hoisted(function _TraceOperations() { return [] as string[]; });
 
 vi.mock("@opencrane/backend/observability", async function _Observability(importOriginal)
@@ -23,12 +23,12 @@ vi.mock("@opencrane/backend/observability", async function _Observability(import
 	};
 });
 
-/** Fixed server instant shared by every focused worker pass. */
+/** Fixed clock time used by every worker test. */
 const _NOW = new Date("2026-08-11T10:00:00.000Z");
 
 beforeEach(function _ResetTraces() { _traceOperations.length = 0; });
 
-/** Build one runnable invocation for a selected lifecycle and recovery mode. */
+/** Build one runnable invocation in a given state and recovery mode. */
 function _invocation(state: ToolInvocationStates, recoveryMode: ExternalActionRecoveryModes = ExternalActionRecoveryModes.Manual): ExternalActionWorkerInvocation
 {
 	return {
@@ -63,13 +63,13 @@ function _invocation(state: ToolInvocationStates, recoveryMode: ExternalActionRe
 	};
 }
 
-/** Build the minimal immutable snapshot fields the worker rebinds. */
+/** Build the few snapshot fields the worker compares against the invocation. */
 function _context(): ExternalActionExecutionContext
 {
 	return { snapshot: { runId: "run-1", siloId: "silo-1", agentRevisionId: "revision-1", identitySnapshot: { executionSubjectId: "user-1" } } as unknown as RunInputSnapshot };
 }
 
-/** Deterministic single-row work source. */
+/** Work source that always returns the same single row. */
 class _Source implements ToolInvocationWorkSource
 {
 	/** Row returned to the next worker pass. */
@@ -88,7 +88,7 @@ class _Source implements ToolInvocationWorkSource
 	}
 }
 
-/** Deterministic immutable-context loader. */
+/** Context loader that always returns the same snapshot. */
 class _Contexts implements ExternalActionExecutionContextLoader
 {
 	/** Context returned to the worker. */
@@ -107,7 +107,7 @@ class _Contexts implements ExternalActionExecutionContextLoader
 	}
 }
 
-/** Recording adapter selected without provider I/O. */
+/** Fake adapter that records calls instead of contacting a provider. */
 class _Adapter implements PreparedExternalActionAdapter
 {
 	/** Recovery capability this fake proves. */
@@ -146,7 +146,7 @@ class _Adapter implements PreparedExternalActionAdapter
 	}
 }
 
-/** Provider-free factory returning one recording adapter. */
+/** Factory that returns the one recording adapter, without contacting a provider. */
 class _Adapters implements ExternalActionAdapterFactory
 {
 	/** Adapter returned after preparation. */
@@ -168,7 +168,7 @@ class _Adapters implements ExternalActionAdapterFactory
 	}
 }
 
-/** In-memory state authority recording the worker's fenced transitions. */
+/** In-memory stand-in for the state writer, recording every transition the worker makes. */
 class _Invocations implements ExternalActionWorkerUnitOfWork
 {
 	/** Invocation returned by lookups and claims. */
@@ -181,13 +181,13 @@ class _Invocations implements ExternalActionWorkerUnitOfWork
 	claims: ExternalActionClaimKinds[] = [];
 	/** Successful results committed after dispatch or readback. */
 	successes: JsonValue[] = [];
-	/** Ambiguous claims handed to frozen recovery policy. */
+	/** Claims completed with an outcome the provider did not prove. */
 	ambiguous: ToolInvocationClaim[] = [];
 	/** Expired claim recoveries. */
 	expiredRecoveries = 0;
-	/** Exact claims released after provider-free start-event failure. */
+	/** Claims released because the started event could not be published. */
 	releasedClaims: ToolInvocationClaim[] = [];
-	/** Lifecycle events atomically coupled to state changes by the fake UoW. */
+	/** Lifecycle events this fake writes together with a state change. */
 	lifecycleEvents: ExternalActionWorkerEvent[] = [];
 
 	/** Create an in-memory authority for one invocation. */
@@ -207,7 +207,7 @@ class _Invocations implements ExternalActionWorkerUnitOfWork
 		const state = this.invocation.approvalRequired ? ToolInvocationStates.AwaitingApproval : ToolInvocationStates.Ready;
 		return { ...this.invocation, state, revision: this.invocation.revision + 1 };
 	}
-	/** Record one bounded provider-free preparation failure. */
+	/** Record one preparation failure, along with the policy used. */
 	async recordPreparationFailure(_invocationId: string, _expectedRevision: number, _now: Date, policy: ToolInvocationPreparationPolicy, failureCode: string): Promise<ToolInvocationRecord | null>
 	{
 		this.preparationFailures.push(policy);
@@ -226,11 +226,11 @@ class _Invocations implements ExternalActionWorkerUnitOfWork
 	async completeSucceeded(_claim: ToolInvocationClaim, result: JsonValue, _now: Date): Promise<ToolInvocationCompletionResult> { this.successes.push(result); this.lifecycleEvents.push({ runId: this.invocation.runId, attempt: this.invocation.attempt, eventType: ToolInvocationEventTypes.Completed, payload: { toolInvocationId: this.invocation.toolInvocationId } }); return { outcome: "winner", invocation: this.invocation }; }
 	/** Commit one proven provider failure. */
 	async completeFailed(_claim: ToolInvocationClaim, failureCode: string, _now: Date): Promise<ToolInvocationCompletionResult> { this.lifecycleEvents.push({ runId: this.invocation.runId, attempt: this.invocation.attempt, eventType: ToolInvocationEventTypes.Failed, payload: { toolInvocationId: this.invocation.toolInvocationId, reason: failureCode, retryCount: this.invocation.preparationAttempt, retryLimit: 3, retrying: false } }); return { outcome: "winner", invocation: this.invocation }; }
-	/** Record an ambiguous result for frozen recovery policy. */
+	/** Record a result the provider did not prove. */
 	async completeAmbiguous(claim: ToolInvocationClaim, _now: Date): Promise<ToolInvocationRecord | null> { this.ambiguous.push(claim); this.lifecycleEvents.push({ runId: this.invocation.runId, attempt: this.invocation.attempt, eventType: ToolInvocationEventTypes.Failed, payload: { toolInvocationId: this.invocation.toolInvocationId, reason: "external_action_provider_outcome_ambiguous", retryCount: this.invocation.preparationAttempt, retryLimit: 3, retrying: this.invocation.recoveryMode !== ExternalActionRecoveryModes.Manual } }); return this.invocation; }
 	/** Recover one expired provider claim without dispatching. */
 	async recoverExpiredClaim(_invocationId: string, _now: Date): Promise<ToolInvocationRecord | null> { this.expiredRecoveries += 1; return this.invocation; }
-	/** Release one exact claim and record its retry-visible failure event. */
+	/** Release the claim and record the failure event a later retry will see. */
 	async releaseClaimBeforeDispatch(claim: ToolInvocationClaim, _now: Date): Promise<ToolInvocationRecord | null>
 	{
 		this.releasedClaims.push(claim);

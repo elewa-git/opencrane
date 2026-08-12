@@ -9,7 +9,7 @@ import type { RunCancellationRepository } from "./run-cancellation.types.js";
 import { __CreateSelfRunCancellationRouter } from "./self-run-cancellation.router.js";
 import type { SelfRunCancellationCaller } from "./self-run-cancellation.types.js";
 
-/** Map authenticated request facts to the caller contract owned by cancellation. */
+/** Turns the authenticated request's principal into the caller shape cancellation expects. */
 function _resolveCaller(request: Parameters<typeof _ResolveRequestPrincipal>[0]): SelfRunCancellationCaller | null
 {
 	const principal = _ResolveRequestPrincipal(request);

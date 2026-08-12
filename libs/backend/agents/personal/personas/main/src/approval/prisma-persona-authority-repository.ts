@@ -8,16 +8,16 @@ import { PrismaPersonaScoringRepository } from "../scoring/prisma-persona-scorin
 import { PersonaColourValues, PersonaModifierValues } from "../scoring/persona-scorer.types.js";
 import { PersonaApprovalInterviewStates, PersonaApprovalPersistenceStatuses, PersonaApprovalRevisionStates, type ApprovePersonaCommand, type AtomicApprovePersonaCommand, type AtomicApprovePersonaResult, type PersonaApprovalSnapshot, type PersonaAuthorityRepository } from "./persona-authority.types.js";
 
-/** Prisma-backed authority that atomically approves and activates one personal persona revision. */
+/** Prisma adapter that approves one persona revision and makes it active in a single transaction. */
 export class PrismaPersonaAuthorityRepository implements PersonaAuthorityRepository
 {
-	/** Transaction-scoped canonical product database. */
+	/** Prisma client for the caller's transaction; every read and write here uses it. */
 	private readonly transaction: Prisma.TransactionClient;
-	/** Configuration-owned proposal repository bound to the same transaction. */
+	/** Persona-refresh proposal repository, on the same transaction. */
 	private readonly refreshes: PrismaPersonalConfigurationPersonaRefreshRepository;
-	/** Aggregate-owned profile and revision evidence reads used by the approval mutation fence. */
+	/** Shared reader for profile and revision rows; the approval update re-reads them through it just before writing. */
 	private readonly reads: PrismaPersonaAggregateReadRepository;
-	/** Weighted scoring replay bound to this approval snapshot. */
+	/** Score repository used to recompute the score, on the same transaction. */
 	private readonly scoring: PrismaPersonaScoringRepository;
 
 	/** Create the authority over one caller-owned transaction. */
@@ -29,7 +29,7 @@ export class PrismaPersonaAuthorityRepository implements PersonaAuthorityReposit
 		this.scoring = new PrismaPersonaScoringRepository(this.transaction);
 	}
 
-	/** Load the exact approval evidence required before an owner may activate a persona draft. */
+	/** Reads everything approval must check before the owner can activate a draft. */
 	async getApprovalSnapshot(command: ApprovePersonaCommand): Promise<PersonaApprovalSnapshot | null>
 	{
 		const revision = await this.transaction.personaRevision.findFirst({
@@ -60,7 +60,7 @@ export class PrismaPersonaAuthorityRepository implements PersonaAuthorityReposit
 		});
 		if (revision === null) return null;
 
-		// The target-baseline trigger remains the commit authority; this query gives callers a precise preflight denial.
+		// The database trigger persona_revisions_closed_lifecycle is what actually enforces this at commit; this query only lets the caller refuse early with a specific reason.
 		const scored = await this.scoring.readScore(revision.interview.id, command.personaProfileId, command.userId);
 		const templateSelectionMatches = scored.status === PersonaScoringPersistenceStatuses.Ready
 			&& scored.score.resolutionRequired === null
@@ -89,24 +89,24 @@ export class PrismaPersonaAuthorityRepository implements PersonaAuthorityReposit
 		};
 	}
 
-	/** Approve a still-valid draft and move its profile pointer inside one serializable transaction. */
+	/** Marks the draft approved and points the profile at it, both inside one Serializable transaction. */
 	async approveAndActivateAtomically(command: AtomicApprovePersonaCommand): Promise<AtomicApprovePersonaResult>
 	{
 		// 1. Read the profile; serializable isolation turns two drafts racing to become active into a conflict.
 		const profile = await this.reads.readProfileForOwner(command);
 		if (profile === null) return { status: PersonaApprovalPersistenceStatuses.NotFound };
-		// 2. Read the draft revision before inspecting its evidence; the state filter rebinds the reviewed snapshot.
+		// 2. Re-read the revision with a Draft filter, so a revision approved since the snapshot is no longer found.
 		const revision = await this.reads.readDraftRevision(command);
 		if (revision === null) return { status: PersonaApprovalPersistenceStatuses.Conflict };
 		const interview = await this.transaction.personaInterview.findUnique({ where: { id: revision.interviewId }, select: { refreshConfigurationChangeId: true } });
 		if (interview === null) return { status: PersonaApprovalPersistenceStatuses.Conflict };
-		// 3. Rebind the exact evidence count accepted at preflight; a valid extra insight still changes the reviewed draft.
+		// 3. Re-count the insights. Even a valid extra insight means the owner reviewed a different draft, so refuse.
 		const insightCount = await this.transaction.personaInsight.count({ where: { personaRevisionId: command.personaRevisionId } });
 		if (insightCount !== command.expectedInsightCount) return { status: PersonaApprovalPersistenceStatuses.Conflict };
-		// 4. The baseline trigger rechecks interview, template, and insight evidence at this mutation fence.
+		// 4. Flip the state to Approved. The persona_revisions_closed_lifecycle trigger rechecks the interview, template, and insight rules on this update.
 		const approvedRevision = await this.transaction.personaRevision.updateMany({ where: { id: command.personaRevisionId, personaProfileId: command.personaProfileId, state: PersonaRevisionState.Draft }, data: { state: PersonaRevisionState.Approved, approvedBy: command.userId, approvedAt: new Date(command.approvedAt) } });
 		if (approvedRevision.count !== 1) return { status: PersonaApprovalPersistenceStatuses.Conflict };
-		// 5. Point the same locked profile at the newly approved revision; its trigger rejects an invalid target.
+		// 5. Point the profile at the newly approved revision. The enforce_active_persona_revision trigger rejects a target that is not an approved revision of this profile.
 		const activatedProfile = await this.transaction.personaProfile.updateMany({ where: { id: command.personaProfileId, userId: command.userId }, data: { activeRevisionId: command.personaRevisionId } });
 		if (activatedProfile.count !== 1) throw new PersonaApprovalTransactionConflict();
 		// 6. Apply only the refresh proposal that the completed interview carries; unrelated accepted proposals remain pending.
@@ -117,19 +117,26 @@ export class PrismaPersonaAuthorityRepository implements PersonaAuthorityReposit
 	}
 }
 
-/** Convert the Prisma colour enum without allowing a fallback. */
+/** Converts a Prisma colour enum to the domain value. There is no default case, so a new enum value fails to compile. */
 function _PrismaColour(value: "Red" | "Yellow" | "Green" | "Blue"): PersonaColourValues
 {
 	return { Red: PersonaColourValues.Red, Yellow: PersonaColourValues.Yellow, Green: PersonaColourValues.Green, Blue: PersonaColourValues.Blue }[value];
 }
 
-/** Convert the Prisma modifier enum without allowing a fallback. */
+/** Converts a Prisma modifier enum to the domain value. There is no default case, so a new enum value fails to compile. */
 function _PrismaModifier(value: "Explorer" | "Guardian"): PersonaModifierValues
 {
 	return { Explorer: PersonaModifierValues.Explorer, Guardian: PersonaModifierValues.Guardian }[value];
 }
 
-/** Canonicalize JSON objects for a strict replay comparison. */
+/**
+ * Renders JSON with every object's keys sorted, so two documents can be compared as strings.
+ *
+ * This is a local sort-and-stringify, not the JSON Canonicalization Scheme: keys are ordered with
+ * `localeCompare` rather than by UTF-16 code unit. Both sides of the comparison in
+ * `getApprovalSnapshot` go through this same function, so the ordering only has to be self-consistent.
+ * It is not safe to compare its output against JSON canonicalized anywhere else.
+ */
 function _StableJson(value: unknown): string
 {
 	if (Array.isArray(value)) return `[${value.map(_StableJson).join(",")}]`;
@@ -137,12 +144,26 @@ function _StableJson(value: unknown): string
 	return JSON.stringify(value);
 }
 
-/** Abort a transaction after an approval mutation when a later required mutation cannot commit. */
+/**
+ * Thrown to roll the approval transaction back when a write that must follow the approval update
+ * cannot be made.
+ *
+ * By the time this is thrown the revision has already been marked approved inside the transaction, so
+ * returning a status instead of throwing would commit a half-finished approval. Two cases raise it:
+ * the profile row could not be pointed at the new revision, and the interview's bound refresh
+ * proposal could not be applied.
+ *
+ * Thrown by: `PrismaPersonaAuthorityRepository.approveAndActivateAtomically`.
+ * Caught by: `PrismaPersonaPersistenceUnitOfWork.approveAndActivateAtomically`, which converts it to
+ * a `Conflict` status.
+ *
+ * @see PersonaApprovalPersistenceStatuses
+ */
 export class PersonaApprovalTransactionConflict extends Error
 {
 }
 
-/** Convert Prisma's closed interview enum into the domain approval vocabulary. */
+/** Converts a Prisma interview state into the value approval uses. */
 function _asInterviewState(state: PersonaInterviewState): PersonaApprovalInterviewStates
 {
 	if (state === PersonaInterviewState.Completed) return PersonaApprovalInterviewStates.Completed;

@@ -1,6 +1,6 @@
 import type { JsonValue } from "@opencrane/util";
 
-/** Exact claimed cleanup event to release for a later cancellation-settlement attempt. */
+/** A claimed cleanup event to hand back so cancellation can be settled on a later attempt. */
 export interface RunCancellationEventDeferralCommand
 {
 	/** Durable cleanup event identity. */
@@ -18,9 +18,9 @@ export interface RunCancellationEventDeferralCommand
 /** Transaction-bound repository for releasing one exact cleanup claim. */
 export interface RunCancellationEventDeferralRepository
 {
-	/** Release the exact claim generation without publishing or failing it. */
+	/** Releases the claim under its current generation, marking it neither published nor failed. */
 	defer(command: RunCancellationEventDeferralCommand): Promise<boolean>;
 }
 
-/** Transaction unit that constructs the cleanup-event deferral repository. */
+/** Builds the deferral repository on the caller's transaction. */
 export interface RunCancellationEventDeferralUnitOfWork extends RunCancellationEventDeferralRepository {}

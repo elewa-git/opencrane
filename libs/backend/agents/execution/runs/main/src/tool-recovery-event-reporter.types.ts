@@ -1,15 +1,15 @@
 import type { ToolInvocationRecoveryEvent } from "@opencrane/backend/server/iam/authorization";
 
-/** Repository that appends one canonical recovery event under an existing transaction. */
+/** Repository that appends the recovery event inside the caller's transaction. */
 export interface ToolRecoveryEventAppendRepository
 {
-	/** Append only when the exact run attempt is still recovery-required. */
+	/** Appends only while the run is still on this attempt and still in RecoveryRequired. */
 	append(event: ToolInvocationRecoveryEvent): Promise<boolean>;
 }
 
-/** Transaction binding that owns construction of the recovery-event repository. */
+/** Builds the recovery-event repository on the caller's transaction. */
 export interface ToolRecoveryEventAppendUnitOfWork
 {
-	/** Append through the exact transaction-bound repository. */
+	/** Appends the event through that transaction's repository. */
 	append(event: ToolInvocationRecoveryEvent): Promise<boolean>;
 }

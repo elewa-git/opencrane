@@ -11,7 +11,7 @@ function _Command()
 	return { datasetId: "dataset-1", cogneeExternalId: "cognee-fact-1", contentDigest: `sha256:${"a".repeat(64)}`, consentState: MemoryFactConsentStates.Explicit, sensitivity: "ordinary", provenance: { user_statement: true, sourceKind: MemoryFactProvenanceSourceKinds.ExplicitUserFact, sourceUserId: "user-1" }, source: { artifactRevisionId: null, messageId: null, explicitUserStatement: true, explicitUserId: "user-1" }, supersedesFactId: null, recordedBy: "user-1", idempotencyKey: "fact-1" };
 }
 
-/** Builds the Prisma transaction fake that exposes the catalog's complete persistence boundary. */
+/** Builds a Prisma transaction fake with the three tables the catalog writes. */
 function _Transaction()
 {
 	return {

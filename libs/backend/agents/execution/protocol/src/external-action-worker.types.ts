@@ -3,104 +3,274 @@ import type { Logger } from "@opencrane/backend/observability";
 import type { RunInputSnapshot } from "@opencrane/contracts";
 import type { JsonValue } from "@opencrane/util";
 
-/** Stable result categories returned by one provider operation. */
+/**
+ * What one provider call is allowed to conclude.
+ *
+ * Only three answers exist, and the third is the reason this enum exists at all. `Ambiguous` is not
+ * a kind of failure: it means the request may already have taken effect at the provider and this
+ * process cannot prove either way - a timeout, a dropped socket, an error the adapter cannot
+ * classify. Recording that as `Failed` is the expensive mistake, because a failed invocation is
+ * reported to the model as not done, and a retry would charge the card or send the message twice.
+ *
+ * So the three answers oblige three different things. `Succeeded` and `Failed` are final and are
+ * delivered to the run as its tool result. `Ambiguous` is handed to the invocation's recovery mode
+ * instead: an adapter with a repeat-safe key may send again, one that can read the outcome back
+ * reconciles it, and one that can do neither leaves the invocation for a person to decide. Only the
+ * provider's own answer may produce `Succeeded` or `Failed`.
+ *
+ * @see ExternalActionRecoveryStrategy which decides what to do with each.
+ * @see PreparedExternalActionAdapter.reconcile for the readback path out of `Ambiguous`.
+ */
 export enum ExternalActionProviderOutcomeKinds
 {
-	/** The provider returned one definite successful result. */
+	/** The provider answered with a result. Final: delivered to the run as the tool's result. */
 	Succeeded = "succeeded",
-	/** The provider returned one definite terminal refusal. */
+	/** The provider refused, and said so. Final: delivered to the run as a failed tool result. */
 	Failed = "failed",
-	/** Dispatch began but no trustworthy outcome can be established. */
+	/** The request may or may not have taken effect. Never retried blindly; goes to recovery. */
 	Ambiguous = "ambiguous",
 }
 
-/** Result of exactly one fenced provider dispatch or readback operation. */
+/**
+ * The result of one provider call made under a claim.
+ *
+ * A discriminated union on purpose: a caller cannot read `result` without having checked that the
+ * call actually succeeded, and cannot invent a result for the ambiguous case, because there is no
+ * field to put one in.
+ *
+ * @see ExternalActionProviderOutcomeKinds for what each kind obliges the caller to do.
+ */
 export type ExternalActionProviderOutcome =
 	| { readonly kind: ExternalActionProviderOutcomeKinds.Succeeded; readonly result: JsonValue }
 	| { readonly kind: ExternalActionProviderOutcomeKinds.Failed; readonly failureCode: string }
 	| { readonly kind: ExternalActionProviderOutcomeKinds.Ambiguous };
 
-/** Frozen run context loaded from the canonical snapshot authority. */
+/**
+ * The frozen input an external action is allowed to see.
+ *
+ * Deliberately nothing but the admitted snapshot. Every decision an action makes - which dataset to
+ * recall from, which integration to resolve, which subject it acts as - must come from here, so a
+ * runtime that has since changed its mind cannot widen what the action may do.
+ *
+ * @see ExternalActionExecutionContextLoader which produces it.
+ */
 export interface ExternalActionExecutionContext
 {
-	/** Exact immutable run input snapshot admitted for this attempt. */
+	/** The immutable run input snapshot admitted for this attempt. */
 	readonly snapshot: RunInputSnapshot;
 }
 
-/** Canonical snapshot loader used before any provider adapter starts. */
+/**
+ * Loads the frozen snapshot an invocation is bound to, before any adapter is built.
+ *
+ * A port, so the worker never reads Postgres itself. It is called again on every pass rather than
+ * cached: after a crash and restart there is nothing in memory worth trusting, and the load doubles
+ * as the check that this attempt is still the run's current one.
+ *
+ * Called by: `_rebuildAdapter` and `_openApproval` in external-action-worker.ts. Implemented by
+ * `PrismaExternalActionExecutionContextRepository` and `...UnitOfWork`
+ * (prisma-external-action-context-repository.ts), wired in
+ * apps/opencrane/src/app/external-action-composition.ts.
+ */
 export interface ExternalActionExecutionContextLoader
 {
-	/** Load the exact immutable snapshot for one invocation attempt. */
+	/**
+	 * Load the frozen snapshot for one run attempt.
+	 *
+	 * @param runId - Run that owns the invocation.
+	 * @param attempt - Attempt the invocation was admitted under.
+	 * @returns The snapshot, or null when the run has moved to another attempt or has no snapshot.
+	 * Null must stop the invocation: it means this work belongs to an attempt that is over.
+	 */
 	load(runId: string, attempt: number): Promise<ExternalActionExecutionContext | null>;
 }
 
-/** Prisma-authorized repository form of the immutable execution-context loader. */
+/** The Prisma-backed form of the loader, reading on a transaction the caller already owns. */
 export interface ExternalActionExecutionContextRepository extends ExternalActionExecutionContextLoader {}
 
-/** Process-scoped transaction owner for immutable execution-context reads. */
+/** The same loader, but it opens its own transaction so one load sees a single consistent read. */
 export interface ExternalActionExecutionContextUnitOfWork extends ExternalActionExecutionContextLoader {}
 
-/** Invocation projection required to rebind a durable action to its immutable run authority. */
+/**
+ * The saved ToolInvocation row the worker works from.
+ *
+ * An alias, not a narrowed projection: the worker deliberately sees the whole durable row, because
+ * its state, revision, recovery mode, and claim fields are what decide which step runs next. The
+ * row is the only source of truth about an action - the runtime that proposed it is long gone by
+ * the time the worker picks it up.
+ */
 export type ExternalActionWorkerInvocation = ToolInvocationRecord;
 
-/** Durable work discovery owned by the ToolInvocation persistence package. */
+/**
+ * Finds the next saved invocation the worker should act on.
+ *
+ * Owned by the ToolInvocation persistence package because "runnable" is a state question, not a
+ * worker question: it covers work that has never been tried and work whose provider claim has
+ * expired, which is how an invocation stranded by a crashed worker gets picked up again.
+ *
+ * Called by: `ExternalActionWorker._runPass` (external-action-worker.ts). Implemented by
+ * `PrismaToolInvocationUnitOfWork`, passed as both `source` and `invocations` by
+ * apps/opencrane/src/app/external-action-composition.ts.
+ */
 export interface ToolInvocationWorkSource
 {
-	/** Return at most one runnable invocation, including an expired provider claim. */
+	/**
+	 * Return at most one invocation to work on.
+	 *
+	 * @param now - Trusted server time, used to decide which claims have expired.
+	 * @returns One invocation, or null when there is nothing to do. One at a time is the point: the
+	 * worker holds no queue, so two processes racing on the same row are separated by the claim rather
+	 * than by whichever read first.
+	 */
 	findNextRunnable(now: Date): Promise<ExternalActionWorkerInvocation | null>;
 }
 
-/** Authorization-owned durable state authority used by the process worker. */
+/**
+ * Writes every durable state change the worker makes: prepared, claimed, released, completed.
+ *
+ * Owned by the authorization package, which is the only writer of tool-invocation state. Each write
+ * is conditional on the revision that was read, so a worker whose lease quietly expired cannot
+ * overwrite an outcome a newer worker already recorded.
+ *
+ * Called by: every step in external-action-worker.ts. Implemented by
+ * `PrismaToolInvocationUnitOfWork`.
+ */
 export type ExternalActionWorkerUnitOfWork = ToolInvocationUnitOfWork;
 
-/** Prepared provider adapter whose capabilities are fixed before a claim is acquired. */
+/**
+ * A provider adapter, built and settled before any claim is taken.
+ *
+ * The order matters: what an adapter can do is fixed while nothing is at stake, and the worker then
+ * refuses to go on if `recoveryMode` is not the mode saved on the invocation. That check is what
+ * stops an invocation admitted as retry-safe from later being run by an adapter that can prove
+ * nothing, which would leave an ambiguous outcome with no way out.
+ *
+ * @see ExternalActionAdapterFactory which builds one.
+ * @see ExternalActionRecoveryStrategy which decides whether `dispatch` or `reconcile` may be called.
+ */
 export interface PreparedExternalActionAdapter
 {
-	/** Recovery capability the adapter can actually enforce for this invocation. */
+	/** What this adapter can really guarantee. The worker stops the invocation if it differs from the mode saved on the row. */
 	readonly recoveryMode: ExternalActionRecoveryModes;
-	/** Dispatch exactly once, using the frozen provider key when the strategy requires it. */
+	/**
+	 * Make the provider call, once.
+	 *
+	 * @param recoveryKey - The frozen idempotency key when the strategy requires one, otherwise null.
+	 * @returns What the provider concluded. An error the adapter cannot classify must come back as
+	 * `Ambiguous`, never `Failed`, because the request may already have taken effect.
+	 */
 	dispatch(recoveryKey: string | null): Promise<ExternalActionProviderOutcome>;
-	/** Read a provider outcome without repeating its effect. */
+	/**
+	 * Ask the provider what happened, without doing it again.
+	 *
+	 * @param recoveryKey - The frozen key identifying the earlier request at the provider.
+	 * @returns The outcome the provider reports. Must not repeat the effect; an adapter that cannot
+	 * read back returns `Ambiguous` instead of dispatching.
+	 */
 	reconcile(recoveryKey: string): Promise<ExternalActionProviderOutcome>;
 }
 
-/** Factory that performs only provider-free validation and adapter construction. */
+/**
+ * Builds the adapter for one invocation, without touching a provider.
+ *
+ * Split from dispatch on purpose: everything that can fail cheaply - checking the arguments digest,
+ * choosing a transport, resolving the snapshot's identity - happens here, before a claim exists, so
+ * a failure at this stage can never strand a half-done provider call.
+ *
+ * Called by: `_rebuildAdapter` in external-action-worker.ts. Implemented by
+ * `ProductionExternalActionAdapterFactory` (production-external-action-adapter.ts).
+ */
 export interface ExternalActionAdapterFactory
 {
-	/** Build one adapter without starting a provider request. */
+	/**
+	 * Build one adapter. Must not start a provider request.
+	 *
+	 * @param invocation - The saved invocation, including the recovery mode the adapter must match.
+	 * @param context - The frozen snapshot the action may read.
+	 * @returns An adapter ready to be claimed and called.
+	 * @throws {Error} When the invocation cannot be honoured at all - for example its arguments no
+	 * longer hash to their saved digest. The worker turns a throw here into a preparation failure, or
+	 * a pre-dispatch failure, and no provider is contacted.
+	 */
 	prepare(invocation: ExternalActionWorkerInvocation, context: ExternalActionExecutionContext): PreparedExternalActionAdapter;
 }
 
-/** Server-owned boundary that opens one durable approval from immutable invocation authority. */
+/**
+ * Opens the approval request that must be decided before an action may run.
+ *
+ * Separate from the provider adapter so that pausing a run and asking a person is never something a
+ * provider transport can influence. The implementation pauses the run and creates the request in
+ * one transaction, and it is safe to call again: after a crash between the two, the next pass finds
+ * the request already open instead of asking twice.
+ *
+ * Called by: `_prepare` and `_openApproval` in external-action-worker.ts. Implemented by
+ * `__CreateProductionExternalActionApprovalOpener` (production-external-action-approval.ts), wired
+ * in apps/opencrane/src/app/external-action-composition.ts.
+ */
 export interface ExternalActionApprovalOpener
 {
-	/** Open or recover the exact approval required before this invocation may become Ready. */
+	/**
+	 * Open the approval this invocation needs, or pick up the one already open.
+	 *
+	 * @param invocation - The invocation waiting for a decision.
+	 * @param context - The frozen snapshot holding the tool schema the approver is shown.
+	 * @param now - Trusted server time, from which the decision deadline is set.
+	 * @returns True when a request is open. False when it could not be opened: the invocation stays
+	 * where it is and no provider is called, so the run waits rather than acting unapproved.
+	 * @throws {Error} When the snapshot cannot be loaded or does not match the invocation, or the
+	 * frozen tool schema cannot be resolved - refusing loudly rather than approving a call whose
+	 * schema is unknown.
+	 */
 	open(invocation: ExternalActionWorkerInvocation, context: ExternalActionExecutionContext, now: Date): Promise<boolean>;
 }
 
-/** Trusted wall clock used for leases, deadlines, and recovery evidence. */
+/** Server clock for leases, deadlines, and saved timestamps. Injected so tests can fix the time. */
 export interface ExternalActionWorkerClock
 {
 	/** Return one server-controlled instant. */
 	now(): Date;
 }
 
-/** Safe canonical event emitted only by the server-side tool worker. */
+/** A tool lifecycle event. Only the server-side worker may emit these, because only it knows what the provider did. */
 export type ExternalActionWorkerEvent = ToolInvocationLifecycleEvent;
 
-/** Canonical server-event sink; implementations must reject secret-bearing payload extensions. */
+/**
+ * Saves tool lifecycle events.
+ *
+ * The started event is published before the provider is called, and the claim is released if that
+ * publish fails, so no request ever goes out unannounced. An implementation must refuse a payload
+ * that carries secrets.
+ *
+ * Called by: `_announceStart` in external-action-worker.ts. Implemented by
+ * `PrismaToolInvocationLifecycleEventUnitOfWork`, wired in
+ * apps/opencrane/src/app/external-action-composition.ts.
+ */
 export interface ExternalActionWorkerEventSink
 {
-	/** Append one bounded lifecycle event for the owning run attempt. */
+	/**
+	 * Add one lifecycle event to the run attempt that owns the invocation.
+	 *
+	 * @param event - The event to record.
+	 * @returns Nothing. A rejection is meaningful: the caller releases its claim instead of calling the
+	 * provider, so a lost event can never hide a real provider call.
+	 */
 	append(event: ExternalActionWorkerEvent): Promise<void>;
 }
 
-/** Fixed worker policy frozen at process composition. */
+/**
+ * The worker's fixed limits, set once when the process is wired up.
+ *
+ * Fixed rather than per-invocation so behaviour cannot drift between passes: the same attempt limit
+ * and the same claim lease apply to every action in the fleet.
+ *
+ * Called by: `__CreateProductionExternalActionWorker` (production-external-action-worker.ts) builds
+ * it from `TOOL_INVOCATION_PREPARATION_POLICY`.
+ */
 export interface ExternalActionWorkerPolicy
 {
 	/** Maximum provider-free preparation attempts. */
 	readonly preparationAttemptLimit: number;
-	/** Hard provider-free preparation retry window. */
+	/** How long preparation may keep retrying. */
 	readonly preparationRetryWindowMilliseconds: number;
 	/** Delay before another provider-free preparation attempt. */
 	readonly preparationRetryDelayMilliseconds: number;
@@ -108,32 +278,61 @@ export interface ExternalActionWorkerPolicy
 	readonly providerClaimLeaseMilliseconds: number;
 }
 
-/** Complete dependencies for one bounded process-owned worker. */
+/**
+ * Everything one worker needs, all injected.
+ *
+ * The worker owns no transport, no clock, and no database handle of its own, so a test can drive
+ * every branch - including the ambiguous provider outcome - with no provider and no database.
+ *
+ * Called by: `__CreateProductionExternalActionWorker` (production-external-action-worker.ts).
+ *
+ * @see ProductionExternalActionWorkerDependencies for the smaller set the app supplies.
+ */
 export interface ExternalActionWorkerDependencies
 {
-	/** Durable runnable-work discovery. */
+	/** Finds the next saved invocation to work on. */
 	readonly source: ToolInvocationWorkSource;
-	/** ToolInvocation state and compare-and-set authority. */
+	/** Writes ToolInvocation state; each write only succeeds if the row is still on the revision it read. */
 	readonly invocations: ExternalActionWorkerUnitOfWork;
-	/** Canonical immutable run context loader. */
+	/** Loads the run's frozen snapshot. */
 	readonly contexts: ExternalActionExecutionContextLoader;
-	/** Provider-free adapter factory. */
+	/** Builds provider adapters without contacting a provider. */
 	readonly adapters: ExternalActionAdapterFactory;
-	/** Durable approval opener used only after preparation selected AwaitingApproval. */
+	/** Opens approval requests; used only once preparation set the state to AwaitingApproval. */
 	readonly approvals: ExternalActionApprovalOpener;
-	/** Server-owned canonical tool lifecycle events. */
+	/** Saves tool lifecycle events. */
 	readonly events: ExternalActionWorkerEventSink;
 	/** Trusted server clock. */
 	readonly clock: ExternalActionWorkerClock;
 	/** Frozen worker policy. */
 	readonly policy: ExternalActionWorkerPolicy;
-	/** Structured, credential-free evidence sink. */
+	/** Structured logger. Never log credentials to it. */
 	readonly log: Logger;
 }
 
-/** One explicit recovery strategy selected by the invocation's frozen mode. */
+/**
+ * What a provider operation is allowed to do, for one recovery mode.
+ *
+ * The mode is fixed on the invocation at admission and cannot change later, so the strategy is
+ * chosen from durable data rather than from whatever the current adapter feels able to do. Each
+ * strategy refuses the claim kinds it must not serve - manual recovery, for instance, throws rather
+ * than reconcile automatically - so an ambiguous outcome cannot quietly become a second provider
+ * call.
+ *
+ * Called by: `_execute` in external-action-worker.ts, selected by
+ * `_ExternalActionRecoveryStrategy` (external-action-recovery-strategy.ts).
+ */
 export interface ExternalActionRecoveryStrategy
 {
-	/** Execute the operation permitted by an exact fenced claim. */
+	/**
+	 * Run the operation this claim allows.
+	 *
+	 * @param adapter - The prepared adapter, already checked against the invocation's recovery mode.
+	 * @param invocation - The claimed invocation, carrying the frozen recovery key when there is one.
+	 * @param claim - The claim just taken; its kind decides dispatch versus readback.
+	 * @returns What the provider concluded.
+	 * @throws {Error} When the claim kind is not one this mode may serve, or a required recovery key is
+	 * missing. The worker treats a throw as ambiguous, never as a failure.
+	 */
 	execute(adapter: PreparedExternalActionAdapter, invocation: ToolInvocationRecord, claim: ToolInvocationClaim): Promise<ExternalActionProviderOutcome>;
 }

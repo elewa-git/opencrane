@@ -7,15 +7,15 @@ import { PrismaSkillWorkloadAssignmentRepository } from "./prisma-skill-workload
 import { PrismaSkillWorkloadReleaseRepository } from "./prisma-skill-workload-release-repository.js";
 import { _SkillWorkloadPersistenceConflictError, type SkillWorkloadExecutionTransaction, type SkillWorkloadExecutionUnitOfWork, type SkillWorkloadExecutionWork } from "./skill-workload-unit-of-work.types.js";
 
-/** Sole root PrismaClient and transaction owner for governed skill-execution durability. */
+/** Owns the root PrismaClient and opens every skill-execution transaction. */
 export class PrismaSkillWorkloadUnitOfWork implements SkillWorkloadExecutionUnitOfWork
 {
-	/** Canonical OpenCrane product-authority database client. */
+	/** The main OpenCrane database client. */
 	private readonly prisma: PrismaClient;
-	/** Bounded controller claim lease supplied by process configuration. */
+	/** How long a controller claim lasts, taken from process configuration. */
 	private readonly claimLeaseMilliseconds: number;
 
-	/** Creates the sole transaction-opening persistence boundary for skill execution. */
+	/** Stores the client and claim lease used by every transaction this class opens. */
 	constructor(prisma: PrismaClient, claimLeaseMilliseconds: number)
 	{
 		if (!Number.isSafeInteger(claimLeaseMilliseconds) || claimLeaseMilliseconds < 1 || claimLeaseMilliseconds > 300_000) throw new Error("skill workload claim lease must be bounded");
@@ -23,7 +23,7 @@ export class PrismaSkillWorkloadUnitOfWork implements SkillWorkloadExecutionUnit
 		this.claimLeaseMilliseconds = claimLeaseMilliseconds;
 	}
 
-	/** Opens one short-lived transaction and exposes only transaction-scoped capability repositories. */
+	/** Opens one short transaction and gives the work only repositories bound to it. */
 	async run<Result>(work: SkillWorkloadExecutionWork<Result>): Promise<Result>
 	{
 		const claimLeaseMilliseconds = this.claimLeaseMilliseconds;
@@ -34,7 +34,7 @@ export class PrismaSkillWorkloadUnitOfWork implements SkillWorkloadExecutionUnit
 			{
 				return await this.prisma.$transaction(async function _RunTransaction(transaction): Promise<Result>
 				{
-					// 1. Bind every persistence capability to the same transaction so none can open an independent commit.
+					// 1. Build every repository on the same transaction, so none of them can commit on its own.
 					const repositories: SkillWorkloadExecutionTransaction = {
 						assignments: new PrismaSkillWorkloadAssignmentRepository(transaction, claimLeaseMilliseconds),
 						releases: new PrismaSkillWorkloadReleaseRepository(transaction, claimLeaseMilliseconds),
@@ -43,7 +43,7 @@ export class PrismaSkillWorkloadUnitOfWork implements SkillWorkloadExecutionUnit
 						authoringInputs: new PrismaSkillAuthoringInputRepository(transaction),
 					};
 
-					// 2. Keep the transaction lifetime limited to durable authority work; callers perform external I/O afterwards.
+					// 2. Keep only database work inside the transaction. Callers do network and file I/O after it commits.
 					return work(repositories);
 				}, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 			}
@@ -58,5 +58,5 @@ export class PrismaSkillWorkloadUnitOfWork implements SkillWorkloadExecutionUnit
 	}
 }
 
-/** Maximum fresh serializable transactions used to resolve ordinary controller contention. */
+/** How many times a serializable transaction is retried when two controllers collide. */
 const _SERIALIZABLE_ATTEMPTS = 3;

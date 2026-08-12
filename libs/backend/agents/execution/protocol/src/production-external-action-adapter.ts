@@ -12,13 +12,13 @@ import { IntegrationAssignmentUnavailableError, IntegrationToolReturnedError } f
 import { ExternalActionProviderOutcomeKinds, type ExternalActionAdapterFactory, type ExternalActionExecutionContext, type ExternalActionProviderOutcome, type ExternalActionWorkerInvocation, type PreparedExternalActionAdapter } from "./external-action-worker.types.js";
 import type { ProductionExternalActionAdapterDependencies } from "./production-external-action-adapter.types.js";
 
-/** Safe failure code for a live integration assignment that was revoked before provider dispatch. */
+/** Failure code for an integration assignment that was revoked before anything reached the provider. */
 function _integrationFailureCode(error: IntegrationAssignmentUnavailableError): string
 {
 	return `integration_assignment_${error.reason}`;
 }
 
-/** Map only typed errors that prove no provider request began into a definite failure. */
+/** Return a definite failure code, but only for errors that prove no request reached the provider. Anything else returns null. */
 function _provenPreDispatchFailure(error: unknown): string | null
 {
 	if (error instanceof IntegrationAssignmentUnavailableError) return _integrationFailureCode(error);
@@ -34,14 +34,14 @@ function _provenPreDispatchFailure(error: unknown): string | null
 	return null;
 }
 
-/** Current server transports have no provider idempotency or readback contract, so they are manual. */
+/** Adapter for transports that support neither a repeat-safe key nor readback, so their recovery mode is Manual. */
 class _ManualPreparedExternalActionAdapter implements PreparedExternalActionAdapter
 {
-	/** Manual is fixed because current Obot, sandbox, and memory ports expose no recovery proof. */
+	/** Always Manual: the Obot, sandbox, and memory ports cannot prove what happened after a failure. */
 	readonly recoveryMode = ExternalActionRecoveryModes.Manual;
-	/** One durable-command executor selected from the frozen tool revision. */
+	/** The executor chosen from the invocation's tool revision. */
 	private readonly executor: ExternalActionExecutor<JsonValue>;
-	/** Credential-free fields shared by provider operation spans. */
+	/** Fields added to every provider trace span; none of them is a credential. */
 	private readonly traceFields: Readonly<Record<string, unknown>>;
 
 	/** Create one manual adapter around an existing server-owned executor. */
@@ -51,7 +51,7 @@ class _ManualPreparedExternalActionAdapter implements PreparedExternalActionAdap
 		this.traceFields = { runId: invocation.runId, attempt: invocation.attempt, toolInvocationId: invocation.toolInvocationId, toolRevisionId: invocation.toolRevisionId, recoveryMode: invocation.recoveryMode };
 	}
 
-	/** Dispatch once; unknown exceptions stay ambiguous because a request may have left the process. */
+	/** Send the request once. An error we cannot classify stays ambiguous, because the request may already have gone out. */
 	dispatch(_recoveryKey: string | null): Promise<ExternalActionProviderOutcome>
 	{
 		const self = this;
@@ -79,7 +79,7 @@ class _ManualPreparedExternalActionAdapter implements PreparedExternalActionAdap
 	}
 }
 
-/** Build the durable command consumed by server-owned provider executors. */
+/** Build the command the server-side executors take. */
 function _command(invocation: ExternalActionWorkerInvocation): DurableExternalActionCommand
 {
 	return {
@@ -92,10 +92,21 @@ function _command(invocation: ExternalActionWorkerInvocation): DurableExternalAc
 	};
 }
 
-/** Provider-free factory that reuses the existing integration, memory, and sandbox executors. */
+/**
+ * Builds adapters over the integration, memory, and sandbox executors, without contacting a provider.
+ *
+ * Every adapter it returns reports Manual recovery, because none of the current transports offers a
+ * repeat-safe key or a way to read an outcome back. That is a deliberate, visible limitation: an
+ * unclear outcome from any of them needs a person, and the worker enforces it by refusing to run an
+ * invocation whose saved recovery mode does not match.
+ *
+ * Called by: `__CreateProductionExternalActionWorker` (production-external-action-worker.ts).
+ *
+ * @implements ExternalActionAdapterFactory
+ */
 export class ProductionExternalActionAdapterFactory implements ExternalActionAdapterFactory
 {
-	/** Concrete control-plane transports never shared with the runtime process. */
+	/** Server-side transports. The runtime process never gets these. */
 	private readonly dependencies: ProductionExternalActionAdapterDependencies;
 
 	/** Create the factory over process-owned transports. */
@@ -104,7 +115,17 @@ export class ProductionExternalActionAdapterFactory implements ExternalActionAda
 		this.dependencies = dependencies;
 	}
 
-	/** Select the existing executor from durable invocation authority without contacting a provider. */
+	/**
+	 * Pick the executor for this saved invocation, without contacting a provider.
+	 *
+	 * @param invocation - The saved invocation, whose tool revision selects the transport.
+	 * @param context - The frozen snapshot supplying silo, subject, dataset, and revision.
+	 * @returns An adapter that will make exactly one provider call when dispatched.
+	 * @throws {Error} When the invocation's effective arguments do not hash to their saved digest.
+	 * Refusing here means tampered or corrupted arguments can never reach a provider.
+	 * @see https://www.rfc-editor.org/rfc/rfc8785 - RFC 8785, the canonical JSON form
+	 * `__DigestCanonicalJson` hashes, for exactly which bytes that check compares.
+	 */
 	prepare(invocation: ExternalActionWorkerInvocation, context: ExternalActionExecutionContext): PreparedExternalActionAdapter
 	{
 		if (__DigestCanonicalJson(invocation.effectiveArguments) !== invocation.effectiveArgumentsDigest) throw new Error("external action effective arguments failed integrity validation");

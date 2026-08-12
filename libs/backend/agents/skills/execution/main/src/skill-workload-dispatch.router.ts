@@ -5,13 +5,14 @@ import { AGENT_CONTROLLER_PROJECTED_TOKEN_AUDIENCE, AGENT_CONTROLLER_SERVICE_ACC
 import type { ReviewedSkillWorkloadControllerIdentity, SkillWorkloadDispatchRouterDependencies } from "./skill-workload-dispatch.types.js";
 
 /**
- * Build the controller-authenticated internal API for governed skill workloads.
+ * Build the internal API the agent controller calls for skill workloads.
  *
- * The router does not choose work, Kubernetes policy, or capabilities. It authenticates the exact
- * controller identity then delegates the claim fence and immutable Job-UID assignment to Postgres.
+ * The router decides nothing: it does not pick work, set Kubernetes policy, or grant capabilities. It
+ * checks that the caller really is the controller, then lets Postgres do the claiming and record the
+ * Kubernetes Job UID.
  *
- * **This router is NOT behind `___AuthMiddleware`.** The server NetworkPolicy limits its listener
- * to the agent controller, while TokenReview verifies the controller's projected-token identity.
+ * **This router is NOT behind `___AuthMiddleware`.** The server NetworkPolicy lets only the agent
+ * controller reach this listener, and TokenReview checks the controller's projected token.
  *
  * @see apps/opencrane/helm/templates/_networkpolicy.tpl — restricts server ingress to the controller.
  * @see apps/agent-controller/helm/templates/_resources.tpl — projects the controller audience-bound token.
@@ -31,7 +32,7 @@ export function __CreateSkillWorkloadDispatchRouter(dependencies: SkillWorkloadD
 				return;
 			}
 
-			// 2. Let the database choose and fence exactly one eligible workload.
+			// 2. Let the database pick and lock exactly one workload that is ready.
 			const claim = await dependencies.authority.claimNextAtomically();
 			if (claim === null)
 			{
@@ -51,7 +52,7 @@ export function __CreateSkillWorkloadDispatchRouter(dependencies: SkillWorkloadD
 	{
 		try
 		{
-			// 1. Authenticate before parsing assignment evidence so another workload cannot probe claim state.
+			// 1. Authenticate before reading the body, so a caller that is not the controller cannot probe claim state.
 			if (!await _IsController(request, dependencies))
 			{
 				_RespondProblem(response, 401, "controller_identity_denied");
@@ -65,7 +66,7 @@ export function __CreateSkillWorkloadDispatchRouter(dependencies: SkillWorkloadD
 				return;
 			}
 
-			// 2. Commit only the exact database claim generation and Kubernetes-issued immutable UID.
+			// 2. Write only against the claim the controller was given, using the UID Kubernetes returned.
 			const outcome = await dependencies.authority.commitAssignmentAtomically(workloadId, command);
 			if (outcome === "conflict")
 			{
@@ -140,7 +141,7 @@ export function __CreateSkillWorkloadDispatchRouter(dependencies: SkillWorkloadD
 	{
 		try
 		{
-			// 1. Authenticate before reading Pod evidence so it cannot become an identity oracle.
+			// 1. Authenticate before reading the Pod ids, so this route cannot be used to test whether an id exists.
 			if (!await _IsController(request, dependencies))
 			{
 				_RespondProblem(response, 401, "controller_identity_denied");
@@ -153,7 +154,7 @@ export function __CreateSkillWorkloadDispatchRouter(dependencies: SkillWorkloadD
 				_RespondProblem(response, 400, "invalid_pod_registration");
 				return;
 			}
-			// 2. Persist only the exact release-fenced, Kubernetes-discovered immutable Pod UID.
+			// 2. Store only the Pod UID Kubernetes returned, and only while the release claim still matches.
 			const outcome = await dependencies.authority.registerFirstPodAtomically(workloadId, command);
 			if (outcome === "conflict")
 			{
@@ -172,7 +173,7 @@ export function __CreateSkillWorkloadDispatchRouter(dependencies: SkillWorkloadD
 	return router;
 }
 
-/** TokenReview one bearer and require the exact controller KSA, namespace, username, and audience. */
+/** TokenReview the bearer token, and require the controller's ServiceAccount, namespace, username, and audience. */
 async function _IsController(request: Request, dependencies: SkillWorkloadDispatchRouterDependencies): Promise<boolean>
 {
 	const token = _BearerValue(request.header("authorization"));
@@ -181,7 +182,7 @@ async function _IsController(request: Request, dependencies: SkillWorkloadDispat
 	return identity !== null && _IdentityMatches(identity, dependencies.namespace);
 }
 
-/** Require every independently reviewed workload coordinate to match the fixed controller identity. */
+/** Return whether every field TokenReview returned matches the controller identity we expect. */
 function _IdentityMatches(identity: ReviewedSkillWorkloadControllerIdentity, namespace: string): boolean
 {
 	return identity.username === `system:serviceaccount:${namespace}:${AGENT_CONTROLLER_SERVICE_ACCOUNT_NAME}`
@@ -190,14 +191,14 @@ function _IdentityMatches(identity: ReviewedSkillWorkloadControllerIdentity, nam
 		&& identity.audiences.includes(AGENT_CONTROLLER_PROJECTED_TOKEN_AUDIENCE);
 }
 
-/** Read one unambiguous standard bearer credential. */
+/** Read the token from a single `Bearer <token>` header, rejecting anything else. */
 function _BearerValue(value: string | undefined): string | null
 {
 	if (!value) return null;
 	return /^Bearer ([^\s,]+)$/u.exec(value)?.[1] ?? null;
 }
 
-/** Write one bounded, non-sensitive internal problem response. */
+/** Write a short error response that leaks nothing sensitive. */
 function _RespondProblem(response: Response, status: number, reason: string): void
 {
 	response.status(status).json({ error: reason });

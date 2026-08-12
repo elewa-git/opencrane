@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import { PersonalConfigurationProposalCodes } from "../proposal/personal-configuration-proposal.types.js";
 import { PrismaPersonalConfigurationProposalUnitOfWork } from "../proposal/prisma-personal-configuration-proposal-unit-of-work.js";
 
-/** Build one Prisma transaction that satisfies every proposal provenance coordinate. */
+/** Builds a Prisma transaction fake where every ownership check passes. */
 function _transaction(overrides: { readonly profile?: unknown; readonly conversation?: unknown; readonly run?: unknown; readonly service?: unknown } = {})
 {
 	return {

@@ -11,7 +11,7 @@ export interface RunCancellationRepositoryConfig
 	readonly orphanObservationMarginMilliseconds: number;
 }
 
-/** User-authorised request to fence one exact current run attempt. */
+/** A user-authorised request to fence the run's current attempt. */
 export interface RequestRunCancellationCommand
 {
 	/** Logical run being cancelled. */
@@ -82,7 +82,7 @@ export type RequestRunCancellationResult =
 /** Exact cleanup mode persisted by the run authority. */
 export type RunWorkloadCleanupMode = "assigned" | "unassigned_orphan";
 
-/** Database-issued cleanup projection; it contains no caller-selected authority. */
+/** The cleanup record the database builds; every field comes from the server, never from a caller. */
 export interface RunWorkloadCleanupProjection
 {
 	/** Logical run whose product authority has already been fenced. */
@@ -108,11 +108,11 @@ export interface RunWorkloadCleanupProjection
 	readonly bootstrapReference: string;
 	/** Exact Kubernetes UID when an assignment was committed; absent only for an in-flight orphan. */
 	readonly workloadUid: string | null;
-	/** Whether cleanup has an exact assignment UID or must first verify a suspended orphan. */
+	/** Whether cleanup already has the assignment's UID, or must first confirm a suspended Job that no assignment claims. */
 	readonly mode: RunWorkloadCleanupMode;
 	/** Why cleanup exists; cancellation finalises the run while failure only removes residue. */
 	readonly reason: "cancellation" | "dispatch_failure" | "runtime_lease_expired";
-	/** First authoritative orphan absence, retained until a second post-horizon observation confirms it. */
+	/** When the Job was first confirmed absent; kept until a second check after the observation window confirms it. */
 	readonly orphanAbsenceObservedAt?: string | null;
 }
 
@@ -146,7 +146,7 @@ export type ClaimNextRunWorkloadCleanupResult =
 /** Outcome of one server-owned expired-runtime repair pass. */
 export type RepairExpiredRunResult = { readonly status: "repaired"; readonly runId: string; readonly attempt: number } | { readonly status: "none" };
 
-/** Exact cleaner evidence submitted after UID-preconditioned deletion or authoritative absence. */
+/** What the cleanup worker reports back, after either deleting the Job by UID or confirming it is gone. */
 export interface ConfirmRunWorkloadCleanupCommand
 {
 	/** Claim generation held by this cleaner process. */
@@ -159,7 +159,12 @@ export interface ConfirmRunWorkloadCleanupCommand
 	readonly attempt: number;
 	/** UID deleted or observed absent; required for assigned cleanup. */
 	readonly workloadUid: string | null;
-	/** Physical result independently established by the Kubernetes adapter. */
+	/**
+	 * What the Kubernetes adapter actually observed: the Job was deleted, or it is absent.
+	 *
+	 * The adapter establishes this itself rather than echoing what the database expected, so cleanup is
+	 * confirmed by reality and not by intent.
+	 */
 	readonly outcome: "deleted" | "absent";
 }
 

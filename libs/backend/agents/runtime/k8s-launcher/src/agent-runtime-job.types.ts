@@ -11,13 +11,21 @@ export type AgentRuntimeImagePullPolicy = "Always" | "IfNotPresent" | "Never";
  */
 export enum AgentRuntimeIdentityProfiles
 {
-	/** Personal runtime identity without managed connector reach. */
+	/** Runs as a person's own identity, and cannot reach the managed connectors. The default when a profile omits the field. */
 	Personal = "personal",
-	/** Managed runtime identity limited to its configured connector plane. */
+	/** Runs as a managed identity, limited to the connectors configured for it, with its own token audience. */
 	Managed = "managed",
 }
 
-/** Immutable release profile applied to every runtime attempt Job of one identity class. */
+/**
+ * Everything a runtime Job needs that is not specific to one run: image, identity, endpoints, and
+ * limits. One profile is shared by every attempt of its identity class.
+ *
+ * Supplied by the deployment as JSON and validated once at startup, then never changed. Because
+ * profiles are checked by actually building a Job from them, a field added here must be one
+ * {@link _AssertAgentRuntimeJobProfile} knows how to bound.
+ * @see {@link __ValidateAgentControllerRuntimeProfiles}
+ */
 export interface AgentRuntimeJobProfile
 {
 	/**
@@ -36,13 +44,13 @@ export interface AgentRuntimeJobProfile
 	readonly litellmBaseUrl: string;
 	/** OpenCrane server namespace, which must differ from the runtime Job namespace. */
 	readonly serverNamespace: string;
-	/** Bounded runtime-profile ServiceAccount selected by the controller. */
+	/** ServiceAccount the runtime Pod runs as. Its name must match this profile's identity class, or validation rejects the profile. */
 	readonly serviceAccountName: string;
 	/** Projected ServiceAccount token lifetime in seconds. */
 	readonly projectedTokenTtlSeconds: number;
-	/** Non-durable binary scratch quantity, capped at 1 GiB. */
+	/** Size of the throwaway scratch volume, as a binary Kubernetes quantity such as `64Mi`; 1 GiB at most. */
 	readonly scratchSize: string;
-	/** Maximum wall-clock lifetime of one attempt before the assignment-specific release cap. */
+	/** Longest an attempt may run under this profile. Release lowers it further so the Job cannot outlive the assignment, and never raises it. */
 	readonly activeDeadlineSeconds: number;
 	/** Cleanup delay after terminal state; must be zero so ephemeral scratch is not retained. */
 	readonly ttlSecondsAfterFinished: number;
@@ -50,7 +58,15 @@ export interface AgentRuntimeJobProfile
 	readonly resources: V1ResourceRequirements;
 }
 
-/** Durable assignment coordinates used to derive one deterministic attempt workload. */
+/**
+ * The recorded run details that one attempt's Job is built from.
+ *
+ * Every field arrives from OpenCrane and ends up in the Job's name, labels, or annotations, which
+ * is why they are all validated before use: they cross from the database into Kubernetes metadata,
+ * where a stray character or an over-long value would be rejected by the API server or, worse,
+ * silently change which object is addressed.
+ * @see {@link _AssertAgentRuntimeJobAssignment}
+ */
 export interface AgentRuntimeJobAssignment
 {
 	/** Logical run identifier. */

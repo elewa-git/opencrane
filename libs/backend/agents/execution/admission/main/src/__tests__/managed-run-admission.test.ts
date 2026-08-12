@@ -6,7 +6,7 @@ import type { ManagedRunNowCommand } from "@opencrane/backend/server/agents/agen
 import { __ReadRunAdmissionConcurrencyPolicy } from "../managed-run-admission.composition.js";
 import { _CreateManagedRunAdmissionPortWithGate, _CreateRunAdmissionCapacityGate } from "../managed-run-admission.js";
 
-/** Produce one valid managed admission command, varying only the authority coordinates under test. */
+/** Produces a valid managed admission command, changing only the fields the test is about. */
 function _command(agentServiceId: string, siloId = "silo-a"): ManagedRunNowCommand
 {
 	return { agentServiceId, siloId, requestedBy: "user-a", requestIdempotencyKey: `${siloId}:${agentServiceId}`, trigger: "managed_invocation", scheduledSlot: null };

@@ -11,14 +11,14 @@ import { PersonaDraftDenialReasons, type CreatePersonaDraftCommand, type CreateP
 import { _DerivePersonaDraftSources } from "./persona-draft-source-deriver.js";
 import type { PersonaDraftInsightEvidence } from "./persona-draft-persistence.types.js";
 
-/** Prisma authority that compiles one reviewed weighted result into an immutable draft. */
+/** Prisma adapter that turns one completed interview's score into a persona draft revision. */
 export class PrismaPersonaDraftRepository implements PersonaDraftFromInterviewRepository
 {
 	/** Transaction-scoped ORM client supplied only by the persona unit of work. */
 	private readonly transaction: Prisma.TransactionClient;
-	/** Aggregate evidence reads shared with lifecycle mutation fences. */
+	/** Shared reader for profile, interview, and revision rows. */
 	private readonly reads: PrismaPersonaAggregateReadRepository;
-	/** Domain-owned weighted scoring and tie replay. */
+	/** Score repository, on the same transaction. */
 	private readonly scoring: PrismaPersonaScoringRepository;
 
 	/** Create the draft authority over one caller-owned transaction. */
@@ -29,38 +29,38 @@ export class PrismaPersonaDraftRepository implements PersonaDraftFromInterviewRe
 		this.scoring = new PrismaPersonaScoringRepository(this.transaction);
 	}
 
-	/** Read exact reviewed sources and persist one reviewable persona revision. */
+	/** Reads the interview's pinned sources and writes one persona draft revision. */
 	async createFromInterviewAtomically(command: CreatePersonaDraftCommand): Promise<CreatePersonaDraftPersistenceResult>
 	{
-		// 1. Rebind owner and completed interview inside this serializable snapshot.
+		// 1. Re-read the owner's profile and the completed interview inside this transaction.
 		const profile = await this.reads.readProfile(command);
 		if (profile === null) return { status: PersonaDraftDenialReasons.NotFoundOrWrongOwner };
 		const interview = await this._interview(command);
 		if (interview === null) return { status: PersonaDraftDenialReasons.InterviewIncomplete };
 
-		// 2. Replay the immutable score and reject every unresolved tie before template selection.
+		// 2. Recompute the stored score, and refuse while any tie is still open.
 		const scored = await this.scoring.readScore(command.interviewId, command.personaProfileId, command.userId);
 		if (scored.status !== PersonaScoringPersistenceStatuses.Ready) return { status: PersonaDraftDenialReasons.DerivationMismatch };
 		const resolvedScore = _ResolvedScore(scored.score);
 		if (resolvedScore === null) return { status: PersonaDraftDenialReasons.ResolutionRequired };
 
-		// 3. Compile only reviewed choice directives into the exact colour/modifier template.
+		// 3. Fill the template for this colour and modifier, using only directive text from the interpolation map.
 		const sources = await this._sources(interview, resolvedScore);
 		if (sources === null) return { status: PersonaDraftDenialReasons.DerivationMismatch };
 		if (sources.insights.length < 3 || sources.insights.length > 5) return { status: PersonaDraftDenialReasons.InvalidInsights };
 
-		// 4. Pin every reviewed source and raw vector when allocating the next immutable revision.
+		// 4. Write the next revision, storing every source id, digest, and raw counter with it.
 		return this._persist(command, profile, interview, resolvedScore, sources);
 	}
 
-	/** Read the exact completed interview sources and ordered choice evidence. */
+	/** Reads the completed interview with its pinned sources and its answers. */
 	private async _interview(command: CreatePersonaDraftCommand): Promise<PersonaDraftInterview | null>
 	{
 		const interview = await this.transaction.personaInterview.findFirst({ where: { id: command.interviewId, personaProfileId: command.personaProfileId, userId: command.userId, state: "Completed" }, select: { questionSetId: true, questionSetVersion: true, scoringPolicyId: true, scoringPolicyVersion: true, scoringPolicy: { select: { digest: true } }, interpolationMapId: true, interpolationMapVersion: true, interpolationMap: { select: { digest: true, directives: true } }, answers: { select: { id: true, questionId: true, choiceId: true, choice: { select: { label: true, question: { select: { category: true } } } } }, orderBy: { questionId: "asc" } } } });
 		return interview;
 	}
 
-	/** Select one reviewed template, interpolation set, and four provenance insights. */
+	/** Picks the SOUL template for this colour and modifier, then derives its instructions and insights. Returns null when no template matches or derivation fails. */
 	private async _sources(interview: PersonaDraftInterview, score: PersonaResolvedScore): Promise<PersonaDraftSources | null>
 	{
 		const template = await this.transaction.personaSoulTemplate.findUnique({ where: { primaryColour_modifier_version: { primaryColour: _ToPrismaColour(score.primary), modifier: _ToPrismaModifier(score.modifier), version: interview.scoringPolicyVersion } }, select: { id: true, version: true, digest: true, content: true } });
@@ -76,7 +76,7 @@ export class PrismaPersonaDraftRepository implements PersonaDraftFromInterviewRe
 		return derived === null ? null : { template, ...derived };
 	}
 
-	/** Persist the draft revision and its bounded insight evidence. */
+	/** Writes the draft revision row and its insight rows. */
 	private async _persist(command: CreatePersonaDraftCommand, profile: PersonaProfileRecord, interview: PersonaDraftInterview, score: PersonaResolvedScore, sources: PersonaDraftSources): Promise<CreatePersonaDraftPersistenceResult>
 	{
 		const revisionNumber = await this.reads.readNextRevision(command.personaProfileId);
@@ -86,7 +86,7 @@ export class PrismaPersonaDraftRepository implements PersonaDraftFromInterviewRe
 	}
 }
 
-/** Completed interview source shape read for deterministic draft compilation. */
+/** The interview fields draft compilation reads. */
 interface PersonaDraftInterview
 {
 	/** Reviewed question-set identity. */
@@ -105,11 +105,11 @@ interface PersonaDraftInterview
 	readonly interpolationMapVersion: number;
 	/** Reviewed interpolation-map source. */
 	readonly interpolationMap: { readonly digest: string; readonly directives: Prisma.JsonValue };
-	/** Ordered exact answer choices. */
+	/** The owner's answers, ordered by question id. */
 	readonly answers: readonly { readonly id: string; readonly questionId: string; readonly choiceId: string; readonly choice: { readonly label: string; readonly question: { readonly category: Prisma.PersonaInsightCreateManyInput["category"] } } }[];
 }
 
-/** Fully resolved score type admitted to draft compilation. */
+/** A score with all three ties settled — the only kind draft compilation accepts. */
 type PersonaResolvedScore = PersonaScoreResult & { readonly primary: PersonaColourValues; readonly secondary: PersonaColourValues; readonly modifier: PersonaModifierValues; readonly resolutionRequired: null };
 
 /** Sources required to compile and review one draft. */
@@ -119,17 +119,17 @@ interface PersonaDraftSources
 	readonly template: { readonly id: string; readonly version: number; readonly digest: string; readonly content: string };
 	/** Exact immutable runtime instructions compiled from reviewed sources. */
 	readonly compiledInstructions: string;
-	/** Four provenance-linked result insights. */
+	/** Four insights, each recording the answer it came from. */
 	readonly insights: readonly PersonaDraftInsightEvidence<Prisma.PersonaInsightCreateManyInput["category"]>[];
 }
 
-/** Narrow a score only after every governed tie boundary is resolved. */
+/** Returns the score typed as fully resolved, or null while any tie is still open. */
 function _ResolvedScore(score: PersonaScoreResult): PersonaResolvedScore | null
 {
 	return score.resolutionRequired === null && score.primary !== null && score.secondary !== null && score.modifier !== null ? score as PersonaResolvedScore : null;
 }
 
-/** Serialize the lossless score without presentation percentages. */
+/** Turns the score into the JSON stored on the revision, keeping raw counters rather than percentages. */
 function _ScoringJson(score: PersonaScoreResult): Prisma.InputJsonObject
 {
 	return { orderedAnswerIds: [...score.orderedAnswerIds], orderedChoiceIds: [...score.orderedChoiceIds], colours: { ...score.colours }, openness: { ...score.openness }, tieResolutions: score.tieResolutions.map(function _Resolution(resolution) { return { kind: resolution.kind, candidates: [...resolution.candidates], selectedValue: resolution.selectedValue }; }), primary: score.primary, secondary: score.secondary, modifier: score.modifier };

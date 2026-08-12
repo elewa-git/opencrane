@@ -23,16 +23,16 @@ export interface PersonaOnboardingClock
 	now(): Date;
 }
 
-/** Durable onboarding workflow notifications emitted only after persona authority success. */
+/** Notifications sent to the onboarding workflow, only after a persona transition has succeeded. */
 export interface PersonaOnboardingWorkflowPort
 {
-	/** Pin a started or resumed owner interview. */
+	/** Records that the owner started or resumed this interview. */
 	surveyStarted(caller: PersonaOnboardingCaller, interviewId: string): Promise<void>;
-	/** Pin the exact approved revision and its source interview. */
+	/** Records the approved revision and the interview it came from. */
 	personaApproved(caller: PersonaOnboardingCaller, evidence: { readonly interviewId: string; readonly personaRevisionId: string }): Promise<void>;
 }
 
-/** Composition ports for the self-only persona onboarding HTTP surface. */
+/** The ports the persona onboarding router needs. Every route serves only the signed-in owner. */
 export interface PersonaOnboardingRouterDependencies
 {
 	/** Resolves session and host identity, or null when the request is unauthenticated. */
@@ -53,6 +53,6 @@ export interface PersonaOnboardingRouterDependencies
 	logger: Logger;
 	/** Reads the resumable onboarding state without exposing compiled persona instructions. */
 	status: PersonaOnboardingStatusRepository;
-	/** Coordinates the distinct server-owned onboarding workflow. */
+	/** Receives the onboarding workflow notifications. */
 	workflow: PersonaOnboardingWorkflowPort;
 }

@@ -11,7 +11,7 @@ function _PersonalRun(overrides: Partial<InitialRunAuthority> = {}): InitialRunA
 	return { agentServiceId: "service-1", agentRevisionId: "revision-1", agentKind: AgentServiceKinds.Personal, effectiveContractDigest: "sha256:contract", promptCompilerVersion: "v1", trigger: "interactive", delegatedUserId: "user-1", rootRunId: "run-1", parentRunId: null, ...overrides };
 }
 
-/** Creates the narrow command whose subject owns the personal profile. */
+/** Creates the command whose subject owns the persona profile. */
 function _Command(overrides: Record<string, unknown> = {})
 {
 	return { runId: "run-1", siloId: "silo-1", agentServiceId: "service-1", conversationId: null, identityKind: "user", trigger: "interactive", executionSubjectId: "user-1", requestIdempotencyKey: "request-1", ...overrides } as never;

@@ -1,6 +1,17 @@
 import type { RunInputSnapshot, RunInputSnapshotIdentity } from "@opencrane/contracts";
 
-/** Map one durable snapshot row into the immutable wire snapshot the runtime receives. */
+/**
+ * Turn one snapshot row from the database into the snapshot shape the runtime receives.
+ *
+ * Field by field on purpose: the row's JSON columns are cast to their contract types here and
+ * nowhere else, so the wire shape cannot drift by accident as the Prisma model grows.
+ *
+ * Called by: `_loadContext` in prisma-runtime-dispatch-authority.ts, and
+ * `PrismaExternalActionExecutionContextRepository.load`.
+ *
+ * @param row - The snapshot row, including its JSON columns.
+ * @returns The snapshot as the runtime and the action worker see it.
+ */
 export function __ProjectRuntimeInputSnapshot(row: { runId: string; siloId: string; agentServiceId: string; agentRevisionId: string; snapshotVersion: number; conversationId: string | null; messageIds: string[]; personaRevisionId: string | null; preferenceFactIds: string[]; artifactRevisionIds: string[]; skillRevisionIds: string[]; memoryFacts: unknown; memoryQueryPolicy: unknown; integrationAssignments: unknown; modelRoute: unknown; budgetPolicy: unknown; identitySnapshot: unknown; capabilitySetDigest: string; effectiveContractDigest: string; promptCompilerVersion: string; digest: string; compiledAt: Date }): RunInputSnapshot
 {
 	return {

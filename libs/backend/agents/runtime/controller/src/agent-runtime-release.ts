@@ -5,7 +5,7 @@ import { _ResolveAgentControllerRuntimeProfile } from "./agent-controller-profil
 import { AgentControllerReconcileOutcomes, type AgentControllerOptions, type AgentControllerRuntimeReleaseReconcileResult } from "./agent-controller.types.js";
 import { _AgentRuntimeAttemptKeySecretName } from "./agent-runtime-attempt-key.js";
 
-/** Require an immutable Pod UID observed through the Kubernetes API. */
+/** Return the Pod UID Kubernetes assigned, or throw when it is missing. */
 function _RequirePodUid(uid: string | undefined): string
 {
 	if (!uid || uid.trim().length === 0)
@@ -28,11 +28,11 @@ export async function __ReconcileNextRuntimeRelease(options: AgentControllerOpti
 {
 	return ___DoWithTrace("agent_controller.workload_release.reconcile", {}, async function _reconcileWorkloadRelease(): Promise<AgentControllerRuntimeReleaseReconcileResult>
 	{
-		// 1. Claim a durable release generation so stale controller replicas cannot register a Pod.
+		// 1. Take a release claim with its own lease, so an out-of-date controller replica cannot register a Pod.
 		const claim = await options.authority.__ClaimWorkloadRelease(signal);
 		if (!claim) return { outcome: AgentControllerReconcileOutcomes.Idle };
 
-		// 2. Rebuild the exact assigned Job from authority coordinates and the fixed release profile.
+		// 2. Rebuild the assigned Job exactly, from the coordinates OpenCrane recorded and the profile it names.
 		const profile = _ResolveAgentControllerRuntimeProfile(options.profiles, claim.workload.workloadProfile);
 		if (!profile || claim.workload.namespace !== profile.namespace || profile.serverNamespace === profile.namespace || profile.serviceAccountName !== claim.workload.serviceAccountName)
 		{
@@ -49,12 +49,12 @@ export async function __ReconcileNextRuntimeRelease(options: AgentControllerOpti
 			litellmKeySecretName: _AgentRuntimeAttemptKeySecretName(claim.workload.bootstrapReference),
 		}, profile);
 
-		// 3. Reject expired authority, then let the Kubernetes adapter reserve its I/O budget.
+		// 3. Fail early if the assignment has already expired; the adapter redoes this with its request timeout added.
 		const authorityUpperBoundEpochMilliseconds = Math.max(Date.now(), Date.parse(claim.lease.expiresAt));
 		__DeriveAgentRuntimeReleaseDeadlineSeconds(claim.workload.assignmentExpiresAt, authorityUpperBoundEpochMilliseconds, profile.activeDeadlineSeconds);
 		await options.kubernetes.__EnsureRuntimeJobReleased(job, claim.workload.workloadUid, claim.workload.assignmentExpiresAt, claim.lease.expiresAt);
 
-		// 4. Wait for one uniquely owned first Pod without choosing among ambiguous candidates.
+		// 4. Wait until exactly one Pod matches; never pick between several candidates.
 		const pod = await options.kubernetes.__FindFirstRuntimePod(job, claim.workload.workloadUid, claim.workload.serviceAccountName);
 		if (!pod)
 		{
@@ -62,7 +62,7 @@ export async function __ReconcileNextRuntimeRelease(options: AgentControllerOpti
 		}
 		const podUid = _RequirePodUid(pod.metadata?.uid);
 
-		// 5. Register the exact Pod through OpenCrane authority before runtime may exchange bootstrap.
+		// 5. Record this Pod in OpenCrane before the runtime is allowed to exchange its bootstrap reference.
 		const registered = await options.authority.__RegisterFirstPod(claim.lease.eventId, {
 			claimedAt: claim.lease.claimedAt,
 			deliveryCount: claim.lease.deliveryCount,
