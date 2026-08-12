@@ -1,0 +1,11 @@
+{
+  "name": "frontend-conversation-assets",
+  "$schema": "../../../../../node_modules/nx/schemas/project-schema.json",
+  "projectType": "library",
+  "sourceRoot": "libs/frontend/state/conversation/assets/src",
+  "tags": ["scope:conversation-assets", "layer:frontend", "type:lib", "frontend-role:state"],
+  "targets": {
+    "lint": { "executor": "nx:run-commands", "options": { "command": "tsc -p tsconfig.json --noEmit", "cwd": "libs/frontend/state/conversation/assets" } },
+    "test": { "executor": "nx:run-commands", "options": { "command": "vitest run", "cwd": "libs/frontend/state/conversation/assets" } }
+  }
+}

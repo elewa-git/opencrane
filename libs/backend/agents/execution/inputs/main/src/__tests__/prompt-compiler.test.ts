@@ -55,7 +55,7 @@ function _tools(): readonly CompiledToolDefinition[]
 /** Build fake repositories that echo their inputs deterministically for compiler assertions. */
 function _repositories(overrides: Partial<PromptCompilerRepositories> = {}): PromptCompilerRepositories
 {
-	const model: CompiledModelRoute = { modelAlias: "silo-default", maxOutputTokens: 1024 };
+	const model: CompiledModelRoute = { modelAlias: "silo-default", maxOutputTokens: 1024, generatedOutputCapabilities: [] };
 	return {
 		loadPersonaInstructions: async function _persona(id): Promise<string> { return id === null ? "" : "You are a careful assistant."; },
 		loadMessages: async function _messages(ids): Promise<readonly { role: "user"; content: string }[]> { return ids.map(function _turn(id): { role: "user"; content: string } { return { role: "user", content: `msg:${id}` }; }); },

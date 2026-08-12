@@ -37,7 +37,7 @@ wires the pieces and the per-silo networking together.
 
 **In this flow:** [opencrane server](../../opencrane/README.md) · [opencrane-ui](../../opencrane-ui/README.md)
 · [channel-proxy](../../channel-proxy/README.md) · [artifact-service](../../artifact-service/README.md)
-· [artifact-preprocessor](../../artifact-preprocessor/README.md)
+· [artifact-preprocessor](../../artifact-preprocessor/README.md) · [artifact-scanner](../../artifact-scanner/README.md)
 · [agent-controller](../../agent-controller/README.md) · [skill-authoring](../../skill-authoring/README.md)
 · [tool-runner](../../tool-runner/README.md)
 · [postgres](../../postgres/README.md) · [cognee](../cognee/README.md) · [litellm](../litellm/README.md)
@@ -105,6 +105,8 @@ package imports it.
 - `artifactPreprocessor` — disabled until its immutable image digest is supplied; when enabled, the
   worker runs in a dedicated restricted namespace and receives only ephemeral scratch plus
   broker/DNS/optional-telemetry egress.
+- `artifactScanner` — disabled until its immutable image digest is supplied; when enabled, the
+  worker scans quarantined uploads in a separate restricted namespace through the server broker.
 - `agentController.runtimeQuota` — aggregate Job, Pod, CPU, and memory ceilings for the dedicated
   untrusted runtime namespace.
 - `opencrane-skill-authoring.skillAuthoring` — the separate, default-deny candidate-skill namespace
@@ -148,6 +150,7 @@ package imports it.
 - Composed apps: [opencrane server](../../opencrane/README.md) · [opencrane-ui](../../opencrane-ui/README.md)
 · [channel-proxy](../../channel-proxy/README.md) · [artifact-service](../../artifact-service/README.md)
   · [artifact-preprocessor](../../artifact-preprocessor/README.md)
+  · [artifact-scanner](../../artifact-scanner/README.md)
   · [agent-controller](../../agent-controller/README.md)
   · [skill-authoring](../../skill-authoring/README.md) · [tool-runner](../../tool-runner/README.md)
   · [postgres](../../postgres/README.md)

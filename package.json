@@ -89,6 +89,7 @@
   ],
   "dependencies": {
     "@a2ui/angular": "0.10.2",
+    "@a2ui/markdown-it": "0.1.0",
     "@a2ui/web_core": "0.10.3",
     "@ag-ui/core": "0.0.57",
     "@angular/animations": "^21.2.19",

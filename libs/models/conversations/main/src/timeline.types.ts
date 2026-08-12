@@ -21,6 +21,13 @@ export enum ConversationTimelineEntryKinds
 	ParentDelivery = "parent_delivery",
 }
 
+/** Display-safe platform events carried by append-only System timeline entries. */
+export enum ConversationSystemEventTypes
+{
+	/** The safe conversation asset list changed and should be read again. */
+	AssetsChanged = "conversation.assets.changed",
+}
+
 /** The fields every timeline entry has. `position` is allocated by the database, so a writer must never choose one. */
 export interface ConversationTimelineEntryBase
 {

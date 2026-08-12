@@ -1,0 +1,31 @@
+<span
+	class="wo-attachment-chip"
+	[class.wo-attachment-chip--working]="item().state === states.Creating || item().state === states.Uploading || item().state === states.Processing"
+	[class.wo-attachment-chip--failed]="item().state === states.Failed"
+	[class.wo-attachment-chip--muted]="item().state === states.Removed || item().state === states.Inaccessible || item().state === states.Expired || item().state === states.Unavailable"
+	[attr.aria-label]="item().displayName + ': ' + item().detail"
+>
+	<span class="wo-attachment-chip__type wo-mono">{{ typeLabel() }}</span>
+	<span class="wo-attachment-chip__name">{{ item().displayName }}</span>
+	@if (item().state === states.Ready) {
+		<i class="pi pi-check wo-attachment-chip__status" aria-hidden="true"></i>
+	} @else if (item().state === states.Uploading) {
+		<span
+			class="wo-attachment-chip__progress"
+			role="progressbar"
+			aria-label="Upload progress"
+			[attr.aria-valuenow]="item().uploadProgressPercent"
+			[attr.aria-valuetext]="item().uploadProgressPercent === null ? 'Uploading' : item().uploadProgressPercent + '% uploaded'"
+		>
+			<span [style.width.%]="item().uploadProgressPercent ?? 40"></span>
+		</span>
+	} @else {
+		<span class="wo-attachment-chip__status">{{ item().detail }}</span>
+	}
+	@if (item().canRetry) {
+		<p-button label="Retry" severity="contrast" [link]="true" size="small" (onClick)="retry()" />
+	}
+	@if (item().canRemove) {
+		<p-button icon="pi pi-times" severity="contrast" [text]="true" [rounded]="true" size="small" [ariaLabel]="'Remove ' + item().displayName" (onClick)="remove()" />
+	}
+</span>

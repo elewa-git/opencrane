@@ -77,9 +77,17 @@ class PrismaRuntimeEventAppendRepository implements RuntimeEventAppendRepository
 		}
 		if (_A2UI_EVENT_TYPES.has(command.eventType) && !_A2uiMatches(command.payload, run.conversationId, run.id)) return { outcome: "denied", reason: "invalid_payload" };
 		const maximum = await this._transaction.conversationRunEvent.aggregate({ where: { runId: run.id }, _max: { sequence: true } });
-		await this._transaction.conversationRunEvent.create({ data: { conversationId: run.conversationId, runId: run.id, sequence: (maximum._max.sequence ?? 0) + 1, type: command.eventType, payload: command.payload as Prisma.InputJsonValue, occurredAt: new Date() } });
+		await this._transaction.conversationRunEvent.create({ data: { conversationId: run.conversationId, runId: run.id, sequence: (maximum._max.sequence ?? 0) + 1, type: command.eventType, messageId: _MessageId(command.eventType, command.payload), payload: command.payload as Prisma.InputJsonValue, occurredAt: new Date() } });
 		return { outcome: "reported" };
 	}
+}
+
+/** Materialize the runtime-known message coordinate so later authorities never inspect JSON to find it. */
+function _MessageId(eventType: string, payload: JsonValue): string | null
+{
+	if (!eventType.startsWith("message.") || payload === null || typeof payload !== "object" || Array.isArray(payload)) return null;
+	const messageId = (payload as { readonly [key: string]: JsonValue })["messageId"];
+	return typeof messageId === "string" ? messageId : null;
 }
 
 /**

@@ -31,6 +31,7 @@ from src.model_loop.driver import (
     build_zero_retry_agent as _build_zero_retry_agent,
     zero_retry_openai_settings as _zero_retry_openai_settings,
 )
+from src.model_loop.openai_generated_outputs import OpenAIGeneratedOutputConfiguration as _OpenAIGeneratedOutputConfiguration
 from src.attempts.execution import (
     execute_cancel_attempt as _execute_cancel_attempt,
     execute_resume_attempt as _execute_resume_attempt,
@@ -62,7 +63,7 @@ def _compiled_input() -> dict:
             {"name": "alpha", "toolRevisionId": "rev-alpha", "description": "", "parametersSchema": {}},
             {"name": "zulu", "toolRevisionId": "rev-zulu", "description": "", "parametersSchema": {}},
         ],
-        "model": {"modelAlias": "silo-default", "maxOutputTokens": None},
+        "model": {"modelAlias": "silo-default", "maxOutputTokens": None, "generatedOutputCapabilities": []},
         "budget": {},
         "digest": "sha256:x",
     }
@@ -372,6 +373,11 @@ class RuntimeZeroRetryTests(unittest.TestCase):
             model_cls=_Model,
             provider_cls=_Provider,
             async_openai=_Client,
+            generated_output_capabilities=("image_png",),
+            generated_output_configuration=_OpenAIGeneratedOutputConfiguration(
+                ({"kind": "image_generation", "output_format": "png", "partial_images": 0},),
+                {"openai_include_code_execution_outputs": True, "openai_include_raw_annotations": True},
+            ),
         )
         # Provider HTTP / model-request retries land on the OpenAI client transport as max_retries=0.
         self.assertEqual(recorded["client"]["max_retries"], 0)
@@ -381,8 +387,9 @@ class RuntimeZeroRetryTests(unittest.TestCase):
         self.assertIsInstance(recorded["provider"]["openai_client"], _Client)
         self.assertEqual(recorded["model"]["name"], "silo-default")
         # Tool-argument and output validation retries land on the Agent.
-        self.assertEqual(recorded["agent"]["retries"], 0)
-        self.assertEqual(recorded["agent"]["output_retries"], 0)
+        self.assertEqual(recorded["agent"]["retries"], {"tools": 0, "output": 0})
+        self.assertEqual(recorded["agent"]["capabilities"], ({"kind": "image_generation", "output_format": "png", "partial_images": 0},))
+        self.assertEqual(recorded["agent"]["model_settings"], {"openai_include_code_execution_outputs": True, "openai_include_raw_annotations": True})
 
 
 class RuntimeExecutorTests(unittest.TestCase):
@@ -643,7 +650,7 @@ class RuntimePydanticAiDriverTests(unittest.TestCase):
     def test_driver_module_is_importable_when_present(self) -> None:  # pragma: no cover - live environment only
         """When the pinned framework is present, the lazily imported driver symbols resolve."""
         from pydantic_ai import Agent  # noqa: F401
-        from pydantic_ai.models.openai import OpenAIModel  # noqa: F401
+        from pydantic_ai.models.openai import OpenAIResponsesModel  # noqa: F401
         from pydantic_ai.providers.openai import OpenAIProvider  # noqa: F401
 
 

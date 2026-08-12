@@ -31,6 +31,7 @@ def execute_start_attempt(
     cancel_event: threading.Event | None = None,
     checkpoint_cipher: object | None = None,
     terminal_gate: "TerminalGate | None" = None,
+    publish_output: Callable[[dict[str, object], str, dict[str, object]], None] | None = None,
 ) -> None:
     """Execute one admitted ``start_attempt`` command.
 
@@ -82,7 +83,7 @@ def execute_start_attempt(
     steering_buffer: list[str] = []
     # Projection is the protocol firewall: execution observes neutral events, while the projector
     # alone binds them to canonical candidate kinds, command coordinates, and frozen tool grants.
-    projector = RuntimeEventProjector(coordinates, compiled_input, post_candidate, record_pending_tool_call)
+    projector = RuntimeEventProjector(coordinates, compiled_input, post_candidate, record_pending_tool_call, publish_output)
     with trace(
         "agent_runtime.start_attempt",
         runId=coordinates["runId"],
@@ -135,6 +136,7 @@ def execute_resume_attempt(
     cancel_event: threading.Event | None = None,
     checkpoint_cipher: object | None = None,
     terminal_gate: "TerminalGate | None" = None,
+    publish_output: Callable[[dict[str, object], str, dict[str, object]], None] | None = None,
 ) -> None:
     """Execute one admitted ``resume_attempt`` with saved tool results.
 
@@ -222,7 +224,7 @@ def execute_resume_attempt(
     steering_buffer = [item["text"].strip() for item in steering_requests]
     # Construct a new projector for this command: message lifecycle and candidate identifiers are
     # command-scoped, even though the model context continues the same durable run attempt.
-    projector = RuntimeEventProjector(coordinates, compiled_input, post_candidate, record_pending_tool_call)
+    projector = RuntimeEventProjector(coordinates, compiled_input, post_candidate, record_pending_tool_call, publish_output)
     with trace(
         "agent_runtime.resume_attempt",
         runId=coordinates["runId"],

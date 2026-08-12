@@ -1,0 +1,26 @@
+<article
+	class="wo-asset-card"
+	[class.wo-asset-card--agent]="item().provenance === provenance.AgentOutput"
+	[class.wo-asset-card--failed]="item().state === states.Failed"
+	[class.wo-asset-card--muted]="item().state === states.Inaccessible || item().state === states.Expired || item().state === states.Removed || item().state === states.Unavailable"
+	[attr.aria-label]="item().displayName + ': ' + item().detail"
+>
+	@if (item().provenance === provenance.AgentOutput) { <span class="wo-asset-card__fold" aria-hidden="true"></span> }
+	<span class="wo-asset-card__type wo-mono">{{ typeLabel() }}</span>
+	<div class="wo-asset-card__body">
+		<strong>{{ item().displayName }}</strong>
+		<span>{{ item().provenance === provenance.AgentOutput ? 'Created by your assistant' : 'You attached' }} · {{ byteLabel() }}</span>
+	</div>
+	<div class="wo-asset-card__actions">
+		@if (item().state === states.Ready && item().disposition === dispositions.Preview) {
+			<p-button label="Preview" severity="contrast" [link]="true" size="small" (onClick)="act(actions.Preview)" />
+		}
+		@if (item().state === states.Ready) {
+			<p-button label="Download" severity="contrast" [link]="true" size="small" (onClick)="act(actions.Download)" />
+		} @else if (item().canRetry) {
+			<p-button label="Retry" severity="contrast" [link]="true" size="small" (onClick)="act(actions.Retry)" />
+		} @else {
+			<span class="wo-asset-card__state">{{ item().detail }}</span>
+		}
+	</div>
+</article>

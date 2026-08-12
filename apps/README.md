@@ -18,6 +18,7 @@ testing on its own, it belongs in a library, not here.
 | [`memory-gateway`](./memory-gateway/README.md) | The private authenticated boundary in front of Cognee. |
 | [`artifact-service`](./artifact-service/README.md) | The artifact promote-and-receipt service. |
 | [`artifact-preprocessor`](./artifact-preprocessor/README.md) | Outbound-only PDF-to-text worker behind the OpenCrane artifact broker. |
+| [`artifact-scanner`](./artifact-scanner/README.md) | Outbound-only malware scanner for quarantined conversation files. |
 | [`agent-runtime`](./agent-runtime/README.md) | Outbound-only personal-agent process prepared as one suspended Job per run attempt. |
 | [`managed-agent-runtime`](./managed-agent-runtime/README.md) | Chart/deploy-only plane for scheduled and triggered managed agents. |
 | [`agent-controller`](./agent-controller/README.md) | Sole Kubernetes mutator for personal-runtime attempt resources. |
@@ -32,7 +33,7 @@ service map.
 ```
    opencrane (control plane) ──serves──► opencrane-ui (SPA)
         │                                  channel-proxy (edge)
-        ├── memory-gateway · artifact-service · artifact-preprocessor
+        ├── memory-gateway · artifact-service · artifact-preprocessor · artifact-scanner
         ├── agent-controller · agent-runtime · managed-agent-runtime
         ├── skill-authoring · tool-runner
         └── postgres (durable DB)

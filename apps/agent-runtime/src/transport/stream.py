@@ -18,8 +18,9 @@ from ..attempts.execution import (
 )
 from ..attempts.terminal import TerminalGate
 from ..constants import MAX_FRAME_BYTES, PROTOCOL_VERSION
-from ..observability import log
+from ..observability import log, trace
 from .http import post_candidate
+from .output import publish_output_asset
 
 
 class _AttemptWorkerRegistry:
@@ -99,6 +100,13 @@ def _launch_attempt_worker(
             candidate,
         )
 
+    def _publish_output(coordinates: dict[str, object], message_id: str, output: dict[str, object]) -> None:
+        """Broker one exact generated output through the same projected runtime identity."""
+        content = output.get("content")
+        byte_length = len(content) if isinstance(content, bytes) else 0
+        with trace("agent_runtime.output.publish", runId=coordinates.get("runId"), attempt=coordinates.get("attempt"), byteLength=byte_length):
+            publish_output_asset(control_plane_url, token, coordinates, message_id, output)
+
     def _run() -> None:
         """Run the injected handler and release its signal even after an unexpected exception."""
         try:
@@ -108,6 +116,7 @@ def _launch_attempt_worker(
                 _post_candidate,
                 cancel_event=cancel_event,
                 terminal_gate=terminal_gate,
+                publish_output=_publish_output,
             )
         finally:
             workers.release(cancel_event)

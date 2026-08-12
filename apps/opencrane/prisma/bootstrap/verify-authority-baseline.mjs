@@ -51,6 +51,17 @@ const _REQUIRED_AUTHORITY_MARKERS = [
 	"'a2ui.rendering.begun', 'a2ui.surface.updated', 'a2ui.data_model.updated'",
 	'ALTER TABLE "conversations" ADD CONSTRAINT "conversations_identity_check"',
 	'ALTER TABLE "conversation_timeline_entries" ADD CONSTRAINT "conversation_timeline_entries_reference_shape_check"',
+	'ALTER TABLE "conversation_asset_output_tickets" ADD CONSTRAINT "conversation_asset_output_tickets_run_id_run_attempt_fkey"',
+	'ALTER TABLE "conversation_asset_output_tickets" ADD CONSTRAINT "conversation_asset_output_tickets_conversation_id_run_id_run_event_sequence_fkey"',
+	'CREATE UNIQUE INDEX "conversation_run_events_one_message_start"',
+	'ALTER TABLE "conversation_assets" ADD CONSTRAINT "conversation_assets_exact_output_ticket_fkey"',
+	'CREATE FUNCTION "enforce_conversation_asset_output_ticket_lifecycle"()',
+	'CREATE TRIGGER "conversation_asset_output_tickets_lifecycle_guard"',
+	'ConversationAssetOutputTicket identity is immutable',
+	'ConversationAssetOutputTicket finalization lacks exact receipt evidence',
+	'"finalized_content_address" IS NULL AND "finalized_receipt_digest" IS NULL AND "finalized_at" IS NULL',
+	'event."payload"->>\'messageId\' = NEW."source_message_id"',
+	'"provenance" = \'agent_output\' AND "created_by_user_id" IS NULL AND "message_id" IS NULL',
 ];
 const _FORBIDDEN_AUTHORITY_MARKERS = [
 	'NEW."state" IN (\'survey_in_progress\', \'completed\')',

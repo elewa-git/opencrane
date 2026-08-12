@@ -60,6 +60,17 @@ describe("REDACT_PATHS", function _redactSuite()
     expect(replay["cursor"]).toBe("[Redacted]");
   });
 
+  it("redacts artifact claim fences and write leases at every logged depth", function _artifactAuthority()
+  {
+    const { logger, records } = _redactingLogger();
+    logger.info({ claimFence: "fence", req: { headers: { "x-opencrane-scan-fence": "header-fence", "x-opencrane-artifact-lease": "compact-lease" } }, nested: { ClaimFence: "nested-fence", Headers: { "X-OpenCrane-Scan-Fence": "case-fence", "X-OpenCrane-Artifact-Lease": "case-lease" } } }, "artifact authority");
+    const request = records[0]?.["req"] as { headers: Record<string, unknown> };
+    const nested = records[0]?.["nested"] as { ClaimFence: unknown; Headers: Record<string, unknown> };
+    expect(records[0]?.["claimFence"]).toBe("[Redacted]");
+    expect(request.headers).toEqual({ "x-opencrane-scan-fence": "[Redacted]", "x-opencrane-artifact-lease": "[Redacted]" });
+    expect(nested).toEqual({ ClaimFence: "[Redacted]", Headers: { "X-OpenCrane-Scan-Fence": "[Redacted]", "X-OpenCrane-Artifact-Lease": "[Redacted]" } });
+  });
+
   it("redacts reviewed and final tool arguments at top-level and nested paths", function _toolArguments()
   {
     const { logger, records } = _redactingLogger();

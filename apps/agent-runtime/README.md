@@ -124,9 +124,10 @@ of the dependency graph; libraries do not import it. The wire contract is owned 
 - `/tmp/opencrane/checkpoints/checkpoint.enc` — the replaceable encrypted local checkpoint. It is a
   subordinate optimisation only, never durable state and never a source of truth.
 - Writable storage is only a per-attempt `emptyDir` capped at 1 GiB and mounted at `/tmp`.
-- Third-party dependencies are `cryptography` (P-256 proof-key generation) and
-  `pydantic-ai-slim[openai]` (the bounded model/tool loop), both pinned in `deploy/requirements.txt`;
-  the standard library covers everything else.
+- Third-party dependencies are `cryptography` (P-256 proof-key generation),
+  `pydantic-ai-slim[openai]` (the bounded model/tool loop), and the direct `openai` client used only
+  to stream attempt-scoped generated files from the provider container. All three are pinned in
+  `deploy/requirements.txt`; the standard library covers everything else.
 
 The Job builder requires an immutable image digest plus bounded CPU, memory, deadline, and scratch.
 The container runs as numeric user and group `65532` with a read-only root filesystem. Its projected

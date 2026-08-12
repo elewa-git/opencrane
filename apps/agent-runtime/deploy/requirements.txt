@@ -16,3 +16,7 @@
 # release hash lock; this does not retain or reactivate any superseded runtime.
 cryptography==48.0.1
 pydantic-ai-slim[openai]==2.13.0
+# Pydantic AI permits a range, but generated code-execution outputs depend on this exact SDK's
+# `/containers/{container_id}/files/{file_id}/content` streaming client. Pin its universal wheel so
+# that provider-private retrieval cannot drift underneath the runtime image.
+openai==2.54.0

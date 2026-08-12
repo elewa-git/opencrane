@@ -12,6 +12,9 @@ from collections.abc import Callable, Iterator
 
 from ..config import environment, read_attempt_litellm_key
 from ..constants import DEFAULT_LITELLM_KEY_PATH
+from .generated_output_policy import order_generated_outputs as _order_generated_outputs
+from .generated_output_policy import validate_generated_output_batch
+from .openai_generated_outputs import OpenAIGeneratedOutputCollector, OpenAIGeneratedOutputConfiguration, openai_generated_output_configuration
 
 
 def absorb_steering(steering_buffer: list[str]) -> list[str]:
@@ -55,6 +58,8 @@ def build_zero_retry_agent(
     model_cls: Callable[..., object] | None = None,
     provider_cls: Callable[..., object] | None = None,
     async_openai: Callable[..., object] | None = None,
+    generated_output_capabilities: tuple[str, ...] = (),
+    generated_output_configuration: OpenAIGeneratedOutputConfiguration | None = None,
 ) -> object:
     """Construct an attempt-scoped agent with every implicit retry path disabled.
 
@@ -70,11 +75,11 @@ def build_zero_retry_agent(
     # complete Pydantic/OpenAI package graph.
     if agent_cls is None or model_cls is None or provider_cls is None:
         from pydantic_ai import Agent
-        from pydantic_ai.models.openai import OpenAIModel
+        from pydantic_ai.models.openai import OpenAIResponsesModel
         from pydantic_ai.providers.openai import OpenAIProvider
 
         agent_cls = agent_cls or Agent
-        model_cls = model_cls or OpenAIModel
+        model_cls = model_cls or OpenAIResponsesModel
         provider_cls = provider_cls or OpenAIProvider
     if async_openai is None:
         from openai import AsyncOpenAI
@@ -95,11 +100,16 @@ def build_zero_retry_agent(
     )
     provider = provider_cls(openai_client=openai_client)
     model = model_cls(model_alias, provider=provider)
+    output_configuration = generated_output_configuration or openai_generated_output_configuration(generated_output_capabilities)
     return agent_cls(
         model,
         system_prompt=instructions,
-        retries=settings["tool_validation_retries"],
-        output_retries=settings["output_validation_retries"],
+        retries={
+            "tools": settings["tool_validation_retries"],
+            "output": settings["output_validation_retries"],
+        },
+        capabilities=output_configuration.capabilities,
+        model_settings=output_configuration.model_settings,
     )
 
 
@@ -116,13 +126,14 @@ def pydantic_ai_event_source(
     """
     from pydantic_ai import Agent
 
-    agent = _agent_for(compiled_input)
+    agent, output_collector, output_base_url, output_attempt_key = _model_loop_components(compiled_input)
 
     async def _collect() -> list[dict[str, object]]:
         """Collect one fresh framework run without leaking async objects out of this adapter."""
         # Buffer plain events until the async run closes; framework-owned nodes and contexts never
         # escape into the synchronous attempt executor or checkpoint format.
         events: list[dict[str, object]] = []
+        output_ordinal = 0
         async with agent.iter(prompt(compiled_input)) as run:
             async for node in run:
                 # Avoid intentionally opening a node after observed cancellation. The in-stream check
@@ -139,7 +150,13 @@ def pydantic_ai_event_source(
                             # allow buffered provider deltas to cross into the runtime protocol.
                             if cancel_event.is_set():
                                 break
-                            events.append(translate_framework_event(event))
+                            translated = output_collector.observe(event, output_ordinal) or translate_framework_event(event)
+                            events.append(translated)
+                            if translated.get("type") == "output_asset":
+                                output_ordinal += 1
+        if not cancel_event.is_set():
+            events.extend(await output_collector.finish(base_url=output_base_url, attempt_key=output_attempt_key))
+        events = _order_generated_outputs(events)
         # Usage is translated after the framework closes the run so the counters represent the whole
         # bounded request sequence rather than an intermediate node.
         usage = run.usage()
@@ -150,6 +167,7 @@ def pydantic_ai_event_source(
                 "outputTokens": getattr(usage, "output_tokens", 0),
             },
         )
+        validate_generated_output_batch(events)
         return events
 
     # Attempt execution is already isolated on a worker thread, so it can own this event loop without
@@ -175,13 +193,14 @@ def pydantic_ai_resume_source(
     """
     from pydantic_ai import Agent
 
-    agent = _agent_for(compiled_input)
+    agent, output_collector, output_base_url, output_attempt_key = _model_loop_components(compiled_input)
 
     async def _collect() -> list[dict[str, object]]:
         """Collect one authorised resume while keeping its framework state inside this adapter."""
         # Resume uses a fresh framework runner but only the server-returned deferred results. The
         # adapter never calls the external tool or recreates a result from pending-call metadata.
         events: list[dict[str, object]] = []
+        output_ordinal = 0
         async with agent.iter(
             prompt(compiled_input),
             deferred_tool_results=tool_results,
@@ -204,7 +223,13 @@ def pydantic_ai_resume_source(
                         async for event in request_stream:
                             if cancel_event.is_set():
                                 break
-                            events.append(translate_framework_event(event))
+                            translated = output_collector.observe(event, output_ordinal) or translate_framework_event(event)
+                            events.append(translated)
+                            if translated.get("type") == "output_asset":
+                                output_ordinal += 1
+        if not cancel_event.is_set():
+            events.extend(await output_collector.finish(base_url=output_base_url, attempt_key=output_attempt_key))
+        events = _order_generated_outputs(events)
         usage = run.usage()
         events.append(
             {
@@ -213,6 +238,7 @@ def pydantic_ai_resume_source(
                 "outputTokens": getattr(usage, "output_tokens", 0),
             },
         )
+        validate_generated_output_batch(events)
         return events
 
     for event in asyncio.run(_collect()):
@@ -244,18 +270,19 @@ def prompt(compiled_input: dict[str, object]) -> str:
 def translate_framework_event(event: object) -> dict[str, object]:
     """Translate the supported Pydantic event shapes into plain dictionaries.
 
-    Text deltas and complete tool-call parts are the only framework shapes admitted here. Unknown
-    shapes become an empty text delta rather than leaking arbitrary framework objects across the
-    protocol seam; the protocol normaliser decides what becomes a candidate.
+    Text deltas, complete tool-call parts, and completed in-memory file parts are admitted here.
+    Provider file identifiers and metadata are deliberately ignored. Unknown shapes become an empty
+    text delta rather than leaking arbitrary framework objects across the protocol seam; the protocol
+    normaliser decides what becomes a candidate.
     """
     # Duck typing is contained here so framework upgrades cannot leak new object shapes directly into
     # the wire protocol. Every admitted output is reconstructed as an owned primitive dictionary.
     delta = getattr(getattr(event, "delta", None), "content_delta", None)
     if isinstance(delta, str):
         return {"type": "output_text", "text": delta}
-    tool_name = getattr(getattr(event, "part", None), "tool_name", None)
-    if isinstance(tool_name, str):
-        part = event.part
+    part = getattr(event, "part", None)
+    tool_name = getattr(part, "tool_name", None)
+    if getattr(part, "part_kind", None) == "tool-call" and isinstance(tool_name, str):
         return {
             "type": "tool_call",
             "toolName": tool_name,
@@ -281,8 +308,8 @@ def apply_steering_to_request(model_request_node: object, steering: list[str]) -
         parts.extend({"content": text} for text in steering)
 
 
-def _agent_for(compiled_input: dict[str, object]) -> object:
-    """Build the model adapter from only the control-plane-compiled route and mounted key.
+def _model_loop_components(compiled_input: dict[str, object]) -> tuple[object, OpenAIGeneratedOutputCollector, str, str]:
+    """Build attempt-private model and generated-output adapters from one frozen route.
 
     The model alias comes from the immutable input snapshot. The base URL is process configuration,
     and the attempt-scoped key is read at the point of use so no master or provider credential enters
@@ -301,9 +328,14 @@ def _agent_for(compiled_input: dict[str, object]) -> object:
         # Do not fall back to a provider/model default: that would bypass the admitted model route.
         raise RuntimeError("compiled input is missing a model alias")
     instructions = compiled_input.get("instructions")
-    return build_zero_retry_agent(
+    generated_output_capabilities = model_route.get("generatedOutputCapabilities") if isinstance(model_route, dict) else None
+    if not isinstance(generated_output_capabilities, list) or any(not isinstance(value, str) for value in generated_output_capabilities):
+        raise RuntimeError("compiled input is missing generated-output capabilities")
+    agent = build_zero_retry_agent(
         model_alias,
         base_url,
         attempt_key,
         instructions if isinstance(instructions, str) else "",
+        generated_output_capabilities=tuple(generated_output_capabilities),
     )
+    return agent, OpenAIGeneratedOutputCollector(), base_url, attempt_key

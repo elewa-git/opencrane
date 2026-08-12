@@ -30,6 +30,16 @@ test("allows imported repository and unit-of-work contract owners", function _Al
 	assert.deepEqual(inspectPrismaBoundary("libs/widgets/prisma-widget-unit-of-work.ts", _Fixture("positive-unit-of-work"), ["widget"], _OWNERS), []);
 });
 
+test("allows exact live contracts without empty repository aliases", function _AllowsLiveContracts()
+{
+	const liveContracts = {
+		repositories: [{ ..._OWNERS.repositories[0], contract: "WidgetPort" }],
+		unitsOfWork: [{ ..._OWNERS.unitsOfWork[0], contract: "WidgetAuthority" }],
+		compositions: [],
+	};
+	assert.doesNotThrow(function _ValidPolicy() { validatePolicy({ version: 1, owners: liveContracts, exemptions: [] }); });
+});
+
 test("rejects service code that calls delegates and transactions directly", function _RejectsServiceBypass()
 {
 	const findings = inspectPrismaBoundary("libs/widgets/widget-service.ts", _Fixture("negative-service"), ["widget"], _OWNERS);
@@ -173,6 +183,7 @@ test("fails closed on broad, ownerless, stale, or malformed exemptions", functio
 	assert.equal(resolved.errors.length, 5);
 	assert.throws(function _InvalidPolicy() { validatePolicy({ version: 2, owners: { repositories: [], unitsOfWork: [], compositions: [] }, exemptions: [] }); }, /invalid Prisma-boundary policy schema/u);
 	assert.throws(function _BroadOwner() { validatePolicy({ version: 1, owners: { repositories: [{ path: "libs/*/repository.ts", adapter: "PrismaWidgetRepository", contract: "WidgetRepository", contractImportPath: "./widget.types.js", constructs: [] }], unitsOfWork: [], compositions: [] }, exemptions: [] }); }, /invalid Prisma-boundary owner/u);
+	assert.throws(function _WrongAdapterKind() { validatePolicy({ version: 1, owners: { repositories: [{ path: "libs/widget.ts", adapter: "PrismaWidgetService", contract: "WidgetPort", contractImportPath: "./widget.types.js", constructs: [] }], unitsOfWork: [], compositions: [] }, exemptions: [] }); }, /invalid Prisma-boundary owner/u);
 });
 
 test("keeps review, style, package, and CI surfaces on the boundary check", function _VerifiesPipeline()

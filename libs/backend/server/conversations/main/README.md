@@ -38,6 +38,10 @@ The general conversation unit of work owns participant reads and aggregate lifec
 dedicated message-admission unit owns submission routing, retry recovery, denial translation, and
 the handoff into execution admission's authoritative final transaction.
 
+Participant artifact blocks are delegated to the conversation-assets attachment port inside that
+same ordinary-message or run-admission transaction. Any foreign, unchecked, reused, or oversized
+asset rolls the message back instead of leaving a dangling transcript reference.
+
 Archive and close are deliberately different. Archive is reversible and affects only one
 participant's list. Close is permanent, applies to the conversation, and makes it read-only. Each
 participant separately records the first visible position, the last read position, and an optional

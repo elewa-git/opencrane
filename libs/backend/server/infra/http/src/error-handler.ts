@@ -14,10 +14,19 @@ interface MalformedJsonError extends SyntaxError
 /** External body-parser category for invalid JSON syntax. */
 const _MALFORMED_JSON_ERROR_TYPE = "entity.parse.failed";
 
+/** External body-parser category for a request larger than its route-owned ceiling. */
+const _PAYLOAD_TOO_LARGE_ERROR_TYPE = "entity.too.large";
+
 /** Return whether Express rejected the request before route-level body validation. */
 function _IsMalformedJson(err: unknown): err is MalformedJsonError
 {
 	return err instanceof SyntaxError && (err as { type?: unknown }).type === _MALFORMED_JSON_ERROR_TYPE;
+}
+
+/** Return whether Express rejected the request before retaining an oversized caller body. */
+function _IsPayloadTooLarge(err: unknown): boolean
+{
+	return err instanceof Error && (err as { type?: unknown }).type === _PAYLOAD_TOO_LARGE_ERROR_TYPE;
 }
 
 /**
@@ -62,7 +71,16 @@ export function _ErrorHandler(log: Logger)
 {
 	return function _handleError(err: unknown, req: Request, res: Response, _next: NextFunction): void
 	{
-		// 1. Malformed JSON is rejected before Zod runs. Log only the category because body-parser's
+		// 1. Oversized bodies can retain caller-controlled bytes on the parser error, so record only
+		//    the bounded request category and route metadata.
+		if (_IsPayloadTooLarge(err))
+		{
+			log.warn({ code: "PAYLOAD_TOO_LARGE", path: req.path, method: req.method }, "request body exceeded its route limit");
+			res.status(413).json({ error: "Request body is too large.", code: "PAYLOAD_TOO_LARGE" });
+			return;
+		}
+
+		// 2. Malformed JSON is rejected before Zod runs. Log only the category because body-parser's
 		//    error object may retain the caller-controlled raw body.
 		if (_IsMalformedJson(err))
 		{
@@ -71,7 +89,7 @@ export function _ErrorHandler(log: Logger)
 			return;
 		}
 
-		// 2. Only the dedicated public request wrapper may turn Zod diagnostics into a client error.
+		// 3. Only the dedicated public request wrapper may turn Zod diagnostics into a client error.
 		//    A ZodError from internal state remains an internal error and cannot disclose its shape.
 		if (err instanceof _RequestValidationProblem)
 		{
@@ -80,7 +98,7 @@ export function _ErrorHandler(log: Logger)
 			return;
 		}
 
-		// 3. An unmapped Prisma uniqueness failure is an expected public conflict. Retain the full
+		// 4. An unmapped Prisma uniqueness failure is an expected public conflict. Retain the full
 		//    diagnostic only in internal logs; the client receives the fixed envelope below.
 		if (_isPrismaUniqueViolation(err))
 		{
@@ -89,7 +107,7 @@ export function _ErrorHandler(log: Logger)
 			return;
 		}
 
-		// 4. Unknown failures are logged with their diagnostic and stay generic in production.
+		// 5. Unknown failures are logged with their diagnostic and stay generic in production.
 		log.error({ err, path: req.path, method: req.method }, "unhandled request error");
 		const body: Record<string, string> = { error: "An unexpected error occurred", code: "INTERNAL_ERROR" };
 		if (process.env["NODE_ENV"] !== "production" && !(err instanceof ZodError))

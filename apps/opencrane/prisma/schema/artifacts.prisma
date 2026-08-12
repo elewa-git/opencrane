@@ -12,7 +12,9 @@ enum ArtifactState {
 }
 
 enum ArtifactRevisionState {
+  Quarantined     @map("quarantined")
   Published       @map("published")
+  Rejected        @map("rejected")
   DeletionPending @map("deletion_pending")
   Purged          @map("purged")
 }
@@ -47,6 +49,15 @@ enum ArtifactPreprocessJobState {
   TerminalFailed  @map("terminal_failed")
 }
 
+enum ArtifactScanJobState {
+  Pending         @map("pending")
+  Claimed         @map("claimed")
+  Clean           @map("clean")
+  Rejected        @map("rejected")
+  RetryableFailed @map("retryable_failed")
+  TerminalFailed  @map("terminal_failed")
+}
+
 model Artifact {
   id                String         @id @default(cuid())
   siloId            String         @map("silo_id")
@@ -61,6 +72,7 @@ model Artifact {
   revisions         ArtifactRevision[] @relation("ArtifactRevisions")
   uploadLeases      ArtifactUploadLease[]
   preprocessOutputs ArtifactPreprocessJob[] @relation("ArtifactPreprocessOutput")
+  conversationAssets ConversationAsset[]
   currentRevision   ArtifactRevision?  @relation("CurrentArtifactRevision", fields: [id, currentRevisionId], references: [artifactId, id], onDelete: Restrict)
 
   @@unique([id, currentRevisionId])
@@ -87,6 +99,7 @@ model ArtifactUploadLease {
   createdAt               DateTime                 @default(now()) @map("created_at")
   artifact                Artifact                 @relation(fields: [artifactId], references: [id], onDelete: Restrict)
   preprocessJobOutput     ArtifactPreprocessJob?   @relation("ArtifactPreprocessOutputLease")
+  conversationAsset       ConversationAsset?
 
   @@index([artifactId, state, expiresAt])
   @@index([siloId, state, expiresAt])
@@ -117,6 +130,8 @@ model ArtifactRevision {
   outboxEvents      ArtifactOutboxEvent[]
   preprocessJobsAsSource ArtifactPreprocessJob[] @relation("ArtifactPreprocessSource")
   preprocessJobsAsOutput ArtifactPreprocessJob[] @relation("ArtifactPreprocessOutputRevision")
+  scanJob           ArtifactScanJob?
+  conversationAssets ConversationAsset[]
 
   @@unique([artifactId, revision])
   @@unique([artifactId, id])
@@ -125,6 +140,26 @@ model ArtifactRevision {
   @@index([sourceRunId])
   @@index([indexState, createdAt])
   @@map("artifact_revisions")
+}
+
+/// Durable, fenced safety scan for one quarantined immutable revision.
+model ArtifactScanJob {
+  id                 String               @id @default(cuid())
+  artifactRevisionId String               @unique @map("artifact_revision_id")
+  state              ArtifactScanJobState @default(Pending)
+  attempt            Int                  @default(0)
+  claimFence         String?              @map("claim_fence")
+  claimExpiresAt     DateTime?            @map("claim_expires_at")
+  nextAttemptAt      DateTime?            @map("next_attempt_at")
+  failureCode        String?              @map("failure_code")
+  scannerVersion     String?              @map("scanner_version")
+  completedAt        DateTime?            @map("completed_at")
+  createdAt          DateTime             @default(now()) @map("created_at")
+  updatedAt          DateTime             @updatedAt @map("updated_at")
+  artifactRevision   ArtifactRevision     @relation(fields: [artifactRevisionId], references: [id], onDelete: Restrict)
+
+  @@index([state, nextAttemptAt, claimExpiresAt])
+  @@map("artifact_scan_jobs")
 }
 
 /// Durable, fenced work record for one deterministic source-revision preprocessing pipeline.

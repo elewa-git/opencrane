@@ -130,6 +130,13 @@ spec:
               value: {{ include "opencrane.artifactPreprocessor.namespace" . | quote }}
             - name: ARTIFACT_PREPROCESSOR_MAX_OUTPUT_BYTES
               value: {{ .Values.artifactPreprocessor.maximumOutputBytes | quote }}
+            # The scanner router TokenReviews only this separate Helm-owned worker namespace.
+            - name: ARTIFACT_SCANNER_ENABLED
+              value: {{ .Values.artifactScanner.enabled | quote }}
+            - name: ARTIFACT_SCANNER_CLAIM_LEASE_SECONDS
+              value: {{ .Values.artifactScanner.claimLeaseSeconds | quote }}
+            - name: ARTIFACT_SCANNER_NAMESPACE
+              value: {{ include "opencrane.artifactScanner.namespace" . | quote }}
             {{- include "opencrane.observabilityEnv" (dict "ctx" $ "component" "opencrane-server") | nindent 12 }}
             {{- with .Values.clustertenantManager.oidc }}
             {{- if .issuerUrl }}

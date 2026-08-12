@@ -15,6 +15,7 @@ enforced identically on both sides.
 | [`artifacts`](./artifacts/main/README.md) | Content-addressed artifact types and invariants. |
 | [`authorization`](./authorization/main/README.md) | Capabilities, proofs, and the pure allow/deny function. |
 | [`conversations`](./conversations/main/README.md) | Conversation modes, lifecycle, messages, timeline coordinates, and pure command decisions. |
+| [`conversation-assets`](./conversation-assets/main/README.md) | Durable file lifecycle, media policy, and per-message limits. |
 
 ```
                  libs/models  (pure — no I/O)

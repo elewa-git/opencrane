@@ -62,8 +62,8 @@ export function validatePolicy(policy)
 		throw new Error("invalid Prisma-boundary policy schema");
 	}
 	const entries = [
-		...policy.owners.repositories.map(function _Repository(entry) { return { ...entry, expectedSuffix: "Repository" }; }),
-		...policy.owners.unitsOfWork.map(function _UnitOfWork(entry) { return { ...entry, expectedSuffix: "UnitOfWork" }; }),
+		...policy.owners.repositories.map(function _Repository(entry) { return { ...entry, expectedAdapterSuffix: "Repository" }; }),
+		...policy.owners.unitsOfWork.map(function _UnitOfWork(entry) { return { ...entry, expectedAdapterSuffix: "UnitOfWork" }; }),
 	];
 	const keys = new Set();
 	for (const entry of entries)
@@ -71,10 +71,9 @@ export function validatePolicy(policy)
 		const valid = _IsExactTypeScriptPath(entry?.path)
 			&& typeof entry?.adapter === "string"
 			&& /^[A-Za-z_$][\w$]*$/u.test(entry.adapter)
-			&& entry.adapter.endsWith(entry.expectedSuffix)
+			&& entry.adapter.endsWith(entry.expectedAdapterSuffix)
 			&& typeof entry?.contract === "string"
 			&& /^[A-Za-z_$][\w$]*$/u.test(entry.contract)
-			&& entry.contract.endsWith(entry.expectedSuffix)
 			&& _IsExactImportPath(entry?.contractImportPath)
 			&& Array.isArray(entry?.constructs)
 			&& entry.constructs.every(_IsExactConstruction);

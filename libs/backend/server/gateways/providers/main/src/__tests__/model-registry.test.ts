@@ -43,7 +43,7 @@ function _mockPrisma(store: Map<string, Row>, credentials: Map<string, Row> = ne
       {
         const id = `model-${++seq}`;
         const now = new Date("2026-06-18T00:00:00.000Z");
-        const row = { id, apiBase: null, isDefault: false, providerCredentialId: null, clusterTenant: null, createdAt: now, updatedAt: now, ...args.data };
+        const row = { id, apiBase: null, isDefault: false, providerCredentialId: null, generatedOutputCapabilities: [], clusterTenant: null, createdAt: now, updatedAt: now, ...args.data };
         store.set(id, row);
         return row;
       },
@@ -120,6 +120,18 @@ describe("modelRegistryRouter", function _suite()
     expect(res.body.scope).toBe("global");
     // No live LiteLLM → no outbound registration call.
     expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("persists only the explicit generated-output capability allowlist", async function _GeneratedOutputCapabilities()
+  {
+    const app = _buildApp(_mockPrisma(new Map()));
+    const accepted = await request(app).post("/api/v1/models").send({ publicModelName: "openai/gpt-4o", upstreamModel: "openai/gpt-4o", generatedOutputCapabilities: ["image_png", "code_execution_files"] });
+    const refused = await request(app).post("/api/v1/models").send({ publicModelName: "openai/gpt-4o-mini", upstreamModel: "openai/gpt-4o-mini", generatedOutputCapabilities: ["code_execution"] });
+
+    expect(accepted.status).toBe(201);
+    expect(accepted.body.generatedOutputCapabilities).toEqual(["image_png", "code_execution_files"]);
+    expect(refused.status).toBe(400);
+    expect(refused.body.code).toBe("VALIDATION_ERROR");
   });
 
   it("registers with LiteLLM and stores the returned model id when configured", async function _createConfigured()

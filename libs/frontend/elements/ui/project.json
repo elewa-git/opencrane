@@ -34,7 +34,8 @@
 				"{workspaceRoot}/libs/frontend/elements/a2ui/src/**/*",
 				"{workspaceRoot}/libs/frontend/features/onboarding/src/**/*",
 				"{workspaceRoot}/libs/frontend/features/context/src/**/__tests__/*.stories.ts",
-				"{workspaceRoot}/libs/frontend/features/context/src/lib/components/canvas-doc/**/*"
+				"{workspaceRoot}/libs/frontend/features/context/src/lib/components/canvas-doc/**/*",
+				"{workspaceRoot}/libs/frontend/features/conversation-assets/src/**/*"
 			],
 			"options": {
 				"browserTarget": "frontend-elements-ui:build-storybook",
@@ -64,7 +65,8 @@
 				"{workspaceRoot}/libs/frontend/elements/a2ui/src/**/*",
 				"{workspaceRoot}/libs/frontend/features/onboarding/src/**/*",
 				"{workspaceRoot}/libs/frontend/features/context/src/**/__tests__/*.stories.ts",
-				"{workspaceRoot}/libs/frontend/features/context/src/lib/components/canvas-doc/**/*"
+				"{workspaceRoot}/libs/frontend/features/context/src/lib/components/canvas-doc/**/*",
+				"{workspaceRoot}/libs/frontend/features/conversation-assets/src/**/*"
 			],
 			"outputs": [
 				"{options.outputDir}"

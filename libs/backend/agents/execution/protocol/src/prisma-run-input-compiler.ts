@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 
 import type { Prisma } from "@prisma/client";
 
-import type { CompiledMessage, CompiledModelRoute, CompiledRunInput, CompiledToolDefinition, MemoryFactReference, RunInputSnapshot, RunInputSnapshotIntegrationAssignment } from "@opencrane/contracts";
+import { GeneratedOutputCapability, type CompiledMessage, type CompiledModelRoute, type CompiledRunInput, type CompiledToolDefinition, type MemoryFactReference, type RunInputSnapshot, type RunInputSnapshotIntegrationAssignment } from "@opencrane/contracts";
 import { __AreReviewedIntegrationToolDefinitionsValid, type ReviewedIntegrationToolDefinition } from "@opencrane/models/agents";
 import { ___CloneCanonicalJson, type JsonValue } from "@opencrane/util";
 import { __CompileRunInput } from "@opencrane/backend/agents/execution/inputs";
@@ -191,5 +191,6 @@ async function _resolveModelRoute(transaction: Prisma.TransactionClient, modelRo
 	const requested = typeof route["alias"] === "string" ? route["alias"] : publicModelName;
 	const maxOutputTokens = typeof route["maxOutputTokens"] === "number" && Number.isSafeInteger(route["maxOutputTokens"]) && route["maxOutputTokens"] > 0 ? route["maxOutputTokens"] : null;
 	const definition = requested.length > 0 ? await transaction.modelDefinition.findFirst({ where: { publicModelName: requested } }) : null;
-	return { modelAlias: definition?.publicModelName ?? requested, maxOutputTokens };
+	const generatedOutputCapabilities = definition?.generatedOutputCapabilities.filter(function _SupportedCapability(capability): capability is GeneratedOutputCapability { return capability === GeneratedOutputCapability.ImagePng || capability === GeneratedOutputCapability.CodeExecutionFiles; }) ?? [];
+	return { modelAlias: definition?.publicModelName ?? requested, maxOutputTokens, generatedOutputCapabilities };
 }

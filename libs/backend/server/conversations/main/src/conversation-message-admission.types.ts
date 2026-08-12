@@ -1,5 +1,19 @@
 import type { ConversationCaller, ConversationMessageView, SubmitConversationMessageRequest, SubmitConversationMessageResult } from "./conversation-authority.types.js";
 import type { ConversationCommandContext } from "./prisma-conversation-query-repository.types.js";
+import type { RunAdmissionTransaction } from "@opencrane/backend/agents/execution/runs";
+
+/** Transaction-bound participant attachment admission owned by conversation assets. */
+export interface ConversationAttachmentAdmissionPort
+{
+	/** Bind every referenced ready asset to the newly persisted message or roll the transaction back. */
+	bindReadyAssets(caller: ConversationCaller, conversationId: string, messageId: string, blocks: SubmitConversationMessageRequest["blocks"]): Promise<void>;
+}
+
+/** Creates attachment admission over an already-open conversation/run transaction. */
+export interface ConversationAttachmentAdmissionFactory
+{
+	(transaction: Pick<RunAdmissionTransaction, "prisma">): ConversationAttachmentAdmissionPort;
+}
 
 /** Internal authority that owns participant-message admission and retry semantics. */
 export interface ConversationMessageAdmissionUnitOfWork

@@ -216,6 +216,34 @@
         "constructs": []
       },
       {
+        "path": "libs/backend/server/agents/artifacts/main/src/prisma-artifact-scan-repository.ts",
+        "adapter": "PrismaArtifactScanRepository",
+        "contract": "ArtifactScanRepository",
+        "contractImportPath": "./artifact-scanning.types.js",
+        "constructs": []
+      },
+      {
+        "path": "libs/backend/server/conversation-assets/main/src/prisma-conversation-asset-repository.ts",
+        "adapter": "PrismaConversationAssetRepository",
+        "contract": "ConversationAssetRepository",
+        "contractImportPath": "./conversation-asset.repository.types.js",
+        "constructs": []
+      },
+      {
+        "path": "libs/backend/server/conversation-assets/main/src/prisma-conversation-attachment-admission.ts",
+        "adapter": "PrismaConversationAttachmentAdmissionRepository",
+        "contract": "ConversationAttachmentAdmissionPort",
+        "contractImportPath": "@opencrane/backend/server/conversations",
+        "constructs": []
+      },
+      {
+        "path": "libs/backend/server/conversation-assets/main/src/prisma-conversation-asset-output-repository.ts",
+        "adapter": "PrismaConversationAssetOutputRepository",
+        "contract": "ConversationAssetOutputRepository",
+        "contractImportPath": "./conversation-asset-output.types.js",
+        "constructs": []
+      },
+      {
         "path": "libs/backend/server/agents/artifacts/main/src/prisma-artifact-catalogue-repository.ts",
         "adapter": "PrismaArtifactCatalogueRepository",
         "contract": "ArtifactReadLeaseRepository",
@@ -558,6 +586,42 @@
           {
             "adapter": "PrismaArtifactPreprocessRepository",
             "importPath": "./prisma-artifact-preprocessing.js"
+          }
+        ]
+      },
+      {
+        "path": "libs/backend/server/agents/artifacts/main/src/prisma-artifact-scan-unit-of-work.ts",
+        "adapter": "PrismaArtifactScanUnitOfWork",
+        "contract": "ArtifactScanRepository",
+        "contractImportPath": "./artifact-scanning.types.js",
+        "constructs": [
+          {
+            "adapter": "PrismaArtifactScanRepository",
+            "importPath": "./prisma-artifact-scan-repository.js"
+          }
+        ]
+      },
+      {
+        "path": "libs/backend/server/conversation-assets/main/src/prisma-conversation-asset-unit-of-work.ts",
+        "adapter": "PrismaConversationAssetUnitOfWork",
+        "contract": "ConversationAssetAuthority",
+        "contractImportPath": "./conversation-asset.router.types.js",
+        "constructs": [
+          {
+            "adapter": "PrismaConversationAssetRepository",
+            "importPath": "./prisma-conversation-asset-repository.js"
+          }
+        ]
+      },
+      {
+        "path": "libs/backend/server/conversation-assets/main/src/prisma-conversation-asset-output-unit-of-work.ts",
+        "adapter": "PrismaConversationAssetOutputUnitOfWork",
+        "contract": "ConversationAssetOutputAuthority",
+        "contractImportPath": "./conversation-asset-output.types.js",
+        "constructs": [
+          {
+            "adapter": "PrismaConversationAssetOutputRepository",
+            "importPath": "./prisma-conversation-asset-output-repository.js"
           }
         ]
       },
@@ -911,6 +975,7 @@
 		"libs/backend/agents/execution/inputs/main/src/prisma-session-assembly-authorities.ts",
 		"libs/backend/agents/execution/admission/main/src/personal-run-admission.composition.ts",
 		"libs/backend/server/agents/artifacts/main/src/prisma-artifact-authority.composition.ts",
+		"libs/backend/server/conversation-assets/main/src/prisma-conversation-asset.composition.ts",
 		"libs/backend/server/conversations/main/src/prisma-conversation-replay.composition.ts",
 		"libs/backend/server/conversations/main/src/prisma-self-conversation-replay.router.ts",
 		"libs/backend/server/conversations/main/src/prisma-self-conversations.router.ts",

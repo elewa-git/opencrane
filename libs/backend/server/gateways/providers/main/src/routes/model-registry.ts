@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { ModelRoutingScope, type ModelDefinition, type ModelDefinitionWrite } from "@opencrane/contracts";
+import { GeneratedOutputCapability, ModelRoutingScope, type ModelDefinition, type ModelDefinitionWrite } from "@opencrane/contracts";
 import type { Prisma, PrismaClient, ModelDefinition as PrismaModelDefinition } from "@prisma/client";
 
 import { _ClusterTenantScopeGuard, type ClusterTenantScopedResource } from "@opencrane/backend/server/tenancy/cluster-tenants";
@@ -24,6 +24,7 @@ function _toContract(row: PrismaModelDefinition): ModelDefinition
     apiBase: row.apiBase,
     isDefault: row.isDefault,
     providerCredentialId: row.providerCredentialId,
+    generatedOutputCapabilities: row.generatedOutputCapabilities as GeneratedOutputCapability[],
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   };
@@ -64,6 +65,12 @@ function _validateWrite(body: Record<string, unknown>): { error: string; code: s
   if (scope === ModelRoutingScope.ClusterTenant && !(typeof body.clusterTenant === "string" && body.clusterTenant.trim()))
   {
     return { error: "clusterTenant is required when scope is 'clusterTenant'.", code: "VALIDATION_ERROR" };
+  }
+
+  const generatedOutputCapabilities = body.generatedOutputCapabilities ?? [];
+  if (!Array.isArray(generatedOutputCapabilities) || generatedOutputCapabilities.some(function _UnsupportedCapability(capability) { return capability !== GeneratedOutputCapability.ImagePng && capability !== GeneratedOutputCapability.CodeExecutionFiles; }))
+  {
+    return { error: "generatedOutputCapabilities contains an unsupported capability.", code: "VALIDATION_ERROR" };
   }
 
   return null;
@@ -209,6 +216,7 @@ export function modelRegistryRouter(prisma: PrismaClient): Router
         apiBase: write.apiBase?.trim() || null,
         isDefault: write.isDefault ?? false,
         providerCredentialId: write.providerCredentialId ?? null,
+        generatedOutputCapabilities: write.generatedOutputCapabilities ?? [],
       },
     });
     res.status(201).json(_toContract(created));
@@ -256,6 +264,7 @@ export function modelRegistryRouter(prisma: PrismaClient): Router
       apiBase: write.apiBase?.trim() || null,
       isDefault: write.isDefault ?? false,
       providerCredentialId: write.providerCredentialId ?? null,
+      generatedOutputCapabilities: write.generatedOutputCapabilities ?? [],
     };
     const updated = await prisma.modelDefinition.update({ where: { id: req.params.id }, data });
     res.json(_toContract(updated));

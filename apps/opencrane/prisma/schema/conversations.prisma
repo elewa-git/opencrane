@@ -52,6 +52,8 @@ model Conversation {
   contextRevisions     ConversationContextRevision[] @relation("ConversationContextRevisions")
   runs                 AgentRun[]
   activeContext        ConversationContextRevision?  @relation("ActiveConversationContext", fields: [id, contextRevisionId], references: [conversationId, id], onDelete: Restrict)
+  assets               ConversationAsset[]
+  assetOutputTickets   ConversationAssetOutputTicket[]
   service              AgentService?                 @relation(fields: [agentServiceId, siloId], references: [id, siloId], onDelete: Restrict)
 
   @@unique([id, siloId])
@@ -92,6 +94,7 @@ model ConversationMessage {
   completedAt    DateTime?                  @map("completed_at")
   conversation   Conversation               @relation(fields: [conversationId], references: [id], onDelete: Restrict)
   timelineEntry  ConversationTimelineEntry?
+  assets         ConversationAsset[]
 
   @@unique([conversationId, id])
   @@unique([conversationId, idempotencyKey])
@@ -104,13 +107,17 @@ model ConversationRunEvent {
   runId           String                     @map("run_id")
   sequence        Int
   type            String
+  messageId       String?                    @map("message_id")
   payload         Json
   occurredAt      DateTime                   @default(now()) @map("occurred_at")
   conversation    Conversation               @relation(fields: [conversationId], references: [id], onDelete: Restrict)
   timelineEntry   ConversationTimelineEntry?
+  assets          ConversationAsset[]
+  assetOutputTickets ConversationAssetOutputTicket[]
 
   @@id([runId, sequence])
   @@unique([conversationId, runId, sequence])
+  @@index([runId, messageId])
   @@index([runId, occurredAt])
   @@map("conversation_run_events")
 }

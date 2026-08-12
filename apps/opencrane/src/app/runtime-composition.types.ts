@@ -20,6 +20,8 @@ export interface InternalRuntimeComposition
 	readonly skillAuthoringCompletion: Router;
 	/** Optional preprocessor router, present only when the restricted worker plane is enabled. */
 	readonly artifactPreprocessor: Router | null;
+	/** Optional malware-scanner router, present only when its isolated worker plane is enabled. */
+	readonly artifactScanner: Router | null;
 	/** Optional router that enforces replay policy; the controller decides whether it is mounted. */
 	readonly conversationReplay: Router | null;
 	/** Router that resolves a browser channel for a workload-authenticated caller, alongside the replay receiver. */
@@ -28,6 +30,8 @@ export interface InternalRuntimeComposition
 	readonly runtimeBootstrap: Router;
 	/** Runtime server-sent-event stream and candidate-ingest router. */
 	readonly runtimeStream: Router;
+	/** Runtime-only broker for generated conversation-file output. */
+	readonly conversationAssetOutputs: Router;
 }
 
 /** The subset of routers built by the controller-only composition step. */
@@ -43,7 +47,7 @@ export type SkillWorkloadRuntimeComposition = Pick<
 >;
 
 /** The subset of routers built by the runtime-protocol composition step. */
-export type RuntimeProtocolComposition = Pick<InternalRuntimeComposition, "runtimeBootstrap" | "runtimeStream">;
+export type RuntimeProtocolComposition = Pick<InternalRuntimeComposition, "runtimeBootstrap" | "runtimeStream" | "conversationAssetOutputs">;
 
 /** The subset of routers built by the optional worker and replay composition step. */
-export type OptionalRuntimeComposition = Pick<InternalRuntimeComposition, "artifactPreprocessor" | "channelTargetResolver" | "conversationReplay">;
+export type OptionalRuntimeComposition = Pick<InternalRuntimeComposition, "artifactPreprocessor" | "artifactScanner" | "channelTargetResolver" | "conversationReplay">;
