@@ -43,7 +43,7 @@ function _Transaction(): never
 		conversationMessage: { findMany: vi.fn().mockResolvedValue([]) },
 		artifactRevision: { findMany: vi.fn().mockResolvedValue([]) },
 		skillRevision: { findMany: vi.fn().mockResolvedValue([]) },
-		modelDefinition: { findFirst: vi.fn().mockResolvedValue({ publicModelName: "model-1" }) },
+		modelDefinition: { findFirst: vi.fn().mockResolvedValue({ publicModelName: "model-1", generatedOutputCapabilities: [] }) },
 	} as never;
 }
 

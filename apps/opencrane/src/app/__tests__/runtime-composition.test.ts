@@ -94,7 +94,7 @@ describe("_CreateInternalRuntimeComposition", function _internalRuntimeCompositi
 	{
 		const config = { ..._RuntimeConfig(), artifactScannerEnabled: true, artifactScannerNamespace: "opencrane-server" };
 
-		expect(function _composeCrossedScannerPlane() { _CreateInternalRuntimeComposition({} as PrismaClient, {} as AuthenticationV1Api, config, new __UnavailableMemoryGatewayClient()); }).toThrow(/different from POD_NAMESPACE/);
+		expect(function _composeCrossedScannerPlane() { _CreateInternalRuntimeComposition({} as PrismaClient, {} as AuthenticationV1Api, config); }).toThrow(/different from POD_NAMESPACE/);
 	});
 
 	it("composes both optional planes only after their concrete boundaries are configured", function _composesOptionalPlanes()
@@ -122,7 +122,7 @@ describe("_CreateInternalRuntimeComposition", function _internalRuntimeCompositi
 	{
 		const config = { ..._RuntimeConfig(), artifactScannerEnabled: true, artifactScannerNamespace: undefined };
 
-		expect(function _composeScannerWithoutNamespace() { _CreateInternalRuntimeComposition({} as PrismaClient, {} as AuthenticationV1Api, config, new __UnavailableMemoryGatewayClient()); }).toThrow(/restricted workload namespace must be valid/);
+		expect(function _composeScannerWithoutNamespace() { _CreateInternalRuntimeComposition({} as PrismaClient, {} as AuthenticationV1Api, config); }).toThrow(/restricted workload namespace must be valid/);
 	});
 
 	it("refuses an enabled worker plane without a separate namespace", function _rejectsWorkerWithoutNamespace()
