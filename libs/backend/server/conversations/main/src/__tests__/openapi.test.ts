@@ -77,4 +77,13 @@ describe("participant conversation OpenAPI", function _Suite()
 		const schema = _SuccessSchema("/me/conversations/{parentConversationId}/agent-threads/{childConversationId}/read-through", "put", 200);
 		expect(schema).toMatchObject({ additionalProperties: false, required: ["outcome", "readThroughPosition"], properties: { outcome: { enum: ["changed", "idempotent"] }, readThroughPosition: { pattern: "^(0|[1-9][0-9]*)$" } } });
 	});
+
+	it("publishes distinct started and idempotent run-retry outcomes", function _RetriesRun()
+	{
+		const started = _SuccessSchema("/me/conversations/{conversationId}/runs/{runId}/retry", "post", 201);
+		const idempotent = _SuccessSchema("/me/conversations/{conversationId}/runs/{runId}/retry", "post", 200);
+
+		expect(started).toMatchObject({ additionalProperties: false, required: ["outcome", "runId", "attempt"], properties: { outcome: { enum: ["started"] }, attempt: { minimum: 2 } } });
+		expect(idempotent).toMatchObject({ additionalProperties: false, required: ["outcome", "runId", "attempt"], properties: { outcome: { enum: ["idempotent"] }, attempt: { minimum: 2 } } });
+	});
 });

@@ -92,15 +92,15 @@ export async function __StartNextRunAttempt(repository: AgentRunAuthorityReposit
 	{
 		return { outcome: "denied", reason: "run_not_terminal" };
 	}
-	if (authority.agentServiceState !== "active")
+	if (!couldBeIdempotentRetry && authority.agentServiceState !== "active")
 	{
 		return { outcome: "denied", reason: "agent_service_inactive" };
 	}
-	if (authority.agentServiceSiloId !== run.siloId)
+	if (!couldBeIdempotentRetry && authority.agentServiceSiloId !== run.siloId)
 	{
 		return { outcome: "denied", reason: "agent_service_silo_mismatch" };
 	}
-	if (authority.activeAgentRevisionId !== run.agentRevisionId)
+	if (!couldBeIdempotentRetry && authority.activeAgentRevisionId !== run.agentRevisionId)
 	{
 		return { outcome: "denied", reason: "agent_revision_superseded" };
 	}

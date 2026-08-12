@@ -11,7 +11,7 @@ not bind an agent and their ordinary messages never manufacture runs.
 
 ```
  authenticated participant
-          │ directory · list · create · open · message · archive · close · replay
+          │ directory · list · create · open · message · retry run · archive · close · replay
           ▼
  ┌──────────────────────────────────────────┐
  │ conversations  ◄── HERE                   │
@@ -74,7 +74,9 @@ the participant from the signed-in browser session.
 ## Public surface
 
 - `_CreateSelfConversationsRouter` composes the privacy-safe creation directory, participant-bound list, create, open, message,
-  Agent-thread mark-read, archive, and close API over Prisma and the internal run-admission port.
+  Agent-thread mark-read, failed-run retry, archive, and close API over Prisma and the internal
+  execution ports. Retry accepts only an observed terminal attempt and a fresh idempotency key; all
+  identity and authority coordinates come from the signed-in route and are rechecked transactionally.
 - `_CreateConversationReplayRepository` composes replay over one `RepeatableRead` transaction so
   access-ending races cannot expose later events.
 - `__CreateConversationReplayRouter` mounts internal context-authorized AG-UI snapshot-to-live replay.

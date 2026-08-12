@@ -60,12 +60,16 @@ rejected with `admission_concurrency_limited`; it does not turn a hot service ro
 unbounded connection pool. The production entrypoint must use this gate before calling
 `PrismaRunAdmissionRepository.admit()` and must keep its policy aligned with the database pool budget.
 
-`__StartNextRunAttempt` is a **compare-and-swap** retry state machine: it reads the run and its
-AgentService authority as one snapshot, refuses unless the run is in a retryable terminal state and the
-service is active with the exact revision the run pins, then atomically increments the attempt while
-re-checking every one of those facts — closing the race where two retries fire at once. In the same
-transaction it appends a `RunAttemptRequested` event to the **outbox** (a durable table the dispatcher
-polls) so a started attempt can never be lost between deciding and launching.
+`__StartNextRunAttempt` is a **compare-and-swap** retry state machine. The browser supplies the
+terminal attempt it actually saw and a fresh retry key; the server supplies the signed-in subject,
+host-selected silo, conversation, and run coordinates. The transaction requires current organisation
+membership and continuing participation in that exact conversation. It refuses unless the run is in
+a retryable terminal state and the service is active with the exact revision the run pins, then
+atomically increments the attempt while re-checking every fact — closing the race where two retries
+fire at once. In the same transaction it appends a `RunAttemptRequested` event to the **outbox** (a
+durable table the dispatcher polls) so a started attempt can never be lost between deciding and
+launching. Repeating the same retry key returns that durable next attempt; a different key for the
+already-advanced terminal attempt is a conflict.
 
 `__ValidateRunWorkloadAssignment` is the mirror check at launch time: it accepts only a one-attempt
 Job, confirms the workload's full identity (who / where / which attempt) matches the expected authority exactly, and selects the dedicated personal or managed namespace together with its matching projected-token audience and ServiceAccount grammar.

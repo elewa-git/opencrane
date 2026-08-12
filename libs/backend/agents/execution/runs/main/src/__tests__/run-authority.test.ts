@@ -164,6 +164,17 @@ describe("single AgentRun authority", function _suite()
 		expect((await repository.getRunAuthority("run-1"))?.run.attempt).toBe(2);
 	});
 
+	it("returns the durable same-key attempt even when the service later retires", async function _IdempotentAfterRetirement()
+	{
+		const run = { ..._run(), attempt: 2, state: "accepted" as const, acceptedAt: "2026-07-18T01:00:00.000Z", startedAt: null, finishedAt: null, terminalReason: null };
+		const repository: AgentRunAuthorityRepository = {
+			getRunAuthority: async function _Get() { return { run, agentServiceState: "retired", agentServiceSiloId: "silo-1", activeAgentRevisionId: "revision-2" }; },
+			startNextAttemptAtomically: async function _Start() { return { status: "idempotent", run }; },
+		};
+
+		await expect(__StartNextRunAttempt(repository, _command())).resolves.toEqual({ outcome: "idempotent", run });
+	});
+
 	it("denies retry when the AgentService is retired before the authority read", async function _retiredService()
 	{
 		const repository = new _RunRepository("retired");
