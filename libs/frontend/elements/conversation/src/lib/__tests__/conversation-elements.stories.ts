@@ -5,7 +5,8 @@ import { AvatarTones } from "@opencrane/elements/ui";
 
 import { ConversationComposerComponent } from "../conversation-composer.component.js";
 import { ConversationMessageComponent } from "../conversation-message.component.js";
-import { ConversationComposerStates, ConversationMessageTones } from "../conversation.types.js";
+import { ConversationStatusLineComponent } from "../conversation-status-line.component.js";
+import { ConversationComposerStates, ConversationMessageTones, ConversationStatusTones } from "../conversation.types.js";
 
 /** Storybook metadata for controlled reusable conversation primitives. */
 const meta: Meta<ConversationComposerComponent> =
@@ -41,7 +42,7 @@ export const DesktopConversation: Story =
 /** Compact disabled composer keeps the controlled draft visible and keyboard focus clear. */
 export const CompactDisabledComposer: Story =
 {
-	tags: ["visual-test-narrow"],
+	tags: ["visual-test", "visual-test-narrow"],
 	parameters: { viewport: { defaultViewport: "mobile1" } },
 	args: { draft: "This draft stays visible while reconnecting.", state: ConversationComposerStates.Disabled, placeholder: "Waiting…" },
 	render: function render(args) { return { props: args, template: `<div style="width:390px;min-height:844px;padding:12px"><wo-conversation-composer [draft]="draft" [state]="state" [placeholder]="placeholder" /></div>` }; },
@@ -50,5 +51,23 @@ export const CompactDisabledComposer: Story =
 		const canvas = within(canvasElement);
 		await expect(canvas.getByRole("textbox", { name: "Message" })).toBeDisabled();
 		await expect(canvas.getByDisplayValue("This draft stays visible while reconnecting.")).toBeVisible();
+	}
+};
+
+/** Shared submitting state keeps the displayed draft while suppressing another send. */
+export const SubmittingComposer: Story =
+{
+	tags: ["visual-test"],
+	args: { draft: "Submitting this follow-up…", state: ConversationComposerStates.Submitting },
+	render: function render(args) { return { props: args, template: `<div style="max-width:720px;padding:20px"><wo-conversation-composer [draft]="draft" [state]="state" /></div>` }; }
+};
+
+/** Message authorship and status urgency states remain finite shared visual contracts. */
+export const MessageAndStatusStates: Story =
+{
+	tags: ["visual-test"],
+	render: function render()
+	{
+		return { props: { messages: [{ id: "participant", authorName: "Alex", authorInitials: "AK", avatarTone: AvatarTones.Blue, timestampLabel: "11:07", body: "Participant message", tone: ConversationMessageTones.Participant }, { id: "agent", authorName: "Nova", authorInitials: "N", avatarTone: AvatarTones.Brand, timestampLabel: "11:08", body: "Agent message", tone: ConversationMessageTones.Agent }, { id: "system", authorName: "OpenCrane", authorInitials: "OC", avatarTone: AvatarTones.Neutral, timestampLabel: "11:09", body: "System notice", tone: ConversationMessageTones.System }], statuses: Object.values(ConversationStatusTones).map(function _Status(tone) { return { label: tone, detail: `Shared ${tone} state`, tone }; }) }, template: `<div style="display:grid;gap:16px;max-width:720px;padding:20px">@for (message of messages; track message.id) { <wo-conversation-message [message]="message" /> } @for (status of statuses; track status.tone) { <wo-conversation-status-line [status]="status" /> }</div>` };
 	}
 };

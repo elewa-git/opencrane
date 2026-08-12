@@ -20,6 +20,9 @@ const _AGENT_OPTIONS: readonly AgentThreadAgentOption[] =
 	{ agentServiceId: "service-research", label: "Research assistant" }
 ];
 
+/** Interaction spy shared by the mention-admission story. */
+const _SUGGESTIONS_REQUESTED = fn();
+
 /** Build one compact parent summary state. */
 function _Summary(state: AgentThreadSummaryStates, overrides: Partial<AgentThreadSummaryPresentation> = {}): AgentThreadSummaryPresentation
 {
@@ -56,11 +59,12 @@ function _Snapshot(state: AgentThreadRunStates = AgentThreadRunStates.Working, o
 		timeline: [
 			{ kind: AgentThreadTimelineEntryKinds.RunBoundary, id: "run-boundary-1", run: { runId: "run-1", ordinal: 1, state, label: _RunLabel(state), detail: _RunDetail(state) } },
 			{ kind: AgentThreadTimelineEntryKinds.Message, id: "message-1", message: { id: "message-1", authorName: "Nova", authorInitials: "N", authoredByAgent: true, timestampLabel: "11:08", body: "I am comparing the commercial terms and renewal obligations." } },
-			{ kind: AgentThreadTimelineEntryKinds.Delivery, id: "delivery-1", delivery }
+			{ kind: AgentThreadTimelineEntryKinds.Delivery, id: "delivery:delivery-1", delivery }
 		],
 		cursor: "opaque-story-cursor",
 		latestPosition: "3",
 		representedThroughPosition: "3",
+		visibleThroughPosition: "3",
 		canSendFollowUp: state === AgentThreadRunStates.Completed,
 		...overrides
 	};
@@ -132,6 +136,14 @@ async function _AssertPage({ canvasElement }: { readonly canvasElement: HTMLElem
 	await expect(canvas.getByText("@agent compare the supplier counterproposal and flag the renewal risk")).toBeVisible();
 }
 
+/** Assert the deep-linked child target receives focus after the authorized view renders. */
+async function _AssertDeepLinkedPage(context: { readonly canvasElement: HTMLElement }): Promise<void>
+{
+	await _AssertPage(context);
+	const target = context.canvasElement.querySelector<HTMLElement>("#delivery\\:delivery-1");
+	await expect(target).toHaveFocus();
+}
+
 /** Storybook metadata for group Agent-thread states and route surfaces. */
 const meta: Meta<AgentThreadPageComponent> =
 {
@@ -151,13 +163,15 @@ export const MentionAdmissionStates: Story =
 	tags: ["visual-test"],
 	render: function render()
 	{
-		return { props: { states: Object.values(AgentThreadAdmissionStates), options: _AGENT_OPTIONS, selected: fn() }, template: `<div style="display:grid;gap:14px;max-width:780px;padding:20px">@for (state of states; track state) { <div><strong>{{ state }}</strong><wo-agent-thread-mention-control [state]="state" [suggestions]="options" (targetChange)="selected($event)" /></div> }</div>` };
+		return { props: { states: Object.values(AgentThreadAdmissionStates), options: _AGENT_OPTIONS, requested: _SUGGESTIONS_REQUESTED, selected: fn() }, template: `<div style="display:grid;gap:14px;max-width:780px;padding:20px">@for (state of states; track state) { <div><strong>{{ state }}</strong><wo-agent-thread-mention-control [state]="state" [suggestions]="options" (suggestionsRequested)="requested($event)" (targetChange)="selected($event)" /></div> }</div>` };
 	},
 	play: async function play({ canvasElement })
 	{
 		const canvas = within(canvasElement);
-		await expect(canvas.getAllByRole("button", { name: "Start Agent thread" })).toHaveLength(2);
-		await userEvent.tab();
+		await expect(canvas.getAllByRole("combobox")).toHaveLength(2);
+		await userEvent.click(canvas.getAllByRole("combobox")[0]);
+		await userEvent.type(canvas.getAllByRole("combobox")[0], "Nova");
+		await expect(_SUGGESTIONS_REQUESTED).toHaveBeenCalledWith("Nova");
 		await expect(canvas.getAllByRole("combobox")[0]).toHaveFocus();
 	}
 };
@@ -183,7 +197,7 @@ export const ChildQueued: Story = { ..._PageStory(_Snapshot(AgentThreadRunStates
 export const ChildWorking: Story = { ..._PageStory(_Snapshot(AgentThreadRunStates.Working)), tags: ["visual-test"], play: _AssertPage };
 
 /** A deep-linked participant question remains anchored to the immutable root ask. */
-export const ChildDeepLinkedAsk: Story = { ..._PageStory(_Snapshot(AgentThreadRunStates.Waiting, { summary: _Summary(AgentThreadSummaryStates.Waiting, { target: { kind: AgentThreadSummaryTargetKinds.WaitingRequest, id: "delivery:delivery-1" } }) }), { kind: AgentThreadSummaryTargetKinds.WaitingRequest, id: "delivery:delivery-1" }, _ELICITATION), tags: ["visual-test"], play: _AssertPage };
+export const ChildDeepLinkedAsk: Story = { ..._PageStory(_Snapshot(AgentThreadRunStates.Waiting, { summary: _Summary(AgentThreadSummaryStates.Waiting, { target: { kind: AgentThreadSummaryTargetKinds.WaitingRequest, id: "delivery:delivery-1" } }) }), { kind: AgentThreadSummaryTargetKinds.WaitingRequest, id: "delivery:delivery-1" }, _ELICITATION), tags: ["visual-test"], play: _AssertDeepLinkedPage };
 
 /** Completion makes the controlled composer available for the next serial run. */
 export const ChildCompleted: Story = { ..._PageStory(_Snapshot(AgentThreadRunStates.Completed)), tags: ["visual-test"], play: _AssertPage };
@@ -208,7 +222,7 @@ export const CompactReconnectDraft: Story =
 {
 	tags: ["visual-test", "visual-test-narrow"],
 	parameters: { viewport: { defaultViewport: "mobile1" } },
-	render: function render() { return { props: { draft: "Keep the renewal question in my draft." }, template: `<div style="width:390px;min-height:844px;padding:8px"><p><strong>Reconnecting</strong><br>The accepted transcript stays visible.</p><wo-conversation-composer [draft]="draft" [state]="'disabled'" label="Follow up in this Agent thread" /></div>` }; },
+	render: function render() { return { props: { draft: "Keep the renewal question in my draft.", state: ConversationComposerStates.Disabled }, template: `<div style="width:390px;min-height:844px;padding:8px"><p><strong>Reconnecting</strong><br>The accepted transcript stays visible.</p><wo-conversation-composer [draft]="draft" [state]="state" label="Follow up in this Agent thread" /></div>` }; },
 	play: async function play({ canvasElement }) { await expect(within(canvasElement).getByDisplayValue("Keep the renewal question in my draft.")).toBeDisabled(); }
 };
 
@@ -220,7 +234,9 @@ export const AccessChangedAndUnavailable: Story =
 	play: async function play({ canvasElement })
 	{
 		const canvas = within(canvasElement);
-		await expect(canvas.getByRole("heading", { name: "This Agent thread is no longer available" })).toBeVisible();
+		const accessChangedHeading = canvas.getByRole("heading", { name: "This Agent thread is no longer available" });
+		await expect(accessChangedHeading).toBeVisible();
+		await expect(accessChangedHeading).toHaveFocus();
 		await expect(canvas.getByRole("heading", { name: "Agent thread unavailable" })).toBeVisible();
 	}
 };
