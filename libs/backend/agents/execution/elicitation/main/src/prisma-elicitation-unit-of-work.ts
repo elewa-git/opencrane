@@ -2,15 +2,16 @@ import { AgentRunState, ApprovalRequestState, ElicitationBodyKind, ElicitationPu
 
 import { ___DoWithTrace } from "@opencrane/backend/observability";
 import { __DecideDeferredToolRequest, __DigestCanonicalJson, __ExpireDeferredToolApprovalBatch, DeferredToolDecisionKinds, DeferredToolDecisionOutcomes, PrismaToolInvocationElicitationRepository, ToolInvocationStates, type ToolInvocationClaim, type ToolInvocationElicitationRepository, type ToolInvocationRecord } from "@opencrane/backend/server/iam/authorization";
-import { CONVERSATION_ELICITATION_VERSION, ElicitationBodyKinds, ElicitationPurposes, ElicitationRequestStates, type ConversationElicitation, type ElicitationBody, type ElicitationResponseValue, type RunInputSnapshot } from "@opencrane/contracts";
+import { ElicitationBodyKinds, ElicitationPurposes, ElicitationRequestStates, type ConversationElicitation, type ElicitationBody, type ElicitationResponseValue, type RunInputSnapshot } from "@opencrane/contracts";
 import { PERSONAL_MEMORY_RECALL_TOOL_REVISION } from "@opencrane/models/agents";
 import type { JsonValue } from "@opencrane/util";
 
 import { _ElicitationStateForResponse, _IsElicitationResponseValid } from "./elicitation-response.js";
+import { _ElicitationRequestMatchesOpenCommand, _ProjectElicitation as _BuildElicitationProjection } from "./elicitation-persistence-mapping.js";
 import { _ElicitationPurposeStrategies } from "./elicitation-purpose-strategies.js";
 import type { ElicitationPurposeRequest, ElicitationPurposeStrategyRegistry } from "./elicitation-purpose-strategy.types.js";
 import { PersonalMemoryPermissionVerificationOutcomes, type ElicitationRepository, type ElicitationUnitOfWork, type ExpireElicitationBatchCommand, type ExpireElicitationBatchResult, type OpenElicitationCommand, type PersonalMemoryPermissionAuthority, type PersonalMemoryPermissionVerificationResult, type RespondToElicitationCommand, type RespondToElicitationResult } from "./elicitation.types.js";
-import { _ClaimedPersonalMemoryPermissionPayload, _OpenPersonalMemoryPermissionPayload, _PersonalMemoryPurposeMatchesReceipt, _PersonalMemoryQueryDigest } from "./personal-memory-permission-payload.js";
+import { _BuildMemoryPermissionPayload, _BuildMemoryPermissionPayloadForClaimedInvocation, _MemoryPurposeMatchesReceipt, _MemoryQueryDigest } from "./personal-memory-permission-payload.js";
 import { _ParsePersonalMemoryPermissionPayload } from "./personal-memory-permission-payload.validator.js";
 
 /** Prisma repository bound to exactly one serializable elicitation transaction. */
@@ -47,7 +48,7 @@ export class PrismaElicitationRepository implements ElicitationRepository
 		const bodyDigest = __DigestCanonicalJson(command.body as unknown as JsonValue);
 		if (!await _CanParticipantAccess(transaction, command.siloId, command.conversationId, command.assignedParticipantId)) return null;
 		const existing = await transaction.elicitationRequest.findUnique({ where: { runId_attempt_requestKey: { runId: command.runId, attempt: command.attempt, requestKey: command.requestKey } } });
-		if (existing !== null) return _RequestMatchesOpenCommand(existing, command, bodyDigest) ? _Projection(existing) : null;
+		if (existing !== null) return _ElicitationRequestMatchesOpenCommand(existing, command, bodyDigest, _PrismaPurpose(command.purpose), _PrismaBodyKind(command.body.kind)) ? _Projection(existing) : null;
 		const run = await transaction.agentRun.findUnique({ where: { id: command.runId } });
 		if (run === null || run.siloId !== command.siloId || run.conversationId !== command.conversationId || run.attempt !== command.attempt || command.expiresAt.getTime() <= command.now.getTime()) return null;
 		if (run.state === AgentRunState.Running)
@@ -71,7 +72,7 @@ export class PrismaElicitationRepository implements ElicitationRepository
 	/** Open or replay one exact personal-memory permission for the execution user. */
 	async openMemoryPermission(invocation: ToolInvocationRecord, snapshot: RunInputSnapshot, now: Date): Promise<boolean>
 	{
-		const payload = _OpenPersonalMemoryPermissionPayload(invocation, snapshot);
+		const payload = _BuildMemoryPermissionPayload(invocation, snapshot);
 		if (payload === null) return false;
 		const body = { kind: ElicitationBodyKinds.Approval, prompt: "Allow this agent to use your personal memory for this answer?", action: "Use personal memory", target: "Your saved memory", dataUse: "Use remembered facts only for this answer", consequence: "The agent will answer this request using relevant saved memory" } as const;
 		const opened = await this.open({
@@ -96,7 +97,7 @@ export class PrismaElicitationRepository implements ElicitationRepository
 	/** Verify an accepted exact receipt without consuming it or reading personal-memory content. */
 	async verifyMemoryPermission(invocation: ToolInvocationRecord, claim: ToolInvocationClaim, snapshot: RunInputSnapshot, now: Date): Promise<PersonalMemoryPermissionVerificationResult>
 	{
-		const expectedPayload = _ClaimedPersonalMemoryPermissionPayload(invocation, snapshot);
+		const expectedPayload = _BuildMemoryPermissionPayloadForClaimedInvocation(invocation, snapshot);
 		if (expectedPayload === null || !await this._toolInvocations.verifyActiveDispatchClaim(invocation, claim, now)) return { outcome: PersonalMemoryPermissionVerificationOutcomes.Denied };
 		const receipt = await this._transaction.personalMemoryPermissionReceipt.findUnique({ where: { toolInvocationId: invocation.id }, include: { request: true } });
 		if (receipt === null) return { outcome: PersonalMemoryPermissionVerificationOutcomes.Denied };
@@ -117,7 +118,7 @@ export class PrismaElicitationRepository implements ElicitationRepository
 			&& request.assignedParticipantId === invocation.subjectId
 			&& request.resolvedBy === invocation.subjectId
 			&& request.purposePayloadDigest === receipt.purposeDigest
-			&& _PersonalMemoryPurposeMatchesReceipt(request.purposePayload, receipt);
+			&& _MemoryPurposeMatchesReceipt(request.purposePayload, receipt);
 		return { outcome: matches ? PersonalMemoryPermissionVerificationOutcomes.Authorized : PersonalMemoryPermissionVerificationOutcomes.Denied };
 	}
 
@@ -242,7 +243,7 @@ export class PrismaElicitationRepository implements ElicitationRepository
 			&& invocation.subjectId === subjectId
 			&& request.assignedParticipantId === subjectId
 			&& payload.executionSubjectId === subjectId
-			&& payload.queryDigest === _PersonalMemoryQueryDigest(invocation.effectiveArguments as unknown as JsonValue)
+			&& payload.queryDigest === _MemoryQueryDigest(invocation.effectiveArguments as unknown as JsonValue)
 			&& payload.inputSnapshotDigest === snapshot.digest
 			&& payload.personaRevisionId === snapshot.personaRevisionId
 			&& payload.expiresAt === request.expiresAt.toISOString()
@@ -418,62 +419,30 @@ export class PrismaElicitationUnitOfWork implements ElicitationUnitOfWork, Perso
 	}
 }
 
-/** Project a persistence row into the browser-safe contract without protected payloads. */
+/** Project a Prisma row after mapping its persistence enums to the public vocabulary. */
 function _Projection(row: { id: string; conversationId: string; runId: string; attempt: number; assignedParticipantId: string; purpose: ElicitationPurpose; state: ElicitationRequestState; body: Prisma.JsonValue; requiresStepUp: boolean; createdAt: Date; expiresAt: Date; resolvedAt: Date | null; safeReason: string | null }): ConversationElicitation
 {
-	let projection: ConversationElicitation = { version: CONVERSATION_ELICITATION_VERSION, requestId: row.id, conversationId: row.conversationId, runId: row.runId, attempt: row.attempt, assignedParticipantId: row.assignedParticipantId, purpose: _PublicPurpose(row.purpose), state: _PublicState(row.state), body: row.body as unknown as ElicitationBody, requiresStepUp: row.requiresStepUp, requestedAt: row.createdAt.toISOString(), expiresAt: row.expiresAt.toISOString() };
-	if (row.resolvedAt !== null) projection = { ...projection, resolvedAt: row.resolvedAt.toISOString() };
-	if (row.safeReason !== null) projection = { ...projection, safeReason: row.safeReason };
-	return projection;
+	return _BuildElicitationProjection({ ...row, purpose: _PublicPurpose(row.purpose), state: _PublicState(row.state) });
 }
 
-/** Compare every runtime-controlled request field on replay; trusted times may differ between posts. */
-function _RequestMatchesOpenCommand(row: { id: string; siloId: string; conversationId: string; runId: string; attempt: number; assignedParticipantId: string; requestKey: string; purpose: ElicitationPurpose; bodyKind: ElicitationBodyKind; bodyDigest: string; purposePayloadDigest: string; requiresStepUp: boolean }, command: OpenElicitationCommand, bodyDigest: string): boolean
-{
-	return row.id === command.requestId
-		&& row.siloId === command.siloId
-		&& row.conversationId === command.conversationId
-		&& row.runId === command.runId
-		&& row.attempt === command.attempt
-		&& row.assignedParticipantId === command.assignedParticipantId
-		&& row.requestKey === command.requestKey
-		&& row.purpose === _PrismaPurpose(command.purpose)
-		&& row.bodyKind === _PrismaBodyKind(command.body.kind)
-		&& row.bodyDigest === bodyDigest
-		&& row.purposePayloadDigest === command.purposePayloadDigest
-		&& row.requiresStepUp === command.requiresStepUp;
-}
-
-/** Derive deadline expiry for reads without mutating canonical request authority. */
+/** Derive deadline expiry for reads without mutating the stored request. */
 function _ProjectionAt(row: Parameters<typeof _Projection>[0], now: Date): ConversationElicitation
 {
 	if (row.state !== ElicitationRequestState.Requested || row.expiresAt.getTime() > now.getTime()) return _Projection(row);
 	return { ..._Projection(row), state: ElicitationRequestStates.Expired, resolvedAt: now.toISOString(), safeReason: "response_window_expired" };
 }
 
-/** Map public body kinds to persistence vocabulary. */
-function _PrismaBodyKind(kind: ElicitationBodyKinds): ElicitationBodyKind
-{
-	return { [ElicitationBodyKinds.Approval]: ElicitationBodyKind.Approval, [ElicitationBodyKinds.SingleChoice]: ElicitationBodyKind.SingleChoice, [ElicitationBodyKinds.MultipleChoice]: ElicitationBodyKind.MultipleChoice, [ElicitationBodyKinds.FreeText]: ElicitationBodyKind.FreeText }[kind];
-}
+/** Map the public body kind to Prisma vocabulary. */
+function _PrismaBodyKind(kind: ElicitationBodyKinds): ElicitationBodyKind { return { [ElicitationBodyKinds.Approval]: ElicitationBodyKind.Approval, [ElicitationBodyKinds.SingleChoice]: ElicitationBodyKind.SingleChoice, [ElicitationBodyKinds.MultipleChoice]: ElicitationBodyKind.MultipleChoice, [ElicitationBodyKinds.FreeText]: ElicitationBodyKind.FreeText }[kind]; }
 
-/** Map public purposes to persistence vocabulary. */
-function _PrismaPurpose(purpose: ElicitationPurposes): ElicitationPurpose
-{
-	return { [ElicitationPurposes.RuntimeInput]: ElicitationPurpose.RuntimeInput, [ElicitationPurposes.ToolApproval]: ElicitationPurpose.ToolApproval, [ElicitationPurposes.PersonalMemoryPermission]: ElicitationPurpose.PersonalMemoryPermission, [ElicitationPurposes.A2uiAction]: ElicitationPurpose.A2uiAction }[purpose];
-}
+/** Map the public purpose to Prisma vocabulary. */
+function _PrismaPurpose(purpose: ElicitationPurposes): ElicitationPurpose { return { [ElicitationPurposes.RuntimeInput]: ElicitationPurpose.RuntimeInput, [ElicitationPurposes.ToolApproval]: ElicitationPurpose.ToolApproval, [ElicitationPurposes.PersonalMemoryPermission]: ElicitationPurpose.PersonalMemoryPermission, [ElicitationPurposes.A2uiAction]: ElicitationPurpose.A2uiAction }[purpose]; }
 
-/** Map persistence purposes to the public contract. */
-function _PublicPurpose(purpose: ElicitationPurpose): ElicitationPurposes
-{
-	return { [ElicitationPurpose.RuntimeInput]: ElicitationPurposes.RuntimeInput, [ElicitationPurpose.ToolApproval]: ElicitationPurposes.ToolApproval, [ElicitationPurpose.PersonalMemoryPermission]: ElicitationPurposes.PersonalMemoryPermission, [ElicitationPurpose.A2uiAction]: ElicitationPurposes.A2uiAction }[purpose];
-}
+/** Map a Prisma purpose to the public vocabulary. */
+function _PublicPurpose(purpose: ElicitationPurpose): ElicitationPurposes { return { [ElicitationPurpose.RuntimeInput]: ElicitationPurposes.RuntimeInput, [ElicitationPurpose.ToolApproval]: ElicitationPurposes.ToolApproval, [ElicitationPurpose.PersonalMemoryPermission]: ElicitationPurposes.PersonalMemoryPermission, [ElicitationPurpose.A2uiAction]: ElicitationPurposes.A2uiAction }[purpose]; }
 
-/** Map persistence lifecycle to the public contract. */
-function _PublicState(state: ElicitationRequestState): ElicitationRequestStates
-{
-	return { [ElicitationRequestState.Requested]: ElicitationRequestStates.Requested, [ElicitationRequestState.Answered]: ElicitationRequestStates.Answered, [ElicitationRequestState.Declined]: ElicitationRequestStates.Declined, [ElicitationRequestState.Expired]: ElicitationRequestStates.Expired, [ElicitationRequestState.Cancelled]: ElicitationRequestStates.Cancelled }[state];
-}
+/** Map a Prisma lifecycle state to the public vocabulary. */
+function _PublicState(state: ElicitationRequestState): ElicitationRequestStates { return { [ElicitationRequestState.Requested]: ElicitationRequestStates.Requested, [ElicitationRequestState.Answered]: ElicitationRequestStates.Answered, [ElicitationRequestState.Declined]: ElicitationRequestStates.Declined, [ElicitationRequestState.Expired]: ElicitationRequestStates.Expired, [ElicitationRequestState.Cancelled]: ElicitationRequestStates.Cancelled }[state]; }
 
 /** Whether one protected purpose payload is a non-array JSON record. */
 function _Record(value: unknown): value is { readonly [key: string]: JsonValue }

@@ -3,28 +3,36 @@ import { RunInputSnapshotIdentityKinds, type RunInputSnapshot } from "@opencrane
 import { PERSONAL_MEMORY_RECALL_TOOL_REVISION } from "@opencrane/models/agents";
 import type { JsonValue } from "@opencrane/util";
 
-import type { PersonalMemoryPermissionPayload } from "./personal-memory-permission-payload.types.js";
+import type { PersonalMemoryPermissionPayload, PersonalMemoryPermissionReceiptCoordinates } from "./personal-memory-permission-payload.types.js";
 import { _ParsePersonalMemoryPermissionPayload } from "./personal-memory-permission-payload.validator.js";
 
-/** Permission remains actionable for fifteen minutes from invocation admission. */
-const _EXTENSION_MILLISECONDS = 10 * 60 * 1_000;
+/** Keep an accepted permission useful while one authorized invocation is claimed and delivered. */
+const _PERSONAL_MEMORY_PERMISSION_EXTENSION_MILLISECONDS = 10 * 60 * 1_000;
 
-/** Derive the protected permission payload from an exact invocation that is awaiting approval. */
-export function _OpenPersonalMemoryPermissionPayload(invocation: ToolInvocationRecord, snapshot: RunInputSnapshot): PersonalMemoryPermissionPayload | null
+/** Derive the protected permission payload from an invocation awaiting approval. */
+export function _BuildMemoryPermissionPayload(invocation: ToolInvocationRecord, snapshot: RunInputSnapshot): PersonalMemoryPermissionPayload | null
 {
 	if (invocation.state !== ToolInvocationStates.AwaitingApproval) return null;
-	return _PayloadAtRevision(invocation, snapshot, invocation.revision);
+	return _BuildMemoryPermissionPayloadAtRevision(invocation, snapshot, invocation.revision);
 }
 
-/** Reconstruct the original protected payload after approval and claim each advanced the revision. */
-export function _ClaimedPersonalMemoryPermissionPayload(invocation: ToolInvocationRecord, snapshot: RunInputSnapshot): PersonalMemoryPermissionPayload | null
+/** Rebuild the original protected payload after approval and claim advanced two revisions. */
+export function _BuildMemoryPermissionPayloadForClaimedInvocation(invocation: ToolInvocationRecord, snapshot: RunInputSnapshot): PersonalMemoryPermissionPayload | null
 {
 	if (invocation.state !== ToolInvocationStates.Claimed || invocation.revision < 2) return null;
-	return _PayloadAtRevision(invocation, snapshot, invocation.revision - 2);
+	return _BuildMemoryPermissionPayloadAtRevision(invocation, snapshot, invocation.revision - 2);
 }
 
-/** Compare a protected request envelope with the receipt that may allow safe memory delivery. */
-export function _PersonalMemoryPurposeMatchesReceipt(value: unknown, receipt: { readonly toolInvocationId: string; readonly toolInvocationRevision: number; readonly runId: string; readonly attempt: number; readonly executionSubjectId: string; readonly queryDigest: string; readonly inputSnapshotDigest: string; readonly personaRevisionId: string; readonly expiresAt: Date }): boolean
+/** Digest the admitted memory query without retaining its text in permission persistence. */
+export function _MemoryQueryDigest(argumentsValue: JsonValue): string | null
+{
+	if (!_JsonRecord(argumentsValue)) return null;
+	const query = argumentsValue["query"];
+	return typeof query === "string" ? __DigestCanonicalJson(query) : null;
+}
+
+/** Compare the protected purpose envelope with the receipt that authorizes delivery. */
+export function _MemoryPurposeMatchesReceipt(value: unknown, receipt: PersonalMemoryPermissionReceiptCoordinates): boolean
 {
 	const payload = _ParsePersonalMemoryPermissionPayload(value);
 	return payload !== null
@@ -39,10 +47,10 @@ export function _PersonalMemoryPurposeMatchesReceipt(value: unknown, receipt: { 
 		&& payload.expiresAt === receipt.expiresAt.toISOString();
 }
 
-/** Bind immutable invocation, execution-user, query, snapshot, persona, and expiry coordinates. */
-function _PayloadAtRevision(invocation: ToolInvocationRecord, snapshot: RunInputSnapshot, toolInvocationRevision: number): PersonalMemoryPermissionPayload | null
+/** Bind invocation, user, query, snapshot, persona, and expiry coordinates. */
+function _BuildMemoryPermissionPayloadAtRevision(invocation: ToolInvocationRecord, snapshot: RunInputSnapshot, toolInvocationRevision: number): PersonalMemoryPermissionPayload | null
 {
-	const queryDigest = _PersonalMemoryQueryDigest(invocation.effectiveArguments);
+	const queryDigest = _MemoryQueryDigest(invocation.effectiveArguments);
 	if (invocation.toolRevisionId !== PERSONAL_MEMORY_RECALL_TOOL_REVISION
 		|| snapshot.identitySnapshot.kind !== RunInputSnapshotIdentityKinds.User
 		|| snapshot.identitySnapshot.executionSubjectId !== invocation.subjectId
@@ -54,19 +62,11 @@ function _PayloadAtRevision(invocation: ToolInvocationRecord, snapshot: RunInput
 		|| snapshot.personaRevisionId === null
 		|| snapshot.personaRevisionId.trim().length === 0
 		|| queryDigest === null) return null;
-	const expiresAt = new Date(invocation.retryDeadlineAt.getTime() + _EXTENSION_MILLISECONDS);
+	const expiresAt = new Date(invocation.retryDeadlineAt.getTime() + _PERSONAL_MEMORY_PERMISSION_EXTENSION_MILLISECONDS);
 	return { toolInvocationId: invocation.id, toolInvocationRevision, runId: invocation.runId, attempt: invocation.attempt, executionSubjectId: invocation.subjectId, queryDigest, inputSnapshotDigest: snapshot.digest, personaRevisionId: snapshot.personaRevisionId, expiresAt: expiresAt.toISOString() };
 }
 
-/** Digest the exact admitted memory query without retaining it in permission persistence. */
-export function _PersonalMemoryQueryDigest(argumentsValue: JsonValue): string | null
-{
-	if (!_JsonRecord(argumentsValue)) return null;
-	const query = argumentsValue["query"];
-	return typeof query === "string" ? __DigestCanonicalJson(query) : null;
-}
-
-/** Return whether one generic JSON value is a non-array object. */
+/** Whether a JSON value is a non-array object. */
 function _JsonRecord(value: JsonValue): value is { readonly [key: string]: JsonValue }
 {
 	return value !== null && typeof value === "object" && !Array.isArray(value);
