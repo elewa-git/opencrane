@@ -355,16 +355,20 @@ export enum RunCancellationResultStatuses
 branch on these values, persist them, and compare them across a version boundary. Document an enum
 as if the reader is about to write that branch.
 
-On the **enum itself**, state all four:
+The comment on the **enum itself** must answer four questions:
 
-1. **What it is for** — the decision this enum exists to drive.
-2. **Where it is used** — which layers read it and branch on it.
-3. **Where it is stored** — the database column, the API payload, or "in memory only". If the value
-   is persisted or sent over the wire, say so plainly and say that renaming a member is a migration
-   or a breaking API change.
-4. **Whether the set is closed** — what happens when an unknown value arrives.
+- What is it for — the decision this enum exists to drive?
+- Where is it used — which layers read it and branch on it?
+- Where is it stored — a database column, an API payload, or memory only? If it is persisted or sent
+  over the wire, does renaming a member mean a migration or a breaking API change?
+- Is the set closed, and what happens if an unknown value arrives?
 
-On **every member**, say **what state it infers** — what is true of the system when a value holds,
+**Answer them as prose, and never write the questions into the comment.** These are a checklist for
+you, not a template for the reader. A comment with `**What it is for.**` / `**Where it is stored.**`
+headings is a filled-in form, not documentation — fold the answers into ordinary sentences in
+whatever order reads best, and leave out a question that genuinely does not apply.
+
+On **every member**, say what state it infers — what is true of the system when that value holds,
 not a restatement of the name. Include what the holder must do next, what it may no longer do, and
 whether the state is terminal.
 
@@ -382,7 +386,9 @@ MessageDelta = "message.delta",
 Cancelling = "cancelling",
 ```
 
-State the storage and stability on the enum block itself:
+The enum block folds the four answers into prose. Both examples below cover the same ground — what
+it is for, who reads it, whether it is stored, and how closed the set is — without ever naming a
+question:
 
 ```typescript
 /**
@@ -391,6 +397,20 @@ State the storage and stability on the enum block itself:
  * The string values are stored in the database and read by clients, so they cannot be renamed
  * without a migration. Holding one of these values grants nothing on its own: an event says what
  * happened, it does not authorise anything.
+ */
+
+/**
+ * What happened when someone asked to cancel a run, and how much of it is left to do.
+ *
+ * Cancelling is two jobs rather than one. The database marks the run so no further work is accepted,
+ * then, if a Kubernetes Job may already exist, that Job has to be deleted in a separate worker pass.
+ * Hence two success values: `Cancelling` is stopped with cleanup still owed, `Cancelled` is stopped
+ * with nothing left to delete. A caller that treats them as the same will report a run as fully torn
+ * down while its pod is still running.
+ *
+ * The repository returns exactly one of these and the HTTP layer maps it to a response; nothing
+ * inside the transaction branches on it. None of them are persisted, so renaming a member needs no
+ * migration, though it is still a breaking change for API clients.
  */
 ```
 

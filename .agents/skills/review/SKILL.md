@@ -63,9 +63,11 @@ flag: a comment that needs re-reading (verbless noun pile, ritual modifiers, inv
 heavy vocabulary that has a plain equivalent — but grep first and keep any term that names a
 real field, state, or standard; an exported symbol whose JSDoc is a one-line label with no
 `Called by:`, `@param`/`@returns`/`@throws`, or per-outcome caller guidance; a `Called by:` or
-`@see` target that does not exist; and an **enum whose members do not say what state they infer**,
-or whose block omits what it is for, where it is used, and where it is stored. A comment that is
-factually wrong about the code is a `correctness` finding instead.
+`@see` target that does not exist; and an **enum whose members do not say what state they infer**, or
+whose block never says what it is for, where it is used, and where it is stored. Those last three are
+questions to answer in prose, so a block that writes them in as literal `**What it is for.**`-style
+headings is also a finding. A comment that is factually wrong about the code is a `correctness`
+finding instead.
 
 ## Constraints
 

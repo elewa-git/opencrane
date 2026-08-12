@@ -23,27 +23,24 @@ export interface RequestRunCancellationCommand
 }
 
 /**
- * What happened when someone asked to cancel a run.
+ * What happened when someone asked to cancel a run, and how much of it is left to do.
  *
- * **What it is for.** Telling the caller how far the cancellation got, because cancelling is two
- * jobs and not one. First the database marks the run so no further work is accepted, which either
- * succeeds or fails outright. Second, if a Kubernetes Job may already exist for the run, that Job
- * has to be deleted — and that happens later, in a separate worker pass. So `Cancelling` means
- * "stopped, cleanup still owed" and `Cancelled` means "stopped, nothing left to delete". A caller
- * that treats those two as the same thing will report a run as fully torn down while its pod is
- * still running.
+ * Cancelling is two jobs rather than one. The database marks the run so no further work is accepted,
+ * which either succeeds or fails outright. Then, if a Kubernetes Job may already exist for the run,
+ * that Job has to be deleted — and that happens later, in a separate worker pass. Hence two
+ * different success values: `Cancelling` is stopped with cleanup still owed, `Cancelled` is stopped
+ * with nothing left to delete. A caller that treats them as the same will report a run as fully torn
+ * down while its pod is still running.
  *
- * **Where it is used.** The repository returns it, and the HTTP layer maps it to a response for
- * whoever asked for the cancellation. Nothing branches on it inside the transaction.
+ * The repository returns exactly one of these values and the HTTP layer maps it to a response for
+ * whoever asked; nothing inside the transaction branches on it. None of them are persisted, so
+ * renaming a member needs no migration, though it is still a breaking change for API clients.
  *
- * **Where it is stored.** Nowhere. These values are a return type only, so renaming a member needs
- * no migration — but they do reach API clients, so it is still a breaking API change. Watch out for
- * a coincidence here: the run's durable state is the separate Prisma `AgentRunState`, whose
- * `Cancelling` and `Cancelled` members are stored as the very same strings `"cancelling"` and
- * `"cancelled"`. Identical text, different enum. Do not compare a value from here against a
- * database column, and do not assume a change to one enum covers the other.
+ * Mind one overlap. The run's durable state is the separate Prisma `AgentRunState`, whose
+ * `Cancelling` and `Cancelled` members are stored as the very same strings, `"cancelling"` and
+ * `"cancelled"` — identical text, different enum. Never compare a value from here against a database
+ * column, and never assume a change to one enum covers the other.
  *
- * **Closed set.** Every value is listed below, and the repository returns exactly one of them.
  * @see RequestRunCancellationResult for the payload carried with each status.
  * @see RunCancellationConflictReasons for why a `Conflict` was refused.
  */

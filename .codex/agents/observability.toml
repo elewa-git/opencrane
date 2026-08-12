@@ -74,8 +74,9 @@ ritual modifiers, no heavy word where a plain one exists — but keep any term t
 field, state, or standard, and simplify the sentence around it instead. Exported types, classes and
 methods get heavy JSDoc: what it does, what a caller must do differently per outcome, a grepped
 `Called by:` line, and `@param`/`@returns`/`@throws`/`@see`. Use `@see` with the URI for external
-specs, citing the pinned revision, and never invent a URL. For an enum, state what it is for, where
-it is used, where it is stored, and on each member what state it infers.
+specs, citing the pinned revision, and never invent a URL. For an enum, cover in prose what it is for, where
+it is used, where it is stored, and on each member what state it infers — those are questions to
+answer, never headings to write into the comment.
 
 ## Two modes
 
