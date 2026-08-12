@@ -16,7 +16,12 @@ export interface RuntimeBootstrapReviewedIdentity
 	readonly podUid: string;
 }
 
-/** Projected-token reviewer supplied by the OpenCrane process boundary. */
+/**
+ * Asks Kubernetes who a projected ServiceAccount token belongs to.
+ *
+ * This is the only thing that authenticates the bootstrap route — there is no session and no API
+ * key — so the reviewer must be bound to the runtime audience, not a general-purpose one.
+ */
 export interface RuntimeBootstrapTokenReviewer
 {
 	/** Reviews one token against the dedicated agent-runtime audience. */
@@ -92,10 +97,24 @@ export interface RuntimeBootstrapExchangeRecord
 	readonly assignmentAgentRevisionId: string;
 }
 
-/** Persistence boundary that loads bootstrap authority and consumes it exactly once. */
+/**
+ * Loads a bootstrap together with the separate assignment row, then spends it.
+ *
+ * Extends {@link RuntimeBootstrapRepository} with the read half so one dependency covers both. The
+ * read deliberately returns BOTH rows' fields, un-merged, so the router can compare two independent
+ * sources rather than trust either alone.
+ *
+ * Implemented by: ./prisma-runtime-bootstrap-exchange.ts.
+ */
 export interface RuntimeBootstrapExchangeRepository extends RuntimeBootstrapRepository
 {
-	/** Loads the durable bootstrap and its independent assignment authority, or null when absent. */
+	/**
+	 * Loads one bootstrap and the assignment row for the same run attempt.
+	 * @param bootstrapReference - The opaque one-use reference projected into the runtime pod.
+	 * @returns Both rows' fields side by side, or null when the bootstrap is missing, no pod has
+	 *   registered yet, or either row's audience is not a recognised runtime audience. Null is not an
+	 *   error — the router answers 409.
+	 */
 	loadBootstrapExchange(bootstrapReference: string): Promise<RuntimeBootstrapExchangeRecord | null>;
 }
 
@@ -106,7 +125,15 @@ export interface RuntimeBootstrapLogger
 	error(bindings: { readonly err: unknown; readonly operation: string }, message: string): void;
 }
 
-/** Dependencies of the workload-authenticated runtime bootstrap-exchange router. */
+/**
+ * Everything {@link __CreateRuntimeBootstrapRouter} needs, all injected.
+ *
+ * Nothing here is read from the request. The clock in particular is a dependency so a runtime can
+ * never extend its own bootstrap deadline by sending a time. `runtimeNamespaces` is a fixed pair —
+ * personal and managed — and a reviewed pod outside both is rejected before any database read.
+ *
+ * Composed in: apps/opencrane/src/app/runtime-composition.ts.
+ */
 export interface RuntimeBootstrapRouterDependencies
 {
 	/** Dedicated projected-token identity reviewer for the runtime audience. */

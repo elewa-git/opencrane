@@ -1,7 +1,26 @@
-/** Runtime configuration for OIDC-backed manager sessions (fleet or clustertenant). */
+/**
+ * Everything the OIDC login flow needs, read from environment variables once and then
+ * treated as read-only.
+ *
+ * Built only by {@link ___LoadOidcAuthConfig}, which snapshots `process.env`; the values
+ * here are therefore fixed for the life of the process (or, in tests, for the life of the
+ * object). Two fields are computed rather than copied: {@link enabled} (is any OIDC
+ * variable set at all) and {@link cookieSecure} (production forces HTTPS-only cookies).
+ *
+ * Every allowlist field defaults to EMPTY and empty means "grants nothing", so a missing
+ * variable can never widen access.
+ *
+ * @see https://openid.net/specs/openid-connect-core-1_0.html — the meaning of `issuer`,
+ *      `client_id`, `redirect_uri`, and `scope` below.
+ */
 export interface OidcAuthConfig
 {
-  /** Whether OIDC is enabled for human login flows. */
+  /**
+   * Whether browser login is possible. Computed, not read from a variable: true when the
+   * issuer, client id, redirect URI, and session secret are all present. When none of
+   * them is set this is false and the server runs in development mode; when only some are
+   * set {@link ___LoadOidcAuthConfig} throws instead of returning false.
+   */
   enabled: boolean;
 
   /** Issuer URL used for OIDC discovery. */
@@ -10,10 +29,19 @@ export interface OidcAuthConfig
   /** Registered OAuth client identifier. */
   clientId: string;
 
-  /** Optional confidential-client secret. */
+  /**
+   * Client secret, when this deployment registered a confidential client. Absent for the
+   * public per-organisation clients, which authenticate the code exchange with PKCE
+   * instead of a secret.
+   */
   clientSecret?: string;
 
-  /** Callback URI registered with the identity provider. */
+  /**
+   * The callback URI registered with the identity provider. Only its PATH is used at
+   * request time: the origin is rebuilt from the host the request arrived on, so a
+   * deployment serving several hosts returns each user to the host they logged in from
+   * (see `_buildRedirectUri`). The provider must allow every resulting URL.
+   */
   redirectUri: string;
 
   /**
@@ -37,16 +65,30 @@ export interface OidcAuthConfig
   /** Session cookie name. */
   cookieName: string;
 
-  /** Whether the session cookie must be HTTPS-only. */
+  /**
+   * Whether the session cookie is marked `Secure` (sent over HTTPS only). Computed:
+   * an explicit `OIDC_COOKIE_SECURE` wins; otherwise `NODE_ENV=production` forces true
+   * whatever the redirect URI says, so a mistyped `OIDC_REDIRECT_URI` cannot quietly
+   * downgrade the cookie; outside production it is inferred from the redirect URI scheme
+   * so plain-HTTP local development works.
+   */
   cookieSecure: boolean;
 
   /** Session lifetime in milliseconds. */
   sessionMaxAgeMs: number;
 
-  /** Lowercased allowlist of email domains. */
+  /**
+   * Email domains allowed to log in, lowercased. Empty means "do not filter by domain".
+   * Checked together with {@link allowedEmails}: a login passes when the address is in
+   * that list OR its domain is in this one.
+   */
   allowedEmailDomains: string[];
 
-  /** Lowercased allowlist of full email addresses. */
+  /**
+   * Individual email addresses allowed to log in, lowercased. Empty means "do not filter
+   * by address". Setting either this or {@link allowedEmailDomains} also makes an email
+   * claim mandatory, so a provider that returns no email can no longer log anyone in.
+   */
   allowedEmails: string[];
 
   /** Claim name carrying the caller's group memberships (default `groups`). */

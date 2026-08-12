@@ -1,8 +1,8 @@
 /**
- * Package-local opencrane-ui logger.
+ * Package-local backend logger for the providers gateway.
  *
  * Same component name as the operator's root logger so every line from this
- * domain package lands in the one `clustertenant-manager` stream, and the
+ * package lands in the one `clustertenant-manager` stream, and the
  * AsyncLocalStorage mixin in `@opencrane/backend/observability` still stamps the
  * active request's `requestId` / `trace_id`.
  */

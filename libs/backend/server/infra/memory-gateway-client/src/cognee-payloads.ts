@@ -1,7 +1,7 @@
 import { MemoryGatewayProtocolError } from "./personal-memory-record.js";
 import type { MemoryFact, MemoryProvenance, ScopedMemoryFact } from "./memory-gateway-client.types.js";
 
-/** Envelope revision written around scoped content so provenance survives a Cognee round trip. */
+/** Version number written into each stored scoped record, so its provenance can be read back safely. A record with any other version is dropped on decode. */
 const _SCOPED_ENVELOPE_VERSION = 1;
 
 /** Return a plain object suitable for security-boundary parsing. */
@@ -48,15 +48,20 @@ export function __DecodeScopedEnvelope(raw: string): { readonly content: string;
 }
 
 /**
- * Project a Cognee search response into gateway-minted facts.
+ * Convert a Cognee search response into facts, keeping only entries the gateway fully identified.
  *
- * Only entries carrying BOTH a remote identifier and text become facts; a malformed entry is
- * dropped rather than given a synthesised id. An entirely unrecognised response shape is a protocol
- * violation, so a broken contract can never masquerade as an empty recall.
+ * An entry becomes a fact only if it carries BOTH an identifier and text; a malformed entry is
+ * dropped rather than given an invented id. The id may arrive as `id`, `data_id`, or `document_id`,
+ * and the text as `text`, `content`, or `chunk`. A response whose overall shape is unrecognised is a
+ * protocol failure, so a broken contract can never look like "no facts found".
+ *
+ * Called by: http-cognee-memory-gateway-client.ts inside `query`, and {@link __ParseScopedFacts}
+ * below with an unbounded limit.
  *
  * @param payload - Untrusted Cognee search response.
- * @param maxResults - Upper bound the caller requested.
- * @returns The validated facts, truncated to the requested bound.
+ * @param maxResults - Most facts to return.
+ * @returns The accepted facts, at most `maxResults` of them, in the order the gateway sent them.
+ * @throws {MemoryGatewayProtocolError} When the response is not an array of entries.
  */
 export function __ParseSearchFacts(payload: unknown, maxResults: number): readonly MemoryFact[]
 {
@@ -75,7 +80,21 @@ export function __ParseSearchFacts(payload: unknown, maxResults: number): readon
 	return facts;
 }
 
-/** Project a Cognee search response into scoped facts, dropping unattributable records. */
+/**
+ * Convert a Cognee search response into scoped facts, dropping any record that cannot prove complete
+ * provenance.
+ *
+ * It reads EVERY entry the response contains rather than just the first `maxResults`, because
+ * unattributable records are dropped along the way, and stops once `maxResults` usable facts have
+ * been collected. That is deliberate: a few bad records must not shrink a caller's result set.
+ *
+ * Called by: http-cognee-memory-gateway-client.ts inside `recallScoped`.
+ *
+ * @param payload - Untrusted Cognee search response.
+ * @param maxResults - Most facts to return.
+ * @returns Facts that carry complete provenance, at most `maxResults` of them.
+ * @throws {MemoryGatewayProtocolError} When the response is not an array of entries.
+ */
 export function __ParseScopedFacts(payload: unknown, maxResults: number): readonly ScopedMemoryFact[]
 {
 	const facts: ScopedMemoryFact[] = [];

@@ -12,7 +12,7 @@ type McpServerResponse = McpServer;
 /** Shared credential contract returned for normalized credential rows. */
 type McpServerCredentialResponse = McpServerCredential;
 
-/** Persist response shape returned after create/update/delete mutations. */
+/** What the create/update/delete routes answer with: the affected server id plus which of the three happened. */
 interface McpServerMutationResponse
 {
 	/** Stable server identifier. */
@@ -126,12 +126,21 @@ export async function getMcpServer(prisma: PrismaClient, serverId: string): Prom
 }
 
 /**
- * Create an MCP server and its child credential rows.
+ * Create one MCP server plus its credential label rows, through the supplied write port.
  *
- * @param prisma - Prisma client used for persistence.
- * @param mutationRepository - MCP aggregate persistence seam.
- * @param body - Route payload provided by the caller.
- * @returns Mutation response consumed by the route.
+ * Takes a repository rather than a Prisma client so the route can hand in a unit of work that
+ * commits the server row, its credential rows, and the audit row together. Credential entries are
+ * label-only: `_NormalizeCredentialWrites` trims each `displayName` and rejects a blank one, and
+ * no secret value is accepted anywhere on this path.
+ *
+ * Called by: the `POST /` handler in `mcpServersRouter` (../routes/mcp-servers.ts), which is gated
+ * by `_RequireOrgAdmin`.
+ *
+ * @param mutationRepository - Write port; the route passes `PrismaMcpServerMutationUnitOfWork`.
+ * @param body - Route payload. The lowercase wire values for scope/transport/status are converted
+ *               to Prisma enum member names here, and `status` defaults to `draft` when omitted.
+ * @returns `{ id, status: "created" }` — the id the route puts in its 201 response.
+ * @throws Error when a supplied credential has a missing or blank `displayName`.
  */
 export async function createMcpServer(mutationRepository: McpServerMutationRepository, body: McpServerWriteRequest): Promise<McpServerMutationResponse>
 {
@@ -152,12 +161,21 @@ export async function createMcpServer(mutationRepository: McpServerMutationRepos
 }
 
 /**
- * Update an MCP server and fully replace its child credential rows.
+ * Change an MCP server, and replace its credential rows with whatever the body carries.
  *
- * @param mutationRepository - MCP aggregate persistence seam.
- * @param serverId - Server identifier from the route.
- * @param body - Partial route payload provided by the caller.
- * @returns Mutation response consumed by the route.
+ * Any field the body omits is left as-is in the database. Credentials are the exception: they are
+ * always replaced, so a body with no `credentials` key deletes every credential row the server had.
+ * `sourceId` and `lastSyncedAt` accept an explicit null to clear the stored value.
+ *
+ * Called by: the `PUT /:id` handler in `mcpServersRouter` (../routes/mcp-servers.ts), gated by
+ * `_RequireOrgAdmin`.
+ *
+ * @param mutationRepository - Write port; the route passes `PrismaMcpServerMutationUnitOfWork`.
+ * @param serverId - Server identifier from the route path.
+ * @param body - Only the fields to change, in route wire values.
+ * @returns `{ id, status: "updated" }` for the route's response body.
+ * @throws Error when a supplied credential has a missing or blank `displayName`, and whatever the
+ *         database client throws when no server has that id.
  */
 export async function updateMcpServer(mutationRepository: McpServerMutationRepository, serverId: string, body: Partial<McpServerWriteRequest>): Promise<McpServerMutationResponse>
 {
@@ -178,7 +196,7 @@ export async function updateMcpServer(mutationRepository: McpServerMutationRepos
 	return { id: serverId, status: "updated" };
 }
 
-/** Projects an optional route timestamp without nesting conditional expressions. */
+/** Turn the optional route timestamp into an update fragment: absent leaves `lastSyncedAt` alone, null clears it, a string sets it. */
 function _OptionalLastSyncedAt(value: string | null | undefined): { readonly lastSyncedAt: Date | null } | Record<string, never>
 {
 	if (value === undefined) return {};
@@ -187,11 +205,16 @@ function _OptionalLastSyncedAt(value: string | null | undefined): { readonly las
 }
 
 /**
- * Delete an MCP server and its child credential rows.
+ * Delete an MCP server together with its credential rows.
  *
- * @param mutationRepository - MCP aggregate persistence seam.
- * @param serverId - Server identifier from the route.
- * @returns Mutation response consumed by the route.
+ * Called by: the `DELETE /:id` handler in `mcpServersRouter` (../routes/mcp-servers.ts), gated by
+ * `_RequireOrgAdmin`.
+ *
+ * @param mutationRepository - Write port; the route passes `PrismaMcpServerMutationUnitOfWork`.
+ * @param serverId - Server identifier from the route path.
+ * @returns `{ id, status: "deleted" }` for the route's response body.
+ * @throws Whatever the database client throws when no server has that id — the route does not
+ *         check the row exists first, so a bad id surfaces as a 500 rather than a 404.
  */
 export async function deleteMcpServer(mutationRepository: McpServerMutationRepository, serverId: string): Promise<McpServerMutationResponse>
 {
@@ -223,12 +246,20 @@ export async function listMcpServerCredentials(prisma: PrismaClient, serverId: s
 }
 
 /**
- * Add a single brokered credential to an MCP server.
+ * Add one brokered credential row to an MCP server.
+ *
+ * "Brokered" here means on-behalf-of (OBO): the row stores only an operator-facing label, and the
+ * actual secret is held by the Obot gateway, which exchanges it for the calling user at invocation
+ * time. Nothing on this path accepts, stores, or returns a secret value.
+ *
+ * Called by: the `POST /:id/credentials` handler in `mcpServersRouter` (../routes/mcp-servers.ts).
+ * That route is deliberately NOT org-admin gated — connecting a credential is a user action.
  *
  * @param prisma - Prisma client used for persistence.
- * @param serverId - Server identifier from the route.
- * @param input - OBO credential metadata to persist.
- * @returns The created credential response, or null when the server is absent.
+ * @param serverId - Server identifier from the route path.
+ * @param input - The credential label to store.
+ * @returns The created credential row, or null when no server has that id, which the route turns
+ *          into a 404.
  */
 export async function addMcpServerCredential(prisma: PrismaClient, serverId: string, input: McpServerCredentialInput): Promise<McpServerCredentialResponse | null>
 {
@@ -282,11 +313,17 @@ export async function deleteMcpServerCredential(prisma: PrismaClient, serverId: 
 }
 
 /**
- * Normalize an OBO-only credential write payload for persistence.
+ * Convert one credential label from the route body into the row shape Prisma stores.
+ *
+ * Label-only by design (see {@link addMcpServerCredential}): there is no field here that could
+ * carry a secret, so a caller cannot smuggle one into the database through this path.
+ *
+ * Called by: {@link addMcpServerCredential} in this file, and
+ * src/__tests__/mcp-credential-brokering.test.ts.
  *
  * @param serverId - Owning MCP server identifier.
- * @param credential - Raw credential payload from the route body.
- * @returns Prisma createMany input for the credential row.
+ * @param credential - The credential label from the route body.
+ * @returns The `mcpServerCredential` create input: the owning server id plus the label.
  */
 export function _NormalizeCredentialInput(serverId: string, credential: McpServerCredentialInput): Prisma.McpServerCredentialCreateManyInput
 {
@@ -296,7 +333,7 @@ export function _NormalizeCredentialInput(serverId: string, credential: McpServe
 	};
 }
 
-/** Validates and normalizes credential labels before any aggregate persistence begins. */
+/** Trim every credential label and reject a blank one, before any row is written. */
 function _NormalizeCredentialWrites(credentials: readonly McpServerCredentialInput[] | undefined): readonly McpServerCredentialWrite[]
 {
 	return credentials?.map(function _normalizeCredential(credential)
@@ -351,10 +388,10 @@ function _MapCredentialResponse(credential: _McpServerRow["credentials"][number]
 }
 
 /**
- * Normalize capability labels into a unique trimmed string array.
+ * Trim each capability label, drop the blanks, and drop duplicates.
  *
- * @param values - Raw request values.
- * @returns Canonical capability labels.
+ * @param values - Raw capability labels from the request body, or undefined.
+ * @returns The kept labels in first-seen order; an empty array when nothing was supplied.
  */
 function _NormalizeStringArray(values: string[] | undefined): string[]
 {

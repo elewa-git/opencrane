@@ -1,13 +1,27 @@
 /**
- * Pure-function types for the AIR.7 off-policy evaluation (OPE) substrate.
+ * Types for the AIR.7 off-policy evaluation (OPE) maths.
  *
- * OPE assesses a *candidate* routing policy from logged decisions made under the *current* policy,
- * without ever serving the candidate to live traffic. This is the math substrate the live
- * improvement loop calls; the full RouteLLM/bandit training that produces candidate policies is an
- * explicit out-of-scope seam (see `app-specific.md`).
+ * The question OPE answers: if we had been routing with a different model-choice policy, would we
+ * have done better? It answers that from calls already logged under the CURRENT policy, so a
+ * candidate policy can be scored without ever being put in front of real traffic.
+ *
+ * These are plain functions over logged samples — no I/O. Producing candidate policies in the
+ * first place (RouteLLM-style training, bandits) is a separate job that is not implemented here;
+ * see `app-specific.md`.
  */
 
-/** One logged decision with the facts needed to score a candidate policy off-policy. */
+/**
+ * One logged call, with everything needed to score a candidate policy against it.
+ *
+ * `loggedAction` is the model that actually ran and earned `reward`. `candidateAction` is the model
+ * the policy under test would have picked. When the two differ there is no observed reward for the
+ * candidate, which is why the other two fields exist: `propensity` (how likely the logging policy
+ * was to pick what it picked) and `rewardModelPred` (a model's guess at the candidate's reward).
+ * `_ReplayEstimate` uses only the matching samples; `_DoublyRobustEstimate` uses all of them.
+ *
+ * `propensity` must be greater than zero. A matched sample with a non-positive propensity is not
+ * an error — `_DoublyRobustEstimate` skips its correction term rather than dividing by zero.
+ */
 export interface OpeSample
 {
   /** The action (model) the logging policy actually took on this call. */
@@ -31,7 +45,13 @@ export interface OpeCiOptions
   rng?: () => number;
 }
 
-/** An OPE value estimate with a bootstrap 95% confidence interval. */
+/**
+ * A candidate policy's estimated value, with a bootstrap 95% confidence interval.
+ *
+ * Read the interval before acting on `value`. All three fields are 0 for empty input, which means
+ * "no signal", not "no improvement" — a caller that treats 0 as a real measurement would ship a
+ * policy change on no evidence.
+ */
 export interface OpeEstimate
 {
   /** The point value estimate of the candidate policy's expected reward. */

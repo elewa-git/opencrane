@@ -10,7 +10,12 @@ export interface ShareAuthorizationTransaction
 	readonly shareRepository: ShareAuthorizationRepository;
 }
 
-/** Unit of work that binds every authorization repository in a share procedure to one transaction. */
+/**
+ * Runs a share procedure with all its repositories on one transaction.
+ *
+ * Kept as a port so the sharing routes depend on this shape rather than on Prisma.
+ * Implemented by: ./prisma-share-authorization-unit-of-work.ts.
+ */
 export interface ShareAuthorizationUnitOfWork
 {
 	/** Executes one share procedure against repositories bound to the same transaction client. */

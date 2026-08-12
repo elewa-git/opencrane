@@ -36,7 +36,7 @@ export class PrismaConversationUnitOfWork implements ConversationUnitOfWork
 		return ___DoWithTrace("conversation.open", { siloId: caller.siloId, conversationId }, async () => this._read(function _Open(query) { return query.open(caller, conversationId); }));
 	}
 
-	/** Creates one immutable-mode aggregate and its initial participant membership events atomically. */
+	/** Writes the conversation and its participant rows in one transaction, so a conversation with missing participants cannot be left behind. The mode chosen here can never change. */
 	async create(caller: ConversationCaller, request: CreateConversationRequest): Promise<CreateConversationResult>
 	{
 		return ___DoWithTrace("conversation.create", { siloId: caller.siloId, mode: request.mode }, async () =>
@@ -58,7 +58,7 @@ export class PrismaConversationUnitOfWork implements ConversationUnitOfWork
 		return ___DoWithTrace("conversation.archive", { siloId: caller.siloId, conversationId, archived }, async () => this._mutate(function _Archive(repository) { return repository.setArchived(caller, conversationId, archived); }));
 	}
 
-	/** Permanently closes one caller-owned conversation after the database rechecks active-run state. */
+	/** Closes the conversation for everyone, permanently. The run check happens inside the transaction, so a run starting concurrently still blocks the close rather than being orphaned. */
 	async close(caller: ConversationCaller, conversationId: string): Promise<MutateConversationResult>
 	{
 		return ___DoWithTrace("conversation.close", { siloId: caller.siloId, conversationId }, async () => this._mutate(function _Close(repository) { return repository.close(caller, conversationId); }));

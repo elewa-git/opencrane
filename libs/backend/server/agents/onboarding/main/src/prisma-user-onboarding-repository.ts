@@ -9,7 +9,19 @@ import type { ApprovedPersonaEvidence, UserOnboardingOwner, UserOnboardingRecord
 /** Trigger text emitted when a concurrent starter loses after another transaction advanced the parent. */
 const _BOOTSTRAP_CONVERSATION_PENDING_TRIGGER = "bootstrap conversation must bind the exact pending onboarding owner and persona";
 
-/** App-composed user-onboarding repository backed by the canonical product database. */
+/**
+ * Build the one object that satisfies both onboarding persistence ports over Postgres.
+ *
+ * Returns both {@link UserOnboardingRepository} and {@link UserOnboardingChatRepository} from a
+ * single instance so the workflow row and its bootstrap conversation are written through the same
+ * client. Exists so the app's composition root never constructs the Prisma class directly.
+ *
+ * Called by: _CreateUserOnboardingComposition in
+ * apps/opencrane/src/app/user-onboarding-composition.ts.
+ *
+ * @param prisma - Product database client, or a transaction client in tests.
+ * @returns One adapter usable as either onboarding port.
+ */
 export function _CreateUserOnboardingRepository(prisma: PrismaClient): UserOnboardingRepository & UserOnboardingChatRepository
 {
 	return new PrismaUserOnboardingRepository(prisma);

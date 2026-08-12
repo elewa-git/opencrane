@@ -485,7 +485,21 @@ function paginated(itemSchema: object)
 // Spec document — Composed from domain path fragments
 // ---------------------------------------------------------------------------
 
-/** OpenAPI 3.1 document served by the control plane and emitted for SDK generation. */
+/**
+ * The complete API description: shared schema components, then the domain paths, then the auth
+ * and meta routes.
+ *
+ * This one object has two consumers, which is why edits here are not cosmetic. It is served at
+ * `/api/v1/openapi.json` (apps/opencrane/src/app/routes.ts), and it is emitted to a file that
+ * generates the typed frontend client — so renaming a component or changing a required field
+ * changes compiled frontend code, not just documentation. Regenerate the client in the same
+ * change; see the note at the top of this file for the commands.
+ *
+ * Paths are relative to the `/api/v1` server prefix declared below, and each must match what a
+ * router actually mounts.
+ *
+ * @see {@link _DomainOpenapiPaths} — the per-package path fragments spread into `paths`.
+ */
 export const spec = {
   openapi: "3.1.0",
   info: {

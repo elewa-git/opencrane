@@ -2,7 +2,27 @@ import { UserOnboardingDenialReasons, UserOnboardingStates, UserOnboardingTransi
 import type { UserOnboardingApprovalReconciliationContext, UserOnboardingLifecycleState, UserOnboardingPersonaApprovalContext, UserOnboardingSurveyStartContext } from "./user-onboarding-lifecycle-state.types.js";
 import type { UserOnboardingRecord, UserOnboardingTransitionResult } from "./user-onboarding.types.js";
 
-/** Resolve the state object that exclusively owns one durable onboarding state. */
+/**
+ * Pick the object that owns the behaviour for the row's current state.
+ *
+ * Every state-changing operation in this package is written twice: once as "try it" and once as
+ * "decide what to report if the try did not take effect". Both live on the state object, so adding
+ * a state cannot leave a hole.
+ *
+ * All writes here are conditional updates - they apply only if the row still looks the way it did
+ * when it was read. When two requests race (two browser tabs, a retry, a persona callback arriving
+ * twice) one update applies and the other changes zero rows. Changing zero rows is NOT a failure:
+ * the row simply moved on. The caller re-reads the row, calls this function again with the new
+ * state, and the matching `reconcile*` method says whether the outcome is really what the caller
+ * wanted (report resumed), harmlessly late (report no-op), or genuinely wrong (report denied).
+ *
+ * Called by: __UserOnboardingAuthority.startSurvey / recordApprovedPersona / readOrCreate, and the
+ * re-read helpers in this file.
+ *
+ * @param onboarding - The row as it was just read.
+ * @returns The state object for `onboarding.state`; every state is mapped, so this never returns
+ * undefined.
+ */
 export function _UserOnboardingLifecycleState(onboarding: UserOnboardingRecord): UserOnboardingLifecycleState
 {
 	return _STATES[onboarding.state];
@@ -19,7 +39,7 @@ class _SurveyPendingState implements UserOnboardingLifecycleState
 		return _SurveyWriteResult(context.repository, context.owner, context.interviewId, advanced);
 	}
 
-	/** Deny a failed write that remained pending because no other valid transition won. */
+	/** Report a conflict: our update did not apply and the row is still survey-pending, so nothing valid happened. */
 	reconcileSurveyStart(context: UserOnboardingSurveyStartContext): UserOnboardingTransitionResult
 	{
 		return _Denied(UserOnboardingDenialReasons.StateConflict, context.onboarding);
@@ -47,7 +67,14 @@ class _SurveyPendingState implements UserOnboardingLifecycleState
 /** State behaviour while an owner-bound persona interview remains the current survey. */
 class _SurveyInProgressState implements UserOnboardingLifecycleState
 {
-	/** Resume the same interview or replace only the still-initial interview by CAS. */
+	/**
+	 * Report success for the same interview, or swap in a new one while the survey is still untouched.
+	 *
+	 * A repeat call naming the interview that is already pinned is reported as resumed. A different
+	 * interview is only allowed while no approved revision and no bootstrap data exist yet; the
+	 * conditional update enforces that, so a second request racing the same swap changes zero rows and
+	 * is re-read instead.
+	 */
 	async startSurvey(context: UserOnboardingSurveyStartContext): Promise<UserOnboardingTransitionResult>
 	{
 		if (context.onboarding.personaInterviewId === context.interviewId) return _Resumed(context.onboarding);
@@ -56,7 +83,13 @@ class _SurveyInProgressState implements UserOnboardingLifecycleState
 		return _SurveyWriteResult(context.repository, context.owner, context.interviewId, advanced);
 	}
 
-	/** Resume the winner when it pinned this interview; otherwise report its incompatible survey. */
+	/**
+	 * Decide what to report after our update did not apply and the row is now survey-in-progress.
+	 *
+	 * If the request that got there first pinned the same interview we wanted, the caller got what it
+	 * asked for: report resumed. If it pinned a different interview, report an interview conflict so
+	 * the client sends the user back to the survey that is actually running.
+	 */
 	reconcileSurveyStart(context: UserOnboardingSurveyStartContext): UserOnboardingTransitionResult
 	{
 		if (context.onboarding.personaInterviewId === context.interviewId) return _Resumed(context.onboarding);
@@ -111,7 +144,13 @@ class _BootstrapChatPendingState implements UserOnboardingLifecycleState
 			: _NoOp(context.onboarding);
 	}
 
-	/** Resume only a matching approval durable winner; preserve other maintenance as no-op. */
+	/**
+	 * Decide what to report after our approval update did not apply and the row is now bootstrap-chat-pending.
+	 *
+	 * If the stored interview and revision are exactly the ones we tried to pin, another request
+	 * already did our work: report resumed. Anything else is a later persona change arriving after the
+	 * survey closed - accepted, but it must not move the workflow, so report no-op.
+	 */
 	reconcilePersonaApprovalWrite(context: UserOnboardingPersonaApprovalContext): UserOnboardingTransitionResult
 	{
 		return context.onboarding.personaInterviewId === context.evidence.interviewId && context.onboarding.personaRevisionId === context.evidence.personaRevisionId

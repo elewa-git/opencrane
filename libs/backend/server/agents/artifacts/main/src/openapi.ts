@@ -1,4 +1,12 @@
-/** OpenAPI path fragment for the owner-only personal asset catalogue. */
+/**
+ * The OpenAPI description of `GET /me/assets`, merged into the published API document.
+ *
+ * Keep this in step with `PersonalArtifactEntry` and with the router's 401 and 503 replies; the
+ * two are not generated from each other.
+ *
+ * Called by: `domain-openapi-paths.ts` in libs/backend/server/api-spec/main/src, which spreads
+ * it into the combined paths object.
+ */
 export const _PersonalArtifactsOpenapiPaths = {
 	"/me/assets": {
 		get: {

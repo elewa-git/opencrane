@@ -7,7 +7,13 @@ import type { AgentRevisionLifecycleRepository, ManagedRunAdmissionPort } from "
 import type { AgentScheduleRepository } from "./agent-schedule.types.js";
 import type { ScopeGrantResolver } from "./scope-attachment-authority.types.js";
 
-/** Authenticated management caller resolved by the app from the browser session. */
+/**
+ * Who is making a management request, worked out by the app from the browser session and request
+ * host — never from the request body.
+ *
+ * The router trusts this completely: `siloId` scopes every query, and `isOrgAdmin` is the only gate
+ * on every mutation. Anything that builds one of these is deciding authorisation.
+ */
 export interface ManagementCaller
 {
 	/** Stable IdP subject of the caller. */
@@ -18,7 +24,7 @@ export interface ManagementCaller
 	readonly isOrgAdmin: boolean;
 }
 
-/** Server-owned clock injected for deterministic management-time instants. */
+/** Supplies the timestamps written to `createdAt`, `publishedAt`, and `updatedAt`. It is injected only so tests can fix time; a caller-supplied timestamp must never reach these fields. */
 export interface ManagementClock
 {
 	/** Returns the trusted wall-clock instant for a management action. */
@@ -28,13 +34,13 @@ export interface ManagementClock
 /** Composition-root dependencies for the managed-agent management router. */
 export interface AgentServicesRouterDependencies
 {
-	/** Atomic definition-plane persistence boundary. */
+	/** Stores and reads services, revisions, and run history — see {@link AgentRevisionLifecycleRepository}. */
 	readonly lifecycle: AgentRevisionLifecycleRepository;
-	/** Builds a caller-attributed publication boundary so the publish audit records the real actor. */
+	/** Returns a publication repository bound to this caller, so the audit row it appends names the administrator who published rather than the process. */
 	publicationFor(caller: ManagementCaller): AgentServicePublicationRepository;
 	/** App-owned managed run admission boundary used by run-now. */
 	readonly runAdmission: ManagedRunAdmissionPort;
-	/** Silo-scoped schedule persistence boundary backing the schedule-management surface. */
+	/** Stores the recurring schedules behind the `/schedules` endpoints — see {@link AgentScheduleRepository}. */
 	readonly schedules: AgentScheduleRepository;
 	/**
 	 * Grant-compiler-backed resolver used to validate, at attach time, that a caller administers every

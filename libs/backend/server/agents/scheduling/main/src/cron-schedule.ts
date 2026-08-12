@@ -80,7 +80,17 @@ export function __IsValidCronExpression(expression: string): boolean
 	return __ParseCronExpression(expression) !== null;
 }
 
-/** Return whether a string names a resolvable IANA timezone. */
+/**
+ * Check that a string is a time zone name this runtime can resolve.
+ *
+ * Used to fail a schedule closed rather than silently evaluating it in the wrong zone. The check is
+ * whatever the JavaScript runtime's own time-zone data accepts, so it follows the IANA time-zone
+ * database shipped with that runtime and can differ between Node versions after a zone is renamed.
+ *
+ * @param timezone - Candidate IANA zone name, for example "Europe/Brussels".
+ * @returns true when the runtime can build a formatter for it; false for anything it rejects.
+ * @see https://www.iana.org/time-zones for the zone names and the rename history behind that caveat.
+ */
 export function __IsValidTimezone(timezone: string): boolean
 {
 	try
@@ -112,8 +122,18 @@ export function __WallClockInZone(date: Date, timezone: string): WallClock
 }
 
 /**
- * Return whether a cron expression matches one wall clock, applying Vixie day-of-month/day-of-week
- * OR semantics: when both day fields are restricted the instant matches if EITHER field matches.
+ * Check whether one wall-clock minute matches the cron expression.
+ *
+ * Minute, hour and month must all match. The two day fields follow the Vixie cron rule, which is the
+ * one thing here that surprises people: when BOTH day-of-month and day-of-week are restricted, the
+ * instant matches if EITHER matches. So `0 0 1 * 1` fires on the 1st of every month AND on every
+ * Monday - not only on a Monday the 1st. When just one day field is restricted only that one
+ * decides, and when neither is, every day matches.
+ *
+ * @param expression - Parsed expression, including which day fields were restricted.
+ * @param wall - The candidate minute, already resolved into the schedule's time zone.
+ * @returns true when a run is due at that minute.
+ * @see Vixie cron `crontab(5)`, the day-field rule this implements.
  */
 export function __CronMatchesWallClock(expression: CronExpression, wall: WallClock): boolean
 {

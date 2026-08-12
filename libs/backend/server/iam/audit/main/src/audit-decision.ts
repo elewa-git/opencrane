@@ -3,9 +3,21 @@ import { AuditDecisionActorKind, AuditDecisionOutcome, WorkloadKind, type Prisma
 import type { AuditDecisionRecord } from "./audit-decision.types.js";
 
 /**
- * Appends target authorization evidence through the caller's active transaction.
- * @param transaction - Driving-domain Prisma transaction that owns the authority change.
- * @param decision - Exact immutable authorization evidence to append atomically.
+ * Writes one row into the append-only decision log, using the transaction the caller is already in.
+ *
+ * It takes a transaction client, not a Prisma client, precisely so it cannot be called on its own:
+ * the audit row commits with the change it describes or not at all. It also translates the plain
+ * string fields (`actorKind`, `workloadKind`, `outcome`) into the Prisma enums, so callers do not
+ * import generated enums.
+ *
+ * Called by: libs/backend/server/iam/authorization/main/src/prisma-runtime-authority.ts,
+ * libs/backend/server/iam/membership/main/src/prisma-membership-authority.ts,
+ * libs/backend/server/agents/agent-services/main/src/prisma-agent-publication.ts, and
+ * standalone-first-user-audit.ts in this package.
+ * @param transaction - The open transaction of the change being recorded.
+ * @param decision - The decision to record; treat it as final, nothing rewrites these rows.
+ * @throws Error propagated from Prisma when the insert fails, which deliberately rolls the caller's
+ *         change back rather than letting it commit unaudited.
  */
 export async function __AppendAuditDecision(transaction: Prisma.TransactionClient, decision: AuditDecisionRecord): Promise<void>
 {

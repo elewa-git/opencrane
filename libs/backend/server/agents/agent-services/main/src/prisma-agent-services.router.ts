@@ -66,11 +66,19 @@ function _publicationFor(prisma: PrismaClient, caller: ManagementCaller): AgentS
 }
 
 /**
- * Composes the Prisma-backed managed-agent management router.
- * @param prisma - Canonical product-authority client.
- * @param runAdmission - Shared, capacity-bounded managed run admission boundary.
- * @param logger - Process logger supplied by the app composition root.
- * @returns The configured agent-services router.
+ * Builds the managed-agent management router with its Prisma-backed dependencies.
+ *
+ * Every repository here is silo-scoped at query level and the caller's silo comes from the session,
+ * so nothing needs a silo from the request body. Note the publication repository is built per
+ * request, not once, so each publish audit row names the administrator who made it.
+ *
+ * Called by: apps/opencrane/src/app/routes.ts, mounted at `/api/v1/agent-services`.
+ *
+ * @param prisma - The OpenCrane Prisma client.
+ * @param runAdmission - Run-recording port, shared with the scheduler so both go through one
+ *   capacity limit.
+ * @param logger - Process logger from the app's composition root.
+ * @returns The router, ready to mount.
  */
 export function _CreateAgentServicesRouter(prisma: PrismaClient, runAdmission: ManagedRunAdmissionPort, logger: Logger): Router
 {

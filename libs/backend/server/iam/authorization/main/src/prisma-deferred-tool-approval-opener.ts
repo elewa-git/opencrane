@@ -11,7 +11,7 @@ import { __MarkToolInvocationApprovalRejectedInTransaction } from "./prisma-tool
 /** One transaction-scoped operation over the approval-open repository. */
 type ApprovalOpenTransaction = <TResult>(operation: (repository: DeferredToolApprovalOpenRepository) => Promise<TResult>) => Promise<TResult>;
 
-/** Transaction-scoped deferred approval open/recovery repository. */
+/** The three operations used while opening one approval, all on the caller's transaction. */
 class PrismaDeferredToolApprovalOpenRepository implements DeferredToolApprovalOpenRepository
 {
 	/** The transaction every query here runs on; never the process-wide Prisma client. */
@@ -62,7 +62,7 @@ export async function __OpenDeferredToolApproval(prisma: PrismaClient, command: 
 	return new PrismaDeferredToolApprovalOpenUnitOfWork(prisma, logger).open(command);
 }
 
-/** Prisma unit of work for deferred-approval open and ambiguous-commit recovery. */
+/** Opens one approval, and cleans up when the open transaction throws without telling us whether it committed. */
 class PrismaDeferredToolApprovalOpenUnitOfWork implements DeferredToolApprovalOpenUnitOfWork
 {
 	/** Process-owned Prisma root used only to begin exact transactions. */

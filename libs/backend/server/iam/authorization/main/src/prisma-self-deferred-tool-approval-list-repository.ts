@@ -32,7 +32,14 @@ type SafeApprovalRow = {
 /** Fields the actor reader is permitted to select from the approval authority. */
 const _SAFE_SELECT = { id: true, runId: true, attempt: true, resourceId: true, state: true, safeProposedArguments: true, responseSchema: true, expiresAt: true, createdAt: true, toolInvocation: { select: { toolInvocationId: true } } } as const;
 
-/** Prisma reader for the signed-in owner's approval inbox and interrupt detail. */
+/**
+ * Owner-only approval reads.
+ *
+ * Every query filters on `siloId` and `subjectId` and selects only `_SAFE_SELECT`, so the reviewed
+ * arguments the server keeps for dispatch cannot leave through this class even by mistake.
+ * Callers should use {@link PrismaSelfDeferredToolApprovalReadUnitOfWork}, which adds the
+ * membership check in the same transaction.
+ */
 export class PrismaSelfDeferredToolApprovalListRepository implements SelfDeferredToolApprovalListRepository
 {
 	/** Prisma client used to read only the caller's own approvals. */
@@ -118,7 +125,7 @@ export class PrismaSelfDeferredToolApprovalReadUnitOfWork implements SelfDeferre
 	}
 }
 
-/** Map a durable state into the actor-facing state, deriving an overdue pending row as expired. */
+/** Convert the stored state into what the owner should see. A row still stored as pending but past its deadline is reported as expired, because the expiry sweep may not have run yet. */
 function _state(approval: SafeApprovalRow, now: Date): DeferredToolApprovalStates
 {
 	if (approval.state === ApprovalRequestState.Pending) return approval.expiresAt.getTime() <= now.getTime() ? DeferredToolApprovalStates.Expired : DeferredToolApprovalStates.Pending;

@@ -56,20 +56,27 @@ function _IsNotFound(error: unknown): boolean
 }
 
 /**
- * Create the authenticated HTTP custody adapter over one Obot management session.
+ * Create the HTTP custody adapter that talks to Obot over one authenticated session.
  *
- * Provisioning creates the remote MCP server, then configures it with the write-only credential.
+ * Provisioning is two calls: create the remote MCP server, then configure it with the credential.
  * The credential values travel ONLY inside the configure request body — they are never logged,
- * persisted, or included in any thrown error. A configure failure is compensated by deleting the
- * just-created server so no half-configured remote custody survives, and the original failure is
- * rethrown. Revocation is idempotent: a 404 on deconfigure or delete counts as success.
+ * stored, or put into any thrown error. If configure fails, the adapter deletes the server it just
+ * created so no half-configured custody is left behind in Obot, and it still throws the ORIGINAL
+ * configure failure even when that delete also fails. Revoking is safe to repeat: a 404 from
+ * deconfigure or delete counts as success.
  *
- * The exact Obot response shapes are not pinned by contract (live qualification is gated on issue
- * #337), so every consumed field is validated and anything unrecognised raises a typed
- * {@link ObotProtocolError} instead of being trusted.
+ * The exact Obot response shapes are not pinned by any contract (live qualification is gated on
+ * issue #337), so every field this adapter reads is checked, and anything unexpected raises
+ * {@link ObotProtocolError} rather than being trusted.
  *
- * @param session - Authenticated bounded Obot management exchange.
+ * Called by: apps/opencrane/src/infra/obot/obot-adapters.factory.ts, which passes the port to
+ * libs/backend/server/gateways/integrations/main/src/integration-custody-provisioning.ts.
+ *
+ * @param session - Authenticated Obot management session; see `__CreateObotSession` in obot-http.ts.
  * @returns The production {@link ObotCustodyPort} implementation.
+ * @throws ObotProtocolError From `provision`, when Obot's create response carries no MCP server id.
+ * @throws ObotTransportError From either method, when Obot cannot be reached or refuses a call.
+ * @throws Error From `provision`, when a credential entry has a blank name.
  */
 export function __CreateHttpObotCustodyAdapter(session: ObotSession): ObotCustodyPort
 {
@@ -88,8 +95,8 @@ export function __CreateHttpObotCustodyAdapter(session: ObotSession): ObotCustod
 			}
 			catch (error)
 			{
-				// 3. Compensate the unconfigured server so a failed configure leaves nothing usable
-				// remotely; the original failure stays authoritative even if compensation also fails.
+				// 3. Delete the server we just created, so a failed configure leaves nothing usable in
+				// Obot. The original configure failure is still the one thrown, even if this delete fails.
 				try
 				{
 					await session.request(`/api/mcp-servers/${encodeURIComponent(mcpServerId)}`, "DELETE");
@@ -98,7 +105,7 @@ export function __CreateHttpObotCustodyAdapter(session: ObotSession): ObotCustod
 				throw error;
 			}
 
-			// 4. Return only Obot-originated coordinates plus the documented far-future fallback expiry.
+			// 4. Return only the ids Obot gave us, plus the far-future fallback expiry explained at the top.
 			const now = new Date();
 			return {
 				obotCatalogEntryId: command.obotCatalogEntryId,

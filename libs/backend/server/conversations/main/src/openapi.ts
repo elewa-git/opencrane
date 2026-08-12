@@ -1,6 +1,18 @@
 import { ConversationLifecycles, ConversationModes, MessageContentBlockKinds, MessageRoles, MessageSources, MessageStates } from "@opencrane/models/conversations";
 
-/** OpenAPI path fragment for owner-bound canonical conversation timeline replay. */
+/**
+ * OpenAPI description of the live replay route, owned by this package rather than by the
+ * central spec file, so the route and its documentation move together.
+ *
+ * Merged into the full document by `_DomainOpenapiPaths`
+ * (libs/backend/server/api-spec/main/src/domain-openapi-paths.ts) and served at
+ * `/api/v1/openapi.json`. The paths are relative to that `/api/v1` prefix and must match what
+ * `__CreateSelfConversationReplayRouter` actually mounts — a mismatch here ships a wrong
+ * generated client, since the same document generates the frontend SDK.
+ *
+ * @see https://html.spec.whatwg.org/multipage/server-sent-events.html — the 200 response is a
+ * `text/event-stream`, which is why `Last-Event-ID` appears as a documented request header.
+ */
 export const _SelfConversationReplayOpenapiPaths = {
 	"/me/conversations/{conversationId}/events": {
 		get: {
@@ -108,7 +120,17 @@ const _IdempotentConversationMessageEnvelopeSchema = {
 	properties: { outcome: { type: "string", enum: ["idempotent"] }, message: _ConversationMessageSchema },
 } as const;
 
-/** OpenAPI path fragment for participant-owned immutable-mode conversation operations. */
+/**
+ * OpenAPI description of the five conversation routes, kept beside the router that serves them.
+ *
+ * Merged into the full document by `_DomainOpenapiPaths`
+ * (libs/backend/server/api-spec/main/src/domain-openapi-paths.ts) and used to generate the
+ * frontend client, so the documented statuses must match `_STATUS_BY_DENIAL` in
+ * self-conversations.router.ts. In particular the message route documents 201 for a new message
+ * and 200 for an identical retry — two different bodies, distinguished by the `outcome` field.
+ *
+ * @see {@link _SelfConversationReplayOpenapiPaths} for the live stream on the same path prefix.
+ */
 export const _SelfConversationsOpenapiPaths = {
 	"/me/conversations": {
 		get: {

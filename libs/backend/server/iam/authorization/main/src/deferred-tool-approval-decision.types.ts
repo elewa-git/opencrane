@@ -1,6 +1,16 @@
 import type { JsonValue } from "@opencrane/util";
 
-/** Terminal decision a reviewer may record for a deferred tool request. */
+/**
+ * The two answers a reviewer can give, and they are final.
+ *
+ * `Approved` MUST come with a complete replacement argument object; a partial edit is rejected as
+ * `invalid_arguments`, because merging a partial edit server-side would let a reviewer approve
+ * values they never saw. `Denied` must come with no arguments at all.
+ *
+ * These string values are also the wire values on the decision route, so they cannot be renamed
+ * without a client change.
+ * @see {@link DecideDeferredToolRequestCommand}
+ */
 export enum DeferredToolDecisionKinds
 {
 	/** Approves the exact complete argument object carried by the decision request. */
@@ -28,7 +38,12 @@ export interface DecideDeferredToolRequestCommand
 	readonly now: Date;
 }
 
-/** Trusted attempt coordinates used by runtime dispatch to close due approvals. */
+/**
+ * Which run attempt to sweep for approvals whose deadline has passed.
+ *
+ * Sent by the runtime's own command poll, so the sweep happens on a transaction that already
+ * holds the run, and no separate cron job is needed.
+ */
 export interface ExpireDeferredToolApprovalBatchCommand
 {
 	/** Exact run whose command poll owns the expiry sweep transaction. */
@@ -48,7 +63,22 @@ export interface ExpireDeferredToolApprovalBatchResult
 	readonly resumed: boolean;
 }
 
-/** Result of atomically deciding one pending deferred tool request. */
+/**
+ * What the decision attempt actually did, and what the caller should tell the user.
+ *
+ * - `approved` / `denied` — the decision was recorded now.
+ * - `already_decided` — the same decision was already recorded; safe to report as success. The
+ *   caller's retry did nothing, which is the point.
+ * - `expired` — the deadline had passed, so the request was closed instead of decided. The user
+ *   must be told their answer was not applied.
+ * - `invalid_arguments` — approval without a complete argument object, denial with arguments, or
+ *   arguments that fail the frozen schema.
+ * - `conflict` — the row is not what the caller thinks: wrong owner or silo, the run is no longer
+ *   waiting, the earlier decision went the other way, or the stored data failed its integrity
+ *   check. Never retry a `conflict`; re-read first.
+ *
+ * ./deferred-tool-approval.router.ts maps these to 200, 409, 400, and 404 respectively.
+ */
 export type DecideDeferredToolRequestResult =
 	| { readonly outcome: "approved"; readonly argumentsDigest: string }
 	| { readonly outcome: "denied" }
@@ -57,9 +87,25 @@ export type DecideDeferredToolRequestResult =
 	| { readonly outcome: "invalid_arguments" }
 	| { readonly outcome: "conflict" };
 
-/** Atomic persistence boundary for a session-authorized deferred-tool decision. */
+/**
+ * Records one browser-submitted approval decision in a single transaction.
+ *
+ * Exists so the HTTP route never touches Prisma and never gets to choose the transaction level:
+ * the decision re-reads the approval, the run, and the invocation, and applies the approved
+ * arguments, all serializably.
+ *
+ * Called by: ./deferred-tool-approval.router.ts (as `decisions`).
+ * Implemented by: ./prisma-deferred-tool-approval-decision-repository.ts.
+ */
 export interface DeferredToolApprovalDecisionRepository
 {
-	/** Decide one request only when its durable run coordinates still match the authenticated owner. */
+	/**
+	 * Applies one reviewer decision, or explains why it could not be applied.
+	 * @param command - The approval id, the authenticated owner and silo, the decision, and the
+	 *   trusted server time. Ownership is re-checked against the stored row, so a caller cannot
+	 *   decide someone else's approval by supplying its id.
+	 * @returns One of {@link DecideDeferredToolRequestResult}; see it for what each outcome obliges
+	 *   the caller to report.
+	 */
 	decideAtomically(command: DecideDeferredToolRequestCommand): Promise<DecideDeferredToolRequestResult>;
 }

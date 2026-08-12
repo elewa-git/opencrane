@@ -24,7 +24,15 @@ function _AsObject(value: unknown): Record<string, unknown> | null
 	return typeof value === "object" && value !== null && !Array.isArray(value) ? value as Record<string, unknown> : null;
 }
 
-/** Extract one expected JSON-RPC result object without preserving remote error details. */
+/**
+ * Pull the `result` object out of one JSON-RPC reply, rejecting anything else.
+ *
+ * Requires `jsonrpc: "2.0"`, the exact id we sent, no `error` member, and an object `result`. Obot's
+ * own error text is deliberately dropped: only the caller-supplied `expectation` string reaches the
+ * thrown {@link ObotProtocolError}, so a remote message cannot end up in a log.
+ *
+ * @see https://www.jsonrpc.org/specification - JSON-RPC 2.0, which defines these members.
+ */
 function _JsonRpcResult(payload: unknown, expectedId: number, expectation: string): Record<string, unknown>
 {
 	const envelope = _AsObject(payload);
@@ -69,27 +77,39 @@ function _McpPath(obotCustodyReference: string): string
 }
 
 /**
- * Create the authenticated server-side MCP invocation adapter over one bounded Obot session.
+ * Create the MCP invocation adapter that calls tools through one authenticated Obot session.
  *
- * The adapter enforces the immutable revision allow-list before transport, performs the required
- * MCP initialize handshake, echoes only the validated session id, and returns only the validated
- * tool result. The service credential, remote bodies, and provider error details remain contained
- * by {@link ObotSession}.
+ * Order matters: the tool allow-list is checked before any path is built or any request is sent, so
+ * a tool the agent revision does not allow never reaches the network. The adapter then performs the
+ * MCP `initialize` handshake, requires Obot to echo the pinned revision, replays only the validated
+ * session id, and returns only a validated tool result. The service token, Obot's response bodies,
+ * and its error details all stay inside {@link ObotSession} — what comes out is the tool result or
+ * one of the typed errors below.
  *
- * @param session - Authenticated bounded Obot session owned by the server process.
- * @returns The production MCP invocation port.
+ * Called by: apps/opencrane/src/infra/obot/obot-adapters.factory.ts; the port it returns is used by
+ * libs/backend/agents/execution/protocol/src/integration-external-action-executor.ts.
+ *
+ * @param session - Authenticated Obot session owned by the server process.
+ * @returns The production `ObotMcpInvocationPort` implementation.
+ * @throws ObotMcpToolNotAllowedError When the tool is absent from the command's allow-list.
+ * @throws ObotMcpAuthenticationError When Obot answers 401 to the server's service token.
+ * @throws ObotMcpAuthorizationError When Obot answers 403 for this MCP endpoint.
+ * @throws ObotProtocolError When the handshake, the revision echo, or the tool result is unusable.
+ * @throws ObotTransportError For any other transport failure.
+ * @see https://modelcontextprotocol.io/specification/2025-06-18 - the `initialize` and `tools/call`
+ *   exchanges this adapter implements.
  */
 export function __CreateHttpObotMcpInvocationAdapter(session: ObotSession): ObotMcpInvocationPort
 {
 	return {
 		async invokeTool(command: ObotMcpToolInvocationCommand): Promise<ObotMcpToolResult>
 		{
-			// 1. Enforce revision authority before computing an endpoint or contacting Obot.
+			// 1. Check the revision's tool allow-list first, before building a path or contacting Obot.
 			__AssertToolAllowed(command);
 			const path = _McpPath(command.obotCustodyReference);
 
-			// 2. Keep the full two-exchange handshake under one safe operation span. Arguments, results,
-			// custody addressing, credentials, and remote error details are deliberately excluded.
+			// 2. Trace both exchanges as one operation. Arguments, results, the custody reference,
+			// credentials, and Obot's error details are deliberately kept out of the span.
 			return ___DoWithTrace("obot.mcp.invoke", { siloId: command.siloId, integrationId: command.integrationId, toolName: command.toolName }, async function _InvokeAllowedTool()
 			{
 				try

@@ -5,7 +5,15 @@ import { API_ERROR_LIMITS, ApiValidationIssueLocations, type ApiValidationIssue 
 
 import type { ValidatedPublicBodyHandler } from "./request-validation.types.js";
 
-/** Dedicated safe-to-expose failure produced only by the public request-body wrapper. */
+/**
+ * The one validation failure whose details may reach a client.
+ *
+ * It is produced ONLY by {@link ___WithValidatedPublicBody}, after the Zod issues have been trimmed
+ * to bounded messages that never echo a rejected value. error-handler.ts answers it with 400 and
+ * includes those issues, while a plain `ZodError` from anywhere else stays a generic 500. Never
+ * throw this from internal code — doing so would publish a schema shape that was not meant to be
+ * public.
+ */
 export class _RequestValidationProblem extends Error
 {
 	/** Bounded issues that may cross the public HTTP boundary. */
@@ -81,10 +89,24 @@ function _PublicIssues(issues: readonly ZodIssue[]): ApiValidationIssue[]
 }
 
 /**
- * Wrap one authenticated public route handler with model-adjacent Zod body validation.
+ * Wrap one public route handler so its body is validated by the owning model's Zod schema first.
  *
- * Mount authorization middleware before this handler whenever field diagnostics could disclose a
- * protected contract. Internal workload routes must keep their opaque, identity-first validation.
+ * The handler is reached only with an already-parsed body, so it never casts `request.body`. On a
+ * failure nothing reaches the handler: a {@link _RequestValidationProblem} goes to `next()`, and
+ * error-handler.ts turns it into a 400 with a bounded list of issues. Only issues produced here may
+ * cross the public boundary — a raw Zod error thrown anywhere else stays an internal 500, so
+ * internal schemas cannot be probed from outside.
+ *
+ * Mount authorization middleware BEFORE this handler wherever the field-level messages would tell an
+ * unauthorized caller about a protected contract. Internal workload routes keep their own opaque,
+ * identity-first validation instead of using this.
+ *
+ * Called by: libs/backend/server/gateways/model-routing/main/src/routes/model-routing-defaults.ts
+ * (`PUT /`, behind its authorization guard).
+ *
+ * @param schema - The owning model's Zod schema, so HTTP never keeps a second copy of the field list.
+ * @param handler - Route handler; it receives the validated body as its fourth argument.
+ * @returns An Express handler that validates, then delegates.
  */
 export function ___WithValidatedPublicBody<T>(schema: z.ZodType<T>, handler: ValidatedPublicBodyHandler<T>): RequestHandler
 {

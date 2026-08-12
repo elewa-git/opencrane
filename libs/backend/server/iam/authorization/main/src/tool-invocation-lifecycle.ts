@@ -74,7 +74,7 @@ function _terminal(): ToolInvocationLifecycleActions
 	return ToolInvocationLifecycleActions.Reject;
 }
 
-/** Manual recovery is inert except for server-authoritative cancellation. */
+/** Once a person must decide, ignore every event except a cancellation from the server. */
 function _recoveryRequired(input: ToolInvocationLifecycleInput): ToolInvocationLifecycleActions
 {
 	return input.event === ToolInvocationLifecycleEvents.Cancelled ? ToolInvocationLifecycleActions.Fail : ToolInvocationLifecycleActions.Reject;
@@ -92,7 +92,25 @@ const _STATE_HANDLERS: Readonly<Record<ToolInvocationStates, ToolInvocationState
 	[ToolInvocationStates.RecoveryRequired]: _recoveryRequired,
 };
 
-/** Select the only valid persistence action for a durable ToolInvocation State x Event cell. */
+/**
+ * Decide the one database write allowed for a given invocation state and event.
+ *
+ * The whole state machine lives here, as pure code with no database and no clock, so it can be
+ * exhaustively tested. Adapters call this BEFORE writing and must obey the answer; that is what
+ * stops an adapter from inventing a transition that would repeat a provider call.
+ *
+ * It also rejects impossible inputs outright: a negative or non-integer retry count, a limit below
+ * one, `Claimed` without a dispatch claim, `Reconciling` with a dispatch claim, or any claim at all
+ * in a state that cannot hold one.
+ *
+ * Called by: ./prisma-tool-invocation-repository.ts (`_plan`, and directly in
+ * `recordPreparationFailure`) and ./run-approval-cancellation.ts (`terminaliseCancellable`, which
+ * throws if the answer is not `Fail`).
+ * @param input - Observed state, the event being applied, the frozen recovery mode, the active
+ *   claim kind, and the retry budget.
+ * @returns The single permitted write, or `Reject` meaning write nothing at all.
+ * @see {@link ToolInvocationLifecycleActions}
+ */
 export function __PlanToolInvocationLifecycle(input: ToolInvocationLifecycleInput): ToolInvocationLifecycleActions
 {
 	if (!Number.isSafeInteger(input.preparationAttempt) || input.preparationAttempt < 0) return ToolInvocationLifecycleActions.Reject;

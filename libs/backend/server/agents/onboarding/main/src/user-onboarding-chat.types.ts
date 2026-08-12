@@ -176,7 +176,17 @@ export interface StartUserOnboardingChatCommand
 	readonly content: UserOnboardingBootstrapContentRevision;
 }
 
-/** Owner answer intent fenced to the exact server-projected conversation question. */
+/**
+ * One answer submitted by the user, tied to the exact question the server had shown them.
+ *
+ * The two `expected*` fields are what stops a stale browser tab from writing an answer against the
+ * wrong question: the server compares them with the conversation and question it currently offers,
+ * and reports a conflict instead of storing a mismatched answer. The user never chooses which
+ * question comes next - the server derives it from how many answers are already stored.
+ *
+ * Parsed from the request body by _ParseUserOnboardingAnswerBody, which enforces the same bounds:
+ * 1-128 characters for the ids, question 1-3, and 1-4000 characters of text.
+ */
 export interface SubmitUserOnboardingAnswerCommand
 {
 	/** Exact server-issued conversation the owner saw. */
@@ -206,14 +216,36 @@ export interface AppendUserOnboardingAnswerCommand
 	readonly idempotencyKey: string;
 }
 
-/** Durable append outcome plus the winning answer when a retry collided. */
+/**
+ * What the repository did with one submitted answer.
+ *
+ * Only the outcome is returned. The stored answer itself is not, because the caller re-reads the
+ * whole conversation afterwards to build the projection it returns.
+ *
+ * @see {@link UserOnboardingAnswerStatuses} for what each status obliges the caller to do.
+ */
 export interface UserOnboardingAnswerPersistenceResult
 {
 	/** Whether a row was created, resumed, or conflicted. */
 	readonly status: UserOnboardingAnswerStatuses.Recorded | UserOnboardingAnswerStatuses.Resumed | UserOnboardingAnswerStatuses.IdempotencyConflict | UserOnboardingAnswerStatuses.StateConflict;
 }
 
-/** Persistence boundary for immutable script, conversation, answer, and conclusion facts. */
+/**
+ * Everything the guided bootstrap chat reads and writes: script, conversation, answers, completion.
+ *
+ * The script rows are immutable and reviewed ahead of time, and the browser never chooses one - the
+ * script is selected from the approved persona's colour. The conversation then freezes the persona
+ * name, archetype, script revision and its digest, so a later script edit can never rewrite a
+ * conversation a user already saw. `startConversation` and `conclude` return a boolean instead of
+ * throwing: `false` means the row was not in the state the call required because another request
+ * got there first, and the caller re-reads rather than failing.
+ *
+ * Called by: __UserOnboardingChatAuthority; implemented by PrismaUserOnboardingRepository and
+ * composed by _CreateUserOnboardingRepository in
+ * apps/opencrane/src/app/user-onboarding-composition.ts.
+ *
+ * @see {@link UserOnboardingRepository} for the workflow-row half of persistence.
+ */
 export interface UserOnboardingChatRepository
 {
 	/** Select the current reviewed revision for one approved persona colour. */

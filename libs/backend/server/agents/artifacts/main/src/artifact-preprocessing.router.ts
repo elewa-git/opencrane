@@ -16,6 +16,24 @@ import type { ArtifactPreprocessorRouterDependencies, ReviewedArtifactPreprocess
  * bytes are brokered through OpenCrane, so storage endpoints, leases, and receipts never reach the
  * worker namespace.
  *
+ * Four routes, in the order a worker uses them: `POST /jobs:claim` takes work (204 when idle),
+ * `POST /jobs/:jobId/source` streams the PDF, `PUT /jobs/:jobId/output` submits the text, and
+ * `PUT /jobs/:jobId/failure` reports a failed attempt. A 409 on any of the last three means the
+ * claim is no longer current and the worker must drop the job and poll again.
+ *
+ * A failure report may use only three codes: `source_read_failed`, `conversion_failed`, and
+ * `output_submission_failed`. The set is closed on purpose. The worker holds the untrusted PDF,
+ * so anything it can put in a failure report - an exception message, a temporary file path, text
+ * pulled out of the document - would flow straight into server logs and the job row. Three fixed
+ * words say which step broke, which is all the server-owned retry policy needs, and carry nothing
+ * an attacker-supplied document could influence. Adding a free-text field would reopen that.
+ *
+ * Called by: `_CreateOptionalRuntimeComposition` in apps/opencrane/src/app/runtime-composition.ts
+ * builds it; the worker's HTTP client is
+ * libs/backend/artifacts/preprocessor/main/src/remote.ts.
+ *
+ * @param dependencies - Token reviewer, allowed namespace, repository, both byte brokers, and logger.
+ * @returns An Express router to mount on the internal listener, never the public one.
  * @see apps/opencrane/helm/templates/_networkpolicy.tpl - protects the server internal listener.
  * @see apps/artifact-preprocessor/helm/templates/_resources.tpl - wires the sole caller identity.
  */
@@ -92,8 +110,10 @@ export function __CreateArtifactPreprocessorRouter(dependencies: ArtifactPreproc
 				_RespondProblem(response, 401, "preprocessor_identity_denied");
 				return;
 			}
-			// RFC 6648 deprecated the X- convention, but these request-only headers intentionally
-			// remain private OpenCrane protocol fields and are never represented as standard HTTP.
+			// RFC 6648 deprecated the X- prefix, but these two headers are private OpenCrane fields
+			// between the server and its own worker, never proposed as standard HTTP, so the prefix
+			// is kept to make that obvious. See https://www.rfc-editor.org/rfc/rfc6648 for the
+			// deprecation this deliberately does not follow.
 			const command = _ParseClaimHeaders(request.params["jobId"], request.header("x-opencrane-preprocess-attempt"), request.header("x-opencrane-preprocess-fence"));
 			if (command === null || !Buffer.isBuffer(request.body))
 			{
@@ -148,7 +168,7 @@ export function __CreateArtifactPreprocessorRouter(dependencies: ArtifactPreproc
 	return router;
 }
 
-/** TokenReview one bearer and require the fixed preprocessor identity. */
+/** Ask Kubernetes who the bearer token belongs to, and accept only the one preprocessor ServiceAccount. */
 async function _IsPreprocessor(request: Request, dependencies: ArtifactPreprocessorRouterDependencies): Promise<boolean>
 {
 	const token = _BearerValue(request.header("authorization"));
@@ -157,7 +177,7 @@ async function _IsPreprocessor(request: Request, dependencies: ArtifactPreproces
 	return identity !== null && _IdentityMatches(identity, dependencies.namespace);
 }
 
-/** Match every independently reviewed identity coordinate against the fixed worker contract. */
+/** Check the reviewed username, namespace, ServiceAccount name, and audience all match the one allowed worker. */
 function _IdentityMatches(identity: ReviewedArtifactPreprocessorIdentity, namespace: string): boolean
 {
 	return identity.username === `system:serviceaccount:${namespace}:${ARTIFACT_PREPROCESSOR_SERVICE_ACCOUNT_NAME}`
@@ -172,13 +192,13 @@ function _BearerValue(value: string | undefined): string | null
 	return value === undefined ? null : /^Bearer ([^\s,]+)$/u.exec(value)?.[1] ?? null;
 }
 
-/** Require an empty object for an authority-owned polling request. */
+/** Require the claim request body to be `{}`, so a worker cannot ask for a particular job. */
 function _IsEmptyObject(value: unknown): boolean
 {
 	return value !== null && typeof value === "object" && !Array.isArray(value) && Object.keys(value).length === 0;
 }
 
-/** Parse exact live-claim coordinates without accepting caller-added policy fields. */
+/** Read the job id, attempt, and fence from the body, rejecting any extra field so a worker cannot smuggle in a value the server owns. */
 function _ParseClaimCommand(jobId: unknown, value: unknown): ArtifactPreprocessorClaimCommand | null
 {
 	if (typeof jobId !== "string" || jobId.length === 0 || value === null || typeof value !== "object" || Array.isArray(value)) return null;
@@ -198,7 +218,7 @@ function _ParseClaimHeaders(jobId: unknown, attempt: string | undefined, claimFe
 		: null;
 }
 
-/** Parse one bounded failure category and exact live-claim coordinates. */
+/** Read the failure code plus the job id, attempt, and fence, rejecting anything else. */
 function _ParseFailure(jobId: unknown, value: unknown): ArtifactPreprocessorFailureCommand | null
 {
 	if (value === null || typeof value !== "object" || Array.isArray(value)) return null;
@@ -208,7 +228,7 @@ function _ParseFailure(jobId: unknown, value: unknown): ArtifactPreprocessorFail
 	return claim === null ? null : { ...claim, failureCode: body["failureCode"] };
 }
 
-/** Keep failure reports within the protocol's stable non-sensitive vocabulary. */
+/** Accept only the three fixed failure codes, so nothing derived from the untrusted PDF - an exception message, a file path, document text - can reach server logs or the job row. */
 function _IsFailureCode(value: string): value is ArtifactPreprocessorFailureCode
 {
 	return value === "source_read_failed" || value === "conversion_failed" || value === "output_submission_failed";

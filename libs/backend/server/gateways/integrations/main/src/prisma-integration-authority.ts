@@ -5,7 +5,13 @@ import { ___CloneCanonicalJson, type JsonValue } from "@opencrane/util";
 
 import type { IntegrationAuthorityClock, IntegrationAuthorityRepository, ResolveIntegrationAssignmentCommand, ResolveIntegrationAssignmentResult } from "./integration-resolution.types.js";
 
-/** Production clock for integration-custody expiry checks. */
+/**
+ * The real system clock, used in production for custody expiry checks.
+ *
+ * Called by: constructed in apps/opencrane/src/app/external-action-composition.ts and handed to
+ * {@link PrismaIntegrationAuthorityRepository}. Tests substitute their own
+ * `IntegrationAuthorityClock` instead.
+ */
 export class __SystemIntegrationAuthorityClock implements IntegrationAuthorityClock
 {
 	/** Returns the current system instant used by the server authority. */
@@ -15,12 +21,27 @@ export class __SystemIntegrationAuthorityClock implements IntegrationAuthorityCl
 	}
 }
 
-/** Prisma-backed, credential-free read authority for immutable integration assignments. */
+/**
+ * Answers "may this revision use this integration right now?" out of Postgres, without ever
+ * returning credential material.
+ *
+ * The checks run in a fixed order and all of them must pass: the assignment exists, it belongs to
+ * the caller's silo, the integration row is Active, custody is not revoked, custody has not
+ * expired against the injected clock, custody state is Ready, and the stored tool definitions
+ * still validate. Any single failure returns `{ outcome: "unavailable" }` — the class never
+ * partially succeeds.
+ *
+ * Called by: constructed in apps/opencrane/src/app/external-action-composition.ts and passed as
+ * the `integrations` dependency to the external-action executor
+ * (libs/backend/agents/execution/protocol/src/integration-external-action-executor.ts).
+ *
+ * @see {@link ResolveIntegrationAssignmentResult} for how a caller should react to each reason.
+ */
 export class PrismaIntegrationAuthorityRepository implements IntegrationAuthorityRepository
 {
 	/** Canonical OpenCrane product database. */
 	private readonly prisma: PrismaClient;
-	/** Authority-owned clock that prevents callers from backdating custody expiry checks. */
+	/** Clock supplied by the server, not the caller, so nobody can pass a stale "now" and keep using expired custody. */
 	private readonly clock: IntegrationAuthorityClock;
 
 	/** Creates the integration authority adapter over the product Postgres database. */
@@ -30,7 +51,22 @@ export class PrismaIntegrationAuthorityRepository implements IntegrationAuthorit
 		this.clock = clock;
 	}
 
-	/** Resolves one currently usable integration assignment without exposing any credential material. */
+	/**
+	 * Look up one integration assignment and return it only if every usability check passes.
+	 *
+	 * The silo check comes first and deliberately reports `not_found` rather than a distinct
+	 * "wrong silo" reason, so a caller cannot probe for the existence of another customer's
+	 * integrations. Tool definitions are returned as a deep copy, so a caller cannot mutate what is
+	 * stored.
+	 *
+	 * @param command - Silo, revision, and integration to resolve.
+	 * @returns `resolved` with the opaque custody handle and reviewed tool definitions, or
+	 *          `unavailable` with `not_found` / `inactive` / `revoked` / `expired`.
+	 * @throws Whatever the Prisma client throws when the database is unreachable; a usability
+	 *         failure is a return value, not an exception.
+	 * @see https://www.rfc-editor.org/rfc/rfc8785 — `___CloneCanonicalJson` copies the stored tool
+	 *      definitions through RFC 8785 canonical JSON.
+	 */
 	async resolveAssignment(command: ResolveIntegrationAssignmentCommand): Promise<ResolveIntegrationAssignmentResult>
 	{
 		// 1. Read the immutable composite assignment so a foreign silo cannot select its own custody reference.
@@ -48,7 +84,9 @@ export class PrismaIntegrationAuthorityRepository implements IntegrationAuthorit
 		const toolDefinitions = assignment.toolDefinitions as unknown as readonly ReviewedIntegrationToolDefinition[];
 		if (!Array.isArray(toolDefinitions) || !__AreReviewedIntegrationToolDefinitionsValid(toolDefinitions)) return { outcome: "unavailable", reason: "inactive" };
 
-		// 3. Return only the opaque custody reference and reviewed definitions for the Obot PEP.
+		// 3. Return only the opaque custody reference and the reviewed definitions. Obot is the policy
+		//    enforcement point (PEP): it holds the real secret and decides whether the call is allowed,
+		//    so this side never needs the credential itself.
 		return { outcome: "resolved", assignment: { integrationId: assignment.integrationId, obotCatalogEntryId: assignment.integration.obotCatalogEntryId, obotCustodyReference: assignment.custodyReference.obotCustodyReference, toolDefinitions: ___CloneCanonicalJson(assignment.toolDefinitions as unknown as JsonValue) as unknown as readonly ReviewedIntegrationToolDefinition[] } };
 	}
 }

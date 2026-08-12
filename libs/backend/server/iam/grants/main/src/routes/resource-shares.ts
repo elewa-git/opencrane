@@ -35,7 +35,7 @@ function _ResourceGroupName(resourceType: _ResourceTypeStr, resourceId: string):
   return `resource:${resourceType}:${resourceId}`;
 }
 
-/** Read a group's `members` JSON as a string list (the canonical stored shape). */
+/** Read a group's `members` JSON as a string list; non-strings are dropped. */
 function _MemberList(members: unknown): string[]
 {
   return Array.isArray(members) ? members.filter(function _isString(m): m is string { return typeof m === "string"; }) : [];
@@ -50,15 +50,18 @@ function _ToResourceShare(row: { id: string; name: string; members: unknown })
 }
 
 /**
- * Inter-user RESOURCE sharing (S4c) — distinct from `/shares` (which shares tool/skill
- * entitlements). In the unified model a direct share of a file/chat materialises a
- * **resource-scoped, Personal-tier Group** whose members are everyone the resource is shared
- * with; the recipient's user identity then receives read access through the derived dataset
- * membership → Cognee (S4c.2). The sharer must already be a member of the resource's group
- * (its owner on first share) to add others — no sharing a resource you don't hold.
+ * Lets one user share a file, chat, or dataset with another. Separate from `/shares`, which shares
+ * tool and skill entitlements.
  *
- * @param prisma - Prisma client for the group mirror.
- * @returns Configured Express router.
+ * Sharing a resource creates one Personal-scope Group named `resource:<type>:<id>`, and its members
+ * are everyone the resource is shared with; read access then follows from that group membership. The
+ * first share creates the group with the sharer and the recipient in it, which makes the sharer its
+ * owner. After that only a current member may add or remove others, so nobody can share a resource
+ * they have no access to.
+ *
+ * Called by: apps/opencrane/src/app/routes.ts, mounted at /api/v1/resource-shares.
+ * @param prisma - Silo Prisma client holding the group rows.
+ * @returns Express router with share, list, and unshare routes.
  */
 export function resourceSharesRouter(prisma: PrismaClient): Router
 {

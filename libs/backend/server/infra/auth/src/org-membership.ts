@@ -6,22 +6,27 @@ export type { OrgMembershipFacts, OrgMembershipRepository, OrgMembershipRow, Own
 const _EMPTY: OrgMembershipFacts = { isOrgAdmin: false, ownedOrgs: [] };
 
 /**
- * Resolve the caller's org-admin facts from their `OrgMembership` rows, fail-closed.
+ * Work out, from the caller's `OrgMembership` rows, whether they administer any
+ * organisation and which ones.
  *
- * This is the single membership derivation used by OIDC session introspection:
+ * The rules:
+ *   - Holding `owner` or `admin` on at least one organisation makes the caller an org
+ *     admin, for exactly those organisations.
+ *   - `member` rows grant nothing and never appear in the returned list.
+ *   - No subject, or no rows, means no authority.
+ *   - A failed lookup is RETHROWN, never turned into an empty result. This matters: an
+ *     unreachable database would otherwise silently read as "administers nothing", and a
+ *     caller would strip a real admin's rights instead of reporting an error.
  *
- *   - A subject who holds `owner` or `admin` on ≥1 org IS an org admin, scoped to
- *     exactly those orgs.
- *   - `member` rows confer no admin authority and are excluded from the scope.
- *   - A missing subject or no rows ⇒ empty facts (no authority).
- *   - A lookup failure propagates so the caller cannot mistake an unavailable authority source
- *     for a successful empty membership result.
+ * Always keyed on the subject the identity provider verified (OIDC `sub`), never on
+ * anything from the request body or query.
  *
- * Keyed on the IdP-verified subject (OIDC `sub`), never request input.
+ * Called by: `OidcAuthServiceBase.getStatus` in ./oidc-service.ts, on every `/auth/me`.
  *
- * @param repository - Repository providing the membership rows.
- * @param subject - The caller's IdP-verified subject; empty/undefined ⇒ empty facts.
- * @returns The derived org-admin flag and the owned/administered org set.
+ * @param repository - Supplies the owner/admin rows; see {@link OrgMembershipRepository}.
+ * @param subject    - The caller's verified subject; empty or missing returns no authority.
+ * @returns Whether the caller administers at least one organisation, plus that list.
+ * @throws Whatever the repository throws when the lookup fails — deliberately not caught.
  */
 export async function _ResolveOrgMembershipFacts(repository: OrgMembershipRepository, subject: string | undefined): Promise<OrgMembershipFacts>
 {

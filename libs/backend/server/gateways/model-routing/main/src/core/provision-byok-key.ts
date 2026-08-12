@@ -14,20 +14,17 @@ import type { ByokProviderCatalog } from "./byok-default-models.types.js";
 import type { DeprovisionByokKeyOptions, ProvisionByokKeyOptions, ProvisionByokKeyResult } from "./provision-byok-key.types.js";
 
 /**
- * Reusable core for setting/removing a silo's BYOK provider key — the work behind both the HTTP
- * route (`providerByokRouter`) and the boot-time bootstrap. Writing it here (not in `routes/`) keeps
- * the provisioning logic out of the HTTP layer so the operator boot path can call it directly.
+ * Setting and removing a silo's BYOK provider key. Both the HTTP route (`providerByokRouter`) and
+ * the boot-time bootstrap call these functions, which is why they live here and not in `routes/` —
+ * the boot path has no HTTP request to go through.
  *
- * A set: write the raw key to a k8s Secret (durable source of truth) → push to LiteLLM's
- * `/credentials` dynamic path (best-effort) → upsert the Global ProviderCredential row → seed a
- * default model bound to it. A key is installation-wide or ClusterTenant-scoped.
+ * Setting a key, in order: write the raw key to a Kubernetes Secret (the durable copy), push it to
+ * LiteLLM's `/credentials` (best-effort), write the Global `ProviderCredential` row, then seed the
+ * models bound to it. NOTE: the row this file writes is always Global (`scope: "Global"`,
+ * `clusterTenant: null`) — the ClusterTenant-scoped variant is written through
+ * `providerCredentialsRouter`, not here.
  */
 
-/**
- * Public model name of the stable "auto" selection. Backed by the cheapest catalogued model
- * today (LiteLLM has no capability-aware routing); the AIR router can re-point it later without
- * callers/skills re-selecting. See `_ensureProviderModels` step 3.
- */
 /**
  * Public model name of the stable EMBEDDING selection — the embedding-side mirror of
  * {@link _AUTO_MODEL_NAME}. Backed by the configured provider's catalogued embedding model
@@ -41,15 +38,29 @@ import type { DeprovisionByokKeyOptions, ProvisionByokKeyOptions, ProvisionByokK
  */
 export const _AUTO_EMBEDDING_MODEL_NAME = "auto-embedding";
 
-/** Stable public model selection whose upstream provider model can improve without caller changes. */
+/**
+ * Public model name of the stable "auto" selection. Backed by the cheapest catalogued model today
+ * (LiteLLM has no capability-aware routing); the AIR router can re-point it later without
+ * callers/skills re-selecting. See `_ensureProviderModels` step 3.
+ */
 const _AUTO_MODEL_NAME = "auto";
 
 /**
- * Require LiteLLM to report one live public model deployment. This is deliberately stricter than
- * the interactive BYOK route: an installation bootstrap must not accept traffic until its default
- * model alias can actually be resolved by the release-local LiteLLM instance.
+ * Check that LiteLLM really has a given model registered, and throw if it does not.
  *
- * @param publicModelName - LiteLLM `model_name` required to be present in its live inventory.
+ * Stricter than the interactive BYOK route on purpose: a fresh install must not start accepting
+ * traffic until the model its default alias points at can actually be resolved by the LiteLLM
+ * instance deployed alongside it. Failing loudly at boot beats every later request failing.
+ *
+ * Called by: apps/opencrane/src/app/initial-model-bootstrap.ts, which calls it with `"auto"`
+ * after provisioning the first key.
+ *
+ * @param publicModelName - The LiteLLM `model_name` that must appear in `GET /model/info`.
+ * @throws Error when `LITELLM_ENDPOINT` or `LITELLM_MASTER_KEY` is unset, when `/model/info`
+ *         answers with a non-2xx status, when its body does not parse, or when the model is
+ *         simply not in the returned inventory.
+ * @see LiteLLM proxy `GET /model/info`, pinned to `main-v1.81.0-stable` by `litellm.image.tag`
+ *      in apps/_infra/deploy-k8s/values.yaml — NEEDS-HUMAN: add the docs URI for that release.
  */
 export async function _RequireLiteLlmModelRegistration(publicModelName: string): Promise<void>
 {
@@ -82,21 +93,60 @@ export async function _RequireLiteLlmModelRegistration(publicModelName: string):
   }
 }
 
-/** Name of the k8s Secret carrying a provider's raw BYOK key, in the operator's own namespace. */
+/**
+ * Build the name of the Kubernetes Secret that holds a provider's raw BYOK key.
+ *
+ * The name is fixed per provider, and that is a security constraint rather than a convenience: the
+ * server's Role grants it `get`/`update` on exactly these Secret names, so the server can rewrite
+ * a key it already has but cannot invent new Secret names or delete existing ones. Deployment
+ * pre-creates every Secret in the fixed provider catalogue — see `_clearProviderKeySecret`, which
+ * blanks the value instead of deleting the object.
+ *
+ * Called by: `_ProvisionByokKey`, `_DeprovisionByokKey`, `_applyProviderKeySecret` and
+ * `_clearProviderKeySecret` in this file.
+ *
+ * @param provider - Provider key, e.g. `openai`.
+ * @returns `byok-provider-key-<provider>`.
+ */
 export function _byokSecretName(provider: string): string
 {
   return `byok-provider-key-${provider}`;
 }
 
-/** Name of the LiteLLM `/credentials` entry for a provider's BYOK key. */
+/**
+ * Build the name a provider's key is stored under in LiteLLM's `/credentials` store.
+ *
+ * Derived from the provider rather than chosen, so the set path and the remove path always agree
+ * on the name, and so a model registration can reference it via `litellm_credential_name`.
+ *
+ * Called by: `_ProvisionByokKey` and `_DeprovisionByokKey` in this file.
+ *
+ * @param provider - Provider key, e.g. `openai`.
+ * @returns `byok-<provider>`.
+ */
 export function _byokCredentialName(provider: string): string
 {
   return `byok-${provider}`;
 }
 
 /**
- * Provision (set or refresh) a silo's raw BYOK key for a provider: persist the Secret, register the
- * LiteLLM credential, record the ProviderCredential row, and seed a default model bound to it.
+ * Set or refresh a provider's raw BYOK key, then get the platform ready to route on it.
+ *
+ * Five steps, in this order for a reason: write the key to its Kubernetes Secret first (that
+ * Secret is the durable copy and survives a LiteLLM database reset), push it to LiteLLM's
+ * `/credentials`, record the `ProviderCredential` row, register every model class for the
+ * provider, and finally register the provider's embedding model.
+ *
+ * Steps 2, 4 and 5 are best-effort by default: if LiteLLM is unconfigured or down, the key is
+ * still set and the platform converges on a later call. `requireLiveModels` flips that — see
+ * `ProvisionByokKeyOptions.requireLiveModels` — and is what the boot-time bootstrap uses so a
+ * fresh install refuses to come up half-configured instead of accepting traffic it cannot serve.
+ *
+ * The raw key is written only to the Secret and to LiteLLM. It is never logged and never returned.
+ *
+ * Called by: the `PUT /:provider` handler in `providerByokRouter`
+ * (libs/backend/server/gateways/providers/main/src/routes/provider-byok.ts, org-admin gated), and
+ * apps/opencrane/src/app/initial-model-bootstrap.ts, which passes `requireLiveModels: true`.
  *
  * @param opts.prisma            - Prisma client for the credential + model rows.
  * @param opts.coreApi           - Kubernetes Core V1 API for the Secret write.
@@ -104,7 +154,16 @@ export function _byokCredentialName(provider: string): string
  * @param opts.provider          - The provider the key is for (e.g. `openai`).
  * @param opts.apiKey            - The raw upstream key (never logged or echoed).
  * @param opts.log               - Scoped logger for the best-effort model-seed warning.
- * @returns Whether LiteLLM accepted the key, and the upserted credential row.
+ * @param opts.requireLiveModels - When true, a failed model or embedding registration throws
+ *                                 instead of only logging a warning. Defaults to false.
+ * @returns Whether LiteLLM accepted the key, and the `ProviderCredential` row that was written.
+ *          `litellmRegistered: false` means the key is set but only in its Secret.
+ * @throws Whatever the Kubernetes client throws when the Secret cannot be written — the key is
+ *         then not set at all. With `requireLiveModels: true`, also whatever a failed model or
+ *         embedding registration throws, after the Secret and row have already been written.
+ * @see LiteLLM proxy, pinned to `main-v1.81.0-stable` by `litellm.image.tag` in
+ *      apps/_infra/deploy-k8s/values.yaml — the `/credentials`, `/model/new` and `/model/info`
+ *      endpoints this path calls. NEEDS-HUMAN: add the docs URI for that release.
  */
 export async function _ProvisionByokKey(opts: ProvisionByokKeyOptions): Promise<ProvisionByokKeyResult>
 {
@@ -152,13 +211,25 @@ export async function _ProvisionByokKey(opts: ProvisionByokKeyOptions): Promise<
 }
 
 /**
- * Remove a silo's BYOK key for a provider: clear the fixed custody Secret, then remove the LiteLLM
- * credential and row. The placeholder Secret remains so the restricted server Role can re-add a key.
+ * Remove a provider's BYOK key: blank the Secret's value, drop the LiteLLM credential, delete the
+ * `ProviderCredential` row.
+ *
+ * The Secret OBJECT is deliberately kept, with an empty value. The server's Role can update these
+ * fixed Secret names but cannot create or delete them, so deleting the object would leave nothing
+ * for a later `PUT` to write into and the provider could never be re-enabled without a redeploy.
+ *
+ * Any `ModelDefinition` rows that referenced the credential are left in place; they simply stop
+ * resolving until a key is set again.
+ *
+ * Called by: the `DELETE /:provider` handler in `providerByokRouter`
+ * (libs/backend/server/gateways/providers/main/src/routes/provider-byok.ts, org-admin gated).
  *
  * @param opts.prisma            - Prisma client.
  * @param opts.coreApi           - Kubernetes Core V1 API.
  * @param opts.operatorNamespace - The operator's own namespace.
  * @param opts.provider          - The provider whose key to remove.
+ * @throws Error when the provider's Secret is missing entirely, which means deployment never
+ *         pre-created it; the LiteLLM credential and the row are then left untouched.
  */
 export async function _DeprovisionByokKey(opts: DeprovisionByokKeyOptions): Promise<void>
 {
@@ -206,7 +277,7 @@ async function _applyProviderKeySecret(coreApi: k8s.CoreV1Api, namespace: string
   }
 }
 
-/** Clear one pre-created provider custody Secret without deleting the name guarded by RBAC. */
+/** Blank a provider Secret's value while keeping the object itself — the server's Role may update these fixed names but not create or delete them, so deleting it would make the provider unrecoverable. */
 async function _clearProviderKeySecret(coreApi: k8s.CoreV1Api, namespace: string, provider: string): Promise<void>
 {
   try
@@ -278,9 +349,21 @@ async function _upsertCredentialRow(prisma: PrismaClient, provider: string, secr
 }
 
 /**
- * Converge one provider catalogue into global ModelDefinition rows and live LiteLLM deployments.
- * Strict startup records every deployment identifier returned by LiteLLM so subsequent restarts
- * converge rather than retaining a placeholder or stale deployment id.
+ * Make sure every model class in a provider's catalogue has a Global `ModelDefinition` row, and —
+ * at boot — a live LiteLLM deployment behind it.
+ *
+ * Three things happen. Each class gets its row created or re-pointed at this credential. The
+ * first-ever default is preserved, so setting up a second provider never steals the default from
+ * the first. And the stable `auto` alias is pointed at the provider's cheapest class.
+ *
+ * When `requireLiveModels` is true (the boot path) every registration must return a real LiteLLM
+ * deployment id, and that id is written back to the row. Without that, a row created while
+ * LiteLLM was unreachable would keep its placeholder id for good and never route.
+ *
+ * @param catalog - The provider's catalogue; undefined for an uncatalogued provider, which is a
+ *                  no-op — the key is still set, it just seeds no models.
+ * @throws Whatever `_RegisterLiteLlmModel` throws under `requireLiveModels`; `_ProvisionByokKey`
+ *         re-throws it at boot and only logs a warning otherwise.
  */
 async function _ensureProviderModels(prisma: PrismaClient, catalog: ByokProviderCatalog | undefined, providerCredentialId: string, litellmCredentialName: string | null, requireLiveModels: boolean): Promise<void>
 {

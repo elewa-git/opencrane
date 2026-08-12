@@ -37,12 +37,13 @@ function _toPrismaScope(scope: ModelRoutingScope): "Global" | "ClusterTenant"
 }
 
 /**
- * Validate a {@link ModelDefinitionWrite} body. Returns a `{ error, code }` envelope when
- * invalid, or null when acceptable. Enforces required `publicModelName` + `upstreamModel`,
- * a valid scope, and `clusterTenant` when scope is `clusterTenant`.
+ * Check an untrusted {@link ModelDefinitionWrite} body: `publicModelName` and `upstreamModel` are
+ * both required, the scope must be `global` or `clusterTenant`, and a `clusterTenant`-scoped
+ * model must name its owning ClusterTenant.
  *
  * @param body - The untrusted request body.
- * @returns A `{ error, code }` payload when invalid; null when valid.
+ * @returns `null` when the body is acceptable; otherwise `{ error, code }` with code
+ *          `VALIDATION_ERROR`, which the route sends as the 400 body unchanged.
  */
 function _validateWrite(body: Record<string, unknown>): { error: string; code: string } | null
 {
@@ -77,17 +78,20 @@ function _validateWrite(body: Record<string, unknown>): { error: string; code: s
 }
 
 /**
- * Resolve and scope-check the backing credential for a model write. A model may bind only a
- * Global credential or one owned by its OWN ClusterTenant — never another customer's — which
- * stops a tenant-scoped model from borrowing another ClusterTenant's provider key. Shared by
- * create and update so the isolation rule cannot be bypassed via PUT.
+ * Look up the credential a model write wants to use, and refuse it if it belongs to someone else.
+ *
+ * A model may bind a Global credential, or one owned by its OWN ClusterTenant — never another
+ * customer's. That is what stops one tenant's model from spending another tenant's provider key.
+ * Create and update both call this, so a PUT cannot slip past the rule that a POST enforces.
  *
  * @param prisma - Prisma client used to look up the credential.
  * @param providerCredentialId - The requested credential id, or undefined/null when none.
  * @param modelClusterTenant - The owning ClusterTenant of the model (null for Global scope).
- * @returns `{ secretRef, litellmCredentialName }` (both null when no credential requested), or a
- *          `{ error, code }` envelope. `litellmCredentialName` is non-null for a BYOK credential on
- *          the dynamic path and selects `litellm_credential_name` over the `os.environ` baseline.
+ * @returns `{ secretRef, litellmCredentialName }` — both null when no credential was requested — or
+ *          `{ error, code }` with `VALIDATION_ERROR` (no such credential) or
+ *          `CREDENTIAL_SCOPE_MISMATCH` (owned by another ClusterTenant). A non-null
+ *          `litellmCredentialName` means the key is in LiteLLM's credential store, so registration
+ *          binds `litellm_credential_name` instead of the `os.environ` baseline.
  */
 async function _resolveCredential(prisma: PrismaClient, providerCredentialId: string | null | undefined, modelClusterTenant: string | null): Promise<{ secretRef: string | null; litellmCredentialName: string | null } | { error: string; code: string }>
 {
@@ -109,12 +113,21 @@ async function _resolveCredential(prisma: PrismaClient, providerCredentialId: st
 }
 
 /**
- * CRUD router for {@link ModelDefinition} — routable models registered in LiteLLM (BYOM).
+ * CRUD router for {@link ModelDefinition} — the routable models registered in LiteLLM (BYOM).
  *
- * On create the row is persisted and the model is registered GLOBALLY with LiteLLM via a
- * best-effort `POST /model/new` (guarded by `LITELLM_ENDPOINT` + `LITELLM_MASTER_KEY`); when
- * LiteLLM is unconfigured a deterministic placeholder id is stored and the create still
- * succeeds. Mutations are gated by the ClusterTenant scope guard (AIR.0b).
+ * On create the row is written and the model is registered GLOBALLY with LiteLLM via a best-effort
+ * `POST /model/new` (guarded by `LITELLM_ENDPOINT` + `LITELLM_MASTER_KEY`). With LiteLLM
+ * unconfigured a deterministic placeholder id is stored and the create still succeeds, so the row
+ * exists but will not route until it is reconciled. Update does NOT re-register, so changing
+ * `upstreamModel` here leaves the LiteLLM deployment pointing at the old model. Mutations are
+ * gated by the ClusterTenant scope guard (AIR.0b).
+ *
+ * `GET /` returns every row, including Global ones, to every caller — which is exactly why an
+ * embedding deployment must never be given a `ModelDefinition` row. See
+ * `ByokProviderCatalog.embeddingModel` in
+ * libs/backend/server/gateways/model-routing/main/src/core/byok-default-models.types.ts.
+ *
+ * Called by: apps/opencrane/src/app/routes.ts, mounted at `/api/v1/models`.
  *
  * @param prisma - Prisma client used for persistence.
  * @returns Configured Express router.

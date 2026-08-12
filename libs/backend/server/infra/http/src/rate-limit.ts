@@ -12,8 +12,14 @@ export type { RateLimitOptions } from "./rate-limit.types.js";
  *
  * The default cap is deliberately generous (1000/min/IP): real opencrane-ui traffic stays well
  * under it, so this never shapes normal use — it only sheds a flood. Health probes (`/healthz`,
- * `/readyz`) and the high-frequency trusted internal pod-poll surface (`/api/internal/*`) are
+ * `/readyz`) and the high-frequency trusted internal pod-poll routes (`/api/internal/*`) are
  * exempt so liveness checks and operator loops are never throttled.
+ *
+ * The counters live in this process's memory, so each replica enforces the cap on its own: with N
+ * replicas behind the ingress, one client can reach N times the configured limit overall.
+ *
+ * Called by: apps/opencrane/src/app/public-app.ts (once, for the whole app) and
+ * apps/opencrane/src/app/routes.ts (per-router, with the caller's overrides).
  *
  * @param opts - Optional window/max overrides.
  * @returns An Express middleware enforcing the per-IP limit.

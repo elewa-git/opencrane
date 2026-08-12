@@ -43,7 +43,7 @@ export interface ToolInvocationIntent
 	readonly requestIdentity: ToolInvocationRequestIdentity;
 	/** Immutable tool revision admitted from the compiled input. */
 	readonly toolRevisionId: string;
-	/** Runtime tool-call idempotency coordinate. */
+	/** Id the runtime gave this tool call; repeat calls with the same id must not run twice. */
 	readonly toolInvocationId: string;
 	/** Canonical validated arguments, not a later runtime replacement. */
 	readonly arguments: JsonValue;
@@ -76,7 +76,7 @@ export interface ToolInvocationRecord
 	readonly attempt: number;
 	/** Candidate id accepted with the invocation. */
 	readonly candidateId: string;
-	/** Runtime tool-call idempotency coordinate. */
+	/** Id the runtime gave this tool call; repeat calls with the same id must not run twice. */
 	readonly toolInvocationId: string;
 	/** Immutable tool revision. */
 	readonly toolRevisionId: string;
@@ -120,7 +120,14 @@ export interface ToolInvocationRecord
 	readonly revision: number;
 }
 
-/** Result of atomic candidate and Preparing-invocation admission. */
+/**
+ * What admission decided for one candidate.
+ *
+ * `admitted` created the row; `idempotent` found the identical row from an earlier attempt — both
+ * carry the invocation and both mean "proceed". `conflict` carries nothing and is permanent: the
+ * candidate id already belongs to different arguments, the request fingerprint is already taken,
+ * or the preparation policy was not the fixed one. Do not retry a `conflict`.
+ */
 export type ToolInvocationAdmissionResult =
 	| { readonly outcome: "admitted" | "idempotent"; readonly invocation: ToolInvocationRecord }
 	| { readonly outcome: "conflict" };
@@ -138,7 +145,17 @@ export interface ToolInvocationClaim
 	readonly revision: number;
 }
 
-/** Outcome of claiming prepared work. */
+/**
+ * What happened when a worker tried to take the lease on one invocation.
+ *
+ * `claimed` means this worker holds the lease and may make exactly one provider call, using the
+ * returned `claim`. `winner` means another worker already moved this invocation, or its state no
+ * longer permits the claim — the row that won is returned so the caller can carry on from the real
+ * state instead of retrying. `missing` means the invocation row is gone.
+ *
+ * Making a provider call after anything other than `claimed` risks a duplicate real-world effect.
+ * @see {@link ToolInvocationClaim}
+ */
 export type ToolInvocationClaimResult =
 	| { readonly outcome: "claimed"; readonly claim: ToolInvocationClaim; readonly invocation: ToolInvocationRecord }
 	| { readonly outcome: "winner"; readonly invocation: ToolInvocationRecord }
@@ -149,13 +166,27 @@ export type ToolResultDeliveryPayload =
 	| { readonly toolInvocationId: string; readonly outcome: "succeeded"; readonly result: JsonValue }
 	| { readonly toolInvocationId: string; readonly outcome: "failed"; readonly failureCode: string };
 
-/** Terminal CAS result; a loser must replay the returned durable winner instead of dispatching. */
+/**
+ * What happened when a worker tried to record a finished provider call.
+ *
+ * `completed` means this worker's result was stored and `delivery` is the exact body to hand back
+ * to the runtime. `winner` means another worker recorded the outcome first: the returned row is
+ * the stored truth, and the caller must deliver from that row rather than send its own result or
+ * call the provider again. `missing` means the invocation row is gone.
+ */
 export type ToolInvocationCompletionResult =
 	| { readonly outcome: "completed"; readonly invocation: ToolInvocationRecord; readonly delivery: ToolResultDeliveryPayload }
 	| { readonly outcome: "winner"; readonly invocation: ToolInvocationRecord }
 	| { readonly outcome: "missing" };
 
-/** Internal transaction result that distinguishes a winning CAS from an observed winner. */
+/**
+ * Whether this transaction actually changed the invocation, and the row as it now stands.
+ *
+ * `changed` is true only when this caller's conditional update matched one row. False means the
+ * row moved under us — usually another worker got there first — and `invocation` is then the
+ * current stored row, not what we tried to write. Only a caller with `changed: true` may append
+ * the timeline event for the transition, otherwise the same event would be written twice.
+ */
 export interface ToolInvocationTransitionResult
 {
 	/** Whether this transaction committed the lifecycle transition. */
@@ -184,7 +215,15 @@ export type ToolInvocationLifecycleEvent =
 /** Appends tool lifecycle events using the caller's transaction. */
 export interface ToolInvocationLifecycleEventSink
 {
-	/** Append one lifecycle event in the invocation transition transaction. */
+	/**
+	 * Adds one timeline event using the caller's open transaction.
+	 * @param transaction - The Prisma transaction that is committing the state change. Typed
+	 *   `unknown` on purpose so this package never imports Prisma types from the runs package.
+	 * @param event - Event to append; carries no arguments and no provider response.
+	 * @returns True when the event was written. False means the run rejected it (wrong attempt or a
+	 *   run state that does not accept this kind), and the caller MUST abort the whole transition —
+	 *   ./prisma-tool-invocation-unit-of-work.ts throws so the transaction rolls back.
+	 */
 	appendInTransaction(transaction: unknown, event: ToolInvocationLifecycleEvent): Promise<boolean>;
 }
 
@@ -211,7 +250,13 @@ export interface ToolInvocationRecoveryEvent
  */
 export interface ToolInvocationRecoveryEventSink
 {
-	/** Append one recovery event in the invocation/run state transition transaction. */
+	/**
+	 * Adds one manual-recovery entry using the caller's open transaction.
+	 * @param transaction - The Prisma transaction moving the invocation into `RecoveryRequired`.
+	 * @param event - Fixed, non-secret summary; never a provider message or body.
+	 * @returns True when the entry was written. False means the caller must abort the transition, so
+	 *   an invocation can never reach `RecoveryRequired` invisibly.
+	 */
 	appendInTransaction(transaction: unknown, event: ToolInvocationRecoveryEvent): Promise<boolean>;
 }
 
@@ -225,10 +270,23 @@ export interface ToolInvocationRunRecoveryCommand
 }
 
 /**
- * Stable runs-owned decisions returned inside a ToolInvocation recovery transaction.
+ * What the runs package answers when this package asks to move a run into manual recovery.
  *
- * The serialized values cross the authorization-to-runs package boundary so callers can suppress
- * recovery events only for an already-cancelling run while treating every true conflict as fatal.
+ * The caller must react differently to each one, and ./prisma-tool-invocation-unit-of-work.ts
+ * (`_enterRecoveryRequired`) does:
+ * - `Entered` and `AlreadyRecoveryRequired` -> write the recovery entry and commit. The second is
+ *   a replay after a retried transaction, not an error.
+ * - `Cancelling` -> commit the invocation change but write NO recovery entry. The run is already
+ *   being torn down, and a recovery entry would ask a person to act on work that is going away.
+ *   The cleared provider claim still commits so cancellation can finish without repeating the
+ *   provider call.
+ * - `Conflict` -> throw. The run id, attempt, or state does not match, which means we are looking
+ *   at the wrong attempt; committing anyway would strand a run in the wrong state.
+ *
+ * These are string values on purpose because they cross a package boundary.
+ * Called by: libs/backend/agents/execution/runs/main/src/prisma-tool-invocation-run-recovery-authority.ts
+ * (returns them) and ./prisma-tool-invocation-unit-of-work.ts (branches on them).
+ * @see {@link ToolInvocationRunRecoveryAuthority}
  */
 export enum ToolInvocationRunRecoveryEnterResults
 {
@@ -248,9 +306,29 @@ export type ToolInvocationRunRecoveryEnterResult = ToolInvocationRunRecoveryEnte
 /** Run-state operations the runs package provides, called inside this package's invocation transaction. */
 export interface ToolInvocationRunRecoveryAuthority
 {
-	/** Enter visible manual recovery in the caller-owned invocation transaction. */
+	/**
+	 * Moves one run attempt into its manual-recovery state.
+	 * @param transaction - The Prisma transaction already changing the invocation. Typed `unknown`
+	 *   so this package holds no Prisma dependency from the runs side.
+	 * @param command - The run id and the attempt the caller believes is current; the runs package
+	 *   checks the attempt itself and answers `Conflict` if it moved on.
+	 * @returns Which of the four {@link ToolInvocationRunRecoveryEnterResults} happened. The caller
+	 *   must branch on all four — see that enum for what each one obliges it to do.
+	 */
 	enterRecoveryRequiredInTransaction(transaction: unknown, command: ToolInvocationRunRecoveryCommand): Promise<ToolInvocationRunRecoveryEnterResult>;
-	/** Resume only after authorization proves no invocation still requires manual recovery. */
+	/**
+	 * Puts a recovered run attempt back to running.
+	 *
+	 * Only legal once no invocation on that attempt is still in `RecoveryRequired` — resuming while
+	 * one is unresolved would let the worker pick up an action whose real-world outcome is still
+	 * unknown. The caller is responsible for that check; this port does not make it.
+	 * @param transaction - The Prisma transaction performing the resume.
+	 * @param command - Run id and the attempt expected to still be current.
+	 * @returns True when the run moved back to running. False when the attempt or state no longer
+	 *   matches, which the caller must treat as "someone else changed this run".
+	 * Called by: no caller in this repo yet — only the runs-side implementation and its tests
+	 * (libs/backend/agents/execution/runs/main/src/prisma-tool-invocation-run-recovery-authority.ts).
+	 */
 	resumeRunningInTransaction(transaction: unknown, command: ToolInvocationRunRecoveryCommand): Promise<boolean>;
 }
 
@@ -279,10 +357,33 @@ interface ToolInvocationOperations
 	recoverExpiredClaim(invocationId: string, now: Date): Promise<ToolInvocationRecord | null>;
 }
 
-/** Process-scoped transaction owner that exposes the ToolInvocation lifecycle as atomic calls. */
+/**
+ * The public way to move one tool call along; each method is its own transaction.
+ *
+ * Callers hold no transaction and never see Prisma. One call = one serializable transaction that
+ * changes the invocation, writes its result delivery if there is one, and appends its timeline
+ * event, so a partially applied transition cannot be observed. Methods that can lose a race
+ * return the durable row that won instead of throwing, and the caller must accept that row rather
+ * than retry its own intent.
+ *
+ * Called by: libs/backend/agents/execution/protocol/src/external-action-worker.types.ts (as the
+ * worker's `invocations` dependency); composed in
+ * apps/opencrane/src/app/external-action-composition.ts.
+ * Implemented by: ./prisma-tool-invocation-unit-of-work.ts.
+ */
 export interface ToolInvocationUnitOfWork extends ToolInvocationOperations {}
 
-/** Transaction-scoped persistence methods constructed only by the ToolInvocation unit of work. */
+/**
+ * Every database write for one tool call, all bound to a single open transaction.
+ *
+ * Only {@link ToolInvocationUnitOfWork} may build one of these, because each method assumes it is
+ * already inside a serializable transaction and enforces its own optimistic check (expected
+ * `revision`, or an exact claim `fence`) in the WHERE clause. Every method here asks the pure
+ * planner first and refuses to write a transition the planner did not choose.
+ *
+ * Implemented by: ./prisma-tool-invocation-repository.ts (`PrismaToolInvocationRepository`).
+ * @see {@link ToolInvocationUnitOfWork} for the process-level entry point callers actually use.
+ */
 export interface ToolInvocationTransactionRepository
 {
 	/** Admit one candidate as durable Preparing work in the caller transaction. */
@@ -320,5 +421,27 @@ export interface ToolInvocationAdmissionUnitOfWork
 	admit(intent: ToolInvocationIntent, now: Date, policy: ToolInvocationPreparationPolicy): Promise<ToolInvocationAdmissionResult>;
 }
 
-/** Atomically admit one candidate as durable Preparing work inside the stream transaction. */
+/**
+ * Records one accepted tool-call candidate as a new invocation in `Preparing`.
+ *
+ * Passed as a function so the runtime-stream code can admit an invocation without importing this
+ * package's Prisma adapter. It runs inside the caller's transaction, so it commits with the
+ * candidate acceptance.
+ *
+ * Idempotent on `(runId, attempt, candidateId)`: a repeat with the same `requestFingerprint`
+ * returns `idempotent` with the existing row, and a repeat with a different fingerprint returns
+ * `conflict` and writes nothing. A caller that treats `conflict` as retryable will spin forever —
+ * it means the same candidate id is being reused for different arguments.
+ *
+ * Called by: libs/backend/agents/execution/protocol/src/prisma-runtime-dispatch-authority.ts.
+ * Implemented by: `__AdmitPreparingToolInvocationInTransaction` in
+ * ./prisma-tool-invocation-repository.ts.
+ * @param transaction - Prisma transaction accepting the runtime candidate, typed `unknown` to keep
+ *   Prisma out of this contract.
+ * @param intent - The frozen candidate facts to persist.
+ * @param now - Trusted server time; sets the retry deadline.
+ * @param policy - Must be exactly {@link TOOL_INVOCATION_PREPARATION_POLICY}; any other value is
+ *   rejected as `conflict`.
+ * @returns `admitted` for a new row, `idempotent` for an exact replay, `conflict` for anything else.
+ */
 export type AdmitPreparingToolInvocation = (transaction: unknown, intent: ToolInvocationIntent, now: Date, policy: ToolInvocationPreparationPolicy) => Promise<ToolInvocationAdmissionResult>;

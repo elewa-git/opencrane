@@ -24,7 +24,26 @@ export class __RandomChannelOpaqueContextSource implements ChannelOpaqueContextS
 	}
 }
 
-/** Resolves a delegated browser operation to one authorized runtime route. */
+/**
+ * Decide whether one browser, proxied by channel-proxy, may read events on one conversation - and where.
+ *
+ * The seven numbered checks below run in a fixed order, cheapest and most sceptical first: validate
+ * the request and the resolver's own configuration, confirm the calling workload with a Kubernetes
+ * TokenReview, require a human subject that OpenCrane itself verified, bind the already
+ * origin-checked host to a silo and current signed membership, require an open agent session the
+ * subject participates in, authorize the read, and only then mint a short-lived opaque pass. Each
+ * stage fails closed with its own reason. The pass is returned to the proxy in full but stored only
+ * as a digest, and the final database call re-checks every binding inside one serializable
+ * transaction, because the conversation or the route can change while the earlier checks run.
+ *
+ * Called by: the POST handler in channel-targets.router.ts, which serves
+ * /api/internal/channel-targets:resolve.
+ *
+ * @param dependencies - Fixed policy plus the identity, membership, conversation, and route authorities.
+ * @param command - The request assembled by the router; never raw browser input.
+ * @returns `authorized` with the endpoint, opaque context and expiry, or `denied` with the reason
+ * that decides the router's status code.
+ */
 export async function __ResolveChannelTarget(dependencies: ChannelTargetResolutionDependencies, command: ResolveChannelTargetCommand): Promise<ResolveChannelTargetResult>
 {
 	const nowEpochMs = dependencies.clock.nowEpochMs();

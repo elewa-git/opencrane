@@ -4,14 +4,26 @@ import type { Logger } from "@opencrane/backend/observability";
 
 import type { SkillCatalogueRepository } from "./skill-catalogue.types.js";
 
-/** Trusted browser identity used only to select a skill catalogue silo. */
+/**
+ * The one fact this router needs about the caller: which silo they are in.
+ *
+ * Nothing else is carried on purpose — the catalogue is read-only, so there is no role to check. The
+ * silo is derived from the authenticated session and request host, never from anything the caller
+ * sends, and it scopes every query.
+ */
 export interface SkillCatalogueCaller
 {
 	/** Silo derived from the authenticated request host. */
 	readonly siloId: string;
 }
 
-/** Composition ports for the read-only skill catalogue router. */
+/**
+ * What {@link __CreateSkillCatalogueRouter} needs supplied: how to identify the caller, where to read
+ * the catalogue, and where to log failures.
+ *
+ * Production values come from `prisma-skill-catalogue.router.ts`; tests substitute fakes so the
+ * handler can be exercised without a database.
+ */
 export interface SkillCatalogueRouterDependencies
 {
 	/** Resolves the authenticated browser caller and trusted host silo. */

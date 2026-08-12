@@ -4,15 +4,25 @@ import { ___LoadOidcAuthConfig } from "./oidc-config.js";
 import type { OidcAuthConfig } from "./oidc-config.types.js";
 
 /**
- * OpenCrane server authentication middleware.
+ * Build the middleware that decides whether a request may proceed at all.
  *
- * Authentication is resolved in priority order:
- *   1. Public path bypass  — /healthz and /api/v1/auth/* never require a token.
- *   2. OIDC session        — a valid session cookie from the browser login flow.
+ * Checked in this order:
+ *   1. Public paths — `/healthz` and everything under `/api/v1/auth` always pass, since
+ *      the login routes themselves cannot require a login.
+ *   2. An established OIDC session — a valid session cookie from the browser login flow.
+ *   3. Anything else gets 401. In particular, a server with OIDC switched off rejects the
+ *      whole API rather than serving it without authentication.
  *
- * The OIDC config is snapshotted when the factory is called —
- * once at startup in production; per-test in tests, so setting the env before
- * calling the factory is enough (no module re-import needed).
+ * Configuration is read once, when this factory is called — at startup in production, and
+ * per test in tests, so a test only has to set the environment before calling the factory.
+ *
+ * This is authentication only. Roles are enforced separately by {@link _RequireOrgAdmin}
+ * and {@link _RequirePlatformOperator}.
+ *
+ * Called by: apps/opencrane/src/app/public-app.ts.
+ *
+ * @returns Middleware that calls `next()` for public paths and session callers, and sends
+ *          401 otherwise.
  */
 export function ___AuthMiddleware(): RequestHandler
 {

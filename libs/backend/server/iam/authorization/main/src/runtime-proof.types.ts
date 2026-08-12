@@ -4,7 +4,14 @@ import type { AgentRuntimeProjectedTokenAudience, ManagedAgentRuntimeProjectedTo
 /** The two accepted token audiences: one for personal runtimes, one for managed runtimes. */
 type RuntimeProjectedTokenAudience = AgentRuntimeProjectedTokenAudience | ManagedAgentRuntimeProjectedTokenAudience;
 
-/** One-time bootstrap claim bound to the exact runtime attempt and Pod identity. */
+/**
+ * A runtime's single chance to register the key it will sign requests with.
+ *
+ * Every field except `proofPublicJwk` and `proofKeyThumbprint` is read from the stored bootstrap
+ * row, not from the runtime — the runtime supplies only its freshly generated public key. The
+ * thumbprint it sends is re-derived from that key before anything is trusted.
+ * @see {@link RuntimeBootstrapExpectation} which every field is compared against.
+ */
 export interface RuntimeBootstrapClaim
 {
 	/** Globally unique one-time bootstrap identifier. */
@@ -41,7 +48,13 @@ export interface RuntimeBootstrapClaim
 	readonly expiresAtEpochMs: number;
 }
 
-/** Trusted facts expected while consuming a bootstrap claim. */
+/**
+ * The independently sourced facts a bootstrap claim must match.
+ *
+ * These come from a different place than the claim: the assignment row plus the Kubernetes
+ * TokenReview result. Comparing two independent sources is what makes a stolen bootstrap reference
+ * useless on its own.
+ */
 export interface RuntimeBootstrapExpectation
 {
 	/** Expected silo. */
@@ -72,23 +85,60 @@ export interface RuntimeBootstrapExpectation
 	readonly nowEpochMs: number;
 }
 
-/** Stable reason a runtime bootstrap failed closed. */
+/**
+ * Why a runtime bootstrap was refused.
+ *
+ * The first three describe malformed input: `invalid_bootstrap` (blank id, bad counter, bad time),
+ * `invalid_workload_kind`, `invalid_proof_key` (not an RFC 7638 SHA-256 thumbprint, or a key that
+ * is not a valid public P-256 point). `expired` means the bootstrap deadline passed.
+ *
+ * Everything ending in `_mismatch` means the bootstrap row and the independently observed workload
+ * disagree on one field — a stolen or misdirected bootstrap looks exactly like this. All of them
+ * are final; none is retryable, and the HTTP layer returns them as 409 without leaking which
+ * stored value differed.
+ */
 export type RuntimeBootstrapFailureReason = "invalid_bootstrap" | "invalid_workload_kind" | "invalid_proof_key" | "projected_token_audience_mismatch" | "silo_mismatch" | "subject_mismatch" | "service_account_mismatch" | "namespace_mismatch" | "workload_kind_mismatch" | "workload_uid_mismatch" | "pod_mismatch" | "agent_service_mismatch" | "run_mismatch" | "attempt_mismatch" | "revision_mismatch" | "proof_key_mismatch" | "expired";
 
 /** Atomic result from the one-time bootstrap repository. */
 export type RuntimeBootstrapConsumptionResult = { readonly status: "consumed"; readonly receiptId: string } | { readonly status: "already_consumed" | "conflict" };
 
-/** Persistence boundary that consumes one bootstrap claim exactly once. */
+/**
+ * Spends a runtime's one-time bootstrap and registers the public key it will sign with.
+ *
+ * One row, one use. The `Atomically` suffix on the method is there because consuming the bootstrap
+ * and storing the key must be one transaction: a bootstrap marked used with no key stored would
+ * leave the runtime unable to prove anything, with no second chance.
+ *
+ * Implemented by: ./prisma-runtime-authority.ts and ./prisma-runtime-bootstrap-exchange.ts.
+ * @see {@link __ConsumeRuntimeBootstrap} which validates before calling this.
+ */
 export interface RuntimeBootstrapRepository
 {
-	/** Atomically consumes the bootstrap and records the newly verified run proof key. */
+	/**
+	 * Spends the bootstrap and stores the runtime's public key in one transaction.
+	 * @param claim - The bootstrap facts and the public key, already fully validated by the caller.
+	 * @returns `consumed` with a receipt id for the first use only. `already_consumed` means a replay
+	 *   — deny it and never return the earlier receipt. `conflict` means the bootstrap is missing or
+	 *   a concurrent write won; also a denial.
+	 * @throws Any database error that is not a uniqueness or serialization failure.
+	 */
 	consumeAndBindProofKeyAtomically(claim: RuntimeBootstrapClaim): Promise<RuntimeBootstrapConsumptionResult>;
 }
 
 /** Result of validating and atomically consuming a runtime bootstrap. */
 export type ConsumeRuntimeBootstrapResult = { readonly outcome: "consumed"; readonly receiptId: string } | { readonly outcome: "denied"; readonly reason: RuntimeBootstrapFailureReason | "bootstrap_replay" | "bootstrap_conflict" };
 
-/** Replay policy attached to a proof-bound action capability. */
+/**
+ * What happens when the exact same signed action is presented twice.
+ *
+ * `one_shot` denies the second attempt outright. `idempotent` returns the stored result of the
+ * first execution, but only if the whole request still matches — same capability id, same request
+ * fingerprint, same replay mode. Any difference is denied as `jti_replay`, so this cannot be used
+ * to slip changed arguments past a completed action.
+ *
+ * Fixed by the first execution and stored on the receipt; a later call cannot change its mind.
+ * @see {@link CapabilityActionReceipt}
+ */
 export type ActionReplayMode = "one_shot" | "idempotent";
 
 /** Verified capability action submitted for exactly-once receipt handling. */
@@ -157,7 +207,13 @@ export interface CapabilityActionIntent
 	readonly argumentsDigest: string;
 }
 
-/** Deferred action executor invoked only after a durable JTI reservation exists. */
+/**
+ * The actual external action, wrapped so it can only run after its reservation is committed.
+ *
+ * Passed in rather than called directly so the action runs outside every transaction — a long
+ * external call must never hold a database transaction open.
+ * @see {@link __ExecuteCapabilityAction}
+ */
 export interface CapabilityActionExecutor<TResult>
 {
 	/** Executes the external action outside the repository transaction. */
@@ -191,18 +247,58 @@ export type CapabilityActionSuccessResult<TResult> =
 /** Compare-and-set result when completing a reserved action as failed. */
 export type CapabilityActionFailureResult = { readonly status: "failed" | "conflict" };
 
-/** Persistence boundary that reserves before I/O and completes the durable receipt afterward. */
+/**
+ * Stores an action's intent before it runs, and its outcome after.
+ *
+ * The order is the whole point: `reserve` commits first, so a crash mid-action leaves a `Reserved`
+ * row that blocks any retry instead of letting the action run twice. The external call then happens
+ * OUTSIDE any transaction, and `markSucceeded` / `markFailed` close the row.
+ *
+ * `Atomically` is not used in these names because each method already runs as one transaction —
+ * `reserve` in particular takes a row lock on the `jti` before deciding.
+ * Implemented by: ./prisma-runtime-authority.ts (`PrismaRuntimeAuthorityRepository`).
+ * @see {@link __ExecuteCapabilityAction} which is the only correct way to drive this order.
+ */
 export interface CapabilityActionReceiptRepository
 {
-	/** Atomically creates a Reserved receipt or returns the existing durable JTI state. */
+	/**
+	 * Claims the right to run this action, or reports that it is already claimed.
+	 * @param intent - The verified action, including the `jti` this row is keyed by.
+	 * @returns `reserved` with a `reservationId` — you may now perform the action. Any other status
+	 *   means DO NOT perform it: `existing_reserved` (another caller is mid-flight or crashed),
+	 *   `existing_failed` (already tried and failed), or `existing_succeeded` with the stored receipt,
+	 *   which may be returned to the caller only for a matching idempotent replay.
+	 * @throws When the verified proof key is not registered to any run, which means verification and
+	 *   stored authority disagree.
+	 */
 	reserve<TResult>(intent: CapabilityActionIntent): Promise<CapabilityActionReservationResult<TResult>>;
-	/** Atomically transitions the exact Reserved receipt to Succeeded with its canonical result. */
+	/**
+	 * Stores the result of a completed action against its reservation.
+	 * @param reservationId - Id returned by {@link CapabilityActionReceiptRepository.reserve}.
+	 * @param result - Value stored for any later idempotent replay.
+	 * @returns `succeeded` with the receipt, or `conflict` when the row is no longer `Reserved`.
+	 *   A `conflict` here is serious: the action already happened but we could not record it, so the
+	 *   caller must report an ambiguous outcome rather than retry.
+	 */
 	markSucceeded<TResult>(reservationId: string, result: TResult): Promise<CapabilityActionSuccessResult<TResult>>;
-	/** Atomically transitions the exact Reserved receipt to Failed with a stable internal code. */
+	/**
+	 * Marks a reserved action as failed so it is never retried.
+	 * @param reservationId - Id returned by {@link CapabilityActionReceiptRepository.reserve}.
+	 * @param failureCode - Short internal code; never a provider message.
+	 * @returns `failed` when recorded, `conflict` when the row is no longer `Reserved` — again an
+	 *   ambiguous outcome, not a retry signal.
+	 */
 	markFailed(reservationId: string, failureCode: string): Promise<CapabilityActionFailureResult>;
 }
 
-/** Result of cryptographically verifying and executing a proof-bound capability action. */
+/**
+ * What happened to one signed action request.
+ *
+ * `executed` ran it now; `replayed` returned the stored result of an earlier identical request.
+ * `denied` never performed the action — except for `action_execution_ambiguous`, which means the
+ * action MAY have happened but we could not record the outcome. Treat that one as unresolved, never
+ * as a failure, and never retry it.
+ */
 export type ExecuteCapabilityActionResult<TResult> =
 	| { readonly outcome: "executed" | "replayed"; readonly receipt: CapabilityActionReceipt<TResult> }
 	| { readonly outcome: "denied"; readonly reason: CapabilityProofFailureReason | "invalid_replay_mode" | "jti_replay" | "action_reservation_failed" | "action_execution_failed" | "action_execution_ambiguous" };

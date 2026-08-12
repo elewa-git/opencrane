@@ -10,18 +10,25 @@ import { MemoryGatewayUnavailableError } from "./unavailable-memory-gateway-clie
 const _SEARCH_TYPE = "CHUNKS";
 
 /**
- * Create the authenticated, read-only Cognee memory gateway client.
+ * Create the authenticated, read-only memory-gateway client backed by Cognee.
  *
- * Every recall is validated: an unrecognised response is a protocol violation, never a silently
- * empty result, and a scoped record that cannot prove complete provenance is dropped rather than
- * returned with partial attribution. Record, correction, forgetting, and scoped injection remain
- * fail-closed until the gateway owns a durable, remotely correlatable write lifecycle.
+ * Every recall is checked: an unrecognised response is a protocol failure, never a silently empty
+ * result, and a scoped record that cannot prove complete provenance is dropped rather than returned
+ * with partial attribution. `recordPersonalFact`, `correct`, `forget`, and `injectScoped` all throw
+ * `MemoryGatewayUnavailableError` — they stay fail-closed until the gateway owns a durable write
+ * lifecycle that can be tied back to a remote record. `injectScoped` still checks the provenance
+ * first, so an unattributable write is refused for the right reason.
  *
- * Dataset selection always comes from the caller's frozen `cogneeDatasetId` — never from a subject
- * id, scope coordinate, or caller-derived dataset name.
+ * Which dataset is searched always comes from the caller's frozen `cogneeDatasetId`. It is never
+ * derived from a subject id, a scope name, or anything this client builds itself.
  *
- * @param options - Memory-gateway origin, timeout, projected-token path, and test seams.
- * @returns A client whose results are only ever gateway-originated.
+ * Called by: apps/opencrane/src/infra/memory/memory-gateway-client.factory.ts.
+ *
+ * @param options - Gateway origin, timeout, projected-token path, and the fetch/token-reader
+ *   overrides used by tests.
+ * @returns A client whose results only ever contain gateway-returned data.
+ * @throws Error When `requestTimeoutMilliseconds` is outside 1-300 seconds, or the gateway origin is
+ *   not a single in-cluster HTTP Service origin.
  */
 export function __CreateHttpCogneeMemoryGatewayClient(options: CogneeMemoryGatewayHttpOptions): MemoryGatewayClient
 {

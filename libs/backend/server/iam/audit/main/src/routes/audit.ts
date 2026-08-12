@@ -7,10 +7,18 @@ import type { AuditEntry } from "./audit.types.js";
 const MAX_LIMIT = 1000;
 
 /**
- * Creates an Express router that queries the audit log from PostgreSQL.
- * Supports cursor-based keyset pagination via the `cursor` query parameter.
- * @param prisma - Prisma ORM client
- * @returns Configured Express Router
+ * Serves the operator-facing audit log, newest entry first.
+ *
+ * These are the readable entries the group and tenant routes write, not the append-only
+ * authorization decisions from __AppendAuditDecision. Paging is keyset-based: the cursor is the last
+ * entry's timestamp, base64url-encoded, and the handler asks for one row more than the page size so
+ * it can report `hasMore` without a second COUNT query. An unreadable cursor is ignored and the first
+ * page is returned; `limit` is capped at 1000.
+ *
+ * Called by: apps/opencrane/src/app/routes.ts, mounted at /api/v1/audit.
+ * @param prisma - Silo Prisma client.
+ * @returns Express router with the single GET / route.
+ * @see AuditEntry
  */
 export function auditRouter(prisma: PrismaClient): Router
 {
