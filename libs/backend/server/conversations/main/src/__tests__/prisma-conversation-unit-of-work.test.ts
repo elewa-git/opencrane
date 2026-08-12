@@ -172,7 +172,7 @@ describe("PrismaConversationUnitOfWork", function _Suite()
 
 		const snapshot = await _Authority(_Prisma(transaction)).openAgentThread(_CALLER, "parent-1", "child-1");
 
-		expect(snapshot?.messages).toHaveLength(1);
+		expect(snapshot?.messages).toHaveLength(2);
 		expect(snapshot?.representedThroughPosition).toBe("1");
 		expect(__DecodeConversationProjectionCursor(snapshot?.cursor)).toEqual({ conversationId: "child-1", position: "1" });
 		expect(transaction.conversationTimelineEntry.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { conversationId: "child-1" } }));

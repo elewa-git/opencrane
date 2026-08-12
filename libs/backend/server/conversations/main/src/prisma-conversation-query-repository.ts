@@ -130,10 +130,11 @@ export class PrismaConversationQueryRepository implements ConversationQueryRepos
 		if (participant === undefined) return null;
 		const activeParentUserIds = new Set(thread.parentConversation.participants.map(function _ParentUser(row) { return row.userId; }));
 		const timeline = await this.prisma.conversationTimelineEntry.findMany({ where: { conversationId: childConversationId }, include: { message: { include: { invokedAgentThread: true } } }, orderBy: { position: "asc" }, take: _MESSAGE_LIMIT });
-		const entries = _RepresentedMessagePrefix(timeline);
+		const entries = timeline.filter(function _MessageEntry(entry) { return entry.messageId !== null && entry.message !== null; });
+		const representedEntries = _RepresentedMessagePrefix(timeline);
 		const latestEntry = await this.prisma.conversationTimelineEntry.findFirst({ where: { conversationId: childConversationId }, orderBy: { position: "desc" }, select: { position: true } });
 		const unreadMessageCount = await this.prisma.conversationTimelineEntry.count({ where: { conversationId: childConversationId, messageId: { not: null }, position: { gt: participant.readThroughPosition } } });
-		const representedPosition = entries.at(-1)?.position ?? 0n;
+		const representedPosition = representedEntries.at(-1)?.position ?? 0n;
 		const latestPosition = latestEntry?.position ?? 0n;
 		const runs = [...thread.childConversation.runs].reverse();
 		const firstRunOrdinal = thread.childConversation._count.runs - runs.length + 1;
