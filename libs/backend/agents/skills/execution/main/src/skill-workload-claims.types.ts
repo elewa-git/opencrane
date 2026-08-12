@@ -1,57 +1,57 @@
-/** One database-owned claim generation for a pending governed skill workload. */
+/** One claim the database handed out for a pending skill workload. */
 export interface SkillWorkloadClaim
 {
 	/** Stable durable workload identifier. */
 	readonly workloadId: string;
 	/** Silo owning the exact revision and workload. */
 	readonly siloId: string;
-	/** Authoring or authorised tool execution class. */
+	/** Workload class: authoring, or running a published tool. */
 	readonly kind: "authoring" | "tool-runner";
 	/** Immutable SkillRevision selected before the claim. */
 	readonly skillRevisionId: string;
-	/** Monotonic delivery generation fencing stale controller replicas. */
+	/** Delivery counter, raised by one on every claim. An out-of-date controller replica holds an older number and is rejected. */
 	readonly deliveryCount: number;
-	/** Database-issued instant that identifies this exact claim. */
+	/** Timestamp the database set for this claim. It is what identifies the claim later. */
 	readonly claimedAt: string;
 	/** Absolute claim expiry calculated from database time. */
 	readonly expiresAt: string;
 }
 
-/** Database fence supplied after the controller creates one suspended Kubernetes Job. */
+/** What the controller sends back after it has created the suspended Kubernetes Job. */
 export interface SkillWorkloadAssignmentCommand
 {
-	/** Exact claim generation accepted by the controller authority. */
+	/** The `claimedAt` value the controller was given. It must still match the stored row. */
 	readonly claimedAt: string;
-	/** Exact claim delivery generation accepted by the controller authority. */
+	/** The `deliveryCount` the controller was given. It must still match the stored row. */
 	readonly deliveryCount: number;
 	/** API-issued immutable Kubernetes Job UID. */
 	readonly workloadUid: string;
-	/** Opaque reference received transiently from the controller and persisted only as a hash. */
+	/** Reference the controller sends once. Only its hash is stored. */
 	readonly bootstrapReference: string;
 	/** Deployment-owned namespace selected by the reviewed controller profile. */
 	readonly namespace: string;
 }
 
-/** Database-fenced release claim for one already assigned governed skill Job. */
+/** One claim to unsuspend a Job that has already been assigned. */
 export interface SkillWorkloadReleaseClaim
 {
 	/** Stable workload identifier. */
 	readonly workloadId: string;
 	/** ClusterTenant silo that owns the released Job. */
 	readonly siloId: string;
-	/** Fixed workload class selecting the immutable controller profile. */
+	/** Workload class. It picks which controller profile is used. */
 	readonly kind: "authoring" | "tool-runner";
 	/** Immutable Job UID that Kubernetes must release. */
 	readonly workloadUid: string;
 	/** Database-issued release-claim instant. */
 	readonly releaseClaimedAt: string;
-	/** Monotonic release generation that fences stale controllers. */
+	/** Release counter, raised by one on every release claim, so an out-of-date controller is rejected. */
 	readonly releaseDeliveryCount: number;
-	/** Absolute database-derived release-claim expiry. */
+	/** When this release claim expires, measured by the database clock. */
 	readonly expiresAt: string;
 }
 
-/** Exact Kubernetes release evidence committed only after the Job patch succeeds. */
+/** What the controller sends after Kubernetes has actually unsuspended the Job. */
 export interface SkillWorkloadReleaseCommand
 {
 	/** Exact release claim instant returned by the authority. */
@@ -62,9 +62,9 @@ export interface SkillWorkloadReleaseCommand
 	readonly workloadUid: string;
 }
 
-/** Exact first-Pod evidence committed only after the released Job owns the Pod. */
+/** What the controller sends after it has seen the unsuspended Job's first Pod. */
 export interface SkillWorkloadPodRegistrationCommand extends SkillWorkloadReleaseCommand
 {
-	/** Immutable Kubernetes UID of the worker Pod selected through the Job UID. */
+	/** Kubernetes UID of the worker Pod, found by looking it up under the Job UID. */
 	readonly podUid: string;
 }

@@ -170,7 +170,7 @@ spec:
             # Encryption-at-rest ENABLED (P0.3). Confirmed against obot v0.23.1:
             # provider=custom makes the binary read an apiserver EncryptionConfiguration
             # FILE — it never consumes the bare key — so the `encryptionsetup` init
-            # container below materialises /config/encryption.yaml from this key and we
+            # container below writes /config/encryption.yaml from this key and we
             # point OBOT_SERVER_ENCRYPTION_CONFIG_FILE at it. Without both, the key is
             # necessary-but-insufficient and data is left unencrypted. Gated behind
             # mcpGateway.encryptionAtRest.enabled (default OFF).

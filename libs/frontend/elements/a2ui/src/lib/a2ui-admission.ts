@@ -8,28 +8,43 @@ const _MAX_OPERATIONS = 256;
 /** Maximum number of components admitted in one progressive surface update. */
 const _MAX_COMPONENTS_PER_UPDATE = 256;
 
-/** Maximum length of any stable coordinate or displayed action identifier. */
+/** Longest allowed id (conversation, run, message, surface, component or action). */
 const _MAX_IDENTIFIER_LENGTH = 256;
 
-/** Maximum length of a display-safe lifecycle explanation. */
+/** Longest allowed reason text. */
 const _MAX_REASON_LENGTH = 2000;
 
-/** Component names admitted by the deliberately constrained catalogue. */
+/** The component names this deliberately small catalogue accepts. */
 const _ADMITTED_COMPONENT_NAMES = new Set<string>(Object.values(A2uiComponentNames));
 
-/** Presentation states admitted at the element boundary. */
+/** The surface states this element accepts. */
 const _ADMITTED_SURFACE_STATES = new Set<string>(Object.values(AgUiA2uiSurfaceStates));
 
 /**
- * Verify the complete typed presentation before it reaches the vendor message processor.
+ * Checks a whole presentation before the vendor MessageProcessor is allowed to see it.
  *
- * This is a defence-in-depth display check. The server and state layer still own decoding,
- * authorization, sequence reconstruction, and raw-payload exclusion.
+ * This is a second line of defence at the display layer only. Decoding the envelope, authorizing
+ * the action, rebuilding the sequence and keeping raw payloads out are all still done by the
+ * server and the state layer — a `true` here is not an authorization decision.
+ *
+ * It checks, in order: the envelope version and state are ones this element knows; all four ids
+ * are non-empty and within {@link _MAX_IDENTIFIER_LENGTH}; `sequence` is a safe non-negative
+ * integer; `reason` is within its length limit; there are no more than
+ * {@link _MAX_OPERATIONS} operations; and every operation targets this surface and uses only
+ * catalogue components.
+ *
+ * Called by: A2uiCanvasComponent._adoptPresentation, which clears the surface and shows the
+ * non-disclosing placeholder when this returns false.
+ *
+ * @param presentation - The presentation about to be applied.
+ * @returns `true` when it is safe to hand to the vendor. `false` means reject the whole
+ *   presentation and show the placeholder; never apply it partially.
+ * @see A2uiSurfacePresentation
  */
 export function _AdmitA2uiSurfacePresentation(presentation: A2uiSurfacePresentation): boolean
 {
-	// 1. Check the fixed envelope vocabulary and coordinates so a malformed projection cannot
-	// select another surface or an unowned lifecycle branch.
+	// 1. Check the envelope's version, state and ids, so a malformed projection cannot
+	// point at another surface, or land on a state this component does not handle.
 	if (presentation.version !== AG_UI_A2UI_ENVELOPE_VERSION || !_ADMITTED_SURFACE_STATES.has(presentation.state))
 	{
 		return false;
@@ -47,7 +62,7 @@ export function _AdmitA2uiSurfacePresentation(presentation: A2uiSurfacePresentat
 		return false;
 	}
 
-	// 2. Bound and inspect every operation before preserving its supplied order for the processor.
+	// 2. Cap how many operations there can be and check each one; their order is passed through unchanged.
 	if (presentation.operations.length > _MAX_OPERATIONS)
 	{
 		return false;
@@ -62,7 +77,7 @@ export function _AdmitA2uiSurfacePresentation(presentation: A2uiSurfacePresentat
 	return true;
 }
 
-/** Whether a protocol operation is singular, surface-bound, bounded, and catalogue-safe. */
+/** Whether one operation has exactly one key, targets this surface, and uses only catalogue components. */
 function _isAdmittedOperation(operation: AgUiA2uiOperation, surfaceId: string): boolean
 {
 	const keys = Object.keys(operation);
@@ -85,7 +100,7 @@ function _isAdmittedOperation(operation: AgUiA2uiOperation, surfaceId: string): 
 	return _hasOnlyAdmittedComponents(operation.surfaceUpdate.components);
 }
 
-/** Whether a surface update contains a bounded list of one-contract component wrappers. */
+/** Whether a surface update holds a non-empty, size-limited list of wrappers that each name exactly one component. */
 function _hasOnlyAdmittedComponents(components: readonly unknown[]): boolean
 {
 	if (components.length === 0 || components.length > _MAX_COMPONENTS_PER_UPDATE)
@@ -113,13 +128,13 @@ function _hasOnlyAdmittedComponents(components: readonly unknown[]): boolean
 	return true;
 }
 
-/** Whether a component name selects one of the three finite choice contracts. */
+/** Whether a component name is SingleChoice, MultipleChoice or Select. */
 function _isChoiceName(name: string): name is A2uiComponentNames.SingleChoice | A2uiComponentNames.MultipleChoice | A2uiComponentNames.Select
 {
 	return name === A2uiComponentNames.SingleChoice || name === A2uiComponentNames.MultipleChoice || name === A2uiComponentNames.Select;
 }
 
-/** Whether choice properties are bounded, renderer-safe, and respect the declared selection limit. */
+/** Whether choice properties stay within limits, are safe for the renderer, and respect maxAllowedSelections. */
 function _isAdmittedChoiceProperties(name: A2uiComponentNames.SingleChoice | A2uiComponentNames.MultipleChoice | A2uiComponentNames.Select, value: unknown): boolean
 {
 	if (!_isRecord(value) || !Array.isArray(value["options"]) || !_isRecord(value["selections"]))
@@ -152,7 +167,7 @@ function _isAdmittedChoiceProperties(name: A2uiComponentNames.SingleChoice | A2u
 	return !Array.isArray(literal) || literal.length <= effectiveLimit;
 }
 
-/** Whether a stable coordinate or action identifier is present and bounded. */
+/** Whether an id is non-empty and no longer than _MAX_IDENTIFIER_LENGTH. */
 function _isIdentifier(value: string): boolean
 {
 	return value.length > 0 && value.length <= _MAX_IDENTIFIER_LENGTH;

@@ -13,7 +13,7 @@
 #     org ingress forwards `/api`. Permitted to the internal port:
 #       - Channel proxy: /api/internal/channel-targets:resolve (TokenReview + delegated session).
 #       - Per-attempt agent-runtime Job: outbound `/api/internal/agent-runtime/*` only; its projected
-#         ServiceAccount token is TokenReviewed inside the route, so this rule is only the L3/4 floor.
+#         ServiceAccount token is TokenReviewed inside the route, so this rule only opens the network path — it proves no identity.
 #       - Governed skill Jobs: bootstrap acknowledgement, authoring input, and terminal completion only.
 #         Their default-deny namespaces permit this single server destination and DNS; TokenReview binds
 #         each request to the registered Pod. ArtifactStore remains unreachable from worker namespaces.

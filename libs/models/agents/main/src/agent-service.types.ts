@@ -17,23 +17,23 @@ export enum AgentServiceKinds
 /** Product role performed by an agent service. */
 export type AgentServiceKind = AgentServiceKinds;
 
-/** Lifecycle state of a stable agent service identity. */
+/** Whether an agent service may take new work. Only `active` may; `paused` can be re-enabled, `retired` never can. */
 export enum AgentServiceStates
 {
 	/** The service has immutable revisions but none may execute yet. */
 	Draft = "draft",
-	/** The service has an active revision eligible for new governed admissions. */
+	/** The service has a published revision and may accept new runs. */
 	Active = "active",
 	/** The service remains durable but rejects new work until explicitly enabled again. */
 	Paused = "paused",
-	/** The service can never accept new work and its active pointer is cleared. */
+	/** The service is permanently closed to new runs and has no active revision. This cannot be undone. */
 	Retired = "retired",
 }
 
-/** Lifecycle state of a stable agent service identity. */
+/** Whether an agent service may take new work. Only `active` may; `paused` can be re-enabled, `retired` never can. */
 export type AgentServiceState = "draft" | "active" | "paused" | "retired";
 
-/** Stable product identity for a personal or managed agent. */
+/** One agent, personal or managed. The identity survives every revision: `activeRevisionId` says which configuration is currently live, or null before the first publication. */
 export interface AgentService
 {
 	/** Stable agent-service identifier. */

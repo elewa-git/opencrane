@@ -9,7 +9,7 @@ function _input(overrides: Partial<ToolInvocationLifecycleInput>): ToolInvocatio
 	return { state: ToolInvocationStates.Preparing, event: ToolInvocationLifecycleEvents.Prepared, recoveryMode: ExternalActionRecoveryModes.Manual, claimKind: null, preparationAttempt: 1, preparationAttemptLimit: 3, withinPreparationDeadline: true, ...overrides };
 }
 
-/** Complete expected action for every current durable State x Event cell under its canonical claim context. */
+/** Expected action for every current durable State x Event cell, using the default claim context built above. */
 const _EXPECTED_ACTIONS = {
 	[ToolInvocationStates.Preparing]: {
 		[ToolInvocationLifecycleEvents.Prepared]: ToolInvocationLifecycleActions.MarkReady,

@@ -1,6 +1,7 @@
 // Public API of @opencrane/state/conversation/render — the vendored OpenClaw headless render
-// helpers retained for tool, file, media, and sanitized markdown presentation. Governed A2UI is
-// projected through the AG-UI state boundary and rendered by @opencrane/elements/a2ui instead.
+// helpers, kept for rendering tool cards, file artifacts, media attachments and sanitized
+// markdown. A2UI surfaces do NOT go through here: they arrive as AG-UI stream state and are
+// rendered by @opencrane/elements/a2ui.
 export * from "./lib/tool-content.js";
 export * from "./lib/tool-output.js";
 export * from "./lib/file-artifact.types.js";

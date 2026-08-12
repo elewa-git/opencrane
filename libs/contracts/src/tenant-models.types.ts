@@ -1,5 +1,5 @@
 /**
- * Wire contract for the internal tenant-models allowlist endpoint
+ * Which models one tenant may use — the body of the internal tenant-models endpoint
  * (`GET /api/internal/tenant-models/:tenant`).
  *
  * The clustertenant-manager produces it; the fleet-manager's tenant reconcile

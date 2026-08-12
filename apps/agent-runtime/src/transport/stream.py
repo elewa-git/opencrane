@@ -39,7 +39,7 @@ class _AttemptWorkerRegistry:
         self._current: threading.Event | None = None
 
     def activate(self) -> threading.Event:
-        """Register a fresh worker signal after cancelling any worker it supersedes."""
+        """Cancel the worker this one replaces, then register the new worker's signal."""
         fresh = threading.Event()
         with self._lock:
             # Supersession is signalled before publishing the new current worker. This prevents a
@@ -56,7 +56,7 @@ class _AttemptWorkerRegistry:
             return self._current
 
     def release(self, signal: threading.Event) -> None:
-        """Forget a returned worker without disturbing a newer current worker."""
+        """Forget a worker that has finished, leaving any newer worker registered."""
         with self._lock:
             self._signals.discard(signal)
             # An older worker may finish after its replacement became current. Identity comparison
@@ -83,7 +83,7 @@ def _launch_attempt_worker(
     token: str,
     workers: _AttemptWorkerRegistry,
 ) -> None:
-    """Launch one cancellation-bound start/resume handler and register its whole lifetime."""
+    """Start one start/resume handler on its own thread with its cancellation signal, and keep it registered until it exits."""
     # Every start/resume gets fresh local gates even when it supersedes work for the same run. The
     # command fence, not a reusable process-global event, defines which output may still be emitted.
     cancel_event = workers.activate()

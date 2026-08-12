@@ -4,7 +4,7 @@ import { PrismaSkillAuthoringCompletionRepository } from "../prisma-skill-author
 import { SkillAuthoringCompletionOutcomes } from "../skill-authoring-completion.types.js";
 import { _SkillWorkloadPersistenceConflictError } from "../skill-workload-unit-of-work.types.js";
 
-/** Exact reviewed authoring worker identity used for persistence-boundary denial coverage. */
+/** Authoring worker identity used by the denial tests below. */
 const _IDENTITY = { namespace: "opencrane-skill-authoring", serviceAccountName: "skill-authoring-default", podUid: "pod-uid-1" };
 
 describe("Prisma skill authoring completion repository", function _DescribeCompletionRepository()

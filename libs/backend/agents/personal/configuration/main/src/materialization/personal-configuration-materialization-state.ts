@@ -1,7 +1,7 @@
 import { PersonalConfigurationMaterializationCodes, type PersonalConfigurationMaterializationPersistenceResult } from "./personal-configuration-materialization.types.js";
 import { PersonalConfigurationMaterializationLifecycleOutcomes, PersonalConfigurationMaterializationLifecycleStates, PersonalConfigurationMaterializationResolutionOutcomes, type PersonalConfigurationMaterializationLifecycleChange, type PersonalConfigurationMaterializationLifecycleResult, type PersonalConfigurationMaterializationResolution } from "./personal-configuration-materialization-state.types.js";
 
-/** Select the only permitted next action for a persisted proposal lifecycle state. */
+/** Decides from the proposal's state whether to materialise it, or to stop with a result. */
 export function _ResolvePersonalConfigurationMaterializationLifecycle(change: PersonalConfigurationMaterializationLifecycleChange): PersonalConfigurationMaterializationLifecycleResult
 {
 	switch (change.state)
@@ -21,13 +21,13 @@ export function _ResolvePersonalConfigurationMaterializationLifecycle(change: Pe
 	}
 }
 
-/** Wrap a lifecycle terminal result for the state machine boundary. */
+/** Wraps a final result so the caller stops instead of materialising. */
 function _TerminalLifecycle(result: PersonalConfigurationMaterializationPersistenceResult): PersonalConfigurationMaterializationLifecycleResult
 {
 	return { outcome: PersonalConfigurationMaterializationLifecycleOutcomes.Terminal, result };
 }
 
-/** Wrap a stable persistence result for the materializer's public resolution union. */
+/** Wraps a final result as a resolution, telling the materialiser to stop. */
 export function _TerminalProposalResolution(result: PersonalConfigurationMaterializationPersistenceResult): PersonalConfigurationMaterializationResolution
 {
 	return { outcome: PersonalConfigurationMaterializationResolutionOutcomes.Terminal, result };

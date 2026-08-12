@@ -46,7 +46,7 @@ void _Main().catch(function _onStartupFailure(err)
 	process.exitCode = 1;
 });
 
-/** Keep startup failures structured after telemetry bootstrap but before console binding. */
+/** Log startup failures through the structured logger in the window after telemetry starts but before the console is bound. */
 function _logStartupFailure(err: unknown): void
 {
 	log.error({ err }, "artifact service startup failed");

@@ -7,7 +7,7 @@ const _SelfRunCancellationBodySchema = z.object({
 	expectedAttempt: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
 }).strict();
 
-/** Parse one exact cancellation request body without coercing untrusted values. */
+/** Parses the cancellation request body, rejecting anything malformed rather than converting it. */
 export function _ParseSelfRunCancellationBody(value: unknown): SelfRunCancellationBody | null
 {
 	const parsed = _SelfRunCancellationBodySchema.safeParse(value);

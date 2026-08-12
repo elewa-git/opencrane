@@ -3,7 +3,7 @@ import { ___IsSha256Digest } from "@opencrane/util";
 
 import type { IdentityEnvelopeInput } from "../session-assembly.types.js";
 
-/** Returns whether an instant is already the single UTC ISO-8601 representation used in a digest. */
+/** Returns whether a timestamp is already in the one UTC ISO-8601 form used in digests, e.g. `2026-01-01T00:00:00.000Z`. */
 export function _IsCanonicalUtcInstant(value: string): boolean
 {
 	return /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value)
@@ -11,7 +11,7 @@ export function _IsCanonicalUtcInstant(value: string): boolean
 		&& new Date(value).toISOString() === value;
 }
 
-/** Verifies that pinned membership evidence is complete and remains trusted at admission time. */
+/** Returns whether the identity's membership fields are all filled in and its trust window has not expired at `requestedAt`. */
 export function _IsIdentityFresh(identity: IdentityEnvelopeInput, requestedAt: string): boolean
 {
 	return identity.executionSubjectId.trim().length > 0
@@ -26,7 +26,18 @@ export function _IsIdentityFresh(identity: IdentityEnvelopeInput, requestedAt: s
 		&& Date.parse(identity.fleetMembershipTrustedUntil) > Date.parse(requestedAt);
 }
 
-/** Sorts fact and provenance coordinates without retaining mutable authority-owned arrays. */
+/**
+ * Sorts memory facts and their provenance entries into a fixed order, copying the arrays instead of
+ * reusing the source's.
+ *
+ * The sort is not cosmetic. The snapshot is hashed as RFC 8785 canonical JSON, and that hash is
+ * taken over the text, so two runs given the same facts in a different row order would otherwise
+ * produce different digests and look like different inputs.
+ *
+ * @see https://www.rfc-editor.org/rfc/rfc8785 - JSON Canonicalization Scheme, the serialisation
+ * `___DigestCanonicalJson` hashes. It fixes object key order but not array order, which is why the
+ * arrays have to be sorted here first.
+ */
 export function _CanonicalMemoryFacts(values: RunInputSnapshot["memoryFacts"]): RunInputSnapshot["memoryFacts"]
 {
 	return [...values].sort(function _compare(left, right): number
@@ -44,7 +55,15 @@ export function _CanonicalMemoryFacts(values: RunInputSnapshot["memoryFacts"]): 
 	});
 }
 
-/** Orders provenance by every stable source coordinate before it contributes to the canonical digest. */
+/**
+ * Compares two provenance entries on all their fields, so the digest never depends on row order.
+ *
+ * Every field goes into the key, because two entries that differ only in a later field must still
+ * sort the same way on every machine.
+ *
+ * @see https://www.rfc-editor.org/rfc/rfc8785 - JSON Canonicalization Scheme. It defines object key
+ * order for the digest but leaves array order to the caller, so this comparator supplies it.
+ */
 function _compareProvenance(left: RunInputSnapshot["memoryFacts"][number]["provenance"][number], right: RunInputSnapshot["memoryFacts"][number]["provenance"][number]): number
 {
 	const leftKey = `${left.sourceKind}\u0000${left.sourceId}\u0000${left.artifactRevisionId ?? ""}\u0000${left.sourceUserId ?? ""}\u0000${left.capturedAt}`;

@@ -8,7 +8,7 @@ import { __DeliverChildRunCompletionInTransaction } from "./prisma-child-run-com
 import { PrismaRunCancellationEventDeferralUnitOfWork } from "./prisma-run-cancellation-event-deferral-repository.js";
 import type { ClaimNextRunWorkloadCleanupResult, ConfirmRunWorkloadCleanupCommand, ConfirmRunWorkloadCleanupResult, RepairExpiredRunResult, RequestRunCancellationCommand, RequestRunCancellationResult, RunCancellationRepository, RunCancellationRepositoryConfig, RunWorkloadCleanupClaim, RunWorkloadCleanupProjection } from "./run-cancellation.types.js";
 
-/** Non-locking cleanup coordinates used only to establish canonical lock order. */
+/** Ids read without locking, used only to work out which rows to lock and in what order. */
 interface CleanupCandidateRow
 {
 	/** Cleanup event identifier. */
@@ -280,7 +280,7 @@ function _ParseCleanupProjection(value: Prisma.JsonValue | undefined): RunWorklo
 	return { runId: item["runId"], attempt: item["attempt"], siloId: item["siloId"], agentServiceId: item["agentServiceId"], agentRevisionId: item["agentRevisionId"], namespace: item["namespace"], workloadProfile: item["workloadProfile"], bootstrapReference: item["bootstrapReference"], workloadUid: item["workloadUid"], mode: item["mode"], reason: item["reason"], orphanAbsenceObservedAt: item["orphanAbsenceObservedAt"] ?? null };
 }
 
-/** Revalidate a cleanup event after canonical locks are held. */
+/** Re-checks a cleanup event once every lock is held. */
 function _CleanupClaimIsCurrent(event: OutboxEvent, run: AgentRun, workload: RunWorkloadCleanupProjection, now: Date, claimLeaseMilliseconds: number): boolean
 {
 	return event.kind === RunOutboxEventKind.RunWorkloadCleanupRequested && event.runId === run.id && event.attempt === run.attempt && workload.runId === run.id && workload.attempt === run.attempt
@@ -300,7 +300,7 @@ function _ConfirmationMatches(event: OutboxEvent, workload: RunWorkloadCleanupPr
 	return event.kind === RunOutboxEventKind.RunWorkloadCleanupRequested && event.runId === command.runId && event.attempt === command.attempt && workload.runId === command.runId && workload.attempt === command.attempt && workload.workloadUid === command.workloadUid;
 }
 
-/** Enter the sole Cancelled terminal state and append its canonical conversation event. */
+/** Moves the run to Cancelled, its only terminal state here, and appends the matching conversation event. */
 async function _FinalizeCancelledRun(transaction: Prisma.TransactionClient, run: Pick<AgentRun, "id" | "attempt" | "conversationId">, now: Date): Promise<void>
 {
 	const finalized = await transaction.agentRun.updateMany({ where: { id: run.id, attempt: run.attempt, state: AgentRunState.Cancelling }, data: { state: AgentRunState.Cancelled, terminalReason: AgentRunTerminalReason.UserCancelled, finishedAt: now } });

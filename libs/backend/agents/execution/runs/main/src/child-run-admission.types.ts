@@ -50,7 +50,7 @@ export interface PrepareChildRunAdmissionCommand
 	readonly requestedBudget: ChildRunBudget;
 }
 
-/** Rechecks whether a parent may delegate work to one exact service revision. */
+/** Re-checks whether the parent is allowed to hand work to this exact service revision. */
 export interface ChildRunTargetAuthorization
 {
 	/**
@@ -65,7 +65,7 @@ export interface ChildRunTargetAuthorization
 /** Result returned by the policy that controls parent-to-child delegation. */
 export type ChildRunTargetAuthorizationResult = { readonly outcome: "authorized" } | { readonly outcome: "denied" };
 
-/** Parent-derived coordinates that the persistence/snapshot layer must preserve exactly. */
+/** Values taken from the parent that the persistence and snapshot code must write through unchanged. */
 export interface PreparedChildRunAdmission
 {
 	/** Depth inherited from the parent and fixed for this exact child. */
@@ -90,5 +90,13 @@ export interface PreparedChildRunAdmission
 	readonly budget: ChildRunBudget;
 }
 
-/** Stable result of evaluating one governed child-run admission. */
+/**
+ * The decision about one child run, and what each refusal means for the caller.
+ *
+ * `prepared` carries values the persistence layer must write through exactly as given. Of the
+ * refusals, `depth_exceeded`, `fanout_exceeded` and `target_not_authorized` are permanent for
+ * this parent and must be reported to the agent; `budget_exceeded` can succeed later if the
+ * parent's children release budget; `target_authorization_unavailable` means the policy could not
+ * be consulted, so it is the only one worth retrying unchanged.
+ */
 export type PrepareChildRunAdmissionResult = { readonly outcome: "prepared"; readonly value: PreparedChildRunAdmission } | { readonly outcome: "denied"; readonly reason: "invalid_command" | "invalid_parent_authority" | "depth_exceeded" | "fanout_exceeded" | "budget_exceeded" | "target_not_authorized" | "target_authorization_unavailable" };

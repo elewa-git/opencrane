@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# Immutable upstream chart identities and their complete rendered cluster-scoped inventory.
+# Pins each upstream chart's identity and lists every cluster-scoped object it renders.
 # Sourced by the bootstrap and its real-render contract; it performs no action by itself.
 
 INGRESS_RELEASE="ingress-nginx"

@@ -1,4 +1,4 @@
-// This validator admits untrusted durable/API values into the conversation model; it stays beside the model so immutable mode and agent-binding rules cannot drift.
+// Turns untrusted values from storage or the API into conversation models. It lives beside the model so the mode and agent-binding rules cannot drift apart from the types.
 import { z } from "zod";
 
 import { ConversationLifecycles, ConversationModes, type Conversation, type ConversationCreationRequest, type ConversationParticipant } from "./conversation.types.js";
@@ -12,7 +12,7 @@ const _InstantSchema = z.string().datetime({ offset: true });
 /** Canonical positive decimal representation of a database-owned BigInt position. */
 const _PositionSchema = z.string().regex(/^[1-9]\d*$/, "must be a canonical positive decimal string");
 
-/** Canonical non-negative decimal representation used by the unread participant coordinate. */
+/** A non-negative position as a decimal string, used by `readThroughPosition` where `"0"` means unread. */
 const _ReadPositionSchema = z.string().regex(/^(0|[1-9]\d*)$/, "must be a canonical non-negative decimal string");
 
 /** Fields shared by each exact immutable-mode conversation validator. */
@@ -44,7 +44,7 @@ const _DirectCreationSchema = z.object({ mode: z.literal(ConversationModes.Direc
 /** Exact group creation branch accepting one to ninety-nine other participants. */
 const _GroupCreationSchema = z.object({ mode: z.literal(ConversationModes.Group), participantUserIds: z.array(_IdentifierSchema).min(1).max(99) }).strict();
 
-/** Strict validator for the canonical immutable-mode conversation union. */
+/** Validates a stored conversation. Rejects unknown fields, and requires `closedAt` to be set exactly when the lifecycle is closed. */
 export const ___ConversationSchema: z.ZodType<Conversation> = z.discriminatedUnion("mode", [_AgentSessionConversationSchema, _DirectConversationSchema, _GroupConversationSchema]).superRefine(function _ValidateClosedAt(conversation, context)
 {
 	const isOpenWithoutClosure = conversation.lifecycle === ConversationLifecycles.Open && conversation.closedAt === null;
@@ -55,10 +55,10 @@ export const ___ConversationSchema: z.ZodType<Conversation> = z.discriminatedUni
 	}
 });
 
-/** Strict validator for the immutable-mode conversation creation request vocabulary. */
+/** Validates a conversation-creation request, applying the per-mode participant rules. */
 export const ___ConversationCreationRequestSchema: z.ZodType<ConversationCreationRequest> = z.discriminatedUnion("mode", [_AgentSessionCreationSchema, _DirectCreationSchema, _GroupCreationSchema]);
 
-/** Strict validator for participant-local join, read, archive, and access coordinates. */
+/** Validates one participant's own record: visibility start, read position, archive time, and access end. */
 export const ___ConversationParticipantSchema: z.ZodType<ConversationParticipant> = z.object({
 	conversationId: _IdentifierSchema,
 	userId: _IdentifierSchema,

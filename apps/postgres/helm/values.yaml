@@ -124,7 +124,7 @@ privileges:
       cpu: 250m
       memory: 256Mi
 
-# The deployment owner supplies these from the immutable repository release ledger. The
+# The deployment owner supplies these from the repository's immutable release ledger. The
 # privileges hook treats them as a convergence proof: a database must either be a fresh current
 # baseline or carry the exact completed adjacent migration history from its protected origin.
 convergence:

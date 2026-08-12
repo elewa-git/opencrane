@@ -7,7 +7,22 @@ import { ___DoWithTrace } from "@opencrane/backend/observability";
 
 import type { ArtifactPreprocessorDependencies } from "./preprocessor.types.js";
 
-/** Run the bounded outbound-only job loop until Kubernetes requests shutdown. */
+/**
+ * Claim and process PDF preprocessing jobs until the process is asked to stop.
+ *
+ * Outbound only: the worker opens every connection itself and OpenCrane never calls in, so the
+ * worker needs no inbound network access. It claims a job, processes it, and sleeps for the poll
+ * interval when there is nothing to do.
+ *
+ * The loop never exits on error. A failed job is logged and retried after the poll interval, and
+ * only an aborted `signal` ends the loop — so a caller must not rely on this returning to signal
+ * a problem.
+ *
+ * Called by: `apps/artifact-preprocessor/src/index.ts`.
+ * @param dependencies - The OpenCrane broker, the PDF converter, scratch directory, size and time limits, and a logger.
+ * @param signal - Aborted on shutdown; the loop stops at the next safe point.
+ * @returns Resolves when the signal is aborted. It does not reject.
+ */
 export async function __RunArtifactPreprocessor(dependencies: ArtifactPreprocessorDependencies, signal: AbortSignal): Promise<void>
 {
 	while (!signal.aborted)
@@ -31,7 +46,23 @@ export async function __RunArtifactPreprocessor(dependencies: ArtifactPreprocess
 	}
 }
 
-/** Read, convert, and submit one already-fenced PDF claim through OpenCrane only. */
+/**
+ * Process one claimed PDF: fetch the source from OpenCrane, convert it, and submit the text back.
+ *
+ * Every byte moves through OpenCrane. The worker is given no storage path and no storage
+ * credential, so it cannot reach the object store directly. Scratch files are removed even when a
+ * stage fails.
+ *
+ * On failure it reports one fixed reason code to OpenCrane and then re-throws the original error,
+ * so the caller's loop still sees the failure. OpenCrane, not the worker, decides whether the job
+ * is retried.
+ *
+ * Called by: {@link __RunArtifactPreprocessor}; exported for the package's own tests.
+ * @param dependencies - Broker, converter, scratch directory, and limits.
+ * @param claim - The claimed job, including the fence every later call must carry.
+ * @param signal - Shutdown signal.
+ * @throws Re-throws the original failure after reporting a reason code; a failure to report is logged and swallowed.
+ */
 export async function __ProcessArtifactPreprocessorJob(dependencies: ArtifactPreprocessorDependencies, claim: ArtifactPreprocessorJobClaim, signal: AbortSignal): Promise<void>
 {
 	await ___DoWithTrace("artifact_preprocessor.job.process", { jobId: claim.lease.jobId, attempt: claim.lease.attempt, sourceByteLength: claim.sourceByteLength }, async function _process()
@@ -73,7 +104,7 @@ export async function __ProcessArtifactPreprocessorJob(dependencies: ArtifactPre
 	});
 }
 
-/** Convert one claimed PDF and return its validated output size or report the fenced failure. */
+/** Convert one PDF and return the output size, or report a `conversion_failed` reason to OpenCrane and re-throw. */
 async function _ConvertOutput(dependencies: ArtifactPreprocessorDependencies, claim: ArtifactPreprocessorJobClaim, command: ArtifactPreprocessorClaimCommand, sourcePath: string, outputPath: string, signal: AbortSignal): Promise<number>
 {
 	try
@@ -90,7 +121,7 @@ async function _ConvertOutput(dependencies: ArtifactPreprocessorDependencies, cl
 	}
 }
 
-/** Fail closed before opening converter output as a potentially large stream. */
+/** Stat the converter's output and throw when it is not a regular file or is over the size limit, so an oversized result is never opened as a stream. */
 async function _BoundedOutputByteLength(path: string, maximumBytes: number): Promise<number>
 {
 	const metadata = await stat(path);
@@ -98,7 +129,7 @@ async function _BoundedOutputByteLength(path: string, maximumBytes: number): Pro
 	return metadata.size;
 }
 
-/** Report one stable failure category and then preserve the stage's original failure. */
+/** Report a fixed reason code to OpenCrane, then re-throw the original error so its detail is not lost. A failed report is logged and does not replace the original error. */
 async function _ReportFailure(dependencies: ArtifactPreprocessorDependencies, command: ArtifactPreprocessorClaimCommand, failureCode: ArtifactPreprocessorFailureCode, failure: unknown, signal: AbortSignal): Promise<never>
 {
 	if (!signal.aborted)
@@ -115,7 +146,7 @@ async function _ReportFailure(dependencies: ArtifactPreprocessorDependencies, co
 	throw failure;
 }
 
-/** Extract the exact live claim coordinates accepted by later broker calls. */
+/** Pull out the three fields — `jobId`, `attempt`, `claimFence` — that every later broker call must carry. */
 function _ClaimCommand(claim: ArtifactPreprocessorJobClaim): ArtifactPreprocessorClaimCommand
 {
 	return { jobId: claim.lease.jobId, attempt: claim.lease.attempt, claimFence: claim.lease.claimFence };

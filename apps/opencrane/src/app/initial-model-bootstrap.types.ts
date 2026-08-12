@@ -5,7 +5,7 @@ import type { InitialModelBootstrapConfig } from "./config.types.js";
 /** Dependencies the app composes for initial provider-key registration. */
 export interface InitialModelBootstrapDependencies
 {
-	/** Canonical product persistence passed through the provider-custody authority. */
+	/** The main product database client, passed through the provider-custody authority. */
 	readonly prisma: Parameters<typeof _ProvisionByokKey>[0]["prisma"];
 	/** Release-local Kubernetes Secret custody client passed through the provider authority. */
 	readonly coreApi: Parameters<typeof _ProvisionByokKey>[0]["coreApi"];

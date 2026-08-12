@@ -4,10 +4,10 @@ import { type UserOnboardingOwner, type UserOnboardingOwnerResolver, type UserOn
 
 import type { UserOnboardingRouteComposition } from "./routes.types.js";
 
-/** Prisma client shape accepted by the onboarding repository initializer without importing Prisma here. */
+/** The Prisma client type `_CreateUserOnboardingRepository` expects, derived so this file need not import Prisma. */
 type UserOnboardingPrismaClient = Parameters<typeof _CreateUserOnboardingRepository>[0];
 
-/** Compose the complete owner-only onboarding route and persona-notification surface. */
+/** Compose the complete owner-only onboarding router and its persona notifications. */
 export function _CreateUserOnboardingComposition(prisma: UserOnboardingPrismaClient, logger: Logger, resolveOwner: UserOnboardingOwnerResolver): UserOnboardingRouteComposition
 {
 	const repository = _CreateUserOnboardingRepository(prisma);
@@ -17,7 +17,7 @@ export function _CreateUserOnboardingComposition(prisma: UserOnboardingPrismaCli
 	return { router: __CreateUserOnboardingRouter({ authority, chatAuthority, resolveOwner, logger }), personaWorkflow: _CreatePersonaOnboardingWorkflow(authority) };
 }
 
-/** Compose the app-owned vocabulary adapter between persona and durable onboarding authorities. */
+/** Compose the app-owned adapter that translates names between the persona and durable onboarding authorities. */
 export function _CreatePersonaOnboardingWorkflow(authority: __UserOnboardingAuthority): PersonaOnboardingWorkflowPort
 {
 	const coordinator = new UserOnboardingPersonaWorkflowCoordinator(authority);
@@ -27,13 +27,13 @@ export function _CreatePersonaOnboardingWorkflow(authority: __UserOnboardingAuth
 	};
 }
 
-/** Translate persona's owner name to onboarding's stable subject vocabulary. */
+/** Translate persona's owner name into the stable subject fields onboarding expects. */
 function _WorkflowOwner(caller: PersonaOnboardingCaller): UserOnboardingOwner
 {
 	return { siloId: caller.siloId, subjectId: caller.userId };
 }
 
-/** Adapt persona-owned evidence vocabulary without sharing either domain's persistence authority. */
+/** Adapt persona's evidence field names without sharing either domain's persistence authority. */
 function _CreateUserOnboardingPersonaEvidence(repository: PersonaWorkflowEvidenceRepository): UserOnboardingPersonaEvidencePort
 {
 	return {
@@ -50,14 +50,14 @@ function _CreateUserOnboardingPersonaEvidence(repository: PersonaWorkflowEvidenc
 	};
 }
 
-/** Map persona persistence vocabulary into the public lowercase colour enum. */
+/** Map the persona persistence colour names into the public lowercase colour enum. */
 function _PersonaColour(colour: PersonaWorkflowColours): UserOnboardingPersonaColours
 {
 	const colours: Record<PersonaWorkflowColours, UserOnboardingPersonaColours> = { [PersonaWorkflowColours.Red]: UserOnboardingPersonaColours.Red, [PersonaWorkflowColours.Yellow]: UserOnboardingPersonaColours.Yellow, [PersonaWorkflowColours.Green]: UserOnboardingPersonaColours.Green, [PersonaWorkflowColours.Blue]: UserOnboardingPersonaColours.Blue };
 	return colours[colour];
 }
 
-/** Select the only reviewed archetype corresponding to an approved persona colour. */
+/** Return the one archetype that an approved persona colour maps to. */
 function _Archetype(colour: UserOnboardingPersonaColours): UserOnboardingBootstrapArchetypes
 {
 	const archetypes: Record<UserOnboardingPersonaColours, UserOnboardingBootstrapArchetypes> = { [UserOnboardingPersonaColours.Red]: UserOnboardingBootstrapArchetypes.Commander, [UserOnboardingPersonaColours.Yellow]: UserOnboardingBootstrapArchetypes.Catalyst, [UserOnboardingPersonaColours.Green]: UserOnboardingBootstrapArchetypes.Anchor, [UserOnboardingPersonaColours.Blue]: UserOnboardingBootstrapArchetypes.Analyst };

@@ -7,7 +7,7 @@ import { __PlanToolInvocationLifecycle } from "./tool-invocation-lifecycle.js";
 import { ExternalActionClaimKinds, ExternalActionRecoveryModes, TOOL_INVOCATION_PREPARATION_POLICY, ToolInvocationLifecycleActions, ToolInvocationLifecycleEvents, ToolInvocationStates } from "./tool-invocation-lifecycle.types.js";
 import type { ToolInvocationAdmissionResult, ToolInvocationClaim, ToolInvocationClaimResult, ToolInvocationCompletionResult, ToolInvocationIntent, ToolInvocationPreparationPolicy, ToolInvocationRecord, ToolInvocationTransactionRepository, ToolInvocationTransitionResult, ToolResultDeliveryPayload } from "./tool-invocation.types.js";
 
-/** Map persistence states onto the dependency-light lifecycle vocabulary. */
+/** Convert Prisma's ToolInvocationState values into this package's own state enum. */
 const _STATE_FROM_PRISMA: Readonly<Record<ToolInvocationState, ToolInvocationStates>> = {
 	[ToolInvocationState.Preparing]: ToolInvocationStates.Preparing,
 	[ToolInvocationState.AwaitingApproval]: ToolInvocationStates.AwaitingApproval,
@@ -19,7 +19,7 @@ const _STATE_FROM_PRISMA: Readonly<Record<ToolInvocationState, ToolInvocationSta
 	[ToolInvocationState.RecoveryRequired]: ToolInvocationStates.RecoveryRequired,
 };
 
-/** Map trusted recovery vocabulary onto Prisma's generated adapter edge. */
+/** Map our recovery modes onto Prisma's generated enum. */
 const _RECOVERY_TO_PRISMA: Readonly<Record<ExternalActionRecoveryModes, ExternalActionRecoveryMode>> = {
 	[ExternalActionRecoveryModes.ProviderIdempotency]: ExternalActionRecoveryMode.ProviderIdempotency,
 	[ExternalActionRecoveryModes.Reconciliation]: ExternalActionRecoveryMode.Reconciliation,
@@ -39,7 +39,7 @@ const _CLAIM_TO_PRISMA: Readonly<Record<ExternalActionClaimKinds, ExternalAction
 	[ExternalActionClaimKinds.Reconcile]: ExternalActionClaimKind.Reconcile,
 };
 
-/** Minimal persistence row shape accepted by the canonical projection helper. */
+/** Smallest persistence row shape the row-to-record helper accepts. */
 type ToolInvocationRow = Prisma.ToolInvocationGetPayload<Record<string, never>>;
 
 /** Map a persisted claim kind back to the dependency-light vocabulary. */
@@ -49,7 +49,7 @@ function _claimKind(kind: ExternalActionClaimKind | null): ExternalActionClaimKi
 	return kind === ExternalActionClaimKind.Dispatch ? ExternalActionClaimKinds.Dispatch : ExternalActionClaimKinds.Reconcile;
 }
 
-/** Project one Prisma row without leaking generated types across the repository contract. */
+/** Convert one ToolInvocation row into ToolInvocationRecord, so Prisma's generated types stay in this file. */
 function _record(row: ToolInvocationRow): ToolInvocationRecord
 {
 	return {
@@ -117,7 +117,7 @@ function _safeFailureCode(failureCode: string): string
 	return /^[a-z][a-z0-9_]{0,63}$/.test(failureCode) ? failureCode : "external_action_failed";
 }
 
-/** Ask the exhaustive State x Event owner for the only permitted persistence action. */
+/** Ask the lifecycle table which database change this row's state allows for this event. */
 function _plan(row: ToolInvocationRow, event: ToolInvocationLifecycleEvents, now: Date): ToolInvocationLifecycleActions
 {
 	return __PlanToolInvocationLifecycle({
@@ -157,7 +157,7 @@ function _completionEvent(kind: ExternalActionClaimKinds, outcome: ToolResultDel
 /** Prisma repository bound to exactly one caller-owned transaction. */
 export class PrismaToolInvocationRepository implements ToolInvocationTransactionRepository
 {
-	/** Exact transaction that owns every delegate access in this adapter. */
+	/** The transaction every query in this class runs on. */
 	private readonly _transaction: Prisma.TransactionClient;
 
 	/** Bind all reads and writes to one ToolInvocation unit-of-work transaction. */
@@ -424,14 +424,14 @@ export class PrismaToolInvocationRepository implements ToolInvocationTransaction
 		return { changed: updated.count === 1, invocation: await this._winner(invocationId) };
 	}
 
-	/** Load the durable winner after any compare-and-set attempt. */
+	/** Re-read the row after a conditional update, whether or not this call was the one that changed it. */
 	private async _winner(invocationId: string): Promise<ToolInvocationRecord | null>
 	{
 		const winner = await this._transaction.toolInvocation.findUnique({ where: { id: invocationId } });
 		return winner === null ? null : _record(winner);
 	}
 
-	/** Load a winner that the preceding successful write guarantees exists. */
+	/** Re-read the row after a write that succeeded, so it must still exist; throws if it does not. */
 	private async _requiredWinner(invocationId: string): Promise<ToolInvocationRecord>
 	{
 		const winner = await this._winner(invocationId);

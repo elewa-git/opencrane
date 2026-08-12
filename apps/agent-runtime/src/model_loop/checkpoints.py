@@ -40,7 +40,7 @@ def process_cipher() -> object:
 
 
 def checkpoint_path(checkpoint_dir: str | None) -> str:
-    """Resolve the single replaceable checkpoint path.
+    """Return the one checkpoint path, which each write replaces in place.
 
     An explicit directory is a test seam. Production otherwise honours the documented environment
     setting and finally the bounded scratch default. The fixed filename prevents accumulation of an

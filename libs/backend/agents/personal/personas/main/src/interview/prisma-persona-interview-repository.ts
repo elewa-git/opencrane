@@ -9,16 +9,16 @@ import { PersonaScoringPersistenceStatuses } from "../scoring/persona-scoring-re
 import { PrismaPersonaScoringRepository } from "../scoring/prisma-persona-scoring-repository.js";
 import type { CompletePersonaInterviewCommand, PersonaInterviewQuestionReader, PersonaInterviewRepository, RecordPersonaInterviewAnswerCommand, ResolvePersonaInterviewTieCommand, StartPersonaInterviewCommand } from "./persona-interview-authority.types.js";
 
-/** Prisma authority for the append-only, reviewed-question-set persona interview lifecycle. */
+/** Prisma adapter for the persona interview lifecycle. Answers are only added, never changed. */
 export class PrismaPersonaInterviewRepository implements PersonaInterviewRepository, PersonaInterviewQuestionReader
 {
-	/** Transaction-scoped canonical product database. */
+	/** Prisma client for the caller's transaction; every read and write here uses it. */
 	private readonly transaction: Prisma.TransactionClient;
-	/** Configuration-owned proposal repository bound to the same transaction. */
+	/** Persona-refresh proposal repository, on the same transaction. */
 	private readonly refreshes: PrismaPersonalConfigurationPersonaRefreshRepository;
-	/** Aggregate-owned evidence reads shared with draft and approval mutation fences. */
+	/** Shared reader for profile, interview, and revision rows; the draft and approval paths use the same one. */
 	private readonly reads: PrismaPersonaAggregateReadRepository;
-	/** Scoring authority bound to this exact transaction. */
+	/** Score repository, on the same transaction. */
 	private readonly scoring: PrismaPersonaScoringRepository;
 	/** Create the interview authority over one caller-owned transaction. */
 	constructor(transaction: Prisma.TransactionClient)
@@ -29,7 +29,7 @@ export class PrismaPersonaInterviewRepository implements PersonaInterviewReposit
 		this.scoring = new PrismaPersonaScoringRepository(this.transaction);
 	}
 
-	/** Read only the exact question-set revision frozen into one owner interview. */
+	/** Reads the questions from the question-set version this interview was pinned to. */
 	async getQuestions(interviewId: string, personaProfileId: string, userId: string): ReturnType<PersonaInterviewQuestionReader["getQuestions"]>
 	{
 		const interview = await this.transaction.personaInterview.findFirst({ where: { id: interviewId, personaProfileId, userId }, select: { questionSetId: true, questionSetVersion: true } });
@@ -37,19 +37,19 @@ export class PrismaPersonaInterviewRepository implements PersonaInterviewReposit
 		return this.transaction.personaQuestion.findMany({ where: { questionSetId: interview.questionSetId, questionSetVersion: interview.questionSetVersion }, select: { id: true, category: true, prompt: true, ordinal: true, choices: { select: { id: true, label: true, ordinal: true }, orderBy: { ordinal: "asc" } } }, orderBy: { ordinal: "asc" } });
 	}
 
-	/** Start one reviewed interview while serialising all in-progress attempts for the same profile. */
+	/** Starts one interview. Serializable isolation makes two simultaneous starts for the same profile collide instead of both succeeding. */
 	async startAtomically(command: StartPersonaInterviewCommand): Promise<{ readonly status: PersonaLifecycleOutcomes.Started | PersonaLifecycleOutcomes.AlreadyInProgress; readonly interviewId: string } | { readonly status: PersonaInterviewDenialReasons }>
 	{
-		// 1. Read the owner profile; two racing browser starts abort at the unit-of-work boundary.
+		// 1. Read the owner's profile. If two browser tabs start at once, one aborts in the transaction wrapper.
 		const profile = await this.reads.readProfile(command);
 		if (profile === null) return { status: PersonaInterviewDenialReasons.NotFoundOrWrongOwner };
-		// 2. Claim only an accepted owner-bound persona-refresh proposal before any interview exists.
+		// 2. Claim the refresh proposal first, and only when it is accepted and belongs to this owner and profile.
 		if (command.refreshConfigurationChangeId !== null)
 		{
 			const refresh = await this.refreshes.claimAcceptedPersonaRefresh({ configurationChangeId: command.refreshConfigurationChangeId, siloId: command.siloId, userId: command.userId, personaProfileId: command.personaProfileId });
 			if (refresh !== PersonalConfigurationPersonaRefreshClaimCodes.Accepted) return { status: PersonaInterviewDenialReasons.RefreshChangeUnavailable };
 		}
-		// 3. Reuse a still-active interview; a different refresh may not hijack unreviewed answers.
+		// 3. Reuse an interview that is still in progress. A different refresh request must not take over answers the owner has not reviewed yet.
 		const existing = await this.transaction.personaInterview.findFirst({ where: { personaProfileId: command.personaProfileId, userId: command.userId, state: PersonaInterviewState.InProgress }, select: { id: true, refreshConfigurationChangeId: true } });
 		if (existing !== null)
 		{
@@ -57,7 +57,7 @@ export class PrismaPersonaInterviewRepository implements PersonaInterviewReposit
 				? { status: PersonaLifecycleOutcomes.AlreadyInProgress, interviewId: existing.id }
 				: { status: PersonaInterviewDenialReasons.RefreshInterviewConflict };
 		}
-		// 4. Accept only an exact reviewed question-set revision before recording the interview attempt.
+		// 4. Require the question set to exist at this exact version and still be Reviewed, and require both derivation sources to exist.
 		const [questionSet, scoringPolicy, interpolationMap] = await Promise.all([
 			this.transaction.personaQuestionSet.findUnique({ where: { id_version: { id: command.questionSetId, version: command.questionSetVersion } }, select: { state: true } }),
 			this.transaction.personaScoringPolicy.findUnique({ where: { id_version: { id: command.scoringPolicyId, version: command.scoringPolicyVersion } }, select: { id: true } }),
@@ -68,10 +68,10 @@ export class PrismaPersonaInterviewRepository implements PersonaInterviewReposit
 		return { status: PersonaLifecycleOutcomes.Started, interviewId: interview.id };
 	}
 
-	/** Append one answer only after locking the exact owner interview and question-set revision. */
+	/** Adds one answer, after re-reading the owner's interview and checking the choice belongs to its pinned question set. */
 	async recordAnswerAtomically(command: RecordPersonaInterviewAnswerCommand): Promise<{ readonly status: PersonaLifecycleOutcomes.Recorded; readonly answerId: string } | { readonly status: PersonaInterviewDenialReasons }>
 	{
-		// 1. Read the interview, proving its owner; a completion racing this append aborts as a serializable conflict.
+		// 1. Read the interview, which also proves the owner. A completion running at the same time aborts as a serialization conflict.
 		const interview = await this.reads.readInterview(command);
 		if (interview === null) return { status: PersonaInterviewDenialReasons.NotFoundOrWrongOwner };
 		if (interview.state !== PersonaAggregateInterviewStates.InProgress) return { status: PersonaInterviewDenialReasons.NotInProgress };
@@ -80,23 +80,23 @@ export class PrismaPersonaInterviewRepository implements PersonaInterviewReposit
 		if (choice === null) return { status: PersonaInterviewDenialReasons.QuestionUnavailable };
 		const existing = await this.transaction.personaInterviewAnswer.findUnique({ where: { interviewId_questionId: { interviewId: command.interviewId, questionId: command.questionId } }, select: { id: true } });
 		if (existing !== null) return { status: PersonaInterviewDenialReasons.AlreadyAnswered };
-		// 3. Persist the immutable answer with the question-set provenance the baseline trigger independently verifies.
+		// 3. Write the answer with its question-set id and version. The persona_interview_answers_exact_question_set trigger checks them again.
 		const answer = await this.transaction.personaInterviewAnswer.create({ data: { interviewId: command.interviewId, questionSetId: interview.questionSetId, questionSetVersion: interview.questionSetVersion, questionId: command.questionId, choiceId: command.choiceId, answeredAt: new Date(command.answeredAt) }, select: { id: true } });
 		return { status: PersonaLifecycleOutcomes.Recorded, answerId: answer.id };
 	}
 
-	/** Freeze one interview only once its exact reviewed-question set has every answer. */
+	/** Completes one interview, but only when every question in its pinned question set has an answer. */
 	async completeAtomically(command: CompletePersonaInterviewCommand): ReturnType<PersonaInterviewRepository["completeAtomically"]>
 	{
-		// 1. Read the interview before counting evidence; an answer racing this completion aborts as a conflict.
+		// 1. Read the interview before counting. An answer written at the same time aborts as a conflict.
 		const interview = await this.reads.readInterview(command);
 		if (interview === null) return { status: PersonaInterviewDenialReasons.NotFoundOrWrongOwner };
 		if (interview.state !== PersonaAggregateInterviewStates.InProgress) return { status: PersonaInterviewDenialReasons.NotInProgress };
-		// 2. Compare the exact reviewed question count with the immutable answers before completion.
+		// 2. Compare the number of questions with the number of answers.
 		const expectedAnswers = await this.transaction.personaQuestion.count({ where: { questionSetId: interview.questionSetId, questionSetVersion: interview.questionSetVersion } });
 		const actualAnswers = await this.transaction.personaInterviewAnswer.count({ where: { interviewId: command.interviewId } });
 		if (expectedAnswers === 0 || actualAnswers !== expectedAnswers) return { status: PersonaInterviewDenialReasons.IncompleteAnswers };
-		// 3. Change only the closed lifecycle state; the target-baseline trigger repeats the answer fence at commit.
+		// 3. Change only the state. The persona_interviews_closed_lifecycle trigger counts the answers again on this update.
 		const updated = await this.transaction.personaInterview.updateMany({ where: { id: command.interviewId, personaProfileId: command.personaProfileId, userId: command.userId, state: PersonaInterviewState.InProgress }, data: { state: PersonaInterviewState.Completed, completedAt: new Date(command.completedAt) } });
 		if (updated.count !== 1) return { status: PersonaInterviewDenialReasons.NotInProgress };
 		const scoring = await this.scoring.ensureScore(command.interviewId, command.personaProfileId, command.userId);
@@ -104,7 +104,7 @@ export class PrismaPersonaInterviewRepository implements PersonaInterviewReposit
 		return { status: PersonaLifecycleOutcomes.Completed, score: scoring.score };
 	}
 
-	/** Append the exact current tie choice without accepting stale or invented candidates. */
+	/** Records the owner's tie choice, refusing a choice for a tie the score is not waiting on. */
 	async resolveTieAtomically(command: ResolvePersonaInterviewTieCommand): ReturnType<PersonaInterviewRepository["resolveTieAtomically"]>
 	{
 		const result = await this.scoring.resolveTie(command);

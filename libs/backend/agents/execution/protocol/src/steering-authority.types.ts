@@ -1,10 +1,21 @@
-/** Disposition recorded for one ordered steering boundary. */
+/**
+ * What one steering boundary decided: the waiting instruction was taken, or there was none.
+ *
+ * These are not interchangeable labels. `absorbed` means the instruction is now part of the next
+ * model request and the attempt's input generation has moved on by one, which is what makes any
+ * model output produced under the old generation stale. `deferred` means nothing was waiting and the
+ * generation is unchanged. A caller that treats a deferral as an absorb would advance the generation
+ * with no instruction to show for it, and then reject the next legitimate model result as stale.
+ *
+ * @see __ClaimSteeringBoundary which records one.
+ * @see __AdmitModelTerminal which rejects output produced under a superseded generation.
+ */
 export type SteeringDisposition = "absorbed" | "deferred";
 
-/** Pending steering observed at a safe pre-model boundary, or null when none is buffered. */
+/** Steering waiting to be applied at the next boundary, or null when nothing is waiting. */
 export interface PendingSteering
 {
-	/** Canonical digest of the buffered steering payload absorbed into the next model request. */
+	/** Digest of the waiting steering text that goes into the next model request. */
 	readonly steeringDigest: string;
 }
 
@@ -21,7 +32,7 @@ export interface ClaimSteeringBoundaryCommand
 	readonly pendingSteering: PendingSteering | null;
 }
 
-/** Immutable steering boundary the repository records exactly once. */
+/** One steering boundary, written to the database exactly once. */
 export interface SteeringBoundaryClaim
 {
 	/** Logical run the boundary belongs to. */
@@ -45,10 +56,30 @@ export type SteeringBoundaryClaimResult =
 	| { readonly status: "claimed" }
 	| { readonly status: "existing"; readonly disposition: SteeringDisposition; readonly toInputGeneration: number; readonly steeringDigest: string | null };
 
-/** Persistence boundary that records exactly one disposition per steering boundary. */
+/**
+ * Records one absorbed-or-deferred decision per steering boundary, and only ever one.
+ *
+ * The exactly-once promise is the whole point: a process can die between deciding and acknowledging,
+ * and the runtime will then claim the same boundary again. The implementation answers that by
+ * returning the decision already recorded rather than writing a second one, so an instruction is
+ * never applied twice.
+ *
+ * Called by: `__ClaimSteeringBoundary` (steering-authority.ts). Implemented by
+ * `PrismaSteeringBoundaryRepository`; no other implementation exists.
+ */
 export interface SteeringBoundaryRepository
 {
-	/** Atomically records a new boundary claim, or returns the disposition already recorded for it. */
+	/**
+	 * Record a new boundary, or report the decision already recorded for it.
+	 *
+	 * @param claim - The boundary to record, identified by its deterministic id.
+	 * @returns `claimed` - this call recorded the decision, so the caller's own disposition and
+	 * generation are in force. `existing` - an earlier process already recorded one, and the caller must
+	 * use the returned disposition and generation instead of its own, or steering would be applied
+	 * twice.
+	 * @throws {Error} When a boundary that absorbed steering could not move the attempt's input
+	 * generation by exactly one row, which would leave the boundary and the command stream disagreeing.
+	 */
 	claim(claim: SteeringBoundaryClaim): Promise<SteeringBoundaryClaimResult>;
 }
 
@@ -65,7 +96,7 @@ export interface ClaimSteeringBoundaryResult
 	readonly replayed: boolean;
 }
 
-/** Model terminal presented for admission against the attempt's current input generation. */
+/** A finished model response, being checked against the attempt's current input generation. */
 export interface AdmitModelTerminalCommand
 {
 	/** Input generation currently in force for the attempt. */
@@ -74,7 +105,7 @@ export interface AdmitModelTerminalCommand
 	readonly terminalInputGeneration: number;
 }
 
-/** Whether a model terminal is admitted or rejected as produced against a superseded generation. */
+/** Accepted, or rejected because the response was produced against an older input generation. */
 export type AdmitModelTerminalResult =
 	| { readonly outcome: "accepted" }
 	| { readonly outcome: "rejected"; readonly reason: "stale_input_generation" };

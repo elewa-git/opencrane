@@ -2,13 +2,22 @@ import { AuthorizationScopeKind, FleetMembershipScopeKind, type Prisma } from "@
 
 import type { PersonalExecutionGrantFact, PersonalExecutionIdentityAuthorityRepository, PersonalFleetMembershipAssertion } from "./personal-execution-identity-envelope-source.types.js";
 
-/** Prisma repository for personal membership assertions and effective capability facts. */
+/**
+ * Reads personal membership assertions and active capability grants with Prisma.
+ *
+ * Takes a transaction client rather than a Prisma client, so it can never open a second transaction
+ * of its own: every read here has to see the same rows as the membership check that runs beside it.
+ *
+ * Constructed per admission by {@link PersonalExecutionIdentityEnvelopeSource}.
+ *
+ * @implements PersonalExecutionIdentityAuthorityRepository
+ */
 export class PrismaPersonalExecutionIdentityAuthorityRepository implements PersonalExecutionIdentityAuthorityRepository
 {
-	/** Caller-owned final-admission transaction. */
+	/** The admission transaction the caller owns. */
 	private readonly prisma: Prisma.TransactionClient;
 
-	/** Creates the repository without opening a second transaction outside the admission fence. */
+	/** Creates the repository. It never opens a transaction of its own outside the admission one. */
 	constructor(prisma: Prisma.TransactionClient)
 	{
 		this.prisma = prisma;
@@ -45,7 +54,7 @@ export class PrismaPersonalExecutionIdentityAuthorityRepository implements Perso
 	}
 }
 
-/** Returns one usable personal assertion and fails closed for absent, ambiguous, or blank values. */
+/** Returns the assertion only when there is exactly one and its ids are non-blank; otherwise null. */
 function _OneAssertion(assertions: readonly PersonalFleetMembershipAssertion[]): PersonalFleetMembershipAssertion | null
 {
 	if (assertions.length !== 1) return null;

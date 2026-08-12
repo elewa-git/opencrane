@@ -1,4 +1,4 @@
-// This validator admits untrusted replay coordinates and timeline entries; it stays beside the model so cursor binding and monotonic position rules cannot drift.
+// Turns untrusted replay cursors and timeline entries into models. It lives beside the model so the cursor-binding and position rules cannot drift apart from the types.
 import { z } from "zod";
 
 import { ConversationTimelineEntryKinds, type ConversationReplayCursor, type ConversationTimelineEntry } from "./timeline.types.js";
@@ -32,7 +32,7 @@ const _SystemTimelineEntrySchema = z.object({ ..._TimelineEntryBaseShape, kind: 
 /** Exact immediate-child-delivery timeline validator. */
 const _ParentDeliveryTimelineEntrySchema = z.object({ ..._TimelineEntryBaseShape, kind: z.literal(ConversationTimelineEntryKinds.ParentDelivery), parentDeliveryChildRunId: _IdentifierSchema }).strict();
 
-/** Strict validator for one database-owned canonical timeline position and exact source reference. */
+/** Validates one timeline entry: its database-allocated position plus the reference for its source kind. */
 export const ___ConversationTimelineEntrySchema: z.ZodType<ConversationTimelineEntry> = z.discriminatedUnion("kind", [_MessageTimelineEntrySchema, _RunEventTimelineEntrySchema, _MembershipTimelineEntrySchema, _SystemTimelineEntrySchema, _ParentDeliveryTimelineEntrySchema]);
 
 /** Strict validator for a resumable cursor bound to one conversation and observed position. */

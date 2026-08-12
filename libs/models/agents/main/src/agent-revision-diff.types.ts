@@ -9,7 +9,7 @@ export interface RevisionLineDiff
 	readonly removedLines: readonly string[];
 }
 
-/** Semantic scalar-field change between two revisions. */
+/** One single-value field that differs between two revisions, with its rendered before and after. */
 export interface RevisionScalarChange
 {
 	/** Structured configuration field that changed. */
@@ -20,7 +20,7 @@ export interface RevisionScalarChange
 	readonly after: string | null;
 }
 
-/** Semantic set-field change between two revisions rendered as stable member keys. */
+/** One collection field that differs between two revisions. Members are rendered as stable keys so an unchanged member never appears as both added and removed. */
 export interface RevisionSetChange
 {
 	/** Structured configuration collection that changed. */
@@ -31,10 +31,16 @@ export interface RevisionSetChange
 	readonly removed: readonly string[];
 }
 
-/** Security-relevant category widened by a revision change. */
+/** Which kind of power a revision change broadened: knowledge scope, tools, credentials, or budget. */
 export type RevisionWideningKind = "scope" | "tools" | "credentials" | "budget";
 
-/** One security-relevant widening flagged for reviewer attention. */
+/**
+ * One change that gives the agent more power than the base revision had.
+ *
+ * A publication flow must surface every one of these and get explicit confirmation. `detail` is
+ * human-readable and safe to show — it names references, never secret values.
+ * @see {@link __DiffAgentRevisions}
+ */
 export interface RevisionWidening
 {
 	/** Category of authority that broadened. */
@@ -45,7 +51,7 @@ export interface RevisionWidening
 	readonly detail: string;
 }
 
-/** Complete comparison between an ordered base and target revision. */
+/** Everything that differs between two revisions. Check `widenings` first: it is the only field that indicates a security review is needed. */
 export interface AgentRevisionDiff
 {
 	/** Line-level diffs for readable text fields. */

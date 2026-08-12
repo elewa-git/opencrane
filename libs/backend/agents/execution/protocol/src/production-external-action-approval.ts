@@ -7,13 +7,13 @@ import type { RunInputSnapshotToolDefinition } from "@opencrane/contracts";
 import { ExternalActionRevisionKinds } from "./external-action-executor.types.js";
 import type { ExternalActionApprovalOpener, ExternalActionExecutionContext, ExternalActionWorkerInvocation } from "./external-action-worker.types.js";
 
-/** Fixed server-owned window in which one person may decide a tool approval. */
+/** How long someone has to decide a tool approval. */
 const _APPROVAL_EXPIRY_MILLISECONDS = 15 * 60 * 1_000;
 
-/** Narrow production persistence input already required by the canonical approval opener. */
+/** The Prisma client type `__OpenDeferredToolApproval` already requires. */
 type DeferredToolApprovalPrisma = Parameters<typeof __OpenDeferredToolApproval>[0];
 
-/** Parse the compiler-owned integration revision without accepting ambiguous extra segments. */
+/** Split an `integration:<id>:<tool>` revision id, rejecting anything with a different number of parts. */
 function _integrationTool(toolRevisionId: string): { readonly integrationId: string; readonly toolName: string } | null
 {
 	const parts = toolRevisionId.split(":");
@@ -21,10 +21,10 @@ function _integrationTool(toolRevisionId: string): { readonly integrationId: str
 	return { integrationId: parts[1], toolName: parts[2] };
 }
 
-/** Resolve exactly one frozen definition that produced the admitted compiler revision. */
+/** Find the one tool definition in the snapshot that this invocation's revision id came from. */
 function _frozenTool(invocation: ExternalActionWorkerInvocation, context: ExternalActionExecutionContext): RunInputSnapshotToolDefinition
 {
-	// 1. Parse the exact compiler-owned coordinate from the admitted invocation revision.
+	// 1. Split the invocation's revision id into its integration and tool name.
 	const coordinate = _integrationTool(invocation.toolRevisionId);
 	if (coordinate === null) throw new Error("approval-required external action has no frozen integration coordinate");
 
@@ -40,20 +40,20 @@ function _frozenTool(invocation: ExternalActionWorkerInvocation, context: Extern
 	}
 	if (matches.length !== 1) throw new Error("approval-required external action has no unique frozen tool schema");
 
-	// 3. Recompute the canonical digest before allowing the definition into approval authority.
+	// 3. Re-hash the schema and check it matches, before the definition is used for approval.
 	const definition = matches[0]!;
 	if (__DigestCanonicalJson(definition.parametersSchema) !== definition.parametersSchemaDigest) throw new Error("approval-required external action schema digest is invalid");
 	return definition;
 }
 
-/** Derive an opaque stable interrupt id without embedding arguments or database coordinates. */
+/** Build a stable interrupt id that reveals neither the arguments nor any database id. */
 function _interruptId(invocation: ExternalActionWorkerInvocation): string
 {
 	const digest = createHash("sha256").update(JSON.stringify(["opencrane-tool-approval-interrupt-v1", invocation.requestFingerprint]), "utf8").digest("hex");
 	return `tool-approval-${digest}`;
 }
 
-/** Build the exact bounded command accepted by the approval authority. */
+/** Build the command `__OpenDeferredToolApproval` takes. */
 function _openCommand(invocation: ExternalActionWorkerInvocation, context: ExternalActionExecutionContext, definition: RunInputSnapshotToolDefinition, now: Date): OpenDeferredToolApprovalCommand
 {
 	return {
@@ -73,22 +73,22 @@ function _openCommand(invocation: ExternalActionWorkerInvocation, context: Exter
 	};
 }
 
-/** Production adapter that binds immutable execution input to the authorization-owned opener. */
+/** Passes the invocation and its snapshot to `__OpenDeferredToolApproval`. */
 class _ProductionExternalActionApprovalOpener implements ExternalActionApprovalOpener
 {
-	/** Canonical product-authority client that owns approval transactions. */
+	/** Database client that runs the approval transaction. */
 	private readonly prisma: DeferredToolApprovalPrisma;
-	/** Structured logger used only by the opener's secret-free recovery evidence. */
+	/** Logger for the opener's own messages. Nothing secret goes into it. */
 	private readonly logger: Logger;
 
-	/** Bind approval opening to process-owned persistence and logging. */
+	/** Store the database client and logger this opener uses. */
 	constructor(prisma: DeferredToolApprovalPrisma, logger: Logger)
 	{
 		this.prisma = prisma;
 		this.logger = logger;
 	}
 
-	/** Resolve immutable policy and open one bounded approval through its canonical authority. */
+	/** Find the frozen tool definition, then open one approval through `__OpenDeferredToolApproval`. */
 	async open(invocation: ExternalActionWorkerInvocation, context: ExternalActionExecutionContext, now: Date): Promise<boolean>
 	{
 		const definition = _frozenTool(invocation, context);
@@ -96,7 +96,16 @@ class _ProductionExternalActionApprovalOpener implements ExternalActionApprovalO
 	}
 }
 
-/** Create the production approval adapter used by the process-owned external-action worker. */
+/**
+ * Create the approval opener the external-action worker uses.
+ *
+ * Called by: `_CreateExternalActionWorker` in apps/opencrane/src/app/external-action-composition.ts.
+ *
+ * @param prisma - Database client that will own the approval transaction.
+ * @param logger - Logger for the opener's own messages; nothing secret goes into it.
+ * @returns An opener that pauses the run and creates, or finds, the approval request.
+ * @see ExternalActionApprovalOpener for what its boolean result obliges the caller to do.
+ */
 export function __CreateProductionExternalActionApprovalOpener(prisma: DeferredToolApprovalPrisma, logger: Logger): ExternalActionApprovalOpener
 {
 	return new _ProductionExternalActionApprovalOpener(prisma, logger);

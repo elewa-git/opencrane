@@ -2,7 +2,7 @@ import type { Router } from "express";
 
 import type { SkillWorkloadDispatchAuthority } from "./skill-workload-authority.types.js";
 
-/** TokenReview-confirmed identity of the one controller workload allowed to project skill Jobs. */
+/** The identity TokenReview confirmed for the one controller allowed to create skill Jobs. */
 export interface ReviewedSkillWorkloadControllerIdentity
 {
 	/** Exact Kubernetes username returned by TokenReview. */
@@ -15,7 +15,7 @@ export interface ReviewedSkillWorkloadControllerIdentity
 	readonly audiences: readonly string[];
 }
 
-/** Projected-token reviewer supplied only by the OpenCrane process boundary. */
+/** TokenReview adapter. Only the OpenCrane process start-up supplies it. */
 export interface SkillWorkloadControllerTokenReviewer
 {
 	/** Review one raw bearer token and expose only its verified Kubernetes identity. */
@@ -25,7 +25,7 @@ export interface SkillWorkloadControllerTokenReviewer
 /** Minimal structured logger surface used by the skill-workload HTTP boundary. */
 export interface SkillWorkloadDispatchLogger
 {
-	/** Record an unavailable authority without serialising a bearer token or request body. */
+	/** Log that the database was unreachable, without logging the bearer token or the request body. */
 	error(bindings: { readonly err: unknown; readonly operation: string }, message: string): void;
 }
 
@@ -36,7 +36,7 @@ export interface SkillWorkloadDispatchRouterDependencies
 	readonly tokenReviewer: SkillWorkloadControllerTokenReviewer;
 	/** Namespace in which the controller ServiceAccount must exist. */
 	readonly namespace: string;
-	/** Application authority for claim generation and suspended-Job assignment. */
+	/** Claims workloads and records suspended-Job assignments. */
 	readonly authority: SkillWorkloadDispatchAuthority;
 	/** Shared process logger carrying request and trace context. */
 	readonly logger: SkillWorkloadDispatchLogger;

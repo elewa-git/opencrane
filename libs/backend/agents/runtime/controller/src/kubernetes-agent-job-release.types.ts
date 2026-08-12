@@ -10,7 +10,7 @@ export interface AgentControllerJobReleasePlan
 {
 	/** Conditional patch that tests identity and suspension before reducing the deadline and releasing. */
 	readonly patch: AgentControllerJobPatchRequest;
-	/** Conservative whole-second execution allowance written into the released Job. */
+	/** How many whole seconds the released Job may run, rounded down and reduced by a safety second to stay inside the assignment. */
 	readonly activeDeadlineSeconds: number;
 	/** Canonical durable expiry that the released Job must not outlive. */
 	readonly canonicalAssignmentExpiresAt: string;

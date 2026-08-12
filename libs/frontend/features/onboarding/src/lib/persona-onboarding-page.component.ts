@@ -13,7 +13,22 @@ import { PersonaResolutionStateComponent } from "./states/resolution/persona-res
 import { PersonaReviewStateComponent } from "./states/review/persona-review-state.component";
 import type { PersonaAnswerIntent, PersonaApprovalIntent, PersonaOnboardingStateSnapshot, PersonaResolutionIntent } from "./persona-onboarding-state.types";
 
-/** Routed shell that renders exactly one component for the server-authoritative persona state. */
+/**
+ * The `/onboarding` page. Shows one screen for whichever persona stage the server reports.
+ *
+ * Provides its own {@link PersonaOnboardingStore}, so the state is thrown away when the user leaves.
+ * All it does is pick a child component from the store's state — `Interview`, `Resolution`, `Review`
+ * or `Ready` — and forward the child's outputs to the store. It holds no state of its own and never
+ * advances the workflow.
+ *
+ * Once the persona is approved it asks the store for the next route and navigates there, which is
+ * how the user reaches `/onboarding/chat`. The navigation happens in an `effect` that only reads
+ * store state and calls the router — nothing is written to product state from inside it.
+ *
+ * Rendered by: the `""` route in onboarding.routes.ts.
+ *
+ * @see PersonaOnboardingStates
+ */
 @Component({
 	selector: "wo-persona-onboarding-page",
 	standalone: true,
@@ -25,13 +40,13 @@ import type { PersonaAnswerIntent, PersonaApprovalIntent, PersonaOnboardingState
 })
 export class PersonaOnboardingPageComponent
 {
-	/** Component-scoped browser state owner for authoritative reads and commands. */
+	/** This page's own store instance; discarded when the page is destroyed. */
 	private readonly _store = inject(PersonaOnboardingStore);
 
-	/** Router used only for transitions selected from durable onboarding state. */
+	/** Router. Only ever used to follow the route the store loaded, never to guess a destination. */
 	private readonly _router = inject(Router);
 
-	/** Shared journey layout enum exposed for loading and failure envelopes. */
+	/** JourneyShellLayouts, exposed so the template can pick a layout for the loading and error screens. */
 	public readonly layouts = JourneyShellLayouts;
 
 	/** Durable lifecycle enum used by the shell's sole state switch. */
@@ -40,13 +55,13 @@ export class PersonaOnboardingPageComponent
 	/** Read-only loader owned by the component-scoped onboarding store. */
 	public readonly onboarding = this._store.onboarding;
 
-	/** Whether the store has admitted one authority command. */
+	/** Whether a command is running in the store; used to disable the controls. */
 	public readonly saving = this._store.busy;
 
-	/** Bounded command or ready-route failure that leaves authoritative state unchanged. */
+	/** Message from the last failed command or route load; the onboarding state itself is unchanged. */
 	public readonly actionError = this._store.actionError;
 
-	/** Observe only the durable ready transition and route from its separate authority projection. */
+	/** Watch for the persona reaching Ready, then navigate using the route the store loaded. */
 	constructor()
 	{
 		effect(this._resolveRouteWhenReady.bind(this));
@@ -64,7 +79,7 @@ export class PersonaOnboardingPageComponent
 		this._store.retry();
 	}
 
-	/** Narrow one authoritative snapshot only after the template's matching lifecycle case. */
+	/** Narrow the snapshot for one state's child component. Only call it from the matching @switch branch — it assumes that branch already matched. */
 	public stateSnapshot<State extends PersonaOnboardingStates>(snapshot: PersonaOnboardingSnapshot, state: State): PersonaOnboardingStateSnapshot<State>
 	{
 		if (snapshot.state !== state) throw new Error("persona onboarding state switch mismatch");
@@ -101,20 +116,20 @@ export class PersonaOnboardingPageComponent
 		await this._store.approve(intent.personaRevisionId, intent.instructionPreview);
 	}
 
-	/** Start a new governed interview without mutating the current review locally. */
+	/** Ask the store to start a fresh interview; the current review stays until the server answers. */
 	public async restart(): Promise<void>
 	{
 		await this._store.restart();
 	}
 
-	/** Trigger route resolution exactly when the persona authority enters its ready state. */
+	/** Ask the store to load the next route, as soon as the persona reaches Ready. */
 	private _resolveRouteWhenReady(): void
 	{
 		if (!this.onboarding.hasValue() || this.onboarding.value().state !== PersonaOnboardingStates.Ready) return;
 		void untracked(this._store.resolveReadyRoute.bind(this._store));
 	}
 
-	/** Navigate only as an external effect of the route projection owned by the store. */
+	/** Navigate when the store has loaded the next route. Reads store state only; writes nothing. */
 	private _navigateFromReadyRoute(): void
 	{
 		const onboarding = this._store.readyRoute();

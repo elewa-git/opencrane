@@ -14,7 +14,7 @@ export interface Es256PublicJwk
 	readonly y: string;
 }
 
-/** Protected JOSE header for the OpenCrane DPoP-style proof envelope. */
+/** The signed JOSE header of a capability proof. It carries the public proof key, so a verifier reads the key from here and then checks it against the thumbprint registered for the workload. @see https://www.rfc-editor.org/rfc/rfc9449 */
 export interface CapabilityProofHeader
 {
 	/** Proof type required by RFC 9449. */
@@ -25,7 +25,7 @@ export interface CapabilityProofHeader
 	readonly jwk: Es256PublicJwk;
 }
 
-/** Signed claims that bind a request to one exact action capability. */
+/** The signed body of a capability proof. Every field must match the independently observed fact in {@link CapabilityProofBindingExpectation}; a proof that verifies cryptographically but disagrees on any binding is still rejected. */
 export interface CapabilityProofClaims
 {
 	/** Exact policy-enforcement audience receiving the proof. */
@@ -78,7 +78,7 @@ export interface CapabilityProofClaims
 	readonly effective_authorization_digest: CanonicalJsonSha256Digest;
 }
 
-/** Trusted workload, run, and request facts observed by the policy-enforcement point. */
+/** What the enforcement point independently knows to be true about the caller. Each field is compared against the matching signed claim, so these must never be read out of the proof itself. */
 export interface CapabilityProofBindingExpectation
 {
 	/** Expected policy-enforcement audience. */
@@ -119,7 +119,7 @@ export interface CapabilityProofBindingExpectation
 	readonly effectiveAuthorizationDigest: CanonicalJsonSha256Digest;
 }
 
-/** Request-side facts against which a capability proof is verified. */
+/** Everything a verifier needs to check one capability proof: the proof, the independently observed bindings, the live request method and URI, the current time, and the tolerances. */
 export interface CapabilityProofExpectation
 {
 	/** Short-lived action capability presented at the policy-enforcement point. */
@@ -138,7 +138,13 @@ export interface CapabilityProofExpectation
 	readonly clockSkewSeconds: number;
 }
 
-/** Stable fail-closed reason returned by capability-proof verification. */
+/**
+ * Why a capability proof was rejected.
+ *
+ * Every value means the same thing to a caller: deny. The distinctions exist for audit and
+ * debugging, so a caller must not branch on them to allow anything or to retry — the reason is
+ * safe to log but is not a signal that the request could succeed if repeated.
+ */
 export type CapabilityProofFailureReason =
 	"malformed_compact_proof"
 	| "malformed_header"
@@ -172,7 +178,7 @@ export type CapabilityProofFailureReason =
 	| "authorization_digest_mismatch"
 	| "capability_window_mismatch";
 
-/** Successful cryptographic and semantic capability-proof verification. */
+/** A proof whose signature verified AND whose every claim matched the independently observed binding. Both had to pass; neither alone produces this result. */
 export interface ValidCapabilityProof
 {
 	/** Positive verification discriminator. */
@@ -183,7 +189,7 @@ export interface ValidCapabilityProof
 	readonly claims: CapabilityProofClaims;
 }
 
-/** Failed capability-proof verification without partially trusted claims. */
+/** A rejected proof. It deliberately carries no claims at all, so a caller cannot accidentally read identity out of a failed verification. */
 export interface InvalidCapabilityProof
 {
 	/** Negative verification discriminator. */

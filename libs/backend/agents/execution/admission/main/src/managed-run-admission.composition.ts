@@ -16,11 +16,20 @@ const _DEFAULT_POLICY: RunAdmissionConcurrencyPolicy = { maxConcurrentAdmissions
 /**
  * Read the server-owned admission capacity policy at startup.
  *
- * The limits apply before snapshot assembly or a Prisma transaction starts. They therefore bound
- * one hot AgentService without consuming every connection in the silo's small database pool.
+ * The limits apply before snapshot assembly or a Prisma transaction starts. They therefore keep one
+ * busy AgentService from using every connection in the silo's small database pool.
+ *
+ * Reads `AGENT_RUN_ADMISSION_MAX_CONCURRENT` (1-2) and `AGENT_RUN_ADMISSION_MAX_QUEUED` (0-100),
+ * falling back to 2 and 10. The concurrent ceiling is deliberately tiny because the Prisma
+ * connection budget is five.
+ *
+ * Called by: apps/opencrane/src/index.ts, at startup, before the gate is built.
  *
  * @param environment - Environment map, injectable only for focused configuration tests.
- * @returns A validated per-service active and waiting admission policy.
+ * @returns The checked limits on how many admissions may run and how many may wait, per service.
+ * @throws When either variable is set but is not an integer inside its range. It fails at startup
+ * on purpose: silently falling back to a default would hide a deployment mistake until the process
+ * was already under load.
  */
 export function __ReadRunAdmissionConcurrencyPolicy(environment: NodeJS.ProcessEnv = process.env): RunAdmissionConcurrencyPolicy
 {
@@ -36,9 +45,16 @@ export function __ReadRunAdmissionConcurrencyPolicy(environment: NodeJS.ProcessE
  * Run-now and the scheduler receive this same port. A single gate is essential: separate gates
  * would let those two entrypoints each exceed the capacity budget for one silo and AgentService.
  *
- * @param prisma - Canonical product-authority client.
- * @param capacityGate - App-owned shared capacity boundary also used by personal admissions.
- * @param evidenceAuthority - Service-owned signed identity and scope-capability authority.
+ * Managed runs are never conversational, so this port allocates the run id itself and passes a null
+ * conversation. A caller that wants a conversational run needs
+ * {@link __CreatePersonalRunAdmissionPort} instead.
+ *
+ * Called by: apps/opencrane/src/index.ts.
+ *
+ * @param prisma - The product database client.
+ * @param capacityGate - The shared capacity gate, also used by personal admissions. Pass the same
+ * instance, not a second gate.
+ * @param evidenceAuthority - Checks the service's signed identity and its scope capabilities.
  * @returns A fail-closed, capacity-bounded managed run admission port.
  */
 export function __CreateManagedRunAdmissionPort(prisma: PrismaClient, capacityGate: RunAdmissionCapacityGate, evidenceAuthority: ManagedExecutionEvidenceAuthority): ManagedRunAdmissionPort
@@ -61,7 +77,7 @@ export function __CreateManagedRunAdmissionPort(prisma: PrismaClient, capacityGa
 	return _CreateManagedRunAdmissionPortWithGate(assemble, capacityGate);
 }
 
-/** Read one bounded non-negative integer without silently coercing malformed deployment config. */
+/** Reads one integer within a range, throwing rather than quietly accepting bad deployment config. */
 function _readBoundedPositiveInteger(environment: NodeJS.ProcessEnv, name: string, fallback: number, minimum: number, maximum: number): number
 {
 	const raw = environment[name]?.trim();

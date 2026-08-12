@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { __AdmitModelTerminal, __ClaimSteeringBoundary } from "../steering-authority.js";
 import type { SteeringBoundaryClaim, SteeringBoundaryClaimResult, SteeringBoundaryRepository } from "../steering-authority.types.js";
 
-/** In-memory exactly-once boundary recorder that survives a simulated process death. */
+/** In-memory boundary recorder that keeps its rows across a simulated process death. */
 class _Repository implements SteeringBoundaryRepository
 {
 	/** Recorded claims keyed by their deterministic boundary id. */

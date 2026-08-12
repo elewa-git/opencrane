@@ -3,22 +3,26 @@ import { z } from "zod";
 import { PersonaColours, PersonaModifiers, PersonaOnboardingSnapshot, PersonaOnboardingStates, PersonaQuestion, PersonaQuestionChoice, PersonaResolution, PersonaResolutionKinds, PersonaResult } from "./persona-gateway.types";
 
 /**
- * Runtime response validation lives beside the persona gateway model so the generated HTTP client
- * and the browser projection cannot acquire separate accepted shapes or lifecycle invariants.
- * Response objects deliberately strip forward-compatible fields that this frontend does not use.
+ * Runtime checks for every persona response, kept next to the model they validate.
+ *
+ * One definition of a valid response, so the generated HTTP client and the browser state cannot end
+ * up accepting different shapes or different rules about which stage allows which fields.
+ *
+ * Fields the frontend does not use are dropped on purpose rather than passed through, so a new
+ * server field cannot silently reach the UI without someone adding it here.
  */
 
-/** Maximum frozen questions accepted in one resumable interview projection. */
+/** Most questions accepted in one interview response. */
 const _MAXIMUM_QUESTIONS = 64;
 
-/** One bounded reviewed answer choice from the frozen question set. */
+/** One answer choice, with its length limits applied. */
 const _PersonaQuestionChoiceSchema: z.ZodType<PersonaQuestionChoice> = z.object({
 	id: z.string().min(1).max(256),
 	label: z.string().min(1).max(512),
 	ordinal: z.number().int().min(1)
 }).strip();
 
-/** One bounded reviewed question plus its immutable selected answer. */
+/** One question with its length limits applied, plus the choice recorded for it if any. */
 const _PersonaQuestionSchema: z.ZodType<PersonaQuestion> = z.object({
 	id: z.string().min(1).max(256),
 	category: z.string().min(1).max(128),
@@ -34,7 +38,7 @@ const _PersonaQuestionSchema: z.ZodType<PersonaQuestion> = z.object({
 	}
 });
 
-/** Exact finite tie boundary the authority asks the owner to resolve. */
+/** The tie the server is asking the user to break, and the candidates it will accept. */
 const _PersonaResolutionSchema: z.ZodType<PersonaResolution> = z.object({
 	kind: z.nativeEnum(PersonaResolutionKinds),
 	candidates: z.array(z.union([z.nativeEnum(PersonaColours), z.nativeEnum(PersonaModifiers)])).min(2).max(6)
@@ -46,7 +50,7 @@ const _PersonaResolutionSchema: z.ZodType<PersonaResolution> = z.object({
 	if (!candidatesMatchKind) context.addIssue({ code: z.ZodIssueCode.custom, path: ["candidates"], message: "must match the tie boundary" });
 });
 
-/** Lossless non-negative score vector returned for persona review. */
+/** Raw colour point counts, none of them negative. */
 const _PersonaColourScoresSchema = z.object({
 	red: z.number().int().nonnegative(),
 	yellow: z.number().int().nonnegative(),
@@ -68,7 +72,7 @@ const _PersonaOpennessScoresSchema = z.object({
 	if (scores.total !== scores.explorer + scores.guardian) context.addIssue({ code: z.ZodIssueCode.custom, path: ["total"], message: "must equal the openness score sum" });
 });
 
-/** Review-safe persona result with an exact non-empty compiled preview when present. */
+/** The persona result; when the instruction preview is present it is guaranteed non-empty. */
 const _PersonaResultSchema: z.ZodType<PersonaResult> = z.object({
 	displayName: z.string().min(1).max(512),
 	primaryColour: z.nativeEnum(PersonaColours),
@@ -80,7 +84,7 @@ const _PersonaResultSchema: z.ZodType<PersonaResult> = z.object({
 	instructionPreview: z.string().min(1).max(100_000).nullable()
 }).strip();
 
-/** Complete owner projection plus cross-field resumability and approval invariants. */
+/** The whole persona response, including the checks that its stage and its fields agree. */
 const _PersonaOnboardingSnapshotSchema: z.ZodType<PersonaOnboardingSnapshot> = z.object({
 	state: z.nativeEnum(PersonaOnboardingStates),
 	interviewId: z.string().min(1).max(256).nullable(),
@@ -101,7 +105,7 @@ const _PersonaOnboardingSnapshotSchema: z.ZodType<PersonaOnboardingSnapshot> = z
 	if (snapshot.personaRevisionId !== null && snapshot.result?.instructionPreview === null) context.addIssue({ code: z.ZodIssueCode.custom, path: ["result", "instructionPreview"], message: "is required for an immutable persona revision" });
 });
 
-/** Parse one untrusted owner response or fail closed before feature state can consume it. */
+/** Parse one persona response, throwing before it can reach UI state if anything is wrong. */
 export function _ParsePersonaOnboardingSnapshot(value: unknown): PersonaOnboardingSnapshot
 {
 	const parsed = _PersonaOnboardingSnapshotSchema.safeParse(value);

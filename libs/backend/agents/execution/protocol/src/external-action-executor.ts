@@ -10,13 +10,19 @@ export { UnsupportedExternalActionError } from "./integration-external-action-ex
 export { MemoryScopeUnavailableError } from "./memory-external-action-executor.js";
 
 /**
- * Select the personal Cognee dataset frozen into an admitted snapshot.
+ * Return the personal Cognee dataset frozen into an admitted snapshot.
  *
- * Runtime arguments and subject identifiers are deliberately ignored: memory recall is available
- * only when admission sealed a non-empty dataset under a personal memory policy for a user identity.
+ * Tool arguments and subject ids are ignored on purpose: recall works only when admission wrote a
+ * non-empty dataset id under a personal memory policy for a user identity. That is what stops a
+ * managed run, or a crafted tool argument, from reading another person's memory.
  *
- * @param snapshot - Immutable run input snapshot admitted by the control plane.
- * @returns The frozen dataset identifier, or null for every non-personal or malformed policy.
+ * Called by: `ProductionExternalActionAdapterFactory.prepare`
+ * (production-external-action-adapter.ts), which passes the result as `cogneeDatasetId`.
+ *
+ * @param snapshot - Immutable run input snapshot admitted by the server.
+ * @returns The frozen dataset id, or null for any non-personal or malformed policy. Null means this
+ * run may not recall memory at all: `_ExecuteMemoryExternalAction` then throws
+ * {@link MemoryScopeUnavailableError} rather than falling back to a dataset of its own.
  */
 export function __PersonalMemoryDatasetId(snapshot: RunInputSnapshot): string | null
 {
@@ -30,17 +36,28 @@ export function __PersonalMemoryDatasetId(snapshot: RunInputSnapshot): string | 
 }
 
 /**
- * Build the concrete external-action executor for one admitted candidate, in the composition root.
+ * Build the executor for one admitted candidate.
  *
- * The factory owns transport selection only. Each selected executor owns its single external seam:
- * the integration executor rechecks live custody through Obot, the sandbox executor submits the
- * immutable invocation tuple, and the memory executor uses only the snapshot-frozen dataset. All
- * unavailable transports and unknown revision kinds throw so the durable server worker records the
- * admitted invocation as failed instead of fabricating a successful result.
+ * This factory only picks the transport, from the prefix of the tool revision id. Each executor
+ * then makes exactly one outside call: the integration executor rechecks live custody and calls the
+ * tool over MCP through Obot, the sandbox executor submits the invocation unchanged, and the memory
+ * executor uses only the dataset frozen in the snapshot. An unavailable transport or an unknown
+ * prefix throws, so the worker records the invocation as failed or ambiguous instead of inventing a
+ * successful result.
  *
- * @param candidate - Runtime external-action candidate whose tool revision selects the transport.
- * @param dependencies - Injected concrete transports and correlation identity.
- * @returns An executor whose `execute` performs exactly one routed, fail-closed tool call.
+ * Called by: `ProductionExternalActionAdapterFactory.prepare`
+ * (production-external-action-adapter.ts), which wraps the returned executor in the
+ * manual-recovery adapter.
+ *
+ * @param candidate - The saved invocation, whose tool revision prefix picks the transport.
+ * @param dependencies - The injected transports, plus the silo, subject, dataset, and revision the
+ * action is bound to.
+ * @returns An executor whose `execute` makes exactly one routed call.
+ * @throws {UnsupportedExternalActionError} From `execute`, when the tool revision names no wired
+ * transport.
+ * @see ExternalActionRevisionKinds for the prefixes it matches.
+ * @see https://modelcontextprotocol.io/specification/2025-06-18 - the MCP revision this repo pins,
+ * for what the integration path's tool call and result look like on the wire.
  */
 export function __CreateExternalActionExecutor(candidate: DurableExternalActionCommand, dependencies: ExternalActionExecutorDependencies): ExternalActionExecutor<JsonValue>
 {

@@ -13,10 +13,27 @@ import type { PersonalRunAdmissionPort } from "./personal-run-admission.types.js
 import type { RunAdmissionCapacityGate } from "./managed-run-admission.types.js";
 
 /**
- * Composes one personal browser-run admission port from transaction-fenced product authorities.
+ * Builds the personal browser-run admission port from readers that run inside the admission
+ * transaction.
  *
- * The application supplies the mounted-key-backed identity configuration and the single process
- * gate it also gives managed admission. This library never reads HTTP requests or environment.
+ * The application supplies the identity settings, including the mounted signing key, and the one
+ * process gate it also gives managed admission. This library never reads HTTP requests or
+ * environment.
+ *
+ * Called by: apps/opencrane/src/index.ts. The result is handed to the conversations router, which
+ * reaches it through `PrismaConversationUnitOfWork`
+ * (libs/backend/server/conversations/main/src/prisma-conversation-unit-of-work.ts).
+ *
+ * @param prisma - The product database client.
+ * @param capacityGate - The shared capacity gate. Pass the same instance
+ * {@link __CreateManagedRunAdmissionPort} was given, or the process admits at double its ceiling.
+ * @param identityEvidence - Trusted issuer, verifier, and staleness bound for signed fleet
+ * membership. Validated eagerly, so a bad value fails at startup.
+ * @param memoryFactSelector - Gateway-backed fact selector; it must throw on transport failure. See
+ * {@link PersonalMemoryFactSelector}.
+ * @returns The port the conversations layer calls to start a user's run.
+ * @throws When `identityEvidence` is incomplete — surfaced from the
+ * {@link PersonalExecutionIdentityEnvelopeSource} constructor at startup, not per request.
  */
 export function __CreatePersonalRunAdmissionPort(prisma: PrismaClient, capacityGate: RunAdmissionCapacityGate, identityEvidence: FleetMembershipEvidenceConfig, memoryFactSelector: PersonalMemoryFactSelector): PersonalRunAdmissionPort
 {

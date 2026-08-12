@@ -24,7 +24,7 @@ const _PRISMA_SCOPE_BY_SHARE: Record<ShareAuthorizationScopeKinds, Authorization
 	[ShareAuthorizationScopeKinds.Personal]: AuthorizationScopeKind.Personal,
 };
 
-/** Maps a stored Prisma scope into the narrower share-domain vocabulary. */
+/** Maps a stored Prisma scope onto the smaller set of scopes that sharing supports. */
 function _shareScopeKind(kind: AuthorizationScopeKind): ShareAuthorizationScopeKinds
 {
 	switch (kind)
@@ -54,7 +54,7 @@ function _share(row: ShareAuthorizationGrantRow): ShareAuthorizationGrant
 /** Prisma adapter that owns the authorization rows required by the sharing capability. */
 export class PrismaShareAuthorizationRepository implements ShareAuthorizationRepository
 {
-	/** Canonical product-authority client that owns catalog and authorization-grant delegates. */
+	/** Product-authority client that owns the catalog and authorization-grant tables. */
 	private readonly _prisma: Prisma.TransactionClient;
 
 	/** Constructs the adapter around the canonical product-authority client. */
@@ -125,7 +125,7 @@ export class PrismaShareAuthorizationRepository implements ShareAuthorizationRep
 	/**
 	 * Finds the grant with the exact durable-authority coordinates that define share identity.
 	 *
-	 * Share revocation hard-deletes the row, so this lookup deliberately has no `revokedAt` predicate.
+	 * Share revocation hard-deletes the row, so this lookup deliberately does not filter on `revokedAt`.
 	 */
 	private async _findExactShare(input: CreateShareAuthorizationGrant): Promise<ShareAuthorizationGrant | null>
 	{

@@ -1,7 +1,7 @@
 import type { CapabilityProofExpectation, CapabilityProofFailureReason, Es256PublicJwk } from "@opencrane/models/authorization";
 import type { AgentRuntimeProjectedTokenAudience, ManagedAgentRuntimeProjectedTokenAudience } from "@opencrane/contracts";
 
-/** Projected-token audience accepted by exactly one personal or managed runtime plane. */
+/** The two accepted token audiences: one for personal runtimes, one for managed runtimes. */
 type RuntimeProjectedTokenAudience = AgentRuntimeProjectedTokenAudience | ManagedAgentRuntimeProjectedTokenAudience;
 
 /** One-time bootstrap claim bound to the exact runtime attempt and Pod identity. */
@@ -111,7 +111,7 @@ export interface CapabilityActionIntent
 	readonly requestFingerprint: string;
 	/** Explicit replay behavior for an identical request. */
 	readonly replayMode: ActionReplayMode;
-	/** Exact policy-enforcement audience. */
+	/** Audience the proof must be addressed to. */
 	readonly audience: string;
 	/** Silo in which the capability is authoritative. */
 	readonly siloId: string;
@@ -164,7 +164,7 @@ export interface CapabilityActionExecutor<TResult>
 	execute(): Promise<TResult>;
 }
 
-/** Canonical completed action receipt retained under the capability JTI. */
+/** Completed action receipt kept under the capability JTI. */
 export interface CapabilityActionReceipt<TResult>
 {
 	/** Proof-bound action capability identifier that created the receipt. */

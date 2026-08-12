@@ -2,13 +2,22 @@ import { spawn } from "node:child_process";
 
 import type { PdfTextExtractor } from "./preprocessor.types.js";
 
-/** Create the shell-free pdftotext adapter used by the worker's one conversion stage. */
+/**
+ * Build the PDF-to-text converter backed by Poppler's `pdftotext`.
+ *
+ * Spawned with a fixed argument list and no shell, so a filename can never be read as a command.
+ * Each conversion has a wall-clock cap and is killed when it is exceeded or when the shutdown
+ * signal fires.
+ *
+ * Called by: `apps/artifact-preprocessor/src/index.ts`.
+ * @returns A converter matching {@link PdfTextExtractor}.
+ */
 export function _CreatePdfTextExtractor(): PdfTextExtractor
 {
 	return { extract: _ExtractPdfText };
 }
 
-/** Run the fixed Poppler conversion command with abort and wall-clock guards. */
+/** Run `pdftotext` on one file, killing it if the timeout elapses or the shutdown signal fires, and throwing on a non-zero exit. */
 async function _ExtractPdfText(sourcePath: string, outputPath: string, timeoutMilliseconds: number, signal: AbortSignal): Promise<void>
 {
 	if (signal.aborted) throw new Error("artifact preprocessing was aborted before conversion");

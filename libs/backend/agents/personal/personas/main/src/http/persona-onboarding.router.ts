@@ -10,7 +10,7 @@ import { PersonaInterviewDenialReasons, PersonaLifecycleOutcomes, PersonaOnboard
 import { PersonaTieKinds, type PersonaScoreResult } from "../scoring/persona-scorer.types.js";
 import type { PersonaOnboardingCaller, PersonaOnboardingRouterDependencies } from "./persona-onboarding.router.types.js";
 
-/** Exhaustive HTTP translation for interview-authority denials. */
+/** The HTTP status for every interview denial reason. */
 const _INTERVIEW_DENIAL_STATUS_BY_REASON: Readonly<Record<PersonaInterviewDenialReasons, number>> = {
 	[PersonaInterviewDenialReasons.InvalidCommand]: 400,
 	[PersonaInterviewDenialReasons.PersistenceUnavailable]: 503,
@@ -27,7 +27,7 @@ const _INTERVIEW_DENIAL_STATUS_BY_REASON: Readonly<Record<PersonaInterviewDenial
 	[PersonaInterviewDenialReasons.Conflict]: 409,
 };
 
-/** Exhaustive HTTP translation for draft-authority denials. */
+/** The HTTP status for every draft denial reason. */
 const _DRAFT_DENIAL_STATUS_BY_REASON: Readonly<Record<PersonaDraftDenialReasons, number>> = {
 	[PersonaDraftDenialReasons.InvalidCommand]: 400,
 	[PersonaDraftDenialReasons.NotFoundOrWrongOwner]: 404,
@@ -40,7 +40,7 @@ const _DRAFT_DENIAL_STATUS_BY_REASON: Readonly<Record<PersonaDraftDenialReasons,
 	[PersonaDraftDenialReasons.PersistenceUnavailable]: 503,
 };
 
-/** Exhaustive HTTP translation for persona-approval denials. */
+/** The HTTP status for every approval denial reason. */
 const _APPROVAL_DENIAL_STATUS_BY_REASON: Readonly<Record<PersonaApprovalDenialReasons, number>> = {
 	[PersonaApprovalDenialReasons.InvalidCommand]: 400,
 	[PersonaApprovalDenialReasons.NotFound]: 404,
@@ -55,14 +55,24 @@ const _APPROVAL_DENIAL_STATUS_BY_REASON: Readonly<Record<PersonaApprovalDenialRe
 };
 
 /**
- * Creates the browser-session-authenticated, self-only persona onboarding router.
+ * Creates the persona onboarding router. Every route serves only the signed-in owner.
  *
- * Each route derives the caller from the session and keeps profile and question-set coordinates
- * server-owned. A route may carry an opaque resource identifier, but its domain authority rebinds
- * that identifier to the authenticated owner before transition. The router orchestrates interview,
- * draft, and approval authorities but never composes persona text itself, so the browser can
- * progress through onboarding without selecting another user's lifecycle state or bypassing a
- * domain transition.
+ * Mounted at /api/v1/me/persona, it exposes the whole onboarding flow: read status, start or resume the
+ * interview, answer a question, complete it, break a tie, create a draft, approve it.
+ *
+ * Each route reads the caller from the session, and the profile id and question set are chosen by the
+ * server, never by the browser. A route may take a resource id from the URL, but the use case behind it
+ * re-checks that the id belongs to the signed-in owner before anything changes. The router calls the
+ * interview, draft, and approval use cases but never writes persona text itself. Together this means a
+ * browser cannot reach another user's onboarding state, and cannot skip a step.
+ *
+ * Called by: {@link _CreatePersonaOnboardingRouter}, which supplies the Prisma-backed dependencies, and
+ * directly by `apps/opencrane/src/app/__tests__/persona-user-onboarding.integration.test.ts` with fakes.
+ *
+ * @param dependencies - Caller resolution, the five persistence ports, a clock, a logger, and the
+ * onboarding workflow notification port.
+ * @returns An Express router to mount below /me/persona.
+ * @see PersonaOnboardingRouterDependencies
  */
 export function __CreatePersonaOnboardingRouter(dependencies: PersonaOnboardingRouterDependencies): Router
 {
@@ -248,7 +258,7 @@ export function __CreatePersonaOnboardingRouter(dependencies: PersonaOnboardingR
 	return router;
 }
 
-/** Resolve one session-derived caller or write a non-disclosing authentication denial. */
+/** Returns the caller from the session, or writes a 401 that reveals nothing and returns null. */
 function _requireCaller(request: Request, response: Response, dependencies: PersonaOnboardingRouterDependencies): PersonaOnboardingCaller | null
 {
 	const caller = dependencies.resolveCaller(request);
@@ -256,14 +266,14 @@ function _requireCaller(request: Request, response: Response, dependencies: Pers
 	return caller;
 }
 
-/** Provision the server-owned profile and catalogue without exposing their coordinates to the browser. */
+/** Provisions the profile and question set on the server, returning null when that fails. Their identifiers never reach the browser. */
 async function _ensure(caller: PersonaOnboardingCaller, dependencies: PersonaOnboardingRouterDependencies): Promise<Extract<Awaited<ReturnType<typeof __EnsurePersonaOnboarding>>, { readonly outcome: PersonaLifecycleOutcomes.Ready }> | null>
 {
 	const result = await __EnsurePersonaOnboarding(dependencies.onboarding, { siloId: caller.siloId, userId: caller.userId, provisionedAt: dependencies.clock.now().toISOString() });
 	return result.outcome === PersonaLifecycleOutcomes.Ready ? result : null;
 }
 
-/** Parse one reviewed choice without accepting arbitrary, stale, or cross-question values. */
+/** Returns the body's `choiceId` only when it is one of that question's own choices, and the body has no other field. */
 function _answerChoiceId(body: unknown, questionId: unknown, questions: readonly { readonly id: string; readonly choices: readonly { readonly id: string }[] }[] | null): string | null
 {
 	if (typeof questionId !== "string" || body === null || typeof body !== "object" || Array.isArray(body)) return null;
@@ -273,31 +283,31 @@ function _answerChoiceId(body: unknown, questionId: unknown, questions: readonly
 	return question?.choices.some(function _Choice(choice) { return choice.id === choiceId; }) === true ? choiceId : null;
 }
 
-/** Map interview lifecycle denials to a bounded HTTP status without leaking another owner's state. */
+/** Returns the HTTP status for an interview denial. A row owned by someone else looks the same as a missing one. */
 function _interviewDenialStatus(reason: PersonaInterviewDenialReasons): number
 {
 	return _INTERVIEW_DENIAL_STATUS_BY_REASON[reason];
 }
 
-/** Map draft denials without borrowing the interview authority's vocabulary. */
+/** Returns the HTTP status for a draft denial. */
 function _draftDenialStatus(reason: PersonaDraftDenialReasons): number
 {
 	return _DRAFT_DENIAL_STATUS_BY_REASON[reason];
 }
 
-/** Map persona-approval denials explicitly so concurrent commits cannot fall through to a bad request. */
+/** Returns the HTTP status for an approval denial. Every reason is listed, so a conflict can never come out as a 400. */
 function _approvalDenialStatus(reason: PersonaApprovalDenialReasons): number
 {
 	return _APPROVAL_DENIAL_STATUS_BY_REASON[reason];
 }
 
-/** Require an empty object for a state transition with no caller-owned coordinates. */
+/** Returns whether the body is an empty object, which is all these routes accept. */
 function _isEmptyObject(value: unknown): boolean
 {
 	return value !== null && typeof value === "object" && !Array.isArray(value) && Object.keys(value).length === 0;
 }
 
-/** Parse the sole allowed resolution field. */
+/** Returns the body's trimmed `selectedValue`, or null when the body carries any other field. */
 function _selectedResolution(value: unknown): string | null
 {
 	if (value === null || typeof value !== "object" || Array.isArray(value) || Object.keys(value).length !== 1) return null;
@@ -305,20 +315,20 @@ function _selectedResolution(value: unknown): string | null
 	return typeof selectedValue === "string" && selectedValue.trim() ? selectedValue.trim() : null;
 }
 
-/** Narrow one URL segment to the documented tie-kind enum. */
+/** Returns whether a URL segment is one of the tie kinds. */
 function _isTieKind(value: unknown): value is PersonaTieKinds
 {
 	return typeof value === "string" && Object.values(PersonaTieKinds).includes(value as PersonaTieKinds);
 }
 
-/** Convert a domain score into the bounded owner-visible transport projection. */
+/** Turns a score into the response body, leaving out the insights and the compiled instructions. */
 function _scoreProjection(score: PersonaScoreResult): { readonly resolution: PersonaScoreResult["resolutionRequired"]; readonly result: { readonly displayName: string; readonly primaryColour: string; readonly secondaryColour: string; readonly modifier: string; readonly colourScores: PersonaScoreResult["colours"]; readonly opennessScores: PersonaScoreResult["openness"]; readonly insights: readonly string[]; readonly instructionPreview: null } | null }
 {
 	if (score.primary === null || score.secondary === null || score.modifier === null) return { resolution: score.resolutionRequired, result: null };
 	return { resolution: score.resolutionRequired, result: { displayName: "Persona result", primaryColour: score.primary, secondaryColour: score.secondary, modifier: score.modifier, colourScores: score.colours, opennessScores: score.openness, insights: [], instructionPreview: null } };
 }
 
-/** Add the explicit empty selection required by the shared resume projection. */
+/** Marks every question unanswered, which the shared resume shape requires. */
 function _UnansweredQuestions<Question extends { readonly id: string }>(questions: readonly Question[]): readonly (Question & { readonly selectedChoiceId: null })[]
 {
 	return questions.map(function _Unanswered(question) { return { ...question, selectedChoiceId: null }; });

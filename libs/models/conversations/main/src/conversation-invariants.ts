@@ -17,7 +17,18 @@ const _MESSAGE_TRANSITIONS: Readonly<Record<MessageStates, readonly MessageState
 	[MessageStates.Cancelled]: [],
 };
 
-/** Determines whether a mode has exactly its required or prohibited agent-service binding. */
+/**
+ * Determine whether a conversation's mode and agent binding agree.
+ *
+ * `AgentSession` requires a non-blank agent service id. `Direct` and `Group` require none at all.
+ * Any unknown mode returns false, so a stored row from another version fails closed rather than
+ * being treated as valid.
+ *
+ * Called by: {@link __DecideConversationCommand}; re-exported through `@opencrane/contracts`.
+ * @param mode - The conversation's stored mode.
+ * @param agentServiceId - The stored agent service id, if any.
+ * @returns True only when the pairing is legal for that mode.
+ */
 export function __HasValidConversationAgentBinding(mode: ConversationModes, agentServiceId: string | null | undefined): boolean
 {
 	if (mode === ConversationModes.AgentSession)
@@ -33,21 +44,28 @@ export function __HasValidConversationAgentBinding(mode: ConversationModes, agen
 	return false;
 }
 
-/** Determines whether a conversation may make the requested direct monotonic lifecycle transition. */
+/** Determine whether a conversation may move straight from one lifecycle state to another. Only open-to-closed is legal; closed is terminal and staying put is not a transition. */
 export function __IsConversationLifecycleTransitionAllowed(current: ConversationLifecycles, next: ConversationLifecycles): boolean
 {
 	return _CONVERSATION_LIFECYCLE_TRANSITIONS[current].includes(next);
 }
 
-/** Determines whether a canonical message may make the requested direct assembly transition. */
+/** Determine whether a message may move straight from one assembly state to another. `Completed`, `Failed`, and `Cancelled` are terminal, so content can never resume. */
 export function __IsMessageTransitionAllowed(current: MessageStates, next: MessageStates): boolean
 {
 	return _MESSAGE_TRANSITIONS[current].includes(next);
 }
 
 /**
- * Determines whether a timeline entry can follow one database-owned conversation position.
- * The first entry is position one and later entries stay in one conversation without gaps.
+ * Determine whether one timeline entry may follow another.
+ *
+ * Pass `null` as `previous` for the first entry, which must be position `"1"`. Every later entry
+ * must be in the same conversation and exactly one position higher. A false result means the
+ * caller is about to create a gap, a duplicate, or a cross-conversation jump — any of which
+ * breaks replay cursors.
+ * @param previous - The entry currently at the end of the timeline, or null when it is empty.
+ * @param next - The entry about to be appended.
+ * @returns True only when appending keeps one conversation's timeline contiguous.
  */
 export function __CanAppendConversationTimelineEntry(previous: ConversationTimelineEntry | null, next: ConversationTimelineEntry): boolean
 {
@@ -69,7 +87,7 @@ export function __CanAppendConversationTimelineEntry(previous: ConversationTimel
 	return previous.conversationId === next.conversationId && BigInt(next.position) === BigInt(previous.position) + 1n;
 }
 
-/** Determines whether a completed-at timestamp agrees with the message's assembly state. */
+/** Determine whether `completedAt` matches the message's state: present for a terminal state, absent otherwise. Neither half may be true on its own. */
 export function __HasValidMessageCompletion(message: Message): boolean
 {
 	const terminalStates: readonly MessageStates[] = [MessageStates.Completed, MessageStates.Failed, MessageStates.Cancelled];

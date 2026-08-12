@@ -1,13 +1,16 @@
 /**
- * Validate one browser Origin against an exact allowlist and bind it to Host.
+ * Check a browser `Origin` against an exact allowlist and confirm it matches `Host`.
  *
- * Exact matching intentionally excludes wildcard and base-domain inference. Both values must use
- * the default HTTPS port so an ingress cannot accidentally admit a sibling or alternate listener.
+ * Matching is exact on purpose: no wildcards and no "same base domain" inference, because either
+ * would let a sibling tenant's origin through. The origin must be plain HTTPS on the default port
+ * with no port, userinfo, path, query, or fragment, so an ingress listening on an alternate port
+ * cannot be accepted as the same origin.
  *
- * @param origin - Browser Origin header.
- * @param host - Request Host header.
- * @param allowedOrigins - Exact configured origins.
- * @returns The trusted host when the request is same-origin, otherwise null.
+ * No caller outside this package yet; {@link __RelayEvents} uses it internally.
+ * @param origin - The browser's `Origin` header.
+ * @param host - The request's `Host` header.
+ * @param allowedOrigins - Exactly the origins that are permitted.
+ * @returns The lowercased trusted host when origin and host agree and the origin is allowed; null otherwise, which the caller must treat as a denial.
  */
 export function __ValidateOrigin(origin: string | null, host: string | null, allowedOrigins: ReadonlySet<string>): string | null
 {
@@ -33,9 +36,12 @@ export function __ValidateOrigin(origin: string | null, host: string | null, all
 }
 
 /**
- * Reject public identity assertions instead of attempting to sanitize an open-ended header set.
- * @param headers - Public request headers.
- * @returns True when a forbidden identity assertion is present.
+ * Whether a public request carries an identity header only an internal caller may set.
+ *
+ * The proxy rejects the whole request rather than stripping these, because a stripping list can
+ * never be complete and a missed header would be read downstream as trusted identity.
+ * @param headers - Headers from the public request.
+ * @returns True when any forbidden identity header is present, meaning reject the request.
  */
 export function __HasForgedIdentityHeaders(headers: Headers): boolean
 {

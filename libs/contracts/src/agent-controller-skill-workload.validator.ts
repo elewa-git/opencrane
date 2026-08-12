@@ -9,7 +9,7 @@ import { _AgentControllerBoundedIdentifierSchema, _AgentControllerMillisecondIns
  * while command schemas reject extensions before evidence reaches a persistence authority.
  */
 
-/** Governed skill workload claim model plus its claim chronology invariant. */
+/** Skill-workload claim fields, plus the rule that a claim must expire after it was claimed. */
 const _SkillWorkloadClaimSchema: z.ZodType<AgentControllerSkillWorkloadClaim> = z.object({
 	workloadId: _AgentControllerBoundedIdentifierSchema,
 	siloId: _AgentControllerBoundedIdentifierSchema,
@@ -107,7 +107,7 @@ export function ___ParseAgentControllerSkillWorkloadClaim(value: unknown): Agent
 	return _ParseAgentControllerModel(_SkillWorkloadClaimSchema, value, "skill workload claim");
 }
 
-/** Parse and correlate one governed skill assignment response with the submitted Job evidence. */
+/** Parse an assignment response and check it describes the same Job the controller submitted; a mismatch means the response cannot be trusted and is rejected. */
 export function ___ParseAgentControllerSkillWorkloadAssignmentResult(value: unknown, workloadId: string, command: AgentControllerSkillWorkloadAssignmentCommand): AgentControllerSkillWorkloadAssignmentResult
 {
 	const result = _ParseAgentControllerModel(_SkillWorkloadAssignmentResultSchema, value, "skill workload assignment result");

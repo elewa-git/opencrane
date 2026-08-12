@@ -7,7 +7,7 @@ import { RunInputSnapshotIdentityKinds, type RunInputSnapshot } from "@opencrane
 
 import { __CreateProductionExternalActionApprovalOpener } from "../production-external-action-approval.js";
 
-/** Hoisted authorization boundary used to inspect the exact secret-free open command. */
+/** Mock of the authorization module, used to inspect the open command it receives. */
 const _openApproval = vi.hoisted(function _openMock()
 {
 	return vi.fn(async function _open(_prisma: PrismaClient, _command: OpenDeferredToolApprovalCommand, _logger: Logger): Promise<boolean> { return true; });
@@ -22,7 +22,7 @@ vi.mock("@opencrane/backend/server/iam/authorization", async function _mockAutho
 /** Fixed server instant used to prove bounded expiry. */
 const _NOW = new Date("2026-08-11T10:00:00.000Z");
 
-/** Build one immutable approval-required invocation without embedding its arguments in public ids. */
+/** Build one invocation that requires approval, with arguments that must not appear in any public id. */
 function _invocation(): ToolInvocationRecord
 {
 	const argumentsValue = { calendarId: "private-calendar", token: "server-secret" };
@@ -58,7 +58,7 @@ function _invocation(): ToolInvocationRecord
 	};
 }
 
-/** Build the exact frozen snapshot definition from which the compiler minted the tool revision. */
+/** Build the snapshot tool definition that the tool revision id was built from. */
 function _snapshot(): RunInputSnapshot
 {
 	const parametersSchema = { type: "object", additionalProperties: false, required: ["calendarId", "token"], properties: { calendarId: { type: "string" }, token: { type: "string", writeOnly: true } } };

@@ -4,7 +4,14 @@ export const ARTIFACT_PREPROCESSOR_PROJECTED_TOKEN_AUDIENCE = "opencrane-artifac
 /** Exact Kubernetes ServiceAccount allowed to claim and complete artifact preprocessing work. */
 export const ARTIFACT_PREPROCESSOR_SERVICE_ACCOUNT_NAME = "artifact-preprocessor";
 
-/** Opaque durable claim coordinates that fence one preprocessing worker attempt. */
+/**
+ * A worker's claim on one preprocessing job.
+ *
+ * Every later call must carry `jobId`, `attempt`, and `claimFence` back unchanged; the server
+ * rejects a call whose fence is stale, which is what stops a worker that lost its claim from
+ * submitting output. After `expiresAt` the worker may no longer report anything at all.
+ * @see {@link ArtifactPreprocessorClaimCommand}
+ */
 export interface ArtifactPreprocessorJobLease
 {
 	/** Durable preprocessing job identifier. */
@@ -17,7 +24,7 @@ export interface ArtifactPreprocessorJobLease
 	readonly expiresAt: string;
 }
 
-/** Source metadata needed to bound one conversion without exposing storage authority. */
+/** What a worker needs to convert one PDF: its claim, the media type, and the exact source size. It deliberately carries no storage path or credential — bytes come from the OpenCrane broker. */
 export interface ArtifactPreprocessorJobClaim
 {
 	/** Fenced claim that must accompany every later worker call. */
@@ -28,7 +35,7 @@ export interface ArtifactPreprocessorJobClaim
 	readonly sourceByteLength: number;
 }
 
-/** Exact live-claim coordinates presented when reading source bytes or submitting output. */
+/** The three claim fields a worker must send on every byte-read and output-submit call. @see {@link ArtifactPreprocessorJobLease} */
 export interface ArtifactPreprocessorClaimCommand
 {
 	/** Durable job identifier returned by the claim endpoint. */
@@ -39,10 +46,10 @@ export interface ArtifactPreprocessorClaimCommand
 	readonly claimFence: string;
 }
 
-/** Bounded failure categories a worker may report for its current attempt. */
+/** The only failure reasons a worker may report. The server, not the worker, decides whether the job is retried. */
 export type ArtifactPreprocessorFailureCode = "source_read_failed" | "conversion_failed" | "output_submission_failed";
 
-/** Failure evidence reported without exposing an exception, path, or storage coordinate. */
+/** A worker's failure report: its claim plus one fixed reason code. It carries no exception text, no filesystem path, and no storage location. */
 export interface ArtifactPreprocessorFailureCommand extends ArtifactPreprocessorClaimCommand
 {
 	/** Stable bounded failure category used by server-owned retry policy. */

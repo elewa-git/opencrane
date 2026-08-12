@@ -6,12 +6,12 @@ import type { SkillWorkloadAssignmentCommand, SkillWorkloadClaim } from "./skill
 import { _SkillWorkloadLeaseExpiryProposal, _SkillWorkloadTimestampProposal } from "./prisma-skill-workload-timestamps.js";
 import type { SkillWorkloadAssignmentRepository } from "./skill-workload-unit-of-work.types.js";
 
-/** Transaction-scoped Postgres authority for controller claim and suspended-Job assignment. */
+/** Claims workloads and records Job assignments in Postgres, inside one transaction. */
 export class PrismaSkillWorkloadAssignmentRepository implements SkillWorkloadAssignmentRepository
 {
-	/** Transaction-scoped ORM client supplied only by the execution unit of work. */
+	/** Prisma client for this transaction. Only the unit of work supplies it. */
 	private readonly transaction: Prisma.TransactionClient;
-	/** Bounded claim lifetime applied consistently to claim and commit. */
+	/** How long a claim lasts. The same value is used when claiming and when committing. */
 	private readonly claimLeaseMilliseconds: number;
 	/** Creates the assignment persistence capability within an existing transaction. */
 	constructor(transaction: Prisma.TransactionClient, claimLeaseMilliseconds: number)
@@ -21,16 +21,16 @@ export class PrismaSkillWorkloadAssignmentRepository implements SkillWorkloadAss
 		this.claimLeaseMilliseconds = claimLeaseMilliseconds;
 	}
 
-	/** Claims one pending workload while keeping revision lifecycle and delivery generation fenced. */
+	/** Claims one pending workload, checking the revision's state and raising the delivery counter by one. */
 	async claimNext(): Promise<SkillWorkloadClaim | null>
 	{
-		// 1. The read-only view keeps the established database-clock and SKIP LOCKED selection semantics.
+		// 1. The `skill_workload_claim_candidates` view does the picking: it filters on the database clock and uses SKIP LOCKED, so two dispatchers never take the same row.
 		const candidate = await this.transaction.skillWorkloadClaimCandidate.findFirst();
 		if (candidate === null || !_IsEligibleRevisionForKind(candidate.kind, candidate.revisionState)) return null;
 		const workload = await this.transaction.skillWorkload.findUnique({ where: { id: candidate.id } });
 		if (workload === null || workload.state !== SkillWorkloadState.Pending || workload.skillRevisionId !== candidate.skillRevisionId) return null;
 
-		// 2. The proposal encodes only the lease duration; the trigger anchors both timestamps to database time.
+		// 2. We send only the lease length. The `skill_workloads_authority` trigger replaces both timestamps with database time, keeping the gap between them.
 		const deliveryCount = workload.deliveryCount + 1;
 		const claimed = await this.transaction.skillWorkload.updateManyAndReturn({
 			where: { id: workload.id, state: SkillWorkloadState.Pending, skillRevisionId: workload.skillRevisionId, claimedAt: workload.claimedAt, claimExpiresAt: workload.claimExpiresAt, deliveryCount: workload.deliveryCount },
@@ -42,12 +42,12 @@ export class PrismaSkillWorkloadAssignmentRepository implements SkillWorkloadAss
 		return { workloadId: workload.id, siloId: workload.siloId, kind: workload.kind === SkillWorkloadKind.Authoring ? "authoring" : "tool-runner", skillRevisionId: workload.skillRevisionId, claimedAt: claim.claimedAt.toISOString(), deliveryCount, expiresAt: claim.claimExpiresAt.toISOString() };
 	}
 
-	/** Commits one exact claim generation with a hash-only bootstrap record. */
+	/** Records the assignment for the claim the controller holds, storing only a hash of the bootstrap reference. */
 	async commitAssignment(workloadId: string, command: SkillWorkloadAssignmentCommand): Promise<"assigned" | "idempotent" | "conflict">
 	{
 		if (!await _IsAssignmentCommandValid(workloadId, command)) return "conflict";
 
-		// 1. Rebind the workload, revision lifecycle, and any existing bootstrap in one snapshot.
+		// 1. Re-read the workload, its revision state, and any existing bootstrap inside this transaction.
 		const workload = await this.transaction.skillWorkload.findUnique({ where: { id: workloadId }, include: { skillRevision: { select: { state: true } }, bootstrap: true } });
 		if (workload === null || !_IsEligibleRevisionForKind(workload.kind, workload.skillRevision.state)) return "conflict";
 		if (workload.state === SkillWorkloadState.Assigned)
@@ -55,11 +55,11 @@ export class PrismaSkillWorkloadAssignmentRepository implements SkillWorkloadAss
 			return workload.workloadUid === command.workloadUid && workload.claimedAt?.getTime() === Date.parse(command.claimedAt) && workload.deliveryCount === command.deliveryCount && workload.bootstrap?.referenceHash === await __HashSkillWorkloadBootstrapReference(command.bootstrapReference) ? "idempotent" : "conflict";
 		}
 
-		// 2. Re-check the exact persisted lease before the irreversible assignment transition.
+		// 2. Check the stored claim has not expired, because the assignment cannot be undone.
 		const now = await this._databaseNow();
 		if (workload.state !== SkillWorkloadState.Pending || workload.claimedAt?.getTime() !== Date.parse(command.claimedAt) || workload.claimExpiresAt === null || workload.deliveryCount !== command.deliveryCount || now >= workload.claimExpiresAt) return "conflict";
 
-		// 3. Compare-and-swap assignment and create its bootstrap in the same serializable transaction.
+		// 3. Update the row with a compare-and-swap and create its bootstrap row in the same transaction.
 		const updated = await this.transaction.skillWorkload.updateMany({ where: { id: workloadId, state: SkillWorkloadState.Pending, skillRevisionId: workload.skillRevisionId, claimedAt: workload.claimedAt, claimExpiresAt: workload.claimExpiresAt, deliveryCount: workload.deliveryCount, workloadUid: null }, data: { state: SkillWorkloadState.Assigned, workloadUid: command.workloadUid } });
 		if (updated.count !== 1) return "conflict";
 		const authoring = workload.kind === SkillWorkloadKind.Authoring;
@@ -69,7 +69,7 @@ export class PrismaSkillWorkloadAssignmentRepository implements SkillWorkloadAss
 		return "assigned";
 	}
 
-	/** Reads database time through the read-only typed view owned by this repository. */
+	/** Reads the current time from the `skill_authority_clock` view, never from this process. */
 	private async _databaseNow(): Promise<Date>
 	{
 		const clock = await this.transaction.skillAuthorityClock.findUnique({ where: { singleton: 1 } });
@@ -78,13 +78,13 @@ export class PrismaSkillWorkloadAssignmentRepository implements SkillWorkloadAss
 	}
 }
 
-/** Validates all caller-visible assignment coordinates before it queries durable authority state. */
+/** Checks every field of the command before any database row is read. */
 async function _IsAssignmentCommandValid(workloadId: string, command: SkillWorkloadAssignmentCommand): Promise<boolean>
 {
 	return workloadId.length > 0 && command.workloadUid.length > 0 && /^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/.test(command.namespace) && command.namespace.length <= 63 && command.bootstrapReference === await __CreateSkillWorkloadBootstrapReference(workloadId) && Number.isSafeInteger(command.deliveryCount) && command.deliveryCount >= 1 && Number.isFinite(Date.parse(command.claimedAt));
 }
 
-/** Returns whether the locked revision lifecycle still permits this workload class. */
+/** Returns whether the revision's state still allows this workload class: authoring needs Draft, tool-runner needs Published. */
 function _IsEligibleRevisionForKind(kind: SkillWorkloadKind, state: SkillRevisionState): boolean
 {
 	return (kind === SkillWorkloadKind.Authoring && state === SkillRevisionState.Draft) || (kind === SkillWorkloadKind.ToolRunner && state === SkillRevisionState.Published);

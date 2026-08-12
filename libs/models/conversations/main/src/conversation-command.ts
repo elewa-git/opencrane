@@ -2,7 +2,7 @@ import { ConversationCommandActions, ConversationCommandDenialReasons, Conversat
 import { ConversationLifecycles, ConversationModes } from "./conversation.types.js";
 import { __HasValidConversationAgentBinding } from "./conversation-invariants.js";
 
-/** Pure handler for one state or mode strategy cell. */
+/** Decides one command for one combination of lifecycle and mode — a single cell in the tables below. */
 type _CommandHandler = (context: ConversationCommandContext) => ConversationCommandDecision;
 
 /** Mode strategy table requiring one decision for every supported command. */
@@ -32,7 +32,7 @@ function _admitOrdinaryMessage(): ConversationCommandDecision
 	return _allow(ConversationCommandActions.AdmitOrdinaryMessage);
 }
 
-/** Routes close through the monotonic lifecycle owner. */
+/** Allows the close command; the lifecycle owner performs the one-way open-to-closed change. */
 function _closeConversation(): ConversationCommandDecision
 {
 	return _allow(ConversationCommandActions.CloseConversation);
@@ -50,7 +50,7 @@ function _denyClosed(): ConversationCommandDecision
 	return _deny(ConversationCommandDenialReasons.ConversationClosed);
 }
 
-/** Requires a steering or elicitation command to name the exact active agent-session run. */
+/** Allows steering or an elicitation answer only when the command's `targetRunId` equals the conversation's active run; denies when there is no active run, or when the ids differ. */
 function _targetActiveRun(context: ConversationCommandContext): ConversationCommandDecision
 {
 	if (context.activeRunId === null)
@@ -74,7 +74,7 @@ const _AGENT_SESSION_STRATEGY: _ModeCommandStrategy = {
 	[ConversationCommandKinds.Close]: _closeConversation,
 };
 
-/** Exhaustive direct strategy: ordinary messages cannot manufacture runs. */
+/** Direct mode: a message is stored as an ordinary message and never starts a run. */
 const _DIRECT_STRATEGY: _ModeCommandStrategy = {
 	[ConversationCommandKinds.SubmitMessage]: _admitOrdinaryMessage,
 	[ConversationCommandKinds.SteerRun]: _denyUnsupportedModeCommand,
@@ -82,7 +82,7 @@ const _DIRECT_STRATEGY: _ModeCommandStrategy = {
 	[ConversationCommandKinds.Close]: _closeConversation,
 };
 
-/** Exhaustive group strategy: ordinary messages cannot manufacture runs. */
+/** Group mode: same as direct — a message is stored as an ordinary message and never starts a run. */
 const _GROUP_STRATEGY: _ModeCommandStrategy = {
 	[ConversationCommandKinds.SubmitMessage]: _admitOrdinaryMessage,
 	[ConversationCommandKinds.SteerRun]: _denyUnsupportedModeCommand,
@@ -97,7 +97,7 @@ const _MODE_STRATEGIES: Readonly<Record<ConversationModes, _ModeCommandStrategy>
 	[ConversationModes.Group]: _GROUP_STRATEGY,
 };
 
-/** Exhaustive open-state dispatch through the immutable mode strategy. */
+/** For an open conversation, hands the command to the table for its mode; an unknown mode or command denies. */
 function _decideOpen(context: ConversationCommandContext): ConversationCommandDecision
 {
 	const strategy = _MODE_STRATEGIES[context.mode] as _ModeCommandStrategy | undefined;
@@ -105,7 +105,7 @@ function _decideOpen(context: ConversationCommandContext): ConversationCommandDe
 	return handler ? handler(context) : _deny(ConversationCommandDenialReasons.UnsupportedCommand);
 }
 
-/** Exhaustive state-by-command table; closed deliberately denies every write cell. */
+/** Decision table by lifecycle then command. Every cell for a closed conversation denies, so closing is a complete stop rather than a filter. */
 const _STATE_COMMAND_STRATEGIES: Readonly<Record<ConversationLifecycles, Readonly<Record<ConversationCommandKinds, _CommandHandler>>>> = {
 	[ConversationLifecycles.Open]: {
 		[ConversationCommandKinds.SubmitMessage]: _decideOpen,
@@ -122,8 +122,22 @@ const _STATE_COMMAND_STRATEGIES: Readonly<Record<ConversationLifecycles, Readonl
 };
 
 /**
- * Decides one conversation write from durable mode, lifecycle, binding, and active-run facts.
- * Unsupported runtime values and invalid agent bindings deny without selecting an authority.
+ * Decide what one conversation command is allowed to do, before anything is written.
+ *
+ * Pure function: it reads the stored mode, lifecycle, agent binding, and active run, and returns
+ * either the single action a caller may then perform or a stable denial reason. It performs no
+ * persistence itself.
+ *
+ * Fails closed. A conversation whose mode and agent binding disagree, a closed conversation, a
+ * command the mode does not support, an unknown mode, and an unknown command all deny. The caller
+ * must branch on `allowed` and must never fall through to a default action.
+ *
+ * Called by: `libs/backend/server/conversations/main/src/prisma-conversation-mutation-repository.ts`,
+ * `libs/backend/server/conversations/main/src/prisma-conversation-unit-of-work.ts`.
+ * @param context - The stored mode, lifecycle, agent binding, active run, and the requested command.
+ * @returns An allowed decision naming exactly one action to perform, or a denial with a stable reason safe to log and to map to an HTTP status.
+ * @see {@link ConversationCommandActions}
+ * @see {@link ConversationCommandDenialReasons}
  */
 export function __DecideConversationCommand(context: ConversationCommandContext): ConversationCommandDecision
 {

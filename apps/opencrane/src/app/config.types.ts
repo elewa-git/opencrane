@@ -1,6 +1,6 @@
 import type { StandaloneFirstUserAdmissionConfig } from "@opencrane/backend/server/iam/identity";
 
-/** Deployment-fixed channel resolver and replay receiver coordinates. */
+/** The channel resolver and replay receiver settings fixed by the deployment. */
 export interface ChannelTargetRuntimeConfig
 {
 	readonly channelProxyServiceAccountName: string;
@@ -11,7 +11,7 @@ export interface ChannelTargetRuntimeConfig
 	readonly trustedHost: string;
 }
 
-/** Startup snapshot used to compose workload identity, dispatch, and worker routes. */
+/** Settings read once at startup, used to compose workload identity, dispatch, and worker routes. */
 export interface InternalRuntimeConfig
 {
 	/** Whether the restricted artifact-preprocessor plane is enabled. */
@@ -36,7 +36,7 @@ export interface InternalRuntimeConfig
 	readonly memoryGatewayTokenPath: string;
 	/** Release-local private memory-gateway origin; the client validates its exact shape. */
 	readonly memoryGatewayUrl: string;
-	/** Maximum retained published runtime outbox rows removed in one pass. */
+	/** Maximum number of published runtime outbox rows deleted in one prune pass. */
 	readonly outboxPruneBatchSize: number;
 	/** Namespace reserved for personal-agent runtime Jobs. */
 	readonly personalRuntimeNamespace: string | undefined;
@@ -48,7 +48,7 @@ export interface InternalRuntimeConfig
 	readonly assignmentTtlMilliseconds: number;
 }
 
-/** Deployment-supplied coordinates of the authenticated Obot management transport. */
+/** The Obot management transport settings the deployment supplies: origin, credential path, and timeout. */
 export interface OpenCraneObotConfig
 {
 	/** In-cluster Obot origin (`http`, `*.svc.cluster.local`) with no path, query, or credentials. */

@@ -17,91 +17,123 @@ import { __AdmitRuntimeCandidate, __AdmitRuntimeCommand } from "./runtime-protoc
 import type { RuntimeAdmissionRunState, RuntimeAttemptAuthority, RuntimeProtocolClock } from "./runtime-protocol-authority.types.js";
 import type { RunInputCompiler, RuntimeApprovalExpiry, RuntimeCandidateDispatchResult, RuntimeDispatchAuthorityConfig, RuntimeEventReporter, RuntimeStreamWorkloadIdentity } from "./prisma-runtime-dispatch-authority.types.js";
 
-/** Immutable durable facts loaded and locked for one connected runtime Pod. */
+/** Database facts about one connected runtime Pod's run and assignment, read under a row lock. */
 interface RuntimeDispatchContext
 {
 	/** Run authorised for the connected Pod. */
 	readonly runId: string;
-	/** Positive run attempt authorised for the exact workload assignment. */
+	/** Run attempt this workload assignment was issued for; always 1 or more. */
 	readonly attempt: number;
 	/** AgentService executed by the workload. */
 	readonly agentServiceId: string;
-	/** Immutable AgentRevision loaded by the runtime. */
+	/** Immutable AgentRevision the runtime runs. */
 	readonly agentRevisionId: string;
 	/** Silo in which the assignment is valid. */
 	readonly siloId: string;
-	/** Owning-run lifecycle state that gates every command and candidate. */
+	/** State of the owning run. Every command and candidate is checked against it. */
 	readonly runState: RuntimeAdmissionRunState;
-	/** Recorded terminal reason, present once the run is cancelling, that fixes the cancel body. */
+	/** Why the run is ending. Set once the run is cancelling, and it decides the reason sent in the cancel command. */
 	readonly terminalReason: AgentRunTerminalReason | null;
-	/** Canonical digest of the immutable assignment claims carried on every command. */
+	/** Digest of the assignment's fixed identity fields; every command carries it. */
 	readonly assignmentDigest: string;
-	/** Immutable input-snapshot digest fixed for the attempt. */
+	/** Digest of the input snapshot for this attempt; it never changes. */
 	readonly inputSnapshotDigest: string;
-	/** Complete immutable input snapshot carried by the start-attempt command. */
+	/** The immutable input snapshot sent in the start-attempt command. */
 	readonly snapshot: RunInputSnapshot;
 	/** Approved persona revision compiled for the run, when present. */
 	readonly personaRevisionId: string | null;
-	/** Tagged user or managed-service identity whose membership evidence authorised the run. */
+	/** Who the run acts as: a user or a managed service. Its fleet-membership check authorised the run. */
 	readonly identity: RuntimeAssignmentIdentity;
-	/** Digest of the effective proof-bound capability set for the attempt. */
+	/** Digest of the capability set proved for this attempt. */
 	readonly capabilitySetDigest: string;
 	/** Expected Kubernetes ServiceAccount name for the runtime workload. */
 	readonly serviceAccountName: string;
 	/** Registered runtime Pod UID bound to the assignment. */
 	readonly podUid: string;
-	/** Hard assignment lease expiry in epoch milliseconds. */
+	/** When the assignment lease expires, in epoch milliseconds. It is never extended. */
 	readonly leaseExpiresAtEpochMs: number;
-	/** Canonical assignment issuance instant reused on every frame. */
+	/** When the assignment was issued; every command repeats this value. */
 	readonly assignmentIssuedAt: string;
-	/** Canonical assignment expiry instant reused on every frame. */
+	/** When the assignment expires; every command repeats this value. */
 	readonly assignmentExpiresAt: string;
 }
 
-/** Minimal dispatched-command row required to rebuild or account for a minted frame. */
+/** Fields of a stored command row, enough to re-send that command or to check it against the sequence. */
 interface DispatchedCommandRow
 {
-	/** Opaque idempotency key assigned by the control plane. */
+	/** Idempotency key the server assigned to this command. */
 	readonly commandId: string;
 	/** Strictly monotonic command sequence for the attempt. */
 	readonly sequence: number;
-	/** Command kind that was durably minted. */
+	/** Which kind of command was saved. */
 	readonly kind: RuntimeCommandKind;
-	/** Server-owned lease fence carried by the frame. */
+	/** Lease fence the server set, sent with this command. */
 	readonly fence: number;
-	/** Persisted resume payload for a resume frame, so redelivery survives marker consumption. */
+	/** Saved payload of a resume command, so it can be re-sent even after its tool-result rows are marked consumed. */
 	readonly payload: Prisma.JsonValue | null;
-	/** Canonical issuance instant of the minted frame. */
+	/** When this command was issued. */
 	readonly issuedAt: Date;
-	/** Canonical hard expiry of the minted frame. */
+	/** When this command expires. */
 	readonly expiresAt: Date;
 }
 
 /**
- * Prisma-backed durable command dispatch and candidate admission for connected runtime Pods.
+ * Sends commands to a connected runtime Pod, and decides whether to accept what that Pod proposes.
  *
- * The adapter loads and locks the live WorkloadAssignment, its AgentRun, and the immutable
- * RunInputSnapshot for the reviewed Pod, then delegates every allow-or-deny decision to the pure
- * `__AdmitRuntimeCommand` / `__AdmitRuntimeCandidate` authority. It only mints a frame the pure
- * authority accepts, and advances the monotonic command sequence and accepted candidate ids inside
- * the same transaction so a wire-format or transport bug can neither reorder nor duplicate work.
+ * This is the whole server side of the runtime protocol. A runtime Pod holds one long-lived stream
+ * and polls {@link PrismaRuntimeDispatchAuthority.__NextCommand} for work; anything it wants to do
+ * that outlives itself - record an event, call an external tool - it must first offer to
+ * {@link PrismaRuntimeDispatchAuthority.__AdmitCandidate}. The Pod is never trusted: for the Pod
+ * that is asking, this class loads and row-locks the live WorkloadAssignment, its AgentRun, and the
+ * immutable RunInputSnapshot, then hands every allow-or-deny decision to `__AdmitRuntimeCommand` /
+ * `__AdmitRuntimeCandidate`, which touch no database.
+ *
+ * Two rules hold the design together. A command is only created if those decision functions accept
+ * it, and the command sequence number and the list of accepted candidate ids move forward in the
+ * same transaction that saves the command, so a bug in the wire format or the transport cannot
+ * reorder work or run it twice. And a command sent again after a reconnect is rebuilt from saved
+ * data that cannot change, so it is byte-for-byte the same as the first send, and the runtime may
+ * safely treat the repeat as the same command.
+ *
+ * Called by: constructed only by `__CreateProductionRuntimeDispatchAuthority`
+ * (production-runtime-dispatch.ts), which apps/opencrane/src/app/runtime-composition.ts passes to
+ * `_RegisterInternalAgentRuntimeStream` as its `authority` port. That transport
+ * (libs/backend/server/infra/agent-runtime-stream/src/agent-runtime-stream.ts) is the only caller
+ * of the three public methods.
+ *
+ * @see __CreateProductionRuntimeDispatchAuthority for the production wiring.
+ * @see RuntimeCandidateDispatchResult for what a refusal obliges the transport to do.
  */
 export class PrismaRuntimeDispatchAuthority
 {
-	/** Canonical OpenCrane product-authority database client. */
+	/** Client for the main OpenCrane database. */
 	private readonly prisma: PrismaClient;
-	/** Fixed runtime-plane namespaces and command-lifetime policy. */
+	/** The two runtime namespaces, and how long a command stays valid. */
 	private readonly config: RuntimeDispatchAuthorityConfig;
 	/** Trusted server clock, never a runtime-supplied time. */
 	private readonly clock: RuntimeProtocolClock;
-	/** Injected control-plane compiler that hydrates the snapshot carried on `start_attempt`. */
+	/** Turns the snapshot into the literal input sent with `start_attempt`. */
 	private readonly compileRunInput: RunInputCompiler;
-	/** Optional composition-root bridge to canonical runtime-event persistence. */
+	/** Optional port that saves runtime events; the composition root supplies it. */
 	private readonly eventReporter: RuntimeEventReporter | null;
-	/** Optional production bridge to the deferred-approval expiry authority. */
+	/** Optional port that closes approvals whose deadline has passed. */
 	private readonly approvalExpiry: RuntimeApprovalExpiry | null;
 
-	/** Creates a dispatch adapter over canonical Postgres with a bounded command lifetime. */
+	/**
+	 * Creates the dispatcher over Postgres.
+	 *
+	 * @param prisma - Client for the main OpenCrane database.
+	 * @param config - The two runtime namespaces, and how long a command stays valid.
+	 * @param compileRunInput - Turns a snapshot into the input sent with `start_attempt`.
+	 * @param eventReporter - Saves runtime events. When omitted, a candidate carrying an event is
+	 * refused with `event_reporter_unavailable` rather than accepted without its event.
+	 * @param clock - Server clock; defaults to `Date.now`. Pass one in tests to fix the time.
+	 * @param approvalExpiry - Closes approvals whose deadline has passed. When omitted, a run waiting
+	 * for approval never advances: `__NextCommand` returns null instead of guessing the wait is over.
+	 * @throws {Error} When `config` does not hold two different valid namespaces and a command
+	 * lifetime between 1s and 300s. Thrown at construction, so a misconfigured deployment fails at
+	 * startup instead of mid-stream.
+	 */
 	constructor(prisma: PrismaClient, config: RuntimeDispatchAuthorityConfig, compileRunInput: RunInputCompiler, eventReporter?: RuntimeEventReporter, clock?: RuntimeProtocolClock, approvalExpiry?: RuntimeApprovalExpiry)
 	{
 		if (!_configIsValid(config)) throw new Error("runtime dispatch authority requires distinct bounded runtime namespaces and command lifetime");
@@ -113,7 +145,29 @@ export class PrismaRuntimeDispatchAuthority
 		this.approvalExpiry = approvalExpiry ?? null;
 	}
 
-	/** Returns the next server-issued command after the supplied sequence, or null while idle. */
+	/**
+	 * Returns the next command for this runtime, or null when there is nothing to send.
+	 *
+	 * `null` is the normal, common answer and never means "error". It covers every case where the
+	 * runtime should simply wait and poll again: no command is due yet, this Pod is not the instance
+	 * bound to the stream, the namespace is not a configured runtime namespace, the run has finished,
+	 * or a run waiting for approval could not be advanced. The transport must not treat null as a
+	 * failure or close the stream; it waits for a wakeup or the recovery timer and calls again.
+	 *
+	 * A command already stored at `afterSequence + 1` is rebuilt and returned again, byte-for-byte
+	 * identical to the first send, so a runtime that reconnected and lost a frame can be caught up
+	 * safely. While the run is cancelling, the stored cancel command is returned instead.
+	 *
+	 * Called by: the command pump in
+	 * libs/backend/server/infra/agent-runtime-stream/src/agent-runtime-stream.ts:166, through the
+	 * `RuntimeCommandStreamAuthority` port.
+	 *
+	 * @param identity - Pod identity the transport already verified with TokenReview.
+	 * @param open - The stream-open message, naming the runtime instance and Pod UID.
+	 * @param afterSequence - Highest command sequence the runtime has already seen; 0 on a new stream.
+	 * @returns The next command to send, or null when the runtime should wait and poll again.
+	 * @see __AdmitCandidate for the runtime-to-server direction.
+	 */
 	async __NextCommand(identity: RuntimeStreamWorkloadIdentity, open: RuntimeStreamOpen, afterSequence: number): Promise<RuntimeCommandEnvelope | null>
 	{
 		if (!_IsConfiguredRuntimeNamespace(identity.namespace, this.config) || open.podUid !== identity.podUid) return null;
@@ -128,7 +182,27 @@ export class PrismaRuntimeDispatchAuthority
 		});
 	}
 
-	/** Admits a runtime candidate through the pure authority and durably records acceptance. */
+	/**
+	 * Decides whether one thing the runtime proposes may happen, and saves it when it may.
+	 *
+	 * Accepting is durable: the event row, or the ToolInvocation row for an external action, is
+	 * written in the same transaction that records the candidate id, so the runtime can crash right
+	 * after the answer without the work being lost or repeated. Offering the same candidate id twice
+	 * returns `accepted: true` again, but only when the repeat carries identical arguments.
+	 *
+	 * Called by: the `/candidates` route in
+	 * libs/backend/server/infra/agent-runtime-stream/src/agent-runtime-stream.ts:204.
+	 *
+	 * @param identity - Pod identity the transport already verified with TokenReview.
+	 * @param candidate - The event or external action the runtime is proposing.
+	 * @returns `accepted: true` when the proposal is now durable and the runtime may carry on.
+	 * `accepted: false` with a `reason` when it must not: the runtime must not perform the proposed
+	 * effect, and the transport answers 409. {@link RuntimeCandidateDispatchResult} groups the reasons
+	 * by what each one obliges the runtime to do.
+	 * @throws Rethrows any database error that is not a candidate refusal, so a broken transaction
+	 * surfaces as a 5xx instead of being reported to the runtime as a clean refusal.
+	 * @see RuntimeCandidateDispatchResult
+	 */
 	async __AdmitCandidate(identity: RuntimeStreamWorkloadIdentity, candidate: RuntimeCandidate): Promise<RuntimeCandidateDispatchResult>
 	{
 		if (!_IsConfiguredRuntimeNamespace(identity.namespace, this.config)) return { accepted: false, reason: "namespace_mismatch" };
@@ -143,7 +217,24 @@ export class PrismaRuntimeDispatchAuthority
 		});
 	}
 
-	/** Releases the runtime-instance binding when its stream is lost so a clean reconnect can rebind. */
+	/**
+	 * Unbinds the runtime instance from its stream after the connection is lost.
+	 *
+	 * A stream row remembers which runtime instance owns it, and `__NextCommand` refuses to serve any
+	 * other instance. Without this call that binding would outlive the dead Pod, and its replacement
+	 * would be refused every command until the assignment lease expired. Only the instance named in
+	 * `open` can release the binding, so a late call from an older instance cannot take the stream
+	 * away from the one now connected; when the binding has already moved, this does nothing.
+	 *
+	 * Called by: the stream cleanup handler in
+	 * libs/backend/server/infra/agent-runtime-stream/src/agent-runtime-stream.ts:146, on response
+	 * close or error. That caller deliberately ignores any rejection, so release is best-effort and
+	 * the assignment lease is the backstop.
+	 *
+	 * @param identity - Pod identity the transport verified when the stream opened.
+	 * @param open - The stream-open message of the connection that is closing.
+	 * @returns Nothing.
+	 */
 	async __ReleaseStream(identity: RuntimeStreamWorkloadIdentity, open: RuntimeStreamOpen): Promise<void>
 	{
 		if (!_IsConfiguredRuntimeNamespace(identity.namespace, this.config) || open.podUid !== identity.podUid) return;
@@ -167,19 +258,19 @@ function _configIsValid(config: RuntimeDispatchAuthorityConfig): boolean
 		&& config.commandTtlMilliseconds <= 300_000;
 }
 
-/** Return whether one namespace belongs to either explicit runtime identity plane. */
+/** Return whether this namespace is one of the two configured runtime namespaces. */
 function _IsConfiguredRuntimeNamespace(namespace: string, config: RuntimeDispatchAuthorityConfig): boolean
 {
 	return namespace === config.personalRuntimeNamespace || namespace === config.managedRuntimeNamespace;
 }
 
-/** Return whether one value is a bounded Kubernetes namespace. */
+/** Return whether this value is a valid Kubernetes namespace name. */
 function _IsNamespace(value: string): boolean
 {
 	return value.length <= 63 && /^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/.test(value);
 }
 
-/** Mint or redeliver one command for the connected runtime inside a single locked transaction. */
+/** Create a new command, or re-send a stored one, inside a single locked transaction. */
 async function _nextCommand(prisma: PrismaClient, config: RuntimeDispatchAuthorityConfig, clock: RuntimeProtocolClock, compileRunInput: RunInputCompiler, approvalExpiry: RuntimeApprovalExpiry | null, identity: RuntimeStreamWorkloadIdentity, open: RuntimeStreamOpen, afterSequence: number): Promise<RuntimeCommandEnvelope | null>
 {
 	if (!Number.isSafeInteger(afterSequence) || afterSequence < 0) return null;
@@ -188,9 +279,9 @@ async function _nextCommand(prisma: PrismaClient, config: RuntimeDispatchAuthori
 		// 1. Load and lock the live assignment, run, and snapshot before any authority decision.
 		let context = await _loadContext(transaction, config, identity);
 		if (context === null) return null;
-		// A waiting attempt cannot advance until its server-owned deadlines are applied. Expiry shares
-		// this transaction and run lock with dispatch, then context is reloaded so cancellation or the
-		// final pending approval determines the command from durable state rather than stale memory.
+		// An attempt waiting for approval cannot move on until overdue approvals are closed. That runs
+		// in this same transaction and under the same run lock, and then the context is read again, so
+		// the next command is chosen from what the database says now, not from the values read earlier.
 		const decisionUnitOfWork = new PrismaRuntimeCommandDecisionUnitOfWork(transaction);
 		const expiry = await decisionUnitOfWork.expireWaiting(context, approvalExpiry, new Date(clock.nowEpochMs()));
 		if (expiry === "unavailable") return null;
@@ -210,12 +301,12 @@ async function _nextCommand(prisma: PrismaClient, config: RuntimeDispatchAuthori
 
 		// 3. Redeliver a stored command the transport has not yet re-sent on this connection.
 		const targetSequence = afterSequence + 1;
-		// Cancellation supersedes stale work; the durable cancel retains one unambiguous newer sequence.
+		// A cancel replaces older work: while cancelling, send the saved cancel command, which is the one row with a sequence higher than what the runtime has already seen.
 		const stored = context.runState === "cancelling" ? commands.find(function _UnobservedCancel(row) { return row.kind === RuntimeCommandKind.CancelAttempt && row.sequence > afterSequence; }) : commands.find(function _AtTarget(row) { return row.sequence === targetSequence; });
 		if (stored)
 		{
-			// Rebuild the exact body from immutable state (or the stored resume payload) so a redelivered
-			// frame is byte-identical even after its saved-result markers have been consumed.
+			// Rebuild the body from data that cannot change (or from the saved resume payload), so a
+			// re-sent command is byte-for-byte the same even after its tool-result rows were consumed.
 			const extras = await _storedCommandExtras(transaction, context, stored, compileRunInput);
 			if (extras === null) return null;
 			const envelope = _rebuildEnvelope(context, runtimeInstanceId, stored, extras);
@@ -224,7 +315,7 @@ async function _nextCommand(prisma: PrismaClient, config: RuntimeDispatchAuthori
 		}
 		if (context.runState !== "cancelling" && targetSequence !== stream.nextCommandSequence) return null;
 
-		// 4. Decide whether a new lifecycle command is due, mint it, and admit it before persisting.
+		// 4. Decide whether a new command is due, build it, and check it before saving it.
 		const kind = await decisionUnitOfWork.decide(context, commands);
 		if (kind === null) return null;
 		const nowEpochMs = clock.nowEpochMs();
@@ -239,14 +330,14 @@ async function _nextCommand(prisma: PrismaClient, config: RuntimeDispatchAuthori
 		await transaction.runtimeDispatchedCommand.create({ data: { runId: context.runId, attempt: context.attempt, sequence: envelope.sequence, commandId: envelope.commandId, kind, fence: envelope.fence, payload: extras.resume === null ? Prisma.DbNull : extras.resume as unknown as Prisma.InputJsonValue, issuedAt: new Date(envelope.issuedAt), expiresAt: new Date(envelope.expiresAt) } });
 		const advanced = await transaction.runtimeCommandStream.updateMany({ where: { runId: context.runId, attempt: context.attempt, nextCommandSequence: stream.nextCommandSequence }, data: { nextCommandSequence: admission.nextCommandSequence } });
 		if (advanced.count !== 1) throw new Error("runtime dispatch lost its command sequence fence");
-		// Consume exact saved-result deliveries only after their byte-stable command body is durable.
+		// Mark the tool-result rows consumed only after the command that carries them is saved.
 		if (kind === RuntimeCommandKind.ResumeAttempt && extras.resumeToolResultDeliveryIds.length > 0) await new PrismaRuntimeDispatchStateUnitOfWork(transaction).consumeToolResultDeliveries(extras.resumeToolResultDeliveryIds, new Date(nowEpochMs));
 		if (kind === RuntimeCommandKind.ResumeAttempt && extras.resumeSteeringRequestIds.length > 0) await transaction.runtimeSteeringRequest.updateMany({ where: { id: { in: [...extras.resumeSteeringRequestIds] }, state: "Pending" }, data: { state: "Consumed", consumedAt: new Date(nowEpochMs) } });
 		return envelope;
 	});
 }
 
-/** Admit one runtime candidate and durably record its id when the pure authority accepts it. */
+/** Check one runtime candidate, and save its id when `__AdmitRuntimeCandidate` accepts it. */
 async function _admitCandidate(prisma: PrismaClient, config: RuntimeDispatchAuthorityConfig, clock: RuntimeProtocolClock, compileRunInput: RunInputCompiler, identity: RuntimeStreamWorkloadIdentity, candidate: RuntimeCandidate, eventReporter: RuntimeEventReporter | null): Promise<RuntimeCandidateDispatchResult>
 {
 	if (candidate.kind === "event" && candidate.eventType === "run.cancelled") return { accepted: false, reason: "runtime_cancellation_not_authoritative" };
@@ -255,7 +346,7 @@ async function _admitCandidate(prisma: PrismaClient, config: RuntimeDispatchAuth
 	{
 		return await prisma.$transaction(async function _admit(transaction: Prisma.TransactionClient): Promise<RuntimeCandidateDispatchResult>
 		{
-			// 1. Load and lock the live assignment, run, and snapshot for the reviewed Pod.
+			// 1. Load and lock the live assignment, run, and snapshot for the Pod that is asking.
 			const context = await _loadContext(transaction, config, identity);
 			if (context === null) return { accepted: false, reason: "unknown_workload" };
 			const stream = await transaction.runtimeCommandStream.findUnique({ where: { runId_attempt: { runId: context.runId, attempt: context.attempt } } });
@@ -263,7 +354,7 @@ async function _admitCandidate(prisma: PrismaClient, config: RuntimeDispatchAuth
 			const commands = await transaction.runtimeDispatchedCommand.findMany({ where: { runId: context.runId, attempt: context.attempt }, orderBy: { sequence: "asc" } });
 			const authority = _buildAuthority(context, stream.runtimeInstanceId, stream.fence, stream.nextCommandSequence, commands, stream.acceptedCandidateIds);
 
-			// 2. Delegate the allow-or-deny decision to the pure candidate authority.
+			// 2. Let __AdmitRuntimeCandidate make the allow-or-deny decision; it reads no database.
 			const admission = __AdmitRuntimeCandidate({ authority, candidate, clock });
 			if (admission.outcome === "idempotent")
 			{
@@ -274,7 +365,7 @@ async function _admitCandidate(prisma: PrismaClient, config: RuntimeDispatchAuth
 				return invocation !== null && actualArgumentsDigest === candidate.argumentsDigest && invocation.runtimeInstanceId === candidate.runtimeInstanceId && invocation.commandId === candidate.commandId && invocation.toolRevisionId === candidate.toolRevisionId && invocation.toolInvocationId === candidate.toolInvocationId && invocation.argumentsDigest === actualArgumentsDigest && invocation.requestFingerprint === requestFingerprint ? { accepted: true } : { accepted: false, reason: "external_action_replay_conflict" };
 			}
 			if (admission.outcome === "denied") return { accepted: false, reason: admission.reason };
-			// 2b. Persist complete provider-free work authority before accepting an external action.
+			// 2b. Save the ToolInvocation row before accepting an external action. Nothing is sent to a provider here.
 			if (candidate.kind === "external_action")
 			{
 				const intent = await _toolInvocationIntent(transaction, context, stream.runtimeInstanceId, candidate, compileRunInput);
@@ -282,11 +373,11 @@ async function _admitCandidate(prisma: PrismaClient, config: RuntimeDispatchAuth
 				const durable = await __AdmitPreparingToolInvocationInTransaction(transaction, intent, new Date(clock.nowEpochMs()), TOOL_INVOCATION_PREPARATION_POLICY);
 				if (durable.outcome === "conflict") return { accepted: false, reason: "external_action_conflict" };
 			}
-			// 2c. Apply transaction-local canonical event effects before accepting the id.
+			// 2c. Record any run event the candidate asks for, in this transaction, before accepting its id.
 			const sideEffectDenial = await _ApplyRuntimeCandidateSideEffects(transaction, candidate, context.runId, context.attempt, eventReporter);
 			if (sideEffectDenial !== null) return { accepted: false, reason: sideEffectDenial };
 
-			// 3. Append the accepted candidate id monotonically under the held stream lock.
+			// 3. Add the accepted candidate id to the stream row while still holding its lock.
 			const appended = await transaction.runtimeCommandStream.updateMany({ where: { runId: context.runId, attempt: context.attempt, nextCommandSequence: stream.nextCommandSequence }, data: { acceptedCandidateIds: { push: candidate.candidateId } } });
 			if (appended.count !== 1) throw new Error("runtime dispatch lost its candidate acceptance fence");
 			return { accepted: true };
@@ -299,7 +390,7 @@ async function _admitCandidate(prisma: PrismaClient, config: RuntimeDispatchAuth
 	}
 }
 
-/** Validate and assemble the immutable provider-free authority saved during candidate admission. */
+/** Check the candidate and build the ToolInvocation record saved when it is admitted. Contacts no provider. */
 async function _toolInvocationIntent(transaction: Prisma.TransactionClient, context: RuntimeDispatchContext, runtimeInstanceId: string, candidate: RuntimeExternalActionCandidate, compileRunInput: RunInputCompiler): Promise<ToolInvocationIntent | null>
 {
 	try
@@ -333,14 +424,14 @@ async function _toolInvocationIntent(transaction: Prisma.TransactionClient, cont
 	}
 }
 
-/** Bind an external-action replay to the exact canonical arguments actually carried by the frame. */
+/** Hash the invocation together with its canonical arguments, so a replay must carry the same arguments. */
 function _ToolInvocationFingerprint(candidate: RuntimeExternalActionCandidate, argumentsDigest: string): string
 {
 	const canonical = JSON.stringify(["opencrane-tool-invocation-fingerprint-v1", candidate.runId, candidate.attempt, candidate.toolRevisionId, candidate.toolInvocationId, argumentsDigest]);
 	return `sha256:${createHash("sha256").update(canonical, "utf8").digest("hex")}`;
 }
 
-/** Bind the tagged snapshot identity to its exact namespace, audience, and ServiceAccount class. */
+/** Return whether the assignment's namespace, token audience, and ServiceAccount name match the snapshot identity's kind. */
 function _RuntimePlaneMatches(identity: RuntimeAssignmentIdentity, assignment: { namespace: string; audience: string; serviceAccountName: string }, config: RuntimeDispatchAuthorityConfig): boolean
 {
 	if (identity.kind === "service")
@@ -365,15 +456,17 @@ async function _releaseStream(prisma: PrismaClient, config: RuntimeDispatchAutho
 	});
 }
 
-/** Load and lock the assignment, run, and snapshot for the reviewed namespace and Pod UID. */
+/** Load and lock the assignment, run, and snapshot for this namespace and Pod UID. */
 async function _loadContext(transaction: Prisma.TransactionClient, config: RuntimeDispatchAuthorityConfig, identity: RuntimeStreamWorkloadIdentity): Promise<RuntimeDispatchContext | null>
 {
-	// 1. Discover the run without holding the assignment. All terminal/cancellation authorities lock
-	// the run before its assignment, so this prevents a runtime report from deadlocking with a cancel.
+	// 1. Find the run id first, without locking the assignment. Everything that ends or cancels a run
+	// locks the run before the assignment, so keeping that order stops a runtime report from
+	// deadlocking with a cancel.
 	const discovered = await transaction.workloadAssignment.findUnique({ where: { namespace_podUid: { namespace: identity.namespace, podUid: identity.podUid } } });
 	if (discovered === null) return null;
-	// The cancellation and terminal-report authorities use this advisory-before-row order too. It
-	// serialises every writer for one run without creating an advisory/row lock inversion.
+	// Cancellation and terminal reports also take the advisory lock before the row locks. Taking them
+	// in this order lets only one writer at a time work on a run, and no two writers can end up each
+	// holding one lock and waiting for the other.
 	await transaction.$queryRaw(Prisma.sql`SELECT pg_advisory_xact_lock(hashtextextended(${discovered.runId}, 0))`);
 	await transaction.$queryRaw(Prisma.sql`SELECT "id" FROM "agent_runs" WHERE "id" = ${discovered.runId} FOR UPDATE`);
 	await transaction.$queryRaw(Prisma.sql`SELECT "run_id" FROM "workload_assignments" WHERE "namespace" = ${identity.namespace} AND "pod_uid" = ${identity.podUid} FOR UPDATE`);
@@ -433,7 +526,7 @@ async function _bindRuntimeInstance(transaction: Prisma.TransactionClient, conte
 	return existing.runtimeInstanceId === runtimeInstanceId ? runtimeInstanceId : null;
 }
 
-/** Build the immutable attempt authority the pure decision boundary consumes. */
+/** Build the `RuntimeAttemptAuthority` value that `__AdmitRuntimeCommand` and `__AdmitRuntimeCandidate` check against. */
 function _buildAuthority(context: RuntimeDispatchContext, runtimeInstanceId: string, fence: number, nextCommandSequence: number, commands: readonly DispatchedCommandRow[], acceptedCandidateIds: readonly string[]): RuntimeAttemptAuthority
 {
 	return {
@@ -451,7 +544,7 @@ function _buildAuthority(context: RuntimeDispatchContext, runtimeInstanceId: str
 	};
 }
 
-/** Build the immutable runtime assignment frame carried by every command. */
+/** Build the assignment block that every command carries. */
 function _buildAssignmentFrame(context: RuntimeDispatchContext): RuntimeAssignment
 {
 	return {
@@ -471,48 +564,48 @@ function _buildAssignmentFrame(context: RuntimeDispatchContext): RuntimeAssignme
 	};
 }
 
-/** Kind-specific data assembled deterministically from immutable state for one command body. */
+/** Extra data for one command body, built only from data that cannot change so it always comes out the same. */
 interface CommandExtras
 {
-	/** Control-plane-hydrated literal input required by a `start_attempt` frame. */
+	/** The compiled input a `start_attempt` command needs. */
 	readonly compiledInput: CompiledRunInput | null;
-	/** Authorized deferred-result payload required by a `resume_attempt` frame. */
+	/** The approved tool results a `resume_attempt` command needs. */
 	readonly resume: ResumeAttemptCommand | null;
-	/** Saved-result delivery rows this resume frame consumes when minted. */
+	/** Tool-result rows this resume command marks consumed once it is saved. */
 	readonly resumeToolResultDeliveryIds: readonly string[];
-	/** Steering rows consumed only after their enclosing resume command is persisted. */
+	/** Steering rows marked consumed only after this resume command is saved. */
 	readonly resumeSteeringRequestIds: readonly string[];
 	/** Server-defined stop reason carried by a `cancel_attempt` frame. */
 	readonly cancelReason: CancelAttemptCommand["reason"];
 }
 
-/** Rebuild a stored command's exact envelope for idempotent redelivery on reconnect. */
+/** Rebuild a stored command exactly as it was first sent, so a reconnect can receive it again. */
 function _rebuildEnvelope(context: RuntimeDispatchContext, runtimeInstanceId: string, row: DispatchedCommandRow, extras: CommandExtras): RuntimeCommandEnvelope
 {
 	const command = _commandBody(context, row.kind, extras);
 	return { protocolVersion: AGENT_RUNTIME_PROTOCOL_V1, runtimeInstanceId, commandId: row.commandId, sequence: row.sequence, fence: row.fence, issuedAt: row.issuedAt.toISOString(), expiresAt: row.expiresAt.toISOString(), assignment: _buildAssignmentFrame(context), ...command };
 }
 
-/** Mint a fresh command envelope bounded by the assignment lease, or null when it cannot be valid. */
+/** Build a new command that expires no later than the assignment lease, or null when it would already be expired. */
 function _mintEnvelope(context: RuntimeDispatchContext, runtimeInstanceId: string, fence: number, sequence: number, kind: RuntimeCommandKind, nowEpochMs: number, commandTtlMilliseconds: number, extras: CommandExtras): RuntimeCommandEnvelope | null
 {
-	// 1. Bound the command lifetime by the assignment lease so a frame never outlives its authority.
+	// 1. Cap the command's expiry at the assignment lease, so a command never outlives the assignment that allows it.
 	const expiresAtEpochMs = Math.min(nowEpochMs + commandTtlMilliseconds, context.leaseExpiresAtEpochMs);
 	if (nowEpochMs >= expiresAtEpochMs) return null;
 
-	// 2. Assemble the canonical frame; the pure authority still fences, orders, and validates it.
+	// 2. Build the command. __AdmitRuntimeCommand still checks its fence, its sequence order, and its fields.
 	const command = _commandBody(context, kind, extras);
 	return { protocolVersion: AGENT_RUNTIME_PROTOCOL_V1, runtimeInstanceId, commandId: _commandId(context, sequence), sequence, fence, issuedAt: new Date(nowEpochMs).toISOString(), expiresAt: new Date(expiresAtEpochMs).toISOString(), assignment: _buildAssignmentFrame(context), ...command };
 }
 
 /**
- * Build the kind-specific command body carried by the envelope.
+ * Build the part of the command that depends on its kind.
  *
- * `start_attempt` carries the immutable snapshot and its control-plane-compiled literal input;
- * `resume_attempt` carries the current input generation and the control-plane-authorized deferred
- * tool results that unblock a paused attempt; `cancel_attempt` carries only a server-defined stop
- * reason. Every field is reconstructed from immutable durable state so a redelivered frame is
- * byte-identical to its mint.
+ * `start_attempt` carries the immutable snapshot and the input the server compiled from it;
+ * `resume_attempt` carries the current input generation and the tool results the server approved,
+ * which let a paused attempt continue; `cancel_attempt` carries only a stop reason chosen by the
+ * server. Every field is rebuilt from saved data that cannot change, so a re-sent command is
+ * byte-for-byte the same as the first one.
  */
 function _commandBody(context: RuntimeDispatchContext, kind: RuntimeCommandKind, extras: CommandExtras): RuntimeCommand
 {
@@ -526,7 +619,7 @@ function _commandBody(context: RuntimeDispatchContext, kind: RuntimeCommandKind,
 	return { kind: "start_attempt", payload: { snapshot: context.snapshot, compiledInput: extras.compiledInput } };
 }
 
-/** Assemble the body data for a freshly minted command from the immutable durable state. */
+/** Collect the body data for a new command from saved data that cannot change. */
 async function _mintCommandExtras(transaction: Prisma.TransactionClient, context: RuntimeDispatchContext, kind: RuntimeCommandKind, inputGeneration: number, compileRunInput: RunInputCompiler): Promise<CommandExtras | null>
 {
 	if (kind === RuntimeCommandKind.StartAttempt)
@@ -569,7 +662,7 @@ function _commandId(context: RuntimeDispatchContext, sequence: number): string
 	return `command-${createHash("sha256").update(canonical, "utf8").digest("hex").slice(0, 32)}`;
 }
 
-/** Maps a Prisma run-state enum member to the lowercase admission-fence run state. */
+/** Maps a Prisma run-state enum member to the lowercase run state used in admission checks. */
 function _toAdmissionRunState(state: PrismaAgentRunState): RuntimeAdmissionRunState
 {
 	switch (state)
@@ -586,21 +679,21 @@ function _toAdmissionRunState(state: PrismaAgentRunState): RuntimeAdmissionRunSt
 	}
 }
 
-/** Digest the immutable assignment identity so a command frame cannot silently rebind a run. */
+/** Hash the assignment's identity fields, so a command cannot quietly point at a different run. */
 function _computeAssignmentDigest(context: { runId: string; attempt: number; agentServiceId: string; agentRevisionId: string; siloId: string; subjectId: string; identity: RuntimeAssignmentIdentity; serviceAccountName: string; podUid: string; expiresAt: Date; createdAt: Date }): string
 {
 	const canonical = JSON.stringify(["opencrane-runtime-assignment-digest-v2", context.runId, context.attempt, context.agentServiceId, context.agentRevisionId, context.siloId, context.subjectId, _CanonicalAssignmentIdentity(context.identity), context.serviceAccountName, context.podUid, context.expiresAt.toISOString(), context.createdAt.toISOString()]);
 	return `sha256:${createHash("sha256").update(canonical, "utf8").digest("hex")}`;
 }
 
-/** Canonicalise tagged assignment identity before it becomes immutable frame evidence. */
+/** Put the identity fields in a fixed order and shape before they go into the assignment digest. */
 function _CanonicalAssignmentIdentity(identity: RuntimeAssignmentIdentity): readonly string[]
 {
 	if (identity.kind === "user") return [identity.kind, identity.executionSubjectId, String(identity.fleetMembershipRevision)];
 	return [identity.kind, identity.executionSubjectId, identity.agentServiceId, String(identity.fleetMembershipRevision), identity.effectiveScopeAttachmentDigest];
 }
 
-/** Parse tagged trusted execution identity fields from the immutable snapshot JSON. */
+/** Read the execution identity out of the snapshot's JSON, returning null when it is malformed. */
 function _snapshotIdentity(value: unknown): RuntimeAssignmentIdentity | null
 {
 	if (!value || typeof value !== "object" || Array.isArray(value)) return null;

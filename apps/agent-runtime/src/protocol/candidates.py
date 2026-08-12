@@ -46,7 +46,7 @@ def command_coordinates(
     command: dict[str, object],
     runtime_instance_id: str,
 ) -> dict[str, object] | None:
-    """Extract the immutable authority coordinates every candidate must echo.
+    """Extract the immutable coordinates, set by the control plane, that every candidate must echo back.
 
     Returning ``None`` is fail-closed: an incomplete command cannot produce even an error candidate,
     because the control plane would have no trustworthy coordinates to attach that error to.
@@ -97,7 +97,7 @@ def candidate(
 
 
 def arguments_digest(arguments: object) -> str:
-    """Compute the deterministic argument digest independently re-derived by the control plane.
+    """Compute the deterministic argument digest; the control plane re-derives the same value independently.
 
     Sorted keys and compact separators remove presentation differences from JSON objects. The
     ``sha256:`` prefix makes the digest algorithm explicit in the wire value.
@@ -135,7 +135,7 @@ def external_action_candidate(
 
 
 def resolve_tool_revision(compiled_input: dict[str, object], tool_name: str) -> str | None:
-    """Resolve a model-visible tool name only from the immutable compiled grant set.
+    """Resolve a tool name the model used, looking only in the immutable compiled grant set.
 
     No registry, network lookup, or model-supplied revision is accepted here. A missing or malformed
     mapping returns ``None`` and therefore cannot become an external-action candidate.
@@ -250,7 +250,7 @@ def normalize_event(
         )
     if isinstance(kind, str) and kind in _A2UI_EVENT_TYPES:
         envelope = neutral_event.get("payload")
-        # The neutral adapter may forward a complete versioned A2UI envelope. This seam never
+        # The neutral adapter may forward a complete versioned A2UI envelope. This path never
         # derives framework-specific UI shapes or fills absent coordinates on its behalf.
         if isinstance(envelope, dict):
             return (_A2UI_EVENT_TYPES[kind], {"a2ui": dict(envelope)})
@@ -261,14 +261,14 @@ def normalize_event(
 
 
 def _non_negative_int(value: object) -> int:
-    """Coerce an untrusted framework usage counter to a safe non-negative integer."""
+    """Convert an untrusted framework usage counter into a safe non-negative integer."""
     # Saturation preserves the signal that usage was large without allowing an unbounded framework
     # integer to escape into the stable wire contract.
     return min(value, MAX_COUNTER_VALUE) if isinstance(value, int) and value >= 0 else 0
 
 
 def _safe_error_type(value: object) -> str:
-    """Return a bounded class-like error label without provider messages or secret-bearing detail."""
+    """Return a short label naming the error's type, never the provider's message or any detail that could carry a secret."""
     # Collapse unknown labels to a stable category; echoing an arbitrary string would turn this
     # allowlist into a provider-controlled logging channel.
     return value if isinstance(value, str) and value in _SAFE_ERROR_TYPES else "ModelLoopError"

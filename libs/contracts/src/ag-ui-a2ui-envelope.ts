@@ -3,33 +3,52 @@ import { Ajv } from "ajv";
 
 import { AG_UI_A2UI_ENVELOPE_VERSION, AgUiA2uiSurfaceStates, type AgUiA2uiEnvelope } from "./ag-ui-projection.types.js";
 
-/** Maximum number of ordered operations admitted in one governed surface envelope. */
+/** Maximum number of operations one A2UI envelope may carry. */
 const _MAX_A2UI_OPERATIONS = 256;
 
-/** Maximum number of components admitted in one progressive surface update. */
+/** Maximum number of components one surface update may carry. */
 const _MAX_A2UI_COMPONENTS = 256;
 
-/** Maximum length of a stable presentation coordinate. */
+/** Maximum length of an id in the envelope, such as `surfaceId` or `messageId`. */
 const _MAX_A2UI_IDENTIFIER_LENGTH = 256;
 
-/** Maximum length of a server-selected display-safe lifecycle explanation. */
+/** Maximum length of the server-written `reason` text shown to the user. */
 const _MAX_A2UI_REASON_LENGTH = 2000;
 
-/** Canonical OpenCrane v4 component contracts admitted by the governed catalogue. */
+/** The eleven component names OpenCrane's v4 catalogue allows. */
 const _A2UI_COMPONENT_NAMES = new Set<string>(["Text", "Button", "TextField", "SingleChoice", "MultipleChoice", "Select", "Slider", "DateTimeInput", "Image", "Card", "List"]);
 
-/** Exact authoritative presentation states admitted across the public projection boundary. */
+/** The only display states this parser accepts. @see AgUiA2uiSurfaceStates */
 const _A2UI_SURFACE_STATES = new Set<string>(Object.values(AgUiA2uiSurfaceStates));
 
-/** Pinned upstream v0.8 operation validator, compiled once for every projection consumer. */
+/**
+ * Validator built from the upstream A2UI v0.8 schema, compiled once and shared by every consumer.
+ *
+ * The version is pinned to v0.8 because that is what the `@a2ui/web_core` dependency ships. Upstream
+ * has since moved on and marks v0.8 legacy, so this cannot be bumped by editing the string here — the
+ * dependency and this schema move together.
+ * @see https://a2ui.org/specification/v0.8-a2ui/ — the pinned revision.
+ */
 const _VALIDATE_A2UI_OPERATION = new Ajv({ strict: false }).compile(Schemas.A2UIClientEventMessage);
 
 /**
- * Parse one complete governed A2UI envelope without granting local action or lifecycle authority.
+ * Parse one A2UI envelope sent by an agent, returning it only if every part is allowed.
  *
- * The pinned upstream schema validates complete component properties and data updates. OpenCrane's
- * additional boundary admits only its exact envelope, operation vocabulary, surface coordinate,
- * bounds, and eleven-name catalogue before those values can reach a renderer.
+ * A2UI lets an agent describe a user interface as JSON, which the client then renders with its own
+ * components. That means the agent's output reaches the screen, so it is checked twice. The upstream
+ * schema checks the shape of components and data updates. Everything after that is OpenCrane's own
+ * limit: the envelope's exact keys, the operations it may contain, its size caps, and a fixed
+ * catalogue of eleven component names. A component the agent invents is refused rather than rendered.
+ *
+ * The envelope is data, never code, and parsing it grants nothing: it cannot start an action or move
+ * a run's lifecycle.
+ *
+ * @param value - Untrusted JSON as it arrived from the agent runtime.
+ * @returns The same envelope, once every check has passed.
+ * @throws TypeError with a short reason when any check fails. There is no partial success — a
+ * rejected envelope renders nothing.
+ * @see https://a2ui.org/specification/v0.8-a2ui/ — the A2UI revision this accepts.
+ * @see https://docs.ag-ui.com — AG-UI, the event protocol that carries this envelope to the client.
  */
 export function ___ParseAgUiA2uiEnvelope(value: unknown): AgUiA2uiEnvelope
 {
@@ -42,7 +61,7 @@ export function ___ParseAgUiA2uiEnvelope(value: unknown): AgUiA2uiEnvelope
 	return value as unknown as AgUiA2uiEnvelope;
 }
 
-/** Whether one operation is singular, surface-bound, bounded, and catalogue-safe. */
+/** Whether an operation has exactly one member, targets this `surfaceId`, stays within the size caps, and uses only catalogue components. */
 function _A2uiOperation(value: unknown, surfaceId: string): boolean
 {
 	if (!_Record(value) || Object.keys(value).length !== 1 || !_VALIDATE_A2UI_OPERATION(_UpstreamA2uiOperation(value))) return false;
@@ -51,7 +70,7 @@ function _A2uiOperation(value: unknown, surfaceId: string): boolean
 	return _SurfaceUpdate(value["surfaceUpdate"], surfaceId);
 }
 
-/** Validate the two OpenCrane one-value display contracts through the upstream MultipleChoice property schema. */
+/** Validate `SingleChoice` and `Select` against the upstream `MultipleChoice` schema, since upstream has no schema for either. */
 function _UpstreamA2uiOperation(value: Record<string, unknown>): Record<string, unknown>
 {
 	const update = value["surfaceUpdate"];
@@ -67,7 +86,7 @@ function _UpstreamA2uiOperation(value: Record<string, unknown>): Record<string, 
 	return { surfaceUpdate: { ...update, components } };
 }
 
-/** Whether one begin-rendering operation uses only the pinned upstream fields. */
+/** Whether a begin-rendering operation carries only the fields the pinned upstream schema defines. */
 function _BeginRendering(value: unknown, surfaceId: string): boolean
 {
 	if (!_Record(value) || !_ExactKeys(value, ["surfaceId", "root"], ["catalogId", "styles"]) || value["surfaceId"] !== surfaceId || !_Identifier(value["root"])) return false;
@@ -79,7 +98,7 @@ function _BeginRendering(value: unknown, surfaceId: string): boolean
 	return (font === undefined || typeof font === "string") && (primaryColor === undefined || typeof primaryColor === "string" && /^#[0-9a-f]{6}$/iu.test(primaryColor));
 }
 
-/** Whether one data-model update is exact, surface-bound, and recursively typed. */
+/** Whether a data-model update has only its allowed keys, targets this `surfaceId`, and has valid values at every nesting level. */
 function _DataModelUpdate(value: unknown, surfaceId: string): boolean
 {
 	if (!_Record(value) || !_ExactKeys(value, ["surfaceId", "contents"], ["path"]) || value["surfaceId"] !== surfaceId || !Array.isArray(value["contents"]) || value["contents"].length > _MAX_A2UI_COMPONENTS) return false;
@@ -87,7 +106,7 @@ function _DataModelUpdate(value: unknown, surfaceId: string): boolean
 	return value["contents"].every(function _Valid(entry): boolean { return _DataValue(entry, 1); });
 }
 
-/** Whether one recursive A2UI data value has exactly one typed value member. */
+/** Whether an A2UI data value sets exactly one of `valueString`, `valueNumber`, `valueBoolean`, or `valueMap`. */
 function _DataValue(value: unknown, depth: number): boolean
 {
 	if (depth > 5 || !_Record(value) || !_ExactKeys(value, ["key"], ["valueString", "valueNumber", "valueBoolean", "valueMap"]) || typeof value["key"] !== "string" || _SensitiveName(value["key"])) return false;
@@ -99,14 +118,14 @@ function _DataValue(value: unknown, depth: number): boolean
 	return Array.isArray(value["valueMap"]) && value["valueMap"].every(function _Valid(entry): boolean { return _DataValue(entry, depth + 1); });
 }
 
-/** Whether one surface update contains only exact component wrappers from the governed catalogue. */
+/** Whether a surface update contains only components from the allowed catalogue. */
 function _SurfaceUpdate(value: unknown, surfaceId: string): boolean
 {
 	if (!_Record(value) || !_ExactKeys(value, ["surfaceId", "components"], []) || value["surfaceId"] !== surfaceId || !Array.isArray(value["components"]) || value["components"].length === 0 || value["components"].length > _MAX_A2UI_COMPONENTS) return false;
 	return value["components"].every(_A2uiComponent);
 }
 
-/** Whether one component instance has one admitted OpenCrane catalogue contract and exact outer fields. */
+/** Whether a component names one allowed catalogue component and carries only `id`, `component`, and optional `weight`. */
 function _A2uiComponent(value: unknown): boolean
 {
 	if (!_Record(value) || !_ExactKeys(value, ["id", "component"], ["weight"]) || !_Identifier(value["id"]) || !_Record(value["component"])) return false;
@@ -118,13 +137,13 @@ function _A2uiComponent(value: unknown): boolean
 	return name !== "SingleChoice" && name !== "Select" || properties["maxAllowedSelections"] === 1;
 }
 
-/** Whether a stable coordinate is present, bounded, and free from control characters. */
+/** Whether an id is non-empty, within the length cap, and free of control characters. */
 function _Identifier(value: unknown): value is string
 {
 	return typeof value === "string" && value.length > 0 && value.length <= _MAX_A2UI_IDENTIFIER_LENGTH && !/[\u0000-\u001f\u007f]/u.test(value);
 }
 
-/** Whether a record contains exactly its required and optional key vocabulary. */
+/** Whether a record has every required key and no key outside the optional list. */
 function _ExactKeys(value: Readonly<Record<string, unknown>>, required: readonly string[], optional: readonly string[]): boolean
 {
 	const keys = Object.keys(value);
@@ -139,7 +158,7 @@ function _HasSecretField(value: unknown): boolean
 	return Object.entries(value).some(function _Sensitive([key, nested]): boolean { return _SensitiveName(key) || _HasSecretField(nested); });
 }
 
-/** Whether a field or logical data key is shaped like forbidden credential material. */
+/** Whether a field or data key name contains secret, token, password, credential, or authorization. */
 function _SensitiveName(value: string): boolean { return /secret|token|password|credential|authorization/iu.test(value); }
 
 /** Whether an unknown value is a non-null, non-array object. */

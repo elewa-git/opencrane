@@ -5,7 +5,16 @@ import type { PersonalConfigurationChangeDecisionRepository } from "../decision/
 import type { PersonalConfigurationChangeMaterializationRepository } from "../materialization/personal-configuration-materialization.types.js";
 import type { PersonalConfigurationChangeViewRepository } from "../query/personal-configuration-view.types.js";
 
-/** Stable error payload codes returned by the owner-only configuration routes. */
+/**
+ * The `error` values the configuration routes put in a JSON body.
+ *
+ * `ChangeNotFound` is returned both for a proposal that does not exist and for one that belongs
+ * to another user or was already decided, so a client cannot use 404s to discover other users'
+ * proposals. The two `*Unavailable` codes are the only ones a client should retry; the
+ * `Invalid*` codes mean the request itself must change.
+ *
+ * These strings appear in the OpenAPI document and in browser code — do not rename them.
+ */
 export enum PersonalConfigurationHttpErrors
 {
 	/** The request has no authenticated personal owner. */
@@ -14,17 +23,17 @@ export enum PersonalConfigurationHttpErrors
 	ListUnavailable = "configuration_list_unavailable",
 	/** The owner decision payload is malformed. */
 	InvalidDecision = "invalid_configuration_decision",
-	/** The proposal is absent, hidden, or no longer decidable. */
+	/** The proposal does not exist, belongs to someone else, or was already decided. */
 	ChangeNotFound = "configuration_change_not_found",
-	/** The decision authority could not produce a durable result. */
+	/** The decision could not be written. */
 	DecisionUnavailable = "configuration_decision_unavailable",
 	/** The materialisation request body or path is malformed. */
 	InvalidMaterialization = "invalid_configuration_materialization",
-	/** The materialisation authority could not produce a durable result. */
+	/** The change could not be applied. */
 	MaterializationUnavailable = "configuration_materialization_unavailable",
 }
 
-/** Trusted browser identity for the owner-only configuration-proposal read surface. */
+/** Who the request is from, worked out by the server and never taken from request input. */
 export interface PersonalConfigurationCaller
 {
 	/** Selected silo derived from the trusted request host. */
@@ -33,10 +42,10 @@ export interface PersonalConfigurationCaller
 	readonly userId: string;
 }
 
-/** Composition ports for the owner-only personal configuration state router. */
+/** Everything the configuration router needs, supplied when it is composed. */
 export interface PersonalConfigurationRouterDependencies
 {
-	/** Resolves the browser caller without accepting owner coordinates from request input. */
+	/** Returns who the request is from, ignoring any owner ids in the request itself. */
 	resolveCaller(request: Request): PersonalConfigurationCaller | null;
 	/** Reads only durable proposals owned by the resolved caller. */
 	readonly changes: PersonalConfigurationChangeViewRepository;

@@ -17,7 +17,7 @@ keywords:
 maintainers:
   - name: OpenCrane
 dependencies:
-  # Shared named-template substrate (labels, fullname, RBAC rule sets, env helpers).
+  # Shared named-template library (labels, fullname, RBAC rule sets, env helpers).
   - name: k8s-platform
     version: 0.8.0
     repository: "file://platform"

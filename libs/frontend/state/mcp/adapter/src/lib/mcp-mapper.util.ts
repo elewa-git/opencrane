@@ -6,7 +6,7 @@ import { McpAccessPolicy, McpApprovalStatus, McpConnectionStatus, McpCredentialF
  * Local projections of the `/api/v1/mcp/...` JSON — WeOwnAI never imports
  * OpenCrane source. Enum-bearing fields arrive as raw strings, so the mappers
  * coerce them through the known enum values (with a safe default) and fill
- * missing collections, keeping the read models the components consume total.
+ * missing collections, so every field on the read models is always set — components never see undefined.
  */
 
 /** Wire shape of a catalogue server. */

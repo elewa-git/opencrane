@@ -1,9 +1,11 @@
 import type { ConversationId, MessageId } from "./identifiers.types.js";
 
 /**
- * Stable source kinds for one database-ordered conversation timeline.
+ * What kind of record occupies one timeline position.
  *
- * The persisted values identify a source record; they never replace the source authority.
+ * The timeline is an ordering only. Each entry points at the real record — a message, a run event,
+ * a membership change — and a reader must still fetch that record and honour its own access
+ * checks. Reading the timeline never grants access to what it points at.
  */
 export enum ConversationTimelineEntryKinds
 {
@@ -19,14 +21,14 @@ export enum ConversationTimelineEntryKinds
 	ParentDelivery = "parent_delivery",
 }
 
-/** Fields shared by every database-owned conversation timeline position. */
+/** The fields every timeline entry has. `position` is allocated by the database, so a writer must never choose one. */
 export interface ConversationTimelineEntryBase
 {
 	/** Conversation owning this sequence position. */
 	readonly conversationId: ConversationId;
-	/** One-based monotonic position allocated atomically within the conversation. */
+	/** Position in this conversation, starting at 1 with no gaps. The database allocates it atomically, so two concurrent writers cannot get the same number. */
 	readonly position: string;
-	/** Display-safe source payload, or null when the referenced record owns all data. */
+	/** A small safe-to-display copy of the source, or null when the reader must fetch the referenced record instead. */
 	readonly payload: Readonly<Record<string, unknown>> | null;
 	/** ISO-8601 instant at which the timeline position was committed. */
 	readonly occurredAt: string;
@@ -84,7 +86,14 @@ export interface ConversationParentDeliveryTimelineEntry extends ConversationTim
 /** Exact source reference occupying one canonical conversation timeline position. */
 export type ConversationTimelineEntry = ConversationMessageTimelineEntry | ConversationRunEventTimelineEntry | ConversationMembershipTimelineEntry | ConversationSystemTimelineEntry | ConversationParentDeliveryTimelineEntry;
 
-/** Resumable replay coordinate bound to exactly one conversation and monotonic position. */
+/**
+ * Where a client resumes replaying one conversation.
+ *
+ * Bound to a single conversation: a cursor from one conversation must never be accepted for
+ * another. `subframe` is present only when a client stopped part-way through the AG-UI events
+ * produced by one timeline row, and absent when that row was fully delivered.
+ * @see {@link __ProjectAgUiEvents}
+ */
 export interface ConversationReplayCursor
 {
 	/** Conversation whose replay may resume. */

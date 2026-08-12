@@ -1,6 +1,6 @@
 import type { AgUiSseRecord } from "./ag-ui-projection.types.js";
 
-/** Encode one versioned AG-UI projection as a single, injection-safe SSE record. */
+/** Encode one AG-UI event as an SSE record, escaped so a payload cannot forge extra SSE fields. */
 export function __EncodeAgUiSseRecord(record: AgUiSseRecord): string
 {
 	if (record.id !== undefined && /[\r\n]/u.test(record.id))

@@ -35,7 +35,7 @@ export function _ParsePersonalConfigurationProposalCommand(value: unknown): Prop
 	return parsed.success ? parsed.data : null;
 }
 
-/** Canonicalise JSON-compatible input before deriving the only durable patch identity. */
+/** Put JSON input into a fixed key order before hashing it, so the same patch always gets the same id. */
 function _DigestPatch(value: PersonalConfigurationPatch): string | null
 {
 	try

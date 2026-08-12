@@ -21,10 +21,11 @@ function _capabilitiesEqual(
 }
 
 /**
- * Determines whether a grant applies structurally to a request before priority evaluation.
+ * Determines whether a grant's silo, subject, capability, resource, and scope all match a
+ * request. Time and priority are checked separately, later.
  * @param grant - Candidate authorization grant.
  * @param request - Authorization request being evaluated.
- * @returns Whether the grant applies to the request.
+ * @returns True only when all five match; scope match allows a broader granted scope to cover a narrower request.
  */
 function _grantApplies(grant: AuthorizationGrant, request: AuthorizationRequest): boolean
 {
@@ -35,7 +36,7 @@ function _grantApplies(grant: AuthorizationGrant, request: AuthorizationRequest)
 		&& __AuthorizationScopeCovers(grant.scope, request.scope);
 }
 
-/** Returns whether one structurally matching grant has well-formed validity boundaries. */
+/** Returns whether a grant's validity times make sense: a non-negative start, an expiry after the start, and a revocation not before the start. */
 function _grantValidityIsWellFormed(grant: AuthorizationGrant): boolean
 {
 	return Number.isSafeInteger(grant.validFromEpochMs)
@@ -55,12 +56,23 @@ function _grantIsActive(grant: AuthorizationGrant, nowEpochMs: number): boolean
 }
 
 /**
- * Produces a deterministic fail-closed authorization decision.
- * Higher priorities replace lower priorities and deny wins whenever effects
- * conflict at the same highest priority.
- * @param request - Authorization request being evaluated.
- * @param grants - Candidate grants available to the evaluator.
- * @returns Deterministic authorization decision with winning evidence.
+ * Decide whether one request is allowed, given the grants that might apply.
+ *
+ * Order of resolution: keep the grants whose silo, subject, capability, resource, and scope match;
+ * drop the ones not in force right now; take only those at the highest `priority`; and if any of
+ * those says deny, the answer is deny. A higher priority completely replaces a lower one — it does
+ * not add to it.
+ *
+ * Fails closed. No matching grant, a malformed time, a malformed priority, or a malformed request
+ * clock all produce a deny, never an allow. The same inputs always give the same answer, so a
+ * decision can be re-derived from an audit record.
+ *
+ * Called by: `libs/backend/server/iam/authorization/main/src/effective-access.ts`,
+ * `libs/backend/server/iam/grants/main/src/routes/shares.ts`.
+ * @param request - The action being attempted, including the caller's trusted current time.
+ * @param grants - Every grant that might apply; unrelated grants are safe to include.
+ * @returns The outcome, a stable `reason` for audit, and the grant ids that decided it — including the offending ids when the deny was caused by malformed data.
+ * @see {@link AuthorizationDecisionReason}
  */
 export function __DecideAuthorization(
 	request: AuthorizationRequest,
@@ -73,7 +85,7 @@ export function __DecideAuthorization(
 		return { outcome: AuthorizationDecisionOutcomes.Deny, reason: "invalid_request_time", grantIds: [] };
 	}
 
-	// 2. Structural matching excludes grants from other trust and scope boundaries.
+	// 2. Keep only grants whose silo, subject, capability, resource, and scope match the request.
 	const matchingGrants = grants.filter(grant => _grantApplies(grant, request));
 
 	// 3. An absent grant always denies because authorization is fail closed.
@@ -82,7 +94,7 @@ export function __DecideAuthorization(
 		return { outcome: AuthorizationDecisionOutcomes.Deny, reason: "no_matching_grant", grantIds: [] };
 	}
 
-	// 4. Invalid validity metadata makes the matching authority set untrustworthy.
+	// 4. If any matching grant has malformed validity times, deny — the whole matching set is suspect.
 	const invalidValidityGrants = matchingGrants.filter(grant => !_grantValidityIsWellFormed(grant));
 	if (invalidValidityGrants.length > 0)
 	{
@@ -93,7 +105,7 @@ export function __DecideAuthorization(
 		};
 	}
 
-	// 5. Invalid precedence cannot safely participate in ordering, so reject the request.
+	// 5. A grant with a malformed priority cannot be ordered against the others, so deny.
 	const invalidPriorityGrants = matchingGrants.filter(grant => !Number.isSafeInteger(grant.priority) || grant.priority < 0);
 	if (invalidPriorityGrants.length > 0)
 	{

@@ -14,7 +14,7 @@ def resolve_tool_results(
     tool_results: list[object],
     post_candidate,
 ) -> dict[str, object] | None:
-    """Validate and consume exact saved tool results, or reject the whole batch."""
+    """Validate and consume the saved tool results, or reject the whole batch."""
     # Keep validation output separate from registry state. Only after the complete wire batch has a
     # recognised terminal shape may this function consume the corresponding pending calls.
     validated: list[tuple[str, object]] = []

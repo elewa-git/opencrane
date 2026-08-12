@@ -3,7 +3,20 @@ import { createHash } from "node:crypto";
 import type { AgentRuntimeJobAssignment } from "./agent-runtime-job.types.js";
 import { _IsBoundedAgentRuntimeCoordinate } from "./agent-runtime-profile.js";
 
-/** Validate assignment coordinates that cross from durable authority into Kubernetes metadata. */
+/**
+ * Throw unless every assignment field is safe to write into Kubernetes names, labels, and annotations.
+ *
+ * These values come from the database and end up addressing real cluster objects, so they are
+ * checked here rather than trusted: the attempt must be a positive integer, each identifier must be
+ * non-empty, at most 256 characters, and free of control characters, the namespace must be a DNS
+ * label, and the Secret name must be a valid DNS subdomain.
+ *
+ * Called by: {@link __BuildSuspendedAgentRuntimeJob} and {@link __AgentRuntimeAttemptResourceName}.
+ * @param assignment - Recorded run coordinates about to be written into a Job.
+ * @throws When any of the above fails. Nothing is returned, so passing means the whole assignment
+ * is safe to use.
+ * @see {@link _IsBoundedAgentRuntimeCoordinate}
+ */
 export function _AssertAgentRuntimeJobAssignment(assignment: AgentRuntimeJobAssignment): void
 {
 	if (!Number.isSafeInteger(assignment.attempt) || assignment.attempt < 1)
@@ -27,7 +40,13 @@ export function _AssertAgentRuntimeJobAssignment(assignment: AgentRuntimeJobAssi
 	}
 }
 
-/** Derive the stable Kubernetes resource name from one validated run-attempt assignment. */
+/**
+ * Derive the attempt's resource name: a fixed prefix, the attempt number, and a hash of silo, run,
+ * and attempt. Expects an already-validated assignment — it does no checking of its own.
+ *
+ * The hash keeps the name short enough for Kubernetes while staying unique per attempt, and the
+ * attempt number stays readable in the clear so a Job can be identified at a glance.
+ */
 export function _AgentRuntimeAttemptResourceName(assignment: AgentRuntimeJobAssignment): string
 {
 	const digest = createHash("sha256").update(`${assignment.siloId}\u0000${assignment.runId}\u0000${assignment.attempt}`).digest("hex").slice(0, 24);

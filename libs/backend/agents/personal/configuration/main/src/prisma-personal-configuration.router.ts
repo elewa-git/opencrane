@@ -11,7 +11,7 @@ import type { PersonalConfigurationCaller } from "./http/personal-configuration.
 import { PrismaPersonalConfigurationDecisionRepository } from "./decision/prisma-personal-configuration-decision-repository.js";
 import { PrismaPersonalConfigurationViewRepository } from "./query/prisma-personal-configuration-view-repository.js";
 
-/** Maps authenticated request facts to the caller contract owned by personal configuration. */
+/** Turns the authenticated request into the caller shape this package uses, or null when there is no session. */
 function _resolveCaller(request: Parameters<typeof _ResolveRequestPrincipal>[0]): PersonalConfigurationCaller | null
 {
 	const principal = _ResolveRequestPrincipal(request);
@@ -19,8 +19,15 @@ function _resolveCaller(request: Parameters<typeof _ResolveRequestPrincipal>[0])
 }
 
 /**
- * Composes the Prisma-backed owner-only personal configuration router.
- * @param prisma - Canonical product-authority client.
+ * Builds the personal configuration router, where a user can only read and change their own
+ * proposals.
+ *
+ * Wires the three routes to their repositories and to a clock, so no route ever takes an owner
+ * id or a timestamp from the request. Mounted at `/api/v1/me/configuration`.
+ *
+ * Called by: `routes.ts` in apps/opencrane/src/app.
+ *
+ * @param prisma - Product database client.
  * @param logger - Process logger supplied by the app composition root.
  * @returns The configured personal configuration router.
  */

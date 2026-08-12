@@ -6,7 +6,7 @@ import { __AgentRuntimeAttemptResourceName } from "@opencrane/backend/agents/run
 import { __CreateKubernetesRuntimeWorkloadCleanupStore } from "../runtime-workload-cleanup-store.js";
 import type { KubernetesRuntimeWorkloadCleanupBatchApi, KubernetesRuntimeWorkloadCleanupProjection, KubernetesRuntimeWorkloadCleanupStore } from "../runtime-workload-cleanup-store.types.js";
 
-/** Canonical cleanup projection used by the Kubernetes adapter tests. */
+/** Build the cleanup input these adapter tests share, with optional field overrides. */
 function _Projection(overrides: Partial<KubernetesRuntimeWorkloadCleanupProjection> = {}): KubernetesRuntimeWorkloadCleanupProjection
 {
 	return {
@@ -23,7 +23,7 @@ function _Projection(overrides: Partial<KubernetesRuntimeWorkloadCleanupProjecti
 	};
 }
 
-/** Build the exact authority fields projected by the runtime Job launcher. */
+/** Build a Job carrying the same labels and annotations the runtime Job launcher would write. */
 function _Job(workload: KubernetesRuntimeWorkloadCleanupProjection, overrides: Partial<V1Job> = {}): V1Job
 {
 	const name = __AgentRuntimeAttemptResourceName(workload.siloId, workload.runId, workload.attempt);
@@ -44,7 +44,7 @@ function _Job(workload: KubernetesRuntimeWorkloadCleanupProjection, overrides: P
 	};
 }
 
-/** Narrow Batch API double with independently observable reads and deletes. */
+/** Build a Batch API fake whose read and delete calls can each be checked separately. */
 function _BatchApi(job: V1Job): KubernetesRuntimeWorkloadCleanupBatchApi
 {
 	return {
@@ -53,7 +53,7 @@ function _BatchApi(job: V1Job): KubernetesRuntimeWorkloadCleanupBatchApi
 	};
 }
 
-/** Create the adapter with the same bounded request policy used by process composition. */
+/** Create the adapter with the same timeout and shutdown signal the real process gives it. */
 function _Store(batchApi: KubernetesRuntimeWorkloadCleanupBatchApi, shutdownSignal: AbortSignal = new AbortController().signal, requestTimeoutMilliseconds = 5_000): KubernetesRuntimeWorkloadCleanupStore
 {
 	return __CreateKubernetesRuntimeWorkloadCleanupStore({ batchApi, requestTimeoutMilliseconds, shutdownSignal });

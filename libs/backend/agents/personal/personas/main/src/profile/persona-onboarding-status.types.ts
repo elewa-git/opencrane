@@ -1,10 +1,10 @@
 import { PersonaOnboardingApiStates } from "./persona-lifecycle.types.js";
 import type { PersonaColourValues, PersonaModifierValues, PersonaScoreResult } from "../scoring/persona-scorer.types.js";
 
-/** Owner-visible resumable state of the required personal persona onboarding flow. */
+/** What the owner still has to do in persona onboarding, plus enough detail to resume it. */
 export interface PersonaOnboardingStatus
 {
-	/** Whether an approved persona currently makes a personal session eligible. */
+	/** Which step the owner is on: interview, tie resolution, review, or ready. */
 	readonly state: PersonaOnboardingApiStates.Interview | PersonaOnboardingApiStates.Resolution | PersonaOnboardingApiStates.Review | PersonaOnboardingApiStates.Ready;
 	/** Current interview identifier, or null before the interview is started. */
 	readonly interviewId: string | null;
@@ -14,9 +14,9 @@ export interface PersonaOnboardingStatus
 	readonly questionCount: number;
 	/** Current draft or approved revision identifier, when one exists. */
 	readonly personaRevisionId: string | null;
-	/** Frozen reviewed questions and current immutable answers for resume. */
+	/** The interview's pinned questions plus any answer already given, so the browser can resume. */
 	readonly questions: readonly PersonaStatusQuestion[];
-	/** Exact next tie boundary, or null when unambiguous. */
+	/** The tie the owner must break next, or null when scoring produced a clear winner. */
 	readonly resolution: PersonaScoreResult["resolutionRequired"];
 	/** Reviewable or approved persona result, or null before scoring completes. */
 	readonly result: PersonaStatusResult | null;
@@ -61,19 +61,41 @@ export interface PersonaStatusResult
 	readonly secondaryColour: PersonaColourValues;
 	/** Resolved Explorer/Guardian modifier. */
 	readonly modifier: PersonaModifierValues;
-	/** Authoritative raw colour counters. */
+	/** The colour counters exactly as scored, not percentages. */
 	readonly colourScores: PersonaScoreResult["colours"];
-	/** Authoritative raw modifier counters. */
+	/** The Explorer and Guardian counters exactly as scored, not percentages. */
 	readonly opennessScores: PersonaScoreResult["openness"];
-	/** Three through five provenance-linked owner-visible insights. */
+	/** Three to five short explanations shown to the owner, each derived from one of their answers. */
 	readonly insights: readonly string[];
-	/** Exact immutable compiled instructions under review, or null before a draft exists. */
+	/** The compiled persona instructions the owner is reviewing, or null before a draft exists. */
 	readonly instructionPreview: string | null;
 }
 
-/** Read-only persistence port for one authenticated owner's onboarding status. */
+/**
+ * Reads the owner's current persona onboarding state.
+ *
+ * This is the one read the browser polls to decide what to show, so it never writes and never fails
+ * with a refusal — an owner with no profile at all gets the empty starting status rather than an error.
+ *
+ * Called by: the GET /me/persona route in persona-onboarding.router.ts, via the router's `status`
+ * dependency. Implemented by `PrismaPersonaOnboardingStatusRepository` and, through delegation, by
+ * `PrismaPersonaPersistenceUnitOfWork`.
+ *
+ * @see PersonaOnboardingStatus
+ */
 export interface PersonaOnboardingStatusRepository
 {
-	/** Reads the latest durable onboarding facts for the exact silo and user. */
+	/**
+	 * Reads the current onboarding state for this silo and user.
+	 *
+	 * @param siloId - Silo taken from the authenticated request host.
+	 * @param userId - The signed-in owner.
+	 * @returns The owner's status. Branch on `state`: `interview` means send them to the questions,
+	 * `resolution` means a tie needs breaking, `review` means a result is waiting for approval, and
+	 * `ready` means an approved persona is active. An owner with no profile yet gets the `interview`
+	 * state with empty lists, so the caller needs no separate not-found branch.
+	 * @throws Error when a stored revision's score JSON cannot be validated against its own columns —
+	 * that is a data fault, not a normal outcome.
+	 */
 	readStatus(siloId: string, userId: string): Promise<PersonaOnboardingStatus>;
 }

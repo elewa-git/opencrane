@@ -1,15 +1,21 @@
 import type { PersonaArchetypeTones } from "@opencrane/elements/ui";
 
-/** Finite presentation states supplied by the first-chat orchestration owner. */
+/**
+ * Which screen the first chat is showing. The page works it out; the component only renders it.
+ *
+ * `Reconnecting` and `Submitting` both disable the composer but keep the transcript on screen, so
+ * the user never loses what they have written. `Error` is recoverable — a retry is offered.
+ * `Completed` removes the composer entirely.
+ */
 export enum PersonaFirstChatStates
 {
 	/** The current calibration question accepts an owner answer. */
 	AwaitingCalibration = "awaiting_calibration",
-	/** The current owner answer is being admitted by the conversation authority. */
+	/** The user's answer is being sent; the transcript stays visible and the composer is disabled. */
 	Submitting = "submitting",
-	/** Saved transcript evidence remains readable while the authoritative projection reloads. */
+	/** The connection dropped and state is reloading; the saved transcript stays readable. */
 	Reconnecting = "reconnecting",
-	/** All admitted answers are being validated for server-owned onboarding completion. */
+	/** The server is checking the answers before finishing onboarding. */
 	Finishing = "finishing",
 	/** The authority has confirmed that all three calibration answers are complete. */
 	Completed = "completed",
@@ -17,16 +23,21 @@ export enum PersonaFirstChatStates
 	Error = "error"
 }
 
-/** Speaker roles rendered in the deterministic first-chat transcript. */
+/** Who said a line: the agent or the user. */
 export enum PersonaFirstChatMessageRoles
 {
 	/** Message emitted by the approved personal agent snapshot. */
 	Agent = "agent",
-	/** Ordinary conversation evidence supplied by the signed-in owner. */
+	/** Something the user typed. */
 	Owner = "owner"
 }
 
-/** Approved CSS classes that map persona archetypes to one provenance-strip owner. */
+/**
+ * The CSS class for the provenance strip, one per archetype.
+ *
+ * A fixed set rather than a template string, so no archetype value from the server can ever become
+ * an arbitrary class name.
+ */
 export enum PersonaFirstChatArchetypeClasses
 {
 	/** Commander provenance treatment backed by the shared red archetype token. */
@@ -39,10 +50,10 @@ export enum PersonaFirstChatArchetypeClasses
 	Analyst = "wo-first-chat__provenance--analyst"
 }
 
-/** One of the canonical three sequential bootstrap questions. */
+/** Which of the three bootstrap questions: 1, 2 or 3. */
 export type PersonaFirstChatQuestionOrdinal = 1 | 2 | 3;
 
-/** Presentational identity of the approved personal agent. */
+/** The agent's name, initials and tone, as shown above the transcript. */
 export interface PersonaFirstChatIdentity
 {
 	/** Human-readable agent name shown beside its avatar. */
@@ -53,7 +64,7 @@ export interface PersonaFirstChatIdentity
 	readonly archetype: PersonaArchetypeTones;
 }
 
-/** Reviewed sources that produced this one-time bootstrap conversation. */
+/** Which persona revision and question set this conversation came from, shown so the user can check. */
 export interface PersonaFirstChatProvenance
 {
 	/** Exact approved persona revision label exposed for owner verification. */
@@ -64,10 +75,10 @@ export interface PersonaFirstChatProvenance
 	readonly scriptRevision: string;
 }
 
-/** One immutable message supplied in authoritative transcript order. */
+/** One line of the conversation, already in display order. */
 export interface PersonaFirstChatTranscriptMessage
 {
-	/** Stable event identifier used to preserve DOM identity across reconnects. */
+	/** Message id; use it as the track key so a reconnect does not rebuild the whole transcript. */
 	readonly id: string;
 	/** Speaker role that selects transcript alignment and accessible labelling. */
 	readonly role: PersonaFirstChatMessageRoles;
@@ -75,18 +86,18 @@ export interface PersonaFirstChatTranscriptMessage
 	readonly body: string;
 }
 
-/** Current archetype-specific calibration question selected by orchestration. */
+/** The question to show now, chosen by the server for this archetype. */
 export interface PersonaFirstChatQuestion
 {
 	/** Stable question identifier returned with the answer intent. */
 	readonly id: string;
-	/** Canonical position in the three-question bootstrap sequence. */
+	/** Which of the three questions this is. */
 	readonly ordinal: PersonaFirstChatQuestionOrdinal;
 	/** Reviewed archetype-specific question text. */
 	readonly prompt: string;
 }
 
-/** Owner intent emitted without advancing or completing the conversation locally. */
+/** What the composer emits when the user sends an answer. Sending it changes nothing on screen by itself. */
 export interface PersonaFirstChatAnswerIntent
 {
 	/** Stable identifier of the question visible when Enter or Send was used. */
@@ -95,14 +106,23 @@ export interface PersonaFirstChatAnswerIntent
 	readonly answer: string;
 }
 
-/** Complete pure presentation derived from one authoritative first-chat projection. */
+/**
+ * Everything the first-chat screen needs, and nothing more.
+ *
+ * Built by _ToPersonaFirstChatView from a server snapshot, so the component can be given plain data
+ * and never has to know about snapshots, stores or workflow states. It exists only when the chat has
+ * really started — a snapshot without a persona or content source cannot produce one, and the page
+ * shows its preparing state instead.
+ *
+ * @see PersonaFirstChatSnapshot
+ */
 export interface PersonaFirstChatView
 {
 	/** Approved personal-agent identity rendered by the conversation surface. */
 	readonly identity: PersonaFirstChatIdentity;
 	/** Exact persona and bootstrap source provenance shown to the owner. */
 	readonly provenance: PersonaFirstChatProvenance;
-	/** Canonical transcript adapted without changing server order. */
+	/** The conversation, renamed for display but left in the server's order. */
 	readonly transcript: readonly PersonaFirstChatTranscriptMessage[];
 	/** Current server-selected question, or null after all answers. */
 	readonly currentQuestion: PersonaFirstChatQuestion | null;

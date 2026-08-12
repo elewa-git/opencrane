@@ -1,42 +1,42 @@
-/** Stable lifecycle values returned by the aggregate read port. */
+/** The interview states this reader returns. */
 export enum PersonaAggregateInterviewStates
 {
 	/** The owner may still append reviewed-question answers. */
 	InProgress = "in_progress",
-	/** The answer evidence is frozen for deterministic drafting. */
+	/** The answers are frozen, so a draft can be derived from them. */
 	Completed = "completed",
 }
 
-/** Coordinates that identify one owner profile inside the canonical product database. */
+/** Identifies one owner's persona profile by silo, owner, and profile id. */
 export interface PersonaProfileReadCommand
 {
 	/** Silo that owns the persona aggregate. */
 	readonly siloId: string;
 	/** Authenticated owner of the aggregate. */
 	readonly userId: string;
-	/** Persona profile receiving the lifecycle mutation. */
+	/** The persona profile being read or changed. */
 	readonly personaProfileId: string;
 }
 
-/** Coordinates that identify one owner profile where the silo is read from the owned row. */
+/** Identifies one owner's persona profile without naming the silo; the silo comes back from the row. */
 export interface PersonaProfileOwnerReadCommand
 {
 	/** Authenticated owner of the aggregate. */
 	readonly userId: string;
-	/** Persona profile receiving the lifecycle mutation. */
+	/** The persona profile being read or changed. */
 	readonly personaProfileId: string;
 }
 
-/** Owner-profile evidence shared by persona lifecycle mutations. */
+/** The profile fields the interview, draft, and approval paths all need. */
 export interface PersonaProfileRecord
 {
-	/** Silo retained for proposal application after the profile read succeeds. */
+	/** The profile's silo, needed later to apply a refresh proposal. */
 	readonly siloId: string;
 	/** Previously active immutable persona revision, if any. */
 	readonly activeRevisionId: string | null;
 }
 
-/** Coordinates that identify one interview owned by the caller's profile. */
+/** Identifies one interview belonging to the caller's profile. */
 export interface PersonaInterviewReadCommand
 {
 	/** Persona profile that owns the interview. */
@@ -47,7 +47,7 @@ export interface PersonaInterviewReadCommand
 	readonly interviewId: string;
 }
 
-/** Interview evidence required by answer, completion, and draft steps. */
+/** The interview fields the answer, completion, and draft steps need. */
 export interface PersonaInterviewRecord
 {
 	/** Reviewed question-set identifier frozen when the interview started. */
@@ -58,7 +58,7 @@ export interface PersonaInterviewRecord
 	readonly state: PersonaAggregateInterviewStates;
 }
 
-/** Coordinates that identify one draft revision owned by the caller's profile. */
+/** Identifies one draft revision belonging to the caller's profile. */
 export interface PersonaDraftRevisionReadCommand
 {
 	/** Persona profile that owns the draft revision. */
@@ -67,7 +67,7 @@ export interface PersonaDraftRevisionReadCommand
 	readonly personaRevisionId: string;
 }
 
-/** Draft evidence needed to finish approval. */
+/** The draft revision fields approval still needs. */
 export interface PersonaDraftRevisionRecord
 {
 	/** Interview whose exact refresh proposal may be applied after approval. */
@@ -75,17 +75,24 @@ export interface PersonaDraftRevisionRecord
 }
 
 /**
- * Typed persona-aggregate read port for all lifecycle evidence and latest-revision operations.
+ * Reads the profile, interview, and revision rows every persona lifecycle step needs.
  *
- * Every method must run inside a Serializable transaction: the repository takes no row locks, so
- * concurrent writers that would invalidate a read surface as serialization or unique-key failures
- * that the owning authority translates into its explicit conflict outcome.
+ * Every method must run inside a transaction at PostgreSQL's SERIALIZABLE isolation level. This port
+ * takes no row locks of its own, so that isolation level is the only thing stopping two writers from
+ * both passing their checks: a writer that would invalidate one of these reads makes the transaction
+ * fail instead, as a serialization error (P2034) or a unique-key clash (P2002), which the calling use
+ * case reports as its conflict outcome.
+ *
+ * Running these reads at a weaker isolation level loses that guarantee without any error, which is why
+ * the requirement is stated here rather than left to each caller.
+ *
+ * @see PersonaAggregateInterviewStates
  */
 export interface PersonaAggregateReadRepository
 {
-	/** Reads an exact profile with a silo and owner proof. */
+	/** Reads the profile matching this id, silo, and owner; null when no row matches all three. */
 	readProfile(command: PersonaProfileReadCommand): Promise<PersonaProfileRecord | null>;
-	/** Reads an owner profile while returning its durable silo coordinate. */
+	/** Reads the profile matching this id and owner, returning its silo; null when no row matches. */
 	readProfileForOwner(command: PersonaProfileOwnerReadCommand): Promise<PersonaProfileRecord | null>;
 	/** Reads one owner interview before answer or completion mutation. */
 	readInterview(command: PersonaInterviewReadCommand): Promise<PersonaInterviewRecord | null>;
@@ -93,6 +100,6 @@ export interface PersonaAggregateReadRepository
 	readCompletedInterview(command: PersonaInterviewReadCommand): Promise<PersonaInterviewRecord | null>;
 	/** Reads one still-draft revision before approval. */
 	readDraftRevision(command: PersonaDraftRevisionReadCommand): Promise<PersonaDraftRevisionRecord | null>;
-	/** Reads the next profile-local revision inside the same serializable transaction as its insert. */
+	/** Returns the next revision number for a profile. Must run in the same Serializable transaction as the insert that uses it. */
 	readNextRevision(personaProfileId: string): Promise<number>;
 }

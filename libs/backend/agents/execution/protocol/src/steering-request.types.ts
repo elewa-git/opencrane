@@ -1,9 +1,9 @@
 import type { JsonValue } from "@opencrane/util";
 
-/** Server-derived request to queue one owner's instruction for the current run attempt. */
+/** Request to queue one owner's instruction for the run's current attempt. Only the text comes from the caller. */
 export interface SubmitSteeringRequestCommand
 {
-	/** Logical run selected by the public path. */
+	/** Run named in the request path. */
 	readonly runId: string;
 	/** Silo resolved from the authenticated request host. */
 	readonly siloId: string;
@@ -23,9 +23,27 @@ export type SubmitSteeringRequestResult =
 	| { readonly outcome: "not_found_or_not_owner" }
 	| { readonly outcome: "run_not_steerable" };
 
-/** Atomic product-authority boundary for owner-submitted runtime steering. */
+/**
+ * Saves owner-submitted steering, in one transaction.
+ *
+ * Ownership and steerability are checked in the same transaction as the insert, under the run's
+ * lock, because both can change between an HTTP request arriving and the row being written. Doing
+ * it in one step is what stops a run being steered by someone who no longer owns it.
+ *
+ * Called by: `__CreateSteeringIngestRouter` (steering-ingest.router.ts) through its injected
+ * `requests` port. Implemented by `PrismaSteeringRequestRepository`.
+ */
 export interface SteeringRequestRepository
 {
-/** Queue a request only for the authenticated owner's current attempt before its sole resume command. */
+	/**
+	 * Queue one instruction for the signed-in owner's current attempt.
+	 *
+	 * @param command - The run, silo, subject, instruction, digest, and submission time.
+	 * @returns `queued` with the new id and attempt - answer 202. `not_found_or_not_owner` - answer 404
+	 * and say nothing more, so the endpoint cannot be used to discover other people's runs.
+	 * `run_not_steerable` - answer 409: the run exists and is owned by the caller, but it is not in a
+	 * steerable state, or a resume command has already been sent for this attempt and steering can no
+	 * longer be folded in.
+	 */
 	submitAtomically(command: SubmitSteeringRequestCommand): Promise<SubmitSteeringRequestResult>;
 }

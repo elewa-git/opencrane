@@ -6,7 +6,16 @@ import { _TerminalProposalResolution } from "./personal-configuration-materializ
 import { PersonalConfigurationMaterializationLifecycleStates, type PersonalConfigurationMaterializationChange, type PersonalConfigurationMaterializationResolution } from "./personal-configuration-materialization-state.types.js";
 import type { PersonalConfigurationMaterializationRepository } from "./personal-configuration-materialization-unit-of-work.types.js";
 
-/** Prisma repository for proposal evidence and the final application fence. */
+/**
+ * Reads a proposal for materialisation and, at the end, marks it applied.
+ *
+ * Takes a transaction client only, so both operations run in the materialisation transaction
+ * alongside agent-services' writes.
+ *
+ * Constructed by: {@link PrismaPersonalConfigurationMaterializationUnitOfWork.run}.
+ *
+ * @implements PersonalConfigurationMaterializationRepository
+ */
 export class PrismaPersonalConfigurationMaterializationRepository implements PersonalConfigurationMaterializationRepository
 {
 	/** Transaction-scoped ORM client supplied only by the owning unit of work. */
@@ -18,7 +27,14 @@ export class PrismaPersonalConfigurationMaterializationRepository implements Per
 		this.transaction = transaction;
 	}
 
-	/** Resolves owner, lifecycle, patch, and persona evidence from one serializable snapshot. */
+	/**
+	 * Reads the proposal for this owner and hands it to the strategy for its patch kind.
+	 *
+	 * @param command - Server-derived owner, proposal id and time.
+	 * @returns `Terminal` with `NotFoundOrNotOwner` when no proposal matches this user and silo —
+	 * the same answer given for another owner's proposal — otherwise whatever the patch kind's
+	 * strategy decides. Writes nothing either way.
+	 */
 	async resolve(command: MaterializePersonalConfigurationChangeCommand): Promise<PersonalConfigurationMaterializationResolution>
 	{
 		const change = await this.transaction.personalConfigurationChange.findFirst({
@@ -46,11 +62,19 @@ export class PrismaPersonalConfigurationMaterializationRepository implements Per
 	}
 
 	/**
-	 * Applies the exact still-accepted owner proposal after agent-services prepares its revision.
+	 * Moves the proposal to Applied, only while it is still Accepted, after agent-services has
+	 * created the revision.
 	 *
-	 * The target-database lifecycle trigger locks the referenced persona profile and rejects this
-	 * transition if its active revision no longer matches the proposal. Throwing on a lost compare-
-	 * and-set forces the owning unit of work to roll every agent-service mutation back as well.
+	 * The database's lifecycle trigger locks the persona profile and rejects this update if its
+	 * active revision no longer matches the proposal, so a change can never be applied to an agent
+	 * the user did not review.
+	 *
+	 * @param command - Server-derived owner, proposal id and time.
+	 * @param revisionId - The revision agent-services just created.
+	 * @returns `Applied` with that revision id.
+	 * @throws Error when the update matched no row. Throwing rather than returning is deliberate:
+	 * it makes the unit of work roll every agent-service write back as well, so no revision is
+	 * left behind for a proposal that was never applied.
 	 */
 	async apply(command: MaterializePersonalConfigurationChangeCommand, revisionId: string): Promise<PersonalConfigurationMaterializationPersistenceResult>
 	{
@@ -73,7 +97,7 @@ export class PrismaPersonalConfigurationMaterializationRepository implements Per
 		return { status: PersonalConfigurationMaterializationCodes.Applied, agentRevisionId: revisionId };
 	}
 
-	/** Reads the owner-bound persona head only when the selected strategy needs freshness evidence. */
+	/** Reads this owner's active persona revision; only a strategy that needs it calls this. */
 	private async _ReadActivePersonaRevision(personaProfileId: string, command: MaterializePersonalConfigurationChangeCommand): Promise<string | null>
 	{
 		const profile = await this.transaction.personaProfile.findFirst({
@@ -88,7 +112,7 @@ export class PrismaPersonalConfigurationMaterializationRepository implements Per
 	}
 }
 
-/** Maps the generated database lifecycle spelling to the personal materialisation state machine. */
+/** Converts Prisma's state value to this package's own state enum. */
 function _MaterializationLifecycleState(state: PersonalConfigurationChangeState): PersonalConfigurationMaterializationLifecycleStates
 {
 	switch (state)

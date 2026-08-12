@@ -11,7 +11,7 @@ function _Command(): PersonalRunAdmissionCommand
 	return { siloId: "silo-1", executionSubjectId: "user-1", conversationId: "conversation-1", requestIdempotencyKey: "request-1", inputMessageId: "message-1", inputMessageBlocks: [{ id: "block-1", kind: MessageContentBlockKinds.Text, value: "Hello" }] };
 }
 
-/** Builds a Prisma-shaped client that exposes one exact serializable transaction snapshot. */
+/** Builds a Prisma-shaped client that offers one serializable transaction. */
 function _Client(transaction: object): never
 {
 	return {

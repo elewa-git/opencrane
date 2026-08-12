@@ -16,7 +16,7 @@ import uuid
 from collections.abc import Callable
 from urllib.error import HTTPError, URLError
 
-# These aliases mark the process-composition seam: the entrypoint chooses concrete implementations,
+# These aliases mark where the process is composed: the entrypoint chooses concrete implementations,
 # while ``run_forever`` receives callables so lifecycle policy can be tested without real identity,
 # network, or model infrastructure. Lower-level packages must not import this composition root.
 from .bootstrap.exchange import BootstrapDeniedError, perform_bootstrap as _perform_bootstrap

@@ -7,13 +7,26 @@ import type { AuthorizedChannelTarget, ChannelTargetResolver, OpenCraneResolverO
 /** Default path of the audience-bound channel-proxy workload token. */
 export const __CHANNEL_PROXY_TOKEN_PATH = "/var/run/opencrane/tokens/opencrane.token";
 
-/** Workload-authenticated client for OpenCrane's internal channel target resolver. */
+/**
+ * Client that asks OpenCrane to authorize one event-stream request and return where to read it.
+ *
+ * Authenticates as this workload with its projected ServiceAccount token, re-read from disk on
+ * every call so kubelet rotation needs no restart. It forwards the browser's own authorization
+ * value in a separate private header, so OpenCrane can authorize the user while still knowing
+ * which workload is asking.
+ *
+ * Called by: `apps/channel-proxy/src/server.ts`.
+ * @implements ChannelTargetResolver
+ */
 export class __OpenCraneTargetResolver implements ChannelTargetResolver
 {
 	/** Validated client options. */
 	private readonly options: OpenCraneResolverOptions;
 
-	/** Construct an OpenCrane target resolver. */
+	/**
+	 * Construct a resolver.
+	 * @param options - Requires `baseUrl`; `workloadTokenPath`, `timeoutMs`, `readFile`, and `fetch` all fall back to defaults suitable for production.
+	 */
 	constructor(options: Partial<OpenCraneResolverOptions> & Pick<OpenCraneResolverOptions, "baseUrl">)
 	{
 		this.options = {
@@ -25,7 +38,18 @@ export class __OpenCraneTargetResolver implements ChannelTargetResolver
 		};
 	}
 
-	/** Resolve one operation through OpenCrane and fail closed on every malformed response. */
+	/**
+	 * Ask OpenCrane to authorize one event-stream read and return where to read it.
+	 *
+	 * Re-reads the workload token on every call, then applies its own timeout independently of the
+	 * browser connection so a slow authority cannot pin the request open. Any non-200, any response
+	 * that is not the exact expected shape, and any oversized body all throw rather than returning a
+	 * partial target.
+	 * @param request - The session, action, conversation, and optional cursor to authorize.
+	 * @param signal - Caller cancellation; combined with this client's own timeout.
+	 * @returns The authorized internal endpoint plus a short-lived invocation context and its expiry.
+	 * @throws Error when the token cannot be read, the call fails or times out, or the response is not the expected shape.
+	 */
 	async resolve(request: TargetResolutionRequest, signal: AbortSignal): Promise<AuthorizedChannelTarget>
 	{
 		// 1. Read the rotating projected token for every call so kubelet rotation needs no restart.
@@ -76,7 +100,7 @@ export class __OpenCraneTargetResolver implements ChannelTargetResolver
 	}
 }
 
-/** Parse the narrow resolver response without trusting structural casts. */
+/** Validate OpenCrane's response field by field, so a wrong-shaped body throws instead of being cast into the expected type. */
 function _ParseTarget(value: unknown): AuthorizedChannelTarget
 {
 	if (!value || typeof value !== "object" || Array.isArray(value))

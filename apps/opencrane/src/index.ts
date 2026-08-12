@@ -55,7 +55,7 @@ async function _Main(): Promise<void>
 	const externalActions = _CreateExternalActionWorker(prisma, memoryGateway, obot.invocation, _log);
 	const channelTargetRoutes = _StartChannelTargetRouteReconciler(prisma, config.runtime.channelTargets);
 
-	// 5. Build separate transport surfaces; only the internal app receives workload-only routes.
+	// 5. Build separate HTTP listeners; only the internal app receives workload-only routes.
 	const authentication = _CreatePublicAuthentication(prisma, kubernetes.customApi, config.standaloneFirstUserAdmission);
 	const publicApp = _CreatePublicApp(prisma, kubernetes.coreApi, managedRunAdmission, personalRunAdmission, runCancellation, config.runtime.serverNamespace, obot.custody, authentication);
 	publicApp.locals.artifactUploadGateway = _CreateArtifactUploadGateway(prisma);

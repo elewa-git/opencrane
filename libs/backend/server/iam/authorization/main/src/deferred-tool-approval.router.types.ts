@@ -26,7 +26,7 @@ export interface DeferredToolApprovalRouterDependencies
 {
 	/** Resolves session and host identity, or null when no authenticated caller exists. */
 	resolveCaller(request: Request): DeferredToolApprovalCaller | null;
-	/** Atomically records the decision after binding it to the durable approval owner. */
+	/** Records the decision in one transaction, and only if the stored approval belongs to this caller. */
 	readonly decisions: DeferredToolApprovalDecisionRepository;
 	/** Lists only the pending approvals owned by the browser caller. */
 	readonly pendingApprovals: SelfDeferredToolApprovalReadUnitOfWork;

@@ -5,10 +5,10 @@ import { describe, expect, it, vi } from "vitest";
 import { __CreateSkillAuthoringInputRouter } from "../skill-authoring-input.router.js";
 import type { SkillAuthoringInputRouterDependencies } from "../skill-authoring-input.types.js";
 
-/** Immutable artifact record selected by the database fence, never by the worker request. */
+/** Artifact record the database returns. The worker request never chooses it. */
 const _INPUT = { siloId: "silo-1", artifactId: "artifact-1", artifactRevisionId: "revision-1", contentAddress: `sha256:${"a".repeat(64)}`, byteLength: 13, mediaType: "application/gzip" };
 
-/** Builds an authoring input route whose security dependencies can be independently denied. */
+/** Builds the input route with a token reviewer and an authority that each test can make deny. */
 function _App(overrides: Partial<SkillAuthoringInputRouterDependencies> = {})
 {
 	const dependencies: SkillAuthoringInputRouterDependencies = {

@@ -33,27 +33,48 @@ const _AGENT_RUN_TRANSITIONS: Readonly<Record<AgentRunState, readonly AgentRunSt
 	cancelled: [],
 };
 
-/** Determines whether an agent service may move directly to the requested state. */
+/**
+ * Return whether an agent service may move straight from one state to another.
+ *
+ * Only the moves in the table above are legal; everything else, including staying in the same
+ * state, returns false. `retired` is terminal. Call this before writing a state change so an
+ * illegal transition is rejected rather than persisted.
+ *
+ * No caller outside this package's tests yet — the state tables are the contract other packages
+ * are expected to check against.
+ * @param current - The service's stored state.
+ * @param next - The state being requested.
+ * @returns True only for a legal direct move.
+ */
 export function __IsAgentServiceTransitionAllowed(current: AgentServiceState, next: AgentServiceState): boolean
 {
 	return _AGENT_SERVICE_TRANSITIONS[current].includes(next);
 }
 
-/** Determines whether an immutable agent revision may move directly to the requested state. */
+/** Return whether an agent revision may move straight from one state to another. Only the moves in the table above are legal; `rejected` and `retired` are terminal. */
 export function __IsAgentRevisionTransitionAllowed(current: AgentRevisionState, next: AgentRevisionState): boolean
 {
 	return _AGENT_REVISION_TRANSITIONS[current].includes(next);
 }
 
-/** Determines whether an agent run may move directly to the requested durable state. */
+/** Return whether an agent run may move straight from one state to another. Only the moves in the table above are legal; `completed`, `failed`, and `cancelled` are terminal. */
 export function __IsAgentRunTransitionAllowed(current: AgentRunState, next: AgentRunState): boolean
 {
 	return _AGENT_RUN_TRANSITIONS[current].includes(next);
 }
 
 /**
- * Determines whether an event can be appended to one contiguous persisted run stream.
- * The first event is sequence one and later events must match the run and increment by one.
+ * Return whether an event may be appended to a run's event stream.
+ *
+ * The stream has no gaps: the first event is sequence 1, and every later event must belong to the
+ * same run and be exactly one higher than the previous. Pass `null` as `previous` for the first
+ * event. A false result means the caller is about to create a gap or a duplicate, which would
+ * make replay and cursors unreliable.
+ *
+ * No caller outside this package's tests yet — the rule is the contract writers check against.
+ * @param previous - The last stored event for this run, or null when the stream is empty.
+ * @param next - The event about to be appended.
+ * @returns True only when appending keeps the stream contiguous and in one run.
  */
 export function __CanAppendRunEvent(previous: RunEvent | null, next: RunEvent): boolean
 {

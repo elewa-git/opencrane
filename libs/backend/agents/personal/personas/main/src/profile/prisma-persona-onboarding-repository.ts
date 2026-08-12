@@ -6,7 +6,7 @@ import { PERSONA_INTERPOLATION_MAP_ID, PERSONA_INTERPOLATION_MAP_VERSION, PERSON
 import { PersonaOnboardingDenialReasons, type EnsurePersonaOnboardingCommand, type EnsurePersonaOnboardingResult, type PersonaOnboardingRepository } from "./persona-onboarding-authority.types.js";
 import { PersonaLifecycleOutcomes } from "./persona-lifecycle.types.js";
 
-/** Prisma authority that verifies baseline-owned sources before provisioning the caller profile. */
+/** Prisma adapter that checks the seeded question set, scoring policy, and interpolation map exist, then creates the caller's profile. */
 export class PrismaPersonaOnboardingRepository implements PersonaOnboardingRepository
 {
 	/** Transaction-scoped ORM client supplied only by the persona unit of work. */
@@ -18,16 +18,16 @@ export class PrismaPersonaOnboardingRepository implements PersonaOnboardingRepos
 		this.transaction = transaction;
 	}
 
-	/** Verify the reviewed baseline source and create the authenticated owner's profile exactly once. */
+	/** Checks the seeded sources, then creates the owner's profile if it does not already exist. */
 	async ensureAtomically(command: EnsurePersonaOnboardingCommand): Promise<EnsurePersonaOnboardingResult>
 	{
 		return this._ensureWithinTransaction(command);
 	}
 
-	/** Verify the reviewed catalogue before provisioning the owner profile in the same transaction. */
+	/** Checks the seeded sources, then creates the owner's profile if it does not already exist, both in the caller's transaction. */
 	private async _ensureWithinTransaction(command: EnsurePersonaOnboardingCommand): Promise<EnsurePersonaOnboardingResult>
 	{
-		// 1. Fail closed unless the immutable product-owned questionnaire revision remains reviewed.
+		// 1. Refuse unless the question set exists at this version and is still Reviewed, and both derivation sources exist.
 		const [source, scoringPolicy, interpolationMap] = await Promise.all([
 			this.transaction.personaQuestionSet.findUnique({ where: { id_version: { id: PERSONA_ONBOARDING_QUESTION_SET_ID, version: PERSONA_ONBOARDING_QUESTION_SET_VERSION } }, select: { state: true } }),
 			this.transaction.personaScoringPolicy.findUnique({ where: { id_version: { id: PERSONA_SCORING_POLICY_ID, version: PERSONA_SCORING_POLICY_VERSION } }, select: { digest: true } }),
@@ -35,7 +35,7 @@ export class PrismaPersonaOnboardingRepository implements PersonaOnboardingRepos
 		]);
 		if (source?.state !== PersonaQuestionSetState.Reviewed || scoringPolicy === null || interpolationMap === null) return { outcome: PersonaLifecycleOutcomes.Denied, reason: PersonaOnboardingDenialReasons.CatalogueUnavailable };
 
-		// 2. Provision the authenticated owner's profile exactly once after catalogue validation.
+		// 2. Create the owner's profile, or leave the existing one untouched.
 		const provisionedAt = new Date(command.provisionedAt);
 		const profile = await this.transaction.personaProfile.upsert({ where: { siloId_userId: { siloId: command.siloId, userId: command.userId } }, create: { id: randomUUID(), siloId: command.siloId, userId: command.userId, createdAt: provisionedAt, updatedAt: provisionedAt }, update: {}, select: { id: true } });
 		return { outcome: PersonaLifecycleOutcomes.Ready, personaProfileId: profile.id, questionSet: { id: PERSONA_ONBOARDING_QUESTION_SET_ID, version: PERSONA_ONBOARDING_QUESTION_SET_VERSION }, derivation: { scoringPolicyId: PERSONA_SCORING_POLICY_ID, scoringPolicyVersion: PERSONA_SCORING_POLICY_VERSION, interpolationMapId: PERSONA_INTERPOLATION_MAP_ID, interpolationMapVersion: PERSONA_INTERPOLATION_MAP_VERSION } };

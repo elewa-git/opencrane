@@ -1,9 +1,12 @@
 import type { ConversationId } from "./identifiers.types.js";
 
 /**
- * Immutable persisted conversation modes shared by validation and command strategy selection.
+ * What kind of conversation this is. Fixed when the conversation is created and never changed.
  *
- * The readable values are part of the durable model contract and never grant authority by themselves.
+ * The mode decides what a submitted message does: in `AgentSession` it starts an agent run, in
+ * `Direct` and `Group` it is simply stored. It also decides whether an agent binding is required
+ * or forbidden — see {@link __HasValidConversationAgentBinding}. The strings are stored, so a
+ * rename breaks existing rows.
  */
 export enum ConversationModes
 {
@@ -16,9 +19,11 @@ export enum ConversationModes
 }
 
 /**
- * Monotonic persisted conversation lifecycle shared by validation and write admission.
+ * Whether a conversation still accepts writes. It only ever moves from `Open` to `Closed`.
  *
- * The readable values are stable storage and API vocabulary; participant-local archive state is separate.
+ * Closing is permanent and denies every command. Do not confuse it with a participant archiving
+ * the conversation, which is per-participant, reversible, and lives on
+ * {@link ConversationParticipant}.
  */
 export enum ConversationLifecycles
 {
@@ -61,7 +66,7 @@ export interface DirectConversation extends ConversationBase
 {
 	/** Immutable mode selecting the direct-message command strategy. */
 	readonly mode: ConversationModes.Direct;
-	/** Forbidden agent binding, expressed so object literals fail to compile when one is supplied. */
+	/** Never set. Declared as `never` so supplying an agent service on a direct conversation fails to compile. */
 	readonly agentServiceId?: never;
 }
 
@@ -70,28 +75,28 @@ export interface GroupConversation extends ConversationBase
 {
 	/** Immutable mode selecting the group-message command strategy. */
 	readonly mode: ConversationModes.Group;
-	/** Forbidden agent binding, expressed so object literals fail to compile when one is supplied. */
+	/** Never set. Declared as `never` so supplying an agent service on a direct conversation fails to compile. */
 	readonly agentServiceId?: never;
 }
 
-/** Canonical durable conversation with a compile-time exact agent-binding invariant. */
+/** One stored conversation. The union makes the agent binding a compile-time rule: an agent-session conversation must carry `agentServiceId`, and a direct or group conversation cannot. */
 export type Conversation = AgentSessionConversation | DirectConversation | GroupConversation;
 
-/** Request vocabulary for creating exactly one immutable-mode conversation. */
+/** Body for creating one conversation. `AgentSession` needs an agent service; `Direct` needs exactly one other participant; `Group` needs one to ninety-nine. */
 export type ConversationCreationRequest =
 	| { readonly mode: ConversationModes.AgentSession; readonly agentServiceId: string; readonly participantUserIds?: never }
 	| { readonly mode: ConversationModes.Direct | ConversationModes.Group; readonly participantUserIds: readonly string[]; readonly agentServiceId?: never };
 
-/** Participant-specific coordinates that never alter conversation lifecycle or mode. */
+/** One participant's own view of a conversation: where their visibility starts, how far they have read, whether they archived it, and where their access ended. None of it affects the conversation itself or any other participant. */
 export interface ConversationParticipant
 {
-	/** Conversation whose membership owns these coordinates. */
+	/** Conversation this participant record belongs to. */
 	readonly conversationId: ConversationId;
 	/** User represented by this participant record. */
 	readonly userId: string;
 	/** First timeline position visible to the participant. */
 	readonly visibleFromPosition: string;
-	/** Greatest timeline position the participant has durably read, or canonical zero while unread. */
+	/** Highest timeline position this participant has read. `"0"` means they have read nothing. */
 	readonly readThroughPosition: string;
 	/** ISO-8601 archive instant, or null while the conversation remains in the user's list. */
 	readonly archivedAt: string | null;

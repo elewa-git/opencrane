@@ -53,7 +53,7 @@ def generate_proof_key() -> dict[str, object]:
     x_coordinate = base64url(numbers.x.to_bytes(32, "big"))
     y_coordinate = base64url(numbers.y.to_bytes(32, "big"))
     # The exchange receives only the public half. Returning the private object would invite callers
-    # to serialize it or broaden proof-key custody beyond this deliberately narrow bootstrap seam.
+    # to serialize it or broaden proof-key custody beyond this deliberately narrow bootstrap path.
     public_jwk = {"kty": "EC", "crv": "P-256", "x": x_coordinate, "y": y_coordinate}
     return {
         "publicJwk": public_jwk,

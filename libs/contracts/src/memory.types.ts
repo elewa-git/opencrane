@@ -12,7 +12,14 @@ import type { AuthorizationScope } from "@opencrane/models/authorization";
  */
 export const MEMORY_GATEWAY_PROJECTED_TOKEN_AUDIENCE = "opencrane-memory-gateway";
 
-/** Provenance source vocabulary shared by memory catalogues and snapshot readers. */
+/**
+ * Where a memory fact's evidence came from.
+ *
+ * Every durable fact records one of these, so a reader can tell a fact a user stated outright
+ * from one inferred from a message or an artifact. A correction keeps the provenance history,
+ * so this is also what an audit reads to see why a fact was believed.
+ * @see {@link MemoryProvenance}
+ */
 export enum MemoryFactProvenanceSourceKinds
 {
 	/** A conversation message supplied the fact evidence. */
@@ -23,16 +30,16 @@ export enum MemoryFactProvenanceSourceKinds
 	ExplicitUserFact = "explicit-user-fact",
 }
 
-/** Durable memory mutation requested through the memory gateway. */
+/** The two changes a user may ask the memory gateway to make to a stored fact. */
 export enum MemoryMutationKind
 {
-  /** Replace an incorrect fact while retaining provenance and revision history. */
+  /** Replace a wrong fact with a corrected one. The old provenance and revision history are kept, so nothing is lost. */
   Correct = "correct",
-  /** Delete an authorized fact and its derived projections. */
+  /** Delete a fact and everything derived from it. Unlike a correction, nothing is kept. */
   Forget = "forget",
 }
 
-/** Canonical identity and authorization boundary of one Cognee dataset. */
+/** Which Cognee dataset a query may touch: its id, the silo containing it, the scope it may be queried in, and who owns it. All four must match before a recall is allowed. */
 export interface MemoryDatasetIdentity
 {
   /** Stable dataset identifier. */
@@ -45,7 +52,7 @@ export interface MemoryDatasetIdentity
   ownerId: string;
 }
 
-/** Source provenance attached to a durable memory fact. */
+/** Evidence for one memory fact: what kind of source it came from, which source, and when it was accepted. */
 export interface MemoryProvenance
 {
   /** Stable source family, such as message, artifact, or explicit-user-fact. */
@@ -60,25 +67,25 @@ export interface MemoryProvenance
   capturedAt: string;
 }
 
-/** Stable reference to one immutable durable memory-fact catalog row. */
+/** Points at one stored memory fact, with a digest so a reader can tell whether the fact has since been corrected. */
 export interface MemoryFactReference
 {
   /** Dataset containing the fact. */
   datasetId: string;
   /** Stable fact identifier. */
   factId: string;
-  /** Immutable content digest recorded by the authoritative memory-fact catalog row. */
+  /** Digest of the fact's content as stored. A mismatch means the fact changed after this reference was taken. */
   contentDigest: string;
   /** Provenance supporting the referenced fact. */
   provenance: MemoryProvenance[];
 }
 
-/** Explicit correction or forgetting request for a durable fact. */
+/** A request to correct or forget one stored fact. `replacement` is required for a correction and unused for a forget; `reason` is written into the audit record either way. */
 export interface MemoryMutationRequest
 {
   /** Requested mutation. */
   kind: MemoryMutationKind;
-  /** Exact immutable memory-fact catalog coordinate being changed. */
+  /** Reference to the stored fact being changed. @see {@link MemoryFactReference} */
   fact: MemoryFactReference;
   /** User requesting the mutation. */
   requestedByUserId: UserId;

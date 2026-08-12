@@ -7,7 +7,7 @@ import { ___DigestCanonicalJson } from "@opencrane/util";
 import { _PersonalConfigurationMaterializer } from "../materialization/personal-configuration-materializer.js";
 import { PrismaPersonalConfigurationMaterializationUnitOfWork } from "../materialization/prisma-personal-configuration-materialization-unit-of-work.js";
 
-/** Build one reviewed tool definition copied through personal revision materialization. */
+/** Builds a tool definition that materialisation must copy to the new revision. */
 function _Tool()
 {
 	const parametersSchema = { type: "object", additionalProperties: false } as const;
@@ -25,7 +25,7 @@ function _Command()
 	};
 }
 
-/** Accepted proposal row returned by the serializable evidence lookup. */
+/** Builds the accepted proposal row the repository's lookup returns. */
 function _AcceptedProposal()
 {
 	return {
@@ -39,7 +39,7 @@ function _AcceptedProposal()
 	};
 }
 
-/** Published personal source revision whose executable content must be copied exactly. */
+/** Builds the source revision whose content the new revision must copy exactly. */
 function _SourceRevision()
 {
 	return {

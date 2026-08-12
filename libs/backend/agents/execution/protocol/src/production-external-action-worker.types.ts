@@ -4,24 +4,24 @@ import type { Logger } from "@opencrane/backend/observability";
 import type { ExternalActionApprovalOpener, ExternalActionExecutionContextLoader, ExternalActionWorkerEventSink, ExternalActionWorkerUnitOfWork, ToolInvocationWorkSource } from "./external-action-worker.types.js";
 import type { ProductionExternalActionTransports } from "./external-action-executor.types.js";
 
-/** Combined persistence authority required by the process worker. */
+/** One port that both finds runnable invocations and writes their state. */
 export type ProductionExternalActionInvocationAuthority = ExternalActionWorkerUnitOfWork & ToolInvocationWorkSource;
 
-/** Dependencies supplied by the thin OpenCrane process composition root. */
+/** What the process composition root passes to the worker factory. */
 export interface ProductionExternalActionWorkerDependencies
 {
-	/** ToolInvocation-owned runnable work, claims, recovery, and completion authority. */
+	/** Finds runnable invocations, and writes claims, recoveries, and completions. */
 	readonly invocations: ProductionExternalActionInvocationAuthority;
-	/** Canonical immutable snapshot loader owned by the execution protocol package. */
+	/** Loads the run's frozen snapshot; implemented in this package. */
 	readonly contexts: ExternalActionExecutionContextLoader;
-	/** Canonical server-owned tool lifecycle event sink. */
+	/** Saves tool lifecycle events. */
 	readonly events: ExternalActionWorkerEventSink;
 	/** Existing server-owned integration, sandbox, and memory transports. */
 	readonly transports: ProductionExternalActionTransports;
-	/** Server-owned deferred approval authority composed outside the provider adapter. */
+	/** Opens approval requests. Wired separately from the provider adapter. */
 	readonly approvals: ExternalActionApprovalOpener;
-	/** Built-in personal configuration proposal authority. */
+	/** Writes upgrade-session proposals for the built-in personal configuration tool. */
 	readonly personalConfiguration: UpgradeSessionProposalRepository;
-	/** Structured credential-free evidence sink. */
+	/** Structured logger. Never log credentials to it. */
 	readonly log: Logger;
 }

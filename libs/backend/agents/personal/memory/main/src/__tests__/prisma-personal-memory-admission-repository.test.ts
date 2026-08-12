@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { PrismaPersonalMemoryAdmissionRepository } from "../prisma-personal-memory-admission-repository.js";
 
-/** Builds the smallest transaction facade that exposes personal-memory admission reads. */
+/** Builds the smallest transaction fake with the two tables these reads use. */
 function _Transaction(dataset: { readonly id: string; readonly cogneeDatasetId: string } | null, facts: readonly unknown[] = [])
 {
 	return { memoryDataset: { findFirst: vi.fn().mockResolvedValue(dataset) }, memoryFactCatalog: { findMany: vi.fn().mockResolvedValue(facts) } };

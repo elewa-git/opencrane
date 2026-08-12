@@ -61,13 +61,45 @@ function _NormalizedJob(job: V1Job): Record<string, unknown>
 	return normalized;
 }
 
-/** Reject adoption unless the existing Job exactly matches our still-suspended projection. */
+/**
+ * Throw unless the Job in the cluster is still suspended and matches the Job we would have created.
+ *
+ * Comparison ignores the fields Kubernetes owns rather than us — UID, resource version, generation,
+ * creation timestamp, managed fields, self link, the generated owner selectors, and defaults the
+ * API server fills in — so an unchanged Job compares equal even though the server added to it.
+ * Everything else must be identical.
+ *
+ * Called by: the Job-ensure path in kubernetes-agent-controller-store.ts, on both the created
+ * object and the object read back after an AlreadyExists reply.
+ * @param current - The Job as Kubernetes holds it.
+ * @param expected - The Job this attempt should have.
+ * @throws When the Job is not suspended, when its generated owner selectors are missing or wrong,
+ * or when any field we own differs. The caller must not repair it: a mismatch means OpenCrane and
+ * the cluster disagree, and repairing would hide that.
+ * @see {@link _AssertExactAssignedAgentRuntimeJob}
+ */
 export function _AssertExactSuspendedAgentRuntimeJob(current: V1Job, expected: V1Job): void
 {
 	if (current.spec?.suspend !== true || !isDeepStrictEqual(_NormalizedJob(current), _NormalizedJob(expected))) throw new Error("refusing to adopt a Job that differs from the claimed suspended runtime attempt");
 }
 
-/** Reject adoption unless the existing Job remains the durable assignment's exact projection. */
+/**
+ * Throw unless the Job in the cluster is still the one the recorded assignment points at.
+ *
+ * Same field-by-field comparison as the suspended check, with two allowances for a Job that has
+ * already been released: its suspend flag may be either value, and its deadline may be lower than
+ * the profile's, because release deliberately shortens it to fit the assignment. A deadline higher
+ * than the profile's, or a UID other than the recorded one, is always refused.
+ *
+ * Called by: the release path in kubernetes-agent-controller-store.ts, both before patching and on
+ * the object Kubernetes returns afterwards.
+ * @param current - The Job as Kubernetes holds it.
+ * @param expected - The Job rebuilt from the recorded coordinates, carrying the profile deadline.
+ * @param workloadUid - UID recorded at assignment; the Job's UID must equal it.
+ * @throws When the UID differs, when suspend is neither true nor false, when the released deadline
+ * is not a positive integer at or below the profile's, or when any other owned field differs.
+ * @see {@link _AssertExactSuspendedAgentRuntimeJob}
+ */
 export function _AssertExactAssignedAgentRuntimeJob(current: V1Job, expected: V1Job, workloadUid: string): void
 {
 	if (current.metadata?.uid !== workloadUid || (current.spec?.suspend !== true && current.spec?.suspend !== false)) throw new Error("refusing to adopt a Job outside the exact durable workload assignment");

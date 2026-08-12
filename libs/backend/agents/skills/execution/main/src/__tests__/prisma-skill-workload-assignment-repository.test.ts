@@ -16,7 +16,7 @@ function _Transaction()
 	return { repository: new PrismaSkillWorkloadAssignmentRepository(transaction as never, 30_000), bootstrapCreate };
 }
 
-/** Builds candidate and mutation delegates that return trigger-owned claim timestamps. */
+/** Builds Prisma fakes whose claim query returns the timestamps the database trigger would have set. */
 function _ClaimTransaction()
 {
 	const updateManyAndReturn = vi.fn().mockResolvedValue([{ claimedAt: new Date("2099-07-26T05:00:01.000Z"), claimExpiresAt: new Date("2099-07-26T05:00:31.000Z") }]);

@@ -10,20 +10,28 @@ function _boundaryId(runId: string, attempt: number, fromInputGeneration: number
 }
 
 /**
- * Claim the next ordered steering boundary for an attempt, absorbing or deferring exactly once.
+ * Claim the next steering boundary for an attempt, absorbing or deferring exactly once.
  *
- * Steering is absorbed only at a safe pre-model boundary: the runtime calls this immediately before
- * issuing a model request, identifying the boundary by a deterministic id derived from the run,
- * attempt, and the generation it is advancing from. Absorbing buffered steering advances the input
- * generation by one; a boundary with nothing buffered is recorded as a deferral and leaves the
- * generation unchanged. The recording is exactly-once through an INJECTED
- * {@link SteeringBoundaryRepository}: if a prior process already claimed this boundary — whether it
- * died before or after acknowledging its claim — the previously recorded disposition is replayed
- * rather than a second absorb/defer being emitted, so steering can never be double-applied.
+ * Steering is only applied at a safe point before a model request: the runtime calls this just
+ * before issuing one, and names the boundary with an id worked out from the run, the attempt, and
+ * the generation it is moving on from. Absorbing waiting steering raises the input generation by
+ * one; a boundary with nothing waiting is written as a deferral and leaves the generation alone.
+ *
+ * The injected {@link SteeringBoundaryRepository} makes the write happen only once: if an earlier
+ * process already claimed this boundary - whether it died before or after acknowledging the claim -
+ * the decision already written is returned, instead of a second absorb or defer, so steering can
+ * never be applied twice.
+ *
+ * Called by: no callers found. Nothing outside this package imports it, and index.ts does not
+ * re-export steering-authority.js, so the runtime side of this protocol is not wired up yet.
  *
  * @param repository - Durable exactly-once boundary-claim authority.
- * @param command - Run attempt, the source generation, and any buffered steering.
- * @returns The disposition and resulting generation in force, and whether it was a replay.
+ * @param command - Run attempt, the generation being moved on from, and any waiting steering.
+ * @returns The disposition and the generation now in force, plus `replayed: true` when an earlier
+ * process had already recorded this boundary. A replay obliges the caller to use the returned
+ * generation, not the one it calculated.
+ * @throws Whatever the repository throws when it cannot record the boundary.
+ * @see __AdmitModelTerminal which uses the resulting generation.
  */
 export async function __ClaimSteeringBoundary(repository: SteeringBoundaryRepository, command: ClaimSteeringBoundaryCommand): Promise<ClaimSteeringBoundaryResult>
 {
@@ -45,11 +53,21 @@ export async function __ClaimSteeringBoundary(repository: SteeringBoundaryReposi
 }
 
 /**
- * Admit a model terminal only when it was produced under the attempt's current input generation.
- * A terminal carrying a superseded generation raced an absorbed steering boundary and is rejected so
- * stale model output can never close or advance a run whose input has already moved on.
- * @param command - The attempt's current generation and the generation the terminal was produced under.
- * @returns Acceptance, or a stale-generation rejection.
+ * Accept a finished model response only when it was produced under the attempt's current input
+ * generation.
+ *
+ * A response carrying an older generation lost a race with a boundary that absorbed steering: the
+ * model answered a question the user has already changed. Rejecting it is what stops out-of-date
+ * output from finishing or advancing a run whose input has moved on.
+ *
+ * Called by: no callers found. Nothing outside this package imports it, and index.ts does not
+ * re-export steering-authority.js.
+ *
+ * @param command - The attempt's current generation, and the generation the response was produced
+ * under.
+ * @returns `accepted` - the response may be applied. `rejected` with `stale_input_generation` - it
+ * must be discarded and the model asked again from the current generation, never merged.
+ * @see SteeringDisposition for how a generation advances.
  */
 export function __AdmitModelTerminal(command: AdmitModelTerminalCommand): AdmitModelTerminalResult
 {

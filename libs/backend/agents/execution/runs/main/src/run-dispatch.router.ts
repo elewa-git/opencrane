@@ -9,7 +9,7 @@ import type { AgentControllerRunDispatchRouterDependencies, ReviewedAgentControl
  * Build the workload-authenticated internal run-dispatch API for the sole agent controller.
  *
  * The router accepts no caller-selected policy or time. It first verifies the dedicated projected
- * ServiceAccount token, then delegates all lease, membership, attempt, and assignment decisions to
+ * ServiceAccount token, then leaves all lease, membership, attempt, and assignment decisions to
  * the repository so HTTP parsing can never become a second run authority.
  */
 export function __CreateAgentControllerRunDispatchRouter(dependencies: AgentControllerRunDispatchRouterDependencies): Router
@@ -88,7 +88,7 @@ export function __CreateAgentControllerRunDispatchRouter(dependencies: AgentCont
 				return;
 			}
 
-			// 2. Claim or terminalise one database-fenced release, including an expired queue head.
+			// 2. Claim one release row under its database fence, or move it to its terminal state — including a row at the head of the queue whose lease expired.
 			const result = await dependencies.repository.claimNextWorkloadReleaseAtomically();
 			if (result.status === RunDispatchResultStatuses.Terminalized)
 			{
@@ -114,7 +114,7 @@ export function __CreateAgentControllerRunDispatchRouter(dependencies: AgentCont
 	{
 		try
 		{
-			// 1. Restrict operational retention to the same TokenReview-confirmed controller identity.
+			// 1. Only the controller identity the Kubernetes API server just confirmed may prune outbox rows.
 			if (!await _IsController(request, dependencies) || !___IsEmptyAgentControllerCommand(request.body))
 			{
 				_RespondProblem(response, 401, "controller_identity_denied");

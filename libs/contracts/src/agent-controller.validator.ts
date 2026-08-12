@@ -18,7 +18,7 @@ function _IsPrunedCount(value: unknown): value is number
 	return typeof value === "number" && Number.isSafeInteger(value) && value >= 0 && value <= _MAXIMUM_PRUNED_ROWS;
 }
 
-/** Shared lease model plus its chronology invariant. */
+/** Claim-lease fields, plus the rule that a lease must expire after it was claimed. */
 const _RunAttemptClaimLeaseSchema: z.ZodType<AgentControllerRunAttemptClaimLease> = z.object({
 	eventId: _AgentControllerBoundedIdentifierSchema,
 	claimedAt: _AgentControllerMillisecondInstantSchema,
@@ -114,7 +114,7 @@ const _RunWorkloadRegistrationResultSchema: z.ZodType<AgentControllerRunWorkload
 	podUid: _AgentControllerBoundedIdentifierSchema,
 }).strip();
 
-/** Outbox-prune response model kept private because callers consume only the bounded count. */
+/** Response shape for an outbox prune. Not exported: callers only ever need the row count, which {@link ___ParseAgentControllerOutboxPrunedCount} returns. */
 const _OutboxPruneResultSchema: z.ZodType<AgentControllerRunOutboxPruneResult> = z.object({ deletedCount: z.custom<number>(_IsPrunedCount, { message: "must be an integer between 0 and 1000" }) }).strip();
 
 /** Parse one exact runtime assignment command or return null for HTTP rejection. */

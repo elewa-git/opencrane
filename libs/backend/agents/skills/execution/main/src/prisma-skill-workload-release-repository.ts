@@ -4,12 +4,12 @@ import type { SkillWorkloadPodRegistrationCommand, SkillWorkloadReleaseClaim, Sk
 import { _SkillWorkloadLeaseExpiryProposal, _SkillWorkloadTimestampProposal } from "./prisma-skill-workload-timestamps.js";
 import type { SkillWorkloadReleaseRepository } from "./skill-workload-unit-of-work.types.js";
 
-/** Transaction-scoped Postgres authority for Job release and first-Pod registration. */
+/** Records Job unsuspends and first-Pod registrations in Postgres, inside one transaction. */
 export class PrismaSkillWorkloadReleaseRepository implements SkillWorkloadReleaseRepository
 {
-	/** Transaction-scoped ORM client supplied only by the execution unit of work. */
+	/** Prisma client for this transaction. Only the unit of work supplies it. */
 	private readonly transaction: Prisma.TransactionClient;
-	/** Bounded release-claim lifetime applied consistently to every claim. */
+	/** How long a release claim lasts. Every claim uses the same value. */
 	private readonly claimLeaseMilliseconds: number;
 	/** Creates the release persistence capability within an existing transaction. */
 	constructor(transaction: Prisma.TransactionClient, claimLeaseMilliseconds: number)
@@ -19,17 +19,17 @@ export class PrismaSkillWorkloadReleaseRepository implements SkillWorkloadReleas
 		this.claimLeaseMilliseconds = claimLeaseMilliseconds;
 	}
 
-	/** Claims one assigned bootstrap-ready Job for a later Kubernetes unsuspend operation. */
+	/** Claims one assigned Job whose bootstrap is still usable, so the controller can unsuspend it. */
 	async claimNextRelease(): Promise<SkillWorkloadReleaseClaim | null>
 	{
-		// 1. The read-only view retains database-clock filtering and nonblocking peer selection.
+		// 1. The `skill_workload_release_claim_candidates` view does the picking: it filters on the database clock and uses SKIP LOCKED, so a second releaser is never blocked.
 		const candidate = await this.transaction.skillWorkloadReleaseClaimCandidate.findFirst();
 		if (candidate === null) return null;
 		const workload = await this.transaction.skillWorkload.findUnique({ where: { id: candidate.id }, include: { bootstrap: true } });
 		const bootstrap = workload?.bootstrap;
 		if (workload === null || bootstrap === null || bootstrap === undefined || workload.workloadUid === null) return null;
 
-		// 2. The proposal carries only the bounded duration; the trigger owns the timestamp and bootstrap cap.
+		// 2. We send only the lease length. The `skill_workloads_authority` trigger sets the timestamp from database time and shortens the expiry to the bootstrap's own expiry.
 		const releaseDeliveryCount = workload.releaseDeliveryCount + 1;
 		const claimed = await this.transaction.skillWorkload.updateManyAndReturn({
 			where: { id: workload.id, state: SkillWorkloadState.Assigned, releasedAt: null, releaseClaimedAt: workload.releaseClaimedAt, releaseDeliveryCount: workload.releaseDeliveryCount, bootstrap: { is: { consumedAt: null, expiresAt: bootstrap.expiresAt } } },
@@ -41,7 +41,7 @@ export class PrismaSkillWorkloadReleaseRepository implements SkillWorkloadReleas
 		return { workloadId: workload.id, siloId: workload.siloId, kind: workload.kind === SkillWorkloadKind.Authoring ? "authoring" : "tool-runner", workloadUid: workload.workloadUid, releaseClaimedAt: claim.releaseClaimedAt.toISOString(), releaseDeliveryCount, expiresAt: claim.releaseExpiresAt.toISOString() };
 	}
 
-	/** Commits an exact fresh release claim, or accepts only its immutable replay. */
+	/** Records the release for the current claim, or returns `idempotent` when the same release was already recorded. */
 	async commitRelease(workloadId: string, command: SkillWorkloadReleaseCommand): Promise<"released" | "idempotent" | "conflict">
 	{
 		if (!_IsReleaseCommandValid(workloadId, command)) return "conflict";
@@ -55,7 +55,7 @@ export class PrismaSkillWorkloadReleaseRepository implements SkillWorkloadReleas
 		return updated.count === 1 ? "released" : "conflict";
 	}
 
-	/** Registers exactly one Job-owned Pod while its release and bootstrap fences remain valid. */
+	/** Records the Job's first Pod, but only while the release claim and the bootstrap are both still valid. */
 	async registerFirstPod(workloadId: string, command: SkillWorkloadPodRegistrationCommand): Promise<"registered" | "idempotent" | "conflict">
 	{
 		if (!_IsReleaseCommandValid(workloadId, command) || command.podUid.length === 0) return "conflict";
@@ -69,7 +69,7 @@ export class PrismaSkillWorkloadReleaseRepository implements SkillWorkloadReleas
 		return updated.count === 1 ? "registered" : "conflict";
 	}
 
-	/** Reads database time through the read-only typed view owned by this repository. */
+	/** Reads the current time from the `skill_authority_clock` view, never from this process. */
 	private async _databaseNow(): Promise<Date>
 	{
 		const clock = await this.transaction.skillAuthorityClock.findUnique({ where: { singleton: 1 } });
@@ -78,13 +78,13 @@ export class PrismaSkillWorkloadReleaseRepository implements SkillWorkloadReleas
 	}
 }
 
-/** Validates a release coordinate before it contends on durable row locks. */
+/** Checks the command's fields before the query takes any row locks. */
 function _IsReleaseCommandValid(workloadId: string, command: SkillWorkloadReleaseCommand): boolean
 {
 	return workloadId.length > 0 && command.workloadUid.length > 0 && Number.isSafeInteger(command.releaseDeliveryCount) && command.releaseDeliveryCount >= 1 && Number.isFinite(Date.parse(command.releaseClaimedAt));
 }
 
-/** Compares every immutable coordinate of a successful release replay. */
+/** Returns whether the stored row and the command describe the same release. */
 function _IsSameRelease(workload: { readonly workloadUid: string | null; readonly releaseClaimedAt: Date | null; readonly releaseDeliveryCount: number }, command: SkillWorkloadReleaseCommand): boolean
 {
 	return workload.workloadUid === command.workloadUid && workload.releaseClaimedAt?.getTime() === Date.parse(command.releaseClaimedAt) && workload.releaseDeliveryCount === command.releaseDeliveryCount;

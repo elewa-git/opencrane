@@ -5,53 +5,80 @@ import { PersonaFirstChatService } from "./persona-first-chat.service.js";
 import { UserOnboardingRouteSnapshot, UserOnboardingRouteStates } from "./persona-first-chat.types.js";
 import { PersonaOnboardingService } from "./persona-onboarding.service";
 
-/** Component-scoped browser state owner for the server-authoritative persona lifecycle. */
+/**
+ * Holds the persona-onboarding state for one visit to the persona route.
+ *
+ * Provided by PersonaOnboardingPageComponent in its own `providers`. The server owns the workflow:
+ * this store issues commands and then replaces its state with whatever the server returns, so
+ * `state`, `questions` and `result` are never computed locally.
+ *
+ * One command runs at a time — while {@link busy} is true, further commands return immediately.
+ * Every command failure is caught, put in {@link actionError}, and followed by a single reload, so
+ * a write whose response was lost cannot be replayed against stale state.
+ *
+ * Approval is the awkward part. {@link approve} records which revision is being approved before it
+ * calls the server; if the response is lost, {@link retryReadyRoute} finishes that approval before
+ * loading the next route. That is why approval has its own retry path.
+ *
+ * @see PersonaOnboardingStates
+ * @see PersonaOnboardingSnapshot
+ */
 @Injectable()
 export class PersonaOnboardingStore
 {
-	/** Application service that performs explicit persona authority commands. */
+	/** Service that makes the persona calls to the server. */
 	private readonly _persona = inject(PersonaOnboardingService);
 
-	/** Application service that reads the durable post-persona route projection. */
+	/** Service used only to read where onboarding goes after the persona is approved. */
 	private readonly _firstChat = inject(PersonaFirstChatService);
 
-	/** Whether one authority command has already been admitted by this store. */
+	/** Whether a command is running; while true, new commands are ignored. */
 	private readonly _commandActive = signal(false);
 
 	/** Whether the post-persona route projection is already being resolved. */
 	private readonly _readyRouteActive = signal(false);
 
-	/** Bounded command failure that leaves the authoritative projection unchanged. */
+	/** Message from the last failed command; the onboarding state itself is unchanged. */
 	private readonly _commandError = signal<string | null>(null);
 
-	/** Exact approval coordinate retained only while its cross-authority transition is uncertain. */
+	/** The revision being approved, kept only until the server confirms the approval landed. */
 	private readonly _pendingApprovalRevisionId = signal<string | null>(null);
 
-	/** Durable route projection loaded only after the persona reaches ready. */
+	/** Where to send the user next, loaded only once the persona is Ready. */
 	private readonly _readyRoute = signal<UserOnboardingRouteSnapshot | null>(null);
 
 	/** Bounded post-persona route failure that keeps the ready state retryable. */
 	private readonly _readyRouteError = signal<string | null>(null);
 
-	/** Read-only loader for the complete authoritative onboarding projection. */
+	/** The onboarding state, as a read-only `resource`; commands push their results into it. */
 	public readonly onboarding = resource({ loader: this._persona.read.bind(this._persona) });
 
 	/** Bounded command or route-resolution failure exposed to the routed shell. */
 	public readonly actionError = computed(this._actionError.bind(this));
 
-	/** Whether one authority command has already been admitted by this store. */
+	/** Whether a command is running; while true, new commands are ignored. */
 	public readonly busy = this._commandActive.asReadonly();
 
 	/** Durable post-persona route projection exposed for the shell's navigation effect. */
 	public readonly readyRoute = this._readyRoute.asReadonly();
 
-	/** Retry the authoritative projection read after a blocking load failure. */
+	/** Reload the onboarding state after the initial load failed. */
 	public retry(): void
 	{
 		this.onboarding.reload();
 	}
 
-	/** Resolve the durable post-persona route once, retaining a bounded retryable failure. */
+	/**
+	 * Loads the route to send the user to next, once.
+	 *
+	 * Returns immediately if it is already loading or already loaded, so it is safe to call from an
+	 * effect. If the server still reports a survey route the persona has not finished propagating
+	 * yet: that is recorded as a retryable message rather than an error, and
+	 * {@link retryReadyRoute} tries again.
+	 *
+	 * @returns Resolves when the attempt finishes; the result lands in {@link readyRoute} or
+	 *   {@link actionError}.
+	 */
 	public async resolveReadyRoute(): Promise<void>
 	{
 		if (this._readyRouteActive() || this._readyRoute() !== null) return;
@@ -77,7 +104,17 @@ export class PersonaOnboardingStore
 		}
 	}
 
-	/** Resume an uncertain approval transition before resolving the durable post-persona route. */
+	/**
+	 * Finishes an approval whose result never came back, then loads the next route.
+	 *
+	 * Use this as the retry action on the ready screen. If an approval is still outstanding it is
+	 * re-sent first — unless the server has since moved to Ready on a different revision, in which
+	 * case the outstanding approval is abandoned as superseded. Only then is the route loaded.
+	 *
+	 * Called by: PersonaOnboardingPageComponent, from the ready state component's retry output.
+	 *
+	 * @returns Resolves when the retry finishes; check {@link actionError}.
+	 */
 	public async retryReadyRoute(): Promise<void>
 	{
 		let revisionId = this._pendingApprovalRevisionId();
@@ -102,7 +139,21 @@ export class PersonaOnboardingStore
 		await this._executeCommand(this._persona.start.bind(this._persona));
 	}
 
-	/** Record one exact answer and complete the interview when the authority confirms the final answer. */
+	/**
+	 * Saves one interview answer, and completes the interview when it was the last one.
+	 *
+	 * The completion is not guessed: it happens only when the server's own response says the answered
+	 * count has reached the question count. So the caller submits answers one at a time and never has
+	 * to decide when the interview is over.
+	 *
+	 * Called by: PersonaOnboardingPageComponent.answer, from the interview state component's answer
+	 * output.
+	 *
+	 * @param interviewId - The interview the question belongs to.
+	 * @param questionId - The question being answered.
+	 * @param choiceId - The choice the user picked.
+	 * @returns Resolves when the attempt finishes; check {@link actionError}.
+	 */
 	public async answer(interviewId: string, questionId: string, choiceId: string): Promise<void>
 	{
 		await this._executeCommand(async function _Answer(this: PersonaOnboardingStore): Promise<PersonaOnboardingSnapshot>
@@ -116,13 +167,13 @@ export class PersonaOnboardingStore
 		}.bind(this));
 	}
 
-	/** Persist one exact tie choice through the persona authority. */
+	/** Save the user's answer to a scoring tie. */
 	public async resolve(interviewId: string, kind: PersonaResolutionKinds, selectedValue: string): Promise<void>
 	{
 		await this._executeCommand(this._persona.resolve.bind(this._persona, interviewId, kind, selectedValue));
 	}
 
-	/** Finish an interrupted draft transition from the current durable review projection. */
+	/** Finish creating the draft when a previous attempt was interrupted, using the state already loaded. */
 	public async prepareDraft(): Promise<void>
 	{
 		const snapshot = this.onboarding.hasValue() ? this.onboarding.value() : null;
@@ -130,7 +181,24 @@ export class PersonaOnboardingStore
 		await this._executeCommand(this._persona.ensureDraft.bind(this._persona, snapshot));
 	}
 
-	/** Approve only when the live state matches the immutable material the owner confirmed. */
+	/**
+	 * Approves the persona the user confirmed, refusing if it changed under them.
+	 *
+	 * Both arguments are re-checked against the current state before anything is sent: the state must
+	 * still be Review, the revision must still be the same one, and the instruction text must be
+	 * byte-identical to what was on screen. If any differ, nothing is sent and
+	 * {@link actionError} explains that the review changed — the user must look again and re-confirm.
+	 *
+	 * The revision is remembered until the server confirms, so a lost response can be finished by
+	 * {@link retryReadyRoute} rather than approving twice.
+	 *
+	 * Called by: PersonaOnboardingPageComponent.approve, from the review state component's approve
+	 * output.
+	 *
+	 * @param personaRevisionId - The revision shown in the confirmation dialog.
+	 * @param instructionPreview - The exact instruction text shown in that dialog.
+	 * @returns Resolves when the attempt finishes; check {@link actionError}.
+	 */
 	public async approve(personaRevisionId: string, instructionPreview: string): Promise<void>
 	{
 		const snapshot = this.onboarding.hasValue() ? this.onboarding.value() : null;
@@ -144,13 +212,13 @@ export class PersonaOnboardingStore
 		if (approved) this._pendingApprovalRevisionId.set(null);
 	}
 
-	/** Start a new governed interview without mutating the current review locally. */
+	/** Ask the server to start a fresh interview; the current review is left alone until it answers. */
 	public async restart(): Promise<void>
 	{
 		await this._executeCommand(this._persona.restart.bind(this._persona));
 	}
 
-	/** Admit one typed command at a time and adopt only its authoritative returned projection. */
+	/** Run one command at a time, storing only what the server returns; on failure, record it and reload once. */
 	private async _executeCommand(operation: () => Promise<PersonaOnboardingSnapshot>): Promise<boolean>
 	{
 		if (this._commandActive()) return false;
@@ -173,7 +241,7 @@ export class PersonaOnboardingStore
 		}
 	}
 
-	/** Reload once after an uncertain command result so an admitted write is not replayed from stale state. */
+	/** Reload once when a command's result is unknown, so a write that did land is not replayed from stale state. */
 	private async _reconcileAfterCommandFailure(): Promise<void>
 	{
 		try
@@ -188,24 +256,24 @@ export class PersonaOnboardingStore
 		}
 		catch
 		{
-			// The bounded command error remains visible and a later explicit retry reloads authority state.
+			// The command's error message stays on screen; a later retry reloads the state from the server.
 		}
 	}
 
-	/** Prefer the current command failure, then the post-persona route failure. */
+	/** Show the command failure if there is one, otherwise the route-loading failure. */
 	private _actionError(): string | null
 	{
 		return this._commandError() ?? this._readyRouteError();
 	}
 }
 
-/** Whether a ready persona is still paired with a pre-approval onboarding route. */
+/** Whether the persona is approved but onboarding still says the survey is unfinished — a transition that has not caught up yet. */
 function _IsSurveyRoute(route: UserOnboardingRouteSnapshot): boolean
 {
 	return route.state === UserOnboardingRouteStates.SurveyPending || route.state === UserOnboardingRouteStates.SurveyInProgress;
 }
 
-/** Return a bounded user-facing command error without exposing an unknown payload. */
+/** Turn any thrown value into a message safe to show, falling back to a generic one. */
 function _CommandErrorMessage(error: unknown): string
 {
 	return error instanceof Error && error.message ? error.message : "OpenCrane could not save this onboarding step.";

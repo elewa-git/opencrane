@@ -19,21 +19,38 @@ const _MAX_DISPLAYED_STRING_LENGTH = 4096;
 /** Maximum number of scalars admitted in one displayed array value. */
 const _MAX_DISPLAYED_ARRAY_LENGTH = 64;
 
-/** Upstream control events that mutate local display data but are not displayed action ids. */
+/** Vendor event names that only change local form data; they never become an action. */
 const _LOCAL_CONTROL_EVENT_NAMES = new Set<string>(["input", "change"]);
 
-/** Property names that could mutate an ordinary JavaScript object's prototype chain. */
+/** Keys that would let a payload change an object's prototype, so they are rejected. */
 const _UNSAFE_VALUE_KEYS = new Set<string>(["__proto__", "constructor", "prototype"]);
 
 /**
- * Convert one upstream renderer event into the narrow intent accepted by the OpenCrane host.
+ * Converts one vendor renderer event into the intent the OpenCrane host may emit, or rejects it.
  *
- * Completion subjects, client timestamps, arbitrary protocol messages, and nested objects are
- * deliberately discarded. The server reconstructs authority from the copied display coordinates.
+ * This is the only way data leaves the renderer, so it is deliberately narrow. It returns null —
+ * emitting nothing at all — when the surface is not Ready, when the event targets a different
+ * surface, when the action or component id is missing or over-long, when the event is a local
+ * `input`/`change` (those only prepare a later button press), or when any value in the context is
+ * not a scalar or a flat array of scalars within the size limits. One bad value rejects the whole
+ * event rather than being silently dropped.
+ *
+ * Completion Subjects, client timestamps, arbitrary protocol messages and nested objects are
+ * always discarded. The ids are copied from the presentation so the server can work out for
+ * itself what the action may do.
+ *
+ * Called by: A2uiCanvasComponent._handleRendererEvent, which emits the result on
+ * `displayedAction` only when it is not null.
+ *
+ * @param presentation - The presentation currently displayed; supplies the ids and the state gate.
+ * @param event - The vendor's client event.
+ * @returns The intent to emit, or `null` meaning emit nothing — the caller must not fall back to a
+ *   partial intent.
+ * @see A2uiDisplayedActionIntent
  */
 export function _ToA2uiDisplayedActionIntent(presentation: A2uiSurfacePresentation, event: A2UIClientEvent): A2uiDisplayedActionIntent | null
 {
-	// 1. Accept only explicit actions displayed on the exact ready presentation; input/change are
+	// 1. Accept an action only when the surface is Ready and the ids match; input/change are
 	// local data-model events used to prepare a later displayed button action.
 	const action = event.message.userAction;
 	if (presentation.state !== AgUiA2uiSurfaceStates.Ready || !action || action.surfaceId !== presentation.surfaceId)
@@ -45,7 +62,7 @@ export function _ToA2uiDisplayedActionIntent(presentation: A2uiSurfacePresentati
 		return null;
 	}
 
-	// 2. Copy only bounded scalar values so raw provider payloads, proof material, and arbitrary
+	// 2. Copy only size-limited scalar values, so raw provider payloads, credentials and arbitrary
 	// nested protocol context can never leave this presentational component.
 	const values = _admitDisplayedValues(action.context);
 	if (values === null)
@@ -53,7 +70,7 @@ export function _ToA2uiDisplayedActionIntent(presentation: A2uiSurfacePresentati
 		return null;
 	}
 
-	// 3. Bind the intent to the exact displayed projection so the authenticated server can perform
+	// 3. Tie the intent to the presentation it was displayed on, so the server can run
 	// its own authorization and one-use checks without trusting the renderer for authority.
 	return {
 		version: presentation.version,
@@ -68,7 +85,7 @@ export function _ToA2uiDisplayedActionIntent(presentation: A2uiSurfacePresentati
 	};
 }
 
-/** Copy and bound the upstream action context as display values, or reject it wholesale. */
+/** Copy the vendor's action context into display values, within limits, or reject all of it. */
 function _admitDisplayedValues(raw: Record<string, unknown> | undefined): Readonly<Record<string, A2uiDisplayedValue>> | null
 {
 	if (raw === undefined)
@@ -92,13 +109,13 @@ function _admitDisplayedValues(raw: Record<string, unknown> | undefined): Readon
 	return Object.freeze(values);
 }
 
-/** Whether a copied value key is bounded and cannot alter object inheritance. */
+/** Whether a value key is short enough and is not one that could alter object inheritance. */
 function _isDisplayedValueKey(key: string): boolean
 {
 	return key.length > 0 && key.length <= _MAX_DISPLAYED_VALUE_KEY_LENGTH && !_UNSAFE_VALUE_KEYS.has(key);
 }
 
-/** Whether an upstream context value fits the intentionally shallow displayed-value contract. */
+/** Whether a context value is a scalar, or a flat array of scalars — the shape is deliberately shallow. */
 function _isDisplayedValue(value: unknown): value is A2uiDisplayedValue
 {
 	if (_isDisplayedScalar(value))
@@ -119,7 +136,7 @@ function _isDisplayedValue(value: unknown): value is A2uiDisplayedValue
 	return true;
 }
 
-/** Whether a scalar is finite and bounded enough to cross the displayed-action boundary. */
+/** Whether a scalar is a finite number, or a string within the length limit, and so may be copied out. */
 function _isDisplayedScalar(value: unknown): value is A2uiDisplayedValueScalar
 {
 	if (value === null || typeof value === "boolean")

@@ -12,23 +12,30 @@ import type { MemoryGatewayClient } from "@opencrane/backend/server/infra/memory
 import { ExternalActionRevisionKinds } from "./external-action-executor.types.js";
 import type { RunInputCompiler } from "./prisma-runtime-dispatch-authority.types.js";
 
-/** Canonical lowercase turn roles the compiled input uses. */
+/** Maps stored message roles to the lowercase roles the compiled input uses. */
 const _MESSAGE_ROLE: Record<string, CompiledMessage["role"]> = { User: "user", Assistant: "assistant", Tool: "tool", System: "system" };
 
-/** Smallest gateway recall window used when re-resolving frozen fact references. */
+/** Fewest results to ask the memory gateway for when looking up frozen facts again. */
 const _MINIMUM_STATEMENT_RECALL_RESULTS = 32;
 
 /**
- * Build the {@link RunInputCompiler} the dispatch authority calls when minting `start_attempt`.
+ * Build the {@link RunInputCompiler} the dispatch authority calls when it creates `start_attempt`.
  *
- * It binds the deterministic prompt compiler to control-plane read ports backed by the same locked
- * Prisma transaction that loaded the snapshot, so every read is of an immutable record and the
- * compiled output stays byte-identical across restarts and idempotent redeliveries. Memory-fact
- * statements are the one network read: they resolve through the injected memory gateway and every
- * statement is verified against the digest frozen in the snapshot, so a redelivered frame either
- * carries byte-identical memory text or the compile fails closed.
- * @param memoryGateway - Authenticated read-only memory-gateway client shared with the action worker.
- * @returns A compiler bound to per-attempt transaction reads and digest-verified gateway recall.
+ * It gives the prompt compiler read functions that run on the same locked Prisma transaction that
+ * loaded the snapshot, so every read is of a record that cannot change and the compiled output stays
+ * byte-for-byte the same across restarts and re-sent commands. Memory-fact statements are the one
+ * network read: they come from the injected memory gateway, and every statement is checked against
+ * the digest frozen in the snapshot, so a re-sent command either carries exactly the same memory
+ * text or the compile fails.
+ *
+ * Called by: `_CreateProductionRunInputCompiler` in production-runtime-dispatch.ts, which appends
+ * the built-in upgrade-session tool on top of the result.
+ *
+ * @param memoryGateway - Read-only memory-gateway client, shared with the action worker.
+ * @returns A compiler that reads inside the attempt's transaction and digest-checks gateway recall.
+ * @throws From the returned compiler: when a frozen memory fact is missing or its text no longer
+ * matches its digest, or the snapshot's memory policy names no dataset. No command is created.
+ * @see RunInputCompiler for the byte-for-byte rule every implementation must meet.
  */
 export function __CreatePrismaRunInputCompiler(memoryGateway: MemoryGatewayClient): RunInputCompiler
 {
@@ -38,7 +45,7 @@ export function __CreatePrismaRunInputCompiler(memoryGateway: MemoryGatewayClien
 	};
 }
 
-/** Assemble the control-plane read ports over one locked transaction client and the snapshot's frozen policy. */
+/** Build the read functions the prompt compiler calls, over one locked transaction and the snapshot's frozen policy. */
 function _repositories(memoryGateway: MemoryGatewayClient, snapshot: RunInputSnapshot, transaction: Prisma.TransactionClient): PromptCompilerRepositories
 {
 	return {
@@ -53,23 +60,22 @@ function _repositories(memoryGateway: MemoryGatewayClient, snapshot: RunInputSna
 }
 
 /**
- * Resolve frozen memory-fact references to digest-verified statements through the memory gateway.
+ * Look up the facts frozen in the snapshot, and check each one's text against its stored digest.
  *
- * Every reference must resolve to content whose `sha256:` digest equals the frozen `contentDigest`;
- * any missing fact or drifted content throws, so a `start_attempt` frame is never minted with a
- * partial or altered memory section. Fact text is returned only for prompt compilation and is
- * never persisted.
+ * Every reference must resolve to text whose `sha256:` digest equals the frozen `contentDigest`. A
+ * missing fact or changed text throws, so a `start_attempt` command is never created with a partial
+ * or altered memory section. The text is used only to compile the prompt and is never saved.
  */
 async function _loadMemoryFactStatements(memoryGateway: MemoryGatewayClient, snapshot: RunInputSnapshot, memoryFacts: readonly MemoryFactReference[]): Promise<readonly string[]>
 {
-	// 1. Compile deterministically with no network read when the snapshot froze no fact references.
+	// 1. No frozen facts means no network read at all.
 	if (memoryFacts.length === 0) return [];
 
-	// 2. Fail closed unless the frozen policy names the exact personal recall coordinates; dataset
-	//    selection only ever comes from the snapshot, never a subject id or argument.
+	// 2. Refuse unless the snapshot's policy gives the dataset and the query text. The dataset always
+	//    comes from the snapshot, never from a subject id or a tool argument.
 	const policy = _personalMemoryPolicy(snapshot.memoryQueryPolicy);
 
-	// 3. Re-run the frozen recall with a widened window so ranking drift cannot hide a frozen fact.
+	// 3. Re-run the same query but ask for more results, so a change in ranking cannot hide a frozen fact.
 	const result = await memoryGateway.query({ siloId: snapshot.siloId, cogneeDatasetId: policy.cogneeDatasetId, subjectId: snapshot.identitySnapshot.executionSubjectId, query: policy.queryText, maxResults: Math.max(memoryFacts.length * 4, _MINIMUM_STATEMENT_RECALL_RESULTS) });
 	const contentByFactId = new Map(result.facts.map(function _entry(fact) { return [fact.factId, fact.content] as const; }));
 
@@ -85,7 +91,7 @@ async function _loadMemoryFactStatements(memoryGateway: MemoryGatewayClient, sna
 	});
 }
 
-/** Extract the frozen personal recall coordinates from the snapshot's opaque memory policy, failing closed. */
+/** Read the dataset id and query text out of the snapshot's memory policy, throwing when either is missing. */
 function _personalMemoryPolicy(memoryQueryPolicy: JsonValue): { cogneeDatasetId: string; queryText: string }
 {
 	const policy: { readonly [key: string]: JsonValue } = memoryQueryPolicy && typeof memoryQueryPolicy === "object" && !Array.isArray(memoryQueryPolicy) ? memoryQueryPolicy as { readonly [key: string]: JsonValue } : {};
@@ -98,7 +104,7 @@ function _personalMemoryPolicy(memoryQueryPolicy: JsonValue): { cogneeDatasetId:
 	return { cogneeDatasetId, queryText };
 }
 
-/** Resolve the approved persona revision's compiled instruction text, or empty when non-personal. */
+/** Return the persona revision's instruction text, or an empty string when the run has no persona. */
 async function _loadPersonaInstructions(transaction: Prisma.TransactionClient, personaRevisionId: string | null): Promise<string>
 {
 	if (personaRevisionId === null) return "";
@@ -106,7 +112,7 @@ async function _loadPersonaInstructions(transaction: Prisma.TransactionClient, p
 	return revision?.compiledInstructions ?? "";
 }
 
-/** Resolve ordered conversation turns for the exact message references, preserving snapshot order. */
+/** Load the conversation messages, keeping the order the snapshot lists them in. */
 async function _loadMessages(transaction: Prisma.TransactionClient, messageIds: readonly string[]): Promise<readonly CompiledMessage[]>
 {
 	if (messageIds.length === 0) return [];
@@ -136,14 +142,14 @@ function _messageContent(blocks: Prisma.JsonValue): string
 }
 
 /**
- * Resolve immutable integration allowances into compiled tool definitions the bounded loop may propose.
+ * Turn the integrations the snapshot allows into the tool definitions the agent may call.
  *
- * Each tool is named with its integration and becomes an `integration:<id>:<tool>` revision id.
- * That exact revision id reaches the external-action boundary, which independently rechecks its
- * live custody reference and the revision's allow-list. Third-party actions require an approval
- * until an explicit per-tool approval policy exists. Schema and digest come only from the admitted
- * snapshot; compilation never consults a mutable catalogue or synthesises a permissive fallback.
- *
+ * Each tool is named with its integration, giving an `integration:<id>:<tool>` revision id. That
+ * revision id reaches the external-action code, which checks the integration's live custody
+ * reference and its allow-list again on its own. Third-party actions always require an approval,
+ * until there is a per-tool approval policy. Schema and digest come only from the admitted
+ * snapshot; compiling never reads a catalogue that can change, and never invents a permissive
+ * fallback.
  */
 async function _loadToolDefinitions(integrationAssignments: readonly RunInputSnapshotIntegrationAssignment[]): Promise<readonly CompiledToolDefinition[]>
 {
@@ -153,7 +159,7 @@ async function _loadToolDefinitions(integrationAssignments: readonly RunInputSna
 		if (!__AreReviewedIntegrationToolDefinitionsValid(assignment.toolDefinitions as readonly ReviewedIntegrationToolDefinition[])) throw new Error("snapshot integration tool definitions are invalid");
 		for (const tool of assignment.toolDefinitions)
 		{
-			// Compile one definition per allowed tool. Provider addressing stays in the server authority.
+			// One definition per allowed tool. How to reach the provider is decided later, on the server.
 			const toolRevisionId = `${ExternalActionRevisionKinds.Integration}:${assignment.integrationId}:${tool.name}`;
 			tools.push({ name: toolRevisionId, toolRevisionId, description: tool.description, requiresApproval: true, parametersSchema: ___CloneCanonicalJson(tool.parametersSchema), parametersSchemaDigest: tool.parametersSchemaDigest });
 		}
@@ -161,7 +167,7 @@ async function _loadToolDefinitions(integrationAssignments: readonly RunInputSna
 	return tools;
 }
 
-/** Resolve one-line availability summaries for the immutable artifact revisions offered to the run. */
+/** Build a one-line summary for each artifact revision offered to the run. */
 async function _loadArtifactSummaries(transaction: Prisma.TransactionClient, artifactRevisionIds: readonly string[]): Promise<readonly string[]>
 {
 	if (artifactRevisionIds.length === 0) return [];
@@ -169,7 +175,7 @@ async function _loadArtifactSummaries(transaction: Prisma.TransactionClient, art
 	return rows.map(function _summary(row) { return `${row.mediaType} artifact ${row.id}`; }).sort();
 }
 
-/** Resolve one-line availability summaries for the immutable skill revisions offered to the run. */
+/** Build a one-line summary for each skill revision offered to the run. */
 async function _loadSkillSummaries(transaction: Prisma.TransactionClient, skillRevisionIds: readonly string[]): Promise<readonly string[]>
 {
 	if (skillRevisionIds.length === 0) return [];
@@ -177,7 +183,7 @@ async function _loadSkillSummaries(transaction: Prisma.TransactionClient, skillR
 	return rows.map(function _summary(row) { return `skill ${row.skillId} revision ${row.id}`; }).sort();
 }
 
-/** Resolve the server-selected model route to a literal alias and output ceiling, never a credential. */
+/** Turn the snapshot's model route into a model name and an output-token limit; never a credential. */
 async function _resolveModelRoute(transaction: Prisma.TransactionClient, modelRoute: JsonValue): Promise<CompiledModelRoute>
 {
 	const route: { readonly [key: string]: JsonValue } = modelRoute && typeof modelRoute === "object" && !Array.isArray(modelRoute) ? modelRoute as { readonly [key: string]: JsonValue } : {};

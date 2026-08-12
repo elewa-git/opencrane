@@ -1,4 +1,4 @@
-/** Configuration for bounded authorized event forwarding. */
+/** Limits and allowlists for the event proxy. Every value is a hard bound: nothing here is a hint, and a missing or oversized value must fail the request rather than be defaulted at use time. */
 export interface ChannelProxyConfig
 {
 	/** Exact HTTPS browser origins allowed to use the proxy. */
@@ -15,7 +15,7 @@ export interface ChannelProxyConfig
 	maxEventBytes: number;
 }
 
-/** Identity material that only OpenCrane may interpret. */
+/** The browser's own credentials, passed through untouched. The proxy never parses or validates them — only OpenCrane can — so it must not branch on their contents. */
 export interface DelegatedSession
 {
 	/** Browser session cookie, when cookie authentication is used. */
@@ -26,7 +26,7 @@ export interface DelegatedSession
 	trustedHost: string;
 }
 
-/** An operation for which the proxy requests an authorized target. */
+/** What the proxy asks OpenCrane to authorize: the browser's session, the action, the conversation, and the cursor to resume from. */
 export interface TargetResolutionRequest
 {
 	/** Delegated browser identity inputs. */
@@ -39,7 +39,7 @@ export interface TargetResolutionRequest
 	cursor?: string;
 }
 
-/** Short-lived route returned by the OpenCrane authority. */
+/** OpenCrane's answer: where to read the stream, the invocation context to present, and when both stop being valid. Re-authorize rather than caching past `expiresAt`. */
 export interface AuthorizedChannelTarget
 {
 	/** Canonical silo subject used only as a rate-limit key. */
@@ -52,14 +52,14 @@ export interface AuthorizedChannelTarget
 	expiresAt: string;
 }
 
-/** OpenCrane target resolver port. */
+/** The way the proxy reaches OpenCrane for authorization. Implemented by {@link __OpenCraneTargetResolver}; a test double may replace it, but nothing may bypass it. */
 export interface ChannelTargetResolver
 {
 	/** Resolve one session-bound operation or reject it. */
 	resolve(request: TargetResolutionRequest, signal: AbortSignal): Promise<AuthorizedChannelTarget>;
 }
 
-/** Minimal rate-limit port for one authenticated subject. */
+/** The way the proxy counts requests per subject. Implemented by {@link __FixedWindowRateLimiter}. `allow` consumes budget, so call it once per request. */
 export interface SubjectRateLimiter
 {
 	/** Consume one request from the subject's current window. */

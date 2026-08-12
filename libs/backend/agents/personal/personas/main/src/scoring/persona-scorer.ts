@@ -1,12 +1,31 @@
 import { PersonaColourValues, PersonaModifierValues, PersonaTieKinds, type PersonaAuthoritativeScoreResult, type PersonaScoreReplayEvidence, type PersonaScoreResult, type PersonaSelectionValue, type PersonaTieChoice, type PersonaWeightedAnswer } from "./persona-scorer.types.js";
 
-/** Stable product order used only to present equal candidates, never to resolve them. */
+/** Fixed display order for the four colours. Used only to list tied candidates; it never decides which one wins. */
 const _COLOUR_ORDER: readonly PersonaColourValues[] = [PersonaColourValues.Red, PersonaColourValues.Yellow, PersonaColourValues.Green, PersonaColourValues.Blue];
 
-/** Canonical lifecycle order shared with durable approval evidence. */
+/** Sort order for tie choices: primary, then secondary, then modifier. The score JSON stored on a revision is sorted this way, and approval compares it in the same order. */
 const _TIE_KIND_ORDER: Readonly<Record<PersonaTieKinds, number>> = { [PersonaTieKinds.Primary]: 1, [PersonaTieKinds.Secondary]: 2, [PersonaTieKinds.Modifier]: 3 };
 
-/** Accumulate reviewed weights and resolve only ties backed by exact owner evidence. */
+/**
+ * Scores a persona from the owner's answers and any tie choices they have already made.
+ *
+ * Adds up the six counters across every answer, then works through the three ties in a fixed order:
+ * primary colour, secondary colour, modifier. A tie is only broken when the owner has recorded a
+ * choice for exactly that tie, against exactly the candidate list this run produced. Nothing here
+ * ever picks a winner on its own, so the same answers always give the same result.
+ *
+ * Called by: `PrismaPersonaScoringRepository.ensureScore`, `.readScore` and `.resolveTie`. Every
+ * caller runs it twice — once with the owner's tie choices and once with none — because the row stores
+ * the candidate lists from the choice-free run.
+ *
+ * @param answers - The owner's answers with the scoring weights of each chosen choice.
+ * @param resolutions - Tie choices already recorded, at most one per tie.
+ * @returns The score, whose `resolutionRequired` is null only when all three ties are settled — the
+ * caller must check it before drafting. `null` when the answers are unusable: none supplied, a blank
+ * identifier, a question answered twice, or a negative or non-integer weight. A `null` is a data
+ * problem, not a tie, and the caller must not retry it.
+ * @see PersonaAuthoritativeScoreResult
+ */
 export function _ScorePersona(answers: readonly PersonaWeightedAnswer[], resolutions: readonly PersonaTieChoice[]): PersonaAuthoritativeScoreResult | null
 {
 	if (answers.length === 0 || !_ValidAnswers(answers)) return null;
@@ -23,14 +42,32 @@ export function _ScorePersona(answers: readonly PersonaWeightedAnswer[], resolut
 	return _ReplayPersonaScore({ orderedAnswerIds: answers.map(function _AnswerId(answer) { return answer.answerId; }), orderedChoiceIds: answers.map(function _ChoiceId(answer) { return `${answer.questionId}:${answer.choiceId}`; }), colours, openness, tieResolutions: resolutions });
 }
 
-/** Replay persisted counters and tie evidence through the same governed selection algorithm. */
+/**
+ * Recomputes a persona result from already-stored counters and tie choices.
+ *
+ * Runs exactly the same three tie steps as {@link _ScorePersona}, but starts from stored counters
+ * rather than re-adding the answers. That is what lets the code check a stored score is still the one
+ * the answers produce: if a stored row or JSON document has drifted, the recomputed colours and
+ * modifier will not match and the caller refuses.
+ *
+ * Called by: {@link _ScorePersona} (it delegates the tie steps here) and
+ * `_ParsePersonaPersistedScoreEvidence` in persona-scorer.validator.ts.
+ *
+ * @param evidence - Stored answer and choice ids, the raw counters with their totals, and the tie
+ * choices made so far.
+ * @returns The recomputed score, whose `resolutionRequired` is null only when all three ties are
+ * settled. `null` when the stored inputs do not check out: no answer ids, mismatched id list lengths,
+ * a blank id, the same tie recorded twice, a negative or non-integer counter, a total that does not
+ * equal its parts, or a zero total. A `null` means the stored evidence is untrustworthy and must not
+ * be shown to the owner.
+ */
 export function _ReplayPersonaScore(evidence: PersonaScoreReplayEvidence): PersonaAuthoritativeScoreResult | null
 {
 	const { orderedAnswerIds, orderedChoiceIds, colours, openness, tieResolutions: resolutions } = evidence;
 	if (!_ValidReplayEvidence(evidence)) return null;
 	const progress = new _PersonaScoreProgress();
 
-	// 1. Advance the explicit Primary -> Secondary -> Modifier resolution lifecycle in reviewed order.
+	// 1. Work through the ties in a fixed order: primary colour, then secondary colour, then modifier.
 	for (const state of _TIE_RESOLUTION_STATES)
 	{
 		const candidates = state.candidates(colours, openness, progress);
@@ -44,7 +81,7 @@ export function _ReplayPersonaScore(evidence: PersonaScoreReplayEvidence): Perso
 	return _Result(orderedAnswerIds, orderedChoiceIds, resolutions, colours, openness, progress, null);
 }
 
-/** Mutable progress carried only while replaying one immutable score evidence set. */
+/** Scratch state held while one score is being computed, then thrown away. */
 class _PersonaScoreProgress
 {
 	/** Primary colour selected by the first resolution state. */
@@ -53,29 +90,29 @@ class _PersonaScoreProgress
 	secondary: PersonaColourValues | null = null;
 	/** Working-style modifier selected by the final resolution state. */
 	modifier: PersonaModifierValues | null = null;
-	/** Candidate sets reached in the governed state order. */
+	/** The candidate list found at each tie, in the order the ties were handled. */
 	candidateEvidence: { primary: PersonaColourValues[]; secondary: PersonaColourValues[]; modifier: PersonaModifierValues[] } = { primary: [], secondary: [], modifier: [] };
 }
 
-/** Shared state contract for one ordered governed persona tie boundary. */
+/** Base class for one tie: how its candidates are found, recorded, and resolved. */
 abstract class _PersonaTieResolutionState<Value extends PersonaSelectionValue>
 {
-	/** Persisted boundary vocabulary owned by this state. */
+	/** Which tie this class handles. The same value is stored on the tie-resolution row. */
 	abstract readonly kind: PersonaTieKinds;
 
-	/** Derive the candidates that may be selected at this exact lifecycle boundary. */
+	/** Works out the candidates the owner could be asked to choose from at this tie. */
 	abstract candidates(colours: PersonaScoreResult["colours"], openness: PersonaScoreResult["openness"], progress: _PersonaScoreProgress): readonly Value[];
 
-	/** Retain this state's candidate evidence before any user selection is accepted. */
+	/** Records this tie's candidate list before any owner choice is applied. */
 	abstract recordCandidates(progress: _PersonaScoreProgress, candidates: readonly Value[]): void;
 
-	/** Retain one valid state-owned selection in the shared score progress. */
+	/** Stores the value chosen for this tie on the shared progress object. */
 	abstract recordSelection(progress: _PersonaScoreProgress, selection: Value): void;
 
-	/** Narrow a persisted selection to this state's own vocabulary. */
+	/** Returns whether a stored value belongs to this tie's set of values. */
 	abstract accepts(value: PersonaSelectionValue): value is Value;
 
-	/** Resolve one unambiguous candidate or exact persisted owner choice. */
+	/** Returns the single candidate when there is no tie, or the owner's stored choice when it names the same candidate list. Returns null while the tie is still open. */
 	resolve(candidates: readonly Value[], resolutions: readonly PersonaTieChoice[]): Value | null
 	{
 		if (candidates.length === 1) return candidates[0] ?? null;
@@ -87,19 +124,19 @@ abstract class _PersonaTieResolutionState<Value extends PersonaSelectionValue>
 	}
 }
 
-/** First lifecycle state: select the highest colour without using a stale tie choice. */
+/** First tie: the highest colour counter. A stored choice is used only while its candidate list still matches. */
 class _PrimaryTieResolutionState extends _PersonaTieResolutionState<PersonaColourValues>
 {
-	/** Persisted discriminator for the primary-colour boundary. */
+	/** Value stored on the tie row for the primary-colour tie. */
 	readonly kind = PersonaTieKinds.Primary;
 
-	/** Derive all highest colour counters in stable display order. */
+	/** Returns every colour tied for the highest counter, in display order. */
 	candidates(colours: PersonaScoreResult["colours"]): readonly PersonaColourValues[]
 	{
 		return _TopColours(colours, null);
 	}
 
-	/** Retain primary candidates for later durable evidence. */
+	/** Records the primary candidates so they can be stored with the score. */
 	recordCandidates(progress: _PersonaScoreProgress, candidates: readonly PersonaColourValues[]): void
 	{
 		progress.candidateEvidence.primary = [...candidates];
@@ -111,26 +148,26 @@ class _PrimaryTieResolutionState extends _PersonaTieResolutionState<PersonaColou
 		progress.primary = selection;
 	}
 
-	/** Accept only the colour vocabulary at the primary boundary. */
+	/** Accepts only colour values for this tie. */
 	accepts(value: PersonaSelectionValue): value is PersonaColourValues
 	{
 		return _IsColour(value);
 	}
 }
 
-/** Second lifecycle state: select the highest colour remaining after primary selection. */
+/** Second tie: the highest colour counter left once the primary colour is taken out. */
 class _SecondaryTieResolutionState extends _PersonaTieResolutionState<PersonaColourValues>
 {
 	/** Persisted discriminator for the secondary-colour boundary. */
 	readonly kind = PersonaTieKinds.Secondary;
 
-	/** Derive remaining highest colours only after primary has been selected. */
+	/** Returns the highest colours left, excluding the primary colour already chosen. */
 	candidates(colours: PersonaScoreResult["colours"], openness: PersonaScoreResult["openness"], progress: _PersonaScoreProgress): readonly PersonaColourValues[]
 	{
 		return _TopColours(colours, progress.primary);
 	}
 
-	/** Retain secondary candidates for later durable evidence. */
+	/** Records the secondary candidates so they can be stored with the score. */
 	recordCandidates(progress: _PersonaScoreProgress, candidates: readonly PersonaColourValues[]): void
 	{
 		progress.candidateEvidence.secondary = [...candidates];
@@ -142,26 +179,26 @@ class _SecondaryTieResolutionState extends _PersonaTieResolutionState<PersonaCol
 		progress.secondary = selection;
 	}
 
-	/** Accept only the colour vocabulary at the secondary boundary. */
+	/** Accepts only colour values for this tie. */
 	accepts(value: PersonaSelectionValue): value is PersonaColourValues
 	{
 		return _IsColour(value);
 	}
 }
 
-/** Final lifecycle state: select the Explorer or Guardian modifier after colours are fixed. */
+/** Third tie: Explorer or Guardian, handled once both colours are settled. */
 class _ModifierTieResolutionState extends _PersonaTieResolutionState<PersonaModifierValues>
 {
 	/** Persisted discriminator for the modifier boundary. */
 	readonly kind = PersonaTieKinds.Modifier;
 
-	/** Derive the modifier candidates without inventing an implicit tie breaker. */
+	/** Returns the winning modifier, or both when the counters are equal. This code never picks a winner itself. */
 	candidates(colours: PersonaScoreResult["colours"], openness: PersonaScoreResult["openness"]): readonly PersonaModifierValues[]
 	{
 		return _ModifierCandidates(openness);
 	}
 
-	/** Retain modifier candidates for later durable evidence. */
+	/** Records the modifier candidates so they can be stored with the score. */
 	recordCandidates(progress: _PersonaScoreProgress, candidates: readonly PersonaModifierValues[]): void
 	{
 		progress.candidateEvidence.modifier = [...candidates];
@@ -173,17 +210,17 @@ class _ModifierTieResolutionState extends _PersonaTieResolutionState<PersonaModi
 		progress.modifier = selection;
 	}
 
-	/** Accept only the modifier vocabulary at the final boundary. */
+	/** Accepts only modifier values for this tie. */
 	accepts(value: PersonaSelectionValue): value is PersonaModifierValues
 	{
 		return _IsModifier(value);
 	}
 }
 
-/** Ordered strategy dispatch for the only permitted persona tie-resolution lifecycle. */
+/** The three ties in the only order they may be handled: primary, secondary, then modifier. */
 const _TIE_RESOLUTION_STATES: readonly _PersonaTieResolutionState<PersonaSelectionValue>[] = [new _PrimaryTieResolutionState(), new _SecondaryTieResolutionState(), new _ModifierTieResolutionState()];
 
-/** Validate persisted score inputs before selecting classifications from them. */
+/** Returns whether stored score inputs are usable: counters are non-negative whole numbers, each total equals its parts, and no tie appears twice. */
 function _ValidReplayEvidence(evidence: PersonaScoreReplayEvidence): boolean
 {
 	const colourValues = [evidence.colours.red, evidence.colours.yellow, evidence.colours.green, evidence.colours.blue];
@@ -200,13 +237,13 @@ function _ValidReplayEvidence(evidence: PersonaScoreReplayEvidence): boolean
 		&& evidence.colours.total > 0 && evidence.openness.total > 0;
 }
 
-/** Return whether a resolution exists for one boundary that did not require one. */
+/** Returns whether the owner already recorded a choice for this tie. */
 function _HasResolution(kind: PersonaTieKinds, resolutions: readonly PersonaTieChoice[]): boolean
 {
 	return resolutions.some(function _Matching(resolution) { return resolution.kind === kind; });
 }
 
-/** Validate non-negative integer weights and unique ordered question evidence. */
+/** Returns whether every answer has its identifiers, answers a question only once, and carries non-negative whole-number weights. */
 function _ValidAnswers(answers: readonly PersonaWeightedAnswer[]): boolean
 {
 	const questions = new Set<string>();
@@ -219,7 +256,7 @@ function _ValidAnswers(answers: readonly PersonaWeightedAnswer[]): boolean
 	return true;
 }
 
-/** Sum one reviewed counter without presentation rounding. */
+/** Adds up one counter across every answer. */
 function _Sum(answers: readonly PersonaWeightedAnswer[], counter: PersonaSelectionValue): number
 {
 	return answers.reduce(function _Accumulate(total, answer) { return total + answer[counter]; }, 0);
@@ -233,7 +270,7 @@ function _TopColours(scores: { readonly red: number; readonly yellow: number; re
 	return available.filter(function _Highest(colour) { return scores[colour] === highest; });
 }
 
-/** Return one unambiguous modifier or both candidates when owner evidence must break a tie. */
+/** Returns the higher-scoring modifier, or both when the counters are equal. */
 function _ModifierCandidates(openness: PersonaScoreResult["openness"]): readonly PersonaModifierValues[]
 {
 	if (openness.explorer === openness.guardian) return [PersonaModifierValues.Explorer, PersonaModifierValues.Guardian];
@@ -241,25 +278,25 @@ function _ModifierCandidates(openness: PersonaScoreResult["openness"]): readonly
 	return [PersonaModifierValues.Guardian];
 }
 
-/** Require byte-for-byte candidate-set equality so stale resolutions cannot be replayed. */
+/** Returns whether two candidate lists are identical in value and order, so a choice recorded against a different list is rejected. */
 function _SameCandidates(left: readonly PersonaSelectionValue[], right: readonly PersonaSelectionValue[]): boolean
 {
 	return left.length === right.length && left.every(function _Same(value, index) { return value === right[index]; });
 }
 
-/** Narrow one governed selection value to the colour vocabulary. */
+/** Returns whether the value is one of the four colours. */
 function _IsColour(value: PersonaSelectionValue): value is PersonaColourValues
 {
 	return Object.values(PersonaColourValues).some(function _Same(candidate) { return candidate === value; });
 }
 
-/** Narrow one governed selection value to the modifier vocabulary. */
+/** Returns whether the value is Explorer or Guardian. */
 function _IsModifier(value: PersonaSelectionValue): value is PersonaModifierValues
 {
 	return Object.values(PersonaModifierValues).some(function _Same(candidate) { return candidate === value; });
 }
 
-/** Assemble one immutable score projection from ordered answer evidence. */
+/** Builds the final score result, copying every list and sorting the tie choices primary, secondary, modifier. */
 function _Result(orderedAnswerIds: readonly string[], orderedChoiceIds: readonly string[], resolutions: readonly PersonaTieChoice[], colours: PersonaScoreResult["colours"], openness: PersonaScoreResult["openness"], progress: _PersonaScoreProgress, resolutionRequired: PersonaScoreResult["resolutionRequired"]): PersonaAuthoritativeScoreResult
 {
 	const orderedResolutions = [...resolutions].sort(function _GovernedOrder(left, right) { return _TIE_KIND_ORDER[left.kind] - _TIE_KIND_ORDER[right.kind]; });

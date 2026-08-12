@@ -15,7 +15,7 @@ function _Datasets(): { findActivePersonalDataset: ReturnType<typeof vi.fn> }
 	return { findActivePersonalDataset: vi.fn().mockResolvedValue({ datasetId: "dataset-1", cogneeDatasetId: "cognee-personal-1" }) };
 }
 
-/** Build an admission transaction whose messages resolve deterministically by id. */
+/** Builds a fake admission transaction that returns a fixed message for each id. */
 function _Transaction(rows: Record<string, { role: string; blocks: unknown }>): { prisma: { conversationMessage: { findUnique: ReturnType<typeof vi.fn> } } }
 {
 	return { prisma: { conversationMessage: { findUnique: vi.fn(async function _findUnique(query: { where: { id: string } }) { return rows[query.where.id] ?? null; }) } } };

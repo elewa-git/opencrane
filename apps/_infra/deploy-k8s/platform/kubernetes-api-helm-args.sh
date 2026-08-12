@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Kubernetes API endpoint discovery for workloads whose NetworkPolicy permits TokenReview traffic.
+# Discovers the Kubernetes API endpoints for workloads whose NetworkPolicy permits TokenReview traffic.
 
 # Populates KUBERNETES_API_HELM_ARGS for one chart-values prefix. The caller owns `err` and must
 # copy the result before invoking the function again.

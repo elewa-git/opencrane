@@ -1,6 +1,6 @@
 import type { ObotCustodyPort, ObotMcpInvocationPort } from "@opencrane/backend/server/infra/obot-custody";
 
-/** Server-owned Obot authority exposed to the process composition. */
+/** The Obot ports the server owns and hands to the process composition. */
 export interface ObotAdapters
 {
 	/** Credential custody authority; the fail-closed unavailable adapter when Obot is not configured. */

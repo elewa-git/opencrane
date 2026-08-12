@@ -13,7 +13,7 @@ function _IsNonBlank(value: string | undefined): boolean
 	return typeof value === "string" && value.trim().length > 0;
 }
 
-/** Auto-routing configuration with typed known fields and deliberate extension preservation. */
+/** Auto-routing settings: known fields are type-checked, and unknown fields are kept rather than stripped so a newer client's settings survive a round trip through an older server. */
 const _AutoRoutingConfigSchema: z.ZodType<AutoRoutingConfig> = z.object({
 	objective: z.nativeEnum(AutoRoutingObjective),
 	costQualitySlider: z.number().min(0).max(10).optional(),
@@ -26,7 +26,7 @@ const _AutoRoutingConfigSchema: z.ZodType<AutoRoutingConfig> = z.object({
 	explorationRate: z.number().min(0).max(1),
 }).passthrough();
 
-/** Exact public write command plus its scope and non-empty-default invariants. */
+/** The public write body, plus the rules that `clusterTenant` is required when `scope` is `clusterTenant` and that a supplied default model cannot be blank. */
 export const ___ModelRoutingDefaultWriteSchema: z.ZodType<ModelRoutingDefaultWrite> = z.object({
 	scope: z.nativeEnum(ModelRoutingScope).optional(),
 	clusterTenant: z.string().optional(),

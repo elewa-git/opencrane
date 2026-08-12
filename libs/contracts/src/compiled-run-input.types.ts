@@ -1,7 +1,7 @@
 import type { JsonValue } from "@opencrane/util";
 
 /**
- * Literal, fully hydrated agent input produced deterministically in the control plane.
+ * Agent input with every reference already resolved to a literal value, built in the control plane.
  *
  * A {@link RunInputSnapshot} holds only immutable ID references plus a `promptCompilerVersion`. The
  * TypeScript prompt compiler dereferences those records into this literal payload — persona
@@ -11,27 +11,27 @@ import type { JsonValue } from "@opencrane/util";
  */
 export interface CompiledRunInput
 {
-	/** Deterministic prompt-compiler version that produced and must consume this payload. */
+	/** Version of the prompt compiler that built this payload; the runtime must be on the same version. */
 	readonly promptCompilerVersion: string;
 	/** Run this compiled input belongs to. */
 	readonly runId: string;
-	/** Positive attempt whose immutable snapshot produced this compiled input. */
+	/** Attempt number whose snapshot this input was compiled from. @see {@link RunInputSnapshot} */
 	readonly attempt: number;
-	/** Fully assembled system instructions: persona text plus resolved memory and resource context. */
+	/** The complete system prompt: persona text plus the memory and resource context already looked up for this run. */
 	readonly instructions: string;
 	/** Ordered conversation turns compiled from the snapshot's message references. */
 	readonly messages: readonly CompiledMessage[];
-	/** Tool schemas the bounded model loop may propose, ordered canonically by name. */
+	/** Tool schemas the model loop may call, sorted by name. */
 	readonly tools: readonly CompiledToolDefinition[];
 	/** Resolved model route carrying no provider credential. */
 	readonly model: CompiledModelRoute;
 	/** Literal token, cost, tool-invocation, and wall-clock limits for the bounded loop. */
 	readonly budget: CompiledBudget;
-	/** SHA-256 digest of the canonical compiled payload excluding this field, in `sha256:<hex>` form. */
+	/** SHA-256 digest of this payload in RFC 8785 canonical form, with this field itself left out, written as `sha256:<hex>`. @see https://www.rfc-editor.org/rfc/rfc8785 */
 	readonly digest: string;
 }
 
-/** One compiled conversation turn delivered to the bounded model loop. */
+/** One conversation turn given to the model loop, already flattened to a role and plain text. */
 export interface CompiledMessage
 {
 	/** Canonical turn role understood by the OpenAI-compatible adapter. */
@@ -40,33 +40,39 @@ export interface CompiledMessage
 	readonly content: string;
 }
 
-/** One resolved tool definition the bounded model loop may propose calling. */
+/**
+ * One tool the model loop may call during this attempt.
+ *
+ * The list is closed: a call to any other name is rejected. `requiresApproval` decides whether
+ * a call pauses for a person before dispatch, and `parametersSchemaDigest` lets the server prove
+ * the schema still matches the pinned revision when it authorizes the call.
+ */
 export interface CompiledToolDefinition
 {
 	/** Stable tool name the model selects. */
 	readonly name: string;
-	/** Immutable tool revision the proposal is fixed to for later authorization. */
+	/** Tool revision this call is pinned to, so authorization later checks the same revision. */
 	readonly toolRevisionId: string;
 	/** Human-readable tool description compiled from its revision. */
 	readonly description: string;
-	/** Whether an invocation of this tool must pause for a deferred human approval before dispatch. */
+	/** When true, a call to this tool pauses and waits for a person to approve it before it is sent. */
 	readonly requiresApproval: boolean;
-	/** JSON-Schema parameters object validated by the adapter, never by an implicit retry. */
+	/** JSON-Schema for the tool's parameters. The adapter validates against it; a retry never re-validates on its own. */
 	readonly parametersSchema: JsonValue;
-	/** Canonical digest binding the exact parameters schema to revision and snapshot authority. */
+	/** Digest of the parameters schema, proving it matches the pinned revision and the run snapshot. @see RunInputSnapshot */
 	readonly parametersSchemaDigest: string;
 }
 
-/** Resolved model route delivered to the runtime, never carrying a provider credential. */
+/** Which model the runtime calls, and its output cap. It never carries a provider credential. */
 export interface CompiledModelRoute
 {
-	/** LiteLLM model alias the attempt-scoped virtual key is bound to. */
+	/** LiteLLM model alias. This attempt's virtual key is restricted to it, so no other model can be called. */
 	readonly modelAlias: string;
 	/** Maximum output tokens for one model request, or null when the route sets no ceiling. */
 	readonly maxOutputTokens: number | null;
 }
 
-/** Literal aggregate limits OpenCrane enforces over the bounded loop. */
+/** Limits OpenCrane enforces across the whole attempt. */
 export interface CompiledBudget
 {
 	/** Maximum total tokens across the attempt, or null when uncapped. */

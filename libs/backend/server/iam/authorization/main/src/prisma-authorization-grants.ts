@@ -4,7 +4,7 @@ import type { AuthorizationGrant, AuthorizationScope } from "@opencrane/models/a
 
 import type { AuthorizationGrantRepository } from "./effective-access.types.js";
 
-/** Maps one Prisma grant scope to the independent target authorization dimension. */
+/** Builds the AuthorizationScope value for one grant row's scope kind and its organization/resource ids. */
 function _scope(kind: string, organizationId: string, resourceId: string | null): AuthorizationScope
 {
 	switch (kind)
@@ -19,7 +19,7 @@ function _scope(kind: string, organizationId: string, resourceId: string | null)
 	}
 }
 
-/** Maps one immutable Prisma authorization grant to the target evaluation contract. */
+/** Converts one authorization-grant row into the AuthorizationGrant shape the decision code reads. */
 function _grant(row: { id: string; siloId: string; subjectId: string; scopeKind: string; organizationId: string; scopeResourceId: string | null; catalogId: string; catalogRevision: number; catalogDigest: string; capabilityId: string; resourceKind: string; resourceId: string; effect: string; priority: number; validFrom: Date; expiresAt: Date | null; revokedAt: Date | null }): AuthorizationGrant
 {
 	return {
@@ -43,13 +43,13 @@ export class PrismaAuthorizationGrantRepository implements AuthorizationGrantRep
 	/** OpenCrane product-authority database client. */
 	private readonly prisma: Prisma.TransactionClient;
 
-	/** Creates a grant reader over canonical Postgres. */
+	/** Creates a grant reader over the product-authority Postgres database. */
 	constructor(prisma: Prisma.TransactionClient)
 	{
 		this.prisma = prisma;
 	}
 
-	/** Lists only immutable grants for one exact silo and subject. */
+	/** Lists every grant for one silo and subject, highest priority first. */
 	async listSubjectGrants(siloId: string, subjectId: string): Promise<readonly AuthorizationGrant[]>
 	{
 		const rows = await this.prisma.authorizationGrant.findMany({ where: { siloId, subjectId }, orderBy: [{ priority: "desc" }, { id: "asc" }] });

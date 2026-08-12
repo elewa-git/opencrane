@@ -2,7 +2,21 @@ import type { AgentControllerRunAttemptAssignmentCommand, AgentControllerRunAtte
 
 import type { AttemptModelKeyIssuer } from "./attempt-model-key.types.js";
 
-/** Stable database-authority outcomes returned to the private agent-controller adapter. */
+/**
+ * What the database layer tells the agent controller to do next.
+ *
+ * The controller does not decide anything. It polls the internal dispatch API, and every call
+ * comes back with one of these statuses; the status is the instruction. `Claimed` means work is
+ * yours for the length of the lease — act on it, then report back. `None` means idle: sleep and
+ * poll again, do not treat it as an error. `Committed` and `Registered` confirm your report was
+ * accepted. `Conflict` means the database no longer agrees with what you sent — drop the work
+ * and poll again; never retry the same body, because another controller replica has almost
+ * certainly taken over. `Terminalized` is the one status that is not about your work at all: a
+ * row that can never succeed was failed on your behalf so the queue can move on, so poll again
+ * immediately rather than backing off.
+ *
+ * @see RunDispatchRepository for the method that returns each status.
+ */
 export enum RunDispatchResultStatuses
 {
 	/** A fresh database-fenced command is ready for the controller. */
@@ -13,7 +27,7 @@ export enum RunDispatchResultStatuses
 	Committed = "committed",
 	/** The submitted command did not match current durable authority. */
 	Conflict = "conflict",
-	/** A poisoned release was durably failed instead of being returned. */
+	/** A release row that can never succeed was marked failed instead of being handed out again. */
 	Terminalized = "terminalized",
 	/** The exact first worker Pod was registered. */
 	Registered = "registered",
@@ -57,18 +71,85 @@ export type RegisterRunWorkloadPodResult =
 	| { readonly status: RunDispatchResultStatuses.Registered; readonly result: AgentControllerRunWorkloadRegistrationResult }
 	| { readonly status: RunDispatchResultStatuses.Conflict; readonly reason: "claim_not_found" | "stale_claim" | "claim_terminal" | "attempt_conflict" | "authority_conflict" | "assignment_conflict" | "pod_conflict" | "invalid_registration" };
 
-/** Run-owned persistence port used by the controller-only internal API. */
+/**
+ * Every database operation the agent controller is allowed to perform.
+ *
+ * This is the complete surface between the Kubernetes controller and OpenCrane's run state: the
+ * controller creates and releases Jobs, but it never decides whether it may. Each method takes
+ * or renews a database-held claim, and the claim is what fences a controller replica whose lease
+ * has expired out of publishing stale work.
+ *
+ * Every method ends in `Atomically` because each one commits its whole effect — claim, rows, run
+ * state and outbox publication — in a single transaction. A caller must never split one of these
+ * into several calls and must never treat a partial success as possible: either the returned
+ * status happened completely, or nothing did.
+ *
+ * Called by: `run-dispatch.router.ts` (the controller-only HTTP adapter). Implemented by
+ * `PrismaRunDispatchRepository`, which `apps/opencrane/src/app/runtime-composition.ts` constructs.
+ *
+ * @see RunDispatchResultStatuses for what each returned status obliges the controller to do.
+ */
 export interface RunDispatchRepository
 {
-	/** Claims one eligible RunAttemptRequested event or reports no current work. */
+	/**
+	 * Takes the next run attempt that is waiting to be dispatched, and mints its model key.
+	 *
+	 * The claim is held by a database lease, so exactly one controller replica gets each attempt.
+	 * The model key is minted after the transaction commits, so no external call ever holds a
+	 * database lock.
+	 *
+	 * @returns `claimed` with the lease and the attempt, including a short-lived model key that
+	 * exists only in this response and is never stored — pass it to the Job and do not log it.
+	 * `none` means nothing is waiting; sleep and poll again.
+	 * @throws When the model-key issuer returns no key, after the claim has already committed; the
+	 * claim's lease will expire and the attempt becomes claimable again.
+	 */
 	claimNextAttemptAtomically(): Promise<ClaimNextRunAttemptResult>;
-	/** Commits only the exact current claim and suspended Job UID as a PendingPod assignment. */
+	/**
+	 * Records the suspended Job the controller just created as this attempt's assignment.
+	 *
+	 * Call this only after the Job exists in Kubernetes. The write is accepted only while the claim
+	 * is still the current one and its lease has not expired, which is what stops a slow replica
+	 * from binding a Job that a newer replica has already superseded.
+	 *
+	 * @param eventId - The outbox event id from the claim you are reporting against.
+	 * @param command - The created Job's UID and identity fields, exactly as Kubernetes returned them.
+	 * @returns `committed` means the assignment is durable and the run has advanced to Assigned, so
+	 * you may go on to release the Job. `conflict` means your claim is no longer current — delete
+	 * nothing, report nothing further, and poll again; another replica owns this attempt.
+	 */
 	commitSuspendedJobAssignmentAtomically(eventId: string, command: AgentControllerRunAttemptAssignmentCommand): Promise<CommitRunAttemptAssignmentResult>;
-	/** Claims one exact PendingPod assignment that is ready to be unsuspended. */
+	/**
+	 * Takes the next committed assignment whose Job is ready to be unsuspended.
+	 *
+	 * @returns `claimed` with the assignment to unsuspend, under a fresh lease. `none` means nothing
+	 * is ready; sleep and poll again. `terminalized` means the row at the head of the queue could
+	 * never succeed and was failed for you — nothing is yours to do, so poll again straight away
+	 * instead of backing off.
+	 */
 	claimNextWorkloadReleaseAtomically(): Promise<ClaimNextRunWorkloadReleaseResult>;
-	/** Registers only the first Pod for the exact current release claim and publishes that command. */
+	/**
+	 * Records the first Pod that appeared for this attempt, and publishes the release command.
+	 *
+	 * Only the first Pod is ever accepted. A second, different Pod for the same attempt is a
+	 * permanent conflict, never a retry: it means two workloads exist for one run attempt.
+	 *
+	 * @param eventId - The outbox event id from the release claim you are reporting against.
+	 * @param command - The observed Pod's UID and the identity fields that must match the assignment.
+	 * @returns `registered` means this Pod is now the attempt's runtime and the release has been
+	 * published. `conflict` means either your claim is stale — poll again — or a different Pod is
+	 * already registered, which no amount of retrying will fix and needs an operator.
+	 */
 	registerFirstPodAndPublishReleaseAtomically(eventId: string, command: AgentControllerRunWorkloadRegistrationCommand): Promise<RegisterRunWorkloadPodResult>;
-	/** Removes a bounded batch of retention-expired successfully delivered operational records. */
+	/**
+	 * Deletes one batch of old outbox rows that were delivered successfully.
+	 *
+	 * Housekeeping only: failed rows are never deleted, because they are the evidence of what went
+	 * wrong. Call it on a schedule; one call deletes at most one batch, so a large backlog needs
+	 * several passes.
+	 *
+	 * @returns How many rows were deleted, so a scheduler can decide whether to run again.
+	 */
 	prunePublishedOutboxEventsAtomically(): Promise<AgentControllerRunOutboxPruneResult>;
 }
 
@@ -114,7 +195,7 @@ export interface AgentControllerRunDispatchRouterDependencies
 	readonly logger: AgentControllerRunDispatchLogger;
 }
 
-/** Non-locking candidate coordinates used only to establish canonical lock order. */
+/** Ids read without locking, used only to work out which rows to lock and in what order. */
 export interface RunOutboxCandidateRow
 {
 	/** Outbox event identifier. */
@@ -125,7 +206,7 @@ export interface RunOutboxCandidateRow
 	readonly agentServiceId: string;
 }
 
-/** Non-locking release candidate coordinates used only to establish canonical lock order. */
+/** Ids for a release row, read without locking, used only to work out which rows to lock and in what order. */
 export interface RunWorkloadReleaseCandidateRow extends RunOutboxCandidateRow
 {
 	/** Positive attempt number used to lock the exact assignment. */

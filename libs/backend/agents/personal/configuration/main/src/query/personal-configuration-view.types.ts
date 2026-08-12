@@ -1,11 +1,21 @@
 import type { PersonalConfigurationPatch } from "../proposal/personal-configuration-patch.types.js";
 
-/** Stable owner-visible lifecycle projection for a durable proposal. */
+/**
+ * The proposal states a user is shown.
+ *
+ * `Accepted` and `Applied` are the pair to keep apart: `Accepted` means the owner agreed but no
+ * revision exists yet, so the agent still behaves as before; `Applied` means a new immutable
+ * revision was created and later runs will use it. Showing `Accepted` as though the change were
+ * live tells the user their agent changed when it has not.
+ *
+ * `Superseded` needs no user action beyond proposing again — a later persona or service change
+ * made this proposal unusable.
+ */
 export enum PersonalConfigurationChangeViewStates
 {
 	/** The owner has not yet made a decision. */
 	Proposed = "proposed",
-	/** The owner accepted the proposal but it is not yet materialized. */
+	/** The owner accepted it, but no revision exists yet and the agent still behaves as before. */
 	Accepted = "accepted",
 	/** The proposal has been copied to a new immutable agent revision. */
 	Applied = "applied",
@@ -15,12 +25,12 @@ export enum PersonalConfigurationChangeViewStates
 	Superseded = "superseded",
 }
 
-/** Product-safe owner view of one durable future-session configuration proposal. */
+/** What a user is shown about one of their configuration proposals. */
 export interface PersonalConfigurationChangeView
 {
 	/** Opaque durable proposal identifier. */
 	readonly changeId: string;
-	/** Closed patch requested for a later immutable run snapshot. */
+	/** The change requested, which applies only to a later run. */
 	readonly requestedPatch: PersonalConfigurationPatch;
 	/** Current durable proposal lifecycle state. */
 	readonly state: PersonalConfigurationChangeViewStates;
@@ -36,9 +46,21 @@ export interface PersonalConfigurationChangeView
 	readonly rejectionReason: string | null;
 }
 
-/** Read-only persistence boundary for the signed-in owner's configuration-proposal state. */
+/**
+ * Reads the signed-in user's own configuration proposals. Never writes.
+ *
+ * Called by: the list route handler, as `dependencies.changes`.
+ *
+ * @see {@link PrismaPersonalConfigurationViewRepository} for the only implementation.
+ */
 export interface PersonalConfigurationChangeViewRepository
 {
-	/** Lists at most fifty proposals belonging to the exact owner and selected silo. */
+	/**
+	 * @param siloId - Silo derived from the request host, never from request input.
+	 * @param userId - Signed-in user; only their own proposals are returned.
+	 * @returns At most fifty proposals, newest first. There is no paging, so an older proposal
+	 * can fall off the end — a caller must not treat this as the user's complete history.
+	 * @throws Error when a stored patch is not a supported shape.
+	 */
 	listOwned(siloId: string, userId: string): Promise<readonly PersonalConfigurationChangeView[]>;
 }

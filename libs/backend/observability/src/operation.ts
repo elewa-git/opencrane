@@ -8,13 +8,19 @@ import { ___RunWithContext } from "./context.js";
 /** Tracer shared by all operations started through this package. */
 const _tracer = trace.getTracer("@opencrane/backend/observability");
 
-/** Active spans deliberately marked failed by a callback that still returns a typed outcome. */
+/** Spans that {@link ___MarkActiveSpanFailed} flagged, so {@link ___DoWithTrace} does not later overwrite their status with OK. */
 const _failedActiveSpans = new WeakSet<object>();
 
 /**
- * Return the currently active OpenTelemetry span, or `undefined` when no span
- * is active. Use this instead of importing `@opentelemetry/api` directly so
- * the dep stays contained inside the observability package.
+ * Return the currently active OpenTelemetry span, or `undefined` when none is active.
+ *
+ * Use this rather than importing `@opentelemetry/api` yourself: keeping the dependency inside this
+ * one package is what lets the version be pinned in a single place. A second copy of the API
+ * package silently stops spans recording — see the alias note in this package's `vitest.config.ts`.
+ *
+ * No caller outside this package yet.
+ * @returns The active span, or `undefined`.
+ * @see https://opentelemetry.io/docs/languages/js/
  */
 export function ___GetActiveSpan()
 {
@@ -22,11 +28,14 @@ export function ___GetActiveSpan()
 }
 
 /**
- * Mark the active operation as failed without recording an exception or caller-controlled detail.
+ * Mark the active span as failed, recording no exception and no caller-supplied text.
  *
- * Use this when an external-I/O adapter converts a provider error into a safe typed outcome. The
- * fixed status message prevents remote bodies, credentials, or provider exception text from
- * entering telemetry while preserving an accurate failed span.
+ * Use it when an adapter turns a provider error into a typed outcome instead of throwing: the span
+ * still shows a failure, but the fixed status message keeps a remote response body, a credential,
+ * or a provider stack trace out of telemetry. A no-op when no span is active.
+ *
+ * Called by: `libs/backend/agents/execution/protocol/src/production-external-action-adapter.ts`.
+ * @see {@link ___DoWithTrace}
  */
 export function ___MarkActiveSpanFailed(): void
 {
@@ -37,11 +46,20 @@ export function ___MarkActiveSpanFailed(): void
 }
 
 /**
- * Execute one outbound exchange without allowing automatic child instrumentation to capture a
- * sensitive transport address, while retaining the surrounding OpenCrane operation span.
+ * Run one outbound call with automatic child spans suppressed, keeping the operation span around it.
  *
- * @param fn - Synchronous initiation of the sensitive external I/O operation.
- * @returns The callback result, normally the promise returned by the I/O client.
+ * Use it when the address itself is sensitive: automatic HTTP instrumentation would record the
+ * URL, and for an internal service that can reveal a tenant or a credential-bearing path. The
+ * surrounding {@link ___DoWithTrace} span still records that the call happened and how long it
+ * took — only the child span is dropped.
+ *
+ * `fn` must START the I/O synchronously. Suppression applies for the duration of the call, so
+ * work deferred to a later tick is no longer covered.
+ *
+ * Called by: `libs/backend/server/infra/memory-gateway-client/src/cognee-http.ts`,
+ * `libs/backend/server/infra/obot-custody/src/obot-http.ts`, `apps/memory-gateway/src/server.ts`.
+ * @param fn - Callback that synchronously starts the sensitive I/O.
+ * @returns Whatever `fn` returns, normally the I/O client's promise.
  */
 export function ___DoWithoutTrace<T>(fn: () => T): T
 {
@@ -49,16 +67,28 @@ export function ___DoWithoutTrace<T>(fn: () => T): T
 }
 
 /**
- * Execute `fn` as a named, traced background operation.
+ * Run `fn` as one named, traced operation.
  *
- * A `requestId` is taken from `fields.requestId` when supplied (so an operation
- * can inherit a caller's correlation id) or minted otherwise. The span is
- * always ended and the error always re-thrown, so callers see normal control
- * flow while telemetry is captured transparently.
- * @param name - Span or operation name, for example `tenant.reconcile`.
- * @param fields - Structured attributes attached to the span and context.
- * @param fn - The work to run inside the operation scope.
+ * This is the standard way to wrap work in this repo — around forty call sites use it. It opens a
+ * span, seeds the async context so every log line inside inherits `requestId` and the fields, and
+ * records the duration. Automatically instrumented calls made inside `fn` (HTTP, pg, fetch) nest
+ * under this span.
+ *
+ * A `requestId` in `fields` is reused so an operation can inherit a caller's correlation id;
+ * otherwise a fresh one is minted. The span is always ended and any error is always re-thrown, so
+ * adding this wrapper never changes control flow — but `fields` are attached to the span and to
+ * every log line, so do not put a secret in them.
+ *
+ * Called by: about forty modules across `libs/backend/**` and `apps/**`, including
+ * `libs/backend/server/conversations/main/src/conversation-live-replay.ts`,
+ * `libs/backend/agents/skills/controller/src/skill-workload-controller.ts`, and
+ * `apps/artifact-service/src/server.ts`.
+ * @param name - Operation name, for example `tenant.reconcile`.
+ * @param fields - Attributes attached to the span AND to every log line in scope; never secrets.
  * @returns Whatever `fn` resolves to.
+ * @throws Re-throws whatever `fn` throws, after recording it on the span and ending it.
+ * @see {@link ___MarkActiveSpanFailed}
+ * @see {@link ___DoWithoutTrace}
  */
 export async function ___DoWithTrace<T>(
   name: string,

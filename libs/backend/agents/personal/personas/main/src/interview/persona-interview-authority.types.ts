@@ -22,9 +22,9 @@ export interface StartPersonaInterviewCommand
 	readonly interpolationMapId: string;
 	/** Exact reviewed interpolation-map revision. */
 	readonly interpolationMapVersion: number;
-	/** Accepted personal refresh proposal this interview materialises, or null for ordinary onboarding. */
+	/** The accepted persona-refresh proposal this interview carries out, or null for first-time onboarding. */
 	readonly refreshConfigurationChangeId: string | null;
-	/** Trusted start instant. */
+	/** Server timestamp for the start. */
 	readonly startedAt: string;
 }
 
@@ -39,7 +39,7 @@ export interface RecordPersonaInterviewAnswerCommand
 	readonly interviewId: string;
 	/** Question from the interview's exact reviewed question set. */
 	readonly questionId: string;
-	/** Exact reviewed choice belonging to the named question. */
+	/** The choice the owner picked; it must belong to that question. */
 	readonly choiceId: string;
 	/** Trusted answer instant. */
 	readonly answeredAt: string;
@@ -67,7 +67,7 @@ export interface ResolvePersonaInterviewTieCommand
 	readonly personaProfileId: string;
 	/** Completed interview whose result is ambiguous. */
 	readonly interviewId: string;
-	/** Governed tie boundary currently awaiting a choice. */
+	/** The tie the score is currently waiting on. */
 	readonly kind: PersonaTieKinds;
 	/** Exact candidate selected by the owner. */
 	readonly selectedValue: string;
@@ -95,7 +95,30 @@ export type ResolvePersonaInterviewTieResult =
 	| { readonly outcome: PersonaLifecycleOutcomes.Recorded; readonly score: PersonaScoreResult }
 	| { readonly outcome: PersonaLifecycleOutcomes.Denied; readonly reason: PersonaInterviewDenialReasons };
 
-/** Persistence boundary for the append-only onboarding interview lifecycle. */
+/**
+ * Stores the persona interview lifecycle: start, answer, complete, break ties.
+ *
+ * Answers and tie choices are only ever added, never edited or deleted, and a completed interview is
+ * frozen. That is deliberate: the persona draft is derived from these rows, so letting an answer change
+ * after scoring would leave a persona that no longer matches the answers behind it.
+ *
+ * Every method name ends in `Atomically` because each one must re-check its preconditions inside the
+ * same Serializable transaction as its write. Checking first and writing after would let two browser
+ * tabs both pass the check and both write.
+ *
+ * Called by: the four use cases in persona-interview-authority.ts ({@link __StartPersonaInterview},
+ * {@link __RecordPersonaInterviewAnswer}, {@link __CompletePersonaInterview},
+ * {@link __ResolvePersonaInterviewTie}), and supplied to the router as its `interviews` dependency.
+ * Implemented by `PrismaPersonaInterviewRepository` and, through delegation, by
+ * `PrismaPersonaPersistenceUnitOfWork`.
+ *
+ * Each method returns either its success shape or `{ status: PersonaInterviewDenialReasons }`. A
+ * `Conflict` or `PersistenceUnavailable` status is retryable; every other reason means the request as
+ * written can never succeed.
+ *
+ * @see PersonaInterviewDenialReasons
+ * @see PersonaInterviewQuestionReader
+ */
 export interface PersonaInterviewRepository
 {
 	/** Starts one reviewed interview or returns the owner's existing in-progress interview. */
@@ -104,13 +127,13 @@ export interface PersonaInterviewRepository
 	recordAnswerAtomically(command: RecordPersonaInterviewAnswerCommand): Promise<{ readonly status: PersonaLifecycleOutcomes.Recorded; readonly answerId: string } | { readonly status: PersonaInterviewDenialReasons }>;
 	/** Completes a fully answered owner interview once and freezes its evidence. */
 	completeAtomically(command: CompletePersonaInterviewCommand): Promise<{ readonly status: PersonaLifecycleOutcomes.Completed; readonly score: PersonaScoreResult } | { readonly status: PersonaInterviewDenialReasons }>;
-	/** Appends one exact owner choice for the score's current tie boundary. */
+	/** Records the owner's choice for the tie the score is currently waiting on. */
 	resolveTieAtomically(command: ResolvePersonaInterviewTieCommand): Promise<{ readonly status: PersonaLifecycleOutcomes.Recorded; readonly score: PersonaScoreResult } | { readonly status: PersonaInterviewDenialReasons }>;
 }
 
-/** Read boundary for the immutable question-set revision pinned to one owner interview. */
+/** Reads the questions from the question-set version an interview is pinned to. */
 export interface PersonaInterviewQuestionReader
 {
-	/** Loads the exact frozen questions for one owner interview, or null when it is not visible. */
+	/** Loads the pinned questions for one owner's interview, or null when the interview does not belong to that owner. */
 	getQuestions(interviewId: string, personaProfileId: string, userId: string): Promise<readonly { readonly id: string; readonly category: string; readonly prompt: string; readonly ordinal: number; readonly choices: readonly { readonly id: string; readonly label: string; readonly ordinal: number }[] }[] | null>;
 }

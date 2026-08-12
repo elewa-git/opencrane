@@ -1,6 +1,14 @@
 import { Routes } from "@angular/router";
 
-/** Lazy routes for the server-authoritative persona lifecycle and first-chat journey. */
+/**
+ * The onboarding routes, lazy-loaded under `/onboarding`.
+ *
+ * `""` is the persona journey (interview, tie-breaking, review, ready) and `chat` is the first
+ * conversation. Nothing here decides which one the user should be on: each page reads the server's
+ * state and redirects, and anything unrecognised falls back to `""`.
+ *
+ * Loaded by: apps/opencrane-ui/src/app/app.routes.ts, behind ___OperatorAccessGuard.
+ */
 export const ONBOARDING_ROUTES: Routes =
 [
 	{

@@ -4,10 +4,22 @@ import { ToolInvocationRunRecoveryEnterResults, type ToolInvocationRunRecoveryAu
 
 import type { ToolInvocationRunRecoveryRepository, ToolInvocationRunRecoveryUnitOfWork } from "./tool-invocation-run-recovery-authority.types.js";
 
-/** Runs-owned adapter injected into authorization without exposing AgentRun persistence. */
+/**
+ * Moves a run in and out of RecoveryRequired on behalf of the authorization package.
+ *
+ * Authorization decides that a tool invocation needs recovery, but must not know how AgentRun is
+ * stored; this adapter is that seam. Both transitions run on the caller's transaction and never
+ * move a run out of a cancelling or finished state, so recovery can never resurrect a run that
+ * has already stopped.
+ *
+ * Called by: `apps/opencrane/src/app/external-action-composition.ts`, which injects it into the
+ * authorization package's tool-invocation recovery path.
+ *
+ * @implements ToolInvocationRunRecoveryAuthority
+ */
 export class PrismaToolInvocationRunRecoveryAuthority implements ToolInvocationRunRecoveryAuthority
 {
-	/** Enter RecoveryRequired inside the invocation owner's existing transaction. */
+	/** Moves the run into RecoveryRequired, using the transaction the caller already holds. */
 	enterRecoveryRequiredInTransaction(transaction: unknown, command: ToolInvocationRunRecoveryCommand): Promise<ToolInvocationRunRecoveryEnterResult>
 	{
 		return new PrismaToolInvocationRunRecoveryUnitOfWork(transaction as Prisma.TransactionClient).enterRecoveryRequired(command);
@@ -20,41 +32,41 @@ export class PrismaToolInvocationRunRecoveryAuthority implements ToolInvocationR
 	}
 }
 
-/** Transaction owner that constructs the exact run recovery repository. */
+/** Builds the run-recovery repository, bound to the caller's transaction. */
 class PrismaToolInvocationRunRecoveryUnitOfWork implements ToolInvocationRunRecoveryUnitOfWork
 {
-	/** Caller-owned invocation transaction. */
+	/** The transaction the caller opened for this invocation change. */
 	private readonly transaction: Prisma.TransactionClient;
 
-	/** Bind recovery state changes to the invocation transition transaction. */
+	/** Keeps every recovery state change on the caller's transaction. */
 	constructor(transaction: Prisma.TransactionClient)
 	{
 		this.transaction = transaction;
 	}
 
-	/** Enter the explicit recovery state without crossing cancellation or terminal states. */
+	/** Moves the run into RecoveryRequired, never out of a cancelling or finished state. */
 	enterRecoveryRequired(command: ToolInvocationRunRecoveryCommand): Promise<ToolInvocationRunRecoveryEnterResult>
 	{
 		return this._repository().enterRecoveryRequired(command);
 	}
 
-	/** Resume the run without crossing cancellation or terminal states. */
+	/** Moves the run back to Running, never out of a cancelling or finished state. */
 	resumeRunning(command: ToolInvocationRunRecoveryCommand): Promise<boolean>
 	{
 		return this._repository().resumeRunning(command);
 	}
 
-	/** Construct one repository over the unit's exact transaction binding. */
+	/** Builds the repository on this unit of work's transaction. */
 	private _repository(): PrismaToolInvocationRunRecoveryRepository
 	{
 		return new PrismaToolInvocationRunRecoveryRepository(this.transaction);
 	}
 }
 
-/** Prisma repository that owns exact AgentRun recovery state compare-and-set operations. */
+/** Prisma repository that changes the AgentRun recovery state, each change as one compare-and-set. */
 class PrismaToolInvocationRunRecoveryRepository implements ToolInvocationRunRecoveryRepository
 {
-	/** Exact invocation transition transaction. */
+	/** The caller's transaction for this invocation state change. */
 	private readonly transaction: Prisma.TransactionClient;
 
 	/** Bind every AgentRun read and write to the caller-owned invocation transaction. */
@@ -63,7 +75,7 @@ class PrismaToolInvocationRunRecoveryRepository implements ToolInvocationRunReco
 		this.transaction = transaction;
 	}
 
-	/** Enter RecoveryRequired from Running or accept the exact already-entered attempt. */
+	/** Moves the run from Running to RecoveryRequired, or reports that this attempt is already there. */
 	async enterRecoveryRequired(command: ToolInvocationRunRecoveryCommand): Promise<ToolInvocationRunRecoveryEnterResult>
 	{
 		const changed = await this.transaction.agentRun.updateMany({ where: { id: command.runId, attempt: command.attempt, state: AgentRunState.Running }, data: { state: AgentRunState.RecoveryRequired } });
@@ -74,7 +86,7 @@ class PrismaToolInvocationRunRecoveryRepository implements ToolInvocationRunReco
 		return ToolInvocationRunRecoveryEnterResults.Conflict;
 	}
 
-	/** Resume Running from RecoveryRequired or accept the exact already-resumed attempt. */
+	/** Moves the run from RecoveryRequired back to Running, or reports that this attempt is already Running. */
 	async resumeRunning(command: ToolInvocationRunRecoveryCommand): Promise<boolean>
 	{
 		const changed = await this.transaction.agentRun.updateMany({ where: { id: command.runId, attempt: command.attempt, state: AgentRunState.RecoveryRequired }, data: { state: AgentRunState.Running } });
@@ -82,13 +94,13 @@ class PrismaToolInvocationRunRecoveryRepository implements ToolInvocationRunReco
 		return this._hasState(command, AgentRunState.Running);
 	}
 
-	/** Verify only an exact idempotent winner after a compare-and-set loss. */
+	/** After a compare-and-set matched no rows, checks whether the run is already in the state we wanted. */
 	private async _hasState(command: ToolInvocationRunRecoveryCommand, state: AgentRunState): Promise<boolean>
 	{
 		return await this._state(command) === state;
 	}
 
-	/** Load state only when the durable run still names the exact attempt. */
+	/** Returns the run's state, but only if the run row is still on this attempt. */
 	private async _state(command: ToolInvocationRunRecoveryCommand): Promise<AgentRunState | null>
 	{
 		const run = await this.transaction.agentRun.findUnique({ where: { id: command.runId }, select: { attempt: true, state: true } });

@@ -8,13 +8,29 @@ import type { ArtifactByteStream, ArtifactStore, ArtifactStorePromotion, Artifac
 import { ___IsSha256ContentAddress } from "@opencrane/models/artifacts";
 import type { FilesystemArtifactStoreOptions } from "./filesystem-artifact-store.types.js";
 
-/** POSIX-backed ArtifactStore adapter with private staging and atomic content-addressed promotion. */
+/**
+ * {@link ArtifactStore} backed by one mounted POSIX volume.
+ *
+ * Uploads are staged in a private directory, hashed as they are written, then published by hard-
+ * linking to `sha256/<ab>/<digest>` — an atomic operation, so two concurrent uploads of identical
+ * content converge on one object instead of one overwriting the other. A path is always derived
+ * from a validated content address, never from caller input, so a caller cannot reach outside the
+ * volume.
+ *
+ * It stores bytes only: it never verifies a lease and never decides whether a read is allowed.
+ *
+ * Called by: `apps/artifact-service/src/server.ts`.
+ * @implements ArtifactStore
+ */
 export class __FilesystemArtifactStore implements ArtifactStore
 {
 	/** Mounted volume root owned only by the artifact-service process. */
 	private readonly rootPath: string;
 
-	/** Creates an adapter rooted at one app-owned mounted volume. */
+	/**
+	 * Create an adapter rooted at one mounted volume.
+	 * @param options - The absolute volume root; it must be owned by this process alone, since staging directories live inside it.
+	 */
 	constructor(options: FilesystemArtifactStoreOptions)
 	{
 		if (!options.rootPath.startsWith("/"))
@@ -24,7 +40,12 @@ export class __FilesystemArtifactStore implements ArtifactStore
 		this.rootPath = options.rootPath;
 	}
 
-	/** Stages untrusted bytes while computing their only accepted canonical address. */
+	/**
+	 * Write the bytes to private staging, hashing and fsyncing as they arrive.
+	 * @param command - The verified lease, byte stream, and expected address, length, and media type.
+	 * @returns The staged object, with the content address computed from the bytes actually written.
+	 * @throws Error when the written bytes do not match an expected address or length the lease pinned.
+	 */
 	async stage(command: StageArtifactCommand): Promise<StagedArtifact>
 	{
 		if (!__ValidateStageArtifactCommand(command, Math.floor(Date.now() / 1_000)))
@@ -76,7 +97,12 @@ export class __FilesystemArtifactStore implements ArtifactStore
 		return { leaseId: command.lease.leaseId, stagingHandle, contentAddress, byteLength, mediaType: command.mediaType };
 	}
 
-	/** Atomically publishes staged bytes to `sha256/ab/<digest>` without overwriting a peer upload. */
+	/**
+	 * Publish staged bytes at `sha256/<ab>/<digest>` by hard-linking, then remove the staging link.
+	 * @param staged - The result of a previous `stage` call.
+	 * @returns The published object; `created` is false when another upload had already published identical bytes.
+	 * @throws Error when a file already exists at the address but is not a regular file with the expected digest.
+	 */
 	async promote(staged: StagedArtifact): Promise<ArtifactStorePromotion>
 	{
 		if (!__ValidateStagedArtifact(staged))
@@ -134,7 +160,7 @@ export class __FilesystemArtifactStore implements ArtifactStore
 		}
 	}
 
-	/** Opens immutable bytes only by a strict canonical address, never a caller-provided path. */
+	/** Open a published object's bytes. The path is derived from the validated content address, so a caller can never supply a path and read outside the volume. */
 	async read(contentAddress: string): Promise<ArtifactByteStream | null>
 	{
 		if (!___IsSha256ContentAddress(contentAddress))
@@ -161,7 +187,7 @@ export class __FilesystemArtifactStore implements ArtifactStore
 		}
 	}
 
-	/** Physically purges one address after the catalog authority has completed its reference-safe gate. */
+	/** Delete a published object. The caller must already have confirmed no lease or catalog reference remains — this method does not check. */
 	async purge(contentAddress: string): Promise<ArtifactStorePurgeResult>
 	{
 		if (!___IsSha256ContentAddress(contentAddress))
@@ -201,7 +227,7 @@ export class __FilesystemArtifactStore implements ArtifactStore
 		}
 	}
 
-	/** Hash an existing regular file before accepting concurrent CAS promotion idempotently. */
+	/** Re-hash a file already present at the target address, so a promotion only reports success when the existing bytes really are the expected ones. */
 	private async _hashFile(path: string): Promise<string>
 	{
 		const file = await open(path, "r");

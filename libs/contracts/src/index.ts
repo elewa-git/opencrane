@@ -14,7 +14,8 @@ export * from "./artifact-preprocessor.types.js";
 export type * from "@opencrane/models/authorization";
 export * from "./cluster-tenant.types.js";
 export * from "./grant.types.js";
-// Resolve the agent-model type-name collision in favor of the contracts-owned grant vocabulary.
+// `GrantScope` and `GrantSubjectType` exist in both the agent models and here, so re-export this
+// package's own versions explicitly; without this line the two names collide.
 export { GrantScope, GrantSubjectType } from "./grant.types.js";
 export type * from "./group.types.js";
 export * from "./memory.types.js";

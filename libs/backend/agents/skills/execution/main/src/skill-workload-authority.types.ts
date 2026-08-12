@@ -3,45 +3,45 @@ import type { SkillAuthoringInputRecord } from "./skill-authoring-input.types.js
 import type { SkillWorkloadBootstrapIdentity, SkillWorkloadBootstrapRecord } from "./skill-workload-bootstrap.types.js";
 import type { SkillWorkloadAssignmentCommand, SkillWorkloadClaim, SkillWorkloadPodRegistrationCommand, SkillWorkloadReleaseClaim, SkillWorkloadReleaseCommand } from "./skill-workload-claims.types.js";
 
-/** Application-facing authority for controller-only workload durability transitions. */
+/** What the agent controller may change about a workload in the database. */
 export interface SkillWorkloadDispatchAuthority
 {
-	/** Claims one eligible workload for the reviewed controller. */
+	/** Claims one workload that is ready to run. */
 	claimNextAtomically(): Promise<SkillWorkloadClaim | null>;
-	/** Assigns the exact claimed generation to one immutable Kubernetes Job UID. */
+	/** Records the Kubernetes Job UID against the claim the controller holds. */
 	commitAssignmentAtomically(workloadId: string, command: SkillWorkloadAssignmentCommand): Promise<"assigned" | "idempotent" | "conflict">;
 	/** Claims one assigned Job for a single fenced release operation. */
 	claimNextReleaseAtomically(): Promise<SkillWorkloadReleaseClaim | null>;
 	/** Commits one exact successful release operation. */
 	commitReleaseAtomically(workloadId: string, command: SkillWorkloadReleaseCommand): Promise<"released" | "idempotent" | "conflict">;
-	/** Binds the first Kubernetes Pod owned by the already released Job. */
+	/** Records the first Pod that the unsuspended Job created. */
 	registerFirstPodAtomically(workloadId: string, command: SkillWorkloadPodRegistrationCommand): Promise<"registered" | "idempotent" | "conflict">;
 }
 
-/** Application-facing authority for one-use worker bootstrap acknowledgement. */
+/** Lets a worker use its bootstrap reference exactly once. */
 export interface SkillWorkloadBootstrapAuthority
 {
-	/** Loads the durable identity fences selected by an opaque reference hash. */
+	/** Looks up, by reference hash, the worker identity this bootstrap will accept. */
 	loadUnconsumedByReferenceHash(referenceHash: string): Promise<SkillWorkloadBootstrapRecord | null>;
-	/** Consumes the referenced bootstrap only under its reviewed worker identity. */
+	/** Marks the bootstrap used, only for the worker identity TokenReview confirmed. */
 	consumeAtomically(referenceHash: string, identity: SkillWorkloadBootstrapIdentity): Promise<"consumed" | "conflict">;
 }
 
-/** Application-facing authority for authoring terminal evidence. */
+/** Records an authoring worker's final report. */
 export interface SkillAuthoringCompletionAuthority
 {
-	/** Completes exactly one workload using bounded evidence from its reviewed authoring Pod. */
+	/** Completes one workload, using the fixed-shape reports its authoring Pod sent. */
 	completeAtomically(command: SkillAuthoringCompletionCommand, identity: SkillWorkloadBootstrapIdentity): Promise<"completed" | "conflict">;
 }
 
-/** Application-facing authority selecting immutable source bytes for a reviewed authoring worker. */
+/** Finds the source artifact an authoring worker is allowed to read. */
 export interface SkillAuthoringInputAuthority
 {
 	/** Loads the sole source artifact authorised for the reviewed worker Pod. */
 	loadForWorker(workloadId: string, identity: SkillWorkloadBootstrapIdentity): Promise<SkillAuthoringInputRecord | null>;
 }
 
-/** Complete application authority surface composed from one opaque unit of work. */
+/** All four skill-execution authorities, backed by one unit of work. */
 export interface SkillWorkloadExecutionAuthority extends SkillWorkloadDispatchAuthority, SkillWorkloadBootstrapAuthority, SkillAuthoringCompletionAuthority, SkillAuthoringInputAuthority
 {
 }

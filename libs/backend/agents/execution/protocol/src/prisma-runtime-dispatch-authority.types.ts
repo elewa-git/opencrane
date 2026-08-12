@@ -6,27 +6,67 @@ import type { JsonValue } from "@opencrane/util";
 import type { RuntimeAdmissionRunState } from "./runtime-protocol-authority.types.js";
 
 /**
- * Injected control-plane compiler that hydrates an immutable snapshot into the literal compiled
- * input carried on `start_attempt`.
+ * Turns an immutable snapshot into the literal input carried on `start_attempt`.
  *
- * The dispatch authority calls it inside the same locked transaction that loads the snapshot, so it
- * reads only immutable records and must return byte-identical output for a given snapshot on every
- * mint and idempotent redelivery. The runtime treats the returned payload as opaque.
+ * Injected rather than imported, so the dispatch authority never depends on the prompt compiler.
+ * The authority calls it inside the same locked transaction that loaded the snapshot, so it reads
+ * only records that cannot change.
+ *
+ * The one hard requirement on any implementation: for a given snapshot it must return byte-for-byte
+ * the same output every time, on the first send and on every re-send. A command re-sent after a
+ * reconnect is rebuilt by calling this again, and the runtime is entitled to treat the repeat as the
+ * same command, so an implementation that returned something slightly different would silently
+ * change a running attempt's instructions. The runtime does not look inside the payload.
+ *
+ * Called by: `_mintCommandExtras` and `_storedCommandExtras` in
+ * prisma-runtime-dispatch-authority.ts, and `_toolInvocationIntent` there when it revalidates an
+ * external action's arguments against the granted tool schema. Implemented by
+ * `__CreatePrismaRunInputCompiler` (prisma-run-input-compiler.ts), wrapped by
+ * `_CreateProductionRunInputCompiler` (production-runtime-dispatch.ts).
+ *
+ * @param snapshot - The immutable snapshot admitted for this attempt.
+ * @param transaction - The locked transaction that loaded the snapshot; every read must use it.
+ * @returns The compiled input to send with `start_attempt`.
+ * @throws Whatever the implementation throws when an input cannot be resolved - for example a
+ * memory fact whose text no longer matches its frozen digest. On the `start_attempt` path nothing
+ * catches it, so no command is sent and nothing is saved; on the external-action path
+ * `_toolInvocationIntent` catches it and refuses the candidate with `external_action_invalid`.
+ * @see PrismaRuntimeDispatchAuthority for the caller that depends on the byte-for-byte rule.
  */
 export type RunInputCompiler = (snapshot: RunInputSnapshot, transaction: Prisma.TransactionClient) => Promise<CompiledRunInput>;
 
-/** Fixed, server-owned policy for minting and expiring runtime command frames. */
+/**
+ * Deployment-fixed settings for creating and expiring runtime commands.
+ *
+ * Validated once in the {@link PrismaRuntimeDispatchAuthority} constructor, which throws when the
+ * two namespaces are equal or invalid, or the lifetime is outside 1s-300s. The namespaces are a
+ * security boundary rather than a convenience: a Pod whose namespace is neither of these gets no
+ * command at all, and personal and managed runtimes are kept apart so a personal Pod can never be
+ * served a managed run's work.
+ *
+ * Called by: apps/opencrane/src/app/runtime-composition.ts builds it from `InternalRuntimeConfig`
+ * and passes it to `__CreateProductionRuntimeDispatchAuthority`.
+ */
 export interface RuntimeDispatchAuthorityConfig
 {
 	/** Dedicated namespace containing personal runtime Pods and no server workload. */
 	readonly personalRuntimeNamespace: string;
 	/** Dedicated namespace containing managed runtime Pods and no personal workload identity. */
 	readonly managedRuntimeNamespace: string;
-	/** Hard lifetime stamped on each minted command frame, bounded by the durable assignment lease. */
+	/** How long a new command stays valid. It is never longer than the assignment lease. */
 	readonly commandTtlMilliseconds: number;
 }
 
-/** Verified workload identity handed to the dispatch authority by the app-owned transport. */
+/**
+ * The Pod identity the transport has already verified, and that this package trusts.
+ *
+ * Produced by Kubernetes TokenReview in the transport layer, never parsed from a request body.
+ * Every dispatch method starts by checking these fields against the stored WorkloadAssignment, so a
+ * Pod can only ever be served the run its own assignment names.
+ *
+ * Called by: passed in on every stream and candidate call by
+ * libs/backend/server/infra/agent-runtime-stream/src/agent-runtime-stream.ts.
+ */
 export interface RuntimeStreamWorkloadIdentity
 {
 	/** Kubernetes ServiceAccount subject returned by TokenReview. */
@@ -42,31 +82,117 @@ export interface RuntimeStreamWorkloadIdentity
 /** Terminal lifecycle persistence supplied by the composition root without reversing library dependencies. */
 export interface RuntimeEventReporter
 {
-	/** Validate and persist an already-fenced canonical runtime event in the current transaction. */
+	/**
+	 * Check one runtime-proposed event and save it, using the caller's transaction.
+	 *
+	 * @param transaction - The candidate transaction; the event must be written on it so acceptance
+	 * and the event commit together.
+	 * @param command - Run, attempt, event type, and payload the runtime asked to record.
+	 * @returns `reported` when the event is durable and the candidate may be accepted. `denied` when
+	 * it must not be: the caller refuses the whole candidate with `reason` and rolls the transaction
+	 * back, so the runtime is never told an event was recorded when it was not.
+	 */
 	reportInTransaction(transaction: Prisma.TransactionClient, command: { readonly runId: string; readonly attempt: number; readonly eventType: string; readonly payload: JsonValue }): Promise<{ readonly outcome: "reported" | "denied"; readonly reason?: string }>;
 }
 
-/** Transaction-scoped expiry sweep supplied by the production approval authority. */
+/**
+ * Closes approvals whose deadline has passed, in the caller's transaction.
+ *
+ * A run waiting for a person to approve a tool call cannot move on by itself. Command polling
+ * therefore runs this first, inside the transaction that already holds the run lock, so expiry and
+ * the command decision see the same state and cannot race each other. When it is not wired a
+ * waiting run simply never advances: `__NextCommand` returns null rather than guess that the wait
+ * is over.
+ *
+ * Called by: `PrismaRuntimeCommandDecisionUnitOfWork.expireWaiting`
+ * (prisma-runtime-command-decision-unit-of-work.ts), reached from `_nextCommand`. Implemented by
+ * `__ExpireDeferredToolApprovalBatch`, wired in production-runtime-dispatch.ts.
+ */
 export interface RuntimeApprovalExpiry
 {
-	/** Close every due approval for one waiting attempt and report whether its batch resumed. */
+	/**
+	 * Close every overdue approval for one waiting attempt.
+	 *
+	 * @param transaction - The dispatch transaction, which already holds the run lock.
+	 * @param command - Run, attempt, and the trusted server time to compare deadlines against.
+	 * @returns `expiredCount` - how many approvals were closed. `resumed` - whether closing them
+	 * released the run, which is what lets command polling then decide a resume command. The caller
+	 * re-reads the run state afterwards rather than trusting either number.
+	 */
 	expireInTransaction(transaction: Prisma.TransactionClient, command: { readonly runId: string; readonly attempt: number; readonly now: Date }): Promise<{ readonly expiredCount: number; readonly resumed: boolean }>;
 }
 
-/** Transaction-bound state and marker interpreter for one runtime command poll. */
+/**
+ * Decides the next command for one poll, and closes overdue approvals, on the caller's transaction.
+ *
+ * Kept as a port so the dispatch authority never reads approval or tool-result tables itself: it
+ * hands over the run's state and the commands already sent, and gets back one decision. Everything
+ * it does must use the caller's transaction, because the decision is only sound while the run lock
+ * is held.
+ *
+ * Called by: `_nextCommand` in prisma-runtime-dispatch-authority.ts. Implemented by
+ * `PrismaRuntimeCommandDecisionUnitOfWork`.
+ */
 export interface RuntimeCommandDecisionUnitOfWork
 {
-	/** Apply due approval expiry while the caller owns the waiting run fence. */
+	/**
+	 * Close overdue approvals while the caller holds the lock on the waiting run.
+	 *
+	 * @param context - Run, attempt, and current run state.
+	 * @param approvalExpiry - The injected expiry port, or null when none was wired.
+	 * @param now - Trusted server time.
+	 * @returns `not_required` - the run is not waiting for approval; carry on and decide a command.
+	 * `applied` - deadlines were processed, which obliges the caller to re-read the run before
+	 * deciding, because it may now be resumable or cancelling. `unavailable` - the run is waiting but
+	 * no expiry port exists, which obliges the caller to send nothing at all.
+	 */
 	expireWaiting(context: { readonly runId: string; readonly attempt: number; readonly runState: RuntimeAdmissionRunState }, approvalExpiry: RuntimeApprovalExpiry | null, now: Date): Promise<"not_required" | "applied" | "unavailable">;
-	/** Select the next persistence command kind from durable run state and marker evidence. */
+	/**
+	 * Pick the next command kind from the run's saved state and the commands already sent.
+	 *
+	 * @param context - Run, attempt, and current run state.
+	 * @param commands - Commands already sent for this attempt, so a second start or cancel cannot be
+	 * produced.
+	 * @returns The kind to create, or null when nothing is due right now - the normal idle answer,
+	 * not an error.
+	 */
 	decide(context: { readonly runId: string; readonly attempt: number; readonly runState: RuntimeAdmissionRunState }, commands: readonly { readonly kind: RuntimeCommandKind }[]): Promise<RuntimeCommandKind | null>;
 }
 
-/** Stable result returned after a candidate reaches the authoritative run boundary. */
+/**
+ * The answer to one candidate the runtime offered.
+ *
+ * `accepted: true` means the proposal is durable: the runtime may go ahead, and the transport
+ * answers 202. `accepted: false` means it must not, and the transport answers 409 - this authority
+ * never sets the transport's optional `retryable` flag, so every refusal is final for that exact
+ * candidate. Conflating the two is the dangerous mistake: a runtime that treats a refusal as
+ * acceptance performs an effect the server has no record of, and nothing will ever deliver its
+ * result.
+ *
+ * The reasons fall into four groups, and the right response differs for each.
+ * - Stale connection - `namespace_mismatch`, `unknown_workload`, `no_active_stream`,
+ *   `runtime_instance_mismatch`, `fence_mismatch`, `assignment_mismatch`, `expired`,
+ *   `command_not_accepted`: this Pod no longer owns the work. Stop and let the stream be rebound;
+ *   retrying the same candidate cannot succeed.
+ * - The run is over - `terminal_run`: it finished or is cancelling. Abandon the work. A candidate
+ *   is never accepted during cancellation, so cancelled work can neither continue nor reopen a
+ *   finished run.
+ * - The runtime asked for something it may not do - `invalid_candidate`, `unsupported_protocol`,
+ *   `runtime_cancellation_not_authoritative`, `runtime_tool_lifecycle_not_authoritative`,
+ *   `external_action_invalid`: a bug in the runtime, not a race. Do not retry.
+ * - The server could not take it - `event_reporter_unavailable`, `event_report_denied` or any
+ *   reason the injected event reporter returns, `external_action_conflict`,
+ *   `external_action_replay_conflict`: nothing was written.
+ *   `external_action_replay_conflict` specifically means a candidate id that was already accepted
+ *   came back with different arguments, which must never be retried under that id.
+ *
+ * @see PrismaRuntimeDispatchAuthority.__AdmitCandidate which returns this.
+ * @see RuntimeCandidateAdmission in agent-runtime-stream.types.ts for the transport-facing shape.
+ */
 export interface RuntimeCandidateDispatchResult
 {
-	/** Whether the authority accepted this candidate or its idempotent replay. */
+	/** True when the proposal is now durable, including a repeat of one already accepted. */
 	readonly accepted: boolean;
-	/** Machine-readable reason when the candidate was rejected. */
+	/** Why it was refused; absent when accepted. See the four groups on {@link RuntimeCandidateDispatchResult}. */
 	readonly reason?: string;
 }

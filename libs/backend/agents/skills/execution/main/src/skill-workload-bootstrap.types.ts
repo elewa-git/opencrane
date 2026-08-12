@@ -13,19 +13,19 @@ export interface SkillWorkloadBootstrapIdentity
 	readonly podUid: string;
 }
 
-/** Reviews a projected token for the precise audience selected by durable bootstrap authority. */
+/** TokenReviews a worker token against the audience stored on its bootstrap row. */
 export interface SkillWorkloadBootstrapTokenReviewer
 {
 	/** Returns a reviewed identity or null without exposing TokenReview internals. */
 	__Review(token: string, audience: string): Promise<SkillWorkloadBootstrapIdentity | null>;
 }
 
-/** Durable bootstrap facts that select the sole accepted projected-token identity. */
+/** The stored bootstrap row. Its fields say which worker identity will be accepted. */
 export interface SkillWorkloadBootstrapRecord
 {
 	/** Stable workload identifier used only in the response receipt. */
 	readonly workloadId: string;
-	/** Hash-only lookup coordinate for the submitted opaque reference. */
+	/** Hash of the reference the worker submits. The plain reference is never stored. */
 	readonly referenceHash: string;
 	/** Expected projected-token audience. */
 	readonly audience: string;
@@ -42,7 +42,7 @@ export interface SkillWorkloadBootstrapRecord
 /** Minimal structured logger surface for the internal worker bootstrap boundary. */
 export interface SkillWorkloadBootstrapLogger
 {
-	/** Records unavailable authority without serialising the bearer token or opaque reference. */
+	/** Logs that the database was unreachable, without logging the bearer token or the reference. */
 	error(bindings: { readonly err: unknown; readonly operation: string }, message: string): void;
 }
 

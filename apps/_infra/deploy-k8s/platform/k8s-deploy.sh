@@ -870,7 +870,7 @@ _enforce_tag_pins
 # rolled through Helm (which keeps Helm the sole owner of the image field). Each
 # falls back to IMAGE_TAG when its flag is unset, preserving the all-same default.
 CP_TAG="${CONTROL_PLANE_TAG:-$IMAGE_TAG}"
-# --set-string: a tag like "1.2.3" or a numeric-looking sha must never be YAML-coerced
+# --set-string: a tag like "1.2.3" or a numeric-looking sha must never be parsed by YAML as a number
 # (same guideline as the OIDC string values below; see the deploy ledger).
 [[ -n "$CP_TAG" ]] && helm_args+=(--set-string "clustertenantManager.image.tag=$CP_TAG")
 # --base-domain drives ingress.domain; controlPlaneHost defaults to platform.<domain>

@@ -1,10 +1,15 @@
 import type { Attributes } from "@opentelemetry/api";
 
 /**
- * Build legacy and stable HTTP trace attributes from a URL after removing its query and fragment.
- * @param value - Absolute or relative HTTP request URL.
- * @param origin - Safe origin used to resolve a relative URL.
- * @returns Query-free attributes that override auto-instrumentation defaults.
+ * Build HTTP span attributes from a URL with its query string and fragment removed.
+ *
+ * A query string routinely carries a token or a cursor, and OpenTelemetry's automatic HTTP
+ * instrumentation records the full URL by default. These attributes replace that default, so both
+ * the legacy (`http.*`) and current (`url.*`) attribute names must be set — an unset one falls
+ * back to the default and leaks the query.
+ * @param value - Absolute or relative request URL.
+ * @param origin - Origin used to resolve a relative URL; must not itself contain a secret.
+ * @returns Attributes with no query string, ready to override the instrumentation defaults.
  */
 export function _SanitizeHttpTraceUrl(value: string, origin = "http://localhost"): Attributes
 {
@@ -16,7 +21,7 @@ export function _SanitizeHttpTraceUrl(value: string, origin = "http://localhost"
 		const parsed = new URL(queryFreeValue, origin);
 		const queryFreeUrl = `${parsed.origin}${parsed.pathname}`;
 
-		// 3. Override both legacy and stable semantic conventions with query-free coordinates.
+		// 3. Set both the legacy `http.*` and current `url.*` attribute names; an unset one keeps the leaky default.
 		return {
 			"http.target": parsed.pathname,
 			"http.url": queryFreeUrl,

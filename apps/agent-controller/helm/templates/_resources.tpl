@@ -434,7 +434,7 @@ spec:
   ingress: []
   egress: []
 ---
-# Every runtime uses this immutable egress floor; the controller has no NetworkPolicy permissions.
+# Every runtime gets this egress allow-list as its minimum, and nothing may widen it; the controller has no NetworkPolicy permissions.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:

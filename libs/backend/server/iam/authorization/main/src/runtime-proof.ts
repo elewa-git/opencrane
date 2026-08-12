@@ -58,13 +58,13 @@ function _validateBootstrap(claim: RuntimeBootstrapClaim, expectation: RuntimeBo
 	return null;
 }
 
-/** Return whether one projected-token audience belongs to a supported runtime identity plane. */
+/** Returns whether the audience is one of the two accepted runtime token audiences. */
 function _IsRuntimeAudience(value: string): boolean
 {
 	return value === AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE || value === MANAGED_AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE;
 }
 
-/** Digests the exact verified action authority and observed request without proof issuance time. */
+/** Digests the verified capability together with the observed HTTP method and target URI; the proof's issue time is deliberately left out. */
 function _requestFingerprint(expectation: CapabilityProofExpectation): string
 {
 	const capability = expectation.capability;
@@ -131,7 +131,7 @@ export async function __ConsumeRuntimeBootstrap(repository: RuntimeBootstrapRepo
  */
 export async function __ExecuteCapabilityAction<TResult>(repository: CapabilityActionReceiptRepository, command: ExecuteCapabilityActionCommand, executor: CapabilityActionExecutor<TResult>): Promise<ExecuteCapabilityActionResult<TResult>>
 {
-	// 1. Cryptographic and semantic verification prevents non-proof inputs from reaching replay state.
+	// 1. Check the replay mode and verify the proof signature, so nothing but a real proof reaches replay state.
 	if (command.replayMode !== "one_shot" && command.replayMode !== "idempotent") return { outcome: "denied", reason: "invalid_replay_mode" };
 	const verification = __VerifyCapabilityProof(command.compactProof, command.expectation);
 	if (!verification.valid) return { outcome: "denied", reason: verification.reason };

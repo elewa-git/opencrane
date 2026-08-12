@@ -1,4 +1,4 @@
-/** Signed, short-lived internal lease consumed only by artifact-service. */
+/** What an upload lease permits. Sign it with {@link __SignArtifactWriteLease}; artifact-service is the only intended audience, so it must never be handed to a third party. */
 export interface ArtifactWriteLeaseClaims
 {
 	readonly leaseId: string;
@@ -11,7 +11,7 @@ export interface ArtifactWriteLeaseClaims
 	readonly mediaType: string;
 }
 
-/** Signed, short-lived internal lease authorising one immutable artifact read. */
+/** What a read lease permits: exactly one revision's bytes, at one content address, with one media type. It expires within five minutes of issue. */
 export interface ArtifactReadLeaseClaims
 {
 	/** Unique server-issued correlation value for this exact read. */
@@ -28,13 +28,13 @@ export interface ArtifactReadLeaseClaims
 	readonly byteLength: number;
 	/** Media type fixed with the immutable revision. */
 	readonly mediaType: string;
-	/** Separates immutable reads from write-lease authority. */
+	/** Always `artifact.read`. It is what stops a read lease being accepted where a write lease is required. */
 	readonly action: "artifact.read";
 	/** Absolute Unix expiry; consumers fail closed after it. */
 	readonly expiresAtEpochSeconds: number;
 }
 
-/** Signed artifact-service receipt that OpenCrane verifies before catalog finalization. */
+/** artifact-service's proof that bytes are durably stored. OpenCrane verifies it before recording a catalog revision, so a revision can never point at bytes that were never written. */
 export interface ArtifactPromotionReceiptClaims
 {
 	readonly leaseId: string;

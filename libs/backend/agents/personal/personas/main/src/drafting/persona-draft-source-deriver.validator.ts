@@ -4,14 +4,14 @@ import { PersonaColourValues } from "../scoring/persona-scorer.types.js";
 
 import type { PersonaDraftDirectives } from "./persona-draft-source-deriver.types.js";
 
-/** Non-blank reviewed directive text accepted from the persisted catalogue. */
+/** Directive text; must not be blank. */
 const _DirectiveSchema = z.string().refine(function _NonBlank(value) { return value.trim().length > 0; }, "must not be blank");
 
 /**
- * Strict persisted interpolation schema.
+ * Schema for the stored interpolation map.
  *
- * Unknown outer fields and unknown secondary-colour fields are rejected instead of stripped,
- * because either means the reviewed catalogue and the runtime model have drifted.
+ * An unexpected field at the top level, or an unexpected secondary-colour key, is rejected rather
+ * than dropped: either one means the stored catalogue and this code no longer agree.
  */
 const _PersonaDraftDirectivesSchema: z.ZodType<PersonaDraftDirectives> = z.object({
 	byChoice: z.record(_DirectiveSchema).refine(function _HasChoiceDirective(value) { return Object.keys(value).length > 0; }, "must contain at least one reviewed choice directive"),
@@ -23,7 +23,7 @@ const _PersonaDraftDirectivesSchema: z.ZodType<PersonaDraftDirectives> = z.objec
 	}).strict(),
 }).strict();
 
-/** Parse persisted interpolation directives, failing closed on malformed or model-drifted JSON. */
+/** Parses the stored interpolation map. Returns null when it is malformed or carries a field this code does not expect. */
 export function _ParsePersonaDraftDirectives(value: unknown): PersonaDraftDirectives | null
 {
 	const parsed = _PersonaDraftDirectivesSchema.safeParse(value);

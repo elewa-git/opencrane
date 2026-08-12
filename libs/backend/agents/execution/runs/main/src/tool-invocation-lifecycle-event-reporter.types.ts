@@ -1,18 +1,18 @@
 import type { ToolInvocationLifecycleEvent, ToolInvocationLifecycleEventSink } from "@opencrane/backend/server/iam/authorization";
 
-/** Process transaction owner used both before dispatch and inside invocation transactions. */
+/** Opens the transaction for writing a lifecycle event, both before dispatch and inside an invocation's own transaction. */
 export interface ToolInvocationLifecycleEventUnitOfWork extends ToolInvocationLifecycleEventSink
 {
-	/** Append one server-owned lifecycle event or fail before provider work can continue. */
+	/** Appends the server-owned lifecycle event, or fails so no provider work continues. */
 	append(event: ToolInvocationLifecycleEvent): Promise<void>;
 }
 
 /** Transaction-bound repository for one validated tool lifecycle event. */
 export interface ToolInvocationLifecycleEventAppendRepository
 {
-	/** Append only while the exact run attempt remains eligible for server tool work. */
+	/** Appends only while the run is still on this attempt and still allowed to run server tool work. */
 	append(event: ToolInvocationLifecycleEvent): Promise<boolean>;
 }
 
-/** Transaction owner that constructs the lifecycle-event repository. */
+/** Builds the lifecycle-event repository on the caller's transaction. */
 export interface ToolInvocationLifecycleEventAppendUnitOfWork extends ToolInvocationLifecycleEventAppendRepository {}

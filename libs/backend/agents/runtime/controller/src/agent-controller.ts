@@ -3,13 +3,13 @@ import { AgentControllerReconcileOutcomes, type AgentControllerOptions } from ".
 import { __ReconcileNextAgentRuntimeAttempt } from "./agent-runtime-attempt-assignment.js";
 import { __ReconcileNextRuntimeRelease } from "./agent-runtime-release.js";
 
-/** Wait for the next idle poll without keeping shutdown blocked behind a full timer. */
+/** Sleep until the next poll, but return as soon as shutdown starts instead of waiting the timer out. */
 async function _Wait(milliseconds: number, signal: AbortSignal): Promise<void>
 {
 	if (signal.aborted) return;
 	await new Promise<void>(function _wait(resolve)
 	{
-		/** Complete the delay once and release the listener retained by the process signal. */
+		/** End the wait once, clearing the timer and removing the abort listener. */
 		function _CompleteWait(): void
 		{
 			clearTimeout(timer);
@@ -21,7 +21,7 @@ async function _Wait(milliseconds: number, signal: AbortSignal): Promise<void>
 	});
 }
 
-/** Return whether the runtime reconciliations advanced durable work in this poll. */
+/** Run both reconciliations, one after the other, and return whether either got any work done. Each failure is logged and swallowed so it cannot stop the other. */
 async function _ReconcileRuntimeWork(options: AgentControllerOptions, signal: AbortSignal): Promise<boolean>
 {
 	let didWork = false;
@@ -48,7 +48,7 @@ async function _ReconcileRuntimeWork(options: AgentControllerOptions, signal: Ab
 	return didWork;
 }
 
-/** Run one due outbox-retention pass without preventing workload reconciliation. */
+/** Delete the outbox records whose retention has expired, logging any failure instead of stopping the loop. */
 async function _PrunePublishedOutbox(options: AgentControllerOptions, signal: AbortSignal): Promise<void>
 {
 	if (!options.authority.__PrunePublishedOutbox) return;
@@ -85,14 +85,14 @@ export async function __RunAgentController(options: AgentControllerOptions, sign
 		const didWork = await _ReconcileRuntimeWork(options, signal);
 		if (signal.aborted) break;
 
-		// 2. Run bounded maintenance on its own schedule without turning it into loop authority.
+		// 2. Prune the outbox on its own slower schedule; it must never decide when the loop polls again.
 		if (Date.now() >= nextOutboxPruneAt)
 		{
 			await _PrunePublishedOutbox(options, signal);
 			nextOutboxPruneAt = Date.now() + outboxPruneIntervalMilliseconds;
 		}
 
-		// 3. Avoid arming an idle timer after shutdown, and immediately drain already-ready work.
+		// 3. Don't start a sleep timer after shutdown, and skip the sleep entirely while work keeps coming.
 		if (signal.aborted) break;
 		if (didWork) continue;
 		await _Wait(options.pollIntervalMilliseconds, signal);

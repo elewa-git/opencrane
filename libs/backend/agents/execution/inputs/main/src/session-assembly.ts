@@ -9,7 +9,7 @@ import { _CanonicalMemoryFacts, _IsIdentityFresh } from "./utils/canonical-input
 import type { AssembleRunInputSnapshotResult, SessionAssemblyRefusalReason } from "./session-assembly-result.types.js";
 import type { ApprovedPersonaInput, IdentityEnvelopeInput, MemoryScopeInput, SessionAssemblyAuthorities, SessionAssemblyCommand, ConversationContextInput, ToolPolicyInput } from "./session-assembly.types.js";
 
-/** Stable contract version emitted by the first session assembler. */
+/** Snapshot format version this assembler stamps on every snapshot it writes. */
 const _SNAPSHOT_VERSION = 1;
 
 /**
@@ -21,16 +21,40 @@ const _SNAPSHOT_VERSION = 1;
  * preferences, memory, tools, budget, signed identity — and any single refusal aborts the
  * whole admission with that reason. Nothing is persisted unless every source loads; a
  * duplicate `requestIdempotencyKey` returns the previously admitted snapshot untouched.
+ *
+ * Called by: `__CreateManagedRunAdmissionPort` (execution/admission/main/src/managed-run-admission.composition.ts)
+ * and `__CreatePersonalRunAdmissionPort` (execution/admission/main/src/personal-run-admission.composition.ts).
+ * Both wrap this call in a capacity gate first, so do not call it straight from a route.
+ *
+ * @param command - Run ids, trigger, and identity kind. The caller chooses `runId` and
+ * `requestIdempotencyKey` before calling. Sending the same key again returns the first run, so a
+ * caller that wants a genuinely new run must send a new key.
+ * @param authorities - The sources this function sequences, in the order listed above. Build the
+ * set with {@link __CreatePrismaManagedSessionAssemblyAuthorities} or
+ * {@link __CreatePrismaPersonalSessionAssemblyAuthorities}. Mixing the two lets a personal input
+ * source run for a managed service, and every such source then refuses the run.
+ * @param commit - Optional extra write the caller needs inside the same transaction, such as the
+ * conversation's input message. It runs only after every source has loaded, so it can never be
+ * committed next to a partial snapshot.
+ * @returns `assembled` with the snapshot, plus `admissionOutcome`: `accepted` means this call
+ * created the run, `idempotent` means the key was already used and the snapshot is the original
+ * one. A caller that treats `idempotent` as `accepted` will start a second runtime for one run.
+ * `denied` carries a {@link SessionAssemblyRefusalReason}, which says whether the caller should
+ * fix the request, wait, or give up.
+ * @throws Anything an injected authority throws. This function has no try/catch, so a Prisma or
+ * memory-gateway error is not turned into a `denied` outcome here.
+ * @see SessionAssemblyRefusalReason
+ * @see RunInputSnapshotAdmissionOutcomes
  */
 export async function __AssembleRunInputSnapshot(command: SessionAssemblyCommand, authorities: SessionAssemblyAuthorities, commit?: RunAdmissionCommit): Promise<AssembleRunInputSnapshotResult>
 {
-	// 1. Reject malformed coordinates before any authority read can accidentally widen its scope.
+	// 1. Reject a command with blank or missing ids first, so no authority read can match rows outside this run.
 	if (!_isCommandValid(command)) return { outcome: "denied", reason: "invalid_command" };
 
 	// 2. Resolve a duplicate before compilation, or hold the service lock while every input is revalidated.
 	const admitted = await authorities.admission.admit(command, async function _compileWithinAdmission(transaction)
 	{
-		// 3. Load the admitted run and pinned revision before any dependent authority can be resolved.
+		// 3. Load the run and its locked revision first; every later source needs them.
 		const run = await authorities.runAuthority.load(command, transaction);
 		if (run.outcome === "denied") return run;
 
@@ -62,7 +86,7 @@ export async function __AssembleRunInputSnapshot(command: SessionAssemblyCommand
 		if (skills.outcome === "denied") return skills;
 		const budget = await authorities.budgetPolicy.load(command, run.value, transaction);
 		if (budget.outcome === "denied") return budget;
-		// 8. Compile the immutable snapshot only after all source authority is revalidated at the durable fence.
+		// 8. Compile the immutable snapshot only after every source has re-checked its data inside this transaction.
 		return { outcome: "ready", value: { authority: run.value, snapshot: _compileSnapshot(command, transaction.admittedAt, run.value, persona.value, conversation.value, preferences.value, memory.value, tools.value, budget.value.budgetPolicy, identity.value) } } as const;
 	}, commit);
 	if (admitted.outcome === "denied") return { outcome: "denied", reason: _publicReason(admitted.reason) };
@@ -118,7 +142,7 @@ function _compileSnapshot(command: SessionAssemblyCommand, admittedAt: string, r
 	return { ...withoutDigest, digest };
 }
 
-/** Removes the assembly-only capability digest while retaining every tagged identity field in the persisted snapshot. */
+/** Drops `capabilitySetDigest`, which is only used during assembly, and keeps every other identity field for the snapshot. */
 function _SnapshotIdentity(identity: IdentityEnvelopeInput): RunInputSnapshot["identitySnapshot"]
 {
 	const { capabilitySetDigest: _capabilitySetDigest, ...snapshotIdentity } = identity;
@@ -143,6 +167,13 @@ function _canonicalIntegrationAssignments(assignments: readonly RunInputSnapshot
  * Assembly hashes the finished snapshot, and the hash is taken over the whole thing as text.
  * So order matters: without this step, the same tools arriving in a different order would hash
  * to a different value, and the run would look like it had been given different inputs.
+ *
+ * @see https://www.rfc-editor.org/rfc/rfc8785 - JSON Canonicalization Scheme, the serialisation that
+ * hash is taken over. It is what puts each schema's keys in a set order; array order it leaves to
+ * the caller, which is the sort above.
+ * @see https://modelcontextprotocol.io/specification/2025-06-18 - MCP, revision 2025-06-18 as pinned
+ * by `_MCP_PROTOCOL_VERSION` in server/infra/obot-custody. Each `parametersSchema` here is an MCP
+ * tool's argument schema, and it reaches the model unchanged.
  */
 function _canonicalToolDefinitions(toolDefinitions: RunInputSnapshotIntegrationAssignment["toolDefinitions"]): RunInputSnapshotIntegrationAssignment["toolDefinitions"]
 {
@@ -151,7 +182,18 @@ function _canonicalToolDefinitions(toolDefinitions: RunInputSnapshotIntegrationA
 		.sort(function _byTool(left, right): number { return left.name.localeCompare(right.name); });
 }
 
-/** Rejects integration allowances that cannot form one unambiguous runtime tool-revision identifier. */
+/**
+ * Returns whether every integration assignment can name one unambiguous tool revision: a non-blank
+ * id with no ":" in it, plus valid tool definitions.
+ *
+ * The ":" rule exists because the runtime's tool revision id is built as
+ * `integration:<integrationId>:<toolName>` (see execution/protocol/src/prisma-run-input-compiler.ts).
+ * A colon inside the integration id would make that id ambiguous to parse.
+ *
+ * @see https://modelcontextprotocol.io/specification/2025-06-18 - MCP, revision 2025-06-18 as
+ * pinned by `_MCP_PROTOCOL_VERSION` in server/infra/obot-custody. These are MCP tools, and their
+ * names and JSON Schemas are what eventually reach the model.
+ */
 function _areIntegrationAssignmentsValid(assignments: readonly RunInputSnapshotIntegrationAssignment[]): boolean
 {
 	return assignments.every(function _assignment(assignment): boolean

@@ -5,7 +5,7 @@ import type { CancelPendingRunApprovalAuthorityCommand, CancelPendingRunApproval
 import { __PlanToolInvocationLifecycle } from "./tool-invocation-lifecycle.js";
 import { ExternalActionClaimKinds, ExternalActionRecoveryModes, TOOL_INVOCATION_PREPARATION_POLICY, ToolInvocationLifecycleActions, ToolInvocationLifecycleEvents, ToolInvocationStates } from "./tool-invocation-lifecycle.types.js";
 
-/** Provider-free or unclaimed ToolInvocation states cancellation may truthfully close. */
+/** Invocation states cancellation may close, because no provider call can be in flight in any of them. */
 const _CANCELLABLE_INVOCATION_STATES: readonly ToolInvocationState[] = [ToolInvocationState.Preparing, ToolInvocationState.AwaitingApproval, ToolInvocationState.Ready, ToolInvocationState.Reconciling, ToolInvocationState.RecoveryRequired];
 
 /** Persistence-to-domain state mapping for the planner boundary. */
@@ -85,7 +85,7 @@ export class PrismaRunApprovalCancellationRepository implements RunApprovalCance
 		return invocations.length;
 	}
 
-	/** Count active exact provider claims without granting cancellation authority over them. */
+	/** Counts invocations that still hold a live provider claim; cancellation must leave those alone. */
 	async countActiveClaims(runId: string, attempt: number): Promise<number>
 	{
 		return this._transaction.toolInvocation.count({ where: { runId, attempt, state: { in: [ToolInvocationState.Claimed, ToolInvocationState.Reconciling] }, claimKind: { not: null }, run: { is: { attempt, state: AgentRunState.Cancelling } } } });
@@ -105,7 +105,7 @@ export async function __CancelPendingRunApprovalAuthority(transaction: Prisma.Tr
 	return new PrismaRunApprovalCancellationUnitOfWork(transaction).cancel(command);
 }
 
-/** Transaction-scoped unit that owns construction of the cancellation repository. */
+/** Creates the cancellation repository on the caller's transaction and runs the cancellation steps in order. */
 class PrismaRunApprovalCancellationUnitOfWork implements RunApprovalCancellationUnitOfWork
 {
 	/** Exact cancellation transaction. */
@@ -117,7 +117,7 @@ class PrismaRunApprovalCancellationUnitOfWork implements RunApprovalCancellation
 		this._transaction = transaction;
 	}
 
-	/** Close approval and invocation authority without exposing delegates to the caller. */
+	/** Closes pending approvals and remaining invocation work, without handing Prisma models to the caller. */
 	async cancel(command: CancelPendingRunApprovalAuthorityCommand): Promise<CancelPendingRunApprovalAuthorityResult>
 	{
 		const repository = new PrismaRunApprovalCancellationRepository(this._transaction);
@@ -127,7 +127,7 @@ class PrismaRunApprovalCancellationUnitOfWork implements RunApprovalCancellation
 		// 2. Close every pending approval; cancellation never resumes the run.
 		const cancelledCount = await repository.cancelPending(command.runId, command.attempt, command.now);
 
-		// 3. Terminalise all remaining invocation work so no post-cancellation dispatch can win.
+		// 3. Terminalise every remaining invocation, so nothing can still be dispatched after cancellation.
 		const failedInvocationCount = invocations.length === 0 ? 0 : await repository.terminaliseCancellable(invocations, command.runId, command.attempt, command.now);
 		const activeClaimCount = await repository.countActiveClaims(command.runId, command.attempt);
 		return { cancelledCount, failedInvocationCount, activeClaimCount };

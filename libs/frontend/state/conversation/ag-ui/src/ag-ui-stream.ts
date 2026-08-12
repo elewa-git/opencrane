@@ -3,25 +3,72 @@ import { AG_UI_A2UI_ENVELOPE_VERSION, AG_UI_INTERRUPTS_CLEARED_EVENT, AG_UI_TOOL
 
 import { AgUiMessageStatuses, AgUiRunStatuses, AgUiToolStatuses, type AgUiMessageView, type AgUiStreamRecord, type AgUiStreamState } from "./ag-ui-stream.types.js";
 
-/** Maximum complete progressive history retained for one governed surface. */
+/** Most operations kept for one surface; a surface that exceeds this makes the reducer throw. */
 const _MAX_MATERIALIZED_A2UI_OPERATIONS = 256;
 
-/** Fixed provider-outcome vocabulary admitted by the shared recovery projection. */
+/** The provider outcomes a recovery event may carry; anything else is rejected. */
 const _TOOL_RECOVERY_PROVIDER_OUTCOMES = new Set<string>(Object.values(AgUiToolRecoveryProviderOutcomes));
 
-/** Construct empty state that requires an authoritative stream before displaying content. */
+/**
+ * Builds the starting state for a conversation stream: no run, no messages, no cursor.
+ *
+ * Nothing is displayed until the server stream sends events — this state deliberately invents no
+ * placeholder content. Call it when opening a stream for the first time; to resume an existing
+ * one, pass the previous state instead so its cursor is reused.
+ *
+ * Called by: OpenCraneConversationEventStream (state/conversation/adapter), as the fallback when
+ * the caller supplies no `initialState`.
+ *
+ * @returns Empty stream state, safe to reduce records into.
+ */
 export function __CreateAgUiStreamState(): AgUiStreamState
 {
 	return { cursor: null, seenCursors: new Map(), runId: null, runStatus: AgUiRunStatuses.Idle, runFailure: null, runRecovery: null, interrupts: [], messages: {}, tools: {}, surfaces: new Map(), surfaceFingerprints: new Map(), customEvents: [], accessRevoked: false };
 }
 
-/** Purge all projected content and reconnect coordinates after proven access loss. */
+/**
+ * Throws away everything in the stream state once the user has lost access to the conversation.
+ *
+ * Clears the messages, tools, surfaces and interrupts AND the reconnect cursors, so nothing can be
+ * shown from memory and no reconnect can resume the old position. The returned state has
+ * `accessRevoked` set and carries the single custom event "opencrane.access_revoked", which is how
+ * the UI knows to show a revoked state rather than an error.
+ *
+ * Called by: OpenCraneConversationEventStream (state/conversation/adapter) on a 403, and reached
+ * from within the reducer when the server sends the "opencrane.access_revoked" custom event.
+ *
+ * @returns Empty state marked as revoked. Do not keep reducing into the previous state after this.
+ */
 export function __RevokeAgUiStreamAccess(): AgUiStreamState
 {
 	return { ...__CreateAgUiStreamState(), accessRevoked: true, customEvents: ["opencrane.access_revoked"] };
 }
 
-/** Fold one strict projection record without inferring order from opaque cursor text. */
+/**
+ * Folds one decoded SSE record into the stream state, returning new state.
+ *
+ * Order comes only from the records arriving in order — the cursor is an opaque server string and
+ * is never parsed or compared to work out what came first.
+ *
+ * Two things a caller must handle. A record whose cursor has been seen before with the SAME
+ * payload is a harmless duplicate and the previous state is returned unchanged, so replaying after
+ * a reconnect is safe. A record whose cursor has been seen before with a DIFFERENT payload, or a
+ * record that contradicts the run (a success after a failure, a message delta with no start frame,
+ * a surface sequence that goes backwards or skips) makes this THROW. That is not a transport
+ * error to retry: the stream cannot be trusted, so the caller should fail it and surface the last
+ * accepted state rather than reconnecting into the same contradiction.
+ *
+ * Called by: OpenCraneConversationEventStream (state/conversation/adapter), once per accepted
+ * frame.
+ *
+ * @param state - The state so far; never mutated.
+ * @param record - One decoded record from {@link __DecodeAgUiSseRecord}.
+ * @returns New state with the record applied; or `state` itself, meaning the record was an exact
+ *   duplicate and nothing changed. Records with a cursor advance `cursor`; records without one are
+ *   temporary overlays and leave it alone.
+ * @throws Error when the stream contradicts itself or a cursor is reused with a different payload.
+ * @see AG-UI protocol docs — the event types handled in _ReduceEvent: https://docs.ag-ui.com
+ */
 export function __ReduceAgUiStream(state: AgUiStreamState, record: AgUiStreamRecord): AgUiStreamState
 {
 	const fingerprint = JSON.stringify(record.data);
@@ -36,10 +83,21 @@ export function __ReduceAgUiStream(state: AgUiStreamState, record: AgUiStreamRec
 	return { ...reduced, cursor: record.id, seenCursors: new Map(reduced.seenCursors).set(record.id, fingerprint) };
 }
 
-/** Return the exact durable cursor a reconnecting client must present. */
+/**
+ * Returns the cursor a reconnecting request must send, or undefined to start from the beginning.
+ *
+ * Undefined is normal, not an error: it means no record with a cursor has been accepted yet, so
+ * there is nothing to resume from. The caller sends the value as both the `cursor` query parameter
+ * and the `Last-Event-ID` header.
+ *
+ * Called by: OpenCraneConversationEventStream (state/conversation/adapter) before each request.
+ *
+ * @param state - Current stream state.
+ * @returns The cursor to resume from, or `undefined` meaning request the stream from its start.
+ */
 export function __AgUiResumeCursor(state: AgUiStreamState): string | undefined { return state.cursor ?? undefined; }
 
-/** Apply one exact-pinned event after transport and duplicate validation. */
+/** Apply one event; the caller has already checked the transport framing and rejected duplicates. */
 function _ReduceEvent(state: AgUiStreamState, event: AgUiProjectionEvent): AgUiStreamState
 {
 	switch (event.type)
@@ -69,14 +127,14 @@ function _ReduceEvent(state: AgUiStreamState, event: AgUiProjectionEvent): AgUiS
 	}
 }
 
-/** Preserve a distinct cancelled terminal while retaining only display-safe error details. */
+/** Mark the run failed, or cancelled when the code is RUN_CANCELLED, keeping only the message and code. */
 function _FailRun(state: AgUiStreamState, message: string, code: string | undefined): AgUiStreamState
 {
 	const runStatus = code === "RUN_CANCELLED" ? AgUiRunStatuses.Cancelled : AgUiRunStatuses.Failed;
 	return { ...state, runStatus, runFailure: { message, ...(code === undefined ? {} : { code }) }, interrupts: [] };
 }
 
-/** Apply a successful or interrupted run terminal without overwriting an error terminal. */
+/** Finish the run as succeeded, or interrupted when the outcome asks for input; never overwrite a failure. */
 function _FinishRun(state: AgUiStreamState, event: Extract<AgUiProjectionEvent, { readonly type: EventType.RUN_FINISHED }>): AgUiStreamState
 {
 	if (state.runId !== null && state.runId !== event.runId) throw new Error("AG-UI run terminal does not match the active run");
@@ -85,7 +143,7 @@ function _FinishRun(state: AgUiStreamState, event: Extract<AgUiProjectionEvent, 
 	return { ...state, runId: event.runId, runStatus: AgUiRunStatuses.Succeeded, runFailure: null, interrupts: [] };
 }
 
-/** Append message text only after the matching start frame established its role and identity. */
+/** Add text to a streaming message; throws when no start frame has created it yet. */
 function _AppendMessage(state: AgUiStreamState, messageId: string, delta: string): AgUiStreamState
 {
 	const message = state.messages[messageId];
@@ -109,7 +167,7 @@ function _AppendToolArguments(state: AgUiStreamState, toolCallId: string, delta:
 	return { ...state, tools: { ...state.tools, [toolCallId]: { ...tool, arguments: tool.arguments + delta } } };
 }
 
-/** Mark one known tool request complete unless durable recovery evidence owns its status. */
+/** Mark a known tool call complete, or Recovered if it failed earlier; leave it alone if recovery is still open. */
 function _CompleteTool(state: AgUiStreamState, toolCallId: string): AgUiStreamState
 {
 	const tool = state.tools[toolCallId];
@@ -119,7 +177,7 @@ function _CompleteTool(state: AgUiStreamState, toolCallId: string): AgUiStreamSt
 	return { ...state, tools: { ...state.tools, [toolCallId]: { ...tool, status } } };
 }
 
-/** Attach a display-safe result only to a known tool call without unresolved recovery evidence. */
+/** Attach the result to a known tool call, unless it is still waiting on recovery. */
 function _ResultTool(state: AgUiStreamState, toolCallId: string, content: string): AgUiStreamState
 {
 	const tool = state.tools[toolCallId];
@@ -129,7 +187,7 @@ function _ResultTool(state: AgUiStreamState, toolCallId: string, content: string
 	return { ...state, tools: { ...state.tools, [toolCallId]: { ...tool, status, result: content } } };
 }
 
-/** Apply OpenCrane custom display signals without adopting raw authority payloads. */
+/** Handle OpenCrane's own CUSTOM events; unrecognised names are recorded by name only, never by payload. */
 function _Custom(state: AgUiStreamState, name: string, value: unknown): AgUiStreamState
 {
 	if (name === "opencrane.access_revoked") return __RevokeAgUiStreamAccess();
@@ -141,7 +199,7 @@ function _Custom(state: AgUiStreamState, name: string, value: unknown): AgUiStre
 	return { ...state, customEvents: [...state.customEvents, name] };
 }
 
-/** Stop one run visibly without treating an ambiguous provider outcome as failure or elicitation. */
+/** Stop the run and mark it NeedsRecovery, so an unclear provider outcome is shown as neither a failure nor a request for input. */
 function _ToolRecoveryRequired(state: AgUiStreamState, value: unknown, name: string): AgUiStreamState
 {
 	if (!_IsToolRecoveryRequired(value)) throw new Error("AG-UI tool recovery requirement is invalid");
@@ -153,7 +211,7 @@ function _ToolRecoveryRequired(state: AgUiStreamState, value: unknown, name: str
 	return { ...state, runStatus: AgUiRunStatuses.NeedsRecovery, runFailure: null, runRecovery: value, interrupts: [], tools: { ...state.tools, [value.toolCallId]: recoveryTool }, customEvents: [...state.customEvents, name] };
 }
 
-/** Admit only the exact server-redacted recovery envelope and its fixed safe vocabularies. */
+/** Whether a CUSTOM payload is a valid recovery envelope: exact key set, bounded ids, and a known provider outcome. */
 function _IsToolRecoveryRequired(value: unknown): value is AgUiToolRecoveryRequiredEnvelope
 {
 	if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
@@ -170,13 +228,13 @@ function _IsToolRecoveryRequired(value: unknown): value is AgUiToolRecoveryRequi
 	return candidate["providerOutcome"] === undefined || (typeof candidate["providerOutcome"] === "string" && _TOOL_RECOVERY_PROVIDER_OUTCOMES.has(candidate["providerOutcome"]));
 }
 
-/** Require one non-empty bounded public coordinate. */
+/** Whether a value is a non-empty string of at most 256 characters. */
 function _BoundedIdentifier(value: unknown): value is string
 {
 	return typeof value === "string" && value.length > 0 && value.length <= 256;
 }
 
-/** Accept only the canonical UTC instant emitted from the durable timeline row. */
+/** Whether a value is an ISO-8601 UTC timestamp that round-trips exactly through Date.toISOString(). */
 function _CanonicalInstant(value: unknown): value is string
 {
 	if (typeof value !== "string") return false;
@@ -184,7 +242,7 @@ function _CanonicalInstant(value: unknown): value is string
 	return Number.isFinite(timestamp) && new Date(timestamp).toISOString() === value;
 }
 
-/** Mark one known tool failed while retaining only the server-selected safe classification. */
+/** Mark a known tool call failed, keeping only the failure code the server chose. */
 function _ToolFailure(state: AgUiStreamState, value: unknown, name: string): AgUiStreamState
 {
 	if (!_IsToolFailure(value)) throw new Error("AG-UI tool failure is invalid");
@@ -195,7 +253,7 @@ function _ToolFailure(state: AgUiStreamState, value: unknown, name: string): AgU
 	return { ...state, tools: { ...state.tools, [value.toolCallId]: failed }, customEvents: [...state.customEvents, name] };
 }
 
-/** Validate the exact display-safe tool-failure envelope without trusting arbitrary CUSTOM data. */
+/** Whether a CUSTOM payload is a valid tool-failure envelope: no unexpected keys, and the exact eventType. */
 function _IsToolFailure(value: unknown): value is AgUiToolFailureEnvelope
 {
 	if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
@@ -205,7 +263,15 @@ function _IsToolFailure(value: unknown): value is AgUiToolFailureEnvelope
 	return candidate["eventType"] === "tool.failed" && typeof candidate["toolCallId"] === "string" && (candidate["failureCode"] === undefined || typeof candidate["failureCode"] === "string");
 }
 
-/** Adopt only an authoritative monotonic surface envelope under its complete stable identity. */
+/**
+ * Accepts one A2UI surface envelope, keyed by the four ids that identify the surface.
+ *
+ * Operations accumulate: a new envelope's operations are appended to what is already stored, so a
+ * surface builds up as it streams. The sequence must advance by exactly one — going backwards,
+ * skipping, or exceeding {@link _MAX_MATERIALIZED_A2UI_OPERATIONS} all throw. Re-sending the same
+ * sequence is accepted only when the payload is byte-identical; a changed payload at the same
+ * sequence throws, which is what `surfaceFingerprints` exists to detect.
+ */
 function _A2uiSurface(state: AgUiStreamState, envelope: AgUiA2uiEnvelope, name: string): AgUiStreamState
 {
 	const identity = _A2uiSurfaceIdentity(envelope);
@@ -229,13 +295,13 @@ function _A2uiSurface(state: AgUiStreamState, envelope: AgUiA2uiEnvelope, name: 
 	};
 }
 
-/** Build one collision-safe key from every stable coordinate that selects a governed surface. */
+/** Build the map key for a surface from its conversation, run, message and surface ids. */
 function _A2uiSurfaceIdentity(envelope: AgUiA2uiEnvelope): string
 {
 	return JSON.stringify([envelope.conversationId, envelope.runId, envelope.messageId, envelope.surfaceId]);
 }
 
-/** Apply the display-safe message terminal marker emitted by the shared projector. */
+/** Apply the marker that ends a message as failed or cancelled. */
 function _MessageTerminal(state: AgUiStreamState, value: unknown, name: string): AgUiStreamState
 {
 	if (typeof value !== "object" || value === null) return { ...state, customEvents: [...state.customEvents, name] };

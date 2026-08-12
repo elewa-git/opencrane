@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { __PrepareChildRunAdmission } from "../child-run-admission.js";
 import type { ChildRunTargetAuthorization } from "../child-run-admission.types.js";
 
-/** Parent facts whose remaining authority can be safely carved into child work. */
+/** Parent facts with enough budget left to give a child. */
 const _PARENT = { runId: "parent-1", siloId: "silo-1", rootRunId: "root-1", depth: 1, executionSubjectId: "user-1", remainingTokens: 1_000, remainingCostUsdMicros: 5_000_000, admittedChildCount: 1 } as const;
 /** Server-owned recursive delegation bounds. */
 const _LIMITS = { maximumDepth: 3, maximumChildrenPerParent: 4 } as const;

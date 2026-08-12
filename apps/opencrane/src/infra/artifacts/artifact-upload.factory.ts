@@ -13,7 +13,7 @@ import { _ReadArtifactMountedPem } from "./artifact-mounted-key.loader.js";
 import { _CreateArtifactReadLeaseSigner } from "./artifact-read-lease-signer.factory.js";
 import { _CreateArtifactServiceReadPort, _InternalArtifactServiceUrl } from "./artifact-service-read-port.factory.js";
 
-/** Build the app-owned bridge from a proof-authorized command to the private artifact service. */
+/** Build the path this app uses to take a proof-authorized command through to the private artifact service. */
 export function _CreateArtifactUploadGateway(prisma: PrismaClient, environment: NodeJS.ProcessEnv = process.env): { upload(command: VerifiedArtifactUploadCommand): Promise<ArtifactUploadResult> }
 {
 	const serviceUrl = _InternalArtifactServiceUrl(environment.ARTIFACT_SERVICE_URL ?? "");
@@ -52,7 +52,7 @@ function _PromotionReceipt(value: unknown): { readonly receipt: string }
 	return { receipt: value.receipt };
 }
 
-/** Build the only server-side bridge from a fenced authoring input to verified ArtifactStore bytes. */
+/** Build the one server-side path that turns a fenced authoring input into verified ArtifactStore bytes. */
 export function _CreateSkillAuthoringArtifactReader(prisma: PrismaClient, environment: NodeJS.ProcessEnv = process.env): SkillAuthoringArtifactReader
 {
 	const repository = _CreateArtifactCatalogueRepository(prisma);
@@ -123,7 +123,7 @@ async function _CollectBounded(bytes: AsyncIterable<Uint8Array>, maximumBytes: n
 	return Buffer.concat(chunks, length);
 }
 
-/** Adapt one already-bounded output buffer to the promotion port without another copy. */
+/** Hand an already size-checked output buffer to the promotion port without copying it again. */
 async function* _OneBuffer(buffer: Buffer): AsyncGenerator<Uint8Array>
 {
 	yield buffer;

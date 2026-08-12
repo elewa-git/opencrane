@@ -4,7 +4,7 @@ import type { AgentRuntimeJobAssignment, AgentRuntimeJobProfile } from "./agent-
 import { _AssertAgentRuntimeJobProfile, _AgentRuntimeProjectedTokenAudience } from "./agent-runtime-profile.js";
 import { _AgentRuntimeAttemptResourceName, _AssertAgentRuntimeJobAssignment } from "./agent-runtime-resource-name.js";
 
-/** Exact component label selected by the runtime namespace's deployment-owned policy. */
+/** Component label put on every runtime Job and Pod; the deployment's namespace policy selects on it. */
 const _COMPONENT_LABEL = "agent-runtime";
 
 /** Exact projected-token path read by the runtime process. */
@@ -31,7 +31,7 @@ function _AssertSeparatedNamespaces(assignment: AgentRuntimeJobAssignment, profi
 	}
 }
 
-/** Build full authority annotations without forcing arbitrary identifiers into label grammar. */
+/** Put the run's identifiers in annotations, not labels, because they need not obey label value rules. */
 function _AuthorityAnnotations(assignment: AgentRuntimeJobAssignment): Record<string, string>
 {
 	return {
@@ -53,7 +53,7 @@ function _AttemptLabels(name: string): Record<string, string>
 	};
 }
 
-/** Build the runtime's explicit environment without projecting credentials as environment values. */
+/** Build the runtime's environment variables. Credentials are mounted as files, never passed as values here. */
 function _RuntimeEnvironment(profile: AgentRuntimeJobProfile): V1EnvVar[]
 {
 	return [
@@ -76,7 +76,7 @@ function _RuntimeVolumeMounts(): V1VolumeMount[]
 	];
 }
 
-/** Build the only executable container, retaining its non-privileged security contract in one place. */
+/** Build the Job's only container, keeping its non-privileged security settings in this one place. */
 function _RuntimeContainer(profile: AgentRuntimeJobProfile): V1Container
 {
 	return {
@@ -90,7 +90,7 @@ function _RuntimeContainer(profile: AgentRuntimeJobProfile): V1Container
 	};
 }
 
-/** Build the four bounded volumes and keep every secret projection visibly read-only. */
+/** Build the Pod's four volumes, giving every projected secret read-only file permissions (0440). */
 function _RuntimeVolumes(assignment: AgentRuntimeJobAssignment, profile: AgentRuntimeJobProfile): V1Volume[]
 {
 	return [
@@ -103,7 +103,7 @@ function _RuntimeVolumes(assignment: AgentRuntimeJobAssignment, profile: AgentRu
 	];
 }
 
-/** Build a restart-free Pod template whose only writable state is bounded ephemeral scratch. */
+/** Build the Pod template: it never restarts, and the only place it can write is the size-capped scratch volume. */
 function _RuntimePodTemplate(assignment: AgentRuntimeJobAssignment, profile: AgentRuntimeJobProfile, labels: Record<string, string>): V1PodTemplateSpec
 {
 	const authorityAnnotations = _AuthorityAnnotations(assignment);
@@ -121,7 +121,7 @@ function _RuntimePodTemplate(assignment: AgentRuntimeJobAssignment, profile: Age
 	return { metadata: { labels: { ...labels }, annotations: podAnnotations }, spec: podSpec };
 }
 
-/** Build the suspended, one-Pod Job that cannot run before durable assignment commits. */
+/** Build the single-Pod Job, suspended so nothing runs until the assignment has been recorded. */
 function _BuildJob(assignment: AgentRuntimeJobAssignment, profile: AgentRuntimeJobProfile, name: string, labels: Record<string, string>): V1Job
 {
 	return {
@@ -151,12 +151,12 @@ function _BuildJob(assignment: AgentRuntimeJobAssignment, profile: AgentRuntimeJ
  */
 export function __BuildSuspendedAgentRuntimeJob(assignment: AgentRuntimeJobAssignment, profile: AgentRuntimeJobProfile): V1Job
 {
-	// 1. Reject malformed authority and release inputs before an adapter can send them to Kubernetes.
+	// 1. Reject a bad assignment or profile here, before any adapter can send it to Kubernetes.
 	_AssertAgentRuntimeJobAssignment(assignment);
 	_AssertAgentRuntimeJobProfile(profile);
 	_AssertSeparatedNamespaces(assignment, profile);
 
-	// 2. Derive one collision-resistant identity reused by the Job and Pod selector labels.
+	// 2. Derive one collision-resistant name, reused by the Job and by the Pod selector labels.
 	const name = _AgentRuntimeAttemptResourceName(assignment);
 	const labels = _AttemptLabels(name);
 

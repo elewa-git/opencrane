@@ -6,19 +6,30 @@ import type { JsonValue } from "@opencrane/util";
 
 import type { RuntimeResumeInputLoad, RuntimeResumeInputRepository, RuntimeResumeInputUnitOfWork } from "./runtime-resume-input.types.js";
 
-/** Prisma marker loader bound to one caller-owned dispatch transaction. */
+/**
+ * Loads the pending tool results and steering rows a resume command would carry.
+ *
+ * Reads on the caller's dispatch transaction, because the same transaction will save the resume
+ * command and mark these rows consumed - reading them on another connection could pick up rows a
+ * different command has already claimed.
+ *
+ * Called by: `PrismaRuntimeResumeInputUnitOfWork.load` and
+ * `PrismaRuntimeCommandDecisionUnitOfWork.decide`.
+ *
+ * @implements RuntimeResumeInputRepository
+ */
 export class PrismaRuntimeResumeInputRepository implements RuntimeResumeInputRepository
 {
-	/** Exact dispatch transaction, never the process-owned root client. */
+	/** The caller's dispatch transaction, never the process-wide Prisma client. */
 	private readonly _transaction: Prisma.TransactionClient;
 
-	/** Bind marker reads to the transaction that will persist and consume their command. */
+	/** Read on the same transaction that will save the resume command and mark these rows consumed. */
 	constructor(transaction: Prisma.TransactionClient)
 	{
 		this._transaction = transaction;
 	}
 
-	/** Load every pending saved result and steering item in deterministic order. */
+	/** Load every pending tool result and steering row, always in the same order. */
 	async load(runId: string, attempt: number, inputGeneration: number): Promise<RuntimeResumeInputLoad | null>
 	{
 		// A multi-tool batch resumes only after every invocation is terminal. This prevents a partial
@@ -38,7 +49,7 @@ export class PrismaRuntimeResumeInputRepository implements RuntimeResumeInputRep
 	}
 }
 
-/** Bind one saved runtime result to the public invocation id of its relational owner. */
+/** Return whether a saved tool result names the invocation row it is attached to. */
 function _PayloadNamesInvocation(payload: JsonValue, toolInvocationId: string): boolean
 {
 	return payload !== null
@@ -47,19 +58,27 @@ function _PayloadNamesInvocation(payload: JsonValue, toolInvocationId: string): 
 		&& (payload as Readonly<Record<string, JsonValue>>)["toolInvocationId"] === toolInvocationId;
 }
 
-/** Transaction-scoped unit that owns construction of the resume marker repository. */
+/**
+ * Creates the resume-input repository on the caller's transaction, and forwards to it.
+ *
+ * Exists so command dispatch never constructs a Prisma-facing repository itself.
+ *
+ * Called by: `_mintCommandExtras` in prisma-runtime-dispatch-authority.ts.
+ *
+ * @implements RuntimeResumeInputUnitOfWork
+ */
 export class PrismaRuntimeResumeInputUnitOfWork implements RuntimeResumeInputUnitOfWork
 {
 	/** Exact dispatch transaction. */
 	private readonly _transaction: Prisma.TransactionClient;
 
-	/** Bind repository construction to the caller-owned transaction. */
+	/** Store the caller's transaction, to build the repository on later. */
 	constructor(transaction: Prisma.TransactionClient)
 	{
 		this._transaction = transaction;
 	}
 
-	/** Load resumable markers without exposing repository construction to dispatch. */
+	/** Load the pending tool results and steering rows, hiding how the repository is built. */
 	async load(runId: string, attempt: number, inputGeneration: number): Promise<RuntimeResumeInputLoad | null>
 	{
 		return new PrismaRuntimeResumeInputRepository(this._transaction).load(runId, attempt, inputGeneration);

@@ -6,7 +6,7 @@ import { ___DigestCanonicalJson } from "@opencrane/util";
 
 import { PrismaRevisionBudgetPolicySource, PrismaRevisionToolPolicySource } from "../prisma-revision-tool-policy-source.js";
 
-/** Fixed active managed authority shared by policy source tests. */
+/** The active managed run facts these tests share. */
 const _RUN = { agentServiceId: "service-1", agentRevisionId: "revision-1", agentKind: AgentServiceKinds.Managed, effectiveContractDigest: `sha256:${"a".repeat(64)}`, promptCompilerVersion: "v1", trigger: "managed_invocation", delegatedUserId: null, rootRunId: "run-1", parentRunId: null } as const;
 /** Fixed session-assembly command scoped to the active managed service. */
 const _COMMAND: RunAdmissionCommand = { runId: "run-1", siloId: "silo-1", agentServiceId: "service-1", conversationId: null, identityKind: "service", trigger: "managed_invocation", requestIdempotencyKey: "request-1" };
@@ -18,7 +18,7 @@ function _Tool(name = "calendar.read")
 	return { name, description: "Read a calendar", parametersSchema, parametersSchemaDigest: ___DigestCanonicalJson(parametersSchema) };
 }
 
-/** Creates a transaction facade around one revision and its directly referenced authorities. */
+/** Creates a stand-in transaction holding one revision and the rows it points at. */
 function _Transaction(revision: unknown, skills: unknown[] = [], artifacts: unknown[] = []): RunAdmissionTransaction
 {
 	return { prisma: { $queryRaw: vi.fn().mockResolvedValue([]), agentRevision: { findFirst: vi.fn().mockResolvedValue(revision) }, skillRevision: { findMany: vi.fn().mockResolvedValue(skills) }, artifactRevision: { findMany: vi.fn().mockResolvedValue(artifacts) } } as never, admittedAt: "2026-07-26T00:00:00.000Z", admittedAtEpochMs: Date.parse("2026-07-26T00:00:00.000Z") };

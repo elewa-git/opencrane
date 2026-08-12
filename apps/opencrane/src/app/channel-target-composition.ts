@@ -15,7 +15,7 @@ const _INTERNAL_ROUTE_HOST_SUFFIXES = [".svc.cluster.local"] as const;
 /** Delay before discovering AgentServices created after process startup. */
 const _CHANNEL_ROUTE_RECONCILE_INTERVAL_MILLISECONDS = 5_000;
 
-/** Assemble fixed resolver policy from validated deployment configuration. */
+/** Build the resolver's fixed policy from the validated deployment configuration. */
 function _CreateResolutionConfig(config: ChannelTargetRuntimeConfig, channelProxyNamespace: string): ChannelTargetResolutionConfig
 {
 	return {
@@ -29,7 +29,7 @@ function _CreateResolutionConfig(config: ChannelTargetRuntimeConfig, channelProx
 	};
 }
 
-/** Assemble resolver adapters while their trust behavior remains in owning packages. */
+/** Wire up the resolver's adapters here; each adapter's trust logic stays in the package that owns it. */
 function _CreateResolutionDependencies(prisma: PrismaClient, authApi: AuthenticationV1Api, config: ChannelTargetRuntimeConfig, channelProxyNamespace: string): ChannelTargetResolutionDependencies
 {
 	const resolutionConfig = _CreateResolutionConfig(config, channelProxyNamespace);
@@ -44,32 +44,32 @@ function _CreateResolutionDependencies(prisma: PrismaClient, authApi: Authentica
 	};
 }
 
-/** Select the deployment-owned route command, or disable convergence explicitly. */
+/** Build the route-reconcile command from the deployment config, or return null to turn reconciling off. */
 function _CreateRouteCommand(config: ChannelTargetRuntimeConfig | null): ReconcileChannelRuntimeRoutesCommand | null
 {
 	if (config === null) return null;
 	return { receiverId: config.receiverId, endpoint: config.receiverEndpoint, action: "events.read", allowedRouteHostSuffixes: _INTERNAL_ROUTE_HOST_SUFFIXES };
 }
 
-/** Assemble the package-owned route reconciler with application logging and persistence. */
+/** Build the dependencies the route reconciler needs: this app's logger and its Prisma persistence. */
 function _CreateRouteReconcilerDependencies(prisma: PrismaClient, config: ChannelTargetRuntimeConfig | null, intervalMilliseconds: number): ChannelTargetRouteReconcilerDependencies
 {
 	return { repository: new PrismaChannelTargetAuthorityUnitOfWork(prisma), command: _CreateRouteCommand(config), logger: _log, intervalMilliseconds };
 }
 
-/** Build the production channel resolver from deployment-fixed and durable authorities. */
+/** Build the channel-resolver router from the deployment config and the database. */
 export function _CreateChannelTargetResolver(prisma: PrismaClient, authApi: AuthenticationV1Api, config: ChannelTargetRuntimeConfig, channelProxyNamespace: string): Router
 {
 	return __CreateChannelTargetsRouter(_CreateResolutionDependencies(prisma, authApi, config, channelProxyNamespace), _log);
 }
 
-/** Reconcile service-specific replay routes before either listener accepts traffic. */
+/** Reconcile one replay route per AgentService before either listener accepts traffic. */
 export async function _ReconcileChannelTargetRoutes(prisma: PrismaClient, config: ChannelTargetRuntimeConfig | null): Promise<number>
 {
 	return __ReconcileOwnedChannelTargetRoutes(_CreateRouteReconcilerDependencies(prisma, config, _CHANNEL_ROUTE_RECONCILE_INTERVAL_MILLISECONDS));
 }
 
-/** Start the package-owned route convergence worker. */
+/** Start the worker that keeps the replay routes reconciled. */
 export function _StartChannelTargetRouteReconciler(prisma: PrismaClient, config: ChannelTargetRuntimeConfig | null, intervalMilliseconds = _CHANNEL_ROUTE_RECONCILE_INTERVAL_MILLISECONDS): ChannelTargetRouteReconciler
 {
 	return __StartOwnedChannelTargetRouteReconciler(_CreateRouteReconcilerDependencies(prisma, config, intervalMilliseconds));
