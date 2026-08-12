@@ -42,5 +42,12 @@ export interface ConversationAssetView
 	readonly createdAt: string;
 }
 
+/** Public denial reasons that are shared across transport and authority layers. */
+export enum ConversationAssetDenialReasons
+{
+	/** No scanner can consume newly quarantined work in this deployment. */
+	ScannerUnavailable = "scanner_unavailable",
+}
+
 /** Stable public result of a participant asset command. */
-export type ConversationAssetResult = { readonly outcome: "accepted" | "idempotent"; readonly asset: ConversationAssetView } | { readonly outcome: "denied"; readonly reason: "invalid_request" | "conversation_unavailable" | "asset_unavailable" | "upload_failed" | "idempotency_conflict" };
+export type ConversationAssetResult = { readonly outcome: "accepted" | "idempotent"; readonly asset: ConversationAssetView } | { readonly outcome: "denied"; readonly reason: "invalid_request" | "conversation_unavailable" | "asset_unavailable" | "upload_failed" | "idempotency_conflict" | ConversationAssetDenialReasons.ScannerUnavailable };

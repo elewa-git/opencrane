@@ -3,7 +3,7 @@ import { Prisma, type PrismaClient } from "@prisma/client";
 import type { ArtifactScannerFailureCommand, ArtifactScannerJobClaim, ArtifactScannerResultCommand } from "@opencrane/contracts";
 import { ___DoWithTrace } from "@opencrane/backend/observability";
 
-import type { ArtifactScanRepository, ArtifactScanSourceRead, ConversationAssetScanLifecycleReporter } from "./artifact-scanning.types.js";
+import type { ArtifactScanRepository, ArtifactScanSourceRead, ConversationAssetScanLifecycleRepository } from "./artifact-scanning.types.js";
 import { PrismaArtifactScanRepository } from "./prisma-artifact-scan-repository.js";
 
 /** Transaction owner for each short fenced scanner lifecycle operation. */
@@ -13,16 +13,16 @@ export class PrismaArtifactScanUnitOfWork implements ArtifactScanRepository
 	private readonly prisma: PrismaClient;
 	/** Duration of every scanner claim created by repositories in this unit of work. */
 	private readonly claimLeaseMilliseconds: number;
-	/** Conversation-owned asset lifecycle adapter. */
-	private readonly conversationAssets: ConversationAssetScanLifecycleReporter;
+	/** Composition-fixed constructor for the conversation repository bound to the same transaction. */
+	private readonly createConversationAssets: (transaction: Prisma.TransactionClient) => ConversationAssetScanLifecycleRepository;
 
 	/** Creates the scanner unit of work. */
-	constructor(prisma: PrismaClient, claimLeaseMilliseconds: number, conversationAssets: ConversationAssetScanLifecycleReporter)
+	constructor(prisma: PrismaClient, claimLeaseMilliseconds: number, createConversationAssets: (transaction: Prisma.TransactionClient) => ConversationAssetScanLifecycleRepository)
 	{
 		if (!Number.isSafeInteger(claimLeaseMilliseconds) || claimLeaseMilliseconds < 60_000 || claimLeaseMilliseconds > 300_000) throw new Error("artifact scanner claim lease must be from 60 through 300 seconds");
 		this.prisma = prisma;
 		this.claimLeaseMilliseconds = claimLeaseMilliseconds;
-		this.conversationAssets = conversationAssets;
+		this.createConversationAssets = createConversationAssets;
 	}
 
 	/** Claims one job in a serializable transaction. */
@@ -53,10 +53,10 @@ export class PrismaArtifactScanUnitOfWork implements ArtifactScanRepository
 	private _transaction<Result>(work: (repository: PrismaArtifactScanRepository) => Promise<Result>, isolationLevel: Prisma.TransactionIsolationLevel): Promise<Result>
 	{
 		const claimLeaseMilliseconds = this.claimLeaseMilliseconds;
-		const conversationAssets = this.conversationAssets;
+		const createConversationAssets = this.createConversationAssets;
 		return this.prisma.$transaction(async function _Transaction(transaction)
 		{
-			return work(new PrismaArtifactScanRepository(transaction, claimLeaseMilliseconds, conversationAssets));
+			return work(new PrismaArtifactScanRepository(transaction, claimLeaseMilliseconds, createConversationAssets(transaction)));
 		}, { isolationLevel });
 	}
 }

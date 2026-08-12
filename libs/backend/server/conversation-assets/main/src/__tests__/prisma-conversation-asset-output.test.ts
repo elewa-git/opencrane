@@ -1,4 +1,5 @@
-import { ArtifactKind, ArtifactRevisionState, ArtifactUploadLeaseState, ConversationAssetProvenance, ConversationAssetState, WorkloadAssignmentState } from "@prisma/client";
+import { ConversationAssetScanLifecycleStates } from "@opencrane/backend/server/agents/artifacts";
+import { ArtifactKind, ArtifactRevisionState, ArtifactUploadLeaseState, ConversationAssetProvenance, ConversationAssetState, ConversationLifecycle, ConversationTimelineEntryKind, WorkloadAssignmentState } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
 
 import { PrismaConversationAssetOutputRepository } from "../prisma-conversation-asset-output-repository.js";
@@ -117,5 +118,43 @@ describe("PrismaConversationAssetOutputRepository", function _Suite()
 		expect(result).toEqual({ outcome: "denied", reason: "runtime_unavailable" });
 		expect(finalizeTransaction.artifactRevision.create).not.toHaveBeenCalled();
 		expect(finalizeTransaction.artifactScanJob.create).not.toHaveBeenCalled();
+	});
+
+	it("moves a processing output to ready and appends one payload-free invalidation", async function _ReportsReady()
+	{
+		const transaction = {
+			conversationAsset: { findFirst: vi.fn().mockResolvedValue({ id: "asset-1", conversationId: "conversation-1" }), updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
+			conversation: { findUnique: vi.fn().mockResolvedValue({ lifecycle: ConversationLifecycle.Open }) },
+			conversationTimelineEntry: { create: vi.fn() },
+		};
+		await new PrismaConversationAssetOutputRepository(transaction as never).report({ revisionId: "revision-1", state: ConversationAssetScanLifecycleStates.Ready, failureCode: null });
+
+		expect(transaction.conversationAsset.updateMany).toHaveBeenCalledWith({ where: { id: "asset-1", revisionId: "revision-1", state: ConversationAssetState.Processing }, data: { state: ConversationAssetState.Ready, failureCode: null } });
+		expect(transaction.conversationTimelineEntry.create).toHaveBeenCalledWith({ data: { conversationId: "conversation-1", kind: ConversationTimelineEntryKind.System, systemEventId: "conversation-asset:asset-1:ready", payload: { eventType: "conversation.assets.changed" } } });
+	});
+
+	it("commits a terminal output after closure without appending a visible position", async function _ReportsClosed()
+	{
+		const transaction = {
+			conversationAsset: { findFirst: vi.fn().mockResolvedValue({ id: "asset-1", conversationId: "conversation-1" }), updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
+			conversation: { findUnique: vi.fn().mockResolvedValue({ lifecycle: ConversationLifecycle.Closed }) },
+			conversationTimelineEntry: { create: vi.fn() },
+		};
+		await new PrismaConversationAssetOutputRepository(transaction as never).report({ revisionId: "revision-1", state: ConversationAssetScanLifecycleStates.Failed, failureCode: "unsafe_file" });
+
+		expect(transaction.conversationAsset.updateMany).toHaveBeenCalledWith(expect.objectContaining({ data: { state: ConversationAssetState.Failed, failureCode: "unsafe_file" } }));
+		expect(transaction.conversationTimelineEntry.create).not.toHaveBeenCalled();
+	});
+
+	it("refuses generated output work when no scanner can consume quarantine", async function _ScannerUnavailable()
+	{
+		const prisma = { $transaction: vi.fn() };
+		const service = { promote: vi.fn() };
+		const authority = new PrismaConversationAssetOutputUnitOfWork(prisma as never, service, {} as never, false);
+
+		await expect(authority.reserve(_IDENTITY, _COMMAND)).resolves.toEqual({ outcome: "denied", reason: "scanner_unavailable" });
+		await expect(authority.publish(_IDENTITY, "ticket-1", (async function* _Bytes() { yield new Uint8Array([1]); })())).resolves.toEqual({ outcome: "denied", reason: "scanner_unavailable" });
+		expect(prisma.$transaction).not.toHaveBeenCalled();
+		expect(service.promote).not.toHaveBeenCalled();
 	});
 });

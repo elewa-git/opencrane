@@ -1,11 +1,12 @@
 import { randomUUID } from "node:crypto";
 
-import { ArtifactKind, ArtifactRevisionState, ArtifactUploadLeaseState, ConversationAssetProvenance, ConversationAssetState, WorkloadAssignmentState, type Prisma } from "@prisma/client";
+import { ArtifactKind, ArtifactRevisionState, ArtifactUploadLeaseState, ConversationAssetProvenance, ConversationAssetState, ConversationLifecycle, ConversationTimelineEntryKind, WorkloadAssignmentState, type Prisma } from "@prisma/client";
 
 import type { ArtifactPromotionReceiptClaims } from "@opencrane/backend/artifacts/authorization";
+import { ConversationAssetScanLifecycleStates } from "@opencrane/backend/server/agents/artifacts";
 import { ___DecideConversationAssetBatch } from "@opencrane/models/conversation-assets";
+import { ConversationSystemEventTypes } from "@opencrane/models/conversations";
 import { ConversationAssetOutputDenialReasons, ConversationAssetOutputPublishOutcomes, ConversationAssetOutputReservationOutcomes, ConversationAssetOutputTargetStatuses, type ConversationAssetOutputRepository, type ConversationAssetOutputReservationResult, type ConversationAssetOutputRuntimeIdentity, type ConversationAssetOutputTarget, type ConversationAssetOutputPublishResult, type ReserveConversationAssetOutput } from "./conversation-asset-output.types.js";
-import { _AppendConversationAssetsChanged } from "./prisma-conversation-asset-scan-lifecycle-reporter.js";
 
 /** Persisted runtime-event value owned by the execution authority but referenced through its database contract. */
 const _MESSAGE_STARTED_EVENT_TYPE = "message.started";
@@ -84,8 +85,18 @@ export class PrismaConversationAssetOutputRepository implements ConversationAsse
 		await this.transaction.artifactScanJob.create({ data: { artifactRevisionId: revisionId } });
 		await this.transaction.conversationAssetOutputTicket.update({ where: { id: ticket.id }, data: { finalizedContentAddress: promotion.contentAddress, finalizedReceiptDigest: receiptDigest, finalizedAt: now } });
 		await this.transaction.conversationAsset.update({ where: { id: asset.id }, data: { revisionId, state: ConversationAssetState.Processing } });
-		await _AppendConversationAssetsChanged(this.transaction, asset.conversationId, asset.id, "processing");
+		await this._appendAssetsChanged(asset.conversationId, asset.id, "processing");
 		return { outcome: ConversationAssetOutputPublishOutcomes.Accepted };
+	}
+
+	/** Commit one scanner-selected terminal state and publish a payload-free list invalidation. */
+	async report(command: { readonly revisionId: string; readonly state: ConversationAssetScanLifecycleStates; readonly failureCode: "unsafe_file" | "scan_failed" | null }): Promise<void>
+	{
+		const asset = await this.transaction.conversationAsset.findFirst({ where: { revisionId: command.revisionId, state: ConversationAssetState.Processing }, select: { id: true, conversationId: true } });
+		if (asset === null) return;
+		const state = command.state === ConversationAssetScanLifecycleStates.Ready ? ConversationAssetState.Ready : ConversationAssetState.Failed;
+		const changed = await this.transaction.conversationAsset.updateMany({ where: { id: asset.id, revisionId: command.revisionId, state: ConversationAssetState.Processing }, data: { state, failureCode: command.failureCode } });
+		if (changed.count === 1) await this._appendAssetsChanged(asset.conversationId, asset.id, command.state);
 	}
 
 	/** Requires the exact live attempt and exact projected pod identity on every operation. */
@@ -99,6 +110,14 @@ export class PrismaConversationAssetOutputRepository implements ConversationAsse
 	{
 		const event = await this.transaction.conversationRunEvent.findFirst({ where: { conversationId, runId: command.runId, type: _MESSAGE_STARTED_EVENT_TYPE, messageId: command.messageId }, select: { sequence: true, payload: true } });
 		return event !== null && _MessagePayloadMatches(event.payload, command.messageId) ? { sequence: event.sequence } : null;
+	}
+
+	/** Append one stable list invalidation only while the conversation remains open. */
+	private async _appendAssetsChanged(conversationId: string, assetId: string, phase: "processing" | "ready" | "failed"): Promise<void>
+	{
+		const conversation = await this.transaction.conversation.findUnique({ where: { id: conversationId }, select: { lifecycle: true } });
+		if (conversation?.lifecycle !== ConversationLifecycle.Open) return;
+		await this.transaction.conversationTimelineEntry.create({ data: { conversationId, kind: ConversationTimelineEntryKind.System, systemEventId: `conversation-asset:${assetId}:${phase}`, payload: { eventType: ConversationSystemEventTypes.AssetsChanged } } });
 	}
 }
 

@@ -1147,7 +1147,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /**
+         * Read one checked conversation file
+         * @description Rechecks current participant access and ready state, then streams the exact published bytes. Storage coordinates and short-lived internal read authority never cross this boundary.
+         */
+        get: operations["readMyConversationAssetContent"];
         /**
          * Upload exact bytes into quarantine
          * @description A successful response means the bytes entered quarantine, not that preview or download is ready.
@@ -6648,6 +6652,50 @@ export interface operations {
                 };
             };
             /** @description Conversation asset authority unavailable. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    readMyConversationAssetContent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversationId: string;
+                assetId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Exact checked bytes with safe media type and inline-or-download disposition. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/octet-stream": string;
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The caller cannot currently read this ready asset. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Conversation asset authority or private byte broker unavailable. */
             503: {
                 headers: {
                     [name: string]: unknown;

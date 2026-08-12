@@ -8,8 +8,9 @@ import unittest.mock
 from urllib.error import URLError
 
 from src.attempts.execution import execute_start_attempt as _execute_start_attempt
-from src.model_loop.driver import (
-    translate_framework_event as _translate_framework_event,
+from src.model_loop import generated_output_policy as _generated_output_policy
+from src.model_loop.driver import translate_framework_event as _translate_framework_event
+from src.model_loop.generated_output_policy import (
     validate_generated_output_batch as _validate_generated_output_batch,
 )
 from src.model_loop.openai_generated_outputs import OpenAIGeneratedOutputCollector as _OpenAIGeneratedOutputCollector
@@ -234,7 +235,7 @@ class GeneratedOutputJourneyTests(unittest.TestCase):
 
         def _source(_compiled, _cancel, _steering):
             outputs = [{**_output_asset(), "content": b"1234", "idempotencyKey": "first"}, {**_output_asset(), "content": b"5678", "idempotencyKey": "second"}]
-            with unittest.mock.patch("src.model_loop.driver._MAX_GENERATED_OUTPUT_BATCH_BYTES", 7):
+            with unittest.mock.patch.object(_generated_output_policy, "MAX_GENERATED_OUTPUT_BYTES", 7):
                 _validate_generated_output_batch(outputs)
             return iter(outputs)
 

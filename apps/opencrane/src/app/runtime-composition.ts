@@ -13,7 +13,7 @@ import { PrismaChannelTargetAuthorityUnitOfWork } from "@opencrane/backend/serve
 import { _CreateArtifactPreprocessAuthority, PrismaArtifactScanUnitOfWork, __CreateArtifactPreprocessorRouter, __CreateArtifactScannerRouter } from "@opencrane/backend/server/agents/artifacts";
 import { _CreateAgentControllerTokenReviewer, _CreateArtifactPreprocessorTokenReviewer, _CreateArtifactScannerTokenReviewer, _CreateRuntimeTokenReviewer, _CreateSkillWorkloadTokenReviewer, _ValidateIsolatedWorkloadNamespace, _ValidateRuntimeIdentityNamespaces, type RuntimeIdentityNamespaces } from "@opencrane/backend/server/infra/workload-identity";
 import type { MemoryGatewayClient } from "@opencrane/backend/server/infra/memory-gateway-client";
-import { PrismaConversationAssetScanLifecycleReporter, __CreateConversationAssetOutputRouter } from "@opencrane/backend/server/conversation-assets";
+import { PrismaConversationAssetOutputRepository, __CreateConversationAssetOutputRouter } from "@opencrane/backend/server/conversation-assets";
 
 import { _CreateArtifactPreprocessSourceBroker } from "../infra/artifacts/artifact-preprocess-source-broker.factory.js";
 import { _CreateArtifactScanSourceBroker } from "../infra/artifacts/artifact-scan-source-broker.factory.js";
@@ -147,7 +147,7 @@ function _CreateRuntimeProtocolComposition(prisma: PrismaClient, config: Interna
 		}),
 		conversationAssetOutputs: __CreateConversationAssetOutputRouter({
 			tokenReviewer,
-			authority: _CreateConversationAssetOutputAuthority(prisma),
+			authority: _CreateConversationAssetOutputAuthority(prisma, process.env, config.artifactScannerEnabled),
 			logger: _log,
 		}),
 	};
@@ -202,7 +202,7 @@ function _CreateOptionalRuntimeComposition(prisma: PrismaClient, authApi: k8s.Au
 		artifactScanner: artifactScannerNamespace === null
 			? null
 			: __CreateArtifactScannerRouter({
-				authority: new PrismaArtifactScanUnitOfWork(prisma, config.artifactScannerClaimLeaseMilliseconds, new PrismaConversationAssetScanLifecycleReporter()),
+				authority: new PrismaArtifactScanUnitOfWork(prisma, config.artifactScannerClaimLeaseMilliseconds, function _ConversationAssets(transaction) { return new PrismaConversationAssetOutputRepository(transaction); }),
 				tokenReviewer: _CreateArtifactScannerTokenReviewer(authApi, artifactScannerNamespace),
 				sourceBroker: _CreateArtifactScanSourceBroker(),
 				expectedNamespace: artifactScannerNamespace,

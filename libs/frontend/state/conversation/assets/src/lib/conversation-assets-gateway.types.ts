@@ -6,6 +6,7 @@ import type { ConversationAsset, ReserveConversationAssetUpload } from "./conver
 export interface ConversationAssetsGateway
 {
 	list(conversationId: string): Promise<readonly ConversationAsset[]>;
+	read(conversationId: string, assetId: string): Promise<Blob>;
 	reserve(conversationId: string, request: ReserveConversationAssetUpload): Promise<ConversationAsset>;
 	upload(conversationId: string, assetId: string, file: File): Promise<ConversationAsset>;
 	remove(conversationId: string, assetId: string): Promise<ConversationAsset>;

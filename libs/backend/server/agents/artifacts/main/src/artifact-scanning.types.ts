@@ -1,5 +1,3 @@
-import type { Prisma } from "@prisma/client";
-
 import type { ArtifactReadLeaseClaims } from "@opencrane/backend/artifacts/authorization";
 import type { ArtifactScannerFailureCommand, ArtifactScannerJobClaim, ArtifactScannerResultCommand } from "@opencrane/contracts";
 
@@ -54,11 +52,20 @@ export interface ArtifactScanRepository
 	fail(command: ArtifactScannerFailureCommand): Promise<"failed" | "idempotent" | "stale">;
 }
 
-/** Conversation-owned lifecycle seam injected into scanner persistence. */
-export interface ConversationAssetScanLifecycleReporter
+/** Safe terminal conversation-asset states selected by scanner authority. */
+export enum ConversationAssetScanLifecycleStates
 {
-	/** Move one processing conversation asset to its scanner-selected safe terminal state. */
-	reportInTransaction(transaction: Prisma.TransactionClient, command: { readonly revisionId: string; readonly state: "ready" | "failed"; readonly failureCode: "unsafe_file" | "scan_failed" | null }): Promise<void>;
+	/** Safe published bytes are available to current participants. */
+	Ready = "ready",
+	/** The scan reached a safe terminal failure. */
+	Failed = "failed",
+}
+
+/** Conversation-owned transaction repository used by the scanner integration unit of work. */
+export interface ConversationAssetScanLifecycleRepository
+{
+	/** Move one processing conversation asset to the scanner-selected safe terminal state. */
+	report(command: { readonly revisionId: string; readonly state: ConversationAssetScanLifecycleStates; readonly failureCode: "unsafe_file" | "scan_failed" | null }): Promise<void>;
 }
 
 /** Dependencies for the private scanner router. */

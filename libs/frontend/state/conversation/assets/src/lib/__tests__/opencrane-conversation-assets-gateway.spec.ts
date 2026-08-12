@@ -32,6 +32,14 @@ describe("OpenCraneConversationAssetsGateway", function _Suite()
 		expect(DELETE).toHaveBeenCalledWith("/me/conversations/{conversationId}/assets/{assetId}", { params: { path: { conversationId: "conversation-1", assetId: "asset-1" } } });
 	});
 
+	it("reads checked bytes through the participant route without receiving storage authority", async function _Reads()
+	{
+		const file = new Blob(["proof"], { type: "application/pdf" });
+		const GET = vi.fn().mockResolvedValue({ data: file, error: undefined });
+		expect(await _Gateway({ GET }).read("conversation-1", "asset-1")).toBe(file);
+		expect(GET).toHaveBeenCalledWith("/me/conversations/{conversationId}/assets/{assetId}/content", { params: { path: { conversationId: "conversation-1", assetId: "asset-1" } }, parseAs: "blob" });
+	});
+
 	it("sends File bytes without JSON serialization", async function _UploadsExactBytes()
 	{
 		const PUT = vi.fn().mockResolvedValue({ data: { outcome: "accepted", asset: _ASSET }, error: undefined });
@@ -48,5 +56,11 @@ describe("OpenCraneConversationAssetsGateway", function _Suite()
 	{
 		const POST = vi.fn().mockResolvedValue({ data: undefined, error: { outcome: "denied", reason: "conversation_unavailable" } });
 		await expect(_Gateway({ POST }).reserve("conversation-1", { idempotencyKey: "retry-1", displayName: "brief.pdf", mediaType: "application/pdf", byteLength: 5, contentAddress: `sha256:${"a".repeat(64)}` })).rejects.toThrow("could not be reserved");
+	});
+
+	it("fails closed when a content response is not binary", async function _RejectsNonBinaryContent()
+	{
+		const GET = vi.fn().mockResolvedValue({ data: { lease: "must-not-be-used" }, error: undefined });
+		await expect(_Gateway({ GET }).read("conversation-1", "asset-1")).rejects.toThrow("could not be opened");
 	});
 });

@@ -7,16 +7,20 @@ import unittest
 import unittest.mock
 import zipfile
 
-from src.model_loop import openai_generated_outputs as _adapter
-from src.model_loop.openai_generated_outputs import (
-    OpenAIContainerFileReference as _Reference,
-    OpenAIGeneratedOutputCollector as _Collector,
-    OpenAIGeneratedOutputError as _OutputError,
+from src.model_loop import openai_container_files as _container_transport
+from src.model_loop.generated_output_policy import (
+    GeneratedOutputError as _OutputError,
     classify_generated_output_media as _classify_media,
+    safe_generated_output_name as _safe_name,
+)
+from src.model_loop.openai_container_files import (
+    OpenAIContainerFileReference as _Reference,
+    retrieve_openai_generated_outputs as _retrieve_outputs,
+)
+from src.model_loop.openai_generated_outputs import (
+    OpenAIGeneratedOutputCollector as _Collector,
     openai_container_file_references as _references,
     openai_generated_output_configuration as _configuration,
-    retrieve_openai_generated_outputs as _retrieve_outputs,
-    safe_generated_output_name as _safe_name,
 )
 
 
@@ -207,7 +211,7 @@ class OpenAIContainerRetrievalTests(unittest.IsolatedAsyncioTestCase):
             return httpx.Response(200, stream=_Chunks())
 
         http_client = httpx.AsyncClient(transport=httpx.MockTransport(_handler))
-        with unittest.mock.patch.object(_adapter, "trace", _trace):
+        with unittest.mock.patch.object(_container_transport, "trace", _trace):
             outputs = await _retrieve_outputs(
                 [_Reference("container-1", "file-1", "../result.exe")],
                 base_url="https://provider.example/v1",
@@ -300,7 +304,11 @@ class OpenAIContainerRetrievalTests(unittest.IsolatedAsyncioTestCase):
             _Reference("container-1", "file-1", "first.png"),
             _Reference("container-2", "file-2", "second.png"),
         ]
-        with unittest.mock.patch.object(_adapter, "MAX_GENERATED_OUTPUT_BYTES", len(_PNG) + 1):
+        with unittest.mock.patch.object(
+            _container_transport,
+            "MAX_GENERATED_OUTPUT_BYTES",
+            len(_PNG) + 1,
+        ):
             with self.assertRaisesRegex(_OutputError, "generated file batch exceeds its byte limit"):
                 await _retrieve_outputs(
                     references,
@@ -433,7 +441,11 @@ class OpenAIGeneratedOutputCollectorTests(unittest.IsolatedAsyncioTestCase):
             1,
         )
 
-        with unittest.mock.patch.object(_adapter, "MAX_GENERATED_OUTPUT_BYTES", len(_PNG) + len(_PDF) - 1):
+        with unittest.mock.patch.object(
+            _container_transport,
+            "MAX_GENERATED_OUTPUT_BYTES",
+            len(_PNG) + len(_PDF) - 1,
+        ):
             with self.assertRaisesRegex(_OutputError, "generated file batch exceeds its byte limit"):
                 await collector.finish(
                     base_url="https://provider.example/v1",

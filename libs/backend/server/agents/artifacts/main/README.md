@@ -93,7 +93,9 @@ authorised artifact-deletion lifecycle once no active job needs those rows.
   fencing and the TokenReview-protected broker-only worker protocol. Each lifecycle transition has
   its own private transaction; no transaction crosses TokenReview, byte brokering, or promotion.
 - `PrismaArtifactScanUnitOfWork` and `__CreateArtifactScannerRouter` — quarantine publication,
-  bounded retries, and the TokenReview-protected scanner protocol.
+  bounded retries, and the TokenReview-protected scanner protocol. App composition supplies a
+  conversation-lifecycle repository factory; the unit of work binds it and the scan repository to
+  the same transaction without making the artifact package an owner of conversation rows.
 - `_CreateArtifactCatalogueRepository` — read-only active/published catalogue facts for internal
   lease issuance; it never acquires publication or preprocessing locks.
 - `ArtifactPreprocessSourceLeaseIssuer` — the narrow durable port that lets app composition issue

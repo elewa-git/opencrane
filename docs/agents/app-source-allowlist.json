@@ -120,6 +120,8 @@
     { "path": "apps/agent-runtime/src/constants.py", "owner": "apps/agent-runtime", "classification": "process-composition" },
     { "path": "apps/agent-runtime/src/model_loop/checkpoints.py", "owner": "apps/agent-runtime", "classification": "process-composition" },
     { "path": "apps/agent-runtime/src/model_loop/driver.py", "owner": "apps/agent-runtime", "classification": "process-composition" },
+    { "path": "apps/agent-runtime/src/model_loop/generated_output_policy.py", "owner": "apps/agent-runtime", "classification": "process-composition" },
+    { "path": "apps/agent-runtime/src/model_loop/openai_container_files.py", "owner": "apps/agent-runtime", "classification": "process-composition" },
     { "path": "apps/agent-runtime/src/model_loop/openai_generated_outputs.py", "owner": "apps/agent-runtime", "classification": "process-composition" },
     { "path": "apps/agent-runtime/src/observability.py", "owner": "apps/agent-runtime", "classification": "process-instrumentation" },
     { "path": "apps/agent-runtime/src/protocol/candidates.py", "owner": "apps/agent-runtime", "classification": "process-composition" },

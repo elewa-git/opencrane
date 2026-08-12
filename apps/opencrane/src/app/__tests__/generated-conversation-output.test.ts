@@ -2,7 +2,7 @@ import { ArtifactRevisionState, ArtifactScanJobState, ArtifactUploadLeaseState, 
 import { describe, expect, it, vi } from "vitest";
 
 import { PrismaArtifactScanUnitOfWork } from "@opencrane/backend/server/agents/artifacts";
-import { PrismaConversationAssetOutputUnitOfWork, PrismaConversationAssetScanLifecycleReporter } from "@opencrane/backend/server/conversation-assets";
+import { PrismaConversationAssetOutputRepository, PrismaConversationAssetOutputUnitOfWork } from "@opencrane/backend/server/conversation-assets";
 import { ArtifactScannerVerdict } from "@opencrane/contracts";
 
 const _NOW = new Date("2026-08-11T10:00:00.000Z");
@@ -86,7 +86,7 @@ describe("generated conversation output journey", function _Suite()
 		if (reservation.outcome === "denied") throw new Error("test reservation was denied");
 		await expect(outputs.publish(_IDENTITY, reservation.ticketId, (async function* _Bytes() { yield _CONTENT; })())).resolves.toEqual({ outcome: "accepted" });
 
-		const scanner = new PrismaArtifactScanUnitOfWork(database.prisma as never, 300_000, new PrismaConversationAssetScanLifecycleReporter());
+		const scanner = new PrismaArtifactScanUnitOfWork(database.prisma as never, 300_000, function _ConversationAssets(transaction) { return new PrismaConversationAssetOutputRepository(transaction); });
 		const claim = await scanner.claim();
 		expect(claim).not.toBeNull();
 		await expect(scanner.complete({ jobId: claim!.lease.jobId, attempt: claim!.lease.attempt, claimFence: claim!.lease.claimFence, verdict: ArtifactScannerVerdict.Clean, scannerVersion: "clamav-pinned" })).resolves.toBe("completed");

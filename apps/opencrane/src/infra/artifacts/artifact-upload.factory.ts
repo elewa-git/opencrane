@@ -7,7 +7,7 @@ import { __SignArtifactWriteLease, __VerifyArtifactPromotionReceipt } from "@ope
 import { _CreateArtifactCatalogueRepository, _CreateArtifactPreprocessAuthority, _CreateArtifactUploadAuthority, __CompleteArtifactPreprocessJob, __IssueArtifactPreprocessOutputLease, __IssueArtifactReadLease, __UploadArtifact, IssueArtifactReadLeaseOutcomes, type ArtifactPreprocessOutputBroker, type ArtifactUploadResult, type VerifiedArtifactUploadCommand } from "@opencrane/backend/server/agents/artifacts";
 import type { SkillAuthoringArtifactReader, SkillAuthoringInputRecord } from "@opencrane/backend/agents/skills/execution";
 import { ___DoWithTrace } from "@opencrane/backend/observability";
-import { PrismaConversationAssetOutputUnitOfWork, PrismaConversationAssetUnitOfWork } from "@opencrane/backend/server/conversation-assets";
+import { PrismaConversationAssetOutputUnitOfWork, PrismaConversationAssetUnitOfWork, type ConversationAssetContentBroker, type ConversationAssetReadTarget } from "@opencrane/backend/server/conversation-assets";
 import { ___ParseAndValidateJson } from "@opencrane/util";
 
 import { _ReadArtifactMountedPem } from "./artifact-mounted-key.loader.js";
@@ -34,7 +34,7 @@ export function _CreateArtifactUploadGateway(prisma: PrismaClient, environment: 
 }
 
 /** Build the participant conversation-file authority without exposing its write leases. */
-export function _CreateConversationAssetAuthority(prisma: PrismaClient, environment: NodeJS.ProcessEnv = process.env): PrismaConversationAssetUnitOfWork
+export function _CreateConversationAssetAuthority(prisma: PrismaClient, environment: NodeJS.ProcessEnv = process.env, scannerAvailable = true): PrismaConversationAssetUnitOfWork
 {
 	const serviceUrl = _InternalArtifactServiceUrl(environment.ARTIFACT_SERVICE_URL ?? "");
 	const leasePrivateKey = _ReadArtifactMountedPem(environment.ARTIFACT_LEASE_PRIVATE_KEY_PATH, "ARTIFACT_LEASE_PRIVATE_KEY_PATH");
@@ -43,11 +43,56 @@ export function _CreateConversationAssetAuthority(prisma: PrismaClient, environm
 		signLease(claims) { return __SignArtifactWriteLease(claims, leasePrivateKey, Math.floor(Date.now() / 1_000)); },
 		verifyReceipt(compact) { return __VerifyArtifactPromotionReceipt(compact, receiptPublicKey); },
 		digestReceipt(compact) { return `sha256:${createHash("sha256").update(compact, "utf8").digest("hex")}`; }
-	});
+	}, _CreateConversationAssetContentBroker(prisma, environment), scannerAvailable);
+}
+
+/** Build the private broker that turns an authorized ready asset into exact published bytes. */
+export function _CreateConversationAssetContentBroker(prisma: PrismaClient, environment: NodeJS.ProcessEnv = process.env): ConversationAssetContentBroker
+{
+	const serviceUrl = _InternalArtifactServiceUrl(environment.ARTIFACT_SERVICE_URL ?? "");
+	const repository = _CreateArtifactCatalogueRepository(prisma);
+	const signer = { sign: _CreateArtifactReadLeaseSigner(environment) };
+	const readPort = _CreateArtifactServiceReadPort(serviceUrl);
+	return {
+		async open(target: ConversationAssetReadTarget): Promise<AsyncIterable<Uint8Array> | null>
+		{
+			return ___DoWithTrace("conversation.asset.content-broker", { siloId: target.siloId, artifactId: target.artifactId, artifactRevisionId: target.artifactRevisionId }, async function _ReadContent(): Promise<AsyncIterable<Uint8Array> | null>
+			{
+				const issued = await __IssueArtifactReadLease(repository, signer, { siloId: target.siloId, artifactId: target.artifactId, artifactRevisionId: target.artifactRevisionId }, Math.floor(Date.now() / 1_000));
+				if (issued.outcome !== IssueArtifactReadLeaseOutcomes.Issued) return null;
+				if (issued.claims.byteLength !== target.byteLength || issued.claims.mediaType !== target.mediaType) return null;
+				const response = await readPort.read(issued.compactLease);
+				if (response.headers.get("content-length") !== String(target.byteLength) || response.headers.get("content-type") !== target.mediaType) throw new Error("artifact service read metadata did not match the ready conversation asset");
+				if (response.body === null) throw new Error("artifact service returned no conversation asset body");
+				return _ResponseBytes(response.body);
+			});
+		}
+	};
+}
+
+/** Yield a private HTTP response body and cancel its reader if the browser disconnects early. */
+async function* _ResponseBytes(body: ReadableStream<Uint8Array>): AsyncGenerator<Uint8Array>
+{
+	const reader = body.getReader();
+	let complete = false;
+	try
+	{
+		while (true)
+		{
+			const next = await reader.read();
+			if (next.done) { complete = true; return; }
+			yield next.value;
+		}
+	}
+	finally
+	{
+		if (!complete) await reader.cancel().catch(function _IgnoreCancellationFailure(): void {});
+		reader.releaseLock();
+	}
 }
 
 /** Build the runtime-only generated conversation-file authority without exposing storage leases. */
-export function _CreateConversationAssetOutputAuthority(prisma: PrismaClient, environment: NodeJS.ProcessEnv = process.env): PrismaConversationAssetOutputUnitOfWork
+export function _CreateConversationAssetOutputAuthority(prisma: PrismaClient, environment: NodeJS.ProcessEnv = process.env, scannerAvailable = true): PrismaConversationAssetOutputUnitOfWork
 {
 	const serviceUrl = _InternalArtifactServiceUrl(environment.ARTIFACT_SERVICE_URL ?? "");
 	const leasePrivateKey = _ReadArtifactMountedPem(environment.ARTIFACT_LEASE_PRIVATE_KEY_PATH, "ARTIFACT_LEASE_PRIVATE_KEY_PATH");
@@ -56,7 +101,7 @@ export function _CreateConversationAssetOutputAuthority(prisma: PrismaClient, en
 		signLease(claims) { return __SignArtifactWriteLease(claims, leasePrivateKey, Math.floor(Date.now() / 1_000)); },
 		verifyReceipt(compact) { return __VerifyArtifactPromotionReceipt(compact, receiptPublicKey); },
 		digestReceipt(compact) { return `sha256:${createHash("sha256").update(compact, "utf8").digest("hex")}`; }
-	});
+	}, scannerAvailable);
 }
 
 /** Build the sole app-owned HTTP client for artifact-service promotion. */

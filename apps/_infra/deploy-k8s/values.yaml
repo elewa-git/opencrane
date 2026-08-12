@@ -275,6 +275,8 @@ artifactPreprocessor:
 # -- Outbound-only malware scanner. It receives brokered quarantined bytes, scans them against the
 # definitions pinned into its immutable image, and returns only a clean/rejected outcome.
 artifactScanner:
+  # Disabled deployments keep existing Ready files readable but refuse every new participant or
+  # runtime-generated conversation upload before storage work starts.
   enabled: false
   # -- Isolated restricted namespace. Empty derives `<release-fullname>-artifact-scanning` and it
   # must never equal the trusted server namespace.

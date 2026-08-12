@@ -48,6 +48,7 @@ function _ReservationStatus(result: Awaited<ReturnType<ConversationAssetOutputRo
 {
 	if (result.outcome === ConversationAssetOutputReservationOutcomes.Issued) return 201;
 	if (result.outcome === ConversationAssetOutputReservationOutcomes.Idempotent) return 200;
+	if (result.reason === ConversationAssetOutputDenialReasons.ScannerUnavailable) return 503;
 	return result.reason === ConversationAssetOutputDenialReasons.OutputConflict ? 409 : 400;
 }
 
@@ -56,6 +57,7 @@ function _PublishStatus(result: Awaited<ReturnType<ConversationAssetOutputRouter
 {
 	if (result.outcome === ConversationAssetOutputPublishOutcomes.Accepted) return 202;
 	if (result.outcome === ConversationAssetOutputPublishOutcomes.Idempotent) return 200;
+	if (result.reason === ConversationAssetOutputDenialReasons.ScannerUnavailable) return 503;
 	if (result.reason === ConversationAssetOutputDenialReasons.RuntimeUnavailable) return 401;
 	return result.reason === ConversationAssetOutputDenialReasons.UploadFailed ? 422 : 409;
 }

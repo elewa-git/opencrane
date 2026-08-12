@@ -62,4 +62,14 @@ describe("conversation asset output router", function _Suite()
 		expect(response.body).toEqual({ outcome: "denied", reason: "invalid_request" });
 		expect(authority.reserve).not.toHaveBeenCalled();
 	});
+
+	it("returns service unavailable when scanning is disabled", async function _ScannerUnavailable()
+	{
+		const authority = { reserve: vi.fn().mockResolvedValue({ outcome: "denied", reason: "scanner_unavailable" }), publish: vi.fn() };
+		const { app } = _App({ authority });
+		const response = await request(app).post("/conversation-assets/outputs:reserve").set("authorization", "Bearer projected-token").send({ runId: "run-1", runAttempt: 2, messageId: "message-1", idempotencyKey: "output-1", displayName: "report.pdf", mediaType: "application/pdf", byteLength: 5, contentAddress: `sha256:${"a".repeat(64)}` });
+
+		expect(response.status).toBe(503);
+		expect(response.body).toEqual({ outcome: "denied", reason: "scanner_unavailable" });
+	});
 });

@@ -69,7 +69,20 @@ export const _ConversationAssetsOpenapiPaths = {
 			},
 		},
 	},
-	"/me/conversations/{conversationId}/assets/{assetId}/content": {
+"/me/conversations/{conversationId}/assets/{assetId}/content": {
+		get: {
+			operationId: "readMyConversationAssetContent",
+			summary: "Read one checked conversation file",
+			description: "Rechecks current participant access and ready state, then streams the exact published bytes. Storage coordinates and short-lived internal read authority never cross this boundary.",
+			tags: ["Conversation assets"],
+			parameters: [{ name: "conversationId", in: "path", required: true, schema: { type: "string" } }, { name: "assetId", in: "path", required: true, schema: { type: "string" } }],
+			responses: {
+				200: { description: "Exact checked bytes with safe media type and inline-or-download disposition.", content: { "application/octet-stream": { schema: { type: "string", format: "binary" } } } },
+				401: { description: "Authentication required." },
+				404: { description: "The caller cannot currently read this ready asset." },
+				503: { description: "Conversation asset authority or private byte broker unavailable." },
+			},
+		},
 		put: {
 			operationId: "uploadMyConversationAssetContent",
 			summary: "Upload exact bytes into quarantine",

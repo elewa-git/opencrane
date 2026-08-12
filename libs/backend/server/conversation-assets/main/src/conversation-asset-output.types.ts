@@ -1,4 +1,5 @@
 import type { ArtifactPromotionReceiptClaims, ArtifactWriteLeaseClaims } from "@opencrane/backend/artifacts/authorization";
+import type { ConversationAssetScanLifecycleRepository } from "@opencrane/backend/server/agents/artifacts";
 
 /** TokenReview-projected runtime identity before durable attempt binding. */
 export interface ConversationAssetOutputRuntimeIdentity
@@ -74,13 +75,15 @@ export enum ConversationAssetOutputDenialReasons
 	OutputUnavailable = "output_unavailable",
 	/** ArtifactStore promotion or receipt verification failed. */
 	UploadFailed = "upload_failed",
+	/** Malware scanning is unavailable, so quarantined work cannot reach a safe terminal state. */
+	ScannerUnavailable = "scanner_unavailable",
 }
 
 /** Internal ticket response without write authority or storage coordinates. */
-export type ConversationAssetOutputReservationResult = { readonly outcome: ConversationAssetOutputReservationOutcomes.Issued; readonly ticketId: string } | { readonly outcome: ConversationAssetOutputReservationOutcomes.Idempotent; readonly ticketId: string } | { readonly outcome: ConversationAssetOutputReservationOutcomes.Denied; readonly reason: ConversationAssetOutputDenialReasons.InvalidRequest | ConversationAssetOutputDenialReasons.RuntimeUnavailable | ConversationAssetOutputDenialReasons.OutputConflict };
+export type ConversationAssetOutputReservationResult = { readonly outcome: ConversationAssetOutputReservationOutcomes.Issued; readonly ticketId: string } | { readonly outcome: ConversationAssetOutputReservationOutcomes.Idempotent; readonly ticketId: string } | { readonly outcome: ConversationAssetOutputReservationOutcomes.Denied; readonly reason: ConversationAssetOutputDenialReasons.InvalidRequest | ConversationAssetOutputDenialReasons.RuntimeUnavailable | ConversationAssetOutputDenialReasons.OutputConflict | ConversationAssetOutputDenialReasons.ScannerUnavailable };
 
 /** Internal content publication response projected without receipt or storage evidence. */
-export type ConversationAssetOutputPublishResult = { readonly outcome: ConversationAssetOutputPublishOutcomes.Accepted } | { readonly outcome: ConversationAssetOutputPublishOutcomes.Idempotent } | { readonly outcome: ConversationAssetOutputPublishOutcomes.Denied; readonly reason: ConversationAssetOutputDenialReasons.RuntimeUnavailable | ConversationAssetOutputDenialReasons.OutputUnavailable | ConversationAssetOutputDenialReasons.UploadFailed };
+export type ConversationAssetOutputPublishResult = { readonly outcome: ConversationAssetOutputPublishOutcomes.Accepted } | { readonly outcome: ConversationAssetOutputPublishOutcomes.Idempotent } | { readonly outcome: ConversationAssetOutputPublishOutcomes.Denied; readonly reason: ConversationAssetOutputDenialReasons.RuntimeUnavailable | ConversationAssetOutputDenialReasons.OutputUnavailable | ConversationAssetOutputDenialReasons.UploadFailed | ConversationAssetOutputDenialReasons.ScannerUnavailable };
 
 /** Server-only status for a retry-stable generated-output target. */
 export enum ConversationAssetOutputTargetStatuses
@@ -95,7 +98,7 @@ export enum ConversationAssetOutputTargetStatuses
 export type ConversationAssetOutputTarget = { readonly status: ConversationAssetOutputTargetStatuses.Issued; readonly lease: ArtifactWriteLeaseClaims } | { readonly status: ConversationAssetOutputTargetStatuses.Completed };
 
 /** Persistence contract for exact generated-output issuance and finalization. */
-export interface ConversationAssetOutputRepository
+export interface ConversationAssetOutputRepository extends ConversationAssetScanLifecycleRepository
 {
 	/** Reserves or replays the exact generated output aggregate. */
 	reserve(identity: ConversationAssetOutputRuntimeIdentity, command: ReserveConversationAssetOutput): Promise<ConversationAssetOutputReservationResult>;

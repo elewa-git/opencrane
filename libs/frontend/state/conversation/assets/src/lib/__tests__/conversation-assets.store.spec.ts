@@ -29,9 +29,10 @@ function _SizedFile(name: string, type: string, size: number): File
 }
 
 /** Build one component-scoped store with a controlled gateway. */
-function _Store(gateway: ConversationAssetsGateway): ConversationAssetsStore
+function _Store(gateway: Omit<ConversationAssetsGateway, "read"> & Partial<Pick<ConversationAssetsGateway, "read">>): ConversationAssetsStore
 {
-	TestBed.configureTestingModule({ providers: [ConversationAssetsStore, { provide: CONVERSATION_ASSETS_GATEWAY, useValue: gateway }] });
+	const completeGateway: ConversationAssetsGateway = { read: vi.fn(), ...gateway };
+	TestBed.configureTestingModule({ providers: [ConversationAssetsStore, { provide: CONVERSATION_ASSETS_GATEWAY, useValue: completeGateway }] });
 	return TestBed.inject(ConversationAssetsStore);
 }
 

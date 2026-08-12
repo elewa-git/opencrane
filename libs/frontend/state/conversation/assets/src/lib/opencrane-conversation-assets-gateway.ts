@@ -21,6 +21,14 @@ export class OpenCraneConversationAssetsGateway implements ConversationAssetsGat
 	}
 
 	/** @inheritdoc */
+	public async read(conversationId: string, assetId: string): Promise<Blob>
+	{
+		const { data, error } = await this._api.client.GET("/me/conversations/{conversationId}/assets/{assetId}/content", { params: { path: { conversationId, assetId } }, parseAs: "blob" });
+		if (error !== undefined || !(data instanceof Blob)) throw new Error("The file could not be opened.");
+		return data;
+	}
+
+	/** @inheritdoc */
 	public async reserve(conversationId: string, request: ReserveConversationAssetUpload): Promise<ConversationAsset>
 	{
 		const { data, error } = await this._api.client.POST("/me/conversations/{conversationId}/assets", { params: { path: { conversationId } }, body: request });

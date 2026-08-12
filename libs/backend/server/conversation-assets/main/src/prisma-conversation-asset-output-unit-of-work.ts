@@ -16,13 +16,16 @@ export class PrismaConversationAssetOutputUnitOfWork implements ConversationAsse
 	private readonly service: ArtifactServicePromotionPort;
 	/** Lease signer and receipt verifier fixed by app composition. */
 	private readonly crypto: ArtifactUploadCryptoPort;
+	/** Whether this deployment can consume newly quarantined scan jobs. */
+	private readonly scannerAvailable: boolean;
 
 	/** Creates the authority with its private ArtifactStore ports. */
-	constructor(prisma: PrismaClient, service: ArtifactServicePromotionPort, crypto: ArtifactUploadCryptoPort) { this.prisma = prisma; this.service = service; this.crypto = crypto; }
+	constructor(prisma: PrismaClient, service: ArtifactServicePromotionPort, crypto: ArtifactUploadCryptoPort, scannerAvailable = true) { this.prisma = prisma; this.service = service; this.crypto = crypto; this.scannerAvailable = scannerAvailable; }
 
 	/** Reserves one retry-stable generated-output ticket without exposing storage authority. */
 	async reserve(identity: ConversationAssetOutputRuntimeIdentity, command: ReserveConversationAssetOutput): Promise<ConversationAssetOutputReservationResult>
 	{
+		if (!this.scannerAvailable) return { outcome: ConversationAssetOutputReservationOutcomes.Denied, reason: ConversationAssetOutputDenialReasons.ScannerUnavailable };
 		const normalized = _ParseReserveConversationAssetOutput(command);
 		if (normalized === null) return { outcome: ConversationAssetOutputReservationOutcomes.Denied, reason: ConversationAssetOutputDenialReasons.InvalidRequest };
 		return ___DoWithTrace("conversation.asset.output.reserve", { runId: normalized.runId, runAttempt: normalized.runAttempt }, () => this._transaction(function _Reserve(repository) { return repository.reserve(identity, normalized); }, Prisma.TransactionIsolationLevel.Serializable));
@@ -31,6 +34,7 @@ export class PrismaConversationAssetOutputUnitOfWork implements ConversationAsse
 	/** Promotes the exact streamed bytes, verifies the receipt, then quarantines the output. */
 	async publish(identity: ConversationAssetOutputRuntimeIdentity, ticketId: string, bytes: AsyncIterable<Uint8Array>): Promise<ConversationAssetOutputPublishResult>
 	{
+		if (!this.scannerAvailable) return { outcome: ConversationAssetOutputPublishOutcomes.Denied, reason: ConversationAssetOutputDenialReasons.ScannerUnavailable };
 		return ___DoWithTrace("conversation.asset.output.publish", { ticketId }, async () =>
 		{
 			// 1. Read and reauthorize the live server-owned target before any bytes leave the server.

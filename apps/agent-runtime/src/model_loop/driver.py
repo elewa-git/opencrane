@@ -12,11 +12,9 @@ from collections.abc import Callable, Iterator
 
 from ..config import environment, read_attempt_litellm_key
 from ..constants import DEFAULT_LITELLM_KEY_PATH
+from .generated_output_policy import order_generated_outputs as _order_generated_outputs
+from .generated_output_policy import validate_generated_output_batch
 from .openai_generated_outputs import OpenAIGeneratedOutputCollector, OpenAIGeneratedOutputConfiguration, openai_generated_output_configuration
-
-
-_MAX_GENERATED_OUTPUT_FILES = 10
-_MAX_GENERATED_OUTPUT_BATCH_BYTES = 200 * 1024 * 1024
 
 
 def absorb_steering(steering_buffer: list[str]) -> list[str]:
@@ -292,28 +290,6 @@ def translate_framework_event(event: object) -> dict[str, object]:
             "arguments": getattr(part, "args_as_json_str", lambda: "{}")(),
         }
     return {"type": "output_text", "text": ""}
-
-
-def validate_generated_output_batch(events: list[dict[str, object]]) -> None:
-    """Reject an oversized model-created file batch before the caller publishes any member."""
-    outputs = [event for event in events if event.get("type") == "output_asset"]
-    if len(outputs) > _MAX_GENERATED_OUTPUT_FILES:
-        raise ValueError("generated output batch has too many files")
-    contents = [event.get("content") for event in outputs]
-    if any(not isinstance(content, bytes) for content in contents):
-        raise ValueError("generated output batch contains invalid bytes")
-    total_bytes = sum(len(content) for content in contents if isinstance(content, bytes))
-    if total_bytes > _MAX_GENERATED_OUTPUT_BATCH_BYTES:
-        raise ValueError("generated output batch is too large")
-
-
-def _order_generated_outputs(events: list[dict[str, object]]) -> list[dict[str, object]]:
-    """Place all validated files after streamed text in their collision-free provider order."""
-    ordinary = [event for event in events if event.get("type") != "output_asset"]
-    outputs = [event for event in events if event.get("type") == "output_asset"]
-    if any(not isinstance(event.get("outputOrdinal"), int) for event in outputs):
-        raise ValueError("generated output ordinal is invalid")
-    return [*ordinary, *sorted(outputs, key=lambda event: int(event["outputOrdinal"]))]
 
 
 def apply_steering_to_request(model_request_node: object, steering: list[str]) -> None:

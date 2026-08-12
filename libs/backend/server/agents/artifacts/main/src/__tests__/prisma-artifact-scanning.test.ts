@@ -39,8 +39,8 @@ function _ClaimedJob(overrides: Record<string, unknown> = {})
 
 describe("PrismaArtifactScanRepository", function _Suite()
 {
-	const lifecycle = { reportInTransaction: vi.fn() };
-	beforeEach(function _Reset() { lifecycle.reportInTransaction.mockReset(); });
+	const lifecycle = { report: vi.fn() };
+	beforeEach(function _Reset() { lifecycle.report.mockReset(); });
 	it("uses the configured complete-operation lease when claiming work", async function _ClaimsWithConfiguredLease()
 	{
 		const transaction = _Transaction();
@@ -76,7 +76,7 @@ describe("PrismaArtifactScanRepository", function _Suite()
 
 		await expect(repository.fail({ jobId: "job-1", attempt, claimFence: `fence-${attempt}`, failureCode: "scanner_failed" })).resolves.toBe("failed");
 		expect(transaction.artifactScanJob.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ state: expectedState }) }));
-		expect(lifecycle.reportInTransaction).toHaveBeenCalledTimes(terminal ? 1 : 0);
+		expect(lifecycle.report).toHaveBeenCalledTimes(terminal ? 1 : 0);
 	});
 
 	it("publishes a clean revision and its ready conversation asset atomically", async function _PublishesClean()
@@ -88,7 +88,7 @@ describe("PrismaArtifactScanRepository", function _Suite()
 		await expect(repository.complete({ jobId: "job-1", attempt: 2, claimFence: "fence-2", verdict: ArtifactScannerVerdict.Clean, scannerVersion: "clamav-pinned" })).resolves.toBe("completed");
 		expect(transaction.artifactRevision.update).toHaveBeenCalledWith({ where: { id: "revision-1" }, data: { state: ArtifactRevisionState.Published } });
 		expect(transaction.artifact.update).toHaveBeenCalledWith({ where: { id: "artifact-1" }, data: { currentRevisionId: "revision-1" } });
-		expect(lifecycle.reportInTransaction).toHaveBeenCalledWith(transaction, { revisionId: "revision-1", state: "ready", failureCode: null });
+		expect(lifecycle.report).toHaveBeenCalledWith({ revisionId: "revision-1", state: "ready", failureCode: null });
 	});
 
 	it("rejects unsafe bytes without publishing an artifact pointer", async function _RejectsUnsafe()
@@ -100,6 +100,6 @@ describe("PrismaArtifactScanRepository", function _Suite()
 		await expect(repository.complete({ jobId: "job-1", attempt: 2, claimFence: "fence-2", verdict: ArtifactScannerVerdict.Rejected, scannerVersion: "clamav-pinned" })).resolves.toBe("completed");
 		expect(transaction.artifactRevision.update).toHaveBeenCalledWith({ where: { id: "revision-1" }, data: { state: ArtifactRevisionState.Rejected } });
 		expect(transaction.artifact.update).not.toHaveBeenCalled();
-		expect(lifecycle.reportInTransaction).toHaveBeenCalledWith(transaction, { revisionId: "revision-1", state: "failed", failureCode: "unsafe_file" });
+		expect(lifecycle.report).toHaveBeenCalledWith({ revisionId: "revision-1", state: "failed", failureCode: "unsafe_file" });
 	});
 });

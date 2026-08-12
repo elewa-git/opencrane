@@ -5,6 +5,7 @@ import { ArtifactKind, ArtifactRevisionState, ArtifactState, ArtifactUploadLease
 import { ___ConversationAssetMediaDisposition, ConversationAssetLifecycle, ConversationAssetProvenance } from "@opencrane/models/conversation-assets";
 
 import type { ConversationAssetRepository, ConversationAssetUploadTarget } from "./conversation-asset.repository.types.js";
+import type { ConversationAssetReadTarget } from "./conversation-asset-content.types.js";
 import type { ConversationAssetCaller, ConversationAssetResult, ConversationAssetView, ReserveConversationAssetRequest } from "./conversation-asset.types.js";
 
 /** Transaction-scoped conversation asset repository. */
@@ -77,6 +78,19 @@ export class PrismaConversationAssetRepository implements ConversationAssetRepos
 	{
 		if (!await this._canReadConversation(caller, conversationId)) return [];
 		return (await this.transaction.conversationAsset.findMany({ where: { conversationId, siloId: caller.siloId, state: { not: ConversationAssetState.Removed }, OR: [{ provenance: PersistedProvenance.ParticipantUpload }, { provenance: PersistedProvenance.AgentOutput, state: { in: [ConversationAssetState.Processing, ConversationAssetState.Ready, ConversationAssetState.Failed] } }] }, orderBy: [{ createdAt: "asc" }, { id: "asc" }] })).map(function _SafeView(asset) { return _ConversationAssetView(asset, caller.subjectId); });
+	}
+
+	/** Reloads current participant access and one exact ready, published revision. */
+	async readReadyTarget(caller: ConversationAssetCaller, conversationId: string, assetId: string): Promise<ConversationAssetReadTarget | null>
+	{
+		if (!await this._canReadConversation(caller, conversationId)) return null;
+		const asset = await this.transaction.conversationAsset.findFirst({ where: { id: assetId, siloId: caller.siloId, conversationId, state: ConversationAssetState.Ready }, include: { artifact: true, revision: true } });
+		if (asset === null || asset.artifactId === null || asset.revisionId === null || asset.artifact === null || asset.revision === null) return null;
+		if (asset.artifact.state !== ArtifactState.Active || asset.revision.state !== ArtifactRevisionState.Published || asset.revision.artifactId !== asset.artifactId || asset.revision.id !== asset.revisionId) return null;
+		if (asset.byteLength === null || asset.byteLength !== asset.revision.byteLength || asset.mediaType !== asset.revision.mediaType || asset.byteLength <= 0n || asset.byteLength > BigInt(Number.MAX_SAFE_INTEGER)) return null;
+		const disposition = ___ConversationAssetMediaDisposition(asset.mediaType);
+		if (disposition === null) return null;
+		return { siloId: caller.siloId, artifactId: asset.artifactId, artifactRevisionId: asset.revisionId, displayName: asset.displayName, mediaType: asset.mediaType, byteLength: Number(asset.byteLength), disposition };
 	}
 
 	/** Requires current membership and participant access, including a closed read-only conversation. */

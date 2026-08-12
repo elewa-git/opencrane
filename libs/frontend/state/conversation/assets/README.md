@@ -4,7 +4,7 @@
 
 ## What it owns
 
-This package owns one mounted conversation's browser-safe file projection and exact upload intents.
+This package owns one mounted conversation's browser-safe file projection, checked-byte reads, and exact upload intents.
 It validates the complete ten-file, 200 MiB message selection before starting work, computes the
 content digest locally, reuses the same idempotency key and bytes after a transport failure, and
 adopts only the server's returned lifecycle.
@@ -18,6 +18,7 @@ receipts, scanner evidence, or credentials.
   local pre-admission removal, and removal of exact reservations granted by server capability.
 - `CONVERSATION_ASSETS_GATEWAY` and `ConversationAssetsGateway` — narrow transport port.
 - `OpenCraneConversationAssetsGateway` — generated-client adapter.
+- `ConversationAssetsGateway.read` — participant-bound byte read that returns a browser `Blob` and never a storage URL.
 - Browser-safe asset, pending-upload progress, typed selection-error, and server capability types.
 
 ## Boundary
@@ -25,6 +26,8 @@ receipts, scanner evidence, or credentials.
 The package prepares files and reflects durable server state; it does not attach an unchecked file
 to a message. Message admission remains a server transaction and accepts only assets whose current
 authoritative state is ready.
+Preview and download bytes come only from the participant API, which rechecks access and ready state
+for each read. This state package never receives a storage address, lease, or scanner evidence.
 It never derives durable removal or retry permission from lifecycle; the server returns both
 capabilities for the exact caller.
 
