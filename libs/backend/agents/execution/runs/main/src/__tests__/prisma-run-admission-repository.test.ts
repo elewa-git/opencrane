@@ -5,6 +5,7 @@ import { ___DigestCanonicalJson } from "@opencrane/util";
 import { describe, expect, it, vi } from "vitest";
 
 import { PrismaRunAdmissionRepository } from "../prisma-run-admission-repository.js";
+import { RunAdmissionDenialReasons } from "../run-admission.types.js";
 
 /** Build one reviewed tool definition. */
 function _Tool(name = "search")
@@ -118,6 +119,26 @@ describe("PrismaRunAdmissionRepository", function _describeAdmissionRepository()
 		{
 			(context.prisma as unknown as { pendingChildren: string[] }).pendingChildren.push("child-1");
 		})).resolves.toEqual({ outcome: "denied", reason: "persona_unavailable" });
+		expect(committedChildren).toEqual([]);
+	});
+
+	it("rolls back prepared child authority when compiled coordinates conflict", async function _RollsBackPreparedAuthorityConflict()
+	{
+		const committedChildren: string[] = [];
+		const transaction = { $queryRaw: vi.fn().mockResolvedValue([]), agentRun: { findUnique: vi.fn().mockResolvedValue(null) } };
+		const prisma = { $transaction: vi.fn(async function _Transaction(callback: (client: typeof transaction) => Promise<unknown>)
+		{
+			const pendingChildren: string[] = [];
+			const result = await callback({ ...transaction, pendingChildren } as never);
+			committedChildren.push(...pendingChildren);
+			return result;
+		}) } as unknown as PrismaClient;
+		const repository = new PrismaRunAdmissionRepository(prisma);
+
+		await expect(repository.admit(_command(), async function _BuildConflict() { return { outcome: "ready", value: { authority: { ..._authority(), delegatedUserId: "user-2" }, snapshot: _snapshot() } } as const; }, undefined, async function _Prepare(context)
+		{
+			(context.prisma as unknown as { pendingChildren: string[] }).pendingChildren.push("child-1");
+		})).resolves.toEqual({ outcome: "denied", reason: RunAdmissionDenialReasons.AuthorityConflict });
 		expect(committedChildren).toEqual([]);
 	});
 

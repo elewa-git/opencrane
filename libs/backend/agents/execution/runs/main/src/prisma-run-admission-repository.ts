@@ -86,7 +86,11 @@ export class PrismaRunAdmissionRepository implements RunAdmissionRepository
 					if (prepare) throw new _PreparedAdmissionDenied(compiled.reason);
 					return compiled;
 				}
-				if (!_matchesCommand(compiled.value, command) || !_matchesExecutionIdentity(compiled.value.authority, compiled.value.snapshot, command)) return { outcome: "denied", reason: RunAdmissionDenialReasons.AuthorityConflict };
+				if (!_matchesCommand(compiled.value, command) || !_matchesExecutionIdentity(compiled.value.authority, compiled.value.snapshot, command))
+				{
+					if (prepare) throw new _PreparedAdmissionDenied(RunAdmissionDenialReasons.AuthorityConflict);
+					return { outcome: "denied", reason: RunAdmissionDenialReasons.AuthorityConflict };
+				}
 
 				// 3. Insert both sides of the deferred snapshot relation plus ordered acceptance and dispatch events in one commit.
 				await _persistInitialAdmission(transaction, command, compiled.value, admittedAtDate);
