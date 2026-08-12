@@ -37,6 +37,6 @@ export function _PurgedAgentThreadRouteProjection(): AgentThreadRouteProjection
 export function _AgentThreadHistoryAfterPurge(historyState: unknown): Readonly<Record<string, unknown>>
 {
 	if (typeof historyState !== "object" || historyState === null || Array.isArray(historyState)) return {};
-	const { focusTarget: _discardedFocusTarget, ...retainedState } = historyState;
+	const { focusTarget: _discardedFocusTarget, ...retainedState } = historyState as Readonly<Record<string, unknown>>;
 	return retainedState;
 }
