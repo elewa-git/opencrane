@@ -131,14 +131,17 @@ function _canonicalIntegrationAssignments(assignments: readonly RunInputSnapshot
 	return [...assignments]
 		.map(function _assignment(assignment): RunInputSnapshotIntegrationAssignment
 		{
-			return {
-				integrationId: assignment.integrationId,
-				toolDefinitions: [...assignment.toolDefinitions]
-					.map(function _tool(definition) { return { name: definition.name, description: definition.description, parametersSchema: ___CloneCanonicalJson(definition.parametersSchema), parametersSchemaDigest: definition.parametersSchemaDigest }; })
-					.sort(function _byTool(left, right): number { return left.name.localeCompare(right.name); }),
-			};
+			return { integrationId: assignment.integrationId, toolDefinitions: _canonicalToolDefinitions(assignment.toolDefinitions) };
 		})
 		.sort(function _byIntegration(left, right): number { return left.integrationId.localeCompare(right.integrationId); });
+}
+
+/** Canonicalises one assignment's tool definitions: cloned schemas, name-sorted. */
+function _canonicalToolDefinitions(toolDefinitions: RunInputSnapshotIntegrationAssignment["toolDefinitions"]): RunInputSnapshotIntegrationAssignment["toolDefinitions"]
+{
+	return [...toolDefinitions]
+		.map(function _tool(definition) { return { name: definition.name, description: definition.description, parametersSchema: ___CloneCanonicalJson(definition.parametersSchema), parametersSchemaDigest: definition.parametersSchemaDigest }; })
+		.sort(function _byTool(left, right): number { return left.name.localeCompare(right.name); });
 }
 
 /** Rejects integration allowances that cannot form one unambiguous runtime tool-revision identifier. */
