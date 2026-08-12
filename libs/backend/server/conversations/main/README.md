@@ -4,8 +4,8 @@
 
 ## What it owns
 
-This package owns the signed-in participant's conversation API and the display-safe replay of
-agent-session events. It creates conversations in exactly one immutable mode: `agent_session`,
+This package owns the signed-in participant's conversation API, canonical timeline and authorised
+stream transports. It creates conversations in exactly one immutable mode: `agent_session`,
 `direct`, or `group`. An agent session binds one agent service; direct and group conversations do
 not bind an agent and their ordinary messages never manufacture runs.
 
@@ -16,7 +16,7 @@ not bind an agent and their ordinary messages never manufacture runs.
  ┌──────────────────────────────────────────┐
  │ conversations  ◄── HERE                   │
  │ immutable mode · participant coordinates │
- │ atomic message admission · safe replay   │
+ │ atomic admission · authorised event read │
  └──────────────────────────────────────────┘
           │ agent-session message       │ direct/group message
           ▼                             ▼
@@ -25,6 +25,7 @@ not bind an agent and their ordinary messages never manufacture runs.
 
 **In this flow:** [execution admission](../../../agents/execution/admission/main/README.md) ·
 [channel-proxy](../../../channel-proxy/main/README.md) ·
+[conversation projection](../../../conversations/projection/main/README.md) ·
 [AG-UI browser state](../../../../frontend/state/conversation/ag-ui/README.md)
 
 Message admission dispatches through the persisted mode strategy. A direct or group message commits
@@ -43,31 +44,18 @@ participant separately records the first visible position, the last read positio
 access-ended position; reads are clipped to those bounds and writes require continuing access.
 
 The database allocates one monotonically increasing position across message and run-event timeline
-entries. Timeline entries hold typed references to canonical rows, never copied payloads. Replay
-uses an opaque `{ conversationId, position, subframe? }` cursor, reads linked messages and run
-events, and projects an allow-listed Agent User Interface (AG-UI) server-sent event stream. Unknown events remain visible
-as a bounded custom event, but proofs, credentials, fences, and provider metadata never cross the
-browser boundary.
+entries. Timeline entries hold typed references to canonical rows, never copied payloads. The replay
+repository checks membership and participant bounds and reads those linked rows in one repeatable
+snapshot. It hands the result to the separate
+[conversation projection package](../../../conversations/projection/main/README.md), which owns
+redaction, Agent User Interface (AG-UI) mapping, cursors and live streaming for every mode.
+Safe technical failure classifications remain visible there, including when a later attempt retries
+the tool, while credentials and provider details are never exposed.
 
-Message lifecycle and tool coordinates are reduced to their display identifiers. A failed tool or
-nonterminal runtime error may expose a bounded failure classification such as
-`AuthenticationError`, while raw messages, provider response bodies, arguments, result content,
-authorization material, and secret-shaped fields remain behind the disclosure boundary.
-
-Governed A2UI replay adopts only the exact `opencrane.a2ui.v1` envelope bound to the replayed
-conversation and run. It preserves ordered upstream `beginRendering`, `surfaceUpdate`, and
-`dataModelUpdate` operations, admits the eleven-name canonical OpenCrane v4 catalogue, and forwards
-the server-selected ten-state presentation lifecycle plus optional bounded safe reason.
-`SingleChoice` and `Select` are one-value display contracts validated through the pinned upstream
-`MultipleChoice` property schema; that validation adapter grants no action authority. Replay never
-infers an action or lifecycle transition locally.
-
-Each response drains the durable snapshot before entering a bounded live tail. Recovery polling is
-authoritative; wake-ups may reduce latency later but can never replace a database read. The server
-rechecks organisation membership and participant bounds on every page, emits heartbeats below the
-proxy idle fence, and ends at five minutes so clients reconnect with the exact last subframe cursor.
-Still-open approval interrupts are overlays without SSE ids, so reconnect restores them without
-advancing `Last-Event-ID`. Proven revocation emits a bounded purge signal and closes the stream.
+The server rechecks organisation membership and participant bounds on every page. Its Express
+adapter supplies backpressure and request cancellation to projection. The two stream routes differ
+only in how they establish authority: one consumes a single-use channel context; the other derives
+the participant from the signed-in browser session.
 
 ## Public surface
 
@@ -77,10 +65,6 @@ advancing `Last-Event-ID`. Proven revocation emits a bounded purge signal and cl
   access-ending races cannot expose later events.
 - `__CreateConversationReplayRouter` mounts internal context-authorized AG-UI snapshot-to-live replay.
 - `_CreateSelfConversationReplayRouter` mounts the participant-authenticated live replay route.
-- `__StreamConversationLiveReplay` owns page draining, deterministic subframes, polling,
-  heartbeats, interrupt restoration, revocation, and the response-duration fence.
-- `__ProjectConversationReplayEvent` strictly redacts canonical rows and adopts only full-coordinate,
-  catalogue-safe governed A2UI envelopes before the shared AG-UI projector can emit them.
 - `_SelfConversationsOpenapiPaths` and `_SelfConversationReplayOpenapiPaths` contribute those APIs
   to the server-owned OpenAPI document.
 
@@ -102,9 +86,10 @@ returned as `capacity_limited` rather than being misreported as a persistence ou
 
 ## Dependency direction
 
-Tagged `scope:conversations` at the backend layer, it may use only its own scope,
-`scope:auth`, `scope:channel-targets`, and shared contracts. The auth edge resolves request identity
-only. It cannot import an app, frontend state, or deployment package.
+Tagged `scope:conversations` at the backend layer, it may use its own scope, the narrow
+`scope:conversation-projection` engine, its listed backend authorities, and shared contracts. The
+auth edge resolves request identity only. It cannot import an app, frontend state, or deployment
+package.
 
 ## Data & persistence
 
@@ -122,4 +107,5 @@ in the caller's host-selected silo; participant rows alone never preserve author
 - Parent index: [server](../../README.md)
 - Related authority: [execution admission](../../../agents/execution/admission/main/README.md) ·
   [channel-targets](../../agents/channel-targets/main/README.md)
+- Stream engine: [conversation projection](../../../conversations/projection/main/README.md)
 - Browser consumer: [AG-UI state](../../../../frontend/state/conversation/ag-ui/README.md)

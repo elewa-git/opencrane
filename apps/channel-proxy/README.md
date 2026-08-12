@@ -55,9 +55,9 @@ HTTP endpoints served: `GET /v1/events` (server-sent-event relay) and `/livez` Â
 probes. Any other path is `404`. The event request names an opaque `conversationId`; OpenCrane
 validates that coordinate before returning a target.
 
-The composed library also contains a pure, versioned AG-UI event encoder for a future
-server-authorized replay reader. This app does not expose it yet: `GET /v1/events` remains an opaque
-bounded relay, and the proxy still has no database, replay reader, approval-decision route, or
+The separate backend conversation projection package produces the versioned AG-UI stream behind
+OpenCrane. This app does not project it: `GET /v1/events` remains an opaque bounded relay, and the
+proxy still has no database, replay reader, approval-decision route, or
 approval-resume authority.
 
 ## Boundary
