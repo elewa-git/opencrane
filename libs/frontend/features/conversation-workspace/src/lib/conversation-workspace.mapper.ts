@@ -2,9 +2,9 @@ import { AvatarTones } from "@opencrane/elements/ui";
 import { ConversationMessageTones, type ConversationMessagePresentation, type ConversationRichTextPresentation } from "@opencrane/elements/conversation";
 import { toSanitizedMarkdownHtml, toStreamingMarkdownHtml } from "@opencrane/state/conversation/render";
 import { AgUiMessageStatuses, type AgUiMessageView } from "@opencrane/state/conversation/ag-ui";
-import { ConversationModes, MessageRoles, MessageStates, type ConversationMessage, type ConversationSummary } from "@opencrane/state/conversation/workspace";
+import { ConversationModes, MessageRoles, MessageStates, type ConversationMessage, type ConversationOnboardingHistory, type ConversationSummary } from "@opencrane/state/conversation/workspace";
 
-import type { ConversationMessageView, ConversationPresentationContext, ConversationSummaryPresentation } from "./conversation-workspace-feature.types.js";
+import type { ConversationMessageView, ConversationOnboardingHistoryPresentation, ConversationPresentationContext, ConversationSummaryPresentation } from "./conversation-workspace-feature.types.js";
 
 /** Map one list summary without displaying opaque participant coordinates. */
 export function _ConversationSummaryPresentation(summary: ConversationSummary, personalAgentName: string | null): ConversationSummaryPresentation
@@ -13,6 +13,30 @@ export function _ConversationSummaryPresentation(summary: ConversationSummary, p
 	if (summary.mode === ConversationModes.AgentSession) return { id: summary.id, title: personalAgentName ?? "Agent session", modeLabel: "Agent session", participantLabel: "You and your Agent", updatedLabel, archived: summary.archivedAt !== null };
 	if (summary.mode === ConversationModes.Direct) return { id: summary.id, title: "Direct conversation", modeLabel: "Direct", participantLabel: "You and Participant 1", updatedLabel, archived: summary.archivedAt !== null };
 	return { id: summary.id, title: "Group conversation", modeLabel: "Group", participantLabel: `${summary.participantRefs.length} participants`, updatedLabel, archived: summary.archivedAt !== null };
+}
+
+/** Map the separate onboarding projection to fixed read-only workspace copy. */
+export function _ConversationOnboardingHistoryPresentation(history: ConversationOnboardingHistory): ConversationOnboardingHistoryPresentation
+{
+	return { id: history.id, title: "Welcome conversation", personaName: history.personaDisplayName, completedLabel: _TimeLabel(history.completedAt) };
+}
+
+/** Map onboarding transcript lines without turning them into canonical conversation messages. */
+export function _ConversationOnboardingHistoryMessageViews(history: ConversationOnboardingHistory): readonly ConversationMessageView[]
+{
+	return history.transcript.map(function _Entry(entry): ConversationMessageView
+	{
+		const assistant = entry.role === MessageRoles.Assistant;
+		const author = assistant
+			? { name: history.personaDisplayName, initials: "A", avatarTone: AvatarTones.Brand, tone: ConversationMessageTones.Agent }
+			: { name: "You", initials: "Y", avatarTone: AvatarTones.Brand, tone: ConversationMessageTones.Participant };
+		const id = `onboarding-${history.id}-${entry.ordinal}`;
+		return {
+			message: { id, authorName: author.name, authorInitials: author.initials, avatarTone: author.avatarTone, timestampLabel: "Onboarding", body: "", tone: author.tone },
+			richText: { messageId: id, html: toSanitizedMarkdownHtml(entry.text), label: `${author.name} onboarding message` },
+			agentThread: null
+		};
+	});
 }
 
 /** Map one canonical message to shared element models and sanitized markdown. */

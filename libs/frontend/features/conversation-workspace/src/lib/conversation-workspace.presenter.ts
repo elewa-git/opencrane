@@ -7,7 +7,7 @@ import { ConversationAssetsStore } from "@opencrane/state/conversation/assets";
 import { ConversationElicitationStore, __MapToolActivity, type ElicitationResponseValue } from "@opencrane/state/conversation/elicitation";
 import { AgUiToolStatuses, ConversationCreationStates, ConversationEventStreamStatuses, ConversationLifecycles, ConversationPersonalAgentStatuses, ConversationRunStates, ConversationWorkspaceRouteStates, ConversationWorkspaceStore } from "@opencrane/state/conversation/workspace";
 
-import { _ConversationMessageViews, _ConversationSummaryPresentation, _LiveMessageViews } from "./conversation-workspace.mapper.js";
+import { _ConversationMessageViews, _ConversationOnboardingHistoryMessageViews, _ConversationOnboardingHistoryPresentation, _ConversationSummaryPresentation, _LiveMessageViews } from "./conversation-workspace.mapper.js";
 import type { ConversationWorkspaceAvailabilityPresentation } from "./conversation-workspace-feature.types.js";
 
 /** Feature-scoped presenter that derives view state and delegates typed intents to owning stores. */
@@ -31,6 +31,10 @@ export class ConversationWorkspacePresenter
 	protected readonly toolStatuses = AgUiToolStatuses;
 	/** Privacy-safe list rows. */
 	protected readonly summaries = computed(this._Summaries.bind(this));
+	/** Display-safe heading for the separate onboarding transcript. */
+	protected readonly onboardingHistoryPresentation = computed(this._OnboardingHistoryPresentation.bind(this));
+	/** Read-only onboarding rows mapped through the shared sanitizer. */
+	protected readonly onboardingHistoryMessages = computed(this._OnboardingHistoryMessages.bind(this));
 	/** Explicit availability state derived from the existing privacy-safe directory. */
 	protected readonly availabilityNotice = computed(this._AvailabilityNotice.bind(this));
 	/** Privacy-safe row corresponding to the selected authorized snapshot. */
@@ -123,6 +127,20 @@ export class ConversationWorkspacePresenter
 	{
 		const agentName = this.store.directory()?.personalAgent?.displayName ?? null;
 		return this.store.conversations().map(summary => _ConversationSummaryPresentation(summary, agentName));
+	}
+
+	/** Map the completed onboarding transcript header when the server supplied one. */
+	private _OnboardingHistoryPresentation()
+	{
+		const history = this.store.onboardingHistory().history;
+		return history === null ? null : _ConversationOnboardingHistoryPresentation(history);
+	}
+
+	/** Map the completed onboarding transcript without adding it to the live conversation stream. */
+	private _OnboardingHistoryMessages()
+	{
+		const history = this.store.onboardingHistory().history;
+		return history === null ? [] : _ConversationOnboardingHistoryMessageViews(history);
 	}
 
 	/** Explain missing workspace or personal-Agent setup without inventing server state. */

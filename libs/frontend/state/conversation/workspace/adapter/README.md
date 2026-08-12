@@ -4,9 +4,9 @@
 
 ## What it owns
 
-This package translates the generated signed-in conversation and run API into the transport-neutral
-workspace gateway. It maps only fields the browser state needs and reduces HTTP failures to fixed,
-display-safe categories.
+This package translates the generated signed-in conversation, onboarding, and run APIs into the
+transport-neutral workspace gateway. It maps only fields the browser state needs and reduces HTTP
+failures to fixed, display-safe categories.
 
 ```
  Control Plane generated client ──► OpenCraneConversationWorkspaceGateway  ◄── HERE
@@ -20,7 +20,8 @@ display-safe categories.
 ## Public surface
 
 - `OpenCraneConversationWorkspaceGateway` implements every workspace read and command against the
-  generated client.
+  generated client. Its onboarding read projects the existing guided exchange into a separate
+  read-only result instead of pretending that it is a direct, group, or Agent-session conversation.
 
 DTO mappers and their narrowed DTO shapes are package-private. Consumers import the gateway only from the
 package barrel.
@@ -31,6 +32,8 @@ Browser-session cookies supply identity. The adapter never accepts a subject id,
 or memory identity from UI code. It sends opaque conversation, participant, Agent, message, and run
 coordinates only to the exact generated endpoint that accepts them. It does not read response bodies when
 building errors and does not implement live streaming; the existing conversation event adapter owns that.
+Completed migrated accounts with no bootstrap conversation produce `NotRecorded`, never an empty success
+transcript. The adapter requests archived conversation rows so the feature can keep them in a separate list.
 
 ## Dependency direction
 

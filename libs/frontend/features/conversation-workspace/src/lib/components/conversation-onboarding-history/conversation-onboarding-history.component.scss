@@ -1,0 +1,10 @@
+:host { display: block; min-width: 0; }
+.onboarding-history { display: grid; grid-template-rows: auto auto minmax(0, 1fr) auto; min-height: 100dvh; }
+header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 1.1rem 1.5rem; border-block-end: 1px solid var(--p-surface-200); }
+header h1 { margin: 0.125rem 0; font-size: 1.35rem; } header p, header small { margin: 0; color: var(--p-text-muted-color); }
+.onboarding-history__notice { display: grid; gap: var(--oc-space-1); padding: var(--oc-space-3) var(--oc-space-5); border-block-end: 1px solid var(--oc-border-subtle); background: var(--oc-surface-subtle); color: var(--oc-ink-muted); }
+.onboarding-history__notice strong { color: var(--oc-ink-strong); }
+.onboarding-history__transcript { overflow: auto; display: grid; align-content: start; gap: 1rem; padding: 1.5rem clamp(1rem, 4vw, 3rem); }
+.onboarding-history__message { display: grid; gap: 0.5rem; }
+footer { padding: 1rem 1.5rem; border-block-start: 1px solid var(--p-surface-200); }
+@media (max-width: 52rem) { .onboarding-history { min-height: 70dvh; } header { align-items: flex-start; padding: 1rem; } .onboarding-history__transcript { padding: 1rem; } footer { padding: 0.75rem; } }

@@ -33,6 +33,12 @@ export class ConversationWorkspaceRouteComponent
 		await this._router.navigate(_ConversationRouteCommands(conversationId));
 	}
 
+	/** Restore the workspace index URL when the onboarding history projection is selected. */
+	protected async selectWorkspaceIndex(): Promise<void>
+	{
+		await this._router.navigate(["/chats"]);
+	}
+
 	/** Open one child Agent session with exact parent breadcrumb restoration state. */
 	protected async openThread(intent: ConversationThreadNavigationIntent): Promise<void>
 	{

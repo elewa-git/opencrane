@@ -7,7 +7,8 @@
 This package owns the browser state for the normal conversation screen. It loads a bounded snapshot,
 then tails the shared conversation event stream from that snapshot. It keeps direct, group, and Agent
 session modes separate and immutable, holds controlled drafts, and owns list, open, create, send,
-archive, close, steering, cancellation, and retry command state.
+archive, close, steering, cancellation, and retry command state. It also reads the completed onboarding
+exchange as a separate read-only projection; that projection never receives a conversation mode or stream.
 
 ```
  generated API ──► workspace/adapter ──► gateway port ──► workspace stores  ◄── HERE
@@ -30,9 +31,13 @@ The package also owns the Zod response validators used by its transport adapter.
 - `ConversationWorkspaceGateway` is the participant-scoped read and command port.
 - `CONVERSATION_WORKSPACE_EVENT_STREAM` binds the existing `ConversationEventStream` port; this package
   does not define a second stream contract.
-- `ConversationWorkspaceStore` owns list, selection, snapshot-tail state, immutable creation mode, drafts,
-  and conversation commands.
+- `ConversationWorkspaceStore` owns ordinary list, selection, snapshot-tail state, immutable creation mode,
+  drafts, and conversation commands.
+- `ConversationOnboardingHistoryStore` keeps the optional transcript read and selection independent from
+  ordinary snapshot, stream, draft, and run state.
 - `ConversationRunStore` owns run status and exact-attempt run commands.
+- `ConversationOnboardingHistoryStatuses` distinguishes a completed transcript, unfinished onboarding,
+  migrated accounts without recorded history, and a temporary read failure without blocking normal chats.
 - Exported enums and view models are transport-neutral and contain no login subjects, emails, roles, or
   memory identity.
 
@@ -45,6 +50,8 @@ messages, live surfaces, run state, and drafts are cleared before the access-cha
 
 The package owns no server authority. It cannot admit a message, create a run, approve an elicitation,
 execute an A2UI action, or decide whether a retry is safe. Those decisions stay behind signed-in APIs.
+The onboarding transcript is disabled by construction: selecting it aborts any conversation stream, clears
+draft and run state, and offers only the existing create-conversation command for continuing work.
 
 ## Dependency direction
 

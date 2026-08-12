@@ -17,6 +17,19 @@ export interface ConversationSummaryPresentation
 	readonly archived: boolean;
 }
 
+/** Display-safe list and header copy for the read-only onboarding exchange. */
+export interface ConversationOnboardingHistoryPresentation
+{
+	/** Stable onboarding-owned coordinate used only for presentation keys. */
+	readonly id: string;
+	/** Fixed title that keeps this exchange distinct from conversation modes. */
+	readonly title: string;
+	/** Server-approved persona name shown as the assistant in this transcript. */
+	readonly personaName: string;
+	/** Preformatted completion time. */
+	readonly completedLabel: string;
+}
+
 /** Full display-safe presentation for one canonical transcript row. */
 export interface ConversationMessageView
 {

@@ -1,11 +1,25 @@
 <aside class="conversation-list" aria-labelledby="conversation-list-title">
 	<header><div><small>Workspace</small><h1 id="conversation-list-title">Chats</h1></div><p-button label="New" icon="pi pi-plus" size="small" (onClick)="createRequested.emit()" /></header>
-	@if (items().length === 0) { <p class="conversation-list__empty">No conversations yet. Start with your Agent or invite a participant.</p> }
-	@else {
-		<nav aria-label="Conversations"><ul>
-			@for (item of items(); track item.id) {
-				<li><button type="button" [class.conversation-list__item--selected]="item.id === selectedId()" [attr.aria-current]="item.id === selectedId() ? 'page' : null" (click)="selected.emit(item.id)"><span><strong>{{ item.title }}</strong><small>{{ item.modeLabel }} · {{ item.participantLabel }}</small></span><time>{{ item.updatedLabel }}</time></button></li>
+	<nav aria-label="Conversation workspace">
+		<section aria-labelledby="conversation-history-heading"><h2 id="conversation-history-heading">Onboarding history</h2>
+			@switch (onboardingHistoryStatus()) {
+				@case (historyStatuses.Ready) { @if (onboardingHistory(); as history) {
+					<button type="button" [class.conversation-list__item--selected]="onboardingSelected()" [attr.aria-current]="onboardingSelected() ? 'page' : null" (click)="onboardingHistorySelected.emit()"><span><strong>{{ history.title }}</strong><small>Read-only · {{ history.personaName }}</small></span><time>{{ history.completedLabel }}</time></button>
+				} }
+				@case (historyStatuses.NotRecorded) { <p class="conversation-list__empty">No saved onboarding conversation exists for this account.</p> }
+				@case (historyStatuses.NotCompleted) { <p class="conversation-list__empty">Onboarding is not complete yet.</p> }
+				@default { <p class="conversation-list__empty">Onboarding history is unavailable right now.</p> }
 			}
-		</ul></nav>
-	}
+		</section>
+		<section aria-labelledby="active-chats-heading"><h2 id="active-chats-heading">Active</h2><ul>
+			@for (item of items(); track item.id) { @if (!item.archived) {
+				<li><button type="button" [class.conversation-list__item--selected]="item.id === selectedId()" [attr.aria-current]="item.id === selectedId() ? 'page' : null" (click)="selected.emit(item.id)"><span><strong>{{ item.title }}</strong><small>{{ item.modeLabel }} · {{ item.participantLabel }}</small></span><time>{{ item.updatedLabel }}</time></button></li>
+			} }
+		</ul>@if (!items().some(item => !item.archived)) { <p class="conversation-list__empty">No active conversations yet. Start with your Agent or invite a participant.</p> }</section>
+		@if (items().some(item => item.archived)) { <section aria-labelledby="archived-chats-heading"><h2 id="archived-chats-heading">Archived</h2><ul>
+			@for (item of items(); track item.id) { @if (item.archived) {
+				<li><button type="button" [class.conversation-list__item--selected]="item.id === selectedId()" [attr.aria-current]="item.id === selectedId() ? 'page' : null" (click)="selected.emit(item.id)"><span><strong>{{ item.title }}</strong><small>{{ item.modeLabel }} · Archived</small></span><time>{{ item.updatedLabel }}</time></button></li>
+			} }
+		</ul></section> }
+	</nav>
 </aside>

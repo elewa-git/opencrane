@@ -8,15 +8,16 @@ import { ConversationAttachmentTrayComponent, ConversationFilesPanelComponent } 
 import { ConversationElicitationCardComponent } from "@opencrane/features/conversation-elicitation";
 import { ConversationAssetsStore } from "@opencrane/state/conversation/assets";
 import { ConversationElicitationStore, type ConversationActivityTarget } from "@opencrane/state/conversation/elicitation";
-import { ConversationRunStore, ConversationWorkspaceRouteStates, ConversationWorkspaceStore } from "@opencrane/state/conversation/workspace";
+import { ConversationOnboardingHistoryStore, ConversationRunStore, ConversationWorkspaceRouteStates, ConversationWorkspaceStore } from "@opencrane/state/conversation/workspace";
 
 import { ConversationCreateComponent } from "../conversation-create/conversation-create.component.js";
 import { ConversationListComponent } from "../conversation-list/conversation-list.component.js";
+import { ConversationOnboardingHistoryComponent } from "../components/conversation-onboarding-history/conversation-onboarding-history.component.js";
 import type { ConversationThreadNavigationIntent } from "../conversation-workspace-feature.types.js";
 import { ConversationWorkspacePresenter } from "../conversation-workspace.presenter.js";
 
 /** Workspace screen; its feature route owns URL coordination while the app binds concrete gateways. */
-@Component({ selector: "wo-conversation-workspace-page", standalone: true, imports: [ButtonModule, ConversationActivityComponent, ConversationAttachmentTrayComponent, ConversationComposerComponent, ConversationCreateComponent, ConversationElicitationCardComponent, ConversationFilesPanelComponent, ConversationListComponent, ConversationMessageComponent, ConversationRichTextComponent, ConversationRunActionsComponent, ConversationStatusLineComponent, MessageModule], templateUrl: "./conversation-workspace-page.component.html", styleUrl: "./conversation-workspace-page.component.scss", changeDetection: ChangeDetectionStrategy.OnPush, providers: [ConversationAssetsStore, ConversationElicitationStore, ConversationRunStore, ConversationWorkspaceStore] })
+@Component({ selector: "wo-conversation-workspace-page", standalone: true, imports: [ButtonModule, ConversationActivityComponent, ConversationAttachmentTrayComponent, ConversationComposerComponent, ConversationCreateComponent, ConversationElicitationCardComponent, ConversationFilesPanelComponent, ConversationListComponent, ConversationMessageComponent, ConversationOnboardingHistoryComponent, ConversationRichTextComponent, ConversationRunActionsComponent, ConversationStatusLineComponent, MessageModule], templateUrl: "./conversation-workspace-page.component.html", styleUrl: "./conversation-workspace-page.component.scss", changeDetection: ChangeDetectionStrategy.OnPush, providers: [ConversationAssetsStore, ConversationElicitationStore, ConversationOnboardingHistoryStore, ConversationRunStore, ConversationWorkspaceStore] })
 export class ConversationWorkspacePageComponent extends ConversationWorkspacePresenter
 {
 	/** Optional app-owned route selection adopted after the workspace list loads. */
@@ -25,6 +26,8 @@ export class ConversationWorkspacePageComponent extends ConversationWorkspacePre
 	public readonly threadRequested = output<ConversationThreadNavigationIntent>();
 	/** Reports participant selection so the app can own the canonical URL. */
 	public readonly conversationSelected = output<string | null>();
+	/** Reports onboarding-history selection so the app can restore the workspace index URL. */
+	public readonly workspaceIndexSelected = output<void>();
 	/** Requests app-owned verified sign-in without letting the feature navigate. */
 	public readonly stepUpRequested = output<string>();
 	/** Keeps a route selection and the component-scoped store aligned. */
@@ -55,6 +58,13 @@ export class ConversationWorkspacePageComponent extends ConversationWorkspacePre
 		if (navigation === null) return;
 		this.creating.set(false);
 		this.conversationSelected.emit(navigation.conversationId);
+	}
+
+	/** Select the read-only onboarding exchange and restore the workspace index URL. */
+	protected openOnboardingHistory(): void
+	{
+		this.store.openOnboardingHistory();
+		if (this.store.onboardingHistorySelected()) this.workspaceIndexSelected.emit();
 	}
 
 	/** Ask the app to replace an archived selection with the next authorized row. */

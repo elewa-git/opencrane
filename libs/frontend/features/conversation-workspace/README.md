@@ -10,6 +10,10 @@ asset, Activity, elicitation, and A2UI elements. A feature presenter derives bro
 models and delegates every command to the existing state stores. Its feature-local route coordinator
 owns index/selection URLs, child Agent-thread navigation, and sign-in recovery through the platform seam.
 
+The completed onboarding exchange appears first as a selected read-only history panel. It is not a fourth
+conversation mode and starts no stream or run. Its composer is replaced by an explanation and a **Start a
+new chat** action, which opens the same immutable-mode creation flow used everywhere else.
+
 ```
  bounded snapshot ──► workspace store ──► feature presenter ──► thin page
                            ▲                       │                 │
@@ -27,8 +31,11 @@ their capability checks and audit trail. Tool failures stay visible even when a 
   to the feature-local route coordinator.
 - `ConversationWorkspacePresenter` maps store projections to shared element presentations and
   delegates typed user intents to the stores that own them.
+- `ConversationOnboardingHistoryComponent` renders the completed bootstrap transcript without message,
+  asset, run, archive, or close controls.
 - The feature-local list and create controls render privacy-safe rows and immutable conversation
-  mode choices. They never show opaque participant references.
+  mode choices. Active chats, archived chats, and onboarding history remain distinct sections, and they
+  never show opaque participant references.
 
 ## Boundary
 
