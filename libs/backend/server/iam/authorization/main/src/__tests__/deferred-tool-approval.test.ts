@@ -23,7 +23,7 @@ function _transaction(row: unknown, updatedCount: number, invocationRow: unknown
 	const runUpdateMany = vi.fn().mockResolvedValue({ count: 1 });
 	const membershipFindFirst = vi.fn().mockResolvedValue({ id: "membership-1", status: OrgMemberStatus.Active });
 	const deliveryCreate = vi.fn().mockResolvedValue({ id: "delivery-1" });
-	return { transaction: { approvalRequest: { findUnique, updateMany, count: vi.fn().mockResolvedValue(pendingCount) }, toolInvocation: { findUnique: invocationFindUnique, updateMany: invocationUpdateMany }, toolResultDelivery: { create: deliveryCreate }, orgMembership: { findFirst: membershipFindFirst }, agentRun: { findUnique: vi.fn().mockResolvedValue({ id: "run-1", attempt: 2, state: AgentRunState.WaitingForInput }), updateMany: runUpdateMany } } as unknown as Prisma.TransactionClient, updateMany, invocationUpdateMany, runUpdateMany, membershipFindFirst, deliveryCreate };
+	return { transaction: { approvalRequest: { findUnique, updateMany, count: vi.fn().mockResolvedValue(pendingCount) }, elicitationRequest: { count: vi.fn().mockResolvedValue(0) }, toolInvocation: { findUnique: invocationFindUnique, updateMany: invocationUpdateMany }, toolResultDelivery: { create: deliveryCreate }, orgMembership: { findFirst: membershipFindFirst }, agentRun: { findUnique: vi.fn().mockResolvedValue({ id: "run-1", attempt: 2, state: AgentRunState.WaitingForInput }), updateMany: runUpdateMany } } as unknown as Prisma.TransactionClient, updateMany, invocationUpdateMany, runUpdateMany, membershipFindFirst, deliveryCreate };
 }
 
 /** A pending deferred-tool approval bound to a tool invocation row. */
@@ -37,7 +37,7 @@ function _pending(): unknown
 const NOW = new Date("2026-07-21T09:00:00.000Z");
 
 /** Build a transaction for one command-poll expiry sweep over already-selected due rows. */
-function _expiryTransaction(due: readonly { id: string; runId: string; attempt: number; toolInvocationRowId: string; elicitationRequestId: string | null }[], pendingCounts: readonly number[], resumed: boolean): { readonly transaction: Prisma.TransactionClient; readonly approvalUpdateMany: ReturnType<typeof vi.fn>; readonly invocationUpdateMany: ReturnType<typeof vi.fn>; readonly runUpdateMany: ReturnType<typeof vi.fn> }
+function _expiryTransaction(due: readonly { id: string; runId: string; attempt: number; toolInvocationRowId: string; elicitationRequestId: string | null }[], pendingCounts: readonly number[], resumed: boolean, pendingElicitations = 0): { readonly transaction: Prisma.TransactionClient; readonly approvalUpdateMany: ReturnType<typeof vi.fn>; readonly invocationUpdateMany: ReturnType<typeof vi.fn>; readonly runUpdateMany: ReturnType<typeof vi.fn> }
 {
 	const approvalUpdateMany = vi.fn().mockResolvedValue({ count: 1 });
 	const invocationUpdateMany = vi.fn().mockResolvedValue({ count: 1 });
@@ -53,6 +53,7 @@ function _expiryTransaction(due: readonly { id: string; runId: string; attempt: 
 		transaction: {
 			agentRun: { findUnique: runFindUnique, updateMany: runUpdateMany },
 			approvalRequest: { findMany: vi.fn().mockResolvedValue(due), updateMany: approvalUpdateMany, count: vi.fn().mockResolvedValueOnce(pendingCounts[0] ?? 0).mockResolvedValueOnce(pendingCounts[1] ?? pendingCounts[0] ?? 0) },
+			elicitationRequest: { count: vi.fn().mockResolvedValue(pendingElicitations) },
 			toolInvocation: { findUnique: invocationFindUnique, updateMany: invocationUpdateMany },
 			toolResultDelivery: { create: vi.fn() },
 		} as unknown as Prisma.TransactionClient,
@@ -176,6 +177,14 @@ describe("deferred tool approval authority", function _suite()
 	it("keeps a mixed due and future batch waiting after expiring only the due row", async function _keepsFutureApprovalWaiting()
 	{
 		const context = _expiryTransaction([{ id: "approval-due", runId: "run-1", attempt: 2, toolInvocationRowId: "tool-due", elicitationRequestId: null }], [1], false);
+
+		await expect(__ExpireDeferredToolApprovalBatch(context.transaction, { runId: "run-1", attempt: 2, now: NOW })).resolves.toEqual({ expiredCount: 1, resumed: false });
+		expect(context.runUpdateMany).not.toHaveBeenCalled();
+	});
+
+	it("keeps a tool expiry paused while a generic request remains pending", async function _KeepsPendingGenericRequest()
+	{
+		const context = _expiryTransaction([{ id: "approval-due", runId: "run-1", attempt: 2, toolInvocationRowId: "tool-due", elicitationRequestId: null }], [0], false, 1);
 
 		await expect(__ExpireDeferredToolApprovalBatch(context.transaction, { runId: "run-1", attempt: 2, now: NOW })).resolves.toEqual({ expiredCount: 1, resumed: false });
 		expect(context.runUpdateMany).not.toHaveBeenCalled();

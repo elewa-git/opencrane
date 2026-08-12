@@ -103,5 +103,29 @@ export interface ElicitationUnitOfWork extends SelfElicitationQueryRepository
 	respond(command: RespondToElicitationCommand): Promise<RespondToElicitationResult>;
 }
 
+/** Trusted server command for expiring every due request on one waiting run attempt. */
+export interface ExpireElicitationBatchCommand
+{
+	/** Exact run whose row the caller already locked. */
+	readonly runId: string;
+	/** Current attempt fence. */
+	readonly attempt: number;
+	/** Trusted server time used for every deadline comparison. */
+	readonly now: Date;
+}
+
+/** Result of applying all due purpose strategies inside one held transaction. */
+export interface ExpireElicitationBatchResult
+{
+	/** Number of generic elicitation requests moved to their terminal expired state. */
+	readonly expiredCount: number;
+	/** Whether the final request released the waiting run back to runtime command polling. */
+	readonly resumed: boolean;
+}
+
 /** Transaction-bound persistence authority constructed only by the unit of work. */
-export interface ElicitationRepository extends ElicitationUnitOfWork, PersonalMemoryPermissionAuthority {}
+export interface ElicitationRepository extends ElicitationUnitOfWork, PersonalMemoryPermissionAuthority
+{
+	/** Expire all due requests for one exact waiting run attempt. */
+	expireDue(command: ExpireElicitationBatchCommand): Promise<ExpireElicitationBatchResult>;
+}
