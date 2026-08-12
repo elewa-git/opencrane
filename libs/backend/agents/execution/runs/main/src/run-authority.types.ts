@@ -78,6 +78,14 @@ export interface StartNextRunAttemptCommand
 	readonly runId: AgentRunId;
 	/** Attempt observed by the caller. */
 	readonly expectedAttempt: number;
+	/** Silo selected from the authenticated request host. */
+	readonly siloId: SiloId;
+	/** Conversation that visibly owns the run. */
+	readonly conversationId: string;
+	/** Authenticated participant asking for the retry. */
+	readonly requestedBy: string;
+	/** Fresh browser retry key bound to this attempt request. */
+	readonly idempotencyKey: string;
 	/** Trusted ISO-8601 acceptance instant for the new attempt. */
 	readonly acceptedAt: string;
 }
@@ -111,8 +119,10 @@ export interface AtomicStartNextRunAttemptCommand extends StartNextRunAttemptCom
 /** Result of incrementing one logical run's attempt under optimistic concurrency. */
 export type AtomicRunAttemptResult =
 	| { readonly status: "started"; readonly run: AgentRun }
+	| { readonly status: "idempotent"; readonly run: AgentRun }
 	| { readonly status: "attempt_conflict"; readonly currentAttempt: number }
 	| { readonly status: "agent_service_authority_conflict"; readonly currentAgentServiceState: AgentServiceState | null; readonly currentAgentServiceSiloId: SiloId | null; readonly currentActiveAgentRevisionId: AgentRevisionId | null }
+	| { readonly status: "unauthorized" }
 	| { readonly status: "not_found" };
 
 /** Persistence boundary that keeps a single AgentRun row while its attempt counter increases. */
@@ -127,4 +137,5 @@ export interface AgentRunAuthorityRepository
 /** Stable outcome of requesting a new attempt for one logical run. */
 export type StartNextRunAttemptResult =
 	| { readonly outcome: "started"; readonly run: AgentRun }
-	| { readonly outcome: "denied"; readonly reason: "invalid_command" | "run_not_found" | "run_not_terminal" | "agent_service_inactive" | "agent_service_silo_mismatch" | "agent_revision_superseded" | "attempt_conflict"; readonly currentAttempt?: number };
+	| { readonly outcome: "idempotent"; readonly run: AgentRun }
+	| { readonly outcome: "denied"; readonly reason: "invalid_command" | "unauthorized" | "run_not_found" | "run_not_terminal" | "agent_service_inactive" | "agent_service_silo_mismatch" | "agent_revision_superseded" | "attempt_conflict"; readonly currentAttempt?: number };

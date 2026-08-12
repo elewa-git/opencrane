@@ -21,6 +21,9 @@ const _ArchiveSchema = z.object({ archived: z.boolean() }).strict();
 /** Exact canonical child position the participant has actually observed. */
 const _AgentThreadReadSchema = z.object({ observedPosition: z.string().regex(/^(0|[1-9][0-9]*)$/u).max(19).refine(function _DatabaseBigInt(value) { return BigInt(value) <= 9_223_372_036_854_775_807n; }) }).strict();
 
+/** Fresh idempotent retry request bound to the terminal attempt the participant observed. */
+const _RunRetrySchema = z.object({ expectedAttempt: z.number().int().min(1), idempotencyKey: z.string().trim().min(1).max(128) }).strict();
+
 /**
  * Build the HTTP routes a signed-in user uses for their own conversations: list, create, open,
  * post a message, archive, close.
@@ -173,6 +176,28 @@ export function __CreateSelfConversationsRouter(dependencies: SelfConversationsR
 		}
 	});
 
+	router.post("/:conversationId/runs/:runId/retry", async function _RetryRun(request: Request, response: Response)
+	{
+		const caller = dependencies.resolveCaller(request);
+		if (caller === null) { response.status(401).json({ error: "conversation_authentication_required" }); return; }
+		const conversationId = _parameter(request.params["conversationId"]);
+		const runId = _parameter(request.params["runId"]);
+		const parsed = _RunRetrySchema.safeParse(request.body);
+		if (conversationId === null || runId === null || !parsed.success) { response.status(400).json({ error: "invalid_run_retry" }); return; }
+		try
+		{
+			const result = await dependencies.authority.retryRun(caller, conversationId, runId, parsed.data);
+			if (result.outcome === "started") { response.status(201).json({ outcome: result.outcome, runId: result.run.id, attempt: result.run.attempt }); return; }
+			if (result.outcome === "idempotent") { response.status(200).json({ outcome: result.outcome, runId: result.run.id, attempt: result.run.attempt }); return; }
+			response.status(_runRetryDenialStatus(result.reason)).json({ error: result.reason, currentAttempt: result.currentAttempt });
+		}
+		catch (err)
+		{
+			_log(dependencies.logger, err, "conversation.run.retry", caller.siloId);
+			response.status(503).json({ error: "persistence_unavailable" });
+		}
+	});
+
 	router.patch("/:conversationId/archive", async function _Archive(request: Request, response: Response)
 	{
 		const caller = dependencies.resolveCaller(request);
@@ -224,6 +249,14 @@ function _parameter(value: string | readonly string[] | undefined): string | nul
 function _denialStatus(reason: ConversationWriteDenial): number
 {
 	return _STATUS_BY_DENIAL[reason];
+}
+
+/** Maps retry denials without revealing whether another participant's run exists. */
+function _runRetryDenialStatus(reason: string): number
+{
+	if (reason === "run_not_found" || reason === "unauthorized") return 404;
+	if (reason === "invalid_command") return 400;
+	return 409;
 }
 
 /**

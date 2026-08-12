@@ -267,6 +267,17 @@ export const _SelfConversationsOpenapiPaths = {
 			responses: { 201: { description: "Message accepted.", content: { "application/json": { schema: _AcceptedConversationMessageEnvelopeSchema } } }, 200: { description: "Exact idempotent retry returned the canonical message.", content: { "application/json": { schema: _IdempotentConversationMessageEnvelopeSchema } } }, 400: { description: "Invalid message body." }, 401: { description: "Authentication required." }, 404: { description: "Conversation unavailable." }, 409: { description: "Closed, active-run, mode, or idempotency conflict." }, 429: { description: "Conversation admission capacity is currently full; retry later." }, 503: { description: "Admission authority unavailable." } },
 		},
 	},
+	"/me/conversations/{conversationId}/runs/{runId}/retry": {
+		post: {
+			operationId: "retryMyConversationRun",
+			summary: "Start a fresh attempt for one failed conversation run",
+			description: "Requires current organisation membership, active conversation participation, the exact terminal attempt, the still-active Agent revision, and a fresh retry key. Repeating the same key returns the same new attempt.",
+			tags: ["Conversations"],
+			parameters: [{ name: "conversationId", in: "path", required: true, schema: { type: "string" } }, { name: "runId", in: "path", required: true, schema: { type: "string" } }],
+			requestBody: { required: true, content: { "application/json": { schema: { type: "object", additionalProperties: false, required: ["expectedAttempt", "idempotencyKey"], properties: { expectedAttempt: { type: "integer", minimum: 1 }, idempotencyKey: { type: "string", minLength: 1, maxLength: 128 } } } } } },
+			responses: { 201: { description: "Fresh attempt started.", content: { "application/json": { schema: { type: "object", additionalProperties: false, required: ["outcome", "runId", "attempt"], properties: { outcome: { type: "string", enum: ["started"] }, runId: { type: "string" }, attempt: { type: "integer", minimum: 2 } } } } } }, 200: { description: "The same retry key already started this attempt.", content: { "application/json": { schema: { type: "object", additionalProperties: false, required: ["outcome", "runId", "attempt"], properties: { outcome: { type: "string", enum: ["idempotent"] }, runId: { type: "string" }, attempt: { type: "integer", minimum: 2 } } } } } }, 400: { description: "Malformed retry request." }, 401: { description: "Authentication required." }, 404: { description: "Conversation run unavailable to this participant." }, 409: { description: "Attempt, terminal state, active Agent service, or revision no longer permits retry." }, 503: { description: "Retry authority unavailable." } },
+		},
+	},
 	"/me/conversations/{conversationId}/archive": {
 		patch: {
 			operationId: "archiveMyConversation",

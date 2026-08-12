@@ -22,3 +22,6 @@ export type { RunCancellationRepository } from "./run-cancellation.types.js";
 export * from "./run-dispatch.router.js";
 export * from "./run-input-snapshot-digest.js";
 export * from "./runtime-workload-cleanup.js";
+export { __StartNextRunAttempt } from "./run-authority.js";
+export type { AgentRunAuthorityRepository, StartNextRunAttemptCommand, StartNextRunAttemptResult } from "./run-authority.types.js";
+export { PrismaAgentRunAuthorityRepository } from "./prisma-run-authority.js";

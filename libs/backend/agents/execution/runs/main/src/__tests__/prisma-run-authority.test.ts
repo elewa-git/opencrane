@@ -2,6 +2,13 @@ import type { PrismaClient } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
 
 import { PrismaAgentRunAuthorityRepository } from "../prisma-run-authority.js";
+import type { AtomicStartNextRunAttemptCommand } from "../run-authority.types.js";
+
+/** Creates one participant-authorized atomic retry command. */
+function _command(): AtomicStartNextRunAttemptCommand
+{
+	return { runId: "run-1", expectedAttempt: 1, siloId: "silo-1", conversationId: "conversation-1", requestedBy: "user-1", idempotencyKey: "retry-1", expectedAgentServiceId: "service-1", expectedAgentServiceSiloId: "silo-1", expectedAgentServiceState: "active", expectedActiveAgentRevisionId: "revision-1", acceptedAt: "2026-07-18T01:00:00.000Z" };
+}
 
 /** Creates one retryable Prisma run row. */
 function _runRow()
@@ -11,7 +18,7 @@ function _runRow()
 		siloId: "silo-1",
 		agentServiceId: "service-1",
 		agentRevisionId: "revision-1",
-		conversationId: null,
+		conversationId: "conversation-1",
 		trigger: "Interactive",
 		delegatedUserId: "user-1",
 		requestIdempotencyKey: "request-1",
@@ -43,37 +50,38 @@ describe("Prisma AgentRun authority adapter", function _suite()
 		const run = _runRow();
 		const outboxCreate = vi.fn().mockResolvedValue({ id: "outbox-1" });
 		const transaction = {
-			$queryRaw: vi.fn().mockResolvedValue([]),
+			orgMembership: { findFirst: vi.fn().mockResolvedValue({ id: "member-1" }) },
+			conversationParticipant: { findFirst: vi.fn().mockResolvedValue({ conversationId: "conversation-1" }) },
 			agentService: { findUnique: vi.fn().mockResolvedValue(_serviceRow()) },
 			agentRun: {
-				findUnique: vi.fn().mockResolvedValue(run),
-				update: vi.fn().mockResolvedValue({ ...run, attempt: 2, state: "Accepted", acceptedAt: new Date("2026-07-18T01:00:00.000Z"), startedAt: null, finishedAt: null, terminalReason: null }),
+				findUnique: vi.fn().mockResolvedValueOnce(run).mockResolvedValueOnce({ ...run, attempt: 2, state: "Accepted", acceptedAt: new Date("2026-07-18T01:00:00.000Z"), startedAt: null, finishedAt: null, terminalReason: null }),
+				updateMany: vi.fn().mockResolvedValue({ count: 1 }),
 			},
-			outboxEvent: { aggregate: vi.fn().mockResolvedValue({ _max: { sequence: 3 } }), create: outboxCreate },
+			outboxEvent: { findUnique: vi.fn(), aggregate: vi.fn().mockResolvedValue({ _max: { sequence: 3 } }), create: outboxCreate },
 		};
 		const prisma = { $transaction: vi.fn(async function _transaction(callback: (client: typeof transaction) => Promise<unknown>) { return callback(transaction); }) } as unknown as PrismaClient;
 		const repository = new PrismaAgentRunAuthorityRepository(prisma);
 
-		const result = await repository.startNextAttemptAtomically({ runId: "run-1", expectedAttempt: 1, expectedAgentServiceId: "service-1", expectedAgentServiceSiloId: "silo-1", expectedAgentServiceState: "active", expectedActiveAgentRevisionId: "revision-1", acceptedAt: "2026-07-18T01:00:00.000Z" });
+		const result = await repository.startNextAttemptAtomically(_command());
 
 		expect(result.status).toBe("started");
-		expect(transaction.$queryRaw).toHaveBeenCalledTimes(2);
-		expect(outboxCreate).toHaveBeenCalledWith({ data: expect.objectContaining({ attempt: 2, sequence: 4, idempotencyKey: "run-1:attempt:2" }) });
+		expect(outboxCreate).toHaveBeenCalledWith({ data: expect.objectContaining({ attempt: 2, sequence: 4, idempotencyKey: "run-1:attempt:2", payload: { runId: "run-1", attempt: 2, requestedBy: "user-1", retryIdempotencyKey: "retry-1" } }) });
 	});
 
 	it("does not mutate when the locked service authority changed", async function _serviceConflict()
 	{
 		const transaction = {
-			$queryRaw: vi.fn().mockResolvedValue([]),
+			orgMembership: { findFirst: vi.fn().mockResolvedValue({ id: "member-1" }) },
+			conversationParticipant: { findFirst: vi.fn().mockResolvedValue({ conversationId: "conversation-1" }) },
 			agentService: { findUnique: vi.fn().mockResolvedValue({ ..._serviceRow(), activeRevisionId: "revision-2" }) },
-			agentRun: { findUnique: vi.fn().mockResolvedValue(_runRow()), update: vi.fn() },
-			outboxEvent: { aggregate: vi.fn(), create: vi.fn() },
+			agentRun: { findUnique: vi.fn().mockResolvedValue(_runRow()), updateMany: vi.fn() },
+			outboxEvent: { findUnique: vi.fn(), aggregate: vi.fn(), create: vi.fn() },
 		};
 		const prisma = { $transaction: vi.fn(async function _transaction(callback: (client: typeof transaction) => Promise<unknown>) { return callback(transaction); }) } as unknown as PrismaClient;
 		const repository = new PrismaAgentRunAuthorityRepository(prisma);
 
-		await expect(repository.startNextAttemptAtomically({ runId: "run-1", expectedAttempt: 1, expectedAgentServiceId: "service-1", expectedAgentServiceSiloId: "silo-1", expectedAgentServiceState: "active", expectedActiveAgentRevisionId: "revision-1", acceptedAt: "2026-07-18T01:00:00.000Z" })).resolves.toEqual({ status: "agent_service_authority_conflict", currentAgentServiceState: "active", currentAgentServiceSiloId: "silo-1", currentActiveAgentRevisionId: "revision-2" });
-		expect(transaction.agentRun.update).not.toHaveBeenCalled();
+		await expect(repository.startNextAttemptAtomically(_command())).resolves.toEqual({ status: "agent_service_authority_conflict", currentAgentServiceState: "active", currentAgentServiceSiloId: "silo-1", currentActiveAgentRevisionId: "revision-2" });
+		expect(transaction.agentRun.updateMany).not.toHaveBeenCalled();
 		expect(transaction.outboxEvent.create).not.toHaveBeenCalled();
 	});
 });

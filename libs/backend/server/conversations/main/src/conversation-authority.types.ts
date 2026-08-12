@@ -1,5 +1,6 @@
 import { ConversationLifecycles, ConversationModes, MessageRoles, MessageSources, MessageStates, type MessageContentBlock } from "@opencrane/models/conversations";
 import type { AgentThreadOrigin, AgentThreadParentDelivery, AgentThreadTarget } from "@opencrane/backend/conversations/agent-threads";
+import type { StartNextRunAttemptResult } from "@opencrane/backend/agents/execution/runs";
 
 /**
  * Who the caller is, as the server worked it out from the browser session.
@@ -390,6 +391,18 @@ export type MarkAgentThreadReadResult =
 	| { readonly outcome: ConversationAuthorityOutcomes.Changed | ConversationAuthorityOutcomes.Idempotent; readonly readThroughPosition: string }
 	| { readonly outcome: ConversationAuthorityOutcomes.Denied; readonly reason: AgentThreadReadDenialReasons };
 
+/** Browser request for one fresh attempt of a failed or cancelled run. */
+export interface RetryConversationRunRequest
+{
+	/** Terminal attempt number the participant observed. */
+	readonly expectedAttempt: number;
+	/** Fresh retry key. Repeating the same key is idempotent; a different key cannot claim its attempt. */
+	readonly idempotencyKey: string;
+}
+
+/** Result returned by the run-owned retry authority after participant authorization. */
+export type RetryConversationRunResult = StartNextRunAttemptResult;
+
 /**
  * Everything the conversation HTTP layer is allowed to do, as one port.
  *
@@ -438,6 +451,8 @@ export interface ConversationUnitOfWork
 	openAgentThread(caller: ConversationCaller, parentConversationId: string, childConversationId: string): Promise<AgentThreadSnapshotView | null>;
 	/** Advances this caller's child read position only up to the canonical position they observed. */
 	markAgentThreadRead(caller: ConversationCaller, parentConversationId: string, childConversationId: string, observedPosition: string): Promise<MarkAgentThreadReadResult>;
+	/** Starts one fresh attempt through the run-owned compare-and-swap authority. */
+	retryRun(caller: ConversationCaller, conversationId: string, runId: string, request: RetryConversationRunRequest): Promise<RetryConversationRunResult>;
 	/**
 	 * Creates one conversation and its participant rows in a single transaction, so a
 	 * conversation with missing participants can never be left behind.

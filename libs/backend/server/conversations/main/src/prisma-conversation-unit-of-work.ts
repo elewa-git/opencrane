@@ -3,8 +3,9 @@ import { randomUUID } from "node:crypto";
 import { Prisma, type PrismaClient } from "@prisma/client";
 
 import { ___DoWithTrace } from "@opencrane/backend/observability";
+import { __StartNextRunAttempt, PrismaAgentRunAuthorityRepository } from "@opencrane/backend/agents/execution/runs";
 
-import type { AgentThreadSnapshotView, ConversationCaller, ConversationCreationDirectory, ConversationDetail, ConversationSummary, ConversationUnitOfWork, CreateConversationRequest, CreateConversationResult, MarkAgentThreadReadResult, MutateConversationResult, SubmitConversationMessageRequest, SubmitConversationMessageResult } from "./conversation-authority.types.js";
+import type { AgentThreadSnapshotView, ConversationCaller, ConversationCreationDirectory, ConversationDetail, ConversationSummary, ConversationUnitOfWork, CreateConversationRequest, CreateConversationResult, MarkAgentThreadReadResult, MutateConversationResult, RetryConversationRunRequest, RetryConversationRunResult, SubmitConversationMessageRequest, SubmitConversationMessageResult } from "./conversation-authority.types.js";
 import type { ConversationMessageAdmissionUnitOfWork } from "./conversation-message-admission.types.js";
 import { PrismaConversationMutationRepository } from "./prisma-conversation-mutation-repository.js";
 import type { ConversationMutationRepository } from "./prisma-conversation-mutation-repository.types.js";
@@ -52,6 +53,12 @@ export class PrismaConversationUnitOfWork implements ConversationUnitOfWork
 	async markAgentThreadRead(caller: ConversationCaller, parentConversationId: string, childConversationId: string, observedPosition: string): Promise<MarkAgentThreadReadResult>
 	{
 		return ___DoWithTrace("conversation.agent_thread.mark_read", { siloId: caller.siloId, parentConversationId, childConversationId }, async () => this._mutate(function _MarkRead(repository) { return repository.markAgentThreadRead(caller, parentConversationId, childConversationId, BigInt(observedPosition)); }));
+	}
+
+	/** Starts one new attempt only through the run package's participant-bound authority. */
+	async retryRun(caller: ConversationCaller, conversationId: string, runId: string, request: RetryConversationRunRequest): Promise<RetryConversationRunResult>
+	{
+		return ___DoWithTrace("conversation.run.retry", { siloId: caller.siloId, conversationId, runId, expectedAttempt: request.expectedAttempt }, async () => __StartNextRunAttempt(new PrismaAgentRunAuthorityRepository(this.prisma), { runId, expectedAttempt: request.expectedAttempt, siloId: caller.siloId, conversationId, requestedBy: caller.subjectId, idempotencyKey: request.idempotencyKey, acceptedAt: new Date().toISOString() }));
 	}
 
 	/** Writes the conversation and participant rows atomically; the selected mode can never change. */

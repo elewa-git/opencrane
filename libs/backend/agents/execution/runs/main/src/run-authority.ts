@@ -74,7 +74,7 @@ export function __ValidateRunWorkloadAssignment(assignment: RunWorkloadAssignmen
 export async function __StartNextRunAttempt(repository: AgentRunAuthorityRepository, command: StartNextRunAttemptCommand): Promise<StartNextRunAttemptResult>
 {
 	// 1. Validate the compare-and-swap input so malformed attempt counters never reach persistence.
-	if (!command.runId.trim() || !Number.isSafeInteger(command.expectedAttempt) || command.expectedAttempt < 1 || !Number.isFinite(Date.parse(command.acceptedAt)))
+	if (!command.runId.trim() || !command.siloId.trim() || !command.conversationId.trim() || !command.requestedBy.trim() || !command.idempotencyKey.trim() || !Number.isSafeInteger(command.expectedAttempt) || command.expectedAttempt < 1 || !Number.isFinite(Date.parse(command.acceptedAt)))
 	{
 		return { outcome: "denied", reason: "invalid_command" };
 	}
@@ -86,7 +86,9 @@ export async function __StartNextRunAttempt(repository: AgentRunAuthorityReposit
 		return { outcome: "denied", reason: "run_not_found" };
 	}
 	const { run } = authority;
-	if (!_isRetryable(run))
+	if (run.siloId !== command.siloId || run.conversationId !== command.conversationId) return { outcome: "denied", reason: "unauthorized" };
+	const couldBeIdempotentRetry = run.attempt === command.expectedAttempt + 1;
+	if (!_isRetryable(run) && !couldBeIdempotentRetry)
 	{
 		return { outcome: "denied", reason: "run_not_terminal" };
 	}
@@ -115,6 +117,8 @@ export async function __StartNextRunAttempt(repository: AgentRunAuthorityReposit
 	{
 		return { outcome: "denied", reason: "run_not_found" };
 	}
+	if (result.status === "unauthorized") return { outcome: "denied", reason: "unauthorized" };
+	if (result.status === "idempotent") return { outcome: "idempotent", run: result.run };
 	if (result.status === "attempt_conflict")
 	{
 		return { outcome: "denied", reason: "attempt_conflict", currentAttempt: result.currentAttempt };
