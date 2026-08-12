@@ -1,10 +1,10 @@
 :host { display: block; }
-.conversation-message { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: .75rem; padding: .75rem 0; color: var(--oc-ink, #16191a); }
+.conversation-message { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: .75rem; padding: .75rem 0; color: var(--oc-ink-default); }
 .conversation-message__content { min-width: 0; }
 header { display: flex; align-items: baseline; gap: .5rem; }
-time { color: var(--oc-ink-muted, #81888a); font-size: .75rem; }
+time { color: var(--oc-ink-muted); font-size: .75rem; }
 p { margin: .25rem 0 0; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.55; }
-.conversation-message[data-tone="agent"] p { background: var(--oc-surface-soft, #f4f7f7); border-radius: .65rem; padding: .7rem .8rem; }
-.conversation-message[data-tone="system"] { color: var(--oc-ink-muted, #616a6c); }
+.conversation-message[data-tone="agent"] p { background: var(--oc-surface-subtle); border-radius: var(--oc-radius-panel); padding: .7rem .8rem; }
+.conversation-message[data-tone="system"] { color: var(--oc-ink-muted); }
 .conversation-message__rich-card:empty { display: none; }
 .conversation-message__rich-card { margin-top: .65rem; }

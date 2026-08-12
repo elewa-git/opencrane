@@ -1,8 +1,8 @@
 :host { display: block; }
-.conversation-composer { display: grid; gap: .5rem; padding: .75rem; background: var(--oc-surface-paper, #fff); border: 1px solid var(--oc-border, #d9dfe0); border-radius: .75rem; }
+.conversation-composer { display: grid; gap: .5rem; padding: .75rem; background: var(--oc-surface-paper); border: 1px solid var(--oc-border-default); border-radius: var(--oc-radius-panel); }
 .conversation-composer__label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
 textarea { width: 100%; resize: vertical; border: 0; box-shadow: none; min-height: 4.5rem; }
-textarea:focus-visible { outline: 3px solid color-mix(in srgb, var(--oc-brand, #0db5cc) 35%, transparent); outline-offset: 2px; }
+textarea:focus-visible { outline: var(--oc-focus-width) solid var(--oc-focus-ring); outline-offset: var(--oc-focus-offset); }
 footer { display: flex; align-items: center; gap: .75rem; }
 .conversation-composer__footer { flex: 1; min-width: 0; }
 .conversation-composer__leading:empty, .conversation-composer__footer:empty { display: none; }
