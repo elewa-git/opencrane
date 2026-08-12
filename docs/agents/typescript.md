@@ -83,22 +83,23 @@ line). Use its output to populate the table; do **not** rely on "it feels right"
 
 When a coding turn writes or edits `.ts` files, include a compact compliance table in the response:
 
-| File | No standalone `=>` | Max one ternary/line | Imports single-line at top | All declarations JSDoc (incl. properties) | Types in `*.types.ts` | Naming convention | New test under `__tests__/` |
-|---|---|---|---|---|---|---|---|
-| `example.ts` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| File | No standalone `=>` | Max one ternary/line | Imports single-line at top | All declarations JSDoc (incl. properties) | Comments in plain English | Types in `*.types.ts` | Naming convention | New test under `__tests__/` |
+|---|---|---|---|---|---|---|---|---|
+| `example.ts` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 
 Rules to check:
 
 1. **No standalone arrow functions** — `setInterval`, `Promise`, `new Map()` callbacks must use named `function` expressions, not `() =>`.  Arrow functions are only permitted inside `map`, `filter`, `reduce`, `Array.from` (as a mapper), and equivalent pure functional HOFs.
 2. **Imports: single-line, all at top** — Every import from a given package on one line. No import statements below the first non-import line. Two separate `import ... from "express"` lines is a violation — merge them.
 3. **JSDoc on every declaration, including every interface property and every class field** — not just the enclosing type or class.
-4. **Exported interfaces and type aliases in `*.types.ts`** — not in the implementation file.
-5. **Function naming** — file-private: `_camelCase`; same-package export: `_PascalCase`; same-domain: `__PascalCase`; wide/global: `___PascalCase`.
-6. **New tests under `__tests__/`** — a `*.test.ts` co-located next to the source file it tests, instead of under a `__tests__` directory, is a violation. See [Test File Location](#test-file-location).
-7. **Categorical branches use documented string-backed enums** — confirm every
+4. **Comments in plain English** — read each one aloud; if you would not say it that way to a colleague, rewrite it. No verbless noun piles, no ritual modifiers, no heavy word where a plain one exists, and `@see` instead of assuming a reference is known. See [Comment Language](#comment-language). This one is not mechanically checkable, so it is on you.
+5. **Exported interfaces and type aliases in `*.types.ts`** — not in the implementation file.
+6. **Function naming** — file-private: `_camelCase`; same-package export: `_PascalCase`; same-domain: `__PascalCase`; wide/global: `___PascalCase`.
+7. **New tests under `__tests__/`** — a `*.test.ts` co-located next to the source file it tests, instead of under a `__tests__` directory, is a violation. See [Test File Location](#test-file-location).
+8. **Categorical branches use documented string-backed enums** — confirm every
    `CATEGORICAL-LITERAL` warning is either replaced with the owning enum or is an explicit external
    protocol/schema/data exemption.
-8. **At most one ternary conditional per physical line** — `INLINE-CONDITIONAL` is an error; expand
+9. **At most one ternary conditional per physical line** — `INLINE-CONDITIONAL` is an error; expand
    each decision onto its own line or use an exhaustive lookup, `switch`, or named helper.
 
 The compliance table is **not** optional when TypeScript files were modified. If the table would be incomplete, fix the violations first.
@@ -235,6 +236,78 @@ interface McpServerEntry
 	/** Fully-qualified URL of the MCP server endpoint. */
 	endpoint: string;
 }
+```
+
+## Comment Language
+
+Write every comment in plain, simple English. A comment is read by someone who has never seen the
+file, so it must land on the first pass. Density is not precision — a sentence nobody can parse
+documents nothing.
+
+Read the sentence aloud as if explaining the function to a colleague. **If you would never say it
+out loud, rewrite it.**
+
+### The six failure patterns
+
+1. **No verb.** A noun pile is not a sentence. Start with a verb saying what the thing does.
+2. **Ritual modifiers.** `only`, `exact`, `one`, `bounded`, `durable`, `canonical`, `safe`, `fixed`,
+   `held`, `governed` sprinkled as decoration. Keep a modifier **only** when it states a restriction
+   the reader must know, and delete it when it is ceremony. In "load state only when X" the `only`
+   is real; in "append one bounded recovery event" it is noise.
+3. **Compressed noun chains.** "an exact idempotent winner", "the invocation owner", "stale
+   invocation". Name the real thing: which row, which caller, stale in what sense.
+4. **Missing subject or invented verbs.** "the durable run still names the exact attempt" — nobody
+   uses "names" that way. Say who does what to what.
+5. **Unexplained shorthand.** "compare-and-set loss", "seam", "plane", "winner" — say what lost,
+   what boundary, or what won.
+6. **Heavy vocabulary with a plain equivalent.** Never `canonicalise`, `provenance`, `terminalise`,
+   `materialise`, `posture`, `vocabulary`, `substrate`, `surface` (as a noun), `reify`, `elide`,
+   `salient`, `coerce`. Use writes, origin, setup, field names, listener, convert.
+
+Keep a term when it **names something real in the code** — a field, enum member, state, or standard
+term with no plain equivalent: `fence` is an actual claim field, `Reconciling` an actual state,
+`ProviderIdempotency` an actual recovery mode, and RFC 8785 canonicalization is the standard's own
+name. Grep before you delete a word. When the term is real, simplify the sentence around it instead.
+Precision beats plainness: never trade away accuracy to sound simpler, and never drop the *why*.
+
+### Reference other code with `@see`
+
+Do not assume a reader knows what a noun phrase points at. When a comment leans on something defined
+elsewhere — "the immutable snapshot", "the held transaction" — either name the real symbol or add a
+`@see` tag. Add `@see` only for a concept **not already visible in the signature** (IDEs link
+parameter types), and only after grepping to confirm the exact exported name exists.
+
+```typescript
+// WRONG — no verb, ritual modifiers, invented verb, and a reference the reader must already know
+/** Transaction-owned construction boundary for the recovery-event repository. */
+/** Verify only an exact idempotent winner after a compare-and-set loss. */
+/** Load state only when the durable run still names the exact attempt. */
+/** Derive the model-key request from the immutable snapshot and exact claim generation. */
+
+// CORRECT — a verb, a subject, and a pointer to what the reader has to look up
+/** Builds the recovery-event repository against a transaction the caller already holds. */
+/** Checks that the row which won the insert race is the same request we tried to write. */
+/** Loads the state only if the run row in the database is still on this attempt. */
+/**
+ * Builds the model-key request from the run's frozen inputs and the claim that won.
+ * @see RunInputSnapshot
+ * @see ToolInvocationClaim
+ */
+```
+
+### Document each enum member so hover is enough
+
+A reader hovering a member must learn what it means and what data it carries, without opening the
+validator that enforces it. Record the payload on the member.
+
+```typescript
+// WRONG — restates the name, and the payload is a mystery
+/** Runtime appended a bounded message delta. */
+MessageDelta = "message.delta",
+
+// CORRECT — what happened, plus what it carries
+/** The runtime added the next piece of a message it is still writing. Payload: `messageId` and `delta`, the new text. */
+MessageDelta = "message.delta",
 ```
 
 ## Type And Interface File Separation
