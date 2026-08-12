@@ -17,6 +17,11 @@ because both carry signed fleet-membership evidence.
 When the executor proposes an event or outside action, it performs the mirror check before another
 domain may persist or execute that proposal.
 
+Runtime input follows the same rule. A bounded `runtime_input` or reviewed `a2ui_action` proposal is
+turned into a durable elicitation request on the locked candidate transaction before its candidate
+id is accepted. Replays must match the exact saved request. Command polling expires tool approvals
+and generic requests on that same transaction, and resumes only after neither kind remains pending.
+
 This package owns both that pure decision and the Prisma-backed adapter that drives it. The adapter
 loads and locks the live workload assignment for a connected runtime Pod, mints only the command the
 pure authority accepts, and durably advances the monotonic command sequence and the accepted

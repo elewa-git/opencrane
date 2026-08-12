@@ -5,7 +5,7 @@ import { __DigestCanonicalJson, ExternalActionClaimKinds, ExternalActionRecovery
 import { ElicitationBodyKinds, ElicitationPurposes, RunInputSnapshotIdentityKinds, type RunInputSnapshot } from "@opencrane/contracts";
 import { PERSONAL_MEMORY_RECALL_TOOL_REVISION } from "@opencrane/models/agents";
 
-import { PrismaElicitationUnitOfWork } from "../prisma-elicitation-unit-of-work.js";
+import { PrismaElicitationUnitOfWork, __ExpireRuntimeElicitationInTransaction, __OpenRuntimeElicitationInTransaction } from "../prisma-elicitation-unit-of-work.js";
 
 const NOW = new Date("2026-08-11T10:00:00.000Z");
 
@@ -29,6 +29,7 @@ function _ResponseTransaction(request = _Request())
 		elicitationResponseAttempt: { findUnique: vi.fn().mockResolvedValue(null), create: vi.fn().mockResolvedValue({ id: "attempt-1" }) },
 		conversationParticipant: { findUnique: vi.fn().mockResolvedValue({ accessEndedPosition: null }) },
 		agentRun: { findUnique: vi.fn().mockResolvedValue({ id: "run-1", attempt: 2, state: AgentRunState.WaitingForInput }), updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
+		approvalRequest: { findUnique: vi.fn(), count: vi.fn().mockResolvedValue(0) },
 		elicitationResultDelivery: { create: vi.fn().mockResolvedValue({ id: "delivery-1" }) },
 		personalMemoryPermissionReceipt: { create: vi.fn().mockResolvedValue({ id: "receipt-1" }) },
 		toolInvocation: { findUnique: vi.fn(), updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
@@ -62,6 +63,64 @@ describe("PrismaElicitationUnitOfWork", function _Suite()
 		await expect(_Unit(transaction).open({ requestId: "request-1", siloId: "silo-1", conversationId: "conversation-1", runId: "run-1", attempt: 2, assignedParticipantId: "user-1", requestKey: "question-1", purpose: ElicitationPurposes.RuntimeInput, body, purposePayloadDigest: "sha256:none", requiresStepUp: false, now: NOW, expiresAt: new Date("2026-08-11T11:00:00.000Z") })).resolves.toMatchObject({ requestId: "request-1", runId: "run-1", state: "requested" });
 		expect(transaction.agentRun.updateMany).toHaveBeenCalledWith({ where: { id: "run-1", attempt: 2, state: AgentRunState.Running }, data: { state: AgentRunState.WaitingForInput } });
 		expect(transaction.elicitationRequest.create).toHaveBeenCalledWith({ data: expect.objectContaining({ runId: "run-1", attempt: 2, assignedParticipantId: "user-1", bodyDigest: __DigestCanonicalJson(body) }) });
+	});
+
+	it("replays only an exactly matching durable runtime request", async function _ReplaysExactRequest()
+	{
+		const body = { kind: ElicitationBodyKinds.FreeText, prompt: "Answer", maximumLength: 100, allowEmpty: false } as const;
+		const command = { requestId: "request-1", siloId: "silo-1", conversationId: "conversation-1", runId: "run-1", attempt: 2, assignedParticipantId: "user-1", requestKey: "question-1", purpose: ElicitationPurposes.RuntimeInput, body, purposePayloadDigest: __DigestCanonicalJson(null), requiresStepUp: false, now: NOW, expiresAt: new Date("2026-08-11T11:00:00.000Z") } as const;
+		const existing = _Request({ body, bodyDigest: __DigestCanonicalJson(body), purposePayloadDigest: command.purposePayloadDigest });
+		const transaction = { elicitationRequest: { findUnique: vi.fn().mockResolvedValue(existing) } };
+
+		await expect(__OpenRuntimeElicitationInTransaction(transaction as never, command)).resolves.toMatchObject({ requestId: "request-1" });
+		await expect(__OpenRuntimeElicitationInTransaction(transaction as never, { ...command, body: { ...body, prompt: "Changed" } })).resolves.toBeNull();
+		await expect(__OpenRuntimeElicitationInTransaction(transaction as never, { ...command, requestId: "request-changed" })).resolves.toBeNull();
+	});
+
+	it.each([ElicitationPurpose.RuntimeInput, ElicitationPurpose.A2uiAction])("expires due generic %s input with one terminal delivery before resuming", async function _ExpiresGenericRequest(purpose)
+	{
+		const request = _Request({ purpose, expiresAt: new Date("2026-08-11T09:59:00.000Z") });
+		let runState: AgentRunState = AgentRunState.WaitingForInput;
+		const transaction = {
+			elicitationRequest: { findMany: vi.fn().mockResolvedValue([request]), updateMany: vi.fn().mockResolvedValue({ count: 1 }), count: vi.fn().mockResolvedValue(0) },
+			approvalRequest: { count: vi.fn().mockResolvedValue(0) },
+			elicitationResultDelivery: { create: vi.fn().mockResolvedValue({ id: "delivery-1" }) },
+			agentRun: {
+				findUnique: vi.fn(async function _FindRun() { return { id: "run-1", attempt: 2, state: runState }; }),
+				updateMany: vi.fn(async function _Resume() { runState = AgentRunState.Running; return { count: 1 }; }),
+			},
+		};
+
+		await expect(__ExpireRuntimeElicitationInTransaction(transaction as never, { runId: "run-1", attempt: 2, now: NOW })).resolves.toEqual({ expiredCount: 1, resumed: true });
+		expect(transaction.elicitationResultDelivery.create).toHaveBeenCalledWith({ data: { requestId: "request-1" } });
+		expect(transaction.elicitationResultDelivery.create.mock.invocationCallOrder[0]).toBeLessThan(transaction.elicitationRequest.updateMany.mock.invocationCallOrder[0] ?? 0);
+		expect(transaction.elicitationRequest.updateMany).toHaveBeenCalledWith(expect.objectContaining({ data: { state: ElicitationRequestState.Expired, resolvedAt: NOW, safeReason: "response_window_expired" } }));
+	});
+
+	it("keeps a waiting run paused while another input request remains", async function _KeepsWaitingWithPendingInput()
+	{
+		const transaction = {
+			elicitationRequest: { findMany: vi.fn().mockResolvedValue([_Request({ expiresAt: new Date("2026-08-11T09:59:00.000Z") })]), updateMany: vi.fn().mockResolvedValue({ count: 1 }), count: vi.fn().mockResolvedValue(1) },
+			approvalRequest: { count: vi.fn().mockResolvedValue(0) },
+			elicitationResultDelivery: { create: vi.fn().mockResolvedValue({ id: "delivery-1" }) },
+			agentRun: { findUnique: vi.fn().mockResolvedValue({ id: "run-1", attempt: 2, state: AgentRunState.WaitingForInput }), updateMany: vi.fn() },
+		};
+
+		await expect(__ExpireRuntimeElicitationInTransaction(transaction as never, { runId: "run-1", attempt: 2, now: NOW })).resolves.toEqual({ expiredCount: 1, resumed: false });
+		expect(transaction.agentRun.updateMany).not.toHaveBeenCalled();
+	});
+
+	it("keeps a generic expiry paused while a tool approval remains pending", async function _KeepsWaitingWithPendingApproval()
+	{
+		const transaction = {
+			elicitationRequest: { findMany: vi.fn().mockResolvedValue([_Request({ expiresAt: new Date("2026-08-11T09:59:00.000Z") })]), updateMany: vi.fn().mockResolvedValue({ count: 1 }), count: vi.fn().mockResolvedValue(0) },
+			approvalRequest: { count: vi.fn().mockResolvedValue(1) },
+			elicitationResultDelivery: { create: vi.fn().mockResolvedValue({ id: "delivery-1" }) },
+			agentRun: { findUnique: vi.fn().mockResolvedValue({ id: "run-1", attempt: 2, state: AgentRunState.WaitingForInput }), updateMany: vi.fn() },
+		};
+
+		await expect(__ExpireRuntimeElicitationInTransaction(transaction as never, { runId: "run-1", attempt: 2, now: NOW })).resolves.toEqual({ expiredCount: 1, resumed: false });
+		expect(transaction.agentRun.updateMany).not.toHaveBeenCalled();
 	});
 
 	it("accepts one typed answer, creates its delivery, and resumes after the final request", async function _Answers()

@@ -1,12 +1,12 @@
 import type { PrismaClient } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
 
-import { AGENT_RUNTIME_PROTOCOL_V1, RuntimeCandidateKinds, type CompiledRunInput, type RuntimeCandidate, type RuntimeCommandEnvelope } from "@opencrane/contracts";
+import { AGENT_RUNTIME_PROTOCOL_V1, ElicitationBodyKinds, ElicitationPurposes, RuntimeCandidateKinds, type CompiledRunInput, type RuntimeCandidate, type RuntimeCommandEnvelope } from "@opencrane/contracts";
 import { PERSONAL_MEMORY_RECALL_TOOL_NAME, PERSONAL_MEMORY_RECALL_TOOL_REVISION } from "@opencrane/models/agents";
 import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 
 import { PrismaRuntimeDispatchAuthority } from "../prisma-runtime-dispatch-authority.js";
-import type { RunInputCompiler, RuntimeApprovalExpiry, RuntimeEventReporter, RuntimeStreamWorkloadIdentity } from "../prisma-runtime-dispatch-authority.types.js";
+import type { RunInputCompiler, RuntimeApprovalExpiry, RuntimeElicitationAuthority, RuntimeEventReporter, RuntimeStreamWorkloadIdentity } from "../prisma-runtime-dispatch-authority.types.js";
 import type { RuntimeProtocolClock } from "../runtime-protocol-authority.types.js";
 
 /** Workload identity of the registered runtime Pod under test. */
@@ -87,6 +87,10 @@ interface FakeOptions
 	readonly eventReporter?: RuntimeEventReporter;
 	/** Optional transaction-scoped approval expiry bridge supplied by the composition root. */
 	readonly approvalExpiry?: RuntimeApprovalExpiry;
+	/** Optional generic elicitation authority supplied by the composition root. */
+	readonly elicitationAuthority?: RuntimeElicitationAuthority;
+	/** Agent-session conversation fixed in the immutable input snapshot. */
+	readonly conversationId?: string | null;
 	/** Optional trusted clock for retry-window expiry assertions. */
 	readonly clock?: RuntimeProtocolClock;
 	/** Finished tool results a resume command can carry. */
@@ -126,7 +130,7 @@ function _fakePrisma(options: FakeOptions)
 	const audience = options.managed ? "opencrane-managed-agent-runtime" : "opencrane-agent-runtime";
 	const assignment = { runId: "run-1", attempt: 1, agentServiceId: "svc-1", agentRevisionId: "rev-1", siloId: "silo-1", subjectId, audience, serviceAccountName: workloadIdentity.serviceAccountName, namespace: workloadIdentity.namespace, workloadKind: "Job", workloadUid: "wl-1", workloadProfile: "profile", podUid: options.podUid === undefined ? "pod-1" : options.podUid, state: options.assignmentState ?? "Registered", expiresAt: new Date("2026-07-20T00:05:00.000Z"), createdAt: new Date("2026-07-20T00:00:00.000Z") };
 	const run = { id: "run-1", attempt: 1, agentServiceId: "svc-1", agentRevisionId: "rev-1", siloId: "silo-1", state: options.runState, inputSnapshotDigest: "sha256:snap" };
-	const snapshot = { runId: "run-1", siloId: "silo-1", agentServiceId: "svc-1", agentRevisionId: "rev-1", snapshotVersion: 1, conversationId: null, messageIds: [], personaRevisionId: null, preferenceFactIds: [], artifactRevisionIds: [], skillRevisionIds: [], memoryQueryPolicy: {}, integrationAssignments: [], modelRoute: {}, budgetPolicy: {}, identitySnapshot: options.managed ? { kind: "service", executionSubjectId: "agent-service:svc-1", agentServiceId: "svc-1", effectiveScopeAttachmentDigest: `sha256:${"a".repeat(64)}`, organizationId: "org-1", fleetMembershipRevision: 3 } : { kind: "user", executionSubjectId: "user-1", organizationId: "org-1", fleetMembershipRevision: 3 }, capabilitySetDigest: "sha256:cap", effectiveContractDigest: "sha256:contract", promptCompilerVersion: "v1", digest: "sha256:snap", compiledAt: new Date("2026-07-20T00:00:00.000Z") };
+	const snapshot = { runId: "run-1", siloId: "silo-1", agentServiceId: "svc-1", agentRevisionId: "rev-1", snapshotVersion: 1, conversationId: options.conversationId ?? null, messageIds: [], personaRevisionId: null, preferenceFactIds: [], artifactRevisionIds: [], skillRevisionIds: [], memoryQueryPolicy: {}, integrationAssignments: [], modelRoute: {}, budgetPolicy: {}, identitySnapshot: options.managed ? { kind: "service", executionSubjectId: "agent-service:svc-1", agentServiceId: "svc-1", effectiveScopeAttachmentDigest: `sha256:${"a".repeat(64)}`, organizationId: "org-1", fleetMembershipRevision: 3 } : { kind: "user", executionSubjectId: "user-1", organizationId: "org-1", fleetMembershipRevision: 3 }, capabilitySetDigest: "sha256:cap", effectiveContractDigest: "sha256:contract", promptCompilerVersion: "v1", digest: "sha256:snap", compiledAt: new Date("2026-07-20T00:00:00.000Z") };
 	const queryRaw = vi.fn().mockResolvedValue([]);
 
 	/** Return whether a stream row matches the fields given in a where clause. */
@@ -239,7 +243,8 @@ function _authority(options: FakeOptions)
 {
 	const fake = _fakePrisma(options);
 	const eventReporter = options.eventReporter ?? { reportInTransaction: vi.fn().mockResolvedValue({ outcome: "reported" as const }) };
-	return { authority: new PrismaRuntimeDispatchAuthority(fake.prisma, { personalRuntimeNamespace: "runtime-ns", managedRuntimeNamespace: "managed-runtime-ns", commandTtlMilliseconds: 60_000 }, options.compileRunInput ?? _compileRunInput, eventReporter, options.clock ?? _clock, options.approvalExpiry), ...fake };
+	const elicitationAuthority = options.elicitationAuthority ?? { openInTransaction: vi.fn().mockResolvedValue(null), expireInTransaction: vi.fn().mockResolvedValue({ expiredCount: 0, resumed: false }) };
+	return { authority: new PrismaRuntimeDispatchAuthority(fake.prisma, { personalRuntimeNamespace: "runtime-ns", managedRuntimeNamespace: "managed-runtime-ns", commandTtlMilliseconds: 60_000 }, options.compileRunInput ?? _compileRunInput, eventReporter, options.clock ?? _clock, options.approvalExpiry, elicitationAuthority), elicitationAuthority, ...fake };
 }
 
 /** Build a runtime event candidate bound to a dispatched command. */
@@ -500,6 +505,28 @@ describe("PrismaRuntimeDispatchAuthority", function _describeDispatchAuthority()
 		const resume = await context.authority.__NextCommand(_identity, _open, 1);
 
 		expect(expiry.expireInTransaction).toHaveBeenCalledWith(expect.anything(), { runId: "run-1", attempt: 1, now: new Date("2026-07-20T00:01:00.000Z") });
+		expect(context.elicitationAuthority.expireInTransaction).toHaveBeenCalledWith(expect.anything(), { runId: "run-1", attempt: 1, now: new Date("2026-07-20T00:01:00.000Z") });
+		expect(resume?.kind).toBe("resume_attempt");
+	});
+
+	it("composes approval and generic expiry on the locked command transaction", async function _ComposesExpiryAuthorities()
+	{
+		const transactions: unknown[] = [];
+		let resumeRun = function _Noop(): void {};
+		const approvalExpiry: RuntimeApprovalExpiry = { async expireInTransaction(transaction) { transactions.push(transaction); return { expiredCount: 0, resumed: false }; } };
+		const elicitationAuthority: RuntimeElicitationAuthority = {
+			async openInTransaction() { return null; },
+			async expireInTransaction(transaction) { transactions.push(transaction); resumeRun(); return { expiredCount: 1, resumed: true }; },
+		};
+		const context = _authority({ runState: "WaitingForInput", savedElicitationResults: [{ requestId: "request-1", requestKey: "question-1", purpose: "RuntimeInput", state: "Expired", payload: null }], approvalExpiry, elicitationAuthority });
+		resumeRun = function _Resume(): void { context.run.state = "Running"; };
+		context.streams.push({ runId: "run-1", attempt: 1, fence: 1, inputGeneration: 0, runtimeInstanceId: "instance-1", nextCommandSequence: 2, acceptedCandidateIds: [] });
+		context.commands.push({ runId: "run-1", attempt: 1, sequence: 1, commandId: "command-start", kind: "StartAttempt", fence: 1, issuedAt: new Date("2026-07-20T00:00:30.000Z"), expiresAt: new Date("2026-07-20T00:01:30.000Z") });
+
+		const resume = await context.authority.__NextCommand(_identity, _open, 1);
+
+		expect(transactions).toHaveLength(2);
+		expect(transactions[0]).toBe(transactions[1]);
 		expect(resume?.kind).toBe("resume_attempt");
 	});
 
@@ -533,6 +560,38 @@ describe("PrismaRuntimeDispatchAuthority", function _describeDispatchAuthority()
 		expect(context.toolInvocations).toHaveLength(1);
 		expect(context.toolInvocations[0]).toMatchObject({ state: "Preparing", candidateId: "candidate-ext", toolInvocationId: "invocation-1", approvalRequired: true, recoveryMode: "Manual" });
 		expect(context.streams[0]?.acceptedCandidateIds).toEqual(["candidate-ext"]);
+	});
+
+	it("opens a runtime request before accepting its candidate id and exactly replays it", async function _OpensRuntimeElicitation()
+	{
+		let context: ReturnType<typeof _authority>;
+		const opened = vi.fn<RuntimeElicitationAuthority["openInTransaction"]>(async function _Open(_transaction, command)
+		{
+			if (opened.mock.calls.length === 1) expect(context.streams[0]?.acceptedCandidateIds).toEqual([]);
+			return { version: "opencrane.elicitation.v1", requestId: command.requestId, conversationId: command.conversationId, runId: command.runId, attempt: command.attempt, assignedParticipantId: command.assignedParticipantId, purpose: command.purpose, state: "requested", body: command.body, requiresStepUp: false, requestedAt: command.now.toISOString(), expiresAt: command.expiresAt.toISOString() } as never;
+		});
+		const elicitationAuthority: RuntimeElicitationAuthority = { openInTransaction: opened, expireInTransaction: vi.fn().mockResolvedValue({ expiredCount: 0, resumed: false }) };
+		context = _authority({ runState: "Running", conversationId: "conversation-1", elicitationAuthority });
+		const start = await context.authority.__NextCommand(_identity, _open, 0);
+		const candidate: RuntimeCandidate = { protocolVersion: AGENT_RUNTIME_PROTOCOL_V1, runtimeInstanceId: "instance-1", commandId: start?.commandId ?? "command-1", candidateId: "candidate-input", runId: "run-1", attempt: 1, fence: 1, kind: RuntimeCandidateKinds.Elicitation, proposal: { requestKey: "question-1", purpose: ElicitationPurposes.RuntimeInput, body: { kind: ElicitationBodyKinds.FreeText, prompt: "What should I do next?", maximumLength: 500, allowEmpty: false }, purposePayloadDigest: ___DigestCanonicalJson(null), expiresInSeconds: 300 } };
+
+		await expect(context.authority.__AdmitCandidate(_identity, candidate)).resolves.toEqual({ accepted: true });
+		await expect(context.authority.__AdmitCandidate(_identity, candidate)).resolves.toEqual({ accepted: true });
+		expect(opened).toHaveBeenCalledTimes(2);
+		expect(opened.mock.calls[0]?.[1]).toMatchObject({ siloId: "silo-1", conversationId: "conversation-1", runId: "run-1", attempt: 1, assignedParticipantId: "user-1", requestKey: "question-1", purpose: ElicitationPurposes.RuntimeInput, expiresAt: new Date("2026-07-20T00:05:00.000Z") });
+		expect(context.streams[0]?.acceptedCandidateIds).toEqual(["candidate-input"]);
+	});
+
+	it("refuses an elicitation replay when the durable request no longer matches", async function _RefusesElicitationReplayConflict()
+	{
+		const open = vi.fn<RuntimeElicitationAuthority["openInTransaction"]>().mockResolvedValueOnce({} as never).mockResolvedValueOnce(null);
+		const context = _authority({ runState: "Running", conversationId: "conversation-1", elicitationAuthority: { openInTransaction: open, expireInTransaction: vi.fn().mockResolvedValue({ expiredCount: 0, resumed: false }) } });
+		const start = await context.authority.__NextCommand(_identity, _open, 0);
+		const candidate: RuntimeCandidate = { protocolVersion: AGENT_RUNTIME_PROTOCOL_V1, runtimeInstanceId: "instance-1", commandId: start?.commandId ?? "command-1", candidateId: "candidate-input", runId: "run-1", attempt: 1, fence: 1, kind: RuntimeCandidateKinds.Elicitation, proposal: { requestKey: "question-1", purpose: ElicitationPurposes.RuntimeInput, body: { kind: ElicitationBodyKinds.FreeText, prompt: "Original?", maximumLength: 500, allowEmpty: false }, purposePayloadDigest: ___DigestCanonicalJson(null), expiresInSeconds: 300 } };
+
+		await expect(context.authority.__AdmitCandidate(_identity, candidate)).resolves.toEqual({ accepted: true });
+		await expect(context.authority.__AdmitCandidate(_identity, { ...candidate, proposal: { ...candidate.proposal, body: { ...candidate.proposal.body, prompt: "Changed?" } } })).resolves.toEqual({ accepted: false, reason: "elicitation_replay_conflict" });
+		expect(context.streams[0]?.acceptedCandidateIds).toEqual(["candidate-input"]);
 	});
 
 	it("forces personal-memory recall through approval even when its descriptor says otherwise", async function _forcesMemoryApproval()

@@ -1,6 +1,7 @@
 import { type Prisma, type PrismaClient } from "@prisma/client";
 
 import { __AppendCompiledTool } from "@opencrane/backend/agents/execution/inputs";
+import { __ExpireRuntimeElicitationInTransaction, __OpenRuntimeElicitationInTransaction } from "@opencrane/backend/agents/execution/elicitation";
 import { PrismaRuntimeEventReporter } from "@opencrane/backend/agents/execution/runs";
 import { __IsUpgradeSessionAvailable, UPGRADE_SESSION_TOOL } from "@opencrane/backend/agents/personal/configuration";
 import { __ExpireDeferredToolApprovalBatch } from "@opencrane/backend/server/iam/authorization";
@@ -70,5 +71,5 @@ function _CreateProductionApprovalExpiry(): RuntimeApprovalExpiry
  */
 export function __CreateProductionRuntimeDispatchAuthority(prisma: PrismaClient, config: RuntimeDispatchAuthorityConfig): PrismaRuntimeDispatchAuthority
 {
-	return new PrismaRuntimeDispatchAuthority(prisma, config, __CreateProductionRunInputCompiler(), new PrismaRuntimeEventReporter(), undefined, _CreateProductionApprovalExpiry());
+	return new PrismaRuntimeDispatchAuthority(prisma, config, __CreateProductionRunInputCompiler(), new PrismaRuntimeEventReporter(), undefined, _CreateProductionApprovalExpiry(), { openInTransaction: __OpenRuntimeElicitationInTransaction, expireInTransaction: __ExpireRuntimeElicitationInTransaction });
 }

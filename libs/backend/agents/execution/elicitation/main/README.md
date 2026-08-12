@@ -28,6 +28,8 @@ the generic elicitation result.
 ## Public surface
 
 - `PrismaElicitationUnitOfWork` — transaction-bound request, response, and resume authority.
+- `__RuntimeElicitationTransactionAuthority` — opens runtime proposals and expires due requests on
+  the dispatch transaction that already holds the run lock; it never nests another transaction.
 - `PersonalMemoryPermissionAuthority` — opens and verifies the exact execution-user receipt without reading or consuming remembered content.
 - `_CreateElicitationInterruptReader` — generic cursorless reconnect overlay for every body type.
 - `_CreateSelfElicitationActivityRouter` — bounded derived Activity references over canonical requests.

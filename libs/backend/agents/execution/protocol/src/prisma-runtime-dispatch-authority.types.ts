@@ -1,6 +1,7 @@
 import type { Prisma, RuntimeCommandKind } from "@prisma/client";
 
 import type { CompiledRunInput, RunInputSnapshot } from "@opencrane/contracts";
+import type { ExpireElicitationBatchCommand, ExpireElicitationBatchResult, OpenElicitationCommand } from "@opencrane/backend/agents/execution/elicitation";
 import type { JsonValue } from "@opencrane/util";
 
 import type { RuntimeAdmissionRunState } from "./runtime-protocol-authority.types.js";
@@ -92,6 +93,15 @@ export interface RuntimeApprovalExpiry
 	expireInTransaction(transaction: Prisma.TransactionClient, command: { readonly runId: string; readonly attempt: number; readonly now: Date }): Promise<{ readonly expiredCount: number; readonly resumed: boolean }>;
 }
 
+/** Durable generic elicitation authority used on the dispatch transaction already holding the run lock. */
+export interface RuntimeElicitationAuthority
+{
+	/** Open or exactly replay one validated request before candidate-id acceptance. */
+	openInTransaction(transaction: Prisma.TransactionClient, command: OpenElicitationCommand): Promise<unknown | null>;
+	/** Expire due generic requests while command polling retains the run lock. */
+	expireInTransaction(transaction: Prisma.TransactionClient, command: ExpireElicitationBatchCommand): Promise<ExpireElicitationBatchResult>;
+}
+
 /**
  * Decides the next command for one poll, and closes overdue approvals, on the caller's transaction.
  *
@@ -110,13 +120,14 @@ export interface RuntimeCommandDecisionUnitOfWork
 	 *
 	 * @param context - Run, attempt, and current run state.
 	 * @param approvalExpiry - The injected expiry port, or null when none was wired.
+	 * @param elicitationAuthority - Generic request expiry on the same caller transaction.
 	 * @param now - Trusted server time.
 	 * @returns `not_required` - the run is not waiting for approval; carry on and decide a command.
 	 * `applied` - deadlines were processed, which obliges the caller to re-read the run before
 	 * deciding, because it may now be resumable or cancelling. `unavailable` - the run is waiting but
 	 * no expiry port exists, which obliges the caller to send nothing at all.
 	 */
-	expireWaiting(context: { readonly runId: string; readonly attempt: number; readonly runState: RuntimeAdmissionRunState }, approvalExpiry: RuntimeApprovalExpiry | null, now: Date): Promise<"not_required" | "applied" | "unavailable">;
+	expireWaiting(context: { readonly runId: string; readonly attempt: number; readonly runState: RuntimeAdmissionRunState }, approvalExpiry: RuntimeApprovalExpiry | null, elicitationAuthority: RuntimeElicitationAuthority | null, now: Date): Promise<"not_required" | "applied" | "unavailable">;
 	/**
 	 * Pick the next command kind from the run's saved state and the commands already sent.
 	 *

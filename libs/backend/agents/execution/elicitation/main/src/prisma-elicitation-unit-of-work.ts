@@ -1,4 +1,4 @@
-import { AgentRunState, ElicitationBodyKind, ElicitationPurpose, ElicitationRequestState, PersonalMemoryPermissionReceiptState, Prisma, type PrismaClient } from "@prisma/client";
+import { AgentRunState, ApprovalRequestState, ElicitationBodyKind, ElicitationPurpose, ElicitationRequestState, PersonalMemoryPermissionReceiptState, Prisma, type PrismaClient } from "@prisma/client";
 
 import { ___DoWithTrace } from "@opencrane/backend/observability";
 import { __DecideDeferredToolRequest, __DigestCanonicalJson, __ExpireDeferredToolApprovalBatch, DeferredToolDecisionKinds, DeferredToolDecisionOutcomes, PrismaToolInvocationElicitationRepository, ToolInvocationStates, type ToolInvocationClaim, type ToolInvocationElicitationRepository, type ToolInvocationRecord } from "@opencrane/backend/server/iam/authorization";
@@ -9,7 +9,7 @@ import type { JsonValue } from "@opencrane/util";
 import { _ElicitationStateForResponse, _IsElicitationResponseValid } from "./elicitation-response.js";
 import { _ElicitationPurposeStrategies } from "./elicitation-purpose-strategies.js";
 import type { ElicitationPurposeRequest, ElicitationPurposeStrategyRegistry } from "./elicitation-purpose-strategy.types.js";
-import { PersonalMemoryPermissionVerificationOutcomes, type ElicitationRepository, type ElicitationUnitOfWork, type OpenElicitationCommand, type PersonalMemoryPermissionAuthority, type PersonalMemoryPermissionVerificationResult, type RespondToElicitationCommand, type RespondToElicitationResult } from "./elicitation.types.js";
+import { PersonalMemoryPermissionVerificationOutcomes, type ElicitationRepository, type ElicitationUnitOfWork, type ExpireElicitationBatchCommand, type ExpireElicitationBatchResult, type OpenElicitationCommand, type PersonalMemoryPermissionAuthority, type PersonalMemoryPermissionVerificationResult, type RespondToElicitationCommand, type RespondToElicitationResult } from "./elicitation.types.js";
 import type { PersonalMemoryPermissionPayload } from "./personal-memory-permission-payload.types.js";
 import { _ParsePersonalMemoryPermissionPayload } from "./personal-memory-permission-payload.validator.js";
 
@@ -49,7 +49,7 @@ class PrismaElicitationRepository implements ElicitationRepository
 		const transaction = this._transaction;
 		const bodyDigest = __DigestCanonicalJson(command.body as unknown as JsonValue);
 		const existing = await transaction.elicitationRequest.findUnique({ where: { runId_attempt_requestKey: { runId: command.runId, attempt: command.attempt, requestKey: command.requestKey } } });
-		if (existing !== null) return existing.id === command.requestId && existing.bodyDigest === bodyDigest && existing.purposePayloadDigest === command.purposePayloadDigest ? _Projection(existing) : null;
+		if (existing !== null) return _RequestMatchesOpenCommand(existing, command, bodyDigest) ? _Projection(existing) : null;
 		const run = await transaction.agentRun.findUnique({ where: { id: command.runId } });
 		const participant = await transaction.conversationParticipant.findUnique({ where: { conversationId_userId: { conversationId: command.conversationId, userId: command.assignedParticipantId } } });
 		if (run === null || run.siloId !== command.siloId || run.conversationId !== command.conversationId || run.attempt !== command.attempt || participant === null || participant.accessEndedPosition !== null || command.expiresAt.getTime() <= command.now.getTime()) return null;
@@ -156,8 +156,9 @@ class PrismaElicitationRepository implements ElicitationRepository
 		const resolved = await transaction.elicitationRequest.updateMany({ where: { id: request.id, state: ElicitationRequestState.Requested }, data: { state, resolvedAt: command.now, resolvedBy: command.subjectId } });
 		if (resolved.count !== 1) throw new Error("elicitation response lost its request fence");
 		if (!await this._purposeStrategies.forPurpose(_PublicPurpose(request.purpose)).apply(request, command.submission.response, command.subjectId, command.now)) throw new Error("elicitation purpose strategy rejected an admitted response");
-		const pending = await transaction.elicitationRequest.count({ where: { runId: request.runId, attempt: request.attempt, state: ElicitationRequestState.Requested } });
-		if (pending === 0)
+		const pendingElicitations = await transaction.elicitationRequest.count({ where: { runId: request.runId, attempt: request.attempt, state: ElicitationRequestState.Requested } });
+		const pendingApprovals = await transaction.approvalRequest.count({ where: { runId: request.runId, attempt: request.attempt, state: ApprovalRequestState.Pending } });
+		if (pendingElicitations === 0 && pendingApprovals === 0)
 		{
 			const resumed = await transaction.agentRun.updateMany({ where: { id: request.runId, attempt: request.attempt, state: AgentRunState.WaitingForInput }, data: { state: AgentRunState.Running } });
 			if (resumed.count !== 1) throw new Error("elicitation response lost its waiting run fence");
@@ -186,6 +187,22 @@ class PrismaElicitationRepository implements ElicitationRepository
 		if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100) throw new TypeError("elicitation activity limit must be between one and one hundred");
 		const rows = await this._transaction.elicitationRequest.findMany({ where: { siloId, assignedParticipantId: subjectId, assignedParticipant: { accessEndedPosition: null } }, orderBy: [{ createdAt: "desc" }, { id: "desc" }], take: limit });
 		return rows.map(function _ProjectActivity(row) { return _ProjectionAt(row, now); });
+	}
+
+	/** Expire every due request through its purpose strategy under the caller's run lock. */
+	async expireDue(command: ExpireElicitationBatchCommand): Promise<ExpireElicitationBatchResult>
+	{
+		const run = await this._transaction.agentRun.findUnique({ where: { id: command.runId } });
+		if (run === null || run.attempt !== command.attempt || run.state !== AgentRunState.WaitingForInput) return { expiredCount: 0, resumed: false };
+		const due = await this._transaction.elicitationRequest.findMany({ where: { runId: command.runId, attempt: command.attempt, state: ElicitationRequestState.Requested, expiresAt: { lte: command.now } }, orderBy: { id: "asc" } });
+		let expiredCount = 0;
+		for (const request of due)
+		{
+			await this._expireRequest(request, command.now);
+			expiredCount += 1;
+		}
+		const after = await this._transaction.agentRun.findUnique({ where: { id: command.runId } });
+		return { expiredCount, resumed: after?.state === AgentRunState.Running };
 	}
 
 	/** Persist one validated ordinary runtime response. */
@@ -290,8 +307,9 @@ class PrismaElicitationRepository implements ElicitationRepository
 		await this._purposeStrategies.forPurpose(_PublicPurpose(request.purpose)).expire(request, now);
 		const expired = await this._transaction.elicitationRequest.updateMany({ where: { id: request.id, state: ElicitationRequestState.Requested, expiresAt: { lte: now } }, data: { state: ElicitationRequestState.Expired, resolvedAt: now, safeReason: "response_window_expired" } });
 		if (expired.count !== 1) throw new Error("elicitation expiry lost its request fence");
-		const pending = await this._transaction.elicitationRequest.count({ where: { runId: request.runId, attempt: request.attempt, state: ElicitationRequestState.Requested } });
-		if (pending !== 0) return;
+		const pendingElicitations = await this._transaction.elicitationRequest.count({ where: { runId: request.runId, attempt: request.attempt, state: ElicitationRequestState.Requested } });
+		const pendingApprovals = await this._transaction.approvalRequest.count({ where: { runId: request.runId, attempt: request.attempt, state: ApprovalRequestState.Pending } });
+		if (pendingElicitations !== 0 || pendingApprovals !== 0) return;
 		const resumed = await this._transaction.agentRun.updateMany({ where: { id: request.runId, attempt: request.attempt, state: AgentRunState.WaitingForInput }, data: { state: AgentRunState.Running } });
 		if (resumed.count !== 1) throw new Error("elicitation expiry lost its waiting run fence");
 	}
@@ -307,6 +325,18 @@ export class PrismaElicitationUnitOfWork implements ElicitationUnitOfWork, Perso
 	constructor(prisma: PrismaClient)
 	{
 		this._prisma = prisma;
+	}
+
+	/** Open one runtime request on a dispatch transaction that already owns the run lock. */
+	static __OpenInTransaction(transaction: Prisma.TransactionClient, command: OpenElicitationCommand): Promise<ConversationElicitation | null>
+	{
+		return PrismaElicitationUnitOfWork._Repository(transaction).open(command);
+	}
+
+	/** Expire due runtime requests on a dispatch transaction that already owns the run lock. */
+	static __ExpireInTransaction(transaction: Prisma.TransactionClient, command: ExpireElicitationBatchCommand): Promise<ExpireElicitationBatchResult>
+	{
+		return PrismaElicitationUnitOfWork._Repository(transaction).expireDue(command);
 	}
 
 	/** Open one request atomically. */
@@ -363,9 +393,27 @@ export class PrismaElicitationUnitOfWork implements ElicitationUnitOfWork, Perso
 	{
 		return this._prisma.$transaction(async function _Transaction(transaction): Promise<TResult>
 		{
-			return work(new PrismaElicitationRepository(transaction));
+			return work(PrismaElicitationUnitOfWork._Repository(transaction));
 		}, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 	}
+
+	/** Construct the sole exact transaction-bound repository for all unit-of-work entry points. */
+	private static _Repository(transaction: Prisma.TransactionClient): ElicitationRepository
+	{
+		return new PrismaElicitationRepository(transaction);
+	}
+}
+
+/** Open one runtime request without nesting a second Prisma transaction. */
+export function __OpenRuntimeElicitationInTransaction(transaction: Prisma.TransactionClient, command: OpenElicitationCommand): Promise<ConversationElicitation | null>
+{
+	return PrismaElicitationUnitOfWork.__OpenInTransaction(transaction, command);
+}
+
+/** Expire due runtime requests without nesting a second Prisma transaction. */
+export function __ExpireRuntimeElicitationInTransaction(transaction: Prisma.TransactionClient, command: ExpireElicitationBatchCommand): Promise<ExpireElicitationBatchResult>
+{
+	return PrismaElicitationUnitOfWork.__ExpireInTransaction(transaction, command);
 }
 
 /** Project a persistence row into the browser-safe contract without protected payloads. */
@@ -375,6 +423,23 @@ function _Projection(row: { id: string; conversationId: string; runId: string; a
 	if (row.resolvedAt !== null) projection = { ...projection, resolvedAt: row.resolvedAt.toISOString() };
 	if (row.safeReason !== null) projection = { ...projection, safeReason: row.safeReason };
 	return projection;
+}
+
+/** Compare every runtime-controlled request field on replay; trusted times may differ between posts. */
+function _RequestMatchesOpenCommand(row: { id: string; siloId: string; conversationId: string; runId: string; attempt: number; assignedParticipantId: string; requestKey: string; purpose: ElicitationPurpose; bodyKind: ElicitationBodyKind; bodyDigest: string; purposePayloadDigest: string; requiresStepUp: boolean }, command: OpenElicitationCommand, bodyDigest: string): boolean
+{
+	return row.id === command.requestId
+		&& row.siloId === command.siloId
+		&& row.conversationId === command.conversationId
+		&& row.runId === command.runId
+		&& row.attempt === command.attempt
+		&& row.assignedParticipantId === command.assignedParticipantId
+		&& row.requestKey === command.requestKey
+		&& row.purpose === _PrismaPurpose(command.purpose)
+		&& row.bodyKind === _PrismaBodyKind(command.body.kind)
+		&& row.bodyDigest === bodyDigest
+		&& row.purposePayloadDigest === command.purposePayloadDigest
+		&& row.requiresStepUp === command.requiresStepUp;
 }
 
 /** Derive deadline expiry for reads without mutating canonical request authority. */
