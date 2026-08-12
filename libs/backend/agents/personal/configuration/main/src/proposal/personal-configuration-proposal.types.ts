@@ -1,6 +1,6 @@
 import type { PersonalConfigurationPatch } from "./personal-configuration-patch.types.js";
 
-/** Stable proposal outcomes and persistence statuses owned by this package. */
+/** Stable proposal outcomes and denial reasons owned by this package. */
 export enum PersonalConfigurationProposalCodes
 {
 	/** A durable future-revision proposal was recorded. */
@@ -44,14 +44,11 @@ export interface ProposePersonalConfigurationChangeCommand
 	readonly proposedAt: string;
 }
 
-/** Atomic persistence result for one durable proposal. */
+/** Validation reason why the proposal authority may deny a future-session change. */
+export type PersonalConfigurationProposalDenialReason =
+	PersonalConfigurationProposalCodes.InvalidCommand;
+
+/** Domain outcome for one proposal request. */
 export type ProposePersonalConfigurationChangeResult =
 	| { readonly outcome: PersonalConfigurationProposalCodes.Proposed; readonly changeId: string }
-	| { readonly outcome: PersonalConfigurationProposalCodes.Denied; readonly reason: PersonalConfigurationProposalCodes.InvalidCommand | PersonalConfigurationProposalCodes.ProvenanceConflict | PersonalConfigurationProposalCodes.PersistenceUnavailable };
-
-/** Persistence boundary for append-only personal configuration proposals. */
-export interface PersonalConfigurationChangeRepository
-{
-	/** Inserts one proposal only when every source coordinate is owned by the same user and silo. */
-	proposeAtomically(command: ProposePersonalConfigurationChangeCommand): Promise<{ readonly status: PersonalConfigurationProposalCodes.Proposed; readonly changeId: string } | { readonly status: PersonalConfigurationProposalCodes.ProvenanceConflict } | { readonly status: PersonalConfigurationProposalCodes.PersistenceUnavailable }>;
-}
+	| { readonly outcome: PersonalConfigurationProposalCodes.Denied; readonly reason: PersonalConfigurationProposalDenialReason };

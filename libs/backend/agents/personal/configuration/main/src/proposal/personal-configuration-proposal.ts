@@ -1,38 +1,29 @@
-import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
-
-import { _IsPersonalConfigurationPatch } from "./personal-configuration-patch.js";
-import { PersonalConfigurationProposalCodes, type PersonalConfigurationChangeRepository, type ProposePersonalConfigurationChangeCommand, type ProposePersonalConfigurationChangeResult } from "./personal-configuration-proposal.types.js";
+import { _ParsePersonalConfigurationProposalCommand } from "./personal-configuration-proposal.validator.js";
+import type { PersonalConfigurationProposalRepository } from "./personal-configuration-proposal-repository.types.js";
+import { PersonalConfigurationProposalCodes, type ProposePersonalConfigurationChangeCommand, type ProposePersonalConfigurationChangeResult } from "./personal-configuration-proposal.types.js";
 
 /** Persist a future-snapshot-only personal configuration proposal after strict coordinate validation. */
-export async function __ProposePersonalConfigurationChange(repository: PersonalConfigurationChangeRepository, command: ProposePersonalConfigurationChangeCommand): Promise<ProposePersonalConfigurationChangeResult>
+export async function __ProposePersonalConfigurationChange(repository: PersonalConfigurationProposalRepository, command: ProposePersonalConfigurationChangeCommand): Promise<ProposePersonalConfigurationChangeResult>
 {
-	// 1. Refuse caller-controlled empty identities or malformed evidence before persistence can be queried.
-	if (!_valid(command.siloId) || !_valid(command.userId) || !_valid(command.personaProfileId) || !_valid(command.agentServiceId) || !_valid(command.sourceConversationId) || !_valid(command.sourceRunId) || (command.sourceMessageId !== null && !_valid(command.sourceMessageId)) || !_IsPersonalConfigurationPatch(command.requestedPatch) || _DigestPatch(command.requestedPatch) !== command.requestedPatchDigest || Number.isNaN(Date.parse(command.proposedAt)))
-	{
-		return { outcome: PersonalConfigurationProposalCodes.Denied, reason: PersonalConfigurationProposalCodes.InvalidCommand };
-	}
+	// 1. Parse the complete caller-controlled command before persistence can be queried.
+	const parsed = _ParsePersonalConfigurationProposalCommand(command);
+	if (parsed === null) return _invalidCommand();
 
-	// 2. Insert through one authority transaction so source ownership cannot race a proposal.
-	const result = await repository.proposeAtomically(command);
-	if (result.status === PersonalConfigurationProposalCodes.Proposed) return { outcome: PersonalConfigurationProposalCodes.Proposed, changeId: result.changeId };
-	return { outcome: PersonalConfigurationProposalCodes.Denied, reason: result.status };
+	// 2. Insert through the database-guarded transaction authority.
+	const receipt = await repository.propose(parsed);
+	return _proposed(receipt.changeId);
 }
 
-/** Require a bounded non-empty identifier without defining an identifier syntax owned elsewhere. */
-function _valid(value: string): boolean
+/** Returns the stable denial for caller-controlled evidence outside the closed command model. */
+function _invalidCommand(): ProposePersonalConfigurationChangeResult
 {
-	return value.trim().length > 0 && value.length <= 200;
+	const result: ProposePersonalConfigurationChangeResult = { outcome: PersonalConfigurationProposalCodes.Denied, reason: PersonalConfigurationProposalCodes.InvalidCommand };
+	return result;
 }
 
-/** Canonicalise JSON-compatible input before deriving the only durable patch identity. */
-function _DigestPatch(value: Readonly<Record<string, unknown>>): string | null
+/** Returns the stable domain result for one durable proposal receipt. */
+function _proposed(changeId: string): ProposePersonalConfigurationChangeResult
 {
-	try
-	{
-		return ___DigestCanonicalJson(value as JsonValue);
-	}
-	catch
-	{
-		return null;
-	}
+	const result: ProposePersonalConfigurationChangeResult = { outcome: PersonalConfigurationProposalCodes.Proposed, changeId };
+	return result;
 }

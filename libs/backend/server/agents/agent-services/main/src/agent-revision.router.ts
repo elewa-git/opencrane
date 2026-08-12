@@ -344,12 +344,26 @@ export function __CreateAgentServicesRouter(dependencies: AgentServicesRouterDep
 /** Maps a run-now denial reason to a fail-closed HTTP status. */
 function _runDenialStatus(reason: AgentRevisionLifecycleDenial): number
 {
-	if (reason === "service_not_found") return 404;
-	if (reason === "service_not_runnable") return 409;
-	if (reason === "membership_stale" || reason === "persistence_unavailable") return 503;
-	if (reason === "memory_unavailable" || reason === "admission_concurrency_limited") return 503;
-	if (reason === "authority_conflict" || reason === "run_not_admittable" || reason === "revision_unavailable" || reason === "persona_unavailable" || reason === "conversation_unavailable" || reason === "memory_scope_unavailable" || reason === "tool_policy_unavailable" || reason === "skill_unavailable" || reason === "budget_unavailable" || reason === "identity_unavailable") return 409;
-	return 400;
+	switch (reason)
+	{
+		case "service_not_found": return 404;
+		case "service_not_runnable":
+		case "authority_conflict":
+		case "run_not_admittable":
+		case "revision_unavailable":
+		case "persona_unavailable":
+		case "conversation_unavailable":
+		case "memory_scope_unavailable":
+		case "tool_policy_unavailable":
+		case "skill_unavailable":
+		case "budget_unavailable":
+		case "identity_unavailable": return 409;
+		case "membership_stale":
+		case "persistence_unavailable":
+		case "memory_unavailable":
+		case "admission_concurrency_limited": return 503;
+		default: return 400;
+	}
 }
 
 /** Mutable schedule fields shared by the create and update surfaces. */
