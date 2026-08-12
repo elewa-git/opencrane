@@ -50,8 +50,8 @@ def _final_annotation_event(*annotations: dict[str, object]) -> object:
 class OpenAIAnnotationBoundaryTests(unittest.TestCase):
     """Accept only final exact container annotations and keep coordinates private."""
 
-    def test_only_final_container_file_citations_are_consumed_and_deduplicated(self) -> None:
-        """Partial text, generic file paths, and repeat citations cannot become output reads."""
+    def test_only_final_container_file_citations_are_consumed(self) -> None:
+        """Partial text and generic file paths cannot become output reads."""
         citation = {
             "type": "container_file_citation",
             "container_id": "container-private",
