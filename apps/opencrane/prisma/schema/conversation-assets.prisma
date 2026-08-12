@@ -44,6 +44,7 @@ model ConversationAsset {
   revision          ArtifactRevision?           @relation(fields: [artifactId, revisionId], references: [artifactId, id], onDelete: Restrict)
   uploadLease       ArtifactUploadLease?         @relation(fields: [uploadLeaseId], references: [id], onDelete: Restrict)
   outputTicket      ConversationAssetOutputTicket? @relation(fields: [outputTicketId, siloId, conversationId, runId, runAttempt, runEventSequence, runMessageId], references: [id, siloId, conversationId, runId, runAttempt, runEventSequence, outputMessageId], onDelete: Restrict, map: "conversation_assets_exact_output_ticket_fkey")
+  agentThreadDeliveries AgentThreadParentDelivery[]
 
   @@unique([conversationId, id])
   @@unique([outputTicketId, siloId, conversationId, runId, runAttempt, runEventSequence, runMessageId], map: "conversation_assets_exact_output_ticket_key")

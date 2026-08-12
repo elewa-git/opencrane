@@ -103,6 +103,7 @@ model AgentRun {
   @@unique([id, agentRevisionId])
   @@unique([id, inputSnapshotDigest])
   @@unique([conversationId, id])
+  @@unique([id, conversationId, siloId, agentServiceId], map: "agent_runs_thread_authority_key")
   @@unique([id, inputSnapshotDigest, conversationId, siloId, agentServiceId, agentRevisionId, effectiveContractDigest], map: "agent_run_snapshot_identity_key")
   @@index([agentServiceId, state])
   @@index([conversationId, acceptedAt])
