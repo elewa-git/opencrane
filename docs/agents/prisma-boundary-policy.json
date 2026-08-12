@@ -965,6 +965,15 @@
       ],
       "reason": "custody route pre-checks the active same-silo integration before any credential can reach Obot; the read belongs in a declared integrations repository later",
       "expiresOn": "2026-12-31"
+    },
+    {
+      "path": "libs/backend/server/agents/onboarding/main/src/prisma-user-onboarding-repository.ts",
+      "owner": "user-onboarding",
+      "operations": [
+        "transaction"
+      ],
+      "reason": "bootstrap chat start must create the child conversation before the parent pin inside one atomic write; extract a dedicated onboarding UnitOfWork with the next onboarding persistence boundary change.",
+      "expiresOn": "2026-12-31"
     }
   ]
 }
