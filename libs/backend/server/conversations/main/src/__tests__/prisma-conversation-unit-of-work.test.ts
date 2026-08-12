@@ -142,12 +142,12 @@ describe("PrismaConversationUnitOfWork", function _Suite()
 				childConversation: { lifecycle: ConversationLifecycle.Open, service: { name: "Research Agent" }, _count: { messages: 150, runs: 105 }, participants: [{ userId: "user-1", readThroughPosition: 90n }, { userId: "removed-user", readThroughPosition: 0n }], runs: [{ id: "run-105", attempt: 2, state: AgentRunState.RecoveryRequired, acceptedAt: new Date("2026-08-10T10:05:00.000Z"), finishedAt: null }] },
 				deliveries: [],
 			}) },
-			conversationTimelineEntry: { findMany, findFirst },
+			conversationTimelineEntry: { findMany, findFirst, count: vi.fn().mockResolvedValue(60) },
 		};
 
 		const snapshot = await _Authority(_Prisma(transaction)).openAgentThread(_CALLER, "parent-1", "child-1");
 
-		expect(snapshot).toMatchObject({ latestPosition: "150", representedThroughPosition: "100", messageCount: 150, participantUserIds: ["user-1"], runs: [{ ordinal: 105, state: "retrying" }] });
+		expect(snapshot).toMatchObject({ latestPosition: "150", representedThroughPosition: "100", messageCount: 150, unreadMessageCount: 60, participantUserIds: ["user-1"], runs: [{ ordinal: 105, state: "retrying" }] });
 		expect(__DecodeConversationProjectionCursor(snapshot?.cursor)).toEqual({ conversationId: "child-1", position: "100" });
 		expect(findMany).toHaveBeenCalledWith(expect.objectContaining({ orderBy: { position: "asc" }, take: 100 }));
 		expect(transaction.conversationAgentThread.findFirst).toHaveBeenCalledWith(expect.objectContaining({ include: expect.objectContaining({ deliveries: expect.objectContaining({ take: 100 }), childConversation: expect.objectContaining({ select: expect.objectContaining({ runs: expect.objectContaining({ take: 100 }) }) }) }) }));

@@ -161,6 +161,9 @@ export interface AgentThreadSnapshotView
 	readonly latestPosition: string;
 	readonly representedThroughPosition: string;
 	readonly messageCount: number;
+	/** Exact canonical message count after this participant's read coordinate. */
+	readonly unreadMessageCount: number;
+	/** Resume cursor for representedThroughPosition; never skips an omitted event. */
 	readonly cursor: string | null;
 	readonly messages: readonly ConversationMessageView[];
 	readonly runs: readonly AgentThreadRunView[];

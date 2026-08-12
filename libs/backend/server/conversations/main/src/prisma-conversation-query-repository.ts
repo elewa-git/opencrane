@@ -131,6 +131,7 @@ export class PrismaConversationQueryRepository implements ConversationQueryRepos
 		const activeParentUserIds = new Set(thread.parentConversation.participants.map(function _ParentUser(row) { return row.userId; }));
 		const entries = await this.prisma.conversationTimelineEntry.findMany({ where: { conversationId: childConversationId, messageId: { not: null } }, include: { message: { include: { invokedAgentThread: true } } }, orderBy: { position: "asc" }, take: _MESSAGE_LIMIT });
 		const latestEntry = await this.prisma.conversationTimelineEntry.findFirst({ where: { conversationId: childConversationId }, orderBy: { position: "desc" }, select: { position: true } });
+		const unreadMessageCount = await this.prisma.conversationTimelineEntry.count({ where: { conversationId: childConversationId, messageId: { not: null }, position: { gt: participant.readThroughPosition } } });
 		const representedPosition = entries.at(-1)?.position ?? 0n;
 		const latestPosition = latestEntry?.position ?? 0n;
 		const runs = [...thread.childConversation.runs].reverse();
@@ -150,6 +151,7 @@ export class PrismaConversationQueryRepository implements ConversationQueryRepos
 			latestPosition: latestPosition.toString(10),
 			representedThroughPosition: representedPosition.toString(10),
 			messageCount: thread.childConversation._count.messages,
+			unreadMessageCount,
 			cursor: representedPosition === 0n ? null : __EncodeConversationProjectionCursor({ conversationId: childConversationId, position: representedPosition.toString(10) }),
 			messages: entries.flatMap(function _Message(entry): readonly ConversationMessageView[] { return entry.message === null ? [] : [_messageView(entry.message, entry.position)]; }),
 			runs: runs.map(function _Run(run, index): AgentThreadRunView { return { id: run.id, ordinal: firstRunOrdinal + index, attempt: run.attempt, state: _RunState(run.state), acceptedAt: run.acceptedAt.toISOString(), finishedAt: run.finishedAt?.toISOString() ?? null }; }),
