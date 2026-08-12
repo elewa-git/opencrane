@@ -1,6 +1,6 @@
 import * as k8s from "@kubernetes/client-node";
 
-import { AGENT_CONTROLLER_PROJECTED_TOKEN_AUDIENCE, AGENT_CONTROLLER_SERVICE_ACCOUNT_NAME, AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, ARTIFACT_PREPROCESSOR_PROJECTED_TOKEN_AUDIENCE, ARTIFACT_PREPROCESSOR_SERVICE_ACCOUNT_NAME, MANAGED_AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, ___IsAgentRuntimeServiceAccountName, ___IsManagedAgentRuntimeServiceAccountName } from "@opencrane/contracts";
+import { AGENT_CONTROLLER_PROJECTED_TOKEN_AUDIENCE, AGENT_CONTROLLER_SERVICE_ACCOUNT_NAME, AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, ARTIFACT_PREPROCESSOR_PROJECTED_TOKEN_AUDIENCE, ARTIFACT_PREPROCESSOR_SERVICE_ACCOUNT_NAME, ARTIFACT_SCANNER_PROJECTED_TOKEN_AUDIENCE, ARTIFACT_SCANNER_SERVICE_ACCOUNT_NAME, MANAGED_AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, ___IsAgentRuntimeServiceAccountName, ___IsManagedAgentRuntimeServiceAccountName } from "@opencrane/contracts";
 import { ___DoWithTrace } from "@opencrane/backend/observability";
 
 import type { ChannelProxyTokenReviewerConfig, FixedServiceAccountTokenReviewer, MemoryGatewayServerIdentityConfig, ProjectedTokenReviewApi, ReviewedFixedServiceAccountIdentity, ReviewedSkillWorkloadIdentity, RuntimeIdentityNamespaceInput, RuntimeIdentityNamespaces, RuntimeTokenReviewer, RuntimeTokenReviewerConfig, RuntimeWorkloadIdentity, SkillWorkloadTokenReviewer } from "./workload-identity.types.js";
@@ -82,6 +82,12 @@ export function _CreateAgentControllerTokenReviewer(authApi: ProjectedTokenRevie
 export function _CreateArtifactPreprocessorTokenReviewer(authApi: ProjectedTokenReviewApi, namespace: string): FixedServiceAccountTokenReviewer
 {
 	return _CreateFixedServiceAccountTokenReviewer(authApi, ARTIFACT_PREPROCESSOR_PROJECTED_TOKEN_AUDIENCE, namespace, ARTIFACT_PREPROCESSOR_SERVICE_ACCOUNT_NAME);
+}
+
+/** Build the fixed TokenReview adapter for the dedicated artifact-scanner identity. */
+export function _CreateArtifactScannerTokenReviewer(authApi: ProjectedTokenReviewApi, namespace: string): FixedServiceAccountTokenReviewer
+{
+	return _CreateFixedServiceAccountTokenReviewer(authApi, ARTIFACT_SCANNER_PROJECTED_TOKEN_AUDIENCE, namespace, ARTIFACT_SCANNER_SERVICE_ACCOUNT_NAME);
 }
 
 /** Build the fixed TokenReview adapter for one deployment-owned channel-proxy identity. */

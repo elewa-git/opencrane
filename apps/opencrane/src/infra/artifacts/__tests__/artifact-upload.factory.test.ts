@@ -4,9 +4,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { __VerifyArtifactReadLease } from "@opencrane/backend/artifacts/authorization";
+import { ConversationAssetDisposition } from "@opencrane/models/conversation-assets";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { _CreateArtifactServicePromotionPort, _CreateArtifactUploadGateway, _CreateSkillAuthoringArtifactReader } from "../artifact-upload.factory.js";
+import { _CreateArtifactServicePromotionPort, _CreateArtifactUploadGateway, _CreateConversationAssetContentBroker, _CreateSkillAuthoringArtifactReader } from "../artifact-upload.factory.js";
 import { _CreateArtifactServiceReadPort } from "../artifact-service-read-port.factory.js";
 
 const _serviceUrl = "http://opencrane-artifact-service.default.svc.cluster.local:8080";
@@ -100,6 +101,56 @@ describe("artifact upload app composition", function _suite()
 			vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("artifact", { status: 200, headers: { "content-length": "8", "content-type": "text/plain" } })));
 			const reader = _CreateSkillAuthoringArtifactReader({ artifactRevision } as never, { ARTIFACT_SERVICE_URL: _serviceUrl, ARTIFACT_LEASE_PRIVATE_KEY_PATH: keyPath });
 			await expect(reader.read({ siloId: "silo-1", artifactId: "artifact-1", artifactRevisionId: "revision-1", contentAddress: `sha256:${"a".repeat(64)}`, byteLength: 9, mediaType: "application/gzip" })).rejects.toThrow("metadata did not match");
+		}
+		finally
+		{
+			rmSync(directory, { recursive: true, force: true });
+		}
+	});
+
+	it("brokers exact ready conversation bytes without returning its read lease", async function _ReadsConversationAsset()
+	{
+		const directory = mkdtempSync(join(tmpdir(), "opencrane-conversation-asset-read-"));
+		const keyPath = join(directory, "lease.pem");
+		const keys = generateKeyPairSync("ed25519");
+		const privateKey = keys.privateKey.export({ type: "pkcs8", format: "pem" }).toString();
+		const publicKey = keys.publicKey.export({ type: "spki", format: "pem" }).toString();
+		writeFileSync(keyPath, privateKey, "utf8");
+		try
+		{
+			const artifactRevision = { findFirst: vi.fn().mockResolvedValue({ id: "revision-1", artifactId: "artifact-1", contentAddress: `sha256:${"a".repeat(64)}`, byteLength: 5n, mediaType: "application/pdf", artifact: { siloId: "silo-1" } }) };
+			const fetchMock = vi.fn().mockResolvedValue(new Response("proof", { status: 200, headers: { "content-length": "5", "content-type": "application/pdf" } }));
+			vi.stubGlobal("fetch", fetchMock);
+			const broker = _CreateConversationAssetContentBroker({ artifactRevision } as never, { ARTIFACT_SERVICE_URL: _serviceUrl, ARTIFACT_LEASE_PRIVATE_KEY_PATH: keyPath });
+			const bytes = await broker.open({ siloId: "silo-1", artifactId: "artifact-1", artifactRevisionId: "revision-1", displayName: "brief.pdf", mediaType: "application/pdf", byteLength: 5, disposition: ConversationAssetDisposition.Preview });
+
+			expect(bytes).not.toBeNull();
+			const chunks: Uint8Array[] = [];
+			for await (const chunk of bytes ?? []) chunks.push(chunk);
+			expect(Buffer.concat(chunks)).toEqual(Buffer.from("proof"));
+			const request = fetchMock.mock.calls[0]?.[1] as RequestInit;
+			const compactLease = (request.headers as Record<string, string>)["x-opencrane-artifact-read-lease"] ?? "";
+			expect(__VerifyArtifactReadLease(compactLease, publicKey, Math.floor(Date.now() / 1_000))).toMatchObject({ artifactId: "artifact-1", artifactRevisionId: "revision-1", byteLength: 5, mediaType: "application/pdf" });
+		}
+		finally
+		{
+			rmSync(directory, { recursive: true, force: true });
+		}
+	});
+
+	it("refuses a ready asset when the reloaded published metadata no longer matches", async function _RejectsChangedConversationAsset()
+	{
+		const directory = mkdtempSync(join(tmpdir(), "opencrane-conversation-asset-read-"));
+		const keyPath = join(directory, "lease.pem");
+		writeFileSync(keyPath, generateKeyPairSync("ed25519").privateKey.export({ type: "pkcs8", format: "pem" }).toString(), "utf8");
+		try
+		{
+			const artifactRevision = { findFirst: vi.fn().mockResolvedValue({ id: "revision-1", artifactId: "artifact-1", contentAddress: `sha256:${"a".repeat(64)}`, byteLength: 6n, mediaType: "application/pdf", artifact: { siloId: "silo-1" } }) };
+			const fetchMock = vi.fn();
+			vi.stubGlobal("fetch", fetchMock);
+			const broker = _CreateConversationAssetContentBroker({ artifactRevision } as never, { ARTIFACT_SERVICE_URL: _serviceUrl, ARTIFACT_LEASE_PRIVATE_KEY_PATH: keyPath });
+			await expect(broker.open({ siloId: "silo-1", artifactId: "artifact-1", artifactRevisionId: "revision-1", displayName: "brief.pdf", mediaType: "application/pdf", byteLength: 5, disposition: ConversationAssetDisposition.Preview })).resolves.toBeNull();
+			expect(fetchMock).not.toHaveBeenCalled();
 		}
 		finally
 		{

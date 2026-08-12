@@ -1,0 +1,29 @@
+:host {
+	display: inline-flex;
+	max-width: 100%;
+	--p-button-link-color: var(--oc-accent-active);
+}
+
+.wo-attachment-chip {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--oc-space-1);
+	max-width: 100%;
+	min-height: 32px;
+	padding: 3px 5px 3px 8px;
+	border: 1px solid var(--oc-border-default);
+	border-radius: var(--oc-radius-chip);
+	background: var(--oc-surface-subtle);
+	color: var(--oc-ink-default);
+	font-size: var(--oc-text-xs);
+
+	&--working { border-style: dashed; }
+	&--failed { border-color: color-mix(in srgb, var(--oc-danger) 35%, var(--oc-border-default)); background: var(--oc-danger-soft); }
+	&--muted { opacity: var(--oc-opacity-disabled); }
+
+	&__type { flex: none; color: var(--oc-ink-muted); font-size: var(--oc-text-2xs); }
+	&__name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+	&__status { flex: none; color: var(--oc-ink-muted); font-size: var(--oc-text-2xs); }
+	&__progress { flex: none; width: 48px; height: 3px; border-radius: var(--oc-radius-round); background: var(--oc-border-subtle); overflow: hidden; }
+	&__progress span { display: block; height: 100%; border-radius: inherit; background: var(--oc-accent-active); }
+}

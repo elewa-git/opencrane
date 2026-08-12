@@ -44,7 +44,7 @@ top level under `server/` — not inside any one domain group — because it mus
 ## Dependency direction
 
 Tagged `scope:api-spec`: it may depend on `scope:shared` and on the route-owning capability scopes it
-aggregates — `access-tokens`, `audit`, `awareness`, `conversations`, `grants`, `groups`, `mcp`, `metrics`,
+aggregates — `access-tokens`, `audit`, `awareness`, `conversation-assets`, `conversations`, `grants`, `groups`, `mcp`, `metrics`,
 `model-routing`, `policies`, `projection`, `providers`, `retrieval`, `skills`, `spend`, and `tenants`
 — and never on apps. Nothing else depends on it in reverse.
 

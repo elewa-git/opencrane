@@ -13,7 +13,9 @@ its model proxy without exposing the raw key afterwards.
 It is the entry point that turns a supplied key into usable models. When an org admin sets a BYOK
 key, this package stores it as a Kubernetes Secret, registers it with LiteLLM (the model proxy),
 records a credential row, and seeds the provider's default models. It also owns the model registry —
-the definitions the routing layer later resolves against.
+the definitions the routing layer later resolves against. A model definition may explicitly admit
+PNG image generation; that allowlist is frozen into each compiled run before the runtime can enable
+the provider-native image tool.
 
 ```
  org admin sets a raw provider key   (OpenAI · Anthropic · …)

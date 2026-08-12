@@ -32,6 +32,10 @@ runtime Jobs ----> LiteLLM (attempt model key)
 opencrane server ----> Obot MCP proxy (service credential, durable action fence)
 
 artifact-service <---- brokered bytes ---- artifact-preprocessor Job namespace
+        ^
+        +-------- quarantined bytes ---- artifact-scanner namespace
+                                           |
+                                  clean / rejected result
 ```
 
 The `apps/_infra/deploy-k8s` umbrella chart composes the app-owned Helm units for one organisation.
@@ -50,6 +54,7 @@ Cluster-wide ingress, certificate, DNS, and CloudNativePG controllers are extern
 | Managed run Job | `apps/managed-agent-runtime` | none; one scheduled or triggered attempt |
 | Artifact bytes | `apps/artifact-service` | ArtifactStore behind server-issued leases |
 | Document extraction | `apps/artifact-preprocessor` | none; brokered input and output |
+| Malware scanning | `apps/artifact-scanner` | none; brokered quarantined bytes and fenced result only |
 | Skill authoring Job | `apps/skill-authoring` | none; one governed workload |
 | Tool execution Job | `apps/tool-runner` | none; one governed workload |
 
@@ -65,6 +70,8 @@ reusable behaviour and never own a deployment.
 - **Skill-authoring namespace** — candidate-skill Jobs with no standing worker.
 - **Tool-runner namespace** — governed tool Jobs with no standing worker.
 - **Artifact-preprocessor namespace** — bounded document-extraction Jobs with broker-only byte flow.
+- **Artifact-scanner namespace** — an outbound-only scanner Deployment with broker-only quarantined
+  byte flow, pinned offline definitions, and no database or ArtifactStore authority.
 
 Each Job namespace has a restricted pod-security label, default-deny networking, bounded resource
 quota, and a dedicated zero- or least-privilege service account.
@@ -83,6 +90,14 @@ Runtime model traffic reaches LiteLLM with a per-attempt virtual key. Integratio
 cross a durable server-owned invocation fence: the server resolves the current Obot assignment,
 performs the call with its mounted service credential, stores the result, and sends only that saved
 result to the runtime. Runtime Jobs receive no Obot address or credential.
+
+Uploaded and generated conversation files remain hidden while quarantined. The scanner authenticates
+to the private server route with its dedicated projected ServiceAccount token. The server rechecks
+the live claim fence and streams exact bytes through its own ArtifactStore lease; it never gives the
+scanner a storage address, signing key, or database credential. Only a clean result publishes the
+revision and moves the conversation asset to Ready. Rejection or a terminal scan failure moves it to
+Failed. When the scanner capability is disabled, public and runtime upload admission fails closed so
+no file can remain indefinitely in Processing.
 
 The release deploys `memory-gateway` as the only NetworkPolicy-admitted path to private Cognee. Its
 search-only route verifies an audience-bound server ServiceAccount token with TokenReview and also

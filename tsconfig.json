@@ -31,6 +31,9 @@
       "@opencrane/backend/server/agents/artifacts": [
         "./libs/backend/server/agents/artifacts/main/src/index.ts"
       ],
+      "@opencrane/backend/server/conversation-assets": [
+        "./libs/backend/server/conversation-assets/main/src/index.ts"
+      ],
       "@opencrane/backend/artifacts/store": [
         "./libs/backend/artifacts/store/main/src/index.ts"
       ],
@@ -115,6 +118,9 @@
       "@opencrane/backend/channel-proxy": [
         "./libs/backend/channel-proxy/main/src/index.ts"
       ],
+      "@opencrane/backend/artifacts/scanner": [
+        "./libs/backend/artifacts/scanner/main/src/index.ts"
+      ],
       "@opencrane/util": [
         "./libs/util/src/index.ts"
       ],
@@ -126,6 +132,9 @@
       ],
       "@opencrane/models/conversations": [
         "./libs/models/conversations/main/src/index.ts"
+      ],
+      "@opencrane/models/conversation-assets": [
+        "./libs/models/conversation-assets/main/src/index.ts"
       ],
       "@opencrane/models/artifacts": [
         "./libs/models/artifacts/main/src/index.ts"
@@ -222,6 +231,12 @@
       ],
       "@opencrane/state/conversation/ag-ui": [
         "./libs/frontend/state/conversation/ag-ui/src/index.ts"
+      ],
+      "@opencrane/state/conversation/assets": [
+        "./libs/frontend/state/conversation/assets/src/index.ts"
+      ],
+      "@opencrane/features/conversation-assets": [
+        "./libs/frontend/features/conversation-assets/src/index.ts"
       ],
       "@opencrane/state/mcp/adapter": [
         "./libs/frontend/state/mcp/adapter/src/index.ts"

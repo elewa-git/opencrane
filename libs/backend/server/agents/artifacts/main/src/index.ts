@@ -1,6 +1,9 @@
 export { __FinalizeArtifactRevision } from "./artifact-finalization.js";
 export { __ClaimArtifactPreprocessJob, __CompleteArtifactPreprocessJob, __FailArtifactPreprocessJob, __IssueArtifactPreprocessOutputLease } from "./artifact-preprocessing.js";
 export { __CreateArtifactPreprocessorRouter } from "./artifact-preprocessing.router.js";
+export { __CreateArtifactScannerRouter } from "./artifact-scanning.router.js";
+export { ConversationAssetScanLifecycleStates } from "./artifact-scanning.types.js";
+export { PrismaArtifactScanUnitOfWork } from "./prisma-artifact-scan-unit-of-work.js";
 export { __IssueArtifactReadLease } from "./artifact-read-lease.js";
 export { IssueArtifactReadLeaseOutcomes } from "./artifact-read-lease.types.js";
 export { _CreateArtifactCatalogueRepository, _CreateArtifactPreprocessAuthority, _CreateArtifactUploadAuthority } from "./prisma-artifact-authority.composition.js";
@@ -10,6 +13,7 @@ export { _CreatePersonalArtifactCatalogueRouter } from "./prisma-personal-artifa
 export { _PersonalArtifactsOpenapiPaths } from "./openapi.js";
 export type { ArtifactAuthorityRepository, ArtifactStorePromotionReceipt, AtomicFinalizeArtifactResult, FinalizeArtifactRevisionCommand, FinalizeArtifactRevisionResult, PersonalArtifactCatalogueRepository, PersonalArtifactEntry } from "./artifact-finalization.types.js";
 export type { ArtifactPreprocessCompletionRequest, ArtifactPreprocessOutputBroker, ArtifactPreprocessOutputLeaseProjection, ArtifactPreprocessOutputLeaseRequest, ArtifactPreprocessRepository, ArtifactPreprocessSourceBroker, ArtifactPreprocessSourceLeaseIssuer, ArtifactPreprocessSourceRead, ArtifactPreprocessorRouterDependencies, ArtifactPreprocessorTokenReviewer, ReviewedArtifactPreprocessorIdentity } from "./artifact-preprocessing.types.js";
+export type { ArtifactScanRepository, ArtifactScannerRouterDependencies, ArtifactScannerTokenReviewer, ArtifactScanSourceBroker, ArtifactScanSourceRead, ConversationAssetScanLifecycleRepository, ReviewedArtifactScannerIdentity } from "./artifact-scanning.types.js";
 export type { ArtifactReadLeaseRepository, ArtifactReadLeaseSigner, IssueArtifactReadLeaseCommand, IssueArtifactReadLeaseResult, PublishedArtifactReadTarget } from "./artifact-read-lease.types.js";
 export type { PersonalArtifactCaller, PersonalArtifactCatalogueRouterDependencies } from "./personal-artifact-catalogue.router.types.js";
 export type { ArtifactServicePromotionPort, ArtifactUploadCryptoPort, ArtifactUploadLeaseRepository, ArtifactUploadResult, VerifiedArtifactUploadCommand } from "./artifact-upload.types.js";

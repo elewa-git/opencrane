@@ -57,7 +57,7 @@ async function _Main(): Promise<void>
 
 	// 5. Build separate HTTP listeners; only the internal app receives workload-only routes.
 	const authentication = _CreatePublicAuthentication(prisma, kubernetes.customApi, config.standaloneFirstUserAdmission);
-	const publicApp = _CreatePublicApp(prisma, kubernetes.coreApi, managedRunAdmission, personalRunAdmission, runCancellation, config.runtime.serverNamespace, obot.custody, authentication);
+	const publicApp = _CreatePublicApp(prisma, kubernetes.coreApi, managedRunAdmission, personalRunAdmission, runCancellation, config.runtime.serverNamespace, obot.custody, authentication, config.runtime.artifactScannerEnabled);
 	publicApp.locals.artifactUploadGateway = _CreateArtifactUploadGateway(prisma);
 	const internalApp = _CreateInternalApp(prisma, kubernetes.authApi, config.runtime, memoryGateway, authentication.sessionMiddleware);
 

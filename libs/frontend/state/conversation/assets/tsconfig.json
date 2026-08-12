@@ -1,0 +1,8 @@
+{
+  "extends": "../../../../../tsconfig.frontend.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "types": []
+  },
+  "include": ["src/**/*.ts", "vitest.config.ts"]
+}

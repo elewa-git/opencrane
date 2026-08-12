@@ -14,6 +14,12 @@ export interface ChannelTargetRuntimeConfig
 /** Settings read once at startup, used to compose workload identity, dispatch, and worker routes. */
 export interface InternalRuntimeConfig
 {
+	/** Whether the restricted artifact-scanner plane is enabled. */
+	readonly artifactScannerEnabled: boolean;
+	/** Complete duration allowed for download, scan, and result reporting. */
+	readonly artifactScannerClaimLeaseMilliseconds: number;
+	/** Namespace reserved for artifact-scanner Pods when enabled. */
+	readonly artifactScannerNamespace: string | undefined;
 	/** Whether the restricted artifact-preprocessor plane is enabled. */
 	readonly artifactPreprocessorEnabled: boolean;
 	/** Maximum accepted and promoted artifact-preprocessor output size. */

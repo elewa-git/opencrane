@@ -12,6 +12,7 @@ its slot; the shell itself is `workspace`.
 | Package | What it owns |
 | --- | --- |
 | [`context`](./context/README.md) | The right-hand context pane. |
+| [`conversation-assets`](./conversation-assets/README.md) | Attachment chips, transcript file cards, and grouped Files presentation. |
 | [`conversation`](./conversation/README.md) | The centre conversation pane. |
 | [`notifications`](./notifications/README.md) | The notification popover. |
 | [`onboarding`](./onboarding/README.md) | One resumable lifecycle shell with interview, resolution, review, and ready states. |

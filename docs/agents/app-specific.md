@@ -21,6 +21,7 @@ root version in the same slice. Documentation-only changes do not advance an app
 | [`apps/managed-agent-runtime`](../../apps/managed-agent-runtime/README.md) | Isolated namespace and identity profile for scheduled and triggered managed runs. |
 | [`apps/artifact-service`](../../apps/artifact-service/README.md) | Governed artifact byte promotion and receipt service. |
 | [`apps/artifact-preprocessor`](../../apps/artifact-preprocessor/README.md) | Broker-only document extraction worker. |
+| [`apps/artifact-scanner`](../../apps/artifact-scanner/README.md) | Broker-only malware scanner for quarantined revisions. |
 | [`apps/skill-authoring`](../../apps/skill-authoring/README.md) | Isolated candidate-skill Job plane. |
 | [`apps/tool-runner`](../../apps/tool-runner/README.md) | Isolated governed tool-execution Job plane. |
 | [`apps/postgres`](../../apps/postgres/README.md) | OpenCrane-owned PostgreSQL deployment and clean baseline bootstrap. |
@@ -38,12 +39,13 @@ app's source.
 | `libs/backend/agents/execution/*` | Immutable run inputs, run lifecycle, and runtime protocol admission. |
 | `libs/backend/agents/runtime/*` | Kubernetes Job projection and controller orchestration. |
 | `libs/backend/agents/skills/*` | Governed skill authoring and execution workloads. |
-| `libs/backend/artifacts/*` | Artifact authorization, storage, and preprocessing. |
+| `libs/backend/artifacts/*` | Artifact authorization, storage, preprocessing, and fenced malware scanning. |
 | [`libs/backend/channel-proxy`](../../libs/backend/channel-proxy/main/README.md) | Reusable inbound-channel trust-boundary logic. |
 | [`libs/backend/conversations/projection`](../../libs/backend/conversations/projection/main/README.md) | Transport-neutral redaction, AG-UI mapping, cursoring, and live streaming for every conversation mode. |
 | [`libs/backend/server`](../../libs/backend/server/README.md) | API capabilities grouped by agents, IAM, gateways, knowledge, reporting, and organisation scope. |
 | [`libs/backend/server/agents/onboarding`](../../libs/backend/server/agents/onboarding/main/README.md) | Durable, session-owner-bound onboarding route state and exact persona/bootstrap references. |
 | [`libs/backend/server/conversations`](../../libs/backend/server/conversations/main/README.md) | Mode-correct conversation authority, participant visibility, canonical timeline, authorised stream readers, and HTTP routes. |
+| [`libs/backend/server/conversation-assets`](../../libs/backend/server/conversation-assets/main/README.md) | Participant upload, quarantine, scan, and message-attachment authority. |
 | [`libs/backend/server/infra`](../../libs/backend/server/infra/README.md) | OpenCrane server runtime, transport, identity, and external-I/O seams. |
 | [`libs/backend/observability`](../../libs/backend/observability/README.md) | Cross-cutting structured logging and execution tracing. |
 

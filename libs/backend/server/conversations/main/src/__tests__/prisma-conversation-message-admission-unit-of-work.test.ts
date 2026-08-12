@@ -31,16 +31,16 @@ function _ActiveMembership(): object
 	return { findFirst: vi.fn().mockResolvedValue({ clusterTenant: "silo-1" }) };
 }
 
-/** Creates the transaction-scoped mutation adapter used by run admission callbacks. */
-function _CreateMutationRepository(transaction: RunAdmissionTransaction): PrismaConversationMutationRepository
+/** Creates the no-op attachment port used by text-only conversation tests. */
+function _CreateAttachmentAdmission(): { readonly bindReadyAssets: () => Promise<void> }
 {
-	return new PrismaConversationMutationRepository(transaction.prisma);
+	return { bindReadyAssets: vi.fn().mockResolvedValue(undefined) };
 }
 
 /** Creates message admission over deliberately narrow Prisma and run-admission test doubles. */
 function _Admission(prisma: object, runAdmission: Partial<PersonalRunAdmissionPort>): PrismaConversationMessageAdmissionUnitOfWork
 {
-	return new PrismaConversationMessageAdmissionUnitOfWork(prisma as never, runAdmission as PersonalRunAdmissionPort, _CreateMutationRepository);
+	return new PrismaConversationMessageAdmissionUnitOfWork(prisma as never, runAdmission as PersonalRunAdmissionPort, _CreateMutationRepository, _CreateAttachmentAdmission);
 }
 
 describe("PrismaConversationMessageAdmissionUnitOfWork", function _Suite()
@@ -173,3 +173,8 @@ describe("PrismaConversationMessageAdmissionUnitOfWork", function _Suite()
 		expect(create).not.toHaveBeenCalled();
 	});
 });
+/** Creates the transaction-scoped mutation adapter used by run admission callbacks. */
+function _CreateMutationRepository(transaction: RunAdmissionTransaction): PrismaConversationMutationRepository
+{
+	return new PrismaConversationMutationRepository(transaction.prisma);
+}

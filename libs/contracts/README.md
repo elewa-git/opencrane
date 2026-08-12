@@ -45,7 +45,9 @@ verified identity provenance; it carries only immutable coordinates and canonica
 provider credentials or mutable source objects. Its integration assignments record an integration
 identifier plus each revision-reviewed tool name, description, exact input JSON Schema, and
 canonical schema digest; provider addressing and credentials remain entirely behind the
-server-owned action execution boundary and never enter the snapshot or runtime. Identity is
+server-owned action execution boundary and never enter the snapshot or runtime. The compiled model
+route also freezes the model registry's generated-output allowlist; the runtime
+cannot infer image-generation authority from a prompt or provider response. Identity is
 explicitly tagged: a user run
 pins a human's signed fleet membership, while a managed run pins the derived service principal, its
 signed membership, and the exact approved non-personal scopes. A service record cannot be read as a
@@ -172,4 +174,4 @@ and other shared packages — never on apps, backend domains, or the frontend/se
 
 - Parent index: [OpenCrane](../../README.md)
 - Siblings: [util](../util/README.md) · [observability](../backend/observability/README.md)
-- Re-exported models: [models/agents](../models/agents/main/README.md) · [models/conversations](../models/conversations/main/README.md) · [models/artifacts](../models/artifacts/main/README.md) · [models/authorization](../models/authorization/main/README.md)
+- Re-exported models: [models/agents](../models/agents/main/README.md) · [models/conversations](../models/conversations/main/README.md) · [models/conversation-assets](../models/conversation-assets/main/README.md) · [models/artifacts](../models/artifacts/main/README.md) · [models/authorization](../models/authorization/main/README.md)

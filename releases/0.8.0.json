@@ -6,7 +6,7 @@
   "database": {
     "schemaVersion": "0.8.0",
     "baselinePath": "apps/opencrane/prisma/bootstrap/target-baseline.sql",
-    "baselineSha256": "a4917eb3e550b52022226d632564282da5ad0410bb699f6c1a7c57259389c4e3"
+    "baselineSha256": "044b2a9533f39699797b1a5309f3fbdbc5e74ce30577fe6bb2dc082424c76f90"
   },
   "projects": {
     "@opencrane/website": {
@@ -27,6 +27,13 @@
     },
     "artifact-preprocessor": {
       "root": "apps/artifact-preprocessor",
+      "adaptedVersion": "0.8.0",
+      "packageVersion": "0.8.0",
+      "chartVersion": "0.8.0",
+      "chartAppVersion": "0.8.0"
+    },
+    "artifact-scanner": {
+      "root": "apps/artifact-scanner",
       "adaptedVersion": "0.8.0",
       "packageVersion": "0.8.0",
       "chartVersion": "0.8.0",

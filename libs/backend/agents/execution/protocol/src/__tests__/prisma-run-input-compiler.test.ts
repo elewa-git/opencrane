@@ -45,19 +45,27 @@ function _snapshot(overrides: Partial<RunInputSnapshot> = {}): RunInputSnapshot
 }
 
 /** Build the fake transaction reads the compile steps perform. */
-function _transaction(): never
+function _transaction(modelDefinition: unknown = null): never
 {
 	return {
 		personaRevision: { findUnique: vi.fn().mockResolvedValue(null) },
 		conversationMessage: { findMany: vi.fn().mockResolvedValue([]) },
 		artifactRevision: { findMany: vi.fn().mockResolvedValue([]) },
 		skillRevision: { findMany: vi.fn().mockResolvedValue([]) },
-		modelDefinition: { findFirst: vi.fn().mockResolvedValue(null) },
+		modelDefinition: { findFirst: vi.fn().mockResolvedValue(modelDefinition) },
 	} as never;
 }
 
 describe("__CreatePrismaRunInputCompiler memory statements", function _describePrismaRunInputCompiler()
 {
+	it("freezes the registered model's generated-output capability into the compiled route", async function _FreezesGeneratedOutputCapability()
+	{
+		const transaction = _transaction({ publicModelName: "silo-default", generatedOutputCapabilities: ["image_png", "code_execution_files", "unknown"] });
+		const compiled = await __CreatePrismaRunInputCompiler(new __UnavailableMemoryGatewayClient())(_snapshot({ memoryFacts: [], memoryQueryPolicy: { scope: "none" } }), transaction);
+
+		expect(compiled.model.generatedOutputCapabilities).toEqual(["image_png", "code_execution_files"]);
+	});
+
 	it("inlines digest-verified statements in the sorted frozen reference order", async function _inlinesVerifiedStatements()
 	{
 		const query = vi.fn().mockResolvedValue({ facts: [{ factId: "fact-b", content: "second fact" }, { factId: "fact-a", content: "first fact" }, { factId: "fact-unrelated", content: "noise" }] });

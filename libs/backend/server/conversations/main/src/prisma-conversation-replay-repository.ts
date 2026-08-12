@@ -1,5 +1,6 @@
 import { ConversationTimelineEntryKind, OrgMemberStatus, type Prisma } from "@prisma/client";
 import { __EncodeConversationProjectionCursor, ConversationProjectionReadStatuses, type ConversationProjectionEventRow, type ConversationProjectionReadResult, type ReadConversationProjectionCommand } from "@opencrane/backend/conversations/projection";
+import { ConversationSystemEventTypes } from "@opencrane/models/conversations";
 
 import type { ConversationReplayRepository } from "./replay-reader.types.js";
 
@@ -36,7 +37,10 @@ export class PrismaConversationReplayRepository implements ConversationReplayRep
 			where: {
 				conversationId: command.conversationId,
 				position: boundedPosition,
-				kind: { in: [ConversationTimelineEntryKind.RunEvent, ConversationTimelineEntryKind.Message] },
+				OR: [
+					{ kind: { in: [ConversationTimelineEntryKind.RunEvent, ConversationTimelineEntryKind.Message] } },
+					{ kind: ConversationTimelineEntryKind.System, payload: { equals: { eventType: ConversationSystemEventTypes.AssetsChanged } } },
+				],
 			},
 			include: { runEvent: true, message: true },
 			orderBy: { position: "asc" },
@@ -52,6 +56,10 @@ export class PrismaConversationReplayRepository implements ConversationReplayRep
 					runId: entry.message.runId, type: "conversation.message", payload: { messageId: entry.message.id, role: entry.message.role, state: entry.message.state, blocks: entry.message.blocks }, occurredAt: entry.occurredAt.toISOString(),
 				}];
 			}
+			if (entry.kind === ConversationTimelineEntryKind.System && _AssetsChanged(entry.payload))
+			{
+				return [{ cursor: __EncodeConversationProjectionCursor({ conversationId: command.conversationId, position }), conversationId: command.conversationId, position, runId: null, type: ConversationSystemEventTypes.AssetsChanged, payload: {}, occurredAt: entry.occurredAt.toISOString() }];
+			}
 			if (entry.runEvent === null || entry.runId === null) return [];
 			return [{
 				cursor: __EncodeConversationProjectionCursor({ conversationId: command.conversationId, position }),
@@ -65,4 +73,10 @@ export class PrismaConversationReplayRepository implements ConversationReplayRep
 		});
 		return { status: ConversationProjectionReadStatuses.Authorized, rows };
 	}
+}
+
+/** Admit only the exact payload-free asset-list invalidation marker. */
+function _AssetsChanged(value: Prisma.JsonValue | null): boolean
+{
+	return value !== null && typeof value === "object" && !Array.isArray(value) && Object.keys(value).length === 1 && value["eventType"] === ConversationSystemEventTypes.AssetsChanged;
 }

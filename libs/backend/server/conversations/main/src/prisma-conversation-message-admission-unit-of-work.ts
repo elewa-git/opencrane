@@ -10,7 +10,7 @@ import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 
 import { ConversationAuthorityOutcomes, ConversationWriteDenialReasons } from "./conversation-authority.types.js";
 import type { ConversationCaller, ConversationMessageView, ConversationWriteDenial, SubmitConversationMessageRequest, SubmitConversationMessageResult } from "./conversation-authority.types.js";
-import type { ConversationMessageAdmissionUnitOfWork, ConversationMessageIdempotencyConflict, ConversationMessageSubmissionPreflight } from "./conversation-message-admission.types.js";
+import type { ConversationAttachmentAdmissionFactory, ConversationMessageAdmissionUnitOfWork, ConversationMessageIdempotencyConflict, ConversationMessageSubmissionPreflight } from "./conversation-message-admission.types.js";
 import { PrismaConversationMutationRepository } from "./prisma-conversation-mutation-repository.js";
 import type { ConversationMutationRepository, ConversationMutationRepositoryFactory } from "./prisma-conversation-mutation-repository.types.js";
 import { PrismaConversationQueryRepository } from "./prisma-conversation-query-repository.js";
@@ -21,13 +21,15 @@ export class PrismaConversationMessageAdmissionUnitOfWork implements Conversatio
 {
 	private readonly prisma: PrismaClient;
 	private readonly runAdmission: PersonalRunAdmissionPort;
+	private readonly createAttachmentAdmission: ConversationAttachmentAdmissionFactory;
 	private readonly createMutationRepository: ConversationMutationRepositoryFactory;
 
 	/** Creates message admission over the conversation database and internal run-admission port. */
-	constructor(prisma: PrismaClient, runAdmission: PersonalRunAdmissionPort, createMutationRepository: ConversationMutationRepositoryFactory)
+	constructor(prisma: PrismaClient, runAdmission: PersonalRunAdmissionPort, createMutationRepository: ConversationMutationRepositoryFactory, createAttachmentAdmission: ConversationAttachmentAdmissionFactory)
 	{
 		this.prisma = prisma;
 		this.runAdmission = runAdmission;
+		this.createAttachmentAdmission = createAttachmentAdmission;
 		this.createMutationRepository = createMutationRepository;
 	}
 
@@ -71,7 +73,7 @@ export class PrismaConversationMessageAdmissionUnitOfWork implements Conversatio
 		const messageId = randomUUID();
 		try
 		{
-			const admitted = await this._mutate(function _Admit(repository) { return repository.admitOrdinaryMessage(caller, conversationId, messageId, request); });
+			const admitted = await this._mutate(function _Admit(repository, attachments) { return repository.admitOrdinaryMessage(caller, conversationId, messageId, request, attachments); });
 			if (admitted.outcome === ConversationAuthorityOutcomes.Denied) return admitted;
 			return this._readAdmittedMessage(caller, conversationId, request);
 		}
@@ -85,10 +87,11 @@ export class PrismaConversationMessageAdmissionUnitOfWork implements Conversatio
 	private async _admitAgentMessage(caller: ConversationCaller, conversationId: string, request: SubmitConversationMessageRequest): Promise<SubmitConversationMessageResult>
 	{
 		const messageId = randomUUID();
-		const createRepository = this.createMutationRepository;
+		const createAttachmentAdmission = this.createAttachmentAdmission;
+		const createMutationRepository = this.createMutationRepository;
 		const result = await this.runAdmission.admitPersonalRun({ siloId: caller.siloId, executionSubjectId: caller.subjectId, conversationId, requestIdempotencyKey: request.idempotencyKey, inputMessageId: messageId, inputMessageBlocks: request.blocks }, async function _PersistMessage(transaction: RunAdmissionTransaction, value: RunAdmissionBuild)
 		{
-			await createRepository(transaction).persistAgentMessage(caller, conversationId, messageId, value.snapshot.runId, request);
+			await createMutationRepository(transaction).persistAgentMessage(caller, conversationId, messageId, value.snapshot.runId, request, createAttachmentAdmission(transaction));
 		});
 		if (result.outcome === PersonalRunAdmissionOutcomes.Denied) return _denied(_runAdmissionDenial(result.reason));
 		const message = await this._findOwnMessage(caller, conversationId, request.idempotencyKey);
@@ -138,11 +141,12 @@ export class PrismaConversationMessageAdmissionUnitOfWork implements Conversatio
 	}
 
 	/** Runs one ordinary-message write against an exact serializable mutation repository. */
-	private async _mutate<T>(operation: (repository: ConversationMutationRepository) => Promise<T>): Promise<T>
+	private async _mutate<T>(operation: (repository: ConversationMutationRepository, attachments: import("./conversation-message-admission.types.js").ConversationAttachmentAdmissionPort) => Promise<T>): Promise<T>
 	{
+		const createAttachmentAdmission = this.createAttachmentAdmission;
 		return this.prisma.$transaction(async function _Mutate(transaction)
 		{
-			return operation(new PrismaConversationMutationRepository(transaction));
+			return operation(new PrismaConversationMutationRepository(transaction), createAttachmentAdmission({ prisma: transaction }));
 		}, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 	}
 }

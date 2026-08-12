@@ -23,6 +23,7 @@
 	"../../a2ui/src/**/__tests__/*.stories.ts",
     "../../../features/onboarding/src/**/__tests__/*.stories.ts",
 	"../../../features/context/src/**/__tests__/*.stories.ts",
+	"../../../features/conversation-assets/src/**/__tests__/*.stories.ts",
     "preview.ts"
   ]
 }

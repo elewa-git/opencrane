@@ -1,0 +1,29 @@
+:host { --p-button-link-color: var(--oc-accent-active); }
+
+.wo-file-row {
+	position: relative;
+	display: grid;
+	grid-template-columns: 34px minmax(0, 1fr) auto auto auto;
+	align-items: center;
+	gap: var(--oc-space-2);
+	min-height: 42px;
+	padding: 6px 8px;
+	border: 1px solid var(--oc-border-subtle);
+	border-radius: var(--oc-radius-chip);
+	background: var(--oc-surface-raised);
+	box-shadow: var(--oc-shadow-card);
+
+	&--agent { border-color: color-mix(in srgb, var(--oc-accent) 40%, var(--oc-border-default)); }
+	&--agent::after { content: ""; position: absolute; top: 0; right: 0; border-top: 9px solid var(--oc-accent); border-left: 9px solid transparent; }
+	&--failed { border-color: color-mix(in srgb, var(--oc-danger) 35%, var(--oc-border-default)); }
+	&--muted { background: var(--oc-surface-subtle); }
+
+	&__type { color: var(--oc-ink-muted); font-size: var(--oc-text-2xs); }
+	&__name { overflow: hidden; color: var(--oc-ink-strong); font-size: var(--oc-text-xs); text-overflow: ellipsis; white-space: nowrap; }
+	&__state { color: var(--oc-ink-muted); font-size: var(--oc-text-2xs); }
+}
+
+@media (max-width: 520px) {
+	.wo-file-row { grid-template-columns: 30px minmax(0, 1fr) auto; }
+	.wo-file-row__state { grid-column: 2; }
+}

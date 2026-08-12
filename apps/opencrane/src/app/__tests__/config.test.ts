@@ -22,6 +22,9 @@ describe("opencrane process config", function _ProcessConfigSuite()
 		vi.stubEnv("WATCH_NAMESPACE", "workspace-seeds");
 		vi.stubEnv("AGENT_RUNTIME_PERSONAL_NAMESPACE", "personal-runs");
 		vi.stubEnv("AGENT_RUNTIME_MANAGED_NAMESPACE", "managed-runs");
+		vi.stubEnv("ARTIFACT_SCANNER_ENABLED", "true");
+		vi.stubEnv("ARTIFACT_SCANNER_CLAIM_LEASE_SECONDS", "240");
+		vi.stubEnv("ARTIFACT_SCANNER_NAMESPACE", "artifact-scanner");
 		vi.stubEnv("OPENCRANE_SCHEDULER_ENABLED", "true");
 		vi.stubEnv("OPENCRANE_SCHEDULER_INTERVAL_MS", "2500");
 
@@ -30,6 +33,9 @@ describe("opencrane process config", function _ProcessConfigSuite()
 			internalPort: 9081,
 			publicPort: 9080,
 			runtime: {
+				artifactScannerEnabled: true,
+				artifactScannerClaimLeaseMilliseconds: 240_000,
+				artifactScannerNamespace: "artifact-scanner",
 				managedRuntimeNamespace: "managed-runs",
 				memoryGatewayTimeoutMilliseconds: 30_000,
 				memoryGatewayTokenPath: "/var/run/opencrane/memory-gateway/token",

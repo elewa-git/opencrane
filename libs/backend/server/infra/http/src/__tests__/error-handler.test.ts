@@ -133,4 +133,25 @@ describe("_ErrorHandler", function _suite()
 		expect(JSON.stringify(warn.mock.calls)).not.toContain("top-secret-query");
 		expect(error).not.toHaveBeenCalled();
 	});
+
+	it("maps an oversized JSON body without logging body-parser's retained caller bytes", async function _OversizedJson()
+	{
+		const warn = vi.fn();
+		const error = vi.fn();
+		const app = express();
+		app.use(express.json({ limit: 16 }));
+		app.post("/json", function _AcceptJson(_request, response)
+		{
+			response.json({ accepted: true });
+		});
+		app.use(_ErrorHandler({ warn, error } as unknown as Logger));
+
+		const response = await request(app).post("/json?token=top-secret-query").set("Content-Type", "application/json").send({ password: "top-secret-body" });
+
+		expect(response.status).toBe(413);
+		expect(response.body).toEqual({ error: "Request body is too large.", code: "PAYLOAD_TOO_LARGE" });
+		expect(JSON.stringify(warn.mock.calls)).not.toContain("top-secret-body");
+		expect(JSON.stringify(warn.mock.calls)).not.toContain("top-secret-query");
+		expect(error).not.toHaveBeenCalled();
+	});
 });

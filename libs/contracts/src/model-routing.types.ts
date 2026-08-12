@@ -17,6 +17,15 @@ export const ModelRoutingScope = {
 /** Union of the {@link ModelRoutingScope} values. */
 export type ModelRoutingScope = (typeof ModelRoutingScope)[keyof typeof ModelRoutingScope];
 
+/** Provider-native generated outputs that an immutable model route may explicitly admit. */
+export const GeneratedOutputCapability = {
+  ImagePng: "image_png",
+  CodeExecutionFiles: "code_execution_files",
+} as const;
+
+/** Union of the {@link GeneratedOutputCapability} values. */
+export type GeneratedOutputCapability = (typeof GeneratedOutputCapability)[keyof typeof GeneratedOutputCapability];
+
 /** A provider API credential reference (the raw key lives in a k8s Secret, not here). */
 export interface ProviderCredential
 {
@@ -74,6 +83,8 @@ export interface ModelDefinition
   isDefault: boolean;
   /** The provider credential backing this model, when set. */
   providerCredentialId: string | null;
+  /** Provider-native generated outputs this registered model route may use. */
+  generatedOutputCapabilities: GeneratedOutputCapability[];
   /** Creation timestamp (ISO-8601). */
   createdAt: string;
   /** Last-update timestamp (ISO-8601). */
@@ -138,6 +149,8 @@ export interface ModelDefinitionWrite
   isDefault?: boolean;
   /** Provider credential backing this model. */
   providerCredentialId?: string;
+  /** Provider-native generated outputs the model route may use. */
+  generatedOutputCapabilities?: GeneratedOutputCapability[];
 }
 
 /**
