@@ -17,18 +17,6 @@
         "constructs": []
       },
       {
-        "path": "libs/backend/agents/personal/configuration/main/src/upgrade-session/prisma-upgrade-session-proposal-repository.ts",
-        "adapter": "PrismaUpgradeSessionProposalRepository",
-        "contract": "UpgradeSessionProposalRepository",
-        "contractImportPath": "./upgrade-session.types.js",
-        "constructs": [
-          {
-            "adapter": "PrismaPersonalConfigurationProposalRepository",
-            "importPath": "../proposal/prisma-personal-configuration-proposal-repository.js"
-          }
-        ]
-      },
-      {
         "path": "libs/backend/agents/personal/configuration/main/src/materialization/prisma-personal-configuration-materialization.ts",
         "adapter": "PrismaPersonalConfigurationMaterializationRepository",
         "contract": "PersonalConfigurationMaterializationRepository",
@@ -39,7 +27,14 @@
         "path": "libs/backend/agents/personal/configuration/main/src/proposal/prisma-personal-configuration-proposal-repository.ts",
         "adapter": "PrismaPersonalConfigurationProposalRepository",
         "contract": "PersonalConfigurationProposalRepository",
-        "contractImportPath": "./personal-configuration-proposal-unit-of-work.types.js",
+        "contractImportPath": "./personal-configuration-proposal-repository.types.js",
+        "constructs": []
+      },
+      {
+        "path": "libs/backend/agents/personal/configuration/main/src/upgrade-session/prisma-upgrade-session-profile-repository.ts",
+        "adapter": "PrismaUpgradeSessionProfileRepository",
+        "contract": "UpgradeSessionProfileRepository",
+        "contractImportPath": "./upgrade-session.types.js",
         "constructs": []
       },
       {
@@ -471,14 +466,18 @@
         ]
       },
       {
-        "path": "libs/backend/agents/personal/configuration/main/src/upgrade-session/prisma-upgrade-session-proposal-repository.ts",
+        "path": "libs/backend/agents/personal/configuration/main/src/upgrade-session/prisma-upgrade-session-proposal-unit-of-work.ts",
         "adapter": "PrismaUpgradeSessionProposalUnitOfWork",
         "contract": "UpgradeSessionProposalUnitOfWork",
-        "contractImportPath": "./upgrade-session.types.js",
+        "contractImportPath": "./upgrade-session-proposal-unit-of-work.types.js",
         "constructs": [
           {
-            "adapter": "PrismaUpgradeSessionProposalRepository",
-            "importPath": "<same-file>"
+            "adapter": "PrismaPersonalConfigurationProposalRepository",
+            "importPath": "../proposal/prisma-personal-configuration-proposal-repository.js"
+          },
+          {
+            "adapter": "PrismaUpgradeSessionProfileRepository",
+            "importPath": "./prisma-upgrade-session-profile-repository.js"
           }
         ]
       },
@@ -659,6 +658,22 @@
           {
             "adapter": "PrismaPersonalRunAdmissionRepository",
             "importPath": "./prisma-personal-run-admission-repository.js"
+          }
+        ]
+      },
+      {
+        "path": "libs/backend/server/conversations/main/src/prisma-conversation-message-admission-unit-of-work.ts",
+        "adapter": "PrismaConversationMessageAdmissionUnitOfWork",
+        "contract": "ConversationMessageAdmissionUnitOfWork",
+        "contractImportPath": "./conversation-message-admission.types.js",
+        "constructs": [
+          {
+            "adapter": "PrismaConversationMutationRepository",
+            "importPath": "./prisma-conversation-mutation-repository.js"
+          },
+          {
+            "adapter": "PrismaConversationQueryRepository",
+            "importPath": "./prisma-conversation-query-repository.js"
           }
         ]
       },

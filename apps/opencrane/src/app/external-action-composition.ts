@@ -25,7 +25,7 @@ export function _CreateExternalActionWorker(prisma: PrismaClient, memoryGateway:
 			sandboxExecutor: new __UnavailableSandboxJobExecutor(),
 			memoryGateway,
 		},
-		personalConfiguration: new PrismaUpgradeSessionProposalUnitOfWork(prisma),
+		personalConfiguration: new PrismaUpgradeSessionProposalUnitOfWork(prisma, log),
 		log,
 	});
 }

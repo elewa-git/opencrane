@@ -30,6 +30,8 @@ def process_cipher() -> object:
     read/write seams, which keeps offline tests independent of the cryptography package.
     """
     global _PROCESS_CIPHER
+    # Lazy creation keeps importing this module side-effect free and delays optional crypto loading
+    # until checkpointing is actually used. The global remains process-local by design.
     if _PROCESS_CIPHER is None:
         from cryptography.fernet import Fernet
 
@@ -44,6 +46,8 @@ def checkpoint_path(checkpoint_dir: str | None) -> str:
     setting and finally the bounded scratch default. The fixed filename prevents accumulation of an
     unbounded local checkpoint history.
     """
+    # Injection is deliberately a directory, not an arbitrary final filename: production and tests
+    # both exercise the same single-slot replacement policy.
     directory = checkpoint_dir or environment(
         "OPENCRANE_RUNTIME_CHECKPOINT_DIR",
         DEFAULT_CHECKPOINT_DIR,
@@ -73,9 +77,13 @@ def write_checkpoint(
         OSError: When the scratch directory cannot be created, written, or replaced.
         Exception: When the injected or process cipher cannot encrypt the document.
     """
+    # Resolve cipher and path once so every subsequent operation in this write uses one key and one
+    # destination, even if environment or test fixtures change concurrently.
     cipher = cipher or process_cipher()
     path = checkpoint_path(checkpoint_dir)
     os.makedirs(os.path.dirname(path), exist_ok=True)
+    # Bind state inside the ciphertext rather than relying on the filename. One fixed file is reused
+    # across attempts, so only authenticated envelope coordinates can reject stale local bytes.
     document = {
         "checkpointVersion": CHECKPOINT_VERSION,
         "runId": run_id,
@@ -83,11 +91,15 @@ def write_checkpoint(
         "inputGeneration": input_generation,
         "state": state,
     }
+    # Canonical JSON is not an authority mechanism, but it keeps encrypted inputs deterministic before
+    # Fernet adds its nonce and avoids accidental formatting-dependent checkpoint drift.
     plaintext = json.dumps(document, sort_keys=True, separators=(",", ":")).encode("utf-8")
     token = cipher.encrypt(plaintext)
     # os.replace is atomic when source and destination share a filesystem; the temporary file is
     # deliberately created beside the destination to retain that guarantee.
     temporary = f"{path}.{uuid.uuid4().hex}.tmp"
+    # Never truncate the current checkpoint in place. A failed temporary write leaves the last complete
+    # encrypted document available, and replacement is the sole commit point.
     with open(temporary, "wb") as handle:
         handle.write(token)
     os.replace(temporary, path)
@@ -108,8 +120,12 @@ def read_checkpoint(
     coordinates all return ``None``. Those cases are ordinary loss of a local optimisation, not a run
     failure and never a reason to weaken validation.
     """
+    # Use the caller's expected coordinates as the read capability. The path alone conveys no right to
+    # resume and is intentionally insufficient to select checkpoint state.
     cipher = cipher or process_cipher()
     path = checkpoint_path(checkpoint_dir)
+    # Missing scratch is normal after eviction or process replacement. It must look identical to every
+    # other unavailable local optimisation and must not become a model-loop error.
     try:
         with open(path, "rb") as handle:
             token = handle.read()
@@ -121,6 +137,8 @@ def read_checkpoint(
         # Cipher and parser errors intentionally collapse to "no usable local state"; exposing their
         # details could leak file contents and would make the optimisation load-bearing.
         return None
+    # Version is checked before coordinates so an unknown schema can never be partially interpreted
+    # using assumptions from the current envelope.
     if not isinstance(document, dict) or document.get("checkpointVersion") != CHECKPOINT_VERSION:
         return None
     if (

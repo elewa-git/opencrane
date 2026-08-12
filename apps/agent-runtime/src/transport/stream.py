@@ -42,6 +42,8 @@ class _AttemptWorkerRegistry:
         """Register a fresh worker signal after cancelling any worker it supersedes."""
         fresh = threading.Event()
         with self._lock:
+            # Supersession is signalled before publishing the new current worker. This prevents a
+            # concurrent cancel command from targeting the stale worker while the replacement starts.
             if self._current is not None:
                 self._current.set()
             self._current = fresh
@@ -57,12 +59,16 @@ class _AttemptWorkerRegistry:
         """Forget a returned worker without disturbing a newer current worker."""
         with self._lock:
             self._signals.discard(signal)
+            # An older worker may finish after its replacement became current. Identity comparison
+            # keeps that late cleanup from clearing the replacement's cancellation handle.
             if self._current is signal:
                 self._current = None
 
     def cancel_all(self) -> None:
         """Signal every still-running worker when the authority stream is lost."""
         with self._lock:
+            # Snapshot under the lock, then signal outside it. ``Event.set`` is small today, but the
+            # registry lock must never become coupled to worker shutdown or callback behavior.
             signals = tuple(self._signals)
             self._current = None
         for signal in signals:
@@ -78,11 +84,15 @@ def _launch_attempt_worker(
     workers: _AttemptWorkerRegistry,
 ) -> None:
     """Launch one cancellation-bound start/resume handler and register its whole lifetime."""
+    # Every start/resume gets fresh local gates even when it supersedes work for the same run. The
+    # command fence, not a reusable process-global event, defines which output may still be emitted.
     cancel_event = workers.activate()
     terminal_gate = TerminalGate(cancel_event)
 
     def _post_candidate(candidate: dict[str, object]) -> None:
         """Post a stable candidate once; the server owns all durable preparation retries."""
+        # Capture this stream's URL and token in the worker closure. Candidates must never migrate to
+        # a later reconnected stream whose bootstrap or fence may differ.
         post_candidate(
             control_plane_url,
             token,
@@ -102,6 +112,8 @@ def _launch_attempt_worker(
         finally:
             workers.release(cancel_event)
 
+    # A daemon worker cannot keep an otherwise terminated runtime alive. The registry still signals
+    # normal teardown so cooperative model work stops before the process exits.
     worker = threading.Thread(target=_run, daemon=True)
     try:
         worker.start()
@@ -124,11 +136,15 @@ def iter_commands(response: object, cancelled: threading.Event) -> Iterator[obje
             break
         if len(raw_line) > MAX_FRAME_BYTES:
             raise RuntimeError("runtime stream frame exceeds the 64KiB boundary")
+        # Decode only after enforcing the byte bound. Replacement decoding is limited to the event
+        # name; command JSON remains strict UTF-8 through ``json.loads`` and fails closed if malformed.
         line = raw_line.rstrip(b"\n")
         if line.startswith(b"event: "):
             # SSE associates subsequent data lines with the most recently declared event name.
             current_event = line[len(b"event: ") :].decode("utf-8", "replace")
         elif line.startswith(b"data: ") and current_event == "command":
+            # The server contract uses one JSON value per data line. We do not concatenate arbitrary
+            # multi-line SSE payloads because that would weaken the per-frame size boundary.
             yield json.loads(line[len(b"data: ") :].decode("utf-8"))
         elif line == b"":
             # A blank line terminates the current SSE event; do not let its type bleed into the next
@@ -157,6 +173,8 @@ def open_stream(
     """
     # The open body binds this connection to both the process instance and the exact Kubernetes Pod
     # identity admitted by the server-side runtime stream.
+    # Opening the stream is itself an authenticated admission request, not a passive subscription.
+    # The server checks these coordinates alongside the projected bearer token before sending work.
     body = json.dumps(
         {
             "protocolVersion": PROTOCOL_VERSION,
@@ -174,6 +192,8 @@ def open_stream(
         },
         method="POST",
     )
+    # One loss signal covers both the reader and workers created by this response. A reconnect builds
+    # a new registry rather than allowing old workers to emit through a new authority channel.
     stream_lost = threading.Event()
     workers = _AttemptWorkerRegistry()
 
@@ -218,6 +238,8 @@ def open_stream(
                         cancel_event=workers.current(),
                     )
                 else:
+                    # Forward compatibility is fail-closed: an unknown command cannot acquire model,
+                    # cancellation, or candidate-emission behavior by falling through a default path.
                     continue
                 log(
                     "command_dispatched",

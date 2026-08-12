@@ -33,6 +33,10 @@ run-admission port so the message, immutable input snapshot, run, and first disp
 one transaction. A single active foreground run blocks another agent-session message. The public API
 does not expose a separate run-start route.
 
+The general conversation unit of work owns participant reads and aggregate lifecycle writes. A
+dedicated message-admission unit owns submission routing, retry recovery, denial translation, and
+the handoff into execution admission's authoritative final transaction.
+
 Archive and close are deliberately different. Archive is reversible and affects only one
 participant's list. Close is permanent, applies to the conversation, and makes it read-only. Each
 participant separately records the first visible position, the last read position, and an optional
@@ -107,8 +111,9 @@ only. It cannot import an app, frontend state, or deployment package.
 Owns participant-facing operations over `Conversation`, `ConversationParticipant`,
 `ConversationMessage`, and `ConversationTimelineEntry`. The write authority uses serialisable
 transactions and projects create, archive, and close results from the same authorised write
-snapshot. The replay adapter is read-only and joins timeline references to canonical messages and
-`RunEvent`; neither path
+snapshot. Message admission separately uses serialisable ordinary-message writes and binds agent
+messages to execution admission's final transaction. The replay adapter is read-only and joins
+timeline references to canonical messages and `RunEvent`; neither path
 reconstructs order from client or run timestamps. All paths depend on current active `OrgMembership`
 in the caller's host-selected silo; participant rows alone never preserve authority after revocation.
 
