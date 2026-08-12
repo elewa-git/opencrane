@@ -21,6 +21,8 @@ def absorb_steering(steering_buffer: list[str]) -> list[str]:
     only the entries observed in ``drained`` are removed. Callers must invoke this immediately before
     starting a model request, never while a request or tool call is in flight.
     """
+    # Snapshot before deletion rather than swapping the list object: producers retain the same shared
+    # buffer reference, and entries appended after the snapshot survive for the next request boundary.
     drained = steering_buffer[:]
     del steering_buffer[: len(drained)]
     return drained
@@ -33,6 +35,8 @@ def zero_retry_openai_settings() -> dict[str, int]:
     output validation retries belong to the Pydantic agent. Keeping all four names visible makes it
     difficult for a framework upgrade to reintroduce an unnoticed default retry path.
     """
+    # Keep each conceptual retry surface explicit even where the current SDK collapses two settings
+    # onto one transport knob. This is a review checklist against dependency-default drift.
     return {
         "model_request_retries": 0,
         "provider_http_retries": 0,
@@ -82,6 +86,8 @@ def build_zero_retry_agent(
     # would be misleading, so reject it before constructing the client.
     if settings["provider_http_retries"] != settings["model_request_retries"]:
         raise RuntimeError("provider HTTP and model-request retries must agree on the transport")
+    # The mounted attempt key and compiled alias are the only provider capabilities admitted here. No
+    # provider fallback, master key, or ambient client default may select a broader route.
     openai_client = async_openai(
         base_url=base_url,
         api_key=attempt_key,
@@ -114,9 +120,13 @@ def pydantic_ai_event_source(
 
     async def _collect() -> list[dict[str, object]]:
         """Collect one fresh framework run without leaking async objects out of this adapter."""
+        # Buffer plain events until the async run closes; framework-owned nodes and contexts never
+        # escape into the synchronous attempt executor or checkpoint format.
         events: list[dict[str, object]] = []
         async with agent.iter(prompt(compiled_input)) as run:
             async for node in run:
+                # Avoid intentionally opening a node after observed cancellation. The in-stream check
+                # below still suppresses output if cancellation races this check-to-open boundary.
                 if cancel_event.is_set():
                     break
                 if Agent.is_model_request_node(node):
@@ -125,6 +135,8 @@ def pydantic_ai_event_source(
                     apply_steering_to_request(node, absorb_steering(steering_buffer))
                     async with node.stream(run.ctx) as request_stream:
                         async for event in request_stream:
+                            # Check inside the stream as well: node-level cancellation alone would still
+                            # allow buffered provider deltas to cross the runtime protocol seam.
                             if cancel_event.is_set():
                                 break
                             events.append(translate_framework_event(event))
@@ -167,17 +179,23 @@ def pydantic_ai_resume_source(
 
     async def _collect() -> list[dict[str, object]]:
         """Collect one authorised resume while keeping its framework state inside this adapter."""
+        # Resume uses a fresh framework runner but only the server-returned deferred results. The
+        # adapter never calls the external tool or recreates a result from pending-call metadata.
         events: list[dict[str, object]] = []
         async with agent.iter(
             prompt(compiled_input),
             deferred_tool_results=tool_results,
         ) as run:
             async for node in run:
+                # A resumed graph is no less cancellable than a fresh graph; do not enter another node
+                # after the shared attempt signal has been set.
                 if cancel_event.is_set():
                     break
                 if Agent.is_model_request_node(node):
                     # Resume steering follows the same pre-request rule as a fresh start. The optional
                     # framework dependency container is checked defensively here inside the adapter.
+                    # Drain once per request node. Steering arriving after this point waits for the next
+                    # model boundary rather than mutating an in-flight prompt.
                     for steer in absorb_steering(steering_buffer):
                         deps = getattr(run.ctx, "deps", None)
                         if hasattr(deps, "steering"):
@@ -210,6 +228,8 @@ def prompt(compiled_input: dict[str, object]) -> str:
     context, or author instructions. Missing or malformed message collections produce an empty
     prompt and remain visible to the model executor rather than triggering an alternate source.
     """
+    # Consume only the literal, ordered server projection. The runtime performs no conversation lookup
+    # and cannot supplement this snapshot from local or provider state.
     messages = compiled_input.get("messages")
     if not isinstance(messages, list):
         return ""
@@ -228,6 +248,8 @@ def translate_framework_event(event: object) -> dict[str, object]:
     shapes become an empty text delta rather than leaking arbitrary framework objects across the
     protocol seam; the protocol normaliser decides what becomes a candidate.
     """
+    # Duck typing is contained here so framework upgrades cannot leak new object shapes directly into
+    # the wire protocol. Every admitted output is reconstructed as an owned primitive dictionary.
     delta = getattr(getattr(event, "delta", None), "content_delta", None)
     if isinstance(delta, str):
         return {"type": "output_text", "text": delta}
@@ -252,6 +274,8 @@ def apply_steering_to_request(model_request_node: object, steering: list[str]) -
     """
     if not steering:
         return
+    # Mutate only the recognised request-parts list. If the framework changes shape, dropping steering
+    # is safer than guessing at a new internal object and corrupting an in-flight request.
     parts = getattr(getattr(model_request_node, "request", None), "parts", None)
     if isinstance(parts, list):
         parts.extend({"content": text} for text in steering)
@@ -264,8 +288,12 @@ def _agent_for(compiled_input: dict[str, object]) -> object:
     and the attempt-scoped key is read at the point of use so no master or provider credential enters
     the runtime.
     """
+    # Configuration chooses only the in-cluster proxy endpoint and key mount. The immutable compiled
+    # snapshot remains the sole authority for the actual model alias and instructions.
     base_url = environment("OPENCRANE_RUNTIME_LITELLM_BASE_URL")
     key_path = environment("OPENCRANE_RUNTIME_LITELLM_KEY_PATH", DEFAULT_LITELLM_KEY_PATH)
+    # Read the secret at point of use so it is neither retained in process configuration nor exposed in
+    # candidate/checkpoint state. The key is scoped to this attempt, never a LiteLLM master key.
     attempt_key = read_attempt_litellm_key(key_path)
     model_route = compiled_input.get("model")
     model_alias = model_route.get("modelAlias") if isinstance(model_route, dict) else None

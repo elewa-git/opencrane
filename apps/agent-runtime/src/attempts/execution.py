@@ -39,10 +39,14 @@ def execute_start_attempt(
     executor/transport failures become one ``run.failed`` terminal candidate unless cancellation has
     already suppressed local terminal delivery.
     """
+    # Coordinates are the runtime's capability fence for this command. Resolve them before reading
+    # payload data so unbound input can neither start model work nor elicit a candidate.
     coordinates = command_coordinates(command, runtime_instance_id)
     if coordinates is None:
         # Without accepted coordinates even an error candidate would be unauthorised and ambiguous.
         return
+    # The executor and terminal gate must share one signal. Otherwise cancellation could stop model
+    # iteration while a separately constructed gate still publishes completion.
     cancel_event = cancel_event or threading.Event()
     terminal_gate = terminal_gate or TerminalGate(cancel_event)
     payload = command.get("payload")
@@ -55,6 +59,8 @@ def execute_start_attempt(
             candidate(coordinates, "run.failed", {"reason": "missing_compiled_input"}),
         )
         return
+    # Announce the attempt before touching the model adapter. This keeps the candidate stream ordered
+    # even when model construction fails immediately after admission.
     post_candidate(
         candidate(
             coordinates,
@@ -63,13 +69,19 @@ def execute_start_attempt(
         ),
     )
     run_evidence(coordinates, "started")
+    # Checkpoint only after ``run.started``: local recovery state must never suggest that an attempt
+    # began before the server has seen the corresponding lifecycle candidate.
     _try_write_checkpoint(
         coordinates,
         payload if isinstance(payload, dict) else {},
         compiled_input,
         checkpoint_cipher,
     )
+    # A fresh start has no carried steering. The mutable list is intentionally attempt-local and is
+    # drained only by the model adapter at pre-request boundaries.
     steering_buffer: list[str] = []
+    # Projection is the protocol firewall: execution observes neutral events, while the projector
+    # alone binds them to canonical candidate kinds, command coordinates, and frozen tool grants.
     projector = RuntimeEventProjector(coordinates, compiled_input, post_candidate, record_pending_tool_call)
     with trace(
         "agent_runtime.start_attempt",
@@ -83,9 +95,13 @@ def execute_start_attempt(
                     # response cannot become a late candidate.
                     break
                 projector.emit(neutral_event)
+            # Do not close a partial message after cancellation. Leaving it open accurately records
+            # where local production stopped and avoids inventing a successful message boundary.
             if not cancel_event.is_set():
                 projector.complete_message()
             if projector.has_pending_tool_calls:
+                # A tool proposal pauses the model loop. Completion belongs after the control plane
+                # authorises and returns the saved result through a later resume command.
                 return
             if terminal_gate.post_completion(
                 post_candidate,
@@ -126,6 +142,8 @@ def execute_resume_attempt(
     tool results, and steering requests; recovers only coordinate-matching compiled context;
     then runs the same neutral-event and terminal pipeline as a fresh start.
     """
+    # A resume is not permission inferred from a run id. It is a separately fenced command, and all
+    # recovered local state remains subordinate to these newly accepted coordinates.
     coordinates = command_coordinates(command, runtime_instance_id)
     if coordinates is None:
         return
@@ -138,6 +156,8 @@ def execute_resume_attempt(
             candidate(coordinates, "run.failed", {"reason": "missing_resume_payload"}),
         )
         return
+    # Input generation prevents an otherwise matching run/attempt checkpoint from reviving context
+    # compiled before later steering or control-plane input was accepted.
     input_generation = payload.get("inputGeneration")
     tool_results = payload.get("toolResults")
     steering_requests = payload.get("steeringRequests")
@@ -163,6 +183,8 @@ def execute_resume_attempt(
             candidate(coordinates, "run.failed", {"reason": "invalid_resume_steering"}),
         )
         return
+    # Recover context before consuming pending calls, but treat missing local scratch as an empty,
+    # fail-closed grant set rather than asking the runtime to reconstruct authority.
     compiled_input = _recover_compiled_input(
         coordinates,
         input_generation,
@@ -170,6 +192,9 @@ def execute_resume_attempt(
     )
     # The control plane already executed or refused each call and persisted its terminal result.
     # The runtime only maps those exact results into the model framework.
+    # Resolution atomically consumes the pending calls named by this command. This must precede
+    # announcing ``run.resumed`` so an unknown, duplicated, or replayed result cannot masquerade as
+    # accepted continuation; other pending calls may remain for a later resume.
     resolved_tool_results = resolve_tool_results(
         coordinates,
         tool_results,
@@ -181,6 +206,9 @@ def execute_resume_attempt(
             candidate(coordinates, "run.failed", {"reason": "invalid_tool_results"}),
         )
         return
+    # At this point coordinates, resume structure, and the supplied pending-call identities have
+    # passed. Checkpoint recovery may still have produced empty context; only now is the accepted
+    # resume command visible in the candidate timeline.
     post_candidate(
         candidate(
             coordinates,
@@ -189,7 +217,11 @@ def execute_resume_attempt(
         ),
     )
     run_evidence(coordinates, "resumed", inputGeneration=input_generation)
+    # Preserve control-plane order while normalising only surrounding whitespace already validated
+    # above. The runtime does not merge, rank, or reinterpret steering content.
     steering_buffer = [item["text"].strip() for item in steering_requests]
+    # Construct a new projector for this command: message lifecycle and candidate identifiers are
+    # command-scoped, even though the model context continues the same durable run attempt.
     projector = RuntimeEventProjector(coordinates, compiled_input, post_candidate, record_pending_tool_call)
     with trace(
         "agent_runtime.resume_attempt",
@@ -207,9 +239,14 @@ def execute_resume_attempt(
                     # A resume is subject to the same late-output suppression as a fresh attempt.
                     break
                 projector.emit(neutral_event)
+            # Once cancellation is observed here, suppress the synthetic message end and subsequent
+            # local completion work. The terminal gate samples the signal again before posting, while
+            # the server remains authoritative for cancellation racing an already in-flight post.
             if not cancel_event.is_set():
                 projector.complete_message()
             if projector.has_pending_tool_calls:
+                # Additional tool calls create another control-plane round trip; a resume may pause
+                # repeatedly, and none of those intermediate pauses is a completed run.
                 return
             if terminal_gate.post_completion(
                 post_candidate,
@@ -251,6 +288,8 @@ def execute_cancel_attempt(
         # Set the shared event before recording evidence so the worker observes cancellation as soon
         # as possible and cannot race a late completion through the terminal gate.
         cancel_event.set()
+    # The reason is evidence only. It cannot alter cancellation semantics or select a different local
+    # worker, because command routing already paired this signal with the active attempt.
     payload = command.get("payload")
     reason = payload.get("reason") if isinstance(payload, dict) else None
     run_evidence(coordinates, "cancelled", reason=reason)
@@ -258,6 +297,8 @@ def execute_cancel_attempt(
 
 def _snapshot_input_generation(payload: dict[str, object]) -> object:
     """Read the accepted input generation, using zero when it is missing or malformed (older commands included)."""
+    # Generation is copied from the server snapshot rather than derived locally, preserving the
+    # control plane's ordering across accepted input changes.
     snapshot = payload.get("snapshot") if isinstance(payload, dict) else None
     if isinstance(snapshot, dict) and isinstance(snapshot.get("inputGeneration"), int):
         return snapshot["inputGeneration"]
@@ -275,6 +316,8 @@ def _try_write_checkpoint(
     Any local crypto or filesystem failure is reduced to safe evidence. The active model attempt
     continues because server authority and emitted candidates do not depend on local scratch.
     """
+    # Checkpoint failure is intentionally outside the model-loop failure path. Local scratch improves
+    # continuation only; it cannot veto execution of an otherwise admitted command.
     try:
         write_checkpoint(
             coordinates["runId"],
@@ -301,6 +344,8 @@ def _recover_compiled_input(
     An empty mapping is deliberately fail-closed: any subsequent tool call resolves as unknown
     rather than inheriting a stale or unverifiable grant set.
     """
+    # Decrypt and validate through the checkpoint owner rather than reading the file here. Keeping a
+    # single validation seam prevents resume code from accidentally accepting weaker coordinates.
     try:
         state = read_checkpoint(
             coordinates["runId"],
@@ -310,6 +355,8 @@ def _recover_compiled_input(
         )
     except Exception:  # noqa: BLE001 - checkpoints never crash resume
         return {}
+    # Return only the one state member execution understands. Other checkpoint fields, including any
+    # introduced by a future format, cannot silently become model input.
     if isinstance(state, dict) and isinstance(state.get("compiledInput"), dict):
         return state["compiledInput"]
     return {}

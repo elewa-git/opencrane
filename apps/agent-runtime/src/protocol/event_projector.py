@@ -20,10 +20,14 @@ class RuntimeEventProjector:
         record_tool_call: Callable[[str, int, str, str, object], None],
     ) -> None:
         """Bind projection to immutable command coordinates and its frozen grant set."""
+        # This object is intentionally command-scoped. Reusing it across commands would carry message
+        # lifecycle or pending-tool state across fences and corrupt event ordering.
         self._coordinates = coordinates
         self._compiled_input = compiled_input
         self._post_candidate = post_candidate
         self._record_tool_call = record_tool_call
+        # Deriving the message id from the command makes replay deterministic while keeping separate
+        # command lifecycles distinct inside the same run attempt.
         self._message_id = f"assistant:{coordinates['commandId']}"
         self._message_started = False
         self._has_pending_tool_calls = False
@@ -35,12 +39,16 @@ class RuntimeEventProjector:
 
     def emit(self, neutral_event: dict[str, object]) -> None:
         """Emit the canonical candidate sequence for one neutral model event."""
+        # Tool calls have a multi-candidate lifecycle and must bypass the ordinary one-event mapping.
         if neutral_event.get("type") == "tool_call":
             self._emit_tool_call(neutral_event)
             return
         normalized = normalize_event(neutral_event, self._message_id)
         if normalized is None:
             return
+        # The first text delta opens the message before that delta is emitted. The flag is flipped
+        # only after the start candidate is posted, so a failed post cannot advance local lifecycle
+        # state beyond what may have reached server authority.
         if normalized[0] == "message.delta" and not self._message_started:
             self._post_candidate(
                 candidate(
@@ -54,6 +62,7 @@ class RuntimeEventProjector:
 
     def complete_message(self) -> None:
         """Close a started message once; if its stream was interrupted part-way, leave it open."""
+        # No synthetic empty message is created when the model produces only usage, errors, or tools.
         if not self._message_started:
             return
         self._post_candidate(
@@ -63,6 +72,8 @@ class RuntimeEventProjector:
                 {"messageId": self._message_id},
             ),
         )
+        # Reset only after delivery succeeds. An ambiguous transport failure is handled at the stable
+        # candidate boundary rather than pretending the local lifecycle definitely completed.
         self._message_started = False
 
     def _emit_tool_call(self, neutral_event: dict[str, object]) -> None:
@@ -73,6 +84,8 @@ class RuntimeEventProjector:
             neutral_event,
         )
         if proposal.get("kind") == "external_action":
+            # ``tool.requested`` is ordered before the external-action proposal so the durable event
+            # history explains why authorization/execution was requested.
             self._has_pending_tool_calls = True
             self._post_candidate(
                 candidate(
@@ -84,6 +97,8 @@ class RuntimeEventProjector:
                     },
                 ),
             )
+            # Record the exact pending-call identity before posting the actionable proposal. A resume
+            # result is accepted only when it maps back to this run/attempt/invocation tuple.
             self._record_tool_call(
                 str(self._coordinates["runId"]),
                 int(self._coordinates["attempt"]),  # type: ignore[arg-type]
@@ -91,4 +106,6 @@ class RuntimeEventProjector:
                 str(neutral_event.get("toolName")),
                 proposal["arguments"],
             )
+        # Failed projections still emit their bounded error proposal, while valid proposals are sent
+        # only after their explanatory event and resume correlation state have been established.
         self._post_candidate(proposal)

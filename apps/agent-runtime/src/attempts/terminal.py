@@ -38,11 +38,15 @@ class TerminalGate:
             ``True`` after delivery returns successfully; otherwise ``False``.
         """
         with self._lock:
+            # The claim lock serializes terminal writers; cancellation is an independent signal
+            # sampled here and again by the delivery loop so it can stop a claimed retry path.
             if self._posted or self._cancel_event.is_set():
                 return False
             # From this point this exact candidate is the sole local terminal writer, even when its
             # first HTTP response is lost.
             self._posted = True
+        # Network retry happens outside the claim lock: no other caller can win after ``_posted``, and
+        # holding the lock during backoff would obscure that terminal ownership is already settled.
         while not self._cancel_event.is_set():
             try:
                 post_candidate(terminal_candidate)
@@ -73,5 +77,9 @@ class TerminalGate:
                     candidateId=terminal_candidate.get("candidateId"),
                     errorType=type(error).__name__,
                 )
+                # Event.wait makes backoff cancellation-responsive; a plain sleep could publish again
+                # after the stream has been dropped or the server has cancelled the attempt.
                 self._cancel_event.wait(TERMINAL_DELIVERY_RETRY_SECONDS)
+        # Cancellation can arrive between retries. Returning false records that local delivery did not
+        # complete, without claiming anything about the server's durable candidate state.
         return False

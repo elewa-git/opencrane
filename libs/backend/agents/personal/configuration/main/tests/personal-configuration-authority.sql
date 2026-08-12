@@ -17,6 +17,31 @@ BEGIN
 END;
 $$;
 
+CREATE FUNCTION pg_temp.expect_personal_configuration_insert_failure(test_name TEXT, change_id TEXT, overrides JSONB, expected_message TEXT) RETURNS VOID LANGUAGE plpgsql AS $$
+BEGIN
+    PERFORM pg_temp.expect_failure(test_name, format($statement$
+        INSERT INTO "personal_configuration_changes" (
+            "id", "silo_id", "user_id", "persona_profile_id", "agent_service_id",
+            "source_conversation_id", "source_run_id", "source_message_id", "requested_patch",
+            "requested_patch_digest", "expected_persona_revision_id", "expected_agent_revision_id"
+        ) VALUES (%L, %L, %L, %L, %L, %L, %L, %L, %L::jsonb, %L, %L, %L)
+    $statement$,
+        change_id,
+        COALESCE(overrides->>'siloId', 'silo-1'),
+        COALESCE(overrides->>'userId', 'user-1'),
+        COALESCE(overrides->>'personaProfileId', 'profile-1'),
+        COALESCE(overrides->>'agentServiceId', 'service-1'),
+        COALESCE(overrides->>'sourceConversationId', 'conversation-1'),
+        COALESCE(overrides->>'sourceRunId', 'run-1'),
+        overrides->>'sourceMessageId',
+        '{"kind":"model_alias","modelAlias":"careful"}',
+        'sha256:' || repeat('d',64),
+        COALESCE(overrides->>'expectedPersonaRevisionId', 'persona-1'),
+        COALESCE(overrides->>'expectedAgentRevisionId', 'agent-1')
+    ), expected_message);
+END;
+$$;
+
 INSERT INTO "persona_profiles" ("id", "silo_id", "user_id", "updated_at") VALUES ('profile-1', 'silo-1', 'user-1', clock_timestamp());
 INSERT INTO "persona_interviews" ("id", "persona_profile_id", "user_id", "question_set_id", "question_set_version", "scoring_policy_id", "scoring_policy_version", "interpolation_map_id", "interpolation_map_version")
 VALUES ('configuration-interview-1','profile-1','user-1','personal-agent-onboarding',1,'personal-agent-scoring',1,'personal-agent-interpolation',1);
@@ -58,7 +83,27 @@ INSERT INTO "agent_runs" ("id", "silo_id", "agent_service_id", "agent_revision_i
 INSERT INTO "personal_configuration_changes" ("id", "silo_id", "user_id", "persona_profile_id", "agent_service_id", "source_conversation_id", "source_run_id", "requested_patch", "requested_patch_digest", "expected_persona_revision_id", "expected_agent_revision_id") VALUES ('change-1', 'silo-1', 'user-1', 'profile-1', 'service-1', 'conversation-1', 'run-1', '{"kind":"model_alias","modelAlias":"careful"}', 'sha256:' || repeat('d',64), 'persona-1', 'agent-1');
 SELECT pg_temp.expect_failure('proposal evidence is immutable', $statement$UPDATE "personal_configuration_changes" SET "requested_patch"='{"kind":"model_alias","modelAlias":"unsafe"}' WHERE "id"='change-1'$statement$, 'proposal evidence is immutable');
 SELECT pg_temp.expect_failure('proposal cannot be deleted', $statement$DELETE FROM "personal_configuration_changes" WHERE "id"='change-1'$statement$, 'cannot be deleted');
-SELECT pg_temp.expect_failure('source ownership is enforced', $statement$INSERT INTO "personal_configuration_changes" ("id", "silo_id", "user_id", "persona_profile_id", "agent_service_id", "source_conversation_id", "source_run_id", "requested_patch", "requested_patch_digest") VALUES ('change-other-user', 'silo-1', 'user-2', 'profile-1', 'service-1', 'conversation-1', 'run-1', '{"kind":"model_alias","modelAlias":"careful"}', 'sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd')$statement$, 'source conversation requires the initiating participant');
+SELECT pg_temp.expect_personal_configuration_insert_failure('profile ownership is enforced', 'change-profile', '{"personaProfileId":"missing-profile"}', 'provenance or active-revision fence conflict');
+SELECT pg_temp.expect_personal_configuration_insert_failure('conversation provenance is enforced', 'change-conversation', '{"sourceConversationId":"missing-conversation"}', 'source conversation requires the initiating participant with current access');
+SELECT pg_temp.expect_personal_configuration_insert_failure('participant provenance is enforced', 'change-other-user', '{"userId":"user-2"}', 'source conversation requires the initiating participant with current access');
+SELECT pg_temp.expect_personal_configuration_insert_failure('run provenance is enforced', 'change-run', '{"sourceRunId":"missing-run"}', 'provenance or active-revision fence conflict');
+SELECT pg_temp.expect_personal_configuration_insert_failure('service provenance is enforced', 'change-service', '{"agentServiceId":"missing-service"}', 'provenance or active-revision fence conflict');
+SELECT pg_temp.expect_personal_configuration_insert_failure('silo provenance is enforced', 'change-silo', '{"siloId":"silo-2"}', 'provenance or active-revision fence conflict');
+SELECT pg_temp.expect_personal_configuration_insert_failure('persona revision fence is enforced', 'change-persona-revision', '{"expectedPersonaRevisionId":"persona-2"}', 'provenance or active-revision fence conflict');
+SELECT pg_temp.expect_personal_configuration_insert_failure('agent revision fence is enforced', 'change-agent-revision', '{"expectedAgentRevisionId":"agent-2"}', 'provenance or active-revision fence conflict');
+SELECT pg_temp.expect_personal_configuration_insert_failure('source message binding is enforced', 'change-message', '{"sourceMessageId":"missing-message"}', 'source message must belong to its source conversation');
+SET LOCAL session_replication_role = replica;
+UPDATE "conversations" SET "mode"='direct', "agent_service_id"=NULL WHERE "id"='conversation-1';
+SET LOCAL session_replication_role = origin;
+SELECT pg_temp.expect_personal_configuration_insert_failure('agent-session conversation mode is enforced', 'change-direct-conversation', '{}', 'provenance or active-revision fence conflict');
+SET LOCAL session_replication_role = replica;
+UPDATE "conversations" SET "mode"='agent_session', "agent_service_id"='service-1' WHERE "id"='conversation-1';
+UPDATE "conversation_participants" SET "access_ended_position"=1 WHERE "conversation_id"='conversation-1' AND "user_id"='user-1';
+SET LOCAL session_replication_role = origin;
+SELECT pg_temp.expect_personal_configuration_insert_failure('current participant access is enforced', 'change-ended-access', '{}', 'source conversation requires the initiating participant with current access');
+SET LOCAL session_replication_role = replica;
+UPDATE "conversation_participants" SET "access_ended_position"=NULL WHERE "conversation_id"='conversation-1' AND "user_id"='user-1';
+SET LOCAL session_replication_role = origin;
 UPDATE "personal_configuration_changes" SET "state"='accepted', "decided_at"=clock_timestamp(), "decided_by"='user-1' WHERE "id"='change-1';
 SELECT pg_temp.expect_failure('accepted decision evidence is immutable', $statement$UPDATE "personal_configuration_changes" SET "decided_by"='other-user' WHERE "id"='change-1'$statement$, 'decision evidence is immutable');
 SELECT pg_temp.expect_failure('accepted proposal cannot return to proposed', $statement$UPDATE "personal_configuration_changes" SET "state"='proposed' WHERE "id"='change-1'$statement$, 'invalid lifecycle transition');

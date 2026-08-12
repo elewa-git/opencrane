@@ -1,6 +1,6 @@
 import { AgentConfigPatchKinds } from "@opencrane/contracts";
 
-import { _IsPersonalConfigurationPatch } from "../proposal/personal-configuration-patch.js";
+import { _IsPersonalConfigurationPatch } from "../proposal/personal-configuration-patch.validator.js";
 import type { PersonalConfigurationPatch } from "../proposal/personal-configuration-patch.types.js";
 import { PersonalConfigurationMaterializationCodes, type MaterializePersonalConfigurationChangeCommand } from "./personal-configuration-materialization.types.js";
 import { _ResolvePersonalConfigurationMaterializationLifecycle, _TerminalProposalResolution } from "./personal-configuration-materialization-state.js";

@@ -6,6 +6,9 @@ import { UserOnboardingAnswerStatuses, UserOnboardingBootstrapArchetypes, UserOn
 import type { AppendUserOnboardingAnswerCommand, StartUserOnboardingChatCommand, UserOnboardingAnswerPersistenceResult, UserOnboardingBootstrapContentRevision, UserOnboardingBootstrapConversation, UserOnboardingChatRepository } from "./user-onboarding-chat.types.js";
 import type { ApprovedPersonaEvidence, UserOnboardingOwner, UserOnboardingRecord, UserOnboardingRepository } from "./user-onboarding.types.js";
 
+/** Trigger text emitted when a concurrent starter loses after another transaction advanced the parent. */
+const _BOOTSTRAP_CONVERSATION_PENDING_TRIGGER = "bootstrap conversation must bind the exact pending onboarding owner and persona";
+
 /** App-composed user-onboarding repository backed by the canonical product database. */
 export function _CreateUserOnboardingRepository(prisma: PrismaClient): UserOnboardingRepository & UserOnboardingChatRepository
 {
@@ -15,11 +18,11 @@ export function _CreateUserOnboardingRepository(prisma: PrismaClient): UserOnboa
 /** Prisma persistence adapter that can mutate only the UserOnboarding authority. */
 export class PrismaUserOnboardingRepository implements UserOnboardingRepository, UserOnboardingChatRepository
 {
-	/** Transaction-scoped canonical product database capability. */
-	private readonly prisma: Prisma.TransactionClient;
+	/** Canonical product database capability used directly or as a transaction opener. */
+	private readonly prisma: Prisma.TransactionClient & Pick<PrismaClient, "$transaction">;
 
 	/** Create an onboarding repository at the reviewed persistence boundary. */
-	constructor(prisma: Prisma.TransactionClient)
+	constructor(prisma: Prisma.TransactionClient & Pick<PrismaClient, "$transaction">)
 	{
 		this.prisma = prisma;
 	}
@@ -120,16 +123,22 @@ export class PrismaUserOnboardingRepository implements UserOnboardingRepository,
 	{
 		try
 		{
-			await this.prisma.userOnboarding.update({
-				where: { siloId_userId: { siloId: command.onboarding.siloId, userId: command.onboarding.subjectId }, state: UserOnboardingState.BootstrapChatPending, id: command.onboarding.id, personaRevisionId: command.persona.personaRevisionId, bootstrapConversationId: null },
-				data: {
-					state: UserOnboardingState.BootstrapChatInProgress,
-					bootstrapConversationId: command.conversationId,
-					bootstrapContentRevisionId: command.content.id,
-					bootstrapContentDigest: command.content.digest,
-					ownedBootstrapConversation: { create: { id: command.conversationId, siloId: command.onboarding.siloId, userId: command.onboarding.subjectId, personaRevisionId: command.persona.personaRevisionId, personaDisplayName: command.persona.displayName, personaArchetype: _PrismaArchetype(command.persona.archetype), contentRevisionId: command.content.id, contentDigest: command.content.digest } },
-				},
-			});
+			await this.prisma.$transaction(async function _StartTransaction(transaction: Prisma.TransactionClient)
+			{
+				// 1. Insert the child evidence while the parent is still pending so its trigger can verify the pending owner and persona.
+				await transaction.userOnboardingBootstrapConversation.create({ data: { id: command.conversationId, onboardingId: command.onboarding.id, siloId: command.onboarding.siloId, userId: command.onboarding.subjectId, personaRevisionId: command.persona.personaRevisionId, personaDisplayName: command.persona.displayName, personaArchetype: _PrismaArchetype(command.persona.archetype), contentRevisionId: command.content.id, contentDigest: command.content.digest } });
+
+				// 2. Pin the parent only after the child row exists, matching the lifecycle trigger's exact provenance check.
+				await transaction.userOnboarding.update({
+					where: { siloId_userId: { siloId: command.onboarding.siloId, userId: command.onboarding.subjectId }, state: UserOnboardingState.BootstrapChatPending, id: command.onboarding.id, personaRevisionId: command.persona.personaRevisionId, bootstrapConversationId: null },
+					data: {
+						state: UserOnboardingState.BootstrapChatInProgress,
+						bootstrapConversationId: command.conversationId,
+						bootstrapContentRevisionId: command.content.id,
+						bootstrapContentDigest: command.content.digest,
+					},
+				});
+			}, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 			return true;
 		}
 		catch (err)
@@ -279,5 +288,6 @@ function _ProjectConversation(conversation: Prisma.UserOnboardingBootstrapConver
 /** Recognise only expected compare-and-set or uniqueness races. */
 function _ExpectedConflict(err: unknown): boolean
 {
-	return err instanceof Prisma.PrismaClientKnownRequestError && (err.code === "P2002" || err.code === "P2025");
+	if (err instanceof Prisma.PrismaClientKnownRequestError) return err.code === "P2002" || err.code === "P2025";
+	return err instanceof Prisma.PrismaClientUnknownRequestError && err.message.includes(_BOOTSTRAP_CONVERSATION_PENDING_TRIGGER);
 }

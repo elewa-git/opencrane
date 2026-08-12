@@ -4900,7 +4900,7 @@ BEGIN
 END;
 $$;
 CREATE FUNCTION "enforce_personal_configuration_change_lifecycle"() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE profile_silo TEXT; profile_user TEXT; active_persona TEXT; conversation_silo TEXT; conversation_service TEXT;
+DECLARE profile_silo TEXT; profile_user TEXT; active_persona TEXT; conversation_silo TEXT; conversation_service TEXT; conversation_mode "ConversationMode";
         run_silo TEXT; run_conversation TEXT; run_service TEXT; run_user TEXT; service_silo TEXT; service_kind "AgentServiceKind"; active_agent TEXT;
         refresh_change TEXT; applied_revision_profile TEXT; applied_revision_service TEXT; applied_revision_parent TEXT; applied_model_alias TEXT;
 BEGIN
@@ -4909,17 +4909,17 @@ BEGIN
         IF NEW."state" <> 'proposed' THEN RAISE EXCEPTION 'PersonalConfigurationChange must begin as Proposed'; END IF;
         SELECT "silo_id", "user_id", "active_revision_id" INTO profile_silo, profile_user, active_persona
           FROM "persona_profiles" WHERE "id" = NEW."persona_profile_id" FOR UPDATE;
-        SELECT "silo_id", "agent_service_id" INTO conversation_silo, conversation_service
+        SELECT "silo_id", "agent_service_id", "mode" INTO conversation_silo, conversation_service, conversation_mode
           FROM "conversations" WHERE "id" = NEW."source_conversation_id" FOR UPDATE;
-        IF NOT EXISTS (SELECT 1 FROM "conversation_participants" WHERE "conversation_id" = NEW."source_conversation_id" AND "user_id" = NEW."user_id") THEN
-            RAISE EXCEPTION 'PersonalConfigurationChange source conversation requires the initiating participant';
+        IF NOT EXISTS (SELECT 1 FROM "conversation_participants" WHERE "conversation_id" = NEW."source_conversation_id" AND "user_id" = NEW."user_id" AND "access_ended_position" IS NULL) THEN
+            RAISE EXCEPTION 'PersonalConfigurationChange source conversation requires the initiating participant with current access';
         END IF;
         SELECT "silo_id", "conversation_id", "agent_service_id", "delegated_user_id" INTO run_silo, run_conversation, run_service, run_user
           FROM "agent_runs" WHERE "id" = NEW."source_run_id" FOR UPDATE;
         SELECT "silo_id", "kind", "active_revision_id" INTO service_silo, service_kind, active_agent
           FROM "agent_services" WHERE "id" = NEW."agent_service_id" FOR UPDATE;
         IF profile_silo IS DISTINCT FROM NEW."silo_id" OR profile_user IS DISTINCT FROM NEW."user_id"
-           OR conversation_silo IS DISTINCT FROM NEW."silo_id" OR conversation_service IS DISTINCT FROM NEW."agent_service_id"
+           OR conversation_silo IS DISTINCT FROM NEW."silo_id" OR conversation_service IS DISTINCT FROM NEW."agent_service_id" OR conversation_mode IS DISTINCT FROM 'agent_session'
            OR run_silo IS DISTINCT FROM NEW."silo_id" OR run_conversation IS DISTINCT FROM NEW."source_conversation_id"
            OR run_service IS DISTINCT FROM NEW."agent_service_id" OR run_user IS DISTINCT FROM NEW."user_id"
            OR service_silo IS DISTINCT FROM NEW."silo_id" OR service_kind IS DISTINCT FROM 'personal'

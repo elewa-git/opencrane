@@ -1,4 +1,4 @@
-import { Prisma, RunOutboxEventKind, type PrismaClient } from "@prisma/client";
+import { Prisma, RunOutboxEventKind, type PrismaClient, type RunInputSnapshot as PrismaRunInputSnapshot } from "@prisma/client";
 
 import type { RunInputSnapshot } from "@opencrane/contracts";
 import { ___CreateLogger, type Logger } from "@opencrane/backend/observability";
@@ -56,7 +56,7 @@ export class PrismaRunAdmissionRepository implements RunAdmissionRepository
 					if (existingSnapshot !== null)
 					{
 						if (!_matchesSnapshotScope(existingSnapshot, command)) return { outcome: "denied", reason: RunAdmissionDenialReasons.AuthorityConflict };
-						return { outcome: "idempotent", snapshot: _snapshot(existingSnapshot) };
+						return { outcome: "idempotent", snapshot: _RunInputSnapshot(existingSnapshot) };
 					}
 				}
 
@@ -88,7 +88,7 @@ export class PrismaRunAdmissionRepository implements RunAdmissionRepository
 						if (existingSnapshot !== null)
 						{
 							if (!_matchesSnapshotScope(existingSnapshot, command)) return { outcome: "denied", reason: RunAdmissionDenialReasons.AuthorityConflict };
-							return { outcome: "idempotent", snapshot: _snapshot(existingSnapshot) };
+							return { outcome: "idempotent", snapshot: _RunInputSnapshot(existingSnapshot) };
 						}
 					}
 				}
@@ -165,11 +165,8 @@ async function _persistInitialAdmission(transaction: Prisma.TransactionClient, c
 		inputSnapshotDigest: value.snapshot.digest,
 		acceptedAt: admittedAt,
 	} });
-	await transaction.runInputSnapshot.create({ data: _snapshotData(value.snapshot) });
-	await transaction.outboxEvent.createMany({ data: [
-		{ runId: command.runId, attempt: 1, sequence: 1, kind: RunOutboxEventKind.RunAccepted, idempotencyKey: `${command.runId}:accepted`, payload: { runId: command.runId, inputSnapshotDigest: value.snapshot.digest }, availableAt: admittedAt },
-		{ runId: command.runId, attempt: 1, sequence: 2, kind: RunOutboxEventKind.RunAttemptRequested, idempotencyKey: `${command.runId}:attempt:1`, payload: { runId: command.runId, attempt: 1, inputSnapshotDigest: value.snapshot.digest }, availableAt: admittedAt },
-	] });
+	await transaction.runInputSnapshot.create({ data: _RunInputSnapshotData(value.snapshot) });
+	await transaction.outboxEvent.createMany({ data: _InitialRunOutboxData(command.runId, value.snapshot.digest, admittedAt) });
 }
 
 /** Maps a dependency-light trigger to the owned database enum representation. */
@@ -180,24 +177,34 @@ function _trigger(value: InitialRunAuthority["trigger"]): "Interactive" | "Sched
 	return "ManagedInvocation";
 }
 
-/**
- * Deep-copies the JSON into canonical form before Prisma writes it.
- *
- * The copy shares no references with the caller's value, so nothing can mutate the payload after
- * its digest was taken.
- *
- * @see https://www.rfc-editor.org/rfc/rfc8785 — canonical form here means RFC 8785 canonical JSON,
- * the same form the snapshot digest is computed over.
- */
-function _json(value: unknown): Prisma.InputJsonValue
+/** Initializes the ordered acceptance event and first-attempt command for one admitted run. */
+export function _InitialRunOutboxData(runId: string, inputSnapshotDigest: string, availableAt: Date): Prisma.OutboxEventCreateManyInput[]
 {
-	return ___CloneCanonicalJson(value as JsonValue) as Prisma.InputJsonValue;
+	const accepted: Prisma.OutboxEventCreateManyInput = {
+		runId,
+		attempt: 1,
+		sequence: 1,
+		kind: RunOutboxEventKind.RunAccepted,
+		idempotencyKey: `${runId}:accepted`,
+		payload: { runId, inputSnapshotDigest },
+		availableAt,
+	};
+	const attemptRequested: Prisma.OutboxEventCreateManyInput = {
+		runId,
+		attempt: 1,
+		sequence: 2,
+		kind: RunOutboxEventKind.RunAttemptRequested,
+		idempotencyKey: `${runId}:attempt:1`,
+		payload: { runId, attempt: 1, inputSnapshotDigest },
+		availableAt,
+	};
+	return [accepted, attemptRequested];
 }
 
-/** Maps an immutable contract snapshot into its canonical Postgres row. */
-function _snapshotData(snapshot: RunInputSnapshot): Prisma.RunInputSnapshotUncheckedCreateInput
+/** Maps the immutable contract snapshot into the canonical Prisma persistence shape. */
+export function _RunInputSnapshotData(snapshot: RunInputSnapshot): Prisma.RunInputSnapshotUncheckedCreateInput
 {
-	return {
+	const data: Prisma.RunInputSnapshotUncheckedCreateInput = {
 		runId: snapshot.runId,
 		snapshotVersion: snapshot.snapshotVersion,
 		siloId: snapshot.siloId,
@@ -221,12 +228,13 @@ function _snapshotData(snapshot: RunInputSnapshot): Prisma.RunInputSnapshotUnche
 		digest: snapshot.digest,
 		compiledAt: new Date(snapshot.compiledAt),
 	};
+	return data;
 }
 
 /** Maps one persisted snapshot row back into the immutable cross-domain contract. */
-function _snapshot(row: { runId: string; siloId: string; agentServiceId: string; agentRevisionId: string; snapshotVersion: number; conversationId: string | null; messageIds: string[]; personaRevisionId: string | null; preferenceFactIds: string[]; artifactRevisionIds: string[]; skillRevisionIds: string[]; memoryFacts: Prisma.JsonValue; memoryQueryPolicy: Prisma.JsonValue; integrationAssignments: Prisma.JsonValue; modelRoute: Prisma.JsonValue; budgetPolicy: Prisma.JsonValue; identitySnapshot: Prisma.JsonValue; capabilitySetDigest: string; effectiveContractDigest: string; promptCompilerVersion: string; digest: string; compiledAt: Date }): RunInputSnapshot
+export function _RunInputSnapshot(row: PrismaRunInputSnapshot): RunInputSnapshot
 {
-	return {
+	const snapshot: RunInputSnapshot = {
 		runId: row.runId,
 		siloId: row.siloId,
 		agentServiceId: row.agentServiceId,
@@ -250,4 +258,11 @@ function _snapshot(row: { runId: string; siloId: string; agentServiceId: string;
 		digest: row.digest,
 		compiledAt: row.compiledAt.toISOString(),
 	};
+	return snapshot;
+}
+
+/** Makes a JSON-safe deep copy before Prisma owns an immutable snapshot field. */
+function _json(value: unknown): Prisma.InputJsonValue
+{
+	return ___CloneCanonicalJson(value as JsonValue) as Prisma.InputJsonValue;
 }

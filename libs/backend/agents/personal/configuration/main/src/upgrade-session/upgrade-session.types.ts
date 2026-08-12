@@ -1,6 +1,8 @@
 import type { RunInputSnapshot } from "@opencrane/contracts";
 import type { JsonValue } from "@opencrane/util";
 
+import type { PersonalConfigurationPatch } from "../proposal/personal-configuration-patch.types.js";
+
 /** The fields of one accepted upgrade_session tool call. */
 export interface UpgradeSessionInvocation
 {
@@ -61,5 +63,34 @@ export interface UpgradeSessionProposalRepository
 	proposeUpgradeSession(candidate: UpgradeSessionInvocation, snapshot: RunInputSnapshot, now: string): Promise<UpgradeSessionProposalReceipt>;
 }
 
-/** Same operation, but it opens its own transaction. */
-export interface UpgradeSessionProposalUnitOfWork extends UpgradeSessionProposalRepository {}
+/** Personal conversation snapshot admitted before upgrade-session persistence begins. */
+export interface PersonalUpgradeSessionSnapshot extends RunInputSnapshot
+{
+	/** Conversation that supplied the future-session request. */
+	readonly conversationId: string;
+	/** Personal revision observed by the immutable run. */
+	readonly personaRevisionId: string;
+}
+
+/** Runtime candidate whose protected arguments match the closed configuration-patch model. */
+export interface PersonalUpgradeSessionCandidate extends UpgradeSessionInvocation
+{
+	/** Strict personal configuration patch admitted by the model-adjacent Zod validator. */
+	readonly arguments: PersonalConfigurationPatch;
+}
+
+/** Immutable owner coordinates used to resolve the canonical personal profile. */
+export interface UpgradeSessionProfileReadCommand
+{
+	/** Silo copied from the frozen run snapshot. */
+	readonly siloId: string;
+	/** Execution subject copied from the frozen identity snapshot. */
+	readonly userId: string;
+}
+
+/** Transaction-scoped owner-profile reader for one upgrade-session proposal. */
+export interface UpgradeSessionProfileRepository
+{
+	/** Resolves the unique profile owned by the frozen silo and execution subject. */
+	readOwnerProfileId(command: UpgradeSessionProfileReadCommand): Promise<string | null>;
+}

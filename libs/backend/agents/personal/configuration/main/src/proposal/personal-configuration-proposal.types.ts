@@ -1,18 +1,6 @@
 import type { PersonalConfigurationPatch } from "./personal-configuration-patch.types.js";
 
-/**
- * What recording a new configuration proposal came back with.
- *
- * A proposal is a request only: it changes nothing about the agent until its owner decides it
- * and a materialisation step applies it. `Proposed` therefore means "recorded for later
- * review", not "in effect".
- *
- * `ProvenanceConflict` is the one that needs care. It means the conversation, run, agent
- * service or persona profile named in the command is not owned by this user, or its active
- * revision moved on between the agent reading it and this insert. Retrying with the same
- * command cannot fix it — the expected revision ids are stale and must be re-read.
- * `PersistenceUnavailable` is the only retryable code.
- */
+/** Stable proposal outcomes and denial reasons owned by this package. */
 export enum PersonalConfigurationProposalCodes
 {
 	/** A durable future-revision proposal was recorded. */
@@ -80,32 +68,11 @@ export interface ProposePersonalConfigurationChangeCommand
 	readonly proposedAt: string;
 }
 
-/** The result of proposing one change: the new id, or a denial reason. */
+/** Validation reason why the proposal authority may deny a future-session change. */
+export type PersonalConfigurationProposalDenialReason =
+	PersonalConfigurationProposalCodes.InvalidCommand;
+
+/** Domain outcome for one proposal request. */
 export type ProposePersonalConfigurationChangeResult =
 	| { readonly outcome: PersonalConfigurationProposalCodes.Proposed; readonly changeId: string }
-	| { readonly outcome: PersonalConfigurationProposalCodes.Denied; readonly reason: PersonalConfigurationProposalCodes.InvalidCommand | PersonalConfigurationProposalCodes.ProvenanceConflict | PersonalConfigurationProposalCodes.PersistenceUnavailable };
-
-/**
- * Records one new personal configuration proposal.
- *
- * This port only ever inserts. Deciding and applying a proposal go through separate ports, and
- * the database trigger rejects any change to the request fields once the row exists, so the
- * recorded request stays exactly what the user asked for.
- *
- * Called by: {@link __ProposePersonalConfigurationChange}.
- *
- * @see {@link PrismaPersonalConfigurationProposalUnitOfWork} for the implementation, and
- * {@link PersonalConfigurationProposalRepository} for the transaction-scoped variant it wraps.
- */
-export interface PersonalConfigurationChangeRepository
-{
-	/**
-	 * Re-checks ownership, then inserts the proposal in one transaction.
-	 *
-	 * @param command - The request to record, already validated by the caller.
-	 * @returns `Proposed` with the new `changeId`; `ProvenanceConflict` when the conversation,
-	 * run, service or profile is not this user's or its active revision moved on;
-	 * `PersistenceUnavailable` when the write failed. Must not throw for these three.
-	 */
-	proposeAtomically(command: ProposePersonalConfigurationChangeCommand): Promise<{ readonly status: PersonalConfigurationProposalCodes.Proposed; readonly changeId: string } | { readonly status: PersonalConfigurationProposalCodes.ProvenanceConflict } | { readonly status: PersonalConfigurationProposalCodes.PersistenceUnavailable }>;
-}
+	| { readonly outcome: PersonalConfigurationProposalCodes.Denied; readonly reason: PersonalConfigurationProposalDenialReason };
