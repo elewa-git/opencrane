@@ -1,13 +1,17 @@
 import { Router } from "express";
 import type { PrismaClient } from "@prisma/client";
 
+import { _RequireOrgAdmin } from "@opencrane/backend/server/infra/auth";
+
 import { createGroup, deleteGroup, getGroup, listGroups, updateGroup } from "../core/groups.logic.js";
 import type { GroupWriteRequest } from "./groups.types.js";
 
 /**
  * Create, read, update, and delete the silo's groups.
  *
- * The handlers do no authorization of their own — whatever the mount point applies is all there is.
+ * Groups are used for access control and sharing, so mutation operations (create, update, delete)
+ * require organisation administrator authority. Read operations remain available to all authenticated
+ * users because they need to see groups for sharing and entitlement selection.
  *
  * Called by: apps/opencrane/src/app/routes.ts, mounted at /api/v1/groups on the browser-session
  * authenticated listener.
@@ -37,22 +41,22 @@ export function groupsRouter(prisma: PrismaClient): Router
     res.json(group);
   });
 
-  /** Create a new group. */
-  router.post("/", async function _createGroup(req, res)
+  /** Create a new group — requires organisation administrator authority. */
+  router.post("/", _RequireOrgAdmin(), async function _createGroup(req, res)
   {
     const body = req.body as GroupWriteRequest;
     res.status(201).json(await createGroup(prisma, body));
   });
 
-  /** Update a group. */
-  router.put("/:id", async function _updateGroup(req, res)
+  /** Update a group — requires organisation administrator authority. */
+  router.put("/:id", _RequireOrgAdmin(), async function _updateGroup(req, res)
   {
     const body = req.body as Partial<GroupWriteRequest>;
     res.json(await updateGroup(prisma, req.params.id, body));
   });
 
-  /** Delete a group. */
-  router.delete("/:id", async function _deleteGroup(req, res)
+  /** Delete a group — requires organisation administrator authority. */
+  router.delete("/:id", _RequireOrgAdmin(), async function _deleteGroup(req, res)
   {
     res.json(await deleteGroup(prisma, req.params.id));
   });
