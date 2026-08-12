@@ -211,6 +211,9 @@
       "@opencrane/elements/elicitation": [
         "./libs/frontend/elements/elicitation/src/index.ts"
       ],
+      "@opencrane/elements/conversation": [
+        "./libs/frontend/elements/conversation/src/index.ts"
+      ],
       "@opencrane/features/conversation-activity": [
         "./libs/frontend/features/conversation-activity/src/index.ts"
       ],
@@ -294,6 +297,9 @@
     },
     {
       "path": "./libs/frontend/elements/elicitation"
+    },
+    {
+      "path": "./libs/frontend/elements/conversation"
     },
     {
       "path": "./libs/frontend/elements/ui"

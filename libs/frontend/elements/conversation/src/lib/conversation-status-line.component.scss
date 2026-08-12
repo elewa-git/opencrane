@@ -1,0 +1,7 @@
+:host { display: block; }
+.conversation-status { display: flex; align-items: flex-start; gap: .55rem; color: var(--oc-ink-muted, #616a6c); font-size: .82rem; }
+.conversation-status__dot { width: .5rem; height: .5rem; margin-top: .3rem; border-radius: 50%; background: var(--oc-border-strong, #91989a); flex: none; }
+.conversation-status strong, .conversation-status span { display: block; }
+.conversation-status[data-tone="attention"] .conversation-status__dot { background: var(--oc-warning, #d88700); }
+.conversation-status[data-tone="success"] .conversation-status__dot { background: var(--oc-success, #2f8b57); }
+.conversation-status[data-tone="danger"] .conversation-status__dot { background: var(--oc-danger, #c74747); }

@@ -1,0 +1,8 @@
+<article class="conversation-message" [attr.data-message-id]="message().id" [attr.data-tone]="message().tone" [attr.aria-label]="message().accessibleStatus ? message().authorName + ', ' + message().accessibleStatus : null">
+	<wo-avatar-circle [initials]="message().authorInitials" [tone]="message().avatarTone" [size]="avatarSize" [label]="message().authorName" />
+	<div class="conversation-message__content">
+		<header><strong>{{ message().authorName }}</strong><time>{{ message().timestampLabel }}</time></header>
+		<p>{{ message().body }}</p>
+		<div class="conversation-message__rich-card"><ng-content select="[conversation-message-rich-card]" /></div>
+	</div>
+</article>
