@@ -17,7 +17,10 @@ import type { PublicAuthenticationComposition } from "./public-app.types.js";
 import { _RegisterRoutes } from "./routes.js";
 import { _CreateHttpRequestLogger } from "./telemetry.js";
 
-/** Composes the audit-owned adapter only when the standalone owner claim is enabled. */
+/**
+ * Build the audit-log appender for the standalone first-owner claim, or null when that claim is not configured.
+ * @see __CreateStandaloneFirstUserAdmissionAuditAppender
+ */
 function _CreateStandaloneFirstUserAudit(config: StandaloneFirstUserAdmissionConfig | null): StandaloneFirstUserAdmissionAuditPort | null
 {
   return config === null ? null : __CreateStandaloneFirstUserAdmissionAuditAppender();
@@ -35,7 +38,7 @@ export function _CreatePublicAuthentication(prisma: PrismaClient, customApi: k8s
  *
  * Authentication precedes every product route, while the OIDC router remains public so it can
  * establish the browser session that the product routes require.
- * @param prisma - Canonical product-authority database client.
+ * @param prisma - The main product database client.
  * @param coreApi - Kubernetes core client passed only to routes that create scoped Secrets.
  * @param runAdmission - Managed run admission port shared with scheduler execution.
  * @param personalRunAdmission - Browser-session personal run admission port.

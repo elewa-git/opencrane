@@ -11,6 +11,6 @@ export interface MemoryGatewayProcessConfig
 	readonly serverServiceAccountName: string;
 	/** Audience expected on the server's projected token. */
 	readonly serverTokenAudience: string;
-	/** Per-hop HTTP timeout. */
+	/** Timeout applied separately to each HTTP call the gateway makes. */
 	readonly requestTimeoutMilliseconds: number;
 }

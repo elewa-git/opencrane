@@ -35,7 +35,7 @@ def post_candidate(
     candidate: dict[str, object],
     send_json: Callable[[str, str, dict[str, object], float], int] = post_json,
 ) -> None:
-    """Deliver one candidate once; durable server admission owns preparation retries.
+    """Deliver one candidate exactly once; the server's durable admission path owns any retry.
 
     A transport error is ambiguous, so the runtime never repeats an external-action candidate.
     """

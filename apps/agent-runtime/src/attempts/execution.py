@@ -257,7 +257,7 @@ def execute_cancel_attempt(
 
 
 def _snapshot_input_generation(payload: dict[str, object]) -> object:
-    """Read the accepted input generation, defaulting legacy/malformed absence to zero."""
+    """Read the accepted input generation, using zero when it is missing or malformed (older commands included)."""
     snapshot = payload.get("snapshot") if isinstance(payload, dict) else None
     if isinstance(snapshot, dict) and isinstance(snapshot.get("inputGeneration"), int):
         return snapshot["inputGeneration"]

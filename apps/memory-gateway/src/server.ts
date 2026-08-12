@@ -29,7 +29,7 @@ function _BearerToken(request: IncomingMessage): string | null
 	return token.length > 0 ? token : null;
 }
 
-/** Read one bounded raw HTTP body without parsing or changing the server-authorized JSON payload. */
+/** Read one size-capped raw HTTP body, leaving the server-authorized JSON exactly as sent. */
 async function _ReadBody(request: IncomingMessage): Promise<Buffer>
 {
 	const chunks: Uint8Array[] = [];
@@ -125,7 +125,7 @@ export function _CreateServer(config: MemoryGatewayProcessConfig, tokenReviewer:
 	});
 }
 
-/** Map internal failures to the gateway's bounded public status vocabulary. */
+/** Map internal failures to the small fixed set of public statuses the gateway returns. */
 function _ErrorStatus(error: unknown): number
 {
 	if (error instanceof MemorySearchContractViolation) return 422;

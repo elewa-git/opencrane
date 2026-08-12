@@ -15,7 +15,7 @@ from ..constants import DEFAULT_LITELLM_KEY_PATH
 
 
 def absorb_steering(steering_buffer: list[str]) -> list[str]:
-    """Drain exactly the steering visible at a safe pre-model-request boundary.
+    """Take only the steering messages already buffered when a model request is about to start.
 
     The copy-then-prefix-delete sequence preserves text appended after the copy by another producer:
     only the entries observed in ``drained`` are removed. Callers must invoke this immediately before
@@ -27,7 +27,7 @@ def absorb_steering(steering_buffer: list[str]) -> list[str]:
 
 
 def zero_retry_openai_settings() -> dict[str, int]:
-    """Describe every retry surface that OpenCrane explicitly disables.
+    """Describe every retry setting that OpenCrane explicitly disables.
 
     Provider HTTP/model-request retries share the OpenAI client's ``max_retries`` setting. Tool and
     output validation retries belong to the Pydantic agent. Keeping all four names visible makes it
@@ -78,7 +78,7 @@ def build_zero_retry_agent(
         async_openai = AsyncOpenAI
 
     settings = zero_retry_openai_settings()
-    # Both named retry surfaces land on one AsyncOpenAI value. A future configuration divergence
+    # Both named retry settings land on one AsyncOpenAI value. If they ever disagreed, the setting
     # would be misleading, so reject it before constructing the client.
     if settings["provider_http_retries"] != settings["model_request_retries"]:
         raise RuntimeError("provider HTTP and model-request retries must agree on the transport")
@@ -113,7 +113,7 @@ def pydantic_ai_event_source(
     agent = _agent_for(compiled_input)
 
     async def _collect() -> list[dict[str, object]]:
-        """Collect one fresh framework run without leaking async objects across the adapter seam."""
+        """Collect one fresh framework run without leaking async objects out of this adapter."""
         events: list[dict[str, object]] = []
         async with agent.iter(prompt(compiled_input)) as run:
             async for node in run:
@@ -177,7 +177,7 @@ def pydantic_ai_resume_source(
                     break
                 if Agent.is_model_request_node(node):
                     # Resume steering follows the same pre-request rule as a fresh start. The optional
-                    # framework dependency container is inspected defensively at this adapter seam.
+                    # framework dependency container is checked defensively here inside the adapter.
                     for steer in absorb_steering(steering_buffer):
                         deps = getattr(run.ctx, "deps", None)
                         if hasattr(deps, "steering"):
@@ -204,7 +204,7 @@ def pydantic_ai_resume_source(
 
 
 def prompt(compiled_input: dict[str, object]) -> str:
-    """Join the server-compiled literal message content in its accepted order.
+    """Join the message text the server compiled, keeping the order it was accepted in.
 
     Prompt selection is intentionally boring: the runtime does not reinterpret roles, fetch more
     context, or author instructions. Missing or malformed message collections produce an empty

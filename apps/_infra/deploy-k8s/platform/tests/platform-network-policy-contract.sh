@@ -51,7 +51,7 @@ if grep -Fq 'cnpg.io/cluster' <<<"$PLATFORM_POLICY"; then
   exit 1
 fi
 
-# Cognee's app-owned policy must override the generic platform posture with one ingress caller and
+# Cognee's app-owned policy must override the generic platform policy with one ingress caller and
 # named egress paths. The generic policy excludes Cognee so it cannot widen this list.
 test -n "$COGNEE_POLICY"
 test -n "$COGNEE_DEPLOYMENT"

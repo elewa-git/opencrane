@@ -14,7 +14,7 @@ def resolve_tool_results(
     tool_results: list[object],
     post_candidate,
 ) -> dict[str, object] | None:
-    """Validate and consume exact saved tool results, or reject the whole batch."""
+    """Validate and consume the saved tool results, or reject the whole batch."""
     validated: list[tuple[str, object]] = []
     tool_invocation_ids: list[str] = []
     # Validate every result before touching the pending-call registry. This keeps malformed commands

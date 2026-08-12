@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Installs the shared Kubernetes substrate required by an OpenCrane silo. This is an
+# Installs the shared cluster-wide Kubernetes controllers an OpenCrane silo needs. This is an
 # explicit operator action: the per-silo release never owns cluster-wide controllers.
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

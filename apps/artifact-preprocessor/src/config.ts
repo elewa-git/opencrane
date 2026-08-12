@@ -22,7 +22,7 @@ function _Integer(environment: NodeJS.ProcessEnv, name: string, fallback: number
 	return value;
 }
 
-/** Require an absolute locally mounted path, never a relative working-directory escape. */
+/** Require an absolute path on a mounted volume; a relative path could escape the working directory. */
 function _AbsolutePath(environment: NodeJS.ProcessEnv, name: string): string
 {
 	const value = _Required(environment, name);

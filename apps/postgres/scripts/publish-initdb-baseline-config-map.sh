@@ -34,7 +34,7 @@ function _sha256_file()
 }
 
 # Hash the application-owner transition and canonical target SQL. The envelope version ensures a
-# future change to the protected provenance contract receives a new content-addressed identity.
+# future change to the protected origin contract receives a new content-addressed identity.
 printf '%s\n' '-- OpenCrane initdb baseline envelope v1.' >"$baseline_identity_input"
 printf 'SET ROLE "%s";\n\n' "$quoted_owner" >>"$baseline_identity_input"
 cat "$baseline_file" >>"$baseline_identity_input"

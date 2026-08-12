@@ -49,7 +49,7 @@ export function _StartBackgroundWorkers(prisma: PrismaClient, batchApi: k8s.Batc
 		}),
 	});
 
-	// 3. Run durable terminal repair separately from physical Job cleanup and fence both in Postgres.
+	// 3. Mark expired runs terminal in the database separately from physical Job cleanup, and fence both in Postgres.
 	const runtimeRepairHandle = setInterval(function _repair() { void runtimeRepairRepository.repairNextExpiredRunAtomically().catch(function _onError(error: unknown) { _log.error({ err: error }, "runtime terminal repair failed"); }); }, _RUNTIME_REPAIR_INTERVAL_MILLISECONDS);
 	runtimeRepairHandle.unref();
 	const runtimeCleanupHandle = setInterval(function _cleanup() { void runtimeCleanup.reconcileNext().catch(function _onError(error: unknown) { _log.error({ err: error }, "runtime workload cleanup failed"); }); }, _RUNTIME_CLEANUP_INTERVAL_MILLISECONDS);

@@ -8,6 +8,6 @@ privileges:
     cloud.google.com/compute-class: opencrane-database-proof
 
 # A prior one-run NetworkPolicy diagnostic must never persist through Helm's
-# reset-then-reuse-values upgrade path. This profile is the normal GKE posture.
+# reset-then-reuse-values upgrade path. This profile is the normal GKE setup.
 networkPolicy:
   enabled: true

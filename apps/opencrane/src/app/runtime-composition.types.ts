@@ -20,9 +20,9 @@ export interface InternalRuntimeComposition
 	readonly skillAuthoringCompletion: Router;
 	/** Optional preprocessor router, present only when the restricted worker plane is enabled. */
 	readonly artifactPreprocessor: Router | null;
-	/** Optional controller-selected replay policy enforcement point. */
+	/** Optional router that enforces replay policy; the controller decides whether it is mounted. */
 	readonly conversationReplay: Router | null;
-	/** Workload-authenticated browser channel resolver paired with the replay receiver. */
+	/** Router that resolves a browser channel for a workload-authenticated caller, alongside the replay receiver. */
 	readonly channelTargetResolver: Router | null;
 	/** Runtime router that binds a workload proof key once. */
 	readonly runtimeBootstrap: Router;
@@ -30,20 +30,20 @@ export interface InternalRuntimeComposition
 	readonly runtimeStream: Router;
 }
 
-/** Controller-only composition slice. */
+/** The subset of routers built by the controller-only composition step. */
 export type ControllerRuntimeComposition = Pick<
 	InternalRuntimeComposition,
 	"agentControllerRunDispatch" | "skillWorkloadDispatch"
 >;
 
-/** Isolated skill workload composition slice. */
+/** The subset of routers built by the isolated skill-workload composition step. */
 export type SkillWorkloadRuntimeComposition = Pick<
 	InternalRuntimeComposition,
 	"skillWorkloadBootstrap" | "skillAuthoringInput" | "skillAuthoringCompletion"
 >;
 
-/** Runtime protocol composition slice. */
+/** The subset of routers built by the runtime-protocol composition step. */
 export type RuntimeProtocolComposition = Pick<InternalRuntimeComposition, "runtimeBootstrap" | "runtimeStream">;
 
-/** Optional workload and replay composition slice. */
+/** The subset of routers built by the optional worker and replay composition step. */
 export type OptionalRuntimeComposition = Pick<InternalRuntimeComposition, "artifactPreprocessor" | "channelTargetResolver" | "conversationReplay">;

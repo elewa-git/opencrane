@@ -116,7 +116,7 @@ sharedPlatform:
 
 # -- Channel trust-boundary settings
 channelProxy:
-  # -- Standalone target channel trust boundary. It delegates all identity, membership,
+  # -- Standalone target channel trust boundary. It leaves all identity, membership,
   #    conversation, and runtime-target decisions to OpenCrane.
   enabled: true
   image:
@@ -185,7 +185,7 @@ memoryGateway:
       cpu: 250m
       memory: 256Mi
 
-# -- Isolated capability-only candidate-skill authoring Job plane. It contains no standing worker.
+# -- Isolated Job plane for candidate-skill authoring and nothing else. It contains no standing worker.
 # The dependency name is intentional: Helm passes its contents to the child chart.
 opencrane-skill-authoring:
   skillAuthoring:
@@ -466,7 +466,7 @@ clustertenantManager:
     #    routes (tenant-models, contract, bundles, participation). The public ingress never
     #    routes to this port; NetworkPolicy (networkpolicy-planes.yaml) restricts it to platform
     #    pods. Splitting the internal API onto its own port keeps it off the internet-facing
-    #    surface — the org ingress's `/api` path can only reach the public port.
+    #    listener — the org ingress's `/api` path can only reach the public port.
     internalPort: 8081
   resources:
     requests:
@@ -880,7 +880,7 @@ mcpGateway:
   # -- Hard timeout in whole seconds for one server→Obot management exchange (1 through 300).
   serverTimeoutSeconds: 30
   # -- Authentication & per-user isolation (P0.1). Default OFF preserves the in-cluster-only
-  # posture (NetworkPolicy is the only gate; shared-credential multi-user servers ONLY — NO
+  # setup (NetworkPolicy is the only gate; shared-credential multi-user servers ONLY — NO
   # per-user credentials or access policies).
   #
   # Set enabled=true for the per-user model. Obot can only differentiate users it
@@ -910,7 +910,7 @@ mcpGateway:
     path: ""
   # -- Encryption-at-rest for Obot's credential/token store (P0.3). Default OFF.
   # When enabled, an `encryptionsetup` init container (replicated verbatim from obot
-  # v0.23.1) materialises an apiserver EncryptionConfiguration from the key below into a
+  # v0.23.1) writes an apiserver EncryptionConfiguration from the key below into a
   # Memory-backed volume, and the gateway reads it via OBOT_SERVER_ENCRYPTION_CONFIG_FILE
   # (provider=custom never consumes the bare key directly). Provision the key Secret
   # out-of-band, e.g. `kubectl create secret generic opencrane-obot-enc \

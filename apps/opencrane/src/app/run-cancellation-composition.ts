@@ -4,10 +4,10 @@ import { PrismaRunCancellationRepository, type RunCancellationRepository } from 
 
 import type { InternalRuntimeConfig } from "./config.types.js";
 
-/** Database claim lifetime shared by repair and cleanup passes. */
+/** How long a cleanup claim stays valid before another pass may reclaim it; the repair and cleanup passes share this value. */
 const _RUNTIME_CLEANUP_CLAIM_LEASE_MILLISECONDS = 30_000;
 
-/** Margin that separates two observations of an unassigned orphan's absence. */
+/** Extra time after a dispatch lease in which an in-flight Kubernetes Job create may still finish, so a Job that is not visible yet is not treated as an orphan. */
 const _RUNTIME_ORPHAN_OBSERVATION_MARGIN_MILLISECONDS = 10_000;
 
 /** Compose one cancellation authority shared by the public route and cleanup workers. */

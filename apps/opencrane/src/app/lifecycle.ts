@@ -48,10 +48,10 @@ function _startHttpServers(publicApp: Express, internalApp: Express, config: Ope
  */
 export function _StartProcessLifecycle(publicApp: Express, internalApp: Express, prisma: PrismaClient, batchApi: k8s.BatchV1Api, managedRunAdmission: ManagedRunAdmissionPort, runCancellation: RunCancellationRepository, config: OpenCraneProcessConfig, channelTargetRoutes: ChannelTargetRouteReconciler, unbindConsole: () => void, externalActions: ExternalActionWorker, stopObot: () => void): void
 {
-	// 1. Bind both transport surfaces before starting the loops that serve or repair their work.
+	// 1. Bind both HTTP listeners before starting the loops that serve or repair their work.
 	const servers = _startHttpServers(publicApp, internalApp, config);
 
-	// 2. Start process-owned workers only after their public and internal control surfaces exist.
+	// 2. Start process-owned workers only after their public and internal listeners exist.
 	const backgroundWorkers = _StartBackgroundWorkers(prisma, batchApi, managedRunAdmission, runCancellation, config, externalActions);
 
 	// 3. Register one idempotent shutdown path so concurrent signals cannot drain dependencies twice.

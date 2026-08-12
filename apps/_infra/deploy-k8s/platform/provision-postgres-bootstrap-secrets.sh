@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Creates the externally-owned PostgreSQL bootstrap Secret authorities for one fresh silo.
+# Creates the PostgreSQL bootstrap Secrets for one fresh silo; the installer only validates them afterwards.
 # It is deliberately separate from k8s-deploy.sh: the installer validates these credentials
 # and never rotates or repairs them.
 set -euo pipefail

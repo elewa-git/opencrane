@@ -3,7 +3,7 @@ import { isAbsolute } from "node:path";
 
 import type { ArtifactServiceProcessConfig } from "./config.types.js";
 
-/** Read configuration without accepting a runtime-local or relative byte root. */
+/** Read configuration, refusing a byte root that is relative or on the pod's own filesystem. */
 export function _ReadConfig(environment: NodeJS.ProcessEnv = process.env): ArtifactServiceProcessConfig
 {
 	const artifactRoot = environment.ARTIFACT_ROOT ?? "/var/lib/opencrane/artifacts";

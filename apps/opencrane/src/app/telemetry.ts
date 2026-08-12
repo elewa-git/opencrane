@@ -6,7 +6,7 @@ import { pinoHttp, type HttpLogger } from "pino-http";
 
 import { ___GetContext } from "@opencrane/backend/observability";
 
-/** Remove replay-cursor headers without retaining their names at another casing. */
+/** Drop the `last-event-id` replay-cursor header, matching its name in any letter case. */
 function _withoutReplayCursorHeaders(headers: IncomingHttpHeaders): IncomingHttpHeaders
 {
 	const safeHeaders: IncomingHttpHeaders = {};
@@ -18,9 +18,9 @@ function _withoutReplayCursorHeaders(headers: IncomingHttpHeaders): IncomingHttp
 }
 
 /**
- * Project only query-free request coordinates into an HTTP request log record.
+ * Copy only query-free request fields into an HTTP request log record.
  *
- * The standard pino-http serializer runs first. This defense-in-depth projection also handles
+ * The standard pino-http serializer runs first. This extra safety pass also handles
  * Express' `originalUrl` and any raw `query` or `cursor` fields supplied by a future serializer.
  * @param request - Standard or extended serialized request value.
  * @returns A request record that cannot retain replay cursors or any URL query string.

@@ -1,7 +1,7 @@
 /** Fully validated configuration for the isolated PDF preprocessing process. */
 export interface ArtifactPreprocessorProcessConfig
 {
-	/** Internal OpenCrane origin used for fenced job authority calls. */
+	/** Internal OpenCrane origin this worker calls to claim and complete its fenced jobs. */
 	readonly openCraneInternalUrl: string;
 	/** Absolute path to the rotating audience-bound Kubernetes ServiceAccount token. */
 	readonly tokenPath: string;
