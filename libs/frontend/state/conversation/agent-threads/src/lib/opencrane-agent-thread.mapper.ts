@@ -29,11 +29,13 @@ export function __AgentThreadSnapshot(value: unknown): AgentThreadSnapshot
 	const latestUpdateAt = [dto.createdAt, ...dto.messages.map(function _MessageTime(message) { return message.createdAt; }), ...dto.deliveries.map(function _DeliveryTime(delivery) { return delivery.createdAt; })].sort().at(-1) ?? dto.createdAt;
 	const result = [...dto.deliveries].reverse().find(function _Result(delivery) { return delivery.kind === "result" || delivery.kind === "asset"; });
 	const visibleThroughPosition = dto.messages.reduce(function _LatestPosition(latest, message) { return BigInt(message.position) > BigInt(latest) ? message.position : latest; }, "0");
+	const previewFields = preview === undefined || preview.length === 0 ? {} : { preview };
+	const resultFields = result === undefined ? {} : { resultLabel: result.label };
 	return {
 		parentConversationId: dto.parentConversationId,
 		childConversationId: dto.childConversationId,
 		origin: { parentTitle: "Group conversation", parentMessageId: dto.parentMessageId, invokedByName: "Invoking participant", invokedByInitials: "IP", ask: dto.ask, timestampLabel: _Time(dto.createdAt) },
-		summary: { childConversationId: dto.childConversationId, state: _SummaryState(dto.lifecycle, latestRun?.state), access: AgentThreadAccessStates.Available, title: dto.agentName, ...(preview === undefined || preview.length === 0 ? {} : { preview }), unreadCount: dto.unreadMessageCount, participants: Array.from({ length: dto.participantCount }, function _Participant(_value, index) { const label = `Participant ${index + 1}`; return { label, initials: `P${index + 1}` }; }), replyCount: dto.messageCount, runCount: latestRun?.ordinal ?? 0, updateCount: dto.messageCount + dto.deliveries.length, lastUpdateLabel: _Time(latestUpdateAt), assetCount: dto.deliveries.filter(function _Asset(delivery) { return delivery.kind === "asset"; }).length, ...(result === undefined ? {} : { resultLabel: result.label }), target: _SummaryTarget(latestRun, latestDelivery, result) },
+		summary: { childConversationId: dto.childConversationId, state: _SummaryState(dto.lifecycle, latestRun?.state), access: AgentThreadAccessStates.Available, title: dto.agentName, ...previewFields, unreadCount: dto.unreadMessageCount, participants: Array.from({ length: dto.participantCount }, function _Participant(_value, index) { const label = `Participant ${index + 1}`; return { label, initials: `P${index + 1}` }; }), replyCount: dto.messageCount, runCount: latestRun?.ordinal ?? 0, updateCount: dto.messageCount + dto.deliveries.length, lastUpdateLabel: _Time(latestUpdateAt), assetCount: dto.deliveries.filter(function _Asset(delivery) { return delivery.kind === "asset"; }).length, ...resultFields, target: _SummaryTarget(latestRun, latestDelivery, result) },
 		recovery: AgentThreadRecoveryStates.Live,
 		timeline,
 		cursor: dto.cursor,
