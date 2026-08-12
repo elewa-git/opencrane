@@ -1,0 +1,13 @@
+<wo-agent-thread-page
+	[parentConversationId]="parentConversationId()"
+	[childConversationId]="childConversationId()"
+	[parentRestore]="parentRestore()"
+	[focusTarget]="focusTarget()"
+	[activityRows]="activityRows()"
+	[elicitation]="elicitation()"
+	[asset]="asset()"
+	[a2uiSurface]="a2uiSurface()"
+	(parentRestoreRequested)="restoreParent($event)"
+	(chatsRequested)="openChats()"
+	(childProjectionPurgeRequested)="purgeChildProjection($event)"
+/>

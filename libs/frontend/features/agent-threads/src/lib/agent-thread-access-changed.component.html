@@ -1,0 +1,10 @@
+<wo-agent-thread-route-notice
+	headingId="access-changed-title"
+	title="This Agent thread is no longer available"
+	detail="Your access changed. Previously displayed child content and drafts were removed from this view."
+	actionLabel="Return to parent chat"
+	severity="error"
+	buttonSeverity="danger"
+	[focusHeading]="true"
+	(returnRequested)="returnRequested.emit()"
+/>

@@ -16,6 +16,7 @@ import type { ConversationActivityRow, ConversationActivityTarget, ConversationE
 import { AgentThreadAccessChangedComponent } from "./agent-thread-access-changed.component.js";
 import { AgentThreadAvailableComponent } from "./agent-thread-available.component.js";
 import { AgentThreadDeliveryComponent } from "./agent-thread-delivery.component.js";
+import { _AgentThreadAuthorizedFocusTarget } from "./agent-thread-focus-target.js";
 import type { AgentThreadProjectionPurgeIntent } from "./agent-thread-feature.types.js";
 import { __AgentThreadMessagePresentation } from "./agent-thread.mapper.js";
 import { AgentThreadOriginComponent } from "./agent-thread-origin.component.js";
@@ -159,7 +160,7 @@ export class AgentThreadPageComponent
 		const snapshot = this.store.snapshot();
 		if (this.store.routeState() !== AgentThreadRouteStates.Ready || snapshot === null) return;
 		void this.store.markVisible();
-		const target = this.focusTarget() ?? snapshot.summary.target;
+		const target = _AgentThreadAuthorizedFocusTarget(this.focusTarget(), snapshot);
 		const targetKey = `${snapshot.childConversationId}\u0000${target.kind}\u0000${target.id}`;
 		if (targetKey === this._focusedTargetKey) return;
 		const element = this._document.getElementById(target.id);

@@ -1,0 +1,14 @@
+.route-state {
+	display: grid;
+	justify-items: center;
+	gap: var(--oc-space-4);
+	max-width: 38rem;
+	margin: auto;
+	padding: var(--oc-space-8);
+	text-align: center;
+}
+
+h2:focus-visible {
+	outline: var(--oc-focus-width) solid var(--oc-focus-ring);
+	outline-offset: var(--oc-focus-offset);
+}
