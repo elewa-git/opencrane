@@ -25,16 +25,34 @@ export function __ProjectConversationEvent(row: ConversationProjectionEventRow):
 /** Select only schema-free display fields needed by known projected event types. */
 function _SafePayload(type: string, payload: Readonly<Record<string, unknown>>, conversationId: string, runId: string | null): AgUiPublicEventPayload
 {
-	if (type === RunEventTypes.MessageStarted || type === RunEventTypes.MessageCompleted) return _Strings(payload, ["messageId"]);
-	if (type === RunEventTypes.MessageDelta) return _Strings(payload, ["messageId", "delta"]);
-	if (type === RunEventTypes.ToolRequested) return _Strings(payload, ["toolCallId", "toolCallName"]);
-	if (type === RunEventTypes.ToolStarted || type === RunEventTypes.ToolCompleted) return _Tool(payload);
-	if (type === RunEventTypes.ToolFailed) return _Failure(payload, true);
-	if (type === RunEventTypes.ToolRecoveryRequired) return _ToolRecovery(payload);
-	if (type === RunEventTypes.RunError) return _Failure(payload, false);
-	if (type === RunEventTypes.RunFailed || type === RunEventTypes.RunCancelled) return _Strings(payload, ["terminalReason", "failureCode"]);
-	if (type === "conversation.message") return _Message(payload);
-	if (type === RunEventTypes.A2uiRenderingBegun || type === RunEventTypes.A2uiSurfaceUpdated || type === RunEventTypes.A2uiDataModelUpdated) return _A2ui(payload, conversationId, runId);
+	switch (type)
+	{
+		case RunEventTypes.MessageStarted:
+		case RunEventTypes.MessageCompleted:
+			return _Strings(payload, ["messageId"]);
+		case RunEventTypes.MessageDelta:
+			return _Strings(payload, ["messageId", "delta"]);
+		case RunEventTypes.ToolRequested:
+			return _Strings(payload, ["toolCallId", "toolCallName"]);
+		case RunEventTypes.ToolStarted:
+		case RunEventTypes.ToolCompleted:
+			return _Tool(payload);
+		case RunEventTypes.ToolFailed:
+			return _Failure(payload, true);
+		case RunEventTypes.ToolRecoveryRequired:
+			return _ToolRecovery(payload);
+		case RunEventTypes.RunError:
+			return _Failure(payload, false);
+		case RunEventTypes.RunFailed:
+		case RunEventTypes.RunCancelled:
+			return _Strings(payload, ["terminalReason", "failureCode"]);
+		case "conversation.message":
+			return _Message(payload);
+		case RunEventTypes.A2uiRenderingBegun:
+		case RunEventTypes.A2uiSurfaceUpdated:
+		case RunEventTypes.A2uiDataModelUpdated:
+			return _A2ui(payload, conversationId, runId);
+	}
 	if (type === "child.run.completed" || type === "child.run.failed" || type === "child.run.cancelled") return _ChildRun(type, payload, runId);
 	return {};
 }
