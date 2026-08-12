@@ -72,7 +72,7 @@ describe("pinned AG-UI client conformance", function _PinnedClientConformance()
 
 	it("preserves one open approval across reconnect and forwards approve-with-edits exactly", async function _ApprovalResume()
 	{
-		const interrupt = { id: "approval-1", reason: "tool_approval", message: "Review the exact query", toolCallId: "tool-1", responseSchema: { type: "object", required: ["query"], properties: { query: { type: "string" } } }, expiresAt: "2026-08-12T00:00:00.000Z" };
+		const interrupt = { id: "approval-1", reason: "tool_approval", message: "Review the exact query", toolCallId: "tool-1", responseSchema: { type: "object", required: ["query"], properties: { query: { type: "string" } } }, expiresAt: "2099-08-12T00:00:00.000Z" };
 		const agent = new _ProjectedEventAgent([
 			[_Started("run-approval"), { type: EventType.RUN_FINISHED, threadId: "conversation-1", runId: "run-approval", outcome: { type: "interrupt", interrupts: [interrupt] } }],
 			[_Started("run-resume"), _Succeeded("run-resume")]
