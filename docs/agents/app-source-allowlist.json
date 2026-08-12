@@ -65,6 +65,7 @@
     { "path": "apps/opencrane-ui/src/environments/environment.prod.ts", "owner": "apps/opencrane-ui", "classification": "browser-config" },
     { "path": "apps/opencrane-ui/src/environments/environment.ts", "owner": "apps/opencrane-ui", "classification": "browser-config" },
     { "path": "apps/opencrane-ui/src/main.ts", "owner": "apps/opencrane-ui", "classification": "browser-entrypoint" },
+    { "path": "apps/opencrane-ui/vitest.config.ts", "owner": "apps/opencrane-ui", "classification": "test-config" },
 
     { "path": "apps/channel-proxy/src/config.ts", "owner": "apps/channel-proxy", "classification": "app-config" },
     { "path": "apps/channel-proxy/src/config.types.ts", "owner": "apps/channel-proxy", "classification": "app-config" },
