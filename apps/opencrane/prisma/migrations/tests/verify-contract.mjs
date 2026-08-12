@@ -191,6 +191,8 @@ for (const name of authorityFunctions)
 
 const seedStart = targetBaseline.indexOf('INSERT INTO "persona_question_sets"');
 requireContract(seedStart >= 0, "target governed persona seeds must exist");
-requireContract(sql.includes(targetBaseline.slice(seedStart)), "migration must carry the exact governed target seeds");
+const seedEnd = targetBaseline.indexOf('\n-- CreateTable\nCREATE TABLE "artifact_scan_jobs"', seedStart);
+requireContract(seedEnd > seedStart, "target governed persona seeds must have an exact boundary");
+requireContract(sql.includes(targetBaseline.slice(seedStart, seedEnd)), "migration must carry the exact governed target seeds");
 
 console.log("0.7.0-to-0.8.0 migration contract: PASS");
