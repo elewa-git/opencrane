@@ -111,4 +111,18 @@ describe("conversation elements", function _ConversationElements()
 		(fixture.nativeElement as HTMLElement).querySelector<HTMLFormElement>("form")?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
 		expect(submitted).toEqual(["Follow up"]);
 	});
+
+	it("allows an empty text submission only when the host has non-text content", async function _SubmitsAttachmentOnly()
+	{
+		const fixture = await _Fixture(ConversationComposerComponent);
+		const submitted: string[] = [];
+		fixture.componentInstance.submitted.subscribe(function _Capture(value) { submitted.push(value); });
+		_SetInput(fixture.componentInstance.draft, "");
+		_SetInput(fixture.componentInstance.allowEmptySubmission, true);
+		fixture.detectChanges();
+
+		(fixture.nativeElement as HTMLElement).querySelector<HTMLFormElement>("form")?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+
+		expect(submitted).toEqual([""]);
+	});
 });

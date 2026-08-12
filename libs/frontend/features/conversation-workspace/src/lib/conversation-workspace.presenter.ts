@@ -70,8 +70,12 @@ export class ConversationWorkspacePresenter
 	protected async open(conversationId: string): Promise<void> { await this.store.open(conversationId); }
 	/** Keep ordinary message input controlled by the conversation store. */
 	protected updateDraft(value: string): void { this.store.updateDraft(value); }
-	/** Submit ordinary participant input through the immutable server strategy. */
-	protected async send(): Promise<void> { await this.store.send(); }
+	/** Submit ordinary participant input with the exact ready assets selected for this message. */
+	protected async send(): Promise<void>
+	{
+		const assetIds = this.assetsStore.messageAssetIds();
+		if (await this.store.send(assetIds)) this.assetsStore.clearMessageSelection(assetIds);
+	}
 	/** Select files through the existing 200 MB per-message asset state. */
 	protected async selectFiles(event: Event): Promise<void>
 	{

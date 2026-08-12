@@ -1,8 +1,7 @@
 import { Injectable, inject } from "@angular/core";
 
 import { ControlPlaneApiService } from "@opencrane/core";
-import { MessageContentBlockKinds } from "@opencrane/models/conversations";
-import { ConversationRunStates, ConversationWorkspaceGatewayError, ConversationWorkspaceGatewayErrorKinds, type ConversationCreationDirectory, type ConversationRun, type ConversationSummary, type ConversationWorkspaceDetail, type ConversationWorkspaceGateway, type CreateConversationCommand, type RetryConversationRunCommand } from "@opencrane/state/conversation/workspace";
+import { ConversationRunStates, ConversationWorkspaceGatewayError, ConversationWorkspaceGatewayErrorKinds, type ConversationCreationDirectory, type ConversationRun, type ConversationSummary, type ConversationWorkspaceDetail, type ConversationWorkspaceGateway, type CreateConversationCommand, type RetryConversationRunCommand, type SubmitConversationMessageCommand } from "@opencrane/state/conversation/workspace";
 
 import { _ConversationDetail, _ConversationRun, _ConversationSummary, _ConversationWorkspaceDirectory } from "./conversation-workspace.dto.js";
 import type { ConversationDetailDto, ConversationDirectoryDto, ConversationRunDto, ConversationSummaryDto } from "./conversation-workspace.dto.types.js";
@@ -52,9 +51,10 @@ export class OpenCraneConversationWorkspaceGateway implements ConversationWorksp
 	}
 
 	/** @inheritdoc */
-	public async send(conversationId: string, text: string, idempotencyKey: string): Promise<void>
+	public async send(command: SubmitConversationMessageCommand): Promise<void>
 	{
-		const result = await this._api.client.POST("/me/conversations/{conversationId}/messages", { params: { path: { conversationId } }, body: { idempotencyKey, blocks: [{ id: globalThis.crypto.randomUUID(), kind: MessageContentBlockKinds.Text, value: text }] } });
+		const blocks = command.blocks.map(function _Block(block) { return { ...block }; });
+		const result = await this._api.client.POST("/me/conversations/{conversationId}/messages", { params: { path: { conversationId: command.conversationId } }, body: { idempotencyKey: command.idempotencyKey, blocks } });
 		if (result.error !== undefined || result.data === undefined) throw _Failure(result.response?.status);
 	}
 

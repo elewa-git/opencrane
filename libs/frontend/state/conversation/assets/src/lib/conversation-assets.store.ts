@@ -1,5 +1,7 @@
 import { Injectable, computed, inject, resource, signal } from "@angular/core";
 
+import { ConversationAssetLifecycle, ConversationAssetProvenance } from "@opencrane/models/conversation-assets";
+
 import { _ConversationAssetContentAddress, _ConversationAssetFileMediaType, _DecideConversationAssetFiles } from "./conversation-asset-file.js";
 import { CONVERSATION_ASSETS_GATEWAY } from "./conversation-assets-gateway.types.js";
 import { ConversationAssetTransferPhases, type ConversationAsset, type ConversationAssetSelectionFailure, type PendingConversationAssetUpload } from "./conversation-assets.types.js";
@@ -24,6 +26,8 @@ export class ConversationAssetsStore
 	private readonly _conversationId = signal<string | undefined>(undefined);
 	private readonly _intents = signal<readonly ConversationAssetUploadIntent[]>([]);
 	private readonly _removingAssetIds = signal<ReadonlySet<string>>(new Set());
+	/** Asset coordinates already submitted while the canonical list catches up. */
+	private readonly _submittedMessageAssetIds = signal<ReadonlySet<string>>(new Set());
 	private _scopeGeneration = 0;
 	private _observedAssetInvalidations = 0;
 
@@ -35,12 +39,14 @@ export class ConversationAssetsStore
 
 	/** Display-safe local transfer state without retaining File objects in presentation. */
 	public readonly pendingUploads = computed<readonly PendingConversationAssetUpload[]>(() => this._intents().map(_PendingUpload));
+	/** Ready unbound participant uploads selected for the next exact message command. */
+	public readonly messageAssetIds = computed<readonly string[]>(this._MessageAssetIds.bind(this));
 
 	/** Select one authoritative conversation for reads and upload commands. */
 	public open(conversationId: string): void
 	{
 		if (conversationId.trim().length === 0) throw new Error("Conversation id is required.");
-		if (this._conversationId() !== conversationId) { this._scopeGeneration += 1; this._observedAssetInvalidations = 0; this._intents.set([]); this.selectionFailure.set(null); this._conversationId.set(conversationId); }
+		if (this._conversationId() !== conversationId) { this._scopeGeneration += 1; this._observedAssetInvalidations = 0; this._intents.set([]); this._submittedMessageAssetIds.set(new Set()); this.selectionFailure.set(null); this._conversationId.set(conversationId); }
 	}
 
 	/** Drop the selected conversation and every browser-private file or command coordinate. */
@@ -51,6 +57,7 @@ export class ConversationAssetsStore
 		this._conversationId.set(undefined);
 		this._intents.set([]);
 		this._removingAssetIds.set(new Set());
+		this._submittedMessageAssetIds.set(new Set());
 		this.selectionFailure.set(null);
 	}
 
@@ -110,6 +117,13 @@ export class ConversationAssetsStore
 
 	/** Explicitly reload lifecycle changes such as scan completion or failure. */
 	public refresh(): void { this.assets.reload(); }
+
+	/** Remove assets from the next composer command after canonical message reconciliation. */
+	public clearMessageSelection(assetIds: readonly string[]): void
+	{
+		if (assetIds.length === 0) return;
+		this._submittedMessageAssetIds.update(current => new Set([...current, ...assetIds]));
+	}
 
 	/** Reload once when the selected conversation's subscribed stream observes a new asset invalidation. */
 	public observeInvalidations(conversationId: string, customEvents: readonly string[]): void
@@ -188,6 +202,14 @@ export class ConversationAssetsStore
 	private _patch(idempotencyKey: string, patch: Partial<ConversationAssetUploadIntent>): void
 	{
 		this._intents.update(current => current.map(intent => intent.idempotencyKey === idempotencyKey ? { ...intent, ...patch } : intent));
+	}
+
+	/** Select only ready, unbound participant uploads owned by the current composer scope. */
+	private _MessageAssetIds(): readonly string[]
+	{
+		if (!this.assets.hasValue()) return [];
+		const submitted = this._submittedMessageAssetIds();
+		return this.assets.value().filter(asset => asset.provenance === ConversationAssetProvenance.ParticipantUpload && asset.state === ConversationAssetLifecycle.Ready && asset.messageId === null && !submitted.has(asset.id)).map(asset => asset.id);
 	}
 }
 

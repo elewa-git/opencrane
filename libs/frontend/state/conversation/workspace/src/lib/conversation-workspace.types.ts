@@ -1,4 +1,4 @@
-import type { ConversationLifecycles, ConversationModes, MessageRoles, MessageSources, MessageStates } from "@opencrane/models/conversations";
+import { MessageContentBlockKinds, type ConversationLifecycles, type ConversationModes, type MessageRoles, type MessageSources, type MessageStates } from "@opencrane/models/conversations";
 
 /** Route-level states rendered by the conversation workspace. */
 export enum ConversationWorkspaceRouteStates
@@ -165,6 +165,28 @@ export type CreateConversationCommand =
 	| { readonly mode: ConversationModes.Direct; readonly participantRefs: readonly string[] }
 	| { readonly mode: ConversationModes.Group; readonly participantRefs: readonly string[] };
 
+/** One participant-admitted block frozen inside a retry-stable message command. */
+export interface SubmitConversationMessageBlock
+{
+	/** Stable block coordinate reused during an exact retry. */
+	readonly id: string;
+	/** Participant input supports only plain text and durable asset references. */
+	readonly kind: MessageContentBlockKinds.Text | MessageContentBlockKinds.Artifact;
+	/** Plain text or an authorized ready asset coordinate. */
+	readonly value: string;
+}
+
+/** Retry-stable participant message command retained until canonical reconciliation succeeds. */
+export interface SubmitConversationMessageCommand
+{
+	/** Selected conversation that owns every referenced asset. */
+	readonly conversationId: string;
+	/** Client command coordinate reused only for an exact retry. */
+	readonly idempotencyKey: string;
+	/** Stable text and asset blocks reused byte-for-byte for an exact retry. */
+	readonly blocks: readonly SubmitConversationMessageBlock[];
+}
+
 /** Exact participant-visible attempt selected for retry. */
 export interface RetryConversationRunCommand
 {
@@ -189,8 +211,8 @@ export interface ConversationWorkspaceGateway
 	open(conversationId: string): Promise<ConversationWorkspaceDetail>;
 	/** Create one conversation whose mode can never change. */
 	create(command: CreateConversationCommand): Promise<ConversationWorkspaceDetail>;
-	/** Submit one text message through the selected conversation's mode strategy. */
-	send(conversationId: string, text: string, idempotencyKey: string): Promise<void>;
+	/** Submit one exact text-and-asset message through the selected conversation's mode strategy. */
+	send(command: SubmitConversationMessageCommand): Promise<void>;
 	/** Change only this participant's archive visibility. */
 	archive(conversationId: string, archived: boolean): Promise<ConversationWorkspaceDetail>;
 	/** Permanently close a conversation after server authority checks. */

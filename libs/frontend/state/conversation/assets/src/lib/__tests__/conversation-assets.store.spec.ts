@@ -61,6 +61,19 @@ describe("ConversationAssetsStore", function _Suite()
 		store.observeInvalidations("conversation-2", ["opencrane.conversation_assets_changed", "opencrane.conversation_assets_changed"]);
 		await vi.waitFor(function _Reloaded() { expect(gateway.list).toHaveBeenCalledTimes(2); expect(store.assets.value()?.[0]?.state).toBe(ConversationAssetLifecycle.Ready); });
 	});
+
+	it("selects ready unbound participant uploads for one message only", async function _MessageSelection()
+	{
+		const ready = _Asset(ConversationAssetLifecycle.Ready);
+		const gateway = { list: vi.fn().mockResolvedValue([ready]), reserve: vi.fn(), upload: vi.fn(), remove: vi.fn() };
+		const store = _Store(gateway);
+		store.open("conversation-1");
+		await vi.waitFor(function _Loaded() { expect(store.assets.hasValue()).toBe(true); });
+
+		expect(store.messageAssetIds()).toEqual([ready.id]);
+		store.clearMessageSelection([ready.id]);
+		expect(store.messageAssetIds()).toEqual([]);
+	});
 	it("rejects an unsupported batch without reserving any file", async function _RejectsSelection()
 	{
 		const gateway = { list: vi.fn().mockResolvedValue([]), reserve: vi.fn(), upload: vi.fn(), remove: vi.fn() };

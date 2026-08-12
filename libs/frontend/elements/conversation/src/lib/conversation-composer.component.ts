@@ -18,6 +18,8 @@ export class ConversationComposerComponent
 	public readonly label = input("Message");
 	/** Host-supplied unique field id for pages that render more than one composer. */
 	public readonly fieldId = input("conversation-composer-field");
+	/** Whether the host has non-text content that permits an empty text submission. */
+	public readonly allowEmptySubmission = input(false);
 	/** Emits every user edit; the host decides whether to adopt it. */
 	public readonly draftChange = output<string>();
 	/** Emits the exact displayed non-empty draft once. */
@@ -43,6 +45,7 @@ export class ConversationComposerComponent
 	/** Emit the exact visible draft only while the composer is available. */
 	protected submit(): void
 	{
-		if (this.state() === ConversationComposerStates.Available && this.draft().trim().length > 0) this.submitted.emit(this.draft());
+		if (this.state() !== ConversationComposerStates.Available) return;
+		if (this.draft().trim().length > 0 || this.allowEmptySubmission()) this.submitted.emit(this.draft());
 	}
 }

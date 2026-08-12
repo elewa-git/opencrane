@@ -4,6 +4,6 @@
 	<textarea [id]="fieldId()" pTextarea rows="3" [value]="draft()" [placeholder]="placeholder()" [disabled]="state() !== states.Available" (input)="changeDraft($event)" (keydown)="handleKeydown($event)"></textarea>
 	<footer>
 		<div class="conversation-composer__footer"><ng-content select="[conversation-composer-footer]" /></div>
-		<p-button type="submit" label="Send" icon="pi pi-send" [loading]="state() === states.Submitting" [disabled]="state() !== states.Available || draft().trim().length === 0" />
+		<p-button type="submit" label="Send" icon="pi pi-send" [loading]="state() === states.Submitting" [disabled]="state() !== states.Available || (draft().trim().length === 0 && !allowEmptySubmission())" />
 	</footer>
 </form>

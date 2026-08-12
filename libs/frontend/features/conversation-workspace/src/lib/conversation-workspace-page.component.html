@@ -26,7 +26,7 @@
 						<wo-conversation-attachment-tray [items]="assets()" [feedback]="assetFeedback()" (actionRequested)="assetAction($event)" />
 						<div class="conversation-workspace__attach"><label><span class="sr-only">Attach files</span><input type="file" multiple (change)="selectFiles($event)" /><span class="conversation-workspace__attach-button"><i class="pi pi-paperclip" aria-hidden="true"></i> Attach</span></label></div>
 						@if (store.error(); as error) { <p-message severity="error" [text]="error" /> }
-						<wo-conversation-composer fieldId="workspace-message" label="Message conversation" placeholder="Write a message…" [draft]="store.draft()" [state]="composerState()" (draftChange)="updateDraft($event)" (submitted)="send()" />
+						<wo-conversation-composer fieldId="workspace-message" label="Message conversation" placeholder="Write a message…" [draft]="store.draft()" [state]="composerState()" [allowEmptySubmission]="assetsStore.messageAssetIds().length > 0" (draftChange)="updateDraft($event)" (submitted)="send()" />
 					</footer>
 				} @else { <section class="conversation-workspace__empty conversation-workspace__empty--page"><h1>No conversation selected</h1><p>Choose a chat or create a new one.</p><p-button label="New conversation" icon="pi pi-plus" (onClick)="showCreate()" /></section> }
 			</section>

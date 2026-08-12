@@ -1,13 +1,13 @@
 import { DestroyRef, Injectable, computed, inject, signal } from "@angular/core";
 
-import { ConversationLifecycles, ConversationModes } from "@opencrane/models/conversations";
+import { ConversationLifecycles, ConversationModes, MessageContentBlockKinds } from "@opencrane/models/conversations";
 import { ConversationEventStreamStatuses, type ConversationEventStreamUpdate } from "@opencrane/state/conversation/adapter";
 import { __CreateAgUiStreamState, type AgUiStreamState } from "@opencrane/state/conversation/ag-ui";
 
 import { ConversationWorkspaceGatewayError, ConversationWorkspaceGatewayErrorKinds } from "./conversation-workspace-gateway.errors.js";
 import { CONVERSATION_WORKSPACE_EVENT_STREAM, CONVERSATION_WORKSPACE_GATEWAY } from "./conversation-workspace.gateway.js";
 import { ConversationRunStore } from "./conversation-run.store.js";
-import { ConversationCreationStates, ConversationPersonalAgentStatuses, ConversationWorkspaceRouteStates, type ConversationCreationDirectory, type ConversationSummary, type ConversationWorkspaceDetail, type CreateConversationCommand } from "./conversation-workspace.types.js";
+import { ConversationCreationStates, ConversationPersonalAgentStatuses, ConversationWorkspaceRouteStates, type ConversationCreationDirectory, type ConversationSummary, type ConversationWorkspaceDetail, type CreateConversationCommand, type SubmitConversationMessageBlock, type SubmitConversationMessageCommand } from "./conversation-workspace.types.js";
 
 /** Component-scoped owner for workspace reads, live tailing, drafts, and commands. */
 @Injectable()
@@ -41,6 +41,8 @@ export class ConversationWorkspaceStore
 	private readonly _creationState = signal(ConversationCreationStates.Idle);
 	/** Whether a message command is active. */
 	private readonly _sending = signal(false);
+	/** Exact command retained after an ambiguous response so retry cannot duplicate the message. */
+	private _pendingMessage: SubmitConversationMessageCommand | null = null;
 	/** Whether a conversation command is active. */
 	private readonly _conversationCommandBusy = signal(false);
 	/** Browser-safe error for the latest failed operation. */
@@ -129,6 +131,7 @@ export class ConversationWorkspaceStore
 			if (generation !== this._generation) return;
 			this._selected.set(detail);
 			this._draft.set("");
+			this._pendingMessage = null;
 			this._routeState.set(ConversationWorkspaceRouteStates.Ready);
 			this._StartStream(detail.id, generation);
 		}
@@ -187,21 +190,25 @@ export class ConversationWorkspaceStore
 	/** Keep the message composer controlled by this selected conversation. */
 	public updateDraft(value: string): void { this._draft.set(value); }
 
-	/** Submit the exact displayed message once and refresh the canonical snapshot. */
-	public async send(): Promise<boolean>
+	/** Submit exact text and ready asset references, then reconcile before forgetting the retry key. */
+	public async send(assetIds: readonly string[] = []): Promise<boolean>
 	{
 		const selected = this._selected();
 		const text = this._draft().trim();
-		if (selected === null || text.length === 0 || !this._CanSend()) return false;
+		if (selected === null || (text.length === 0 && assetIds.length === 0) || !this._CanSend(assetIds.length > 0)) return false;
 		const generation = this._generation;
+		const command = this._PendingMessageCommand(selected.id, text, assetIds);
 		this._sending.set(true);
 		this._error.set(null);
 		try
 		{
-			await this._gateway.send(selected.id, text, globalThis.crypto.randomUUID());
+			await this._gateway.send(command);
 			if (generation !== this._generation) return false;
+			const reconciled = await this._gateway.open(selected.id);
+			if (generation !== this._generation) return false;
+			this._selected.set(reconciled);
 			this._draft.set("");
-			this._selected.set(await this._gateway.open(selected.id));
+			this._pendingMessage = null;
 			return true;
 		}
 		catch (error)
@@ -286,6 +293,7 @@ export class ConversationWorkspaceStore
 		this._live.set(__CreateAgUiStreamState());
 		this.runs.clear();
 		this._draft.set("");
+		this._pendingMessage = null;
 		this._routeState.set(ConversationWorkspaceRouteStates.AccessChanged);
 		this._error.set(null);
 	}
@@ -299,6 +307,7 @@ export class ConversationWorkspaceStore
 		this._live.set(__CreateAgUiStreamState());
 		this.runs.clear();
 		this._draft.set("");
+		this._pendingMessage = null;
 	}
 
 	/** Stop the current stream without changing any retained view state. */
@@ -309,10 +318,21 @@ export class ConversationWorkspaceStore
 	}
 
 	/** Whether selected canonical and run state accept a message. */
-	private _CanSend(): boolean
+	private _CanSend(hasAssets = false): boolean
 	{
 		const selected = this._selected();
-		return selected !== null && selected.lifecycle === ConversationLifecycles.Open && selected.accessEndedPosition === null && !this._sending() && this._draft().trim().length > 0;
+		return selected !== null && selected.lifecycle === ConversationLifecycles.Open && selected.accessEndedPosition === null && !this._sending() && (this._draft().trim().length > 0 || hasAssets);
+	}
+
+	/** Reuse the exact pending command, or freeze a fresh command from the current composer. */
+	private _PendingMessageCommand(conversationId: string, text: string, assetIds: readonly string[]): SubmitConversationMessageCommand
+	{
+		if (this._pendingMessage !== null && this._pendingMessage.conversationId === conversationId) return this._pendingMessage;
+		const textBlocks: readonly SubmitConversationMessageBlock[] = text.length === 0 ? [] : [{ id: globalThis.crypto.randomUUID(), kind: MessageContentBlockKinds.Text, value: text }];
+		const assetBlocks: readonly SubmitConversationMessageBlock[] = assetIds.map(function _AssetBlock(assetId) { return { id: globalThis.crypto.randomUUID(), kind: MessageContentBlockKinds.Artifact, value: assetId }; });
+		const command: SubmitConversationMessageCommand = { conversationId, idempotencyKey: globalThis.crypto.randomUUID(), blocks: [...textBlocks, ...assetBlocks] };
+		this._pendingMessage = command;
+		return command;
 	}
 
 	/** Whether the creation selection matches the fixed mode's cardinality. */

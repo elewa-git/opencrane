@@ -4,7 +4,7 @@ import { TestBed } from "@angular/core/testing";
 import { BrowserDynamicTestingModule, platformBrowserDynamicTesting } from "@angular/platform-browser-dynamic/testing";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
-import { ConversationLifecycles, ConversationModes } from "@opencrane/models/conversations";
+import { ConversationLifecycles, ConversationModes, MessageContentBlockKinds } from "@opencrane/models/conversations";
 import { ConversationEventStreamStatuses, type ConversationEventStream, type StreamConversationEventsCommand } from "@opencrane/state/conversation/adapter";
 import { __CreateAgUiStreamState } from "@opencrane/state/conversation/ag-ui";
 
@@ -12,7 +12,7 @@ import { ConversationRunStore } from "../conversation-run.store.js";
 import { ConversationWorkspaceGatewayError, ConversationWorkspaceGatewayErrorKinds } from "../conversation-workspace-gateway.errors.js";
 import { CONVERSATION_WORKSPACE_EVENT_STREAM, CONVERSATION_WORKSPACE_GATEWAY } from "../conversation-workspace.gateway.js";
 import { ConversationWorkspaceStore } from "../conversation-workspace.store.js";
-import { ConversationPersonalAgentStatuses, ConversationWorkspaceRouteStates, type ConversationRun, type ConversationWorkspaceDetail, type ConversationWorkspaceGateway, type CreateConversationCommand, type RetryConversationRunCommand } from "../conversation-workspace.types.js";
+import { ConversationPersonalAgentStatuses, ConversationWorkspaceRouteStates, type ConversationRun, type ConversationWorkspaceDetail, type ConversationWorkspaceGateway, type CreateConversationCommand, type RetryConversationRunCommand, type SubmitConversationMessageCommand } from "../conversation-workspace.types.js";
 
 /** Build one complete authorized conversation snapshot. */
 function _Detail(id = "conversation-1"): ConversationWorkspaceDetail
@@ -27,8 +27,10 @@ class _FakeGateway implements ConversationWorkspaceGateway
 	public openResult: ConversationWorkspaceDetail | Error = _Detail();
 	/** Created immutable-mode commands. */
 	public readonly created: CreateConversationCommand[] = [];
-	/** Submitted message copy. */
-	public readonly sent: string[] = [];
+	/** Submitted exact message commands. */
+	public readonly sent: SubmitConversationMessageCommand[] = [];
+	/** Optional send failure used to model ambiguous transport outcomes. */
+	public sendError: Error | null = null;
 
 	/** Return generic privacy-safe choices. */
 	public async directory() { return { participants: [{ participantRef: "self-ref", isSelf: true, label: "You" }, { participantRef: "other-ref", isSelf: false, label: "Participant 1" }], personalAgentStatus: ConversationPersonalAgentStatuses.Ready, personalAgent: { personalAgentRef: "agent-ref", displayName: "Nova" } } as const; }
@@ -38,8 +40,12 @@ class _FakeGateway implements ConversationWorkspaceGateway
 	public async open(): Promise<ConversationWorkspaceDetail> { if (this.openResult instanceof Error) throw this.openResult; return this.openResult; }
 	/** Record and return one created snapshot. */
 	public async create(command: CreateConversationCommand): Promise<ConversationWorkspaceDetail> { this.created.push(command); return { ..._Detail("created-1"), mode: command.mode }; }
-	/** Record one message body. */
-	public async send(_conversationId: string, text: string): Promise<void> { this.sent.push(text); }
+	/** Record one exact message command before returning its controlled outcome. */
+	public async send(command: SubmitConversationMessageCommand): Promise<void>
+	{
+		this.sent.push(command);
+		if (this.sendError !== null) throw this.sendError;
+	}
 	/** Return an archived snapshot. */
 	public async archive() { return { ..._Detail(), archivedAt: "2026-08-12T10:00:00.000Z" }; }
 	/** Return a closed snapshot. */
@@ -127,6 +133,32 @@ describe("ConversationWorkspaceStore", function _ConversationWorkspaceStore()
 		expect(store.draft()).toBe("Keep this draft");
 		expect(store.streamStatus()).toBe(ConversationEventStreamStatuses.Reconnecting);
 		expect(store.routeState()).toBe(ConversationWorkspaceRouteStates.Ready);
+	});
+
+	it("reuses the exact message command after an ambiguous response", async function _RetryExactMessage()
+	{
+		const [store, gateway] = _CreateStore();
+		await store.load();
+		store.updateDraft("Send once");
+		gateway.sendError = new Error("connection reset after commit");
+
+		expect(await store.send()).toBe(false);
+		gateway.sendError = null;
+		expect(await store.send()).toBe(true);
+
+		expect(gateway.sent).toHaveLength(2);
+		expect(gateway.sent[1]).toEqual(gateway.sent[0]);
+		expect(store.draft()).toBe("");
+	});
+
+	it("submits an attachment-only message using a durable asset reference", async function _AttachmentOnly()
+	{
+		const [store, gateway] = _CreateStore();
+		await store.load();
+
+		expect(await store.send(["asset-1"])).toBe(true);
+
+		expect(gateway.sent[0]?.blocks).toEqual([{ id: "command-key", kind: MessageContentBlockKinds.Artifact, value: "asset-1" }]);
 	});
 
 	it("purges a previously visible snapshot and draft on proven access loss", async function _AccessLoss()
