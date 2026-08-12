@@ -256,6 +256,9 @@
       "@opencrane/state/conversation/elicitation": [
         "./libs/frontend/state/conversation/elicitation/src/index.ts"
       ],
+      "@opencrane/state/conversation/agent-threads": [
+        "./libs/frontend/state/conversation/agent-threads/src/index.ts"
+      ],
       "@opencrane/state/mcp/adapter": [
         "./libs/frontend/state/mcp/adapter/src/index.ts"
       ],
@@ -312,6 +315,9 @@
     },
     {
       "path": "./libs/frontend/state/conversation/elicitation"
+    },
+    {
+      "path": "./libs/frontend/state/conversation/agent-threads"
     },
     {
       "path": "./libs/frontend/state/persona/adapter"
