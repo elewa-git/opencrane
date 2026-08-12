@@ -6400,6 +6400,7 @@ export interface operations {
                             latestPosition: string;
                             representedThroughPosition: string;
                             messageCount: number;
+                            unreadMessageCount: number;
                             cursor: string | null;
                             messages: {
                                 id: string;
