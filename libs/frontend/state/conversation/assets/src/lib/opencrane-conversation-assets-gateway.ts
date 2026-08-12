@@ -51,7 +51,7 @@ export class OpenCraneConversationAssetsGateway implements ConversationAssetsGat
 }
 
 /** Convert generated literals to the owning string-backed enums after the schema validated them. */
-function _Asset(asset: { readonly id: string; readonly conversationId: string; readonly messageId: string | null; readonly provenance: "participant_upload" | "agent_output"; readonly state: "uploading" | "processing" | "ready" | "failed" | "cancelled" | "removed"; readonly displayName: string; readonly mediaType: string; readonly byteLength: number | null; readonly disposition: "preview" | "download" | null; readonly failureCode: string | null; readonly canRemove: boolean; readonly canRetry: boolean; readonly createdAt: string }): ConversationAsset
+function _Asset(asset: { readonly id: string; readonly conversationId: string; readonly messageId: string | null; readonly provenance: "participant_upload" | "agent_output"; readonly state: "uploading" | "processing" | "ready" | "failed" | "removed"; readonly displayName: string; readonly mediaType: string; readonly byteLength: number | null; readonly disposition: "preview" | "download" | null; readonly failureCode: string | null; readonly canRemove: boolean; readonly createdAt: string }): ConversationAsset
 {
 	return { ...asset, provenance: asset.provenance as ConversationAssetProvenance, state: asset.state as ConversationAssetLifecycle, disposition: asset.disposition as ConversationAssetDisposition | null };
 }

@@ -1742,6 +1742,8 @@ export interface components {
             isDefault: boolean;
             /** @description The provider credential backing this model, when set. */
             providerCredentialId?: string | null;
+            /** @description Provider-native generated outputs this model route may use. */
+            generatedOutputCapabilities: ("image_png" | "code_execution_files")[];
             /** Format: date-time */
             createdAt?: string;
             /** Format: date-time */
@@ -1765,6 +1767,8 @@ export interface components {
             isDefault?: boolean;
             /** @description Provider credential backing this model. */
             providerCredentialId?: string;
+            /** @description Provider-native generated outputs this model route may use. */
+            generatedOutputCapabilities?: ("image_png" | "code_execution_files")[];
         };
         /** @description Opt-in auto-routing configuration. Auto routing applies ONLY when a skill (or scope default) selects it; the runtime optimizer that consumes it is a later track item (AIR.7). */
         AutoRoutingConfig: {
@@ -6497,7 +6501,7 @@ export interface operations {
                             /** @enum {string} */
                             provenance: "participant_upload" | "agent_output";
                             /** @enum {string} */
-                            state: "uploading" | "processing" | "ready" | "failed" | "cancelled" | "removed";
+                            state: "uploading" | "processing" | "ready" | "failed" | "removed";
                             displayName: string;
                             mediaType: string;
                             byteLength: number | null;
@@ -6505,7 +6509,6 @@ export interface operations {
                             disposition: "preview" | "download" | null;
                             failureCode: string | null;
                             canRemove: boolean;
-                            canRetry: boolean;
                             /** Format: date-time */
                             createdAt: string;
                         }[];
@@ -6565,7 +6568,7 @@ export interface operations {
                             /** @enum {string} */
                             provenance: "participant_upload" | "agent_output";
                             /** @enum {string} */
-                            state: "uploading" | "processing" | "ready" | "failed" | "cancelled" | "removed";
+                            state: "uploading" | "processing" | "ready" | "failed" | "removed";
                             displayName: string;
                             mediaType: string;
                             byteLength: number | null;
@@ -6573,7 +6576,6 @@ export interface operations {
                             disposition: "preview" | "download" | null;
                             failureCode: string | null;
                             canRemove: boolean;
-                            canRetry: boolean;
                             /** Format: date-time */
                             createdAt: string;
                         };
@@ -6596,7 +6598,7 @@ export interface operations {
                             /** @enum {string} */
                             provenance: "participant_upload" | "agent_output";
                             /** @enum {string} */
-                            state: "uploading" | "processing" | "ready" | "failed" | "cancelled" | "removed";
+                            state: "uploading" | "processing" | "ready" | "failed" | "removed";
                             displayName: string;
                             mediaType: string;
                             byteLength: number | null;
@@ -6604,7 +6606,6 @@ export interface operations {
                             disposition: "preview" | "download" | null;
                             failureCode: string | null;
                             canRemove: boolean;
-                            canRetry: boolean;
                             /** Format: date-time */
                             createdAt: string;
                         };
@@ -6687,7 +6688,7 @@ export interface operations {
                             /** @enum {string} */
                             provenance: "participant_upload" | "agent_output";
                             /** @enum {string} */
-                            state: "uploading" | "processing" | "ready" | "failed" | "cancelled" | "removed";
+                            state: "uploading" | "processing" | "ready" | "failed" | "removed";
                             displayName: string;
                             mediaType: string;
                             byteLength: number | null;
@@ -6695,7 +6696,6 @@ export interface operations {
                             disposition: "preview" | "download" | null;
                             failureCode: string | null;
                             canRemove: boolean;
-                            canRetry: boolean;
                             /** Format: date-time */
                             createdAt: string;
                         };
@@ -6760,7 +6760,7 @@ export interface operations {
                             /** @enum {string} */
                             provenance: "participant_upload" | "agent_output";
                             /** @enum {string} */
-                            state: "uploading" | "processing" | "ready" | "failed" | "cancelled" | "removed";
+                            state: "uploading" | "processing" | "ready" | "failed" | "removed";
                             displayName: string;
                             mediaType: string;
                             byteLength: number | null;
@@ -6768,7 +6768,6 @@ export interface operations {
                             disposition: "preview" | "download" | null;
                             failureCode: string | null;
                             canRemove: boolean;
-                            canRetry: boolean;
                             /** Format: date-time */
                             createdAt: string;
                         };

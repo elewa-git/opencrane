@@ -1,3 +1,5 @@
+import type { Prisma } from "@prisma/client";
+
 import type { ArtifactReadLeaseClaims } from "@opencrane/backend/artifacts/authorization";
 import type { ArtifactScannerFailureCommand, ArtifactScannerJobClaim, ArtifactScannerResultCommand } from "@opencrane/contracts";
 
@@ -52,8 +54,12 @@ export interface ArtifactScanRepository
 	fail(command: ArtifactScannerFailureCommand): Promise<"failed" | "idempotent" | "stale">;
 }
 
-/** Transaction-owning scan lifecycle contract. */
-export interface ArtifactScanUnitOfWork extends ArtifactScanRepository {}
+/** Conversation-owned lifecycle seam injected into scanner persistence. */
+export interface ConversationAssetScanLifecycleReporter
+{
+	/** Move one processing conversation asset to its scanner-selected safe terminal state. */
+	reportInTransaction(transaction: Prisma.TransactionClient, command: { readonly revisionId: string; readonly state: "ready" | "failed"; readonly failureCode: "unsafe_file" | "scan_failed" | null }): Promise<void>;
+}
 
 /** Dependencies for the private scanner router. */
 export interface ArtifactScannerRouterDependencies

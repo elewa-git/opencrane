@@ -34,7 +34,7 @@ describe("PrismaConversationAssetRepository removal", function _Suite()
 		const transaction = _Transaction(_Asset());
 		const result = await new PrismaConversationAssetRepository(transaction as never).remove(_CALLER, "conversation-1", "asset-1");
 
-		expect(result).toMatchObject({ outcome: "accepted", asset: { state: "removed", displayName: "Attachment removed", mediaType: "application/octet-stream", byteLength: null, canRemove: false, canRetry: false } });
+		expect(result).toMatchObject({ outcome: "accepted", asset: { state: "removed", displayName: "Attachment removed", mediaType: "application/octet-stream", byteLength: null, canRemove: false } });
 		expect(transaction.artifactUploadLease.updateMany).toHaveBeenCalledWith({ where: { id: "lease-1", state: ArtifactUploadLeaseState.Active }, data: { state: ArtifactUploadLeaseState.Cancelled } });
 		expect(transaction.artifact.updateMany).toHaveBeenCalledWith({ where: { id: "artifact-1", state: ArtifactState.Active }, data: { state: ArtifactState.DeletionPending, deletedAt: expect.any(Date) } });
 		expect(transaction.conversationAsset.update).toHaveBeenCalledWith({ where: { id: "asset-1" }, data: { state: ConversationAssetState.Removed, displayName: "Attachment removed", mediaType: "application/octet-stream", byteLength: null, failureCode: null, removedAt: expect.any(Date) } });
@@ -58,7 +58,8 @@ describe("PrismaConversationAssetRepository removal", function _Suite()
 		const transaction = _Transaction(_Asset());
 		const owner = await new PrismaConversationAssetRepository(transaction as never).list(_CALLER, "conversation-1");
 		const participant = await new PrismaConversationAssetRepository(transaction as never).list({ ..._CALLER, subjectId: "user-2" }, "conversation-1");
-		expect(owner[0]).toMatchObject({ canRemove: true, canRetry: false });
-		expect(participant[0]).toMatchObject({ canRemove: false, canRetry: false });
+		expect(owner[0]).toMatchObject({ canRemove: true });
+		expect(participant[0]).toMatchObject({ canRemove: false });
+		expect(transaction.conversationAsset.findMany).toHaveBeenCalledWith({ where: { conversationId: "conversation-1", siloId: "silo-1", state: { not: ConversationAssetState.Removed }, OR: [{ provenance: ConversationAssetProvenance.ParticipantUpload }, { provenance: ConversationAssetProvenance.AgentOutput, state: { in: [ConversationAssetState.Processing, ConversationAssetState.Ready, ConversationAssetState.Failed] } }] }, orderBy: [{ createdAt: "asc" }, { id: "asc" }] });
 	});
 });

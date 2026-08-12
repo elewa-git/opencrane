@@ -4,20 +4,19 @@ import { ConversationAssetDisposition, ConversationAssetLifecycle, ConversationA
 const _ConversationAssetSchema = {
 	type: "object",
 	additionalProperties: false,
-	required: ["id", "conversationId", "messageId", "provenance", "state", "displayName", "mediaType", "byteLength", "disposition", "failureCode", "canRemove", "canRetry", "createdAt"],
+	required: ["id", "conversationId", "messageId", "provenance", "state", "displayName", "mediaType", "byteLength", "disposition", "failureCode", "canRemove", "createdAt"],
 	properties: {
 		id: { type: "string" },
 		conversationId: { type: "string" },
 		messageId: { type: ["string", "null"] },
 		provenance: { type: "string", enum: [ConversationAssetProvenance.ParticipantUpload, ConversationAssetProvenance.AgentOutput] },
-		state: { type: "string", enum: [ConversationAssetLifecycle.Uploading, ConversationAssetLifecycle.Processing, ConversationAssetLifecycle.Ready, ConversationAssetLifecycle.Failed, ConversationAssetLifecycle.Cancelled, ConversationAssetLifecycle.Removed] },
+		state: { type: "string", enum: [ConversationAssetLifecycle.Uploading, ConversationAssetLifecycle.Processing, ConversationAssetLifecycle.Ready, ConversationAssetLifecycle.Failed, ConversationAssetLifecycle.Removed] },
 		displayName: { type: "string" },
 		mediaType: { type: "string" },
 		byteLength: { type: ["integer", "null"], minimum: 1 },
 		disposition: { type: ["string", "null"], enum: [ConversationAssetDisposition.Preview, ConversationAssetDisposition.Download, null] },
 		failureCode: { type: ["string", "null"] },
 		canRemove: { type: "boolean" },
-		canRetry: { type: "boolean" },
 		createdAt: { type: "string", format: "date-time" },
 	},
 } as const;

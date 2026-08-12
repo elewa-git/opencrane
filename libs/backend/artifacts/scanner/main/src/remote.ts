@@ -77,5 +77,5 @@ async function _Headers(config: ArtifactScannerRemoteConfig, command?: ArtifactS
 /** Validate the complete claim shape before trusting any bound. */
 function _ValidClaim(value: ArtifactScannerJobClaim): boolean
 {
-	return typeof value?.lease?.jobId === "string" && value.lease.jobId.length > 0 && Number.isSafeInteger(value.lease.attempt) && value.lease.attempt > 0 && typeof value.lease.claimFence === "string" && value.lease.claimFence.length > 0 && Number.isSafeInteger(value.sourceByteLength) && value.sourceByteLength > 0 && typeof value.sourceMediaType === "string";
+	return typeof value?.lease?.jobId === "string" && value.lease.jobId.length > 0 && Number.isSafeInteger(value.lease.attempt) && value.lease.attempt > 0 && typeof value.lease.claimFence === "string" && value.lease.claimFence.length > 0 && Number.isSafeInteger(value.sourceByteLength) && value.sourceByteLength > 0;
 }

@@ -18,8 +18,6 @@ export enum ConversationAssetLifecycle
 	Ready = "ready",
 	/** The upload or safety check failed. */
 	Failed = "failed",
-	/** The participant cancelled the upload before publication. */
-	Cancelled = "cancelled",
 	/** The durable asset was removed from the conversation. */
 	Removed = "removed"
 }

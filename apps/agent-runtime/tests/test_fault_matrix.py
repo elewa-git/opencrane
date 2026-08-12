@@ -54,7 +54,7 @@ def _compiled_input() -> dict:
         "instructions": "",
         "messages": [{"role": "user", "content": "hi"}],
         "tools": [{"name": "search", "toolRevisionId": "rev-search", "description": "", "parametersSchema": {}}],
-        "model": {"modelAlias": "silo-default"},
+        "model": {"modelAlias": "silo-default", "generatedOutputCapabilities": []},
         "budget": {},
         "digest": "sha256:fault",
     }

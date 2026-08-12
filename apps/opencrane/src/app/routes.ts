@@ -162,6 +162,7 @@ export function _RegisterInternalRoutes(app: Express, prisma: PrismaClient, auth
 		{ method: "use", path: "/api/internal/agent-runtime", handler: runtime.skillAuthoringCompletion },
 		{ method: "use", path: "/api/internal/agent-runtime", handler: runtime.runtimeBootstrap },
 		{ method: "use", path: "/api/internal/agent-runtime", handler: runtime.runtimeStream },
+		{ method: "use", path: "/api/internal/agent-runtime", handler: runtime.conversationAssetOutputs },
 	];
 	const internalWorkerRoutes = _OptionalRoute("/api/internal/artifact-preprocessor", runtime.artifactPreprocessor);
 	const internalScannerRoutes = _OptionalRoute("/api/internal/artifact-scanner", runtime.artifactScanner);

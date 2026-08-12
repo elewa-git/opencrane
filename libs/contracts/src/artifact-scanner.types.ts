@@ -20,8 +20,6 @@ export interface ArtifactScannerJobClaim
 {
 	/** Current claim coordinates. */
 	readonly lease: ArtifactScannerClaimCommand & { readonly expiresAt: string };
-	/** Exact media type recorded by the artifact authority. */
-	readonly sourceMediaType: string;
 	/** Exact byte length enforced by the source broker. */
 	readonly sourceByteLength: number;
 }

@@ -389,7 +389,7 @@ const ProviderCredentialWriteSchema = {
 
 const ModelDefinitionSchema = {
   type: "object" as const,
-  required: ["id", "scope", "publicModelName", "litellmModelId", "upstreamModel", "isDefault"],
+  required: ["id", "scope", "publicModelName", "litellmModelId", "upstreamModel", "isDefault", "generatedOutputCapabilities"],
   properties: {
     id: { type: "string", description: "Stable identifier." },
     scope: { type: "string", enum: ["global", "clusterTenant"], description: "Whether the model is platform-wide or owned by one ClusterTenant." },
@@ -400,6 +400,7 @@ const ModelDefinitionSchema = {
     apiBase: { type: "string", nullable: true, description: "Optional non-default API base for self-hosted / proxied endpoints." },
     isDefault: { type: "boolean", description: "Whether this is the default model at its scope." },
     providerCredentialId: { type: "string", nullable: true, description: "The provider credential backing this model, when set." },
+    generatedOutputCapabilities: { type: "array", items: { type: "string", enum: ["image_png", "code_execution_files"] }, description: "Provider-native generated outputs this model route may use." },
     createdAt: { type: "string", format: "date-time" },
     updatedAt: { type: "string", format: "date-time" },
   },
@@ -416,6 +417,7 @@ const ModelDefinitionWriteSchema = {
     apiBase: { type: "string", description: "Optional non-default API base." },
     isDefault: { type: "boolean", description: "Whether this is the default model at its scope." },
     providerCredentialId: { type: "string", description: "Provider credential backing this model." },
+    generatedOutputCapabilities: { type: "array", items: { type: "string", enum: ["image_png", "code_execution_files"] }, description: "Provider-native generated outputs this model route may use." },
   },
 };
 

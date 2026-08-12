@@ -5,7 +5,7 @@ import { ControlPlaneApiService } from "@opencrane/core";
 
 import { OpenCraneConversationAssetsGateway } from "../opencrane-conversation-assets-gateway.js";
 
-const _ASSET = { id: "asset-1", conversationId: "conversation-1", messageId: null, provenance: "participant_upload" as const, state: "processing" as const, displayName: "brief.pdf", mediaType: "application/pdf", byteLength: 5, disposition: "preview" as const, failureCode: null, canRemove: false, canRetry: false, createdAt: "2026-08-11T10:00:00.000Z" };
+const _ASSET = { id: "asset-1", conversationId: "conversation-1", messageId: null, provenance: "participant_upload" as const, state: "processing" as const, displayName: "brief.pdf", mediaType: "application/pdf", byteLength: 5, disposition: "preview" as const, failureCode: null, canRemove: false, createdAt: "2026-08-11T10:00:00.000Z" };
 
 /** Construct the adapter with controlled generated-client methods. */
 function _Gateway(client: object): OpenCraneConversationAssetsGateway

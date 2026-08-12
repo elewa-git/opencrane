@@ -107,13 +107,17 @@ model ConversationRunEvent {
   runId           String                     @map("run_id")
   sequence        Int
   type            String
+  messageId       String?                    @map("message_id")
   payload         Json
   occurredAt      DateTime                   @default(now()) @map("occurred_at")
   conversation    Conversation               @relation(fields: [conversationId], references: [id], onDelete: Restrict)
   timelineEntry   ConversationTimelineEntry?
+  assets          ConversationAsset[]
+  assetOutputTickets ConversationAssetOutputTicket[]
 
   @@id([runId, sequence])
   @@unique([conversationId, runId, sequence])
+  @@index([runId, messageId])
   @@index([runId, occurredAt])
   @@map("conversation_run_events")
 }

@@ -120,12 +120,16 @@
     { "path": "apps/agent-runtime/src/constants.py", "owner": "apps/agent-runtime", "classification": "process-composition" },
     { "path": "apps/agent-runtime/src/model_loop/checkpoints.py", "owner": "apps/agent-runtime", "classification": "process-composition" },
     { "path": "apps/agent-runtime/src/model_loop/driver.py", "owner": "apps/agent-runtime", "classification": "process-composition" },
+    { "path": "apps/agent-runtime/src/model_loop/openai_generated_outputs.py", "owner": "apps/agent-runtime", "classification": "provider-output-adapter" },
     { "path": "apps/agent-runtime/src/observability.py", "owner": "apps/agent-runtime", "classification": "process-instrumentation" },
     { "path": "apps/agent-runtime/src/protocol/candidates.py", "owner": "apps/agent-runtime", "classification": "process-composition" },
     { "path": "apps/agent-runtime/src/protocol/event_projector.py", "owner": "apps/agent-runtime", "classification": "process-composition" },
     { "path": "apps/agent-runtime/src/runtime.py", "owner": "apps/agent-runtime", "classification": "process-entrypoint" },
     { "path": "apps/agent-runtime/src/transport/http.py", "owner": "apps/agent-runtime", "classification": "process-composition" },
-    { "path": "apps/agent-runtime/src/transport/stream.py", "owner": "apps/agent-runtime", "classification": "process-composition" }
+    { "path": "apps/agent-runtime/src/transport/output.py", "owner": "apps/agent-runtime", "classification": "process-composition" },
+    { "path": "apps/agent-runtime/src/transport/stream.py", "owner": "apps/agent-runtime", "classification": "process-composition" },
+    { "path": "apps/agent-runtime/qualification/__init__.py", "owner": "apps/agent-runtime", "classification": "composition-test" },
+    { "path": "apps/agent-runtime/qualification/test_generated_output.py", "owner": "apps/agent-runtime", "classification": "composition-test" }
   ],
   "requiredTaggedProjects": [
     "apps/_infra/cognee/project.json",

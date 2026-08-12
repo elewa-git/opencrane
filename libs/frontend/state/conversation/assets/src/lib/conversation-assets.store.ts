@@ -25,6 +25,7 @@ export class ConversationAssetsStore
 	private readonly _intents = signal<readonly ConversationAssetUploadIntent[]>([]);
 	private readonly _removingAssetIds = signal<ReadonlySet<string>>(new Set());
 	private _scopeGeneration = 0;
+	private _observedAssetInvalidations = 0;
 
 	/** Pure server projection keyed by the selected conversation. */
 	public readonly assets = resource({ params: this._conversationId, loader: ({ params }) => this._gateway.list(params) });
@@ -39,7 +40,7 @@ export class ConversationAssetsStore
 	public open(conversationId: string): void
 	{
 		if (conversationId.trim().length === 0) throw new Error("Conversation id is required.");
-		if (this._conversationId() !== conversationId) { this._scopeGeneration += 1; this._intents.set([]); this.selectionFailure.set(null); this._conversationId.set(conversationId); }
+		if (this._conversationId() !== conversationId) { this._scopeGeneration += 1; this._observedAssetInvalidations = 0; this._intents.set([]); this.selectionFailure.set(null); this._conversationId.set(conversationId); }
 	}
 
 	/** Validate the whole message selection, then transfer independent files concurrently. */
@@ -97,6 +98,16 @@ export class ConversationAssetsStore
 
 	/** Explicitly reload lifecycle changes such as scan completion or failure. */
 	public refresh(): void { this.assets.reload(); }
+
+	/** Reload once when the selected conversation's subscribed stream observes a new asset invalidation. */
+	public observeInvalidations(conversationId: string, customEvents: readonly string[]): void
+	{
+		if (this._conversationId() !== conversationId) return;
+		const observed = customEvents.filter(function _AssetInvalidation(name) { return name === "opencrane.conversation_assets_changed"; }).length;
+		if (observed <= this._observedAssetInvalidations) return;
+		this._observedAssetInvalidations = observed;
+		this.assets.reload();
+	}
 
 	/** Run one intent from its last exact durable boundary. */
 	private async _transfer(idempotencyKey: string): Promise<void>

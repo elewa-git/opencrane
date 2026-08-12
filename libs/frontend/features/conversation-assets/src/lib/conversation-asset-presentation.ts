@@ -6,7 +6,7 @@ import { ConversationAssetPresentationStates, type ConversationAssetPresentation
 export function __ConversationAssetPresentation(asset: ConversationAsset): ConversationAssetPresentation
 {
 	const state = _DurableState(asset.state);
-	return { id: asset.id, messageId: asset.messageId, provenance: asset.provenance, displayName: asset.displayName, mediaType: asset.mediaType, byteLength: asset.byteLength, disposition: asset.disposition, state, detail: _StateDetail(state), canRetry: asset.canRetry, canRemove: asset.canRemove, uploadProgressPercent: null };
+	return { id: asset.id, messageId: asset.messageId, provenance: asset.provenance, displayName: asset.displayName, mediaType: asset.mediaType, byteLength: asset.byteLength, disposition: asset.disposition, state, detail: _StateDetail(state), canRetry: false, canRemove: asset.canRemove, uploadProgressPercent: null };
 }
 
 /** Map one browser-local intent while omitting its retained File bytes. */
@@ -55,7 +55,6 @@ function _DurableState(state: ConversationAssetLifecycle): ConversationAssetPres
 		case ConversationAssetLifecycle.Processing: return ConversationAssetPresentationStates.Processing;
 		case ConversationAssetLifecycle.Ready: return ConversationAssetPresentationStates.Ready;
 		case ConversationAssetLifecycle.Failed: return ConversationAssetPresentationStates.Failed;
-		case ConversationAssetLifecycle.Cancelled:
 		case ConversationAssetLifecycle.Removed: return ConversationAssetPresentationStates.Removed;
 	}
 }

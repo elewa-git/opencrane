@@ -213,7 +213,7 @@ function _fakePrisma(options: FakeOptions)
 const _compileRunInput: RunInputCompiler = async function _compile(snapshot): Promise<CompiledRunInput>
 {
 	const parametersSchema = { type: "object", properties: { q: { type: "string" } }, required: ["q"], additionalProperties: false } as const;
-	return { promptCompilerVersion: "v1", runId: snapshot.runId, attempt: 1, instructions: "compiled", messages: [], tools: [{ name: "integration:search:query", toolRevisionId: "integration:search:query", description: "search", requiresApproval: true, parametersSchema, parametersSchemaDigest: ___DigestCanonicalJson(parametersSchema) }], model: { modelAlias: "silo-default", maxOutputTokens: null }, budget: { maxTotalTokens: null, maxCostUsdMicros: null, maxToolInvocations: null, wallClockDeadlineEpochMs: null }, digest: `sha256:${snapshot.digest}` };
+	return { promptCompilerVersion: "v1", runId: snapshot.runId, attempt: 1, instructions: "compiled", messages: [], tools: [{ name: "integration:search:query", toolRevisionId: "integration:search:query", description: "search", requiresApproval: true, parametersSchema, parametersSchemaDigest: ___DigestCanonicalJson(parametersSchema) }], model: { modelAlias: "silo-default", maxOutputTokens: null, generatedOutputCapabilities: [] }, budget: { maxTotalTokens: null, maxCostUsdMicros: null, maxToolInvocations: null, wallClockDeadlineEpochMs: null }, digest: `sha256:${snapshot.digest}` };
 };
 
 /** Build the adapter under test over a fake with the requested durable state. */

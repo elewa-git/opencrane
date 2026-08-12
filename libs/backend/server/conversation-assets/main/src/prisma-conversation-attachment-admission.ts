@@ -1,12 +1,11 @@
 import { ConversationAssetProvenance, ConversationAssetState, type Prisma } from "@prisma/client";
 
 import { ___CONVERSATION_ASSET_MAX_FILES, ___CONVERSATION_ASSET_MAX_TOTAL_BYTES, ___IsSupportedConversationAssetMediaType } from "@opencrane/models/conversation-assets";
+import type { ConversationAttachmentAdmissionPort } from "@opencrane/backend/server/conversations";
 import { MessageContentBlockKinds, type MessageContentBlock } from "@opencrane/models/conversations";
 
-import type { ConversationAttachmentAdmissionRepository } from "./conversation-attachment-admission.repository.types.js";
-
 /** Transaction-scoped attachment binder used by ordinary and run message admission. */
-export class PrismaConversationAttachmentAdmissionRepository implements ConversationAttachmentAdmissionRepository
+export class PrismaConversationAttachmentAdmissionRepository implements ConversationAttachmentAdmissionPort
 {
 	private readonly transaction: Prisma.TransactionClient;
 

@@ -11,7 +11,7 @@ import { ConversationAssetTransferPhases, type ConversationAsset } from "../conv
 /** One safe server projection fixture. */
 function _Asset(state: ConversationAssetLifecycle = ConversationAssetLifecycle.Processing): ConversationAsset
 {
-	return { id: "asset-1", conversationId: "conversation-1", messageId: null, provenance: ConversationAssetProvenance.ParticipantUpload, state, displayName: "brief.pdf", mediaType: "application/pdf", byteLength: 5, disposition: ConversationAssetDisposition.Preview, failureCode: null, canRemove: state === ConversationAssetLifecycle.Uploading, canRetry: false, createdAt: "2026-08-11T10:00:00.000Z" };
+	return { id: "asset-1", conversationId: "conversation-1", messageId: null, provenance: ConversationAssetProvenance.ParticipantUpload, state, displayName: "brief.pdf", mediaType: "application/pdf", byteLength: 5, disposition: ConversationAssetDisposition.Preview, failureCode: null, canRemove: state === ConversationAssetLifecycle.Uploading, createdAt: "2026-08-11T10:00:00.000Z" };
 }
 
 /** Minimal file with deterministic bytes for hashing in jsdom. */
@@ -42,6 +42,17 @@ afterEach(function _ResetTestBed() { TestBed.resetTestingModule(); });
 
 describe("ConversationAssetsStore", function _Suite()
 {
+	it("reloads once for each newly streamed asset invalidation in the selected conversation", async function _LiveInvalidation()
+	{
+		const gateway = { list: vi.fn().mockResolvedValueOnce([_Asset()]).mockResolvedValueOnce([_Asset(ConversationAssetLifecycle.Ready)]), reserve: vi.fn(), upload: vi.fn(), remove: vi.fn() };
+		const store = _Store(gateway);
+		store.open("conversation-1");
+		await vi.waitFor(function _Loaded() { expect(store.assets.hasValue()).toBe(true); });
+		store.observeInvalidations("conversation-1", ["opencrane.conversation_assets_changed"]);
+		store.observeInvalidations("conversation-1", ["opencrane.conversation_assets_changed"]);
+		store.observeInvalidations("conversation-2", ["opencrane.conversation_assets_changed", "opencrane.conversation_assets_changed"]);
+		await vi.waitFor(function _Reloaded() { expect(gateway.list).toHaveBeenCalledTimes(2); expect(store.assets.value()?.[0]?.state).toBe(ConversationAssetLifecycle.Ready); });
+	});
 	it("rejects an unsupported batch without reserving any file", async function _RejectsSelection()
 	{
 		const gateway = { list: vi.fn().mockResolvedValue([]), reserve: vi.fn(), upload: vi.fn(), remove: vi.fn() };

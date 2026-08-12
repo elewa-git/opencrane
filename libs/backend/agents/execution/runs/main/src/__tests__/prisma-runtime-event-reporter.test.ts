@@ -18,7 +18,7 @@ describe("PrismaRuntimeEventReporter", function _Suite()
 		const transaction = _Transaction();
 		const reporter = new PrismaRuntimeEventReporter();
 		await expect(reporter.reportInTransaction(transaction, { runId: "run-1", attempt: 2, eventType: "message.delta", payload: { messageId: "message-1", delta: "hello" } })).resolves.toEqual({ outcome: "reported" });
-		expect(transaction.conversationRunEvent.create).toHaveBeenCalledWith({ data: expect.objectContaining({ conversationId: "conversation-1", runId: "run-1", sequence: 4, type: "message.delta", payload: { messageId: "message-1", delta: "hello" } }) });
+		expect(transaction.conversationRunEvent.create).toHaveBeenCalledWith({ data: expect.objectContaining({ conversationId: "conversation-1", runId: "run-1", sequence: 4, type: "message.delta", messageId: "message-1", payload: { messageId: "message-1", delta: "hello" } }) });
 	});
 
 	it("atomically starts only the exact assigned attempt before appending run.started", async function _StartsAssignedAttempt()

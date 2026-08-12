@@ -15,6 +15,7 @@ vi.mock("../../infra/artifacts/artifact-upload.factory.js", function _MockArtifa
 {
 	return {
 		_CreateArtifactPreprocessOutputBroker: function _CreateArtifactPreprocessOutputBroker() { return {}; },
+		_CreateConversationAssetOutputAuthority: function _CreateConversationAssetOutputAuthority() { return { reserve: vi.fn(), publish: vi.fn() }; },
 		_CreateSkillAuthoringArtifactReader: function _CreateSkillAuthoringArtifactReader() { return {}; },
 	};
 });
@@ -77,6 +78,7 @@ describe("_CreateInternalRuntimeComposition", function _internalRuntimeCompositi
 		expect(composition.skillAuthoringCompletion).toEqual(expect.any(Function));
 		expect(composition.runtimeBootstrap).toEqual(expect.any(Function));
 		expect(composition.runtimeStream).toEqual(expect.any(Function));
+		expect(composition.conversationAssetOutputs).toEqual(expect.any(Function));
 		expect(composition.artifactPreprocessor).toBeNull();
 		expect(composition.artifactScanner).toBeNull();
 		expect(composition.channelTargetResolver).toBeNull();

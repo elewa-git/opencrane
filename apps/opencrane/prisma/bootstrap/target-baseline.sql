@@ -44,7 +44,7 @@ CREATE TYPE "ArtifactScanJobState" AS ENUM ('pending', 'claimed', 'clean', 'reje
 CREATE TYPE "ConversationAssetProvenance" AS ENUM ('participant_upload', 'agent_output');
 
 -- CreateEnum
-CREATE TYPE "ConversationAssetState" AS ENUM ('uploading', 'processing', 'ready', 'failed', 'cancelled', 'removed');
+CREATE TYPE "ConversationAssetState" AS ENUM ('uploading', 'processing', 'ready', 'failed', 'removed');
 
 -- CreateEnum
 CREATE TYPE "AuditDecisionOutcome" AS ENUM ('allow', 'deny', 'error');
@@ -751,6 +751,7 @@ CREATE TABLE "conversation_run_events" (
     "run_id" TEXT NOT NULL,
     "sequence" INTEGER NOT NULL,
     "type" TEXT NOT NULL,
+    "message_id" TEXT,
     "payload" JSONB NOT NULL,
     "occurred_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
@@ -1285,10 +1286,12 @@ CREATE TABLE "model_definitions" (
     "api_base" TEXT,
     "is_default" BOOLEAN NOT NULL DEFAULT false,
     "provider_credential_id" TEXT,
+    "generated_output_capabilities" TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updated_at" TIMESTAMP(3) NOT NULL,
 
-    CONSTRAINT "model_definitions_pkey" PRIMARY KEY ("id")
+    CONSTRAINT "model_definitions_pkey" PRIMARY KEY ("id"),
+    CONSTRAINT "model_definitions_generated_output_capabilities_check" CHECK ("generated_output_capabilities" <@ ARRAY['image_png', 'code_execution_files']::TEXT[])
 );
 
 -- CreateTable
@@ -2402,6 +2405,10 @@ CREATE UNIQUE INDEX "conversation_messages_conversation_id_idempotency_key_key" 
 
 -- CreateIndex
 CREATE INDEX "conversation_run_events_run_id_occurred_at_idx" ON "conversation_run_events"("run_id", "occurred_at");
+
+CREATE INDEX "conversation_run_events_run_id_message_id_idx" ON "conversation_run_events"("run_id", "message_id");
+
+CREATE UNIQUE INDEX "conversation_run_events_one_message_start" ON "conversation_run_events"("run_id", "message_id") WHERE "type" = 'message.started';
 
 -- CreateIndex
 CREATE UNIQUE INDEX "conversation_run_events_conversation_id_run_id_sequence_key" ON "conversation_run_events"("conversation_id", "run_id", "sequence");
@@ -5030,9 +5037,16 @@ BEGIN
         IF source_silo_id IS DISTINCT FROM artifact_silo_id THEN RAISE EXCEPTION 'ArtifactRevision run provenance must stay inside its silo'; END IF;
     END IF;
     IF NEW."source_message_id" IS NOT NULL THEN
-        SELECT conversation."silo_id" INTO source_silo_id FROM "conversation_messages" message
-          JOIN "conversations" conversation ON conversation."id" = message."conversation_id"
-          WHERE message."id" = NEW."source_message_id" FOR UPDATE OF message, conversation;
+        IF NEW."source_run_id" IS NOT NULL THEN
+            SELECT run."silo_id" INTO source_silo_id FROM "conversation_run_events" event
+              JOIN "agent_runs" run ON run."id" = event."run_id" AND run."conversation_id" = event."conversation_id"
+              WHERE event."run_id" = NEW."source_run_id" AND event."type" = 'message.started'
+                AND event."payload"->>'messageId' = NEW."source_message_id" FOR UPDATE OF event, run;
+        ELSE
+            SELECT conversation."silo_id" INTO source_silo_id FROM "conversation_messages" message
+              JOIN "conversations" conversation ON conversation."id" = message."conversation_id"
+              WHERE message."id" = NEW."source_message_id" FOR UPDATE OF message, conversation;
+        END IF;
         IF source_silo_id IS DISTINCT FROM artifact_silo_id THEN RAISE EXCEPTION 'ArtifactRevision message provenance must stay inside its silo'; END IF;
     END IF;
     RETURN NEW;
@@ -5881,6 +5895,10 @@ ALTER TABLE "conversation_run_events" ADD CONSTRAINT "conversation_run_events_ty
         'child.run.completed', 'child.run.failed', 'child.run.cancelled'
     ));
 ALTER TABLE "conversation_run_events" ADD CONSTRAINT "conversation_run_events_payload_check" CHECK (jsonb_typeof("payload") = 'object');
+ALTER TABLE "conversation_run_events" ADD CONSTRAINT "conversation_run_events_message_id_check" CHECK (
+        ("type" LIKE 'message.%' AND length(btrim("message_id")) BETWEEN 1 AND 256 AND "payload"->>'messageId' = "message_id")
+        OR ("type" NOT LIKE 'message.%' AND "message_id" IS NULL)
+    );
 ALTER TABLE "conversation_timeline_entries" ADD CONSTRAINT "conversation_timeline_entries_reference_shape_check" CHECK (
         ("kind" = 'message' AND "message_id" IS NOT NULL AND "run_id" IS NULL AND "run_event_sequence" IS NULL
             AND "membership_event_id" IS NULL AND "participant_user_id" IS NULL AND "system_event_id" IS NULL
@@ -6750,8 +6768,12 @@ CREATE TABLE "conversation_asset_output_tickets" (
     "conversation_id" TEXT NOT NULL,
     "run_id" TEXT NOT NULL,
     "run_attempt" INTEGER NOT NULL,
+    "run_event_sequence" INTEGER NOT NULL,
+    "output_message_id" TEXT NOT NULL,
     "idempotency_key" TEXT NOT NULL,
     "finalized_content_address" TEXT,
+    "finalized_receipt_digest" TEXT,
+    "finalized_at" TIMESTAMP(3),
     "expires_at" TIMESTAMP(3) NOT NULL,
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT "conversation_asset_output_tickets_pkey" PRIMARY KEY ("id")
@@ -6764,6 +6786,8 @@ CREATE TABLE "conversation_assets" (
     "message_id" TEXT,
     "run_id" TEXT,
     "run_attempt" INTEGER,
+    "run_event_sequence" INTEGER,
+    "run_message_id" TEXT,
     "artifact_id" TEXT,
     "revision_id" TEXT,
     "upload_lease_id" TEXT,
@@ -6785,9 +6809,12 @@ CREATE TABLE "conversation_assets" (
 CREATE UNIQUE INDEX "artifact_scan_jobs_artifact_revision_id_key" ON "artifact_scan_jobs"("artifact_revision_id");
 CREATE INDEX "artifact_scan_jobs_state_next_attempt_at_claim_expires_at_idx" ON "artifact_scan_jobs"("state", "next_attempt_at", "claim_expires_at");
 CREATE UNIQUE INDEX "conversation_asset_output_tickets_run_id_run_attempt_idempo_key" ON "conversation_asset_output_tickets"("run_id", "run_attempt", "idempotency_key");
+CREATE UNIQUE INDEX "conversation_asset_output_tickets_exact_asset_key" ON "conversation_asset_output_tickets"("id", "silo_id", "conversation_id", "run_id", "run_attempt", "run_event_sequence", "output_message_id");
+CREATE UNIQUE INDEX "conversation_asset_output_tickets_finalized_receipt_digest_key" ON "conversation_asset_output_tickets"("finalized_receipt_digest");
 CREATE INDEX "conversation_asset_output_tickets_conversation_id_created_a_idx" ON "conversation_asset_output_tickets"("conversation_id", "created_at");
 CREATE UNIQUE INDEX "conversation_assets_upload_lease_id_key" ON "conversation_assets"("upload_lease_id");
 CREATE UNIQUE INDEX "conversation_assets_output_ticket_id_key" ON "conversation_assets"("output_ticket_id");
+CREATE UNIQUE INDEX "conversation_assets_exact_output_ticket_key" ON "conversation_assets"("output_ticket_id", "silo_id", "conversation_id", "run_id", "run_attempt", "run_event_sequence", "run_message_id");
 CREATE UNIQUE INDEX "conversation_assets_conversation_id_id_key" ON "conversation_assets"("conversation_id", "id");
 CREATE UNIQUE INDEX "conversation_assets_participant_idempotency_key" ON "conversation_assets"("conversation_id", "created_by_user_id", "idempotency_key");
 CREATE INDEX "conversation_assets_conversation_id_state_created_at_idx" ON "conversation_assets"("conversation_id", "state", "created_at");
@@ -6798,13 +6825,16 @@ CREATE INDEX "conversation_assets_artifact_id_revision_id_idx" ON "conversation_
 ALTER TABLE "artifact_scan_jobs" ADD CONSTRAINT "artifact_scan_jobs_artifact_revision_id_fkey" FOREIGN KEY ("artifact_revision_id") REFERENCES "artifact_revisions"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 ALTER TABLE "conversation_asset_output_tickets" ADD CONSTRAINT "conversation_asset_output_tickets_conversation_id_silo_id_fkey" FOREIGN KEY ("conversation_id", "silo_id") REFERENCES "conversations"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
 ALTER TABLE "conversation_asset_output_tickets" ADD CONSTRAINT "conversation_asset_output_tickets_conversation_id_run_id_fkey" FOREIGN KEY ("conversation_id", "run_id") REFERENCES "agent_runs"("conversation_id", "id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "conversation_asset_output_tickets" ADD CONSTRAINT "conversation_asset_output_tickets_run_id_run_attempt_fkey" FOREIGN KEY ("run_id", "run_attempt") REFERENCES "workload_assignments"("run_id", "attempt") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "conversation_asset_output_tickets" ADD CONSTRAINT "conversation_asset_output_tickets_conversation_id_run_id_run_event_sequence_fkey" FOREIGN KEY ("conversation_id", "run_id", "run_event_sequence") REFERENCES "conversation_run_events"("conversation_id", "run_id", "sequence") ON DELETE RESTRICT ON UPDATE CASCADE;
 ALTER TABLE "conversation_assets" ADD CONSTRAINT "conversation_assets_conversation_id_silo_id_fkey" FOREIGN KEY ("conversation_id", "silo_id") REFERENCES "conversations"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
 ALTER TABLE "conversation_assets" ADD CONSTRAINT "conversation_assets_conversation_id_message_id_fkey" FOREIGN KEY ("conversation_id", "message_id") REFERENCES "conversation_messages"("conversation_id", "id") ON DELETE RESTRICT ON UPDATE CASCADE;
 ALTER TABLE "conversation_assets" ADD CONSTRAINT "conversation_assets_conversation_id_run_id_fkey" FOREIGN KEY ("conversation_id", "run_id") REFERENCES "agent_runs"("conversation_id", "id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "conversation_assets" ADD CONSTRAINT "conversation_assets_conversation_id_run_id_run_event_sequence_fkey" FOREIGN KEY ("conversation_id", "run_id", "run_event_sequence") REFERENCES "conversation_run_events"("conversation_id", "run_id", "sequence") ON DELETE RESTRICT ON UPDATE CASCADE;
 ALTER TABLE "conversation_assets" ADD CONSTRAINT "conversation_assets_artifact_id_silo_id_fkey" FOREIGN KEY ("artifact_id", "silo_id") REFERENCES "artifacts"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
 ALTER TABLE "conversation_assets" ADD CONSTRAINT "conversation_assets_artifact_id_revision_id_fkey" FOREIGN KEY ("artifact_id", "revision_id") REFERENCES "artifact_revisions"("artifact_id", "id") ON DELETE RESTRICT ON UPDATE CASCADE;
 ALTER TABLE "conversation_assets" ADD CONSTRAINT "conversation_assets_upload_lease_id_fkey" FOREIGN KEY ("upload_lease_id") REFERENCES "artifact_upload_leases"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-ALTER TABLE "conversation_assets" ADD CONSTRAINT "conversation_assets_output_ticket_id_fkey" FOREIGN KEY ("output_ticket_id") REFERENCES "conversation_asset_output_tickets"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "conversation_assets" ADD CONSTRAINT "conversation_assets_exact_output_ticket_fkey" FOREIGN KEY ("output_ticket_id", "silo_id", "conversation_id", "run_id", "run_attempt", "run_event_sequence", "run_message_id") REFERENCES "conversation_asset_output_tickets"("id", "silo_id", "conversation_id", "run_id", "run_attempt", "run_event_sequence", "output_message_id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 ALTER TABLE "artifact_scan_jobs" ADD CONSTRAINT "artifact_scan_jobs_state_check" CHECK (
     ("state" IN ('pending', 'retryable_failed') AND "claim_fence" IS NULL AND "claim_expires_at" IS NULL AND "completed_at" IS NULL)
@@ -6813,25 +6843,75 @@ ALTER TABLE "artifact_scan_jobs" ADD CONSTRAINT "artifact_scan_jobs_state_check"
 );
 ALTER TABLE "conversation_asset_output_tickets" ADD CONSTRAINT "conversation_asset_output_tickets_identity_check" CHECK (
     "run_attempt" > 0
+    AND "run_event_sequence" > 0
+    AND length(btrim("output_message_id")) BETWEEN 1 AND 256
     AND length(btrim("idempotency_key")) BETWEEN 1 AND 128
-    AND ("finalized_content_address" IS NULL OR "finalized_content_address" ~ '^sha256:[0-9a-f]{64}$')
+    AND "expires_at" > "created_at"
+    AND (("finalized_content_address" IS NULL AND "finalized_receipt_digest" IS NULL AND "finalized_at" IS NULL)
+      OR ("finalized_content_address" ~ '^sha256:[0-9a-f]{64}$' AND "finalized_receipt_digest" ~ '^sha256:[0-9a-f]{64}$' AND "finalized_at" IS NOT NULL))
 );
 ALTER TABLE "conversation_assets" ADD CONSTRAINT "conversation_assets_identity_check" CHECK (
     length(btrim("display_name")) BETWEEN 1 AND 255
     AND length(btrim("idempotency_key")) BETWEEN 1 AND 128
     AND length(btrim("media_type")) BETWEEN 1 AND 255
     AND ("byte_length" IS NULL OR "byte_length" > 0)
-    AND (("run_id" IS NULL AND "run_attempt" IS NULL) OR ("run_id" IS NOT NULL AND "run_attempt" > 0))
+    AND (("run_id" IS NULL AND "run_attempt" IS NULL AND "run_event_sequence" IS NULL AND "run_message_id" IS NULL)
+      OR ("run_id" IS NOT NULL AND "run_attempt" > 0 AND "run_event_sequence" > 0 AND length(btrim("run_message_id")) BETWEEN 1 AND 256))
 );
 ALTER TABLE "conversation_assets" ADD CONSTRAINT "conversation_assets_provenance_check" CHECK (
-    ("provenance" = 'participant_upload' AND "created_by_user_id" IS NOT NULL AND "output_ticket_id" IS NULL)
-    OR ("provenance" = 'agent_output' AND "created_by_user_id" IS NULL AND "run_id" IS NOT NULL AND "run_attempt" > 0 AND "output_ticket_id" IS NOT NULL)
+    ("provenance" = 'participant_upload' AND "created_by_user_id" IS NOT NULL AND "output_ticket_id" IS NULL AND "run_id" IS NULL AND "run_attempt" IS NULL AND "run_event_sequence" IS NULL AND "run_message_id" IS NULL)
+    OR ("provenance" = 'agent_output' AND "created_by_user_id" IS NULL AND "message_id" IS NULL AND "run_id" IS NOT NULL AND "run_attempt" > 0 AND "run_event_sequence" > 0 AND "run_message_id" IS NOT NULL AND "output_ticket_id" IS NOT NULL)
 );
 ALTER TABLE "conversation_assets" ADD CONSTRAINT "conversation_assets_lifecycle_check" CHECK (
     ("state" = 'uploading' AND "upload_lease_id" IS NOT NULL AND "revision_id" IS NULL AND "failure_code" IS NULL)
     OR ("state" = 'processing' AND "artifact_id" IS NOT NULL AND "revision_id" IS NOT NULL AND "failure_code" IS NULL)
     OR ("state" = 'ready' AND "artifact_id" IS NOT NULL AND "revision_id" IS NOT NULL AND "byte_length" IS NOT NULL AND "failure_code" IS NULL)
     OR ("state" = 'failed' AND "failure_code" IS NOT NULL)
-    OR ("state" = 'cancelled' AND "removed_at" IS NOT NULL)
     OR ("state" = 'removed' AND "removed_at" IS NOT NULL)
 );
+
+CREATE FUNCTION "enforce_conversation_asset_output_ticket_lifecycle"() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+    verified BOOLEAN;
+BEGIN
+    IF TG_OP = 'DELETE' THEN
+        RAISE EXCEPTION 'ConversationAssetOutputTicket cannot be deleted';
+    END IF;
+    IF TG_OP = 'INSERT' THEN
+        IF NEW."finalized_content_address" IS NOT NULL OR NEW."finalized_receipt_digest" IS NOT NULL OR NEW."finalized_at" IS NOT NULL THEN
+            RAISE EXCEPTION 'ConversationAssetOutputTicket must begin unfinalized';
+        END IF;
+        RETURN NEW;
+    END IF;
+    IF NEW."id" IS DISTINCT FROM OLD."id" OR NEW."silo_id" IS DISTINCT FROM OLD."silo_id"
+        OR NEW."conversation_id" IS DISTINCT FROM OLD."conversation_id" OR NEW."run_id" IS DISTINCT FROM OLD."run_id"
+        OR NEW."run_attempt" IS DISTINCT FROM OLD."run_attempt" OR NEW."run_event_sequence" IS DISTINCT FROM OLD."run_event_sequence"
+        OR NEW."output_message_id" IS DISTINCT FROM OLD."output_message_id" OR NEW."idempotency_key" IS DISTINCT FROM OLD."idempotency_key"
+        OR NEW."expires_at" IS DISTINCT FROM OLD."expires_at" OR NEW."created_at" IS DISTINCT FROM OLD."created_at" THEN
+        RAISE EXCEPTION 'ConversationAssetOutputTicket identity is immutable';
+    END IF;
+    IF OLD."finalized_at" IS NOT NULL THEN
+        IF NEW."finalized_content_address" IS DISTINCT FROM OLD."finalized_content_address"
+            OR NEW."finalized_receipt_digest" IS DISTINCT FROM OLD."finalized_receipt_digest"
+            OR NEW."finalized_at" IS DISTINCT FROM OLD."finalized_at" THEN
+            RAISE EXCEPTION 'ConversationAssetOutputTicket receipt is immutable';
+        END IF;
+        RETURN NEW;
+    END IF;
+    IF NEW."finalized_at" IS NULL THEN RETURN NEW; END IF;
+    SELECT EXISTS (
+        SELECT 1 FROM "conversation_assets" asset
+        JOIN "artifact_upload_leases" lease ON lease."id" = asset."upload_lease_id"
+        WHERE asset."output_ticket_id" = OLD."id" AND asset."silo_id" = OLD."silo_id"
+          AND asset."conversation_id" = OLD."conversation_id" AND asset."run_id" = OLD."run_id"
+          AND asset."run_attempt" = OLD."run_attempt" AND asset."run_event_sequence" = OLD."run_event_sequence"
+          AND asset."run_message_id" = OLD."output_message_id" AND lease."state" = 'finalized'
+          AND lease."promoted_content_address" = NEW."finalized_content_address"
+          AND lease."promotion_receipt_digest" = NEW."finalized_receipt_digest"
+    ) INTO verified;
+    IF NOT verified THEN RAISE EXCEPTION 'ConversationAssetOutputTicket finalization lacks exact receipt evidence'; END IF;
+    RETURN NEW;
+END;
+$$;
+CREATE TRIGGER "conversation_asset_output_tickets_lifecycle_guard" BEFORE INSERT OR UPDATE OR DELETE ON "conversation_asset_output_tickets"
+    FOR EACH ROW EXECUTE FUNCTION "enforce_conversation_asset_output_ticket_lifecycle"();

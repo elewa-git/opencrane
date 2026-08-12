@@ -12,11 +12,10 @@ describe("conversation asset presentation", function _Suite()
 		[ConversationAssetLifecycle.Processing, ConversationAssetPresentationStates.Processing],
 		[ConversationAssetLifecycle.Ready, ConversationAssetPresentationStates.Ready],
 		[ConversationAssetLifecycle.Failed, ConversationAssetPresentationStates.Failed],
-		[ConversationAssetLifecycle.Cancelled, ConversationAssetPresentationStates.Removed],
 		[ConversationAssetLifecycle.Removed, ConversationAssetPresentationStates.Removed]
 	] as const)("maps durable %s without predicting a later state", function _Maps(state, expected)
 	{
-		const result = __ConversationAssetPresentation({ id: "asset-1", conversationId: "conversation-1", messageId: null, provenance: ConversationAssetProvenance.ParticipantUpload, state, displayName: "brief.pdf", mediaType: "application/pdf", byteLength: 1024, disposition: ConversationAssetDisposition.Preview, failureCode: null, canRemove: state === ConversationAssetLifecycle.Uploading, canRetry: false, createdAt: "2026-08-11T10:00:00.000Z" });
+		const result = __ConversationAssetPresentation({ id: "asset-1", conversationId: "conversation-1", messageId: null, provenance: ConversationAssetProvenance.ParticipantUpload, state, displayName: "brief.pdf", mediaType: "application/pdf", byteLength: 1024, disposition: ConversationAssetDisposition.Preview, failureCode: null, canRemove: state === ConversationAssetLifecycle.Uploading, createdAt: "2026-08-11T10:00:00.000Z" });
 		expect(result.state).toBe(expected);
 		expect(result.canRetry).toBe(false);
 	});

@@ -1,4 +1,5 @@
 import type { JsonValue } from "@opencrane/util";
+import type { GeneratedOutputCapability } from "./model-routing.types.js";
 
 /**
  * Agent input with every reference already resolved to a literal value, built in the control plane.
@@ -70,6 +71,8 @@ export interface CompiledModelRoute
 	readonly modelAlias: string;
 	/** Maximum output tokens for one model request, or null when the route sets no ceiling. */
 	readonly maxOutputTokens: number | null;
+	/** Server-admitted provider-native generated outputs frozen into this run. */
+	readonly generatedOutputCapabilities: GeneratedOutputCapability[];
 }
 
 /** Limits OpenCrane enforces across the whole attempt. */

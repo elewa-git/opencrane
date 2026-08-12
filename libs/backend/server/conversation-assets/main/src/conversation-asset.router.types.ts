@@ -11,9 +11,6 @@ export interface ConversationAssetAuthority
 	list(caller: ConversationAssetCaller, conversationId: string): Promise<readonly ConversationAssetView[]>;
 }
 
-/** Transaction-owning participant asset application contract. */
-export interface ConversationAssetUnitOfWork extends ConversationAssetAuthority {}
-
 /** Dependencies for the authenticated participant asset router. */
 export interface ConversationAssetRouterDependencies
 {

@@ -17,7 +17,7 @@ runtime.py  process lifecycle and bounded reconnects
 │   proof evidence + one-use exchange │
 │                                     ▼
 └── transport/ ◄──────────────── control-plane HTTP/SSE
-    command stream                     │
+    command stream + output bytes      │
             │                          │ candidates
             ▼                          │
         attempts/ ─────────────────────┘
@@ -52,7 +52,10 @@ config.py · constants.py · observability.py support the components above.
    It translates framework events into small dictionaries; framework objects never cross the seam.
 5. `protocol/candidates.py` binds each event to the accepted command coordinates. Tool calls become
    `external_action` candidates only after resolving the exact revision from the compiled grant set.
-6. `transport/http.py` delivers each non-terminal candidate once. Terminal delivery alone may reuse
+6. `transport/http.py` delivers each non-terminal candidate once. A neutral `output_asset` starts
+   the assistant message when needed, then `transport/output.py` reserves and uploads exact bytes
+   through the private control-plane broker. The runtime sends its message id, never a database
+   sequence, storage lease, or receipt. Terminal delivery alone may reuse
    its stable identifier after an ambiguous network loss.
 7. A `resume_attempt` carries exact saved tool results. `attempts/tool_results.py` maps each
    `toolInvocationId` back to the pending call recorded at proposal time

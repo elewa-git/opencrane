@@ -198,6 +198,7 @@ model WorkloadAssignment {
   proofKey           RunProofKey?
   executionReceipts  ActionExecutionReceipt[]
   approvalRequests   ApprovalRequest[]
+  conversationAssetTickets ConversationAssetOutputTicket[]
 
   @@id([runId, attempt])
   @@unique([runId, attempt, agentServiceId, agentRevisionId, siloId, subjectId, audience, serviceAccountName, namespace, workloadKind, workloadUid], map: "workload_assignment_bootstrap_identity_key")

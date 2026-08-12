@@ -7,8 +7,13 @@ FROM python:3.13-slim
 WORKDIR /app
 ENV PYTHONDONTWRITEBYTECODE=1
 COPY apps/agent-runtime/deploy/requirements.txt /app/requirements.txt
+RUN pip download --no-deps --only-binary=:all: --dest /app/wheels openai==2.54.0
+RUN echo "89089789197ccdb87f173a03145ed1598d00795220c93e96cf712b1cbf5e5f2b  /app/wheels/openai-2.54.0-py3-none-any.whl" | sha256sum --check --strict
+RUN pip install --no-cache-dir --no-deps /app/wheels/openai-2.54.0-py3-none-any.whl
 RUN pip install --no-cache-dir -r /app/requirements.txt
 COPY apps/agent-runtime/src /app/src
+COPY apps/agent-runtime/qualification /app/qualification
+RUN python -B -m unittest qualification.test_generated_output
 
 USER 65532:65532
 CMD ["python", "-B", "-m", "src.runtime"]

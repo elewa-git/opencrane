@@ -6,11 +6,11 @@ import { ___DecideConversationAssetBatch } from "@opencrane/models/conversation-
 import { ___IsSha256ContentAddress } from "@opencrane/models/artifacts";
 
 import type { ConversationAssetCaller, ConversationAssetResult, ConversationAssetView, ReserveConversationAssetRequest } from "./conversation-asset.types.js";
-import type { ConversationAssetUnitOfWork } from "./conversation-asset.router.types.js";
+import type { ConversationAssetAuthority } from "./conversation-asset.router.types.js";
 import { PrismaConversationAssetRepository } from "./prisma-conversation-asset-repository.js";
 
 /** Transaction owner around server-brokered participant uploads. */
-export class PrismaConversationAssetUnitOfWork implements ConversationAssetUnitOfWork
+export class PrismaConversationAssetUnitOfWork implements ConversationAssetAuthority
 {
 	private readonly prisma: PrismaClient;
 	private readonly service: ArtifactServicePromotionPort;

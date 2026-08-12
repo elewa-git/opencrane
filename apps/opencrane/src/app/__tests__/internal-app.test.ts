@@ -2,12 +2,22 @@ import type { PrismaClient } from "@prisma/client";
 import type { AuthenticationV1Api } from "@kubernetes/client-node";
 import type { NextFunction, Request, Response } from "express";
 import request from "supertest";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { __UnavailableMemoryGatewayClient } from "@opencrane/backend/server/infra/memory-gateway-client";
 
 import { _CreateInternalApp } from "../internal-app.js";
 import type { InternalRuntimeConfig } from "../config.types.js";
+
+/** Keep parser tests independent from mounted ArtifactStore credentials. */
+vi.mock("../../infra/artifacts/artifact-upload.factory.js", function _MockArtifactUploadFactory()
+{
+	return {
+		_CreateArtifactPreprocessOutputBroker: function _CreateArtifactPreprocessOutputBroker() { return {}; },
+		_CreateConversationAssetOutputAuthority: function _CreateConversationAssetOutputAuthority() { return { reserve: vi.fn(), publish: vi.fn() }; },
+		_CreateSkillAuthoringArtifactReader: function _CreateSkillAuthoringArtifactReader() { return {}; },
+	};
+});
 
 /** Build valid disabled-worker configuration for transport-parser tests. */
 function _RuntimeConfig(): InternalRuntimeConfig

@@ -11,6 +11,16 @@ import { _RateLimit } from "@opencrane/backend/server/infra/http";
 import { __UnavailableMemoryGatewayClient } from "@opencrane/backend/server/infra/memory-gateway-client";
 import { _ReadProcessConfig } from "../app/config.js";
 
+/** Keep identity-route tests independent from mounted ArtifactStore credentials. */
+vi.mock("../infra/artifacts/artifact-upload.factory.js", function _MockArtifactUploadFactory()
+{
+	return {
+		_CreateArtifactPreprocessOutputBroker: function _CreateArtifactPreprocessOutputBroker() { return {}; },
+		_CreateConversationAssetOutputAuthority: function _CreateConversationAssetOutputAuthority() { return { reserve: vi.fn(), publish: vi.fn() }; },
+		_CreateSkillAuthoringArtifactReader: function _CreateSkillAuthoringArtifactReader() { return {}; },
+	};
+});
+
 /**
  * Build a minimal Express app that exercises OIDC/session authentication.
  * @returns An Express app wired for auth testing

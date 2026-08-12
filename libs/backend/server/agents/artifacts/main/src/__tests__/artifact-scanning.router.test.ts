@@ -43,11 +43,11 @@ describe("artifact scanner broker router", function _Suite()
 	it("returns only fenced scan work metadata", async function _Claims()
 	{
 		const authority = _Dependencies().authority;
-		vi.mocked(authority.claim).mockResolvedValue({ lease: { jobId: "job-1", attempt: 1, claimFence: "fence-1", expiresAt: "2026-08-11T21:00:00.000Z" }, sourceMediaType: "image/png", sourceByteLength: 3 });
+		vi.mocked(authority.claim).mockResolvedValue({ lease: { jobId: "job-1", attempt: 1, claimFence: "fence-1", expiresAt: "2026-08-11T21:00:00.000Z" }, sourceByteLength: 3 });
 		const response = await request(_App(_Dependencies({ authority }))).post("/api/internal/artifact-scanner/jobs:claim").set(_Authorization()).send({});
 
 		expect(response.status).toBe(200);
-		expect(response.body).toEqual({ lease: { jobId: "job-1", attempt: 1, claimFence: "fence-1", expiresAt: "2026-08-11T21:00:00.000Z" }, sourceMediaType: "image/png", sourceByteLength: 3 });
+		expect(response.body).toEqual({ lease: { jobId: "job-1", attempt: 1, claimFence: "fence-1", expiresAt: "2026-08-11T21:00:00.000Z" }, sourceByteLength: 3 });
 		expect(JSON.stringify(response.body)).not.toMatch(/address|token|capability|store/iu);
 	});
 

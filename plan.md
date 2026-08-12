@@ -387,6 +387,9 @@ review order follows the real branch ancestry and incremental diff, not merely t
 8. **[#162](https://github.com/elewa-git/opencrane/issues/162)** — qualify the immutable deployed
    SPA and named live journeys after #602. Attach live-only evidence directly to #162; create a
    separate #162 PR only when qualification reveals an owned chart, release, or status change.
+   The live generated-output gate must also prove LiteLLM/provider forwarding for the exact pinned
+   OpenAI Responses image and code-execution tools, including container-file content retrieval through
+   the attempt-scoped virtual key. Offline provider-adapter tests do not satisfy that external proof.
 
 Every feature PR should contain several coherent green commits: model/contracts and version or
 migration intent; server authority and adapters; approved components and motion; route/store wiring;

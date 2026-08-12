@@ -66,7 +66,7 @@ def _compiled_input() -> dict:
             {"name": "search", "toolRevisionId": "rev-search", "description": "", "parametersSchema": {}},
             {"name": "write", "toolRevisionId": "rev-write", "description": "", "parametersSchema": {}},
         ],
-        "model": {"modelAlias": "silo-default", "maxOutputTokens": None},
+        "model": {"modelAlias": "silo-default", "maxOutputTokens": None, "generatedOutputCapabilities": []},
         "budget": {"maxCostUsdMicros": 5_000_000},
         "digest": "sha256:conformance",
     }
@@ -186,7 +186,7 @@ class ConformanceToolCallTests(unittest.TestCase):
         """
         reassembled = types.SimpleNamespace(
             delta=None,
-            part=types.SimpleNamespace(tool_name="search", tool_call_id="call-frag", args_as_json_str=lambda: '{"q":"reassembled"}'),
+            part=types.SimpleNamespace(part_kind="tool-call", tool_name="search", tool_call_id="call-frag", args_as_json_str=lambda: '{"q":"reassembled"}'),
         )
         neutral = _translate_framework_event(reassembled)
         self.assertEqual(neutral, {"type": "tool_call", "toolName": "search", "toolCallId": "call-frag", "arguments": '{"q":"reassembled"}'})
@@ -374,10 +374,10 @@ class ConformanceTelemetryTests(unittest.TestCase):
             self.assertNotIn("litellmKey", record)
             self.assertNotIn("token", record)
 
-    def test_trace_seam_is_a_transparent_no_op_offline(self) -> None:
-        """The OTEL span seam is a transparent no-op when the SDK is absent (the offline slice)."""
+    def test_trace_seam_is_transparent_with_or_without_the_optional_api(self) -> None:
+        """The optional OTEL API yields None or a non-recording span without changing execution."""
         with _trace("agent_runtime.test", runId="run-conf", attempt=1) as span:
-            self.assertIsNone(span)
+            self.assertTrue(span is None or not span.is_recording())
 
 
 class ConformanceLiveLiteLlmLegTests(unittest.TestCase):
@@ -395,7 +395,7 @@ class ConformanceLiveLiteLlmLegTests(unittest.TestCase):
     def test_live_litellm_conformance_is_enabled(self) -> None:  # pragma: no cover - live environment only
         """When explicitly enabled, the pinned driver symbols resolve for the live conformance run."""
         from pydantic_ai import Agent  # noqa: F401
-        from pydantic_ai.models.openai import OpenAIModel  # noqa: F401
+        from pydantic_ai.models.openai import OpenAIResponsesModel  # noqa: F401
         from pydantic_ai.providers.openai import OpenAIProvider  # noqa: F401
 
 

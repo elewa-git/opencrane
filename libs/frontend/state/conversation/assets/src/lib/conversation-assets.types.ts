@@ -14,7 +14,6 @@ export interface ConversationAsset
 	readonly disposition: ConversationAssetDisposition | null;
 	readonly failureCode: string | null;
 	readonly canRemove: boolean;
-	readonly canRetry: boolean;
 	readonly createdAt: string;
 }
 

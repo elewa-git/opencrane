@@ -1,12 +1,12 @@
 import { randomUUID } from "node:crypto";
 
-import { ArtifactRevisionState, ArtifactScanJobState, ArtifactState, ConversationAssetState, type Prisma } from "@prisma/client";
+import { ArtifactRevisionState, ArtifactScanJobState, ArtifactState, type Prisma } from "@prisma/client";
 
 import { ___IsSha256ContentAddress } from "@opencrane/models/artifacts";
 
 import { ArtifactScannerVerdict, type ArtifactScannerFailureCommand, type ArtifactScannerJobClaim, type ArtifactScannerResultCommand } from "@opencrane/contracts";
 
-import type { ArtifactScanRepository, ArtifactScanSourceRead } from "./artifact-scanning.types.js";
+import type { ArtifactScanRepository, ArtifactScanSourceRead, ConversationAssetScanLifecycleReporter } from "./artifact-scanning.types.js";
 
 /** Transaction-scoped scan job and quarantine publication repository. */
 export class PrismaArtifactScanRepository implements ArtifactScanRepository
@@ -15,12 +15,15 @@ export class PrismaArtifactScanRepository implements ArtifactScanRepository
 	private readonly transaction: Prisma.TransactionClient;
 	/** Claim duration proven to cover download, scan, and result-report deadlines. */
 	private readonly claimLeaseMilliseconds: number;
+	/** Conversation-owned terminal asset transition seam. */
+	private readonly conversationAssets: ConversationAssetScanLifecycleReporter;
 
 	/** Binds every delegate to one already-open transaction. */
-	constructor(transaction: Prisma.TransactionClient, claimLeaseMilliseconds: number)
+	constructor(transaction: Prisma.TransactionClient, claimLeaseMilliseconds: number, conversationAssets: ConversationAssetScanLifecycleReporter)
 	{
 		this.transaction = transaction;
 		this.claimLeaseMilliseconds = claimLeaseMilliseconds;
+		this.conversationAssets = conversationAssets;
 	}
 
 	/** Claims one eligible quarantined revision. */
@@ -34,7 +37,7 @@ export class PrismaArtifactScanRepository implements ArtifactScanRepository
 		const expiresAt = new Date(now.getTime() + this.claimLeaseMilliseconds);
 		const changed = await this.transaction.artifactScanJob.updateMany({ where: { id: job.id, attempt: job.attempt, state: job.state }, data: { state: ArtifactScanJobState.Claimed, attempt, claimFence, claimExpiresAt: expiresAt, nextAttemptAt: null, failureCode: null } });
 		if (changed.count !== 1) throw new Error("Artifact scan claim conflict");
-		return { lease: { jobId: job.id, attempt, claimFence, expiresAt: expiresAt.toISOString() }, sourceMediaType: job.artifactRevision.mediaType, sourceByteLength: Number(job.artifactRevision.byteLength) };
+		return { lease: { jobId: job.id, attempt, claimFence, expiresAt: expiresAt.toISOString() }, sourceByteLength: Number(job.artifactRevision.byteLength) };
 	}
 
 	/** Resolves source metadata through the exact live fence. */
@@ -91,7 +94,7 @@ export class PrismaArtifactScanRepository implements ArtifactScanRepository
 		const nextAttemptAt = terminal ? null : new Date(now.getTime() + 5_000);
 		const completedAt = terminal ? now : null;
 		await this.transaction.artifactScanJob.update({ where: { id: job.id }, data: { state, claimFence: null, claimExpiresAt: null, failureCode: command.failureCode, nextAttemptAt, completedAt } });
-		if (terminal) await this.transaction.conversationAsset.updateMany({ where: { revisionId: job.artifactRevisionId, state: ConversationAssetState.Processing }, data: { state: ConversationAssetState.Failed, failureCode: "scan_failed" } });
+		if (terminal) await this.conversationAssets.reportInTransaction(this.transaction, { revisionId: job.artifactRevisionId, state: "failed", failureCode: "scan_failed" });
 		return "failed";
 	}
 
@@ -100,7 +103,7 @@ export class PrismaArtifactScanRepository implements ArtifactScanRepository
 	{
 		await this.transaction.artifactRevision.update({ where: { id: job.artifactRevisionId }, data: { state: ArtifactRevisionState.Published } });
 		await this.transaction.artifact.update({ where: { id: job.artifactRevision.artifactId }, data: { currentRevisionId: job.artifactRevisionId } });
-		await this.transaction.conversationAsset.updateMany({ where: { revisionId: job.artifactRevisionId, state: ConversationAssetState.Processing }, data: { state: ConversationAssetState.Ready } });
+		await this.conversationAssets.reportInTransaction(this.transaction, { revisionId: job.artifactRevisionId, state: "ready", failureCode: null });
 		await this.transaction.artifactOutboxEvent.create({ data: { artifactId: job.artifactRevision.artifactId, revisionId: job.artifactRevisionId, kind: "RevisionPublished", idempotencyKey: `scan:${job.id}`, payload: { byteLength: Number(job.artifactRevision.byteLength), mediaType: job.artifactRevision.mediaType } } });
 		if (job.artifactRevision.mediaType === "application/pdf") await this.transaction.artifactPreprocessJob.create({ data: { sourceRevisionId: job.artifactRevisionId, pipelineVersion: "pdf-to-text/v1" } });
 	}
@@ -109,7 +112,7 @@ export class PrismaArtifactScanRepository implements ArtifactScanRepository
 	private async _rejectUnsafe(job: { readonly artifactRevisionId: string }): Promise<void>
 	{
 		await this.transaction.artifactRevision.update({ where: { id: job.artifactRevisionId }, data: { state: ArtifactRevisionState.Rejected } });
-		await this.transaction.conversationAsset.updateMany({ where: { revisionId: job.artifactRevisionId, state: ConversationAssetState.Processing }, data: { state: ConversationAssetState.Failed, failureCode: "unsafe_file" } });
+		await this.conversationAssets.reportInTransaction(this.transaction, { revisionId: job.artifactRevisionId, state: "failed", failureCode: "unsafe_file" });
 	}
 
 	/** Read one database-owned timestamp. */
