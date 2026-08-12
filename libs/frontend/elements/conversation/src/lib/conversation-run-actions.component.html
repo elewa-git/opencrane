@@ -1,0 +1,9 @@
+<section class="conversation-run-actions" aria-label="Agent run controls">
+	<span class="conversation-run-actions__status" role="status">{{ presentation().statusLabel }}</span>
+	@if (presentation().canSteer) {
+		<label class="conversation-run-actions__steering"><span class="sr-only">Steer this run</span><input pInputText [value]="steeringDraft()" placeholder="Add guidance…" [disabled]="presentation().busy" (input)="changeDraft($event)" /></label>
+		<p-button label="Steer" icon="pi pi-send" size="small" [disabled]="presentation().busy || steeringDraft().trim().length === 0" (onClick)="steerRequested.emit()" />
+	}
+	@if (presentation().canCancel) { <p-button label="Cancel run" icon="pi pi-stop-circle" severity="secondary" size="small" [outlined]="true" [disabled]="presentation().busy" (onClick)="cancelRequested.emit()" /> }
+	@if (presentation().canRetry) { <p-button label="Retry run" icon="pi pi-refresh" size="small" [disabled]="presentation().busy" (onClick)="retryRequested.emit()" /> }
+</section>

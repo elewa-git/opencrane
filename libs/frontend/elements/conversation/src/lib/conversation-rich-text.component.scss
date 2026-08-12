@@ -1,0 +1,6 @@
+:host { display: block; min-width: 0; }
+.conversation-rich-text { color: var(--p-text-color); line-height: 1.55; overflow-wrap: anywhere; }
+.conversation-rich-text :where(p:first-child) { margin-block-start: 0; }
+.conversation-rich-text :where(p:last-child) { margin-block-end: 0; }
+.conversation-rich-text :where(pre) { overflow: auto; padding: 0.875rem; border-radius: var(--p-border-radius-md); background: var(--p-surface-100); }
+.conversation-rich-text :where(a) { color: var(--p-primary-color); }

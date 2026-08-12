@@ -68,3 +68,29 @@ export interface ConversationStatusPresentation
 	/** Whether assistive technology should announce the change assertively. */
 	readonly assertive?: boolean;
 }
+
+/** Display-safe sanitized rich text owned by a conversation feature mapper. */
+export interface ConversationRichTextPresentation
+{
+	/** Stable message coordinate used for DOM identity. */
+	readonly messageId: string;
+	/** Sanitized HTML produced by the shared conversation renderer. */
+	readonly html: string;
+	/** Plain accessible label describing the content. */
+	readonly label: string;
+}
+
+/** Finite labels and permissions for participant-visible run actions. */
+export interface ConversationRunActionsPresentation
+{
+	/** Plain run lifecycle label. */
+	readonly statusLabel: string;
+	/** Whether an exact-attempt cancellation intent may be emitted. */
+	readonly canCancel: boolean;
+	/** Whether an exact failed attempt may be retried. */
+	readonly canRetry: boolean;
+	/** Whether a steering instruction may be submitted. */
+	readonly canSteer: boolean;
+	/** Whether one run command is already active. */
+	readonly busy: boolean;
+}
