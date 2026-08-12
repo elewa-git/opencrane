@@ -1,4 +1,5 @@
 import type { RunAdmissionTransaction } from "@opencrane/backend/agents/execution/runs";
+import type { AgentThreadOrigin } from "@opencrane/backend/conversations/agent-threads";
 
 import { ConversationAuthorityOutcomes, type ConversationCaller, type ConversationWriteDenial, type CreateConversationRequest, type CreateConversationResult, type MutateConversationResult, type SubmitConversationMessageRequest } from "./conversation-authority.types.js";
 import type { ConversationAttachmentAdmissionPort } from "./conversation-message-admission.types.js";
@@ -11,6 +12,8 @@ export interface ConversationMutationRepository
 	close(caller: ConversationCaller, conversationId: string): Promise<MutateConversationResult>;
 	admitOrdinaryMessage(caller: ConversationCaller, conversationId: string, messageId: string, request: SubmitConversationMessageRequest, attachments: ConversationAttachmentAdmissionPort): Promise<{ readonly outcome: ConversationAuthorityOutcomes.Accepted } | { readonly outcome: ConversationAuthorityOutcomes.Denied; readonly reason: ConversationWriteDenial }>;
 	persistAgentMessage(caller: ConversationCaller, conversationId: string, messageId: string, runId: string, request: SubmitConversationMessageRequest, attachments: ConversationAttachmentAdmissionPort): Promise<void>;
+	prepareAgentThread(caller: ConversationCaller, parentConversationId: string, parentMessageId: string, childConversationId: string, request: SubmitConversationMessageRequest, attachments: ConversationAttachmentAdmissionPort): Promise<{ readonly personaProfileId: string; readonly personaRevisionId: string }>;
+	persistAgentThread(caller: ConversationCaller, origin: AgentThreadOrigin, personaProfileId: string, childMessageId: string, request: SubmitConversationMessageRequest): Promise<void>;
 }
 
 /**

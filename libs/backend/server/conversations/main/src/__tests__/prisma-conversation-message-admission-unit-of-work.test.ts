@@ -14,9 +14,9 @@ const _CALLER = { siloId: "silo-1", subjectId: "user-1" } as const;
 const _REQUEST: SubmitConversationMessageRequest = { idempotencyKey: "request-1", blocks: [{ id: "block-1", kind: MessageContentBlockKinds.Text, value: "Hello" }] };
 
 /** Builds a canonical persisted message timeline row. */
-function _Entry(runId: string | null): object
+function _Entry(runId: string | null, invokedAgentThread: object | null = null): object
 {
-	return { position: 2n, message: { id: "message-1", role: ConversationMessageRole.User, state: ConversationMessageState.Completed, source: MessageSources.UserInput, blocks: _REQUEST.blocks, runId, userId: "user-1", createdAt: new Date("2026-08-10T10:00:00.000Z"), completedAt: new Date("2026-08-10T10:00:00.000Z") } };
+	return { position: 2n, message: { id: "message-1", role: ConversationMessageRole.User, state: ConversationMessageState.Completed, source: MessageSources.UserInput, blocks: _REQUEST.blocks, runId, userId: "user-1", createdAt: new Date("2026-08-10T10:00:00.000Z"), completedAt: new Date("2026-08-10T10:00:00.000Z"), invokedAgentThread } };
 }
 
 /** Builds the root client facade around one transaction-shaped test double. */
@@ -45,6 +45,28 @@ function _Admission(prisma: object, runAdmission: Partial<PersonalRunAdmissionPo
 
 describe("PrismaConversationMessageAdmissionUnitOfWork", function _Suite()
 {
+	it("routes a structured group target through one prepared first-run transaction", async function _AdmitsAgentThread()
+	{
+		const request = { ..._REQUEST, agentTarget: { agentServiceId: "service-1" } };
+		const origin = { childConversationId: "child-1", parentConversationId: "conversation-1", rootConversationId: "conversation-1", parentMessageId: "message-1", initiatorUserId: "user-1", agentServiceId: "service-1", personaRevisionId: "persona-1", firstRunId: "run-1" };
+		const transaction = { orgMembership: _ActiveMembership(), conversationTimelineEntry: { findFirst: vi.fn().mockResolvedValueOnce(null).mockResolvedValueOnce(_Entry(null, origin)) }, conversation: { findFirst: vi.fn().mockResolvedValue({ mode: ConversationMode.Group, lifecycle: ConversationLifecycle.Open, agentServiceId: null, runs: [] }) } };
+		const prepareAgentThread = vi.fn().mockResolvedValue({ personaProfileId: "profile-1", personaRevisionId: "persona-1" });
+		const persistAgentThread = vi.fn().mockResolvedValue(undefined);
+		const runAdmission = { admitFirstAgentThreadRun: vi.fn(async function _Admit(command, serviceId, prepare, commit)
+		{
+			const runTransaction = { prisma: {} };
+			await prepare(runTransaction);
+			await commit(runTransaction, { snapshot: { runId: "run-1", personaRevisionId: "persona-1" } });
+			return { outcome: PersonalRunAdmissionOutcomes.Accepted, runId: "run-1" };
+		}) };
+		const admission = new PrismaConversationMessageAdmissionUnitOfWork(_Prisma(transaction) as never, runAdmission as never, function _Repository(): never { return { prepareAgentThread, persistAgentThread } as never; }, _CreateAttachmentAdmission);
+
+		await expect(admission.submit(_CALLER, "conversation-1", request)).resolves.toEqual(expect.objectContaining({ outcome: "accepted", agentThread: expect.objectContaining({ firstRunId: "run-1" }) }));
+		expect(runAdmission.admitFirstAgentThreadRun).toHaveBeenCalledWith(expect.objectContaining({ conversationId: expect.any(String) }), "service-1", expect.any(Function), expect.any(Function));
+		expect(prepareAgentThread).toHaveBeenCalledOnce();
+		expect(persistAgentThread).toHaveBeenCalledWith(_CALLER, expect.objectContaining({ firstRunId: "run-1", personaRevisionId: "persona-1" }), "profile-1", expect.any(String), request);
+	});
+
 	it("routes agent-session input through run admission and persists the message in its transaction", async function _AdmitsAgentMessage()
 	{
 		const create = vi.fn().mockResolvedValue({});

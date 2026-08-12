@@ -1,5 +1,6 @@
-import { AgentServiceKind, AgentServiceState, ConversationLifecycle, ConversationMessageRole, ConversationMessageState, ConversationMode, OrgMemberStatus, Prisma } from "@prisma/client";
+import { AgentServiceKind, AgentServiceState, ConversationLifecycle, ConversationMessageRole, ConversationMessageState, ConversationMode, OrgMemberStatus, PersonaRevisionState, Prisma } from "@prisma/client";
 
+import type { AgentThreadOrigin } from "@opencrane/backend/conversations/agent-threads";
 import { __DecideConversationCommand, ConversationCommandActions, ConversationCommandDenialReasons, ConversationCommandKinds, ConversationLifecycles, ConversationModes, MessageSources } from "@opencrane/models/conversations";
 
 import { ConversationAuthorityOutcomes, ConversationWriteDenialReasons } from "./conversation-authority.types.js";
@@ -112,6 +113,33 @@ export class PrismaConversationMutationRepository implements ConversationMutatio
 		// 3. Persist the message only after every caller and immutable-mode fence remains valid.
 		await this.transaction.conversationMessage.create({ data: _messageData(messageId, conversationId, caller.subjectId, request, runId) });
 		await attachments.bindReadyAssets(caller, conversationId, messageId, request.blocks);
+	}
+
+	/** Establishes the parent message and mirrored child before snapshot assembly reads the child. */
+	async prepareAgentThread(caller: ConversationCaller, parentConversationId: string, parentMessageId: string, childConversationId: string, request: SubmitConversationMessageRequest, attachments: ConversationAttachmentAdmissionPort): Promise<{ readonly personaProfileId: string; readonly personaRevisionId: string }>
+	{
+		if (request.agentTarget === undefined) throw new Error("Agent target unavailable");
+		const context = await this.query.loadCommandContext(caller, parentConversationId);
+		if (context?.mode !== ConversationModes.Group || context.lifecycle !== ConversationLifecycles.Open) throw new Error("Agent-thread parent unavailable");
+		const service = await this.transaction.agentService.findFirst({ where: { id: request.agentTarget.agentServiceId, siloId: caller.siloId, kind: AgentServiceKind.Personal, state: AgentServiceState.Active, activeRevisionId: { not: null } }, select: { id: true } });
+		const persona = await this.transaction.personaProfile.findFirst({ where: { siloId: caller.siloId, userId: caller.subjectId, activeRevision: { is: { state: PersonaRevisionState.Approved } } }, select: { id: true, activeRevisionId: true } });
+		if (service === null || persona === null || persona.activeRevisionId === null) throw new Error("Agent-thread identity unavailable");
+		const participants = await this.transaction.conversationParticipant.findMany({ where: { conversationId: parentConversationId, accessEndedPosition: null }, select: { userId: true }, orderBy: { userId: "asc" } });
+		if (participants.length < 2 || !participants.some(function _Caller(row): boolean { return row.userId === caller.subjectId; })) throw new Error("Agent-thread participants unavailable");
+		const userIds = participants.map(function _Id(row): string { return row.userId; });
+		if (await this.transaction.orgMembership.count({ where: { clusterTenant: caller.siloId, subject: { in: userIds }, status: OrgMemberStatus.Active } }) !== userIds.length) throw new Error("Agent-thread participants unavailable");
+		await this.transaction.conversationMessage.create({ data: _messageData(parentMessageId, parentConversationId, caller.subjectId, request, null) });
+		await attachments.bindReadyAssets(caller, parentConversationId, parentMessageId, request.blocks);
+		await this.transaction.conversation.create({ data: { id: childConversationId, siloId: caller.siloId, mode: ConversationMode.AgentSession, agentServiceId: service.id } });
+		for (const userId of userIds) await this.transaction.conversationParticipant.create({ data: { conversationId: childConversationId, userId } });
+		return { personaProfileId: persona.id, personaRevisionId: persona.activeRevisionId };
+	}
+
+	/** Persists the child input and immutable origin after the exact first run is staged. */
+	async persistAgentThread(caller: ConversationCaller, origin: AgentThreadOrigin, personaProfileId: string, childMessageId: string, request: SubmitConversationMessageRequest): Promise<void>
+	{
+		await this.transaction.conversationMessage.create({ data: _messageData(childMessageId, origin.childConversationId, caller.subjectId, request, origin.firstRunId) });
+		await this.transaction.conversationAgentThread.create({ data: { childConversationId: origin.childConversationId, parentConversationId: origin.parentConversationId, rootConversationId: origin.rootConversationId, siloId: caller.siloId, parentMessageId: origin.parentMessageId, initiatorUserId: origin.initiatorUserId, agentServiceId: origin.agentServiceId, personaProfileId, personaRevisionId: origin.personaRevisionId, firstRunId: origin.firstRunId } });
 	}
 }
 

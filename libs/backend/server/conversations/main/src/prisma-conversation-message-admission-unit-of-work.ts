@@ -4,6 +4,7 @@ import { Prisma, type PrismaClient } from "@prisma/client";
 
 import { PersonalRunAdmissionDenialReasons, PersonalRunAdmissionOutcomes, type PersonalRunAdmissionPort } from "@opencrane/backend/agents/execution/admission";
 import { RunAdmissionConcurrencyDenialReasons, RunAdmissionDenialReasons, type RunAdmissionBuild, type RunAdmissionTransaction } from "@opencrane/backend/agents/execution/runs";
+import type { AgentThreadOrigin } from "@opencrane/backend/conversations/agent-threads";
 import { ___DoWithTrace } from "@opencrane/backend/observability";
 import { __DecideConversationCommand, ConversationCommandActions, ConversationCommandDenialReasons, ConversationCommandKinds, type MessageContentBlock } from "@opencrane/models/conversations";
 import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
@@ -44,9 +45,9 @@ export class PrismaConversationMessageAdmissionUnitOfWork implements Conversatio
 
 			const decision = __DecideConversationCommand({ ...preflight.context, command: { kind: ConversationCommandKinds.SubmitMessage } });
 			if (!decision.allowed) return _denied(_writeDenial(decision.reason));
-			// A structured target is never allowed to fall through as an ordinary message. The Agent-thread
-			// admission branch replaces this refusal in the next bounded transaction slice.
-			if (request.agentTarget !== undefined) return _denied(ConversationWriteDenialReasons.CommandNotSupported);
+			if (request.agentTarget !== undefined) return decision.action === ConversationCommandActions.AdmitOrdinaryMessage
+				? this._admitAgentThreadMessage(caller, conversationId, request)
+				: _denied(ConversationWriteDenialReasons.CommandNotSupported);
 
 			switch (decision.action)
 			{
@@ -98,6 +99,36 @@ export class PrismaConversationMessageAdmissionUnitOfWork implements Conversatio
 		});
 		if (result.outcome === PersonalRunAdmissionOutcomes.Denied) return _denied(_runAdmissionDenial(result.reason));
 		const message = await this._findOwnMessage(caller, conversationId, request.idempotencyKey);
+		if (message === null) return _denied(ConversationWriteDenialReasons.PersistenceUnavailable);
+		return result.outcome === PersonalRunAdmissionOutcomes.Idempotent ? _duplicateResult(message, request) : _accepted(message);
+	}
+
+	/** Atomically creates the parent root message, child session, first run, and immutable origin. */
+	private async _admitAgentThreadMessage(caller: ConversationCaller, parentConversationId: string, request: SubmitConversationMessageRequest): Promise<SubmitConversationMessageResult>
+	{
+		if (request.agentTarget === undefined) return _denied(ConversationWriteDenialReasons.CommandNotSupported);
+		const parentMessageId = randomUUID();
+		const childConversationId = randomUUID();
+		const childMessageId = randomUUID();
+		const createRepository = this.createMutationRepository;
+		const createAttachments = this.createAttachmentAdmission;
+		let prepared: { readonly personaProfileId: string; readonly personaRevisionId: string } | null = null;
+		const result = await this.runAdmission.admitFirstAgentThreadRun(
+			{ siloId: caller.siloId, executionSubjectId: caller.subjectId, conversationId: childConversationId, requestIdempotencyKey: request.idempotencyKey, inputMessageId: childMessageId, inputMessageBlocks: request.blocks },
+			request.agentTarget.agentServiceId,
+			async function _Prepare(transaction): Promise<void>
+			{
+				prepared = await createRepository(transaction).prepareAgentThread(caller, parentConversationId, parentMessageId, childConversationId, request, createAttachments(transaction));
+			},
+			async function _Commit(transaction: RunAdmissionTransaction, value: RunAdmissionBuild): Promise<void>
+			{
+				if (prepared === null || value.snapshot.personaRevisionId !== prepared.personaRevisionId) throw new Error("Agent-thread persona authority changed");
+				const origin: AgentThreadOrigin = { childConversationId, parentConversationId, rootConversationId: parentConversationId, parentMessageId, initiatorUserId: caller.subjectId, agentServiceId: request.agentTarget!.agentServiceId, personaRevisionId: prepared.personaRevisionId, firstRunId: value.snapshot.runId };
+				await createRepository(transaction).persistAgentThread(caller, origin, prepared.personaProfileId, childMessageId, request);
+			},
+		);
+		if (result.outcome === PersonalRunAdmissionOutcomes.Denied) return _denied(_runAdmissionDenial(result.reason));
+		const message = await this._findOwnMessage(caller, parentConversationId, request.idempotencyKey);
 		if (message === null) return _denied(ConversationWriteDenialReasons.PersistenceUnavailable);
 		return result.outcome === PersonalRunAdmissionOutcomes.Idempotent ? _duplicateResult(message, request) : _accepted(message);
 	}
