@@ -65,4 +65,23 @@ describe("self conversations router", function _Suite()
 		const open = vi.fn().mockRejectedValue(new Error("database connection contained private detail"));
 		await request(_App({ open })).get("/conversation-1").expect(503, { error: "persistence_unavailable" });
 	});
+
+	it("advances an exact Agent-thread read coordinate and maps bounded denials", async function _MarksAgentThreadRead()
+	{
+		const markAgentThreadRead = vi.fn().mockResolvedValueOnce({ outcome: "changed", readThroughPosition: "5" }).mockResolvedValueOnce({ outcome: "idempotent", readThroughPosition: "5" }).mockResolvedValueOnce({ outcome: "denied", reason: "observed_position_unavailable" }).mockResolvedValueOnce({ outcome: "denied", reason: "conversation_unavailable" });
+		const app = _App({ markAgentThreadRead });
+
+		await request(app).put("/parent-1/agent-threads/child-1/read-through").send({ observedPosition: "5" }).expect(200, { outcome: "changed", readThroughPosition: "5" });
+		await request(app).put("/parent-1/agent-threads/child-1/read-through").send({ observedPosition: "3" }).expect(200, { outcome: "idempotent", readThroughPosition: "5" });
+		await request(app).put("/parent-1/agent-threads/child-1/read-through").send({ observedPosition: "6" }).expect(409, { error: "observed_position_unavailable" });
+		await request(app).put("/parent-1/agent-threads/child-1/read-through").send({ observedPosition: "2" }).expect(404, { error: "conversation_unavailable" });
+		expect(markAgentThreadRead).toHaveBeenCalledWith({ siloId: "silo-1", subjectId: "user-1" }, "parent-1", "child-1", "5");
+	});
+
+	it("rejects malformed Agent-thread read positions before authority", async function _RejectsMalformedRead()
+	{
+		const markAgentThreadRead = vi.fn();
+		await request(_App({ markAgentThreadRead })).put("/parent-1/agent-threads/child-1/read-through").send({ observedPosition: "9223372036854775808" }).expect(400, { error: "invalid_agent_thread_read_position" });
+		expect(markAgentThreadRead).not.toHaveBeenCalled();
+	});
 });

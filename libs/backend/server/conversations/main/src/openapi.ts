@@ -1,5 +1,7 @@
 import { ConversationLifecycles, ConversationModes, MessageContentBlockKinds, MessageRoles, MessageSources, MessageStates } from "@opencrane/models/conversations";
 
+import { ConversationAuthorityOutcomes } from "./conversation-authority.types.js";
+
 /**
  * OpenAPI description of the live replay route, owned by this package rather than by the
  * central spec file, so the route and its documentation move together.
@@ -188,6 +190,17 @@ export const _SelfConversationsOpenapiPaths = {
 			tags: ["Conversations"],
 			parameters: [{ name: "parentConversationId", in: "path", required: true, schema: { type: "string" } }, { name: "childConversationId", in: "path", required: true, schema: { type: "string" } }],
 			responses: { 200: { description: "Authorized Agent-thread snapshot.", content: { "application/json": { schema: { type: "object", additionalProperties: false, required: ["agentThread"], properties: { agentThread: _AgentThreadSnapshotSchema } } } } }, 401: { description: "Authentication required." }, 404: { description: "Agent thread unavailable." }, 503: { description: "Conversation authority unavailable." } },
+		},
+	},
+	"/me/conversations/{parentConversationId}/agent-threads/{childConversationId}/read-through": {
+		put: {
+			operationId: "markMyAgentThreadRead",
+			summary: "Advance this participant's Agent-thread read position",
+			description: "Idempotently advances one participant-local coordinate only after current parent and child access are rechecked. The observed position cannot exceed the current child timeline.",
+			tags: ["Conversations"],
+			parameters: [{ name: "parentConversationId", in: "path", required: true, schema: { type: "string" } }, { name: "childConversationId", in: "path", required: true, schema: { type: "string" } }],
+			requestBody: { required: true, content: { "application/json": { schema: { type: "object", additionalProperties: false, required: ["observedPosition"], properties: { observedPosition: { type: "string", pattern: "^(0|[1-9][0-9]*)$", maxLength: 19 } } } } } },
+			responses: { 200: { description: "Participant read coordinate changed or was already at least this position.", content: { "application/json": { schema: { type: "object", additionalProperties: false, required: ["outcome", "readThroughPosition"], properties: { outcome: { type: "string", enum: [ConversationAuthorityOutcomes.Changed, ConversationAuthorityOutcomes.Idempotent] }, readThroughPosition: { type: "string", pattern: "^(0|[1-9][0-9]*)$" } } } } } }, 400: { description: "Malformed observed position." }, 401: { description: "Authentication required." }, 404: { description: "Agent thread unavailable." }, 409: { description: "Observed position exceeds the current child timeline." }, 503: { description: "Conversation authority unavailable." } },
 		},
 	},
 	"/me/conversations/{conversationId}/messages": {

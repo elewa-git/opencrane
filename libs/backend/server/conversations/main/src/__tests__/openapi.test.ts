@@ -4,7 +4,7 @@ import { ConversationLifecycles, ConversationModes, MessageContentBlockKinds, Me
 import { _SelfConversationsOpenapiPaths } from "../openapi.js";
 
 /** Returns the JSON success schema for one participant conversation operation. */
-function _SuccessSchema(path: keyof typeof _SelfConversationsOpenapiPaths, method: "get" | "patch" | "post", status: 200 | 201): object
+function _SuccessSchema(path: keyof typeof _SelfConversationsOpenapiPaths, method: "get" | "patch" | "post" | "put", status: 200 | 201): object
 {
 	const paths = _SelfConversationsOpenapiPaths as unknown as Record<string, Record<string, { readonly responses: Record<number, { readonly content?: { readonly "application/json"?: { readonly schema: object } } }> }>>;
 	const operation = paths[path][method];
@@ -62,5 +62,11 @@ describe("participant conversation OpenAPI", function _Suite()
 		const list = _SuccessSchema("/me/conversations", "get", 200) as { readonly properties: { readonly conversations: { readonly items: { readonly properties: Record<string, { readonly enum: readonly string[] }> } } } };
 		expect(list.properties.conversations.items.properties.mode.enum).toEqual(Object.values(ConversationModes));
 		expect(list.properties.conversations.items.properties.lifecycle.enum).toEqual(Object.values(ConversationLifecycles));
+	});
+
+	it("publishes exact Agent-thread read-coordinate outcomes", function _MarksAgentThreadRead()
+	{
+		const schema = _SuccessSchema("/me/conversations/{parentConversationId}/agent-threads/{childConversationId}/read-through", "put", 200);
+		expect(schema).toMatchObject({ additionalProperties: false, required: ["outcome", "readThroughPosition"], properties: { outcome: { enum: ["changed", "idempotent"] }, readThroughPosition: { pattern: "^(0|[1-9][0-9]*)$" } } });
 	});
 });

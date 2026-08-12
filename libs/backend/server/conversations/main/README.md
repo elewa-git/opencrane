@@ -46,6 +46,10 @@ Archive and close are deliberately different. Archive is reversible and affects 
 participant's list. Close is permanent, applies to the conversation, and makes it read-only. Each
 participant separately records the first visible position, the last read position, and an optional
 access-ended position; reads are clipped to those bounds and writes require continuing access.
+Opening a child Agent-thread returns exact unread message count separately from timeline positions.
+The participant may then advance `readThroughPosition` through the exact parent-child route. That
+mutation is monotonic and idempotent, rechecks current parent and child access, and refuses any
+position beyond the current canonical child timeline.
 
 The database allocates one monotonically increasing position across message and run-event timeline
 entries. Timeline entries hold typed references to canonical rows, never copied payloads. The replay
@@ -64,7 +68,7 @@ the participant from the signed-in browser session.
 ## Public surface
 
 - `_CreateSelfConversationsRouter` composes the participant-bound list, create, open, message,
-  archive, and close API over Prisma and the internal run-admission port.
+  Agent-thread mark-read, archive, and close API over Prisma and the internal run-admission port.
 - `_CreateConversationReplayRepository` composes replay over one `RepeatableRead` transaction so
   access-ending races cannot expose later events.
 - `__CreateConversationReplayRouter` mounts internal context-authorized AG-UI snapshot-to-live replay.

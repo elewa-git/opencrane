@@ -153,6 +153,38 @@ describe("PrismaConversationUnitOfWork", function _Suite()
 		expect(transaction.conversationAgentThread.findFirst).toHaveBeenCalledWith(expect.objectContaining({ include: expect.objectContaining({ deliveries: expect.objectContaining({ take: 100 }), childConversation: expect.objectContaining({ select: expect.objectContaining({ runs: expect.objectContaining({ take: 100 }) }) }) }) }));
 	});
 
+	it("advances one Agent-thread read coordinate monotonically", async function _MarksRead()
+	{
+		const updateMany = vi.fn().mockResolvedValue({ count: 1 });
+		const transaction = { orgMembership: _ActiveMembership(), conversationAgentThread: { findFirst: vi.fn().mockResolvedValue({ childConversation: { participants: [{ readThroughPosition: 3n }] } }) }, conversationTimelineEntry: { findFirst: vi.fn().mockResolvedValue({ position: 6n }) }, conversationParticipant: { updateMany } };
+
+		await expect(_Authority(_Prisma(transaction)).markAgentThreadRead(_CALLER, "parent-1", "child-1", "5")).resolves.toEqual({ outcome: "changed", readThroughPosition: "5" });
+		expect(updateMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ conversationId: "child-1", userId: "user-1", readThroughPosition: { lt: 5n }, conversation: expect.objectContaining({ originAgentThread: { is: expect.objectContaining({ parentConversationId: "parent-1" }) } }) }), data: { readThroughPosition: 5n } }));
+	});
+
+	it("keeps stale Agent-thread read repeats idempotent", async function _StaleRead()
+	{
+		const updateMany = vi.fn();
+		const transaction = { orgMembership: _ActiveMembership(), conversationAgentThread: { findFirst: vi.fn().mockResolvedValue({ childConversation: { participants: [{ readThroughPosition: 5n }] } }) }, conversationTimelineEntry: { findFirst: vi.fn().mockResolvedValue({ position: 6n }) }, conversationParticipant: { updateMany } };
+
+		await expect(_Authority(_Prisma(transaction)).markAgentThreadRead(_CALLER, "parent-1", "child-1", "3")).resolves.toEqual({ outcome: "idempotent", readThroughPosition: "5" });
+		expect(updateMany).not.toHaveBeenCalled();
+	});
+
+	it("rejects foreign, access-ended, and future Agent-thread read coordinates", async function _RejectsReadEscalation()
+	{
+		const thread = vi.fn().mockResolvedValueOnce(null).mockResolvedValueOnce(null).mockResolvedValueOnce({ childConversation: { participants: [{ readThroughPosition: 2n }] } });
+		const timeline = vi.fn().mockResolvedValue({ position: 5n });
+		const transaction = { orgMembership: _ActiveMembership(), conversationAgentThread: { findFirst: thread }, conversationTimelineEntry: { findFirst: timeline }, conversationParticipant: { updateMany: vi.fn() } };
+		const authority = _Authority(_Prisma(transaction));
+
+		await expect(authority.markAgentThreadRead(_CALLER, "foreign-parent", "child-1", "2")).resolves.toEqual({ outcome: "denied", reason: "conversation_unavailable" });
+		await expect(authority.markAgentThreadRead(_CALLER, "parent-1", "child-1", "2")).resolves.toEqual({ outcome: "denied", reason: "conversation_unavailable" });
+		await expect(authority.markAgentThreadRead(_CALLER, "parent-1", "child-1", "6")).resolves.toEqual({ outcome: "denied", reason: "observed_position_unavailable" });
+		expect(thread).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ parentConversation: { participants: { some: { userId: "user-1", accessEndedPosition: null } } }, childConversation: { participants: { some: { userId: "user-1", accessEndedPosition: null } } } }) }));
+		expect(transaction.conversationParticipant.updateMany).not.toHaveBeenCalled();
+	});
+
 	it("orders visible conversations by the database-global activity allocation", async function _OrdersByGlobalActivity()
 	{
 		const findMany = vi.fn().mockResolvedValue([]);

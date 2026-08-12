@@ -4,7 +4,7 @@ import { Prisma, type PrismaClient } from "@prisma/client";
 
 import { ___DoWithTrace } from "@opencrane/backend/observability";
 
-import type { AgentThreadSnapshotView, ConversationCaller, ConversationDetail, ConversationSummary, ConversationUnitOfWork, CreateConversationRequest, CreateConversationResult, MutateConversationResult, SubmitConversationMessageRequest, SubmitConversationMessageResult } from "./conversation-authority.types.js";
+import type { AgentThreadSnapshotView, ConversationCaller, ConversationDetail, ConversationSummary, ConversationUnitOfWork, CreateConversationRequest, CreateConversationResult, MarkAgentThreadReadResult, MutateConversationResult, SubmitConversationMessageRequest, SubmitConversationMessageResult } from "./conversation-authority.types.js";
 import type { ConversationMessageAdmissionUnitOfWork } from "./conversation-message-admission.types.js";
 import { PrismaConversationMutationRepository } from "./prisma-conversation-mutation-repository.js";
 import type { ConversationMutationRepository } from "./prisma-conversation-mutation-repository.types.js";
@@ -40,6 +40,12 @@ export class PrismaConversationUnitOfWork implements ConversationUnitOfWork
 	async openAgentThread(caller: ConversationCaller, parentConversationId: string, childConversationId: string): Promise<AgentThreadSnapshotView | null>
 	{
 		return ___DoWithTrace("conversation.agent_thread.open", { siloId: caller.siloId, parentConversationId, childConversationId }, async () => this._read(function _Open(query) { return query.openAgentThread(caller, parentConversationId, childConversationId); }));
+	}
+
+	/** Monotonically advances one participant's read coordinate inside a serializable authority snapshot. */
+	async markAgentThreadRead(caller: ConversationCaller, parentConversationId: string, childConversationId: string, observedPosition: string): Promise<MarkAgentThreadReadResult>
+	{
+		return ___DoWithTrace("conversation.agent_thread.mark_read", { siloId: caller.siloId, parentConversationId, childConversationId }, async () => this._mutate(function _MarkRead(repository) { return repository.markAgentThreadRead(caller, parentConversationId, childConversationId, BigInt(observedPosition)); }));
 	}
 
 	/** Writes the conversation and participant rows atomically; the selected mode can never change. */

@@ -1082,6 +1082,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/me/conversations/{parentConversationId}/agent-threads/{childConversationId}/read-through": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Advance this participant's Agent-thread read position
+         * @description Idempotently advances one participant-local coordinate only after current parent and child access are rechecked. The observed position cannot exceed the current child timeline.
+         */
+        put: operations["markMyAgentThreadRead"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/me/conversations/{conversationId}/messages": {
         parameters: {
             query?: never;
@@ -6471,6 +6491,74 @@ export interface operations {
             };
             /** @description Agent thread unavailable. */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Conversation authority unavailable. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    markMyAgentThreadRead: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                parentConversationId: string;
+                childConversationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    observedPosition: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Participant read coordinate changed or was already at least this position. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {string} */
+                        outcome: "changed" | "idempotent";
+                        readThroughPosition: string;
+                    };
+                };
+            };
+            /** @description Malformed observed position. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Agent thread unavailable. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Observed position exceeds the current child timeline. */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

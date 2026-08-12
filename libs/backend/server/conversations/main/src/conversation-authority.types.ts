@@ -319,6 +319,18 @@ export type SubmitConversationMessageResult = { readonly outcome: ConversationAu
  */
 export type MutateConversationResult = { readonly outcome: ConversationAuthorityOutcomes.Changed; readonly conversation: ConversationDetail } | { readonly outcome: ConversationAuthorityOutcomes.Denied; readonly reason: ConversationWriteDenial };
 
+/** Stable non-disclosing denials for one participant's Agent-thread read coordinate. */
+export enum AgentThreadReadDenialReasons
+{
+	ConversationUnavailable = "conversation_unavailable",
+	ObservedPositionUnavailable = "observed_position_unavailable",
+}
+
+/** Result of monotonically advancing one participant's Agent-thread read coordinate. */
+export type MarkAgentThreadReadResult =
+	| { readonly outcome: ConversationAuthorityOutcomes.Changed | ConversationAuthorityOutcomes.Idempotent; readonly readThroughPosition: string }
+	| { readonly outcome: ConversationAuthorityOutcomes.Denied; readonly reason: AgentThreadReadDenialReasons };
+
 /**
  * Everything the conversation HTTP layer is allowed to do, as one port.
  *
@@ -363,6 +375,8 @@ export interface ConversationUnitOfWork
 	open(caller: ConversationCaller, conversationId: string): Promise<ConversationDetail | null>;
 	/** Opens one bounded child snapshot only for current participants in both conversations. */
 	openAgentThread(caller: ConversationCaller, parentConversationId: string, childConversationId: string): Promise<AgentThreadSnapshotView | null>;
+	/** Advances this caller's child read position only up to the canonical position they observed. */
+	markAgentThreadRead(caller: ConversationCaller, parentConversationId: string, childConversationId: string, observedPosition: string): Promise<MarkAgentThreadReadResult>;
 	/**
 	 * Creates one conversation and its participant rows in a single transaction, so a
 	 * conversation with missing participants can never be left behind.

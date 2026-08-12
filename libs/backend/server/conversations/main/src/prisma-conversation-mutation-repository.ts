@@ -3,8 +3,8 @@ import { AgentServiceKind, AgentServiceState, ConversationLifecycle, Conversatio
 import type { AgentThreadOrigin } from "@opencrane/backend/conversations/agent-threads";
 import { __DecideConversationCommand, ConversationCommandActions, ConversationCommandDenialReasons, ConversationCommandKinds, ConversationLifecycles, ConversationModes, MessageSources } from "@opencrane/models/conversations";
 
-import { ConversationAuthorityOutcomes, ConversationWriteDenialReasons } from "./conversation-authority.types.js";
-import type { ConversationCaller, ConversationDetail, ConversationWriteDenial, CreateConversationRequest, CreateConversationResult, MutateConversationResult, SubmitConversationMessageRequest } from "./conversation-authority.types.js";
+import { AgentThreadReadDenialReasons, ConversationAuthorityOutcomes, ConversationWriteDenialReasons } from "./conversation-authority.types.js";
+import type { ConversationCaller, ConversationDetail, ConversationWriteDenial, CreateConversationRequest, CreateConversationResult, MarkAgentThreadReadResult, MutateConversationResult, SubmitConversationMessageRequest } from "./conversation-authority.types.js";
 import type { ConversationMutationRepository } from "./prisma-conversation-mutation-repository.types.js";
 import type { ConversationAttachmentAdmissionPort } from "./conversation-message-admission.types.js";
 import { PrismaConversationQueryRepository } from "./prisma-conversation-query-repository.js";
@@ -85,6 +85,25 @@ export class PrismaConversationMutationRepository implements ConversationMutatio
 		if (update.count !== 1) return { outcome: ConversationAuthorityOutcomes.Denied, reason: ConversationWriteDenialReasons.ConversationUnavailable };
 		const conversation = _requireWrittenConversation(await this.query.open(caller, conversationId));
 		return { outcome: ConversationAuthorityOutcomes.Changed, conversation };
+	}
+
+	/** Advances one participant's child read coordinate after exact parent and timeline checks. */
+	async markAgentThreadRead(caller: ConversationCaller, parentConversationId: string, childConversationId: string, observedPosition: bigint): Promise<MarkAgentThreadReadResult>
+	{
+		if (!await this.query.hasActiveCallerMembership(caller)) return { outcome: ConversationAuthorityOutcomes.Denied, reason: AgentThreadReadDenialReasons.ConversationUnavailable };
+		const thread = await this.transaction.conversationAgentThread.findFirst({
+			where: { parentConversationId, childConversationId, siloId: caller.siloId, parentConversation: { participants: { some: { userId: caller.subjectId, accessEndedPosition: null } } }, childConversation: { participants: { some: { userId: caller.subjectId, accessEndedPosition: null } } } },
+			select: { childConversation: { select: { participants: { where: { userId: caller.subjectId, accessEndedPosition: null }, select: { readThroughPosition: true } } } } },
+		});
+		const participant = thread?.childConversation.participants[0];
+		if (participant === undefined) return { outcome: ConversationAuthorityOutcomes.Denied, reason: AgentThreadReadDenialReasons.ConversationUnavailable };
+		const latest = await this.transaction.conversationTimelineEntry.findFirst({ where: { conversationId: childConversationId }, orderBy: { position: "desc" }, select: { position: true } });
+		const latestPosition = latest?.position ?? 0n;
+		if (observedPosition > latestPosition) return { outcome: ConversationAuthorityOutcomes.Denied, reason: AgentThreadReadDenialReasons.ObservedPositionUnavailable };
+		if (observedPosition <= participant.readThroughPosition) return { outcome: ConversationAuthorityOutcomes.Idempotent, readThroughPosition: participant.readThroughPosition.toString(10) };
+		const changed = await this.transaction.conversationParticipant.updateMany({ where: { conversationId: childConversationId, userId: caller.subjectId, accessEndedPosition: null, readThroughPosition: { lt: observedPosition }, conversation: { siloId: caller.siloId, originAgentThread: { is: { parentConversationId, parentConversation: { participants: { some: { userId: caller.subjectId, accessEndedPosition: null } } } } } } }, data: { readThroughPosition: observedPosition } });
+		if (changed.count !== 1) return { outcome: ConversationAuthorityOutcomes.Denied, reason: AgentThreadReadDenialReasons.ConversationUnavailable };
+		return { outcome: ConversationAuthorityOutcomes.Changed, readThroughPosition: observedPosition.toString(10) };
 	}
 
 	/** Revalidates the mode strategy and persists one ordinary direct/group message. */
