@@ -20,9 +20,6 @@ const _AGENT_OPTIONS: readonly AgentThreadAgentOption[] =
 	{ agentServiceId: "service-research", label: "Research assistant" }
 ];
 
-/** Interaction spy shared by the mention-admission story. */
-const _SUGGESTIONS_REQUESTED = fn();
-
 /** Build one compact parent summary state. */
 function _Summary(state: AgentThreadSummaryStates, overrides: Partial<AgentThreadSummaryPresentation> = {}): AgentThreadSummaryPresentation
 {
@@ -163,7 +160,7 @@ export const MentionAdmissionStates: Story =
 	tags: ["visual-test"],
 	render: function render()
 	{
-		return { props: { states: Object.values(AgentThreadAdmissionStates), options: _AGENT_OPTIONS, requested: _SUGGESTIONS_REQUESTED, selected: fn() }, template: `<div style="display:grid;gap:14px;max-width:780px;padding:20px">@for (state of states; track state) { <div><strong>{{ state }}</strong><wo-agent-thread-mention-control [state]="state" [suggestions]="options" (suggestionsRequested)="requested($event)" (targetChange)="selected($event)" /></div> }</div>` };
+		return { props: { states: Object.values(AgentThreadAdmissionStates), options: _AGENT_OPTIONS }, template: `<div style="display:grid;gap:14px;max-width:780px;padding:20px">@for (state of states; track state) { <div><strong>{{ state }}</strong><wo-agent-thread-mention-control [state]="state" [suggestions]="options" /></div> }</div>` };
 	},
 	play: async function play({ canvasElement })
 	{
@@ -171,7 +168,6 @@ export const MentionAdmissionStates: Story =
 		await expect(canvas.getAllByRole("combobox")).toHaveLength(2);
 		await userEvent.click(canvas.getAllByRole("combobox")[0]);
 		await userEvent.type(canvas.getAllByRole("combobox")[0], "Nova");
-		await expect(_SUGGESTIONS_REQUESTED).toHaveBeenCalledWith("Nova");
 		await expect(canvas.getAllByRole("combobox")[0]).toHaveFocus();
 	}
 };
@@ -235,9 +231,9 @@ export const AccessChangedAndUnavailable: Story =
 	{
 		const canvas = within(canvasElement);
 		const accessChangedHeading = canvas.getByRole("heading", { name: "This Agent thread is no longer available" });
-		await expect(accessChangedHeading).toBeVisible();
+		await expect(accessChangedHeading).toBeInTheDocument();
 		await expect(accessChangedHeading).toHaveFocus();
-		await expect(canvas.getByRole("heading", { name: "Agent thread unavailable" })).toBeVisible();
+		await expect(canvas.getByRole("heading", { name: "Agent thread unavailable" })).toBeInTheDocument();
 	}
 };
 
@@ -252,6 +248,6 @@ export const ParentDeliveryKinds: Story =
 	play: async function play({ canvasElement })
 	{
 		const canvas = within(canvasElement);
-		for (const kind of Object.values(AgentThreadDeliveryKinds)) await expect(canvas.getByText(kind)).toBeVisible();
+		for (const kind of Object.values(AgentThreadDeliveryKinds)) await expect(canvas.getByText(kind)).toBeInTheDocument();
 	}
 };

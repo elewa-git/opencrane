@@ -54,6 +54,45 @@ export const OpenCranePreset = definePreset(Aura,
 			root:
 			{
 				borderRadius: "7px"
+			},
+			colorScheme:
+			{
+				light:
+				{
+					root:
+					{
+						danger:
+						{
+							background: "var(--oc-danger)",
+							hoverBackground: "var(--oc-danger)",
+							activeBackground: "var(--oc-danger)",
+							borderColor: "var(--oc-danger)",
+							hoverBorderColor: "var(--oc-danger)",
+							activeBorderColor: "var(--oc-danger)"
+						}
+					},
+					text:
+					{
+						primary:
+						{
+							color: "{primary.700}"
+						}
+					}
+				}
+			}
+		},
+		message:
+		{
+			colorScheme:
+			{
+				light:
+				{
+					info: { background: "var(--oc-info-soft)", borderColor: "var(--oc-info)", color: "var(--oc-info)" },
+					success: { background: "var(--oc-success-soft)", borderColor: "var(--oc-success)", color: "var(--oc-success)" },
+					warn: { background: "var(--oc-warning-soft)", borderColor: "var(--oc-warning)", color: "var(--oc-warning)" },
+					error: { background: "var(--oc-danger-soft)", borderColor: "var(--oc-danger)", color: "var(--oc-danger)" },
+					secondary: { background: "var(--oc-neutral-soft)", borderColor: "var(--oc-border-strong)", color: "var(--oc-ink-default)" }
+				}
 			}
 		},
 		progressspinner:

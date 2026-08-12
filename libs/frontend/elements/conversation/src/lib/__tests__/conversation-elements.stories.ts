@@ -1,4 +1,5 @@
-import type { Meta, StoryObj } from "@storybook/angular";
+import { ChangeDetectionStrategy, Component } from "@angular/core";
+import { type Meta, moduleMetadata, type StoryObj } from "@storybook/angular";
 import { expect, fn, userEvent, within } from "storybook/test";
 
 import { AvatarTones } from "@opencrane/elements/ui";
@@ -8,33 +9,47 @@ import { ConversationMessageComponent } from "../conversation-message.component.
 import { ConversationStatusLineComponent } from "../conversation-status-line.component.js";
 import { ConversationComposerStates, ConversationMessageTones, ConversationStatusTones } from "../conversation.types.js";
 
+/** Records emitted draft intent from the Storybook-only composer host. */
+const _DRAFT_CHANGED = fn();
+
+/** Storybook host that proves the controlled composer output binding in a real Angular template. */
+@Component({ selector: "wo-desktop-conversation-story", standalone: true, imports: [ConversationComposerComponent], template: `<div style="max-width:720px;padding:20px"><wo-conversation-composer [draft]="draft" [state]="state" placeholder="Message this conversation…" (draftChange)="recordDraft($event)" /></div>`, changeDetection: ChangeDetectionStrategy.OnPush })
+class _DesktopConversationStoryComponent
+{
+	/** Empty host-owned draft keeps the controlled send action disabled. */
+	protected readonly draft = "";
+	/** Available lifecycle keeps the textarea interactive. */
+	protected readonly state = ConversationComposerStates.Available;
+
+	/** Record one composer edit without adopting it as host state. */
+	protected recordDraft(value: string): void { _DRAFT_CHANGED(value); }
+}
+
 /** Storybook metadata for controlled reusable conversation primitives. */
 const meta: Meta<ConversationComposerComponent> =
 {
 	title: "Conversations/Shared elements",
 	component: ConversationComposerComponent,
 	tags: ["autodocs"],
+	decorators: [moduleMetadata({ imports: [_DesktopConversationStoryComponent, ConversationMessageComponent, ConversationStatusLineComponent] })],
 	parameters: { docs: { description: { component: "Presentation-only message and controlled composer primitives shared by direct, group, and Agent-session conversations." } } }
 };
 
 export default meta;
 type Story = StoryObj<ConversationComposerComponent>;
 
-/** Desktop transcript and controlled composer emit user intent without keeping command state. */
+/** Desktop controlled composer emits user intent without keeping command state. */
 export const DesktopConversation: Story =
 {
 	tags: ["visual-test"],
-	args: { draft: "", state: ConversationComposerStates.Available, placeholder: "Message this conversation…", draftChange: fn(), submitted: fn() },
-	render: function render(args)
+	render: function render() { return { template: `<wo-desktop-conversation-story />` }; },
+	play: async function play({ canvasElement })
 	{
-		return { props: { ...args, message: { id: "message-1", authorName: "Alex Kimani", authorInitials: "AK", avatarTone: AvatarTones.Blue, timestampLabel: "11:07", body: "Can you compare the counterproposal?", tone: ConversationMessageTones.Participant } }, template: `<div style="display:grid;gap:16px;max-width:720px;padding:20px"><wo-conversation-message [message]="message" /><wo-conversation-composer [draft]="draft" [state]="state" [placeholder]="placeholder" (draftChange)="draftChange($event)" (submitted)="submitted($event)" /></div>` };
-	},
-	play: async function play({ args, canvasElement })
-	{
+		_DRAFT_CHANGED.mockClear();
 		const canvas = within(canvasElement);
 		const field = canvas.getByRole("textbox", { name: "Message" });
 		await userEvent.type(field, "Follow up");
-		await expect(args.draftChange).toHaveBeenCalled();
+		await expect(_DRAFT_CHANGED).toHaveBeenCalled();
 		await expect(canvas.getByRole("button", { name: "Send" })).toBeDisabled();
 	}
 };
