@@ -3,12 +3,9 @@ import { computed, effect, inject, signal } from "@angular/core";
 import type { A2uiSurfacePresentation } from "@opencrane/elements/a2ui";
 import { ConversationComposerStates, ConversationStatusTones, type ConversationRunActionsPresentation, type ConversationStatusPresentation } from "@opencrane/elements/conversation";
 import { ConversationAssetActionKinds, __ConversationAssetPresentation, __ConversationAssetSelectionFeedback, __PendingConversationAssetPresentation, type ConversationAssetActionIntent, type ConversationAssetPresentation, type ConversationAssetSelectionFeedback } from "@opencrane/features/conversation-assets";
-import { ConversationLifecycles } from "@opencrane/models/conversations";
-import { ConversationEventStreamStatuses } from "@opencrane/state/conversation/adapter";
-import { AgUiToolStatuses } from "@opencrane/state/conversation/ag-ui";
 import { ConversationAssetsStore } from "@opencrane/state/conversation/assets";
 import { ConversationElicitationStore, __MapToolActivity, type ElicitationResponseValue } from "@opencrane/state/conversation/elicitation";
-import { ConversationCreationStates, ConversationRunStates, ConversationWorkspaceRouteStates, ConversationWorkspaceStore } from "@opencrane/state/conversation/workspace";
+import { AgUiToolStatuses, ConversationCreationStates, ConversationEventStreamStatuses, ConversationLifecycles, ConversationRunStates, ConversationWorkspaceRouteStates, ConversationWorkspaceStore } from "@opencrane/state/conversation/workspace";
 
 import { _ConversationMessageViews, _ConversationSummaryPresentation, _LiveMessageViews } from "./conversation-workspace.mapper.js";
 
@@ -33,6 +30,8 @@ export class ConversationWorkspacePresenter
 	protected readonly toolStatuses = AgUiToolStatuses;
 	/** Privacy-safe list rows. */
 	protected readonly summaries = computed(this._Summaries.bind(this));
+	/** Privacy-safe row corresponding to the selected authorized snapshot. */
+	protected readonly selectedSummary = computed(() => this.summaries().find(summary => summary.id === this.store.selected()?.id) ?? null);
 	/** Canonical and live transcript rows mapped through the shared sanitizer. */
 	protected readonly messages = computed(this._Messages.bind(this));
 	/** Existing asset presentations for transcript and Files views. */

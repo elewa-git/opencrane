@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, output } from "@angular/core";
+import { ChangeDetectionStrategy, Component, effect, input, output } from "@angular/core";
 import { ButtonModule } from "primeng/button";
 import { MessageModule } from "primeng/message";
 
@@ -20,8 +20,21 @@ import { ConversationWorkspacePresenter } from "./conversation-workspace.present
 @Component({ selector: "wo-conversation-workspace-page", standalone: true, imports: [A2uiCanvasComponent, ButtonModule, ConversationActivityComponent, ConversationAttachmentTrayComponent, ConversationComposerComponent, ConversationCreateComponent, ConversationElicitationCardComponent, ConversationFilesPanelComponent, ConversationListComponent, ConversationMessageComponent, ConversationRichTextComponent, ConversationRunActionsComponent, ConversationStatusLineComponent, MessageModule], templateUrl: "./conversation-workspace-page.component.html", styleUrl: "./conversation-workspace-page.component.scss", changeDetection: ChangeDetectionStrategy.OnPush, providers: [ConversationAssetsStore, ConversationElicitationStore, ConversationWorkspaceStore] })
 export class ConversationWorkspacePageComponent extends ConversationWorkspacePresenter
 {
+	/** Optional app-owned route selection adopted after the workspace list loads. */
+	public readonly conversationId = input<string | null>(null);
 	/** Requests app-owned navigation into one child Agent session. */
 	public readonly threadRequested = output<ConversationThreadNavigationIntent>();
+	/** Reports participant selection so the app can own the canonical URL. */
+	public readonly conversationSelected = output<string>();
+	/** Keeps a route selection and the component-scoped store aligned. */
+	private readonly _routeSelectionEffect = effect(this._OpenRouteSelection.bind(this));
+
+	/** Open one rail selection before asking the app to update the URL. */
+	protected async openConversation(conversationId: string): Promise<void>
+	{
+		await this.open(conversationId);
+		if (this.store.selected()?.id === conversationId) this.conversationSelected.emit(conversationId);
+	}
 
 	/** Emit one exact child route intent from a parent message. */
 	protected openThread(childConversationId: string, parentMessageId: string): void
@@ -35,5 +48,13 @@ export class ConversationWorkspacePageComponent extends ConversationWorkspacePre
 	{
 		const id = target.requestId ?? target.toolCallId;
 		if (id !== undefined) globalThis.document.getElementById(id)?.focus();
+	}
+
+	/** Adopt only a route coordinate that differs from the selected authorized snapshot. */
+	private _OpenRouteSelection(): void
+	{
+		const conversationId = this.conversationId();
+		if (this.store.routeState() !== this.routeStates.Ready) return;
+		if (conversationId !== null && this.store.selected()?.id !== conversationId) void this.open(conversationId);
 	}
 }

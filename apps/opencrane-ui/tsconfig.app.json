@@ -14,6 +14,27 @@
   ],
   "references": [
     {
+      "path": "../../libs/frontend/features/conversation-workspace"
+    },
+    {
+      "path": "../../libs/frontend/state/conversation/workspace"
+    },
+    {
+      "path": "../../libs/frontend/state/conversation/workspace/adapter"
+    },
+    {
+      "path": "../../libs/frontend/state/conversation/adapter"
+    },
+    {
+      "path": "../../libs/frontend/state/conversation/assets"
+    },
+    {
+      "path": "../../libs/frontend/state/conversation/render"
+    },
+    {
+      "path": "../../libs/frontend/elements/a2ui"
+    },
+    {
       "path": "../../libs/frontend/features/agent-threads"
     },
     {

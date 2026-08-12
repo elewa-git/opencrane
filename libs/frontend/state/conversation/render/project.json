@@ -6,7 +6,8 @@
 	"prefix": "wo",
 	"tags": [
 		"scope:web",
-		"type:state"
+		"type:state",
+		"frontend-role:state"
 	],
 	"targets": {
 		"lint": {

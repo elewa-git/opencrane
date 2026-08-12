@@ -3,4 +3,7 @@ export { ConversationWorkspaceGatewayError, ConversationWorkspaceGatewayErrorKin
 export { ConversationWorkspaceStore } from "./lib/conversation-workspace.store.js";
 export { ConversationRunStore } from "./lib/conversation-run.store.js";
 export { ConversationCreationStates, ConversationPersonalAgentStatuses, ConversationRunStates, ConversationWorkspaceRouteStates } from "./lib/conversation-workspace.types.js";
+export { ConversationLifecycles, ConversationModes, MessageRoles, MessageSources, MessageStates } from "@opencrane/models/conversations";
+export { ConversationEventStreamStatuses } from "@opencrane/state/conversation/adapter";
+export { AgUiToolStatuses } from "@opencrane/state/conversation/ag-ui";
 export type { ConversationCreationDirectory, ConversationDirectoryParticipant, ConversationMessage, ConversationPersonalAgent, ConversationRun, ConversationSummary, ConversationWorkspaceDetail, ConversationWorkspaceGateway, CreateConversationCommand, RetryConversationRunCommand } from "./lib/conversation-workspace.types.js";

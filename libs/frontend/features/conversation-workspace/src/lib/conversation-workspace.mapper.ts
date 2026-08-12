@@ -1,9 +1,8 @@
 import { AvatarTones } from "@opencrane/elements/ui";
 import { ConversationMessageTones, type ConversationMessagePresentation, type ConversationRichTextPresentation } from "@opencrane/elements/conversation";
-import { ConversationModes, MessageRoles, MessageStates } from "@opencrane/models/conversations";
 import { toSanitizedMarkdownHtml, toStreamingMarkdownHtml } from "@opencrane/state/conversation/render";
 import { AgUiMessageStatuses, type AgUiMessageView } from "@opencrane/state/conversation/ag-ui";
-import type { ConversationMessage, ConversationSummary } from "@opencrane/state/conversation/workspace";
+import { ConversationModes, MessageRoles, MessageStates, type ConversationMessage, type ConversationSummary } from "@opencrane/state/conversation/workspace";
 
 import type { ConversationMessageView, ConversationPresentationContext, ConversationSummaryPresentation } from "./conversation-workspace-feature.types.js";
 

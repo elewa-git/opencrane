@@ -2,8 +2,7 @@ import { ChangeDetectionStrategy, Component, input, output } from "@angular/core
 import { ButtonModule } from "primeng/button";
 import { DialogModule } from "primeng/dialog";
 
-import { ConversationModes } from "@opencrane/models/conversations";
-import { ConversationPersonalAgentStatuses, type ConversationCreationDirectory } from "@opencrane/state/conversation/workspace";
+import { ConversationModes, ConversationPersonalAgentStatuses, type ConversationCreationDirectory } from "@opencrane/state/conversation/workspace";
 
 /** Controlled immutable-mode creation dialog with privacy-safe generic participants. */
 @Component({ selector: "wo-conversation-create", standalone: true, imports: [ButtonModule, DialogModule], templateUrl: "./conversation-create.component.html", styleUrl: "./conversation-create.component.scss", changeDetection: ChangeDetectionStrategy.OnPush })

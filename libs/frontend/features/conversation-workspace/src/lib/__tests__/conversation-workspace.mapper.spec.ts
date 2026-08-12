@@ -1,5 +1,4 @@
-import { ConversationLifecycles, ConversationModes, MessageRoles, MessageSources, MessageStates } from "@opencrane/models/conversations";
-import { ConversationPersonalAgentStatuses, type ConversationMessage, type ConversationSummary } from "@opencrane/state/conversation/workspace";
+import { ConversationLifecycles, ConversationModes, ConversationPersonalAgentStatuses, MessageRoles, MessageSources, MessageStates, type ConversationMessage, type ConversationSummary } from "@opencrane/state/conversation/workspace";
 
 import { _ConversationMessageView, _ConversationSummaryPresentation } from "../conversation-workspace.mapper.js";
 

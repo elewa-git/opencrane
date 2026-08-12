@@ -56,10 +56,28 @@ export const APP_ROUTES: Routes =
 		}
 	},
 	{
-		// Non-disclosing fallback until #351 mounts the complete direct/group conversation feature.
+		// Canonical selected-conversation route; the same shell also owns /chats.
+		path: "chats/:conversationId",
+		canActivate: [___OperatorAccessGuard],
+		loadComponent: function loadConversationWorkspaceRoute()
+		{
+			return import("./chats/conversation-workspace-route.component.js").then(function pickConversationWorkspaceRoute(m)
+			{
+				return m.ConversationWorkspaceRouteComponent;
+			});
+		}
+	},
+	{
+		// Post-onboarding direct, group, and Agent-session workspace index.
 		path: "chats",
 		canActivate: [___OperatorAccessGuard],
-		redirectTo: "/onboarding"
+		loadComponent: function loadConversationWorkspaceRoute()
+		{
+			return import("./chats/conversation-workspace-route.component.js").then(function pickConversationWorkspaceRoute(m)
+			{
+				return m.ConversationWorkspaceRouteComponent;
+			});
+		}
 	},
 	{ path: "", pathMatch: "full", redirectTo: "onboarding" },
 	{

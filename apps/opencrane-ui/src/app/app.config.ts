@@ -13,6 +13,7 @@ import { OpenCranePersonaGateway } from "@opencrane/state/persona/adapter";
 import { provideWebPlatform } from "@opencrane/platform";
 
 import { APP_ROUTES } from "./app.routes";
+import { provideConversationWorkspaceComposition } from "./chats/conversation-workspace.providers.js";
 
 /**
  * Root application configuration for the OpenCrane frontend.
@@ -35,6 +36,7 @@ export const appConfig: ApplicationConfig =
 		{ provide: PERSONA_GATEWAY, useClass: OpenCranePersonaGateway },
 		{ provide: PERSONA_FIRST_CHAT_GATEWAY, useClass: OpenCranePersonaFirstChatGateway },
 		{ provide: AGENT_THREAD_GATEWAY, useClass: OpenCraneAgentThreadGateway },
+		...provideConversationWorkspaceComposition(),
 		// This app is the org/customer surface — capabilities derive from the
 		// org-admin claim only (platform-operator claims grant nothing here).
 		{ provide: PLATFORM_SURFACE, useValue: "org" },
