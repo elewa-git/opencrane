@@ -64,7 +64,7 @@ describe("PrismaConversationAssetRepository access continuity", function _Suite(
 
 		expect(await new PrismaConversationAssetRepository(transaction as never).list(_CALLER, "conversation-1")).toEqual([]);
 
-		expect(transaction.conversationParticipant.findFirst).toHaveBeenCalledWith({ where: { conversationId: "conversation-1", userId: "user-1", accessEndedPosition: null, conversation: { siloId: "silo-1" } } });
+		expect(transaction.conversationParticipant.findFirst).toHaveBeenCalledWith({ where: { conversationId: "conversation-1", userId: "user-1", accessEndedPosition: null, conversation: expect.objectContaining({ siloId: "silo-1" }) } });
 		expect(transaction.conversationAsset.findMany).toHaveBeenCalledOnce();
 	});
 
@@ -76,7 +76,7 @@ describe("PrismaConversationAssetRepository access continuity", function _Suite(
 		};
 
 		await expect(new PrismaConversationAssetRepository(transaction as never).readReadyTarget(_CALLER, "conversation-1", "asset-1")).resolves.toEqual({ siloId: "silo-1", artifactId: "artifact-1", artifactRevisionId: "revision-1", displayName: "brief.pdf", mediaType: "application/pdf", byteLength: 5, disposition: ConversationAssetDisposition.Preview });
-		expect(transaction.conversationParticipant.findFirst).toHaveBeenCalledWith({ where: { conversationId: "conversation-1", userId: "user-1", accessEndedPosition: null, conversation: { siloId: "silo-1" } } });
+		expect(transaction.conversationParticipant.findFirst).toHaveBeenCalledWith({ where: { conversationId: "conversation-1", userId: "user-1", accessEndedPosition: null, conversation: expect.objectContaining({ siloId: "silo-1" }) } });
 		expect(transaction.conversationAsset.findFirst).toHaveBeenCalledWith({ where: { id: "asset-1", siloId: "silo-1", conversationId: "conversation-1", state: ConversationAssetState.Ready }, include: { artifact: true, revision: true } });
 	});
 
@@ -84,6 +84,16 @@ describe("PrismaConversationAssetRepository access continuity", function _Suite(
 	{
 		const transaction = { ..._Access(false), conversationAsset: { findFirst: vi.fn() } };
 		await expect(new PrismaConversationAssetRepository(transaction as never).readReadyTarget(_CALLER, "conversation-1", "asset-1")).resolves.toBeNull();
+		expect(transaction.conversationAsset.findFirst).not.toHaveBeenCalled();
+	});
+
+	it("does not resolve child assets after immediate-parent access ends", async function _DeniesParentRevocation()
+	{
+		const findFirst = vi.fn().mockResolvedValue(null);
+		const transaction = { conversationParticipant: { findFirst }, orgMembership: { count: vi.fn().mockResolvedValue(1) }, conversationAsset: { findFirst: vi.fn() } };
+
+		await expect(new PrismaConversationAssetRepository(transaction as never).readReadyTarget(_CALLER, "child-1", "asset-1")).resolves.toBeNull();
+		expect(findFirst).toHaveBeenCalledWith({ where: { conversationId: "child-1", userId: "user-1", accessEndedPosition: null, conversation: expect.objectContaining({ OR: expect.arrayContaining([{ originAgentThread: { is: { parentConversation: { participants: { some: { userId: "user-1", accessEndedPosition: null } } } } } }]) }) } });
 		expect(transaction.conversationAsset.findFirst).not.toHaveBeenCalled();
 	});
 
@@ -95,7 +105,7 @@ describe("PrismaConversationAssetRepository access continuity", function _Suite(
 		const result = await new PrismaConversationAssetRepository(transaction as never).reserve(_CALLER, "conversation-1", { idempotencyKey: "upload-1", displayName: "brief.pdf", mediaType: "application/pdf", byteLength: 5, contentAddress: _ADDRESS });
 
 		expect(result).toEqual({ outcome: "denied", reason: "conversation_unavailable" });
-		expect(findFirst).toHaveBeenCalledWith({ where: { conversationId: "conversation-1", userId: "user-1", accessEndedPosition: null, conversation: { siloId: "silo-1", lifecycle: ConversationLifecycle.Open } } });
+		expect(findFirst).toHaveBeenCalledWith({ where: { conversationId: "conversation-1", userId: "user-1", accessEndedPosition: null, conversation: expect.objectContaining({ siloId: "silo-1", lifecycle: ConversationLifecycle.Open }) } });
 		expect(transaction.conversationAsset.findUnique).not.toHaveBeenCalled();
 	});
 

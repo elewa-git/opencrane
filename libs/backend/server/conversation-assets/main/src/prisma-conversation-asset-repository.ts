@@ -96,19 +96,31 @@ export class PrismaConversationAssetRepository implements ConversationAssetRepos
 	/** Requires current membership and participant access, including a closed read-only conversation. */
 	private async _canReadConversation(caller: ConversationAssetCaller, conversationId: string): Promise<boolean>
 	{
-		const participant = await this.transaction.conversationParticipant.findFirst({ where: { conversationId, userId: caller.subjectId, accessEndedPosition: null, conversation: { siloId: caller.siloId } } });
+		const participant = await this.transaction.conversationParticipant.findFirst({ where: { conversationId, userId: caller.subjectId, accessEndedPosition: null, conversation: _ConversationAccess(caller) } });
 		return participant !== null && await this._isActiveMember(caller);
 	}
 
 	/** Requires current membership and participant access to an open mutable conversation. */
 	private async _canMutateConversation(caller: ConversationAssetCaller, conversationId: string): Promise<boolean>
 	{
-		const participant = await this.transaction.conversationParticipant.findFirst({ where: { conversationId, userId: caller.subjectId, accessEndedPosition: null, conversation: { siloId: caller.siloId, lifecycle: ConversationLifecycle.Open } } });
+		const participant = await this.transaction.conversationParticipant.findFirst({ where: { conversationId, userId: caller.subjectId, accessEndedPosition: null, conversation: { ..._ConversationAccess(caller), lifecycle: ConversationLifecycle.Open } } });
 		return participant !== null && await this._isActiveMember(caller);
 	}
 
 	/** Confirm the caller remains one active member of the selected silo. */
 	private async _isActiveMember(caller: ConversationAssetCaller): Promise<boolean> { return await this.transaction.orgMembership.count({ where: { clusterTenant: caller.siloId, subject: caller.subjectId, status: OrgMemberStatus.Active } }) === 1; }
+}
+
+/** Bind child asset access to the caller's current immediate-parent participation. */
+function _ConversationAccess(caller: ConversationAssetCaller): Prisma.ConversationWhereInput
+{
+	return {
+		siloId: caller.siloId,
+		OR: [
+			{ originAgentThread: { is: null } },
+			{ originAgentThread: { is: { parentConversation: { participants: { some: { userId: caller.subjectId, accessEndedPosition: null } } } } } },
+		],
+	};
 }
 
 /** Require an exact retry body for reservation idempotency. */

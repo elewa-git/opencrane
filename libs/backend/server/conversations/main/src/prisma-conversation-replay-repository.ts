@@ -43,7 +43,7 @@ export class PrismaConversationReplayRepository implements ConversationReplayRep
 		// 2. Prove access twice: an active membership in this silo, and a participant row on a conversation in the same silo. Both read in this transaction, so they agree with the rows below.
 		const membership = await this.prisma.orgMembership.findFirst({ where: { clusterTenant: command.siloId, subject: command.subjectId, status: OrgMemberStatus.Active }, select: { clusterTenant: true } });
 		if (membership === null) return { status: ConversationProjectionReadStatuses.RevokedOrMissing, rows: [] };
-		const participant = await this.prisma.conversationParticipant.findUnique({ where: { conversationId_userId: { conversationId: command.conversationId, userId: command.subjectId } }, include: { conversation: { select: { siloId: true } } } });
+		const participant = await this.prisma.conversationParticipant.findFirst({ where: { conversationId: command.conversationId, userId: command.subjectId, conversation: _ConversationAccess(command) }, include: { conversation: { select: { siloId: true } } } });
 		if (participant === null || participant.conversation.siloId !== command.siloId) return { status: ConversationProjectionReadStatuses.RevokedOrMissing, rows: [] };
 
 		// 3. Read only rows inside the caller's visible range: start after the cursor (or at the range start), and stop at accessEndedPosition when their access has ended.
@@ -97,6 +97,18 @@ export class PrismaConversationReplayRepository implements ConversationReplayRep
 		});
 		return { status: ConversationProjectionReadStatuses.Authorized, rows };
 	}
+}
+
+/** Require a child Agent-thread reader to retain active access to its immediate parent. */
+function _ConversationAccess(command: ReadConversationProjectionCommand): Prisma.ConversationWhereInput
+{
+	return {
+		siloId: command.siloId,
+		OR: [
+			{ originAgentThread: { is: null } },
+			{ originAgentThread: { is: { parentConversation: { participants: { some: { userId: command.subjectId, accessEndedPosition: null } } } } } },
+		],
+	};
 }
 
 /** Admit only the exact payload-free asset-list invalidation marker. */

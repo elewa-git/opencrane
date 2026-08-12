@@ -13,7 +13,7 @@ describe("Prisma conversation replay unit of work", function _Suite()
 		let liveAccessEndedPosition: bigint | null = null;
 		const transaction = {
 			orgMembership: { findFirst: vi.fn().mockResolvedValue({ clusterTenant: "silo-1" }) },
-			conversationParticipant: { findUnique: vi.fn(async function _ReadParticipant()
+			conversationParticipant: { findFirst: vi.fn(async function _ReadParticipant()
 			{
 				const snapshotAccessEndedPosition = liveAccessEndedPosition;
 				liveAccessEndedPosition = 3n;
@@ -28,14 +28,14 @@ describe("Prisma conversation replay unit of work", function _Suite()
 				expect(options.isolationLevel).toBe(Prisma.TransactionIsolationLevel.RepeatableRead);
 				return callback(transaction);
 			}),
-			conversationParticipant: { findUnique: vi.fn(function _RootParticipantRead() { throw new Error("root participant read"); }) },
+			conversationParticipant: { findFirst: vi.fn(function _RootParticipantRead() { throw new Error("root participant read"); }) },
 			conversationTimelineEntry: { findMany: vi.fn(function _RootTimelineRead() { return liveTimeline; }) },
 		} as unknown as PrismaClient;
 
 		const result = await _CreateConversationReplayRepository(prisma).readAuthorized({ conversationId: "conversation-1", siloId: "silo-1", subjectId: "user-1", cursor: null, limit: 10 });
 
 		expect(prisma.$transaction).toHaveBeenCalledTimes(1);
-		expect(transaction.conversationParticipant.findUnique).toHaveBeenCalledTimes(1);
+		expect(transaction.conversationParticipant.findFirst).toHaveBeenCalledTimes(1);
 		expect(transaction.conversationTimelineEntry.findMany).toHaveBeenCalledTimes(1);
 		expect(liveAccessEndedPosition).toBe(3n);
 		expect(liveTimeline).toHaveLength(2);

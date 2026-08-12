@@ -114,6 +114,15 @@ describe("PrismaConversationUnitOfWork", function _Suite()
 		expect(participants.findFirst).not.toHaveBeenCalled();
 	});
 
+	it("does not open a child Agent session after parent participant access ends", async function _RejectsParentAccessEnd()
+	{
+		const findFirst = vi.fn().mockResolvedValue(null);
+		const transaction = { orgMembership: _ActiveMembership(), conversationParticipant: { findFirst } };
+
+		await expect(_Authority(_Prisma(transaction)).open(_CALLER, "child-1")).resolves.toBeNull();
+		expect(findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ conversationId: "child-1", conversation: expect.objectContaining({ OR: expect.arrayContaining([{ originAgentThread: { is: { parentConversation: { participants: { some: { userId: "user-1", accessEndedPosition: null } } } } } }]) }) }) }));
+	});
+
 	it("orders visible conversations by the database-global activity allocation", async function _OrdersByGlobalActivity()
 	{
 		const findMany = vi.fn().mockResolvedValue([]);

@@ -16,6 +16,12 @@ function _Unit(transaction: object): PrismaElicitationUnitOfWork
 	return new PrismaElicitationUnitOfWork({ $transaction: vi.fn(async function _Transaction(operation) { return operation(transaction); }) } as never);
 }
 
+/** Active membership and current parent-coupled participant access. */
+function _Access()
+{
+	return { orgMembership: { count: vi.fn().mockResolvedValue(1) }, conversationParticipant: { findFirst: vi.fn().mockResolvedValue({ accessEndedPosition: null }) } };
+}
+
 /** Complete ordinary request row shared by response cases. */
 function _Request(overrides: Readonly<Record<string, unknown>> = {})
 {
@@ -26,9 +32,9 @@ function _Request(overrides: Readonly<Record<string, unknown>> = {})
 function _ResponseTransaction(request = _Request())
 {
 	return {
+		..._Access(),
 		elicitationRequest: { findUnique: vi.fn().mockResolvedValue(request), updateMany: vi.fn().mockResolvedValue({ count: 1 }), count: vi.fn().mockResolvedValue(0) },
 		elicitationResponseAttempt: { findUnique: vi.fn().mockResolvedValue(null), create: vi.fn().mockResolvedValue({ id: "attempt-1" }) },
-		conversationParticipant: { findUnique: vi.fn().mockResolvedValue({ accessEndedPosition: null }) },
 		agentRun: { findUnique: vi.fn().mockResolvedValue({ id: "run-1", attempt: 2, state: AgentRunState.WaitingForInput }), updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
 		approvalRequest: { findUnique: vi.fn(), count: vi.fn().mockResolvedValue(0) },
 		elicitationResultDelivery: { create: vi.fn().mockResolvedValue({ id: "delivery-1" }) },
@@ -56,9 +62,9 @@ describe("PrismaElicitationUnitOfWork", function _Suite()
 	it("pauses and opens one exact server-owned request in one transaction", async function _Opens()
 	{
 		const transaction = {
+			..._Access(),
 			elicitationRequest: { findUnique: vi.fn().mockResolvedValue(null), create: vi.fn().mockImplementation(async function _Create(input) { return { ..._Request(), ...input.data }; }) },
 			agentRun: { findUnique: vi.fn().mockResolvedValue({ id: "run-1", siloId: "silo-1", conversationId: "conversation-1", attempt: 2, state: AgentRunState.Running }), updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
-			conversationParticipant: { findUnique: vi.fn().mockResolvedValue({ accessEndedPosition: null }) },
 		};
 		const body = { kind: ElicitationBodyKinds.FreeText, prompt: "Answer", maximumLength: 100, allowEmpty: false } as const;
 		await expect(_Unit(transaction).open({ requestId: "request-1", siloId: "silo-1", conversationId: "conversation-1", runId: "run-1", attempt: 2, assignedParticipantId: "user-1", requestKey: "question-1", purpose: ElicitationPurposes.RuntimeInput, body, purposePayloadDigest: "sha256:none", requiresStepUp: false, now: NOW, expiresAt: new Date("2026-08-11T11:00:00.000Z") })).resolves.toMatchObject({ requestId: "request-1", runId: "run-1", state: "requested" });
@@ -71,7 +77,7 @@ describe("PrismaElicitationUnitOfWork", function _Suite()
 		const body = { kind: ElicitationBodyKinds.FreeText, prompt: "Answer", maximumLength: 100, allowEmpty: false } as const;
 		const command = { requestId: "request-1", siloId: "silo-1", conversationId: "conversation-1", runId: "run-1", attempt: 2, assignedParticipantId: "user-1", requestKey: "question-1", purpose: ElicitationPurposes.RuntimeInput, body, purposePayloadDigest: __DigestCanonicalJson(null), requiresStepUp: false, now: NOW, expiresAt: new Date("2026-08-11T11:00:00.000Z") } as const;
 		const existing = _Request({ body, bodyDigest: __DigestCanonicalJson(body), purposePayloadDigest: command.purposePayloadDigest });
-		const transaction = { elicitationRequest: { findUnique: vi.fn().mockResolvedValue(existing) } };
+		const transaction = { ..._Access(), elicitationRequest: { findUnique: vi.fn().mockResolvedValue(existing) } };
 
 		const unitOfWork = new PrismaRuntimeElicitationUnitOfWork(transaction as never);
 		await expect(unitOfWork.open(command)).resolves.toMatchObject({ requestId: "request-1" });
@@ -210,12 +216,48 @@ describe("PrismaElicitationUnitOfWork", function _Suite()
 	it("opens a personal-memory request for only the execution user and exact invocation", async function _OpenMemoryPermission()
 	{
 		const transaction = {
+			..._Access(),
 			elicitationRequest: { findUnique: vi.fn().mockResolvedValue(null), create: vi.fn().mockImplementation(async function _Create(input) { return { ..._Request(), ...input.data }; }) },
 			agentRun: { findUnique: vi.fn().mockResolvedValue({ id: "run-1", siloId: "silo-1", conversationId: "conversation-1", attempt: 2, state: AgentRunState.Running }), updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
-			conversationParticipant: { findUnique: vi.fn().mockResolvedValue({ accessEndedPosition: null }) },
 		};
 		await expect(_Unit(transaction).openMemoryPermission(_MemoryInvocation(), _MemorySnapshot(), NOW)).resolves.toBe(true);
 		expect(transaction.elicitationRequest.create).toHaveBeenCalledWith({ data: expect.objectContaining({ runId: "run-1", attempt: 2, assignedParticipantId: "user-1", purpose: ElicitationPurpose.PersonalMemoryPermission, expiresAt: new Date("2026-08-11T10:15:00.000Z") }) });
+	});
+
+	it("keeps ordinary conversation elicitation access unchanged", async function _AllowsOrdinaryConversation()
+	{
+		const transaction = _ResponseTransaction();
+		await expect(_Unit(transaction).respond({ siloId: "silo-1", conversationId: "conversation-1", requestId: "request-1", subjectId: "user-1", verifiedStepUpAt: null, submission: { idempotencyKey: "retry-ordinary", response: { kind: ElicitationBodyKinds.FreeText, text: "Answer" } }, now: NOW })).resolves.toMatchObject({ outcome: "accepted" });
+		expect(transaction.conversationParticipant.findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ conversation: expect.objectContaining({ OR: expect.arrayContaining([{ originAgentThread: { is: null } }]) }) }) }));
+	});
+
+	it("denies child open, response, and activity after immediate-parent access ends", async function _DeniesRevokedParent()
+	{
+		const access = { orgMembership: { count: vi.fn().mockResolvedValue(1) }, conversationParticipant: { findFirst: vi.fn().mockResolvedValue(null) } };
+		const openTransaction = { ...access, elicitationRequest: { findUnique: vi.fn(), create: vi.fn() }, agentRun: { findUnique: vi.fn(), updateMany: vi.fn() } };
+		const command = { requestId: "request-1", siloId: "silo-1", conversationId: "child-1", runId: "run-1", attempt: 2, assignedParticipantId: "user-1", requestKey: "question-1", purpose: ElicitationPurposes.RuntimeInput, body: { kind: ElicitationBodyKinds.FreeText, prompt: "Answer", maximumLength: 100, allowEmpty: false }, purposePayloadDigest: "sha256:none", requiresStepUp: false, now: NOW, expiresAt: new Date("2026-08-11T11:00:00.000Z") } as const;
+		await expect(_Unit(openTransaction).open(command)).resolves.toBeNull();
+		expect(openTransaction.elicitationRequest.findUnique).not.toHaveBeenCalled();
+
+		const responseTransaction = { ..._ResponseTransaction(_Request({ conversationId: "child-1" })), ...access };
+		await expect(_Unit(responseTransaction).respond({ siloId: "silo-1", conversationId: "child-1", requestId: "request-1", subjectId: "user-1", verifiedStepUpAt: null, submission: { idempotencyKey: "retry-child", response: { kind: ElicitationBodyKinds.FreeText, text: "Answer" } }, now: NOW })).resolves.toEqual({ outcome: "unauthorized" });
+		expect(responseTransaction.elicitationResponseAttempt.findUnique).not.toHaveBeenCalled();
+
+		const activityTransaction = { ...access, elicitationRequest: { findMany: vi.fn().mockResolvedValue([]) } };
+		await expect(_Unit(activityTransaction).listOpenOwned("silo-1", "child-1", "user-1", NOW)).resolves.toEqual([]);
+		await expect(_Unit(activityTransaction).listActivityOwned("silo-1", "user-1", 20, NOW)).resolves.toEqual([]);
+		expect(activityTransaction.elicitationRequest.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ assignedParticipant: expect.objectContaining({ conversation: expect.objectContaining({ OR: expect.arrayContaining([{ originAgentThread: { is: { parentConversation: { participants: { some: { userId: "user-1", accessEndedPosition: null } } } } } }]) }) }) }) }));
+	});
+
+	it("denies elicitation reads and responses after organisation membership revocation", async function _DeniesRevokedMembership()
+	{
+		const transaction = _ResponseTransaction();
+		transaction.orgMembership.count.mockResolvedValue(0);
+
+		await expect(_Unit(transaction).respond({ siloId: "silo-1", conversationId: "conversation-1", requestId: "request-1", subjectId: "user-1", verifiedStepUpAt: null, submission: { idempotencyKey: "retry-revoked", response: { kind: ElicitationBodyKinds.FreeText, text: "Answer" } }, now: NOW })).resolves.toEqual({ outcome: "unauthorized" });
+		await expect(_Unit(transaction).listOpenOwned("silo-1", "conversation-1", "user-1", NOW)).resolves.toEqual([]);
+		expect(transaction.conversationParticipant.findFirst).not.toHaveBeenCalled();
+		expect(transaction.elicitationResponseAttempt.findUnique).not.toHaveBeenCalled();
 	});
 
 	it("denies stale claim coordinates and accepts only the exact active dispatch claim", async function _VerifyMemoryPermission()
