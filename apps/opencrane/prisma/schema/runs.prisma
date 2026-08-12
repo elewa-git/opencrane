@@ -91,6 +91,8 @@ model AgentRun {
   childReservation         ChildRunReservation?         @relation("ChildRunReservationChild")
   childCompletionDelivery  ChildRunCompletionDelivery?  @relation("ChildRunCompletionDeliveryChild")
   receivedChildCompletions ChildRunCompletionDelivery[] @relation("ChildRunCompletionDeliveryParent")
+  agentThreadOrigin        ConversationAgentThread?
+  agentThreadDeliveries    AgentThreadParentDelivery[]
   conversationAssets       ConversationAsset[]
   conversationAssetTickets ConversationAssetOutputTicket[]
 

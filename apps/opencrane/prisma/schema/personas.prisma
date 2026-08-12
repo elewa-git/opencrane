@@ -303,6 +303,7 @@ model PersonaRevision {
   previousRevision          PersonaRevision?        @relation("PersonaRevisionHistory", fields: [previousRevisionId], references: [id], onDelete: Restrict)
   laterRevisions            PersonaRevision[]       @relation("PersonaRevisionHistory")
   insights                  PersonaInsight[]
+  agentThreadOrigins        ConversationAgentThread[]
 
   @@unique([personaProfileId, revision])
   @@unique([personaProfileId, id])
