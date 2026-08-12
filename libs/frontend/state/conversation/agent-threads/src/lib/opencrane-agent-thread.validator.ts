@@ -11,18 +11,6 @@ const _Position = z.string().regex(/^(0|[1-9][0-9]*)$/u);
 /** Canonical timestamp accepted before any locale formatting occurs. */
 const _Instant = z.string().datetime({ offset: true });
 
-/** Nested Agent-thread origin attached to a child message. */
-const _NestedThread = z.object({
-	childConversationId: _Id,
-	parentConversationId: _Id,
-	rootConversationId: _Id,
-	parentMessageId: _Id,
-	initiatorUserId: _Id,
-	agentServiceId: _Id,
-	personaRevisionId: _Id,
-	firstRunId: _Id
-}).strict();
-
 /** One canonical message content block. */
 const _Block = z.object({
 	id: _Id,
@@ -39,10 +27,8 @@ const _Message = z.object({
 	source: z.enum(["user_input", "model_output", "tool_result", "platform"]),
 	blocks: z.array(_Block).max(100),
 	runId: _Id.nullable(),
-	userId: _Id.nullable(),
 	createdAt: _Instant,
-	completedAt: _Instant.nullable(),
-	agentThread: _NestedThread.nullable()
+	completedAt: _Instant.nullable()
 }).strict();
 
 /** One serial run boundary in the bounded child projection. */
@@ -74,13 +60,12 @@ const _Snapshot: z.ZodType<AgentThreadSnapshotDto> = z.object({
 	childConversationId: _Id,
 	rootConversationId: _Id,
 	parentMessageId: _Id,
-	initiatorUserId: _Id,
 	agentServiceId: _Id,
 	agentName: _Text,
 	ask: z.string().max(20_000),
 	createdAt: _Instant,
 	lifecycle: z.enum(["open", "closed"]),
-	participantUserIds: z.array(_Id).max(200),
+	participantCount: z.number().int().positive().max(200),
 	readThroughPosition: _Position,
 	latestPosition: _Position,
 	representedThroughPosition: _Position,

@@ -147,7 +147,9 @@ describe("PrismaConversationUnitOfWork", function _Suite()
 
 		const snapshot = await _Authority(_Prisma(transaction)).openAgentThread(_CALLER, "parent-1", "child-1");
 
-		expect(snapshot).toMatchObject({ latestPosition: "150", representedThroughPosition: "100", messageCount: 150, unreadMessageCount: 60, participantUserIds: ["user-1"], runs: [{ ordinal: 105, state: "retrying" }] });
+		expect(snapshot).toMatchObject({ latestPosition: "150", representedThroughPosition: "100", messageCount: 150, unreadMessageCount: 60, participantCount: 1, runs: [{ ordinal: 105, state: "retrying" }] });
+		expect(snapshot).not.toHaveProperty("initiatorUserId");
+		expect(snapshot).not.toHaveProperty("participantUserIds");
 		expect(__DecodeConversationProjectionCursor(snapshot?.cursor)).toEqual({ conversationId: "child-1", position: "100" });
 		expect(findMany).toHaveBeenCalledWith(expect.objectContaining({ orderBy: { position: "asc" }, take: 100 }));
 		expect(transaction.conversationAgentThread.findFirst).toHaveBeenCalledWith(expect.objectContaining({ include: expect.objectContaining({ deliveries: expect.objectContaining({ take: 100 }), childConversation: expect.objectContaining({ select: expect.objectContaining({ runs: expect.objectContaining({ take: 100 }) }) }) }) }));

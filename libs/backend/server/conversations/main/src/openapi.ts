@@ -130,12 +130,30 @@ const _IdempotentConversationMessageEnvelopeSchema = {
 	properties: { outcome: { type: "string", enum: ["idempotent"] }, message: _ConversationMessageSchema, agentThread: { oneOf: [{ type: "null" }, _AgentThreadOriginSchema] } },
 } as const;
 
+/** Child message schema that omits participant login identifiers and nested authority. */
+const _AgentThreadMessageSchema = {
+	type: "object",
+	additionalProperties: false,
+	required: ["id", "position", "role", "state", "source", "blocks", "runId", "createdAt", "completedAt"],
+	properties: {
+		id: { type: "string" },
+		position: { type: "string", pattern: "^(0|[1-9][0-9]*)$" },
+		role: { type: "string", enum: [MessageRoles.User, MessageRoles.Assistant, MessageRoles.Tool, MessageRoles.System] },
+		state: { type: "string", enum: [MessageStates.Pending, MessageStates.Streaming, MessageStates.Completed, MessageStates.Failed, MessageStates.Cancelled] },
+		source: { type: "string", enum: [MessageSources.UserInput, MessageSources.ModelOutput, MessageSources.ToolResult, MessageSources.Platform] },
+		blocks: { type: "array", items: _ConversationMessageBlockSchema },
+		runId: { type: ["string", "null"] },
+		createdAt: { type: "string", format: "date-time" },
+		completedAt: { type: ["string", "null"], format: "date-time" },
+	},
+} as const;
+
 /** Bounded Agent-thread read model that omits participant login identifiers. */
 const _AgentThreadSnapshotSchema = {
 	type: "object", additionalProperties: false,
 	required: ["parentConversationId", "childConversationId", "rootConversationId", "parentMessageId", "agentServiceId", "agentName", "ask", "createdAt", "lifecycle", "participantCount", "readThroughPosition", "latestPosition", "representedThroughPosition", "messageCount", "unreadMessageCount", "cursor", "messages", "runs", "deliveries"],
 	properties: {
-		parentConversationId: { type: "string" }, childConversationId: { type: "string" }, rootConversationId: { type: "string" }, parentMessageId: { type: "string" }, agentServiceId: { type: "string" }, agentName: { type: "string" }, ask: { type: "string" }, createdAt: { type: "string", format: "date-time" }, lifecycle: { type: "string", enum: [ConversationLifecycles.Open, ConversationLifecycles.Closed] }, participantCount: { type: "integer", minimum: 1 }, readThroughPosition: { type: "string", pattern: "^(0|[1-9][0-9]*)$" }, latestPosition: { type: "string", pattern: "^(0|[1-9][0-9]*)$" }, representedThroughPosition: { type: "string", pattern: "^(0|[1-9][0-9]*)$" }, messageCount: { type: "integer", minimum: 0 }, unreadMessageCount: { type: "integer", minimum: 0 }, cursor: { type: ["string", "null"] }, messages: { type: "array", items: _ConversationMessageSchema },
+		parentConversationId: { type: "string" }, childConversationId: { type: "string" }, rootConversationId: { type: "string" }, parentMessageId: { type: "string" }, agentServiceId: { type: "string" }, agentName: { type: "string" }, ask: { type: "string" }, createdAt: { type: "string", format: "date-time" }, lifecycle: { type: "string", enum: [ConversationLifecycles.Open, ConversationLifecycles.Closed] }, participantCount: { type: "integer", minimum: 1 }, readThroughPosition: { type: "string", pattern: "^(0|[1-9][0-9]*)$" }, latestPosition: { type: "string", pattern: "^(0|[1-9][0-9]*)$" }, representedThroughPosition: { type: "string", pattern: "^(0|[1-9][0-9]*)$" }, messageCount: { type: "integer", minimum: 0 }, unreadMessageCount: { type: "integer", minimum: 0 }, cursor: { type: ["string", "null"] }, messages: { type: "array", items: _AgentThreadMessageSchema },
 		runs: { type: "array", items: { type: "object", additionalProperties: false, required: ["id", "ordinal", "attempt", "state", "acceptedAt", "finishedAt"], properties: { id: { type: "string" }, ordinal: { type: "integer", minimum: 1 }, attempt: { type: "integer", minimum: 1 }, state: { type: "string", enum: ["queued", "working", "waiting", "retrying", "completed", "failed", "cancelled"] }, acceptedAt: { type: "string", format: "date-time" }, finishedAt: { type: ["string", "null"], format: "date-time" } } } },
 		deliveries: { type: "array", items: { type: "object", additionalProperties: false, required: ["id", "childConversationId", "parentConversationId", "runId", "kind", "label", "detail", "assetId", "createdAt"], properties: { id: { type: "string" }, childConversationId: { type: "string" }, parentConversationId: { type: "string" }, runId: { type: "string" }, kind: { type: "string", enum: ["status", "question", "approval", "result", "failure", "asset"] }, label: { type: "string" }, detail: { type: "string" }, assetId: { type: ["string", "null"] }, createdAt: { type: "string", format: "date-time" } } } },
 	},

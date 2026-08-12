@@ -6407,7 +6407,6 @@ export interface operations {
                             childConversationId: string;
                             rootConversationId: string;
                             parentMessageId: string;
-                            initiatorUserId: string;
                             agentServiceId: string;
                             agentName: string;
                             ask: string;
@@ -6415,7 +6414,7 @@ export interface operations {
                             createdAt: string;
                             /** @enum {string} */
                             lifecycle: "open" | "closed";
-                            participantUserIds: string[];
+                            participantCount: number;
                             readThroughPosition: string;
                             latestPosition: string;
                             representedThroughPosition: string;
@@ -6438,21 +6437,10 @@ export interface operations {
                                     value: string;
                                 }[];
                                 runId: string | null;
-                                userId: string | null;
                                 /** Format: date-time */
                                 createdAt: string;
                                 /** Format: date-time */
                                 completedAt: string | null;
-                                agentThread: null | {
-                                    childConversationId: string;
-                                    parentConversationId: string;
-                                    rootConversationId: string;
-                                    parentMessageId: string;
-                                    initiatorUserId: string;
-                                    agentServiceId: string;
-                                    personaRevisionId: string;
-                                    firstRunId: string;
-                                };
                             }[];
                             runs: {
                                 id: string;

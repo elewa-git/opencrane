@@ -144,6 +144,20 @@ export interface AgentThreadRunView
 	readonly finishedAt: string | null;
 }
 
+/** Participant-visible child message without login identifiers or nested thread authority. */
+export interface AgentThreadMessageView
+{
+	readonly id: string;
+	readonly position: string;
+	readonly role: MessageRoles;
+	readonly state: MessageStates;
+	readonly source: MessageSources;
+	readonly blocks: readonly MessageContentBlock[];
+	readonly runId: string | null;
+	readonly createdAt: string;
+	readonly completedAt: string | null;
+}
+
 /** Canonical authorized child read model without participant login identifiers. */
 export interface AgentThreadSnapshotView
 {
@@ -165,7 +179,7 @@ export interface AgentThreadSnapshotView
 	readonly unreadMessageCount: number;
 	/** Resume cursor for representedThroughPosition; never skips an omitted event. */
 	readonly cursor: string | null;
-	readonly messages: readonly ConversationMessageView[];
+	readonly messages: readonly AgentThreadMessageView[];
 	readonly runs: readonly AgentThreadRunView[];
 	readonly deliveries: readonly AgentThreadParentDelivery[];
 }

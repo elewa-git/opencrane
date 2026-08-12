@@ -8,8 +8,8 @@ import { OpenCraneAgentThreadGateway } from "../opencrane-agent-thread.gateway.j
 
 /** Generated success fixture containing only truthful canonical fields. */
 const _DTO = {
-	parentConversationId: "parent-1", childConversationId: "child-1", rootConversationId: "parent-1", parentMessageId: "parent-message-1", initiatorUserId: "user-1", agentServiceId: "service-1", agentName: "Research Agent", ask: "Compare the terms", createdAt: "2026-08-12T10:00:00.000Z", lifecycle: "open" as const, participantUserIds: ["user-1"], readThroughPosition: "2", latestPosition: "5", representedThroughPosition: "5", messageCount: 2, unreadMessageCount: 1, cursor: "opaque-cursor",
-	messages: [{ id: "message-1", position: "2", role: "assistant" as const, state: "completed" as const, source: "model_output" as const, blocks: [{ id: "block-1", kind: "text" as const, value: "I found one risk." }], runId: "run-1", userId: null, createdAt: "2026-08-12T10:01:00.000Z", completedAt: "2026-08-12T10:01:00.000Z", agentThread: null }],
+	parentConversationId: "parent-1", childConversationId: "child-1", rootConversationId: "parent-1", parentMessageId: "parent-message-1", agentServiceId: "service-1", agentName: "Research Agent", ask: "Compare the terms", createdAt: "2026-08-12T10:00:00.000Z", lifecycle: "open" as const, participantCount: 1, readThroughPosition: "2", latestPosition: "5", representedThroughPosition: "5", messageCount: 2, unreadMessageCount: 1, cursor: "opaque-cursor",
+	messages: [{ id: "message-1", position: "2", role: "assistant" as const, state: "completed" as const, source: "model_output" as const, blocks: [{ id: "block-1", kind: "text" as const, value: "I found one risk." }], runId: "run-1", createdAt: "2026-08-12T10:01:00.000Z", completedAt: "2026-08-12T10:01:00.000Z" }],
 	runs: [{ id: "run-1", ordinal: 1, attempt: 1, state: "completed" as const, acceptedAt: "2026-08-12T10:00:30.000Z", finishedAt: "2026-08-12T10:01:00.000Z" }],
 	deliveries: [],
 };

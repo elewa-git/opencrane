@@ -4,7 +4,7 @@ import { ConversationLifecycles, ConversationModes, MessageRoles, MessageSources
 import { AgentThreadDeliveryKinds, type AgentThreadParentDelivery } from "@opencrane/backend/conversations/agent-threads";
 import { __EncodeConversationProjectionCursor } from "@opencrane/backend/conversations/projection";
 
-import { AgentThreadRunViewStates, type AgentThreadRunView, type AgentThreadSnapshotView, type ConversationCaller, type ConversationDetail, type ConversationMessageView, type ConversationSummary } from "./conversation-authority.types.js";
+import { AgentThreadRunViewStates, type AgentThreadMessageView, type AgentThreadRunView, type AgentThreadSnapshotView, type ConversationCaller, type ConversationDetail, type ConversationMessageView, type ConversationSummary } from "./conversation-authority.types.js";
 import type { ConversationCommandContext, ConversationQueryRepository } from "./prisma-conversation-query-repository.types.js";
 
 /** Maximum message rows returned by one participant-bound open operation. */
@@ -153,7 +153,7 @@ export class PrismaConversationQueryRepository implements ConversationQueryRepos
 			messageCount: thread.childConversation._count.messages,
 			unreadMessageCount,
 			cursor: representedPosition === 0n ? null : __EncodeConversationProjectionCursor({ conversationId: childConversationId, position: representedPosition.toString(10) }),
-			messages: entries.flatMap(function _Message(entry): readonly ConversationMessageView[] { return entry.message === null ? [] : [_messageView(entry.message, entry.position)]; }),
+			messages: entries.flatMap(function _Message(entry): readonly AgentThreadMessageView[] { return entry.message === null ? [] : [_agentThreadMessageView(entry.message, entry.position)]; }),
 			runs: runs.map(function _Run(run, index): AgentThreadRunView { return { id: run.id, ordinal: firstRunOrdinal + index, attempt: run.attempt, state: _RunState(run.state), acceptedAt: run.acceptedAt.toISOString(), finishedAt: run.finishedAt?.toISOString() ?? null }; }),
 			deliveries: [...thread.deliveries].reverse().map(_Delivery),
 		};
@@ -265,6 +265,13 @@ function _summary(conversation: { id: string; mode: ConversationMode; lifecycle:
 function _messageView(message: { id: string; role: ConversationMessageRole; state: ConversationMessageState; source: string; blocks: Prisma.JsonValue; runId: string | null; userId: string | null; createdAt: Date; completedAt: Date | null; invokedAgentThread: { childConversationId: string; parentConversationId: string; rootConversationId: string; parentMessageId: string; initiatorUserId: string; agentServiceId: string; personaRevisionId: string; firstRunId: string } | null }, position: bigint): ConversationMessageView
 {
 	return { id: message.id, position: position.toString(10), role: _ROLE_BY_PERSISTED_ROLE[message.role], state: _STATE_BY_PERSISTED_STATE[message.state], source: _messageSource(message.source), blocks: message.blocks as unknown as readonly MessageContentBlock[], runId: message.runId, userId: message.userId, createdAt: message.createdAt.toISOString(), completedAt: message.completedAt?.toISOString() ?? null, agentThread: message.invokedAgentThread ?? null };
+}
+
+/** Maps a child message without participant login identifiers or nested thread authority. */
+function _agentThreadMessageView(message: Parameters<typeof _messageView>[0], position: bigint): AgentThreadMessageView
+{
+	const projected = _messageView(message, position);
+	return { id: projected.id, position: projected.position, role: projected.role, state: projected.state, source: projected.source, blocks: projected.blocks, runId: projected.runId, createdAt: projected.createdAt, completedAt: projected.completedAt };
 }
 
 /** Validates the string-backed persistence column against the complete model-owned source vocabulary. */
