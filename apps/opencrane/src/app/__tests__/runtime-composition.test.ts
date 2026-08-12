@@ -77,6 +77,7 @@ describe("_CreateInternalRuntimeComposition", function _internalRuntimeCompositi
 		expect(composition.runtimeBootstrap).toEqual(expect.any(Function));
 		expect(composition.runtimeStream).toEqual(expect.any(Function));
 		expect(composition.conversationAssetOutputs).toEqual(expect.any(Function));
+		expect(composition.agentThreadParentDeliveries).toEqual(expect.any(Function));
 		expect(composition.artifactPreprocessor).toBeNull();
 		expect(composition.artifactScanner).toBeNull();
 		expect(composition.channelTargetResolver).toBeNull();

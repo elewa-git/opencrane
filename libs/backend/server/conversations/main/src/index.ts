@@ -21,5 +21,6 @@ export type { ConversationAttachmentAdmissionFactory, ConversationAttachmentAdmi
 export { _CreateSelfConversationsRouter } from "./prisma-self-conversations.router.js";
 export { _SelfConversationReplayOpenapiPaths } from "./openapi.js";
 export { _SelfConversationsOpenapiPaths } from "./openapi.js";
-export type { AgentThreadParentDeliveryCommand, AgentThreadParentDeliveryUnitOfWork, DeliverAgentThreadParentResult } from "./agent-thread-parent-delivery.types.js";
+export type { AgentThreadParentDeliveryCommand, AgentThreadParentDeliveryRouterDependencies, AgentThreadParentDeliveryUnitOfWork, AgentThreadRuntimeIdentity, AgentThreadRuntimeIdentityReviewer, DeliverAgentThreadParentResult } from "./agent-thread-parent-delivery.types.js";
 export { PrismaAgentThreadParentDeliveryUnitOfWork } from "./prisma-agent-thread-parent-delivery-unit-of-work.js";
+export { __CreateAgentThreadParentDeliveryRouter } from "./agent-thread-parent-delivery.router.js";

@@ -8,7 +8,7 @@ import { PrismaSkillWorkloadUnitOfWork, _CreateSkillWorkloadExecutionAuthority, 
 import { __CreateProductionRuntimeDispatchAuthority } from "@opencrane/backend/agents/execution/protocol";
 import { PrismaRuntimeBootstrapExchange, __CreateRuntimeBootstrapRouter } from "@opencrane/backend/server/iam/authorization";
 import { CONVERSATION_PROJECTION_CLOCK, CONVERSATION_PROJECTION_LIMITS } from "@opencrane/backend/conversations/projection";
-import { _CreateConversationReplayRepository, __CreateConversationReplayRouter } from "@opencrane/backend/server/conversations";
+import { _CreateConversationReplayRepository, PrismaAgentThreadParentDeliveryUnitOfWork, __CreateAgentThreadParentDeliveryRouter, __CreateConversationReplayRouter } from "@opencrane/backend/server/conversations";
 import { PrismaChannelTargetAuthorityUnitOfWork } from "@opencrane/backend/server/agents/channel-targets";
 import { _CreateArtifactPreprocessAuthority, PrismaArtifactScanUnitOfWork, __CreateArtifactPreprocessorRouter, __CreateArtifactScannerRouter } from "@opencrane/backend/server/agents/artifacts";
 import { _CreateAgentControllerTokenReviewer, _CreateArtifactPreprocessorTokenReviewer, _CreateArtifactScannerTokenReviewer, _CreateRuntimeTokenReviewer, _CreateSkillWorkloadTokenReviewer, _ValidateIsolatedWorkloadNamespace, _ValidateRuntimeIdentityNamespaces, type RuntimeIdentityNamespaces } from "@opencrane/backend/server/infra/workload-identity";
@@ -148,6 +148,7 @@ function _CreateRuntimeProtocolComposition(prisma: PrismaClient, config: Interna
 			authority: _CreateConversationAssetOutputAuthority(prisma, process.env, config.artifactScannerEnabled),
 			logger: _log,
 		}),
+		agentThreadParentDeliveries: __CreateAgentThreadParentDeliveryRouter({ tokenReviewer, authority: new PrismaAgentThreadParentDeliveryUnitOfWork(prisma, _log), logger: _log }),
 	};
 }
 

@@ -1,12 +1,12 @@
 import { randomUUID } from "node:crypto";
 
-import { AgentThreadDeliveryKind, Prisma, type PrismaClient } from "@prisma/client";
+import { AgentThreadDeliveryKind, Prisma, WorkloadAssignmentState, type PrismaClient } from "@prisma/client";
 import type { Logger } from "pino";
 
 import { AgentThreadDeliveryKinds, type AgentThreadParentDelivery } from "@opencrane/backend/conversations/agent-threads";
 import { ___CreateLogger, ___DoWithTrace } from "@opencrane/backend/observability";
 
-import type { AgentThreadParentDeliveryCommand, AgentThreadParentDeliveryUnitOfWork, DeliverAgentThreadParentResult } from "./agent-thread-parent-delivery.types.js";
+import type { AgentThreadParentDeliveryCommand, AgentThreadParentDeliveryUnitOfWork, AgentThreadRuntimeIdentity, DeliverAgentThreadParentResult } from "./agent-thread-parent-delivery.types.js";
 
 const _KIND: Readonly<Record<AgentThreadDeliveryKinds, AgentThreadDeliveryKind>> = {
 	[AgentThreadDeliveryKinds.Status]: AgentThreadDeliveryKind.Status,
@@ -30,26 +30,28 @@ export class PrismaAgentThreadParentDeliveryUnitOfWork implements AgentThreadPar
 {
 	constructor(private readonly prisma: PrismaClient, private readonly logger: Logger = ___CreateLogger("agent-thread-parent-delivery")) {}
 
-	async deliver(command: AgentThreadParentDeliveryCommand): Promise<DeliverAgentThreadParentResult>
+	async deliver(identity: AgentThreadRuntimeIdentity, command: AgentThreadParentDeliveryCommand): Promise<DeliverAgentThreadParentResult>
 	{
-		return ___DoWithTrace("conversation.agent_thread.parent_delivery", { siloId: command.siloId, conversationId: command.childConversationId, runId: command.runId }, async () =>
+		return ___DoWithTrace("conversation.agent_thread.parent_delivery", { conversationId: command.childConversationId, runId: command.runId }, async () =>
 		{
 			if (!_valid(command)) return { outcome: "denied", reason: "invalid_display_content" };
 			try
 			{
 				return await this.prisma.$transaction(async function _Deliver(transaction): Promise<DeliverAgentThreadParentResult>
 				{
-					const existing = await transaction.agentThreadParentDelivery.findUnique({ where: { childConversationId_idempotencyKey: { childConversationId: command.childConversationId, idempotencyKey: command.idempotencyKey } } });
-					if (existing !== null) return _matches(existing, command) ? { outcome: "idempotent", delivery: _view(existing) } : { outcome: "denied", reason: "idempotency_conflict" };
-					const thread = await transaction.conversationAgentThread.findFirst({ where: { childConversationId: command.childConversationId, siloId: command.siloId, agentServiceId: command.agentServiceId, childConversation: { lifecycle: "Open" } }, select: { parentConversationId: true } });
+					const assignment = await transaction.workloadAssignment.findFirst({ where: { runId: command.runId, namespace: identity.namespace, serviceAccountName: identity.serviceAccountName, podUid: identity.podUid, state: WorkloadAssignmentState.Registered, expiresAt: { gt: new Date() } }, select: { siloId: true, agentServiceId: true } });
+					if (assignment === null) return { outcome: "denied", reason: "authority_unavailable" };
+					const thread = await transaction.conversationAgentThread.findFirst({ where: { childConversationId: command.childConversationId, siloId: assignment.siloId, agentServiceId: assignment.agentServiceId, childConversation: { lifecycle: "Open" } }, select: { parentConversationId: true } });
 					if (thread === null) return { outcome: "denied", reason: "authority_unavailable" };
-					const delivery = await transaction.agentThreadParentDelivery.create({ data: { id: randomUUID(), childConversationId: command.childConversationId, parentConversationId: thread.parentConversationId, siloId: command.siloId, agentServiceId: command.agentServiceId, runId: command.runId, idempotencyKey: command.idempotencyKey, kind: _KIND[command.kind], label: command.label, detail: command.detail, assetId: command.assetId } });
+					const existing = await transaction.agentThreadParentDelivery.findUnique({ where: { childConversationId_idempotencyKey: { childConversationId: command.childConversationId, idempotencyKey: command.idempotencyKey } } });
+					if (existing !== null) return _matches(existing, command, assignment.agentServiceId, thread.parentConversationId) ? { outcome: "idempotent", delivery: _view(existing) } : { outcome: "denied", reason: "idempotency_conflict" };
+					const delivery = await transaction.agentThreadParentDelivery.create({ data: { id: randomUUID(), childConversationId: command.childConversationId, parentConversationId: thread.parentConversationId, siloId: assignment.siloId, agentServiceId: assignment.agentServiceId, runId: command.runId, idempotencyKey: command.idempotencyKey, kind: _KIND[command.kind], label: command.label, detail: command.detail, assetId: command.assetId } });
 					return { outcome: "accepted", delivery: _view(delivery) };
 				}, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 			}
 			catch (err)
 			{
-				this.logger.error({ err, siloId: command.siloId, conversationId: command.childConversationId, runId: command.runId, agentServiceId: command.agentServiceId }, "Agent-thread parent delivery persistence failed");
+				this.logger.error({ err, conversationId: command.childConversationId, runId: command.runId, namespace: identity.namespace, serviceAccountName: identity.serviceAccountName, podUid: identity.podUid }, "Agent-thread parent delivery persistence failed");
 				return { outcome: "denied", reason: "persistence_unavailable" };
 			}
 		});
@@ -64,9 +66,9 @@ function _valid(command: AgentThreadParentDeliveryCommand): boolean
 		&& (command.kind === AgentThreadDeliveryKinds.Asset ? command.assetId !== null : command.assetId === null);
 }
 
-function _matches(row: { runId: string; agentServiceId: string; kind: AgentThreadDeliveryKind; label: string; detail: string; assetId: string | null }, command: AgentThreadParentDeliveryCommand): boolean
+function _matches(row: { runId: string; parentConversationId: string; agentServiceId: string; kind: AgentThreadDeliveryKind; label: string; detail: string; assetId: string | null }, command: AgentThreadParentDeliveryCommand, agentServiceId: string, parentConversationId: string): boolean
 {
-	return row.runId === command.runId && row.agentServiceId === command.agentServiceId && row.kind === _KIND[command.kind] && row.label === command.label && row.detail === command.detail && row.assetId === command.assetId;
+	return row.runId === command.runId && row.parentConversationId === parentConversationId && row.agentServiceId === agentServiceId && row.kind === _KIND[command.kind] && row.label === command.label && row.detail === command.detail && row.assetId === command.assetId;
 }
 
 function _view(row: { id: string; childConversationId: string; parentConversationId: string; runId: string; kind: AgentThreadDeliveryKind; label: string; detail: string; assetId: string | null; createdAt: Date }): AgentThreadParentDelivery

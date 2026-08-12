@@ -32,6 +32,7 @@ export interface InternalRuntimeComposition
 	readonly runtimeStream: Router;
 	/** Runtime-only broker for generated conversation-file output. */
 	readonly conversationAssetOutputs: Router;
+	readonly agentThreadParentDeliveries: Router;
 }
 
 /** The subset of routers built by the controller-only composition step. */
@@ -47,7 +48,7 @@ export type SkillWorkloadRuntimeComposition = Pick<
 >;
 
 /** The subset of routers built by the runtime-protocol composition step. */
-export type RuntimeProtocolComposition = Pick<InternalRuntimeComposition, "runtimeBootstrap" | "runtimeStream" | "conversationAssetOutputs">;
+export type RuntimeProtocolComposition = Pick<InternalRuntimeComposition, "runtimeBootstrap" | "runtimeStream" | "conversationAssetOutputs" | "agentThreadParentDeliveries">;
 
 /** The subset of routers built by the optional worker and replay composition step. */
 export type OptionalRuntimeComposition = Pick<InternalRuntimeComposition, "artifactPreprocessor" | "artifactScanner" | "channelTargetResolver" | "conversationReplay">;
