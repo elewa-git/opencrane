@@ -1,0 +1,12 @@
+{
+  "name": "frontend-conversation-workspace-adapter",
+  "$schema": "../../../../../../node_modules/nx/schemas/project-schema.json",
+  "projectType": "library",
+  "sourceRoot": "libs/frontend/state/conversation/workspace/adapter/src",
+  "prefix": "wo",
+  "tags": ["scope:conversation-workspace", "type:lib", "layer:frontend", "frontend-role:adapter"],
+  "targets": {
+    "lint": { "executor": "nx:run-commands", "options": { "command": "tsc -p tsconfig.lint.json", "cwd": "libs/frontend/state/conversation/workspace/adapter" } },
+    "test": { "executor": "nx:run-commands", "options": { "command": "vitest run --passWithNoTests", "cwd": "libs/frontend/state/conversation/workspace/adapter" } }
+  }
+}

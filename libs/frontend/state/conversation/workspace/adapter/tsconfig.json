@@ -1,0 +1,11 @@
+{
+  "extends": "../../../../../../tsconfig.frontend.json",
+  "compilerOptions": { "outDir": "../../../../../../dist/out-tsc", "types": [], "composite": true, "tsBuildInfoFile": "../../../../../../dist/out-tsc/libs/frontend/state/conversation/workspace/adapter/tsconfig.tsbuildinfo" },
+  "include": ["src/**/*.ts"],
+  "exclude": ["**/*.spec.ts", "**/*.stories.ts"],
+  "references": [
+    { "path": ".." },
+    { "path": "../../../../core" },
+    { "path": "../../../../../models/conversations/main" }
+  ]
+}

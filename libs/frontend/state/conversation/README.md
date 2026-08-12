@@ -14,6 +14,8 @@ participants, assets, elicitation, or access decisions.
 | [`assets`](./assets/README.md) | Upload, retry, and safe attachment lifecycle state. |
 | [`elicitation`](./elicitation/README.md) | Recoverable question and approval state plus Activity mapping. |
 | [`render`](./render/README.md) | Vendored conversation render view-models. |
+| [`workspace`](./workspace/README.md) | Snapshot-tail conversation selection, immutable creation mode, drafts, and command state. |
+| [`workspace/adapter`](./workspace/adapter/README.md) | Generated-client adapter for signed-in conversation and run commands. |
 
 ## Boundary
 

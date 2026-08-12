@@ -265,6 +265,12 @@
       "@opencrane/state/conversation/agent-threads": [
         "./libs/frontend/state/conversation/agent-threads/src/index.ts"
       ],
+      "@opencrane/state/conversation/workspace": [
+        "./libs/frontend/state/conversation/workspace/src/index.ts"
+      ],
+      "@opencrane/state/conversation/workspace/adapter": [
+        "./libs/frontend/state/conversation/workspace/adapter/src/index.ts"
+      ],
       "@opencrane/state/mcp/adapter": [
         "./libs/frontend/state/mcp/adapter/src/index.ts"
       ],
@@ -327,6 +333,12 @@
     },
     {
       "path": "./libs/frontend/state/conversation/agent-threads"
+    },
+    {
+      "path": "./libs/frontend/state/conversation/workspace"
+    },
+    {
+      "path": "./libs/frontend/state/conversation/workspace/adapter"
     },
     {
       "path": "./libs/frontend/state/persona/adapter"
