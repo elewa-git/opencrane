@@ -102,7 +102,10 @@ The normal conversation workspace keeps transport, state, and presentation separ
 Legacy frontend packages use `scope:web`; new capability slices use bounded ownership scopes. The
 persona onboarding feature, state port, and adapter use `scope:persona-onboarding` plus role tags
 that enforce feature → state and adapter → state/core direction. Cross-cutting core and UI elements
-use `scope:shared`. The UI is an API client, never a privileged product authority.
+use `scope:shared`. The conversation workspace may depend on `scope:persona-onboarding` only to
+reuse its model-adjacent validator for the separate read-only onboarding-history projection; the
+onboarding authority and commands remain owned by the onboarding slice. The UI is an API client,
+never a privileged product authority.
 
 ## API-first rule
 
