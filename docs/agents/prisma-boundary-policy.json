@@ -232,8 +232,15 @@
       {
         "path": "libs/backend/server/conversation-assets/main/src/prisma-conversation-attachment-admission.ts",
         "adapter": "PrismaConversationAttachmentAdmissionRepository",
-        "contract": "ConversationAttachmentAdmissionRepository",
-        "contractImportPath": "./conversation-attachment-admission.repository.types.js",
+        "contract": "ConversationAttachmentAdmissionPort",
+        "contractImportPath": "@opencrane/backend/server/conversations",
+        "constructs": []
+      },
+      {
+        "path": "libs/backend/server/conversation-assets/main/src/prisma-conversation-asset-output-repository.ts",
+        "adapter": "PrismaConversationAssetOutputRepository",
+        "contract": "ConversationAssetOutputRepository",
+        "contractImportPath": "./conversation-asset-output.types.js",
         "constructs": []
       },
       {
@@ -585,7 +592,7 @@
       {
         "path": "libs/backend/server/agents/artifacts/main/src/prisma-artifact-scan-unit-of-work.ts",
         "adapter": "PrismaArtifactScanUnitOfWork",
-        "contract": "ArtifactScanUnitOfWork",
+        "contract": "ArtifactScanRepository",
         "contractImportPath": "./artifact-scanning.types.js",
         "constructs": [
           {
@@ -597,12 +604,24 @@
       {
         "path": "libs/backend/server/conversation-assets/main/src/prisma-conversation-asset-unit-of-work.ts",
         "adapter": "PrismaConversationAssetUnitOfWork",
-        "contract": "ConversationAssetUnitOfWork",
+        "contract": "ConversationAssetAuthority",
         "contractImportPath": "./conversation-asset.router.types.js",
         "constructs": [
           {
             "adapter": "PrismaConversationAssetRepository",
             "importPath": "./prisma-conversation-asset-repository.js"
+          }
+        ]
+      },
+      {
+        "path": "libs/backend/server/conversation-assets/main/src/prisma-conversation-asset-output-unit-of-work.ts",
+        "adapter": "PrismaConversationAssetOutputUnitOfWork",
+        "contract": "ConversationAssetOutputAuthority",
+        "contractImportPath": "./conversation-asset-output.types.js",
+        "constructs": [
+          {
+            "adapter": "PrismaConversationAssetOutputRepository",
+            "importPath": "./prisma-conversation-asset-output-repository.js"
           }
         ]
       },
