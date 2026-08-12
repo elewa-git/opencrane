@@ -5,8 +5,9 @@ export { AgentThreadMentionControlComponent } from "./lib/agent-thread-mention-c
 export { AgentThreadOriginComponent } from "./lib/agent-thread-origin.component.js";
 export { AgentThreadPageComponent } from "./lib/agent-thread-page.component.js";
 export { AgentThreadQueuedComponent } from "./lib/agent-thread-queued.component.js";
+export { AgentThreadRouteNoticeComponent } from "./lib/agent-thread-route-notice.component.js";
 export { AgentThreadRunBoundaryComponent } from "./lib/agent-thread-run-boundary.component.js";
 export { AgentThreadSummaryComponent } from "./lib/agent-thread-summary.component.js";
 export { AgentThreadUnavailableComponent } from "./lib/agent-thread-unavailable.component.js";
 export { __AgentThreadMessagePresentation, __AgentThreadRunStatusPresentation, __AgentThreadSummaryStatusPresentation } from "./lib/agent-thread.mapper.js";
-export type { AgentThreadAgentOption, AgentThreadMentionTarget, AgentThreadOpenIntent } from "./lib/agent-thread-feature.types.js";
+export type { AgentThreadAgentOption, AgentThreadMentionTarget, AgentThreadOpenIntent, AgentThreadProjectionPurgeIntent } from "./lib/agent-thread-feature.types.js";

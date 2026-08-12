@@ -6,8 +6,9 @@
 
 This package owns the UI for invoking an Agent from a group message, showing the compact child
 summary below that message, and presenting the linked child conversation as a full workspace. The
-application route added by #351 supplies immutable route ids and owns navigation, focus, and scroll
-restoration; this feature renders the route-ready page and returns exact typed intents.
+application supplies immutable route ids and owns navigation, focus, and scroll restoration; this
+feature renders the route-ready page and returns exact typed intents. It persists unread state only
+after Angular has rendered the represented snapshot, and then adopts the server's confirmed count.
 
 ```
  parent group message ── @agent intent ──► backend admission
@@ -27,9 +28,14 @@ asset, elicitation, Activity, and A2UI renderers rather than copying their contr
 
 ## Public surface
 
-- `AgentThreadMentionControlComponent` emits one root-message coordinate for admission.
-- `AgentThreadSummaryComponent` renders every compact parent state and emits an exact open intent.
-- `AgentThreadPageComponent` is the thin route-ready child workspace.
+- `AgentThreadMentionControlComponent` selects a display-safe Agent target before the ordinary group
+  composer submits the message and target atomically.
+- `AgentThreadSummaryComponent` renders run/update/result/asset metadata and emits a canonical target
+  together with exact parent restoration coordinates.
+- `AgentThreadPageComponent` is the thin route-ready child workspace. Its breadcrumbs emit route
+  intents, its post-render hook focuses the canonical target and marks only rendered positions read,
+  and its purge intent tells the app to discard Activity, elicitation, asset, A2UI, draft, and cursor
+  projections together.
 - Origin, run-boundary, delivery, queued, available, access-changed, and unavailable components keep
   those states independently testable.
 - Mapper functions translate dependency-neutral store models into shared conversation elements.
@@ -38,7 +44,7 @@ asset, elicitation, Activity, and A2UI renderers rather than copying their contr
 
 This feature neither calls HTTP nor starts a run. It cannot grant access, infer a missing route's
 existence, select personal memory, or deliver beyond the immediate parent. The generated-client
-adapter and production route composition arrive only after their backend contracts exist.
+adapter lives in state; the production app route owns browser history and every external projection.
 
 ## Dependency direction
 

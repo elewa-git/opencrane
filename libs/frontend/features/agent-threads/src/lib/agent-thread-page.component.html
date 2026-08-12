@@ -15,11 +15,13 @@
 					@if (snapshot.recovery === recoveryStates.Reconnecting) { <p-message severity="warn" text="Reconnecting from the last received update. Your draft is still here." /> }
 					<section class="agent-thread-page__timeline" aria-label="Agent thread messages and runs">
 						@for (entry of snapshot.timeline; track entry.id) {
-							@switch (entry.kind) {
-								@case (entryKinds.RunBoundary) { <wo-agent-thread-run-boundary [run]="entry.run" /> }
-								@case (entryKinds.Message) { <wo-conversation-message [message]="messagePresentation(entry.message)" /> }
-								@case (entryKinds.Delivery) { <wo-agent-thread-delivery [delivery]="entry.delivery" /> }
-							}
+							<div class="agent-thread-page__target" [id]="entry.id" [attr.data-agent-thread-target]="entry.id" tabindex="-1">
+								@switch (entry.kind) {
+									@case (entryKinds.RunBoundary) { <wo-agent-thread-run-boundary [run]="entry.run" /> }
+									@case (entryKinds.Message) { <wo-conversation-message [message]="messagePresentation(entry.message)" /> }
+									@case (entryKinds.Delivery) { <wo-agent-thread-delivery [delivery]="entry.delivery" /> }
+								}
+							</div>
 						}
 					</section>
 					@if (activityRows().length > 0) { <wo-conversation-activity [rows]="activityRows()" (targetRequested)="activityTargetRequested.emit($event)" /> }

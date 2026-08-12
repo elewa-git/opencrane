@@ -40,6 +40,6 @@ export class AgentThreadSummaryComponent
 	{
 		const summary = this.summary();
 		if (summary.access !== AgentThreadAccessStates.Available) return;
-		this.opened.emit({ parentConversationId: this.parentConversationId(), childConversationId: summary.childConversationId, parentMessageId: this.parentMessageId(), parentScrollAnchor: this.parentScrollAnchor() });
+		this.opened.emit({ parentConversationId: this.parentConversationId(), childConversationId: summary.childConversationId, parentMessageId: this.parentMessageId(), parentScrollAnchor: this.parentScrollAnchor(), target: summary.target });
 	}
 }

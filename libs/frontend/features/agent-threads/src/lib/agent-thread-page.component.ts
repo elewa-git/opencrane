@@ -1,4 +1,5 @@
-import { ChangeDetectionStrategy, Component, computed, effect, inject, input, output } from "@angular/core";
+import { DOCUMENT } from "@angular/common";
+import { ChangeDetectionStrategy, Component, afterRenderEffect, computed, effect, inject, input, output } from "@angular/core";
 import type { MenuItem } from "primeng/api";
 import { BreadcrumbModule } from "primeng/breadcrumb";
 import { ButtonModule } from "primeng/button";
@@ -9,12 +10,13 @@ import { ConversationComposerComponent, ConversationComposerStates, Conversation
 import { ConversationActivityComponent } from "@opencrane/features/conversation-activity";
 import { ConversationAssetCardComponent, type ConversationAssetActionIntent, type ConversationAssetPresentation } from "@opencrane/features/conversation-assets";
 import { ConversationElicitationCardComponent } from "@opencrane/features/conversation-elicitation";
-import { AgentThreadRecoveryStates, AgentThreadRouteStates, AgentThreadRunStates, AgentThreadStore, AgentThreadTimelineEntryKinds, type AgentThreadParentRestoreIntent } from "@opencrane/state/conversation/agent-threads";
+import { AgentThreadRecoveryStates, AgentThreadRouteStates, AgentThreadRunStates, AgentThreadStore, AgentThreadTimelineEntryKinds, type AgentThreadParentRestoreIntent, type AgentThreadSummaryTarget } from "@opencrane/state/conversation/agent-threads";
 import type { ConversationActivityRow, ConversationActivityTarget, ConversationElicitation, ElicitationResponseValue } from "@opencrane/state/conversation/elicitation";
 
 import { AgentThreadAccessChangedComponent } from "./agent-thread-access-changed.component.js";
 import { AgentThreadAvailableComponent } from "./agent-thread-available.component.js";
 import { AgentThreadDeliveryComponent } from "./agent-thread-delivery.component.js";
+import type { AgentThreadProjectionPurgeIntent } from "./agent-thread-feature.types.js";
 import { __AgentThreadMessagePresentation } from "./agent-thread.mapper.js";
 import { AgentThreadOriginComponent } from "./agent-thread-origin.component.js";
 import { AgentThreadQueuedComponent } from "./agent-thread-queued.component.js";
@@ -27,12 +29,16 @@ export class AgentThreadPageComponent
 {
 	/** Component-scoped route and command state. */
 	protected readonly store = inject(AgentThreadStore);
+	/** Browser document used only after Angular has rendered an authorized target. */
+	private readonly _document = inject(DOCUMENT);
 	/** Parent group conversation route coordinate. */
 	public readonly parentConversationId = input.required<string>();
 	/** Child Agent-session conversation route coordinate. */
 	public readonly childConversationId = input.required<string>();
 	/** Optional exact parent restoration coordinate captured before navigation. */
 	public readonly parentRestore = input<AgentThreadParentRestoreIntent | null>(null);
+	/** Optional canonical focus target carried by the child route. */
+	public readonly focusTarget = input<AgentThreadSummaryTarget | null>(null);
 	/** Existing Activity rows supplied by the workspace composition owner. */
 	public readonly activityRows = input<readonly ConversationActivityRow[]>([]);
 	/** Existing recoverable question or approval projection. */
@@ -51,6 +57,8 @@ export class AgentThreadPageComponent
 	public readonly parentRestoreRequested = output<AgentThreadParentRestoreIntent>();
 	/** Requests a safe return to the chat index when no parent restoration is available. */
 	public readonly chatsRequested = output<void>();
+	/** Requests one atomic purge of all child-owned projections composed outside this package. */
+	public readonly childProjectionPurgeRequested = output<AgentThreadProjectionPurgeIntent>();
 	/** Forwards the existing Activity component's canonical target. */
 	public readonly activityTargetRequested = output<ConversationActivityTarget>();
 	/** Forwards the existing elicitation component's controlled draft. */
@@ -76,6 +84,14 @@ export class AgentThreadPageComponent
 
 	/** Load whenever the route coordinator supplies a different exact pair of ids. */
 	private readonly _routeLoader = effect(this._LoadRoute.bind(this));
+	/** Notify the route coordinator whenever this store purges its owned child projection. */
+	private readonly _purgeNotifier = effect(this._NotifyProjectionPurge.bind(this));
+	/** Mark and focus only content Angular has finished rendering into the document. */
+	private readonly _visibleProjection = afterRenderEffect(this._AfterAuthorizedRender.bind(this));
+	/** Last purge generation already emitted to the route coordinator. */
+	private _emittedPurgeGeneration = 0;
+	/** Last exact target already focused for the current authorized snapshot. */
+	private _focusedTargetKey: string | null = null;
 
 	/** Forward exact parent restoration, or fall back to the non-disclosing chat index. */
 	protected returnToParent(): void
@@ -110,8 +126,8 @@ export class AgentThreadPageComponent
 	private _Breadcrumbs(): MenuItem[]
 	{
 		const snapshot = this.store.snapshot();
-		if (snapshot === null) return [{ label: "Chats" }, { label: "Agent thread" }];
-		return [{ label: "Chats" }, { label: snapshot.origin.parentTitle }, { label: snapshot.summary.title }];
+		if (snapshot === null) return [{ label: "Chats", command: this._RequestChats.bind(this) }, { label: "Agent thread" }];
+		return [{ label: "Chats", command: this._RequestChats.bind(this) }, { label: snapshot.origin.parentTitle, command: this.returnToParent.bind(this) }, { label: snapshot.summary.title }];
 	}
 
 	/** Keep the shared composer controlled by the store's independent state dimensions. */
@@ -123,4 +139,33 @@ export class AgentThreadPageComponent
 
 	/** Read the exact route pair; the route coordinator remains responsible for URL ownership. */
 	private _LoadRoute(): void { void this.store.load(this.parentConversationId(), this.childConversationId()); }
+
+	/** Emit a chat-index route intent from the first breadcrumb. */
+	private _RequestChats(): void { this.chatsRequested.emit(); }
+
+	/** Forward each store purge exactly once with the exact route being discarded. */
+	private _NotifyProjectionPurge(): void
+	{
+		const generation = this.store.projectionPurgeGeneration();
+		if (generation === 0 || generation === this._emittedPurgeGeneration) return;
+		this._emittedPurgeGeneration = generation;
+		this._focusedTargetKey = null;
+		this.childProjectionPurgeRequested.emit({ generation, parentConversationId: this.parentConversationId(), childConversationId: this.childConversationId() });
+	}
+
+	/** Persist the rendered position and focus the canonical target after authorized DOM paint. */
+	private _AfterAuthorizedRender(): void
+	{
+		const snapshot = this.store.snapshot();
+		if (this.store.routeState() !== AgentThreadRouteStates.Ready || snapshot === null) return;
+		void this.store.markVisible();
+		const target = this.focusTarget() ?? snapshot.summary.target;
+		const targetKey = `${snapshot.childConversationId}\u0000${target.kind}\u0000${target.id}`;
+		if (targetKey === this._focusedTargetKey) return;
+		const element = this._document.getElementById(target.id);
+		if (element === null) return;
+		element.focus({ preventScroll: true });
+		element.scrollIntoView({ block: "center", behavior: "auto" });
+		this._focusedTargetKey = targetKey;
+	}
 }

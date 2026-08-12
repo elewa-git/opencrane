@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, input, output } from "@angular/core";
+import { ChangeDetectionStrategy, Component, computed, input, output } from "@angular/core";
 import { FormsModule } from "@angular/forms";
 import { AutoCompleteModule, type AutoCompleteCompleteEvent, type AutoCompleteSelectEvent } from "primeng/autocomplete";
 import { MessageModule } from "primeng/message";
@@ -17,6 +17,8 @@ export class AgentThreadMentionControlComponent
 	public readonly target = input<AgentThreadMentionTarget | null>(null);
 	/** Display-safe Agent services that may be selected for this group. */
 	public readonly suggestions = input<readonly AgentThreadAgentOption[]>([]);
+	/** PrimeNG adapter copy; the public component input remains immutable. */
+	protected readonly primeSuggestions = computed(this._PrimeSuggestions.bind(this));
 	/** Requests filtered suggestions from the parent. */
 	public readonly suggestionsRequested = output<string>();
 	/** Returns the selected service to the ordinary composer; it creates no message by itself. */
@@ -36,6 +38,9 @@ export class AgentThreadMentionControlComponent
 
 	/** Clear the controlled Agent target so the host submits an ordinary group message. */
 	protected clear(): void { this.targetChange.emit(null); }
+
+	/** Copy the immutable host list at the mutable third-party component boundary. */
+	private _PrimeSuggestions(): AgentThreadAgentOption[] { return [...this.suggestions()]; }
 }
 
 /** Narrow PrimeNG's untyped selection event to the exact display-safe option contract. */

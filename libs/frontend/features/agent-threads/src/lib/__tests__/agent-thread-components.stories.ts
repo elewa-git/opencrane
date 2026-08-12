@@ -2,7 +2,8 @@ import { applicationConfig, type Meta, moduleMetadata, type StoryObj } from "@st
 import { expect, fn, userEvent, within } from "storybook/test";
 
 import { ConversationComposerComponent, ConversationComposerStates } from "@opencrane/elements/conversation";
-import { AgentThreadAccessStates, AgentThreadAdmissionStates, AgentThreadDeliveryKinds, AgentThreadRecoveryStates, AgentThreadRunStates, AgentThreadSummaryStates, AgentThreadTimelineEntryKinds, AGENT_THREAD_GATEWAY, type AgentThreadGateway, type AgentThreadSnapshot, type AgentThreadSummaryPresentation } from "@opencrane/state/conversation/agent-threads";
+import { CONVERSATION_ELICITATION_VERSION, ElicitationBodyKinds, ElicitationPurposes, ElicitationRequestStates, type ConversationElicitation } from "@opencrane/state/conversation/elicitation";
+import { AgentThreadAccessStates, AgentThreadAdmissionStates, AgentThreadDeliveryKinds, AgentThreadRecoveryStates, AgentThreadRunStates, AgentThreadSummaryStates, AgentThreadSummaryTargetKinds, AgentThreadTimelineEntryKinds, AGENT_THREAD_GATEWAY, type AgentThreadGateway, type AgentThreadSnapshot, type AgentThreadSummaryPresentation } from "@opencrane/state/conversation/agent-threads";
 
 import { AgentThreadAccessChangedComponent } from "../agent-thread-access-changed.component.js";
 import { AgentThreadDeliveryComponent } from "../agent-thread-delivery.component.js";
@@ -22,7 +23,7 @@ const _AGENT_OPTIONS: readonly AgentThreadAgentOption[] =
 /** Build one compact parent summary state. */
 function _Summary(state: AgentThreadSummaryStates, overrides: Partial<AgentThreadSummaryPresentation> = {}): AgentThreadSummaryPresentation
 {
-	return { childConversationId: "child-pricing", state, access: AgentThreadAccessStates.Available, title: "Compare supplier pricing", preview: "The counterproposal moves most risk into the renewal clause and changes the payment date.", unreadCount: 2, participantInitials: ["AK", "JR", "N"], replyCount: 7, ...overrides };
+	return { childConversationId: "child-pricing", state, access: AgentThreadAccessStates.Available, title: "Compare supplier pricing", preview: "The counterproposal moves most risk into the renewal clause and changes the payment date.", unreadCount: 2, participants: [{ label: "Alex Kimani", initials: "AK" }, { label: "Jente Rosseel", initials: "JR" }, { label: "Nova Agent", initials: "N" }], replyCount: 7, runCount: 2, updateCount: 9, lastUpdateLabel: "12:14", assetCount: 1, resultLabel: "Pricing comparison", target: { kind: AgentThreadSummaryTargetKinds.Thread, id: "agent-thread-origin" }, ...overrides };
 }
 
 /** Complete summary catalogue required by the parent-message contract. */
@@ -58,6 +59,8 @@ function _Snapshot(state: AgentThreadRunStates = AgentThreadRunStates.Working, o
 			{ kind: AgentThreadTimelineEntryKinds.Delivery, id: "delivery-1", delivery }
 		],
 		cursor: "opaque-story-cursor",
+		latestPosition: "3",
+		representedThroughPosition: "3",
 		canSendFollowUp: state === AgentThreadRunStates.Completed,
 		...overrides
 	};
@@ -106,23 +109,27 @@ function _RunDetail(state: AgentThreadRunStates): string
 /** Build a deterministic generated-client-shaped gateway double for one page story. */
 function _Gateway(snapshot: AgentThreadSnapshot): AgentThreadGateway
 {
-	return { read: async function _Read() { return snapshot; }, sendFollowUp: async function _SendFollowUp() { return { ...snapshot, canSendFollowUp: false }; } };
+	return { read: async function _Read() { return snapshot; }, sendFollowUp: async function _SendFollowUp() { return { ...snapshot, canSendFollowUp: false }; }, markReadThrough: async function _MarkReadThrough() {} };
 }
 
-/** Build one page story with an isolated gateway projection. */
-function _PageStory(snapshot: AgentThreadSnapshot, tags: readonly string[] = ["visual-test"]): Story
+/** One real participant question composed into the child workspace. */
+const _ELICITATION: ConversationElicitation = { version: CONVERSATION_ELICITATION_VERSION, requestId: "request-renewal", conversationId: "child-pricing", runId: "run-1", attempt: 1, assignedParticipantId: "participant-alex", purpose: ElicitationPurposes.RuntimeInput, state: ElicitationRequestStates.Requested, body: { kind: ElicitationBodyKinds.SingleChoice, prompt: "Which renewal rule should I compare?", choices: [{ value: "current", label: "Current renewal rule" }, { value: "proposed", label: "Supplier proposal" }] }, requiresStepUp: false, requestedAt: "2026-08-12T11:08:00.000Z", expiresAt: "2026-08-12T12:08:00.000Z" };
+
+/** Build only decorators and rendering; visual tags and play functions stay static on each export. */
+function _PageStory(snapshot: AgentThreadSnapshot, focusTarget = snapshot.summary.target, elicitation: ConversationElicitation | null = null): Story
 {
 	return {
-		tags: [...tags],
 		decorators: [applicationConfig({ providers: [{ provide: AGENT_THREAD_GATEWAY, useValue: _Gateway(snapshot) }] })],
-		render: function render() { return { props: { parentConversationId: "group-launch", childConversationId: "child-pricing", restore: { parentConversationId: "group-launch", parentMessageId: "root-ask", parentScrollAnchor: "message-root-top" } }, template: `<wo-agent-thread-page [parentConversationId]="parentConversationId" [childConversationId]="childConversationId" [parentRestore]="restore" />` }; },
-		play: async function play({ canvasElement })
-		{
-			const canvas = within(canvasElement);
-			await expect(await canvas.findByRole("heading", { name: "Compare supplier pricing" })).toBeVisible();
-			await expect(canvas.getByText("@agent compare the supplier counterproposal and flag the renewal risk")).toBeVisible();
-		}
+		render: function render() { return { props: { parentConversationId: "group-launch", childConversationId: "child-pricing", restore: { parentConversationId: "group-launch", parentMessageId: "root-ask", parentScrollAnchor: "message-root-top" }, focusTarget, elicitation }, template: `<wo-agent-thread-page [parentConversationId]="parentConversationId" [childConversationId]="childConversationId" [parentRestore]="restore" [focusTarget]="focusTarget" [elicitation]="elicitation" />` }; }
 	};
+}
+
+/** Assert the immutable origin and child heading shared by every full-page journey. */
+async function _AssertPage({ canvasElement }: { readonly canvasElement: HTMLElement }): Promise<void>
+{
+	const canvas = within(canvasElement);
+	await expect(await canvas.findByRole("heading", { name: "Compare supplier pricing" })).toBeVisible();
+	await expect(canvas.getByText("@agent compare the supplier counterproposal and flag the renewal risk")).toBeVisible();
 }
 
 /** Storybook metadata for group Agent-thread states and route surfaces. */
@@ -170,36 +177,36 @@ export const SummaryStateCatalogue: Story =
 };
 
 /** Atomic first-run admission renders a durable queued child with a disabled composer. */
-export const ChildQueued: Story = _PageStory(_Snapshot(AgentThreadRunStates.Queued));
+export const ChildQueued: Story = { ..._PageStory(_Snapshot(AgentThreadRunStates.Queued)), tags: ["visual-test"], play: _AssertPage };
 
 /** The active foreground run streams inside the child workspace. */
-export const ChildWorking: Story = _PageStory(_Snapshot(AgentThreadRunStates.Working));
+export const ChildWorking: Story = { ..._PageStory(_Snapshot(AgentThreadRunStates.Working)), tags: ["visual-test"], play: _AssertPage };
 
 /** A deep-linked participant question remains anchored to the immutable root ask. */
-export const ChildDeepLinkedAsk: Story = _PageStory(_Snapshot(AgentThreadRunStates.Waiting));
+export const ChildDeepLinkedAsk: Story = { ..._PageStory(_Snapshot(AgentThreadRunStates.Waiting, { summary: _Summary(AgentThreadSummaryStates.Waiting, { target: { kind: AgentThreadSummaryTargetKinds.WaitingRequest, id: "delivery:delivery-1" } }) }), { kind: AgentThreadSummaryTargetKinds.WaitingRequest, id: "delivery:delivery-1" }, _ELICITATION), tags: ["visual-test"], play: _AssertPage };
 
 /** Completion makes the controlled composer available for the next serial run. */
-export const ChildCompleted: Story = _PageStory(_Snapshot(AgentThreadRunStates.Completed));
+export const ChildCompleted: Story = { ..._PageStory(_Snapshot(AgentThreadRunStates.Completed)), tags: ["visual-test"], play: _AssertPage };
 
 /** A second completed run stays ordered after the first run and follow-up message. */
-export const ChildSecondRun: Story = _PageStory(_Snapshot(AgentThreadRunStates.Completed, { timeline: [..._Snapshot(AgentThreadRunStates.Completed).timeline, { kind: AgentThreadTimelineEntryKinds.RunBoundary, id: "run-boundary-2", run: { runId: "run-2", ordinal: 2, state: AgentThreadRunStates.Completed, label: "Run 2 · completed", detail: "The follow-up completed." } }] }));
+export const ChildSecondRun: Story = { ..._PageStory(_Snapshot(AgentThreadRunStates.Completed, { timeline: [..._Snapshot(AgentThreadRunStates.Completed).timeline, { kind: AgentThreadTimelineEntryKinds.Message, id: "message-follow-up", message: { id: "message-follow-up", authorName: "Alex Kimani", authorInitials: "AK", authoredByAgent: false, timestampLabel: "11:12", body: "Compare the renewal notice period too." } }, { kind: AgentThreadTimelineEntryKinds.RunBoundary, id: "run-boundary-2", run: { runId: "run-2", ordinal: 2, state: AgentThreadRunStates.Completed, label: "Run 2 · completed", detail: "The follow-up completed." } }] })), tags: ["visual-test"], play: _AssertPage };
 
 /** Failure remains visible and never claims a result. */
-export const ChildFailed: Story = _PageStory(_Snapshot(AgentThreadRunStates.Failed));
+export const ChildFailed: Story = { ..._PageStory(_Snapshot(AgentThreadRunStates.Failed)), tags: ["visual-test"], play: _AssertPage };
 
 /** Cancellation remains distinct from failure and completion. */
-export const ChildCancelled: Story = _PageStory(_Snapshot(AgentThreadRunStates.Cancelled));
+export const ChildCancelled: Story = { ..._PageStory(_Snapshot(AgentThreadRunStates.Cancelled)), tags: ["visual-test"], play: _AssertPage };
 
 /** A closed child keeps its history and disables future follow-ups. */
-export const ChildClosed: Story = _PageStory(_Snapshot(AgentThreadRunStates.Completed, { summary: _Summary(AgentThreadSummaryStates.Closed), canSendFollowUp: false }));
+export const ChildClosed: Story = { ..._PageStory(_Snapshot(AgentThreadRunStates.Completed, { summary: _Summary(AgentThreadSummaryStates.Closed), canSendFollowUp: false })), tags: ["visual-test"], play: _AssertPage };
 
 /** Reconnect keeps the accepted child projection visible while commands are disabled. */
-export const ChildReconnecting: Story = _PageStory(_Snapshot(AgentThreadRunStates.Working, { recovery: AgentThreadRecoveryStates.Reconnecting }), ["visual-test"]);
+export const ChildReconnecting: Story = { ..._PageStory(_Snapshot(AgentThreadRunStates.Working, { recovery: AgentThreadRecoveryStates.Reconnecting })), tags: ["visual-test"], play: _AssertPage };
 
 /** A compact reconnect composition proves the draft stays visible at 390 by 844 pixels. */
 export const CompactReconnectDraft: Story =
 {
-	tags: ["visual-test-narrow"],
+	tags: ["visual-test", "visual-test-narrow"],
 	parameters: { viewport: { defaultViewport: "mobile1" } },
 	render: function render() { return { props: { draft: "Keep the renewal question in my draft." }, template: `<div style="width:390px;min-height:844px;padding:8px"><p><strong>Reconnecting</strong><br>The accepted transcript stays visible.</p><wo-conversation-composer [draft]="draft" [state]="'disabled'" label="Follow up in this Agent thread" /></div>` }; },
 	play: async function play({ canvasElement }) { await expect(within(canvasElement).getByDisplayValue("Keep the renewal question in my draft.")).toBeDisabled(); }

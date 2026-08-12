@@ -1,3 +1,5 @@
+import type { AgentThreadSummaryTarget } from "@opencrane/state/conversation/agent-threads";
+
 /** One display-safe Agent service that an ordinary group composer may target. */
 export interface AgentThreadAgentOption
 {
@@ -27,4 +29,17 @@ export interface AgentThreadOpenIntent
 	readonly parentMessageId: string;
 	/** Opaque parent scroll anchor captured before navigation. */
 	readonly parentScrollAnchor: string;
+	/** Canonical child focus target derived from current durable state. */
+	readonly target: AgentThreadSummaryTarget;
+}
+
+/** Route-wide purge request for every projection owned outside the Agent-thread store. */
+export interface AgentThreadProjectionPurgeIntent
+{
+	/** Monotonic purge generation for idempotent route-coordinator handling. */
+	readonly generation: number;
+	/** Exact parent route being removed from browser state. */
+	readonly parentConversationId: string;
+	/** Exact child route being removed from browser state. */
+	readonly childConversationId: string;
 }
