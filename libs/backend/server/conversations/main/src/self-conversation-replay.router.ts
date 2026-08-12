@@ -1,9 +1,7 @@
 import { Router, type Request, type Response } from "express";
+import { __DecodeConversationProjectionCursor, __StreamConversationProjection, ConversationProjectionOutcomes } from "@opencrane/backend/conversations/projection";
 
-import { __StreamConversationLiveReplay } from "./conversation-live-replay.js";
-import { ConversationLiveReplayOutcomes } from "./conversation-live-replay.types.js";
 import { _CreateExpressConversationLiveReplaySink } from "./express-conversation-live-replay-sink.js";
-import { __DecodeConversationReplayCursor } from "./replay-cursor.js";
 import type { SelfConversationReplayRouterDependencies } from "./self-conversation-replay.router.types.js";
 
 /** Create the browser-session-authenticated snapshot-to-live surface. */
@@ -24,8 +22,8 @@ export function __CreateSelfConversationReplayRouter(dependencies: SelfConversat
 		dependencies.shutdownSignal?.addEventListener("abort", _Abort, { once: true });
 		try
 		{
-			const outcome = await __StreamConversationLiveReplay({ repository: dependencies.repository, ...(dependencies.interrupts === undefined ? {} : { interrupts: dependencies.interrupts }), clock: dependencies.clock, limits: dependencies.limits }, _CreateExpressConversationLiveReplaySink(response), { conversationId, siloId: caller.siloId, subjectId: caller.subjectId, cursor, signal: abort.signal });
-			if (outcome === ConversationLiveReplayOutcomes.RevokedOrMissing && !response.headersSent) response.status(404).json({ error: "conversation_not_found" });
+			const outcome = await __StreamConversationProjection({ reader: dependencies.repository, ...(dependencies.interrupts === undefined ? {} : { interrupts: dependencies.interrupts }), clock: dependencies.clock, limits: dependencies.limits }, _CreateExpressConversationLiveReplaySink(response), { conversationId, siloId: caller.siloId, subjectId: caller.subjectId, cursor, signal: abort.signal });
+			if (outcome === ConversationProjectionOutcomes.RevokedOrMissing && !response.headersSent) response.status(404).json({ error: "conversation_not_found" });
 			else if (!response.writableEnded) response.end();
 		}
 		catch (err)
@@ -53,5 +51,5 @@ function _cursor(request: Request)
 	if (queryCursor !== undefined && headerCursor !== undefined && queryCursor !== headerCursor) return undefined;
 	const rawCursor = queryCursor ?? headerCursor;
 	if (rawCursor === undefined) return null;
-	return __DecodeConversationReplayCursor(rawCursor) ?? undefined;
+	return __DecodeConversationProjectionCursor(rawCursor) ?? undefined;
 }

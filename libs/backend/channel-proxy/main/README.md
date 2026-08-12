@@ -63,7 +63,8 @@ It makes no authorization decisions of its own — identity, membership, and res
 delegated to OpenCrane via the resolver — and it never interprets the user's credentials, only forwards
 them. It fails closed on every malformed authority response or target.
 
-AG-UI projection is a shared contract owned by `@opencrane/contracts`; this proxy only relays the
+AG-UI wire types are shared contracts, while projection policy is owned by the backend
+[conversation projection package](../../conversations/projection/main/README.md); this proxy only relays the
 already-authorised SSE bytes. It never reads canonical events or forwards raw event payloads.
 
 ## Dependency direction

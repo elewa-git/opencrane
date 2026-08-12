@@ -22,6 +22,9 @@
       "@opencrane/backend/server/conversations": [
         "./libs/backend/server/conversations/main/src/index.ts"
       ],
+      "@opencrane/backend/conversations/projection": [
+        "./libs/backend/conversations/projection/main/src/index.ts"
+      ],
       "@opencrane/backend/server/agents/onboarding": [
         "./libs/backend/server/agents/onboarding/main/src/index.ts"
       ],

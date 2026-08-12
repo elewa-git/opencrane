@@ -1,11 +1,9 @@
 import { Router, type Request, type Response } from "express";
 
 import { __DigestChannelInvocationContext } from "@opencrane/backend/server/agents/channel-targets";
+import { __DecodeConversationProjectionCursor, __StreamConversationProjection, ConversationProjectionOutcomes } from "@opencrane/backend/conversations/projection";
 
-import { __StreamConversationLiveReplay } from "./conversation-live-replay.js";
-import { ConversationLiveReplayOutcomes } from "./conversation-live-replay.types.js";
 import { _CreateExpressConversationLiveReplaySink } from "./express-conversation-live-replay-sink.js";
-import { __DecodeConversationReplayCursor } from "./replay-cursor.js";
 import type { ConversationReplayRouterDependencies } from "./conversation-replay.router.types.js";
 
 /** Create the internal consumed-context-authorized snapshot-to-live route. */
@@ -17,7 +15,7 @@ export function __CreateConversationReplayRouter(dependencies: ConversationRepla
 		const token = _Bearer(request.header("authorization"));
 		const suppliedCursor = _SuppliedCursor(request);
 		if (suppliedCursor === null) { response.status(400).json({ error: "invalid_replay_request" }); return; }
-		const cursor = __DecodeConversationReplayCursor(suppliedCursor);
+		const cursor = __DecodeConversationProjectionCursor(suppliedCursor);
 		if (token === null || (suppliedCursor !== undefined && cursor === null)) { response.status(400).json({ error: "invalid_replay_request" }); return; }
 		const consumed = await dependencies.contexts.consumeInvocationContextAtomically({ digest: __DigestChannelInvocationContext(token), expectedReceiverId: dependencies.expectedReceiverId, nowEpochMs: dependencies.nowEpochMs() });
 		if (consumed.status !== "consumed" || consumed.context.action !== "events.read") { response.status(403).json({ error: "replay_denied" }); return; }
@@ -29,8 +27,8 @@ export function __CreateConversationReplayRouter(dependencies: ConversationRepla
 		dependencies.shutdownSignal?.addEventListener("abort", _Abort, { once: true });
 		try
 		{
-			const outcome = await __StreamConversationLiveReplay({ repository: dependencies.repository, clock: dependencies.clock, limits: dependencies.limits }, _CreateExpressConversationLiveReplaySink(response), { conversationId: consumed.context.conversationId, siloId: consumed.context.siloId, subjectId: consumed.context.subjectId, cursor, signal: abort.signal });
-			if (outcome === ConversationLiveReplayOutcomes.RevokedOrMissing && !response.headersSent) response.status(403).json({ error: "replay_denied" });
+			const outcome = await __StreamConversationProjection({ reader: dependencies.repository, clock: dependencies.clock, limits: dependencies.limits }, _CreateExpressConversationLiveReplaySink(response), { conversationId: consumed.context.conversationId, siloId: consumed.context.siloId, subjectId: consumed.context.subjectId, cursor, signal: abort.signal });
+			if (outcome === ConversationProjectionOutcomes.RevokedOrMissing && !response.headersSent) response.status(403).json({ error: "replay_denied" });
 			else if (!response.writableEnded) response.end();
 		}
 		finally

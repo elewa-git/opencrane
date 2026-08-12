@@ -1,9 +1,8 @@
 import type { Response } from "express";
-
-import type { ConversationLiveReplaySink } from "./conversation-live-replay.types.js";
+import type { ConversationProjectionSink } from "@opencrane/backend/conversations/projection";
 
 /** Adapt one Express response into the awaitable bounded replay sink contract. */
-export function _CreateExpressConversationLiveReplaySink(response: Response): ConversationLiveReplaySink
+export function _CreateExpressConversationLiveReplaySink(response: Response): ConversationProjectionSink
 {
 	return {
 		open: function _Open(): void

@@ -15,6 +15,8 @@ Opening a conversation sends a cookie-session request to
 session, applies participant membership, and returns bounded snapshot-then-live AG-UI server-sent
 events (SSE). The adapter consumes the response `ReadableStream` incrementally and validates every
 complete record with the shared AG-UI state package before publishing browser view state.
+The backend [conversation projection package](../../../../backend/conversations/projection/main/README.md)
+produces this one stream for direct, group and agent-session conversations.
 
 ```
  green conversation feature
@@ -57,3 +59,4 @@ packages — here `conversation/ag-ui`, `@opencrane/core`, and Angular — never
 
 - Parent index: [state](../../README.md)
 - Siblings: [conversation/ag-ui](../ag-ui/README.md) · [conversation/render](../render/README.md)
+- Server producer: [conversation projection](../../../../backend/conversations/projection/main/README.md)

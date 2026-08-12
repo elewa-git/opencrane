@@ -4,7 +4,8 @@
 
 ## What it owns
 
-This pure browser-state package turns the exact-pinned, display-safe AG-UI event projection into
+This pure browser-state package turns the exact-pinned, display-safe AG-UI event projection from the
+[backend conversation projection package](../../../../backend/conversations/projection/main/README.md) into
 message, tool, run, governed A2UI surface, interrupt, and reconnect-cursor state. The OpenCrane conversation event adapter
 supplies complete SSE records incrementally; this package never opens a connection, reads browser
 storage, or invents conversation authority.
@@ -75,3 +76,4 @@ frontend features.
 
 - Parent index: [state](../../README.md)
 - Related boundary: [channel proxy](../../../../backend/channel-proxy/main/README.md)
+- Server producer: [conversation projection](../../../../backend/conversations/projection/main/README.md)

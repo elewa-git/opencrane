@@ -1,8 +1,19 @@
 import { EventType } from "@ag-ui/core";
-import { RunEventTypes } from "@opencrane/models/agents";
-import { AG_UI_A2UI_ENVELOPE_VERSION, AG_UI_CHILD_RUN_ENVELOPE_VERSION, AG_UI_TOOL_FAILURE_EVENT, AG_UI_TOOL_RECOVERY_REQUIRED_EVENT, type AgUiProjectionEvent, type AgUiProjectionSourceEvent, type AgUiToolFailureEnvelope, type AgUiToolRecoveryRequiredEnvelope } from "./ag-ui-projection.types.js";
+import { AG_UI_A2UI_ENVELOPE_VERSION, AG_UI_CHILD_RUN_ENVELOPE_VERSION, AG_UI_TOOL_FAILURE_EVENT, AG_UI_TOOL_RECOVERY_REQUIRED_EVENT, RunEventTypes, type AgUiProjectionEvent, type AgUiProjectionSourceEvent, type AgUiToolFailureEnvelope, type AgUiToolRecoveryRequiredEnvelope } from "@opencrane/contracts";
 
-/** Turn one stored run-event row into the AG-UI events it produces, always in the same order. */
+/**
+ * Turns one display-safe conversation event into the AG-UI events the client receives, in order.
+ *
+ * A stored message can become a start event, a text event and an end event. Run events use the most
+ * specific AG-UI event whose required fields are present. Unsupported events remain visible as
+ * custom events without copying their source payload.
+ *
+ * Called by: `__StreamConversationProjection`.
+ *
+ * @param source Display-safe source event produced by `__ProjectConversationEvent`.
+ * @returns One or more ordered events accepted by the pinned `@ag-ui/core` 0.0.57 schemas.
+ * @see https://www.npmjs.com/package/@ag-ui/core/v/0.0.57
+ */
 export function __ProjectAgUiEvents(source: AgUiProjectionSourceEvent): readonly AgUiProjectionEvent[]
 {
 	if (source.eventType === "conversation.message") return _Message(source);

@@ -1,8 +1,8 @@
 import type { Request } from "express";
 import type { Logger } from "@opencrane/backend/observability";
+import type { ConversationOpenInterruptReader, ConversationProjectionClock, ConversationProjectionLimits } from "@opencrane/backend/conversations/projection";
 
 import type { ConversationReplayUnitOfWork } from "./replay-reader.types.js";
-import type { ConversationLiveReplayClock, ConversationLiveReplayLimits, ConversationOpenInterruptReader } from "./conversation-live-replay.types.js";
 
 /** Session-derived participant identity for the self-only conversation history surface. */
 export interface SelfConversationReplayCaller
@@ -32,9 +32,9 @@ export interface SelfConversationReplayRouterDependencies
 	/** Current open-approval overlay, kept outside canonical cursor authority. */
 	interrupts?: ConversationOpenInterruptReader;
 	/** Bounded live-tail clock. */
-	clock: ConversationLiveReplayClock;
+	clock: ConversationProjectionClock;
 	/** Bounded page, heartbeat, polling, and response-duration limits. */
-	limits: ConversationLiveReplayLimits;
+	limits: ConversationProjectionLimits;
 	/** Process shutdown signal that drains long-lived streams before telemetry flush. */
 	shutdownSignal?: AbortSignal;
 	/** Records unexpected persistence failures without event content. */

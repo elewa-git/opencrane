@@ -68,6 +68,11 @@ trusted to act. Runtime input is frozen for the accepted attempt, and events are
 before clients receive them. Missing or mismatched identity, assignment, authorization, or ordering
 evidence produces a refusal, never partial authority.
 
+Both conversation routes compose the transport-neutral
+[conversation projection package](../../libs/backend/conversations/projection/main/README.md). It
+turns authorised direct, group and agent-session timelines into the same safe, resumable browser
+stream while this app keeps authentication, Prisma and Express ownership.
+
 ## Public surface
 
 `Entrypoint: src/index.ts` — a short, telemetry-first `_Main()` that composes the process and hands
@@ -192,6 +197,7 @@ Helm library chart, which [`deploy-k8s`](../_infra/deploy-k8s/README.md) compose
 
 - Parent index: [apps](../README.md)
 - Composed logic: [backend capabilities](../../libs/backend/README.md) ·
+  [conversation projection](../../libs/backend/conversations/projection/main/README.md) ·
   [server infrastructure](../../libs/backend/server/infra/README.md)
 - Sibling apps: [opencrane-ui](../opencrane-ui/README.md) ·
   [channel-proxy](../channel-proxy/README.md) ·

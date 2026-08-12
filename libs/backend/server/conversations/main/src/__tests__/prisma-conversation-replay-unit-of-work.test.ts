@@ -1,8 +1,8 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
+import { ConversationProjectionReadStatuses } from "@opencrane/backend/conversations/projection";
 
 import { _CreateConversationReplayRepository } from "../prisma-conversation-replay.composition.js";
-import { ConversationReplayReadStatuses } from "../replay-reader.types.js";
 
 describe("Prisma conversation replay unit of work", function _Suite()
 {
@@ -39,7 +39,7 @@ describe("Prisma conversation replay unit of work", function _Suite()
 		expect(transaction.conversationTimelineEntry.findMany).toHaveBeenCalledTimes(1);
 		expect(liveAccessEndedPosition).toBe(3n);
 		expect(liveTimeline).toHaveLength(2);
-		expect(result.status).toBe(ConversationReplayReadStatuses.Authorized);
+		expect(result.status).toBe(ConversationProjectionReadStatuses.Authorized);
 		expect(result.rows.map(function _Position(row): string { return row.position; })).toEqual(["2"]);
 	});
 });

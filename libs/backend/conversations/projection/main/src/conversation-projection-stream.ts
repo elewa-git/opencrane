@@ -1,26 +1,44 @@
 import { EventType } from "@ag-ui/core";
 import { ___DoWithTrace, ___GetActiveSpan } from "@opencrane/backend/observability";
-import { AG_UI_INTERRUPTS_CLEARED_EVENT, __EncodeAgUiSseRecord, __ProjectAgUiEvents } from "@opencrane/contracts";
-import type { ConversationReplayCursor } from "@opencrane/models/conversations";
+import { AG_UI_INTERRUPTS_CLEARED_EVENT } from "@opencrane/contracts";
+import type { ConversationReplayCursor } from "@opencrane/contracts";
 
-import { __EncodeConversationReplayCursor } from "./replay-cursor.js";
-import { __ProjectConversationReplayEvent } from "./replay-projection.js";
-import { ConversationReplayReadStatuses } from "./replay-reader.types.js";
-import { ConversationLiveReplayOutcomes, type ConversationLiveReplayDependencies, type ConversationLiveReplaySink, type StreamConversationLiveReplayCommand } from "./conversation-live-replay.types.js";
+import { __ProjectAgUiEvents } from "./ag-ui-event-projector.js";
+import { __EncodeAgUiSseRecord } from "./ag-ui-sse-encoder.js";
+import { __EncodeConversationProjectionCursor } from "./conversation-projection-cursor.js";
+import { __ProjectConversationEvent } from "./conversation-event-projector.js";
+import type { ConversationProjectionEventRow } from "./conversation-event-projector.types.js";
+import { ConversationProjectionReadStatuses } from "./conversation-projection-reader.types.js";
+import { ConversationProjectionOutcomes, type ConversationProjectionDependencies, type ConversationProjectionSink, type StreamConversationProjectionCommand } from "./conversation-projection-stream.types.js";
 
-/** Stream an authorized snapshot followed by a bounded recovery-polled live tail. */
-export async function __StreamConversationLiveReplay(dependencies: ConversationLiveReplayDependencies, sink: ConversationLiveReplaySink, command: StreamConversationLiveReplayCommand): Promise<ConversationLiveReplayOutcomes>
+/**
+ * Streams an authorised conversation snapshot followed by a bounded live tail.
+ *
+ * The same function handles direct, group and agent-session conversations because it reads their
+ * shared canonical timeline. Ordinary messages become text events; agent-session run rows may also
+ * become run, tool, A2UI and interrupt events. Every durable row is redacted before it is mapped or
+ * written.
+ *
+ * Called by: `__CreateConversationReplayRouter` and `__CreateSelfConversationReplayRouter`.
+ *
+ * @param dependencies Authorised page reader, optional interrupt overlay, time source and safe bounds.
+ * @param sink Transport adapter that writes complete Server-Sent Event records.
+ * @param command Trusted participant coordinates, cursor and cancellation signal.
+ * @returns The reason this finite response stopped.
+ * @throws {Error} When a canonical row is invalid or interrupt coordinates conflict.
+ */
+export async function __StreamConversationProjection(dependencies: ConversationProjectionDependencies, sink: ConversationProjectionSink, command: StreamConversationProjectionCommand): Promise<ConversationProjectionOutcomes>
 {
-	return ___DoWithTrace("conversation.replay.stream", { siloId: command.siloId, conversationId: command.conversationId, subjectId: command.subjectId, hasCursor: command.cursor !== null }, async function _traceReplay()
+	return ___DoWithTrace("conversation.projection.stream", { siloId: command.siloId, conversationId: command.conversationId, subjectId: command.subjectId, hasCursor: command.cursor !== null }, async function _TraceProjection()
 	{
-		const outcome = await _streamConversationLiveReplay(dependencies, sink, command);
+		const outcome = await _StreamConversationProjection(dependencies, sink, command);
 		___GetActiveSpan()?.setAttribute("outcome", outcome);
 		return outcome;
 	});
 }
 
-/** Execute the bounded replay loop inside the central trace boundary. */
-async function _streamConversationLiveReplay(dependencies: ConversationLiveReplayDependencies, sink: ConversationLiveReplaySink, command: StreamConversationLiveReplayCommand): Promise<ConversationLiveReplayOutcomes>
+/** Executes the bounded stream loop inside the central trace boundary. */
+async function _StreamConversationProjection(dependencies: ConversationProjectionDependencies, sink: ConversationProjectionSink, command: StreamConversationProjectionCommand): Promise<ConversationProjectionOutcomes>
 {
 	_Validate(dependencies);
 	let cursor = command.cursor;
@@ -31,12 +49,13 @@ async function _streamConversationLiveReplay(dependencies: ConversationLiveRepla
 	while (!command.signal.aborted && dependencies.clock.now() - startedAt < dependencies.limits.maximumDurationMilliseconds)
 	{
 		const readCommand = { conversationId: command.conversationId, siloId: command.siloId, subjectId: command.subjectId, cursor, limit: dependencies.limits.pageSize };
-		const result = await dependencies.repository.readAuthorized(readCommand);
-		if (result.status === ConversationReplayReadStatuses.RevokedOrMissing)
+		const result = await dependencies.reader.readAuthorized(readCommand);
+		if (result.status === ConversationProjectionReadStatuses.RevokedOrMissing)
 		{
 			if (opened) await _WriteSink(sink, _RevokedRecord(), command.signal);
-			return ConversationLiveReplayOutcomes.RevokedOrMissing;
+			return ConversationProjectionOutcomes.RevokedOrMissing;
 		}
+		if (result.status !== ConversationProjectionReadStatuses.Authorized) throw new Error("conversation projection reader returned an unknown authority result");
 		if (!opened) { sink.open(); opened = true; }
 		cursor = await _WriteRows(sink, command.conversationId, cursor, result.rows, command.signal);
 
@@ -60,11 +79,11 @@ async function _streamConversationLiveReplay(dependencies: ConversationLiveRepla
 			heartbeatAt = dependencies.clock.now();
 		}
 	}
-	return command.signal.aborted ? ConversationLiveReplayOutcomes.Disconnected : ConversationLiveReplayOutcomes.DurationReached;
+	return command.signal.aborted ? ConversationProjectionOutcomes.Disconnected : ConversationProjectionOutcomes.DurationReached;
 }
 
 /** Replace the complete cursorless interrupt overlay, including an explicit empty-set marker. */
-async function _WriteInterruptSnapshot(sink: ConversationLiveReplaySink, conversationId: string, overlays: readonly import("@opencrane/contracts").AgUiProjectionSourceEvent[], signal: AbortSignal): Promise<void>
+async function _WriteInterruptSnapshot(sink: ConversationProjectionSink, conversationId: string, overlays: readonly import("@opencrane/contracts").AgUiProjectionSourceEvent[], signal: AbortSignal): Promise<void>
 {
 	if (overlays.length === 0)
 	{
@@ -82,19 +101,19 @@ async function _WriteInterruptSnapshot(sink: ConversationLiveReplaySink, convers
 }
 
 /** Write deterministic subframes and return the last emitted replay coordinate. */
-async function _WriteRows(sink: ConversationLiveReplaySink, conversationId: string, cursor: ConversationReplayCursor | null, rows: readonly import("./replay-projection.types.js").ConversationReplayEventRow[], signal: AbortSignal): Promise<ConversationReplayCursor | null>
+async function _WriteRows(sink: ConversationProjectionSink, conversationId: string, cursor: ConversationReplayCursor | null, rows: readonly ConversationProjectionEventRow[], signal: AbortSignal): Promise<ConversationReplayCursor | null>
 {
 	let next = cursor;
 	for (const row of rows)
 	{
-		const source = __ProjectConversationReplayEvent(row);
-		if (source === null) throw new Error("canonical conversation replay row is invalid");
+		const source = __ProjectConversationEvent(row);
+		if (source === null) throw new Error("canonical conversation projection row is invalid");
 		const events = __ProjectAgUiEvents({ ...source, cursor: undefined });
 		const resumeAfter = cursor?.position === row.position ? cursor.subframe : undefined;
 		for (let subframe = 0; subframe < events.length; subframe += 1)
 		{
 			if (resumeAfter !== undefined && subframe <= resumeAfter) continue;
-			const id = __EncodeConversationReplayCursor({ conversationId, position: row.position, subframe });
+			const id = __EncodeConversationProjectionCursor({ conversationId, position: row.position, subframe });
 			await _WriteSink(sink, __EncodeAgUiSseRecord({ id, event: "ag-ui", data: events[subframe]! }), signal);
 			next = { conversationId, position: row.position, subframe };
 		}
@@ -103,7 +122,7 @@ async function _WriteRows(sink: ConversationLiveReplaySink, conversationId: stri
 }
 
 /** Respect Node writable backpressure before reading or projecting more authority rows. */
-async function _WriteSink(sink: ConversationLiveReplaySink, value: string, signal: AbortSignal): Promise<void>
+async function _WriteSink(sink: ConversationProjectionSink, value: string, signal: AbortSignal): Promise<void>
 {
 	if (!sink.write(value)) await sink.drain(signal);
 }
@@ -115,14 +134,20 @@ function _RevokedRecord(): string
 }
 
 /** Reject unsafe production bounds before opening a long-lived response. */
-function _Validate(dependencies: ConversationLiveReplayDependencies): void
+function _Validate(dependencies: ConversationProjectionDependencies): void
 {
 	const limits = dependencies.limits;
 	if (!Number.isSafeInteger(limits.pageSize) || limits.pageSize < 1 || limits.pageSize > 500 || !Number.isSafeInteger(limits.pollMilliseconds) || limits.pollMilliseconds < 25 || !Number.isSafeInteger(limits.heartbeatMilliseconds) || limits.heartbeatMilliseconds <= limits.pollMilliseconds || limits.heartbeatMilliseconds >= 45_000 || !Number.isSafeInteger(limits.maximumDurationMilliseconds) || limits.maximumDurationMilliseconds < limits.heartbeatMilliseconds || limits.maximumDurationMilliseconds > 300_000) throw new TypeError("invalid live conversation replay limits");
 }
 
-/** Production clock using abort-aware bounded waits; wake-ups remain hints and polling recovers loss. */
-export const CONVERSATION_LIVE_REPLAY_CLOCK: import("./conversation-live-replay.types.js").ConversationLiveReplayClock = {
+/**
+ * Provides the production time source and abort-aware wait used by the live stream.
+ *
+ * Polling remains authoritative: a wake-up only controls when the reader is asked again.
+ *
+ * Called by: the OpenCrane server conversation route composition.
+ */
+export const CONVERSATION_PROJECTION_CLOCK: import("./conversation-projection-stream.types.js").ConversationProjectionClock = {
 	now: () => Date.now(),
 	wait: async function _Wait(milliseconds, signal): Promise<void>
 	{
@@ -142,8 +167,12 @@ export const CONVERSATION_LIVE_REPLAY_CLOCK: import("./conversation-live-replay.
 	},
 };
 
-/** Production bounds stay below channel-proxy idle/duration fences. */
-export const CONVERSATION_LIVE_REPLAY_LIMITS: import("./conversation-live-replay.types.js").ConversationLiveReplayLimits = {
+/**
+ * Keeps production polling, heartbeats and response duration below proxy connection fences.
+ *
+ * Called by: the OpenCrane server conversation route composition.
+ */
+export const CONVERSATION_PROJECTION_LIMITS: import("./conversation-projection-stream.types.js").ConversationProjectionLimits = {
 	pageSize: 200,
 	pollMilliseconds: 1_000,
 	heartbeatMilliseconds: 15_000,

@@ -3,10 +3,9 @@ import request from "supertest";
 import { describe, expect, it, vi } from "vitest";
 
 import type { ConsumeChannelInvocationContextCommand } from "@opencrane/backend/server/agents/channel-targets";
+import { __EncodeConversationProjectionCursor, ConversationProjectionReadStatuses } from "@opencrane/backend/conversations/projection";
 
-import { __EncodeConversationReplayCursor } from "../replay-cursor.js";
 import { __CreateConversationReplayRouter } from "../conversation-replay.router.js";
-import { ConversationReplayReadStatuses } from "../replay-reader.types.js";
 
 /** Deterministic bounded tail dependencies for router tests. */
 function _Live()
@@ -16,7 +15,7 @@ function _Live()
 }
 
 /** Builds a one-use replay router with a caller-visible reader seam. */
-function _App(consumed: unknown, readAuthorized = vi.fn(async function _read() { return { status: ConversationReplayReadStatuses.Authorized, rows: [{ cursor: "c.one", conversationId: "conversation-1", runId: "run-1", position: "1", type: "message.delta", payload: { messageId: "message-1", delta: "hello", proof: "never-forwarded" }, occurredAt: "2026-07-23T10:00:00.000Z" }] }; }), consume = vi.fn(async function _consume(_command: ConsumeChannelInvocationContextCommand) { return consumed; }))
+function _App(consumed: unknown, readAuthorized = vi.fn(async function _read() { return { status: ConversationProjectionReadStatuses.Authorized, rows: [{ cursor: "c.one", conversationId: "conversation-1", runId: "run-1", position: "1", type: "message.delta", payload: { messageId: "message-1", delta: "hello", proof: "never-forwarded" }, occurredAt: "2026-07-23T10:00:00.000Z" }] }; }), consume = vi.fn(async function _consume(_command: ConsumeChannelInvocationContextCommand) { return consumed; }))
 {
 	const app = express();
 	app.use(__CreateConversationReplayRouter({
@@ -47,7 +46,7 @@ describe("internal conversation replay router", function _Suite()
 	{
 		const consume = vi.fn(async function _consume() { return { status: "denied", reason: "not_found" }; });
 		const app = express();
-		app.use(__CreateConversationReplayRouter({ ..._Live(), contexts: { consumeInvocationContextAtomically: consume } as never, repository: { readAuthorized: async function _read() { return { status: ConversationReplayReadStatuses.Authorized, rows: [] }; } }, expectedReceiverId: "receiver-1", nowEpochMs: function _now() { return 1_000; } }));
+		app.use(__CreateConversationReplayRouter({ ..._Live(), contexts: { consumeInvocationContextAtomically: consume } as never, repository: { readAuthorized: async function _read() { return { status: ConversationProjectionReadStatuses.Authorized, rows: [] }; } }, expectedReceiverId: "receiver-1", nowEpochMs: function _now() { return 1_000; } }));
 		const response = await request(app).get("/?cursor=not-a-cursor").set("authorization", "Bearer context-token");
 		expect(response.status).toBe(400);
 		expect(consume).not.toHaveBeenCalled();
@@ -55,9 +54,9 @@ describe("internal conversation replay router", function _Suite()
 
 	it("accepts the proxy's Last-Event-ID cursor without a query coordinate", async function _UsesLastEventId()
 	{
-		const cursor = __EncodeConversationReplayCursor({ conversationId: "conversation-1", position: "2" });
+		const cursor = __EncodeConversationProjectionCursor({ conversationId: "conversation-1", position: "2" });
 		const consumed = { status: "consumed", context: { action: "events.read", conversationId: "conversation-1", siloId: "silo-1", subjectId: "user-1" } };
-		const { app, readAuthorized } = _App(consumed, vi.fn(async function _read() { return { status: ConversationReplayReadStatuses.Authorized, rows: [] }; }));
+		const { app, readAuthorized } = _App(consumed, vi.fn(async function _read() { return { status: ConversationProjectionReadStatuses.Authorized, rows: [] }; }));
 		const response = await request(app).get("/").set("authorization", "Bearer context-token").set("last-event-id", cursor);
 		expect(response.status).toBe(200);
 		expect(readAuthorized).toHaveBeenCalledWith(expect.objectContaining({ cursor: { conversationId: "conversation-1", position: "2" } }));

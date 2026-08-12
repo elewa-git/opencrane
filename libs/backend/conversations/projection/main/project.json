@@ -1,0 +1,11 @@
+{
+  "name": "backend-conversation-projection",
+  "$schema": "../../../../../node_modules/nx/schemas/project-schema.json",
+  "projectType": "library",
+  "sourceRoot": "libs/backend/conversations/projection/main/src",
+  "tags": ["type:lib", "layer:backend", "scope:conversation-projection"],
+  "targets": {
+    "lint": { "executor": "nx:run-commands", "options": { "command": "tsc -p tsconfig.json --noEmit", "cwd": "libs/backend/conversations/projection/main" } },
+    "test": { "executor": "nx:run-commands", "options": { "command": "vitest run", "cwd": "libs/backend/conversations/projection/main" } }
+  }
+}

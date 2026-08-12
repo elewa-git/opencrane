@@ -40,9 +40,10 @@ app's source.
 | `libs/backend/agents/skills/*` | Governed skill authoring and execution workloads. |
 | `libs/backend/artifacts/*` | Artifact authorization, storage, and preprocessing. |
 | [`libs/backend/channel-proxy`](../../libs/backend/channel-proxy/main/README.md) | Reusable inbound-channel trust-boundary logic. |
+| [`libs/backend/conversations/projection`](../../libs/backend/conversations/projection/main/README.md) | Transport-neutral redaction, AG-UI mapping, cursoring, and live streaming for every conversation mode. |
 | [`libs/backend/server`](../../libs/backend/server/README.md) | API capabilities grouped by agents, IAM, gateways, knowledge, reporting, and organisation scope. |
 | [`libs/backend/server/agents/onboarding`](../../libs/backend/server/agents/onboarding/main/README.md) | Durable, session-owner-bound onboarding route state and exact persona/bootstrap references. |
-| [`libs/backend/server/conversations`](../../libs/backend/server/conversations/main/README.md) | Mode-correct conversation authority, participant visibility, canonical timeline, and display-safe replay. |
+| [`libs/backend/server/conversations`](../../libs/backend/server/conversations/main/README.md) | Mode-correct conversation authority, participant visibility, canonical timeline, authorised stream readers, and HTTP routes. |
 | [`libs/backend/server/infra`](../../libs/backend/server/infra/README.md) | OpenCrane server runtime, transport, identity, and external-I/O seams. |
 | [`libs/backend/observability`](../../libs/backend/observability/README.md) | Cross-cutting structured logging and execution tracing. |
 

@@ -1,8 +1,6 @@
 /** Public app-composition and API-description surface. */
 export { _CreateConversationReplayRepository } from "./prisma-conversation-replay.composition.js";
 export { __CreateConversationReplayRouter } from "./conversation-replay.router.js";
-export { CONVERSATION_LIVE_REPLAY_CLOCK, CONVERSATION_LIVE_REPLAY_LIMITS } from "./conversation-live-replay.js";
-export type { ConversationLiveReplayClock, ConversationLiveReplayLimits, ConversationOpenInterruptReader, ReadOpenConversationInterruptsCommand } from "./conversation-live-replay.types.js";
 export { _CreateSelfConversationReplayRouter } from "./prisma-self-conversation-replay.router.js";
 export type { SelfConversationReplayCompositionOptions } from "./self-conversation-replay.router.types.js";
 export { _CreateSelfConversationsRouter } from "./prisma-self-conversations.router.js";
