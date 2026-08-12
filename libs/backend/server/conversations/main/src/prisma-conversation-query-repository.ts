@@ -129,7 +129,8 @@ export class PrismaConversationQueryRepository implements ConversationQueryRepos
 		const participant = thread.childConversation.participants.find(function _Caller(row) { return row.userId === caller.subjectId; });
 		if (participant === undefined) return null;
 		const activeParentUserIds = new Set(thread.parentConversation.participants.map(function _ParentUser(row) { return row.userId; }));
-		const entries = await this.prisma.conversationTimelineEntry.findMany({ where: { conversationId: childConversationId, messageId: { not: null } }, include: { message: { include: { invokedAgentThread: true } } }, orderBy: { position: "asc" }, take: _MESSAGE_LIMIT });
+		const timeline = await this.prisma.conversationTimelineEntry.findMany({ where: { conversationId: childConversationId }, include: { message: { include: { invokedAgentThread: true } } }, orderBy: { position: "asc" }, take: _MESSAGE_LIMIT });
+		const entries = _RepresentedMessagePrefix(timeline);
 		const latestEntry = await this.prisma.conversationTimelineEntry.findFirst({ where: { conversationId: childConversationId }, orderBy: { position: "desc" }, select: { position: true } });
 		const unreadMessageCount = await this.prisma.conversationTimelineEntry.count({ where: { conversationId: childConversationId, messageId: { not: null }, position: { gt: participant.readThroughPosition } } });
 		const representedPosition = entries.at(-1)?.position ?? 0n;
@@ -198,6 +199,13 @@ export class PrismaConversationQueryRepository implements ConversationQueryRepos
 		// 3. Reveal only the collision boolean required by bounded conflict handling.
 		return message !== null;
 	}
+}
+
+/** Keep the snapshot cursor before the first timeline event that only the live projection can render. */
+function _RepresentedMessagePrefix<TRow extends { readonly messageId: string | null; readonly message: unknown }>(timeline: readonly TRow[]): readonly TRow[]
+{
+	const firstStreamOnlyEvent = timeline.findIndex(function _StreamOnly(entry) { return entry.messageId === null || entry.message === null; });
+	return firstStreamOnlyEvent === -1 ? timeline : timeline.slice(0, firstStreamOnlyEvent);
 }
 
 /**

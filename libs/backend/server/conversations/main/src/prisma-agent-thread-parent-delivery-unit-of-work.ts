@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import { AgentThreadDeliveryKind, Prisma, WorkloadAssignmentState, type PrismaClient } from "@prisma/client";
+import { AgentRunState, AgentThreadDeliveryKind, Prisma, WorkloadAssignmentState, type PrismaClient } from "@prisma/client";
 import type { Logger } from "pino";
 
 import { AgentThreadDeliveryKinds, type AgentThreadParentDelivery } from "@opencrane/backend/conversations/agent-threads";
@@ -39,8 +39,8 @@ export class PrismaAgentThreadParentDeliveryUnitOfWork implements AgentThreadPar
 			{
 				return await this.prisma.$transaction(async function _Deliver(transaction): Promise<DeliverAgentThreadParentResult>
 				{
-					const assignment = await transaction.workloadAssignment.findFirst({ where: { runId: command.runId, namespace: identity.namespace, serviceAccountName: identity.serviceAccountName, podUid: identity.podUid, state: WorkloadAssignmentState.Registered, expiresAt: { gt: new Date() } }, select: { siloId: true, agentServiceId: true } });
-					if (assignment === null) return { outcome: "denied", reason: "authority_unavailable" };
+					const assignment = await transaction.workloadAssignment.findFirst({ where: { runId: command.runId, namespace: identity.namespace, serviceAccountName: identity.serviceAccountName, podUid: identity.podUid, state: WorkloadAssignmentState.Registered, expiresAt: { gt: new Date() }, run: { state: AgentRunState.Running } }, select: { siloId: true, agentServiceId: true, attempt: true, run: { select: { attempt: true } } } });
+					if (assignment === null || assignment.attempt !== assignment.run.attempt) return { outcome: "denied", reason: "authority_unavailable" };
 					const thread = await transaction.conversationAgentThread.findFirst({ where: { childConversationId: command.childConversationId, siloId: assignment.siloId, agentServiceId: assignment.agentServiceId, childConversation: { lifecycle: "Open" } }, select: { parentConversationId: true } });
 					if (thread === null) return { outcome: "denied", reason: "authority_unavailable" };
 					const existing = await transaction.agentThreadParentDelivery.findUnique({ where: { childConversationId_idempotencyKey: { childConversationId: command.childConversationId, idempotencyKey: command.idempotencyKey } } });

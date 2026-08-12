@@ -1,4 +1,4 @@
-import { AgentThreadDeliveryKind } from "@prisma/client";
+import { AgentRunState, AgentThreadDeliveryKind } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
 
 import { AgentThreadDeliveryKinds } from "@opencrane/backend/conversations/agent-threads";
@@ -18,19 +18,22 @@ function _Authority(transaction: object): PrismaAgentThreadParentDeliveryUnitOfW
 	return new PrismaAgentThreadParentDeliveryUnitOfWork({ $transaction: vi.fn(async function _Transaction(work) { return work(transaction); }) } as never);
 }
 
+/** Active attempt coordinates returned by the runtime-assignment authority. */
+function _Assignment(): object { return { siloId: "silo-1", agentServiceId: "service-1", attempt: 1, run: { attempt: 1 } }; }
+
 describe("PrismaAgentThreadParentDeliveryUnitOfWork", function _Suite()
 {
 	it("appends one delivery only after resolving its exact immutable thread", async function _Delivers()
 	{
 		const create = vi.fn().mockResolvedValue(_Row());
-		const transaction = { agentThreadParentDelivery: { findUnique: vi.fn().mockResolvedValue(null), create }, workloadAssignment: { findFirst: vi.fn().mockResolvedValue({ siloId: "silo-1", agentServiceId: "service-1" }) }, conversationAgentThread: { findFirst: vi.fn().mockResolvedValue({ parentConversationId: "parent-1" }) } };
+		const transaction = { agentThreadParentDelivery: { findUnique: vi.fn().mockResolvedValue(null), create }, workloadAssignment: { findFirst: vi.fn().mockResolvedValue(_Assignment()) }, conversationAgentThread: { findFirst: vi.fn().mockResolvedValue({ parentConversationId: "parent-1" }) } };
 		await expect(_Authority(transaction).deliver(_IDENTITY, _COMMAND)).resolves.toEqual({ outcome: "accepted", delivery: expect.objectContaining({ parentConversationId: "parent-1", kind: "result" }) });
 		expect(create).toHaveBeenCalledWith({ data: expect.objectContaining({ childConversationId: "child-1", parentConversationId: "parent-1", runId: "run-1", detail: "The requested work is ready." }) });
 	});
 
 	it("returns an exact retry and rejects changed content", async function _Idempotency()
 	{
-		const transaction = { workloadAssignment: { findFirst: vi.fn().mockResolvedValue({ siloId: "silo-1", agentServiceId: "service-1" }) }, conversationAgentThread: { findFirst: vi.fn().mockResolvedValue({ parentConversationId: "parent-1" }) }, agentThreadParentDelivery: { findUnique: vi.fn().mockResolvedValue(_Row()) } };
+		const transaction = { workloadAssignment: { findFirst: vi.fn().mockResolvedValue(_Assignment()) }, conversationAgentThread: { findFirst: vi.fn().mockResolvedValue({ parentConversationId: "parent-1" }) }, agentThreadParentDelivery: { findUnique: vi.fn().mockResolvedValue(_Row()) } };
 		await expect(_Authority(transaction).deliver(_IDENTITY, _COMMAND)).resolves.toEqual(expect.objectContaining({ outcome: "idempotent" }));
 		await expect(_Authority(transaction).deliver(_IDENTITY, { ..._COMMAND, detail: "Changed" })).resolves.toEqual({ outcome: "denied", reason: "idempotency_conflict" });
 	});
@@ -40,9 +43,20 @@ describe("PrismaAgentThreadParentDeliveryUnitOfWork", function _Suite()
 		const existing = vi.fn();
 		const transaction = { workloadAssignment: { findFirst: vi.fn().mockResolvedValue(null) }, conversationAgentThread: { findFirst: vi.fn() }, agentThreadParentDelivery: { findUnique: existing } };
 		await expect(_Authority(transaction).deliver(_IDENTITY, _COMMAND)).resolves.toEqual({ outcome: "denied", reason: "authority_unavailable" });
-		expect(transaction.workloadAssignment.findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ runId: "run-1", namespace: "runtime", serviceAccountName: "agent-runtime-service-1", podUid: "pod-1", state: "Registered" }) }));
+		expect(transaction.workloadAssignment.findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ runId: "run-1", namespace: "runtime", serviceAccountName: "agent-runtime-service-1", podUid: "pod-1", state: "Registered", run: { state: AgentRunState.Running } }), select: expect.objectContaining({ attempt: true, run: { select: { attempt: true } } }) }));
 		expect(transaction.conversationAgentThread.findFirst).not.toHaveBeenCalled();
 		expect(existing).not.toHaveBeenCalled();
+	});
+
+	it("rejects a registered assignment after its run becomes terminal or advances attempt", async function _RejectsInactiveRun()
+	{
+		const thread = vi.fn();
+		const terminal = { workloadAssignment: { findFirst: vi.fn().mockResolvedValue(null) }, conversationAgentThread: { findFirst: thread } };
+		const staleAttempt = { workloadAssignment: { findFirst: vi.fn().mockResolvedValue({ ..._Assignment(), attempt: 1, run: { attempt: 2 } }) }, conversationAgentThread: { findFirst: thread } };
+
+		await expect(_Authority(terminal).deliver(_IDENTITY, _COMMAND)).resolves.toEqual({ outcome: "denied", reason: "authority_unavailable" });
+		await expect(_Authority(staleAttempt).deliver(_IDENTITY, _COMMAND)).resolves.toEqual({ outcome: "denied", reason: "authority_unavailable" });
+		expect(thread).not.toHaveBeenCalled();
 	});
 
 	it("rejects non-asset delivery attempts that smuggle an asset coordinate", async function _RejectsShape()
