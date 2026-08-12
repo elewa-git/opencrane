@@ -8,8 +8,11 @@ import { _ClusterTenantScopeGuard, type ClusterTenantScopedResource } from "@ope
 const _RAW_KEY_FIELDS = ["apiKey", "keyValue", "key"] as const;
 
 /**
- * Project a persisted provider-credential row into its contract DTO. The Prisma enum
- * values map 1:1 to the lowercase {@link ModelRoutingScope} string union.
+ * Convert a stored provider-credential row into the contract shape the API returns. The Prisma
+ * enum values map 1:1 to the lowercase {@link ModelRoutingScope} string union.
+ *
+ * Only the Secret's NAME (`secretRef`) is carried out, never a key — there is no key on the row
+ * to leak in the first place.
  *
  * @param row - The persisted `ProviderCredential` row.
  * @returns The contract-shaped credential (timestamps as ISO-8601 strings).
@@ -35,13 +38,19 @@ function _toPrismaScope(scope: ModelRoutingScope): "Global" | "ClusterTenant"
 }
 
 /**
- * Validate a {@link ProviderCredentialWrite} body. Returns an error envelope string when
- * invalid, or null when the body is acceptable. Enforces the locked decisions: required
- * `provider` + `secretRef`, `clusterTenant` required when scope is `clusterTenant`, and a
- * hard reject of any raw-key field — the raw key must live in a k8s Secret, never here.
+ * Check an untrusted {@link ProviderCredentialWrite} body, in this order:
+ *   1. reject the request outright if it carries any raw-key field (`apiKey`, `keyValue`, `key`) —
+ *      this endpoint stores only a `secretRef`, and the key itself belongs in a Kubernetes Secret;
+ *   2. require `provider` and `secretRef`;
+ *   3. require `clusterTenant` when the scope is `clusterTenant`, and reject any other scope value.
+ *
+ * The raw-key check runs first on purpose, so a request that would have leaked a key into Postgres
+ * is refused before any other reason can mask it.
  *
  * @param body - The untrusted request body.
- * @returns A `{ error, code }` payload when invalid; null when valid.
+ * @returns `null` when the body is acceptable; otherwise `{ error, code }` — `RAW_KEY_REJECTED`
+ *          for a raw key, `VALIDATION_ERROR` for everything else. The route sends it as the 400
+ *          body unchanged.
  */
 function _validateWrite(body: Record<string, unknown>): { error: string; code: string } | null
 {

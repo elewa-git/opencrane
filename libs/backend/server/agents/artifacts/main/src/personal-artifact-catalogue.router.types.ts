@@ -4,7 +4,12 @@ import type { Logger } from "@opencrane/backend/observability";
 
 import type { PersonalArtifactCatalogueRepository } from "./artifact-finalization.types.js";
 
-/** Trusted browser identity used only to select personal assets. */
+/**
+ * Who is asking, as established by the session and the request host.
+ *
+ * Both fields come from verified request facts, never from anything the browser can set freely.
+ * They are the only inputs to the asset query, which is what makes the listing owner-only.
+ */
 export interface PersonalArtifactCaller
 {
 	/** Silo derived from the trusted request host. */
@@ -13,7 +18,12 @@ export interface PersonalArtifactCaller
 	readonly ownerPrincipalId: string;
 }
 
-/** Composition ports for the owner-only personal asset catalogue. */
+/**
+ * Everything `__CreatePersonalArtifactCatalogueRouter` needs, supplied by the app.
+ *
+ * Called by: `_CreatePersonalArtifactCatalogueRouter` in
+ * prisma-personal-artifact-catalogue.router.ts.
+ */
 export interface PersonalArtifactCatalogueRouterDependencies
 {
 	/** Resolves an authenticated browser caller and trusted host silo. */

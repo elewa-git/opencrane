@@ -1,10 +1,16 @@
 /**
- * Types for host→ClusterTenant→per-org OIDC client resolution (S3b).
+ * Types for working out, from a request host, which organisation's OIDC client a login
+ * should use.
  *
- * Each ClusterTenant gets a dedicated Zitadel Organization + OIDC app on create (S3),
- * persisting `{zitadelOrgId, zitadelClientId, zitadelRedirectUri}`. A request arriving at
- * `<org>.<base>` must log in against THAT org's client (and only that org's user pool),
- * so login resolves the per-org client from the host's first DNS label.
+ * Every ClusterTenant gets its own Zitadel Organization and OIDC application when it is
+ * created, and the resulting org id, client id, and redirect URI are written onto its
+ * ClusterTenant custom resource. A request arriving at that organisation's host must log
+ * in against THAT client, so that only members of that organisation can authenticate
+ * there.
+ *
+ * A host is matched either by its first DNS label (`<org>.<base>`, treated as the resource
+ * name) or by the full host equalling a resource's `spec.vanityDomain`. See
+ * {@link _ResolvePerOrgClient} for the matching order and every fail-closed case.
  */
 
 /**
@@ -14,7 +20,12 @@
  */
 export interface ResolvedPerOrgClient
 {
-  /** The ClusterTenant (silo) name — the host's first DNS label, confirmed against the DB. */
+  /**
+   * The ClusterTenant (silo) name. Taken from the `metadata.name` of the ClusterTenant
+   * custom resource that matched the host — NOT confirmed against any database, and not
+   * always the host's first DNS label, since a customer vanity domain matches on
+   * `spec.vanityDomain` instead.
+   */
   clusterTenant: string;
 
   /** The org's OIDC client_id login authorizes with (the per-org credential). */
@@ -29,6 +40,10 @@ export interface ResolvedPerOrgClient
   /** IdP subject configured as the ClusterTenant owner, when present. */
   ownerSubject: string | null;
 
-  /** Owner email used only while the trusted owner subject has not been configured. */
+  /**
+   * The owner's email from the resource, lower-cased. A weaker match than
+   * {@link ResolvedPerOrgClient.ownerSubject} because a user can change their email at the
+   * provider, so use it only while no owner subject has been configured yet.
+   */
   ownerEmail: string | null;
 }

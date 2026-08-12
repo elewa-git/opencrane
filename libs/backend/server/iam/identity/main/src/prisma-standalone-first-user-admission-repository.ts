@@ -2,15 +2,19 @@ import { OrgMemberStatus, OrgRole, type Prisma } from "@prisma/client";
 
 import { StandaloneFirstUserAdmissionOutcomes, type StandaloneFirstUserAdmissionAuditPort, type StandaloneFirstUserOwnerClaim, type StandaloneFirstUserOwnerClaimRepository, type StandaloneFirstUserStoredMembership } from "./standalone-first-user-admission.types.js";
 
-/** Maps the precise stored fields used by one-time owner admission into the port's vocabulary. */
+/** Copies the three stored membership fields the decision needs into the port's type. */
 function _storedMembership(row: { subject: string; role: OrgRole; status: OrgMemberStatus }): StandaloneFirstUserStoredMembership
 {
   return { subject: row.subject, role: row.role, status: row.status };
 }
 
 /**
- * Transaction-scoped Prisma adapter for the standalone first-owner claim.
- * It owns typed OrgMembership reads/writes; the unit of work owns transaction selection.
+ * Reads and writes the OrgMembership rows for one owner-slot decision, inside a given transaction.
+ *
+ * It never opens a transaction of its own — {@link PrismaStandaloneFirstUserAdmissionUnitOfWork} does
+ * that and constructs one of these per attempt.
+ *
+ * @implements StandaloneFirstUserOwnerClaimRepository
  */
 export class PrismaStandaloneFirstUserAdmissionRepository implements StandaloneFirstUserOwnerClaimRepository
 {
@@ -19,7 +23,10 @@ export class PrismaStandaloneFirstUserAdmissionRepository implements StandaloneF
   /** Audit authority supplied by the app composition root. */
   private readonly audit: StandaloneFirstUserAdmissionAuditPort;
 
-  /** @param prisma - Exact serializable transaction for one owner-slot decision. @param audit - Audit authority bound to this transaction. */
+  /**
+   * @param prisma - The open serializable transaction for this one owner-slot decision.
+   * @param audit - Audit appender that writes into that same transaction.
+   */
   constructor(prisma: Prisma.TransactionClient, audit: StandaloneFirstUserAdmissionAuditPort)
   {
     this.prisma = prisma;
@@ -66,7 +73,21 @@ export class PrismaStandaloneFirstUserAdmissionRepository implements StandaloneF
   }
 }
 
-/** Decides one durable owner claim against a serializable transaction-scoped store. */
+/**
+ * Runs the owner-slot decision: is the slot already this subject's, already someone else's, or free?
+ *
+ * The order of the checks is the safety property. A membership row for this exact subject is the only
+ * idempotent success, and only while it is an active Owner — a suspended or demoted row counts as
+ * claimed. Any other existing owner ends it. Only a genuinely empty slot reaches the eligibility
+ * check, and the audit row is written in the same transaction as the new owner row.
+ *
+ * Called by: PrismaStandaloneFirstUserAdmissionUnitOfWork in this package.
+ * @param store - Transaction-scoped reads and writes for one attempt.
+ * @param claim - Silo, subject, and whether this login may create the owner row.
+ * @returns The outcome to report to the login; only `Admitted` created anything.
+ * @throws Error from Prisma when a concurrent login inserts the owner first (P2002); the unit of
+ *         work catches that and retries once.
+ */
 export async function _ClaimStandaloneFirstUserOwner(store: StandaloneFirstUserOwnerClaimRepository, claim: StandaloneFirstUserOwnerClaim): Promise<{ readonly outcome: StandaloneFirstUserAdmissionOutcomes }>
 {
   // 1. Preserve an exact active owner tuple as the only idempotent success case.

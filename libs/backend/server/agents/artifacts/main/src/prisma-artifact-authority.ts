@@ -8,10 +8,21 @@ import type { ArtifactUploadLeaseRepository, VerifiedArtifactUploadCommand } fro
 /** First deterministic preprocessing pipeline scheduled for every published PDF source revision. */
 const _PDF_TO_TEXT_PIPELINE_VERSION = "pdf-to-text/v1";
 
-/** Transaction-scoped artifact publication repository; only its unit of work may construct it. */
+/**
+ * Runs the publication SQL inside a transaction someone else already opened.
+ *
+ * Built once per attempt by `PrismaArtifactPublicationUnitOfWork` and handed the transaction
+ * client. It cannot open, commit, or roll back anything, so a rolled-back attempt simply throws
+ * this instance away rather than leaving it holding a dead client.
+ *
+ * One object serves as both repositories in `ArtifactPublicationTransaction`.
+ *
+ * Called by: `PrismaArtifactPublicationUnitOfWork.run` in
+ * prisma-artifact-publication-unit-of-work.ts.
+ */
 export class PrismaArtifactAuthorityRepository implements ArtifactAuthorityRepository, ArtifactUploadLeaseRepository
 {
-	/** Private transaction client; this repository can never open or commit a transaction itself. */
+	/** The already-open transaction to run every query against. This class cannot start or commit one. */
 	private readonly transaction: Prisma.TransactionClient;
 
 	/** Creates the repository for one already-open artifact publication transaction. */
@@ -20,7 +31,20 @@ export class PrismaArtifactAuthorityRepository implements ArtifactAuthorityRepos
 		this.transaction = transaction;
 	}
 
-	/** Creates or reloads the one durable proof-bound lease for the exact capability JTI. */
+	/**
+	 * Creates the write lease for this upload, or returns the existing one for the same replay key.
+	 *
+	 * The replay key (`capabilityJti`) has a unique index, so a repeated request finds the same row
+	 * instead of issuing a second lease over the same bytes.
+	 *
+	 * @param command - Upload facts without the finalization-only fields.
+	 * @returns `issued` with the lease claims; `artifact_not_found` when there is no Active artifact
+	 *   at those ids in that silo; `conflict` when a lease exists for this replay key but is no
+	 *   longer Active, has expired, or was issued for a different artifact, silo, hash, size, media
+	 *   type, or expiry.
+	 * @throws Error when the database clock row cannot be read, because expiry would otherwise be
+	 *   judged against process time.
+	 */
 	async issueLeaseAtomically(command: Omit<VerifiedArtifactUploadCommand, "bytes" | "createdBy" | "revision" | "artifactRevisionId" | "provenance" | "idempotencyKey">): ReturnType<ArtifactUploadLeaseRepository["issueLeaseAtomically"]>
 	{
 		// 1. Read the active logical artifact from the serializable transaction snapshot.
@@ -41,10 +65,21 @@ export class PrismaArtifactAuthorityRepository implements ArtifactAuthorityRepos
 		return { status: "issued", lease: { leaseId: lease.id, siloId: lease.siloId, artifactId: lease.artifactId, action: "artifact.write", expiresAtEpochSeconds: Math.floor(lease.expiresAt.getTime() / 1_000), expectedContentAddress: lease.expectedContentAddress, expectedByteLength: Number(lease.expectedByteLength), mediaType: lease.mediaType } };
 	}
 
-	/** Consumes one exact service receipt and publishes its immutable revision in this transaction. */
+	/**
+	 * Publishes the revision and spends its lease, in a fixed order that survives a retry.
+	 *
+	 * Recognises a replay from the outbox first, so a repeat commits nothing. Then records the
+	 * promotion on the lease before creating the revision, schedules a text-conversion job when the
+	 * media type is `application/pdf`, and writes the outbox event last so nothing outside the
+	 * database can see the revision before it is fully committed.
+	 *
+	 * @param command - Validated revision metadata plus the verified promotion receipt.
+	 * @returns One of the statuses in {@link AtomicFinalizeArtifactResult}.
+	 * @throws Error when the database clock row cannot be read.
+	 */
 	async finalizeRevisionAtomically(command: FinalizeArtifactRevisionCommand): Promise<AtomicFinalizeArtifactResult>
 	{
-		// 1. Recognize an exact outbox replay from the serializable transaction snapshot.
+		// 1. If the outbox already holds this idempotency key for the same artifact and revision, this is a repeat: report success and write nothing.
 		const existingOutbox = await this.transaction.artifactOutboxEvent.findUnique({ where: { idempotencyKey: command.idempotencyKey } });
 		if (existingOutbox !== null && existingOutbox.artifactId === command.artifactId && existingOutbox.revisionId === command.artifactRevisionId) return { status: "idempotent" };
 
@@ -56,21 +91,30 @@ export class PrismaArtifactAuthorityRepository implements ArtifactAuthorityRepos
 		if (lease.state !== ArtifactUploadLeaseState.Active) return { status: "receipt_consumed" };
 		if (lease.expectedContentAddress !== command.promotion.contentAddress || lease.expectedByteLength !== BigInt(command.promotion.byteLength) || lease.mediaType !== command.promotion.mediaType) return { status: "conflict" };
 
-		// 2. Persist promotion evidence before the revision so lifecycle triggers preserve immutable receipt lineage.
+		// 2. Mark the lease Promoted before creating the revision, so the record of which receipt stored these bytes exists before anything points at them.
 		await this.transaction.artifactUploadLease.update({ where: { id: lease.id }, data: { state: ArtifactUploadLeaseState.Promoted, promotionReceiptDigest: command.promotion.receiptDigest, promotedContentAddress: command.promotion.contentAddress, promotedByteLength: BigInt(command.promotion.byteLength), promotedAt: now } });
 		await this.transaction.artifactRevision.create({ data: { id: command.artifactRevisionId, artifactId: command.artifactId, revision: command.revision, contentAddress: command.promotion.contentAddress, byteLength: BigInt(command.promotion.byteLength), mediaType: command.promotion.mediaType, provenance: command.provenance as Prisma.InputJsonValue, createdBy: command.createdBy } });
 		await this.transaction.artifact.update({ where: { id: command.artifactId }, data: { currentRevisionId: command.artifactRevisionId } });
 
-		// 3. Record required derived work before the publication outbox makes the source externally observable.
+		// 3. Queue the PDF-to-text job before the outbox event, so the conversion is already scheduled the moment anything outside sees the revision.
 		if (command.promotion.mediaType === "application/pdf") await this.transaction.artifactPreprocessJob.create({ data: { sourceRevisionId: command.artifactRevisionId, pipelineVersion: _PDF_TO_TEXT_PIPELINE_VERSION } });
 
-		// 4. Publish the revision and consume the receipt together so no retry can duplicate either effect.
+		// 4. Write the outbox event and mark the lease Finalized in the same commit, so a retry cannot publish twice or spend the receipt twice.
 		await this.transaction.artifactOutboxEvent.create({ data: { artifactId: command.artifactId, revisionId: command.artifactRevisionId, kind: "RevisionPublished", idempotencyKey: command.idempotencyKey, payload: { contentAddress: command.promotion.contentAddress, byteLength: command.promotion.byteLength, mediaType: command.promotion.mediaType } } });
 		await this.transaction.artifactUploadLease.update({ where: { id: lease.id }, data: { state: ArtifactUploadLeaseState.Finalized, finalizedAt: now } });
 		return { status: "finalized" };
 	}
 
-	/** Reads one database-owned wall-clock sample through the read-only Prisma view. */
+	/**
+	 * Reads the current time from the database rather than this process.
+	 *
+	 * Lease expiry must be judged by one clock. A pod whose clock runs behind would otherwise
+	 * accept an expired lease.
+	 *
+	 * @returns The database's current timestamp.
+	 * @throws Error when the clock view returns no usable row, which fails the whole operation
+	 *   rather than falling back to process time.
+	 */
 	private async _databaseNow(): Promise<Date>
 	{
 		const clock = await this.transaction.artifactAuthorityClock.findUnique({ where: { singleton: 1 }, select: { now: true } });

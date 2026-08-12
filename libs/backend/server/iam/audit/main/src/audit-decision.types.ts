@@ -1,10 +1,42 @@
-/** Actor classes retained in the append-only target decision ledger. */
+/**
+ * Who caused a decision, as stored on every audit row.
+ *
+ * `user` is a person's OIDC subject (sharing, publishing). `workload` is a running pod, identified
+ * by its pod UID — what the runtime authority records. `system` is OpenCrane acting with no request
+ * behind it, such as accepting a signed membership revision. `agent-service` is an agent acting in
+ * its own name. Choose by who actually caused the row, not by which module writes it:
+ * {@link __AppendAuditDecision} maps these strings onto the Prisma enum and nothing rewrites these
+ * rows afterwards.
+ *
+ * @see AuditDecisionRecord
+ */
 export type AuditDecisionActorKind = "user" | "agent-service" | "workload" | "system";
 
-/** Stable authorization result retained in the append-only target decision ledger. */
+/**
+ * How a decision came out: `allow` permitted it, `deny` refused it, and `error` means no decision
+ * could be reached at all — a failure while evaluating, not a judgement about the request.
+ *
+ * Every call site in this repo records `allow` today, because refusals are returned before any
+ * transaction is open; `deny` and `error` exist for call sites that need to keep the refusal.
+ */
 export type AuditDecisionOutcome = "allow" | "deny" | "error";
 
-/** Exact target authorization evidence appended inside a driving-domain transaction. */
+/**
+ * One row of the append-only decision log: what was decided, about what, by whom, and under which
+ * policy and capability catalog.
+ *
+ * The rule that matters: this row is written inside the same transaction as the change it describes
+ * — the grant, the publish, the accepted membership revision. Write it separately and the two can
+ * drift, leaving either a change nobody can account for or an audit row for a change that rolled
+ * back. Most fields are optional because they only apply to some actors: the workload and pod fields
+ * describe a running pod, `runId`/`attempt` a run, and the proof-key fields a signed runtime request.
+ *
+ * Called by: libs/backend/server/iam/authorization/main/src/prisma-runtime-authority.ts,
+ * libs/backend/server/iam/membership/main/src/prisma-membership-authority.ts,
+ * libs/backend/server/agents/agent-services (publication audit evidence), and
+ * standalone-first-user-audit.ts in this package.
+ * @see __AppendAuditDecision
+ */
 export interface AuditDecisionRecord
 {
 	/** RFC 8785 SHA-256 digest of the complete decision evidence. */
@@ -63,6 +95,6 @@ export interface AuditDecisionRecord
 	readonly outcome: AuditDecisionOutcome;
 	/** Stable machine-readable decision reason. */
 	readonly reasonCode: string;
-	/** Database-authoritative decision instant. */
+	/** When the decision happened; leave it unset to let the database stamp the row. */
 	readonly decidedAt?: Date;
 }

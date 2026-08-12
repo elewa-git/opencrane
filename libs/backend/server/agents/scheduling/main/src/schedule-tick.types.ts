@@ -2,7 +2,21 @@ import type { AgentScheduleOverlapPolicies, ManagedRunAdmissionPort, ManagedRunA
 
 import type { ScheduleInvalidReasons, ScheduledSlotOutcomes, ScheduleTickStatuses } from "./schedule-tick.enums.js";
 
-/** One recurring schedule bound to a managed AgentService's active revision. */
+/**
+ * One recurring schedule, as the scheduler needs to see it.
+ *
+ * `cron` is a standard 5-field expression read in `timezone`, which is an IANA zone name - so a
+ * schedule keeps its local meaning across daylight-saving changes. `lastScheduledAt` is the cursor:
+ * the newest slot already dealt with, and the exclusive lower bound for the next evaluation.
+ * `catchupWindowSeconds` bounds how far back a restarted or delayed scheduler will reach, so a long
+ * outage does not produce a flood of old runs. Setting `enabled` to false suspends evaluation
+ * without deleting anything.
+ *
+ * This is the scheduler's own read model. The write-side record owned by the agent-services package
+ * is the separately named `AgentServiceScheduleRecord` - do not confuse the two.
+ *
+ * @see {@link CronExpression} for the cron subset that is actually supported.
+ */
 export interface AgentServiceSchedule
 {
 	/** Stable schedule identifier. */
@@ -50,10 +64,18 @@ export interface ActiveScheduledRunLookup
 	hasActiveScheduledRun(agentServiceId: string, siloId: string): Promise<boolean>;
 }
 
-/** Ports and bounds a schedule tick composes over. */
+/**
+ * Everything one tick needs injected, so the tick itself is a pure function of its inputs.
+ *
+ * The clock is injected rather than read, so a whole pass shares one instant and tests are
+ * deterministic. `maxSlotsPerTick` is the hard ceiling on catch-up work in one pass, and `backoff`
+ * only produces the delay hint reported with a `RetryHint` outcome - nothing here waits.
+ *
+ * Built by: ScheduleTicker.runOnce in schedule-ticker.ts.
+ */
 export interface ScheduleTickDependencies
 {
-	/** The EXISTING managed run-admission seam; the tick opens no second run-creation path. */
+	/** The one authority allowed to create an AgentRun; the scheduler never writes runs itself. */
 	readonly admission: ManagedRunAdmissionPort;
 	/** In-flight scheduled-run lookup consulted only for the `skip` overlap policy. */
 	readonly activeRuns: ActiveScheduledRunLookup;
@@ -67,14 +89,32 @@ export interface ScheduleTickDependencies
 	readonly backoff: RetryBackoffPolicy;
 }
 
-/** Why a due slot was not admitted, or how it was admitted. */
+/**
+ * One line of the tick's report: what happened to a single due slot.
+ *
+ * Every case carries `idempotencyKey`, so a caller can match the slot to whichever run a tick
+ * created for it. `runId` exists only on the two admitted cases and `reason` only on the two refused
+ * ones. Which case appears also decides whether the cursor moved past the slot.
+ *
+ * @see {@link ScheduledSlotOutcomes} for what each outcome obliges the caller to do.
+ */
 export type ScheduledSlotOutcome =
 	| { readonly slot: string; readonly outcome: ScheduledSlotOutcomes.Accepted | ScheduledSlotOutcomes.Idempotent; readonly runId: string; readonly idempotencyKey: string }
 	| { readonly slot: string; readonly outcome: ScheduledSlotOutcomes.SkippedOverlap; readonly idempotencyKey: string }
 	| { readonly slot: string; readonly outcome: ScheduledSlotOutcomes.RetryHint; readonly reason: string; readonly retryAfterMs: number; readonly idempotencyKey: string }
 	| { readonly slot: string; readonly outcome: ScheduledSlotOutcomes.Denied; readonly reason: string; readonly idempotencyKey: string };
 
-/** Result of evaluating one schedule at one instant. */
+/**
+ * Everything one evaluation of one schedule reports back.
+ *
+ * Only the `Ticked` case carries `nextLastScheduledAt`, and that value is a proposal rather than a
+ * stored fact: the caller still has to write it with a conditional update that may be refused. It is
+ * null when the schedule has never fired and nothing was due; otherwise it is the newest slot the
+ * cursor may safely move to - which is not always the newest slot in `outcomes`, because a
+ * `RetryHint` stops the cursor short on purpose.
+ *
+ * @see {@link ScheduleTickStatuses} for what each status means for the caller.
+ */
 export type ScheduleTickResult =
 	| { readonly status: ScheduleTickStatuses.Suspended }
 	| { readonly status: ScheduleTickStatuses.InvalidSchedule; readonly reason: ScheduleInvalidReasons }

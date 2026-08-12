@@ -50,7 +50,20 @@ export function _buildCurrentUrl(req: Request): URL
   return new URL(`${protocol}://${host}${req.originalUrl}`);
 }
 
-/** Limit return targets to local relative paths to prevent open redirects. */
+/**
+ * Reduce a post-login return target to something safe to redirect to.
+ *
+ * Only a path starting with a single `/` is kept. Anything else — an absolute URL, a
+ * protocol-relative `//evil.example`, or nothing at all — becomes `/`. Without this, an
+ * attacker could hand a user a login link that bounced them to another site after a real
+ * login, which is what makes it a phishing tool.
+ *
+ * Called by: `OidcAuthServiceBase.buildLoginUrl` and `completeLogin` in ./oidc-service.ts
+ * — the value is sanitised on the way in AND on the way out of the session.
+ *
+ * @param returnTo - The requested return path, straight from the query string.
+ * @returns A local path safe to redirect to; `/` when the input was not one.
+ */
 export function _sanitizeReturnTo(returnTo: string | undefined): string
 {
   if (!returnTo || !returnTo.startsWith("/") || returnTo.startsWith("//"))

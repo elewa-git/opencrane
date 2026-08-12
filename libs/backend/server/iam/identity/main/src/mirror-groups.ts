@@ -8,7 +8,7 @@ import type { MirrorGroupsOnLoginOptions } from "./identity-workflows.types.js";
  * `AuthUser.groups` already carries every `group:*` the user holds. This module mirrors those
  * claims into the silo's persisted `Group.members` so operator-facing group management, grants,
  * and audit see the IdP-sourced membership — the token stays the live source for request-time
- * `{groups}`, this is the durable projection of it.
+ * `{groups}`, and this is the stored copy of it.
  *
  * Scope-aware retrieval keys on the live token groups, so this mirror is the persistence half,
  * not on the hot path.
@@ -21,7 +21,7 @@ import type { MirrorGroupsOnLoginOptions } from "./identity-workflows.types.js";
  *
  * DEFERRED (tracked on #126): opencrane-ui group mutations writing Zitadel role grants via
  * the fleet management client — for now org admins manage group roles in the Zitadel Console
- * they own (the decided native primitive).
+ * they own — Zitadel's own roles are the agreed mechanism.
  */
 
 /** Maps the scope segment of a `group:<scope>:<name>` claim to the `GrantScope` enum. */
@@ -67,7 +67,7 @@ export function _ParseGroupClaims(groups: readonly string[] | undefined): Parsed
   return out;
 }
 
-/** Coerce a stored `members` JSON value into a string array (defensive against nulls/non-arrays). */
+/** Read a stored `members` JSON value as a string array; anything else reads as empty. */
 function _asMemberArray(value: Prisma.JsonValue | undefined): string[]
 {
   return Array.isArray(value) ? value.filter((m): m is string => typeof m === "string") : [];

@@ -8,7 +8,19 @@ interface AiBudgetLogicDeps
   prisma: PrismaClient;
 }
 
-/** Returns global monthly spend ceiling. */
+/**
+ * Answer with the platform-wide monthly spend ceiling.
+ *
+ * There is exactly one such row (id 1). When it has never been set the response is
+ * `{ currency: "USD", ceilingAmount: 0 }` rather than a 404 — so a client always gets a number,
+ * and a zero ceiling means "not configured", NOT "no spending allowed".
+ *
+ * Called by: `aiBudgetRouter` (routes/ai-budget.ts) for `GET /global`, mounted at
+ * `/api/v1/ai-budget` by apps/opencrane/src/app/routes.ts.
+ *
+ * @param deps - Carries the database client.
+ * @returns Nothing; writes a 200 JSON body to `res`.
+ */
 export async function _GetGlobalBudget(req: Request, res: Response, deps: AiBudgetLogicDeps): Promise<void>
 {
   const item = await deps.prisma.globalBudgetSetting.findUnique({ where: { id: 1 } });
@@ -22,7 +34,17 @@ export async function _GetGlobalBudget(req: Request, res: Response, deps: AiBudg
   res.json({ currency: item.currency, ceilingAmount: Number(item.ceilingAmount) });
 }
 
-/** Updates the global monthly spend ceiling. */
+/**
+ * Set the platform-wide monthly spend ceiling, creating the single row if it does not exist yet.
+ *
+ * Inputs are coerced rather than rejected: a missing currency becomes `USD` and is upper-cased,
+ * and a missing or unparseable amount becomes 0. A client sending a typo therefore gets 204 and
+ * a zero ceiling, not a validation error — worth knowing before relying on this endpoint.
+ *
+ * Called by: `aiBudgetRouter` (routes/ai-budget.ts) for `PUT /global`.
+ *
+ * @returns Nothing; answers 204 with no body.
+ */
 export async function _PutGlobalBudget(req: Request, res: Response, deps: AiBudgetLogicDeps): Promise<void>
 {
   const currency = String(req.body.currency ?? "USD").toUpperCase();
@@ -37,7 +59,15 @@ export async function _PutGlobalBudget(req: Request, res: Response, deps: AiBudg
   res.status(204).send();
 }
 
-/** Returns all per-account monthly spend ceilings. */
+/**
+ * List every per-user monthly ceiling, ordered by user id so the response is stable between
+ * calls. Users with no row of their own are simply absent — they fall back to the global
+ * ceiling.
+ *
+ * Called by: `aiBudgetRouter` (routes/ai-budget.ts) for `GET /accounts`.
+ *
+ * @returns Nothing; writes a 200 JSON array to `res`.
+ */
 export async function _GetAccountBudgets(req: Request, res: Response, deps: AiBudgetLogicDeps): Promise<void>
 {
   const accounts = await deps.prisma.accountBudgetSetting.findMany({ orderBy: { userId: "asc" } });
@@ -52,7 +82,16 @@ export async function _GetAccountBudgets(req: Request, res: Response, deps: AiBu
   }));
 }
 
-/** Creates or updates the budget ceiling for a specific account. */
+/**
+ * Set one user's monthly ceiling, creating the row if there is none.
+ *
+ * Same lenient coercion as the global setter: a missing currency becomes `USD`, a missing or
+ * unparseable amount becomes 0.
+ *
+ * Called by: `aiBudgetRouter` (routes/ai-budget.ts) for `PUT /accounts/:userId`.
+ *
+ * @returns Nothing; answers 204 with no body.
+ */
 export async function _PutAccountBudget(req: Request, res: Response, deps: AiBudgetLogicDeps): Promise<void>
 {
   const userId = Array.isArray(req.params.userId) ? req.params.userId[0] : req.params.userId;
@@ -68,7 +107,15 @@ export async function _PutAccountBudget(req: Request, res: Response, deps: AiBud
   res.status(204).send();
 }
 
-/** Deletes a per-account spend ceiling. */
+/**
+ * Remove one user's own ceiling, so they fall back to the global one.
+ *
+ * Answers 204 whether or not a row existed, so it is safe to call twice.
+ *
+ * Called by: `aiBudgetRouter` (routes/ai-budget.ts) for `DELETE /accounts/:userId`.
+ *
+ * @returns Nothing; answers 204 with no body.
+ */
 export async function _DeleteAccountBudget(req: Request, res: Response, deps: AiBudgetLogicDeps): Promise<void>
 {
   const userId = Array.isArray(req.params.userId) ? req.params.userId[0] : req.params.userId;

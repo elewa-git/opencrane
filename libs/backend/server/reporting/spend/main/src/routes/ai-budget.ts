@@ -4,7 +4,15 @@ import type { PrismaClient } from "@prisma/client";
 import { _DeleteAccountBudget, _GetAccountBudgets, _GetGlobalBudget, _PutAccountBudget, _PutGlobalBudget } from "../core/ai-budget.logic.js";
 
 /**
- * Router for AI spend control and budget management.
+ * Build the spend-ceiling routes: one platform-wide ceiling, plus per-user overrides.
+ *
+ * Every handler lives in core/ai-budget.logic.ts; this file only maps method and path onto
+ * them, so route wiring and behaviour can be reviewed separately.
+ *
+ * Called by: apps/opencrane/src/app/routes.ts, mounted at `/api/v1/ai-budget`.
+ *
+ * @param prisma - Database client passed through to the handlers.
+ * @returns An Express router with the five budget routes mounted on it.
  */
 export function aiBudgetRouter(prisma: PrismaClient): Router
 {

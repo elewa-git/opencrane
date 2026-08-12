@@ -5,10 +5,14 @@ import { createGroup, deleteGroup, getGroup, listGroups, updateGroup } from "../
 import type { GroupWriteRequest } from "./groups.types.js";
 
 /**
- * CRUD router for domain access groups.
+ * Create, read, update, and delete the silo's groups.
  *
- * @param prisma - Prisma client used for persistence.
- * @returns Configured Express router.
+ * The handlers do no authorization of their own — whatever the mount point applies is all there is.
+ *
+ * Called by: apps/opencrane/src/app/routes.ts, mounted at /api/v1/groups on the browser-session
+ * authenticated listener.
+ * @param prisma - Silo Prisma client.
+ * @returns Express router with the five group routes.
  */
 export function groupsRouter(prisma: PrismaClient): Router
 {

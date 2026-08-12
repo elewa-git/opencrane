@@ -1,10 +1,30 @@
 /**
- * `@opencrane/backend/server/infra/auth` — the OpenCrane server's OIDC login and authorization
- * substrate: environment-driven configuration, session lifecycle, per-organization login
- * seams, identity claims, membership facts, middleware, and authorization gates.
+ * `@opencrane/backend/server/infra/auth` — how the OpenCrane server logs a human in and
+ * decides what that human may do.
  *
- * Importing this package also applies the `express-session` `SessionData` augmentation
- * (see ./session.types) so `req.session.authUser` is typed in every consumer.
+ * What is in here:
+ *   - OIDC settings read from environment variables ({@link ___LoadOidcAuthConfig}).
+ *   - The whole browser login flow — redirect, callback, logout ({@link OidcAuthServiceBase}).
+ *   - Session cookie helpers (save, regenerate, destroy, safe return-to paths).
+ *   - The rules that turn identity-provider claims into `isPlatformOperator` /
+ *     `isOrgAdmin` ({@link _ResolveIdentityClaims}) and the `OrgMembership` lookup that
+ *     refreshes org-admin authority ({@link _ResolveOrgMembershipFacts}).
+ *   - Request-derived facts: host, silo (ClusterTenant), principal.
+ *   - The authentication middleware ({@link ___AuthMiddleware}) and the two route guards
+ *     ({@link _RequireOrgAdmin}, {@link _RequirePlatformOperator}).
+ *
+ * A newcomer should read {@link OidcAuthServiceBase} first (the login flow) and then
+ * {@link AuthUser} (what ends up in the session cookie).
+ *
+ * IMPORTANT: importing this package also runs `./session.types.js` for its side effect,
+ * and that is what adds `authUser`, `idToken`, and `oidcFlow` to the `express-session`
+ * `SessionData` type. Without the import on line 9 `req.session.authUser` stops
+ * type-checking in every consumer, so do not remove it as an unused import.
+ *
+ * @see https://openid.net/specs/openid-connect-core-1_0.html — the OIDC Authorization
+ *      Code flow this package implements (login redirect, callback, ID-token claims).
+ * @see https://github.com/expressjs/session — `express-session` (^1.19.0), whose
+ *      `SessionData` interface this package augments.
  */
 import "./session.types.js";
 

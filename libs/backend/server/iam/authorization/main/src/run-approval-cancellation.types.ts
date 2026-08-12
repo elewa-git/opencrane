@@ -11,7 +11,14 @@ export interface CancelPendingRunApprovalAuthorityCommand
 	readonly now: Date;
 }
 
-/** Count of pending approval rows atomically closed for one run attempt. */
+/**
+ * What cancellation managed to close, and what it could not.
+ *
+ * `activeClaimCount` is the one that matters: it counts tool calls still holding a provider claim,
+ * which cancellation deliberately leaves alone. The runs package must keep the run in `Cancelling`
+ * until that reaches zero — treating a non-zero count as done reports a torn-down run while a
+ * provider request may still be in flight.
+ */
 export interface CancelPendingRunApprovalAuthorityResult
 {
 	/** Number of Pending approvals transitioned to Cancelled. */
@@ -22,7 +29,13 @@ export interface CancelPendingRunApprovalAuthorityResult
 	readonly activeClaimCount: number;
 }
 
-/** Minimal invocation identity needed to persist one cancellation delivery. */
+/**
+ * The snapshot of one tool call taken before cancellation closes it.
+ *
+ * Read once up front so the state machine can be consulted and the conditional update can check
+ * the same `state` and `revision` it planned against. `claimKind` must be null here — a non-null
+ * value means provider work may be in flight and the row must be left alone.
+ */
 export interface RunCancellationToolInvocation
 {
 	/** Trusted ToolInvocation database identity. */
@@ -43,7 +56,12 @@ export interface RunCancellationToolInvocation
 	readonly revision: number;
 }
 
-/** Transaction-scoped persistence used by the pure cancellation procedure. */
+/**
+ * The four database operations cancellation performs, in the order they must happen.
+ *
+ * Split out from the procedure so the ordering can be tested against a fake.
+ * Implemented by: ./run-approval-cancellation.ts (`PrismaRunApprovalCancellationRepository`).
+ */
 export interface RunApprovalCancellationRepository
 {
 	/** Snapshot every nonterminal invocation after the run enters Cancelling. */
@@ -56,7 +74,12 @@ export interface RunApprovalCancellationRepository
 	countActiveClaims(runId: string, attempt: number): Promise<number>;
 }
 
-/** Transaction binding that owns construction of the cancellation repository. */
+/**
+ * Runs the whole cancellation sequence as one call on the caller's transaction.
+ *
+ * Exists so a caller cannot build the repository itself and run the steps out of order.
+ * Implemented by: ./run-approval-cancellation.ts.
+ */
 export interface RunApprovalCancellationUnitOfWork
 {
 	/** Close pending approval and invocation authority on the caller-owned transaction. */

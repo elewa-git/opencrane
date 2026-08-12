@@ -26,7 +26,21 @@ function _createMutationRepository(transaction: RunAdmissionTransaction): Prisma
 	return new PrismaConversationMutationRepository(transaction.prisma);
 }
 
-/** Composes the Prisma-backed participant conversation router. */
+/**
+ * Build the ready-to-mount conversation router for an app.
+ *
+ * Everything Prisma-shaped is assembled here — the unit of work, the query and mutation
+ * repositories, and the factory that lets run admission write the user's message inside its own
+ * transaction — so the router itself stays free of database types.
+ *
+ * Called by: apps/opencrane/src/app/routes.ts, mounted at `/api/v1/me/conversations`.
+ *
+ * @param prisma - Product database client.
+ * @param runAdmission - Starts an agent run in the same transaction as the message that
+ *   triggered it.
+ * @param logger - Used only for unexpected failures; never receives message content.
+ * @returns An Express router ready to mount.
+ */
 export function _CreateSelfConversationsRouter(prisma: PrismaClient, runAdmission: PersonalRunAdmissionPort, createAttachmentAdmission: ConversationAttachmentAdmissionFactory, logger: Logger): Router
 {
 	const messageAdmission = new PrismaConversationMessageAdmissionUnitOfWork(prisma, runAdmission, _createMutationRepository, createAttachmentAdmission);

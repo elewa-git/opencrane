@@ -1,4 +1,8 @@
-/** Deployment-owned bootstrap coordinates for exactly one standalone-silo owner. */
+/**
+ * The three configured values that decide who may become a standalone silo's owner: which silo,
+ * which verified email, and which OIDC issuer. Read from the environment at startup, so a login can
+ * never widen its own eligibility.
+ */
 export interface StandaloneFirstUserAdmissionConfig
 {
   /** ClusterTenant served by this release and derived again from the callback host. */
@@ -24,7 +28,12 @@ export interface StandaloneFirstUserAdmissionCommand
   readonly emailVerified: boolean | undefined;
 }
 
-/** Durable owner-claim request after all trusted admission checks have passed. */
+/**
+ * The owner claim handed to persistence once the login's host, issuer, and subject have checked out.
+ *
+ * `mayCreateOwner` is the one permission left: it is true only when the login's verified email
+ * matched the configured one, and it decides whether an empty owner slot may be filled.
+ */
 export interface StandaloneFirstUserOwnerClaim
 {
   /** Silo in which the one-time owner claim is being made. */
@@ -35,7 +44,20 @@ export interface StandaloneFirstUserOwnerClaim
   readonly mayCreateOwner: boolean;
 }
 
-/** Stable outcomes of the standalone first-owner admission decision. */
+/**
+ * How a first-owner claim ended. Only `Admitted` and `AlreadyOwner` let the caller proceed.
+ *
+ * A standalone silo has exactly one owner slot and every login tries to fill it, so two logins can
+ * race for the same empty slot: both see it empty, both insert, and the unique constraint lets only
+ * one through. The loser retries and comes back with `AlreadyOwner` when it is the same subject, or
+ * `AlreadyClaimed` when someone else got there first. `AlreadyClaimed` also covers a subject whose
+ * membership exists but is not an active Owner, so a demoted or suspended user cannot promote itself
+ * back. `NotEligible` is different in kind: the login did not match the configured host, issuer, or
+ * verified email, so it was never a candidate. Both refusals make the login fail visibly in the
+ * browser instead of dropping the user into a silo they do not own.
+ *
+ * @see StandaloneFirstUserAdmissionResult
+ */
 export enum StandaloneFirstUserAdmissionOutcomes
 {
   /** The configured verified user was created as this silo's active owner. */
@@ -55,14 +77,28 @@ export interface StandaloneFirstUserAdmissionResult
   readonly outcome: StandaloneFirstUserAdmissionOutcomes;
 }
 
-/** Persistence port that atomically claims the single owner slot for one standalone silo. */
+/**
+ * Claims the silo's single owner slot, all or nothing.
+ *
+ * The implementation opens a serializable transaction and retries once if it collides with a
+ * concurrent login, so callers get a settled outcome and never handle the race themselves.
+ *
+ * Called by: _AdmitStandaloneFirstUser in this package; implemented by
+ * {@link PrismaStandaloneFirstUserAdmissionUnitOfWork}.
+ */
 export interface StandaloneFirstUserAdmissionRepository
 {
-  /** Claims one owner membership or returns an idempotent/denied durable outcome. */
+  /**
+   * @param claim - Silo, subject, and whether this login may create the owner row.
+   * @returns One of the four outcomes; only `Admitted` means this call created the owner.
+   */
   claimOwner(claim: StandaloneFirstUserOwnerClaim): Promise<StandaloneFirstUserAdmissionResult>;
 }
 
-/** Unit-of-work port that owns the serializable standalone first-owner transaction. */
+/**
+ * Marks the implementation that opens the transaction, as opposed to one that joins an existing one.
+ * It adds no methods; the only distinction is which layer may start a transaction.
+ */
 export interface StandaloneFirstUserAdmissionUnitOfWork extends StandaloneFirstUserAdmissionRepository
 {
 }
@@ -74,7 +110,12 @@ export interface StandaloneFirstUserAdmissionAuditPort
   append(transaction: unknown, claim: Pick<StandaloneFirstUserOwnerClaim, "clusterTenant" | "subject">): Promise<void>;
 }
 
-/** Transaction-scoped persistence operations needed to inspect and claim one owner slot. */
+/**
+ * The reads and writes one owner-slot decision needs, all against a single open transaction.
+ *
+ * Called by: _ClaimStandaloneFirstUserOwner in this package; implemented by
+ * {@link PrismaStandaloneFirstUserAdmissionRepository}.
+ */
 export interface StandaloneFirstUserOwnerClaimRepository
 {
   /** Finds the exact subject membership inside the selected silo. */

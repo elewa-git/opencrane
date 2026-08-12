@@ -23,12 +23,20 @@ async function _isModelDefinitionAvailable(transaction: Prisma.TransactionClient
 }
 
 /**
- * Prisma-backed authority for the managed-agent definition plane.
+ * Stores managed-agent services and revisions in Postgres.
  *
- * Every mutation runs inside one transaction that locks the parent service first, so concurrent
- * edits either observe the same head revision or fail closed. Revisions are immutable: revise and
- * restore append a new draft rather than mutating an existing one, and restore records both the
- * lineage parent and the cloned source revision without touching history.
+ * Every write runs in one transaction that takes a row lock on the parent service first, so two
+ * concurrent edits queue rather than race: the second one sees the first one's revision and returns
+ * a conflict instead of overwriting it.
+ *
+ * Revisions are never edited or deleted. Revise adds a new draft; restore adds a new draft that
+ * copies an older revision's content and records both its lineage parent and the revision it was
+ * copied from, so the history stays complete.
+ *
+ * Called by: constructed in `prisma-agent-services.router.ts` and passed to the router as
+ * `lifecycle`.
+ * NEEDS-HUMAN: the row lock is PostgreSQL `SELECT … FOR UPDATE`; add the doc URI for the Postgres
+ * major version this deployment pins.
  */
 export class PrismaAgentRevisionLifecycleRepository implements AgentRevisionLifecycleRepository
 {
@@ -180,7 +188,14 @@ type _HeadGuard =
 	| { readonly outcome: "ok"; readonly siloId: string; readonly head: { id: string; revision: number } }
 	| { readonly outcome: "blocked"; readonly result: AppendAgentRevisionResult };
 
-/** Locks the silo-scoped service, then confirms the observed parent still matches the head revision. */
+/**
+ * Locks the service row, then checks the caller is editing the newest revision.
+ *
+ * Returns `blocked` for three cases the caller must not proceed past: the service is missing (or in
+ * another silo — indistinguishable on purpose), the service is retired, or the newest stored revision
+ * is not the one the caller said they edited. The last case returns the current newest revision id so
+ * the caller can re-apply its edit on top of it.
+ */
 async function _lockAndReadHead(transaction: Prisma.TransactionClient, agentServiceId: string, siloId: string, expectedParentRevisionId: string | null): Promise<_HeadGuard>
 {
 	await transaction.$queryRaw(Prisma.sql`SELECT "id" FROM "agent_services" WHERE "id" = ${agentServiceId} AND "silo_id" = ${siloId} FOR UPDATE`);

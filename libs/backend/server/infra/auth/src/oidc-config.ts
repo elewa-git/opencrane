@@ -1,6 +1,27 @@
 import type { OidcAuthConfig } from "./oidc-config.types.js";
 
-/** Load OIDC session auth configuration from environment variables. */
+/**
+ * Read the OIDC login configuration out of environment variables and return it as a
+ * snapshot.
+ *
+ * Three outcomes:
+ *   - No OIDC variable is set at all — return a disabled config with safe defaults, so a
+ *     developer can run the server without an identity provider.
+ *   - Some but not all required variables are set — throw, naming the missing ones. A
+ *     half-configured login is treated as a deployment mistake, never as "disabled".
+ *   - All required variables are set — return an enabled config.
+ *
+ * Group allowlists, the operator seed email, and the org-admin groups are all read even
+ * in the disabled case, and all default to empty, so nobody gains a role by leaving a
+ * variable unset.
+ *
+ * Called by: {@link OidcAuthServiceBase} (its `config` field) and
+ * {@link ___AuthMiddleware}. Each call re-reads `process.env`, which is what lets a test
+ * set variables and then build the middleware without reloading the module.
+ *
+ * @returns A snapshot of the configuration; later `process.env` changes do not affect it.
+ * @throws When OIDC is partially configured, listing every missing variable.
+ */
 export function ___LoadOidcAuthConfig(): OidcAuthConfig
 {
   const issuerUrl = process.env.OIDC_ISSUER_URL?.trim() ?? "";

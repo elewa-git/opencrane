@@ -1,6 +1,12 @@
 import type { MemoryProvenance } from "./memory-gateway-client.types.js";
 
-/** Typed failure raised when a scoped memory write lacks complete provenance. */
+/**
+ * Thrown when a scoped memory write does not name all five provenance fields.
+ *
+ * The message names the first field that was missing, and nothing else — the record content never
+ * appears in it. This is a refusal before any write happens: the caller must fix the provenance,
+ * because a record with partial attribution is not allowed to exist in a shared scope.
+ */
 export class MemoryProvenanceIncompleteError extends Error
 {
 	/** Creates a fail-closed provenance violation. */
@@ -12,14 +18,19 @@ export class MemoryProvenanceIncompleteError extends Error
 }
 
 /**
- * Assert that a provenance record is complete before a scoped memory write is allowed.
+ * Check that a provenance record is complete before a scoped memory write is allowed.
  *
- * Every record injected into a shared knowledge scope by a central agent MUST be attributable to the
- * agent, its revision, the run that produced it, when it was recorded, and the source it came from.
- * A missing field fails closed with {@link MemoryProvenanceIncompleteError} rather than writing an
- * unattributable fact.
+ * Every record a central agent writes into a shared knowledge scope MUST be traceable to the agent,
+ * its revision, the run that produced it, when it was recorded, and where it came from. A missing or
+ * blank field — or a `recordedAt` that is not a parseable date — fails closed with
+ * {@link MemoryProvenanceIncompleteError} rather than writing a record nobody can attribute later.
  *
- * @param provenance - The provenance to validate.
+ * Called by: http-cognee-memory-gateway-client.ts and unavailable-memory-gateway-client.ts, both as
+ * the first statement of `injectScoped`, so the check runs even when no gateway is configured.
+ *
+ * @param provenance - The provenance to check.
+ * @throws {MemoryProvenanceIncompleteError} Naming the first field that is missing, blank, or (for
+ *   `recordedAt`) not a parseable date.
  */
 export function __AssertMemoryProvenanceComplete(provenance: MemoryProvenance): void
 {

@@ -37,13 +37,26 @@ export interface DeferToolRequestCommand
 	readonly expiresAt: Date;
 }
 
-/** Result of creating or idempotently replaying one pending deferred-tool approval. */
+/**
+ * What opening an approval did.
+ *
+ * `deferred` created it; `already_deferred` found the identical approval from an earlier attempt —
+ * both mean the tool call is now correctly parked. `unavailable` means it could not be opened at
+ * all (the run's pod is gone, its proof key expired, the deadline is already past, or the run is
+ * not in a state that can pause), and the caller must fail the tool call rather than wait.
+ */
 export type DeferToolRequestResult =
 	| { readonly outcome: "deferred"; readonly approvalRequestId: string }
 	| { readonly outcome: "already_deferred"; readonly approvalRequestId: string }
 	| { readonly outcome: "unavailable" };
 
-/** Exact prepared external-action coordinates needed to open a deferred approval. */
+/**
+ * Everything needed to open an approval for one already-prepared tool call.
+ *
+ * The digests are re-computed and compared before anything is written, so a caller that passes an
+ * arguments or schema digest that does not match its value gets the tool call failed with
+ * `approval_arguments_invalid` rather than an approval a reviewer could not trust.
+ */
 export interface OpenDeferredToolApprovalCommand
 {
 	/** Interrupt id emitted for the reviewed proposal and reused as the approval id. */
@@ -74,18 +87,38 @@ export interface OpenDeferredToolApprovalCommand
 	readonly expiresAt: Date;
 }
 
-/** Transaction-scoped persistence operations used while opening or recovering one approval. */
+/**
+ * The three writes and reads needed to open one approval, or to clean up after an unclear commit.
+ *
+ * All three run on the caller's transaction. `hasLinkedApproval` exists purely for recovery: if the
+ * open transaction throws after the database may already have committed, a linked approval proves
+ * the create succeeded and the tool call must NOT be failed.
+ *
+ * Implemented by: ./prisma-deferred-tool-approval-opener.ts.
+ * @see {@link DeferredToolApprovalOpenUnitOfWork}
+ */
 export interface DeferredToolApprovalOpenRepository
 {
 	/** Creates the approval, checking the run's live workload assignment and proof key on this transaction. */
 	defer(command: DeferToolRequestCommand): Promise<DeferToolRequestResult>;
-	/** Compare-and-set one awaiting-approval invocation to a stable failure and delivery. */
+	/**
+	 * Fails one tool call that is still waiting for approval, and records its result delivery.
+	 * @returns False when the tool call is no longer awaiting approval, meaning something else
+	 *   already moved it and the caller must not assume it was failed.
+	 */
 	terminaliseAwaitingApproval(invocationId: string, failureCode: string, now: Date): Promise<boolean>;
 	/** Return whether the exact interrupt is durably linked to its invocation. */
 	hasLinkedApproval(command: OpenDeferredToolApprovalCommand): Promise<boolean>;
 }
 
-/** Atomic boundary for opening and ambiguity-recovering one deferred tool approval. */
+/**
+ * Opens one approval and guarantees the tool call never ends up stuck waiting.
+ *
+ * Either an approval exists afterwards, or the tool call has been failed. It never leaves a tool
+ * call in `AwaitingApproval` with no approval to decide.
+ *
+ * Implemented by: ./prisma-deferred-tool-approval-opener.ts (`__OpenDeferredToolApproval`).
+ */
 export interface DeferredToolApprovalOpenUnitOfWork
 {
 	/** Opens an approval or proves the invocation terminal without exposing Prisma. */

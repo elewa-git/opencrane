@@ -5,12 +5,19 @@ import type { DbHealthProbeUnitOfWork } from "./healthz.types.js";
 export type { DbHealthProbeRepository, DbHealthProbeUnitOfWork } from "./healthz.types.js";
 
 /**
- * Build a `/healthz` handler that performs request-bearing database I/O.
- * Returns 200 `{ status: "ok", db: true }` on success, 503 `{ status: "degraded", db: false }`
- * when the database check rejects. Shared by the fleet registry DB and each silo's per-CT DB.
+ * Build the `/healthz` handler, which answers by actually querying the database.
  *
- * @param db - Narrow database health probe supplied by the composing process.
- * @returns Express handler for the `/healthz` endpoint.
+ * A cheap 200 would let a pod look healthy while its database was gone, so the handler awaits a real
+ * query: 200 `{ status: "ok", db: true }` when it succeeds, 503 `{ status: "degraded", db: false }`
+ * when it rejects. The error itself is swallowed on purpose — `/healthz` is unauthenticated, so it
+ * must not describe the failure; look in the logs instead. The same handler serves the fleet
+ * registry database and each silo's per-ClusterTenant database. Note that rate-limit.ts exempts
+ * `/healthz`, so probes are never throttled.
+ *
+ * Called by: apps/opencrane/src/app/routes.ts, mounted as `GET /healthz`.
+ *
+ * @param db - Database check supplied by the composing process, which owns the Prisma client.
+ * @returns Express handler for `/healthz`. It never throws and never calls `next` with an error.
  */
 export function _CheckDbHealth(db: DbHealthProbeUnitOfWork): RequestHandler
 {

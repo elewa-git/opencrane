@@ -17,7 +17,10 @@ const _HSTS_VALUE = "max-age=63072000; includeSubDomains; preload";
  * an always-on redirect would 3xx internal plain-HTTP health probes; when enabled it
  * only redirects safe (GET/HEAD) methods.
  *
- * @returns Express request handler enforcing the transport-security posture.
+ * Called by: apps/opencrane/src/app/public-app.ts, mounted before the routes.
+ *
+ * @returns Express request handler that sets the HSTS header on secure requests and, when
+ *   `OPENCRANE_FORCE_HTTPS` is on, redirects safe plain-HTTP methods to HTTPS.
  */
 export function _TransportSecurity(): RequestHandler
 {

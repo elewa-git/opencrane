@@ -58,9 +58,10 @@ function _respond(response: Response, status: number, error: string): void
  * Obot. The response carries the provisioning outcome only; the credential is never echoed, logged,
  * or persisted by this process.
  *
- * @param prisma - Canonical product-authority database client.
- * @param custody - Composed Obot custody port (the fail-closed adapter when Obot is off).
- * @param logger - Structured process logger used for secret-safe failure evidence.
+ * @param prisma - Prisma client for the product database.
+ * @param custody - Obot custody port; when Obot is switched off this is the adapter that always
+ *                  fails, so the route reports unavailable rather than silently doing nothing.
+ * @param logger - Logger for failure records that carry ids and an error class name, never a secret.
  * @returns The configured Express router, mounted under `/api/v1/integrations`.
  */
 export function _CreateIntegrationCustodyRouter(prisma: PrismaClient, custody: ObotCustodyPort, logger: IntegrationCustodyLogger): Router
@@ -74,7 +75,7 @@ export function _CreateIntegrationCustodyRouter(prisma: PrismaClient, custody: O
 		const principal = _ResolveRequestPrincipal(request);
 		if (principal === null) { _respond(response, 401, "authentication_required"); return; }
 
-		// 2. Validate the untrusted coordinates and write-only credential shape before any lookup.
+		// 2. Check the integration id and the credential entries are well formed before any database or Obot call.
 		const integrationId = request.params["integrationId"];
 		const body = _parseBody(request.body);
 		if (!_isBoundedIdentifier(integrationId) || body === null) { _respond(response, 400, "invalid_custody_request"); return; }

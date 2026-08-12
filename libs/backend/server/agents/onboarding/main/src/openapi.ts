@@ -35,7 +35,16 @@ const _ChatResponses = {
 	503: { description: "Required onboarding, persona, or script evidence unavailable." },
 } as const;
 
-/** OpenAPI fragment for durable owner routing state and deterministic guided chat. */
+/**
+ * The OpenAPI path entries for the five `/me/onboarding` endpoints.
+ *
+ * Merged into the published API document rather than served from here, so a change to a route in
+ * user-onboarding.http.ts must be made here too or the document silently drifts. The `state` enums
+ * are generated from {@link UserOnboardingStates} with `Object.values`, so adding a state updates
+ * the document automatically.
+ *
+ * Called by: libs/backend/server/api-spec/main/src/domain-openapi-paths.ts.
+ */
 export const _UserOnboardingOpenapiPaths = {
 	"/me/onboarding": {
 		get: {

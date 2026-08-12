@@ -319,10 +319,16 @@ function _capabilityBindingFailure(expectation: CapabilityProofExpectation): Cap
 }
 
 /**
- * Computes the RFC 7638 SHA-256 thumbprint for a public ES256 key.
+ * Compute the standard fingerprint of a public ES256 key.
+ *
+ * Rejects a key carrying a private component, and rejects a point that is not actually on P-256, so
+ * a thumbprint only ever exists for a key we could really verify with.
+ *
+ * Called by: ./runtime-proof.ts (`_validateBootstrap`) and `__VerifyCapabilityProof` below.
  * @param jwk - Public P-256 JSON Web Key.
- * @returns Unpadded base64url thumbprint over required canonical JWK members.
- * @throws TypeError when the key is malformed, private, or not on P-256.
+ * @returns Unpadded base64url SHA-256 thumbprint over the four required JWK members.
+ * @throws TypeError when the key is malformed, carries a private part, or is not a valid P-256
+ *   point. Callers that treat a bad key as a denial must catch this.
  */
 export function __ComputeEs256JwkThumbprint(jwk: Es256PublicJwk): string
 {
@@ -336,10 +342,15 @@ export function __ComputeEs256JwkThumbprint(jwk: Es256PublicJwk): string
 }
 
 /**
- * Normalizes an observed target URI to the RFC 9449 `htu` representation.
- * @param targetUri - Absolute HTTP or HTTPS request URI.
- * @returns Normalized URI without query or fragment.
- * @throws TypeError when the URI is not a safe absolute HTTP target.
+ * Reduce a request URI to the form a DPoP proof is expected to sign.
+ *
+ * Drops the query string and fragment, and refuses a URI carrying embedded credentials, so the
+ * value being compared cannot vary with per-request parameters.
+ *
+ * Called by: ./runtime-proof.ts (`_requestFingerprint`) and `__VerifyCapabilityProof` below.
+ * @param targetUri - Absolute http or https request URI.
+ * @returns Origin plus path only.
+ * @throws TypeError when the URI is relative, not http(s), or contains a username or password.
  */
 export function __NormalizeDpopTargetUri(targetUri: string): string
 {
@@ -352,10 +363,26 @@ export function __NormalizeDpopTargetUri(targetUri: string): string
 }
 
 /**
- * Verifies an ES256 RFC 9449-style compact proof against one exact action capability.
- * @param compactProof - Compact JWS carried in the request's DPoP proof field.
- * @param expectation - Trusted request and action-capability facts from the PEP.
- * @returns Fail-closed verification with claims only after every binding succeeds.
+ * Check that a request really was signed by the key registered to this run, for this exact action.
+ *
+ * Order matters and is deliberate: the caller's own trusted facts are validated first, then the
+ * issued capability is compared against what was actually observed, and only then is a single byte
+ * of the attacker-controlled proof parsed. The signature is verified before any claim inside the
+ * proof is believed.
+ *
+ * It then re-checks everything against everything: the key's thumbprint must match the signed
+ * claim, the issued capability, AND the key registered to the workload; the HTTP method and
+ * normalized path must match; and every workload, run, resource, action, and digest field must
+ * agree. Any single mismatch returns a reason and no claims, so a valid proof cannot be redirected
+ * at a different action or a different pod.
+ *
+ * Called by: ./runtime-proof.ts (`__ExecuteCapabilityAction`).
+ * @param compactProof - The compact JWS from the request's DPoP proof header. Untrusted.
+ * @param expectation - Facts the server established itself: the issued capability, the separately
+ *   observed workload binding, the request method and URI, and the current time. Never taken from
+ *   the request body.
+ * @returns On success, the parsed claims and the confirmed key thumbprint. On failure, only a
+ *   reason — never partially trusted claims.
  */
 export function __VerifyCapabilityProof(compactProof: string, expectation: CapabilityProofExpectation): CapabilityProofVerification
 {

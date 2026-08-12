@@ -16,7 +16,7 @@ const _MAX_RESPONSE_BYTES = 256 * 1024;
  */
 export class MemoryGatewayTransportError extends Error
 {
-	/** Bounded failure class safe to project into a durable invocation failure code. */
+	/** Which kind of failure it was. It carries no remote content, so it is safe to log or store as an invocation's failure code. */
 	readonly code: MemoryGatewayTransportFailureCode;
 
 	/** Creates a transport failure that names only its bounded class. */
@@ -28,7 +28,7 @@ export class MemoryGatewayTransportError extends Error
 	}
 }
 
-/** Validate and normalize the release-local memory-gateway origin. */
+/** Check that the configured gateway URL is one in-cluster Kubernetes Service origin, and return it parsed. */
 function _MemoryGatewayOrigin(value: string): URL
 {
 	const parsed = URL.parse(value);
@@ -99,16 +99,26 @@ function _CreateServerTokenReader(tokenFile: string): () => Promise<string>
 }
 
 /**
- * Create the authenticated Cognee exchange used by read-only memory-gateway search operations.
+ * Create the authenticated exchange the memory-gateway client uses for read-only search.
  *
- * Every exchange presents a freshly read, audience-bound projected ServiceAccount token. The memory
- * gateway TokenReviews it and admits only the OpenCrane server identity; Cognee itself remains
- * private and unauthenticated. Every fetch runs with automatic child tracing suppressed so bearer
- * headers and remote addresses cannot become child-span attributes. The caller's explicit
- * memory-gateway operation span remains active.
+ * Every exchange re-reads the projected ServiceAccount token and sends it as a bearer token. The
+ * memory gateway checks that token with a Kubernetes TokenReview and admits only the OpenCrane
+ * server identity; Cognee itself sits behind the gateway, private and unauthenticated, so the
+ * gateway is the only thing that ever authorizes a search. Every fetch runs with automatic child
+ * tracing switched off so the bearer header and the remote address cannot become span attributes;
+ * the caller's own memory-gateway span stays active. The token audience is
+ * `MEMORY_GATEWAY_PROJECTED_TOKEN_AUDIENCE` in libs/contracts/src/memory.types.ts.
  *
- * @param options - Gateway origin, timeout, projected token, and test seams.
- * @returns A session issuing bounded, timeout-guarded JSON exchanges.
+ * Called by: http-cognee-memory-gateway-client.ts, which builds one session per client.
+ *
+ * @param options - Gateway origin, per-exchange timeout, projected-token path, and the optional
+ *   fetch and token-reader overrides used by tests.
+ * @returns A session with a single `search` method — the only call allowed against Cognee.
+ * @throws Error When the origin is not a single in-cluster HTTP Service origin, or the mounted token
+ *   file is empty when it is first read.
+ * @see NEEDS-HUMAN - add the URI for the Kubernetes TokenReview API
+ *   (`authentication.k8s.io/v1`) that the "admits only the OpenCrane server identity" claim rests
+ *   on; I could not confirm the exact upstream doc URL.
  */
 export function __CreateCogneeSession(options: CogneeMemoryGatewayHttpOptions): CogneeSession
 {

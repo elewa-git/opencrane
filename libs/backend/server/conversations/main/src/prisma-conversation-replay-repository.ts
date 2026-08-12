@@ -4,7 +4,20 @@ import { ConversationSystemEventTypes } from "@opencrane/models/conversations";
 
 import type { ConversationReplayRepository } from "./replay-reader.types.js";
 
-/** Prisma adapter that reads only participant-visible run events through canonical timeline order. */
+/**
+ * The SQL side of a replay page: checks access, then reads rows in timeline order.
+ *
+ * Access is proved by two rows, not by anything the caller sent — an active organisation
+ * membership in the requested silo, and a participant row on a conversation in that same silo.
+ * The participant row also carries the range the caller may read, and that range is applied as
+ * a WHERE bound rather than filtered afterwards, so rows outside it never leave the database.
+ *
+ * Takes a `Prisma.TransactionClient`, so it cannot open its own transaction; the caller owns
+ * that.
+ *
+ * Called by: `PrismaConversationReplayUnitOfWork.readAuthorized`
+ * (prisma-conversation-replay-unit-of-work.ts).
+ */
 export class PrismaConversationReplayRepository implements ConversationReplayRepository
 {
 	/** Transaction-scoped canonical product database snapshot. */
@@ -16,19 +29,23 @@ export class PrismaConversationReplayRepository implements ConversationReplayRep
 		this.prisma = prisma;
 	}
 
-	/** Read a bounded page and retain the same-snapshot authority result for live streams. */
+	/**
+	 * @returns The access decision and up to `limit` rows in ascending position order. An
+	 *   authorized result with no rows means "nothing new yet"; a revoked result means stop.
+	 * @throws Whatever the database driver throws; the caller's transaction rolls back.
+	 */
 	async readAuthorized(command: ReadConversationProjectionCommand): Promise<ConversationProjectionReadResult>
 	{
 		// 1. Reject a foreign cursor before consulting any durable authority.
 		if (command.cursor !== null && command.cursor.conversationId !== command.conversationId) return { status: ConversationProjectionReadStatuses.RevokedOrMissing, rows: [] };
 
-		// 2. Require current organisation membership and participant bounds in this repeatable snapshot.
+		// 2. Prove access twice: an active membership in this silo, and a participant row on a conversation in the same silo. Both read in this transaction, so they agree with the rows below.
 		const membership = await this.prisma.orgMembership.findFirst({ where: { clusterTenant: command.siloId, subject: command.subjectId, status: OrgMemberStatus.Active }, select: { clusterTenant: true } });
 		if (membership === null) return { status: ConversationProjectionReadStatuses.RevokedOrMissing, rows: [] };
 		const participant = await this.prisma.conversationParticipant.findUnique({ where: { conversationId_userId: { conversationId: command.conversationId, userId: command.subjectId } }, include: { conversation: { select: { siloId: true } } } });
 		if (participant === null || participant.conversation.siloId !== command.siloId) return { status: ConversationProjectionReadStatuses.RevokedOrMissing, rows: [] };
 
-		// 3. Read and project only canonical run events within the durable participant bounds.
+		// 3. Read only rows inside the caller's visible range: start after the cursor (or at the range start), and stop at accessEndedPosition when their access has ended.
 		const afterPosition = command.cursor === null ? BigInt(participant.visibleFromPosition) - 1n : BigInt(command.cursor.position);
 		if (afterPosition < BigInt(participant.visibleFromPosition) - 1n) return { status: ConversationProjectionReadStatuses.RevokedOrMissing, rows: [] };
 		const position = command.cursor?.subframe === undefined ? { gt: afterPosition } : { gte: afterPosition };

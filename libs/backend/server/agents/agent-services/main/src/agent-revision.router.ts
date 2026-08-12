@@ -78,8 +78,12 @@ function _publishDenialStatus(reason: PublishAgentRevisionFailureReason): number
  * administrators cannot silently overwrite each other. run-now records an admission on the shared
  * run substrate and never dispatches or executes anything.
  *
- * @param dependencies - Composition-root persistence, admission, caller, clock, and logging ports.
- * @returns The configured Express router.
+ * Called by: `_CreateAgentServicesRouter` in `prisma-agent-services.router.ts`, which supplies the
+ * Prisma-backed dependencies and is mounted at `/api/v1/agent-services` by
+ * apps/opencrane/src/app/routes.ts.
+ *
+ * @param dependencies - Persistence, admission, caller resolution, clock, and logging.
+ * @returns An Express router with no prefix of its own; the caller decides where it mounts.
  */
 export function __CreateAgentServicesRouter(dependencies: AgentServicesRouterDependencies): Router
 {
@@ -87,8 +91,10 @@ export function __CreateAgentServicesRouter(dependencies: AgentServicesRouterDep
 	const { lifecycle, publicationFor, runAdmission, schedules, scopeGrantResolver, resolveCaller, clock, logger } = dependencies;
 
 	/**
-	 * Enforce that the caller administers every scope they attach, before the revision is persisted.
-	 * Returns true when the request may proceed; otherwise it has already sent a fail-closed response.
+	 * Check the caller holds every scope the new revision attaches, before anything is stored.
+	 *
+	 * @returns True to carry on. On false it has already sent 403 `FORBIDDEN_SCOPE_ATTACHMENT` listing
+	 *   the offending attachments, so the caller must return immediately and not touch the response.
 	 */
 	async function _authoriseAttachments(caller: ManagementCaller, content: AgentRevisionContent, res: Response): Promise<boolean>
 	{
@@ -97,7 +103,7 @@ export function __CreateAgentServicesRouter(dependencies: AgentServicesRouterDep
 		return true;
 	}
 
-	/** Resolves an org-admin caller, or sends the fail-closed 401/403 envelope. */
+	/** Returns the caller only if authenticated AND an org admin. On null it has already sent 401 or 403, so the handler must return at once. */
 	function _requireAdmin(req: Request, res: Response): ManagementCaller | null
 	{
 		const caller = resolveCaller(req);
@@ -323,7 +329,7 @@ export function __CreateAgentServicesRouter(dependencies: AgentServicesRouterDep
 		});
 	}
 
-	/** Emits the shared append (revise/restore) result envelope. */
+	/** Sends the response for revise and restore, which return the same shape: 201 with the new revision, 409 with the current newest revision id, or the denial's own status. */
 	function _sendAppend(res: Response, result: Awaited<ReturnType<typeof __ReviseAgentRevision>>): void
 	{
 		if (result.outcome === "conflict") { res.status(409).json({ error: "A newer revision exists; rebase on the current head.", code: "REVISION_CONFLICT", currentHeadRevisionId: result.currentHeadRevisionId }); return; }

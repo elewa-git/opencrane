@@ -2,7 +2,13 @@
  * API types for the audit-log route.
  */
 
-/** Single entry in the audit log. */
+/**
+ * One row of the operator-facing audit log, as returned by GET /audit.
+ *
+ * These are the readable entries written by the group and tenant routes, not the append-only
+ * authorization decisions from __AppendAuditDecision. `tenant` is part of the contract but the list
+ * route does not populate it today.
+ */
 export interface AuditEntry
 {
   /** ISO-8601 timestamp of the event. */

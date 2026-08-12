@@ -4,13 +4,25 @@ import { isAbsolute } from "node:path";
 import type { MountedPublicKeySource } from "./mounted-public-key.types.js";
 
 /**
- * Creates a reloadable source for one public key projected as a mounted file.
+ * Create a reader for one public key that Kubernetes mounts into this container as a file.
  *
- * Kubernetes replaces projected Secret files atomically. Reading on every use makes an in-place
- * rotation effective without extending old trust until a process restart.
+ * The file is re-read on every use rather than cached, because Kubernetes swaps a mounted
+ * Secret file in one step: re-reading means a rotated key takes effect on the next
+ * verification, instead of the old key staying trusted until the process restarts.
  *
- * @param publicKeyPath - Absolute mounted path containing the public key.
- * @returns A source that fails closed when the current projection cannot be read.
+ * The path must be absolute, so that a change of working directory cannot point trust at a
+ * different file, and the file is read once here so that missing key material fails at
+ * startup rather than on the first real request.
+ *
+ * Called by: libs/backend/server/iam/membership/main/src/fleet-membership-evidence.factory.ts
+ *.
+ *
+ * @param publicKeyPath - Absolute path of the mounted public-key file.
+ * @returns A reader whose `read()` returns the file contents as it is now.
+ * @throws When the path is not absolute, and when the file cannot be read at creation time
+ *         or on any later read — a key that cannot be read must fail, never verify.
+ * @see https://kubernetes.io/docs/tasks/configure-pod-container/configure-service-account/
+ *      — projected volumes, whose atomic file replacement is what makes re-reading correct.
  */
 export function _CreateMountedPublicKeySource(publicKeyPath: string): MountedPublicKeySource
 {

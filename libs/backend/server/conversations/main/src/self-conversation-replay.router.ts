@@ -4,7 +4,33 @@ import { __DecodeConversationProjectionCursor, __StreamConversationProjection, C
 import { _CreateExpressConversationLiveReplaySink } from "./express-conversation-live-replay-sink.js";
 import type { SelfConversationReplayRouterDependencies } from "./self-conversation-replay.router.types.js";
 
-/** Create the browser-session-authenticated snapshot-to-live surface. */
+/**
+ * Build the `GET /:conversationId/events` route a signed-in user's browser subscribes to for
+ * live conversation updates.
+ *
+ * The route resolves the caller from the session, decodes the resume cursor, and refuses a
+ * cursor for a different conversation with 400 before any streaming starts. It then hands off
+ * to `__StreamConversationLiveReplay` and stays out of the way.
+ *
+ * Because a stream is long-lived, the route wires an abort signal to three things — the
+ * response closing, a response error, and process shutdown — and removes those listeners in a
+ * `finally`, so a busy server does not accumulate listeners on the shutdown signal.
+ *
+ * Error handling depends on whether the response was opened. Before that, a revoked read
+ * answers 404 and an unexpected failure answers 503 with JSON; after that, headers are already
+ * sent and all the route can do is end the response.
+ *
+ * Called by: `_CreateSelfConversationReplayRouter`
+ * (prisma-self-conversation-replay.router.ts), mounted at `/api/v1/me/conversations` by
+ * apps/opencrane/src/app/routes.ts.
+ *
+ * @param dependencies - Caller resolver, replay repository, clock, limits, optional approval
+ *   overlay reader, optional shutdown signal, and logger.
+ * @returns An Express router carrying the single events route.
+ * @see https://html.spec.whatwg.org/multipage/server-sent-events.html — the response is an SSE
+ * stream, which is why `Last-Event-ID` is accepted as an alternative to the `cursor` query
+ * parameter.
+ */
 export function __CreateSelfConversationReplayRouter(dependencies: SelfConversationReplayRouterDependencies): Router
 {
 	const router = Router();
@@ -42,7 +68,16 @@ export function __CreateSelfConversationReplayRouter(dependencies: SelfConversat
 	return router;
 }
 
-/** Decode only one unambiguous, canonical replay cursor. */
+/**
+ * Work out where to resume from, accepting the cursor either as a `cursor` query parameter or
+ * as the `Last-Event-ID` header. When both are present they must be byte-identical — two
+ * different resume points is a client bug, and guessing which one is meant could silently skip
+ * events.
+ *
+ * @returns The decoded cursor to resume from; null to start from the beginning; or `undefined`
+ *   meaning "reject this request", which the caller turns into 400. The three-way answer is
+ *   why the return type is not just `cursor | null` — do not collapse `undefined` and null.
+ */
 function _cursor(request: Request)
 {
 	if (request.query["cursor"] !== undefined && typeof request.query["cursor"] !== "string") return undefined;

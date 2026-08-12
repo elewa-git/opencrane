@@ -7,13 +7,31 @@ import { ___ConversationCreationRequestSchema, ___ParticipantInputBlocksSchema }
 import { ConversationAuthorityOutcomes, ConversationWriteDenialReasons, type ConversationWriteDenial } from "./conversation-authority.types.js";
 import type { SelfConversationsRouterDependencies } from "./self-conversations.router.types.js";
 
-/** Bounded idempotent participant message body. */
+/** Message body shape: a retry key of 1–128 characters plus the participant block list. Unknown fields are rejected, not ignored. */
 const _MessageSchema = z.object({ idempotencyKey: z.string().trim().min(1).max(128), blocks: ___ParticipantInputBlocksSchema }).strict();
 
 /** Participant-local archive mutation body. */
 const _ArchiveSchema = z.object({ archived: z.boolean() }).strict();
 
-/** Creates the browser-session-authenticated conversation router. */
+/**
+ * Build the HTTP routes a signed-in user uses for their own conversations: list, create, open,
+ * post a message, archive, close.
+ *
+ * The router owns three jobs and nothing else. It derives the caller from the session (never
+ * from the path or body, so there is no route for reading someone else's conversations), checks
+ * the request shape, and translates the result: a `Denied` outcome becomes the HTTP status from
+ * `_STATUS_BY_DENIAL` with the denial value as the `error` field, while an unexpected throw
+ * becomes 503 with a generic code. Authorisation itself happens in the database layer behind
+ * `dependencies.authority`.
+ *
+ * Called by: `_CreateSelfConversationsRouter` (prisma-self-conversations.router.ts), which is
+ * mounted at `/api/v1/me/conversations` by apps/opencrane/src/app/routes.ts.
+ *
+ * @param dependencies - Caller resolver, the conversation authority port, and the logger.
+ * @returns An Express router with the six participant routes mounted on it.
+ * @see _SelfConversationsOpenapiPaths in openapi.ts — the documented contract these routes
+ * must match.
+ */
 export function __CreateSelfConversationsRouter(dependencies: SelfConversationsRouterDependencies): Router
 {
 	const router = Router();
@@ -138,13 +156,24 @@ function _parameter(value: string | readonly string[] | undefined): string | nul
 	return typeof value === "string" && value.trim().length > 0 ? value : null;
 }
 
-/** Maps stable authority denials to non-disclosing HTTP classes. */
+/** Look up the HTTP status for a denial reason. Total by construction, so an unmapped reason cannot fall through to a 200. */
 function _denialStatus(reason: ConversationWriteDenial): number
 {
 	return _STATUS_BY_DENIAL[reason];
 }
 
-/** Exhaustive HTTP mapping that keeps capacity refusal distinct from persistence failure. */
+/**
+ * One HTTP status per denial reason. Typed as a complete record, so adding a member to
+ * {@link ConversationWriteDenialReasons} without a status here fails the build rather than
+ * shipping a wrong status.
+ *
+ * Two groupings are deliberate. `ConversationUnavailable`, `ParticipantUnavailable`, and
+ * `AgentServiceUnavailable` all answer 404 so a client cannot probe for conversations, users,
+ * or agents it may not see. And 429 for `CapacityLimited` is kept apart from 503 for
+ * `PersistenceUnavailable`: the first means "we are busy, send the same request again", the
+ * second means "we could not confirm the write" — collapsing them would have clients retrying
+ * a possibly-applied write as though it were a queue delay.
+ */
 const _STATUS_BY_DENIAL: Readonly<Record<ConversationWriteDenialReasons, number>> = {
 	[ConversationWriteDenialReasons.ConversationUnavailable]: 404,
 	[ConversationWriteDenialReasons.ConversationClosed]: 409,
@@ -157,13 +186,13 @@ const _STATUS_BY_DENIAL: Readonly<Record<ConversationWriteDenialReasons, number>
 	[ConversationWriteDenialReasons.PersistenceUnavailable]: 503,
 };
 
-/** Emits only bounded operation and silo metadata; body content and identity remain excluded. */
+/** Log an unexpected failure with the operation name and silo only. Message content and the user's identity are deliberately left out. */
 function _log(logger: Logger, err: unknown, operation: string, siloId: string): void
 {
 	logger.error({ err, operation, siloId }, "Conversation operation failed");
 }
 
-/** Records handled persistence degradation without logging message content or participant identity. */
+/** Log a warning only for a database-unavailable denial. Every other denial is a normal client outcome and is not logged. */
 function _logUnavailable(logger: Logger, reason: ConversationWriteDenial, operation: string, siloId: string): void
 {
 	if (reason === ConversationWriteDenialReasons.PersistenceUnavailable) logger.warn({ operation, reason, siloId }, "Conversation operation unavailable");

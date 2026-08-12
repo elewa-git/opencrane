@@ -1,14 +1,22 @@
 import type { AgentServiceSchedule, ScheduleTickResult } from "./schedule-tick.types.js";
 import type { ScheduleCursorAdvanceOutcomes } from "./schedule-tick.enums.js";
 
-/** One enabled scheduler snapshot read from one stable schedule version. */
+/**
+ * One enabled schedule plus the service facts observed in the same read.
+ *
+ * Read together on purpose: the tick has to judge the schedule and whether its service can actually
+ * accept a run as of the same moment. `activeRevisionId` is null when the service is not runnable,
+ * which the tick reports as `ServiceNotRunnable` instead of admitting anything. `updatedAt` is
+ * carried along so the later cursor write can be made conditional on the row not having changed
+ * since this read.
+ */
 export interface EnabledScheduleSnapshot
 {
 	/** Scheduler-owned schedule coordinates and evaluation policy. */
 	readonly schedule: AgentServiceSchedule;
 	/** Active managed revision observed with the schedule, or null when the service is not runnable. */
 	readonly activeRevisionId: string | null;
-	/** Exact persisted update instant used to fence the subsequent cursor compare-and-set. */
+	/** The row's last-update time when it was read; the later cursor write only applies if it is still this. */
 	readonly updatedAt: string;
 }
 
@@ -26,7 +34,17 @@ export interface ActiveScheduledRunRepository
 	hasActiveScheduledRun(agentServiceId: string, siloId: string): Promise<boolean>;
 }
 
-/** Command that conditionally records a completed scheduler tick's newest durable cursor. */
+/**
+ * A request to record how far one tick got, which the database may refuse.
+ *
+ * The two `expected*` fields are the whole point: they are the schedule version and cursor the tick
+ * read BEFORE it began admitting runs, and the update applies only if both are still those values.
+ * Runs are admitted outside any transaction - they are slow, and holding a transaction across them
+ * would be worse - so a schedule edit or a second scheduler can land in between. This check is what
+ * stops a late tick from dragging the cursor back over slots that already fired.
+ *
+ * @see {@link ScheduleCursorAdvanceOutcomes} for the two possible answers.
+ */
 export interface AdvanceScheduleCursorCommand
 {
 	/** Schedule that owns the cursor. */
@@ -48,7 +66,17 @@ export interface AdvanceScheduleCursorResult
 	readonly outcome: ScheduleCursorAdvanceOutcomes;
 }
 
-/** Capability repository that advances a schedule cursor only through its observed version. */
+/**
+ * The only writer of a schedule's cursor, and it will not move one backwards.
+ *
+ * There is exactly one method and it is conditional by design: it updates the cursor only while the
+ * schedule row still matches the version and previous cursor the caller observed. That is what makes
+ * two schedulers, or a tick that overran, safe to run at the same time - the loser writes nothing
+ * and reports `Stale` rather than rewinding the schedule.
+ *
+ * Called by: ScheduleTicker._advanceCursorIfNeeded in schedule-ticker.ts, through
+ * {@link ScheduleTickerTransaction}.
+ */
 export interface ScheduleCursorRepository
 {
 	/** Performs the version-and-cursor compare-and-set without ever moving a newer cursor backwards. */
@@ -69,7 +97,19 @@ export interface ScheduleTickerTransaction
 /** Work performed only with capability repositories, never with a Prisma client. */
 export type ScheduleTickerWork<Result> = (transaction: ScheduleTickerTransaction) => Promise<Result>;
 
-/** Opaque, scheduler-specific transaction boundary that exclusively owns Prisma. */
+/**
+ * The scheduler's whole database boundary: short pieces of work, with no Prisma client in sight.
+ *
+ * Callers are handed capability repositories rather than a client, so the scheduler cannot reach
+ * tables it does not own. Each `run` call is deliberately brief and happens either before or after
+ * run admission, never around it - one tick therefore uses several small transactions instead of one
+ * long one, because holding a transaction open across external admission calls would pin a
+ * connection and invite deadlocks.
+ *
+ * Called by: ScheduleTicker in schedule-ticker.ts; implemented by PrismaScheduleTickerUnitOfWork
+ * over a read-committed Prisma transaction and constructed in
+ * apps/opencrane/src/app/background-workers.ts.
+ */
 export interface ScheduleTickerUnitOfWork
 {
 	/** Runs one short persistence operation against transaction-scoped capability repositories. */

@@ -17,10 +17,17 @@ function _resolveCaller(request: Parameters<typeof _ResolveRequestPrincipal>[0])
 }
 
 /**
- * Composes the Prisma-backed participant-bound conversation replay router.
- * @param prisma - Canonical product-authority client.
- * @param logger - Process logger supplied by the app composition root.
- * @returns The configured self-conversation replay router.
+ * Build the ready-to-mount live replay router for an app, wired to the production clock and
+ * limits.
+ *
+ * Called by: apps/opencrane/src/app/routes.ts, mounted at `/api/v1/me/conversations`, which
+ * also supplies the approval-overlay reader and the shutdown signal.
+ *
+ * @param prisma - Product database client; one short transaction is opened per page read.
+ * @param logger - Used only for unexpected stream failures; never receives event content.
+ * @param options - Optional approval-overlay reader and process shutdown signal. Leave them
+ *   out and the stream carries stored events only and is not drained on shutdown.
+ * @returns An Express router carrying the events route.
  */
 export function _CreateSelfConversationReplayRouter(prisma: PrismaClient, logger: Logger, options: SelfConversationReplayCompositionOptions = {}): Router
 {

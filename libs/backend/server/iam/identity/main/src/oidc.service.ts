@@ -15,7 +15,7 @@ import { _ResolveCallerClusterTenant } from "@opencrane/backend/server/tenancy/c
  * The clustertenant-manager's OIDC auth service. Extends the shared
  * {@link OidcAuthServiceBase} (provider discovery, PKCE login, token exchange, claim
  * validation, session lifecycle, membership-derived org-admin facts) with the two
- * silo-specific seams:
+ * parts that differ per silo:
  *
  *   - {@link resolveLoginClient} — per-org login. A host `<org>.<base>` (or a customer
  *     vanity domain) that maps to a fully-provisioned ClusterTenant authorizes against THAT
@@ -91,12 +91,16 @@ export class OidcAuthService extends OidcAuthServiceBase
   }
 
   /**
-   * Mirror optional OIDC group projection, then claim the configured standalone owner slot from
-   * verified callback facts. The durable claim is subject-bound and failure is browser-visible.
+   * Copy the login's group claims into the database, then, on a standalone install, claim the silo's
+   * single owner slot from the verified login facts.
+   *
+   * The group copy is best-effort: a failure is logged and nothing else. The owner claim is not — a
+   * refusal throws, and {@link isPostLoginFailureFatal} makes the browser see a failed login rather
+   * than landing the user in a silo they do not own. The stored owner is keyed on the OIDC subject.
    */
   protected override async onLoginEstablished(req: Request, authUser: AuthUser): Promise<void>
   {
-    // 1. Keep optional group projection independent so its outage cannot hide first-owner admission.
+    // 1. Copy group claims separately, so a failure there cannot hide the owner-claim result.
     try
     {
       await _MirrorGroupsOnLogin({ prisma: this.prisma, subject: authUser.sub, groups: authUser.groups, log: this.log });

@@ -4,7 +4,17 @@ import { ___DoWithTrace } from "@opencrane/backend/observability";
 import { __DecideDeferredToolRequest } from "./deferred-tool-approval.js";
 import type { DecideDeferredToolRequestCommand, DecideDeferredToolRequestResult, DeferredToolApprovalDecisionRepository } from "./deferred-tool-approval-decision.types.js";
 
-/** Prisma-backed atomic persistence for session-authorized deferred-tool decisions. */
+/**
+ * Records one approval decision in a serializable transaction.
+ *
+ * Serializable is required, not a preference: the decision re-reads the approval, the run, and the
+ * tool call, and applies the reviewer's arguments, and none of that may see a torn state.
+ *
+ * A database trigger aborts the transaction if the run's workload authority changed underneath;
+ * that abort is translated into a plain `conflict` so the route answers 404 rather than 500.
+ *
+ * Called by: ./prisma-deferred-tool-approval.router.ts.
+ */
 export class PrismaDeferredToolApprovalDecisionRepository implements DeferredToolApprovalDecisionRepository
 {
 	/** Prisma client used to run the decision's read and its conditional update in one transaction. */

@@ -4,7 +4,21 @@ import { UserOnboardingDenialReasons, UserOnboardingTransitionStatuses } from ".
 import { _UserOnboardingLifecycleState } from "./user-onboarding-lifecycle-state.js";
 import type { ApprovedPersonaEvidence, UserOnboardingOwner, UserOnboardingPersonaEvidencePort, UserOnboardingRecord, UserOnboardingRepository, UserOnboardingTransitionResult } from "./user-onboarding.types.js";
 
-/** Server-owned orchestration for the resumable persona-survey phase of onboarding. */
+/**
+ * Runs the persona-survey half of onboarding: start or resume a survey, then pin the approved persona.
+ *
+ * Every method re-checks with the persona package before writing, dispatches through the state
+ * object for the row's current state, and reports a stable status instead of throwing when a race is
+ * lost - so any call here can be retried safely. `readOrCreate` also repairs one specific gap: if
+ * persona committed an approval but its notification to onboarding never arrived (a crash or a
+ * dropped call), reading the row finds that approval and pins it.
+ *
+ * Called by: __CreateUserOnboardingRouter and __UserOnboardingChatAuthority in this package, and
+ * UserOnboardingPersonaWorkflowCoordinator; constructed in
+ * apps/opencrane/src/app/user-onboarding-composition.ts.
+ *
+ * @see {@link UserOnboardingTransitionResult} for what the write methods report.
+ */
 export class __UserOnboardingAuthority
 {
 	/** Persistence authority for UserOnboarding rows only. */

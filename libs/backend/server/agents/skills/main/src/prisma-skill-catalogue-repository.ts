@@ -7,7 +7,15 @@ import { SkillCatalogueRevisionStates, SkillCatalogueStates, type SkillCatalogue
 /** Maximum browser-safe skill summaries one silo can receive in one catalogue response. */
 const _CATALOGUE_ENTRY_LIMIT = 200;
 
-/** Prisma repository for the live, browser-safe governed skill catalogue. */
+/**
+ * Reads the skill catalogue from Postgres.
+ *
+ * The query selects only listing fields — id, name, description, states, timestamps — so no skill
+ * bundle, manifest, signature, or review evidence can reach a browser even by accident. It reads
+ * live rows with no cache, so a newly published revision shows up on the next request.
+ *
+ * Called by: `_CreateSkillCatalogueRouter` in `prisma-skill-catalogue.router.ts`.
+ */
 export class PrismaSkillCatalogueRepository implements SkillCatalogueRepository
 {
 	/** Canonical OpenCrane catalog database client. */
@@ -19,7 +27,7 @@ export class PrismaSkillCatalogueRepository implements SkillCatalogueRepository
 		this.prisma = prisma;
 	}
 
-	/** Lists bounded browser-safe metadata for the exact host-derived silo. */
+	/** Lists at most 200 skills from this silo, most recently updated first and tie-broken by id so repeated calls agree. Wrapped in a trace span named `skills.catalogue.list`. */
 	async listCatalogue(siloId: string): Promise<readonly SkillCatalogueEntry[]>
 	{
 		const self = this;
@@ -43,7 +51,7 @@ export class PrismaSkillCatalogueRepository implements SkillCatalogueRepository
 	}
 }
 
-/** Converts generated persistence lifecycle values into the browser catalogue vocabulary. */
+/** Converts a stored `SkillRevisionState` into the value returned over HTTP. The switch has no default arm, so adding a state to the Prisma schema without adding it here is a compile error rather than a runtime surprise. */
 function _RevisionState(state: SkillRevisionState): SkillCatalogueRevisionStates
 {
 	switch (state)
