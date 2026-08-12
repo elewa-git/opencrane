@@ -277,6 +277,26 @@ elsewhere — "the immutable snapshot", "the held transaction" — either name t
 `@see` tag. Add `@see` only for a concept **not already visible in the signature** (IDEs link
 parameter types), and only after grepping to confirm the exact exported name exists.
 
+**External specs and third-party services get a `@see` with the URI.** Whenever a comment leans on
+something defined outside this repo — the MCP protocol, AG-UI, A2UI, an RFC, or a third-party service
+such as Obot, LiteLLM, Zitadel or CNPG — link it. A reader must not have to go searching for the
+document that makes the code correct.
+
+- **Link the pinned revision, not the latest.** If the code pins `2025-06-18`, link that revision's
+  page. A link to a newer spec silently misdescribes the code.
+- **Never invent a URL.** Confirm it resolves and is the right version before committing it. A
+  fabricated or wrong-version link is worse than none, because it will be trusted.
+- Say what the link is *for*, not merely that it exists.
+
+```typescript
+/**
+ * MCP protocol revision this client announces, and the only one it will accept back.
+ * ...
+ * @see https://modelcontextprotocol.io/specification/2025-06-18 — the revision pinned here.
+ */
+const _MCP_PROTOCOL_VERSION = "2025-06-18";
+```
+
 ```typescript
 // WRONG — no verb, ritual modifiers, invented verb, and a reference the reader must already know
 /** Transaction-owned construction boundary for the recovery-event repository. */

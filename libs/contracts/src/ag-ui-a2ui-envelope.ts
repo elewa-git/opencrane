@@ -21,15 +21,34 @@ const _A2UI_COMPONENT_NAMES = new Set<string>(["Text", "Button", "TextField", "S
 /** Exact authoritative presentation states admitted across the public projection boundary. */
 const _A2UI_SURFACE_STATES = new Set<string>(Object.values(AgUiA2uiSurfaceStates));
 
-/** Pinned upstream v0.8 operation validator, compiled once for every projection consumer. */
+/**
+ * Validator built from the upstream A2UI v0.8 schema, compiled once and shared by every consumer.
+ *
+ * The version is pinned to v0.8 because that is what the `@a2ui/web_core` dependency ships. Upstream
+ * has since moved on and marks v0.8 legacy, so this cannot be bumped by editing the string here — the
+ * dependency and this schema move together.
+ * @see https://a2ui.org/specification/v0.8-a2ui/ — the pinned revision.
+ */
 const _VALIDATE_A2UI_OPERATION = new Ajv({ strict: false }).compile(Schemas.A2UIClientEventMessage);
 
 /**
- * Parse one complete governed A2UI envelope without granting local action or lifecycle authority.
+ * Parse one A2UI envelope sent by an agent, returning it only if every part is allowed.
  *
- * The pinned upstream schema validates complete component properties and data updates. OpenCrane's
- * additional boundary admits only its exact envelope, operation vocabulary, surface coordinate,
- * bounds, and eleven-name catalogue before those values can reach a renderer.
+ * A2UI lets an agent describe a user interface as JSON, which the client then renders with its own
+ * components. That means the agent's output reaches the screen, so it is checked twice. The upstream
+ * schema checks the shape of components and data updates. Everything after that is OpenCrane's own
+ * limit: the envelope's exact keys, the operations it may contain, its size caps, and a fixed
+ * catalogue of eleven component names. A component the agent invents is refused rather than rendered.
+ *
+ * The envelope is data, never code, and parsing it grants nothing: it cannot start an action or move
+ * a run's lifecycle.
+ *
+ * @param value - Untrusted JSON as it arrived from the agent runtime.
+ * @returns The same envelope, once every check has passed.
+ * @throws TypeError with a short reason when any check fails. There is no partial success — a
+ * rejected envelope renders nothing.
+ * @see https://a2ui.org/specification/v0.8-a2ui/ — the A2UI revision this accepts.
+ * @see https://docs.ag-ui.com — AG-UI, the event protocol that carries this envelope to the client.
  */
 export function ___ParseAgUiA2uiEnvelope(value: unknown): AgUiA2uiEnvelope
 {

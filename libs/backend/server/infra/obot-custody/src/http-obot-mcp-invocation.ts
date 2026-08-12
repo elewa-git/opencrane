@@ -7,7 +7,15 @@ import type { ObotMcpInvocationPort, ObotMcpToolInvocationCommand, ObotMcpToolRe
 import { ObotProtocolError, ObotTransportError } from "./obot-http.js";
 import type { ObotSession } from "./obot-http.types.js";
 
-/** MCP protocol revision announced by the trusted OpenCrane server client. */
+/**
+ * MCP protocol revision this client announces, and the only one it will accept back.
+ *
+ * The `initialize` handshake sends this and then rejects the server if it answers with anything
+ * else, rather than falling back to whatever the server offers. A mismatch means the two sides
+ * disagree about the wire format, and guessing across that gap is how a tool call gets silently
+ * misread.
+ * @see https://modelcontextprotocol.io/specification/2025-06-18 — the revision pinned here.
+ */
 const _MCP_PROTOCOL_VERSION = "2025-06-18";
 
 /** Return a plain object suitable for validating an untrusted JSON-RPC response. */
