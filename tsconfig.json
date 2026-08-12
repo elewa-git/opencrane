@@ -25,6 +25,9 @@
       "@opencrane/backend/conversations/projection": [
         "./libs/backend/conversations/projection/main/src/index.ts"
       ],
+      "@opencrane/backend/conversations/agent-threads": [
+        "./libs/backend/conversations/agent-threads/main/src/index.ts"
+      ],
       "@opencrane/backend/server/agents/onboarding": [
         "./libs/backend/server/agents/onboarding/main/src/index.ts"
       ],
