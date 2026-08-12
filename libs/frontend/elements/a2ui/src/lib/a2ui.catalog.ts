@@ -13,13 +13,13 @@ function _loadButton(): typeof Button { return Button; }
 /** Load the upstream text-field renderer. */
 function _loadTextField(): typeof TextField { return TextField; }
 
-/** Load the package-owned accessible renderer shared by the three distinct choice contracts. */
+/** Load our own accessible renderer, used for SingleChoice, MultipleChoice and Select. */
 function _loadChoice(): typeof A2uiChoiceComponent { return A2uiChoiceComponent; }
 
 /** Load the upstream numeric-slider renderer. */
 function _loadSlider(): typeof Slider { return Slider; }
 
-/** Load the package-owned accessible adapter for the pinned date-time contract. */
+/** Load our own accessible adapter for DateTimeInput. */
 function _loadDateTimeInput(): typeof A2uiDateTimeComponent { return A2uiDateTimeComponent; }
 
 /** Load the upstream image renderer. */
@@ -32,10 +32,23 @@ function _loadCard(): typeof Card { return Card; }
 function _loadList(): typeof List { return List; }
 
 /**
- * Build the exact OpenCrane A2UI catalogue.
+ * Builds the catalogue of renderers the vendor is allowed to use.
  *
- * This intentionally does not spread the upstream default catalogue. Unknown names are rejected
- * before processing and render one package-owned unsupported placeholder without payload details.
+ * It deliberately does NOT spread the vendor's default catalogue: only the names in
+ * {@link A2uiComponentNames} appear, so a component OpenCrane has not reviewed can never render.
+ * Names outside the catalogue are rejected by the admission check before the vendor is called, and
+ * the canvas shows a placeholder that repeats nothing from the payload.
+ *
+ * Most entries load the vendor's own renderer. Two do not: SingleChoice/MultipleChoice/Select all
+ * load A2uiChoiceComponent, and DateTimeInput loads A2uiDateTimeComponent, because the vendor
+ * renderers for those drop accessible labels.
+ *
+ * Called by: a2ui.providers.ts, which registers the result for A2uiCanvasComponent.
+ *
+ * @returns The catalogue to provide to the vendor renderer. Adding an entry also means adding the
+ *   name to {@link A2uiComponentNames}, or admission will still reject it.
+ * @see A2UI v0.8 specification — the upstream component list and each component's properties:
+ *   https://a2ui.org/specification/v0.8-a2ui/
  */
 export function _OpenCraneA2uiCatalog(): Catalog
 {

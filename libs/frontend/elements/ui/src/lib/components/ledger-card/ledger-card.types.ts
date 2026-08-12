@@ -1,7 +1,7 @@
-/** Finite entry kinds supported by the shared ledger-card treatment. */
+/** The three kinds of ledger entry a card can show: an observation, a policy, or an action. */
 export enum LedgerCardKinds
 {
-	/** Evidence observed from retrieved context. */
+	/** Something observed in the retrieved context. */
 	Observation = "observation",
 	/** Policy applied while producing the result. */
 	Policy = "policy",

@@ -3,11 +3,18 @@ import { z } from "zod";
 import { PersonaFirstChatArchetypes, PersonaFirstChatColours, PersonaFirstChatContentRevision, PersonaFirstChatCurrentQuestion, PersonaFirstChatPersona, PersonaFirstChatSnapshot, PersonaFirstChatTranscriptEntry, PersonaFirstChatTranscriptKinds, PersonaFirstChatTranscriptRoles, UserOnboardingRouteSnapshot, UserOnboardingRouteStates } from "./persona-first-chat.types.js";
 
 /**
- * First-chat runtime validation stays beside the frontend model so generated transport data cannot
- * acquire a second, looser lifecycle interpretation in feature code.
+ * Runtime checks for every first-chat response, kept next to the model they validate.
+ *
+ * They live here rather than in the feature layer so there is exactly one definition of a valid
+ * first chat. If feature code did its own checking it would end up accepting shapes this rejects,
+ * and the two would drift.
+ *
+ * The checks go beyond field types: they enforce agreement BETWEEN fields, so a response cannot say
+ * the chat has started while leaving the conversation null, or offer a next question that
+ * contradicts the answer count.
  */
 
-/** Exact question count required by every reviewed bootstrap source. */
+/** Every approved question set has exactly this many questions. */
 const _QUESTION_COUNT = 3;
 
 /** Bounded approved persona evidence selected by the server. */
@@ -25,7 +32,7 @@ const _ContentRevisionSchema: z.ZodType<PersonaFirstChatContentRevision> = z.obj
 	sourceLabel: z.string().min(1).max(512)
 }).strip();
 
-/** One canonical bounded transcript entry. */
+/** One transcript entry, with its text and id length limits applied. */
 const _TranscriptEntrySchema: z.ZodType<PersonaFirstChatTranscriptEntry> = z.object({
 	ordinal: z.number().int().positive(),
 	role: z.nativeEnum(PersonaFirstChatTranscriptRoles),
@@ -40,7 +47,7 @@ const _CurrentQuestionSchema: z.ZodType<PersonaFirstChatCurrentQuestion> = z.obj
 	text: z.string().min(1).max(4_000)
 }).strip();
 
-/** State-keyed validators for the complete first-chat projection evidence matrix. */
+/** One validator per workflow state, so each state's own field rules are checked. */
 const _STATE_EVIDENCE_VALIDATORS: Readonly<Record<UserOnboardingRouteStates, (snapshot: PersonaFirstChatSnapshot) => boolean>> =
 {
 	[UserOnboardingRouteStates.SurveyPending]: function _SurveyPending(snapshot) { return _EmptyEvidence(snapshot); },
@@ -50,7 +57,7 @@ const _STATE_EVIDENCE_VALIDATORS: Readonly<Record<UserOnboardingRouteStates, (sn
 	[UserOnboardingRouteStates.Completed]: function _Completed(snapshot) { return _CompletedEvidence(snapshot); }
 };
 
-/** Complete first-chat response with cross-field authority and resumability checks. */
+/** The whole first-chat response, including the checks that fields agree with each other. */
 const _SnapshotSchema: z.ZodType<PersonaFirstChatSnapshot> = z.object({
 	workflowVersion: z.number().int().positive(),
 	state: z.nativeEnum(UserOnboardingRouteStates),
@@ -66,7 +73,7 @@ const _SnapshotSchema: z.ZodType<PersonaFirstChatSnapshot> = z.object({
 	completedAt: z.string().datetime({ offset: true }).nullable()
 }).strip().superRefine(function _ValidateSnapshot(snapshot, context)
 {
-	// 1. Preserve the server's contiguous transcript order so reconnects cannot reorder evidence.
+	// 1. Keep the server's gap-free transcript order, so a reconnect cannot reshuffle the conversation.
 	const transcriptOrdered = snapshot.transcript.every(function _InOrder(entry, index) { return entry.ordinal === index + 1; });
 	if (!transcriptOrdered) context.addIssue({ code: z.ZodIssueCode.custom, path: ["transcript"], message: "must have contiguous one-based ordering" });
 
@@ -79,7 +86,7 @@ const _SnapshotSchema: z.ZodType<PersonaFirstChatSnapshot> = z.object({
 	if ((snapshot.persona === null) !== (snapshot.contentRevision === null)) context.addIssue({ code: z.ZodIssueCode.custom, path: ["persona"], message: "must be paired with the reviewed source" });
 	if (!hasConversation && snapshot.persona !== null && snapshot.questionCount !== _QUESTION_COUNT) context.addIssue({ code: z.ZodIssueCode.custom, path: ["questionCount"], message: "must match the reviewed pending source" });
 
-	// 3. Once started, require every immutable source coordinate and the exact reviewed question count.
+	// 3. Once started, require every source id to be present and the question count to be exactly three.
 	if (hasConversation && (snapshot.conversationId === null || snapshot.persona === null || snapshot.contentRevision === null || snapshot.startedAt === null || snapshot.questionCount !== _QUESTION_COUNT))
 	{
 		context.addIssue({ code: z.ZodIssueCode.custom, path: ["conversationId"], message: "must carry complete pinned first-chat provenance" });
@@ -90,10 +97,10 @@ const _SnapshotSchema: z.ZodType<PersonaFirstChatSnapshot> = z.object({
 	if (snapshot.canConclude && (snapshot.answerCount !== _QUESTION_COUNT || snapshot.questionCount !== _QUESTION_COUNT)) context.addIssue({ code: z.ZodIssueCode.custom, path: ["canConclude"], message: "requires all reviewed answers" });
 	if (snapshot.state === UserOnboardingRouteStates.Completed && snapshot.completedAt === null) context.addIssue({ code: z.ZodIssueCode.custom, path: ["completedAt"], message: "is required for completed onboarding" });
 
-	// 5. Reject every cross-field combination the authority cannot emit so the UI never renders a blank success state.
+	// 5. Reject any field combination the server could not have sent, so the UI never shows an empty success screen.
 	if (!_STATE_EVIDENCE_VALIDATORS[snapshot.state](snapshot)) context.addIssue({ code: z.ZodIssueCode.custom, path: ["state"], message: "does not match its first-chat evidence" });
 
-	// 6. Preserve the exact opening/question/answer role and coordinate sequence emitted by the authority.
+	// 6. Keep the opening/question/answer order and the question numbers exactly as the server sent them.
 	if (!_TranscriptMatchesEvidence(snapshot)) context.addIssue({ code: z.ZodIssueCode.custom, path: ["transcript"], message: "does not match admitted answer evidence" });
 });
 
@@ -109,7 +116,7 @@ const _RouteSnapshotSchema: z.ZodType<UserOnboardingRouteSnapshot> = z.object({
 	completedAt: z.string().datetime({ offset: true }).nullable()
 }).strip();
 
-/** Parse one untrusted first-chat response or fail closed before feature state consumes it. */
+/** Parse one first-chat response, throwing before it can reach UI state if anything is wrong. */
 export function _ParsePersonaFirstChatSnapshot(value: unknown): PersonaFirstChatSnapshot
 {
 	const parsed = _SnapshotSchema.safeParse(value);
@@ -117,7 +124,7 @@ export function _ParsePersonaFirstChatSnapshot(value: unknown): PersonaFirstChat
 	throw new Error("The onboarding authority returned an invalid first-chat projection.");
 }
 
-/** Recover only a documented answer-conflict projection; every other error remains opaque. */
+/** Turn a documented answer conflict into PersonaFirstChatConflictError; rethrow anything else untouched. */
 export function _ParsePersonaFirstChatConflictSnapshot(value: unknown): PersonaFirstChatSnapshot | null
 {
 	const parsed = z.object({
@@ -147,7 +154,7 @@ function _PendingEvidence(snapshot: PersonaFirstChatSnapshot): boolean
 	return snapshot.conversationId === null && snapshot.persona !== null && snapshot.contentRevision !== null && snapshot.transcript.length === 0 && snapshot.currentQuestion === null && snapshot.answerCount === 0 && snapshot.questionCount === _QUESTION_COUNT && !snapshot.canConclude && snapshot.startedAt === null && snapshot.completedAt === null;
 }
 
-/** Whether an active chat exposes exactly its next question or exact conclusion eligibility. */
+/** Whether an active chat offers either a next question or the ability to conclude, but not neither. */
 function _InProgressEvidence(snapshot: PersonaFirstChatSnapshot): boolean
 {
 	if (!_StartedEvidence(snapshot) || snapshot.completedAt !== null) return false;
@@ -181,7 +188,7 @@ function _StartedEvidence(snapshot: PersonaFirstChatSnapshot): boolean
 	return snapshot.conversationId !== null && snapshot.persona !== null && snapshot.contentRevision !== null && snapshot.questionCount === _QUESTION_COUNT && snapshot.startedAt !== null;
 }
 
-/** Whether transcript roles, kinds, and question coordinates match the admitted answer count exactly. */
+/** Whether the transcript's roles, kinds and question numbers all agree with the saved answer count. */
 function _TranscriptMatchesEvidence(snapshot: PersonaFirstChatSnapshot): boolean
 {
 	if (snapshot.conversationId === null) return snapshot.transcript.length === 0;

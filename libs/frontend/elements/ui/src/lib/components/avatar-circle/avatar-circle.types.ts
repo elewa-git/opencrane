@@ -1,7 +1,11 @@
-/** Semantic colour treatments available to an initials avatar. */
+/**
+ * The colour an initials avatar uses, chosen by who or what it represents.
+ *
+ * A fixed set rather than a colour input, so an avatar can never be given an off-palette colour.
+ */
 export enum AvatarTones
 {
-	/** OpenCrane brand treatment for the signed-in owner or primary agent. */
+	/** Brand colour, for the signed-in user or the primary agent. */
 	Brand = "brand",
 	/** Cool blue treatment for a second participant. */
 	Blue = "blue",
@@ -9,11 +13,15 @@ export enum AvatarTones
 	Green = "green",
 	/** Amber treatment for a participant that needs attention. */
 	Amber = "amber",
-	/** Quiet treatment when no stronger semantic distinction applies. */
+	/** Neutral grey, when nothing more specific applies. */
 	Neutral = "neutral"
 }
 
-/** Finite avatar sizes supported by the shared component. */
+/**
+ * The four avatar sizes, from dense table rows up to a journey header.
+ *
+ * A fixed set rather than a pixel input, so avatars stay consistent across screens.
+ */
 export enum AvatarSizes
 {
 	/** Dense table and chip size. */

@@ -1,6 +1,6 @@
 import { InjectionToken } from "@angular/core";
 
-/** Browser-safe summary of a governed skill. */
+/** What the browser is told about one governed skill; the skill's own content stays server-side. */
 export interface GovernedSkill
 {
 	/** Stable skill identifier. */
@@ -21,7 +21,14 @@ export interface GovernedSkill
 	readonly updatedAt: string;
 }
 
-/** Read-only port for the host-silo governed skill catalogue. */
+/**
+ * Reads the skills available in the host's silo. Read-only — nothing here changes anything.
+ *
+ * Bound to OpenCraneSkillCatalogueGateway in the app's providers, and to
+ * MockSkillCatalogueGateway in UI-state tests, both at {@link SKILL_CATALOGUE_GATEWAY}.
+ *
+ * @see GovernedSkill
+ */
 export interface SkillCatalogueGateway
 {
 	/** Lists safe governed skills from the host-selected silo. */

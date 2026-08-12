@@ -3,6 +3,6 @@ export enum CollapsibleSectionVariants
 {
 	/** Light content panel with a dividing rule. */
 	Panel = "panel",
-	/** Compact treatment for a dark navigation rail. */
+	/** Compact style for use inside a dark navigation rail. */
 	Rail = "rail"
 }
