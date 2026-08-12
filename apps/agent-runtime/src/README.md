@@ -37,9 +37,9 @@ config.py · constants.py · observability.py support the components above.
 | `runtime.py` | Mounted settings and projected identity files | One bootstrapped outbound stream | Run selection or durable state |
 | `bootstrap/` | Bootstrap reference, projected token, generated public key evidence | One accepted proof-key binding | Retry after permanent refusal |
 | `transport/` | Authenticated server-sent events and candidate dictionaries | Dispatched commands and bounded HTTP requests | An inbound listener or local queue |
-| `attempts/` | Fenced start, resume, and cancel commands | Ordered runtime candidates, mapped saved tool results, and safe run evidence | Tool execution, approval, or canonical cancellation |
-| `model_loop/` | Compiled input, attempt-scoped LiteLLM key, authorised resume results | Framework-neutral model events | Direct tool execution or implicit retries |
-| `protocol/` | Neutral events and compiled tool grants | Stable event or external-action candidates | Trusting a model-selected tool revision |
+| `attempts/` | Fenced start, resume, and cancel commands | Ordered candidates, exact saved tool and elicitation results, and safe run evidence | Tool execution, participant selection, approval, or canonical cancellation |
+| `model_loop/` | Compiled input, attempt-scoped LiteLLM key, authorised resume results | Framework-neutral model events | Direct tool execution, participant authority, or implicit retries |
+| `protocol/` | Neutral events and compiled tool grants | Stable event, external-action, or elicitation candidates | Trusting a model-selected authority coordinate |
 
 ## Runtime sequence
 
@@ -52,15 +52,20 @@ config.py · constants.py · observability.py support the components above.
    It translates framework events into small dictionaries; framework objects never cross the seam.
 5. `protocol/candidates.py` binds each event to the accepted command coordinates. Tool calls become
    `external_action` candidates only after resolving the exact revision from the compiled grant set.
+   `protocol/elicitation.py` admits one strictly bounded ordinary-input or A2UI-action request,
+   computes its canonical digest, and carries no participant or absolute-expiry coordinate.
 6. `transport/http.py` delivers each non-terminal candidate once. A neutral `output_asset` starts
    the assistant message when needed, then `transport/output.py` reserves and uploads exact bytes
    through the private control-plane broker. The runtime sends its message id, never a database
    sequence, storage lease, or receipt. Terminal delivery alone may reuse
    its stable identifier after an ambiguous network loss.
-7. A `resume_attempt` carries exact saved tool results. `attempts/tool_results.py` maps each
+7. A `resume_attempt` carries exact saved tool and participant-input results. `attempts/tool_results.py` maps each
    `toolInvocationId` back to the pending call recorded at proposal time
-   (`attempts/pending_tools.py`) and feeds the framework that saved result. It never contacts the
-   provider or creates a second tool completion.
+   (`attempts/pending_tools.py`) and feeds the framework that saved result.
+   `attempts/elicitation_results.py` rejects unknown fields and invalid terminal shapes before any
+   pending tool result is consumed. Ordinary answers enter the next model boundary exactly;
+   declined, expired, cancelled, failed, and protected redacted answers enter as terminal markers.
+   Neither path contacts a provider or creates a second completion.
    Starting or resuming
    supersedes any prior local worker; a `cancel_attempt` signals the current worker, while dropped
    transport cancels every registered worker and suppresses late runtime output.

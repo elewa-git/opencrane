@@ -92,7 +92,12 @@ def _resume_command(tool_results: list, input_generation: int = 9) -> dict:
         "commandId": "cmd-resume",
         "fence": 3,
         "assignment": {"runId": "run-conf", "attempt": 1},
-        "payload": {"inputGeneration": input_generation, "toolResults": tool_results, "steeringRequests": []},
+        "payload": {
+            "inputGeneration": input_generation,
+            "toolResults": tool_results,
+            "steeringRequests": [],
+            "elicitationResults": [],
+        },
     }
 
 
@@ -305,7 +310,7 @@ class ConformanceApprovalResumeTests(unittest.TestCase):
 
         self.assertNotIn("results", captured)
         reasons = [candidate["payload"].get("reason") for candidate in resume_emitted if candidate.get("eventType") in ("run.error", "run.failed")]
-        self.assertEqual(reasons, ["invalid_tool_result", "invalid_tool_results"])
+        self.assertEqual(reasons, ["invalid_resume_results"])
         self.assertNotIn("must-not-enter", json.dumps(captured))
 
 

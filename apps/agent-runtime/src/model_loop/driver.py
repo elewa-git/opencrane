@@ -8,6 +8,7 @@ access, provider fallback, or implicit retry.
 
 import asyncio
 import copy
+import json
 import re
 import threading
 from collections.abc import Callable, Iterator
@@ -18,6 +19,7 @@ from .generated_output_policy import order_generated_outputs as _order_generated
 from .generated_output_policy import validate_generated_output_batch
 from .histories import load_model_history, store_model_history
 from .openai_generated_outputs import OpenAIGeneratedOutputCollector, OpenAIGeneratedOutputConfiguration, openai_generated_output_configuration
+from ..protocol.elicitation import ELICITATION_TOOL_NAME, elicitation_proposal, elicitation_tool_schema
 
 _MODEL_TOOL_NAME = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 
@@ -145,8 +147,6 @@ def _external_toolsets(
     call therefore returns to OpenCrane as a neutral event and must cross the server's durable
     admission, approval, and worker boundaries. Malformed or duplicate compiled tools fail closed.
     """
-    if not compiled_tools:
-        return []
     if external_toolset_cls is None or tool_definition_cls is None:
         from pydantic_ai import ExternalToolset, ToolDefinition
 
@@ -173,6 +173,8 @@ def _external_toolsets(
             raise RuntimeError("compiled input contains a malformed tool definition")
         if name in names:
             raise RuntimeError("compiled input contains duplicate model-visible tool names")
+        if name == ELICITATION_TOOL_NAME:
+            raise RuntimeError("compiled input shadows the built-in elicitation tool")
         names.add(name)
         definitions.append(
             tool_definition_cls(
@@ -181,6 +183,13 @@ def _external_toolsets(
                 parameters_json_schema=copy.deepcopy(parameters_schema),
             ),
         )
+    definitions.append(
+        tool_definition_cls(
+            name=ELICITATION_TOOL_NAME,
+            description="Ask the active participant one bounded question and wait for the server-owned result.",
+            parameters_json_schema=elicitation_tool_schema(),
+        ),
+    )
     return [external_toolset_cls(definitions, id="opencrane-compiled-tools")]
 
 
@@ -232,7 +241,7 @@ def pydantic_ai_event_source(
         # bounded request sequence rather than an intermediate node.
         if not cancel_event.is_set():
             store_model_history(*_history_coordinates(compiled_input), run.all_messages())
-        usage = run.usage()
+        usage = _run_usage(run)
         events.append(
             {
                 "type": "usage",
@@ -308,7 +317,7 @@ def pydantic_ai_resume_source(
             events.extend(await output_collector.finish(base_url=output_base_url, attempt_key=output_attempt_key))
             store_model_history(*coordinates, run.all_messages())
         events = _order_generated_outputs(events)
-        usage = run.usage()
+        usage = _run_usage(run)
         events.append(
             {
                 "type": "usage",
@@ -345,6 +354,12 @@ def prompt(compiled_input: dict[str, object]) -> str:
     return "\n".join(part for part in parts if isinstance(part, str))
 
 
+def _run_usage(run: object) -> object:
+    """Read pinned Pydantic run usage across its callable-to-property compatibility seam."""
+    usage = getattr(run, "usage", None)
+    return usage() if callable(usage) else usage
+
+
 def translate_framework_event(event: object) -> dict[str, object]:
     """Translate the supported Pydantic event shapes into plain dictionaries.
 
@@ -361,6 +376,16 @@ def translate_framework_event(event: object) -> dict[str, object]:
     part = getattr(event, "part", None)
     tool_name = getattr(part, "tool_name", None)
     if getattr(event, "event_kind", None) == "part_end" and isinstance(tool_name, str):
+        if tool_name == ELICITATION_TOOL_NAME:
+            framework_call_id = getattr(part, "tool_call_id", "")
+            try:
+                arguments = json.loads(getattr(part, "args_as_json_str", lambda: "{}")())
+            except (json.JSONDecodeError, TypeError, ValueError):
+                return {"type": "invalid_elicitation_request"}
+            if not isinstance(arguments, dict) or not isinstance(framework_call_id, str) or not framework_call_id:
+                return {"type": "invalid_elicitation_request"}
+            neutral_event = {"type": "elicitation_request", "frameworkCallId": framework_call_id, **arguments}
+            return neutral_event if elicitation_proposal(neutral_event) is not None else {"type": "invalid_elicitation_request"}
         return {
             "type": "tool_call",
             "toolName": tool_name,
