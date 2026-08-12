@@ -1,6 +1,6 @@
 import { json, Router, type Response } from "express";
 
-import { AGENT_RUNTIME_PROTOCOL_V1, type RuntimeCandidate, type RuntimeStreamOpen } from "@opencrane/contracts";
+import { AGENT_RUNTIME_PROTOCOL_V1, RuntimeCandidateKinds, ___ParseRuntimeElicitationCandidate, type RuntimeCandidate, type RuntimeStreamOpen } from "@opencrane/contracts";
 import { ___DoWithTrace } from "@opencrane/backend/observability";
 import type { RuntimeWorkloadIdentity } from "@opencrane/backend/server/infra/workload-identity";
 
@@ -65,6 +65,10 @@ function _IsRuntimeCandidate(value: unknown): value is RuntimeCandidate
 	if (candidate.kind === "event")
 	{
 		return typeof candidate.eventType === "string" && candidate.eventType.length > 0 && "payload" in candidate;
+	}
+	if (candidate.kind === RuntimeCandidateKinds.Elicitation)
+	{
+		return ___ParseRuntimeElicitationCandidate(value) !== null;
 	}
 	return candidate.kind === "external_action"
 		&& typeof candidate.toolRevisionId === "string" && candidate.toolRevisionId.length > 0

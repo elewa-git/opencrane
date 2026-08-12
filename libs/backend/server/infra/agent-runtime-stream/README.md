@@ -33,7 +33,9 @@ connection alive without inventing work.
 [runtime authority](../../../agents/execution/protocol/README.md) ·
 [wire contracts](../../../../contracts/README.md)
 
-Invariant: transport syntax never becomes business authority. A token/Pod mismatch, malformed input,
+Invariant: transport syntax never becomes business authority. Runtime elicitation bodies are parsed
+by the strict shared contract before admission, including their allowed purpose, text and choice
+bounds, expiry window, and A2UI action coordinates. A token/Pod mismatch, malformed input,
 non-monotonic command, oversized request body, or unavailable injected authority fails closed. When
 the connection drops it signals the loss to the injected authority through a port call — never an
 import of the backend authority package — so a lost stream can release its runtime-instance binding.
