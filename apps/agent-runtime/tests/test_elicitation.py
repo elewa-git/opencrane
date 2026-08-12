@@ -102,6 +102,32 @@ class RuntimeElicitationProducerTests(unittest.TestCase):
         self.assertNotIn("assignedParticipantId", emitted[1])
         self.assertFalse(any(item.get("eventType") == "run.completed" for item in emitted))
 
+    def test_sibling_tool_after_question_is_still_correlated(self) -> None:
+        """A later deferred external call is not lost from the saved framework response."""
+        emitted: list[dict] = []
+        events = [
+            _free_text_event(),
+            {"type": "tool_call", "toolName": "alpha", "toolCallId": "tool-after-question", "arguments": "{}"},
+        ]
+        command = _start_command()
+        command["payload"]["compiledInput"]["tools"] = [{
+            "name": "alpha",
+            "toolRevisionId": "revision-alpha",
+            "description": "Read approved data",
+            "requiresApproval": False,
+            "parametersSchema": {},
+        }]
+
+        execute_start_attempt(
+            command,
+            "runtime-instance-1",
+            emitted.append,
+            event_source=lambda _compiled, _cancel, _steering: iter(events),
+        )
+
+        self.assertEqual([item["kind"] for item in emitted], ["event", "elicitation", "event", "external_action"])
+        self.assertFalse(any(item.get("eventType") == "run.completed" for item in emitted))
+
     def test_builtin_tool_is_present_without_compiled_external_tools(self) -> None:
         """The production model toolset always exposes the execution-free input request."""
         class _Definition:
