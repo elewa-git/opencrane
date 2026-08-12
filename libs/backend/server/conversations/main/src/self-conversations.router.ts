@@ -7,8 +7,12 @@ import { ___ConversationCreationRequestSchema, ___ParticipantInputBlocksSchema }
 import { ConversationAuthorityOutcomes, ConversationWriteDenialReasons, type ConversationWriteDenial } from "./conversation-authority.types.js";
 import type { SelfConversationsRouterDependencies } from "./self-conversations.router.types.js";
 
-/** Message body shape: a retry key of 1–128 characters plus the participant block list. Unknown fields are rejected, not ignored. */
-const _MessageSchema = z.object({ idempotencyKey: z.string().trim().min(1).max(128), blocks: ___ParticipantInputBlocksSchema }).strict();
+/** Bounded idempotent participant message body. */
+const _MessageSchema = z.object({
+	idempotencyKey: z.string().trim().min(1).max(128),
+	blocks: ___ParticipantInputBlocksSchema,
+	agentTarget: z.object({ agentServiceId: z.string().trim().min(1).max(128) }).strict().optional(),
+}).strict();
 
 /** Participant-local archive mutation body. */
 const _ArchiveSchema = z.object({ archived: z.boolean() }).strict();
@@ -100,7 +104,7 @@ export function __CreateSelfConversationsRouter(dependencies: SelfConversationsR
 		{
 			const result = await dependencies.authority.submitMessage(caller, conversationId, parsed.data);
 			if (result.outcome === ConversationAuthorityOutcomes.Denied) { _logUnavailable(dependencies.logger, result.reason, "conversation.message.submit", caller.siloId); response.status(_denialStatus(result.reason)).json({ error: result.reason }); return; }
-			response.status(result.outcome === ConversationAuthorityOutcomes.Accepted ? 201 : 200).json({ outcome: result.outcome, message: result.message });
+			response.status(result.outcome === ConversationAuthorityOutcomes.Accepted ? 201 : 200).json({ outcome: result.outcome, message: result.message, agentThread: result.agentThread });
 		}
 		catch (err)
 		{

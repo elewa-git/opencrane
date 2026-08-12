@@ -85,7 +85,7 @@ export class PrismaConversationQueryRepository implements ConversationQueryRepos
 		if (participant === null) return null;
 
 		// 3. Clip canonical messages to the durable participant bounds before projecting detail.
-		const entries = await this.prisma.conversationTimelineEntry.findMany({ where: { conversationId, position: { gte: participant.visibleFromPosition, ...(participant.accessEndedPosition === null ? {} : { lte: participant.accessEndedPosition }) }, messageId: { not: null } }, include: { message: true }, orderBy: { position: "desc" }, take: _MESSAGE_LIMIT });
+		const entries = await this.prisma.conversationTimelineEntry.findMany({ where: { conversationId, position: { gte: participant.visibleFromPosition, ...(participant.accessEndedPosition === null ? {} : { lte: participant.accessEndedPosition }) }, messageId: { not: null } }, include: { message: { include: { invokedAgentThread: true } } }, orderBy: { position: "desc" }, take: _MESSAGE_LIMIT });
 		return {
 			..._summary(participant.conversation, participant),
 			visibleFromPosition: participant.visibleFromPosition.toString(10),
@@ -115,7 +115,7 @@ export class PrismaConversationQueryRepository implements ConversationQueryRepos
 		if (!await this.hasActiveCallerMembership(caller)) return null;
 
 		// 2. Resolve the key only while the caller retains active participant access.
-		const entry = await this.prisma.conversationTimelineEntry.findFirst({ where: { conversationId, message: { is: { idempotencyKey, userId: caller.subjectId, conversation: { siloId: caller.siloId, participants: { some: { userId: caller.subjectId, accessEndedPosition: null } } } } } }, include: { message: true } });
+		const entry = await this.prisma.conversationTimelineEntry.findFirst({ where: { conversationId, message: { is: { idempotencyKey, userId: caller.subjectId, conversation: { siloId: caller.siloId, participants: { some: { userId: caller.subjectId, accessEndedPosition: null } } } } } }, include: { message: { include: { invokedAgentThread: true } } } });
 
 		// 3. Project no foreign or access-ended durable message facts.
 		return entry?.message ? _messageView(entry.message, entry.position) : null;
@@ -142,9 +142,9 @@ function _summary(conversation: { id: string; mode: ConversationMode; lifecycle:
 }
 
 /** Maps a canonical persisted message and database-owned position. */
-function _messageView(message: { id: string; role: ConversationMessageRole; state: ConversationMessageState; source: string; blocks: Prisma.JsonValue; runId: string | null; userId: string | null; createdAt: Date; completedAt: Date | null }, position: bigint): ConversationMessageView
+function _messageView(message: { id: string; role: ConversationMessageRole; state: ConversationMessageState; source: string; blocks: Prisma.JsonValue; runId: string | null; userId: string | null; createdAt: Date; completedAt: Date | null; invokedAgentThread: { childConversationId: string; parentConversationId: string; rootConversationId: string; parentMessageId: string; initiatorUserId: string; agentServiceId: string; personaRevisionId: string; firstRunId: string } | null }, position: bigint): ConversationMessageView
 {
-	return { id: message.id, position: position.toString(10), role: _ROLE_BY_PERSISTED_ROLE[message.role], state: _STATE_BY_PERSISTED_STATE[message.state], source: _messageSource(message.source), blocks: message.blocks as unknown as readonly MessageContentBlock[], runId: message.runId, userId: message.userId, createdAt: message.createdAt.toISOString(), completedAt: message.completedAt?.toISOString() ?? null };
+	return { id: message.id, position: position.toString(10), role: _ROLE_BY_PERSISTED_ROLE[message.role], state: _STATE_BY_PERSISTED_STATE[message.state], source: _messageSource(message.source), blocks: message.blocks as unknown as readonly MessageContentBlock[], runId: message.runId, userId: message.userId, createdAt: message.createdAt.toISOString(), completedAt: message.completedAt?.toISOString() ?? null, agentThread: message.invokedAgentThread };
 }
 
 /** Validates the string-backed persistence column against the complete model-owned source vocabulary. */

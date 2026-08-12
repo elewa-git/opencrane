@@ -1,4 +1,5 @@
 import { ConversationLifecycles, ConversationModes, MessageRoles, MessageSources, MessageStates, type ConversationCreationRequest, type MessageContentBlock } from "@opencrane/models/conversations";
+import type { AgentThreadOrigin, AgentThreadTarget } from "@opencrane/backend/conversations/agent-threads";
 
 /**
  * Who the caller is, as the server worked it out from the browser session.
@@ -52,6 +53,8 @@ export interface SubmitConversationMessageRequest
 	readonly idempotencyKey: string;
 	/** The message content, in display order. At least one block; order is preserved exactly as sent. */
 	readonly blocks: readonly MessageContentBlock[];
+	/** Exact structured target; accepted only for a root message in a group conversation. */
+	readonly agentTarget?: AgentThreadTarget;
 }
 
 /**
@@ -96,6 +99,8 @@ export interface ConversationMessageView
 	readonly userId: string | null;
 	readonly createdAt: string;
 	readonly completedAt: string | null;
+	/** Immutable child origin when this ordinary group message invoked an Agent. */
+	readonly agentThread: AgentThreadOrigin | null;
 }
 
 /**
@@ -256,7 +261,7 @@ export type CreateConversationResult = { readonly outcome: ConversationAuthority
  * For an agent-session conversation an `Accepted` result also means a run was started in the
  * same database transaction, so the message and the run can never exist without each other.
  */
-export type SubmitConversationMessageResult = { readonly outcome: ConversationAuthorityOutcomes.Accepted | ConversationAuthorityOutcomes.Idempotent; readonly message: ConversationMessageView } | { readonly outcome: ConversationAuthorityOutcomes.Denied; readonly reason: ConversationWriteDenial };
+export type SubmitConversationMessageResult = { readonly outcome: ConversationAuthorityOutcomes.Accepted | ConversationAuthorityOutcomes.Idempotent; readonly message: ConversationMessageView; readonly agentThread: AgentThreadOrigin | null } | { readonly outcome: ConversationAuthorityOutcomes.Denied; readonly reason: ConversationWriteDenial };
 
 /**
  * What {@link ConversationUnitOfWork.setArchived} and {@link ConversationUnitOfWork.close}

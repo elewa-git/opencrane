@@ -44,6 +44,9 @@ export class PrismaConversationMessageAdmissionUnitOfWork implements Conversatio
 
 			const decision = __DecideConversationCommand({ ...preflight.context, command: { kind: ConversationCommandKinds.SubmitMessage } });
 			if (!decision.allowed) return _denied(_writeDenial(decision.reason));
+			// A structured target is never allowed to fall through as an ordinary message. The Agent-thread
+			// admission branch replaces this refusal in the next bounded transaction slice.
+			if (request.agentTarget !== undefined) return _denied(ConversationWriteDenialReasons.CommandNotSupported);
 
 			switch (decision.action)
 			{
@@ -171,13 +174,15 @@ function _writeDenial(reason: ConversationCommandDenialReasons): ConversationWri
 /** Verifies a retry body against its durable canonical message. */
 function _duplicateResult(message: ConversationMessageView, request: SubmitConversationMessageRequest): SubmitConversationMessageResult
 {
-	return _blocksDigest(message.blocks) === _blocksDigest(request.blocks) ? { outcome: ConversationAuthorityOutcomes.Idempotent, message } : _denied(ConversationWriteDenialReasons.IdempotencyConflict);
+	const targetMatches = message.agentThread?.agentServiceId === (request.agentTarget?.agentServiceId ?? undefined)
+		|| (message.agentThread === null && request.agentTarget === undefined);
+	return _blocksDigest(message.blocks) === _blocksDigest(request.blocks) && targetMatches ? { outcome: ConversationAuthorityOutcomes.Idempotent, message, agentThread: message.agentThread } : _denied(ConversationWriteDenialReasons.IdempotencyConflict);
 }
 
 /** Returns a successful canonical participant-message result. */
 function _accepted(message: ConversationMessageView): SubmitConversationMessageResult
 {
-	return { outcome: ConversationAuthorityOutcomes.Accepted, message };
+	return { outcome: ConversationAuthorityOutcomes.Accepted, message, agentThread: message.agentThread };
 }
 
 /** Returns one stable fail-closed participant-message result. */
