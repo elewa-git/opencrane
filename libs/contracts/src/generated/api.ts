@@ -4165,7 +4165,7 @@ export interface operations {
                             /** @enum {string} */
                             purpose: "runtime_input" | "tool_approval" | "personal_memory_permission" | "a2ui_action";
                             /** @enum {string} */
-                            state: "requested" | "answered" | "declined" | "expired" | "cancelled" | "failed";
+                            state: "requested" | "answered" | "declined" | "expired" | "cancelled";
                             body: {
                                 /** @constant */
                                 kind: "approval";
@@ -4276,7 +4276,7 @@ export interface operations {
                             /** @enum {string} */
                             purpose: "runtime_input" | "tool_approval" | "personal_memory_permission" | "a2ui_action";
                             /** @enum {string} */
-                            state: "requested" | "answered" | "declined" | "expired" | "cancelled" | "failed";
+                            state: "requested" | "answered" | "declined" | "expired" | "cancelled";
                             body: {
                                 /** @constant */
                                 kind: "approval";
@@ -4402,7 +4402,7 @@ export interface operations {
                         response: {
                             requestId: string;
                             /** @enum {string} */
-                            state: "requested" | "answered" | "declined" | "expired" | "cancelled" | "failed";
+                            state: "requested" | "answered" | "declined" | "expired" | "cancelled";
                             idempotent: boolean;
                             /** Format: date-time */
                             resolvedAt: string;
@@ -6206,6 +6206,16 @@ export interface operations {
                                 createdAt: string;
                                 /** Format: date-time */
                                 completedAt: string | null;
+                                agentThread: null | {
+                                    childConversationId: string;
+                                    parentConversationId: string;
+                                    rootConversationId: string;
+                                    parentMessageId: string;
+                                    initiatorUserId: string;
+                                    agentServiceId: string;
+                                    personaRevisionId: string;
+                                    firstRunId: string;
+                                };
                             }[];
                         };
                     };
@@ -6295,6 +6305,16 @@ export interface operations {
                                 createdAt: string;
                                 /** Format: date-time */
                                 completedAt: string | null;
+                                agentThread: null | {
+                                    childConversationId: string;
+                                    parentConversationId: string;
+                                    rootConversationId: string;
+                                    parentMessageId: string;
+                                    initiatorUserId: string;
+                                    agentServiceId: string;
+                                    personaRevisionId: string;
+                                    firstRunId: string;
+                                };
                             }[];
                         };
                     };
@@ -6342,6 +6362,10 @@ export interface operations {
                         kind: "text" | "artifact";
                         value: string;
                     }[];
+                    /** @description In a group only, create a child Agent session using the caller's active approved persona. */
+                    agentTarget?: {
+                        agentServiceId: string;
+                    };
                 };
             };
         };
@@ -6376,6 +6400,26 @@ export interface operations {
                             createdAt: string;
                             /** Format: date-time */
                             completedAt: string | null;
+                            agentThread: null | {
+                                childConversationId: string;
+                                parentConversationId: string;
+                                rootConversationId: string;
+                                parentMessageId: string;
+                                initiatorUserId: string;
+                                agentServiceId: string;
+                                personaRevisionId: string;
+                                firstRunId: string;
+                            };
+                        };
+                        agentThread: null | {
+                            childConversationId: string;
+                            parentConversationId: string;
+                            rootConversationId: string;
+                            parentMessageId: string;
+                            initiatorUserId: string;
+                            agentServiceId: string;
+                            personaRevisionId: string;
+                            firstRunId: string;
                         };
                     };
                 };
@@ -6410,6 +6454,26 @@ export interface operations {
                             createdAt: string;
                             /** Format: date-time */
                             completedAt: string | null;
+                            agentThread: null | {
+                                childConversationId: string;
+                                parentConversationId: string;
+                                rootConversationId: string;
+                                parentMessageId: string;
+                                initiatorUserId: string;
+                                agentServiceId: string;
+                                personaRevisionId: string;
+                                firstRunId: string;
+                            };
+                        };
+                        agentThread: null | {
+                            childConversationId: string;
+                            parentConversationId: string;
+                            rootConversationId: string;
+                            parentMessageId: string;
+                            initiatorUserId: string;
+                            agentServiceId: string;
+                            personaRevisionId: string;
+                            firstRunId: string;
                         };
                     };
                 };
@@ -6518,6 +6582,16 @@ export interface operations {
                                 createdAt: string;
                                 /** Format: date-time */
                                 completedAt: string | null;
+                                agentThread: null | {
+                                    childConversationId: string;
+                                    parentConversationId: string;
+                                    rootConversationId: string;
+                                    parentMessageId: string;
+                                    initiatorUserId: string;
+                                    agentServiceId: string;
+                                    personaRevisionId: string;
+                                    firstRunId: string;
+                                };
                             }[];
                         };
                     };
@@ -6607,6 +6681,16 @@ export interface operations {
                                 createdAt: string;
                                 /** Format: date-time */
                                 completedAt: string | null;
+                                agentThread: null | {
+                                    childConversationId: string;
+                                    parentConversationId: string;
+                                    rootConversationId: string;
+                                    parentMessageId: string;
+                                    initiatorUserId: string;
+                                    agentServiceId: string;
+                                    personaRevisionId: string;
+                                    firstRunId: string;
+                                };
                             }[];
                         };
                     };
