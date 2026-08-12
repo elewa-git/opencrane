@@ -1,4 +1,4 @@
-import { Prisma, UserOnboardingBootstrapArchetype, UserOnboardingCompletionProvenance, UserOnboardingState } from "@prisma/client";
+import { Prisma, type PrismaClient, UserOnboardingBootstrapArchetype, UserOnboardingCompletionProvenance, UserOnboardingState } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
 
 import { PrismaUserOnboardingRepository } from "../prisma-user-onboarding-repository.js";
@@ -29,13 +29,13 @@ const _ROW: Prisma.UserOnboardingGetPayload<Record<string, never>> = {
 /** Build a repository over one explicitly mocked UserOnboarding delegate. */
 function _Repository(delegate: Record<string, unknown>): PrismaUserOnboardingRepository
 {
-	return new PrismaUserOnboardingRepository({ userOnboarding: delegate } as unknown as Prisma.TransactionClient);
+	return new PrismaUserOnboardingRepository({ userOnboarding: delegate } as unknown as Prisma.TransactionClient & Pick<PrismaClient, "$transaction">);
 }
 
 /** Build a repository over the exact chat delegates supplied by one adapter test. */
 function _ChatRepository(delegates: Record<string, unknown>): PrismaUserOnboardingRepository
 {
-	return new PrismaUserOnboardingRepository({ userOnboarding: {}, userOnboardingBootstrapAnswer: {}, userOnboardingBootstrapConversation: {}, ...delegates } as unknown as Prisma.TransactionClient);
+	return new PrismaUserOnboardingRepository({ userOnboarding: {}, userOnboardingBootstrapAnswer: {}, userOnboardingBootstrapConversation: {}, ...delegates } as unknown as Prisma.TransactionClient & Pick<PrismaClient, "$transaction">);
 }
 
 /** Build one exact bootstrap start command with immutable owner, persona, and content pins. */
@@ -141,12 +141,33 @@ describe("PrismaUserOnboardingRepository", function _PrismaUserOnboardingReposit
 		});
 	});
 
-	it("starts by atomically creating and pinning the exact nested conversation", async function _StartsConversation()
+	it("starts by creating the exact conversation before pinning it on the parent", async function _StartsConversation()
 	{
+		const calls: string[] = [];
+		const create = vi.fn(async function _Create()
+		{
+			calls.push("conversation.create");
+		});
 		const update = vi.fn().mockResolvedValue({});
-		const started = await _ChatRepository({ userOnboarding: { update } }).startConversation(_StartCommand());
+		const $transaction = vi.fn(async function _Transaction(work: (transaction: Prisma.TransactionClient) => Promise<void>, options: { readonly isolationLevel: Prisma.TransactionIsolationLevel }): Promise<void>
+		{
+			expect(options.isolationLevel).toBe(Prisma.TransactionIsolationLevel.Serializable);
+			await work({
+				userOnboarding: {
+					update: async function _Update(input: unknown)
+					{
+						calls.push("userOnboarding.update");
+						return update(input);
+					},
+				},
+				userOnboardingBootstrapConversation: { create },
+			} as unknown as Prisma.TransactionClient);
+		});
+		const started = await _ChatRepository({ $transaction }).startConversation(_StartCommand());
 
 		expect(started).toBe(true);
+		expect(calls).toEqual(["conversation.create", "userOnboarding.update"]);
+		expect(create).toHaveBeenCalledWith({ data: { id: "conversation-a", onboardingId: "onboarding-a", siloId: "silo-a", userId: "subject-a", personaRevisionId: "revision-a", personaDisplayName: "The Commander", personaArchetype: UserOnboardingBootstrapArchetype.Commander, contentRevisionId: "bootstrap-commander-v1", contentDigest: `sha256:${"a".repeat(64)}` } });
 		expect(update).toHaveBeenCalledWith({
 			where: { siloId_userId: { siloId: "silo-a", userId: "subject-a" }, state: UserOnboardingState.BootstrapChatPending, id: "onboarding-a", personaRevisionId: "revision-a", bootstrapConversationId: null },
 			data: {
@@ -154,7 +175,6 @@ describe("PrismaUserOnboardingRepository", function _PrismaUserOnboardingReposit
 				bootstrapConversationId: "conversation-a",
 				bootstrapContentRevisionId: "bootstrap-commander-v1",
 				bootstrapContentDigest: `sha256:${"a".repeat(64)}`,
-				ownedBootstrapConversation: { create: { id: "conversation-a", siloId: "silo-a", userId: "subject-a", personaRevisionId: "revision-a", personaDisplayName: "The Commander", personaArchetype: UserOnboardingBootstrapArchetype.Commander, contentRevisionId: "bootstrap-commander-v1", contentDigest: `sha256:${"a".repeat(64)}` } },
 			},
 		});
 	});
@@ -162,9 +182,17 @@ describe("PrismaUserOnboardingRepository", function _PrismaUserOnboardingReposit
 	it("returns a start conflict only for a failed compare-and-set update", async function _RejectsStartConflict()
 	{
 		const conflict = new Prisma.PrismaClientKnownRequestError("stale onboarding", { code: "P2025", clientVersion: "test" });
-		const update = vi.fn().mockRejectedValue(conflict);
+		const $transaction = vi.fn(async function _Transaction(): Promise<void> { throw conflict; });
 
-		await expect(_ChatRepository({ userOnboarding: { update } }).startConversation(_StartCommand())).resolves.toBe(false);
+		await expect(_ChatRepository({ $transaction }).startConversation(_StartCommand())).resolves.toBe(false);
+	});
+
+	it("returns a start conflict when a concurrent winner advances the parent before child insert", async function _RejectsConcurrentStartTrigger()
+	{
+		const conflict = new Prisma.PrismaClientUnknownRequestError("bootstrap conversation must bind the exact pending onboarding owner and persona", { clientVersion: "test" });
+		const $transaction = vi.fn(async function _Transaction(): Promise<void> { throw conflict; });
+
+		await expect(_ChatRepository({ $transaction }).startConversation(_StartCommand())).resolves.toBe(false);
 	});
 
 	it("appends only the exact next question through the answer delegate", async function _AppendsExactQuestion()
