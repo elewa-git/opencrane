@@ -16,6 +16,8 @@ export class ConversationComposerComponent
 	public readonly placeholder = input("Write a message…");
 	/** Accessible name for the message field. */
 	public readonly label = input("Message");
+	/** Host-supplied unique field id for pages that render more than one composer. */
+	public readonly fieldId = input("conversation-composer-field");
 	/** Emits every user edit; the host decides whether to adopt it. */
 	public readonly draftChange = output<string>();
 	/** Emits the exact displayed non-empty draft once. */

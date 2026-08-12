@@ -2,7 +2,7 @@
 .thread-summary { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: .75rem; padding: .75rem; border: 1px solid var(--oc-border, #d9dfe0); border-radius: .7rem; background: var(--oc-surface-paper, #fff); }
 .thread-summary__avatars { display: flex; }
 .thread-summary__avatars wo-avatar-circle + wo-avatar-circle { margin-left: -.45rem; }
-.thread-summary__body { min-width: 0; }
+.thread-summary__body { min-width: 0; overflow-wrap: anywhere; }
 .thread-summary__title { display: flex; align-items: center; gap: .4rem; }
 .thread-summary small { color: var(--oc-ink-muted, #81888a); }
 @media (max-width: 390px) { .thread-summary { grid-template-columns: auto minmax(0, 1fr); } p-button, wo-scope-chip { grid-column: 2; justify-self: start; } }

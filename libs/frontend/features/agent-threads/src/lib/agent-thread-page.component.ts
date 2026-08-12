@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, effect, inject, input, output } from "@angular/core";
 import type { MenuItem } from "primeng/api";
 import { BreadcrumbModule } from "primeng/breadcrumb";
+import { ButtonModule } from "primeng/button";
 import { MessageModule } from "primeng/message";
 
 import { A2uiCanvasComponent, type A2uiDisplayedActionIntent, type A2uiSurfacePresentation } from "@opencrane/elements/a2ui";
@@ -21,7 +22,7 @@ import { AgentThreadRunBoundaryComponent } from "./agent-thread-run-boundary.com
 import { AgentThreadUnavailableComponent } from "./agent-thread-unavailable.component.js";
 
 /** Thin route-ready child workspace; the app route coordinator still owns navigation and restoration. */
-@Component({ selector: "wo-agent-thread-page", standalone: true, imports: [A2uiCanvasComponent, AgentThreadAccessChangedComponent, AgentThreadAvailableComponent, AgentThreadDeliveryComponent, AgentThreadOriginComponent, AgentThreadQueuedComponent, AgentThreadRunBoundaryComponent, AgentThreadUnavailableComponent, BreadcrumbModule, ConversationActivityComponent, ConversationAssetCardComponent, ConversationComposerComponent, ConversationElicitationCardComponent, ConversationMessageComponent, MessageModule], templateUrl: "./agent-thread-page.component.html", styleUrl: "./agent-thread-page.component.scss", changeDetection: ChangeDetectionStrategy.OnPush, providers: [AgentThreadStore] })
+@Component({ selector: "wo-agent-thread-page", standalone: true, imports: [A2uiCanvasComponent, AgentThreadAccessChangedComponent, AgentThreadAvailableComponent, AgentThreadDeliveryComponent, AgentThreadOriginComponent, AgentThreadQueuedComponent, AgentThreadRunBoundaryComponent, AgentThreadUnavailableComponent, BreadcrumbModule, ButtonModule, ConversationActivityComponent, ConversationAssetCardComponent, ConversationComposerComponent, ConversationElicitationCardComponent, ConversationMessageComponent, MessageModule], templateUrl: "./agent-thread-page.component.html", styleUrl: "./agent-thread-page.component.scss", changeDetection: ChangeDetectionStrategy.OnPush, providers: [AgentThreadStore] })
 export class AgentThreadPageComponent
 {
 	/** Component-scoped route and command state. */
@@ -80,7 +81,11 @@ export class AgentThreadPageComponent
 	protected returnToParent(): void
 	{
 		const restore = this.parentRestore();
-		if (restore === null) this.chatsRequested.emit();
+		const snapshot = this.store.snapshot();
+		const authorizedSnapshotMatches = restore !== null && snapshot !== null && restore.parentConversationId === snapshot.parentConversationId && restore.parentMessageId === snapshot.origin.parentMessageId;
+		const purgedAccessChangeMatches = restore !== null && this.store.routeState() === AgentThreadRouteStates.AccessChanged && restore.parentConversationId === this.parentConversationId();
+		const exact = authorizedSnapshotMatches || purgedAccessChangeMatches;
+		if (!exact) this.chatsRequested.emit();
 		else this.parentRestoreRequested.emit(restore);
 	}
 

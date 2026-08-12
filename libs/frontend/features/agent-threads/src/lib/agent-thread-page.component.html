@@ -1,7 +1,7 @@
 <main class="agent-thread-page" [attr.data-route-state]="store.routeState()">
 	<header class="agent-thread-page__header">
 		<p-breadcrumb [model]="breadcrumbs()" />
-		<button type="button" class="agent-thread-page__back" (click)="returnToParent()">← Back</button>
+		<p-button label="Back" icon="pi pi-arrow-left" [text]="true" (onClick)="returnToParent()" />
 	</header>
 	@switch (store.routeState()) {
 		@case (routeStates.Loading) { <section class="agent-thread-page__loading" role="status" aria-live="polite">Loading Agent thread…</section> }
@@ -29,7 +29,7 @@
 					@if (latestRunIsQueued()) { <wo-agent-thread-queued /> }
 					@else if (store.canSendFollowUp()) { <wo-agent-thread-available /> }
 					@if (store.error(); as error) { <p-message severity="error" [text]="error" /> }
-					<wo-conversation-composer label="Follow up in this Agent thread" placeholder="Ask a follow-up…" [draft]="store.draft()" [state]="composerState()" (draftChange)="updateDraft($event)" (submitted)="submitFollowUp()" />
+					<wo-conversation-composer fieldId="agent-thread-follow-up" label="Follow up in this Agent thread" placeholder="Ask a follow-up…" [draft]="store.draft()" [state]="composerState()" (draftChange)="updateDraft($event)" (submitted)="submitFollowUp()" />
 				</section>
 			}
 		}

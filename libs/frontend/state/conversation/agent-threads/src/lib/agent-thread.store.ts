@@ -1,6 +1,8 @@
 import { Injectable, computed, inject, signal } from "@angular/core";
 
 import { AgentThreadGatewayError, AgentThreadGatewayErrorKinds } from "./agent-thread-gateway.errors.js";
+import { __AgentThreadFailureRoute } from "./agent-thread-access-policy.js";
+import { _AgentThreadFollowUpState } from "./agent-thread-follow-up.state.js";
 import { AGENT_THREAD_GATEWAY } from "./agent-thread.gateway.js";
 import { AgentThreadRecoveryStates, AgentThreadRouteStates, type AgentThreadSnapshot } from "./agent-thread.types.js";
 
@@ -14,36 +16,35 @@ export class AgentThreadStore
 	private readonly _routeState = signal(AgentThreadRouteStates.Loading);
 	/** Exact authorized snapshot, or null after every purge. */
 	private readonly _snapshot = signal<AgentThreadSnapshot | null>(null);
-	/** Controlled follow-up draft retained through reconnect only. */
-	private readonly _draft = signal("");
-	/** One active follow-up command fence. */
-	private readonly _submitting = signal(false);
-	/** Display-safe recoverable failure. */
-	private readonly _error = signal<string | null>(null);
+	/** Controlled draft, command fence, and display-safe command failure. */
+	private readonly _followUp = new _AgentThreadFollowUpState();
 	/** Generation fence that rejects late reads and command completions. */
 	private _generation = 0;
 	/** Whether this store has ever held an authorized snapshot for the exact route. */
 	private _hadAuthorizedSnapshot = false;
+	/** Exact route whose prior authorization may justify the access-changed state. */
+	private _routeKey: string | null = null;
 
 	/** Current route state. */
 	public readonly routeState = this._routeState.asReadonly();
 	/** Exact authorized child snapshot. */
 	public readonly snapshot = this._snapshot.asReadonly();
 	/** Host-owned controlled composer draft. */
-	public readonly draft = this._draft.asReadonly();
+	public readonly draft = this._followUp.draft;
 	/** Whether one follow-up command is active. */
-	public readonly submitting = this._submitting.asReadonly();
+	public readonly submitting = this._followUp.submitting;
 	/** Display-safe recoverable error. */
-	public readonly error = this._error.asReadonly();
+	public readonly error = this._followUp.error;
 	/** Whether current independent dimensions permit one follow-up. */
 	public readonly canSendFollowUp = computed(this._CanSendFollowUp.bind(this));
 
 	/** Load one exact parent-child route and collapse first-view absence or denial. */
 	public async load(parentConversationId: string, childConversationId: string): Promise<void>
 	{
+		this._PrepareRoute(parentConversationId, childConversationId);
 		const generation = ++this._generation;
 		this._routeState.set(AgentThreadRouteStates.Loading);
-		this._error.set(null);
+		this._followUp.clearError();
 		try
 		{
 			const snapshot = await this._gateway.read(parentConversationId, childConversationId);
@@ -68,85 +69,80 @@ export class AgentThreadStore
 	}
 
 	/** Reload from the exact accepted route coordinates after a live-delivery interruption. */
-	public async reconnect(): Promise<void>
-	{
-		const current = this._snapshot();
-		if (current === null) return;
-		await this.load(current.parentConversationId, current.childConversationId);
-	}
+	public async reconnect(): Promise<void> { const current = this._snapshot(); if (current !== null) await this.load(current.parentConversationId, current.childConversationId); }
 
 	/** Adopt one controlled follow-up draft only while authorized child state is retained. */
-	public updateDraft(draft: string): void
-	{
-		if (this._routeState() === AgentThreadRouteStates.Ready) this._draft.set(draft);
-	}
+	public updateDraft(draft: string): void { this._followUp.update(draft, this._routeState()); }
 
 	/** Send one exact serial follow-up and adopt only a matching authoritative snapshot. */
 	public async sendFollowUp(): Promise<boolean>
 	{
 		const current = this._snapshot();
-		const body = this._draft();
+		const body = this._followUp.draft();
 		if (current === null || !this._CanSendFollowUp() || body.trim().length === 0) return false;
-		const generation = this._generation;
-		this._submitting.set(true);
-		this._error.set(null);
+		const generation = this._followUp.begin();
 		try
 		{
 			const next = await this._gateway.sendFollowUp(current.childConversationId, body, globalThis.crypto.randomUUID());
-			if (generation !== this._generation || next.parentConversationId !== current.parentConversationId || next.childConversationId !== current.childConversationId) return false;
+			if (!this._followUp.isCurrent(generation)) return false;
+			if (next.parentConversationId !== current.parentConversationId || next.childConversationId !== current.childConversationId)
+			{
+				this._followUp.fail(generation, "OpenCrane returned a different Agent thread. Nothing was sent again.");
+				return false;
+			}
 			this._snapshot.set(next);
-			this._draft.set("");
+			this._followUp.succeed(generation);
 			return true;
 		}
 		catch (error)
 		{
-			if (generation !== this._generation) return false;
+			if (!this._followUp.isCurrent(generation)) return false;
 			if (error instanceof AgentThreadGatewayError && error.kind !== AgentThreadGatewayErrorKinds.Recoverable)
 			{
 				this._HandleGatewayFailure(error);
 				return false;
 			}
-			this._error.set(error instanceof Error ? error.message : "OpenCrane could not send this follow-up.");
+			this._followUp.fail(generation, error instanceof Error ? error.message : "OpenCrane could not send this follow-up.");
 			this.beginReconnect();
 			return false;
 		}
-		finally { if (generation === this._generation) this._submitting.set(false); }
 	}
 
 	/** Whether the exact route, snapshot, recovery, and command states permit a follow-up. */
-	private _CanSendFollowUp(): boolean
-	{
-		const current = this._snapshot();
-		return this._routeState() === AgentThreadRouteStates.Ready && current !== null && current.recovery === AgentThreadRecoveryStates.Live && current.canSendFollowUp && !this._submitting();
-	}
+	private _CanSendFollowUp(): boolean { return this._followUp.canSend(this._routeState(), this._snapshot()); }
 
 	/** Purge all child-derived state before exposing a restricted or unavailable route state. */
 	private _PurgeAndSet(state: AgentThreadRouteStates.AccessChanged | AgentThreadRouteStates.Unavailable): void
 	{
 		this._snapshot.set(null);
-		this._draft.set("");
-		this._error.set(null);
+		this._followUp.purge();
 		this._routeState.set(state);
+	}
+
+	/** Clear every child-derived value before changing to a different exact route pair. */
+	private _PrepareRoute(parentConversationId: string, childConversationId: string): void
+	{
+		const routeKey = `${parentConversationId}\u0000${childConversationId}`;
+		if (this._routeKey === routeKey) return;
+		this._routeKey = routeKey;
+		this._hadAuthorizedSnapshot = false;
+		this._snapshot.set(null);
+		this._followUp.purge();
 	}
 
 	/** Collapse gateway errors while distinguishing only proven post-authorization revocation. */
 	private _HandleGatewayFailure(error: unknown): void
 	{
-		if (!(error instanceof AgentThreadGatewayError))
+		const failureRoute = __AgentThreadFailureRoute(error, this._hadAuthorizedSnapshot);
+		if (failureRoute !== null) this._PurgeAndSet(failureRoute);
+		else
 		{
-			this._error.set("OpenCrane could not load this Agent thread.");
-			return;
+			this._followUp.setError(error instanceof Error ? error.message : "OpenCrane could not load this Agent thread.");
+			if (this._snapshot() !== null)
+			{
+				this.beginReconnect();
+				this._routeState.set(AgentThreadRouteStates.Ready);
+			}
 		}
-		if (error.kind === AgentThreadGatewayErrorKinds.AccessChanged && this._hadAuthorizedSnapshot)
-		{
-			this._PurgeAndSet(AgentThreadRouteStates.AccessChanged);
-			return;
-		}
-		if (error.kind === AgentThreadGatewayErrorKinds.Unavailable || error.kind === AgentThreadGatewayErrorKinds.AccessChanged)
-		{
-			this._PurgeAndSet(AgentThreadRouteStates.Unavailable);
-			return;
-		}
-		this._error.set(error.message);
 	}
 }

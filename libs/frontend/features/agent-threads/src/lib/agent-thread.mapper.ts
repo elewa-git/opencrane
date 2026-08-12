@@ -5,7 +5,9 @@ import { AgentThreadRunStates, AgentThreadSummaryStates, type AgentThreadMessage
 /** Map a dependency-neutral child message into the shared conversation element contract. */
 export function __AgentThreadMessagePresentation(message: AgentThreadMessagePresentation): ConversationMessagePresentation
 {
-	return { id: message.id, authorName: message.authorName, authorInitials: message.authorInitials, avatarTone: message.authoredByAgent ? AvatarTones.Brand : AvatarTones.Blue, timestampLabel: message.timestampLabel, body: message.body, tone: message.authoredByAgent ? ConversationMessageTones.Agent : ConversationMessageTones.Participant };
+	const avatarTone = message.authoredByAgent ? AvatarTones.Brand : AvatarTones.Blue;
+	const tone = message.authoredByAgent ? ConversationMessageTones.Agent : ConversationMessageTones.Participant;
+	return { id: message.id, authorName: message.authorName, authorInitials: message.authorInitials, avatarTone, timestampLabel: message.timestampLabel, body: message.body, tone };
 }
 
 /** Map one independent run state into a short shared status projection. */

@@ -226,9 +226,11 @@ export default [
             { sourceTag: "type:app", notDependOnLibsWithTags: ["type:app"] },
 			{ sourceTag: "type:lib", notDependOnLibsWithTags: ["type:app"] },
 			{ sourceTag: "frontend-role:feature", onlyDependOnLibsWithTags: ["frontend-role:elements", "frontend-role:state"] },
+			{ sourceTag: "frontend-role:feature-shell", onlyDependOnLibsWithTags: ["frontend-role:elements", "frontend-role:elements-composite", "frontend-role:feature", "frontend-role:state"] },
 			{ sourceTag: "frontend-role:adapter", onlyDependOnLibsWithTags: ["frontend-role:core", "frontend-role:state"] },
 			{ sourceTag: "frontend-role:state", onlyDependOnLibsWithTags: ["frontend-role:core", "layer:contract", "layer:model", "layer:util"] },
-			{ sourceTag: "frontend-role:elements", onlyDependOnLibsWithTags: ["frontend-role:core"] },
+			{ sourceTag: "frontend-role:elements", onlyDependOnLibsWithTags: ["frontend-role:core", "layer:contract"] },
+			{ sourceTag: "frontend-role:elements-composite", onlyDependOnLibsWithTags: ["frontend-role:core", "frontend-role:elements"] },
             {
               sourceTag: "layer:backend",
               notDependOnLibsWithTags: ["layer:entrypoint", "layer:frontend"],

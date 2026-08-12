@@ -1,6 +1,6 @@
 # @opencrane/state/conversation/agent-threads — Agent-thread browser state
 
-> [frontend](../../../README.md) › [state](../../README.md) › conversation › agent-threads
+> [frontend](../../../README.md) › [state](../../README.md) › [conversation](../README.md) › agent-threads
 
 ## What it owns
 
@@ -46,5 +46,5 @@ package, app, or concrete adapter.
 
 ## See also
 
-- Parent index: [`libs/frontend/state`](../../README.md)
+- Parent index: [`libs/frontend/state/conversation`](../README.md)
 - Siblings: [`conversation/ag-ui`](../ag-ui/README.md) · [`conversation/assets`](../assets/README.md) · [`conversation/elicitation`](../elicitation/README.md)

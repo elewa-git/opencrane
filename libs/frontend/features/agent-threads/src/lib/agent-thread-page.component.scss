@@ -2,8 +2,6 @@
 .agent-thread-page { min-height: 100%; background: var(--oc-surface-paper, #fff); color: var(--oc-ink, #16191a); }
 .agent-thread-page__header { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; gap: .75rem; padding: .65rem 1rem; border-bottom: 1px solid var(--oc-border, #d9dfe0); background: inherit; }
 .agent-thread-page__header p-breadcrumb { flex: 1; min-width: 0; }
-.agent-thread-page__back { border: 0; background: transparent; color: var(--oc-brand-dark, #0a94a7); cursor: pointer; }
-.agent-thread-page__back:focus-visible { outline: 3px solid color-mix(in srgb, var(--oc-brand, #0db5cc) 35%, transparent); outline-offset: 3px; border-radius: .25rem; }
 .agent-thread-page__workspace { display: grid; gap: 1rem; width: min(100% - 2rem, 52rem); margin: 0 auto; padding: 1.25rem 0 2rem; }
 .agent-thread-page__title { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
 .agent-thread-page__title small { color: var(--oc-ink-muted, #81888a); }

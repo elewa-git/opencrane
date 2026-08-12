@@ -37,6 +37,7 @@ const _SUMMARIES: readonly AgentThreadSummaryPresentation[] =
 /** Build one full child projection with ordered run, message, and delivery entries. */
 function _Snapshot(state: AgentThreadRunStates = AgentThreadRunStates.Working, overrides: Partial<AgentThreadSnapshot> = {}): AgentThreadSnapshot
 {
+	const delivery = _DeliveryForRun(state);
 	return {
 		parentConversationId: "group-launch",
 		childConversationId: "child-pricing",
@@ -46,12 +47,19 @@ function _Snapshot(state: AgentThreadRunStates = AgentThreadRunStates.Working, o
 		timeline: [
 			{ kind: AgentThreadTimelineEntryKinds.RunBoundary, id: "run-boundary-1", run: { runId: "run-1", ordinal: 1, state, label: _RunLabel(state), detail: _RunDetail(state) } },
 			{ kind: AgentThreadTimelineEntryKinds.Message, id: "message-1", message: { id: "message-1", authorName: "Nova", authorInitials: "N", authoredByAgent: true, timestampLabel: "11:08", body: "I am comparing the commercial terms and renewal obligations." } },
-			{ kind: AgentThreadTimelineEntryKinds.Delivery, id: "delivery-1", delivery: { id: "delivery-1", kind: state === AgentThreadRunStates.Failed ? AgentThreadDeliveryKinds.Failure : AgentThreadDeliveryKinds.Status, label: state === AgentThreadRunStates.Failed ? "Comparison failed" : "Review in progress", detail: state === AgentThreadRunStates.Failed ? "Authentication failed. No result was delivered." : "The child sent a safe progress update to nova-pitch.", timestampLabel: "11:08" } }
+			{ kind: AgentThreadTimelineEntryKinds.Delivery, id: "delivery-1", delivery }
 		],
 		cursor: "opaque-story-cursor",
 		canSendFollowUp: state === AgentThreadRunStates.Completed,
 		...overrides
 	};
+}
+
+/** Build a truthful delivery for the latest run outcome. */
+function _DeliveryForRun(state: AgentThreadRunStates)
+{
+	if (state === AgentThreadRunStates.Failed) return { id: "delivery-1", kind: AgentThreadDeliveryKinds.Failure, label: "Comparison failed", detail: "Authentication failed. No result was delivered.", timestampLabel: "11:08" } as const;
+	return { id: "delivery-1", kind: AgentThreadDeliveryKinds.Status, label: "Review in progress", detail: "The child sent a safe progress update to nova-pitch.", timestampLabel: "11:08" } as const;
 }
 
 /** Resolve the summary state belonging to one latest serial run state. */

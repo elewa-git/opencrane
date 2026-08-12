@@ -109,6 +109,16 @@ describe("AgentThreadStore", function _AgentThreadStore()
 		expect(store.routeState()).toBe(AgentThreadRouteStates.AccessChanged);
 	});
 
+	it("does not carry proof of prior access across a different route pair", async function _RouteScopedAccessProof()
+	{
+		const [store, gateway] = _CreateStore();
+		await store.load("parent-1", "child-1");
+		gateway.readResult = new AgentThreadGatewayError(AgentThreadGatewayErrorKinds.AccessChanged, "Hidden detail");
+		await store.load("parent-1", "child-2");
+		expect(store.routeState()).toBe(AgentThreadRouteStates.Unavailable);
+		expect(store.snapshot()).toBeNull();
+	});
+
 	it("retains a controlled draft while reconnecting", async function _ReconnectDraft()
 	{
 		const [store] = _CreateStore();
@@ -118,6 +128,18 @@ describe("AgentThreadStore", function _AgentThreadStore()
 		expect(store.snapshot()?.recovery).toBe(AgentThreadRecoveryStates.Reconnecting);
 		expect(store.draft()).toBe("What changed in the payment clause?");
 		expect(store.canSendFollowUp()).toBe(false);
+	});
+
+	it("keeps an authorized snapshot and draft when a reconnect read fails temporarily", async function _RecoverableReconnect()
+	{
+		const [store, gateway] = _CreateStore();
+		await store.load("parent-1", "child-1");
+		store.updateDraft("Keep this question");
+		gateway.readResult = new AgentThreadGatewayError(AgentThreadGatewayErrorKinds.Recoverable, "Connection interrupted. Retrying.");
+		await store.reconnect();
+		expect(store.routeState()).toBe(AgentThreadRouteStates.Ready);
+		expect(store.snapshot()?.recovery).toBe(AgentThreadRecoveryStates.Reconnecting);
+		expect(store.draft()).toBe("Keep this question");
 	});
 
 	it("sends the exact draft once and adopts the matching authoritative result", async function _SendFollowUp()
