@@ -21,6 +21,13 @@ function _File(name: string, type: string, text: string): File
 	return { name, type, size: bytes.byteLength, arrayBuffer: async function _Bytes() { return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength); } } as File;
 }
 
+/** Minimal file whose declared length can exercise limits without allocating those bytes. */
+function _SizedFile(name: string, type: string, size: number): File
+{
+	const file = _File(name, type, "bounded-content");
+	return { ...file, size } as File;
+}
+
 /** Build one component-scoped store with a controlled gateway. */
 function _Store(gateway: ConversationAssetsGateway): ConversationAssetsStore
 {
@@ -61,6 +68,35 @@ describe("ConversationAssetsStore", function _Suite()
 		await store.select([_File("data.sqlite", "application/vnd.sqlite3", "db")]);
 		expect(store.selectionFailure()).toBe("unsupported_media_type");
 		expect(gateway.reserve).not.toHaveBeenCalled();
+	});
+
+	it("rejects a later selection when existing pending files already fill the ten-file limit", async function _RejectsAcrossPendingCount()
+	{
+		const gateway = { list: vi.fn().mockResolvedValue([]), reserve: vi.fn().mockRejectedValue(new Error("offline")), upload: vi.fn(), remove: vi.fn() };
+		const store = _Store(gateway);
+		store.open("conversation-1");
+		const firstSelection = Array.from({ length: 10 }, function _FileAt(_value, index) { return _File(`brief-${index}.pdf`, "application/pdf", `brief-${index}`); });
+
+		await store.select(firstSelection);
+		await store.select([_File("eleventh.pdf", "application/pdf", "eleventh")]);
+
+		expect(store.selectionFailure()).toBe("too_many_files");
+		expect(store.pendingUploads()).toHaveLength(10);
+		expect(gateway.reserve).toHaveBeenCalledTimes(10);
+	});
+
+	it("rejects a later selection when pending bytes would exceed 200 MiB", async function _RejectsAcrossPendingBytes()
+	{
+		const gateway = { list: vi.fn().mockResolvedValue([]), reserve: vi.fn().mockRejectedValue(new Error("offline")), upload: vi.fn(), remove: vi.fn() };
+		const store = _Store(gateway);
+		store.open("conversation-1");
+
+		await store.select([_SizedFile("large.pdf", "application/pdf", 150 * 1024 * 1024)]);
+		await store.select([_SizedFile("too-large.pdf", "application/pdf", 51 * 1024 * 1024)]);
+
+		expect(store.selectionFailure()).toBe("total_too_large");
+		expect(store.pendingUploads()).toHaveLength(1);
+		expect(gateway.reserve).toHaveBeenCalledOnce();
 	});
 
 	it("reuses the exact reservation after an ambiguous transport failure", async function _RetriesReservation()

@@ -18,8 +18,8 @@ export class PrismaConversationAssetRepository implements ConversationAssetRepos
 	/** Reserves one logical artifact, hidden write lease, and browser asset row. */
 	async reserve(caller: ConversationAssetCaller, conversationId: string, request: ReserveConversationAssetRequest): Promise<ConversationAssetResult>
 	{
-		if (!await this._canAccessConversation(caller, conversationId)) return { outcome: "denied", reason: "conversation_unavailable" };
-		const existing = await this.transaction.conversationAsset.findUnique({ where: { conversationId_createdByUserId_idempotencyKey: { conversationId, createdByUserId: caller.subjectId, idempotencyKey: request.idempotencyKey } } });
+		if (!await this._canMutateConversation(caller, conversationId)) return { outcome: "denied", reason: "conversation_unavailable" };
+		const existing = await this.transaction.conversationAsset.findUnique({ where: { conversationId_createdByUserId_idempotencyKey: { conversationId, createdByUserId: caller.subjectId, idempotencyKey: request.idempotencyKey } }, include: { uploadLease: true } });
 		if (existing !== null) return _ReservationMatches(existing, request) ? { outcome: "idempotent", asset: _ConversationAssetView(existing, caller.subjectId) } : { outcome: "denied", reason: "idempotency_conflict" };
 		const artifactId = randomUUID();
 		const leaseId = randomUUID();
@@ -32,7 +32,7 @@ export class PrismaConversationAssetRepository implements ConversationAssetRepos
 	/** Reads one live hidden upload lease. */
 	async readUploadTarget(caller: ConversationAssetCaller, conversationId: string, assetId: string): Promise<ConversationAssetUploadTarget | null>
 	{
-		if (!await this._canAccessConversation(caller, conversationId)) return null;
+		if (!await this._canMutateConversation(caller, conversationId)) return null;
 		const asset = await this.transaction.conversationAsset.findFirst({ where: { id: assetId, siloId: caller.siloId, conversationId, createdByUserId: caller.subjectId, state: ConversationAssetState.Uploading }, include: { uploadLease: true } });
 		const lease = asset?.uploadLease;
 		if (lease === null || lease === undefined || lease.state !== ArtifactUploadLeaseState.Active || lease.expiresAt <= new Date() || lease.expectedContentAddress === null || lease.expectedByteLength === null) return null;
@@ -42,7 +42,7 @@ export class PrismaConversationAssetRepository implements ConversationAssetRepos
 	/** Converts a verified promotion into a quarantined revision and scan job. */
 	async finalize(caller: ConversationAssetCaller, conversationId: string, assetId: string, promotion: import("@opencrane/backend/artifacts/authorization").ArtifactPromotionReceiptClaims, receiptDigest: string): Promise<ConversationAssetResult>
 	{
-		if (!await this._canAccessConversation(caller, conversationId)) return { outcome: "denied", reason: "conversation_unavailable" };
+		if (!await this._canMutateConversation(caller, conversationId)) return { outcome: "denied", reason: "conversation_unavailable" };
 		const asset = await this.transaction.conversationAsset.findFirst({ where: { id: assetId, siloId: caller.siloId, conversationId, createdByUserId: caller.subjectId } });
 		if (asset === null) return { outcome: "denied", reason: "asset_unavailable" };
 		if (asset.state === ConversationAssetState.Processing || asset.state === ConversationAssetState.Ready) return { outcome: "idempotent", asset: _ConversationAssetView(asset, caller.subjectId) };
@@ -60,7 +60,7 @@ export class PrismaConversationAssetRepository implements ConversationAssetRepos
 	/** Removes only the caller's unlinked upload reservation and revokes its live write lease. */
 	async remove(caller: ConversationAssetCaller, conversationId: string, assetId: string): Promise<ConversationAssetResult>
 	{
-		if (!await this._canAccessConversation(caller, conversationId)) return { outcome: "denied", reason: "conversation_unavailable" };
+		if (!await this._canMutateConversation(caller, conversationId)) return { outcome: "denied", reason: "conversation_unavailable" };
 		const asset = await this.transaction.conversationAsset.findFirst({ where: { id: assetId, siloId: caller.siloId, conversationId, createdByUserId: caller.subjectId, provenance: PersistedProvenance.ParticipantUpload } });
 		if (asset === null) return { outcome: "denied", reason: "asset_unavailable" };
 		if (asset.state === ConversationAssetState.Removed) return { outcome: "idempotent", asset: _ConversationAssetView(asset, caller.subjectId) };
@@ -75,22 +75,32 @@ export class PrismaConversationAssetRepository implements ConversationAssetRepos
 	/** Lists browser-safe metadata for a current participant. */
 	async list(caller: ConversationAssetCaller, conversationId: string): Promise<readonly ConversationAssetView[]>
 	{
-		if (!await this._canAccessConversation(caller, conversationId)) return [];
+		if (!await this._canReadConversation(caller, conversationId)) return [];
 		return (await this.transaction.conversationAsset.findMany({ where: { conversationId, siloId: caller.siloId, state: { not: ConversationAssetState.Removed }, OR: [{ provenance: PersistedProvenance.ParticipantUpload }, { provenance: PersistedProvenance.AgentOutput, state: { in: [ConversationAssetState.Processing, ConversationAssetState.Ready, ConversationAssetState.Failed] } }] }, orderBy: [{ createdAt: "asc" }, { id: "asc" }] })).map(function _SafeView(asset) { return _ConversationAssetView(asset, caller.subjectId); });
 	}
 
-	/** Requires current silo membership and participant access. */
-	private async _canAccessConversation(caller: ConversationAssetCaller, conversationId: string): Promise<boolean>
+	/** Requires current membership and participant access, including a closed read-only conversation. */
+	private async _canReadConversation(caller: ConversationAssetCaller, conversationId: string): Promise<boolean>
+	{
+		const participant = await this.transaction.conversationParticipant.findFirst({ where: { conversationId, userId: caller.subjectId, accessEndedPosition: null, conversation: { siloId: caller.siloId } } });
+		return participant !== null && await this._isActiveMember(caller);
+	}
+
+	/** Requires current membership and participant access to an open mutable conversation. */
+	private async _canMutateConversation(caller: ConversationAssetCaller, conversationId: string): Promise<boolean>
 	{
 		const participant = await this.transaction.conversationParticipant.findFirst({ where: { conversationId, userId: caller.subjectId, accessEndedPosition: null, conversation: { siloId: caller.siloId, lifecycle: ConversationLifecycle.Open } } });
-		return participant !== null && await this.transaction.orgMembership.count({ where: { clusterTenant: caller.siloId, subject: caller.subjectId, status: OrgMemberStatus.Active } }) === 1;
+		return participant !== null && await this._isActiveMember(caller);
 	}
+
+	/** Confirm the caller remains one active member of the selected silo. */
+	private async _isActiveMember(caller: ConversationAssetCaller): Promise<boolean> { return await this.transaction.orgMembership.count({ where: { clusterTenant: caller.siloId, subject: caller.subjectId, status: OrgMemberStatus.Active } }) === 1; }
 }
 
 /** Require an exact retry body for reservation idempotency. */
-function _ReservationMatches(asset: { readonly displayName: string; readonly mediaType: string; readonly byteLength: bigint | null; readonly artifactId: string | null }, request: ReserveConversationAssetRequest): boolean
+function _ReservationMatches(asset: { readonly displayName: string; readonly mediaType: string; readonly byteLength: bigint | null; readonly artifactId: string | null; readonly uploadLease: { readonly expectedContentAddress: string | null } | null }, request: ReserveConversationAssetRequest): boolean
 {
-	return asset.displayName === request.displayName.trim() && asset.mediaType === request.mediaType && asset.byteLength === BigInt(request.byteLength) && asset.artifactId !== null;
+	return asset.displayName === request.displayName.trim() && asset.mediaType === request.mediaType && asset.byteLength === BigInt(request.byteLength) && asset.uploadLease?.expectedContentAddress === request.contentAddress && asset.artifactId !== null;
 }
 
 /** Project a browser-safe view without technical authority facts. */

@@ -2,11 +2,9 @@ import { Prisma, type PrismaClient } from "@prisma/client";
 
 import type { ArtifactServicePromotionPort, ArtifactUploadCryptoPort } from "@opencrane/backend/server/agents/artifacts";
 import { ___DoWithTrace } from "@opencrane/backend/observability";
-import { ___DecideConversationAssetBatch } from "@opencrane/models/conversation-assets";
-import { ___IsSha256ContentAddress } from "@opencrane/models/artifacts";
-
 import type { ConversationAssetCaller, ConversationAssetResult, ConversationAssetView, ReserveConversationAssetRequest } from "./conversation-asset.types.js";
 import type { ConversationAssetAuthority } from "./conversation-asset.router.types.js";
+import { _ParseReserveConversationAsset } from "./conversation-asset.validator.js";
 import { PrismaConversationAssetRepository } from "./prisma-conversation-asset-repository.js";
 
 /** Transaction owner around server-brokered participant uploads. */
@@ -22,8 +20,9 @@ export class PrismaConversationAssetUnitOfWork implements ConversationAssetAutho
 	/** Reserves one hidden upload transaction. */
 	async reserveUpload(caller: ConversationAssetCaller, conversationId: string, request: ReserveConversationAssetRequest): Promise<ConversationAssetResult>
 	{
-		if (!_ValidReservation(request)) return { outcome: "denied", reason: "invalid_request" };
-		return ___DoWithTrace("conversation.asset.reserve", { conversationId }, () => this._transaction(function _Reserve(repository) { return repository.reserve(caller, conversationId, request); }, Prisma.TransactionIsolationLevel.Serializable));
+		const reservation = _ParseReserveConversationAsset(request);
+		if (reservation === null) return { outcome: "denied", reason: "invalid_request" };
+		return ___DoWithTrace("conversation.asset.reserve", { conversationId }, () => this._transaction(function _Reserve(repository) { return repository.reserve(caller, conversationId, reservation); }, Prisma.TransactionIsolationLevel.Serializable));
 	}
 
 	/** Promotes exact bytes outside a transaction, then quarantines the receipt atomically. */
@@ -61,10 +60,4 @@ export class PrismaConversationAssetUnitOfWork implements ConversationAssetAutho
 			return work(new PrismaConversationAssetRepository(transaction));
 		}, { isolationLevel });
 	}
-}
-
-/** Validate one upload reservation without persistence. */
-function _ValidReservation(request: ReserveConversationAssetRequest): boolean
-{
-	return request.idempotencyKey.trim().length >= 1 && request.idempotencyKey.trim().length <= 128 && request.displayName.trim().length >= 1 && request.displayName.trim().length <= 255 && ___IsSha256ContentAddress(request.contentAddress) && ___DecideConversationAssetBatch([{ mediaType: request.mediaType, byteLength: request.byteLength }]).accepted;
 }

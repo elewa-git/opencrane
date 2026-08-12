@@ -46,7 +46,8 @@ export class ConversationAssetsStore
 	/** Validate the whole message selection, then transfer independent files concurrently. */
 	public async select(files: readonly File[]): Promise<void>
 	{
-		const decision = _DecideConversationAssetFiles(files);
+		const currentIntents = this._intents();
+		const decision = _DecideConversationAssetFiles([...currentIntents.map(function _SelectedFile(intent) { return intent.file; }), ...files]);
 		if (!decision.accepted)
 		{
 			this.selectionFailure.set(decision.failureCode);

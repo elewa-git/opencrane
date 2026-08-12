@@ -39,8 +39,31 @@ describe("PrismaConversationAssetRepository access continuity", function _Suite(
 
 		expect((await repository.reserve(_CALLER, "conversation-1", request)).outcome).toBe("accepted");
 		expect((await repository.reserve({ ..._CALLER, subjectId: "user-2" }, "conversation-1", request)).outcome).toBe("accepted");
-		expect(transaction.conversationAsset.findUnique).toHaveBeenNthCalledWith(1, { where: { conversationId_createdByUserId_idempotencyKey: { conversationId: "conversation-1", createdByUserId: "user-1", idempotencyKey: "upload-1" } } });
-		expect(transaction.conversationAsset.findUnique).toHaveBeenNthCalledWith(2, { where: { conversationId_createdByUserId_idempotencyKey: { conversationId: "conversation-1", createdByUserId: "user-2", idempotencyKey: "upload-1" } } });
+		expect(transaction.conversationAsset.findUnique).toHaveBeenNthCalledWith(1, { where: { conversationId_createdByUserId_idempotencyKey: { conversationId: "conversation-1", createdByUserId: "user-1", idempotencyKey: "upload-1" } }, include: { uploadLease: true } });
+		expect(transaction.conversationAsset.findUnique).toHaveBeenNthCalledWith(2, { where: { conversationId_createdByUserId_idempotencyKey: { conversationId: "conversation-1", createdByUserId: "user-2", idempotencyKey: "upload-1" } }, include: { uploadLease: true } });
+	});
+
+	it("rejects an idempotency retry whose content address changed", async function _RejectsChangedDigest()
+	{
+		const transaction = {
+			..._Access(true),
+			conversationAsset: { findUnique: vi.fn().mockResolvedValue({ displayName: "brief.pdf", mediaType: "application/pdf", byteLength: 5n, artifactId: "artifact-1", uploadLease: { expectedContentAddress: _ADDRESS } }) },
+		};
+		const changedAddress = `sha256:${"b".repeat(64)}`;
+
+		const result = await new PrismaConversationAssetRepository(transaction as never).reserve(_CALLER, "conversation-1", { idempotencyKey: "upload-1", displayName: "brief.pdf", mediaType: "application/pdf", byteLength: 5, contentAddress: changedAddress });
+
+		expect(result).toEqual({ outcome: "denied", reason: "idempotency_conflict" });
+	});
+
+	it("lists assets for a current participant without requiring an open lifecycle", async function _ReadsClosedConversation()
+	{
+		const transaction = { ..._Access(true), conversationAsset: { findMany: vi.fn().mockResolvedValue([]) } };
+
+		expect(await new PrismaConversationAssetRepository(transaction as never).list(_CALLER, "conversation-1")).toEqual([]);
+
+		expect(transaction.conversationParticipant.findFirst).toHaveBeenCalledWith({ where: { conversationId: "conversation-1", userId: "user-1", accessEndedPosition: null, conversation: { siloId: "silo-1" } } });
+		expect(transaction.conversationAsset.findMany).toHaveBeenCalledOnce();
 	});
 
 	it("does not issue an upload target after participant access ends", async function _DeniesRevokedTarget()
