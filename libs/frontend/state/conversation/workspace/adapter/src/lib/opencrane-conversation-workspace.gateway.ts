@@ -1,9 +1,9 @@
 import { Injectable, inject } from "@angular/core";
 
 import { ControlPlaneApiService } from "@opencrane/core";
-import { ConversationRunStates, ConversationWorkspaceGatewayError, ConversationWorkspaceGatewayErrorKinds, type ConversationCreationDirectory, type ConversationRun, type ConversationSummary, type ConversationWorkspaceDetail, type ConversationWorkspaceGateway, type CreateConversationCommand, type RetryConversationRunCommand, type SubmitConversationMessageCommand, type SubmitConversationSteeringCommand } from "@opencrane/state/conversation/workspace";
+import { ConversationRunStates, ConversationWorkspaceGatewayError, ConversationWorkspaceGatewayErrorKinds, type ConversationCreationDirectory, type ConversationOnboardingHistoryProjection, type ConversationRun, type ConversationSummary, type ConversationWorkspaceDetail, type ConversationWorkspaceGateway, type CreateConversationCommand, type RetryConversationRunCommand, type SubmitConversationMessageCommand, type SubmitConversationSteeringCommand } from "@opencrane/state/conversation/workspace";
 
-import { _ConversationDetail, _ConversationRun, _ConversationSummary, _ConversationWorkspaceDirectory } from "./conversation-workspace.dto.js";
+import { _ConversationDetail, _ConversationOnboardingHistory, _ConversationRun, _ConversationSummary, _ConversationWorkspaceDirectory } from "./conversation-workspace.dto.js";
 
 /** Generated-client adapter for participant-scoped workspace reads and commands. */
 @Injectable()
@@ -24,9 +24,18 @@ export class OpenCraneConversationWorkspaceGateway implements ConversationWorksp
 	/** @inheritdoc */
 	public async list(): Promise<readonly ConversationSummary[]>
 	{
-		const result = await this._api.client.GET("/me/conversations", { params: { query: { includeArchived: false } } });
+		const result = await this._api.client.GET("/me/conversations", { params: { query: { includeArchived: true } } });
 		if (result.error !== undefined || result.data === undefined) throw _Failure(result.response?.status);
 		try { return result.data.conversations.map(_ConversationSummary); }
+		catch { throw _InvalidResponse(); }
+	}
+
+	/** @inheritdoc */
+	public async onboardingHistory(): Promise<ConversationOnboardingHistoryProjection>
+	{
+		const result = await this._api.client.GET("/me/onboarding/chat");
+		if (result.error !== undefined || result.data === undefined) throw _Failure(result.response?.status);
+		try { return _ConversationOnboardingHistory(result.data); }
 		catch { throw _InvalidResponse(); }
 	}
 

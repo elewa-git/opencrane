@@ -49,13 +49,14 @@ consume it.
   the feature-facing projection.
 - `PersonaFirstChatService` and `PERSONA_FIRST_CHAT_GATEWAY` — read and explicit start, answer, and
   guarded-conclusion operations over a package-internal narrow port.
+- `_ParsePersonaFirstChatSnapshot` — the single model-adjacent validator for every consumer of the
+  signed-in onboarding-chat projection, including the workspace's read-only history adapter.
 - `PersonaFirstChatStore` — component-scoped read resource, typed command phases and admission,
   retry coordinates, conflict adoption, controlled draft, and authoritative projection state.
 - `OpenCranePersonaFirstChatGateway` — thin generated-client adapter for the signed-in owner's
   onboarding and first-chat endpoints.
-- Package-internal adapter validators fail closed on routing, provenance, transcript order, and
-  completion eligibility; only the feature-consumed route, snapshot, transcript, and current-question
-  projections plus finite lifecycle enums are exported.
+- Model-adjacent validators fail closed on routing, provenance, transcript order, and completion
+  eligibility; consumers reuse these validators instead of copying a reduced HTTP response shape.
 
 ## Boundary
 

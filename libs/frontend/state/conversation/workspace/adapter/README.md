@@ -23,8 +23,9 @@ failures to fixed, display-safe categories.
   generated client. Its onboarding read projects the existing guided exchange into a separate
   read-only result instead of pretending that it is a direct, group, or Agent-session conversation.
 
-DTO mappers and their narrowed DTO shapes are package-private. Consumers import the gateway only from the
-package barrel.
+DTO mappers and their narrowed conversation DTO shapes are package-private. The onboarding read reuses the
+onboarding state package's model-adjacent validator before reducing the valid snapshot to history. Consumers
+import the gateway only from the package barrel.
 
 ## Boundary
 
@@ -38,8 +39,8 @@ transcript. The adapter requests archived conversation rows so the feature can k
 ## Dependency direction
 
 The package carries `scope:conversation-workspace` and `frontend-role:adapter`. It depends inward on
-frontend core, conversation models, and the workspace state port. It must not import a feature, element,
-backend package, app, or concrete conversation stream.
+frontend core, conversation models, the onboarding projection validator, and the workspace state port. It
+must not import a feature, element, backend package, app, or concrete conversation stream.
 
 ## See also
 
