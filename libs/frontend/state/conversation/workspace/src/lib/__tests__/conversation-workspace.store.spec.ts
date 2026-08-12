@@ -59,13 +59,15 @@ class _FakeStream implements ConversationEventStream
 {
 	/** Number of selected streams started. */
 	public starts = 0;
+	/** Connection state emitted by the next selected stream. */
+	public status = ConversationEventStreamStatuses.Live;
 
 	/** Emit one update without retaining the command. */
 	public async stream(command: StreamConversationEventsCommand)
 	{
 		this.starts += 1;
 		const state = __CreateAgUiStreamState();
-		command.onUpdate?.({ status: ConversationEventStreamStatuses.Live, state, reconnectAttempt: 0, lastHeartbeatAt: Date.now() });
+		command.onUpdate?.({ status: this.status, state, reconnectAttempt: this.status === ConversationEventStreamStatuses.Reconnecting ? 1 : 0, lastHeartbeatAt: Date.now() });
 		return state;
 	}
 }
@@ -118,10 +120,12 @@ describe("ConversationWorkspaceStore", function _ConversationWorkspaceStore()
 
 	it("retains a message draft while the live stream reconnects", async function _ReconnectDraft()
 	{
-		const [store] = _CreateStore();
+		const [store, _gateway, stream] = _CreateStore();
+		stream.status = ConversationEventStreamStatuses.Reconnecting;
 		await store.load();
 		store.updateDraft("Keep this draft");
 		expect(store.draft()).toBe("Keep this draft");
+		expect(store.streamStatus()).toBe(ConversationEventStreamStatuses.Reconnecting);
 		expect(store.routeState()).toBe(ConversationWorkspaceRouteStates.Ready);
 	});
 

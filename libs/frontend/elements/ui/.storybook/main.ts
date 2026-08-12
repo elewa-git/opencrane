@@ -14,6 +14,7 @@ const config: StorybookConfig =
 		"../../../features/conversation-elicitation/src/**/__tests__/*.stories.@(js|jsx|mjs|ts|tsx)"
 		,"../../conversation/src/**/__tests__/*.stories.@(js|jsx|mjs|ts|tsx)"
 		,"../../../features/agent-threads/src/**/__tests__/*.stories.@(js|jsx|mjs|ts|tsx)"
+		,"../../../features/conversation-workspace/src/**/__tests__/*.stories.@(js|jsx|mjs|ts|tsx)"
 	],
 	addons:
 	[
