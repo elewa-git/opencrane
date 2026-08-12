@@ -21,11 +21,17 @@ export class ConversationOnboardingHistoryStore
 	/** Public read-only selection state. */
 	public readonly selected = this._selected.asReadonly();
 
-	/** Read optional onboarding history without making its failure block ordinary conversations. */
-	public async load(): Promise<void>
+	/** Read optional onboarding history without adopting it ahead of the workspace generation fence. */
+	public async load(): Promise<ConversationOnboardingHistoryProjection>
 	{
-		try { this._projection.set(await this._gateway.onboardingHistory()); }
-		catch { this._projection.set(_UNAVAILABLE_ONBOARDING_HISTORY); }
+		try { return await this._gateway.onboardingHistory(); }
+		catch { return _UNAVAILABLE_ONBOARDING_HISTORY; }
+	}
+
+	/** Adopt only the history result admitted by the owning workspace load generation. */
+	public adopt(projection: ConversationOnboardingHistoryProjection): void
+	{
+		this._projection.set(projection);
 		if (this._projection().status !== ConversationOnboardingHistoryStatuses.Ready) this._selected.set(false);
 	}
 

@@ -20,6 +20,14 @@ function _Detail(id = "conversation-1"): ConversationWorkspaceDetail
 	return { id, mode: ConversationModes.Group, lifecycle: ConversationLifecycles.Open, agentServiceId: null, participantRefs: ["self-ref", "other-ref"], archivedAt: null, updatedAt: "2026-08-12T09:00:00.000Z", visibleFromPosition: "1", accessEndedPosition: null, messages: [] };
 }
 
+/** Controllable promise used to prove stale load completions cannot mutate current state. */
+function _Deferred<T>(): { readonly promise: Promise<T>; readonly resolve: (value: T) => void }
+{
+	let resolve!: (value: T) => void;
+	const promise = new Promise<T>(function _Wait(complete) { resolve = complete; });
+	return { promise, resolve };
+}
+
 /** Mutable gateway fake exposing exact store commands. */
 class _FakeGateway implements ConversationWorkspaceGateway
 {
@@ -35,11 +43,15 @@ class _FakeGateway implements ConversationWorkspaceGateway
 	public readonly sent: SubmitConversationMessageCommand[] = [];
 	/** Optional send failure used to model ambiguous transport outcomes. */
 	public sendError: Error | null = null;
+	/** Optional onboarding history outcome. */
+	public historyResult: ConversationOnboardingHistoryProjection | Promise<ConversationOnboardingHistoryProjection> = _OnboardingHistory();
 
 	/** Return generic privacy-safe choices. */
 	public async directory() { return { participants: [{ participantRef: "self-ref", isSelf: true, label: "You" }, { participantRef: "other-ref", isSelf: false, label: "Participant 1" }], personalAgentStatus: ConversationPersonalAgentStatuses.Ready, personalAgent: { personalAgentRef: "agent-ref", displayName: "Nova" } } as const; }
 	/** Return one current row. */
 	public async list() { return [_Detail()]; }
+	/** Return the configured separate onboarding history projection. */
+	public async onboardingHistory() { return await this.historyResult; }
 	/** Resolve the configured open outcome. */
 	public async open(conversationId: string): Promise<ConversationWorkspaceDetail> { if (this.openResult instanceof Error) throw this.openResult; return this.openResult ?? _Detail(conversationId); }
 	/** Record and return one created snapshot. */
@@ -157,6 +169,27 @@ describe("ConversationWorkspaceStore", function _ConversationWorkspaceStore()
 		expect(store.selected()?.id).toBe("conversation-1");
 		expect(store.streamStatus()).toBe(ConversationEventStreamStatuses.Live);
 		expect(stream.starts).toBe(1);
+	});
+
+	it("rejects a stale onboarding-history completion after a newer workspace load", async function _StaleHistoryLoad()
+	{
+		const [store, gateway] = _CreateStore();
+		const staleHistory = _Deferred<ConversationOnboardingHistoryProjection>();
+		const currentHistory = _Deferred<ConversationOnboardingHistoryProjection>();
+		gateway.historyResult = staleHistory.promise;
+		const staleLoad = store.load();
+		gateway.historyResult = currentHistory.promise;
+		const currentLoad = store.load();
+
+		currentHistory.resolve({ status: ConversationOnboardingHistoryStatuses.NotRecorded, history: null });
+		await currentLoad;
+		expect(store.selected()?.id).toBe("conversation-1");
+		expect(store.onboardingHistory().status).toBe(ConversationOnboardingHistoryStatuses.NotRecorded);
+
+		staleHistory.resolve(_OnboardingHistory());
+		await staleLoad;
+		expect(store.selected()?.id).toBe("conversation-1");
+		expect(store.onboardingHistory().status).toBe(ConversationOnboardingHistoryStatuses.NotRecorded);
 	});
 
 	it("creates the fixed selected mode with opaque coordinates only", async function _CreateDirect()

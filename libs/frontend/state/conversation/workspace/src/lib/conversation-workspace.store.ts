@@ -106,8 +106,9 @@ export class ConversationWorkspaceStore
 		this._error.set(null);
 		try
 		{
-			const [directory, conversations] = await Promise.all([this._gateway.directory(), this._gateway.list(), this.history.load()]);
+			const [directory, conversations, onboardingHistory] = await Promise.all([this._gateway.directory(), this._gateway.list(), this.history.load()]);
 			if (generation !== this._generation) return;
+			this.history.adopt(onboardingHistory);
 			this._directory.set(directory);
 			this._conversations.set(conversations);
 			this._routeState.set(ConversationWorkspaceRouteStates.Ready);
