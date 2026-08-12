@@ -62,12 +62,12 @@ function _skillKeys(revision: AgentRevision): string[]
 	return revision.skills.map(function _key(skill) { return `${skill.skillId}@${skill.revisionId}`; });
 }
 
-/** Renders integration tool grants as stable `integrationId:tool` member keys. */
+/** Renders integration tool grants as stable schema-bound member keys. */
 function _integrationToolKeys(revision: AgentRevision): string[]
 {
 	return revision.integrationAssignments.flatMap(function _tools(assignment)
 	{
-		return assignment.allowedTools.map(function _key(tool) { return `${assignment.integrationId}:${tool}`; });
+		return assignment.toolDefinitions.map(function _key(tool) { return `${assignment.integrationId}:${tool.name}@${tool.parametersSchemaDigest}`; });
 	});
 }
 

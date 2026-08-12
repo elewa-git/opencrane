@@ -1,6 +1,8 @@
-import { createHash, randomBytes } from "node:crypto";
+import { randomBytes } from "node:crypto";
 
-import type { AuthorizedChannelTargetResult, ChannelOpaqueContextSource, ChannelTargetClock, ChannelTargetResolutionDependencies, DelegatedBrowserIdentityDecision, ResolveChannelTargetCommand, ResolveChannelTargetResult } from "./channel-target-resolution.types.js";
+import { __AuthorizeConversationRead } from "./conversation-read-authorization.js";
+import { __DigestChannelInvocationContext } from "./channel-invocation-context-digest.js";
+import type { AuthorizedChannelTargetResult, ChannelOpaqueContextSource, ChannelTargetClock, ChannelTargetResolutionDependencies, ResolveChannelTargetCommand, ResolveChannelTargetResult } from "./channel-target-resolution.types.js";
 
 /** Real wall clock for production composition. */
 export class __SystemChannelTargetClock implements ChannelTargetClock
@@ -34,24 +36,23 @@ export async function __ResolveChannelTarget(dependencies: ChannelTargetResoluti
 	}
 
 	// 2. TokenReview the channel-proxy token and require the exact audience, KSA, namespace, and username.
-	const workload = await dependencies.workloadIdentity.review(command.workloadToken, dependencies.config.workloadAudience);
+	const workload = await dependencies.workloadIdentity.__Review(command.workloadToken);
 	const expectedUsername = `system:serviceaccount:${dependencies.config.channelProxyNamespace}:${dependencies.config.channelProxyServiceAccountName}`;
-	if (workload.outcome !== "trusted"
-		|| workload.identity.serviceAccountName !== dependencies.config.channelProxyServiceAccountName
-		|| workload.identity.namespace !== dependencies.config.channelProxyNamespace
-		|| workload.identity.username !== expectedUsername
-		|| !workload.identity.audiences.includes(dependencies.config.workloadAudience))
+	if (workload === null
+		|| workload.serviceAccountName !== dependencies.config.channelProxyServiceAccountName
+		|| workload.namespace !== dependencies.config.channelProxyNamespace
+		|| workload.username !== expectedUsername
+		|| !workload.audiences.includes(dependencies.config.workloadAudience))
 	{
 		return { outcome: "denied", reason: "workload_denied" };
 	}
 
-	// 3. Resolve the browser cookie first. A present-but-invalid cookie never falls back to bearer.
-	const delegatedIdentity = await _resolveDelegatedIdentity(dependencies, command);
-	if (delegatedIdentity.outcome !== "trusted" || !delegatedIdentity.identity.trustworthySubject || !delegatedIdentity.identity.subjectId.trim())
+	// 3. Require the human subject already verified by the shared OpenCrane session middleware.
+	if (!command.delegatedIdentity.trustworthySubject || command.delegatedIdentity.source !== "cookie" || !command.delegatedIdentity.subjectId.trim())
 	{
 		return { outcome: "denied", reason: "identity_denied" };
 	}
-	const subjectId = delegatedIdentity.identity.subjectId;
+	const subjectId = command.delegatedIdentity.subjectId;
 
 	// 4. Bind the already origin-checked host to one registered silo and current signed membership.
 	const hostBinding = await dependencies.hostSilo.resolveExactHost(command.trustedHost);
@@ -67,13 +68,13 @@ export async function __ResolveChannelTarget(dependencies: ChannelTargetResoluti
 
 	// 5. Require an open agent session bound to the same silo, service, and explicit participant.
 	const conversation = await dependencies.repository.getConversationAuthority(command.conversationId);
-	if (conversation === null || conversation.mode !== "agent_session" || conversation.lifecycle !== "open" || conversation.siloId !== hostBinding.siloId || !conversation.agentServiceId.trim() || !conversation.participantUserIds.includes(subjectId))
+	if (conversation === null || conversation.mode !== "agent_session" || conversation.lifecycle !== "open" || conversation.siloId !== hostBinding.siloId || !conversation.agentServiceId.trim())
 	{
 		return { outcome: "denied", reason: "conversation_denied" };
 	}
 
 	// 6. Authorize the event-read action without manufacturing command or run authority.
-	const authorization = await dependencies.authorization.authorize({
+	const authorization = __AuthorizeConversationRead(conversation, {
 		subjectId,
 		siloId: hostBinding.siloId,
 		conversationId: conversation.conversationId,
@@ -94,13 +95,13 @@ export async function __ResolveChannelTarget(dependencies: ChannelTargetResoluti
 	{
 		return { outcome: "denied", reason: "route_denied" };
 	}
-	const digest = `sha256:${createHash("sha256").update(invocationContext, "utf8").digest("hex")}`;
+	const digest = __DigestChannelInvocationContext(invocationContext);
 	const expiresAtEpochMs = Math.min(nowEpochMs + dependencies.config.invocationContextTtlMs, membership.trustedUntilEpochMs);
 	if (expiresAtEpochMs <= nowEpochMs)
 	{
 		return { outcome: "denied", reason: "membership_denied" };
 	}
-	const issued = await dependencies.repository.issueInvocationContextAtomically({ digest, subjectId, siloId: hostBinding.siloId, conversationId: conversation.conversationId, agentServiceId: conversation.agentServiceId, action: command.action, membershipRevision: membership.revision, authorizationDigest: authorization.authorizationDigest, nowEpochMs, expiresAtEpochMs, allowedRouteHostSuffixes: dependencies.config.allowedRouteHostSuffixes });
+	const issued = await dependencies.repository.issueInvocationContextAtomically({ digest, subjectId, siloId: hostBinding.siloId, conversationId: conversation.conversationId, agentServiceId: conversation.agentServiceId, action: command.action, membershipRevision: membership.revision, authorizationDigest: authorization.authorizationDigest, nowEpochMs, expiresAtEpochMs, allowedRouteHostSuffixes: dependencies.config.allowedRouteHostSuffixes, receiverId: dependencies.config.receiverId });
 	if (issued.status !== "issued" || !_endpointIsAllowed(issued.context.endpoint, dependencies.config.allowedRouteHostSuffixes))
 	{
 		return { outcome: "denied", reason: "route_denied" };
@@ -108,24 +109,6 @@ export async function __ResolveChannelTarget(dependencies: ChannelTargetResoluti
 
 	const target: AuthorizedChannelTargetResult = { subjectId, endpoint: issued.context.endpoint, invocationContext, expiresAt: new Date(expiresAtEpochMs).toISOString() };
 	return { outcome: "authorized", target };
-}
-
-/** Resolves cookie before bearer and refuses cross-mechanism fallback. */
-async function _resolveDelegatedIdentity(dependencies: ChannelTargetResolutionDependencies, command: ResolveChannelTargetCommand): Promise<DelegatedBrowserIdentityDecision>
-{
-	if (command.cookie?.trim())
-	{
-		const decision = await dependencies.delegatedIdentity.resolveCookie(command.cookie);
-		if (decision.outcome === "trusted" && decision.identity.source !== "cookie") return { outcome: "denied", reason: "identity_source_mismatch" };
-		return decision;
-	}
-	if (command.delegatedAuthorization?.trim())
-	{
-		const decision = await dependencies.delegatedIdentity.resolveBearer(command.delegatedAuthorization);
-		if (decision.outcome === "trusted" && decision.identity.source !== "bearer") return { outcome: "denied", reason: "identity_source_mismatch" };
-		return decision;
-	}
-	return { outcome: "denied", reason: "missing_identity" };
 }
 
 /** Validates target-neutral request structure without interpreting credentials. */
@@ -150,7 +133,9 @@ function _configIsValid(dependencies: ChannelTargetResolutionDependencies, nowEp
 		&& dependencies.config.invocationContextTtlMs > 0
 		&& dependencies.config.invocationContextTtlMs <= 300_000
 		&& dependencies.config.allowedRouteHostSuffixes.length > 0
-		&& dependencies.config.allowedRouteHostSuffixes.every(suffix => suffix.startsWith(".") && suffix.length > 1);
+		&& dependencies.config.allowedRouteHostSuffixes.every(suffix => suffix.startsWith(".") && suffix.length > 1)
+		&& dependencies.config.receiverId.trim().length > 0
+		&& _endpointIsAllowed(dependencies.config.receiverEndpoint, dependencies.config.allowedRouteHostSuffixes);
 }
 
 /** Accepts only credential-free HTTP(S) endpoints within configured internal DNS suffixes. */

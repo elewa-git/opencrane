@@ -2,14 +2,12 @@ import * as k8s from "@kubernetes/client-node";
 import type { PrismaClient } from "@prisma/client";
 
 import { _IssueAttemptLiteLlmKey } from "@opencrane/backend/server/gateways/model-routing";
-import { PrismaIntegrationAuthorityRepository, __SystemIntegrationAuthorityClock, type IntegrationAuthorityRepository } from "@opencrane/backend/server/gateways/integrations";
 import { _RegisterInternalAgentRuntimeStream } from "@opencrane/backend/server/infra/agent-runtime-stream";
-import { PrismaRunDispatchRepository, __CreateAgentControllerRunDispatchRouter, type AttemptModelKeyMintRequest, type AttemptObotKeyIssuer, type AttemptObotKeyMintRequest, type MintedAttemptModelKey, type MintedAttemptObotKey } from "@opencrane/backend/agents/execution/runs";
-import type { ObotAttemptKeyIssuer } from "@opencrane/backend/server/infra/obot-custody";
+import { PrismaRunDispatchRepository, __CreateAgentControllerRunDispatchRouter, type AttemptModelKeyMintRequest, type MintedAttemptModelKey } from "@opencrane/backend/agents/execution/runs";
 import { PrismaSkillWorkloadUnitOfWork, _CreateSkillWorkloadExecutionAuthority, __CreateSkillAuthoringCompletionRouter, __CreateSkillAuthoringInputRouter, __CreateSkillWorkloadBootstrapRouter, __CreateSkillWorkloadDispatchRouter } from "@opencrane/backend/agents/skills/execution";
 import { __CreateProductionRuntimeDispatchAuthority } from "@opencrane/backend/agents/execution/protocol";
 import { PrismaRuntimeBootstrapExchange, __CreateRuntimeBootstrapRouter } from "@opencrane/backend/server/iam/authorization";
-import { _CreateConversationReplayRepository, __CreateConversationReplayRouter } from "@opencrane/backend/server/conversations";
+import { CONVERSATION_LIVE_REPLAY_CLOCK, CONVERSATION_LIVE_REPLAY_LIMITS, _CreateConversationReplayRepository, __CreateConversationReplayRouter } from "@opencrane/backend/server/conversations";
 import { PrismaChannelTargetAuthorityUnitOfWork } from "@opencrane/backend/server/agents/channel-targets";
 import { _CreateArtifactPreprocessAuthority, __CreateArtifactPreprocessorRouter } from "@opencrane/backend/server/agents/artifacts";
 import { _CreateAgentControllerTokenReviewer, _CreateArtifactPreprocessorTokenReviewer, _CreateRuntimeTokenReviewer, _CreateSkillWorkloadTokenReviewer, _ValidateIsolatedWorkloadNamespace, _ValidateRuntimeIdentityNamespaces, type RuntimeIdentityNamespaces } from "@opencrane/backend/server/infra/workload-identity";
@@ -17,7 +15,9 @@ import type { MemoryGatewayClient } from "@opencrane/backend/server/infra/memory
 
 import { _CreateArtifactPreprocessSourceBroker } from "../infra/artifacts/artifact-preprocess-source-broker.factory.js";
 import { _CreateArtifactPreprocessOutputBroker, _CreateSkillAuthoringArtifactReader } from "../infra/artifacts/artifact-upload.factory.js";
+import { _CreateChannelTargetResolver } from "./channel-target-composition.js";
 import type { InternalRuntimeConfig } from "./config.types.js";
+import { _ProcessShutdownSignal } from "./process-shutdown.js";
 import { _log } from "./log.js";
 import type { ControllerRuntimeComposition, InternalRuntimeComposition, OptionalRuntimeComposition, RuntimeProtocolComposition, SkillWorkloadRuntimeComposition } from "./runtime-composition.types.js";
 
@@ -38,39 +38,6 @@ async function _IssueAttemptModelKey(request: AttemptModelKeyMintRequest): Promi
 }
 
 /**
- * Bind the optional attempt-scoped Obot key issuer to the integrations authority and Obot transport.
- *
- * Mirrors {@link _IssueAttemptModelKey}: the Obot service credential stays server-side, only the
- * minted attempt key rides the claim response. Every integration frozen into the snapshot is
- * re-resolved to its live custody reference here, so a revoked or expired assignment fails the mint
- * (and therefore the claim) instead of producing a key with narrower scope than the snapshot's tools.
- *
- * @param integrations - Shared live integration-custody resolver constructed by this composition.
- * @param attemptKeys - Composed Obot attempt-key issuer, or null when the deployment leaves Obot off.
- * @returns The dispatch-repository issuer, or null so no attempt carries an Obot credential.
- */
-function _CreateAttemptObotKeyIssuer(integrations: IntegrationAuthorityRepository, attemptKeys: ObotAttemptKeyIssuer | null): AttemptObotKeyIssuer | null
-{
-	if (attemptKeys === null) return null;
-	return async function _IssueAttemptObotKey(request: AttemptObotKeyMintRequest): Promise<MintedAttemptObotKey>
-	{
-		// 1. Resolve every snapshot integration to its live custody reference; any unavailable
-		// assignment fails the mint so the key scope always matches the compiled tool set.
-		const references: string[] = [];
-		for (const integrationId of request.integrationIds)
-		{
-			const resolved = await integrations.resolveAssignment({ siloId: request.siloId, agentRevisionId: request.agentRevisionId, integrationId });
-			if (resolved.outcome !== "resolved") throw new Error(`attempt Obot key cannot scope integration '${integrationId}': ${resolved.reason}`);
-			references.push(resolved.assignment.obotCustodyReference);
-		}
-
-		// 2. Mint ONE key scoped to exactly those MCP server ids, expiring with the assignment lease.
-		const issued = await attemptKeys.issueAttemptKey({ obotCustodyReferences: references, name: request.keyName, expiresAt: request.expiresAt });
-		return { key: issued.key, keyId: issued.keyId };
-	};
-}
-
-/**
  * Bind the two controller-only dispatch routers to one reviewed controller identity.
  *
  * Both routers run in the trusted server namespace. Keeping their repositories together makes the
@@ -80,11 +47,9 @@ function _CreateAttemptObotKeyIssuer(integrations: IntegrationAuthorityRepositor
  * @param config - Frozen leases, assignment limits, and outbox-retention settings.
  * @param namespaces - Validated server, personal-runtime, and managed-runtime identity planes.
  * @param tokenReviewer - Reviewer fixed to the sole agent-controller ServiceAccount.
- * @param integrationAuthority - Shared live integration-custody resolver.
- * @param obotAttemptKeys - Optional Obot attempt-key issuer composed by the app root.
  * @returns Controller dispatch routers with no runtime or worker routes.
  */
-function _CreateControllerRuntimeComposition(prisma: PrismaClient, config: InternalRuntimeConfig, namespaces: RuntimeIdentityNamespaces, tokenReviewer: ReturnType<typeof _CreateAgentControllerTokenReviewer>, integrationAuthority: IntegrationAuthorityRepository, obotAttemptKeys: ObotAttemptKeyIssuer | null, skillWorkloadAuthority: ReturnType<typeof _CreateSkillWorkloadExecutionAuthority>): ControllerRuntimeComposition
+function _CreateControllerRuntimeComposition(prisma: PrismaClient, config: InternalRuntimeConfig, namespaces: RuntimeIdentityNamespaces, tokenReviewer: ReturnType<typeof _CreateAgentControllerTokenReviewer>, skillWorkloadAuthority: ReturnType<typeof _CreateSkillWorkloadExecutionAuthority>): ControllerRuntimeComposition
 {
 	const runDispatchRepository = new PrismaRunDispatchRepository(prisma, {
 		personalRuntimeNamespace: namespaces.personalRuntimeNamespace,
@@ -93,7 +58,7 @@ function _CreateControllerRuntimeComposition(prisma: PrismaClient, config: Inter
 		assignmentTtlMilliseconds: config.assignmentTtlMilliseconds,
 		publishedOutboxRetentionMilliseconds: config.publishedOutboxRetentionMilliseconds,
 		outboxPruneBatchSize: config.outboxPruneBatchSize,
-	}, _IssueAttemptModelKey, _CreateAttemptObotKeyIssuer(integrationAuthority, obotAttemptKeys));
+	}, _IssueAttemptModelKey);
 	return {
 		agentControllerRunDispatch: __CreateAgentControllerRunDispatchRouter({
 			tokenReviewer,
@@ -153,18 +118,15 @@ function _CreateSkillWorkloadRuntimeComposition(prisma: PrismaClient, tokenRevie
  * @param namespaces - Validated server, personal-runtime, and managed-runtime identity planes.
  * @param tokenReviewer - Reviewer constrained to the two runtime identity planes.
  * @param memoryGateway - Authenticated memory-gateway client shared by compile-time recall and the action transport.
- * @param integrationAuthority - Shared live custody resolver compiling per-tool Obot addressing.
  * @returns Runtime bootstrap and stream routers.
  */
-function _CreateRuntimeProtocolComposition(prisma: PrismaClient, config: InternalRuntimeConfig, namespaces: RuntimeIdentityNamespaces, tokenReviewer: ReturnType<typeof _CreateRuntimeTokenReviewer>, memoryGateway: MemoryGatewayClient, integrationAuthority: IntegrationAuthorityRepository): RuntimeProtocolComposition
+function _CreateRuntimeProtocolComposition(prisma: PrismaClient, config: InternalRuntimeConfig, namespaces: RuntimeIdentityNamespaces, tokenReviewer: ReturnType<typeof _CreateRuntimeTokenReviewer>, memoryGateway: MemoryGatewayClient): RuntimeProtocolComposition
 {
 	const runtimeDispatchAuthority = __CreateProductionRuntimeDispatchAuthority(prisma, {
 		personalRuntimeNamespace: namespaces.personalRuntimeNamespace,
 		managedRuntimeNamespace: namespaces.managedRuntimeNamespace,
 		commandTtlMilliseconds: config.commandTtlMilliseconds,
-		externalActionRetryLimit: 3,
-		externalActionRetryWindowMilliseconds: 30_000,
-	}, _log, memoryGateway, integrationAuthority);
+	}, memoryGateway);
 	return {
 		runtimeBootstrap: __CreateRuntimeBootstrapRouter({
 			tokenReviewer,
@@ -202,12 +164,18 @@ function _CreateOptionalRuntimeComposition(prisma: PrismaClient, authApi: k8s.Au
 		: null;
 	const artifactPreprocessRepository = _CreateArtifactPreprocessAuthority(prisma);
 	return {
-		conversationReplay: config.channelReplayRouteId === null
+		channelTargetResolver: config.channelTargets === null
+			? null
+			: _CreateChannelTargetResolver(prisma, authApi, config.channelTargets, serverNamespace),
+		conversationReplay: config.channelTargets === null
 			? null
 			: __CreateConversationReplayRouter({
 				contexts: new PrismaChannelTargetAuthorityUnitOfWork(prisma),
 				repository: _CreateConversationReplayRepository(prisma),
-				expectedRouteId: config.channelReplayRouteId,
+				clock: CONVERSATION_LIVE_REPLAY_CLOCK,
+				limits: CONVERSATION_LIVE_REPLAY_LIMITS,
+				shutdownSignal: _ProcessShutdownSignal,
+				expectedReceiverId: config.channelTargets.receiverId,
 				nowEpochMs: function _nowEpochMs() { return Date.now(); },
 			}),
 		artifactPreprocessor: artifactPreprocessorNamespace === null
@@ -234,10 +202,9 @@ function _CreateOptionalRuntimeComposition(prisma: PrismaClient, authApi: k8s.Au
  * @param authApi - Kubernetes TokenReview client for workload identity.
  * @param config - Frozen startup configuration shared with the internal body parser and workers.
  * @param memoryGateway - Process-wide authenticated memory-gateway client built once at startup.
- * @param obotAttemptKeys - Optional Obot attempt-key issuer composed by the app root; null disables direct invocation.
  * @returns Routers composed from controller, skill-workload, runtime, and optional-worker plane authorities.
  */
-export function _CreateInternalRuntimeComposition(prisma: PrismaClient, authApi: k8s.AuthenticationV1Api, config: InternalRuntimeConfig, memoryGateway: MemoryGatewayClient, obotAttemptKeys: ObotAttemptKeyIssuer | null = null): InternalRuntimeComposition
+export function _CreateInternalRuntimeComposition(prisma: PrismaClient, authApi: k8s.AuthenticationV1Api, config: InternalRuntimeConfig, memoryGateway: MemoryGatewayClient): InternalRuntimeComposition
 {
 	// 1. Validate all identity planes before constructing a router, so malformed coordinates fail
 	// startup rather than leaving a partially mounted internal API.
@@ -251,15 +218,11 @@ export function _CreateInternalRuntimeComposition(prisma: PrismaClient, authApi:
 	const skillWorkloadUnitOfWork = new PrismaSkillWorkloadUnitOfWork(prisma, config.claimLeaseMilliseconds);
 	const skillWorkloadAuthority = _CreateSkillWorkloadExecutionAuthority(skillWorkloadUnitOfWork);
 
-	// 3. One shared live custody resolver serves attempt-key scoping and compiled Obot addressing, so
-	// the two planes can never disagree about which MCP server an assignment resolves to.
-	const integrationAuthority = new PrismaIntegrationAuthorityRepository(prisma, new __SystemIntegrationAuthorityClock());
-
-	// 4. Compose only named routers; `routes.ts` remains the single readable map of internal paths.
+	// 3. Compose only named routers; `routes.ts` remains the single readable map of internal paths.
 	return {
-		..._CreateControllerRuntimeComposition(prisma, config, namespaces, controllerTokenReviewer, integrationAuthority, obotAttemptKeys, skillWorkloadAuthority),
+		..._CreateControllerRuntimeComposition(prisma, config, namespaces, controllerTokenReviewer, skillWorkloadAuthority),
 		..._CreateSkillWorkloadRuntimeComposition(prisma, skillWorkloadTokenReviewer, skillWorkloadAuthority),
-		..._CreateRuntimeProtocolComposition(prisma, config, namespaces, runtimeTokenReviewer, memoryGateway, integrationAuthority),
+		..._CreateRuntimeProtocolComposition(prisma, config, namespaces, runtimeTokenReviewer, memoryGateway),
 		..._CreateOptionalRuntimeComposition(prisma, authApi, config, namespaces.serverNamespace),
 	};
 }

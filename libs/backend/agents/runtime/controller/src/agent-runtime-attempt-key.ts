@@ -12,14 +12,6 @@ export function _AgentRuntimeAttemptKeySecretName(bootstrapReference: string): s
 	return suffix.length === 32 ? `litellm-key-${suffix}` : "litellm-key-profilevalidation";
 }
 
-/** Derive the deterministic per-attempt Secret name carrying the attempt-scoped Obot key. */
-export function _AgentRuntimeObotKeySecretName(bootstrapReference: string): string
-{
-	const prefix = "bootstrap-v1_";
-	const suffix = bootstrapReference.startsWith(prefix) ? bootstrapReference.slice(prefix.length, prefix.length + 32) : "";
-	return suffix.length === 32 ? `obot-key-${suffix}` : "obot-key-profilevalidation";
-}
-
 /** Build one immutable, Job-owned Secret carrying bounded transient attempt-key data. */
 function _BuildAgentRuntimeKeySecret(persistedJob: V1Job, workloadUid: string, secretName: string, stringData: Record<string, string>): V1Secret
 {
@@ -59,10 +51,4 @@ function _BuildAgentRuntimeKeySecret(persistedJob: V1Job, workloadUid: string, s
 export function _BuildAgentRuntimeAttemptKeySecret(persistedJob: V1Job, workloadUid: string, secretName: string, key: string): V1Secret
 {
 	return _BuildAgentRuntimeKeySecret(persistedJob, workloadUid, secretName, { key });
-}
-
-/** Build the immutable Secret carrying one attempt-scoped Obot key and its revocation id. */
-export function _BuildAgentRuntimeObotKeySecret(persistedJob: V1Job, workloadUid: string, secretName: string, key: string, keyId: string): V1Secret
-{
-	return _BuildAgentRuntimeKeySecret(persistedJob, workloadUid, secretName, { key, keyId });
 }

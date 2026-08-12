@@ -11,6 +11,7 @@ import type { Logger } from "pino";
 
 import { ___ContextMixin } from "./context.js";
 import { REDACT_PATHS } from "./redact.js";
+import { _SanitizeLogFields } from "./sanitize.js";
 import type { LoggerOptions } from "./observability.types.js";
 
 /**
@@ -43,6 +44,7 @@ export function ___CreateLogger(name: string, opts: LoggerOptions = {}): Logger
       level,
       mixin: ___ContextMixin,
       redact: [...REDACT_PATHS],
+      formatters: { bindings: _SanitizeLogFields, log: _SanitizeLogFields },
       transport: { target: "pino-pretty", options: { destination: fd, colorize: fd === 2 } },
     });
   }
@@ -55,6 +57,7 @@ export function ___CreateLogger(name: string, opts: LoggerOptions = {}): Logger
       level,
       mixin: ___ContextMixin,
       redact: [...REDACT_PATHS],
+      formatters: { bindings: _SanitizeLogFields, log: _SanitizeLogFields },
     },
     pino.destination({ fd, sync: true }),
   );

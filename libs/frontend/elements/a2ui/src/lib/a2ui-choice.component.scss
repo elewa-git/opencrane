@@ -1,0 +1,40 @@
+:host {
+	display: block;
+}
+
+.a2ui-choice,
+.a2ui-choice__group {
+	display: grid;
+	gap: var(--oc-space-2);
+}
+
+.a2ui-choice__group {
+	margin: 0;
+	padding: 0;
+	border: 0;
+}
+
+.a2ui-choice__group legend {
+	margin-bottom: var(--oc-space-1);
+}
+
+.a2ui-choice__option {
+	display: flex;
+	align-items: center;
+	gap: var(--oc-space-2);
+	cursor: pointer;
+}
+
+.a2ui-choice__option input {
+	margin: 0;
+	accent-color: var(--oc-accent);
+}
+
+.a2ui-choice select {
+	min-width: min(100%, 16rem);
+	padding: var(--oc-space-2);
+	color: var(--oc-ink-strong);
+	background: var(--oc-surface-raised);
+	border: 1px solid var(--oc-border-default);
+	border-radius: var(--oc-radius-chip);
+}

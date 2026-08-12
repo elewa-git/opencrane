@@ -31,6 +31,39 @@ enum ActionReplayMode {
   Idempotent @map("idempotent")
 }
 
+/// Durable lifecycle of one externally effectful runtime tool invocation. These states belong to
+/// ToolInvocation rather than ActionExecutionReceipt because provider ambiguity, approval, and
+/// recovery are properties of the runtime tool path, not proof/JTI-bound capability execution.
+enum ToolInvocationState {
+  Preparing        @map("preparing")
+  AwaitingApproval @map("awaiting_approval")
+  Ready            @map("ready")
+  Claimed          @map("claimed")
+  Reconciling      @map("reconciling")
+  Succeeded        @map("succeeded")
+  Failed           @map("failed")
+  RecoveryRequired @map("recovery_required")
+}
+
+/// Recovery capability frozen from the trusted adapter before any provider dispatch begins.
+enum ExternalActionRecoveryMode {
+  ProviderIdempotency @map("provider_idempotency")
+  Reconciliation      @map("reconciliation")
+  Manual              @map("manual")
+}
+
+/// Kind of provider work protected by the current monotonic claim fence.
+enum ExternalActionClaimKind {
+  Dispatch  @map("dispatch")
+  Reconcile @map("reconcile")
+}
+
+/// Delivery lifecycle for the exact server-owned tool result returned to the runtime loop.
+enum ToolResultDeliveryState {
+  Pending  @map("pending")
+  Consumed @map("consumed")
+}
+
 model AuthorizationGrant {
   id              String                    @id @default(cuid())
   siloId          String                    @map("silo_id")
@@ -83,45 +116,51 @@ model CapabilityCatalogRevision {
 }
 
 model ApprovalRequest {
-  id                     String                    @id @default(cuid())
-  runId                  String                    @map("run_id")
-  attempt                Int
-  agentRevisionId        String                    @map("agent_revision_id")
-  agentServiceId         String                    @map("agent_service_id")
-  siloId                 String                    @map("silo_id")
-  proofKeyId             String                    @map("proof_key_id")
-  proofKeyThumbprint     String                    @map("proof_key_thumbprint")
-  subjectId              String                    @map("subject_id")
-  workloadAudience       String                    @map("workload_audience")
-  serviceAccountName     String                    @map("service_account_name")
-  namespace              String
-  workloadKind           WorkloadKind              @map("workload_kind")
-  workloadUid            String                    @map("workload_uid")
-  podUid                 String                    @map("pod_uid")
-  catalogId              String?                   @map("catalog_id")
-  catalogRevision        Int?                      @map("catalog_revision")
-  catalogDigest          String?                   @map("catalog_digest")
-  capabilityId           String?                   @map("capability_id")
-  resourceKind           String                    @map("resource_kind")
-  resourceId             String                    @map("resource_id")
-  action                 String
-  argumentsDigest        String                    @map("arguments_digest")
-  actionDigest           String                    @map("action_digest")
-  approverPolicyRevision String                    @map("approver_policy_revision")
-  effectivePolicyDigest  String                    @map("effective_policy_digest")
-  state                  ApprovalRequestState      @default(Pending)
-  expiresAt              DateTime                  @map("expires_at")
-  decidedAt              DateTime?                 @map("decided_at")
-  decidedBy              String?                   @map("decided_by")
-  resumeTokenHash        String?                   @unique @map("resume_token_hash")
-  toolInvocationRowId    String?                   @map("tool_invocation_row_id")
-  deferredToolResult     Json?                     @map("deferred_tool_result")
-  createdAt              DateTime                  @default(now()) @map("created_at")
-  run                    AgentRun                  @relation(fields: [runId, agentServiceId, agentRevisionId], references: [id, agentServiceId, agentRevisionId], onDelete: Restrict)
-  toolInvocation         ToolInvocation?           @relation(fields: [toolInvocationRowId], references: [id], onDelete: Restrict)
-  proofKey               RunProofKey               @relation(fields: [proofKeyId, runId, attempt, workloadKind, workloadUid, proofKeyThumbprint, podUid], references: [id, runId, attempt, workloadKind, workloadUid, keyThumbprint, podUid], onDelete: Restrict)
-  assignment             WorkloadAssignment        @relation(fields: [runId, attempt, agentServiceId, agentRevisionId, siloId, subjectId, workloadAudience, serviceAccountName, namespace, workloadKind, workloadUid], references: [runId, attempt, agentServiceId, agentRevisionId, siloId, subjectId, audience, serviceAccountName, namespace, workloadKind, workloadUid], onDelete: Restrict)
-  catalog                CapabilityCatalogRevision? @relation(fields: [catalogId, catalogRevision, catalogDigest], references: [catalogId, revision, digest], onDelete: Restrict)
+  id                       String                     @id @default(cuid())
+  runId                    String                     @map("run_id")
+  attempt                  Int
+  agentRevisionId          String                     @map("agent_revision_id")
+  agentServiceId           String                     @map("agent_service_id")
+  siloId                   String                     @map("silo_id")
+  proofKeyId               String                     @map("proof_key_id")
+  proofKeyThumbprint       String                     @map("proof_key_thumbprint")
+  subjectId                String                     @map("subject_id")
+  workloadAudience         String                     @map("workload_audience")
+  serviceAccountName       String                     @map("service_account_name")
+  namespace                String
+  workloadKind             WorkloadKind               @map("workload_kind")
+  workloadUid              String                     @map("workload_uid")
+  podUid                   String                     @map("pod_uid")
+  catalogId                String?                    @map("catalog_id")
+  catalogRevision          Int?                       @map("catalog_revision")
+  catalogDigest            String?                    @map("catalog_digest")
+  capabilityId             String?                    @map("capability_id")
+  resourceKind             String                     @map("resource_kind")
+  resourceId               String                     @map("resource_id")
+  action                   String
+  argumentsDigest          String                     @map("arguments_digest")
+  actionDigest             String                     @map("action_digest")
+  approverPolicyRevision   String                     @map("approver_policy_revision")
+  effectivePolicyDigest    String                     @map("effective_policy_digest")
+  state                    ApprovalRequestState       @default(Pending)
+  expiresAt                DateTime                   @map("expires_at")
+  decidedAt                DateTime?                  @map("decided_at")
+  decidedBy                String?                    @map("decided_by")
+  resumeTokenHash          String?                    @unique @map("resume_token_hash")
+  toolInvocationRowId      String?                    @map("tool_invocation_row_id")
+  reviewedToolArguments    Json?                      @map("reviewed_tool_arguments")
+  reviewedToolSchema       Json?                      @map("reviewed_tool_schema")
+  reviewedToolSchemaDigest String?                    @map("reviewed_tool_schema_digest")
+  safeProposedArguments    Json?                      @map("safe_proposed_arguments")
+  responseSchema           Json?                      @map("response_schema")
+  finalArguments           Json?                      @map("final_arguments")
+  finalArgumentsDigest     String?                    @map("final_arguments_digest")
+  createdAt                DateTime                   @default(now()) @map("created_at")
+  run                      AgentRun                   @relation(fields: [runId, agentServiceId, agentRevisionId], references: [id, agentServiceId, agentRevisionId], onDelete: Restrict)
+  toolInvocation           ToolInvocation?            @relation(fields: [toolInvocationRowId], references: [id], onDelete: Restrict)
+  proofKey                 RunProofKey                @relation(fields: [proofKeyId, runId, attempt, workloadKind, workloadUid, proofKeyThumbprint, podUid], references: [id, runId, attempt, workloadKind, workloadUid, keyThumbprint, podUid], onDelete: Restrict)
+  assignment               WorkloadAssignment         @relation(fields: [runId, attempt, agentServiceId, agentRevisionId, siloId, subjectId, workloadAudience, serviceAccountName, namespace, workloadKind, workloadUid], references: [runId, attempt, agentServiceId, agentRevisionId, siloId, subjectId, audience, serviceAccountName, namespace, workloadKind, workloadUid], onDelete: Restrict)
+  catalog                  CapabilityCatalogRevision? @relation(fields: [catalogId, catalogRevision, catalogDigest], references: [catalogId, revision, digest], onDelete: Restrict)
 
   @@unique([runId, attempt, actionDigest])
   @@index([state, expiresAt])
@@ -129,39 +168,73 @@ model ApprovalRequest {
   @@map("approval_requests")
 }
 
-/// One external tool invocation reserved by the runtime external-action authority before dispatch.
-/// It mirrors ActionExecutionReceipt's reserve/execute/complete lifecycle: the row is created
-/// (Reserved) BEFORE any external tool I/O so a crash leaves durable evidence that blocks a retry,
-/// then compare-and-set to Succeeded (with the canonical result) or Failed (with a stable code). The
-/// runtime-supplied `toolInvocationId` is the caller idempotency key; `requestFingerprint` binds the
-/// exact validated tool revision and canonical argument digest so a mutated replay can never reuse a
-/// receipt. Unlike a capability-proof action, authority comes from the immutable RunInputSnapshot's
-/// tool grants (revalidated by the external-action authority), not a signed capability catalog entry.
+/// Durable work authority for one validated external-action candidate. Candidate admission creates
+/// this Preparing row atomically with acceptance; all later preparation, approval, dispatch,
+/// reconciliation, terminal result delivery, and manual recovery decisions use revision/fence CAS.
 model ToolInvocation {
-  id                 String               @id @default(cuid())
-  siloId             String               @map("silo_id")
-  runId              String               @map("run_id")
-  attempt            Int
-  agentServiceId     String               @map("agent_service_id")
-  agentRevisionId    String               @map("agent_revision_id")
-  subjectId          String               @map("subject_id")
-  toolRevisionId     String               @map("tool_revision_id")
-  toolInvocationId   String               @map("tool_invocation_id")
-  argumentsDigest    String               @map("arguments_digest")
-  requestFingerprint String               @unique @map("request_fingerprint")
-  approvalRequired   Boolean              @default(false) @map("approval_required")
-  state              ActionExecutionState @default(Reserved)
-  result             Json?
-  failureCode        String?              @map("failure_code")
-  reservedAt         DateTime             @default(now()) @map("reserved_at")
-  completedAt        DateTime?            @map("completed_at")
-  run                AgentRun             @relation(fields: [runId, agentServiceId, agentRevisionId], references: [id, agentServiceId, agentRevisionId], onDelete: Restrict)
-  approvalRequests   ApprovalRequest[]
-  skillWorkload      SkillWorkload?
+  id                       String                     @id @default(cuid())
+  siloId                   String                     @map("silo_id")
+  runId                    String                     @map("run_id")
+  attempt                  Int
+  agentServiceId           String                     @map("agent_service_id")
+  agentRevisionId          String                     @map("agent_revision_id")
+  subjectId                String                     @map("subject_id")
+  runtimeInstanceId        String                     @map("runtime_instance_id")
+  commandId                String                     @map("command_id")
+  candidateId              String                     @map("candidate_id")
+  toolRevisionId           String                     @map("tool_revision_id")
+  toolInvocationId         String                     @map("tool_invocation_id")
+  arguments                Json
+  argumentsDigest          String                     @map("arguments_digest")
+  effectiveArguments       Json                       @map("effective_arguments")
+  effectiveArgumentsDigest String                     @map("effective_arguments_digest")
+  requestFingerprint       String                     @unique @map("request_fingerprint")
+  requestIdentity          Json                       @map("request_identity")
+  approvalRequired         Boolean                    @default(false) @map("approval_required")
+  recoveryMode             ExternalActionRecoveryMode @map("recovery_mode")
+  recoveryKey              String?                    @map("recovery_key")
+  state                    ToolInvocationState        @default(Preparing)
+  preparationAttempt       Int                        @default(0) @map("preparation_attempt")
+  retryDeadlineAt          DateTime                   @map("retry_deadline_at")
+  nextPreparationAttemptAt DateTime                   @map("next_preparation_attempt_at")
+  claimAttempt             Int                        @default(0) @map("claim_attempt")
+  claimKind                ExternalActionClaimKind?   @map("claim_kind")
+  claimFence               Int                        @default(0) @map("claim_fence")
+  claimExpiresAt           DateTime?                  @map("claim_expires_at")
+  recoveryRequiredAt       DateTime?                  @map("recovery_required_at")
+  result                   Json?
+  failureCode              String?                    @map("failure_code")
+  revision                 Int                        @default(0)
+  createdAt                DateTime                   @default(now()) @map("created_at")
+  updatedAt                DateTime                   @updatedAt @map("updated_at")
+  completedAt              DateTime?                  @map("completed_at")
+  run                      AgentRun                   @relation(fields: [runId, agentServiceId, agentRevisionId], references: [id, agentServiceId, agentRevisionId], onDelete: Restrict)
+  approvalRequests         ApprovalRequest[]
+  resultDelivery           ToolResultDelivery?
+  skillWorkload            SkillWorkload?
 
   @@unique([runId, attempt, toolInvocationId])
+  @@unique([runId, attempt, candidateId])
   @@index([runId, attempt, state])
+  @@index([state, nextPreparationAttemptAt])
+  @@index([state, claimExpiresAt])
   @@map("tool_invocations")
+}
+
+/// One-to-one outbox intent created in the same transaction that terminalises its invocation.
+/// The runtime command authority consumes it only after persisting the exact resume command body.
+model ToolResultDelivery {
+  id               String                  @id @default(cuid())
+  toolInvocationId String                  @unique @map("tool_invocation_id")
+  state            ToolResultDeliveryState @default(Pending)
+  payload          Json
+  payloadDigest    String                  @map("payload_digest")
+  createdAt        DateTime                @default(now()) @map("created_at")
+  consumedAt       DateTime?               @map("consumed_at")
+  invocation       ToolInvocation          @relation(fields: [toolInvocationId], references: [id], onDelete: Restrict)
+
+  @@index([state, createdAt])
+  @@map("tool_result_deliveries")
 }
 
 model ActionExecutionReceipt {

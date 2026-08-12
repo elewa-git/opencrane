@@ -103,7 +103,7 @@ standard output, and OpenTelemetry spans cover every HTTP and Kubernetes input/o
 the chart requires immutable SHA-256 digests for both the controller and runtime images. Helm derives
 one personal `<release>-runtime` namespace by default. Its managed profile reads the namespace and
 ServiceAccount from the composer-owned `managedAgentRuntimePlane.managedAgentRuntime` values; that
-runtime plane owns the namespace and its network policy, while this chart grants the controller KSA only exact Job, Pod-list, and attempt-key
+runtime plane owns the namespace and its network policy, while this chart grants the controller KSA only exact Job, Pod-list, and model-key
 Secret-create permissions there. Each profile namespace receives a separate fail-closed admission
 policy with its own ServiceAccount grammar and projected-token audience. The personal plane applies the Pod Security Standards restricted profile,
 an aggregate Job/Pod/CPU/memory quota, default-deny networking, fixed OpenCrane, same-silo LiteLLM,

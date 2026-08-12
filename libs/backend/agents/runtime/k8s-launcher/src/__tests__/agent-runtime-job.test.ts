@@ -102,35 +102,10 @@ describe("personal-runtime attempt Job", function _Suite()
 		expect(serialized).not.toContain("secretKeyRef");
 		expect(serialized).not.toContain("secretName");
 		expect(serialized).not.toContain("configMapKeyRef");
+		expect(serialized).not.toContain("obot");
 		expect(job.spec?.template.spec?.containers[0]?.env).not.toContainEqual(expect.objectContaining({ name: expect.stringMatching(/BOOTSTRAP/) }));
 		expect(job.spec?.template.spec?.containers[0]?.args).toBeUndefined();
 		expect(serialized).not.toContain("NetworkPolicy");
-	});
-
-	it("mounts the Obot key and pins the addressing env only when key and origin are both present", function _ObotKeyProjection()
-	{
-		const profile: AgentRuntimeJobProfile = { ..._Profile(), obotMcpBaseUrl: "http://oc-mcp-gateway.opencrane-silo-1.svc.cluster.local:8080" };
-		const job = __BuildSuspendedAgentRuntimeJob({ ..._Assignment(), obotKeySecretName: "obot-key-a2" }, profile);
-		const container = job.spec?.template.spec?.containers[0];
-		const env = Object.fromEntries((container?.env ?? []).map(function _pair(entry) { return [entry.name, entry.value]; }));
-		expect(env["OPENCRANE_RUNTIME_OBOT_URL"]).toBe("http://oc-mcp-gateway.opencrane-silo-1.svc.cluster.local:8080");
-		expect(env["OPENCRANE_RUNTIME_OBOT_KEY_PATH"]).toBe("/var/run/opencrane/obot/key");
-		expect(container?.volumeMounts?.at(-1)).toEqual({ name: "obot-key", mountPath: "/var/run/opencrane/obot", readOnly: true });
-		expect(job.spec?.template.spec?.volumes?.at(-1)).toEqual({ name: "obot-key", projected: { defaultMode: 0o440, sources: [{ secret: { name: "obot-key-a2", items: [{ key: "key", path: "key" }] } }] } });
-
-		// No key Secret ⇒ no env, mount, or volume, even when the profile pins the origin.
-		const withoutKey = __BuildSuspendedAgentRuntimeJob(_Assignment(), profile);
-		expect(JSON.stringify(withoutKey)).not.toContain("obot");
-	});
-
-	it("rejects an Obot key Secret without a pinned origin, and pathful or foreign Obot origins", function _ObotValidation()
-	{
-		expect(function _KeyWithoutOrigin() { __BuildSuspendedAgentRuntimeJob({ ..._Assignment(), obotKeySecretName: "obot-key-a2" }, _Profile()); }).toThrow(/pins no Obot MCP base origin/);
-		for (const obotMcpBaseUrl of ["http://oc-mcp-gateway.opencrane-silo-1.svc.cluster.local:8080/mcp-connect", "http://attacker.example:8080", "https://oc-mcp-gateway.opencrane-silo-1.svc.cluster.local:8080", "http://oc-mcp-gateway.other-ns.svc.cluster.local:8080"])
-		{
-			expect(function _InvalidOrigin() { __BuildSuspendedAgentRuntimeJob({ ..._Assignment(), obotKeySecretName: "obot-key-a2" }, { ..._Profile(), obotMcpBaseUrl }); }).toThrow(/Obot MCP base origin/);
-		}
-		expect(function _InvalidSecretName() { __BuildSuspendedAgentRuntimeJob({ ..._Assignment(), obotKeySecretName: "Bad_Name" }, { ..._Profile(), obotMcpBaseUrl: "http://oc-mcp-gateway.opencrane-silo-1.svc.cluster.local:8080" }); }).toThrow(/Obot key Secret name/);
 	});
 
 	it("rejects Internet endpoints and non-positive attempts before adapter I/O", function _InvalidInputs()

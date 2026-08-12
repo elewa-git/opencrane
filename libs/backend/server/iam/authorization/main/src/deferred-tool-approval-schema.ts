@@ -1,0 +1,156 @@
+import { Ajv } from "ajv";
+
+import { ___CloneCanonicalJson, type JsonValue } from "@opencrane/util";
+
+import type { DeferredToolApprovalProjection } from "./deferred-tool-approval-interrupt.types.js";
+
+/** JSON object used while deriving a display-safe decision schema. */
+type JsonObject = { readonly [key: string]: JsonValue };
+
+/** Fields that can contain an example or default secret value and must never reach an actor. */
+const _SECRET_VALUE_KEYWORDS = new Set(["const", "default", "enum", "example", "examples"]);
+
+/** Return whether a JSON value is a non-array object. */
+function _isObject(value: JsonValue): value is JsonObject
+{
+	return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/** Return whether this schema node explicitly marks the corresponding value as secret. */
+function _isSecretSchema(schema: JsonValue): boolean
+{
+	if (!_isObject(schema)) return false;
+	return schema["writeOnly"] === true || schema["sensitive"] === true || schema["secret"] === true || schema["x-sensitive"] === true || schema["x-secret"] === true || schema["format"] === "password";
+}
+
+/** Resolve one local JSON Pointer reference; external or malformed references fail closed. */
+function _resolveLocalReference(root: JsonValue, reference: string): JsonValue | null
+{
+	if (!reference.startsWith("#/")) return null;
+	let current: JsonValue = root;
+	for (const encoded of reference.slice(2).split("/"))
+	{
+		const segment = encoded.replaceAll("~1", "/").replaceAll("~0", "~");
+		if (!_isObject(current) || current[segment] === undefined) return null;
+		current = current[segment]!;
+	}
+	return current;
+}
+
+/** Conservatively discover secret annotations through local refs and schema combinators. */
+function _containsSecretSchema(schema: JsonValue, root: JsonValue, visitedReferences = new Set<string>()): boolean
+{
+	if (Array.isArray(schema)) return schema.some(entry => _containsSecretSchema(entry, root, visitedReferences));
+	if (!_isObject(schema)) return false;
+	if (_isSecretSchema(schema)) return true;
+	const reference = schema["$ref"];
+	if (typeof reference === "string")
+	{
+		if (visitedReferences.has(reference)) return false;
+		const resolved = _resolveLocalReference(root, reference);
+		if (resolved === null) return true;
+		const nextVisited = new Set(visitedReferences);
+		nextVisited.add(reference);
+		if (_containsSecretSchema(resolved, root, nextVisited)) return true;
+	}
+	for (const keyword of ["allOf", "anyOf", "oneOf"])
+	{
+		const branches = schema[keyword];
+		if (Array.isArray(branches) && branches.some(branch => _containsSecretSchema(branch, root, new Set(visitedReferences)))) return true;
+	}
+	for (const keyword of ["properties", "$defs", "definitions"])
+	{
+		const nested = schema[keyword];
+		if (_isObject(nested as JsonValue) && Object.values(nested as JsonObject).some(value => _containsSecretSchema(value, root, new Set(visitedReferences)))) return true;
+	}
+	for (const keyword of ["items", "additionalProperties"])
+	{
+		const nested = schema[keyword];
+		if (nested !== undefined && _containsSecretSchema(nested, root, new Set(visitedReferences))) return true;
+	}
+	return false;
+}
+
+/** Remove value-bearing annotations from a secret schema while retaining its input shape. */
+function _safeSchema(schema: JsonValue, inheritedSecret = false): JsonValue
+{
+	if (Array.isArray(schema)) return schema.map(function _project(entry) { return _safeSchema(entry, inheritedSecret); });
+	if (!_isObject(schema)) return schema;
+	const secret = inheritedSecret || _isSecretSchema(schema);
+	const projected: Record<string, JsonValue> = {};
+	for (const [key, value] of Object.entries(schema))
+	{
+		if (secret && _SECRET_VALUE_KEYWORDS.has(key)) continue;
+		projected[key] = _safeSchema(value, secret && key === "properties");
+	}
+	return projected;
+}
+
+/** Redact schema-marked secret values while retaining every non-secret proposed argument. */
+function _safeArguments(value: JsonValue, schema: JsonValue): JsonValue
+{
+	if (_isSecretSchema(schema)) return null;
+	if (Array.isArray(value))
+	{
+		const itemSchema = _isObject(schema) && schema["items"] !== undefined ? schema["items"] : {};
+		return value.map(function _project(entry) { return _safeArguments(entry, itemSchema as JsonValue); });
+	}
+	if (!_isObject(value)) return value;
+	const properties = _isObject(schema) && _isObject(schema["properties"] as JsonValue) ? schema["properties"] as JsonObject : {};
+	const additional = _isObject(schema) && schema["additionalProperties"] !== undefined ? schema["additionalProperties"] : {};
+	const projected: Record<string, JsonValue> = {};
+	for (const [key, entry] of Object.entries(value))
+	{
+		const propertySchema = properties[key] ?? additional;
+		if (_isSecretSchema(propertySchema as JsonValue)) continue;
+		projected[key] = _safeArguments(entry, propertySchema as JsonValue);
+	}
+	return projected;
+}
+
+/** Build the exact actor response schema from one frozen reviewed parameters schema. */
+function _responseSchema(parametersSchema: JsonValue): JsonValue
+{
+	return {
+		oneOf: [
+			{ type: "object", additionalProperties: false, required: ["decision", "arguments"], properties: { decision: { const: "approved" }, arguments: _safeSchema(parametersSchema) } },
+			{ type: "object", additionalProperties: false, required: ["decision"], properties: { decision: { const: "denied" } } },
+		],
+	};
+}
+
+/** Validate a complete argument value against the frozen reviewed JSON Schema. */
+export function __ValidateDeferredToolArguments(parametersSchema: JsonValue, argumentsValue: JsonValue): boolean
+{
+	try
+	{
+		const ajv = new Ajv({ allErrors: true, strict: false });
+		return ajv.validate(parametersSchema as object | boolean, argumentsValue);
+	}
+	catch
+	{
+		return false;
+	}
+}
+
+/** Return whether the frozen schema permits an actor-supplied replacement rather than denial only. */
+export function __IsDeferredToolApprovalReplacementAllowed(parametersSchema: JsonValue): boolean
+{
+	return !_containsSecretSchema(parametersSchema, parametersSchema);
+}
+
+/** Derive detached, actor-safe proposed arguments and the exact decision-body schema. */
+export function __ProjectDeferredToolApproval(parametersSchema: JsonValue, argumentsValue: JsonValue): DeferredToolApprovalProjection
+{
+	if (!__IsDeferredToolApprovalReplacementAllowed(parametersSchema))
+	{
+		return {
+			proposedArguments: null,
+			responseSchema: { oneOf: [{ type: "object", additionalProperties: false, required: ["decision"], properties: { decision: { const: "denied" } } }] },
+		};
+	}
+	return {
+		proposedArguments: ___CloneCanonicalJson(_safeArguments(argumentsValue, parametersSchema)),
+		responseSchema: ___CloneCanonicalJson(_responseSchema(parametersSchema)),
+	};
+}

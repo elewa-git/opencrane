@@ -1,0 +1,170 @@
+import { applicationConfig } from "@storybook/angular";
+import type { Meta, StoryObj } from "@storybook/angular";
+
+import { AG_UI_A2UI_ENVELOPE_VERSION, AgUiA2uiSurfaceStates, type AgUiA2uiOperation } from "@opencrane/contracts";
+import { toSanitizedMarkdownHtml } from "@opencrane/state/conversation/render";
+
+import { A2uiCanvasComponent } from "../a2ui-canvas.component.js";
+import { provideOpenCraneA2ui } from "../a2ui.providers.js";
+import { type A2uiSurfacePresentation } from "../a2ui.types.js";
+
+/** Reviewed interactive form used by every canonical lifecycle visual contract. */
+const _SURFACE_OPERATIONS: readonly AgUiA2uiOperation[] =
+[
+	{
+		surfaceUpdate:
+		{
+			surfaceId: "surface-pricing",
+			components:
+			[
+				{ id: "pricing-form", component: { List: { children: { explicitList: ["pricing-copy", "pricing-reason", "apply-button"] }, direction: "vertical", alignment: "stretch" } } },
+				{ id: "pricing-copy", component: { Text: { text: { literalString: "Apply the proposed pricing?" }, usageHint: "h3" } } },
+				{ id: "pricing-reason", component: { TextField: { label: { literalString: "Reason" }, text: { literalString: "Validated customer evidence" }, textFieldType: "shortText" } } },
+				{ id: "apply-label", component: { Text: { text: { literalString: "Request approval" }, usageHint: "body" } } },
+				{ id: "apply-button", component: { Button: { child: "apply-label", primary: true, action: { name: "apply-pricing", context: [{ key: "decision", value: { literalString: "apply" } }] } } } }
+			]
+		}
+	},
+	{ beginRendering: { surfaceId: "surface-pricing", root: "pricing-form" } }
+];
+
+/** Stable inline image used to exercise the admitted image renderer without network input. */
+const _CATALOGUE_IMAGE = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='96' height='48' viewBox='0 0 96 48'%3E%3Crect width='96' height='48' rx='6' fill='%23e9f8fb'/%3E%3Cpath d='M16 32l12-12 9 9 12-15 30 28H16z' fill='%230db5cc'/%3E%3C/svg%3E";
+
+/** Representative operations that render every component admitted by the v4 catalogue. */
+const _CATALOGUE_OPERATIONS: readonly AgUiA2uiOperation[] =
+[
+	{
+		surfaceUpdate:
+		{
+			surfaceId: "surface-catalogue",
+			components:
+			[
+				{ id: "catalogue-root", component: { List: { children: { explicitList: ["catalogue-title", "catalogue-card", "catalogue-text-field", "single-choice", "multiple-choice", "select-choice", "catalogue-slider", "catalogue-date", "image-title", "catalogue-image", "catalogue-button"] }, direction: "vertical", alignment: "stretch" } } },
+				{ id: "catalogue-title", component: { Text: { text: { literalString: "Approved interactive components" }, usageHint: "h3" } } },
+				{ id: "catalogue-card-copy", component: { Text: { text: { literalString: "Card groups related evidence without granting action authority." }, usageHint: "body" } } },
+				{ id: "catalogue-card", component: { Card: { child: "catalogue-card-copy" } } },
+				{ id: "catalogue-text-field", component: { TextField: { label: { literalString: "Review note" }, text: { literalString: "Evidence checked" }, textFieldType: "shortText" } } },
+				{ id: "single-choice", component: { SingleChoice: { selections: { literalArray: ["current"] }, options: [{ label: { literalString: "Current agreement" }, value: "current" }, { label: { literalString: "New proposal" }, value: "proposal" }], maxAllowedSelections: 1 } } },
+				{ id: "multiple-choice", component: { MultipleChoice: { selections: { literalArray: ["research"] }, options: [{ label: { literalString: "Research" }, value: "research" }, { label: { literalString: "Security" }, value: "security" }, { label: { literalString: "Delivery" }, value: "delivery" }], maxAllowedSelections: 2 } } },
+				{ id: "select-choice", component: { Select: { selections: { literalArray: ["weekly"] }, options: [{ label: { literalString: "Weekly" }, value: "weekly" }, { label: { literalString: "Monthly" }, value: "monthly" }], maxAllowedSelections: 1 } } },
+				{ id: "catalogue-slider", component: { Slider: { label: { literalString: "Confidence" }, value: { literalNumber: 72 }, minValue: 0, maxValue: 100 } } },
+				{ id: "catalogue-date", component: { DateTimeInput: { value: { literalString: "2026-08-18T09:30" }, enableDate: true, enableTime: true } } },
+				{ id: "image-title", component: { Text: { text: { literalString: "Image" }, usageHint: "body" } } },
+				{ id: "catalogue-image", component: { Image: { url: { literalString: _CATALOGUE_IMAGE }, altText: { literalString: "Abstract cyan landscape sample" }, fit: "contain", usageHint: "smallFeature" } } },
+				{ id: "catalogue-button-label", component: { Text: { text: { literalString: "Request review" }, usageHint: "body" } } },
+				{ id: "catalogue-button", component: { Button: { child: "catalogue-button-label", primary: true, action: { name: "request-review", context: [{ key: "catalogue", value: { literalString: "v4" } }] } } } }
+			]
+		}
+	},
+	{ beginRendering: { surfaceId: "surface-catalogue", root: "catalogue-root" } }
+];
+
+/** Build a complete visual presentation for one finite lifecycle fixture. */
+function _storyPresentation(state: AgUiA2uiSurfaceStates, reason?: string): A2uiSurfacePresentation
+{
+	return {
+		version: AG_UI_A2UI_ENVELOPE_VERSION,
+		conversationId: "conversation-story",
+		runId: "run-story",
+		messageId: "message-story",
+		surfaceId: "surface-pricing",
+		sequence: 1,
+		state,
+		operations: _SURFACE_OPERATIONS,
+		reason
+	};
+}
+
+/** Build one screenshot-backed story with its explicit server/browser authority boundary. */
+function _lifecycleStory(state: AgUiA2uiSurfaceStates, description: string, reason?: string): Story
+{
+	return {
+		args: { presentation: _storyPresentation(state, reason) },
+		parameters: { docs: { description: { story: description } } }
+	};
+}
+
+/** Storybook metadata for the constrained A2UI surface boundary. */
+const meta: Meta<A2uiCanvasComponent> =
+{
+	title: "Foundation/A2UI canvas",
+	component: A2uiCanvasComponent,
+	tags: ["autodocs", "visual-test"],
+	decorators: [applicationConfig({ providers: [...provideOpenCraneA2ui(toSanitizedMarkdownHtml)] })],
+	parameters:
+	{
+		docs:
+		{
+			description:
+			{
+				component: "Display-only A2UI sink with the exact accepted eleven-component catalogue. Actions leave this component as full-coordinate intent and remain subject to authenticated server authorization."
+			}
+		}
+	},
+	args: { presentation: _storyPresentation(AgUiA2uiSurfaceStates.Ready) }
+};
+
+export default meta;
+
+/** Local Storybook story type for the A2UI canvas. */
+type Story = StoryObj<A2uiCanvasComponent>;
+
+/** Progressive operations remain visible but inert until the authoritative projection is ready. */
+export const Streaming: Story = _lifecycleStory(AgUiA2uiSurfaceStates.Streaming, "The server projection says operations are still arriving. The browser preserves their order and focus identity but cannot authorize an action.");
+
+/** Ready is the only browser-interactive state; action admission still belongs to the server. */
+export const Ready: Story = _lifecycleStory(AgUiA2uiSurfaceStates.Ready, "The server projection permits the displayed controls to emit a coordinate-bound intent. The browser still grants no command authority.");
+
+/** A displayed action is locally inert while the server owns admission and idempotency. */
+export const ActionPending: Story = _lifecycleStory(AgUiA2uiSurfaceStates.ActionPending, "The browser has emitted an intent and now suppresses duplicates. The server owns admission, one-use fencing, and the next authoritative projection.", "Waiting for authoritative admission. Nothing has been applied yet.");
+
+/** Submitted truthfully reflects server acceptance without claiming downstream completion. */
+export const Submitted: Story = _lifecycleStory(AgUiA2uiSurfaceStates.Submitted, "The server accepted the displayed action. This render-only state does not independently claim that a later run or tool side effect completed.", "The action was accepted and the surface is now read-only.");
+
+/** Validation feedback is display-safe server evidence and never a local authorization decision. */
+export const ValidationError: Story = _lifecycleStory(AgUiA2uiSurfaceStates.ValidationError, "The server rejected the displayed values. The browser renders the safe reason and keeps the surface inert until a newer ready projection arrives.", "Add the customer segment used to validate this pricing change.");
+
+/** Failure never guesses success or retries a command from the presentational component. */
+export const ActionFailed: Story = _lifecycleStory(AgUiA2uiSurfaceStates.ActionFailed, "The authoritative action path failed without claiming success. Retry sequencing remains with the host and server, not this renderer.", "Authentication expired. Nothing was changed. Sign in again and retry this action.");
+
+/** Expiry is server-declared and prevents the browser from replaying a stale action. */
+export const Expired: Story = _lifecycleStory(AgUiA2uiSurfaceStates.Expired, "The server says the action window expired. The browser disables the old controls and cannot extend or reconstruct authority.", "This approval window expired. Ask the agent to prepare a current proposal.");
+
+/** One-use consumption is authoritative and suppresses duplicate browser submission. */
+export const AlreadyUsed: Story = _lifecycleStory(AgUiA2uiSurfaceStates.AlreadyUsed, "The server reports that this one-use action was already consumed. The browser presents that result without inventing a replacement action.", "This action was already used and cannot be submitted again.");
+
+/** Actor authorization remains server-owned and is never inferred from visible control state. */
+export const Unauthorized: Story = _lifecycleStory(AgUiA2uiSurfaceStates.Unauthorized, "The authenticated server denied this actor. The browser displays the bounded explanation and cannot elevate access.", "You do not have permission to approve this pricing change.");
+
+/** Unsupported content fails closed without echoing rejected provider payload or reason. */
+export const Unsupported: Story = _lifecycleStory(AgUiA2uiSurfaceStates.Unsupported, "The browser rejected or cannot render the admitted component shape. It exposes only a generic placeholder; server and raw provider details remain outside the DOM.", "This reason is deliberately not displayed.");
+
+/** Every admitted v4 component renders through its exact constrained protocol-backed contract. */
+export const Catalogue: Story =
+{
+	args:
+	{
+		presentation:
+		{
+			version: AG_UI_A2UI_ENVELOPE_VERSION,
+			conversationId: "conversation-story",
+			runId: "run-story",
+			messageId: "message-catalogue",
+			surfaceId: "surface-catalogue",
+			sequence: 1,
+			state: AgUiA2uiSurfaceStates.Ready,
+			operations: _CATALOGUE_OPERATIONS
+		}
+	},
+	parameters:
+	{
+		docs:
+		{
+			description:
+			{
+				story: "The complete eleven-component admission contract in one deterministic surface. Package-owned adapters retain distinct radio, bounded-checkbox, select, and labelled date/time semantics where the pinned renderer is incomplete. The canvas displays and emits intent only; server authorization remains outside the story."
+			}
+		}
+	}
+};

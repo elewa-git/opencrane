@@ -1,26 +1,23 @@
-import { randomUUID } from "node:crypto";
-
 import * as k8s from "@kubernetes/client-node";
 import type { PrismaClient } from "@prisma/client";
-import express, { type Express } from "express";
-import { pinoHttp } from "pino-http";
+import express, { type Express, type RequestHandler } from "express";
 
-import { ___GetContext, ___RequestContext } from "@opencrane/backend/observability";
+import { ___RequestContext } from "@opencrane/backend/observability";
 import { _ErrorHandler } from "@opencrane/backend/server/infra/http";
 import type { MemoryGatewayClient } from "@opencrane/backend/server/infra/memory-gateway-client";
-import type { ObotAttemptKeyIssuer } from "@opencrane/backend/server/infra/obot-custody";
 
 import type { InternalRuntimeConfig } from "./config.types.js";
 import { _log } from "./log.js";
 import { _RegisterInternalRoutes } from "./routes.js";
+import { _CreateHttpRequestLogger } from "./telemetry.js";
 
 /**
  * Build the workload-facing Express application.
  *
- * This app has no browser-session middleware because it is reachable only through the internal
- * Service and NetworkPolicy. Routes that cross a workload identity boundary perform TokenReview.
+ * It shares the public listener's signed-session middleware only so channel-proxy can delegate the
+ * browser cookie. Every resolver request independently TokenReviews the proxy workload identity.
  */
-export function _CreateInternalApp(prisma: PrismaClient, authApi: k8s.AuthenticationV1Api, config: InternalRuntimeConfig, memoryGateway: MemoryGatewayClient, obotAttemptKeys: ObotAttemptKeyIssuer | null = null): Express
+export function _CreateInternalApp(prisma: PrismaClient, authApi: k8s.AuthenticationV1Api, config: InternalRuntimeConfig, memoryGateway: MemoryGatewayClient, sessionMiddleware: readonly RequestHandler[]): Express
 {
 	const app = express();
 
@@ -29,13 +26,14 @@ export function _CreateInternalApp(prisma: PrismaClient, authApi: k8s.Authentica
 	app.use("/api/internal/agent-runtime", express.json({ limit: 64 * 1_024, strict: true }));
 	app.use("/api/internal/artifact-preprocessor/jobs/:jobId/output", express.raw({ type: "text/plain", limit: config.artifactPreprocessorMaximumOutputBytes }));
 	app.use(express.json());
+	app.use(...sessionMiddleware);
 
 	// 2. Correlate every internal request without treating correlation as authentication.
 	app.use(___RequestContext());
-	app.use(pinoHttp({ logger: _log, genReqId: function _genRequestId() { return ___GetContext()?.requestId ?? randomUUID(); } }));
+	app.use(_CreateHttpRequestLogger(_log));
 
 	// 3. Mount only workload-facing routes and terminate failures through the structured handler.
-	_RegisterInternalRoutes(app, prisma, authApi, config, memoryGateway, obotAttemptKeys);
+	_RegisterInternalRoutes(app, prisma, authApi, config, memoryGateway);
 	app.use(_ErrorHandler(_log));
 	return app;
 }

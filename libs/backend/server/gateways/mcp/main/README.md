@@ -10,9 +10,9 @@ MCP (the Model Context Protocol) is an open standard for connecting an agent to 
 data sources; an *MCP server* is one such tool provider. This package decides which MCP servers
 exist, who may install them, and how their credentials are held.
 
-It is the control plane in front of the tool runtime. Administrators curate and approve servers;
+It is the control plane in front of server-owned tool execution. Administrators curate and approve servers;
 individual users browse the resulting directory, install the ones they are entitled to, and supply
-credentials or complete an OAuth (delegated sign-in) connection. Only then does the runtime connect.
+credentials or complete an OAuth (delegated sign-in) connection. Only then may the server worker invoke a governed tool.
 
 ```
  admin / operator request     (register · approve · publish · set access policy)
@@ -23,10 +23,10 @@ credentials or complete an OAuth (delegated sign-in) connection. Only then does 
  └────────────────────────────────────┘
         │  the servers a user is entitled to, with connection + credential status
         ▼
- agent runtime connects to those tool servers at run time
+ server worker invokes an allowed tool; the runtime receives only its saved result
 ```
 
-**In this flow:** [providers](../../providers/main/README.md) · [integrations](../../integrations/main/README.md) *(sibling tool/model gateways)* · agent runtime *(consumes entitlements)*
+**In this flow:** [providers](../../providers/main/README.md) · [integrations](../../integrations/main/README.md) *(sibling tool/model gateways)* · server action worker *(consumes entitlements)*
 
 Invariant: a user only ever sees and installs servers permitted by the access policy and the
 server's approval state (pending review → approved → published, or disabled). Credential values are

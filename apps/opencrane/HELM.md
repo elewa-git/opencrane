@@ -14,9 +14,9 @@ port; the gateway remains the sole Cognee caller. Contract coverage lives in
 `apps/_infra/deploy-k8s/platform/tests/server-key-permissions-contract.sh` and
 `server-network-policy-contract.sh`.
 
-## Obot management transport
+## Obot server transport
 
-The Deployment renders the server→Obot management coordinates only when
+The Deployment renders the server→Obot coordinates only when
 `mcpGateway.serviceTokenExistingSecret` names a pre-provisioned Secret (key `token`) carrying the
 Obot service credential:
 
@@ -27,6 +27,16 @@ Obot service credential:
 - `OBOT_TIMEOUT_SECONDS` from `mcpGateway.serverTimeoutSeconds` (default 30, bounded 1–300).
 
 When the value is empty (the default) nothing renders and the application composes fail-closed
-unavailable Obot adapters: custody provisioning refuses and no run attempt carries an Obot key. The
-server NetworkPolicy adds matching `mcp-gateway` egress for the management API only; tool payloads
-flow runtime→Obot and never transit this Deployment.
+unavailable Obot adapters: custody provisioning and external actions refuse. The server NetworkPolicy
+adds matching `mcp-gateway` egress for custody and durable action execution. Runtime Jobs receive no
+Obot address or credential.
+
+## Channel target and replay wiring
+
+When `channelProxy.enabled=true`, the Deployment renders the complete resolver contract: the exact
+channel-proxy ServiceAccount, the public control-plane host, the silo id, a stable replay receiver,
+and the release-local internal replay endpoint. OpenCrane mounts the same signed-session middleware
+on both listeners, TokenReviews the proxy's projected `opencrane` token, and accepts browser identity
+only from that verified session. At startup it reconciles one `events.read` route row per existing
+AgentService. Those rows share `channelProxy.replayReceiverId` but retain distinct route ids, so
+revocation and consumption remain bound to exact per-service evidence.

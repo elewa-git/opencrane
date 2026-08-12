@@ -105,6 +105,17 @@ describe("opencrane process config", function _ProcessConfigSuite()
 		expect(function _readInvalidConfig() { _ReadProcessConfig(); }).toThrow(/integer from 1024 through 67108864/);
 	});
 
+	it("rejects the receiver namespace reserved for migrated route evidence", function _RejectLegacyRouteReceiver()
+	{
+		vi.stubEnv("CHANNEL_PROXY_SERVICE_ACCOUNT_NAME", "channel-proxy");
+		vi.stubEnv("CHANNEL_REPLAY_ENDPOINT", "http://opencrane-server.silo.svc.cluster.local:8081/api/internal/conversation-replay");
+		vi.stubEnv("CHANNEL_REPLAY_RECEIVER_ID", "legacy-route-v0:forged");
+		vi.stubEnv("CHANNEL_TARGET_SILO_ID", "silo");
+		vi.stubEnv("CHANNEL_TARGET_TRUSTED_HOST", "silo.example.com");
+
+		expect(function _ReadReservedReceiver() { _ReadProcessConfig(); }).toThrow(/reserved legacy route namespace/);
+	});
+
 	it("fails boot when the memory-gateway origin or token path is missing", function _RejectMissingMemoryGateway()
 	{
 		vi.stubEnv("MEMORY_GATEWAY_URL", "");

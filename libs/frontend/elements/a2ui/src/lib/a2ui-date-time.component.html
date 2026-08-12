@@ -1,0 +1,14 @@
+<div
+	class="a2ui-date-time"
+	[class]="theme.components.DateTimeInput.container"
+	[style]="theme.additionalStyles?.DateTimeInput"
+>
+	<label [class]="theme.components.DateTimeInput.label" [for]="inputId">{{ label() }}</label>
+	<input
+		[class]="theme.components.DateTimeInput.element"
+		[id]="inputId"
+		[type]="inputType()"
+		[value]="resolvedValue()"
+		(change)="onChange($event)"
+	/>
+</div>

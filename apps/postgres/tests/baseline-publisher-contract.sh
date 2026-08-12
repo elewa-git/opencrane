@@ -80,19 +80,19 @@ config_map_name="$(PATH="$TEST_DIR/bin:$PATH" bash "$PUBLISHER" opencrane 'owner
 [[ "$config_map_name" =~ ^opencrane-database-baseline-[a-f0-9]{16}$ ]]
 grep -q '^immutable: true$' "$CAPTURE_FILE"
 grep -q 'opencrane.ai/baseline-sha256:' "$CAPTURE_FILE"
-grep -q 'CREATE SCHEMA "opencrane_bootstrap" AUTHORIZATION CURRENT_USER;' "$CAPTURE_FILE"
-grep -q 'REVOKE ALL ON SCHEMA "opencrane_bootstrap" FROM PUBLIC;' "$CAPTURE_FILE"
-grep -q 'GRANT SELECT ON TABLE "opencrane_bootstrap"."target_baseline" TO "owner""quoted";' "$CAPTURE_FILE"
-grep -Eq 'VALUES \(TRUE, '\''[0-9a-f]{64}'\''\);' "$CAPTURE_FILE"
-grep -q 'SET ROLE "owner""quoted";' "$CAPTURE_FILE"
-grep -q 'OpenCrane target database baseline' "$CAPTURE_FILE"
+expected_sql="$TEST_DIR/expected-target-baseline.sql"
+"$REAL_KUBECTL" patch --local -f "$CAPTURE_FILE" --type=merge -p '{}' -o jsonpath='{.data.target-baseline\.sql}' >"$expected_sql"
+grep -q 'CREATE SCHEMA "opencrane_bootstrap" AUTHORIZATION CURRENT_USER;' "$expected_sql"
+grep -q 'REVOKE ALL ON SCHEMA "opencrane_bootstrap" FROM PUBLIC;' "$expected_sql"
+grep -q 'GRANT SELECT ON TABLE "opencrane_bootstrap"."target_baseline" TO "owner""quoted";' "$expected_sql"
+grep -Eq 'VALUES \(TRUE, '\''[0-9a-f]{64}'\''\);' "$expected_sql"
+grep -q 'SET ROLE "owner""quoted";' "$expected_sql"
+grep -q 'OpenCrane target database baseline' "$expected_sql"
 if grep -q 'kubectl.kubernetes.io/last-applied-configuration' "$CAPTURE_FILE"; then
   echo "publisher added the client-side apply annotation to the baseline ConfigMap" >&2
   exit 1
 fi
 
-expected_sql="$TEST_DIR/expected-target-baseline.sql"
-"$REAL_KUBECTL" patch --local -f "$CAPTURE_FILE" --type=merge -p '{}' -o jsonpath='{.data.target-baseline\.sql}' >"$expected_sql"
 baseline_digest="$("$REAL_KUBECTL" patch --local -f "$CAPTURE_FILE" --type=merge -p '{}' -o jsonpath='{.metadata.annotations.opencrane\.ai/baseline-sha256}')"
 export FAKE_BASELINE_DIGEST="$baseline_digest"
 export FAKE_EXISTING_SQL_FILE="$expected_sql"

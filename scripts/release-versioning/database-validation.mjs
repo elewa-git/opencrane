@@ -69,7 +69,7 @@ export function validateDatabase(repositoryRoot, manifest, previousManifest, cha
 	if (migrationManifest.owner !== "apps/opencrane") errors.push("database migration owner must be 'apps/opencrane'");
 	if (migrationManifest.rollback !== "backup-restore-or-forward-repair")
 		errors.push("database migration rollback must be 'backup-restore-or-forward-repair'");
-	if (!["automatic", "automatic-when-legacy-persona-empty-otherwise-manual-data-mapping-required", "automatic-when-legacy-persona-and-conversations-empty-otherwise-manual-data-mapping-required"].includes(migrationManifest.executionMode))
+	if (!["automatic", "automatic-when-legacy-persona-empty-otherwise-manual-data-mapping-required", "automatic-when-legacy-persona-and-conversations-empty-otherwise-manual-data-mapping-required", "automatic-when-legacy-persona-conversations-approval-requests-and-integration-assignments-empty-otherwise-manual-data-mapping-required", "automatic-when-legacy-persona-conversations-channel-invocation-contexts-approval-requests-and-integration-assignments-empty-otherwise-manual-data-mapping-required"].includes(migrationManifest.executionMode))
 		errors.push("database migration executionMode must declare its automatic upgrade boundary");
 	if (migrationManifest.sourceTargetBaselineSha256 !== previousDatabase.baselineSha256)
 		errors.push("database migration source baseline digest differs from the previous release manifest");

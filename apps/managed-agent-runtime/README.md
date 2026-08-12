@@ -10,7 +10,7 @@ This app owns the **deployment surface for managed agents** — the agents an or
 runs on a schedule, distinct from a person's personal agent. It is **chart/deploy-only**: a
 dedicated Kubernetes namespace, one bounded connector-scoped ServiceAccount, and the
 default-deny + port-bounded explicit-egress NetworkPolicies that fence that namespace. A
-namespace-wide Pod, Job, attempt-key Secret, CPU, and memory quota limits aggregate consumption even when many
+namespace-wide Pod, Job, Secret, CPU, and memory quota limits aggregate consumption even when many
 admission-valid Jobs are requested. It ships no application source and builds no image of its own.
 
 Managed runtime Pods run the **same image as the personal runtime** (built by
@@ -19,7 +19,7 @@ The two planes differ only in identity and reach: the launcher projects a *manag
 (the `managed-agent-runtime-*` ServiceAccount class and the distinct
 `opencrane-managed-agent-runtime` projected-token audience), and this namespace's NetworkPolicies
 allow egress only to the control-plane stream and the channel-proxy / artifact / memory-gateway /
-LiteLLM / Obot services a managed run needs — everything else is denied.
+LiteLLM services a managed run needs — everything else is denied.
 
 ```text
  managed AgentService + schedule (control API)
@@ -30,7 +30,7 @@ LiteLLM / Obot services a managed run needs — everything else is denied.
  └────────────────────────────────────┘
         │  runs the shared agent-runtime image under the managed identity
         ▼
- channel-proxy · artifact · memory-gateway · LiteLLM · Obot   (the only permitted egress)
+ channel-proxy · artifact · memory-gateway · LiteLLM   (the only permitted egress)
 ```
 
 Invariant: the managed identity is never the personal `agent-runtime-*` class and vice versa — the

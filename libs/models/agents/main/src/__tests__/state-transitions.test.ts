@@ -39,6 +39,8 @@ describe("agent model state transitions", function _stateTransitionSuite()
 		expect(__IsAgentRunTransitionAllowed("assigned", "running")).toBe(true);
 		expect(__IsAgentRunTransitionAllowed("running", "waiting_for_approval")).toBe(true);
 		expect(__IsAgentRunTransitionAllowed("waiting_for_approval", "running")).toBe(true);
+		expect(__IsAgentRunTransitionAllowed("running", "recovery_required")).toBe(true);
+		expect(__IsAgentRunTransitionAllowed("recovery_required", "cancelling")).toBe(true);
 		expect(__IsAgentRunTransitionAllowed("running", "completed")).toBe(true);
 		expect(__IsAgentRunTransitionAllowed("accepted", "cancelling")).toBe(true);
 		expect(__IsAgentRunTransitionAllowed("queued", "cancelling")).toBe(true);

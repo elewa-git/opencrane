@@ -96,6 +96,8 @@ describe("Control Plane", () =>
     vi.stubEnv("AGENT_RUNTIME_MANAGED_NAMESPACE", "opencrane-silo-managed-runtime");
     vi.stubEnv("MEMORY_GATEWAY_URL", "http://opencrane-memory-gateway.opencrane-silo.svc.cluster.local:8080");
     vi.stubEnv("MEMORY_GATEWAY_TOKEN_PATH", "/var/run/opencrane/memory-gateway/token");
+		vi.stubEnv("OPENCRANE_MEMBERSHIP_MODE", "standalone");
+		vi.stubEnv("OPENCRANE_MEMBERSHIP_MAX_STALENESS_MS", "86400000");
   });
 
   afterEach(function _RestoreEnvironment()
@@ -170,5 +172,23 @@ describe("Control Plane", () =>
 
       expect(response.status).toBe(401);
     });
+
+		it("mounts the production channel resolver when the complete receiver contract is configured", async function _MountsChannelResolver()
+		{
+			const { _RegisterInternalRoutes } = await import("../app/routes.js");
+			vi.stubEnv("CHANNEL_PROXY_SERVICE_ACCOUNT_NAME", "opencrane-channel-proxy");
+			vi.stubEnv("CHANNEL_TARGET_TRUSTED_HOST", "acme.example.com");
+			vi.stubEnv("CHANNEL_TARGET_SILO_ID", "silo-1");
+			vi.stubEnv("CHANNEL_REPLAY_RECEIVER_ID", "conversation-replay-v1");
+			vi.stubEnv("CHANNEL_REPLAY_ENDPOINT", "http://opencrane-server.opencrane-silo.svc.cluster.local:8081/api/internal/conversation-replay");
+			const app = express();
+			app.use(express.json());
+			_RegisterInternalRoutes(app, {} as PrismaClient, {} as AuthenticationV1Api, _ReadProcessConfig().runtime, new __UnavailableMemoryGatewayClient());
+
+			const response = await request(app).post("/api/internal/channel-targets:resolve").set("authorization", "Bearer projected-token").send({ action: "events.read", trustedHost: "acme.example.com", conversationId: "conversation-1" });
+
+			expect(response.status).toBe(400);
+			expect(response.body).toEqual({ error: "invalid_request" });
+		});
   });
 });

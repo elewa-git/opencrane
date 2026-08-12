@@ -150,7 +150,7 @@ def pydantic_ai_event_source(
 
 def pydantic_ai_resume_source(
     compiled_input: dict[str, object],
-    deferred_tool_results: object,
+    tool_results: object,
     cancel_event: threading.Event,
     steering_buffer: list[str],
 ) -> Iterator[dict[str, object]]:
@@ -170,7 +170,7 @@ def pydantic_ai_resume_source(
         events: list[dict[str, object]] = []
         async with agent.iter(
             prompt(compiled_input),
-            deferred_tool_results=deferred_tool_results,
+            deferred_tool_results=tool_results,
         ) as run:
             async for node in run:
                 if cancel_event.is_set():

@@ -1,8 +1,7 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 
 import { PrismaConversationReplayRepository } from "./prisma-conversation-replay-repository.js";
-import type { ConversationReplayUnitOfWork, ReadConversationReplayCommand } from "./replay-reader.types.js";
-import type { ConversationReplayEventRow } from "./replay-projection.types.js";
+import type { ConversationReplayReadResult, ConversationReplayUnitOfWork, ReadConversationReplayCommand } from "./replay-reader.types.js";
 
 /** Prisma transaction boundary that freezes participant bounds and visible timeline rows together. */
 export class PrismaConversationReplayUnitOfWork implements ConversationReplayUnitOfWork
@@ -16,12 +15,12 @@ export class PrismaConversationReplayUnitOfWork implements ConversationReplayUni
 		this.prisma = prisma;
 	}
 
-	/** Reads participant bounds and timeline rows from one repeatable database snapshot. */
-	async read(command: ReadConversationReplayCommand): Promise<readonly ConversationReplayEventRow[]>
+	/** Recheck authority and rows inside one repeatable-read transaction. */
+	async readAuthorized(command: ReadConversationReplayCommand): Promise<ConversationReplayReadResult>
 	{
 		return this.prisma.$transaction(async function _ReadReplaySnapshot(transaction)
 		{
-			return new PrismaConversationReplayRepository(transaction).read(command);
+			return new PrismaConversationReplayRepository(transaction).readAuthorized(command);
 		}, { isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead });
 	}
 }

@@ -25,10 +25,6 @@ export function _AssertAgentRuntimeJobAssignment(assignment: AgentRuntimeJobAssi
 	{
 		throw new Error("agent runtime assignment requires a valid LiteLLM key Secret name");
 	}
-	if (assignment.obotKeySecretName !== undefined && (!/^[a-z0-9]([-a-z0-9.]*[a-z0-9])?$/.test(assignment.obotKeySecretName) || assignment.obotKeySecretName.length > 253))
-	{
-		throw new Error("agent runtime assignment requires a valid Obot key Secret name");
-	}
 }
 
 /** Derive the stable Kubernetes resource name from one validated run-attempt assignment. */

@@ -2,9 +2,17 @@ import { AgentRevisionState, Prisma } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
 
 import { __DigestAgentRevisionContent } from "@opencrane/models/agents";
+import { ___DigestCanonicalJson } from "@opencrane/util";
 
 import { _PersonalConfigurationMaterializer } from "../materialization/personal-configuration-materializer.js";
 import { PrismaPersonalConfigurationMaterializationUnitOfWork } from "../materialization/prisma-personal-configuration-materialization-unit-of-work.js";
+
+/** Build one reviewed tool definition copied through personal revision materialization. */
+function _Tool()
+{
+	const parametersSchema = { type: "object", additionalProperties: false } as const;
+	return { name: "calendar.read", description: "Read a calendar", parametersSchema, parametersSchemaDigest: ___DigestCanonicalJson(parametersSchema) };
+}
 
 /** Trusted materialization command shared by transaction-level tests. */
 function _Command()
@@ -46,7 +54,7 @@ function _SourceRevision()
 			integrationId: "integration-1",
 			siloId: "silo-1",
 			custodyReferenceId: "custody-1",
-			allowedTools: ["calendar.read"],
+			toolDefinitions: [_Tool()],
 		}],
 		scopeAttachments: [{
 			scope: "Personal",
@@ -141,7 +149,7 @@ describe("Prisma-backed personal configuration materialization", function _Mater
 			integrationAssignments: [{
 				integrationId: "integration-1",
 				custodyReferenceId: "custody-1",
-				allowedTools: ["calendar.read"],
+				toolDefinitions: [_Tool()],
 			}],
 			scopeAttachments: [{
 				scope: "personal",
@@ -187,7 +195,7 @@ describe("Prisma-backed personal configuration materialization", function _Mater
 						integrationId: "integration-1",
 						siloId: "silo-1",
 						custodyReferenceId: "custody-1",
-						allowedTools: ["calendar.read"],
+						toolDefinitions: [_Tool()],
 					}],
 				},
 				scopeAttachments: {

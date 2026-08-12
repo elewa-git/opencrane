@@ -1,58 +1,57 @@
-import type { RuntimeCandidate, RuntimeEventCandidate } from "@opencrane/contracts";
-import type { JsonValue } from "@opencrane/util";
-import { __MarkToolInvocationSucceededByCoordinatesInTransaction } from "@opencrane/backend/server/iam/authorization";
+import type { RuntimeCandidate } from "@opencrane/contracts";
+import { RunEventTypes } from "@opencrane/models/agents";
 
-import type { RuntimeTerminalReporter } from "./prisma-runtime-dispatch-authority.types.js";
+import type { RuntimeEventReporter } from "./prisma-runtime-dispatch-authority.types.js";
 
-/** Transaction shape already owned by the injected canonical terminal-reporting port. */
-type RuntimeCandidateTransaction = Parameters<RuntimeTerminalReporter["reportInTransaction"]>[0];
+/** Transaction shape already owned by the injected event-reporting port. */
+type RuntimeCandidateTransaction = Parameters<RuntimeEventReporter["reportInTransaction"]>[0];
 
-/** Return whether this candidate needs the injected canonical run-terminal authority. */
-export function _RuntimeCandidateRequiresTerminalReporter(candidate: RuntimeCandidate): boolean
+/**
+ * Tool events the runtime may ask for but is not trusted to record.
+ *
+ * The tool worker is the only writer of a tool's start, success, and failure, because only it
+ * knows what the provider actually did. A runtime claiming these could report a tool call that
+ * never ran.
+ */
+const _WORKER_OWNED_EVENT_TYPES: ReadonlySet<string> = new Set<string>([RunEventTypes.ToolStarted, RunEventTypes.ToolCompleted, RunEventTypes.ToolFailed]);
+
+/** Transaction-aborting denial used when a post-persistence tool fence rejects the candidate. */
+export class RuntimeCandidateSideEffectDeniedError extends Error
 {
-	return _TerminalRuntimeEvent(candidate) !== null;
+	public constructor(public readonly reason: string)
+	{
+		super(reason);
+		this.name = "RuntimeCandidateSideEffectDeniedError";
+	}
+}
+
+/** Return whether this candidate needs the injected run-event authority. */
+export function _RuntimeCandidateRequiresEventReporter(candidate: RuntimeCandidate): boolean
+{
+	return "eventType" in candidate;
 }
 
 /**
- * Applies the durable side effects selected by an already-admitted runtime event.
+ * Records the run event an admitted candidate asks for, inside the caller's transaction.
  *
- * The caller retains the candidate fence and accepted-id append. This transaction-scoped adapter
- * owns only canonical terminal reporting and digest-only tool-completion persistence; it must never
- * dispatch external I/O or advance the runtime command stream.
+ * Returns `null` when there is nothing to refuse, or a reason string that tells the caller to
+ * reject the candidate and roll the transaction back. The caller still owns the candidate fence
+ * and the accepted-id append; this function must never call out to a provider or advance the
+ * runtime command stream.
  */
-export async function _ApplyRuntimeCandidateSideEffects(transaction: RuntimeCandidateTransaction, candidate: RuntimeCandidate, runId: string, attempt: number, terminalReporter: RuntimeTerminalReporter | null): Promise<string | null>
+export async function _ApplyRuntimeCandidateSideEffects(transaction: RuntimeCandidateTransaction, candidate: RuntimeCandidate, runId: string, attempt: number, eventReporter: RuntimeEventReporter | null): Promise<string | null>
 {
-	const terminal = _TerminalRuntimeEvent(candidate);
-	if (terminal !== null && terminalReporter === null) return "terminal_reporter_unavailable";
-	if (terminal !== null && terminalReporter !== null)
-	{
-		const report = await terminalReporter.reportInTransaction(transaction, { runId, attempt, eventType: terminal });
-		if (report.outcome === "denied") return report.reason ?? "terminal_report_denied";
-	}
-	if (candidate.kind !== "event" || candidate.eventType !== "tool.completed") return null;
-	const completion = _ToolCompletionPayload(candidate.payload);
-	if (completion === null) return "invalid_tool_completion";
-	const marked = await __MarkToolInvocationSucceededByCoordinatesInTransaction(transaction, { runId, attempt, toolInvocationId: completion.toolInvocationId }, { resultDigest: completion.resultDigest });
-	return marked.status === "succeeded" ? null : "tool_completion_conflict";
-}
+	// 1. A candidate that carries no event has no side effect to apply.
+	if (!("eventType" in candidate)) return null;
 
-/** Validate an untrusted `tool.completed` payload into digest-only completion coordinates. */
-function _ToolCompletionPayload(payload: JsonValue): { readonly toolInvocationId: string; readonly resultDigest: string } | null
-{
-	if (payload === null || typeof payload !== "object" || Array.isArray(payload)) return null;
-	const record = payload as { readonly [key: string]: JsonValue };
-	const toolInvocationId = record["toolInvocationId"];
-	const resultDigest = record["resultDigest"];
-	if (typeof toolInvocationId !== "string" || toolInvocationId.trim().length === 0 || toolInvocationId.length > 256) return null;
-	if (typeof resultDigest !== "string" || !/^sha256:[0-9a-f]{64}$/.test(resultDigest)) return null;
-	return { toolInvocationId, resultDigest };
-}
+	// 2. Writing an event needs the authority the composition root injects.
+	if (eventReporter === null) return "event_reporter_unavailable";
 
-/** Return a terminal event type only for workload outcomes the server lets a runtime report. */
-function _TerminalRuntimeEvent(candidate: RuntimeCandidate): "run.completed" | "run.failed" | null
-{
-	if (candidate.kind !== "event") return null;
-	const event = candidate as RuntimeEventCandidate;
-	if (event.eventType === "run.completed" || event.eventType === "run.failed") return event.eventType;
+	// 3. Refuse the events only the tool worker may write.
+	if (_WORKER_OWNED_EVENT_TYPES.has(candidate.eventType)) return "runtime_tool_lifecycle_not_authoritative";
+
+	// 4. Persist the event, and treat any refusal as this candidate's refusal.
+	const report = await eventReporter.reportInTransaction(transaction, { runId, attempt, eventType: candidate.eventType, payload: candidate.payload });
+	if (report.outcome === "denied") return report.reason ?? "event_report_denied";
 	return null;
 }

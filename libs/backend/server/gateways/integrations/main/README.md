@@ -13,8 +13,8 @@ credential without being the credential.
 
 This package is the authority over the integration lifecycle and its custody. It runs two flows.
 The **provisioning** flow (write side) asks Obot to take custody, then records a projection of the
-result in Postgres. The **resolution** flow (read side) hands the runtime an active integration
-assignment for a given agent revision — a custody reference plus the exact tools that revision may
+result in Postgres. The **resolution** flow (read side) hands the server action worker an active integration
+assignment for a given agent revision — a custody reference plus the exact reviewed tool definitions that revision may
 call, and never any credential material.
 
 ```
@@ -26,7 +26,7 @@ call, and never any credential material.
  └────────────────────────────────────┘        └─ persistence fails? revoke the remote custody
         │  ready custody reference (never credential bytes)
         ▼
- agent runtime resolves the revision's assignment → reference + allowed tools
+ server action worker resolves the revision's assignment → reference + reviewed schema-bound tools
 ```
 
 **In this flow:** Obot [(vendored app)](../../../../../../apps/_infra/obot/README.md) via the `@opencrane/backend/server/infra/obot-custody` port · [agent-services](../../../agents/agent-services/main/README.md) *(a revision assigns an integration)*
@@ -43,7 +43,7 @@ Failure logging is best-effort and can never flip a fail-closed result.
 
 - `__ProvisionIntegrationCustody` — provision remote custody, persist the projection, compensate on
   failure.
-- `PrismaIntegrationAuthorityRepository` — resolves runtime assignments (read side).
+- `PrismaIntegrationAuthorityRepository` — resolves server action assignments (read side).
 - `PrismaIntegrationCustodyRepository` — persists custody projections (write side).
 - `__SystemIntegrationAuthorityClock` — the production clock for custody-expiry checks.
 - Types: `IntegrationAuthorityRepository`, `ResolveIntegrationAssignmentCommand`/`Result`,
@@ -59,7 +59,10 @@ projection consistent with it.
 ## Dependency direction
 
 Tagged `scope:integrations`: it may depend only on `scope:integrations`, `scope:obot-custody` (the
-Obot port), and `scope:shared` — never on apps or other server domains.
+Obot port), `scope:agents` (the revision-owned reviewed tool-definition contract), `scope:auth`, and
+`scope:shared` — never on apps or unrelated server domains. The agents dependency follows the
+ownership direction: an integration resolves the exact tools already frozen into an agent
+revision; it does not define or mutate that revision.
 
 ## Data & persistence
 

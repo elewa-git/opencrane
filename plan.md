@@ -116,13 +116,17 @@ moves the run to `Cancelled`. The runtime protocol and channel-target admission 
 `cancelling` the same way they close on a terminal state. Bootstrap exchange and the full runtime
 command lifecycle now land: the dispatch authority mints `start_attempt`, `resume_attempt`, and a
 positive `cancel_attempt` stop signal (with exactly-once terminal reporting under a race); the runtime
-surfaces model tool calls as external-action candidates validated against the immutable snapshot and
-reserved before dispatch through an injected tool-invocation authority. A tool grant flagged
-`requiresApproval` defers: the reserved invocation opens a pending `ApprovalRequest`, so the
-pause is reachable end to end. The owner-bound approval-DECISION and steering-INGEST APIs are built:
+surfaces model tool calls as external-action candidates that the server validates against the
+immutable snapshot and admits into the durable ToolInvocation lifecycle before any provider request.
+A tool grant flagged `requiresApproval` enters `AwaitingApproval` and opens a pending
+`ApprovalRequest`, so the pause is reachable end to end. The owner-bound approval-DECISION and
+steering-INGEST APIs are built:
 an owner may decide only their own pending tool approval or queue bounded text only to their own live
-run. The deferred-tool DECIDE authority and steering queue feed a fenced, single-use resume command;
-the runtime absorbs the queued steering only at safe pre-model boundaries. The
+run. The approval authority persists approved effective arguments or a terminal failure, and the
+server-owned worker records one durable result delivery before a fenced resume command can carry it
+back to the runtime. Later results and steering requests remain independently consumable, so
+concurrent input cannot supersede an active executor loop. The runtime absorbs queued steering only
+at safe pre-model boundaries. The
 runtime also writes encrypted, version-tagged, replaceable LOCAL checkpoints subordinate to canonical
 state (no server-side checkpoint model). The MCP and sandbox execution ports remain fail-closed in
 the production composition root. The authenticated memory transport IS composed: the server mounts
@@ -130,12 +134,12 @@ its audience-bound projected token and shares one gateway client between admissi
 Admission-time recall freezes gateway-selected fact references (id + content digest, never text)
 into the personal `RunInputSnapshot`, and compile-time statement loading re-resolves and
 digest-verifies every reference before inlining it — so redelivered `start_attempt` frames stay
-byte-identical or fail closed. Mid-run recall through the external-action executor remains gated:
-`AgentRuntimeProtocol v1` has no attempt-fenced ephemeral tool-result channel, and persisted
-`ToolInvocation` receipts must not duplicate Cognee fact content. Record, correction, forgetting,
-and scoped injection also remain fail-closed pending a recoverable gateway write lifecycle.
+byte-identical or fail closed. Mid-run recall now uses the same server-owned ToolInvocation worker and
+durable, attempt-fenced result delivery as integration tools; persisted receipts must not duplicate
+Cognee fact content. Record, correction, forgetting, and scoped injection remain fail-closed pending
+a recoverable gateway write lifecycle.
 
-**MEMORY TRANSPORT COMPOSED; ADMISSION+COMPILE RECALL LIVE; MID-RUN RECALL AND WRITES STILL GATED**
+**MEMORY TRANSPORT COMPOSED; ADMISSION+COMPILE RECALL LIVE; DURABLE MID-RUN RESULTS BUILT; WRITES STILL GATED**
 
 The offline conformance harness and fault-injection matrix are built and CI-runnable (runtime protocol/reliability, attempt-scoped
 credential rejection, observability evidence). The live-LiteLLM conformance leg and driver-adoption
@@ -169,18 +173,17 @@ catch-up, overlap/backoff/suspension, idempotent run creation through the existi
 `ManagedRunAdmissionPort` with `trigger: schedule`), the `AgentServiceSchedule` model + management
 API, the connector-scoped managed identity (`managed-agent-runtime-*` SA class + distinct token
 audience, the launcher's selectable identity profile, and the chart-only `apps/managed-agent-runtime`
-plane), execution authority via the reserve-before-dispatch tool boundary with the Obot transports
-composed (authenticated custody provisioning + a per-attempt Obot key scoped to the run's MCP server
-ids; approved calls execute runtime→Obot directly with digest-only `tool.completed` receipts,
-allow-list enforced), the scoped-memory
+plane), execution authority via the durable ToolInvocation lifecycle with the Obot transports
+composed (authenticated custody provisioning plus server-owned, allow-listed action execution;
+provider addressing and credentials never enter a runtime Job), the scoped-memory
 contract freezes the gateway-native dataset selected by admitted authority while the authenticated
-read transport is built but not connected to runtime execution pending attempt-fenced ephemeral
-result delivery, and the attach-authority + runtime
+read transport returns through the same durable attempt-fenced result delivery, and the
+attach-authority + runtime
 effective-access intersection over the grant compiler (closes the slice-5 deferral; scope-isolation
 tested). Scoped injection and personal record/correct/forget remain fail-closed pending a durable,
 recoverable gateway write lifecycle. NOT done — a NAMED LATER GATE: **create and qualify the harvesting central agent against
 live Obot**, tracked under [#337](https://github.com/elewa-git/opencrane/issues/337); the composed
-custody + direct attempt-key data plane validates Obot responses defensively until that live
+custody and server action data plane validates Obot responses defensively until that live
 qualification pins the exact shapes. The repository
 does not retain an unqualified offline definition alongside that live acceptance gate.
 
@@ -294,6 +297,10 @@ The accepted product contract is:
   `AgentRun` records.
 - an authorized `@agent` message in a group creates one linked child Conversation in
   `agent_session` mode and its first run. The UI calls this an **Agent thread**, not a subagent.
+- the child freezes the approved persona of the participant who wrote the `@agent` message. It never
+  attaches that participant's personal memory automatically; memory use requires an explicit ask
+  that warns approved memory-derived content will be visible to the active parent participants.
+  Child visibility mirrors those active parent participants.
 - an Agent thread can communicate status, questions, approvals, safe results, failures, and durable
   asset references to its immediate parent through typed, append-only, idempotent delivery. Runtime
   subagents and recursive governed child runs remain the separate authority in
@@ -305,12 +312,24 @@ The accepted product contract is:
   reopens; archive remains a separate user-applied visibility state.
 - attached and agent-created assets have distinct provenance. A created asset becomes durable only
   after finalization and survives retry, refresh, and conversation closure.
+- one message admits at most ten files sharing a 200 MB total limit. A dedicated scanner must pass
+  each file before use. One server-issued output ticket can finalize exactly one generated asset;
+  reconnect returns the same asset and conflicting bytes fail visibly.
 - tool failure remains visible while retrying and after recovery. Plain-language state is primary;
   sanitized tool, error category, provider response, time, and retry details are progressively
   disclosed. Tokens, credentials, cookies, authorization headers, keys, proofs, and raw secrets never
   reach the browser.
+- retry internal preparation at most three times within five minutes, and only before a provider
+  request starts. After dispatch, replay a saved success or check the provider when that is possible.
+  If neither can prove the outcome, never guess or send the action again: stop the run in a visible,
+  cancellable **Needs recovery** state.
+- #319 owns the durable recovery state, sanitized stream projection, and expected-attempt-fenced
+  cancellation API. The deployed SPA still has no conversation workspace route, so the actual
+  **Needs recovery** card and cancel control mount with the workspace in #351; #319 must not claim
+  that an unmounted reducer or Storybook fixture is already user-visible.
 - one recoverable elicitation contract renders approvals, single choice, multiple choice, and bounded
-  free text. Consequential A2UI actions use that authority; rendered UI never grants permission.
+  free text, including explicit personal-memory permission. Consequential A2UI actions use that
+  authority; rendered UI never grants permission.
 
 The accepted paper/origami workspace language remains the visual source. The repository-owned
 [canonical design context target](./docs/ui-design/README.md) contains the current workspace, A2UI,
@@ -329,7 +348,7 @@ component-manager validated the supplement against the live catalogue and return
 | F1.1 — model and design contract | Freeze mode vocabulary, strategy ownership, lifecycle, parent/child coordinates, terminology, route hierarchy, finite visual states, and the no-secret disclosure contract | [#600](https://github.com/elewa-git/opencrane/issues/600), [#601](https://github.com/elewa-git/opencrane/issues/601), [#351](https://github.com/elewa-git/opencrane/issues/351) | User stories, architecture decision, component/state map, and committed desktop/compact wireframes agree before schema or routed-page work starts |
 | F1.2 — conversation authority and ordinary messaging | Add immutable modes, mode strategies, conditional agent binding, participant/join authority, canonical mixed timeline, list/create/open APIs, and idempotent direct/group message admission | [#600](https://github.com/elewa-git/opencrane/issues/600) | Agent-session input cannot bypass runs; ordinary direct/group messages cannot create runs; foreign, closed, wrong-mode, and replay attempts fail closed |
 | F1.3 — onboarding handoff | Retain the completed bootstrap exchange as the selected closed/read-only workspace conversation and expose Start a new chat without rewriting onboarding evidence | [#602](https://github.com/elewa-git/opencrane/issues/602), [#351](https://github.com/elewa-git/opencrane/issues/351) | Completion, refresh, direct navigation, attempted write, and incomplete-user API/route denial pass end to end |
-| F1.4 — canonical live delivery | Extend finite replay into authorized snapshot-to-live conversation delivery across ordinary messages and run events; pin AG-UI, reconnect/interrupt semantics, terminal projection, and the versioned A2UI envelope | [#319](https://github.com/elewa-git/opencrane/issues/319), [#351](https://github.com/elewa-git/opencrane/issues/351) | No gaps or duplicates; opaque cursors recover open elicitation; failure/cancellation stay truthful; raw authority/runtime payloads remain server-side |
+| F1.4 — canonical live delivery — **IN PROGRESS** | Extend finite replay into authorized snapshot-to-live conversation delivery across ordinary messages and run events; pin AG-UI, reconnect/interrupt semantics, terminal projection, and the versioned A2UI envelope | [#319](https://github.com/elewa-git/opencrane/issues/319), [#351](https://github.com/elewa-git/opencrane/issues/351) | No gaps or duplicates; opaque cursors recover open elicitation; failure/cancellation stay truthful; raw authority/runtime payloads remain server-side |
 | F1.5 — group Agent threads and parent communication | Admit `@agent`, create the child agent session, stream its serial runs, project the parent summary, deliver safe results upward, and navigate through stable breadcrumbs | [#601](https://github.com/elewa-git/opencrane/issues/601), [#351](https://github.com/elewa-git/opencrane/issues/351) | One mention creates one child and first run; parent/child keep independent history and unread state; access loss, deep links, back/scroll restoration, and immediate-parent-only delivery pass |
 | F1.6 — conversation assets | Add governed upload/attach/preview/download, finalized agent-output receipts, inline asset cards, and the Files index | [#603](https://github.com/elewa-git/opencrane/issues/603), [#351](https://github.com/elewa-git/opencrane/issues/351) | Upload, scan/process, failure/retry, inaccessible/expired, ready, and durable-created-output journeys pass without exposing storage internals |
 | F1.7 — tools, elicitation, approvals, and A2UI | Render honest tool/retry state with sanitized disclosure; unify approval, single-choice, multiple-choice, and free-text requests; route A2UI actions through authenticated command authority | [#604](https://github.com/elewa-git/opencrane/issues/604), [#319](https://github.com/elewa-git/opencrane/issues/319), [#351](https://github.com/elewa-git/opencrane/issues/351) | Duplicate, foreign, expired, stale-run, and unauthorized responses fail closed; reconnect restores unresolved input; keyboard, focus, screen-reader, and reduced-motion contracts pass |
@@ -376,6 +395,40 @@ requesting independent review. Review findings are resolved in later `🐛` comm
 the branch is not kept uncommitted while waiting for a reviewer. Before publication, re-read the
 live PR graph, stack only on genuine dependencies, and prove that each `base...head` diff contains
 exactly one issue's incremental work.
+
+Current F1.4 checkpoint: #319 has committed snapshot-to-live replay, reconnect and interrupt
+overlays, canonical runtime-event persistence, exact runtime payload contracts, per-approval-batch
+resume, truthful tool/run failure projection, governed A2UI and child-run envelopes, stateless
+receiver-bound channel relay, and database/release authority. Follow-up commits now make lifecycle
+event admission atomic, allow cancellation to supersede stale delivery, retain failed-then-recovered
+tool evidence, materialize progressive A2UI surfaces, admit the complete v4 component catalogue,
+pass the Linux visual baselines, and prove the projection against the exact pinned AG-UI client.
+The latest architecture wave leaves the OpenCrane app as typed assembly only: fixed TokenReview,
+signed membership selection, conversation-read policy, exact host binding, and bounded route
+reconciliation now live in their owning libraries. A verified producer/consumer mismatch was also
+closed by sharing one digest authority between invocation-context issuance and replay consumption;
+the raw bearer remains absent from persistence and logs. Focused package tests and policy gates pass
+for the committed projection work at this checkpoint.
+Durable recovery for irreversible external actions now has product approval: OpenCrane may retry
+only bounded internal preparation before dispatch; after dispatch it must replay saved success,
+check the provider when supported, or stop visibly in **Needs recovery** without sending the action
+again. That recovery model is implemented through a transaction-bound ToolInvocation unit of work:
+durable claims, result replay, provider-check strategy, and the visible recovery projection share one
+canonical lifecycle authority. Server-owned Obot invocation, credential isolation, safe result
+redaction, lifecycle-event ownership, and the provider-free replay digest check are covered by
+focused tests. The exact State×Event planner owns every invocation transition; claim kind, fence and
+revision prevent overlapping dispatch/reconciliation; approved argument edits become the effective
+provider request; and cancellation waits for in-flight claims to settle without admitting new work.
+Provider failures now retain failed spans without exporting raw exceptions, idle polls create no
+trace noise, and process shutdown aborts Obot before draining durable work. Correctness, security,
+architecture, observability, and residue rechecks pass; fresh and upgraded 0.8 databases converge
+under live PostgreSQL qualification; and package, ownership, style, boundary, and release gates pass.
+The legacy 0.7 route-expiry replacement is approved and
+implemented: migrated route ids, endpoint/registration coordinates, prior revocation, and exact
+expiry evidence survive as permanently inactive rows, while startup reconciliation creates the
+sole usable stable receiver route. Fresh 0.8 and migrated 0.7 databases converge under the live
+PostgreSQL test. F1.4 remains in progress until the rebased PR head passes live CI and merges. #337
+remains LiteLLM-only; retirement and replacement of the remaining Obot path is tracked by #592.
 
 Track F1 closes [#351](https://github.com/elewa-git/opencrane/issues/351),
 [#600](https://github.com/elewa-git/opencrane/issues/600),

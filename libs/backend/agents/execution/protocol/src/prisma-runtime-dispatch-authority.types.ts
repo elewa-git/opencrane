@@ -1,6 +1,9 @@
-import type { Prisma } from "@prisma/client";
+import type { Prisma, RuntimeCommandKind } from "@prisma/client";
 
-import type { CompiledRunInput, CompiledToolDefinition, RunInputSnapshot, RuntimeExternalActionCandidate } from "@opencrane/contracts";
+import type { CompiledRunInput, RunInputSnapshot } from "@opencrane/contracts";
+import type { JsonValue } from "@opencrane/util";
+
+import type { RuntimeAdmissionRunState } from "./runtime-protocol-authority.types.js";
 
 /**
  * Injected control-plane compiler that hydrates an immutable snapshot into the literal compiled
@@ -21,10 +24,6 @@ export interface RuntimeDispatchAuthorityConfig
 	readonly managedRuntimeNamespace: string;
 	/** Hard lifetime stamped on each minted command frame, bounded by the durable assignment lease. */
 	readonly commandTtlMilliseconds: number;
-	/** Maximum server-recorded pre-reservation retries for one external-action candidate. */
-	readonly externalActionRetryLimit: number;
-	/** Hard server-owned window in which one external-action candidate may use its retry budget. */
-	readonly externalActionRetryWindowMilliseconds: number;
 }
 
 /** Verified workload identity handed to the dispatch authority by the app-owned transport. */
@@ -40,38 +39,27 @@ export interface RuntimeStreamWorkloadIdentity
 	readonly podUid: string;
 }
 
-/**
- * Composition-root port that reserves and dispatches an admitted external-action candidate.
- *
- * The dispatch authority admits the candidate against the live fence, then hands it to this injected
- * runner so the concrete MCP/artifact/memory/sandbox transports stay in the app root and never leak
- * into `scope:execution-protocol`. The runner performs reserve-before-dispatch via
- * `__ExecuteExternalAction`. It returns `"completed"` only after a durable invocation result exists,
- * returns `"denied"` for a durable fail-closed refusal, and throws only before reservation when the
- * runtime may safely replay the exact admitted candidate.
- */
-export type RuntimeExternalActionRunnerResult =
-	| { readonly outcome: "completed" | "denied" }
-	| { readonly outcome: "retryable"; readonly error: unknown };
-
-/**
- * Result from the composition root after attempting one admitted external action.
- *
- * `retryable` proves that no ToolInvocation reservation was created. Every outcome after a
- * reservation — including deferred-approval creation or executor persistence failures — is instead
- * `denied`, so an admitted candidate can never re-dispatch an already-reserved side effect.
- */
-export interface RuntimeExternalActionRunner
+/** Terminal lifecycle persistence supplied by the composition root without reversing library dependencies. */
+export interface RuntimeEventReporter
 {
-	/** Reserve and dispatch one admitted external-action candidate against its validated tools. */
-	run(candidate: RuntimeExternalActionCandidate, snapshot: RunInputSnapshot, compiledTools: readonly CompiledToolDefinition[]): Promise<RuntimeExternalActionRunnerResult>;
+	/** Validate and persist an already-fenced canonical runtime event in the current transaction. */
+	reportInTransaction(transaction: Prisma.TransactionClient, command: { readonly runId: string; readonly attempt: number; readonly eventType: string; readonly payload: JsonValue }): Promise<{ readonly outcome: "reported" | "denied"; readonly reason?: string }>;
 }
 
-/** Terminal lifecycle persistence supplied by the composition root without reversing library dependencies. */
-export interface RuntimeTerminalReporter
+/** Transaction-scoped expiry sweep supplied by the production approval authority. */
+export interface RuntimeApprovalExpiry
 {
-	/** Persist an already-fenced runtime completion or failure in the current authority transaction. */
-	reportInTransaction(transaction: Prisma.TransactionClient, command: { readonly runId: string; readonly attempt: number; readonly eventType: "run.completed" | "run.failed" }): Promise<{ readonly outcome: "reported" | "denied"; readonly reason?: string }>;
+	/** Close every due approval for one waiting attempt and report whether its batch resumed. */
+	expireInTransaction(transaction: Prisma.TransactionClient, command: { readonly runId: string; readonly attempt: number; readonly now: Date }): Promise<{ readonly expiredCount: number; readonly resumed: boolean }>;
+}
+
+/** Transaction-bound state and marker interpreter for one runtime command poll. */
+export interface RuntimeCommandDecisionUnitOfWork
+{
+	/** Apply due approval expiry while the caller owns the waiting run fence. */
+	expireWaiting(context: { readonly runId: string; readonly attempt: number; readonly runState: RuntimeAdmissionRunState }, approvalExpiry: RuntimeApprovalExpiry | null, now: Date): Promise<"not_required" | "applied" | "unavailable">;
+	/** Select the next persistence command kind from durable run state and marker evidence. */
+	decide(context: { readonly runId: string; readonly attempt: number; readonly runState: RuntimeAdmissionRunState }, commands: readonly { readonly kind: RuntimeCommandKind }[]): Promise<RuntimeCommandKind | null>;
 }
 
 /** Stable result returned after a candidate reaches the authoritative run boundary. */
@@ -81,8 +69,4 @@ export interface RuntimeCandidateDispatchResult
 	readonly accepted: boolean;
 	/** Machine-readable reason when the candidate was rejected. */
 	readonly reason?: string;
-	/** Whether the runtime must retry this exact candidate rather than terminalising its attempt. */
-	readonly retryable?: boolean;
-	/** Server-bounded delay before retrying the same candidate identifier. */
-	readonly retryAfterMilliseconds?: number;
 }

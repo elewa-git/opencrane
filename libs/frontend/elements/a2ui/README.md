@@ -1,60 +1,67 @@
-# @opencrane/elements/a2ui — in-process A2UI canvas renderer
+# @opencrane/elements/a2ui — governed interactive surfaces
 
 > [frontend](../../README.md) › [elements](../README.md) › a2ui
 
 ## What it owns
 
-This is a frontend **element** package — a small, reusable piece of UI plus its Angular
-providers, with no route or business logic of its own. It renders **A2UI canvases**: A2UI (the
-Agent-to-UI protocol, an Apache-2.0 spec from Google) lets an agent stream a small interactive
-surface — text, buttons, form fields — that the browser draws live. This package is the **sink**
-half of that feature: it takes the agent's canvas payload and draws it, and it hands the user's
-clicks and field edits back out so the host can return them to the agent.
+This frontend element renders a display-safe A2UI (Agent-to-User Interface) surface inside a
+conversation. The conversation state layer first decodes and validates the server projection;
+this package then preserves the supplied operation order and renders one stable surface identity.
 
 ```
- agent canvas message  (A2UI payload: JSONL (newline-delimited JSON) / JSON array / parsed actions)
-          │
+ authorized conversation projection
+          │  typed presentation + ordered operations
           ▼
  ┌──────────────────────────────────┐
- │  <wo-a2ui-canvas>  ◄── HERE       │  parse → render surfaces → emit userAction
+ │  <wo-a2ui-canvas>  ◄── HERE       │  render exact accepted eleven-component catalogue
  └──────────────────────────────────┘
-          │  userAction (button press · field change)
+          │  coordinate-bound displayed action intent
           ▼
- host returns the action to the agent  (canvas.action return path)
+ authenticated server command path ........ reconstructs authority and accepts or denies
 ```
 
-**In this flow:** [state/conversation/render](../../state/conversation/render/README.md) *(the
-shared markdown + sanitisation pipeline A2UI text reuses)*
+**In this flow:** the conversation projection and authenticated command path remain outside this
+presentational package.
 
-Invariant: each `<wo-a2ui-canvas>` owns its own message processor, so surfaces from one canvas
-never leak into another; agent-authored text is routed through the same sanitisation pipeline as
-the transcript, so a canvas can never inject unsafe HTML. The **producer** half (turning an agent
-message part into a canvas card) is not wired yet — until it lands, this renderer is present but
-intentionally unproduced.
+The catalogue admits exactly Text, Button, TextField, SingleChoice, MultipleChoice, Select, Slider,
+DateTimeInput, Image, Card, and List. OpenCrane owns narrow dynamic-renderer adapters for the three
+choice contracts and DateTimeInput because pinned v0.8 collapses multiple selection and strips the
+labels those controls need. The adapters retain the public protocol names and render native radio,
+bounded-checkbox, select, and labelled date/time semantics. They inherit only the upstream non-visual
+processor/action boundary; their templates and styles remain package-owned. Unknown or malformed
+components fail closed to a generic unsupported placeholder without echoing payload data. Stable
+component ids preserve focus during progressive updates.
 
 ## Public surface
 
-- `provideOpenCraneA2ui()` — app-level providers (component catalogue, theme, shared markdown renderer);
-  spread once into a route or app's `providers`.
-- `A2uiCanvasComponent` (`<wo-a2ui-canvas>`) — renders a canvas payload and emits each `userAction`.
-- `_ParseA2uiMessages(raw)` — tolerant parser accepting JSONL, a JSON array, or parsed actions.
+- `A2uiCanvasComponent` (`<wo-a2ui-canvas>`) — consumes one `A2uiSurfacePresentation` and emits one
+  `A2uiDisplayedActionIntent` without exposing upstream completion subjects or raw events.
+- `provideOpenCraneA2ui(sanitizer)` — registers the constrained catalogue, theme, and browser-owned
+  safe markdown-to-HTML port.
+- `A2uiSurfacePresentation` and `A2uiDisplayedActionIntent` — the finite display contract shared
+  with the host. Envelope version, operations, and lifecycle state use the canonical
+  `AG_UI_A2UI_ENVELOPE_VERSION`, `AgUiA2uiOperation`, and `AgUiA2uiSurfaceStates` contracts.
+
+The accessible choice and date/time adapters are internal catalogue entries, not additional public
+exports. Their `input` and `change` events update only surface-local display data. The canvas drops
+those local event names; only an explicit displayed action such as Button can become a coordinate-
+bound `A2uiDisplayedActionIntent` for later server authorization.
 
 ## Boundary
 
-The future workspace shell will call `provideOpenCraneA2ui()` on its lazy route so the vendored
-(copied-in third-party code) A2UI code stays out of the initial bundle. No product route consumes
-the provider yet because the canvas producer is intentionally unwired. This package only renders
-and emits — it does not fetch canvas payloads or talk to the API; returning an action to the agent
-is the host's job.
+This package renders; it does not fetch events, authorize actions, resume runs, or infer completion.
+Only `ready` surfaces emit action intent. The intent contains display coordinates, a displayed action
+id, and bounded scalar values; the server remains responsible for identity, expiry, one-use checks,
+audit, and command execution. Agent-authored text reaches HTML only through the injected sanitizer.
 
 ## Dependency direction
 
-Tagged `type:lib`, `layer:frontend`, and `scope:web` (the frontend dependency tier): it may import
-only other `scope:web` packages and `scope:shared` contracts — never backend code or app source.
-Its one internal dependency is `state/conversation/render` for the shared markdown pipeline.
+Tagged `type:lib`, `layer:frontend`, and `scope:web`. It depends on Angular and the directly pinned
+upstream A2UI renderer, but never imports frontend state, a feature package, backend code, or app
+source.
 
 ## See also
 
 - Parent index: [elements](../README.md)
 - Sibling: [ui](../ui/README.md)
-- Intended consumer: the future product workspace surface.
+- Frontend architecture map: [frontend](../../README.md)

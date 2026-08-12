@@ -54,14 +54,12 @@ grep -Fq 'app.kubernetes.io/component: channel-proxy' "$EGRESS"
 grep -Fq 'app.kubernetes.io/component: artifact-service' "$EGRESS"
 grep -Fq 'kubernetes.io/metadata.name: default-artifacts' "$EGRESS"
 grep -Fq 'app.kubernetes.io/component: litellm' "$EGRESS"
-# Obot's Deployment carries the mcp-gateway component label; the previous `obot` selector matched
-# no pod, so the direct approved-invocation data plane was unreachable from the managed plane.
-grep -Fq 'app.kubernetes.io/component: mcp-gateway' "$EGRESS"
-if grep -Fq 'app.kubernetes.io/component: obot' "$EGRESS"; then
-  echo "managed runtime egress still targets the nonexistent obot component label" >&2
+# Provider execution belongs to the server worker; a runtime must never reach Obot directly.
+if grep -Eq 'app.kubernetes.io/component: (mcp-gateway|obot)' "$EGRESS"; then
+  echo "managed runtime egress still grants direct Obot access" >&2
   exit 1
 fi
-test "$(grep -Fc 'port: 8080' "$EGRESS")" -eq 3
+test "$(grep -Fc 'port: 8080' "$EGRESS")" -eq 2
 grep -Fq 'const _COMPONENT_LABEL = "agent-runtime";' "$ROOT/libs/backend/agents/runtime/k8s-launcher/src/agent-runtime-job.ts"
 
 # A personal agent-runtime-* SA name must be rejected at render time (identity-class fence).

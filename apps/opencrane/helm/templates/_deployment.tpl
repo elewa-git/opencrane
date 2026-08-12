@@ -4,6 +4,9 @@
 {{- $membership := .Values.clustertenantManager.membership -}}
 {{- $initialModel := .Values.clustertenantManager.initialModel -}}
 {{- $firstUser := .Values.clustertenantManager.firstUser -}}
+{{- $controlPlaneHost := .Values.ingress.controlPlaneHost | default (printf "platform.%s" .Values.ingress.domain) -}}
+{{- $channelSiloId := .Values.channelProxy.siloId | default $firstUser.clusterTenant | default .Release.Name -}}
+{{- $openCraneInternalUrl := .Values.channelProxy.openCraneInternalUrl | default (printf "http://%s-opencrane-server.%s.svc.cluster.local:%v" (include "opencrane.fullname" .) .Release.Namespace .Values.clustertenantManager.service.internalPort) -}}
 {{- if not (or (eq $membership.mode "standalone") (eq $membership.mode "fleet")) -}}
 {{- fail "clustertenantManager.membership.mode must be standalone or fleet" -}}
 {{- end -}}
@@ -67,6 +70,22 @@ spec:
             # Second (internal-only) listener for /api/internal/*.
             - name: INTERNAL_PORT
               value: {{ .Values.clustertenantManager.service.internalPort | quote }}
+            {{- if .Values.channelProxy.enabled }}
+            # Stable receiver identity and exact per-release target. Startup reconciles one distinct
+            # route row per AgentService; the receiver id is never reused as a route-row id.
+            - name: CHANNEL_PROXY_SERVICE_ACCOUNT_NAME
+              value: {{ printf "%s-channel-proxy" (include "opencrane.fullname" .) | quote }}
+            - name: CHANNEL_TARGET_TRUSTED_HOST
+              value: {{ $controlPlaneHost | quote }}
+            - name: CHANNEL_TARGET_SILO_ID
+              value: {{ $channelSiloId | quote }}
+            - name: CHANNEL_REPLAY_RECEIVER_ID
+              value: {{ required "channelProxy.replayReceiverId is required when channelProxy is enabled" .Values.channelProxy.replayReceiverId | quote }}
+            - name: CHANNEL_REPLAY_ENDPOINT
+              value: {{ printf "%s/api/internal/conversation-replay" (trimSuffix "/" $openCraneInternalUrl) | quote }}
+            - name: CHANNEL_INVOCATION_CONTEXT_TTL_SECONDS
+              value: {{ .Values.channelProxy.invocationContextTtlSeconds | quote }}
+            {{- end }}
             - name: AGENT_CONTROLLER_CLAIM_LEASE_SECONDS
               value: {{ .Values.agentController.claimLeaseSeconds | quote }}
             - name: AGENT_RUNTIME_ASSIGNMENT_TTL_SECONDS
@@ -198,7 +217,7 @@ spec:
             {{- end }}
             {{- end }}
             {{- if .Values.mcpGateway.serviceTokenExistingSecret }}
-            # Obot management transport: custody provisioning and attempt-key minting. Rendered only
+            # Obot server transport: custody provisioning and durable action execution. Rendered only
             # when the pre-provisioned service-credential Secret is named; otherwise the app composes
             # fail-closed unavailable adapters and no Obot exchange can occur.
             - name: OBOT_GATEWAY_URL

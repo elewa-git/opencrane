@@ -19,6 +19,10 @@ interface _RecordedRequest
 	readonly authorization: string | null;
 	/** Whether automatic child tracing was suppressed. */
 	readonly tracingSuppressed: boolean;
+	/** MCP session id echoed by the client, when present. */
+	readonly mcpSessionId: string | null;
+	/** Accepted response media types. */
+	readonly accept: string | null;
 }
 
 /** Active context maintained by the synchronous test context manager. */
@@ -52,7 +56,7 @@ function _fetchSeam(recorded: _RecordedRequest[], respond: () => Response | Prom
 		const url = new URL(String(input));
 		const headers = new Headers(init?.headers);
 		const rawBody = typeof init?.body === "string" ? init.body : null;
-		recorded.push({ path: url.pathname, method: init?.method ?? "GET", body: rawBody === null ? null : JSON.parse(rawBody) as Record<string, unknown>, authorization: headers.get("authorization"), tracingSuppressed: isTracingSuppressed(context.active()) });
+		recorded.push({ path: url.pathname, method: init?.method ?? "GET", body: rawBody === null ? null : JSON.parse(rawBody) as Record<string, unknown>, authorization: headers.get("authorization"), tracingSuppressed: isTracingSuppressed(context.active()), mcpSessionId: headers.get("mcp-session-id"), accept: headers.get("accept") });
 		return respond();
 	};
 }
@@ -66,7 +70,7 @@ function _json(payload: unknown, status = 200): Response
 /** Creates a session bound to the recording seam with an injected token reader. */
 function _session(recorded: _RecordedRequest[], respond: () => Response | Promise<Response>, extra: Partial<ObotHttpOptions> = {})
 {
-	return __CreateObotSession({ baseUrl: "http://oc-mcp-gateway.silo.svc.cluster.local:8080", requestTimeoutMilliseconds: 30_000, serviceTokenFile: "/var/run/opencrane/obot/token", readServiceToken: async function _readToken() { return "obot-service-token"; }, fetch: _fetchSeam(recorded, respond), ...extra });
+	return __CreateObotSession({ baseUrl: "http://oc-mcp-gateway.silo.svc.cluster.local:8080", requestTimeoutMilliseconds: 30_000, serviceTokenFile: "/var/run/opencrane/obot/token", readServiceToken: async function _readToken() { return "obot-service-token"; }, fetch: _fetchSeam(recorded, respond), shutdownSignal: new AbortController().signal, ...extra });
 }
 
 describe("Obot HTTP session", function _SessionSuite()
@@ -86,7 +90,7 @@ describe("Obot HTTP session", function _SessionSuite()
 	{
 		expect(function _TooShort() { _session([], function _never() { return _json(null); }, { requestTimeoutMilliseconds: 999 }); }).toThrow("1 and 300 seconds");
 		expect(function _TooLong() { _session([], function _never() { return _json(null); }, { requestTimeoutMilliseconds: 300_001 }); }).toThrow("1 and 300 seconds");
-		expect(function _Relative() { __CreateObotSession({ baseUrl: "http://oc-mcp-gateway.silo.svc.cluster.local:8080", requestTimeoutMilliseconds: 30_000, serviceTokenFile: "relative/token" }); }).toThrow("absolute");
+		expect(function _Relative() { __CreateObotSession({ baseUrl: "http://oc-mcp-gateway.silo.svc.cluster.local:8080", requestTimeoutMilliseconds: 30_000, serviceTokenFile: "relative/token", shutdownSignal: new AbortController().signal }); }).toThrow("absolute");
 	});
 
 	it("presents the freshly read bearer token and suppresses child tracing", async function _AuthenticatedExchange()
@@ -95,6 +99,25 @@ describe("Obot HTTP session", function _SessionSuite()
 		const result = await _session(recorded, function _ok() { return _json({ id: "srv-1" }); }).request("/api/mcp-servers", "POST", { catalogEntryID: "cat-1" });
 		expect(result).toEqual({ id: "srv-1" });
 		expect(recorded[0]).toMatchObject({ path: "/api/mcp-servers", method: "POST", body: { catalogEntryID: "cat-1" }, authorization: "Bearer obot-service-token", tracingSuppressed: true });
+	});
+
+	it("aborts an active exchange when process shutdown begins", async function _ShutdownAbort()
+	{
+		const shutdown = new AbortController();
+		let notifyStarted: (() => void) | undefined;
+		const started = new Promise<void>(function _Started(resolve) { notifyStarted = resolve; });
+		const fetchRequest: ObotFetch = function _Fetch(_input, init)
+		{
+			notifyStarted?.();
+			return new Promise<Response>(function _UntilAbort(_resolve, reject)
+			{
+				init?.signal?.addEventListener("abort", function _Abort() { reject(init.signal?.reason); }, { once: true });
+			});
+		};
+		const request = _session([], function _never() { return _json(null); }, { fetch: fetchRequest, shutdownSignal: shutdown.signal }).request("/api/me", "GET");
+		await started;
+		shutdown.abort();
+		await expect(request).rejects.toMatchObject({ name: "ObotTransportError", code: "timeout" });
 	});
 
 	it("maps timeouts, network faults, statuses, oversize, and malformed JSON to typed failures", async function _FailureTaxonomy()
@@ -111,6 +134,37 @@ describe("Obot HTTP session", function _SessionSuite()
 	it("returns null for an empty success body", async function _EmptyBody()
 	{
 		await expect(_session([], function _empty() { return new Response(null, { status: 200 }); }).request("/api/mcp-servers/srv-1", "DELETE")).resolves.toBeNull();
+	});
+
+	it("parses bounded MCP JSON and event-stream responses while echoing only the session id", async function _McpExchange()
+	{
+		const recorded: _RecordedRequest[] = [];
+		const responses = [
+			new Response(JSON.stringify({ jsonrpc: "2.0", id: 1, result: {} }), { status: 200, headers: { "content-type": "application/json", "mcp-session-id": "session-1" } }),
+			new Response(`event: message\ndata: ${JSON.stringify({ jsonrpc: "2.0", id: 2, result: { content: [] } })}\n\n`, { status: 200, headers: { "content-type": "text/event-stream; charset=utf-8" } }),
+		];
+		const session = _session(recorded, function _nextResponse(): Response { return responses.shift() as Response; });
+		await expect(session.mcpRequest("/mcp-connect/server-1/mcp", { jsonrpc: "2.0", id: 1, method: "initialize" })).resolves.toEqual({ payload: { jsonrpc: "2.0", id: 1, result: {} }, sessionId: "session-1" });
+		await expect(session.mcpRequest("/mcp-connect/server-1/mcp", { jsonrpc: "2.0", id: 2, method: "tools/call" }, "session-1")).resolves.toEqual({ payload: { jsonrpc: "2.0", id: 2, result: { content: [] } }, sessionId: null });
+		expect(recorded).toMatchObject([
+			{ path: "/mcp-connect/server-1/mcp", method: "POST", authorization: "Bearer obot-service-token", mcpSessionId: null, accept: "application/json, text/event-stream", tracingSuppressed: true },
+			{ path: "/mcp-connect/server-1/mcp", method: "POST", authorization: "Bearer obot-service-token", mcpSessionId: "session-1", accept: "application/json, text/event-stream", tracingSuppressed: true },
+		]);
+	});
+
+	it("refuses malformed MCP media, event frames, and session ids without exposing bodies", async function _RejectMalformedMcp()
+	{
+		const cases = [
+			new Response("secret-plain-text", { status: 200, headers: { "content-type": "text/plain" } }),
+			new Response("event: message\n\n", { status: 200, headers: { "content-type": "text/event-stream" } }),
+			new Response(JSON.stringify({ ok: true }), { status: 200, headers: { "content-type": "application/json", "mcp-session-id": "x".repeat(1_025) } }),
+		];
+		for (const response of cases)
+		{
+			const failure = await _session([], function _response() { return response; }).mcpRequest("/mcp-connect/server-1/mcp", {}).then(function _unexpected(): never { throw new Error("expected MCP protocol failure"); }, function _capture(error: unknown): Error { return error as Error; });
+			expect(failure).toBeInstanceOf(ObotProtocolError);
+			expect(failure.message).not.toContain("secret");
+		}
 	});
 
 	it("carries only the bounded code in transport failure messages", async function _NoBodyLeak()

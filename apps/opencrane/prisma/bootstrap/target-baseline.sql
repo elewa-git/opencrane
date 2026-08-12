@@ -59,6 +59,18 @@ CREATE TYPE "ActionExecutionState" AS ENUM ('reserved', 'succeeded', 'failed');
 CREATE TYPE "ActionReplayMode" AS ENUM ('one_shot', 'idempotent');
 
 -- CreateEnum
+CREATE TYPE "ToolInvocationState" AS ENUM ('preparing', 'awaiting_approval', 'ready', 'claimed', 'reconciling', 'succeeded', 'failed', 'recovery_required');
+
+-- CreateEnum
+CREATE TYPE "ExternalActionRecoveryMode" AS ENUM ('provider_idempotency', 'reconciliation', 'manual');
+
+-- CreateEnum
+CREATE TYPE "ExternalActionClaimKind" AS ENUM ('dispatch', 'reconcile');
+
+-- CreateEnum
+CREATE TYPE "ToolResultDeliveryState" AS ENUM ('pending', 'consumed');
+
+-- CreateEnum
 CREATE TYPE "ChannelInvocationAction" AS ENUM ('events.read');
 
 -- CreateEnum
@@ -173,7 +185,7 @@ CREATE TYPE "ThirdPartySourceItemKind" AS ENUM ('mcp-server');
 CREATE TYPE "AgentRunTrigger" AS ENUM ('interactive', 'schedule', 'managed_invocation');
 
 -- CreateEnum
-CREATE TYPE "AgentRunState" AS ENUM ('accepted', 'queued', 'assigned', 'running', 'waiting_for_approval', 'cancelling', 'completed', 'failed', 'cancelled');
+CREATE TYPE "AgentRunState" AS ENUM ('accepted', 'queued', 'assigned', 'running', 'waiting_for_approval', 'recovery_required', 'cancelling', 'completed', 'failed', 'cancelled');
 
 -- CreateEnum
 CREATE TYPE "AgentRunTerminalReason" AS ENUM ('success', 'user_cancelled', 'policy_denied', 'budget_exhausted', 'runtime_failure', 'invalid_input');
@@ -292,7 +304,7 @@ CREATE TABLE "agent_revision_integration_assignments" (
     "integration_id" TEXT NOT NULL,
     "silo_id" TEXT NOT NULL,
     "custody_reference_id" TEXT NOT NULL,
-    "allowed_tools" TEXT[],
+    "tool_definitions" JSONB NOT NULL,
 
     CONSTRAINT "agent_revision_integration_assignments_pkey" PRIMARY KEY ("agent_revision_id","integration_id")
 );
@@ -523,7 +535,13 @@ CREATE TABLE "approval_requests" (
     "decided_by" TEXT,
     "resume_token_hash" TEXT,
     "tool_invocation_row_id" TEXT,
-    "deferred_tool_result" JSONB,
+    "reviewed_tool_arguments" JSONB,
+    "reviewed_tool_schema" JSONB,
+    "reviewed_tool_schema_digest" TEXT,
+    "safe_proposed_arguments" JSONB,
+    "response_schema" JSONB,
+    "final_arguments" JSONB,
+    "final_arguments_digest" TEXT,
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "approval_requests_pkey" PRIMARY KEY ("id")
@@ -538,18 +556,50 @@ CREATE TABLE "tool_invocations" (
     "agent_service_id" TEXT NOT NULL,
     "agent_revision_id" TEXT NOT NULL,
     "subject_id" TEXT NOT NULL,
+    "runtime_instance_id" TEXT NOT NULL,
+    "command_id" TEXT NOT NULL,
+    "candidate_id" TEXT NOT NULL,
     "tool_revision_id" TEXT NOT NULL,
     "tool_invocation_id" TEXT NOT NULL,
+    "arguments" JSONB NOT NULL,
     "arguments_digest" TEXT NOT NULL,
+    "effective_arguments" JSONB NOT NULL,
+    "effective_arguments_digest" TEXT NOT NULL,
     "request_fingerprint" TEXT NOT NULL,
+    "request_identity" JSONB NOT NULL,
     "approval_required" BOOLEAN NOT NULL DEFAULT false,
-    "state" "ActionExecutionState" NOT NULL DEFAULT 'reserved',
+    "recovery_mode" "ExternalActionRecoveryMode" NOT NULL,
+    "recovery_key" TEXT,
+    "state" "ToolInvocationState" NOT NULL DEFAULT 'preparing',
+    "preparation_attempt" INTEGER NOT NULL DEFAULT 0,
+    "retry_deadline_at" TIMESTAMP(3) NOT NULL,
+    "next_preparation_attempt_at" TIMESTAMP(3) NOT NULL,
+    "claim_attempt" INTEGER NOT NULL DEFAULT 0,
+    "claim_kind" "ExternalActionClaimKind",
+    "claim_fence" INTEGER NOT NULL DEFAULT 0,
+    "claim_expires_at" TIMESTAMP(3),
+    "recovery_required_at" TIMESTAMP(3),
     "result" JSONB,
     "failure_code" TEXT,
-    "reserved_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "revision" INTEGER NOT NULL DEFAULT 0,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
     "completed_at" TIMESTAMP(3),
 
     CONSTRAINT "tool_invocations_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "tool_result_deliveries" (
+    "id" TEXT NOT NULL,
+    "tool_invocation_id" TEXT NOT NULL,
+    "state" "ToolResultDeliveryState" NOT NULL DEFAULT 'pending',
+    "payload" JSONB NOT NULL,
+    "payload_digest" TEXT NOT NULL,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "consumed_at" TIMESTAMP(3),
+
+    CONSTRAINT "tool_result_deliveries_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -593,13 +643,14 @@ CREATE TABLE "action_execution_receipts" (
 -- CreateTable
 CREATE TABLE "channel_runtime_routes" (
     "id" TEXT NOT NULL,
+    "receiver_id" TEXT NOT NULL,
     "silo_id" TEXT NOT NULL,
     "agent_service_id" TEXT NOT NULL,
     "action" "ChannelInvocationAction" NOT NULL,
     "endpoint" TEXT NOT NULL,
     "is_current" BOOLEAN NOT NULL DEFAULT true,
     "registered_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "expires_at" TIMESTAMP(3) NOT NULL,
+    "legacy_expires_at" TIMESTAMP(3),
     "revoked_at" TIMESTAMP(3),
 
     CONSTRAINT "channel_runtime_routes_pkey" PRIMARY KEY ("id")
@@ -615,6 +666,7 @@ CREATE TABLE "channel_invocation_contexts" (
     "agent_service_id" TEXT NOT NULL,
     "action" "ChannelInvocationAction" NOT NULL,
     "route_id" TEXT NOT NULL,
+    "receiver_id" TEXT NOT NULL,
     "membership_revision" INTEGER NOT NULL,
     "authorization_digest" TEXT NOT NULL,
     "expires_at" TIMESTAMP(3) NOT NULL,
@@ -1444,19 +1496,6 @@ CREATE TABLE "runtime_command_streams" (
 );
 
 -- CreateTable
-CREATE TABLE "runtime_external_action_retries" (
-    "run_id" TEXT NOT NULL,
-    "attempt" INTEGER NOT NULL,
-    "candidate_id" TEXT NOT NULL,
-    "retry_count" INTEGER NOT NULL DEFAULT 0,
-    "retry_deadline_at" TIMESTAMP(3) NOT NULL,
-    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updated_at" TIMESTAMP(3) NOT NULL,
-
-    CONSTRAINT "runtime_external_action_retries_pkey" PRIMARY KEY ("run_id", "attempt", "candidate_id")
-);
-
--- CreateTable
 CREATE TABLE "runtime_steering_boundaries" (
     "run_id" TEXT NOT NULL,
     "attempt" INTEGER NOT NULL,
@@ -1700,13 +1739,25 @@ CREATE TABLE "user_onboarding_bootstrap_answers" (
 CREATE UNIQUE INDEX "tool_invocations_request_fingerprint_key" ON "tool_invocations"("request_fingerprint");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "tool_invocations_run_id_attempt_tool_invocation_id_key" ON "tool_invocations"("run_id", "attempt", "tool_invocation_id");
-
--- CreateIndex
 CREATE INDEX "tool_invocations_run_id_attempt_state_idx" ON "tool_invocations"("run_id", "attempt", "state");
 
 -- CreateIndex
-CREATE INDEX "runtime_external_action_retries_run_id_attempt_retry_deadline_at_idx" ON "runtime_external_action_retries"("run_id", "attempt", "retry_deadline_at");
+CREATE INDEX "tool_invocations_state_next_preparation_attempt_at_idx" ON "tool_invocations"("state", "next_preparation_attempt_at");
+
+-- CreateIndex
+CREATE INDEX "tool_invocations_state_claim_expires_at_idx" ON "tool_invocations"("state", "claim_expires_at");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "tool_invocations_run_id_attempt_tool_invocation_id_key" ON "tool_invocations"("run_id", "attempt", "tool_invocation_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "tool_invocations_run_id_attempt_candidate_id_key" ON "tool_invocations"("run_id", "attempt", "candidate_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "tool_result_deliveries_tool_invocation_id_key" ON "tool_result_deliveries"("tool_invocation_id");
+
+-- CreateIndex
+CREATE INDEX "tool_result_deliveries_state_created_at_idx" ON "tool_result_deliveries"("state", "created_at");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "runtime_steering_boundaries_run_id_attempt_to_input_generat_key" ON "runtime_steering_boundaries"("run_id", "attempt", "to_input_generation");
@@ -1904,10 +1955,13 @@ CREATE INDEX "action_execution_receipts_run_id_attempt_state_idx" ON "action_exe
 CREATE INDEX "action_execution_receipts_replay_mode_state_idx" ON "action_execution_receipts"("replay_mode", "state");
 
 -- CreateIndex
-CREATE INDEX "channel_runtime_routes_current_lookup_idx" ON "channel_runtime_routes"("silo_id", "agent_service_id", "action", "is_current", "expires_at");
+CREATE INDEX "channel_runtime_routes_current_lookup_idx" ON "channel_runtime_routes"("silo_id", "agent_service_id", "action", "is_current");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "channel_runtime_routes_exact_target_key" ON "channel_runtime_routes"("id", "silo_id", "agent_service_id", "action");
+CREATE UNIQUE INDEX "channel_runtime_routes_exact_target_key" ON "channel_runtime_routes"("id", "receiver_id", "silo_id", "agent_service_id", "action");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "channel_runtime_routes_receiver_service_key" ON "channel_runtime_routes"("receiver_id", "silo_id", "agent_service_id", "action");
 
 -- CreateIndex
 CREATE INDEX "org_memberships_subject_idx" ON "org_memberships"("subject");
@@ -2516,7 +2570,7 @@ ALTER TABLE "approval_requests" ADD CONSTRAINT "approval_requests_tool_invocatio
 ALTER TABLE "tool_invocations" ADD CONSTRAINT "tool_invocations_run_id_agent_service_id_agent_revision_id_fkey" FOREIGN KEY ("run_id", "agent_service_id", "agent_revision_id") REFERENCES "agent_runs"("id", "agent_service_id", "agent_revision_id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "runtime_external_action_retries" ADD CONSTRAINT "runtime_external_action_retries_run_id_attempt_fkey" FOREIGN KEY ("run_id", "attempt") REFERENCES "runtime_command_streams"("run_id", "attempt") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "tool_result_deliveries" ADD CONSTRAINT "tool_result_deliveries_tool_invocation_id_fkey" FOREIGN KEY ("tool_invocation_id") REFERENCES "tool_invocations"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "runtime_dispatched_commands" ADD CONSTRAINT "runtime_dispatched_commands_run_id_attempt_fkey" FOREIGN KEY ("run_id", "attempt") REFERENCES "runtime_command_streams"("run_id", "attempt") ON DELETE RESTRICT ON UPDATE CASCADE;
@@ -2694,7 +2748,7 @@ ALTER TABLE "skill_workload_bootstraps" ADD CONSTRAINT "skill_workload_bootstrap
 
 
 -- AddForeignKey
-ALTER TABLE "channel_invocation_contexts" ADD CONSTRAINT "channel_invocation_contexts_route_id_silo_id_agent_service_fkey" FOREIGN KEY ("route_id", "silo_id", "agent_service_id", "action") REFERENCES "channel_runtime_routes"("id", "silo_id", "agent_service_id", "action") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "channel_invocation_contexts" ADD CONSTRAINT "channel_invocation_contexts_route_id_receiver_id_silo_id_agent_service_fkey" FOREIGN KEY ("route_id", "receiver_id", "silo_id", "agent_service_id", "action") REFERENCES "channel_runtime_routes"("id", "receiver_id", "silo_id", "agent_service_id", "action") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "conversations" ADD CONSTRAINT "conversations_id_context_revision_id_fkey" FOREIGN KEY ("id", "context_revision_id") REFERENCES "conversation_context_revisions"("conversation_id", "id") ON DELETE RESTRICT ON UPDATE CASCADE;
@@ -2757,7 +2811,21 @@ ALTER TABLE "run_input_snapshots" ADD CONSTRAINT "run_input_snapshots_run_input_
 
 -- Channel-target constraints cannot be represented by Prisma relations/indexes alone.
 ALTER TABLE "channel_runtime_routes" ADD CONSTRAINT "channel_runtime_routes_endpoint_nonempty" CHECK (length(btrim("endpoint")) > 0);
-ALTER TABLE "channel_runtime_routes" ADD CONSTRAINT "channel_runtime_routes_expiry_after_registration" CHECK ("expires_at" > "registered_at");
+ALTER TABLE "channel_runtime_routes" ADD CONSTRAINT "channel_runtime_routes_receiver_nonempty" CHECK (length(btrim("receiver_id")) > 0);
+ALTER TABLE "channel_runtime_routes" ADD CONSTRAINT "channel_runtime_routes_state_check" CHECK (
+    ("is_current" = TRUE AND "revoked_at" IS NULL AND "legacy_expires_at" IS NULL)
+    OR ("is_current" = FALSE AND "revoked_at" IS NOT NULL)
+);
+ALTER TABLE "channel_runtime_routes" ADD CONSTRAINT "channel_runtime_routes_legacy_evidence_check" CHECK (
+    ("legacy_expires_at" IS NULL AND "receiver_id" NOT LIKE 'legacy-route-v0:%')
+    OR (
+        "legacy_expires_at" IS NOT NULL
+        AND "legacy_expires_at" > "registered_at"
+        AND "receiver_id" = 'legacy-route-v0:' || "id"
+        AND "is_current" = FALSE
+        AND "revoked_at" IS NOT NULL
+    )
+);
 ALTER TABLE "channel_runtime_routes" ADD CONSTRAINT "channel_runtime_routes_service_fkey"
     FOREIGN KEY ("agent_service_id", "silo_id") REFERENCES "agent_services"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
 CREATE UNIQUE INDEX "channel_runtime_routes_one_current_target"
@@ -2769,6 +2837,31 @@ ALTER TABLE "channel_invocation_contexts" ADD CONSTRAINT "channel_invocation_con
     FOREIGN KEY ("conversation_id", "silo_id", "agent_service_id") REFERENCES "conversations"("id", "silo_id", "agent_service_id") ON DELETE RESTRICT ON UPDATE CASCADE;
 ALTER TABLE "channel_invocation_contexts" ADD CONSTRAINT "channel_invocation_contexts_participant_fkey"
     FOREIGN KEY ("conversation_id", "subject_id") REFERENCES "conversation_participants"("conversation_id", "user_id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+CREATE FUNCTION "enforce_channel_runtime_route_evidence"() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+    IF TG_OP = 'DELETE' THEN
+        RAISE EXCEPTION 'ChannelRuntimeRoute evidence cannot be deleted';
+    END IF;
+    IF TG_OP = 'INSERT' THEN
+        IF NEW."legacy_expires_at" IS NOT NULL OR NEW."receiver_id" LIKE 'legacy-route-v0:%' THEN
+            RAISE EXCEPTION 'legacy ChannelRuntimeRoute evidence can only be created by a reviewed migration';
+        END IF;
+        RETURN NEW;
+    END IF;
+    IF OLD."legacy_expires_at" IS NOT NULL OR OLD."receiver_id" LIKE 'legacy-route-v0:%' THEN
+        RAISE EXCEPTION 'legacy ChannelRuntimeRoute evidence is immutable';
+    END IF;
+    IF NEW."legacy_expires_at" IS NOT NULL OR NEW."receiver_id" LIKE 'legacy-route-v0:%' THEN
+        RAISE EXCEPTION 'legacy ChannelRuntimeRoute evidence cannot be added at runtime';
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER "channel_runtime_routes_evidence_guard"
+    BEFORE INSERT OR UPDATE OR DELETE ON "channel_runtime_routes"
+    FOR EACH ROW EXECUTE FUNCTION "enforce_channel_runtime_route_evidence"();
 
 -- Cross-domain transcript and persona provenance constraints are deliberately database-enforced.
 ALTER TABLE "agent_runs" ADD CONSTRAINT "agent_runs_conversation_fkey"
@@ -3480,20 +3573,27 @@ BEGIN
         OR NEW."arguments_digest" IS DISTINCT FROM OLD."arguments_digest" OR NEW."action_digest" IS DISTINCT FROM OLD."action_digest"
         OR NEW."approver_policy_revision" IS DISTINCT FROM OLD."approver_policy_revision"
         OR NEW."effective_policy_digest" IS DISTINCT FROM OLD."effective_policy_digest"
+		OR NEW."tool_invocation_row_id" IS DISTINCT FROM OLD."tool_invocation_row_id"
+		OR NEW."reviewed_tool_arguments" IS DISTINCT FROM OLD."reviewed_tool_arguments"
+		OR NEW."reviewed_tool_schema" IS DISTINCT FROM OLD."reviewed_tool_schema"
+		OR NEW."reviewed_tool_schema_digest" IS DISTINCT FROM OLD."reviewed_tool_schema_digest"
+		OR NEW."safe_proposed_arguments" IS DISTINCT FROM OLD."safe_proposed_arguments"
+		OR NEW."response_schema" IS DISTINCT FROM OLD."response_schema"
         OR NEW."expires_at" IS DISTINCT FROM OLD."expires_at" OR NEW."created_at" IS DISTINCT FROM OLD."created_at" THEN
         RAISE EXCEPTION 'ApprovalRequest proof and action bindings are immutable';
     END IF;
-    -- A dispatched resume consumes its opaque token without changing the already-authorised decision.
+    -- A dispatched resume consumes its opaque token without changing the already-authorised result.
     -- No other terminal-row mutation is allowed, so retry redelivery still relies on the durable command.
-    IF OLD."state" = 'approved' THEN
-        IF NEW."state" = 'approved'
+    IF OLD."state" IN ('approved', 'denied', 'expired') THEN
+        IF NEW."state" = OLD."state"
             AND OLD."resume_token_hash" IS NOT NULL AND NEW."resume_token_hash" IS NULL
             AND NEW."decided_at" IS NOT DISTINCT FROM OLD."decided_at"
             AND NEW."decided_by" IS NOT DISTINCT FROM OLD."decided_by"
-            AND NEW."deferred_tool_result" IS NOT DISTINCT FROM OLD."deferred_tool_result" THEN
+			AND NEW."final_arguments" IS NOT DISTINCT FROM OLD."final_arguments"
+			AND NEW."final_arguments_digest" IS NOT DISTINCT FROM OLD."final_arguments_digest" THEN
             RETURN NEW;
         END IF;
-        RAISE EXCEPTION 'an approved ApprovalRequest may only consume its resume token once';
+        RAISE EXCEPTION 'a terminal ApprovalRequest may only consume its resume token once';
     END IF;
     IF OLD."state" <> 'pending' OR NEW."state" = 'pending' THEN
         RAISE EXCEPTION 'ApprovalRequest may be decided exactly once';
@@ -4890,11 +4990,11 @@ BEGIN
                 (SELECT "skill_id", "skill_revision_id" FROM "agent_revision_skill_assignments" WHERE "agent_revision_id" = NEW."applied_agent_revision_id"
                  EXCEPT SELECT "skill_id", "skill_revision_id" FROM "agent_revision_skill_assignments" WHERE "agent_revision_id" = NEW."expected_agent_revision_id")
             ) OR EXISTS (
-                (SELECT "integration_id", "silo_id", "custody_reference_id", "allowed_tools" FROM "agent_revision_integration_assignments" WHERE "agent_revision_id" = NEW."expected_agent_revision_id"
-                 EXCEPT SELECT "integration_id", "silo_id", "custody_reference_id", "allowed_tools" FROM "agent_revision_integration_assignments" WHERE "agent_revision_id" = NEW."applied_agent_revision_id")
+                (SELECT "integration_id", "silo_id", "custody_reference_id", "tool_definitions" FROM "agent_revision_integration_assignments" WHERE "agent_revision_id" = NEW."expected_agent_revision_id"
+                 EXCEPT SELECT "integration_id", "silo_id", "custody_reference_id", "tool_definitions" FROM "agent_revision_integration_assignments" WHERE "agent_revision_id" = NEW."applied_agent_revision_id")
                 UNION ALL
-                (SELECT "integration_id", "silo_id", "custody_reference_id", "allowed_tools" FROM "agent_revision_integration_assignments" WHERE "agent_revision_id" = NEW."applied_agent_revision_id"
-                 EXCEPT SELECT "integration_id", "silo_id", "custody_reference_id", "allowed_tools" FROM "agent_revision_integration_assignments" WHERE "agent_revision_id" = NEW."expected_agent_revision_id")
+                (SELECT "integration_id", "silo_id", "custody_reference_id", "tool_definitions" FROM "agent_revision_integration_assignments" WHERE "agent_revision_id" = NEW."applied_agent_revision_id"
+                 EXCEPT SELECT "integration_id", "silo_id", "custody_reference_id", "tool_definitions" FROM "agent_revision_integration_assignments" WHERE "agent_revision_id" = NEW."expected_agent_revision_id")
             ) OR EXISTS (
                 (SELECT "scope", "subject_type", "subject_id" FROM "agent_revision_scope_attachments" WHERE "agent_revision_id" = NEW."expected_agent_revision_id"
                  EXCEPT SELECT "scope", "subject_type", "subject_id" FROM "agent_revision_scope_attachments" WHERE "agent_revision_id" = NEW."applied_agent_revision_id")
@@ -5223,13 +5323,76 @@ BEGIN
     RETURN NEW;
 END;
 $$;
+CREATE FUNCTION "enforce_tool_result_delivery_identity"() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE public_tool_invocation_id TEXT;
+BEGIN
+    SELECT invocation."tool_invocation_id" INTO public_tool_invocation_id
+      FROM "tool_invocations" invocation
+     WHERE invocation."id" = NEW."tool_invocation_id"
+       FOR KEY SHARE;
+    IF NOT FOUND THEN RAISE EXCEPTION 'ToolResultDelivery requires its related ToolInvocation'; END IF;
+    IF NEW."payload"->>'toolInvocationId' IS DISTINCT FROM public_tool_invocation_id THEN
+        RAISE EXCEPTION 'ToolResultDelivery payload must name the related ToolInvocation public id';
+    END IF;
+    RETURN NEW;
+END;
+$$;
+CREATE FUNCTION "enforce_tool_invocation_lifecycle"() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+    IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'ToolInvocation rows cannot be deleted'; END IF;
+    IF TG_OP = 'INSERT' THEN
+        IF NEW."state" <> 'preparing' OR NEW."preparation_attempt" <> 0 OR NEW."claim_attempt" <> 0
+            OR NEW."claim_kind" IS NOT NULL OR NEW."claim_fence" <> 0 OR NEW."claim_expires_at" IS NOT NULL
+            OR NEW."recovery_required_at" IS NOT NULL OR NEW."result" IS NOT NULL OR NEW."failure_code" IS NOT NULL
+            OR NEW."revision" <> 0 OR NEW."completed_at" IS NOT NULL THEN
+            RAISE EXCEPTION 'a new ToolInvocation must begin as unclaimed Preparing work';
+        END IF;
+        RETURN NEW;
+    END IF;
+    IF NEW."id" IS DISTINCT FROM OLD."id" OR NEW."silo_id" IS DISTINCT FROM OLD."silo_id"
+        OR NEW."run_id" IS DISTINCT FROM OLD."run_id" OR NEW."attempt" IS DISTINCT FROM OLD."attempt"
+        OR NEW."agent_service_id" IS DISTINCT FROM OLD."agent_service_id" OR NEW."agent_revision_id" IS DISTINCT FROM OLD."agent_revision_id"
+        OR NEW."subject_id" IS DISTINCT FROM OLD."subject_id" OR NEW."runtime_instance_id" IS DISTINCT FROM OLD."runtime_instance_id"
+        OR NEW."command_id" IS DISTINCT FROM OLD."command_id" OR NEW."candidate_id" IS DISTINCT FROM OLD."candidate_id"
+        OR NEW."tool_revision_id" IS DISTINCT FROM OLD."tool_revision_id" OR NEW."tool_invocation_id" IS DISTINCT FROM OLD."tool_invocation_id"
+        OR NEW."arguments" IS DISTINCT FROM OLD."arguments" OR NEW."arguments_digest" IS DISTINCT FROM OLD."arguments_digest"
+        OR NEW."request_fingerprint" IS DISTINCT FROM OLD."request_fingerprint" OR NEW."request_identity" IS DISTINCT FROM OLD."request_identity"
+        OR NEW."approval_required" IS DISTINCT FROM OLD."approval_required" OR NEW."recovery_mode" IS DISTINCT FROM OLD."recovery_mode"
+        OR NEW."recovery_key" IS DISTINCT FROM OLD."recovery_key" OR NEW."retry_deadline_at" IS DISTINCT FROM OLD."retry_deadline_at"
+        OR NEW."created_at" IS DISTINCT FROM OLD."created_at" THEN
+        RAISE EXCEPTION 'ToolInvocation admitted identity and recovery strategy are immutable';
+    END IF;
+    IF NEW."revision" <> OLD."revision" + 1 THEN RAISE EXCEPTION 'ToolInvocation revision must advance exactly once'; END IF;
+    IF OLD."state" IN ('succeeded', 'failed') THEN RAISE EXCEPTION 'terminal ToolInvocation rows are immutable'; END IF;
+    IF NOT (
+        (OLD."state" = 'preparing' AND NEW."state" IN ('preparing', 'awaiting_approval', 'ready', 'failed')) OR
+        (OLD."state" = 'awaiting_approval' AND NEW."state" IN ('ready', 'failed')) OR
+        (OLD."state" = 'ready' AND NEW."state" IN ('claimed', 'failed')) OR
+        (OLD."state" = 'claimed' AND NEW."state" IN ('ready', 'reconciling', 'succeeded', 'failed', 'recovery_required')) OR
+        (OLD."state" = 'reconciling' AND NEW."state" IN ('reconciling', 'ready', 'succeeded', 'failed', 'recovery_required')) OR
+        (OLD."state" = 'recovery_required' AND NEW."state" = 'failed')
+    ) THEN RAISE EXCEPTION 'invalid ToolInvocation lifecycle transition'; END IF;
+    IF NEW."state" = 'claimed' AND (OLD."state" <> 'ready' OR NEW."claim_kind" <> 'dispatch'
+        OR OLD."claim_kind" IS NOT NULL OR NEW."claim_fence" <> OLD."claim_fence" + 1
+        OR NEW."claim_attempt" <> OLD."claim_attempt" + 1 OR NEW."claim_expires_at" IS NULL) THEN
+        RAISE EXCEPTION 'dispatch claim requires the exact unclaimed Ready revision and next fence';
+    END IF;
+    IF OLD."state" = 'reconciling' AND NEW."state" = 'reconciling' AND NEW."claim_kind" IS NOT NULL
+        AND (OLD."claim_kind" IS NOT NULL OR NEW."claim_kind" <> 'reconcile'
+        OR NEW."claim_fence" <> OLD."claim_fence" + 1 OR NEW."claim_attempt" <> OLD."claim_attempt" + 1
+        OR NEW."claim_expires_at" IS NULL) THEN
+        RAISE EXCEPTION 'reconciliation claim requires the exact unclaimed revision and next fence';
+    END IF;
+    RETURN NEW;
+END;
+$$;
 CREATE FUNCTION "cancel_ineligible_skill_workloads"() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
     IF TG_TABLE_NAME = 'skill_revisions' AND NEW."state" <> OLD."state" THEN
         UPDATE "skill_workloads" SET "state"='cancelled', "cancelled_at"=clock_timestamp()
           WHERE "state" IN ('pending', 'assigned') AND "skill_revision_id"=NEW."id"
             AND (("kind"='authoring' AND NEW."state" <> 'draft') OR ("kind"='tool_runner' AND NEW."state" <> 'published'));
-    ELSIF TG_TABLE_NAME = 'tool_invocations' AND NEW."state" <> OLD."state" AND NEW."state" <> 'reserved' THEN
+    ELSIF TG_TABLE_NAME = 'tool_invocations' AND NEW."state" <> OLD."state" AND NEW."state" IN ('succeeded', 'failed', 'recovery_required') THEN
         UPDATE "skill_workloads" SET "state"='cancelled', "cancelled_at"=clock_timestamp()
           WHERE "state" IN ('pending', 'assigned') AND "kind"='tool_runner' AND "tool_invocation_id"=NEW."id";
     END IF;
@@ -5362,16 +5525,28 @@ BEGIN
     RETURN NEW;
 END;
 $$;
-CREATE FUNCTION "has_nonempty_distinct_tool_ids"(TEXT[]) RETURNS BOOLEAN LANGUAGE sql IMMUTABLE AS $$
-  SELECT COALESCE(
-    cardinality($1) > 0 AND NOT EXISTS (
+CREATE FUNCTION "has_reviewed_tool_definitions"(JSONB) RETURNS BOOLEAN LANGUAGE sql IMMUTABLE AS $$
+  SELECT CASE WHEN jsonb_typeof($1) IS DISTINCT FROM 'array' THEN FALSE ELSE COALESCE(
+    jsonb_array_length($1) > 0
+    AND NOT EXISTS (
       SELECT 1
-      FROM unnest($1) AS tool("value")
-      GROUP BY tool."value"
-      HAVING tool."value" IS NULL OR btrim(tool."value") = '' OR position(':' in tool."value") > 0 OR count(*) > 1
+      FROM jsonb_array_elements($1) AS tool("value")
+      WHERE jsonb_typeof(tool."value") IS DISTINCT FROM 'object'
+        OR jsonb_typeof(tool."value"->'name') IS DISTINCT FROM 'string'
+        OR btrim(tool."value"->>'name') = ''
+        OR position(':' in tool."value"->>'name') > 0
+        OR jsonb_typeof(tool."value"->'description') IS DISTINCT FROM 'string'
+        OR btrim(tool."value"->>'description') = ''
+        OR jsonb_typeof(tool."value"->'parametersSchema') IS DISTINCT FROM 'object'
+        OR tool."value"->'parametersSchema'->>'type' IS DISTINCT FROM 'object'
+        OR jsonb_typeof(tool."value"->'parametersSchemaDigest') IS DISTINCT FROM 'string'
+        OR tool."value"->>'parametersSchemaDigest' !~ '^sha256:[0-9a-f]{64}$'
+    )
+    AND jsonb_array_length($1) = (
+      SELECT count(DISTINCT tool."value"->>'name') FROM jsonb_array_elements($1) AS tool("value")
     ),
     FALSE
-  );
+  ) END;
 $$;
 CREATE FUNCTION "enforce_integration_lifecycle"() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
@@ -5546,7 +5721,14 @@ ALTER TABLE "approval_requests" ADD CONSTRAINT "approval_requests_exact_check" C
         btrim("resource_id") NOT IN ('', '*') AND btrim("action") <> '' AND
         "arguments_digest" ~ '^sha256:[0-9a-f]{64}$' AND "action_digest" ~ '^sha256:[0-9a-f]{64}$' AND
         btrim("approver_policy_revision") <> '' AND "effective_policy_digest" ~ '^sha256:[0-9a-f]{64}$' AND
-        "expires_at" > "created_at"
+		"expires_at" > "created_at" AND
+		(("tool_invocation_row_id" IS NULL AND "reviewed_tool_arguments" IS NULL AND "reviewed_tool_schema" IS NULL AND
+		  "reviewed_tool_schema_digest" IS NULL AND "safe_proposed_arguments" IS NULL AND "response_schema" IS NULL AND
+		  "final_arguments" IS NULL AND "final_arguments_digest" IS NULL) OR
+		 ("tool_invocation_row_id" IS NOT NULL AND "catalog_id" IS NULL AND "reviewed_tool_arguments" IS NOT NULL AND
+		  jsonb_typeof("reviewed_tool_arguments") = 'object' AND "reviewed_tool_schema" IS NOT NULL AND
+		  jsonb_typeof("reviewed_tool_schema") = 'object' AND "reviewed_tool_schema_digest" ~ '^sha256:[0-9a-f]{64}$' AND
+		  "safe_proposed_arguments" IS NOT NULL AND "response_schema" IS NOT NULL AND jsonb_typeof("response_schema") = 'object'))
     );
 ALTER TABLE "runtime_steering_requests" ADD CONSTRAINT "runtime_steering_requests_exact_check" CHECK (
         btrim("id") <> '' AND btrim("run_id") <> '' AND "attempt" > 0 AND
@@ -5556,10 +5738,46 @@ ALTER TABLE "runtime_steering_requests" ADD CONSTRAINT "runtime_steering_request
          ("state" = 'consumed' AND "consumed_at" IS NOT NULL))
     );
 ALTER TABLE "approval_requests" ADD CONSTRAINT "approval_requests_decision_check" CHECK (
-        ("state" = 'pending' AND "decided_at" IS NULL AND "decided_by" IS NULL AND "resume_token_hash" IS NULL) OR
-        ("state" = 'approved' AND "decided_at" IS NOT NULL AND "decided_by" IS NOT NULL AND btrim("decided_by") <> '' AND "resume_token_hash" IS NOT NULL AND btrim("resume_token_hash") <> '') OR
-        ("state" = 'denied' AND "decided_at" IS NOT NULL AND "decided_by" IS NOT NULL AND btrim("decided_by") <> '' AND "resume_token_hash" IS NULL) OR
-        ("state" IN ('expired', 'cancelled') AND "decided_at" IS NOT NULL AND "resume_token_hash" IS NULL)
+		("state" = 'pending' AND "decided_at" IS NULL AND "decided_by" IS NULL AND "resume_token_hash" IS NULL AND "final_arguments" IS NULL AND "final_arguments_digest" IS NULL) OR
+		("state" = 'approved' AND "decided_at" IS NOT NULL AND "decided_by" IS NOT NULL AND btrim("decided_by") <> '' AND
+		 ("resume_token_hash" IS NULL OR btrim("resume_token_hash") <> '') AND
+		 (("tool_invocation_row_id" IS NULL AND "final_arguments" IS NULL AND "final_arguments_digest" IS NULL) OR
+		  ("tool_invocation_row_id" IS NOT NULL AND jsonb_typeof("final_arguments") = 'object' AND "final_arguments_digest" ~ '^sha256:[0-9a-f]{64}$'))) OR
+		("state" = 'denied' AND "decided_at" IS NOT NULL AND "decided_by" IS NOT NULL AND btrim("decided_by") <> '' AND
+		 ("resume_token_hash" IS NULL OR btrim("resume_token_hash") <> '') AND "final_arguments" IS NULL AND "final_arguments_digest" IS NULL) OR
+		("state" = 'expired' AND "decided_at" IS NOT NULL AND "decided_by" IS NULL AND
+		 ("resume_token_hash" IS NULL OR btrim("resume_token_hash") <> '') AND "final_arguments" IS NULL AND "final_arguments_digest" IS NULL) OR
+		("state" = 'cancelled' AND "decided_at" IS NOT NULL AND "decided_by" IS NULL AND "resume_token_hash" IS NULL AND "final_arguments" IS NULL AND "final_arguments_digest" IS NULL)
+    );
+ALTER TABLE "tool_invocations" ADD CONSTRAINT "tool_invocations_identity_check" CHECK (
+        btrim("id") <> '' AND btrim("silo_id") <> '' AND btrim("run_id") <> '' AND "attempt" > 0 AND
+        btrim("agent_service_id") <> '' AND btrim("agent_revision_id") <> '' AND btrim("subject_id") <> '' AND
+        btrim("runtime_instance_id") <> '' AND btrim("command_id") <> '' AND btrim("candidate_id") <> '' AND
+        btrim("tool_revision_id") <> '' AND btrim("tool_invocation_id") <> '' AND
+        jsonb_typeof("arguments") = 'object' AND "arguments_digest" ~ '^sha256:[0-9a-f]{64}$' AND
+        jsonb_typeof("effective_arguments") = 'object' AND "effective_arguments_digest" ~ '^sha256:[0-9a-f]{64}$' AND
+        "request_fingerprint" ~ '^sha256:[0-9a-f]{64}$' AND jsonb_typeof("request_identity") = 'object' AND
+        (("recovery_mode" = 'manual' AND "recovery_key" IS NULL) OR
+         ("recovery_mode" IN ('provider_idempotency', 'reconciliation') AND btrim("recovery_key") <> '' AND length("recovery_key") <= 256)) AND
+        "preparation_attempt" BETWEEN 0 AND 3 AND "retry_deadline_at" > "created_at" AND
+        "next_preparation_attempt_at" >= "created_at" AND "claim_attempt" >= 0 AND "claim_fence" >= 0 AND "revision" >= 0 AND
+        (("state" = 'claimed' AND "claim_kind" = 'dispatch' AND "claim_expires_at" IS NOT NULL) OR
+         ("state" = 'reconciling' AND (("claim_kind" IS NULL AND "claim_expires_at" IS NULL) OR
+                                      ("claim_kind" = 'reconcile' AND "claim_expires_at" IS NOT NULL))) OR
+         ("state" NOT IN ('claimed', 'reconciling') AND "claim_kind" IS NULL AND "claim_expires_at" IS NULL)) AND
+        (("state" = 'recovery_required' AND "recovery_required_at" IS NOT NULL) OR
+         ("state" <> 'recovery_required' AND "recovery_required_at" IS NULL)) AND
+        (("state" = 'succeeded' AND "completed_at" IS NOT NULL AND "result" IS NOT NULL AND "failure_code" IS NULL) OR
+         ("state" = 'failed' AND "completed_at" IS NOT NULL AND "result" IS NULL AND btrim("failure_code") <> '') OR
+         ("state" NOT IN ('succeeded', 'failed') AND "completed_at" IS NULL AND "result" IS NULL)) AND
+        ("state" <> 'awaiting_approval' OR "approval_required")
+    );
+ALTER TABLE "tool_result_deliveries" ADD CONSTRAINT "tool_result_deliveries_exact_check" CHECK (
+        btrim("id") <> '' AND btrim("tool_invocation_id") <> '' AND jsonb_typeof("payload") = 'object' AND
+        "payload_digest" ~ '^sha256:[0-9a-f]{64}$' AND
+        (("payload"->>'outcome' = 'succeeded' AND "payload" ? 'result' AND NOT ("payload" ? 'failureCode')) OR
+         ("payload"->>'outcome' = 'failed' AND btrim("payload"->>'failureCode') <> '' AND NOT ("payload" ? 'result'))) AND
+        (("state" = 'pending' AND "consumed_at" IS NULL) OR ("state" = 'consumed' AND "consumed_at" IS NOT NULL))
     );
 ALTER TABLE "action_execution_receipts" ADD CONSTRAINT "action_execution_receipts_exact_check" CHECK (
         btrim("silo_id") <> '' AND btrim("subject_id") <> '' AND btrim("audience") <> '' AND
@@ -5647,9 +5865,10 @@ CREATE UNIQUE INDEX "agent_runs_one_foreground_per_conversation"
 ALTER TABLE "conversation_run_events" ADD CONSTRAINT "conversation_run_events_sequence_check" CHECK ("sequence" > 0);
 ALTER TABLE "conversation_run_events" ADD CONSTRAINT "conversation_run_events_type_check" CHECK ("type" IN (
         'run.accepted', 'run.started', 'message.started', 'message.delta', 'message.completed',
-        'tool.requested', 'tool.approval_required', 'tool.started', 'tool.progress', 'tool.completed',
+        'tool.requested', 'tool.approval_required', 'tool.started', 'tool.progress', 'tool.completed', 'tool.failed',
+        'a2ui.rendering.begun', 'a2ui.surface.updated', 'a2ui.data_model.updated',
         'context.compaction_started', 'context.compaction_completed', 'run.usage',
-        'run.completed', 'run.failed', 'run.cancelled',
+        'run.completed', 'run.failed', 'run.cancelled', 'run.error',
         'child.run.completed', 'child.run.failed', 'child.run.cancelled'
     ));
 ALTER TABLE "conversation_run_events" ADD CONSTRAINT "conversation_run_events_payload_check" CHECK (jsonb_typeof("payload") = 'object');
@@ -5887,7 +6106,7 @@ ALTER TABLE "integration_custody_references" ADD CONSTRAINT "integration_custody
 ALTER TABLE "integration_custody_references" ADD CONSTRAINT "integration_custody_references_revocation_evidence" CHECK (
     ("state" = 'revoked' AND "revoked_at" IS NOT NULL) OR ("state" <> 'revoked' AND "revoked_at" IS NULL)
   );
-ALTER TABLE "agent_revision_integration_assignments" ADD CONSTRAINT "agent_revision_integration_assignments_allowed_tools_check" CHECK ("has_nonempty_distinct_tool_ids"("allowed_tools"));
+ALTER TABLE "agent_revision_integration_assignments" ADD CONSTRAINT "agent_revision_integration_assignments_tool_definitions_check" CHECK ("has_reviewed_tool_definitions"("tool_definitions"));
 
 -- Partial indexes
 CREATE UNIQUE INDEX "memory_fact_catalog_single_successor_key" ON "memory_fact_catalog"("supersedes_fact_id") WHERE "supersedes_fact_id" IS NOT NULL;
@@ -5952,6 +6171,8 @@ CREATE TRIGGER "capability_catalog_revisions_immutable" BEFORE UPDATE OR DELETE 
 CREATE TRIGGER "authorization_grants_immutable" BEFORE UPDATE OR DELETE ON "authorization_grants" FOR EACH ROW EXECUTE FUNCTION "enforce_authorization_grant_update"();
 CREATE TRIGGER "approval_requests_immutable" BEFORE INSERT OR UPDATE OR DELETE ON "approval_requests" FOR EACH ROW EXECUTE FUNCTION "enforce_approval_request_update"();
 CREATE TRIGGER "action_execution_receipts_immutable" BEFORE INSERT OR UPDATE OR DELETE ON "action_execution_receipts" FOR EACH ROW EXECUTE FUNCTION "enforce_action_execution_receipt_lifecycle"();
+CREATE TRIGGER "tool_invocations_lifecycle_guard" BEFORE INSERT OR UPDATE OR DELETE ON "tool_invocations" FOR EACH ROW EXECUTE FUNCTION "enforce_tool_invocation_lifecycle"();
+CREATE TRIGGER "tool_result_deliveries_invocation_identity" BEFORE INSERT OR UPDATE OF "tool_invocation_id", "payload" ON "tool_result_deliveries" FOR EACH ROW EXECUTE FUNCTION "enforce_tool_result_delivery_identity"();
 CREATE TRIGGER "verified_fleet_membership_revisions_immutable" BEFORE UPDATE OR DELETE ON "verified_fleet_membership_revisions" FOR EACH ROW EXECUTE FUNCTION "reject_verified_membership_revision_mutation"();
 CREATE TRIGGER "verified_fleet_membership_assertions_immutable" BEFORE INSERT OR UPDATE OR DELETE ON "verified_fleet_membership_assertions" FOR EACH ROW EXECUTE FUNCTION "reject_verified_membership_assertion_mutation"();
 CREATE TRIGGER "highest_accepted_fleet_memberships_monotonic" BEFORE INSERT OR UPDATE OR DELETE ON "highest_accepted_fleet_memberships" FOR EACH ROW EXECUTE FUNCTION "enforce_highest_membership_revision"();

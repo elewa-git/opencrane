@@ -34,13 +34,6 @@ export interface AgentRuntimeJobProfile
 	readonly runtimeStreamUrl: string;
 	/** In-cluster LiteLLM proxy base URL the runtime reaches with its attempt-scoped key. */
 	readonly litellmBaseUrl: string;
-	/**
-	 * In-cluster Obot MCP base origin the runtime reaches with its attempt-scoped Obot key.
-	 *
-	 * Base origin ONLY — no `/mcp-connect` path; the runtime appends `/mcp-connect/<serverId>/mcp`
-	 * per invocation. Absent when the deployment leaves direct Obot invocation off.
-	 */
-	readonly obotMcpBaseUrl?: string;
 	/** OpenCrane server namespace, which must differ from the runtime Job namespace. */
 	readonly serverNamespace: string;
 	/** Bounded runtime-profile ServiceAccount selected by the controller. */
@@ -76,10 +69,4 @@ export interface AgentRuntimeJobAssignment
 	readonly bootstrapReference: string;
 	/** Name of the per-attempt Secret holding the attempt-scoped LiteLLM virtual key. */
 	readonly litellmKeySecretName: string;
-	/**
-	 * Name of the per-attempt Secret holding the attempt-scoped Obot key, when the run has
-	 * integration assignments and the deployment composes the Obot transport. Absent leaves the Job
-	 * without any Obot volume or environment (feature off for this attempt).
-	 */
-	readonly obotKeySecretName?: string;
 }

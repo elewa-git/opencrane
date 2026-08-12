@@ -8,6 +8,9 @@ import { ___RunWithContext } from "./context.js";
 /** Tracer shared by all operations started through this package. */
 const _tracer = trace.getTracer("@opencrane/backend/observability");
 
+/** Active spans deliberately marked failed by a callback that still returns a typed outcome. */
+const _failedActiveSpans = new WeakSet<object>();
+
 /**
  * Return the currently active OpenTelemetry span, or `undefined` when no span
  * is active. Use this instead of importing `@opentelemetry/api` directly so
@@ -16,6 +19,21 @@ const _tracer = trace.getTracer("@opencrane/backend/observability");
 export function ___GetActiveSpan()
 {
   return trace.getActiveSpan();
+}
+
+/**
+ * Mark the active operation as failed without recording an exception or caller-controlled detail.
+ *
+ * Use this when an external-I/O adapter converts a provider error into a safe typed outcome. The
+ * fixed status message prevents remote bodies, credentials, or provider exception text from
+ * entering telemetry while preserving an accurate failed span.
+ */
+export function ___MarkActiveSpanFailed(): void
+{
+  const span = trace.getActiveSpan();
+  if (span === undefined) return;
+  _failedActiveSpans.add(span);
+  span.setStatus({ code: SpanStatusCode.ERROR, message: "operation_failed" });
 }
 
 /**
@@ -64,7 +82,7 @@ export async function ___DoWithTrace<T>(
       try
       {
         const result = await fn();
-        span.setStatus({ code: SpanStatusCode.OK });
+        if (!_failedActiveSpans.has(span)) span.setStatus({ code: SpanStatusCode.OK });
         return result;
       }
       catch (err)

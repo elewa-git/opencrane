@@ -42,13 +42,11 @@ Invariant: the client's types are a faithful projection of the server's publishe
 after any API change so the two never silently diverge. `RunInputSnapshot` is the cross-domain
 record of one run's frozen persona, transcript, memory references, tools, budgets, model route and
 verified identity provenance; it carries only immutable coordinates and canonical JSON, never
-provider credentials or mutable source objects. Its integration assignments record only an
-integration identifier and the revision-approved tool names; the custody reference never enters
-the snapshot. It reappears only as the server-compiled `CompiledToolDefinition.obotMcpServerId` —
-non-secret ADDRESSING, because the custody reference doubles as Obot's MCP server id. The runtime
-receives that id plus an attempt-scoped, server-scoped Obot key so it can execute an approved call
-directly against Obot; the underlying integration credential never leaves Obot, and the allow-list
-plus key scoping remain the authority. Identity is explicitly tagged: a user run
+provider credentials or mutable source objects. Its integration assignments record an integration
+identifier plus each revision-reviewed tool name, description, exact input JSON Schema, and
+canonical schema digest; provider addressing and credentials remain entirely behind the
+server-owned action execution boundary and never enter the snapshot or runtime. Identity is
+explicitly tagged: a user run
 pins a human's signed fleet membership, while a managed run pins the derived service principal, its
 signed membership, and the exact approved non-personal scopes. A service record cannot be read as a
 user record by accident.
@@ -65,10 +63,22 @@ runtime from silently interpreting a frozen snapshot with different assembly rul
   to map authorized request failures back to frontend fields without trusting arbitrary responses.
 - `___ModelRoutingDefaultWriteSchema` — the model-adjacent Zod schema shared by the public routing
   defaults boundary; it enforces known fields while deliberately preserving auto-config extensions.
-- `AG_UI_PROJECTION_VERSION`, `AgUiProjectionSourceEvent`, `AgUiSseRecord`,
-  `__ProjectAgUiEvent`, and `__EncodeAgUiSseRecord` — the display-safe input, output, projection,
-  and SSE-record contract used by the server-owned AG-UI replay path. They do not authenticate a
-  browser, read canonical event storage, or create an approval-resume protocol.
+- `AG_UI_PROJECTION_VERSION`, `AG_UI_A2UI_ENVELOPE_VERSION`, `AgUiProjectionSourceEvent`,
+  `AgUiSseRecord`, `__ProjectAgUiEvents`, and `__EncodeAgUiSseRecord` — the exact-pinned upstream
+  AG-UI vocabulary and display-safe projection used by server-owned live replay. Deterministic
+  subframes support ordinary messages; open interrupt overlays deliberately omit SSE ids.
+- `AG_UI_A2UI_ENVELOPE_VERSION`, `AgUiA2uiSurfaceStates`, and
+  `___ParseAgUiA2uiEnvelope` — the versioned CUSTOM envelope, authoritative ten-state presentation
+  lifecycle, and strict parser for governed A2UI surfaces. Each envelope binds conversation, run,
+  message, surface, and monotonic sequence coordinates; admits only ordered upstream
+  `beginRendering`, `surfaceUpdate`, and `dataModelUpdate` operations from the accepted eleven-name
+  catalogue; and may carry one bounded display-safe reason. These are presentation facts only and
+  never grant an action or let a client infer lifecycle authority.
+- `AG_UI_CHILD_RUN_ENVELOPE_VERSION` — versioned CUSTOM envelope for lossy immediate-child terminal
+  updates. It never exposes child context or sibling data.
+- `AG_UI_TOOL_FAILURE_EVENT` / `AgUiToolFailureEnvelope` — display-safe failed-tool marker carrying
+  only the public call id and an optional server-selected technical classification, never provider
+  text, raw arguments, credentials, or retry authority.
 - Hand-written DTOs/enums: `Grant`/`GrantScope`/`GrantAccess`, `Group`, `ClusterTenant*`,
   `McpServer*`/`Mcp*` operator types (MCP — the Model Context Protocol for connecting external tools),
   model-routing types, `Memory*`, `Approval`, `ThirdPartySource*`, `RuntimeAssignment`,

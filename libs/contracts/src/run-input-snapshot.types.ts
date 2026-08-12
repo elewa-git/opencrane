@@ -75,13 +75,26 @@ export interface ServiceRunInputSnapshotIdentity extends RunInputSnapshotFleetMe
 /** Immutable, tagged execution identity resolved before a runtime receives the snapshot. */
 export type RunInputSnapshotIdentity = UserRunInputSnapshotIdentity | ServiceRunInputSnapshotIdentity;
 
+/** One exact reviewed integration tool definition frozen at run admission. */
+export interface RunInputSnapshotToolDefinition
+{
+  /** Stable MCP tool name selected by the immutable revision. */
+  name: string;
+  /** Human-readable model guidance reviewed with the schema. */
+  description: string;
+  /** Exact JSON Schema used for model input and approval validation. */
+  parametersSchema: JsonValue;
+  /** Canonical digest binding the exact schema to the admitted snapshot. */
+  parametersSchemaDigest: string;
+}
+
 /** Immutable integration tool allowance selected by the executing AgentRevision. */
 export interface RunInputSnapshotIntegrationAssignment
 {
   /** Integration selected by the revision. */
   integrationId: string;
-  /** Exact tool names the revision permits through that integration. */
-  allowedTools: readonly string[];
+  /** Exact reviewed tool definitions the revision permits through that integration. */
+  toolDefinitions: readonly RunInputSnapshotToolDefinition[];
 }
 
 /** Deterministic, immutable inputs compiled before a runtime assignment. */

@@ -47,6 +47,7 @@
     "test:storybook:visual:update": "nx run frontend-elements-ui:update-storybook-visual"
   },
   "devDependencies": {
+    "@ag-ui/client": "0.0.57",
     "@angular-devkit/build-angular": "^21.2.19",
     "@angular/cli": "^21.2.19",
     "@angular/compiler-cli": "^21.2.19",
@@ -65,7 +66,6 @@
     "@types/markdown-it": "^14.1.2",
     "@types/node": "^22.0.0",
     "@types/supertest": "^6.0.0",
-    "ajv": "8.18.0",
     "@typescript-eslint/eslint-plugin": "^8.63.0",
     "@typescript-eslint/parser": "^8.63.0",
     "axe-playwright": "2.2.2",
@@ -90,6 +90,7 @@
   "dependencies": {
     "@a2ui/angular": "0.10.2",
     "@a2ui/web_core": "0.10.3",
+    "@ag-ui/core": "0.0.57",
     "@angular/animations": "^21.2.19",
     "@angular/cdk": "^21.2.14",
     "@angular/common": "^21.2.19",
@@ -109,6 +110,7 @@
     "@primeng/themes": "^21.0.0",
     "@prisma/client": "^6.0.0",
     "@sinclair/typebox": "0.34.49",
+    "ajv": "8.18.0",
     "dompurify": "^3.4.13",
     "express": "^5.1.0",
     "express-rate-limit": "^7.4.0",

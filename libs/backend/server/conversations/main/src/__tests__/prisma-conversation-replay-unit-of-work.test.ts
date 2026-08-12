@@ -2,6 +2,7 @@ import { Prisma, type PrismaClient } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
 
 import { _CreateConversationReplayRepository } from "../prisma-conversation-replay.composition.js";
+import { ConversationReplayReadStatuses } from "../replay-reader.types.js";
 
 describe("Prisma conversation replay unit of work", function _Suite()
 {
@@ -31,13 +32,14 @@ describe("Prisma conversation replay unit of work", function _Suite()
 			conversationTimelineEntry: { findMany: vi.fn(function _RootTimelineRead() { return liveTimeline; }) },
 		} as unknown as PrismaClient;
 
-		const rows = await _CreateConversationReplayRepository(prisma).read({ conversationId: "conversation-1", siloId: "silo-1", subjectId: "user-1", cursor: null, limit: 10 });
+		const result = await _CreateConversationReplayRepository(prisma).readAuthorized({ conversationId: "conversation-1", siloId: "silo-1", subjectId: "user-1", cursor: null, limit: 10 });
 
 		expect(prisma.$transaction).toHaveBeenCalledTimes(1);
 		expect(transaction.conversationParticipant.findUnique).toHaveBeenCalledTimes(1);
 		expect(transaction.conversationTimelineEntry.findMany).toHaveBeenCalledTimes(1);
 		expect(liveAccessEndedPosition).toBe(3n);
 		expect(liveTimeline).toHaveLength(2);
-		expect(rows.map(function _Position(row): string { return row.position; })).toEqual(["2"]);
+		expect(result.status).toBe(ConversationReplayReadStatuses.Authorized);
+		expect(result.rows.map(function _Position(row): string { return row.position; })).toEqual(["2"]);
 	});
 });

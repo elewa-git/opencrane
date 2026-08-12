@@ -3,7 +3,7 @@ import { ___DoWithTrace } from "@opencrane/backend/observability";
 
 import { _ResolveAgentControllerRuntimeProfile } from "./agent-controller-profiles.js";
 import { AgentControllerReconcileOutcomes, type AgentControllerOptions, type AgentControllerRuntimeReleaseReconcileResult } from "./agent-controller.types.js";
-import { _AgentRuntimeAttemptKeySecretName, _AgentRuntimeObotKeySecretName } from "./agent-runtime-attempt-key.js";
+import { _AgentRuntimeAttemptKeySecretName } from "./agent-runtime-attempt-key.js";
 
 /** Require an immutable Pod UID observed through the Kubernetes API. */
 function _RequirePodUid(uid: string | undefined): string
@@ -47,7 +47,6 @@ export async function __ReconcileNextRuntimeRelease(options: AgentControllerOpti
 			namespace: claim.workload.namespace,
 			bootstrapReference: claim.workload.bootstrapReference,
 			litellmKeySecretName: _AgentRuntimeAttemptKeySecretName(claim.workload.bootstrapReference),
-			obotKeySecretName: claim.workload.obotKeyProvisioned === true ? _AgentRuntimeObotKeySecretName(claim.workload.bootstrapReference) : undefined,
 		}, profile);
 
 		// 3. Reject expired authority, then let the Kubernetes adapter reserve its I/O budget.

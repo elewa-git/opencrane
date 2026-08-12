@@ -1,0 +1,62 @@
+<div
+	class="a2ui-choice"
+	[class]="theme.components.MultipleChoice.container"
+	[style]="theme.additionalStyles?.MultipleChoice"
+>
+	@switch (kind())
+	{
+		@case ("single")
+		{
+			<fieldset class="a2ui-choice__group">
+				<legend [class]="theme.components.MultipleChoice.label">{{ label() }}</legend>
+				@for (option of resolvedOptions(); track option.value)
+				{
+					<label class="a2ui-choice__option">
+						<input
+							type="radio"
+							[name]="radioGroupName"
+							[value]="option.value"
+							[checked]="isSelected(option.value)"
+							(change)="onSingleChange($event)"
+						/>
+						<span>{{ option.label }}</span>
+					</label>
+				}
+			</fieldset>
+		}
+		@case ("multiple")
+		{
+			<fieldset class="a2ui-choice__group">
+				<legend [class]="theme.components.MultipleChoice.label">{{ label() }}</legend>
+				@for (option of resolvedOptions(); track option.value)
+				{
+					<label class="a2ui-choice__option">
+						<input
+							type="checkbox"
+							[value]="option.value"
+							[checked]="isSelected(option.value)"
+							[disabled]="isAtLimit(option.value)"
+							(change)="onMultipleChange($event)"
+						/>
+						<span>{{ option.label }}</span>
+					</label>
+				}
+			</fieldset>
+		}
+		@default
+		{
+			<label [class]="theme.components.MultipleChoice.label" [for]="radioGroupName">{{ label() }}</label>
+			<select
+				[class]="theme.components.MultipleChoice.element"
+				[id]="radioGroupName"
+				[value]="selectedValues()[0] ?? ''"
+				(change)="onSelectChange($event)"
+			>
+				@for (option of resolvedOptions(); track option.value)
+				{
+					<option [value]="option.value" [selected]="isSelected(option.value)">{{ option.label }}</option>
+				}
+			</select>
+		}
+	}
+</div>

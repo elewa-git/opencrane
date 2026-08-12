@@ -11,6 +11,8 @@ export enum RunEventTypes
 	RunAccepted = "run.accepted",
 	/** Assigned runtime began executing the run. */
 	RunStarted = "run.started",
+	/** Runtime resumed execution after a control-plane-authorized pause. */
+	RunResumed = "run.resumed",
 	/** Runtime began assembling a user-visible message. */
 	MessageStarted = "message.started",
 	/** Runtime appended a bounded message delta. */
@@ -27,6 +29,18 @@ export enum RunEventTypes
 	ToolProgress = "tool.progress",
 	/** Governed tool execution completed. */
 	ToolCompleted = "tool.completed",
+	/** Governed tool execution failed without exposing provider or credential details. */
+	ToolFailed = "tool.failed",
+	/** Provider outcome is ambiguous and this cancellable run needs explicit recovery. */
+	ToolRecoveryRequired = "tool.recovery_required",
+	/** Runtime reported a display-safe nonterminal problem while the run remained active. */
+	RunError = "run.error",
+	/** Runtime began one versioned governed A2UI rendering surface. */
+	A2uiRenderingBegun = "a2ui.rendering.begun",
+	/** Runtime supplied an ordered versioned update to a governed A2UI surface. */
+	A2uiSurfaceUpdated = "a2ui.surface.updated",
+	/** Runtime supplied an ordered versioned update to governed A2UI data. */
+	A2uiDataModelUpdated = "a2ui.data_model.updated",
 	/** Runtime began compacting the run's conversation context. */
 	ContextCompactionStarted = "context.compaction_started",
 	/** Runtime completed context compaction. */

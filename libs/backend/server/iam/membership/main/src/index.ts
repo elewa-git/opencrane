@@ -5,3 +5,5 @@ export type { FleetMembershipAcceptance, FleetMembershipAcceptanceResult, FleetM
 export { Ed25519FleetMembershipSignatureVerifier } from "./ed25519-fleet-membership-signature-verifier.js";
 export { _CreateFleetMembershipEvidenceConfig } from "./fleet-membership-evidence.factory.js";
 export { PrismaFleetMembershipAuthorityRepository } from "./prisma-membership-authority.js";
+export { SignedFleetMembershipAssertionVerifier } from "./signed-membership-assertion-authority.js";
+export type { SignedFleetMembershipAssertionAuthority } from "./membership-authority.types.js";

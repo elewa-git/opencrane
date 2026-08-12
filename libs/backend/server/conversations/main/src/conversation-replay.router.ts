@@ -1,11 +1,14 @@
 import { Router, type Request, type Response } from "express";
-import { __EncodeAgUiSseRecord, __ProjectAgUiEvent } from "@opencrane/contracts";
 
+import { __DigestChannelInvocationContext } from "@opencrane/backend/server/agents/channel-targets";
+
+import { __StreamConversationLiveReplay } from "./conversation-live-replay.js";
+import { ConversationLiveReplayOutcomes } from "./conversation-live-replay.types.js";
+import { _CreateExpressConversationLiveReplaySink } from "./express-conversation-live-replay-sink.js";
 import { __DecodeConversationReplayCursor } from "./replay-cursor.js";
-import { __ReadConversationReplay } from "./conversation-replay.js";
 import type { ConversationReplayRouterDependencies } from "./conversation-replay.router.types.js";
 
-/** Create the internal authorised conversation snapshot route. */
+/** Create the internal consumed-context-authorized snapshot-to-live route. */
 export function __CreateConversationReplayRouter(dependencies: ConversationReplayRouterDependencies): Router
 {
 	const router = Router();
@@ -16,21 +19,30 @@ export function __CreateConversationReplayRouter(dependencies: ConversationRepla
 		if (suppliedCursor === null) { response.status(400).json({ error: "invalid_replay_request" }); return; }
 		const cursor = __DecodeConversationReplayCursor(suppliedCursor);
 		if (token === null || (suppliedCursor !== undefined && cursor === null)) { response.status(400).json({ error: "invalid_replay_request" }); return; }
-		const consumed = await dependencies.contexts.consumeInvocationContextAtomically({ digest: token, expectedRouteId: dependencies.expectedRouteId, nowEpochMs: dependencies.nowEpochMs() });
+		const consumed = await dependencies.contexts.consumeInvocationContextAtomically({ digest: __DigestChannelInvocationContext(token), expectedReceiverId: dependencies.expectedReceiverId, nowEpochMs: dependencies.nowEpochMs() });
 		if (consumed.status !== "consumed" || consumed.context.action !== "events.read") { response.status(403).json({ error: "replay_denied" }); return; }
 		if (cursor !== null && cursor.conversationId !== consumed.context.conversationId) { response.status(403).json({ error: "replay_denied" }); return; }
-		const events = await __ReadConversationReplay(dependencies.repository, { conversationId: consumed.context.conversationId, siloId: consumed.context.siloId, subjectId: consumed.context.subjectId, cursor, limit: 200 });
-		response.status(200).set({ "cache-control": "no-store", connection: "keep-alive", "content-type": "text/event-stream" });
-		for (const event of events)
+		const abort = new AbortController();
+		function _Abort(): void { abort.abort(); }
+		response.once("close", _Abort);
+		response.once("error", _Abort);
+		dependencies.shutdownSignal?.addEventListener("abort", _Abort, { once: true });
+		try
 		{
-			response.write(__EncodeAgUiSseRecord(__ProjectAgUiEvent(event)));
+			const outcome = await __StreamConversationLiveReplay({ repository: dependencies.repository, clock: dependencies.clock, limits: dependencies.limits }, _CreateExpressConversationLiveReplaySink(response), { conversationId: consumed.context.conversationId, siloId: consumed.context.siloId, subjectId: consumed.context.subjectId, cursor, signal: abort.signal });
+			if (outcome === ConversationLiveReplayOutcomes.RevokedOrMissing && !response.headersSent) response.status(403).json({ error: "replay_denied" });
+			else if (!response.writableEnded) response.end();
 		}
-		response.end();
+		finally
+		{
+			response.removeListener("close", _Abort);
+			response.removeListener("error", _Abort);
+			dependencies.shutdownSignal?.removeEventListener("abort", _Abort);
+		}
 	});
 	return router;
 }
 
-/** Resolve the one permitted upstream resume cursor without accepting conflicting coordinates. */
 function _SuppliedCursor(request: Request): string | undefined | null
 {
 	if (request.query.cursor !== undefined && typeof request.query.cursor !== "string") return null;
@@ -40,7 +52,6 @@ function _SuppliedCursor(request: Request): string | undefined | null
 	return queryCursor ?? headerCursor;
 }
 
-/** Parse one unambiguous bearer context. */
 function _Bearer(value: string | undefined): string | null
 {
 	const match = /^Bearer ([^\s,]+)$/u.exec(value ?? "");

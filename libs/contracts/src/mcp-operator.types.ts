@@ -9,7 +9,7 @@
  *
  * Custody contract: NO type here ever carries credential material. A connected
  * install reports only its {@link McpConnectionStatus}; the secret lives in the
- * gateway plane (Obot) and the agent only ever receives a connection URL.
+ * gateway plane (Obot). Neither the agent runtime nor the browser receives a provider URL or secret.
  */
 
 /**

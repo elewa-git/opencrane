@@ -128,6 +128,13 @@ channelProxy:
     port: 8080
   # -- Empty derives the release-local OpenCrane internal Service URL.
   openCraneInternalUrl: ""
+  # -- Stable replay receiver identity. Per-AgentService route rows bind to this receiver without
+  #    reusing it as their row id.
+  replayReceiverId: opencrane-conversation-replay-v1
+  # -- Silo id used by the exact public-host binding. Empty derives the standalone first-user
+  #    ClusterTenant when configured, otherwise the Helm release name.
+  siloId: ""
+  invocationContextTtlSeconds: 60
   # -- Empty derives the exact HTTPS control-plane origin from ingress.controlPlaneHost/domain.
   allowedOrigins: []
   targetHostSuffixes:
@@ -291,12 +298,10 @@ managedAgentRuntimePlane:
       artifactServiceComponent: artifact-service
       memoryGatewayComponent: opencrane-server
       litellmComponent: litellm
-      obotComponent: mcp-gateway
       serverInternalPort: 8081
       channelProxyPort: 8080
       artifactServicePort: 8080
       litellmPort: 4000
-      obotPort: 8080
 
 # -- Personal and managed runtime workload controller. Disabled until immutable runtime image
 # digests and exact Kubernetes API Service CIDRs are supplied; enabling it never starts a Job directly.
@@ -868,7 +873,7 @@ mcpGateway:
   service:
     port: 8080
   # -- Name of a pre-provisioned Secret (key `token`) carrying the Obot service credential the
-  #    opencrane-server presents for custody provisioning and per-attempt Obot key minting. The
+  #    opencrane-server presents for custody provisioning and server-owned tool execution. The
   #    chart never renders this Secret. Empty (default) leaves the Obot management transport OFF:
   #    no env/volume renders and the server composes fail-closed unavailable adapters.
   serviceTokenExistingSecret: ""

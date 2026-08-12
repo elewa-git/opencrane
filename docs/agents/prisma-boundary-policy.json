@@ -10,6 +10,25 @@
         "constructs": []
       },
       {
+        "path": "libs/backend/agents/execution/protocol/src/prisma-external-action-context-repository.ts",
+        "adapter": "PrismaExternalActionExecutionContextRepository",
+        "contract": "ExternalActionExecutionContextRepository",
+        "contractImportPath": "./external-action-worker.types.js",
+        "constructs": []
+      },
+      {
+        "path": "libs/backend/agents/personal/configuration/main/src/upgrade-session/prisma-upgrade-session-proposal-repository.ts",
+        "adapter": "PrismaUpgradeSessionProposalRepository",
+        "contract": "UpgradeSessionProposalRepository",
+        "contractImportPath": "./upgrade-session.types.js",
+        "constructs": [
+          {
+            "adapter": "PrismaPersonalConfigurationProposalRepository",
+            "importPath": "../proposal/prisma-personal-configuration-proposal-repository.js"
+          }
+        ]
+      },
+      {
         "path": "libs/backend/agents/personal/configuration/main/src/materialization/prisma-personal-configuration-materialization.ts",
         "adapter": "PrismaPersonalConfigurationMaterializationRepository",
         "contract": "PersonalConfigurationMaterializationRepository",
@@ -332,6 +351,97 @@
         "contractImportPath": "./effective-access.types.js",
         "constructs": []
       },
+	  {
+		"path": "libs/backend/server/iam/authorization/main/src/prisma-deferred-tool-approval-opener.ts",
+		"adapter": "PrismaDeferredToolApprovalOpenRepository",
+		"contract": "DeferredToolApprovalOpenRepository",
+		"contractImportPath": "./deferred-tool-approval-open.types.js",
+		"constructs": []
+	  },
+	  {
+		"path": "libs/backend/server/iam/authorization/main/src/prisma-tool-invocation-repository.ts",
+		"adapter": "PrismaToolInvocationRepository",
+		"contract": "ToolInvocationTransactionRepository",
+		"contractImportPath": "./tool-invocation.types.js",
+		"constructs": []
+	  },
+	  {
+		"path": "libs/backend/server/iam/authorization/main/src/run-approval-cancellation.ts",
+		"adapter": "PrismaRunApprovalCancellationRepository",
+		"contract": "RunApprovalCancellationRepository",
+		"contractImportPath": "./run-approval-cancellation.types.js",
+		"constructs": []
+	  },
+	  {
+		"path": "libs/backend/agents/execution/protocol/src/prisma-runtime-resume-input-repository.ts",
+		"adapter": "PrismaRuntimeResumeInputRepository",
+		"contract": "RuntimeResumeInputRepository",
+		"contractImportPath": "./runtime-resume-input.types.js",
+		"constructs": []
+	  },
+	  {
+		"path": "libs/backend/agents/execution/protocol/src/prisma-runtime-dispatch-state-repository.ts",
+		"adapter": "PrismaRuntimeDispatchStateRepository",
+		"contract": "RuntimeDispatchStateRepository",
+		"contractImportPath": "./runtime-dispatch-state.types.js",
+		"constructs": []
+	  },
+	  {
+		"path": "libs/backend/agents/execution/runs/main/src/prisma-runtime-event-reporter.ts",
+		"adapter": "PrismaRuntimeEventAppendRepository",
+		"contract": "RuntimeEventAppendRepository",
+		"contractImportPath": "./runtime-event-reporter.types.js",
+		"constructs": []
+	  },
+	  {
+		"path": "libs/backend/agents/execution/runs/main/src/prisma-runtime-terminal-reporter.ts",
+		"adapter": "PrismaRuntimeTerminalPendingToolRepository",
+		"contract": "RuntimeTerminalPendingToolRepository",
+		"contractImportPath": "./runtime-terminal-reporter.types.js",
+		"constructs": []
+	  },
+	  {
+		"path": "libs/backend/agents/execution/runs/main/src/prisma-run-cancellation-event-deferral-repository.ts",
+		"adapter": "PrismaRunCancellationEventDeferralRepository",
+		"contract": "RunCancellationEventDeferralRepository",
+		"contractImportPath": "./run-cancellation-event-deferral.types.js",
+		"constructs": []
+	  },
+	  {
+		"path": "libs/backend/agents/execution/runs/main/src/prisma-tool-recovery-event-reporter.ts",
+		"adapter": "PrismaToolRecoveryEventAppendRepository",
+		"contract": "ToolRecoveryEventAppendRepository",
+		"contractImportPath": "./tool-recovery-event-reporter.types.js",
+		"constructs": []
+	  },
+	  {
+		"path": "libs/backend/agents/execution/runs/main/src/prisma-tool-invocation-lifecycle-event-reporter.ts",
+		"adapter": "PrismaToolInvocationLifecycleEventAppendRepository",
+		"contract": "ToolInvocationLifecycleEventAppendRepository",
+		"contractImportPath": "./tool-invocation-lifecycle-event-reporter.types.js",
+		"constructs": []
+	  },
+	  {
+		"path": "libs/backend/agents/execution/runs/main/src/prisma-tool-invocation-run-recovery-authority.ts",
+		"adapter": "PrismaToolInvocationRunRecoveryRepository",
+		"contract": "ToolInvocationRunRecoveryRepository",
+		"contractImportPath": "./tool-invocation-run-recovery-authority.types.js",
+		"constructs": []
+	  },
+	  {
+		"path": "libs/backend/agents/execution/runs/main/src/prisma-self-run-cancellation-repository.ts",
+		"adapter": "PrismaSelfRunCancellationRepository",
+		"contract": "SelfRunCancellationRepository",
+		"contractImportPath": "./self-run-cancellation.types.js",
+		"constructs": []
+	  },
+	  {
+		"path": "libs/backend/server/iam/authorization/main/src/prisma-self-deferred-tool-approval-list-repository.ts",
+		"adapter": "PrismaSelfDeferredToolApprovalListRepository",
+		"contract": "SelfDeferredToolApprovalListRepository",
+		"contractImportPath": "./deferred-tool-approval-interrupt.types.js",
+		"constructs": []
+	  },
       {
         "path": "libs/backend/server/iam/authorization/main/src/prisma-share-authorization-repository.ts",
         "adapter": "PrismaShareAuthorizationRepository",
@@ -348,6 +458,30 @@
       }
     ],
     "unitsOfWork": [
+      {
+        "path": "libs/backend/agents/execution/protocol/src/prisma-external-action-context-repository.ts",
+        "adapter": "PrismaExternalActionExecutionContextUnitOfWork",
+        "contract": "ExternalActionExecutionContextUnitOfWork",
+        "contractImportPath": "./external-action-worker.types.js",
+        "constructs": [
+          {
+            "adapter": "PrismaExternalActionExecutionContextRepository",
+            "importPath": "<same-file>"
+          }
+        ]
+      },
+      {
+        "path": "libs/backend/agents/personal/configuration/main/src/upgrade-session/prisma-upgrade-session-proposal-repository.ts",
+        "adapter": "PrismaUpgradeSessionProposalUnitOfWork",
+        "contract": "UpgradeSessionProposalUnitOfWork",
+        "contractImportPath": "./upgrade-session.types.js",
+        "constructs": [
+          {
+            "adapter": "PrismaUpgradeSessionProposalRepository",
+            "importPath": "<same-file>"
+          }
+        ]
+      },
       {
         "path": "apps/opencrane/src/infra/db/db.ts",
         "adapter": "_PrismaDbHealthProbeUnitOfWork",
@@ -572,6 +706,169 @@
           }
         ]
       },
+	  {
+		"path": "libs/backend/server/iam/authorization/main/src/prisma-deferred-tool-approval-opener.ts",
+		"adapter": "PrismaDeferredToolApprovalOpenUnitOfWork",
+		"contract": "DeferredToolApprovalOpenUnitOfWork",
+		"contractImportPath": "./deferred-tool-approval-open.types.js",
+		"constructs": [
+		  {
+			"adapter": "PrismaDeferredToolApprovalOpenRepository",
+			"importPath": "<same-file>"
+		  }
+		]
+	  },
+	  {
+		"path": "libs/backend/server/iam/authorization/main/src/prisma-tool-invocation-unit-of-work.ts",
+		"adapter": "PrismaToolInvocationUnitOfWork",
+		"contract": "ToolInvocationUnitOfWork",
+		"contractImportPath": "./tool-invocation.types.js",
+		"constructs": [
+		  {
+			"adapter": "PrismaToolInvocationRepository",
+			"importPath": "./prisma-tool-invocation-repository.js"
+		  }
+		]
+	  },
+	  {
+		"path": "libs/backend/agents/execution/protocol/src/prisma-runtime-command-decision-unit-of-work.ts",
+		"adapter": "PrismaRuntimeCommandDecisionUnitOfWork",
+		"contract": "RuntimeCommandDecisionUnitOfWork",
+		"contractImportPath": "./prisma-runtime-dispatch-authority.types.js",
+		"constructs": [
+		  {
+			"adapter": "PrismaRuntimeResumeInputRepository",
+			"importPath": "./prisma-runtime-resume-input-repository.js"
+		  }
+		]
+	  },
+	  {
+		"path": "libs/backend/server/iam/authorization/main/src/run-approval-cancellation.ts",
+		"adapter": "PrismaRunApprovalCancellationUnitOfWork",
+		"contract": "RunApprovalCancellationUnitOfWork",
+		"contractImportPath": "./run-approval-cancellation.types.js",
+		"constructs": [
+		  {
+			"adapter": "PrismaRunApprovalCancellationRepository",
+			"importPath": "<same-file>"
+		  }
+		]
+	  },
+	  {
+		"path": "libs/backend/agents/execution/protocol/src/prisma-runtime-resume-input-repository.ts",
+		"adapter": "PrismaRuntimeResumeInputUnitOfWork",
+		"contract": "RuntimeResumeInputUnitOfWork",
+		"contractImportPath": "./runtime-resume-input.types.js",
+		"constructs": [
+		  {
+			"adapter": "PrismaRuntimeResumeInputRepository",
+			"importPath": "<same-file>"
+		  }
+		]
+	  },
+	  {
+		"path": "libs/backend/agents/execution/protocol/src/prisma-runtime-dispatch-state-repository.ts",
+		"adapter": "PrismaRuntimeDispatchStateUnitOfWork",
+		"contract": "RuntimeDispatchStateUnitOfWork",
+		"contractImportPath": "./runtime-dispatch-state.types.js",
+		"constructs": [
+		  {
+			"adapter": "PrismaRuntimeDispatchStateRepository",
+			"importPath": "<same-file>"
+		  }
+		]
+	  },
+	  {
+		"path": "libs/backend/agents/execution/runs/main/src/prisma-runtime-event-reporter.ts",
+		"adapter": "PrismaRuntimeEventAppendUnitOfWork",
+		"contract": "RuntimeEventAppendUnitOfWork",
+		"contractImportPath": "./runtime-event-reporter.types.js",
+		"constructs": [
+		  {
+			"adapter": "PrismaRuntimeEventAppendRepository",
+			"importPath": "<same-file>"
+		  }
+		]
+	  },
+	  {
+		"path": "libs/backend/agents/execution/runs/main/src/prisma-runtime-terminal-reporter.ts",
+		"adapter": "PrismaRuntimeTerminalPendingToolUnitOfWork",
+		"contract": "RuntimeTerminalPendingToolUnitOfWork",
+		"contractImportPath": "./runtime-terminal-reporter.types.js",
+		"constructs": [
+		  {
+			"adapter": "PrismaRuntimeTerminalPendingToolRepository",
+			"importPath": "<same-file>"
+		  }
+		]
+	  },
+	  {
+		"path": "libs/backend/agents/execution/runs/main/src/prisma-run-cancellation-event-deferral-repository.ts",
+		"adapter": "PrismaRunCancellationEventDeferralUnitOfWork",
+		"contract": "RunCancellationEventDeferralUnitOfWork",
+		"contractImportPath": "./run-cancellation-event-deferral.types.js",
+		"constructs": [
+		  {
+			"adapter": "PrismaRunCancellationEventDeferralRepository",
+			"importPath": "<same-file>"
+		  }
+		]
+	  },
+	  {
+		"path": "libs/backend/agents/execution/runs/main/src/prisma-tool-invocation-lifecycle-event-reporter.ts",
+		"adapter": "PrismaToolInvocationLifecycleEventUnitOfWork",
+		"contract": "ToolInvocationLifecycleEventUnitOfWork",
+		"contractImportPath": "./tool-invocation-lifecycle-event-reporter.types.js",
+		"constructs": []
+	  },
+	  {
+		"path": "libs/backend/agents/execution/runs/main/src/prisma-tool-invocation-lifecycle-event-reporter.ts",
+		"adapter": "PrismaToolInvocationLifecycleEventAppendUnitOfWork",
+		"contract": "ToolInvocationLifecycleEventAppendUnitOfWork",
+		"contractImportPath": "./tool-invocation-lifecycle-event-reporter.types.js",
+		"constructs": [
+		  {
+			"adapter": "PrismaToolInvocationLifecycleEventAppendRepository",
+			"importPath": "<same-file>"
+		  }
+		]
+	  },
+	  {
+		"path": "libs/backend/agents/execution/runs/main/src/prisma-tool-invocation-run-recovery-authority.ts",
+		"adapter": "PrismaToolInvocationRunRecoveryUnitOfWork",
+		"contract": "ToolInvocationRunRecoveryUnitOfWork",
+		"contractImportPath": "./tool-invocation-run-recovery-authority.types.js",
+		"constructs": [
+		  {
+			"adapter": "PrismaToolInvocationRunRecoveryRepository",
+			"importPath": "<same-file>"
+		  }
+		]
+	  },
+	  {
+		"path": "libs/backend/agents/execution/runs/main/src/prisma-tool-recovery-event-reporter.ts",
+		"adapter": "PrismaToolRecoveryEventAppendUnitOfWork",
+		"contract": "ToolRecoveryEventAppendUnitOfWork",
+		"contractImportPath": "./tool-recovery-event-reporter.types.js",
+		"constructs": [
+		  {
+			"adapter": "PrismaToolRecoveryEventAppendRepository",
+			"importPath": "<same-file>"
+		  }
+		]
+	  },
+	  {
+		"path": "libs/backend/server/iam/authorization/main/src/prisma-self-deferred-tool-approval-list-repository.ts",
+		"adapter": "PrismaSelfDeferredToolApprovalReadUnitOfWork",
+		"contract": "SelfDeferredToolApprovalReadUnitOfWork",
+		"contractImportPath": "./deferred-tool-approval-interrupt.types.js",
+		"constructs": [
+		  {
+			"adapter": "PrismaSelfDeferredToolApprovalListRepository",
+			"importPath": "<same-file>"
+		  }
+		]
+	  },
       {
         "path": "libs/backend/server/gateways/mcp/main/src/core/prisma-mcp-server-mutation-unit-of-work.ts",
         "adapter": "PrismaMcpServerMutationUnitOfWork",
@@ -586,7 +883,12 @@
       }
     ],
     "compositions": [
+      "apps/opencrane/src/app/external-action-composition.ts",
       "apps/opencrane/src/app/runtime-composition.ts",
+      "apps/opencrane/src/app/channel-target-composition.ts",
+      "apps/opencrane/src/app/lifecycle.ts",
+      "apps/opencrane/src/app/background-workers.ts",
+      "apps/opencrane/src/app/run-cancellation-composition.ts",
       "libs/backend/agents/personal/configuration/main/src/prisma-personal-configuration.router.ts",
 		"libs/backend/agents/personal/personas/main/src/http/prisma-persona-onboarding.router.ts",
 		"libs/backend/agents/personal/personas/main/src/profile/prisma-persona-workflow-evidence.ts",
@@ -597,9 +899,11 @@
 		"libs/backend/server/conversations/main/src/prisma-conversation-replay.composition.ts",
 		"libs/backend/server/conversations/main/src/prisma-self-conversation-replay.router.ts",
 		"libs/backend/server/conversations/main/src/prisma-self-conversations.router.ts",
+		"libs/backend/agents/execution/runs/main/src/prisma-self-run-cancellation.router.ts",
 		"libs/backend/server/agents/onboarding/main/src/prisma-user-onboarding-repository.ts",
 		"libs/backend/server/agents/skills/main/src/prisma-skill-catalogue.router.ts",
 		"libs/backend/server/iam/identity/main/src/oidc.service.ts",
+		"libs/backend/server/iam/authorization/main/src/prisma-deferred-tool-approval-interrupt-reader.ts",
 		"libs/backend/server/gateways/integrations/main/src/integration-custody.router.ts"
     ]
   },
@@ -635,16 +939,7 @@
       "operations": [
         "delegate"
       ],
-      "reason": "pre-policy in-transaction approval authority joins the reserved ToolInvocation to record the approved toolInvocationId in the resume payload",
-      "expiresOn": "2026-12-31"
-    },
-    {
-      "path": "libs/backend/server/iam/authorization/main/src/prisma-tool-invocation-repository.ts",
-      "owner": "iam-authorization",
-      "operations": [
-        "delegate"
-      ],
-      "reason": "pre-policy invocation receipt adapter gains the coordinate CAS used by digest-only tool.completed receipts; declaring it needs a TransactionClient constructor refactor",
+      "reason": "The approval lifecycle owns one existing caller-opened serializable transaction across the approval row, run pause, ToolInvocation transition, and result delivery; its ToolInvocation writes delegate to the declared transaction repository helpers while the remaining approval-row delegates stay here until the approval unit of work is extracted.",
       "expiresOn": "2026-12-31"
     },
     {

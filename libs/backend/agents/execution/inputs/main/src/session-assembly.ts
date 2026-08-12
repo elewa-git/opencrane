@@ -1,6 +1,7 @@
 import { __DigestRunInputSnapshot } from "@opencrane/backend/agents/execution/runs";
 import type { InitialRunAuthority, RunAdmissionCommit } from "@opencrane/backend/agents/execution/runs";
 import type { RunInputSnapshot, RunInputSnapshotIntegrationAssignment } from "@opencrane/contracts";
+import { __AreReviewedIntegrationToolDefinitionsValid, type ReviewedIntegrationToolDefinition } from "@opencrane/models/agents";
 import { ___CloneCanonicalJson, ___SortBy } from "@opencrane/util";
 import type { JsonValue } from "@opencrane/util";
 
@@ -130,9 +131,24 @@ function _canonicalIntegrationAssignments(assignments: readonly RunInputSnapshot
 	return [...assignments]
 		.map(function _assignment(assignment): RunInputSnapshotIntegrationAssignment
 		{
-			return { integrationId: assignment.integrationId, allowedTools: ___SortBy([...new Set(assignment.allowedTools)]) };
+			return { integrationId: assignment.integrationId, toolDefinitions: _canonicalToolDefinitions(assignment.toolDefinitions) };
 		})
 		.sort(function _byIntegration(left, right): number { return left.integrationId.localeCompare(right.integrationId); });
+}
+
+/**
+ * Copies one integration's tools into a fixed shape: sorted by name, with each schema's keys
+ * put into a set order by the clone.
+ *
+ * Assembly hashes the finished snapshot, and the hash is taken over the whole thing as text.
+ * So order matters: without this step, the same tools arriving in a different order would hash
+ * to a different value, and the run would look like it had been given different inputs.
+ */
+function _canonicalToolDefinitions(toolDefinitions: RunInputSnapshotIntegrationAssignment["toolDefinitions"]): RunInputSnapshotIntegrationAssignment["toolDefinitions"]
+{
+	return [...toolDefinitions]
+		.map(function _tool(definition) { return { name: definition.name, description: definition.description, parametersSchema: ___CloneCanonicalJson(definition.parametersSchema), parametersSchemaDigest: definition.parametersSchemaDigest }; })
+		.sort(function _byTool(left, right): number { return left.name.localeCompare(right.name); });
 }
 
 /** Rejects integration allowances that cannot form one unambiguous runtime tool-revision identifier. */
@@ -142,7 +158,6 @@ function _areIntegrationAssignmentsValid(assignments: readonly RunInputSnapshotI
 	{
 		return assignment.integrationId.trim().length > 0
 			&& !assignment.integrationId.includes(":")
-			&& assignment.allowedTools.length > 0
-			&& assignment.allowedTools.every(function _tool(tool): boolean { return tool.trim().length > 0 && !tool.includes(":"); });
+			&& __AreReviewedIntegrationToolDefinitionsValid(assignment.toolDefinitions as readonly ReviewedIntegrationToolDefinition[]);
 	});
 }

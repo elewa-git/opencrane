@@ -5,7 +5,7 @@ import type { AgentRevisionId, AgentRunId, AgentServiceId, SiloId, UserId } from
 export type AgentRunTrigger = "interactive" | "schedule" | "managed_invocation";
 
 /** Durable lifecycle state of an agent run attempt, including nonterminal cleanup after cancellation is requested. */
-export type AgentRunState = "accepted" | "queued" | "assigned" | "running" | "waiting_for_approval" | "cancelling" | "completed" | "failed" | "cancelled";
+export type AgentRunState = "accepted" | "queued" | "assigned" | "running" | "waiting_for_approval" | "recovery_required" | "cancelling" | "completed" | "failed" | "cancelled";
 
 /** Terminal classification recorded for a finished run. */
 export type AgentRunTerminalReason = "success" | "user_cancelled" | "policy_denied" | "budget_exhausted" | "runtime_failure" | "invalid_input";

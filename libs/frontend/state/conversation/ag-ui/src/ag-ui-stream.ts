@@ -1,90 +1,251 @@
-import type { AgUiProjectionEvent } from "@opencrane/contracts";
-import { ___ParseAndValidateJson } from "@opencrane/util";
+import { EventType } from "@ag-ui/core";
+import { AG_UI_A2UI_ENVELOPE_VERSION, AG_UI_INTERRUPTS_CLEARED_EVENT, AG_UI_TOOL_FAILURE_EVENT, AG_UI_TOOL_RECOVERY_REQUIRED_EVENT, AgUiToolRecoveryProviderOutcomes, ___ParseAgUiA2uiEnvelope, type AgUiA2uiEnvelope, type AgUiProjectionEvent, type AgUiToolFailureEnvelope, type AgUiToolRecoveryRequiredEnvelope } from "@opencrane/contracts";
 
-import type { AgUiStreamRecord, AgUiStreamState } from "./ag-ui-stream.types.js";
+import { AgUiMessageStatuses, AgUiRunStatuses, AgUiToolStatuses, type AgUiMessageView, type AgUiStreamRecord, type AgUiStreamState } from "./ag-ui-stream.types.js";
 
-/** Construct an empty state that requires an authoritative stream before it can display content. */
+/** Maximum complete progressive history retained for one governed surface. */
+const _MAX_MATERIALIZED_A2UI_OPERATIONS = 256;
+
+/** Fixed provider-outcome vocabulary admitted by the shared recovery projection. */
+const _TOOL_RECOVERY_PROVIDER_OUTCOMES = new Set<string>(Object.values(AgUiToolRecoveryProviderOutcomes));
+
+/** Construct empty state that requires an authoritative stream before displaying content. */
 export function __CreateAgUiStreamState(): AgUiStreamState
 {
-	return { cursor: null, seenCursors: new Set(), runId: null, messages: {}, tools: {}, customEvents: [] };
+	return { cursor: null, seenCursors: new Map(), runId: null, runStatus: AgUiRunStatuses.Idle, runFailure: null, runRecovery: null, interrupts: [], messages: {}, tools: {}, surfaces: new Map(), surfaceFingerprints: new Map(), customEvents: [], accessRevoked: false };
 }
 
-/** Decode one complete AG-UI SSE record, rejecting malformed or non-projection input. */
-export function __DecodeAgUiSseRecord(frame: string): AgUiStreamRecord | null
+/** Purge all projected content and reconnect coordinates after proven access loss. */
+export function __RevokeAgUiStreamAccess(): AgUiStreamState
 {
-	const fields = new Map<string, string>();
-	for (const line of frame.replaceAll("\r\n", "\n").split("\n"))
-	{
-		const separator = line.indexOf(":");
-		if (separator > 0) fields.set(line.slice(0, separator), line.slice(separator + 1).trimStart());
-	}
-	const id = fields.get("id");
-	const event = fields.get("event");
-	const serialized = fields.get("data");
-	if (!id || event !== "ag-ui" || !serialized || /[\r\n]/.test(id)) return null;
-	try
-	{
-		const data = ___ParseAndValidateJson(serialized, "AG-UI SSE data", _ProjectionEvent);
-		return { id, event: "ag-ui", data };
-	}
-	catch { return null; }
+	return { ...__CreateAgUiStreamState(), accessRevoked: true, customEvents: ["opencrane.access_revoked"] };
 }
 
-/** Return one supported projection event or reject the decoded transport value. */
-function _ProjectionEvent(value: unknown): AgUiProjectionEvent
-{
-	if (!_IsProjectionEvent(value)) throw new Error("AG-UI SSE data must contain a supported projection event");
-	return value;
-}
-
-/** Fold one replay record, refusing duplicate cursors without inferring order from opaque identifiers. */
+/** Fold one strict projection record without inferring order from opaque cursor text. */
 export function __ReduceAgUiStream(state: AgUiStreamState, record: AgUiStreamRecord): AgUiStreamState
 {
-	if (state.seenCursors.has(record.id)) return state;
-	const seenCursors = new Set(state.seenCursors).add(record.id);
-	const event = record.data;
-	if (event.type === "RUN_STARTED") return { ...state, seenCursors, cursor: record.id, runId: event.runId };
-	if (event.type === "TEXT_MESSAGE_START") return { ...state, seenCursors, cursor: record.id, messages: { ...state.messages, [event.messageId]: { id: event.messageId, text: "", complete: false } } };
-	if (event.type === "TEXT_MESSAGE_CONTENT")
+	const fingerprint = JSON.stringify(record.data);
+	if (record.id !== undefined)
 	{
-		const message = state.messages[event.messageId];
-		if (!message) return { ...state, seenCursors, cursor: record.id };
-		return { ...state, seenCursors, cursor: record.id, messages: { ...state.messages, [event.messageId]: { ...message, text: message.text + event.delta } } };
+		const prior = state.seenCursors.get(record.id);
+		if (prior === fingerprint) return state;
+		if (prior !== undefined) throw new Error("durable AG-UI cursor changed payload");
 	}
-	if (event.type === "TEXT_MESSAGE_END")
-	{
-		const message = state.messages[event.messageId];
-		return message ? { ...state, seenCursors, cursor: record.id, messages: { ...state.messages, [event.messageId]: { ...message, complete: true } } } : { ...state, seenCursors, cursor: record.id };
-	}
-	if (event.type === "TOOL_CALL_START") return { ...state, seenCursors, cursor: record.id, tools: { ...state.tools, [event.toolCallId]: { id: event.toolCallId, name: event.toolCallName, complete: false, result: null } } };
-	if (event.type === "TOOL_CALL_END")
-	{
-		const tool = state.tools[event.toolCallId];
-		return tool ? { ...state, seenCursors, cursor: record.id, tools: { ...state.tools, [event.toolCallId]: { ...tool, complete: true } } } : { ...state, seenCursors, cursor: record.id };
-	}
-	if (event.type === "TOOL_CALL_RESULT")
-	{
-		const tool = state.tools[event.toolCallId];
-		return tool ? { ...state, seenCursors, cursor: record.id, tools: { ...state.tools, [event.toolCallId]: { ...tool, complete: true, result: event.content } } } : { ...state, seenCursors, cursor: record.id };
-	}
-	if (event.type === "CUSTOM") return { ...state, seenCursors, cursor: record.id, customEvents: [...state.customEvents, event.name] };
-	return { ...state, seenCursors, cursor: record.id };
+	const reduced = _ReduceEvent(state, record.data);
+	if (record.id === undefined || reduced.accessRevoked) return reduced;
+	return { ...reduced, cursor: record.id, seenCursors: new Map(reduced.seenCursors).set(record.id, fingerprint) };
 }
 
-/** Return the durable cursor a reconnecting client must present to its future authorized reader. */
+/** Return the exact durable cursor a reconnecting client must present. */
 export function __AgUiResumeCursor(state: AgUiStreamState): string | undefined { return state.cursor ?? undefined; }
 
-/** Validate only the intentionally supported, display-safe event vocabulary. */
-function _IsProjectionEvent(value: unknown): value is AgUiProjectionEvent
+/** Apply one exact-pinned event after transport and duplicate validation. */
+function _ReduceEvent(state: AgUiStreamState, event: AgUiProjectionEvent): AgUiStreamState
 {
-	if (typeof value !== "object" || value === null) return false;
-	const event = value as Record<string, unknown>;
-	if (event["type"] === "RUN_STARTED" || event["type"] === "RUN_FINISHED") return typeof event["threadId"] === "string" && typeof event["runId"] === "string";
-	if (event["type"] === "TEXT_MESSAGE_START") return typeof event["messageId"] === "string" && event["role"] === "assistant";
-	if (event["type"] === "TEXT_MESSAGE_CONTENT") return typeof event["messageId"] === "string" && typeof event["delta"] === "string";
-	if (event["type"] === "TEXT_MESSAGE_END") return typeof event["messageId"] === "string";
-	if (event["type"] === "TOOL_CALL_START") return typeof event["toolCallId"] === "string" && typeof event["toolCallName"] === "string";
-	if (event["type"] === "TOOL_CALL_ARGS" || event["type"] === "TOOL_CALL_END") return typeof event["toolCallId"] === "string";
-	if (event["type"] === "TOOL_CALL_RESULT") return typeof event["toolCallId"] === "string" && typeof event["content"] === "string";
-	return event["type"] === "CUSTOM" && typeof event["name"] === "string" && typeof event["value"] === "object" && event["value"] !== null && typeof (event["value"] as Record<string, unknown>)["eventType"] === "string";
+	switch (event.type)
+	{
+		case EventType.RUN_STARTED:
+			return { ...state, runId: event.runId, runStatus: AgUiRunStatuses.Running, runFailure: null, runRecovery: null, interrupts: [], accessRevoked: false };
+		case EventType.RUN_FINISHED:
+			return _FinishRun(state, event);
+		case EventType.RUN_ERROR:
+			return _FailRun(state, event.message, event.code);
+		case EventType.TEXT_MESSAGE_START:
+			return { ...state, messages: { ...state.messages, [event.messageId]: { id: event.messageId, role: event.role, text: "", status: AgUiMessageStatuses.Streaming } } };
+		case EventType.TEXT_MESSAGE_CONTENT:
+			return _AppendMessage(state, event.messageId, event.delta);
+		case EventType.TEXT_MESSAGE_END:
+			return _CompleteMessage(state, event.messageId);
+		case EventType.TOOL_CALL_START:
+			return { ...state, tools: { ...state.tools, [event.toolCallId]: { id: event.toolCallId, name: event.toolCallName, arguments: "", status: AgUiToolStatuses.Requested, result: null, failureCode: null, failures: [], recovery: null } } };
+		case EventType.TOOL_CALL_ARGS:
+			return _AppendToolArguments(state, event.toolCallId, event.delta);
+		case EventType.TOOL_CALL_END:
+			return _CompleteTool(state, event.toolCallId);
+		case EventType.TOOL_CALL_RESULT:
+			return _ResultTool(state, event.toolCallId, event.content);
+		case EventType.CUSTOM:
+			return _Custom(state, event.name, event.value);
+	}
+}
+
+/** Preserve a distinct cancelled terminal while retaining only display-safe error details. */
+function _FailRun(state: AgUiStreamState, message: string, code: string | undefined): AgUiStreamState
+{
+	const runStatus = code === "RUN_CANCELLED" ? AgUiRunStatuses.Cancelled : AgUiRunStatuses.Failed;
+	return { ...state, runStatus, runFailure: { message, ...(code === undefined ? {} : { code }) }, interrupts: [] };
+}
+
+/** Apply a successful or interrupted run terminal without overwriting an error terminal. */
+function _FinishRun(state: AgUiStreamState, event: Extract<AgUiProjectionEvent, { readonly type: EventType.RUN_FINISHED }>): AgUiStreamState
+{
+	if (state.runId !== null && state.runId !== event.runId) throw new Error("AG-UI run terminal does not match the active run");
+	if (state.runStatus === AgUiRunStatuses.NeedsRecovery || state.runStatus === AgUiRunStatuses.Failed || state.runStatus === AgUiRunStatuses.Cancelled) throw new Error("AG-UI success cannot overwrite a recovery-required, failed, or cancelled run");
+	if (event.outcome?.type === "interrupt") return { ...state, runId: event.runId, runStatus: AgUiRunStatuses.Interrupted, runFailure: null, interrupts: event.outcome.interrupts };
+	return { ...state, runId: event.runId, runStatus: AgUiRunStatuses.Succeeded, runFailure: null, interrupts: [] };
+}
+
+/** Append message text only after the matching start frame established its role and identity. */
+function _AppendMessage(state: AgUiStreamState, messageId: string, delta: string): AgUiStreamState
+{
+	const message = state.messages[messageId];
+	if (message === undefined || message.status !== AgUiMessageStatuses.Streaming) throw new Error("AG-UI message delta has no active message");
+	return { ...state, messages: { ...state.messages, [messageId]: { ...message, text: message.text + delta } } };
+}
+
+/** Complete only a message that is currently streaming. */
+function _CompleteMessage(state: AgUiStreamState, messageId: string): AgUiStreamState
+{
+	const message = state.messages[messageId];
+	if (message === undefined || message.status !== AgUiMessageStatuses.Streaming) throw new Error("AG-UI message end has no active message");
+	return { ...state, messages: { ...state.messages, [messageId]: { ...message, status: AgUiMessageStatuses.Completed } } };
+}
+
+/** Append tool arguments only after the matching start frame. */
+function _AppendToolArguments(state: AgUiStreamState, toolCallId: string, delta: string): AgUiStreamState
+{
+	const tool = state.tools[toolCallId];
+	if (tool === undefined || tool.status !== AgUiToolStatuses.Requested) throw new Error("AG-UI tool arguments have no active tool call");
+	return { ...state, tools: { ...state.tools, [toolCallId]: { ...tool, arguments: tool.arguments + delta } } };
+}
+
+/** Mark one known tool request complete unless durable recovery evidence owns its status. */
+function _CompleteTool(state: AgUiStreamState, toolCallId: string): AgUiStreamState
+{
+	const tool = state.tools[toolCallId];
+	if (tool === undefined) throw new Error("AG-UI tool end has no active tool call");
+	if (tool.status === AgUiToolStatuses.NeedsRecovery || tool.recovery !== null) return state;
+	const status = tool.failures.length === 0 && tool.recovery === null ? AgUiToolStatuses.Completed : AgUiToolStatuses.Recovered;
+	return { ...state, tools: { ...state.tools, [toolCallId]: { ...tool, status } } };
+}
+
+/** Attach a display-safe result only to a known tool call without unresolved recovery evidence. */
+function _ResultTool(state: AgUiStreamState, toolCallId: string, content: string): AgUiStreamState
+{
+	const tool = state.tools[toolCallId];
+	if (tool === undefined) throw new Error("AG-UI tool result has no known tool call");
+	if (tool.status === AgUiToolStatuses.NeedsRecovery || tool.recovery !== null) return state;
+	const status = tool.failures.length === 0 && tool.recovery === null ? AgUiToolStatuses.Completed : AgUiToolStatuses.Recovered;
+	return { ...state, tools: { ...state.tools, [toolCallId]: { ...tool, status, result: content } } };
+}
+
+/** Apply OpenCrane custom display signals without adopting raw authority payloads. */
+function _Custom(state: AgUiStreamState, name: string, value: unknown): AgUiStreamState
+{
+	if (name === "opencrane.access_revoked") return __RevokeAgUiStreamAccess();
+	if (name === AG_UI_INTERRUPTS_CLEARED_EVENT) return { ...state, interrupts: [], customEvents: [...state.customEvents, name] };
+	if (name === "opencrane.message_terminal") return _MessageTerminal(state, value, name);
+	if (name === AG_UI_TOOL_FAILURE_EVENT) return _ToolFailure(state, value, name);
+	if (name === AG_UI_TOOL_RECOVERY_REQUIRED_EVENT) return _ToolRecoveryRequired(state, value, name);
+	if (name === AG_UI_A2UI_ENVELOPE_VERSION) return _A2uiSurface(state, ___ParseAgUiA2uiEnvelope(value), name);
+	return { ...state, customEvents: [...state.customEvents, name] };
+}
+
+/** Stop one run visibly without treating an ambiguous provider outcome as failure or elicitation. */
+function _ToolRecoveryRequired(state: AgUiStreamState, value: unknown, name: string): AgUiStreamState
+{
+	if (!_IsToolRecoveryRequired(value)) throw new Error("AG-UI tool recovery requirement is invalid");
+	if (state.runId === null || value.runId !== state.runId) throw new Error("AG-UI tool recovery requirement does not match the active run");
+	if (state.runStatus !== AgUiRunStatuses.Running && state.runStatus !== AgUiRunStatuses.Interrupted) throw new Error("AG-UI tool recovery requirement has no recoverable active run");
+	const tool = state.tools[value.toolCallId];
+	if (tool === undefined) throw new Error("AG-UI tool recovery requirement has no known tool call");
+	const recoveryTool = { ...tool, status: AgUiToolStatuses.NeedsRecovery, recovery: value };
+	return { ...state, runStatus: AgUiRunStatuses.NeedsRecovery, runFailure: null, runRecovery: value, interrupts: [], tools: { ...state.tools, [value.toolCallId]: recoveryTool }, customEvents: [...state.customEvents, name] };
+}
+
+/** Admit only the exact server-redacted recovery envelope and its fixed safe vocabularies. */
+function _IsToolRecoveryRequired(value: unknown): value is AgUiToolRecoveryRequiredEnvelope
+{
+	if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
+	const candidate = value as Record<string, unknown>;
+	const keys = Object.keys(candidate);
+	const required = ["eventType", "runId", "expectedAttempt", "toolCallId", "occurredAt", "recoveryCategory", "preparationRetryCount", "preparationRetryLimit"];
+	if (required.some(function _Missing(key): boolean { return !Object.hasOwn(candidate, key); })) return false;
+	if (keys.some(function _Unknown(key): boolean { return !required.includes(key) && key !== "providerOutcome"; })) return false;
+	if (candidate["eventType"] !== "tool.recovery_required" || candidate["recoveryCategory"] !== "manual_action_required") return false;
+	if (!_BoundedIdentifier(candidate["runId"]) || !_BoundedIdentifier(candidate["toolCallId"])) return false;
+	if (!Number.isSafeInteger(candidate["expectedAttempt"]) || (candidate["expectedAttempt"] as number) < 1) return false;
+	if (!Number.isSafeInteger(candidate["preparationRetryCount"]) || (candidate["preparationRetryCount"] as number) < 0 || (candidate["preparationRetryCount"] as number) > 3) return false;
+	if (candidate["preparationRetryLimit"] !== 3 || !_CanonicalInstant(candidate["occurredAt"])) return false;
+	return candidate["providerOutcome"] === undefined || (typeof candidate["providerOutcome"] === "string" && _TOOL_RECOVERY_PROVIDER_OUTCOMES.has(candidate["providerOutcome"]));
+}
+
+/** Require one non-empty bounded public coordinate. */
+function _BoundedIdentifier(value: unknown): value is string
+{
+	return typeof value === "string" && value.length > 0 && value.length <= 256;
+}
+
+/** Accept only the canonical UTC instant emitted from the durable timeline row. */
+function _CanonicalInstant(value: unknown): value is string
+{
+	if (typeof value !== "string") return false;
+	const timestamp = Date.parse(value);
+	return Number.isFinite(timestamp) && new Date(timestamp).toISOString() === value;
+}
+
+/** Mark one known tool failed while retaining only the server-selected safe classification. */
+function _ToolFailure(state: AgUiStreamState, value: unknown, name: string): AgUiStreamState
+{
+	if (!_IsToolFailure(value)) throw new Error("AG-UI tool failure is invalid");
+	const tool = state.tools[value.toolCallId];
+	if (tool === undefined) throw new Error("AG-UI tool failure has no known tool call");
+	const failureCode = value.failureCode ?? null;
+	const failed = { ...tool, status: AgUiToolStatuses.Failed, failureCode, failures: [...tool.failures, { code: failureCode }] };
+	return { ...state, tools: { ...state.tools, [value.toolCallId]: failed }, customEvents: [...state.customEvents, name] };
+}
+
+/** Validate the exact display-safe tool-failure envelope without trusting arbitrary CUSTOM data. */
+function _IsToolFailure(value: unknown): value is AgUiToolFailureEnvelope
+{
+	if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
+	const candidate = value as Record<string, unknown>;
+	const keys = Object.keys(candidate);
+	if (keys.some(function _Unknown(key): boolean { return key !== "eventType" && key !== "toolCallId" && key !== "failureCode"; })) return false;
+	return candidate["eventType"] === "tool.failed" && typeof candidate["toolCallId"] === "string" && (candidate["failureCode"] === undefined || typeof candidate["failureCode"] === "string");
+}
+
+/** Adopt only an authoritative monotonic surface envelope under its complete stable identity. */
+function _A2uiSurface(state: AgUiStreamState, envelope: AgUiA2uiEnvelope, name: string): AgUiStreamState
+{
+	const identity = _A2uiSurfaceIdentity(envelope);
+	const previous = state.surfaces.get(identity);
+	const fingerprint = JSON.stringify(envelope);
+	const previousFingerprint = state.surfaceFingerprints.get(identity);
+	if (previous !== undefined && envelope.sequence < previous.sequence) throw new Error("governed A2UI surface sequence regressed");
+	if (previous !== undefined && envelope.sequence > previous.sequence + 1) throw new Error("governed A2UI surface sequence has a gap");
+	if (previous !== undefined && envelope.sequence === previous.sequence)
+	{
+		if (previousFingerprint !== fingerprint) throw new Error("governed A2UI surface sequence changed payload");
+		return state;
+	}
+	const materialized = previous === undefined ? envelope : { ...envelope, operations: [...previous.operations, ...envelope.operations] };
+	if (materialized.operations.length > _MAX_MATERIALIZED_A2UI_OPERATIONS) throw new Error("governed A2UI surface history is too large");
+	return {
+		...state,
+		surfaces: new Map(state.surfaces).set(identity, materialized),
+		surfaceFingerprints: new Map(state.surfaceFingerprints).set(identity, fingerprint),
+		customEvents: [...state.customEvents, name]
+	};
+}
+
+/** Build one collision-safe key from every stable coordinate that selects a governed surface. */
+function _A2uiSurfaceIdentity(envelope: AgUiA2uiEnvelope): string
+{
+	return JSON.stringify([envelope.conversationId, envelope.runId, envelope.messageId, envelope.surfaceId]);
+}
+
+/** Apply the display-safe message terminal marker emitted by the shared projector. */
+function _MessageTerminal(state: AgUiStreamState, value: unknown, name: string): AgUiStreamState
+{
+	if (typeof value !== "object" || value === null) return { ...state, customEvents: [...state.customEvents, name] };
+	const marker = value as Record<string, unknown>;
+	const messageId = marker["messageId"];
+	const eventType = marker["eventType"];
+	if (typeof messageId !== "string") return { ...state, customEvents: [...state.customEvents, name] };
+	const message = state.messages[messageId];
+	if (message === undefined) throw new Error("AG-UI message terminal has no known message");
+	if (eventType !== "message.failed" && eventType !== "message.cancelled") throw new Error("AG-UI message terminal is invalid");
+	const status = eventType === "message.cancelled" ? AgUiMessageStatuses.Cancelled : AgUiMessageStatuses.Failed;
+	return { ...state, messages: { ...state.messages, [messageId]: { ...message, status } }, customEvents: [...state.customEvents, name] };
 }

@@ -1,17 +1,15 @@
 import type { Types } from "@a2ui/angular/v0_8";
 
 /**
- * The OpenCrane A2UI theme — brings agent-authored canvas surfaces onto our design tokens.
+ * The OpenCrane A2UI theme brings projected canvas surfaces onto shared design tokens.
  *
  * A2UI applies `additionalStyles.<Component>` as inline styles on each rendered component, so
  * that channel is the bridge to our CSS variables (no A2UI-named CSS classes exist to target, so
- * the class-map fields stay empty). Markdown inside A2UI Text is NOT themed here — it flows
- * through our vendored pipeline via `provideMarkdownRenderer`, so it already carries our classes.
+ * the class-map fields stay empty). Markdown inside A2UI Text is not themed here; the browser
+ * composition root supplies the package's required safe HTML sanitizer port.
  *
- * This is the incremental "custom themed catalog" step from #41 §4: it themes the standard
- * catalog rather than swapping in bespoke components. Fine-grained element theming (e.g. input
- * borders, which need per-element class-maps A2UI doesn't expose via additionalStyles) is a
- * further refinement on top of this.
+ * The catalogue is constrained separately; this complete upstream theme shape is required by the
+ * A2UI renderer even though unsupported component entries can never be selected.
  */
 export function _OpenCraneA2uiTheme(): Types.Theme
 {
@@ -44,37 +42,37 @@ export function _OpenCraneA2uiTheme(): Types.Theme
 		},
 		markdown: { p: [], h1: [], h2: [], h3: [], h4: [], h5: [], ul: [], ol: [], li: [], a: [], strong: [], em: [] },
 		additionalStyles: {
-			Card: { background: "var(--oc-surface-subtle)", border: "1px solid var(--oc-border-default)", "border-radius": "var(--oc-radius-chip)", padding: "12px" },
-			Row: { gap: "8px", "align-items": "center" },
-			Column: { gap: "8px" },
-			List: { gap: "6px" },
+			Card: { background: "var(--oc-surface-subtle)", border: "1px solid var(--oc-border-default)", "border-radius": "var(--oc-radius-chip)", padding: "var(--oc-space-3)" },
+			Row: { gap: "var(--oc-space-2)", "align-items": "center" },
+			Column: { gap: "var(--oc-space-2)" },
+			List: { gap: "var(--oc-space-2)" },
 			Button: {
 				background: "var(--oc-ink-strong)",
 				color: "var(--oc-on-strong)",
 				border: "none",
 				"border-radius": "var(--oc-radius-chip)",
-				padding: "6px 14px",
-				"font-size": "13px",
+				padding: "var(--oc-space-2) var(--oc-space-3)",
+				"font-size": "var(--oc-text-sm)",
 				cursor: "pointer",
 			},
-			Divider: { "border-top": "1px solid var(--oc-border-default)", margin: "8px 0" },
+			Divider: { "border-top": "1px solid var(--oc-border-default)", margin: "var(--oc-space-2) 0" },
 			Icon: { color: "var(--oc-ink-muted)" },
 			Image: { "border-radius": "var(--oc-radius-chip)", "max-width": "100%" },
-			TextField: { color: "var(--oc-ink-strong)", "font-size": "13px" },
-			CheckBox: { color: "var(--oc-ink-strong)", "font-size": "13px", "accent-color": "var(--oc-accent)" },
-			DateTimeInput: { color: "var(--oc-ink-strong)", "font-size": "13px" },
-			MultipleChoice: { color: "var(--oc-ink-strong)", "font-size": "13px" },
+			TextField: { color: "var(--oc-ink-strong)", "font-size": "var(--oc-text-sm)" },
+			CheckBox: { color: "var(--oc-ink-strong)", "font-size": "var(--oc-text-sm)", "accent-color": "var(--oc-accent)" },
+			DateTimeInput: { color: "var(--oc-ink-strong)", "font-size": "var(--oc-text-sm)" },
+			MultipleChoice: { color: "var(--oc-ink-strong)", "font-size": "var(--oc-text-sm)" },
 			Slider: { "accent-color": "var(--oc-accent)" },
-			Tabs: { "font-size": "13px", color: "var(--oc-ink-strong)" },
-			Modal: { background: "var(--oc-surface-subtle)", border: "1px solid var(--oc-border-default)", "border-radius": "var(--oc-radius-chip)", padding: "16px" },
+			Tabs: { "font-size": "var(--oc-text-sm)", color: "var(--oc-ink-strong)" },
+			Modal: { background: "var(--oc-surface-subtle)", border: "1px solid var(--oc-border-default)", "border-radius": "var(--oc-radius-chip)", padding: "var(--oc-space-4)" },
 			Text: {
-				body: { color: "var(--oc-ink-strong)", "font-size": "14px", "line-height": "1.6" },
-				caption: { color: "var(--oc-ink-muted)", "font-size": "12px" },
-				h1: { color: "var(--oc-ink-strong)", "font-size": "18px", "font-weight": "600" },
-				h2: { color: "var(--oc-ink-strong)", "font-size": "16px", "font-weight": "600" },
-				h3: { color: "var(--oc-ink-strong)", "font-size": "14px", "font-weight": "600" },
-				h4: { color: "var(--oc-ink-strong)", "font-size": "13px", "font-weight": "600" },
-				h5: { color: "var(--oc-ink-strong)", "font-size": "12px", "font-weight": "600" },
+				body: { color: "var(--oc-ink-strong)", "font-size": "var(--oc-text-md)", "line-height": "1.6" },
+				caption: { color: "var(--oc-ink-muted)", "font-size": "var(--oc-text-sm)" },
+				h1: { color: "var(--oc-ink-strong)", "font-size": "var(--oc-text-lg)", "font-weight": "var(--oc-font-weight-medium)" },
+				h2: { color: "var(--oc-ink-strong)", "font-size": "var(--oc-text-md)", "font-weight": "var(--oc-font-weight-medium)" },
+				h3: { color: "var(--oc-ink-strong)", "font-size": "var(--oc-text-md)", "font-weight": "var(--oc-font-weight-medium)" },
+				h4: { color: "var(--oc-ink-strong)", "font-size": "var(--oc-text-sm)", "font-weight": "var(--oc-font-weight-medium)" },
+				h5: { color: "var(--oc-ink-strong)", "font-size": "var(--oc-text-xs)", "font-weight": "var(--oc-font-weight-medium)" },
 			},
 		},
 	};

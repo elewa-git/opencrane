@@ -655,9 +655,29 @@ export interface paths {
         };
         /**
          * List the signed-in owner's pending tool approvals
-         * @description The server derives the owner and silo from the browser session and host. It returns at most fifty actionable approvals and never returns arguments, proof data, policy digests, or resume credentials.
+         * @description The server derives the owner and silo from the browser session and host. It returns at most fifty actionable interrupts with pre-redacted proposed arguments and an exact decision response schema derived from the frozen reviewed tool schema. It never returns secret-marked values, raw authority evidence, policy digests, or resume material.
          */
         get: operations["listMyPendingToolApprovals"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/approvals/{approvalRequestId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read one tool interrupt owned by the signed-in user
+         * @description The approval id is the interrupt id. The response reports actor-relevant state, pre-redacted proposed arguments, and the frozen decision response schema without returning server-only reviewed arguments or resume material.
+         */
+        get: operations["getMyToolApproval"];
         put?: never;
         post?: never;
         delete?: never;
@@ -677,7 +697,7 @@ export interface paths {
         put?: never;
         /**
          * Approve or deny one pending tool action owned by the signed-in user
-         * @description The server derives the owner and silo from the browser session. The body can contain only the terminal decision; it cannot choose another run, subject, tool result, or resume credential.
+         * @description The server derives the owner and silo from the browser session. Approval must carry one complete argument value, which the server validates against the frozen reviewed response schema; denial carries no arguments. Partial edits, run coordinates, tool results, and resume material are rejected.
          */
         post: operations["decideDeferredToolApproval"];
         delete?: never;
@@ -740,6 +760,26 @@ export interface paths {
         get: operations["getMyRunStatus"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/runs/{runId}/cancellation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cancel the exact personal run attempt observed by its signed-in owner
+         * @description The server derives owner and silo from the browser session, rejects stale attempts, and never exposes whether a foreign run exists.
+         */
+        post: operations["cancelMyRun"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1791,7 +1831,7 @@ export interface components {
             runId: string;
             attempt: number;
             /** @enum {string} */
-            state: "accepted" | "queued" | "assigned" | "running" | "waiting_for_approval" | "cancelling" | "completed" | "failed" | "cancelled";
+            state: "accepted" | "queued" | "assigned" | "running" | "waiting_for_approval" | "recovery_required" | "cancelling" | "completed" | "failed" | "cancelled";
             conversationId: string | null;
             agentRevisionId: string;
             /** Format: date-time */
@@ -1799,11 +1839,22 @@ export interface components {
             /** Format: date-time */
             finishedAt: string | null;
         };
+        SelfRunCancellation: {
+            runId: string;
+            attempt: number;
+            /** @enum {string} */
+            state: "cancelling" | "cancelled";
+        };
         SelfDeferredToolApproval: {
             approvalRequestId: string;
             runId: string;
             attempt: number;
             toolRevisionId: string;
+            toolInvocationId: string;
+            /** @enum {string} */
+            state: "pending" | "approved" | "denied" | "expired" | "cancelled";
+            proposedArguments: unknown;
+            responseSchema: Record<string, never>;
             /** Format: date-time */
             expiresAt: string;
             /** Format: date-time */
@@ -4051,6 +4102,67 @@ export interface operations {
             };
         };
     };
+    getMyToolApproval: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Interrupt identifier for the owned approval. */
+                approvalRequestId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Owned tool interrupt. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        approval: components["schemas"]["SelfDeferredToolApproval"];
+                    };
+                };
+            };
+            /** @description The interrupt identifier is empty. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description No authenticated browser session owns the request. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The interrupt is absent or belongs to another actor or silo. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The product authority could not read the interrupt. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
     decideDeferredToolApproval: {
         parameters: {
             query?: never;
@@ -4064,8 +4176,12 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": {
-                    /** @enum {string} */
-                    decision: "approved" | "denied";
+                    /** @constant */
+                    decision: "approved";
+                    arguments: unknown;
+                } | {
+                    /** @constant */
+                    decision: "denied";
                 };
             };
         };
@@ -4083,7 +4199,7 @@ export interface operations {
                     };
                 };
             };
-            /** @description The request body is not the exact decision shape. */
+            /** @description The request body is not the exact decision shape, or approved arguments fail the frozen reviewed schema. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -4298,6 +4414,99 @@ export interface operations {
                 };
             };
             /** @description Run status could not be read. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    cancelMyRun: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Opaque run identifier. */
+                runId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description Attempt last observed by the browser. */
+                    expectedAttempt: number;
+                };
+            };
+        };
+        responses: {
+            /** @description The run was already, or is now, fully cancelled. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SelfRunCancellation"];
+                };
+            };
+            /** @description Cancellation is fenced while physical cleanup completes. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SelfRunCancellation"];
+                };
+            };
+            /** @description The identifier or request body is malformed. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description No browser session owns the request. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The browser request failed CSRF protection. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The run is absent or not owned by the caller. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The attempt is stale, terminal, or could not be safely fenced. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Cancellation authority is temporarily unavailable. */
             503: {
                 headers: {
                     [name: string]: unknown;

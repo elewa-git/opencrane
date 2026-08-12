@@ -22,6 +22,34 @@ export interface RequestRunCancellationCommand
 	readonly requestedBy: string;
 }
 
+/** Stable categories returned by durable cancellation authority. */
+export enum RunCancellationResultStatuses
+{
+	/** The run is fenced while physical cleanup remains. */
+	Cancelling = "cancelling",
+	/** The run reached its final cancelled state without pending cleanup. */
+	Cancelled = "cancelled",
+	/** The exact cancellation was already applied. */
+	Idempotent = "idempotent",
+	/** No run exists for the supplied identifier. */
+	NotFound = "not_found",
+	/** Current durable authority rejected the cancellation. */
+	Conflict = "conflict",
+}
+
+/** Stable reasons durable cancellation authority can reject a request. */
+export enum RunCancellationConflictReasons
+{
+	/** The supplied command is syntactically or semantically invalid. */
+	InvalidRequest = "invalid_request",
+	/** The run has moved to a newer attempt. */
+	AttemptConflict = "attempt_conflict",
+	/** The run already finished. */
+	TerminalRun = "terminal_run",
+	/** Required durable facts did not agree under the cancellation fence. */
+	AuthorityConflict = "authority_conflict",
+}
+
 /** Durable outcome of requesting cancellation. */
 export type RequestRunCancellationResult =
 	| { readonly status: "cancelling"; readonly runId: string; readonly attempt: number; readonly cleanupRequired: true }

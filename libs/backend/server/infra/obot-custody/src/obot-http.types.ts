@@ -12,6 +12,17 @@ export interface ObotSession
 {
 	/** Issue one bounded, timeout-guarded JSON exchange and return the parsed response body. */
 	request(path: string, method: ObotRequestMethod, body?: unknown): Promise<unknown>;
+	/** Issue one bounded MCP JSON-RPC exchange, accepting JSON or server-sent events. */
+	mcpRequest(path: string, body: unknown, sessionId?: string): Promise<ObotMcpExchangeResponse>;
+}
+
+/** Parsed response metadata from one bounded MCP JSON-RPC exchange. */
+export interface ObotMcpExchangeResponse
+{
+	/** Parsed JSON-RPC payload; raw response bytes never leave the session. */
+	readonly payload: unknown;
+	/** Validated Obot session identifier to echo on the next exchange, when present. */
+	readonly sessionId: string | null;
 }
 
 /** Configuration for the authenticated Obot management HTTP session. */
@@ -27,4 +38,6 @@ export interface ObotHttpOptions
 	readonly fetch?: ObotFetch;
 	/** Optional service-token reader seam used by focused tests. */
 	readonly readServiceToken?: () => Promise<string>;
+	/** Process-lifecycle signal that aborts active exchanges before dependency shutdown. */
+	readonly shutdownSignal: AbortSignal;
 }

@@ -10,8 +10,8 @@ draw it, that data has to be turned into a **view-model**: a plain, already-shap
 can render without further logic. This package owns those pure view-model builders and the
 attributed third-party code they reuse.
 
-It is pure and does no input/output: no HTTP, no storage, no Angular. It holds the chat/tool/canvas
-view-model types, the builders that fold a message stream into them, and a **sanitised markdown
+It is pure and does no input/output: no HTTP, no storage, no Angular. It holds tool/file view-model
+builders, the helpers that fold a message stream into them, and a **sanitised markdown
 pipeline** — markdown converted to HTML and then run through a strict tag/attribute allowlist so a
 message can never inject unsafe markup (only `data:` image URIs, dangerous link schemes stripped). The
 Angular rendering surface that consumes these view-models is re-implemented separately in
@@ -23,15 +23,17 @@ attribution inline in the source file that carries it.
 
 ## Public surface
 
-- `chat-types`, `tool-content`, `tool-output`, `canvas-render` — chat/tool/canvas view-model types + builders.
+- `tool-content`, `tool-output` — provider-shaped tool guards and display-safe output builders.
 - `conversation-stream.types` / `conversation-stream.util` — fold a message stream into view-models.
-- `file-artifact` / `file-artifact.types`, `media`, `fences` — attachment, media, and code-fence helpers.
+- `file-artifact` / `file-artifact.types`, `media` — attachment and media helpers.
 - `markdown` — the sanitised markdown → HTML pipeline.
 
 ## Boundary
 
-Consumed by future product conversation UI and `elements/a2ui` (the rendering surfaces). It builds view-models
-and sanitises markup only; it never fetches, caches, or streams — the conversation adapter does that.
+Consumed by future product conversation UI. It builds view-models and sanitises markup only; it
+never fetches, caches, or streams — the conversation adapter does that. Governed A2UI envelopes do
+not pass through these OpenClaw helpers: the AG-UI state boundary projects them directly to
+`@opencrane/elements/a2ui`.
 
 ## Dependency direction
 

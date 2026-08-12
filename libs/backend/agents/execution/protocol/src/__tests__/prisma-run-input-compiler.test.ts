@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { PROMPT_COMPILER_VERSION, RunInputSnapshotIdentityKinds, type RunInputSnapshot } from "@opencrane/contracts";
 import { __UnavailableMemoryGatewayClient } from "@opencrane/backend/server/infra/memory-gateway-client";
+import { ___DigestCanonicalJson } from "@opencrane/util";
 
 import { __CreatePrismaRunInputCompiler } from "../prisma-run-input-compiler.js";
 
@@ -93,5 +94,27 @@ describe("__CreatePrismaRunInputCompiler memory statements", function _describeP
 		const compiled = await __CreatePrismaRunInputCompiler(new __UnavailableMemoryGatewayClient())(_snapshot({ memoryFacts: [], memoryQueryPolicy: { scope: "none" } }), _transaction());
 
 		expect(compiled.instructions).not.toContain("Durable memory");
+	});
+
+	it("projects the exact frozen tool schema and digest without a live catalogue lookup", async function _ProjectsFrozenToolSchema()
+	{
+		const parametersSchema = { type: "object", additionalProperties: false, required: ["query"], properties: { query: { type: "string" } } } as const;
+		const snapshot = _snapshot({ memoryFacts: [], memoryQueryPolicy: { scope: "none" }, integrationAssignments: [{ integrationId: "search", toolDefinitions: [{ name: "query", description: "Search records", parametersSchema, parametersSchemaDigest: ___DigestCanonicalJson(parametersSchema) }] }] });
+
+		const compiled = await __CreatePrismaRunInputCompiler(new __UnavailableMemoryGatewayClient())(snapshot, _transaction());
+
+		expect(compiled.tools).toEqual([{ name: "integration:search:query", toolRevisionId: "integration:search:query", description: "Search records", requiresApproval: true, parametersSchema, parametersSchemaDigest: ___DigestCanonicalJson(parametersSchema) }]);
+	});
+
+	it("fails closed when a frozen tool schema is missing or changed without a new digest", async function _RejectsToolSchemaDrift()
+	{
+		const reviewedSchema = { type: "object", additionalProperties: false } as const;
+		const definition = { name: "query", description: "Search records", parametersSchema: reviewedSchema, parametersSchemaDigest: ___DigestCanonicalJson(reviewedSchema) };
+		const base = { memoryFacts: [], memoryQueryPolicy: { scope: "none" } } as const;
+		const missing = _snapshot({ ...base, integrationAssignments: [{ integrationId: "search", toolDefinitions: [{ ...definition, parametersSchema: undefined } as never] }] });
+		const mutated = _snapshot({ ...base, integrationAssignments: [{ integrationId: "search", toolDefinitions: [{ ...definition, parametersSchema: { type: "object", additionalProperties: true } }] }] });
+
+		await expect(__CreatePrismaRunInputCompiler(new __UnavailableMemoryGatewayClient())(missing, _transaction())).rejects.toThrow(/tool definitions are invalid/);
+		await expect(__CreatePrismaRunInputCompiler(new __UnavailableMemoryGatewayClient())(mutated, _transaction())).rejects.toThrow(/tool definitions are invalid/);
 	});
 });

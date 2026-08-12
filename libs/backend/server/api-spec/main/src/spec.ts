@@ -12,6 +12,8 @@
 
 import { _DomainOpenapiPaths } from "./domain-openapi-paths.js";
 import { _ErrorEnvelopeSchema, _ValidationIssueSchema } from "./error-schemas.js";
+import { _SelfDeferredToolApprovalSchema } from "./approval-schemas.js";
+import { _SelfRunCancellationSchema, _SelfRunStatusSchema } from "./run-schemas.js";
 
 // ---------------------------------------------------------------------------
 // Reusable schema components
@@ -585,31 +587,9 @@ export const spec = {
       Budget: BudgetSchema,
       ThirdPartySource: ThirdPartySourceSchema,
       TokenUsage: TokenUsageSchema,
-      SelfRunStatus: {
-        type: "object",
-        required: ["runId", "attempt", "state", "conversationId", "agentRevisionId", "acceptedAt", "finishedAt"],
-        properties: {
-          runId: { type: "string" },
-          attempt: { type: "integer", minimum: 1 },
-          state: { type: "string", enum: ["accepted", "queued", "assigned", "running", "waiting_for_approval", "cancelling", "completed", "failed", "cancelled"] },
-          conversationId: { type: "string", nullable: true },
-          agentRevisionId: { type: "string" },
-          acceptedAt: { type: "string", format: "date-time" },
-          finishedAt: { type: "string", format: "date-time", nullable: true },
-        },
-      },
-      SelfDeferredToolApproval: {
-        type: "object",
-        required: ["approvalRequestId", "runId", "attempt", "toolRevisionId", "expiresAt", "createdAt"],
-        properties: {
-          approvalRequestId: { type: "string" },
-          runId: { type: "string" },
-          attempt: { type: "integer", minimum: 1 },
-          toolRevisionId: { type: "string" },
-          expiresAt: { type: "string", format: "date-time" },
-          createdAt: { type: "string", format: "date-time" },
-        },
-      },
+      SelfRunStatus: _SelfRunStatusSchema,
+      SelfRunCancellation: _SelfRunCancellationSchema,
+      SelfDeferredToolApproval: _SelfDeferredToolApprovalSchema,
       AgentService: {
         type: "object",
         required: ["id", "siloId", "kind", "name", "state", "activeRevisionId", "workloadProfile", "createdAt", "updatedAt"],

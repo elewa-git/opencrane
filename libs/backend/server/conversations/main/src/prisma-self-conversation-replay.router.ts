@@ -5,8 +5,9 @@ import type { Logger } from "pino";
 import { _ResolveRequestPrincipal } from "@opencrane/backend/server/infra/auth";
 
 import { _CreateConversationReplayRepository } from "./prisma-conversation-replay.composition.js";
+import { CONVERSATION_LIVE_REPLAY_CLOCK, CONVERSATION_LIVE_REPLAY_LIMITS } from "./conversation-live-replay.js";
 import { __CreateSelfConversationReplayRouter } from "./self-conversation-replay.router.js";
-import type { SelfConversationReplayCaller } from "./self-conversation-replay.router.types.js";
+import type { SelfConversationReplayCaller, SelfConversationReplayCompositionOptions } from "./self-conversation-replay.router.types.js";
 
 /** Maps authenticated request facts to the caller contract owned by conversations. */
 function _resolveCaller(request: Parameters<typeof _ResolveRequestPrincipal>[0]): SelfConversationReplayCaller | null
@@ -21,11 +22,15 @@ function _resolveCaller(request: Parameters<typeof _ResolveRequestPrincipal>[0])
  * @param logger - Process logger supplied by the app composition root.
  * @returns The configured self-conversation replay router.
  */
-export function _CreateSelfConversationReplayRouter(prisma: PrismaClient, logger: Logger): Router
+export function _CreateSelfConversationReplayRouter(prisma: PrismaClient, logger: Logger, options: SelfConversationReplayCompositionOptions = {}): Router
 {
 	return __CreateSelfConversationReplayRouter({
 		resolveCaller: _resolveCaller,
 		repository: _CreateConversationReplayRepository(prisma),
+		clock: CONVERSATION_LIVE_REPLAY_CLOCK,
+		limits: CONVERSATION_LIVE_REPLAY_LIMITS,
+		...(options.interrupts === undefined ? {} : { interrupts: options.interrupts }),
+		...(options.shutdownSignal === undefined ? {} : { shutdownSignal: options.shutdownSignal }),
 		logger,
 	});
 }

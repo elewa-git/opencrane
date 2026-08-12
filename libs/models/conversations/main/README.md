@@ -29,7 +29,8 @@ only checks deterministic model rules and never allocates a position itself.
 - `ConversationCreationRequest` and `___ConversationCreationRequestSchema` — the shared strict
   request vocabulary that keeps transport validation aligned with immutable modes.
 - `ConversationParticipant`, `Message`, `ConversationTimelineEntry`, and `ConversationReplayCursor`
-  — canonical membership, message, ordering, and replay coordinates.
+  — canonical membership, message, ordering, and replay coordinates. A cursor may include a
+  deterministic AG-UI subframe so reconnect can finish one multi-frame timeline row exactly once.
 - `__DecideConversationCommand` and the `ConversationCommand*` enums/types — the exhaustive
   State-by-Command and immutable-mode strategy decision.
 - `__HasValidConversationAgentBinding`, lifecycle/message/timeline invariant helpers, and the

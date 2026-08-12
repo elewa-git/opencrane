@@ -90,9 +90,14 @@ its resources to the lifecycle owner.
   mounted lease keys, exact same-silo `artifact-service` route, and durable artifact authority into
   source, read, upload, and output brokers; those pieces are inseparable from this process's private
   configuration and do not expose a reusable ArtifactStore client.
-- `src/app/background-workers.ts` owns schedule ticks, expired-run repair, and fenced cleanup loops.
-- `src/app/lifecycle.ts` starts both listeners, stops producers first, drains requests, disconnects
-  Prisma, and flushes telemetry.
+- `src/infra/obot/*` composes custody and server-side Model Context Protocol (MCP) invocation over
+  one authenticated, bounded Obot session. With no Obot configuration both ports refuse closed.
+- `src/app/background-workers.ts` owns schedule ticks, durable external-action passes, expired-run
+  repair, and fenced cleanup loops; shutdown drains any active provider pass before Prisma closes.
+- `src/app/external-action-composition.ts` binds that worker to the immutable execution snapshot,
+  canonical tool lifecycle unit of work, deferred-approval authority, and private provider ports.
+- `src/app/lifecycle.ts` starts both listeners, aborts active Obot exchanges before draining workers,
+  drains requests, disconnects Prisma, and flushes telemetry.
 - `prisma/schema/*.prisma` defines the product's durable domain models.
 - `prisma/bootstrap/target-baseline.sql` defines a clean OpenCrane database. Its focused source
   verifiers prove the seeded persona and onboarding-bootstrap content against the reviewed files in
@@ -168,6 +173,7 @@ are:
 | `OIDC_*` | Organisation sign-in, callbacks, and server-side session protection | required |
 | `OPENCRANE_STANDALONE_FIRST_USER_*` | Optional one-time standalone Owner admission: a configured verified email may claim the host-selected silo under its stable OIDC subject | disabled |
 | `OPENCRANE_INITIAL_MODEL_*` | Optional first provider key; the server persists its custody reference and requires LiteLLM registration before readiness | disabled |
+| `OBOT_GATEWAY_URL`, `OBOT_SERVICE_TOKEN_PATH`, `OBOT_TIMEOUT_SECONDS` | Release-local credential custody and server-side external tool execution | disabled together |
 | `POD_NAMESPACE` | Trusted namespace of this server and controller identity | `default` |
 | `AGENT_RUNTIME_PERSONAL_NAMESPACE` | Personal runtime Job boundary | required |
 | `AGENT_RUNTIME_MANAGED_NAMESPACE` | Managed runtime Job boundary | required |
@@ -176,7 +182,8 @@ are:
 | `OPENCRANE_SCHEDULER_*` | Optional scheduled-run loop and interval | disabled |
 | `ARTIFACT_SERVICE_URL` and mounted artifact keys | Private byte promotion/read brokers | required when used |
 | `ARTIFACT_PREPROCESSOR_*` | Restricted preprocessing worker and output ceiling | disabled |
-| `CHANNEL_REPLAY_ROUTE_ID` | Exact internal replay policy-enforcement route | disabled when absent |
+| `CHANNEL_TARGET_*`, `CHANNEL_PROXY_SERVICE_ACCOUNT_NAME` | Exact trusted host/silo and TokenReviewed proxy caller for channel resolution | disabled when absent |
+| `CHANNEL_REPLAY_RECEIVER_ID`, `CHANNEL_REPLAY_ENDPOINT` | Stable replay receiver plus exact internal endpoint; startup and the drained convergence worker reconcile distinct routes per AgentService | disabled when absent |
 
 The app builds into `dist/apps/opencrane`, uses `deploy/Dockerfile`, and ships through its app-owned
 Helm library chart, which [`deploy-k8s`](../_infra/deploy-k8s/README.md) composes into a release.

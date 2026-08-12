@@ -7,7 +7,7 @@ export interface ClaimedAttemptWithMintInputs
 {
 	/** Database-issued claim generation fencing the delivery. */
 	readonly lease: AgentControllerRunAttemptClaimLease;
-	/** Narrow attempt projection without either transient key. */
+	/** Narrow attempt projection before the transient model key is attached. */
 	readonly attempt: Omit<AgentControllerRunAttemptProjection, "litellmKey">;
 	/** Attempt- and delivery-unique LiteLLM alias. */
 	readonly keyAlias: string;
@@ -17,12 +17,6 @@ export interface ClaimedAttemptWithMintInputs
 	readonly maxBudgetUsd: number;
 	/** Whole-second key lifetime bounded to the assignment lifetime. */
 	readonly expirySeconds: number;
-	/** Integrations frozen into the snapshot, scoping an optional attempt Obot key. */
-	readonly obotIntegrationIds: readonly string[];
-	/** Attempt- and delivery-unique Obot key name derived from immutable claim coordinates. */
-	readonly obotKeyName: string;
-	/** Hard Obot key expiry bounded to the assignment lifetime. */
-	readonly obotKeyExpiresAt: Date;
 }
 
 /** Transaction outcome: no eligible work, or a claim awaiting post-commit key minting. */
@@ -35,8 +29,6 @@ export interface RunAttemptCredentialInput
 	readonly modelRoute: unknown;
 	/** Frozen budget-policy JSON. */
 	readonly budgetPolicy: unknown;
-	/** Frozen integration-assignment JSON. */
-	readonly integrationAssignments: unknown;
 	/** Logical run identifier. */
 	readonly runId: string;
 	/** Positive current attempt number. */
@@ -47,8 +39,6 @@ export interface RunAttemptCredentialInput
 	readonly deliveryCount: number;
 	/** Server-owned assignment lifetime. */
 	readonly assignmentTtlMilliseconds: number;
-	/** Database claim instant bounding the Obot key. */
-	readonly claimedAt: Date;
 }
 
 /** Credential inputs that do not include the already-built lease and attempt projection. */

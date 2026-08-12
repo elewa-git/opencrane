@@ -40,14 +40,30 @@ access-ended position; reads are clipped to those bounds and writes require cont
 
 The database allocates one monotonically increasing position across message and run-event timeline
 entries. Timeline entries hold typed references to canonical rows, never copied payloads. Replay
-uses an opaque `{ conversationId, position }` cursor, reads only linked run events, and projects an
-allow-listed Agent User Interface (AG-UI) server-sent event snapshot. Unknown events remain visible
+uses an opaque `{ conversationId, position, subframe? }` cursor, reads linked messages and run
+events, and projects an allow-listed Agent User Interface (AG-UI) server-sent event stream. Unknown events remain visible
 as a bounded custom event, but proofs, credentials, fences, and provider metadata never cross the
 browser boundary.
 
-The snapshot has no live tail or wake-up loop. The server mounts the adapter only when its
-controller-issued `CHANNEL_REPLAY_ROUTE_ID` is configured; the controller must register that exact
-endpoint as the current `events.read` channel route. Without both facts, no replay route is exposed.
+Message lifecycle and tool coordinates are reduced to their display identifiers. A failed tool or
+nonterminal runtime error may expose a bounded failure classification such as
+`AuthenticationError`, while raw messages, provider response bodies, arguments, result content,
+authorization material, and secret-shaped fields remain behind the disclosure boundary.
+
+Governed A2UI replay adopts only the exact `opencrane.a2ui.v1` envelope bound to the replayed
+conversation and run. It preserves ordered upstream `beginRendering`, `surfaceUpdate`, and
+`dataModelUpdate` operations, admits the eleven-name canonical OpenCrane v4 catalogue, and forwards
+the server-selected ten-state presentation lifecycle plus optional bounded safe reason.
+`SingleChoice` and `Select` are one-value display contracts validated through the pinned upstream
+`MultipleChoice` property schema; that validation adapter grants no action authority. Replay never
+infers an action or lifecycle transition locally.
+
+Each response drains the durable snapshot before entering a bounded live tail. Recovery polling is
+authoritative; wake-ups may reduce latency later but can never replace a database read. The server
+rechecks organisation membership and participant bounds on every page, emits heartbeats below the
+proxy idle fence, and ends at five minutes so clients reconnect with the exact last subframe cursor.
+Still-open approval interrupts are overlays without SSE ids, so reconnect restores them without
+advancing `Last-Event-ID`. Proven revocation emits a bounded purge signal and closes the stream.
 
 ## Public surface
 
@@ -55,8 +71,12 @@ endpoint as the current `events.read` channel route. Without both facts, no repl
   archive, and close API over Prisma and the internal run-admission port.
 - `_CreateConversationReplayRepository` composes replay over one `RepeatableRead` transaction so
   access-ending races cannot expose later events.
-- `__CreateConversationReplayRouter` mounts internal context-authorized AG-UI replay.
-- `_CreateSelfConversationReplayRouter` mounts the participant-authenticated replay route.
+- `__CreateConversationReplayRouter` mounts internal context-authorized AG-UI snapshot-to-live replay.
+- `_CreateSelfConversationReplayRouter` mounts the participant-authenticated live replay route.
+- `__StreamConversationLiveReplay` owns page draining, deterministic subframes, polling,
+  heartbeats, interrupt restoration, revocation, and the response-duration fence.
+- `__ProjectConversationReplayEvent` strictly redacts canonical rows and adopts only full-coordinate,
+  catalogue-safe governed A2UI envelopes before the shared AG-UI projector can emit them.
 - `_SelfConversationsOpenapiPaths` and `_SelfConversationReplayOpenapiPaths` contribute those APIs
   to the server-owned OpenAPI document.
 
@@ -69,11 +89,12 @@ does not assemble inputs, dispatch workloads, or execute agents. The channel rep
 requires a consumed one-use context and the exact controller-selected route identifier.
 
 Missing, foreign, closed, access-ended, wrong-mode, duplicate-body, and active-run writes fail
-closed through stable denials. Replay likewise returns no rows when participant, silo, cursor, or
-visibility bounds do not match. Every self-service read and write also rechecks active organisation
-membership inside its own database snapshot, so revocation closes list, open, retry, archive, close,
-message, and replay authority immediately. Admission overload is returned as `capacity_limited`
-rather than being misreported as a persistence outage.
+closed through stable denials. The replay persistence port always returns an explicit authorised or
+revoked-or-missing outcome from the same snapshot as its rows; it has no rows-only fallback that
+could turn authority loss into an empty successful page. Every self-service read and write also
+rechecks active organisation membership inside its own database snapshot, so revocation closes
+list, open, retry, archive, close, message, and replay authority immediately. Admission overload is
+returned as `capacity_limited` rather than being misreported as a persistence outage.
 
 ## Dependency direction
 
@@ -86,7 +107,8 @@ only. It cannot import an app, frontend state, or deployment package.
 Owns participant-facing operations over `Conversation`, `ConversationParticipant`,
 `ConversationMessage`, and `ConversationTimelineEntry`. The write authority uses serialisable
 transactions and projects create, archive, and close results from the same authorised write
-snapshot. The replay adapter is read-only and joins timeline references to `RunEvent`; neither path
+snapshot. The replay adapter is read-only and joins timeline references to canonical messages and
+`RunEvent`; neither path
 reconstructs order from client or run timestamps. All paths depend on current active `OrgMembership`
 in the caller's host-selected silo; participant rows alone never preserve authority after revocation.
 

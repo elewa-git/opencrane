@@ -7,8 +7,6 @@ import { __ResolveChannelTarget } from "../channel-target-resolution.js";
 
 /** Stable test instant. */
 const _NOW = Date.parse("2026-07-18T12:00:00.000Z");
-/** Valid authorization evidence digest. */
-const _AUTHORIZATION_DIGEST = `sha256:${"b".repeat(64)}`;
 /** Opaque 256-bit-like test context. */
 const _OPAQUE_CONTEXT = "a".repeat(43);
 
@@ -16,18 +14,14 @@ const _OPAQUE_CONTEXT = "a".repeat(43);
 function _dependencies(): ChannelTargetResolutionDependencies
 {
 	return {
-		config: { workloadAudience: "opencrane", channelProxyServiceAccountName: "channel-proxy", channelProxyNamespace: "silo-acme", invocationContextTtlMs: 60_000, allowedRouteHostSuffixes: [".svc.cluster.local"] },
-		workloadIdentity: { review: async function _review() { return { outcome: "trusted", identity: { username: "system:serviceaccount:silo-acme:channel-proxy", serviceAccountName: "channel-proxy", namespace: "silo-acme", audiences: ["opencrane"] } }; } },
-		delegatedIdentity: {
-			resolveCookie: async function _resolveCookie() { return { outcome: "trusted", identity: { subjectId: "user-1", source: "cookie", trustworthySubject: true } }; },
-			resolveBearer: async function _resolveBearer() { return { outcome: "trusted", identity: { subjectId: "user-1", source: "bearer", trustworthySubject: true } }; },
-		},
-		hostSilo: { resolveExactHost: async function _resolveHost() { return { siloId: "silo-1", authorizationScope: { kind: "organization", organizationId: "org-1" } }; } },
+		config: { workloadAudience: "opencrane", channelProxyServiceAccountName: "channel-proxy", channelProxyNamespace: "silo-acme", invocationContextTtlMs: 60_000, allowedRouteHostSuffixes: [".svc.cluster.local"], receiverId: "conversation-replay-v1", receiverEndpoint: "http://agent-runtime.silo-acme.svc.cluster.local:8080/v1/events" },
+		workloadIdentity: { __Review: async function _review() { return { username: "system:serviceaccount:silo-acme:channel-proxy", serviceAccountName: "channel-proxy", namespace: "silo-acme", audiences: ["opencrane"] }; } },
+		hostSilo: { resolveExactHost: async function _resolveHost() { return { siloId: "silo-1", authorizationScope: { kind: "organization", organizationId: "silo-1" } }; } },
 		membership: { verifyCurrentMembership: async function _membership() { return { outcome: "trusted", revision: 7, trustedUntilEpochMs: _NOW + 120_000 }; } },
-		authorization: { authorize: async function _authorize() { return { outcome: "allowed", authorizationDigest: _AUTHORIZATION_DIGEST }; } },
 		repository: {
 			getConversationAuthority: async function _Conversation() { return { conversationId: "conversation-1", siloId: "silo-1", agentServiceId: "service-1", mode: "agent_session", lifecycle: "open", participantUserIds: ["user-1"] }; },
-			issueInvocationContextAtomically: async function _issue() { return { status: "issued", context: { id: "context-1", routeId: "route-1", endpoint: "http://agent-runtime.silo-acme.svc.cluster.local:8080/v1/events" } }; },
+			reconcileRuntimeRoutes: async function _Reconcile() { return 0; },
+			issueInvocationContextAtomically: async function _issue() { return { status: "issued", context: { id: "context-1", routeId: "route-1", receiverId: "conversation-replay-v1", endpoint: "http://agent-runtime.silo-acme.svc.cluster.local:8080/v1/events" } }; },
 			consumeInvocationContextAtomically: async function _consume() { return { status: "denied", reason: "not_found" }; },
 		},
 		clock: { nowEpochMs: function _now() { return _NOW; } },
@@ -38,69 +32,59 @@ function _dependencies(): ChannelTargetResolutionDependencies
 /** Constructs the common workload-authenticated browser request. */
 function _command()
 {
-	return { workloadToken: "projected-token", cookie: "session=opaque", delegatedAuthorization: "Bearer browser-token", trustedHost: "acme.example.com", action: "events.read", conversationId: "conversation-1" } as const;
+	return { workloadToken: "projected-token", delegatedIdentity: { subjectId: "user-1", source: "cookie", trustworthySubject: true }, trustedHost: "acme.example.com", action: "events.read", conversationId: "conversation-1" } as const;
 }
 
-describe("channel target resolution", () =>
+describe("channel target resolution", function _DescribeChannelTargetResolution()
 {
-	it("uses cookie identity first and persists only the opaque digest", async () =>
+	it("uses the session-verified identity and persists only the opaque digest", async function _PersistsOpaqueDigest()
 	{
 		const dependencies = _dependencies();
-		const bearer = vi.spyOn(dependencies.delegatedIdentity, "resolveBearer");
 		let issued: IssueChannelInvocationContextCommand | undefined;
 		dependencies.repository.issueInvocationContextAtomically = async function _issue(command)
 		{
 			issued = command;
-			return { status: "issued", context: { id: "context-1", routeId: "route-1", endpoint: "http://agent-runtime.silo-acme.svc.cluster.local:8080/v1/events" } };
+			return { status: "issued", context: { id: "context-1", routeId: "route-1", receiverId: "conversation-replay-v1", endpoint: "http://agent-runtime.silo-acme.svc.cluster.local:8080/v1/events" } };
 		};
 
 		const result = await __ResolveChannelTarget(dependencies, _command());
 
 		expect(result.outcome).toBe("authorized");
-		expect(bearer).not.toHaveBeenCalled();
 		expect(issued?.digest).toBe(`sha256:${createHash("sha256").update(_OPAQUE_CONTEXT).digest("hex")}`);
 		expect(JSON.stringify(issued)).not.toContain(_OPAQUE_CONTEXT);
 		expect(issued?.action).toBe("events.read");
+		expect(issued?.receiverId).toBe("conversation-replay-v1");
+		expect(issued?.authorizationDigest).toMatch(/^sha256:[0-9a-f]{64}$/u);
 	});
 
-	it("does not fall back to bearer when a cookie is present but invalid", async () =>
+	it("rejects an identity that was not verified by cookie session middleware", async function _RejectsUnverifiedIdentity()
 	{
 		const dependencies = _dependencies();
-		dependencies.delegatedIdentity.resolveCookie = async function _cookieDenied() { return { outcome: "denied", reason: "invalid_cookie" }; };
-		const bearer = vi.spyOn(dependencies.delegatedIdentity, "resolveBearer");
-
-		const result = await __ResolveChannelTarget(dependencies, _command());
+		const result = await __ResolveChannelTarget(dependencies, { ..._command(), delegatedIdentity: { subjectId: "", source: "cookie", trustworthySubject: true } });
 
 		expect(result).toEqual({ outcome: "denied", reason: "identity_denied" });
-		expect(bearer).not.toHaveBeenCalled();
 	});
 
-	it("requires the exact TokenReview namespace, KSA, username, and audience", async () =>
+	it("requires the exact TokenReview namespace, KSA, username, and audience", async function _RejectsWrongWorkload()
 	{
 		const dependencies = _dependencies();
-		dependencies.workloadIdentity.review = async function _wrongNamespace() { return { outcome: "trusted", identity: { username: "system:serviceaccount:other:channel-proxy", serviceAccountName: "channel-proxy", namespace: "other", audiences: ["opencrane"] } }; };
+		dependencies.workloadIdentity.__Review = async function _wrongNamespace() { return { username: "system:serviceaccount:other:channel-proxy", serviceAccountName: "channel-proxy", namespace: "other", audiences: ["opencrane"] }; };
 
 		const result = await __ResolveChannelTarget(dependencies, _command());
 
 		expect(result).toEqual({ outcome: "denied", reason: "workload_denied" });
 	});
 
-	it("authorizes only conversation read before event-route issuance", async () =>
+	it("fails closed when the participant is absent", async function _RejectsMissingParticipant()
 	{
 		const dependencies = _dependencies();
-		let requiredActions: readonly string[] = [];
-		dependencies.authorization.authorize = async function _authorize(command)
-		{
-			requiredActions = command.requiredActions;
-			return { outcome: "allowed", authorizationDigest: _AUTHORIZATION_DIGEST };
-		};
+		dependencies.repository.getConversationAuthority = async function _NoParticipant() { return { conversationId: "conversation-1", siloId: "silo-1", agentServiceId: "service-1", mode: "agent_session", lifecycle: "open", participantUserIds: [] }; };
 		const result = await __ResolveChannelTarget(dependencies, _command());
 
-		expect(requiredActions).toEqual(["conversation.read"]);
-		expect(result.outcome).toBe("authorized");
+		expect(result).toEqual({ outcome: "denied", reason: "authorization_denied" });
 	});
 
-	it("fails closed when the conversation is outside the host silo or subject participation", async () =>
+	it("fails closed when the conversation is outside the host silo", async function _RejectsWrongSilo()
 	{
 		const dependencies = _dependencies();
 		dependencies.repository.getConversationAuthority = async function _WrongConversation() { return { conversationId: "conversation-1", siloId: "silo-other", agentServiceId: "service-1", mode: "agent_session", lifecycle: "open", participantUserIds: [] }; };
@@ -110,7 +94,7 @@ describe("channel target resolution", () =>
 		expect(result).toEqual({ outcome: "denied", reason: "conversation_denied" });
 	});
 
-	it("caps context expiry at the signed membership trust boundary", async () =>
+	it("caps context expiry at the signed membership trust boundary", async function _CapsExpiry()
 	{
 		const dependencies = _dependencies();
 		dependencies.membership.verifyCurrentMembership = async function _membership() { return { outcome: "trusted", revision: 9, trustedUntilEpochMs: _NOW + 10_000 }; };
@@ -118,7 +102,7 @@ describe("channel target resolution", () =>
 		dependencies.repository.issueInvocationContextAtomically = async function _issue(command)
 		{
 			expiry = command.expiresAtEpochMs;
-			return { status: "issued", context: { id: "context-1", routeId: "route-1", endpoint: "http://agent-runtime.silo-acme.svc.cluster.local:8080/v1/events" } };
+			return { status: "issued", context: { id: "context-1", routeId: "route-1", receiverId: "conversation-replay-v1", endpoint: "http://agent-runtime.silo-acme.svc.cluster.local:8080/v1/events" } };
 		};
 
 		const result = await __ResolveChannelTarget(dependencies, _command());

@@ -200,8 +200,7 @@ spec:
           port: {{ .Values.litellm.service.port }}
     {{- end }}
     {{- if and .Values.mcpGateway.enabled (ne (include "opencrane.mcpGatewayShared" .) "true") }}
-    # Release-local Obot management plane: custody provisioning and attempt-key minting only.
-    # Tool invocation payloads flow runtime→Obot directly and never transit this server.
+    # Release-local Obot transport for server-owned custody and durable action execution.
     - to:
         - podSelector:
             matchLabels:

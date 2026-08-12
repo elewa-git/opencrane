@@ -22,6 +22,28 @@ export class ObotMcpInvocationUnavailableError extends Error
 	}
 }
 
+/** Safe failure raised when Obot rejects the server's mounted service credential. */
+export class ObotMcpAuthenticationError extends Error
+{
+	/** Creates an authentication failure without retaining any remote response body. */
+	constructor()
+	{
+		super("Obot MCP authentication failed");
+		this.name = "ObotMcpAuthenticationError";
+	}
+}
+
+/** Safe failure raised when Obot denies the authenticated server access to the MCP endpoint. */
+export class ObotMcpAuthorizationError extends Error
+{
+	/** Creates an authorization failure without retaining any remote response body. */
+	constructor()
+	{
+		super("Obot MCP authorization failed");
+		this.name = "ObotMcpAuthorizationError";
+	}
+}
+
 /**
  * Assert an invocation names an allow-listed tool, throwing {@link ObotMcpToolNotAllowedError}
  * otherwise. This is the single enforcement point every adapter calls before any transport, so the
@@ -30,5 +52,5 @@ export class ObotMcpInvocationUnavailableError extends Error
  */
 export function __AssertToolAllowed(command: ObotMcpToolInvocationCommand): void
 {
-	if (!command.allowedTools.includes(command.toolName)) throw new ObotMcpToolNotAllowedError(command.toolName);
+	if (!command.allowedToolNames.includes(command.toolName)) throw new ObotMcpToolNotAllowedError(command.toolName);
 }

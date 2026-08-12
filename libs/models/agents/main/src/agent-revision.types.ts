@@ -1,3 +1,5 @@
+import type { CanonicalJsonSha256Digest, JsonValue } from "@opencrane/util";
+
 import type { AgentRevisionId, AgentServiceId, PersonaRevisionId, UserId } from "./identifiers.types.js";
 import type { RevisionScopeAttachment } from "./scope-attachment.types.js";
 
@@ -13,6 +15,19 @@ export interface SkillRevisionReference
 	readonly revisionId: string;
 }
 
+/** One reviewed integration tool definition frozen into an immutable agent revision. */
+export interface ReviewedIntegrationToolDefinition
+{
+	/** Stable MCP tool name selected from the reviewed integration catalogue. */
+	readonly name: string;
+	/** Human-readable model guidance reviewed with the tool schema. */
+	readonly description: string;
+	/** Exact JSON Schema governing every proposed and approved argument value. */
+	readonly parametersSchema: JsonValue;
+	/** Canonical digest proving the schema did not drift after revision authoring. */
+	readonly parametersSchemaDigest: CanonicalJsonSha256Digest;
+}
+
 /** Immutable reference to an integration assignment. */
 export interface IntegrationAssignmentReference
 {
@@ -20,8 +35,8 @@ export interface IntegrationAssignmentReference
 	readonly integrationId: string;
 	/** Immutable opaque Obot custody reference selected for the revision. */
 	readonly custodyReferenceId: string;
-	/** Explicit tool identifiers exposed from the integration. */
-	readonly allowedTools: readonly string[];
+	/** Reviewed tool definitions exposed from the integration. */
+	readonly toolDefinitions: readonly ReviewedIntegrationToolDefinition[];
 }
 
 /** Immutable budget ceilings applied to a run. */

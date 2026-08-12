@@ -1,5 +1,9 @@
 import { Router, type Request, type Response } from "express";
 
+// Side-effect import: loads the verified browser-session `authUser` augmentation.
+import "@opencrane/backend/server/infra/auth";
+import type { Logger } from "@opencrane/backend/observability";
+
 import type { ChannelResolutionAction, ChannelTargetResolutionDependencies, ResolveChannelTargetCommand } from "./channel-target-resolution.types.js";
 import { __ResolveChannelTarget } from "./channel-target-resolution.js";
 
@@ -7,7 +11,7 @@ import { __ResolveChannelTarget } from "./channel-target-resolution.js";
 const _FORBIDDEN_IDENTITY_HEADERS = ["x-opencrane-subject", "x-forwarded-user", "x-auth-request-user", "x-remote-user"];
 
 /** Builds the workload-authenticated internal channel target resolver router. */
-export function __CreateChannelTargetsRouter(dependencies: ChannelTargetResolutionDependencies): Router
+export function __CreateChannelTargetsRouter(dependencies: ChannelTargetResolutionDependencies, log: Logger): Router
 {
 	const router = Router();
 	router.post("/", async function _resolve(request: Request, response: Response)
@@ -39,8 +43,9 @@ export function __CreateChannelTargetsRouter(dependencies: ChannelTargetResoluti
 			// 3. Return only the exact route and opaque short-lived context required by channel-proxy.
 			response.status(200).json(result.target);
 		}
-		catch
+		catch (error)
 		{
+			log.error({ err: error, action: command.action, conversationId: command.conversationId }, "channel target authority failed");
 			_respondProblem(response, 503, "authority_unavailable");
 		}
 	});
@@ -68,8 +73,9 @@ function _parseCommand(request: Request, workloadToken: string): ResolveChannelT
 	if (!request.body || typeof request.body !== "object" || Array.isArray(request.body)) return null;
 	const body = request.body as Record<string, unknown>;
 	if (!_isAction(body["action"]) || typeof body["trustedHost"] !== "string" || typeof body["conversationId"] !== "string" || body["requestIdempotencyKey"] !== undefined || (body["cursor"] !== undefined && typeof body["cursor"] !== "string")) return null;
-	const delegatedAuthorization = request.header("x-opencrane-session-authorization");
-	return { workloadToken, cookie: request.header("cookie"), delegatedAuthorization, trustedHost: body["trustedHost"], action: body["action"], conversationId: body["conversationId"], cursor: body["cursor"] as string | undefined };
+	const subjectId = request.session?.authUser?.sub?.trim();
+	if (!subjectId) return null;
+	return { workloadToken, delegatedIdentity: { subjectId, source: "cookie", trustworthySubject: true }, trustedHost: body["trustedHost"], action: body["action"], conversationId: body["conversationId"], cursor: body["cursor"] as string | undefined };
 }
 
 /** Returns a bearer value only for one unambiguous standard Authorization header. */

@@ -7,7 +7,7 @@ import { _ResolveRequestPrincipal } from "@opencrane/backend/server/infra/auth";
 import { __CreateDeferredToolApprovalRouter } from "./deferred-tool-approval.router.js";
 import type { DeferredToolApprovalCaller } from "./deferred-tool-approval.router.types.js";
 import { PrismaDeferredToolApprovalDecisionRepository } from "./prisma-deferred-tool-approval-decision-repository.js";
-import { PrismaSelfDeferredToolApprovalListRepository } from "./prisma-self-deferred-tool-approval-list-repository.js";
+import { PrismaSelfDeferredToolApprovalReadUnitOfWork } from "./prisma-self-deferred-tool-approval-list-repository.js";
 
 /** Maps authenticated request facts to the caller contract owned by approval decisions. */
 function _resolveCaller(request: Parameters<typeof _ResolveRequestPrincipal>[0]): DeferredToolApprovalCaller | null
@@ -27,7 +27,7 @@ export function _CreateDeferredToolApprovalRouter(prisma: PrismaClient, logger: 
 	return __CreateDeferredToolApprovalRouter({
 		resolveCaller: _resolveCaller,
 		decisions: new PrismaDeferredToolApprovalDecisionRepository(prisma),
-		pendingApprovals: new PrismaSelfDeferredToolApprovalListRepository(prisma),
+		pendingApprovals: new PrismaSelfDeferredToolApprovalReadUnitOfWork(prisma),
 		clock: { now(): Date { return new Date(); } },
 		logger,
 	});

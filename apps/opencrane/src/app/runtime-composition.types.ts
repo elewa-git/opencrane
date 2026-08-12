@@ -22,6 +22,8 @@ export interface InternalRuntimeComposition
 	readonly artifactPreprocessor: Router | null;
 	/** Optional controller-selected replay policy enforcement point. */
 	readonly conversationReplay: Router | null;
+	/** Workload-authenticated browser channel resolver paired with the replay receiver. */
+	readonly channelTargetResolver: Router | null;
 	/** Runtime router that binds a workload proof key once. */
 	readonly runtimeBootstrap: Router;
 	/** Runtime server-sent-event stream and candidate-ingest router. */
@@ -44,4 +46,4 @@ export type SkillWorkloadRuntimeComposition = Pick<
 export type RuntimeProtocolComposition = Pick<InternalRuntimeComposition, "runtimeBootstrap" | "runtimeStream">;
 
 /** Optional workload and replay composition slice. */
-export type OptionalRuntimeComposition = Pick<InternalRuntimeComposition, "artifactPreprocessor" | "conversationReplay">;
+export type OptionalRuntimeComposition = Pick<InternalRuntimeComposition, "artifactPreprocessor" | "channelTargetResolver" | "conversationReplay">;

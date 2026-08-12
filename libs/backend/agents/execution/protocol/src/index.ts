@@ -1,4 +1,13 @@
+export { ExternalActionWorker } from "./external-action-worker.js";
+export { ExternalActionProviderOutcomeKinds } from "./external-action-worker.types.js";
+export type { ExternalActionAdapterFactory, ExternalActionApprovalOpener, ExternalActionExecutionContext, ExternalActionExecutionContextLoader, ExternalActionExecutionContextRepository, ExternalActionExecutionContextUnitOfWork, ExternalActionProviderOutcome, ExternalActionRecoveryStrategy, ExternalActionWorkerClock, ExternalActionWorkerDependencies, ExternalActionWorkerEvent, ExternalActionWorkerEventSink, ExternalActionWorkerInvocation, ExternalActionWorkerPolicy, ExternalActionWorkerUnitOfWork, PreparedExternalActionAdapter, ToolInvocationWorkSource } from "./external-action-worker.types.js";
 export * from "./gateway-memory-fact-selector.js";
 export * from "./openapi.js";
+export { PrismaExternalActionExecutionContextRepository, PrismaExternalActionExecutionContextUnitOfWork } from "./prisma-external-action-context-repository.js";
 export * from "./prisma-steering-ingest.router.js";
+export { ProductionExternalActionAdapterFactory } from "./production-external-action-adapter.js";
+export type { ProductionExternalActionAdapterDependencies } from "./production-external-action-adapter.types.js";
+export { __CreateProductionExternalActionWorker } from "./production-external-action-worker.js";
+export { __CreateProductionExternalActionApprovalOpener } from "./production-external-action-approval.js";
+export type { ProductionExternalActionInvocationAuthority, ProductionExternalActionWorkerDependencies } from "./production-external-action-worker.types.js";
 export * from "./production-runtime-dispatch.js";

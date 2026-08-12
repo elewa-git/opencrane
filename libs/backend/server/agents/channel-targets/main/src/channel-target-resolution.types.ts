@@ -1,4 +1,5 @@
 import type { AuthorizationScope } from "@opencrane/models/authorization";
+import type { SignedFleetMembershipAssertionAuthority } from "@opencrane/backend/server/iam/membership";
 
 /** Stable proxy operation presented to OpenCrane for resolution. */
 export type ChannelResolutionAction = "events.read";
@@ -11,10 +12,8 @@ export interface ResolveChannelTargetCommand
 {
 	/** Projected channel-proxy ServiceAccount token. */
 	readonly workloadToken: string;
-	/** Raw browser cookie header, when supplied. */
-	readonly cookie?: string;
-	/** Delegated browser authorization value, used only when no cookie is supplied. */
-	readonly delegatedAuthorization?: string;
+	/** Browser identity already verified by OpenCrane's shared session middleware. */
+	readonly delegatedIdentity: TrustedDelegatedBrowserIdentity;
 	/** Exact host already bound to the browser Origin by channel-proxy. */
 	readonly trustedHost: string;
 	/** Target-neutral proxy operation. */
@@ -38,6 +37,10 @@ export interface ChannelTargetResolutionConfig
 	readonly invocationContextTtlMs: number;
 	/** Internal DNS suffixes permitted for registered runtime endpoints. */
 	readonly allowedRouteHostSuffixes: readonly string[];
+	/** Stable receiver identity shared by every per-service route to this replay runtime. */
+	readonly receiverId: string;
+	/** Exact deployment-owned endpoint reconciled for every service route. */
+	readonly receiverEndpoint: string;
 }
 
 /** Verified projected workload identity returned by TokenReview. */
@@ -53,16 +56,11 @@ export interface VerifiedChannelWorkloadIdentity
 	readonly audiences: readonly string[];
 }
 
-/** Fail-closed TokenReview result. */
-export type ChannelWorkloadIdentityDecision =
-	| { readonly outcome: "trusted"; readonly identity: VerifiedChannelWorkloadIdentity }
-	| { readonly outcome: "denied"; readonly reason: string };
-
 /** TokenReview boundary implemented by the OpenCrane Kubernetes adapter. */
 export interface ChannelWorkloadIdentityPort
 {
-	/** Reviews one projected token for the fixed OpenCrane audience. */
-	review(token: string, audience: "opencrane"): Promise<ChannelWorkloadIdentityDecision>;
+	/** Reviews one projected token against the adapter's fixed audience and workload subject. */
+	__Review(token: string): Promise<VerifiedChannelWorkloadIdentity | null>;
 }
 
 /** Verified browser subject produced by OpenCrane-owned identity validation. */
@@ -71,23 +69,9 @@ export interface TrustedDelegatedBrowserIdentity
 	/** Trustworthy issuer-bound human subject; never read from proxy assertions. */
 	readonly subjectId: string;
 	/** Credential mechanism OpenCrane successfully verified. */
-	readonly source: "cookie" | "bearer";
+	readonly source: "cookie";
 	/** Explicit evidence that the adapter derived a trustworthy subject. */
 	readonly trustworthySubject: true;
-}
-
-/** Fail-closed delegated browser identity result. */
-export type DelegatedBrowserIdentityDecision =
-	| { readonly outcome: "trusted"; readonly identity: TrustedDelegatedBrowserIdentity }
-	| { readonly outcome: "denied"; readonly reason: string };
-
-/** OpenCrane-owned browser identity boundary. */
-export interface DelegatedBrowserIdentityPort
-{
-	/** Resolves an authenticated cookie session without consulting bearer input. */
-	resolveCookie(cookie: string): Promise<DelegatedBrowserIdentityDecision>;
-	/** Resolves a bearer only when it yields a trustworthy issuer-bound subject. */
-	resolveBearer(authorization: string): Promise<DelegatedBrowserIdentityDecision>;
 }
 
 /** Exact silo and authorization scope bound to one trusted host. */
@@ -104,18 +88,6 @@ export interface TrustedHostSiloPort
 {
 	/** Resolves one exact trusted host; unknown or ambiguous hosts return null. */
 	resolveExactHost(trustedHost: string): Promise<TrustedHostSiloBinding | null>;
-}
-
-/** Current signed membership result for one exact human and silo. */
-export type ChannelMembershipDecision =
-	| { readonly outcome: "trusted"; readonly revision: number; readonly trustedUntilEpochMs: number }
-	| { readonly outcome: "denied"; readonly reason: string };
-
-/** Signed fleet-membership boundary. */
-export interface ChannelMembershipPort
-{
-	/** Requires the current signed membership revision for the exact scope. */
-	verifyCurrentMembership(subjectId: string, siloId: string, scope: AuthorizationScope, nowEpochMs: number): Promise<ChannelMembershipDecision>;
 }
 
 /** Current canonical conversation coordinates needed before action authorization. */
@@ -161,13 +133,6 @@ export type ChannelActionAuthorizationDecision =
 	| { readonly outcome: "allowed"; readonly authorizationDigest: string }
 	| { readonly outcome: "denied"; readonly reason: string };
 
-/** Product authorization facade for channel actions. */
-export interface ChannelActionAuthorizationPort
-{
-	/** Allows only when every requested action is currently authorized. */
-	authorize(command: AuthorizeChannelActionsCommand): Promise<ChannelActionAuthorizationDecision>;
-}
-
 /** Atomic invocation-context issuance request. */
 export interface IssueChannelInvocationContextCommand
 {
@@ -193,6 +158,8 @@ export interface IssueChannelInvocationContextCommand
 	readonly expiresAtEpochMs: number;
 	/** Internal DNS suffixes the selected registered endpoint must satisfy before insertion. */
 	readonly allowedRouteHostSuffixes: readonly string[];
+	/** Stable receiver selected by deployment configuration, never request input. */
+	readonly receiverId: string;
 }
 
 /** Exact selected route returned only after atomic authority revalidation. */
@@ -202,6 +169,8 @@ export interface IssuedChannelInvocationContext
 	readonly id: string;
 	/** Controller-registered route identifier. */
 	readonly routeId: string;
+	/** Stable runtime receiver bound independently of the per-service route row. */
+	readonly receiverId: string;
 	/** Exact registered internal endpoint; never derived by the resolver. */
 	readonly endpoint: string;
 }
@@ -216,8 +185,8 @@ export interface ConsumeChannelInvocationContextCommand
 {
 	/** SHA-256 digest of the presented opaque context. */
 	readonly digest: string;
-	/** Route identifier registered to the receiving runtime. */
-	readonly expectedRouteId: string;
+	/** Stable receiver identity configured on the consuming runtime. */
+	readonly expectedReceiverId: string;
 	/** Trusted consumption instant. */
 	readonly nowEpochMs: number;
 }
@@ -225,6 +194,10 @@ export interface ConsumeChannelInvocationContextCommand
 /** Durable authority returned to the runtime PEP after one-time consumption. */
 export interface ConsumedChannelInvocationContext
 {
+	/** Exact per-service route evidence consumed online. */
+	readonly routeId: string;
+	/** Stable runtime receiver independently bound to that route evidence. */
+	readonly receiverId: string;
 	/** Verified delegated human subject. */
 	readonly subjectId: string;
 	/** Bound silo. */
@@ -242,13 +215,28 @@ export interface ConsumedChannelInvocationContext
 /** One-time online consumption outcome. */
 export type ConsumeChannelInvocationContextResult =
 	| { readonly status: "consumed"; readonly context: ConsumedChannelInvocationContext }
-	| { readonly status: "denied"; readonly reason: "not_found" | "route_mismatch" | "expired" | "revoked" | "replayed" | "route_inactive" };
+	| { readonly status: "denied"; readonly reason: "not_found" | "receiver_mismatch" | "route_mismatch" | "expired" | "revoked" | "replayed" | "route_inactive" };
+
+/** Deployment-owned route receiver reconciled across current AgentServices at startup. */
+export interface ReconcileChannelRuntimeRoutesCommand
+{
+	/** Stable receiver shared by all service-specific rows. */
+	readonly receiverId: string;
+	/** Exact internal replay endpoint owned by that receiver. */
+	readonly endpoint: string;
+	/** Only this operation is currently served by the replay receiver. */
+	readonly action: "events.read";
+	/** Internal DNS suffixes enforced before any route mutation. */
+	readonly allowedRouteHostSuffixes: readonly string[];
+}
 
 /** Durable conversation, route, and invocation-context authority. */
 export interface ChannelTargetAuthorityRepository
 {
 	/** Loads current conversation coordinates for pre-authorization checks. */
 	getConversationAuthority(conversationId: string): Promise<ChannelConversationAuthority | null>;
+	/** Reconciles one service-specific route per current AgentService for the deployment receiver. */
+	reconcileRuntimeRoutes(command: ReconcileChannelRuntimeRoutesCommand): Promise<number>;
 	/** Rechecks conversation, participant, and selected route while inserting the digest. */
 	issueInvocationContextAtomically(command: IssueChannelInvocationContextCommand): Promise<IssueChannelInvocationContextResult>;
 	/** Consumes one digest once while rechecking the exact registered route online. */
@@ -256,7 +244,7 @@ export interface ChannelTargetAuthorityRepository
 }
 
 /** Owns the serializable transaction that fences one channel-target authority operation. */
-export interface ChannelTargetAuthorityUnitOfWork extends ChannelTargetAuthorityRepository {}
+export type ChannelTargetAuthorityUnitOfWork = ChannelTargetAuthorityRepository;
 
 /** Injectable wall clock. */
 export interface ChannelTargetClock
@@ -279,14 +267,10 @@ export interface ChannelTargetResolutionDependencies
 	readonly config: ChannelTargetResolutionConfig;
 	/** Projected workload TokenReview port. */
 	readonly workloadIdentity: ChannelWorkloadIdentityPort;
-	/** OpenCrane browser identity port. */
-	readonly delegatedIdentity: DelegatedBrowserIdentityPort;
 	/** Exact host registration port. */
 	readonly hostSilo: TrustedHostSiloPort;
 	/** Signed membership authority. */
-	readonly membership: ChannelMembershipPort;
-	/** Product action authorization facade. */
-	readonly authorization: ChannelActionAuthorizationPort;
+	readonly membership: SignedFleetMembershipAssertionAuthority;
 	/** Canonical conversation, route, and context repository. */
 	readonly repository: ChannelTargetAuthorityRepository;
 	/** Trusted clock. */

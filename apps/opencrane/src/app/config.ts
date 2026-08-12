@@ -3,7 +3,7 @@ import { isAbsolute } from "node:path";
 import { ByokProvider } from "@opencrane/contracts";
 import { FleetMembershipDeploymentModes } from "@opencrane/backend/server/iam/membership";
 
-import type { InitialModelBootstrapConfig, OpenCraneObotConfig, OpenCraneProcessConfig } from "./config.types.js";
+import type { ChannelTargetRuntimeConfig, InitialModelBootstrapConfig, OpenCraneObotConfig, OpenCraneProcessConfig } from "./config.types.js";
 import type { StandaloneFirstUserAdmissionConfig } from "@opencrane/backend/server/iam/identity";
 
 /** Smallest accepted artifact-preprocessor output body. */
@@ -14,6 +14,9 @@ const _MAXIMUM_ARTIFACT_OUTPUT_BYTES = 64 * 1_024 * 1_024;
 
 /** Default artifact-preprocessor output body limit. */
 const _DEFAULT_ARTIFACT_OUTPUT_BYTES = 16 * 1_024 * 1_024;
+
+/** Receiver namespace reserved for immutable migrated route evidence. */
+const _LEGACY_CHANNEL_ROUTE_RECEIVER_PREFIX = "legacy-route-v0:";
 
 /** Read one bounded whole-number setting from the startup environment. */
 function _readBoundedInteger(name: string, fallback: number, minimum: number, maximum: number): number
@@ -111,6 +114,22 @@ function _readStandaloneFirstUserAdmission(): StandaloneFirstUserAdmissionConfig
 	return { email, clusterTenant, issuer };
 }
 
+/** Read the all-or-nothing channel resolver and stable replay receiver contract. */
+function _readChannelTargetConfig(): ChannelTargetRuntimeConfig | null
+{
+	const values = {
+		channelProxyServiceAccountName: process.env.CHANNEL_PROXY_SERVICE_ACCOUNT_NAME?.trim() ?? "",
+		receiverEndpoint: process.env.CHANNEL_REPLAY_ENDPOINT?.trim() ?? "",
+		receiverId: process.env.CHANNEL_REPLAY_RECEIVER_ID?.trim() ?? "",
+		siloId: process.env.CHANNEL_TARGET_SILO_ID?.trim() ?? "",
+		trustedHost: process.env.CHANNEL_TARGET_TRUSTED_HOST?.trim().toLowerCase() ?? "",
+	};
+	if (Object.values(values).every(value => value.length === 0)) return null;
+	if (Object.values(values).some(value => value.length === 0)) throw new Error("channel target resolver configuration must be complete");
+	if (values.receiverId.startsWith(_LEGACY_CHANNEL_ROUTE_RECEIVER_PREFIX)) throw new Error("CHANNEL_REPLAY_RECEIVER_ID uses the reserved legacy route namespace");
+	return { ...values, invocationContextTtlMilliseconds: _readBoundedSeconds("CHANNEL_INVOCATION_CONTEXT_TTL_SECONDS", 60, 1, 300) };
+}
+
 /**
  * Read the optional Obot management-transport block from the startup environment.
  *
@@ -153,7 +172,7 @@ export function _ReadProcessConfig(): OpenCraneProcessConfig
 			artifactPreprocessorMaximumOutputBytes: _readArtifactPreprocessorBodyLimit(),
 			artifactPreprocessorNamespace: process.env.ARTIFACT_PREPROCESSOR_NAMESPACE?.trim(),
 			assignmentTtlMilliseconds: _readBoundedSeconds("AGENT_RUNTIME_ASSIGNMENT_TTL_SECONDS", 3_600, 60, 86_400),
-			channelReplayRouteId: process.env.CHANNEL_REPLAY_ROUTE_ID?.trim() || null,
+			channelTargets: _readChannelTargetConfig(),
 			claimLeaseMilliseconds: _readBoundedSeconds("AGENT_CONTROLLER_CLAIM_LEASE_SECONDS", 30, 1, 300),
 			commandRecoveryMilliseconds: _readBoundedSeconds("AGENT_RUNTIME_COMMAND_RECOVERY_POLL_SECONDS", 5, 5, 300),
 			commandTtlMilliseconds: _readBoundedSeconds("AGENT_RUNTIME_COMMAND_TTL_SECONDS", 60, 1, 300),

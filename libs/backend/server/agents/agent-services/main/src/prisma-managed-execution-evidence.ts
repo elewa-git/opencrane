@@ -5,7 +5,7 @@ import { RunInputSnapshotIdentityKinds, type ManagedRunInputScopeAttachment } fr
 import { __DigestCanonicalJson } from "@opencrane/backend/server/iam/authorization";
 import { __VerifyCurrentFleetMembershipEvidence, PrismaFleetMembershipAuthorityRepository } from "@opencrane/backend/server/iam/membership";
 import type { AuthorizationScope } from "@opencrane/models/authorization";
-import type { RevisionScopeAttachment } from "@opencrane/models/agents";
+import type { ReviewedIntegrationToolDefinition, RevisionScopeAttachment } from "@opencrane/models/agents";
 import type { JsonValue } from "@opencrane/util";
 
 import { __ResolveEffectiveScopeAttachments } from "./scope-attachment-authority.js";
@@ -53,7 +53,7 @@ export class PrismaManagedExecutionEvidenceAuthority implements ManagedExecution
 				budget: true,
 				scopeAttachments: { select: { scope: true, subjectType: true, subjectId: true } },
 				skillAssignments: { select: { skillId: true, skillRevisionId: true } },
-				integrationAssignments: { select: { integrationId: true, custodyReferenceId: true, allowedTools: true } },
+				integrationAssignments: { select: { integrationId: true, custodyReferenceId: true, toolDefinitions: true } },
 			},
 		});
 		if (revision === null) return { outcome: "denied", reason: "run_not_admittable" };
@@ -192,9 +192,19 @@ function _CanonicalSkillAssignments(values: readonly { skillId: string; skillRev
 }
 
 /** Canonicalizes integration custody and exact tool allowances for capability digesting. */
-function _CanonicalIntegrationAssignments(values: readonly { integrationId: string; custodyReferenceId: string; allowedTools: readonly string[] }[]): JsonValue
+function _CanonicalIntegrationAssignments(values: readonly { integrationId: string; custodyReferenceId: string; toolDefinitions: Prisma.JsonValue }[]): JsonValue
 {
 	return [...values]
-		.map(function _Copy(value) { return { integrationId: value.integrationId, custodyReferenceId: value.custodyReferenceId, allowedTools: [...value.allowedTools].sort() }; })
+		.map(function _Copy(value)
+		{
+			const toolDefinitions = value.toolDefinitions as unknown as readonly ReviewedIntegrationToolDefinition[];
+			return {
+				integrationId: value.integrationId,
+				custodyReferenceId: value.custodyReferenceId,
+				toolDefinitions: [...toolDefinitions]
+					.map(function _Tool(tool) { return { name: tool.name, description: tool.description, parametersSchema: tool.parametersSchema, parametersSchemaDigest: tool.parametersSchemaDigest }; })
+					.sort(function _ByTool(left, right): number { return _CompareCanonicalCoordinate(left.name, right.name); }),
+			};
+		})
 		.sort(function _ByIntegration(left, right): number { return _CompareCanonicalCoordinate(`${left.integrationId}\u0000${left.custodyReferenceId}`, `${right.integrationId}\u0000${right.custodyReferenceId}`); }) as JsonValue;
 }

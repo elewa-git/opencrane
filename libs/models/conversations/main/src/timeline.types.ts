@@ -91,4 +91,6 @@ export interface ConversationReplayCursor
 	readonly conversationId: ConversationId;
 	/** Last positive timeline position already observed; absence of a cursor represents the beginning. */
 	readonly position: string;
+	/** Last deterministic AG-UI subframe observed within the position; absent means the row is complete. */
+	readonly subframe?: number;
 }

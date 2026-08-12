@@ -23,14 +23,15 @@ and the agent service. New runs freeze the resulting capability set.
 ## Execute safely
 
 The runtime proposes a tool call. OpenCrane validates the run proof and arguments, opens an
-approval when required and reserves the invocation. After approval the runtime executes the call
-directly against Obot with a short-lived attempt-scoped key and reports back only a result digest.
-Integration credentials stay with Obot; they never enter the runtime or browser.
+approval when required and saves the invocation before work starts. After approval a server worker
+executes the exact allowed call through Obot and saves the result before the runtime can continue.
+Integration credentials and provider addressing never enter the runtime or browser.
 
 ::: info
-The registration, grant, approval, receipt, custody and direct-invocation authorities are present.
+The registration, grant, approval, durable invocation, custody and server execution authorities are present.
 The Obot transports compose only when the deployment mounts the Obot service credential; without
-it execution fails closed after reservation. Live-Obot qualification remains gated on issue #337.
+it server preparation fails closed before a provider request starts. Live-Obot qualification
+remains gated on issue #337.
 :::
 
 ::: tip

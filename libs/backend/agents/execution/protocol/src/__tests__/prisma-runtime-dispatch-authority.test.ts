@@ -1,11 +1,11 @@
 import type { PrismaClient } from "@prisma/client";
-import type { Logger } from "@opencrane/backend/observability";
 import { describe, expect, it, vi } from "vitest";
 
 import { AGENT_RUNTIME_PROTOCOL_V1, type CompiledRunInput, type RuntimeCandidate, type RuntimeCommandEnvelope } from "@opencrane/contracts";
+import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 
 import { PrismaRuntimeDispatchAuthority } from "../prisma-runtime-dispatch-authority.js";
-import type { RunInputCompiler, RuntimeExternalActionRunner, RuntimeStreamWorkloadIdentity, RuntimeTerminalReporter } from "../prisma-runtime-dispatch-authority.types.js";
+import type { RunInputCompiler, RuntimeApprovalExpiry, RuntimeEventReporter, RuntimeStreamWorkloadIdentity } from "../prisma-runtime-dispatch-authority.types.js";
 import type { RuntimeProtocolClock } from "../runtime-protocol-authority.types.js";
 
 /** Fixed reviewed identity for the registered runtime Pod under test. */
@@ -62,19 +62,15 @@ interface FakeCommandRow
 	expiresAt: Date;
 }
 
-/** Mutable durable retry row mirrored from the runtime retry-budget model. */
-interface FakeExternalActionRetryRow
+/** Durable invocation row created atomically with an accepted external-action candidate. */
+interface FakeToolInvocationRow
 {
-	/** Logical run identifier. */
-	runId: string;
-	/** Positive attempt identifier. */
-	attempt: number;
-	/** Idempotent runtime candidate identifier. */
-	candidateId: string;
-	/** Number of server-granted retries already consumed. */
-	retryCount: number;
-	/** Hard server-owned retry deadline. */
-	retryDeadlineAt: Date;
+	id: string; siloId: string; runId: string; attempt: number; agentServiceId: string; agentRevisionId: string; subjectId: string;
+	runtimeInstanceId: string; commandId: string; candidateId: string; toolRevisionId: string; toolInvocationId: string;
+	arguments: unknown; argumentsDigest: string; requestFingerprint: string; requestIdentity: unknown; approvalRequired: boolean;
+	recoveryMode: string; recoveryKey: string | null; state: string; preparationAttempt: number; retryDeadlineAt: Date;
+	nextPreparationAttemptAt: Date; claimAttempt: number; claimKind: null; claimFence: number; claimExpiresAt: null;
+	result: unknown; failureCode: null; revision: number; recoveryRequiredAt: null; completedAt: null;
 }
 
 /** Options controlling the durable state the fake exposes to the adapter. */
@@ -86,32 +82,35 @@ interface FakeOptions
 	readonly podUid?: string | null;
 	/** Assignment state, defaulting to the registered state. */
 	readonly assignmentState?: string;
-	/** Optional composition-root runner invoked for an admitted external-action candidate. */
-	readonly externalActionRunner?: RuntimeExternalActionRunner;
-	/** Optional structured logger injected to assert handled dispatch failures remain observable. */
-	readonly logger?: Logger;
-	/** Optional terminal lifecycle bridge supplied by the composition root. */
-	readonly terminalReporter?: RuntimeTerminalReporter;
+	/** Optional canonical event persistence bridge supplied by the composition root. */
+	readonly eventReporter?: RuntimeEventReporter;
+	/** Optional transaction-scoped approval expiry bridge supplied by the composition root. */
+	readonly approvalExpiry?: RuntimeApprovalExpiry;
 	/** Optional trusted clock for retry-window expiry assertions. */
 	readonly clock?: RuntimeProtocolClock;
-	/** Approved deferred-tool results available for a resume frame. */
-	readonly approvedDeferredResults?: readonly unknown[];
+	/** Saved terminal tool results available for a resume frame. */
+	readonly savedToolResults?: readonly JsonValue[];
 	/** Owner steering requests waiting for the next fenced resume command. */
 	readonly pendingSteeringRequests?: readonly unknown[];
 	/** Use tagged managed service evidence and its distinct projected workload identity. */
 	readonly managed?: boolean;
-	/** Durable tool-invocation reservations available for `tool.completed` coordinate completion. */
-	readonly toolInvocations?: readonly { id: string; runId: string; attempt: number; toolInvocationId: string; requestFingerprint: string; state: string; result: unknown }[];
 }
 
 /** Minimal in-memory Prisma double covering only the reads and writes the adapter performs. */
-function _fakePrisma(options: FakeOptions): { prisma: PrismaClient; queryRaw: ReturnType<typeof vi.fn>; streams: FakeStreamRow[]; commands: FakeCommandRow[]; retries: FakeExternalActionRetryRow[]; approvals: { id: string; deferredToolResult: unknown; resumeTokenHash: string | null }[]; steeringRequests: { id: string; content: unknown; state: string }[]; toolInvocations: { id: string; runId: string; attempt: number; toolInvocationId: string; requestFingerprint: string; state: string; result: unknown }[] }
+function _fakePrisma(options: FakeOptions)
 {
 	const streams: FakeStreamRow[] = [];
 	const commands: FakeCommandRow[] = [];
-	const retries: FakeExternalActionRetryRow[] = [];
-	const toolInvocations = [...(options.toolInvocations ?? [])].map(function _row(row) { return { ...row }; });
-	const approvals: { id: string; deferredToolResult: unknown; resumeTokenHash: string | null }[] = [...(options.approvedDeferredResults ?? [])].map(function _row(result, index) { return { id: `approval-${index}`, deferredToolResult: result, resumeTokenHash: `hash-${index}` }; });
+	const toolInvocations: FakeToolInvocationRow[] = [];
+	const resultDeliveries = [...(options.savedToolResults ?? [])].map(function _row(result, index)
+	{
+		const payload = { toolInvocationId: `invocation-${index}`, outcome: "succeeded", result };
+		return { id: `delivery-${index}`, toolInvocationId: `row-${index}`, state: "Pending", payload, payloadDigest: ___DigestCanonicalJson(payload), invocation: { toolInvocationId: `invocation-${index}` }, createdAt: new Date(`2026-07-20T00:00:0${index}.000Z`), consumedAt: null as Date | null };
+	});
+	for (const [index] of resultDeliveries.entries())
+	{
+		toolInvocations.push({ id: `row-${index}`, siloId: "silo-1", runId: "run-1", attempt: 1, agentServiceId: "svc-1", agentRevisionId: "rev-1", subjectId: "user-1", runtimeInstanceId: "instance-1", commandId: "command-1", candidateId: `candidate-${index}`, toolRevisionId: "integration:search:query", toolInvocationId: `invocation-${index}`, arguments: {}, argumentsDigest: `sha256:${index}`, requestFingerprint: `sha256:${index}`, requestIdentity: {}, approvalRequired: true, recoveryMode: "Manual", recoveryKey: null, state: "Succeeded", preparationAttempt: 1, retryDeadlineAt: new Date("2026-07-20T00:05:00.000Z"), nextPreparationAttemptAt: new Date("2026-07-20T00:00:00.000Z"), claimAttempt: 1, claimKind: null, claimFence: 1, claimExpiresAt: null, result: resultDeliveries[index]?.payload.result, failureCode: null, revision: 3, recoveryRequiredAt: null, completedAt: null });
+	}
 	const steeringRequests: { id: string; content: unknown; state: string }[] = [...(options.pendingSteeringRequests ?? [])].map(function _row(content, index) { return { id: `steering-${index}`, content, state: "Pending" }; });
 	const workloadIdentity = options.managed ? _managedIdentity : _identity;
 	const subjectId = options.managed ? "agent-service:svc-1" : "user-1";
@@ -163,35 +162,6 @@ function _fakePrisma(options: FakeOptions): { prisma: PrismaClient; queryRaw: Re
 			async findMany(args: { where: { runId: string; attempt: number } }) { return commands.filter(row => row.runId === args.where.runId && row.attempt === args.where.attempt).sort((left, right) => left.sequence - right.sequence); },
 			async create(args: { data: FakeCommandRow }) { commands.push({ ...args.data }); return args.data; },
 		},
-		runtimeExternalActionRetry: {
-			async findUnique(args: { where: { runId_attempt_candidateId: { runId: string; attempt: number; candidateId: string } } })
-			{
-				const key = args.where.runId_attempt_candidateId;
-				const row = retries.find(candidate => candidate.runId === key.runId && candidate.attempt === key.attempt && candidate.candidateId === key.candidateId);
-				return row === undefined ? null : { ...row };
-			},
-			async create(args: { data: FakeExternalActionRetryRow })
-			{
-				retries.push({ ...args.data });
-				return args.data;
-			},
-			async updateMany(args: { where: { runId: string; attempt: number; candidateId: string; retryCount: number }; data: { retryCount: { increment: number } } })
-			{
-				const row = retries.find(candidate => candidate.runId === args.where.runId && candidate.attempt === args.where.attempt && candidate.candidateId === args.where.candidateId && candidate.retryCount === args.where.retryCount);
-				if (row === undefined) return { count: 0 };
-				row.retryCount += args.data.retryCount.increment;
-				return { count: 1 };
-			},
-		},
-		approvalRequest: {
-			async findMany() { return approvals.filter(row => row.resumeTokenHash !== null); },
-			async updateMany(args: { where: { id: { in: string[] } }; data: { resumeTokenHash: null } })
-			{
-				let count = 0;
-				for (const row of approvals.filter(candidate => args.where.id.in.includes(candidate.id))) { row.resumeTokenHash = args.data.resumeTokenHash; count += 1; }
-				return { count };
-			},
-		},
 		runtimeSteeringRequest: {
 			async findMany() { return steeringRequests.filter(row => row.state === "Pending"); },
 			async updateMany(args: { where: { id: { in: string[] }; state: string }; data: { state: string; consumedAt: Date } })
@@ -202,6 +172,13 @@ function _fakePrisma(options: FakeOptions): { prisma: PrismaClient; queryRaw: Re
 			},
 		},
 		toolInvocation: {
+			async count() { return toolInvocations.filter(row => !["Succeeded", "Failed"].includes(row.state)).length; },
+			async create(args: { data: Omit<FakeToolInvocationRow, "id" | "state" | "preparationAttempt" | "nextPreparationAttemptAt" | "claimAttempt" | "claimKind" | "claimFence" | "claimExpiresAt" | "result" | "failureCode" | "revision" | "recoveryRequiredAt" | "completedAt"> })
+			{
+				const row: FakeToolInvocationRow = { ...args.data, id: `row-${toolInvocations.length + 1}`, state: "Preparing", preparationAttempt: 0, nextPreparationAttemptAt: args.data.retryDeadlineAt, claimAttempt: 0, claimKind: null, claimFence: 0, claimExpiresAt: null, result: null, failureCode: null, revision: 0, recoveryRequiredAt: null, completedAt: null };
+				toolInvocations.push(row);
+				return row;
+			},
 			async updateMany(args: { where: { runId: string; attempt: number; toolInvocationId: string; state: string }; data: { state: string; result: unknown; completedAt: Date } })
 			{
 				const row = toolInvocations.find(candidate => candidate.runId === args.where.runId && candidate.attempt === args.where.attempt && candidate.toolInvocationId === args.where.toolInvocationId && candidate.state === args.where.state);
@@ -210,27 +187,41 @@ function _fakePrisma(options: FakeOptions): { prisma: PrismaClient; queryRaw: Re
 				row.result = args.data.result;
 				return { count: 1 };
 			},
-			async findUnique(args: { where: { runId_attempt_toolInvocationId: { runId: string; attempt: number; toolInvocationId: string } } })
+			async findUnique(args: { where: { runId_attempt_toolInvocationId?: { runId: string; attempt: number; toolInvocationId: string }; runId_attempt_candidateId?: { runId: string; attempt: number; candidateId: string }; requestFingerprint?: string } })
 			{
-				const key = args.where.runId_attempt_toolInvocationId;
-				return toolInvocations.find(candidate => candidate.runId === key.runId && candidate.attempt === key.attempt && candidate.toolInvocationId === key.toolInvocationId) ?? null;
+				const toolKey = args.where.runId_attempt_toolInvocationId;
+				if (toolKey) return toolInvocations.find(candidate => candidate.runId === toolKey.runId && candidate.attempt === toolKey.attempt && candidate.toolInvocationId === toolKey.toolInvocationId) ?? null;
+				const candidateKey = args.where.runId_attempt_candidateId;
+				if (candidateKey) return toolInvocations.find(candidate => candidate.runId === candidateKey.runId && candidate.attempt === candidateKey.attempt && candidate.candidateId === candidateKey.candidateId) ?? null;
+				return toolInvocations.find(candidate => candidate.requestFingerprint === args.where.requestFingerprint) ?? null;
+			},
+		},
+		toolResultDelivery: {
+			async findMany() { return resultDeliveries.filter(row => row.state === "Pending"); },
+			async updateMany(args: { where: { id: { in: string[] }; state: string }; data: { state: string; consumedAt: Date } })
+			{
+				let count = 0;
+				for (const row of resultDeliveries.filter(candidate => args.where.id.in.includes(candidate.id) && candidate.state === args.where.state)) { row.state = args.data.state; row.consumedAt = args.data.consumedAt; count += 1; }
+				return { count };
 			},
 		},
 	};
-	return { prisma: client as unknown as PrismaClient, queryRaw, streams, commands, retries, approvals, steeringRequests, toolInvocations };
+	return { prisma: client as unknown as PrismaClient, queryRaw, run, streams, commands, resultDeliveries, steeringRequests, toolInvocations };
 }
 
 /** Deterministic fake compiler: same snapshot digest always yields byte-identical compiled input. */
 const _compileRunInput: RunInputCompiler = async function _compile(snapshot): Promise<CompiledRunInput>
 {
-	return { promptCompilerVersion: "v1", runId: snapshot.runId, attempt: 1, instructions: "compiled", messages: [], tools: [], model: { modelAlias: "silo-default", maxOutputTokens: null }, budget: { maxTotalTokens: null, maxCostUsdMicros: null, maxToolInvocations: null, wallClockDeadlineEpochMs: null }, digest: `sha256:${snapshot.digest}` };
+	const parametersSchema = { type: "object", properties: { q: { type: "string" } }, required: ["q"], additionalProperties: false } as const;
+	return { promptCompilerVersion: "v1", runId: snapshot.runId, attempt: 1, instructions: "compiled", messages: [], tools: [{ name: "integration:search:query", toolRevisionId: "integration:search:query", description: "search", requiresApproval: true, parametersSchema, parametersSchemaDigest: ___DigestCanonicalJson(parametersSchema) }], model: { modelAlias: "silo-default", maxOutputTokens: null }, budget: { maxTotalTokens: null, maxCostUsdMicros: null, maxToolInvocations: null, wallClockDeadlineEpochMs: null }, digest: `sha256:${snapshot.digest}` };
 };
 
 /** Build the adapter under test over a fake with the requested durable state. */
 function _authority(options: FakeOptions)
 {
 	const fake = _fakePrisma(options);
-	return { authority: new PrismaRuntimeDispatchAuthority(fake.prisma, { personalRuntimeNamespace: "runtime-ns", managedRuntimeNamespace: "managed-runtime-ns", commandTtlMilliseconds: 60_000, externalActionRetryLimit: 3, externalActionRetryWindowMilliseconds: 30_000 }, _compileRunInput, options.externalActionRunner, options.terminalReporter, options.clock ?? _clock, options.logger), ...fake };
+	const eventReporter = options.eventReporter ?? { reportInTransaction: vi.fn().mockResolvedValue({ outcome: "reported" as const }) };
+	return { authority: new PrismaRuntimeDispatchAuthority(fake.prisma, { personalRuntimeNamespace: "runtime-ns", managedRuntimeNamespace: "managed-runtime-ns", commandTtlMilliseconds: 60_000 }, _compileRunInput, eventReporter, options.clock ?? _clock, options.approvalExpiry), ...fake };
 }
 
 /** Build a runtime event candidate bound to a dispatched command. */
@@ -317,16 +308,46 @@ describe("PrismaRuntimeDispatchAuthority", function _describeDispatchAuthority()
 		expect(late.accepted).toBe(false);
 	});
 
-	it("mints a resume_attempt carrying the approved deferred results after start", async function _mintsResume()
+	it("supersedes stale start delivery with one monotonic cancel on reconnect", async function _SupersedesStaleStart()
 	{
-		const context = _authority({ runState: "Running", approvedDeferredResults: [{ ok: true }] });
+		const context = _authority({ runState: "Running" });
+		await context.authority.__NextCommand(_identity, _open, 0);
+		context.run.state = "Cancelling";
+
+		const cancel = await context.authority.__NextCommand(_identity, _open, 0);
+		const redelivered = await context.authority.__NextCommand(_identity, _open, 0);
+
+		expect(cancel?.kind).toBe("cancel_attempt");
+		expect(cancel?.sequence).toBe(2);
+		expect(redelivered).toEqual(cancel);
+		expect(context.commands.map(function _Sequence(row) { return row.sequence; })).toEqual([1, 2]);
+		expect(await context.authority.__NextCommand(_identity, _open, 2)).toBeNull();
+	});
+
+	it("skips stored start and resume frames when cancellation wins", async function _SupersedesStaleResume()
+	{
+		const context = _authority({ runState: "Running", savedToolResults: [{ ok: true }] });
+		await context.authority.__NextCommand(_identity, _open, 0);
+		await context.authority.__NextCommand(_identity, _open, 1);
+		context.run.state = "Cancelling";
+
+		const cancel = await context.authority.__NextCommand(_identity, _open, 0);
+
+		expect(cancel?.kind).toBe("cancel_attempt");
+		expect(cancel?.sequence).toBe(3);
+		expect(context.commands.map(function _Kind(row) { return row.kind; })).toEqual(["StartAttempt", "ResumeAttempt", "CancelAttempt"]);
+	});
+
+	it("mints a resume_attempt carrying the saved terminal tool results after start", async function _mintsResume()
+	{
+		const context = _authority({ runState: "Running", savedToolResults: [{ ok: true }] });
 
 		const start = await context.authority.__NextCommand(_identity, _open, 0);
 		const resume = await context.authority.__NextCommand(_identity, _open, 1);
 
 		expect(start?.kind).toBe("start_attempt");
 		expect(resume?.kind).toBe("resume_attempt");
-		expect(resume?.kind === "resume_attempt" ? resume.payload.deferredToolResults : null).toEqual([{ ok: true }]);
+		expect(resume?.kind === "resume_attempt" ? resume.payload.toolResults : null).toEqual([{ toolInvocationId: "invocation-0", outcome: "succeeded", result: { ok: true } }]);
 	});
 
 	it("mints one fenced resume carrying pending steering and consumes it only after persistence", async function _mintsSteeringResume()
@@ -342,23 +363,23 @@ describe("PrismaRuntimeDispatchAuthority", function _describeDispatchAuthority()
 		expect(await authority.__NextCommand(_identity, _open, 2)).toBeNull();
 	});
 
-	it("consumes the single-use resume token so no duplicate resume is minted", async function _singleUseResume()
+	it("consumes each saved-result marker so no duplicate resume is minted", async function _singleUseResume()
 	{
-		const context = _authority({ runState: "Running", approvedDeferredResults: [{ ok: true }] });
+		const context = _authority({ runState: "Running", savedToolResults: [{ ok: true }] });
 
 		await context.authority.__NextCommand(_identity, _open, 0);
 		await context.authority.__NextCommand(_identity, _open, 1);
-		// The resume token is now consumed; a further poll past the resume frame mints nothing.
+		// The saved-result delivery is now consumed; a further poll past the resume frame mints nothing.
 		const afterResume = await context.authority.__NextCommand(_identity, _open, 2);
 
 		expect(afterResume).toBeNull();
-		expect(context.approvals.every(row => row.resumeTokenHash === null)).toBe(true);
+		expect(context.resultDeliveries.every(row => row.state === "Consumed")).toBe(true);
 		expect(context.commands.filter(row => row.kind === "ResumeAttempt")).toHaveLength(1);
 	});
 
 	it("redelivers a resume frame byte-identically after its token was consumed", async function _resumeRedeliver()
 	{
-		const context = _authority({ runState: "Running", approvedDeferredResults: [{ ok: true }] });
+		const context = _authority({ runState: "Running", savedToolResults: [{ ok: true }] });
 
 		await context.authority.__NextCommand(_identity, _open, 0);
 		const resume = await context.authority.__NextCommand(_identity, _open, 1);
@@ -367,129 +388,158 @@ describe("PrismaRuntimeDispatchAuthority", function _describeDispatchAuthority()
 		expect(redelivered).toEqual(resume);
 	});
 
-	it("dispatches an admitted external-action candidate through the injected runner", async function _runsExternalAction()
+	it("mints a later resume only when a new approval batch produces a fresh marker", async function _resumesLaterApprovalBatch()
 	{
-		let ran = 0;
-		const context = _authority({ runState: "Running", externalActionRunner: { async run() { ran += 1; return { outcome: "completed" as const }; } } });
+		const context = _authority({ runState: "Running", savedToolResults: [{ batch: 1 }] });
+		await context.authority.__NextCommand(_identity, _open, 0);
+		await context.authority.__NextCommand(_identity, _open, 1);
+		context.toolInvocations.push({ ...context.toolInvocations[0]!, id: "row-later", toolInvocationId: "invocation-later", requestFingerprint: "sha256:later", state: "Succeeded", result: { batch: 2 } });
+		const laterPayload = { toolInvocationId: "invocation-later", outcome: "succeeded", result: { batch: 2 } };
+		context.resultDeliveries.push({ id: "delivery-later", toolInvocationId: "row-later", state: "Pending", payload: laterPayload, payloadDigest: ___DigestCanonicalJson(laterPayload), invocation: { toolInvocationId: "invocation-later" }, createdAt: new Date("2026-07-20T00:00:09.000Z"), consumedAt: null });
+
+		const later = await context.authority.__NextCommand(_identity, _open, 2);
+
+		expect(later?.kind).toBe("resume_attempt");
+		expect(later?.kind === "resume_attempt" ? later.payload.toolResults : null).toEqual([{ toolInvocationId: "invocation-later", outcome: "succeeded", result: { batch: 2 } }]);
+		expect(context.commands.filter(row => row.kind === "ResumeAttempt")).toHaveLength(2);
+	});
+
+	it("does not mint a second resume for steering without a new approval pause", async function _rejectsConcurrentSteeringResume()
+	{
+		const context = _authority({ runState: "Running", pendingSteeringRequests: [{ text: "First." }] });
+		await context.authority.__NextCommand(_identity, _open, 0);
+		await context.authority.__NextCommand(_identity, _open, 1);
+		context.steeringRequests.push({ id: "steering-later", content: { text: "Do not interrupt the active loop." }, state: "Pending" });
+
+		expect(await context.authority.__NextCommand(_identity, _open, 2)).toBeNull();
+		expect(context.steeringRequests[1]?.state).toBe("Pending");
+	});
+
+	it("refuses a saved result whose payload digest no longer matches", async function _rejectsChangedResultPayload()
+	{
+		const context = _authority({ runState: "Running", savedToolResults: [{ ok: true }] });
+		context.resultDeliveries[0]!.payloadDigest = "sha256:changed";
+		await context.authority.__NextCommand(_identity, _open, 0);
+
+		await expect(context.authority.__NextCommand(_identity, _open, 1)).resolves.toBeNull();
+		expect(context.resultDeliveries[0]?.state).toBe("Pending");
+	});
+
+	it("refuses a saved result that names a different public invocation id", async function _rejectsChangedInvocationId()
+	{
+		const context = _authority({ runState: "Running", savedToolResults: [{ ok: true }] });
+		context.resultDeliveries[0]!.payload.toolInvocationId = "attacker-invocation";
+		context.resultDeliveries[0]!.payloadDigest = ___DigestCanonicalJson(context.resultDeliveries[0]!.payload);
+		await context.authority.__NextCommand(_identity, _open, 0);
+
+		await expect(context.authority.__NextCommand(_identity, _open, 1)).resolves.toBeNull();
+		expect(context.resultDeliveries[0]?.state).toBe("Pending");
+	});
+
+	it("expires a waiting batch inside command polling before minting its resume", async function _expiresWaitingBatch()
+	{
+		let resumeRun = function _noop(): void {};
+		const expiry = { expireInTransaction: vi.fn(async function _expire() { resumeRun(); return { expiredCount: 1, resumed: true }; }) };
+		const context = _authority({ runState: "WaitingForApproval", savedToolResults: [{ expired: true }], approvalExpiry: expiry });
+		resumeRun = function _resume(): void { context.run.state = "Running"; };
+		context.streams.push({ runId: "run-1", attempt: 1, fence: 1, inputGeneration: 0, runtimeInstanceId: "instance-1", nextCommandSequence: 2, acceptedCandidateIds: [] });
+		context.commands.push({ runId: "run-1", attempt: 1, sequence: 1, commandId: "command-start", kind: "StartAttempt", fence: 1, issuedAt: new Date("2026-07-20T00:00:30.000Z"), expiresAt: new Date("2026-07-20T00:01:30.000Z") });
+
+		const resume = await context.authority.__NextCommand(_identity, _open, 1);
+
+		expect(expiry.expireInTransaction).toHaveBeenCalledWith(expect.anything(), { runId: "run-1", attempt: 1, now: new Date("2026-07-20T00:01:00.000Z") });
+		expect(resume?.kind).toBe("resume_attempt");
+	});
+
+	it("keeps a partially expired approval batch waiting and mints no command", async function _keepsWaitingAfterPartialExpiry()
+	{
+		const expiry = { expireInTransaction: vi.fn().mockResolvedValue({ expiredCount: 1, resumed: false }) };
+		const context = _authority({ runState: "WaitingForApproval", approvalExpiry: expiry });
+
+		expect(await context.authority.__NextCommand(_identity, _open, 0)).toBeNull();
+		expect(context.commands).toHaveLength(0);
+	});
+
+	it("rejects redelivery when a persisted resume payload is not an exact result array", async function _rejectsMalformedResumeRedelivery()
+	{
+		const context = _authority({ runState: "Running" });
+		await context.authority.__NextCommand(_identity, _open, 0);
+		context.commands.push({ runId: "run-1", attempt: 1, sequence: 2, commandId: "malformed-resume", kind: "ResumeAttempt", fence: 1, payload: { inputGeneration: 0, toolResults: { toolInvocationId: "invocation-1" }, steeringRequests: [] }, issuedAt: new Date("2026-07-20T00:01:00.000Z"), expiresAt: new Date("2026-07-20T00:02:00.000Z") });
+
+		await expect(context.authority.__NextCommand(_identity, _open, 1)).resolves.toBeNull();
+	});
+
+	it("atomically saves Preparing work before accepting an external-action candidate", async function _persistsActionAuthority()
+	{
+		const context = _authority({ runState: "Running" });
 		const start = await context.authority.__NextCommand(_identity, _open, 0);
-		const candidate: RuntimeCandidate = { protocolVersion: AGENT_RUNTIME_PROTOCOL_V1, runtimeInstanceId: "instance-1", commandId: start?.commandId ?? "command-1", candidateId: "candidate-ext", runId: "run-1", attempt: 1, fence: 1, kind: "external_action", toolRevisionId: "integration:search:query", toolInvocationId: "invocation-1", argumentsDigest: "sha256:d", arguments: { q: "a" } };
+		const argumentsValue = { q: "a" };
+		const candidate: RuntimeCandidate = { protocolVersion: AGENT_RUNTIME_PROTOCOL_V1, runtimeInstanceId: "instance-1", commandId: start?.commandId ?? "command-1", candidateId: "candidate-ext", runId: "run-1", attempt: 1, fence: 1, kind: "external_action", toolRevisionId: "integration:search:query", toolInvocationId: "invocation-1", argumentsDigest: ___DigestCanonicalJson(argumentsValue), arguments: argumentsValue };
 
-		const result = await context.authority.__AdmitCandidate(_identity, candidate);
+		await expect(context.authority.__AdmitCandidate(_identity, candidate)).resolves.toEqual({ accepted: true });
+		await expect(context.authority.__AdmitCandidate(_identity, candidate)).resolves.toEqual({ accepted: true });
+		expect(context.toolInvocations).toHaveLength(1);
+		expect(context.toolInvocations[0]).toMatchObject({ state: "Preparing", candidateId: "candidate-ext", toolInvocationId: "invocation-1", approvalRequired: true, recoveryMode: "Manual" });
+		expect(context.streams[0]?.acceptedCandidateIds).toEqual(["candidate-ext"]);
+	});
 
-		expect(result.accepted).toBe(true);
-		expect(ran).toBe(1);
+	it("rejects an external-action replay whose arguments changed behind the accepted digest", async function _rejectsMutatedActionReplay()
+	{
+		const context = _authority({ runState: "Running" });
+		const start = await context.authority.__NextCommand(_identity, _open, 0);
+		const argumentsValue = { q: "accepted" };
+		const candidate: RuntimeCandidate = { protocolVersion: AGENT_RUNTIME_PROTOCOL_V1, runtimeInstanceId: "instance-1", commandId: start?.commandId ?? "command-1", candidateId: "candidate-ext", runId: "run-1", attempt: 1, fence: 1, kind: "external_action", toolRevisionId: "integration:search:query", toolInvocationId: "invocation-1", argumentsDigest: ___DigestCanonicalJson(argumentsValue), arguments: argumentsValue };
+
+		await expect(context.authority.__AdmitCandidate(_identity, candidate)).resolves.toEqual({ accepted: true });
+		await expect(context.authority.__AdmitCandidate(_identity, { ...candidate, arguments: { q: "changed" } })).resolves.toEqual({ accepted: false, reason: "external_action_replay_conflict" });
+		expect(context.toolInvocations).toHaveLength(1);
 	});
 
 	it("persists only a fenced runtime completion through the injected run authority", async function _reportsTerminalCompletion()
 	{
 		const reporter = { reportInTransaction: vi.fn().mockResolvedValue({ outcome: "reported" }) };
-		const context = _authority({ runState: "Running", terminalReporter: reporter });
+		const context = _authority({ runState: "Running", eventReporter: reporter });
 		const start = await context.authority.__NextCommand(_identity, _open, 0);
 		const candidate: RuntimeCandidate = { protocolVersion: AGENT_RUNTIME_PROTOCOL_V1, runtimeInstanceId: "instance-1", commandId: start?.commandId ?? "command-1", candidateId: "candidate-complete", runId: "run-1", attempt: 1, fence: 1, kind: "event", eventType: "run.completed", payload: { ignored: "runtime payload never becomes durable terminal evidence" } };
 
 		await expect(context.authority.__AdmitCandidate(_identity, candidate)).resolves.toEqual({ accepted: true });
-		expect(reporter.reportInTransaction).toHaveBeenCalledWith(expect.anything(), { runId: "run-1", attempt: 1, eventType: "run.completed" });
+		expect(reporter.reportInTransaction).toHaveBeenCalledWith(expect.anything(), { runId: "run-1", attempt: 1, eventType: "run.completed", payload: { ignored: "runtime payload never becomes durable terminal evidence" } });
+	});
+
+	it("persists each canonical event before accepting its candidate id", async function _persistsBeforeCandidateAcceptance()
+	{
+		let context: ReturnType<typeof _authority>;
+		const reporter: RuntimeEventReporter = { async reportInTransaction()
+		{
+			expect(context.streams[0]?.acceptedCandidateIds).toEqual([]);
+			return { outcome: "reported" };
+		} };
+		context = _authority({ runState: "Running", eventReporter: reporter });
+		const start = await context.authority.__NextCommand(_identity, _open, 0);
+		const candidate: RuntimeCandidate = { protocolVersion: AGENT_RUNTIME_PROTOCOL_V1, runtimeInstanceId: "instance-1", commandId: start?.commandId ?? "command-1", candidateId: "candidate-delta", runId: "run-1", attempt: 1, fence: 1, kind: "event", eventType: "message.delta", payload: { messageId: "message-1", delta: "Hello" } };
+
+		await expect(context.authority.__AdmitCandidate(_identity, candidate)).resolves.toEqual({ accepted: true });
+		expect(context.streams[0]?.acceptedCandidateIds).toEqual(["candidate-delta"]);
+	});
+
+	it("does not accept a candidate id when canonical event persistence denies it", async function _deniesUnpersistedEvent()
+	{
+		const reporter: RuntimeEventReporter = { reportInTransaction: vi.fn().mockResolvedValue({ outcome: "denied", reason: "invalid_event_type" }) };
+		const context = _authority({ runState: "Running", eventReporter: reporter });
+		const start = await context.authority.__NextCommand(_identity, _open, 0);
+		const candidate: RuntimeCandidate = { protocolVersion: AGENT_RUNTIME_PROTOCOL_V1, runtimeInstanceId: "instance-1", commandId: start?.commandId ?? "command-1", candidateId: "candidate-unknown", runId: "run-1", attempt: 1, fence: 1, kind: "event", eventType: "framework.internal", payload: {} };
+
+		await expect(context.authority.__AdmitCandidate(_identity, candidate)).resolves.toEqual({ accepted: false, reason: "invalid_event_type" });
+		expect(context.streams[0]?.acceptedCandidateIds).toEqual([]);
 	});
 
 	it("keeps cancellation server-owned even for an authenticated runtime", async function _deniesRuntimeCancellation()
 	{
-		const context = _authority({ runState: "Running", terminalReporter: { reportInTransaction: vi.fn() } });
+		const context = _authority({ runState: "Running", eventReporter: { reportInTransaction: vi.fn() } });
 		const start = await context.authority.__NextCommand(_identity, _open, 0);
 		const candidate: RuntimeCandidate = { protocolVersion: AGENT_RUNTIME_PROTOCOL_V1, runtimeInstanceId: "instance-1", commandId: start?.commandId ?? "command-1", candidateId: "candidate-cancel", runId: "run-1", attempt: 1, fence: 1, kind: "event", eventType: "run.cancelled", payload: {} };
 
 		await expect(context.authority.__AdmitCandidate(_identity, candidate)).resolves.toEqual({ accepted: false, reason: "runtime_cancellation_not_authoritative" });
-	});
-
-	it("marks the exact reserved invocation Succeeded with a digest-only receipt on tool.completed", async function _acceptsToolCompletion()
-	{
-		const digest = `sha256:${"b".repeat(64)}`;
-		const context = _authority({ runState: "Running", toolInvocations: [{ id: "row-1", runId: "run-1", attempt: 1, toolInvocationId: "call-7", requestFingerprint: "sha256:f", state: "Reserved", result: null }] });
-		const start = await context.authority.__NextCommand(_identity, _open, 0);
-		const candidate: RuntimeCandidate = { protocolVersion: AGENT_RUNTIME_PROTOCOL_V1, runtimeInstanceId: "instance-1", commandId: start?.commandId ?? "command-1", candidateId: "candidate-tc", runId: "run-1", attempt: 1, fence: 1, kind: "event", eventType: "tool.completed", payload: { toolInvocationId: "call-7", resultDigest: digest } };
-
-		await expect(context.authority.__AdmitCandidate(_identity, candidate)).resolves.toEqual({ accepted: true });
-		expect(context.toolInvocations[0]).toMatchObject({ state: "Succeeded", result: { resultDigest: digest } });
-		// The durable receipt is the digest ONLY; tool content never enters the invocation row.
-		expect(JSON.stringify(context.toolInvocations[0]?.result)).not.toContain("content");
-	});
-
-	it("refuses tool.completed for unknown or already-completed invocation coordinates", async function _refusesToolCompletionConflict()
-	{
-		const digest = `sha256:${"b".repeat(64)}`;
-		const context = _authority({ runState: "Running", toolInvocations: [{ id: "row-1", runId: "run-1", attempt: 1, toolInvocationId: "call-7", requestFingerprint: "sha256:f", state: "Succeeded", result: { resultDigest: digest } }] });
-		const start = await context.authority.__NextCommand(_identity, _open, 0);
-		const duplicate: RuntimeCandidate = { protocolVersion: AGENT_RUNTIME_PROTOCOL_V1, runtimeInstanceId: "instance-1", commandId: start?.commandId ?? "command-1", candidateId: "candidate-tc-dup", runId: "run-1", attempt: 1, fence: 1, kind: "event", eventType: "tool.completed", payload: { toolInvocationId: "call-7", resultDigest: digest } };
-		const unknown: RuntimeCandidate = { ...duplicate, candidateId: "candidate-tc-unknown", payload: { toolInvocationId: "call-absent", resultDigest: digest } };
-
-		await expect(context.authority.__AdmitCandidate(_identity, duplicate)).resolves.toEqual({ accepted: false, reason: "tool_completion_conflict" });
-		await expect(context.authority.__AdmitCandidate(_identity, unknown)).resolves.toEqual({ accepted: false, reason: "tool_completion_conflict" });
-	});
-
-	it("refuses tool.completed payloads without a canonical sha256 digest", async function _refusesInvalidToolCompletion()
-	{
-		const context = _authority({ runState: "Running", toolInvocations: [{ id: "row-1", runId: "run-1", attempt: 1, toolInvocationId: "call-7", requestFingerprint: "sha256:f", state: "Reserved", result: null }] });
-		const start = await context.authority.__NextCommand(_identity, _open, 0);
-		const malformedPayloads: readonly Record<string, string>[] = [{}, { toolInvocationId: "call-7" }, { toolInvocationId: "call-7", resultDigest: "sha256:short" }, { toolInvocationId: "", resultDigest: `sha256:${"b".repeat(64)}` }, { toolInvocationId: "call-7", resultDigest: `md5:${"b".repeat(64)}` }];
-		for (const payload of malformedPayloads)
-		{
-			const candidate: RuntimeCandidate = { protocolVersion: AGENT_RUNTIME_PROTOCOL_V1, runtimeInstanceId: "instance-1", commandId: start?.commandId ?? "command-1", candidateId: `candidate-${JSON.stringify(payload).length}`, runId: "run-1", attempt: 1, fence: 1, kind: "event", eventType: "tool.completed", payload };
-			await expect(context.authority.__AdmitCandidate(_identity, candidate)).resolves.toEqual({ accepted: false, reason: "invalid_tool_completion" });
-		}
-		expect(context.toolInvocations[0]?.state).toBe("Reserved");
-	});
-
-	it("retries only an explicit pre-reservation runner failure within its durable server budget", async function _surfacesExternalActionFailure()
-	{
-		let attempts = 0;
-		const error = new Error("temporary tool authority outage");
-		const logger = { error: vi.fn() } as unknown as Logger;
-		const context = _authority({ runState: "Running", logger, externalActionRunner: { async run() { attempts += 1; return { outcome: "retryable" as const, error }; } } });
-		const start = await context.authority.__NextCommand(_identity, _open, 0);
-		const candidate: RuntimeCandidate = { protocolVersion: AGENT_RUNTIME_PROTOCOL_V1, runtimeInstanceId: "instance-1", commandId: start?.commandId ?? "command-1", candidateId: "candidate-ext-retry", runId: "run-1", attempt: 1, fence: 1, kind: "external_action", toolRevisionId: "integration:search:query", toolInvocationId: "invocation-retry", argumentsDigest: "sha256:d", arguments: { q: "a" } };
-
-		const first = await context.authority.__AdmitCandidate(_identity, candidate);
-		const replay = await context.authority.__AdmitCandidate(_identity, candidate);
-
-		expect(attempts).toBe(2);
-		expect(first).toEqual({ accepted: false, reason: "external_action_dispatch_retryable", retryable: true, retryAfterMilliseconds: 1_000 });
-		expect(replay).toEqual(first);
-		expect(context.retries).toEqual([{ runId: "run-1", attempt: 1, candidateId: "candidate-ext-retry", retryCount: 2, retryDeadlineAt: new Date("2026-07-20T00:01:30.000Z") }]);
-		expect(logger.error).toHaveBeenCalledWith({ err: error, runId: "run-1", attempt: 1, candidateId: "candidate-ext-retry", toolInvocationId: "invocation-retry", toolRevisionId: "integration:search:query", retryCount: 2, failureKind: "external_action_dispatch_retryable" }, "runtime external action dispatch failed before reservation");
-	});
-
-	it("exhausts the durable retry budget instead of returning an unbounded retry response", async function _exhaustsExternalActionRetries()
-	{
-		const context = _authority({ runState: "Running", externalActionRunner: { async run() { return { outcome: "retryable" as const, error: new Error("compiler unavailable") }; } } });
-		const start = await context.authority.__NextCommand(_identity, _open, 0);
-		const candidate: RuntimeCandidate = { protocolVersion: AGENT_RUNTIME_PROTOCOL_V1, runtimeInstanceId: "instance-1", commandId: start?.commandId ?? "command-1", candidateId: "candidate-ext-exhausted", runId: "run-1", attempt: 1, fence: 1, kind: "external_action", toolRevisionId: "integration:search:query", toolInvocationId: "invocation-exhausted", argumentsDigest: "sha256:d", arguments: { q: "a" } };
-
-		expect(await context.authority.__AdmitCandidate(_identity, candidate)).toMatchObject({ retryable: true });
-		expect(await context.authority.__AdmitCandidate(_identity, candidate)).toMatchObject({ retryable: true });
-		expect(await context.authority.__AdmitCandidate(_identity, candidate)).toMatchObject({ retryable: true });
-		expect(await context.authority.__AdmitCandidate(_identity, candidate)).toEqual({ accepted: false, reason: "external_action_dispatch_retry_exhausted" });
-		expect(context.retries[0]?.retryCount).toBe(3);
-	});
-
-	it("exhausts a retry window from server time even when its count remains below the limit", async function _expiresExternalActionRetries()
-	{
-		let nowEpochMs = Date.parse("2026-07-20T00:01:00.000Z");
-		const clock = { nowEpochMs(): number { return nowEpochMs; } };
-		const context = _authority({ runState: "Running", clock, externalActionRunner: { async run() { return { outcome: "retryable" as const, error: new Error("compiler unavailable") }; } } });
-		const start = await context.authority.__NextCommand(_identity, _open, 0);
-		const candidate: RuntimeCandidate = { protocolVersion: AGENT_RUNTIME_PROTOCOL_V1, runtimeInstanceId: "instance-1", commandId: start?.commandId ?? "command-1", candidateId: "candidate-ext-expired", runId: "run-1", attempt: 1, fence: 1, kind: "external_action", toolRevisionId: "integration:search:query", toolInvocationId: "invocation-expired", argumentsDigest: "sha256:d", arguments: { q: "a" } };
-
-		expect(await context.authority.__AdmitCandidate(_identity, candidate)).toMatchObject({ retryable: true });
-		nowEpochMs += 30_000;
-		expect(await context.authority.__AdmitCandidate(_identity, candidate)).toEqual({ accepted: false, reason: "external_action_dispatch_retry_exhausted" });
-	});
-
-	it("returns a terminal denial when the runner has durable evidence the action failed", async function _deniedExternalAction()
-	{
-		const context = _authority({ runState: "Running", externalActionRunner: { async run() { return { outcome: "denied" as const }; } } });
-		const start = await context.authority.__NextCommand(_identity, _open, 0);
-		const candidate: RuntimeCandidate = { protocolVersion: AGENT_RUNTIME_PROTOCOL_V1, runtimeInstanceId: "instance-1", commandId: start?.commandId ?? "command-1", candidateId: "candidate-ext-denied", runId: "run-1", attempt: 1, fence: 1, kind: "external_action", toolRevisionId: "integration:search:query", toolInvocationId: "invocation-denied", argumentsDigest: "sha256:d", arguments: { q: "a" } };
-
-		expect(await context.authority.__AdmitCandidate(_identity, candidate)).toEqual({ accepted: false, reason: "external_action_dispatch_denied" });
 	});
 
 	it("returns null when no live assignment exists for the reviewed Pod", async function _unknownWorkload()

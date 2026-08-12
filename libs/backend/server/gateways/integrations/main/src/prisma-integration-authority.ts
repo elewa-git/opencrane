@@ -1,5 +1,8 @@
 import { IntegrationCustodyState, IntegrationState, type PrismaClient } from "@prisma/client";
 
+import { __AreReviewedIntegrationToolDefinitionsValid, type ReviewedIntegrationToolDefinition } from "@opencrane/models/agents";
+import { ___CloneCanonicalJson, type JsonValue } from "@opencrane/util";
+
 import type { IntegrationAuthorityClock, IntegrationAuthorityRepository, ResolveIntegrationAssignmentCommand, ResolveIntegrationAssignmentResult } from "./integration-resolution.types.js";
 
 /** Production clock for integration-custody expiry checks. */
@@ -42,8 +45,10 @@ export class PrismaIntegrationAuthorityRepository implements IntegrationAuthorit
 		if (assignment.custodyReference.state === IntegrationCustodyState.Revoked || assignment.custodyReference.revokedAt !== null) return { outcome: "unavailable", reason: "revoked" };
 		if (assignment.custodyReference.state === IntegrationCustodyState.Expired || assignment.custodyReference.expiresAt <= this.clock.now()) return { outcome: "unavailable", reason: "expired" };
 		if (assignment.custodyReference.state !== IntegrationCustodyState.Ready) return { outcome: "unavailable", reason: "inactive" };
+		const toolDefinitions = assignment.toolDefinitions as unknown as readonly ReviewedIntegrationToolDefinition[];
+		if (!Array.isArray(toolDefinitions) || !__AreReviewedIntegrationToolDefinitionsValid(toolDefinitions)) return { outcome: "unavailable", reason: "inactive" };
 
-		// 3. Return only the opaque custody reference and explicit allow-list for the Obot PEP to redeem.
-		return { outcome: "resolved", assignment: { integrationId: assignment.integrationId, obotCatalogEntryId: assignment.integration.obotCatalogEntryId, obotCustodyReference: assignment.custodyReference.obotCustodyReference, allowedTools: assignment.allowedTools } };
+		// 3. Return only the opaque custody reference and reviewed definitions for the Obot PEP.
+		return { outcome: "resolved", assignment: { integrationId: assignment.integrationId, obotCatalogEntryId: assignment.integration.obotCatalogEntryId, obotCustodyReference: assignment.custodyReference.obotCustodyReference, toolDefinitions: ___CloneCanonicalJson(assignment.toolDefinitions as unknown as JsonValue) as unknown as readonly ReviewedIntegrationToolDefinition[] } };
 	}
 }

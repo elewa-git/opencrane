@@ -1,7 +1,8 @@
 import { AgentRevisionState, GrantScope, GrantSubjectType, Prisma } from "@prisma/client";
 
 import { __DigestAgentRevisionContent } from "@opencrane/models/agents";
-import type { AgentBudget, AgentRevisionContent, GrantScope as DomainGrantScope, GrantSubjectType as DomainGrantSubjectType } from "@opencrane/models/agents";
+import type { AgentBudget, AgentRevisionContent, GrantScope as DomainGrantScope, GrantSubjectType as DomainGrantSubjectType, ReviewedIntegrationToolDefinition } from "@opencrane/models/agents";
+import { ___CloneCanonicalJson, type JsonValue } from "@opencrane/util";
 
 import { type AgentRevisionWriterRepository, type CreateAgentRevisionWithinTransactionCommand } from "./prisma-agent-revision-writer.types.js";
 
@@ -64,7 +65,7 @@ export function _AgentRevisionContentFromRow(row: AgentRevisionWithAssignments):
 			return {
 				integrationId: assignment.integrationId,
 				custodyReferenceId: assignment.custodyReferenceId,
-				allowedTools: [...assignment.allowedTools],
+				toolDefinitions: ___CloneCanonicalJson(assignment.toolDefinitions as unknown as JsonValue) as unknown as readonly ReviewedIntegrationToolDefinition[],
 			};
 		}),
 		scopeAttachments: row.scopeAttachments.map(function _MapScope(attachment)
@@ -126,7 +127,7 @@ function _RevisionCreateData(command: CreateAgentRevisionWithinTransactionComman
 					integrationId: assignment.integrationId,
 					siloId: command.siloId,
 					custodyReferenceId: assignment.custodyReferenceId,
-					allowedTools: [...assignment.allowedTools],
+					toolDefinitions: ___CloneCanonicalJson(assignment.toolDefinitions as unknown as JsonValue) as Prisma.InputJsonValue,
 				};
 			}),
 		},

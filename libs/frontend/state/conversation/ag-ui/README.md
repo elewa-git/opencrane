@@ -4,12 +4,13 @@
 
 ## What it owns
 
-This pure browser-state package turns the small, display-safe AG-UI event projection into message,
-tool, run, and reconnect-cursor state. A future OpenCrane-authorised replay reader supplies the
-events; this package never opens a connection, reads browser storage, or invents a conversation.
+This pure browser-state package turns the exact-pinned, display-safe AG-UI event projection into
+message, tool, run, governed A2UI surface, interrupt, and reconnect-cursor state. The OpenCrane conversation event adapter
+supplies complete SSE records incrementally; this package never opens a connection, reads browser
+storage, or invents conversation authority.
 
 ```
- server-authorised replay reader
+ server-authorised event stream
              │ safe SSE records
              ▼
  ┌───────────────────────┐
@@ -20,16 +21,45 @@ events; this package never opens a connection, reads browser storage, or invents
      green workspace feature
 ```
 
-**In this flow:** a future authorised replay reader · the green workspace feature.
+**In this flow:** the live [conversation event adapter](../adapter/README.md) · the green workspace
+feature.
 
-Malformed records fail closed. Exact replay cursors are ignored, while cursor ordering remains the
-server reader's responsibility because SSE identifiers are opaque.
+Malformed records and invalid lifecycle sequences fail closed. Exact duplicate cursors are ignored;
+a duplicate cursor carrying different data is rejected. Cursorless open-interrupt overlays replace
+the current interrupt set without advancing the durable cursor. An access-revoked overlay purges all
+projected content and reconnect coordinates immediately. Tool attempts remain visibly failed when
+the model retries; if a later attempt succeeds, the view becomes `recovered` while retaining the
+ordered safe failure classifications. An ambiguous provider outcome is a distinct `needs_recovery`
+run and tool state carrying only fixed display-safe evidence and its expected-attempt cancellation
+fence. It never becomes a retry, failure, or elicitation locally; a later canonical cancellation is
+adopted without discarding the unresolved tool evidence.
+
+Governed `opencrane.a2ui.v1` custom events are validated against the exact shared envelope,
+three-operation vocabulary, and constrained upstream-backed catalogue. Surfaces are keyed by conversation,
+run, message, and surface identity. Consecutive authoritative sequences append to one bounded,
+materialized operation history so a newly mounted canvas can reconstruct the complete surface;
+same-sequence mutation, regression, and gaps fail closed. The reducer stores the server-selected ten-state
+lifecycle and display-safe reason without inferring action authority or a next state locally.
+
+The supported AG-UI packages are exact-pinned together at `@ag-ui/core` **0.0.57** and
+`@ag-ui/client` **0.0.57**; both are MIT-licensed upstream packages. The OpenCrane projection
+version remains `opencrane.ag-ui.v1`. Conformance tests drive the actual pinned `AbstractAgent`
+lifecycle through completion, tool calls, approval edits, denial, expiry, failure, cancellation,
+A2UI, and reconnect/resume. Production transport deliberately remains the cookie-authorized
+OpenCrane GET replay adapter: using the client's POST-oriented `HttpAgent` would create a second run
+and command path outside OpenCrane authority. The generic client resolves `RUN_ERROR` delivery, so
+this reducer remains the explicit owner of failed versus cancelled browser state.
 
 ## Public surface
 
-- `__DecodeAgUiSseRecord` — validates one complete projected SSE record.
-- `__ReduceAgUiStream` / `__CreateAgUiStreamState` — builds immutable browser view state.
-- `__AgUiResumeCursor` — returns the cursor for a future authorised reconnect.
+- `__DecodeAgUiSseRecord` — validates one complete record with pinned `@ag-ui/core` schemas and is
+  exercised through the matching pinned `@ag-ui/client` lifecycle.
+- `__ReduceAgUiStream` / `__CreateAgUiStreamState` — builds immutable browser view state while
+  preserving truthful success, interruption, failure, and cancellation terminals, display-safe
+  tool-failure and recovery classifications, plus monotonic governed A2UI surfaces.
+- `__AgUiResumeCursor` — returns only the latest durable server cursor for reconnect.
+- `__RevokeAgUiStreamAccess` — purges all projected content and reconnect coordinates after access loss.
+- `AgUiRunStatuses` / `AgUiMessageStatuses` / `AgUiToolStatuses` — the browser's explicit projection lifecycle.
 
 ## Boundary
 

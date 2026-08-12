@@ -10,11 +10,13 @@ function _run(overrides: Record<string, unknown> = {})
 }
 
 /** Builds one transaction double that exposes only terminal reporter dependencies. */
-function _transaction(run: ReturnType<typeof _run> | null, updateCount = 1)
+function _transaction(run: ReturnType<typeof _run> | null, updateCount = 1, unresolvedInvocations = 0, pendingResults = 0)
 {
 	return {
 		$queryRaw: vi.fn().mockResolvedValue([]),
 		agentRun: { findUnique: vi.fn().mockResolvedValue(run), updateMany: vi.fn().mockResolvedValue({ count: updateCount }) },
+		toolInvocation: { count: vi.fn().mockResolvedValue(unresolvedInvocations) },
+		toolResultDelivery: { count: vi.fn().mockResolvedValue(pendingResults) },
 		conversationRunEvent: { aggregate: vi.fn().mockResolvedValue({ _max: { sequence: 4 } }), create: vi.fn().mockResolvedValue({}) },
 	};
 }
@@ -31,6 +33,55 @@ describe("PrismaRuntimeTerminalReporter", function _describeReporter()
 		expect(transaction.conversationRunEvent.create).toHaveBeenCalledWith({ data: expect.objectContaining({ conversationId: "conversation-1", runId: "run-1", sequence: 5, type: "run.completed", payload: { terminalReason: "success" } }) });
 	});
 
+	it("commits runtime failure when candidate delivery failed before any durable tool work existed", async function _reportsPreAdmissionFailure()
+	{
+		const transaction = _transaction(_run());
+		const reporter = new PrismaRuntimeTerminalReporter();
+
+		await expect(reporter.reportInTransaction(transaction as never, { runId: "run-1", attempt: 1, eventType: "run.failed" })).resolves.toEqual({ outcome: "reported" });
+		expect(transaction.agentRun.updateMany).toHaveBeenCalledWith({ where: { id: "run-1", attempt: 1, state: AgentRunState.Running }, data: expect.objectContaining({ state: AgentRunState.Failed, terminalReason: AgentRunTerminalReason.RuntimeFailure }) });
+		expect(transaction.conversationRunEvent.create).toHaveBeenCalledWith({ data: expect.objectContaining({ conversationId: "conversation-1", runId: "run-1", sequence: 5, type: "run.failed", payload: { terminalReason: "runtime_failure" } }) });
+	});
+
+	it("refuses success while an external action or saved result is unresolved", async function _deniesPrematureSuccess()
+	{
+		const transaction = _transaction(_run(), 1, 1, 1);
+		const reporter = new PrismaRuntimeTerminalReporter();
+
+		await expect(reporter.reportInTransaction(transaction as never, { runId: "run-1", attempt: 1, eventType: "run.completed" })).resolves.toEqual({ outcome: "denied", reason: "tool_results_pending" });
+		expect(transaction.agentRun.updateMany).not.toHaveBeenCalled();
+	});
+
+	it("refuses runtime failure when a committed action has not reached the worker", async function _deniesFailureBeforeWorker()
+	{
+		const transaction = _transaction(_run(), 1, 1, 0);
+		const reporter = new PrismaRuntimeTerminalReporter();
+
+		await expect(reporter.reportInTransaction(transaction as never, { runId: "run-1", attempt: 1, eventType: "run.failed" })).resolves.toEqual({ outcome: "denied", reason: "tool_results_pending" });
+		expect(transaction.agentRun.updateMany).not.toHaveBeenCalled();
+		expect(transaction.conversationRunEvent.create).not.toHaveBeenCalled();
+	});
+
+	it("refuses runtime failure while a provider claim remains unresolved", async function _deniesFailureDuringProviderClaim()
+	{
+		const transaction = _transaction(_run(), 1, 1, 0);
+		const reporter = new PrismaRuntimeTerminalReporter();
+
+		await expect(reporter.reportInTransaction(transaction as never, { runId: "run-1", attempt: 1, eventType: "run.failed" })).resolves.toEqual({ outcome: "denied", reason: "tool_results_pending" });
+		expect(transaction.agentRun.updateMany).not.toHaveBeenCalled();
+		expect(transaction.conversationRunEvent.create).not.toHaveBeenCalled();
+	});
+
+	it("refuses runtime failure after provider settlement while its saved result is pending", async function _deniesFailureWithPendingResult()
+	{
+		const transaction = _transaction(_run(), 1, 0, 1);
+		const reporter = new PrismaRuntimeTerminalReporter();
+
+		await expect(reporter.reportInTransaction(transaction as never, { runId: "run-1", attempt: 1, eventType: "run.failed" })).resolves.toEqual({ outcome: "denied", reason: "tool_results_pending" });
+		expect(transaction.agentRun.updateMany).not.toHaveBeenCalled();
+		expect(transaction.conversationRunEvent.create).not.toHaveBeenCalled();
+	});
+
 	it("refuses a report after cancellation or another terminal writer won", async function _deniesStaleReport()
 	{
 		const transaction = _transaction(_run({ state: AgentRunState.Cancelling }));
@@ -39,5 +90,14 @@ describe("PrismaRuntimeTerminalReporter", function _describeReporter()
 		await expect(reporter.reportInTransaction(transaction as never, { runId: "run-1", attempt: 1, eventType: "run.failed" })).resolves.toEqual({ outcome: "denied", reason: "run_not_running" });
 		expect(transaction.agentRun.updateMany).not.toHaveBeenCalled();
 		expect(transaction.conversationRunEvent.create).not.toHaveBeenCalled();
+	});
+
+	it("refuses runtime completion while the run requires tool recovery", async function _deniesRecoveryRequiredCompletion()
+	{
+		const transaction = _transaction(_run({ state: AgentRunState.RecoveryRequired }));
+		const reporter = new PrismaRuntimeTerminalReporter();
+
+		await expect(reporter.reportInTransaction(transaction as never, { runId: "run-1", attempt: 1, eventType: "run.completed" })).resolves.toEqual({ outcome: "denied", reason: "run_not_running" });
+		expect(transaction.agentRun.updateMany).not.toHaveBeenCalled();
 	});
 });

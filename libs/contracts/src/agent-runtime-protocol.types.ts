@@ -109,13 +109,18 @@ export interface StartAttemptCommand
 	readonly compiledInput: CompiledRunInput;
 }
 
-/** Resumes an attempt only with control-plane-authorized deferred results and steering. */
+/** Exact server-owned tool result delivered after provider execution or a terminal refusal. */
+export type RuntimeToolResult =
+	| { readonly toolInvocationId: string; readonly outcome: "succeeded"; readonly result: JsonValue }
+	| { readonly toolInvocationId: string; readonly outcome: "failed"; readonly failureCode: string };
+
+/** Resumes an attempt only with saved server-owned tool results and steering. */
 export interface ResumeAttemptCommand
 {
 	/** Monotonic input generation that must still be current at resume. */
 	readonly inputGeneration: number;
-	/** Opaque canonical result payloads for previously deferred actions. */
-	readonly deferredToolResults: JsonValue;
+	/** Exact ordered tool results whose one-time delivery rows were atomically consumed. */
+	readonly toolResults: readonly RuntimeToolResult[];
 	/** Owner-authored steering consumed at this server-fenced command boundary. */
 	readonly steeringRequests: JsonValue;
 }

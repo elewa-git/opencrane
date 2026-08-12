@@ -3,7 +3,7 @@ name: opencrane-silo
 description: >-
   OpenCrane SILO install — one per ClusterTenant, into the org's own namespace: the
   opencrane-server (per-silo control plane + in-silo controllers), the channel trust boundary,
-  and its dedicated runtime planes (Cognee, LiteLLM, Obot/MCP gateway), per-silo
+  and its dedicated service planes (Cognee, LiteLLM, Obot/MCP gateway), per-silo
   NetworkPolicies, and identity routing. Installed with apps/_infra/deploy-k8s/deploy.sh;
   `crds.install` defaults true, while a release that uses a separately managed shared CRD
   bundle sets it false. Still depends on the cert-manager issuer.

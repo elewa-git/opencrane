@@ -9,14 +9,43 @@
  * operator-owned endpoint. Logs remain JSON on stdout; auto-instrumentation
  * injects `trace_id`/`span_id` so a platform log pipeline can correlate them.
  */
+import type { IncomingMessage, RequestOptions } from "node:http";
+
+import type { Attributes } from "@opentelemetry/api";
 import { getNodeAutoInstrumentations } from "@opentelemetry/auto-instrumentations-node";
 import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-proto";
 import { NodeSDK } from "@opentelemetry/sdk-node";
 
+import { _SanitizeHttpTraceUrl } from "./http-trace.js";
 import type { TelemetryOptions } from "./observability.types.js";
 
 /** The running SDK, kept so {@link ___ShutdownTelemetry} can flush it. Null when disabled. */
 let _sdk: NodeSDK | null = null;
+
+/** Build query-free server-span attributes before HTTP auto-instrumentation starts a span. */
+function _incomingHttpTraceAttributes(request: IncomingMessage): Attributes
+{
+  const host = typeof request.headers.host === "string" ? request.headers.host : "localhost";
+  const encrypted = "encrypted" in request.socket && request.socket.encrypted === true;
+  const scheme = encrypted ? "https" : "http";
+  return _SanitizeHttpTraceUrl(request.url ?? "/", `${scheme}://${host}`);
+}
+
+/** Build query-free client-span attributes before HTTP auto-instrumentation starts a span. */
+function _outgoingHttpTraceAttributes(request: RequestOptions): Attributes
+{
+  const protocol = request.protocol ?? "http:";
+  const host = request.hostname ?? request.host ?? "localhost";
+  const port = request.port === undefined ? "" : `:${String(request.port)}`;
+  const origin = `${protocol}//${host}${port}`;
+  return _SanitizeHttpTraceUrl(request.path ?? "/", origin);
+}
+
+/** Build query-free client-span attributes for fetch and other Undici requests. */
+function _undiciHttpTraceAttributes(request: { origin: string; path: string }): Attributes
+{
+  return _SanitizeHttpTraceUrl(request.path, request.origin);
+}
 
 /**
  * Start the OpenTelemetry SDK.
@@ -50,7 +79,14 @@ export async function ___StartTelemetry(opts: TelemetryOptions): Promise<void>
   //    Node auto-instrumentations, with the noisy fs instrumentation disabled.
   _sdk = new NodeSDK({
     traceExporter: new OTLPTraceExporter(),
-    instrumentations: [getNodeAutoInstrumentations({ "@opentelemetry/instrumentation-fs": { enabled: false } })],
+    instrumentations: [getNodeAutoInstrumentations({
+      "@opentelemetry/instrumentation-fs": { enabled: false },
+      "@opentelemetry/instrumentation-http": {
+        startIncomingSpanHook: _incomingHttpTraceAttributes,
+        startOutgoingSpanHook: _outgoingHttpTraceAttributes,
+      },
+      "@opentelemetry/instrumentation-undici": { startSpanHook: _undiciHttpTraceAttributes },
+    })],
   });
 
   // 4. Start synchronously-ish; NodeSDK.start() registers the providers and

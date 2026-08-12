@@ -16,6 +16,17 @@ export interface ReviewedFixedServiceAccountIdentity
 	readonly audiences: readonly string[];
 }
 
+/** Deployment-fixed channel-proxy identity accepted by the OpenCrane resolver. */
+export interface ChannelProxyTokenReviewerConfig
+{
+	/** Audience Kubernetes must accept for the projected token. */
+	readonly audience: string;
+	/** Namespace containing the sole admitted channel-proxy ServiceAccount. */
+	readonly namespace: string;
+	/** Exact channel-proxy ServiceAccount name admitted by the resolver. */
+	readonly serviceAccountName: string;
+}
+
 /** Reviewed authoring-worker identity whose exact coordinates are checked by durable bootstrap authority. */
 export interface ReviewedSkillWorkloadIdentity
 {

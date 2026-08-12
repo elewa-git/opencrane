@@ -20,13 +20,13 @@ OpenCrane control plane
 
 | File | Responsibility |
 | --- | --- |
-| `http.py` | Sends JSON and retries only explicit pre-reservation candidate responses. |
+| `http.py` | Sends each non-terminal candidate once over bounded authenticated JSON. |
 | `stream.py` | Parses bounded command frames and dispatches attempt workers. |
 
 A dropped stream signals the active attempt to stop. The transport never persists commands or opens
 an inbound listener. Clean EOF and exceptional disconnects share bounded reconnect backoff. Ordinary
-candidates retry only an explicit pre-reservation response; terminal candidates additionally reuse
-their stable identifier after ambiguous network loss, but never after an explicit HTTP refusal.
+candidates are not retried; terminal candidates alone reuse their stable identifier after ambiguous
+network loss, but never after an explicit HTTP refusal.
 
 ## See also
 

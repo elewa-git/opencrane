@@ -94,5 +94,7 @@ describe("conversation model validators", function _ConversationValidatorSuite()
 			expect(___ConversationReplayCursorSchema.safeParse({ conversationId: "conversation-1", position: invalidPosition }).success).toBe(false);
 		}
 		expect(___ConversationReplayCursorSchema.safeParse({ conversationId: "conversation-1", position: "9007199254740993" }).success).toBe(true);
+		expect(___ConversationReplayCursorSchema.safeParse({ conversationId: "conversation-1", position: "9007199254740993", subframe: 2 }).success).toBe(true);
+		expect(___ConversationReplayCursorSchema.safeParse({ conversationId: "conversation-1", position: "9007199254740993", subframe: -1 }).success).toBe(false);
 	});
 });

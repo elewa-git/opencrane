@@ -1,25 +1,26 @@
-# @opencrane/state/conversation/adapter — canonical conversation replay reader
+# @opencrane/state/conversation/adapter — live conversation event stream
 
 > [frontend](../../../README.md) › [state](../../README.md) › conversation › adapter
 
 ## What it owns
 
 Part of the OpenCrane **frontend state layer** (the code between the browser UI and the backend).
-This package reads a signed-in participant's already-authorised, display-safe conversation history
-from the canonical replay API. It does not open an agent-runtime connection, mint a pod credential,
-or submit a chat command: those concerns belong to the owned execution boundary, not the browser.
+This package streams a signed-in participant's already-authorised, display-safe conversation
+projection from the canonical event API. It does not open an agent-runtime connection, mint a pod
+credential, or submit a chat command: those concerns belong to the owned execution boundary, not
+the browser.
 
-Reading a conversation sends one cookie-session request to
+Opening a conversation sends a cookie-session request to
 `GET /api/v1/me/conversations/:conversationId/events`. The server derives the caller and silo from the
-session, applies participant membership, and returns bounded AG-UI server-sent events (SSE). The
-reader validates every record with the shared AG-UI state package before reducing it into browser
-view state.
+session, applies participant membership, and returns bounded snapshot-then-live AG-UI server-sent
+events (SSE). The adapter consumes the response `ReadableStream` incrementally and validates every
+complete record with the shared AG-UI state package before publishing browser view state.
 
 ```
  green conversation feature
-        │ asks for one authorised replay
+        │ opens one authorised stream
         ▼
- OpenCraneConversationReplayReader  ◄── HERE
+ OpenCraneConversationEventStream  ◄── HERE
         │ GET /me/conversations/:conversationId/events
         ▼
  conversation/ag-ui ......... validates + reduces safe SSE records
@@ -27,22 +28,25 @@ view state.
 
 **In this flow:** [conversation/ag-ui](../ag-ui/README.md) · the green conversation feature.
 
-Invariant: an invalid replay record fails the read rather than being rendered as inferred content.
-The cursor is opaque and is returned only by the server, so the browser never invents order or
-authorization state.
+The generated client keeps `credentials: include`, so the existing browser session authenticates
+every reconnect. Bounded responses resume with the exact opaque cursor in both `cursor` and
+`Last-Event-ID`; cursorless open-interrupt overlays never change it. Heartbeats and reconnect phases
+are observable, caller abort is immediate, malformed frames fail closed, and access revocation
+purges the reduced projection.
 
 ## Public surface
 
-- `OpenCraneConversationReplayReader` — the cookie-session reader for one canonical conversation replay.
-- `__ReadConversationReplay` — validates and reduces one finite AG-UI SSE body.
-- `ConversationReplayReader` — the narrow reader contract for consumers that need a replaceable API seam.
+- `OpenCraneConversationEventStream` — cookie-session incremental snapshot-to-live adapter.
+- `ConversationEventStream` / `StreamConversationEventsCommand` — narrow consumer port with abort,
+  prior state, bounded retry, and update observation.
+- `ConversationEventStreamStatuses` — connecting, live, reconnecting, aborted, and failed states.
 
 ## Boundary
 
 Consumed directly by a green conversation feature or by a feature-owned provider. It depends on the
 shared `ControlPlaneApiService` only for the session-bound generated API client, and delegates all
-SSE validation to `conversation/ag-ui`. It deliberately does not list conversations, cache messages,
-maintain a socket, or expose agent commands.
+AG-UI record validation/reduction to `conversation/ag-ui`. It deliberately does not list
+conversations, persist messages, interpret approval authority, or expose agent commands.
 
 ## Dependency direction
 

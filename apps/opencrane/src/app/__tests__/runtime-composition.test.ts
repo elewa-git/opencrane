@@ -1,6 +1,6 @@
 import type { PrismaClient } from "@prisma/client";
 import type { AuthenticationV1Api } from "@kubernetes/client-node";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { __UnavailableMemoryGatewayClient } from "@opencrane/backend/server/infra/memory-gateway-client";
 
@@ -34,7 +34,7 @@ function _RuntimeConfig(): InternalRuntimeConfig
 		artifactPreprocessorMaximumOutputBytes: 1_024,
 		artifactPreprocessorNamespace: undefined,
 		assignmentTtlMilliseconds: 60_000,
-		channelReplayRouteId: null,
+		channelTargets: null,
 		claimLeaseMilliseconds: 30_000,
 		commandRecoveryMilliseconds: 15_000,
 		commandTtlMilliseconds: 60_000,
@@ -51,6 +51,11 @@ function _RuntimeConfig(): InternalRuntimeConfig
 
 describe("_CreateInternalRuntimeComposition", function _internalRuntimeCompositionSuite()
 {
+	afterEach(function _RestoreEnvironment()
+	{
+		vi.unstubAllEnvs();
+	});
+
 	it("keeps disabled optional planes unmounted while composing every mandatory caller plane", function _composesRequiredPlanes()
 	{
 		const composition = _CreateInternalRuntimeComposition({} as PrismaClient, {} as AuthenticationV1Api, _RuntimeConfig(), new __UnavailableMemoryGatewayClient());
@@ -63,6 +68,7 @@ describe("_CreateInternalRuntimeComposition", function _internalRuntimeCompositi
 		expect(composition.runtimeBootstrap).toEqual(expect.any(Function));
 		expect(composition.runtimeStream).toEqual(expect.any(Function));
 		expect(composition.artifactPreprocessor).toBeNull();
+		expect(composition.channelTargetResolver).toBeNull();
 		expect(composition.conversationReplay).toBeNull();
 	});
 
@@ -75,16 +81,19 @@ describe("_CreateInternalRuntimeComposition", function _internalRuntimeCompositi
 
 	it("composes both optional planes only after their concrete boundaries are configured", function _composesOptionalPlanes()
 	{
+		vi.stubEnv("OPENCRANE_MEMBERSHIP_MODE", "standalone");
+		vi.stubEnv("OPENCRANE_MEMBERSHIP_MAX_STALENESS_MS", "86400000");
 		const config = {
 			..._RuntimeConfig(),
 			artifactPreprocessorEnabled: true,
 			artifactPreprocessorNamespace: "artifact-preprocessor",
-			channelReplayRouteId: "internal-channel-replay",
+			channelTargets: { channelProxyServiceAccountName: "channel-proxy", invocationContextTtlMilliseconds: 60_000, receiverEndpoint: "http://opencrane-server.opencrane-server.svc.cluster.local:8081/api/internal/conversation-replay", receiverId: "internal-channel-replay", siloId: "silo-1", trustedHost: "acme.example.com" },
 		};
 
 		const composition = _CreateInternalRuntimeComposition({} as PrismaClient, {} as AuthenticationV1Api, config, new __UnavailableMemoryGatewayClient());
 
 		expect(composition.artifactPreprocessor).toEqual(expect.any(Function));
+		expect(composition.channelTargetResolver).toEqual(expect.any(Function));
 		expect(composition.conversationReplay).toEqual(expect.any(Function));
 	});
 

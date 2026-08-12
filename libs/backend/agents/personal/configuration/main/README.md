@@ -49,7 +49,7 @@ Internally, the source is grouped by responsibility:
 - `materialization/` uses lifecycle state and patch-kind strategies to coordinate personal configuration and agent-service repositories in one UoW;
 - `persona-refresh/` provides the narrow transaction-scoped bridge that a persona authority uses to
   claim and apply an accepted refresh;
-- `upgrade-session/` adapts the trusted runtime tool candidate into a proposal; and
+- `upgrade-session/` adapts a durably admitted tool invocation into a proposal; and
 - `http/` translates authenticated API requests and domain results.
 
 ## Public surface
@@ -58,8 +58,10 @@ Internally, the source is grouped by responsibility:
 - `_PersonalConfigurationOpenapiPaths` contributes the configuration endpoints to the server API.
 - `UPGRADE_SESSION_TOOL` and `UPGRADE_SESSION_TOOL_REVISION` describe the built-in future-change tool.
 - `__IsUpgradeSessionAvailable` checks whether a frozen run can receive that tool descriptor.
-- `UpgradeSessionProposalRepository` is the narrow runtime-facing contract for proposing that future change.
-- `PrismaUpgradeSessionProposalRepository` maps an accepted runtime candidate to the proposal UoW.
+- `UpgradeSessionInvocation` and `UpgradeSessionProposalRepository` form the narrow server-worker
+  contract for proposing that future change after runtime admission.
+- `PrismaUpgradeSessionProposalUnitOfWork` maps a durable admitted invocation to one transaction;
+  its transaction-bound repository resolves the owner profile and inserts proposal evidence.
 - `PrismaPersonalConfigurationPersonaRefreshRepository` is the transaction-scoped bridge that a
   persona unit of work uses to claim and apply an accepted refresh without taking over the
   configuration delegate.

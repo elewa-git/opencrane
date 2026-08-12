@@ -1,8 +1,8 @@
 import { Router, type Request, type Response } from "express";
-import { PROMPT_COMPILER_VERSION } from "@opencrane/contracts";
 import type { AgentRevisionContent } from "@opencrane/models/agents";
 
 import { __AdmitManagedRunNow, __ChangeAgentServiceState, __CompareAgentRevisions, __CreateManagedAgentService, __ReadAgentServiceHistory, __RestoreAgentRevision, __ReviseAgentRevision } from "./agent-revision-lifecycle.js";
+import { _ParseAgentRevisionContent } from "./agent-revision-content.parser.js";
 import type { AgentRevisionLifecycleDenial, AgentServiceLifecycleAction } from "./agent-revision-lifecycle.types.js";
 import type { AgentServicesRouterDependencies, ManagementCaller } from "./agent-revision.router.types.js";
 import { __PublishAgentRevision } from "./agent-publication.js";
@@ -18,78 +18,6 @@ const _SERVICE_STATES = ["draft", "active", "paused", "retired"] as const;
 function _isNonEmptyString(value: unknown): value is string
 {
 	return typeof value === "string" && value.trim().length > 0;
-}
-
-/** Returns whether a string is safe as one segment of the runtime integration tool revision. */
-function _isToolRevisionSegment(value: unknown): value is string
-{
-	return _isNonEmptyString(value) && !value.includes(":");
-}
-
-/** Parses and validates the immutable executable content from a request body. */
-function _parseContent(raw: unknown): AgentRevisionContent | null
-{
-	if (raw === null || typeof raw !== "object") return null;
-	const body = raw as Record<string, unknown>;
-	const budget = body.budget as Record<string, unknown> | undefined;
-	if (body.promptPolicyVersion !== PROMPT_COMPILER_VERSION || !_isNonEmptyString(body.modelDefinitionId) || budget === undefined || typeof budget !== "object") return null;
-	if (typeof budget.maxTurns !== "number" || typeof budget.maxTokens !== "number" || typeof budget.maxDurationMs !== "number") return null;
-	const personaRevisionId = body.personaRevisionId === undefined || body.personaRevisionId === null ? null : body.personaRevisionId;
-	if (personaRevisionId !== null && !_isNonEmptyString(personaRevisionId)) return null;
-	const skills = _parseSkills(body.skills);
-	const integrationAssignments = _parseIntegrations(body.integrationAssignments);
-	const scopeAttachments = _parseScopeAttachments(body.scopeAttachments);
-	if (skills === null || integrationAssignments === null || scopeAttachments === null) return null;
-	return { promptPolicyVersion: body.promptPolicyVersion, personaRevisionId, modelDefinitionId: body.modelDefinitionId, budget: { maxTurns: budget.maxTurns, maxTokens: budget.maxTokens, maxDurationMs: budget.maxDurationMs }, skills, integrationAssignments, scopeAttachments };
-}
-
-/** Parses the optional skill-reference array. */
-function _parseSkills(raw: unknown): AgentRevisionContent["skills"] | null
-{
-	if (raw === undefined) return [];
-	if (!Array.isArray(raw)) return null;
-	const skills = raw.map(function _skill(entry) { const item = entry as Record<string, unknown>; return _isNonEmptyString(item?.skillId) && _isNonEmptyString(item?.revisionId) ? { skillId: item.skillId, revisionId: item.revisionId } : null; });
-	return skills.some(skill => skill === null) ? null : (skills as AgentRevisionContent["skills"]);
-}
-
-/** Parses the optional integration-assignment array. */
-function _parseIntegrations(raw: unknown): AgentRevisionContent["integrationAssignments"] | null
-{
-	if (raw === undefined) return [];
-	if (!Array.isArray(raw)) return null;
-	const assignments = raw.map(function _assignment(entry)
-	{
-		const item = entry as Record<string, unknown>;
-		if (!_isToolRevisionSegment(item?.integrationId) || !_isNonEmptyString(item?.custodyReferenceId) || !Array.isArray(item?.allowedTools) || !item.allowedTools.every(_isToolRevisionSegment)) return null;
-		return { integrationId: item.integrationId, custodyReferenceId: item.custodyReferenceId, allowedTools: item.allowedTools as string[] };
-	});
-	return assignments.some(assignment => assignment === null) ? null : (assignments as AgentRevisionContent["integrationAssignments"]);
-}
-
-/**
- * Parses the optional revision-scoped scope-attachment array against the canonical vocabulary.
- *
- * Shape-validation only: it confirms each `{ scope, subjectType, subjectId }` triple is well formed.
- * Per-scope ATTACH-AUTHORITY (the caller must administer every scope they attach) is enforced
- * separately by `__ValidateAttachAuthority` in the create/revise handlers before the revision is
- * persisted, and the RUNTIME effective-access intersection (`__ResolveEffectiveScopeAttachments`)
- * ensures a stored attachment grants nothing beyond the agent's actual compiled grants — both landed
- * in slice 6 (#332) and both ride the IAM grant compiler. Attachments remain silo-bounded and
- * org-admin-gated.
- */
-function _parseScopeAttachments(raw: unknown): AgentRevisionContent["scopeAttachments"] | null
-{
-	if (raw === undefined) return [];
-	if (!Array.isArray(raw)) return null;
-	const scopes = new Set(["org", "department", "team", "project", "personal"]);
-	const subjectTypes = new Set(["group", "tenant", "user"]);
-	const attachments = raw.map(function _attachment(entry)
-	{
-		const item = entry as Record<string, unknown>;
-		if (typeof item?.scope !== "string" || !scopes.has(item.scope) || typeof item?.subjectType !== "string" || !subjectTypes.has(item.subjectType) || !_isNonEmptyString(item?.subjectId)) return null;
-		return { scope: item.scope as AgentRevisionContent["scopeAttachments"][number]["scope"], subjectType: item.subjectType as AgentRevisionContent["scopeAttachments"][number]["subjectType"], subjectId: item.subjectId };
-	});
-	return attachments.some(attachment => attachment === null) ? null : (attachments as AgentRevisionContent["scopeAttachments"]);
 }
 
 /** Maps a definition-plane denial reason to a fail-closed HTTP status. */
@@ -204,7 +132,7 @@ export function __CreateAgentServicesRouter(dependencies: AgentServicesRouterDep
 			const caller = _requireAdmin(req, res);
 			if (caller === null) return;
 			const body = (req.body ?? {}) as Record<string, unknown>;
-			const content = _parseContent(body.content);
+			const content = _ParseAgentRevisionContent(body.content);
 			if (!_isNonEmptyString(body.name) || !_isNonEmptyString(body.workloadProfile) || !_isNonEmptyString(body.changeMessage) || content === null) { res.status(400).json({ error: "name, workloadProfile, changeMessage, and valid content are required.", code: "VALIDATION_ERROR" }); return; }
 			if (!await _authoriseAttachments(caller, content, res)) return;
 			const result = await __CreateManagedAgentService(lifecycle, { siloId: caller.siloId, name: body.name, workloadProfile: body.workloadProfile, authoredBy: caller.subjectId, changeMessage: body.changeMessage, content }, clock.now().toISOString());
@@ -221,7 +149,7 @@ export function __CreateAgentServicesRouter(dependencies: AgentServicesRouterDep
 			const caller = _requireAdmin(req, res);
 			if (caller === null) return;
 			const body = (req.body ?? {}) as Record<string, unknown>;
-			const content = _parseContent(body.content);
+			const content = _ParseAgentRevisionContent(body.content);
 			const expectedParentRevisionId = body.expectedParentRevisionId === undefined || body.expectedParentRevisionId === null ? null : body.expectedParentRevisionId;
 			if (!_isNonEmptyString(body.changeMessage) || content === null || (expectedParentRevisionId !== null && !_isNonEmptyString(expectedParentRevisionId))) { res.status(400).json({ error: "changeMessage, valid content, and an expectedParentRevisionId are required.", code: "VALIDATION_ERROR" }); return; }
 			if (!await _authoriseAttachments(caller, content, res)) return;

@@ -1217,6 +1217,31 @@ INSERT INTO "approval_requests" (
     "catalog_id", "catalog_revision", "catalog_digest", "capability_id",
     "resource_kind", "resource_id", "action", "arguments_digest", "action_digest",
     "approver_policy_revision", "effective_policy_digest", "expires_at"
+) SELECT
+    'approval-denied', "run_id", "attempt", "agent_revision_id", "agent_service_id", "silo_id",
+    "proof_key_id", "proof_key_thumbprint", "subject_id", "workload_audience",
+    "service_account_name", "namespace", "workload_kind", "workload_uid", "pod_uid",
+    "catalog_id", "catalog_revision", "catalog_digest", "capability_id",
+    "resource_kind", 'message-denied', "action", "arguments_digest", 'sha256:' || repeat('1', 64),
+    "approver_policy_revision", "effective_policy_digest", clock_timestamp() + interval '1 hour'
+FROM "approval_requests" WHERE "id" = 'approval-1';
+UPDATE "approval_requests"
+SET "state" = 'denied', "decided_by" = 'approver-1', "resume_token_hash" = 'resume-denied'
+WHERE "id" = 'approval-denied';
+UPDATE "approval_requests" SET "resume_token_hash" = NULL WHERE "id" = 'approval-denied';
+SELECT pg_temp.assert_true(
+    'denied ApprovalRequest retains a durable marker until one-time consumption',
+    (SELECT "state" = 'denied' AND "decided_by" = 'approver-1' AND "resume_token_hash" IS NULL
+     FROM "approval_requests" WHERE "id" = 'approval-denied')
+);
+
+INSERT INTO "approval_requests" (
+    "id", "run_id", "attempt", "agent_revision_id", "agent_service_id", "silo_id",
+    "proof_key_id", "proof_key_thumbprint", "subject_id", "workload_audience",
+    "service_account_name", "namespace", "workload_kind", "workload_uid", "pod_uid",
+    "catalog_id", "catalog_revision", "catalog_digest", "capability_id",
+    "resource_kind", "resource_id", "action", "arguments_digest", "action_digest",
+    "approver_policy_revision", "effective_policy_digest", "expires_at"
 ) VALUES (
     'approval-expiring', 'run-action', 1, 'rev-published', 'svc-main', 'silo-1',
     'proof-key-1', repeat('k', 43), 'user-1', 'opencrane-agent-runtime',
@@ -1237,11 +1262,17 @@ SELECT pg_temp.expect_failure(
     'decisions must be recorded before expiry'
 );
 UPDATE "approval_requests"
-SET "state" = 'expired', "decided_at" = clock_timestamp()
+SET "state" = 'expired', "decided_at" = clock_timestamp(), "resume_token_hash" = 'resume-expired'
 WHERE "id" = 'approval-expiring';
 SELECT pg_temp.assert_true(
     'ApprovalRequest expires only after its deadline',
     (SELECT "state" = 'expired' AND "decided_at" >= "expires_at"
+     FROM "approval_requests" WHERE "id" = 'approval-expiring')
+);
+UPDATE "approval_requests" SET "resume_token_hash" = NULL WHERE "id" = 'approval-expiring';
+SELECT pg_temp.assert_true(
+    'expired ApprovalRequest consumes its durable result marker exactly once',
+    (SELECT "state" = 'expired' AND "decided_by" IS NULL AND "resume_token_hash" IS NULL
      FROM "approval_requests" WHERE "id" = 'approval-expiring')
 );
 
