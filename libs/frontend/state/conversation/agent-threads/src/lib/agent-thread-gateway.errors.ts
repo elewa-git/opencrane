@@ -6,7 +6,9 @@ export enum AgentThreadGatewayErrorKinds
 	/** A previously authorized route observed participant access loss. */
 	AccessChanged = "access_changed",
 	/** A temporary transport failure may be retried from the accepted cursor. */
-	Recoverable = "recoverable"
+	Recoverable = "recoverable",
+	/** A read-through coordinate was stale and requires an authoritative re-read. */
+	Conflict = "conflict"
 }
 
 /** Typed gateway failure carrying no raw transport or provider detail. */

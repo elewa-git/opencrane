@@ -29,12 +29,20 @@ export class OpenCraneAgentThreadGateway implements AgentThreadGateway
 		if (result.error !== undefined || result.data === undefined) throw _Failure(result.response?.status);
 		return this.read(parentConversationId, childConversationId);
 	}
+
+	/** @inheritdoc */
+	public async markReadThrough(parentConversationId: string, childConversationId: string, observedPosition: string): Promise<void>
+	{
+		const result = await this._api.client.PUT("/me/conversations/{parentConversationId}/agent-threads/{childConversationId}/read-through", { params: { path: { parentConversationId, childConversationId } }, body: { observedPosition } });
+		if (result.error !== undefined || result.data === undefined) throw _Failure(result.response?.status);
+	}
 }
 
 /** Collapse transport status into browser-safe categories without copying response bodies. */
 function _Failure(status: number | undefined): AgentThreadGatewayError
 {
 	if (status === 401 || status === 403 || status === 404) return new AgentThreadGatewayError(AgentThreadGatewayErrorKinds.AccessChanged, "This Agent thread is no longer available.");
+	if (status === 409) return new AgentThreadGatewayError(AgentThreadGatewayErrorKinds.Conflict, "This Agent thread advanced before the visible position was saved.");
 	if (status === 408 || status === 429 || (status !== undefined && status >= 500)) return new AgentThreadGatewayError(AgentThreadGatewayErrorKinds.Recoverable, "OpenCrane could not reach this Agent thread. Try reconnecting.");
 	return new AgentThreadGatewayError(AgentThreadGatewayErrorKinds.Unavailable, "This Agent thread is unavailable.");
 }

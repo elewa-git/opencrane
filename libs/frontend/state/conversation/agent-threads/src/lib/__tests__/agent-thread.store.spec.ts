@@ -7,7 +7,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest
 import { AgentThreadStore } from "../agent-thread.store.js";
 import { AgentThreadGatewayError, AgentThreadGatewayErrorKinds } from "../agent-thread-gateway.errors.js";
 import { AGENT_THREAD_GATEWAY } from "../agent-thread.gateway.js";
-import { AgentThreadAccessStates, AgentThreadRecoveryStates, AgentThreadRouteStates, AgentThreadRunStates, AgentThreadSummaryStates, AgentThreadTimelineEntryKinds, type AgentThreadGateway, type AgentThreadSnapshot } from "../agent-thread.types.js";
+import { AgentThreadAccessStates, AgentThreadRecoveryStates, AgentThreadRouteStates, AgentThreadRunStates, AgentThreadSummaryStates, AgentThreadSummaryTargetKinds, AgentThreadTimelineEntryKinds, type AgentThreadGateway, type AgentThreadSnapshot } from "../agent-thread.types.js";
 
 /** Build one complete display-safe snapshot for store tests. */
 function _Snapshot(overrides: Partial<AgentThreadSnapshot> = {}): AgentThreadSnapshot
@@ -16,13 +16,15 @@ function _Snapshot(overrides: Partial<AgentThreadSnapshot> = {}): AgentThreadSna
 		parentConversationId: "parent-1",
 		childConversationId: "child-1",
 		origin: { parentTitle: "Launch planning", parentMessageId: "message-root", invokedByName: "Alex Kimani", invokedByInitials: "AK", ask: "@agent compare the counterproposal", timestampLabel: "11:07" },
-		summary: { childConversationId: "child-1", state: AgentThreadSummaryStates.Working, access: AgentThreadAccessStates.Available, title: "Compare the counterproposal", preview: "Reviewing the commercial terms", unreadCount: 0, participantInitials: ["AK", "JR"], replyCount: 2 },
+		summary: { childConversationId: "child-1", state: AgentThreadSummaryStates.Working, access: AgentThreadAccessStates.Available, title: "Compare the counterproposal", preview: "Reviewing the commercial terms", unreadCount: 0, participants: [{ label: "Alex Kimani", initials: "AK" }, { label: "Jente Rosseel", initials: "JR" }], replyCount: 2, runCount: 1, updateCount: 2, lastUpdateLabel: "11:08", assetCount: 0, target: { kind: AgentThreadSummaryTargetKinds.Thread, id: "agent-thread-origin" } },
 		recovery: AgentThreadRecoveryStates.Live,
 		timeline: [
 			{ kind: AgentThreadTimelineEntryKinds.RunBoundary, id: "boundary-run-1", run: { runId: "run-1", ordinal: 1, state: AgentThreadRunStates.Working, label: "Run 1" } },
 			{ kind: AgentThreadTimelineEntryKinds.Message, id: "message-1", message: { id: "message-1", authorName: "Nova", authorInitials: "N", authoredByAgent: true, timestampLabel: "11:08", body: "I am comparing the terms." } }
 		],
 		cursor: "opaque-cursor",
+		latestPosition: "2",
+		representedThroughPosition: "2",
 		canSendFollowUp: true,
 		...overrides
 	};
@@ -37,6 +39,8 @@ class _FakeAgentThreadGateway implements AgentThreadGateway
 	public sendResult: AgentThreadSnapshot | Error = _Snapshot();
 	/** Submitted command bodies. */
 	public readonly sentBodies: string[] = [];
+	/** Positions sent only after the view adopted them. */
+	public readonly markedPositions: string[] = [];
 
 	/** Resolve the configured read result. */
 	public async read(): Promise<AgentThreadSnapshot>
@@ -52,6 +56,9 @@ class _FakeAgentThreadGateway implements AgentThreadGateway
 		if (this.sendResult instanceof Error) throw this.sendResult;
 		return this.sendResult;
 	}
+
+	/** Record one server-confirmed visible position. */
+	public async markReadThrough(_parentConversationId: string, _childConversationId: string, observedPosition: string): Promise<void> { this.markedPositions.push(observedPosition); }
 }
 
 /** Create one store and its fake gateway. */
@@ -107,6 +114,7 @@ describe("AgentThreadStore", function _AgentThreadStore()
 		expect(store.draft()).toBe("");
 		expect(store.error()).toBeNull();
 		expect(store.routeState()).toBe(AgentThreadRouteStates.AccessChanged);
+		expect(store.projectionPurgeGeneration()).toBe(2);
 	});
 
 	it("does not carry proof of prior access across a different route pair", async function _RouteScopedAccessProof()
@@ -152,5 +160,18 @@ describe("AgentThreadStore", function _AgentThreadStore()
 		expect(gateway.sentBodies).toEqual(["Summarise the remaining risk."]);
 		expect(store.draft()).toBe("");
 		expect(store.snapshot()?.canSendFollowUp).toBe(false);
+	});
+
+	it("marks only the represented visible position and adopts the confirmed reread", async function _MarksVisible()
+	{
+		const [store, gateway] = _CreateStore();
+		gateway.readResult = _Snapshot({ latestPosition: "9", representedThroughPosition: "5", summary: { ..._Snapshot().summary, unreadCount: 2 } });
+		await store.load("parent-1", "child-1");
+		gateway.readResult = _Snapshot({ latestPosition: "9", representedThroughPosition: "5", summary: { ..._Snapshot().summary, unreadCount: 1 } });
+		await store.markVisible();
+		expect(gateway.markedPositions).toEqual(["5"]);
+		expect(store.snapshot()?.summary.unreadCount).toBe(1);
+		await store.markVisible();
+		expect(gateway.markedPositions).toEqual(["5"]);
 	});
 });

@@ -28,7 +28,8 @@ describe("OpenCraneAgentThreadGateway", function _Suite()
 		const GET = vi.fn().mockResolvedValue({ data: { agentThread: _DTO }, error: undefined, response: { status: 200 } });
 		const snapshot = await _Gateway({ GET }).read("parent-1", "child-1");
 		expect(GET).toHaveBeenCalledWith("/me/conversations/{parentConversationId}/agent-threads/{childConversationId}", { params: { path: { parentConversationId: "parent-1", childConversationId: "child-1" } } });
-		expect(snapshot).toMatchObject({ parentConversationId: "parent-1", childConversationId: "child-1", summary: { unreadCount: 1, replyCount: 2 }, canSendFollowUp: true });
+		expect(snapshot).toMatchObject({ parentConversationId: "parent-1", childConversationId: "child-1", origin: { invokedByName: "Invoking participant" }, summary: { unreadCount: 1, replyCount: 2, participants: [{ label: "Participant 1", initials: "P1" }] }, canSendFollowUp: true });
+		expect(JSON.stringify(snapshot)).not.toContain("user-1");
 	});
 
 	it("submits one serial follow-up and re-reads the exact pair", async function _Submits()
@@ -46,5 +47,30 @@ describe("OpenCraneAgentThreadGateway", function _Suite()
 	{
 		const GET = vi.fn().mockResolvedValue({ data: undefined, error: { secret: "must-not-copy" }, response: { status: 404 } });
 		await expect(_Gateway({ GET }).read("parent-1", "child-1")).rejects.toMatchObject({ kind: AgentThreadGatewayErrorKinds.AccessChanged, message: "This Agent thread is no longer available." });
+	});
+
+	it("persists the exact visible position through the generated read-through operation", async function _MarksRead()
+	{
+		const PUT = vi.fn().mockResolvedValue({ data: { outcome: "changed", readThroughPosition: "5" }, error: undefined, response: { status: 200 } });
+		await _Gateway({ PUT }).markReadThrough("parent-1", "child-1", "5");
+		expect(PUT).toHaveBeenCalledWith("/me/conversations/{parentConversationId}/agent-threads/{childConversationId}/read-through", { params: { path: { parentConversationId: "parent-1", childConversationId: "child-1" } }, body: { observedPosition: "5" } });
+	});
+
+	it("rejects malformed states, deliveries, timestamps, cursors, counts, and unknown fields", async function _RejectsMalformed()
+	{
+		const malformed: readonly unknown[] =
+		[
+			{ ..._DTO, runs: [{ ..._DTO.runs[0], state: "unknown" }] },
+			{ ..._DTO, deliveries: [{ id: "delivery-1", childConversationId: "child-1", parentConversationId: "parent-1", runId: "run-1", kind: "unknown", label: "Result", detail: "Done", assetId: null, createdAt: "2026-08-12T10:02:00.000Z" }] },
+			{ ..._DTO, createdAt: "yesterday" },
+			{ ..._DTO, cursor: null },
+			{ ..._DTO, unreadMessageCount: 3 },
+			{ ..._DTO, secret: "must-not-enter-browser-state" }
+		];
+		for (const agentThread of malformed)
+		{
+			const GET = vi.fn().mockResolvedValue({ data: { agentThread }, error: undefined, response: { status: 200 } });
+			await expect(_Gateway({ GET }).read("parent-1", "child-1")).rejects.toMatchObject({ kind: AgentThreadGatewayErrorKinds.Recoverable });
+		}
 	});
 });

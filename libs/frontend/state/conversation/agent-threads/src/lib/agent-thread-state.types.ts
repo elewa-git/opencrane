@@ -92,6 +92,19 @@ export enum AgentThreadSummaryStates
 	Reconnecting = "reconnecting"
 }
 
+/** Canonical focus targets derived from one authorized parent summary. */
+export enum AgentThreadSummaryTargetKinds
+{
+	/** Open the child at its immutable origin and latest timeline context. */
+	Thread = "thread",
+	/** Focus the delivery that asks for participant input or approval. */
+	WaitingRequest = "waiting_request",
+	/** Focus the failed run boundary without implying a result. */
+	Failure = "failure",
+	/** Focus the final result or durable generated asset delivery. */
+	FinalResult = "final_result"
+}
+
 /** Ordered child timeline entry categories. */
 export enum AgentThreadTimelineEntryKinds
 {

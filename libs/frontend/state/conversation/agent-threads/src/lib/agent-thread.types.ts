@@ -1,6 +1,6 @@
-import { AgentThreadAccessStates, AgentThreadDeliveryKinds, AgentThreadRecoveryStates, AgentThreadRunStates, AgentThreadSummaryStates, AgentThreadTimelineEntryKinds } from "./agent-thread-state.types.js";
+import { AgentThreadAccessStates, AgentThreadDeliveryKinds, AgentThreadRecoveryStates, AgentThreadRunStates, AgentThreadSummaryStates, AgentThreadSummaryTargetKinds, AgentThreadTimelineEntryKinds } from "./agent-thread-state.types.js";
 
-export { AgentThreadAccessStates, AgentThreadAdmissionStates, AgentThreadDeliveryKinds, AgentThreadRecoveryStates, AgentThreadRouteStates, AgentThreadRunStates, AgentThreadSummaryStates, AgentThreadTimelineEntryKinds } from "./agent-thread-state.types.js";
+export { AgentThreadAccessStates, AgentThreadAdmissionStates, AgentThreadDeliveryKinds, AgentThreadRecoveryStates, AgentThreadRouteStates, AgentThreadRunStates, AgentThreadSummaryStates, AgentThreadSummaryTargetKinds, AgentThreadTimelineEntryKinds } from "./agent-thread-state.types.js";
 
 /** Exact typed intent for one authorized parent mention. */
 export interface AgentThreadCreateIntent
@@ -88,6 +88,24 @@ export interface AgentThreadDeliveryPresentation
 	readonly richCardId?: string;
 }
 
+/** Display-safe participant avatar; opaque authority subject ids never enter this contract. */
+export interface AgentThreadParticipantPresentation
+{
+	/** Generic or directory-authorized participant label. */
+	readonly label: string;
+	/** Initials derived only from the display-safe label. */
+	readonly initials: string;
+}
+
+/** Canonical deep-link selected from durable run and delivery facts. */
+export interface AgentThreadSummaryTarget
+{
+	/** Target kind that determines focus behavior in the child workspace. */
+	readonly kind: AgentThreadSummaryTargetKinds;
+	/** Stable child-owned timeline coordinate. */
+	readonly id: string;
+}
+
 /** Compact authorized child state rendered beneath the root parent message. */
 export interface AgentThreadSummaryPresentation
 {
@@ -103,10 +121,22 @@ export interface AgentThreadSummaryPresentation
 	readonly preview?: string;
 	/** Count of unread child messages for this participant. */
 	readonly unreadCount: number;
-	/** Display-safe participant initials. */
-	readonly participantInitials: readonly string[];
+	/** Display-safe participant labels and initials. */
+	readonly participants: readonly AgentThreadParticipantPresentation[];
 	/** Number of replies after the root message. */
 	readonly replyCount: number;
+	/** Exact canonical child run count represented by the snapshot. */
+	readonly runCount: number;
+	/** Count of visible message and parent-delivery updates. */
+	readonly updateCount: number;
+	/** Display-safe time of the latest represented child update. */
+	readonly lastUpdateLabel: string;
+	/** Number of durable asset deliveries visible in the summary. */
+	readonly assetCount: number;
+	/** Optional final result label derived from an authorized delivery. */
+	readonly resultLabel?: string;
+	/** Canonical target opened for this summary state. */
+	readonly target: AgentThreadSummaryTarget;
 }
 
 /** One ordered child timeline entry with exactly one presentation payload. */
@@ -132,6 +162,10 @@ export interface AgentThreadSnapshot
 	readonly timeline: readonly AgentThreadTimelineEntry[];
 	/** Opaque cursor accepted only by the gateway implementation. */
 	readonly cursor: string | null;
+	/** Latest canonical timeline position used only for accurate unread state. */
+	readonly latestPosition: string;
+	/** Last position fully visible in this bounded snapshot. */
+	readonly representedThroughPosition: string;
 	/** Whether the current state permits another serial follow-up. */
 	readonly canSendFollowUp: boolean;
 }
@@ -143,4 +177,6 @@ export interface AgentThreadGateway
 	read(parentConversationId: string, childConversationId: string): Promise<AgentThreadSnapshot>;
 	/** Send one serial follow-up using a caller-created idempotency fence. */
 	sendFollowUp(parentConversationId: string, childConversationId: string, body: string, idempotencyKey: string): Promise<AgentThreadSnapshot>;
+	/** Persist one actually displayed read-through coordinate without optimistic local clearing. */
+	markReadThrough(parentConversationId: string, childConversationId: string, observedPosition: string): Promise<void>;
 }

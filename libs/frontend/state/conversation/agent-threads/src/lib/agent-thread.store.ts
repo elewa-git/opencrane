@@ -24,6 +24,10 @@ export class AgentThreadStore
 	private _hadAuthorizedSnapshot = false;
 	/** Exact route whose prior authorization may justify the access-changed state. */
 	private _routeKey: string | null = null;
+	/** Last position confirmed by the server for this exact visible route. */
+	private _markedThroughPosition: string | null = null;
+	/** Monotonic signal telling the route coordinator to purge every child-owned projection. */
+	private readonly _projectionPurgeGeneration = signal(0);
 
 	/** Current route state. */
 	public readonly routeState = this._routeState.asReadonly();
@@ -37,6 +41,8 @@ export class AgentThreadStore
 	public readonly error = this._followUp.error;
 	/** Whether current independent dimensions permit one follow-up. */
 	public readonly canSendFollowUp = computed(this._CanSendFollowUp.bind(this));
+	/** Changes whenever every child-derived projection outside this store must also be discarded. */
+	public readonly projectionPurgeGeneration = this._projectionPurgeGeneration.asReadonly();
 
 	/** Load one exact parent-child route and collapse first-view absence or denial. */
 	public async load(parentConversationId: string, childConversationId: string): Promise<void>
@@ -73,6 +79,30 @@ export class AgentThreadStore
 
 	/** Adopt one controlled follow-up draft only while authorized child state is retained. */
 	public updateDraft(draft: string): void { this._followUp.update(draft, this._routeState()); }
+
+	/** Persist only the timeline position the route has actually rendered, then adopt server truth. */
+	public async markVisible(): Promise<void>
+	{
+		const current = this._snapshot();
+		if (current === null || this._routeState() !== AgentThreadRouteStates.Ready || current.recovery !== AgentThreadRecoveryStates.Live) return;
+		const observedPosition = current.representedThroughPosition === current.latestPosition ? current.latestPosition : current.representedThroughPosition;
+		if (observedPosition === "0" || observedPosition === this._markedThroughPosition) return;
+		const generation = this._generation;
+		try
+		{
+			await this._gateway.markReadThrough(current.parentConversationId, current.childConversationId, observedPosition);
+			if (generation !== this._generation) return;
+			this._markedThroughPosition = observedPosition;
+			const refreshed = await this._gateway.read(current.parentConversationId, current.childConversationId);
+			if (generation === this._generation && refreshed.parentConversationId === current.parentConversationId && refreshed.childConversationId === current.childConversationId) this._snapshot.set(refreshed);
+		}
+		catch (error)
+		{
+			if (generation !== this._generation) return;
+			if (error instanceof AgentThreadGatewayError && error.kind === AgentThreadGatewayErrorKinds.Conflict) { await this.load(current.parentConversationId, current.childConversationId); return; }
+			this._HandleGatewayFailure(error);
+		}
+	}
 
 	/** Send one exact serial follow-up and adopt only a matching authoritative snapshot. */
 	public async sendFollowUp(): Promise<boolean>
@@ -116,6 +146,8 @@ export class AgentThreadStore
 	{
 		this._snapshot.set(null);
 		this._followUp.purge();
+		this._markedThroughPosition = null;
+		this._projectionPurgeGeneration.update(function _Next(generation) { return generation + 1; });
 		this._routeState.set(state);
 	}
 
@@ -126,8 +158,10 @@ export class AgentThreadStore
 		if (this._routeKey === routeKey) return;
 		this._routeKey = routeKey;
 		this._hadAuthorizedSnapshot = false;
+		this._markedThroughPosition = null;
 		this._snapshot.set(null);
 		this._followUp.purge();
+		this._projectionPurgeGeneration.update(function _Next(generation) { return generation + 1; });
 	}
 
 	/** Collapse gateway errors while distinguishing only proven post-authorization revocation. */
