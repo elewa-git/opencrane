@@ -16,8 +16,8 @@ models and delegates every command to the existing state stores.
 ```
 
 The snapshot remains canonical while the shared stream adds live messages, run state, tool
-activity, files, questions, approvals, and display-only A2UI surfaces. Tool failures stay visible
-even when a later attempt succeeds.
+activity, files, questions, and approvals. A2UI surfaces are reported as unavailable until the server owns
+their capability checks and audit trail. Tool failures stay visible even when a later attempt succeeds.
 
 ## Public surface
 
@@ -33,7 +33,7 @@ even when a later attempt succeeds.
 This feature does not call HTTP, persist conversations, authorize participants, start streams, or
 decide whether a message creates an Agent run. Those rules remain in the backend and typed state
 ports. It never treats a display role as identity and never renders secrets. A2UI returned by an
-Agent is deliberately display-only in this phase.
+Agent remains unavailable in this phase because its actions have no server-owned capability or audit path.
 
 ## Dependency direction
 

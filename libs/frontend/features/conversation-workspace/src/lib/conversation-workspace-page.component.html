@@ -2,7 +2,7 @@
 	@switch (store.routeState()) {
 		@case (routeStates.Loading) { <section class="conversation-workspace__route-state" role="status">Loading your workspace…</section> }
 		@case (routeStates.Unavailable) { <section class="conversation-workspace__route-state"><h1>Chats are unavailable</h1><p>OpenCrane could not load this workspace. Try again when the connection is available.</p><p-button label="Try again" icon="pi pi-refresh" (onClick)="store.load()" /></section> }
-		@case (routeStates.AccessChanged) { <section class="conversation-workspace__route-state"><h1>Access changed</h1><p>This conversation is no longer available. Its messages and drafts have been removed from this screen.</p><p-button label="Back to chats" (onClick)="store.load()" /></section> }
+		@case (routeStates.AccessChanged) { <section class="conversation-workspace__route-state"><h1 #accessChangedHeading tabindex="-1">Access changed</h1><p>This conversation is no longer available. Its messages, files, questions, and drafts have been removed from this screen.</p><p-button label="Back to chats" (onClick)="store.load()" /></section> }
 		@case (routeStates.Ready) {
 			<wo-conversation-list [items]="summaries()" [selectedId]="store.selected()?.id ?? null" (createRequested)="showCreate()" (selected)="openConversation($event)" />
 			<section class="conversation-workspace__main">
@@ -17,7 +17,7 @@
 							</div>
 						}
 						@for (tool of tools(); track tool.id) { <article class="conversation-workspace__tool" [id]="tool.id" tabindex="-1"><header><strong>{{ tool.name }}</strong><span>{{ tool.status }}</span></header>@if (tool.failures.length > 0) { <p>Tool call failed@if (tool.status === toolStatuses.Recovered) { and later recovered. } @else { . }</p> } @if (tool.result; as result) { <details><summary>Result</summary><pre>{{ result }}</pre></details> }</article> }
-						@for (surface of a2uiSurfaces(); track surface.surfaceId) { <section class="conversation-workspace__a2ui" inert><p class="conversation-workspace__display-only">Interactive Agent cards are display-only in this version.</p><wo-a2ui-canvas [presentation]="surface" /></section> }
+						@for (surface of a2uiSurfaces(); track surface.surfaceId) { <section class="conversation-workspace__a2ui" role="status"><strong>Agent card unavailable</strong><p>This card cannot be used yet. Its actions need server approval and audit support.</p></section> }
 						@if (store.live().interrupts.length > 0) { @if (elicitationStore.elicitation(); as elicitation) { <div [id]="elicitation.requestId" tabindex="-1"><wo-conversation-elicitation-card [elicitation]="elicitation" [draft]="elicitationStore.draft()" [busy]="elicitationStore.busy()" [error]="elicitationStore.error()" [stepUpPath]="elicitationStore.stepUpPath()" (draftSelected)="selectElicitation($event)" (submitRequested)="submitElicitation()" /></div> } }
 					</section>
 					<footer class="conversation-workspace__composer">
@@ -29,7 +29,7 @@
 					</footer>
 				} @else { <section class="conversation-workspace__empty conversation-workspace__empty--page"><h1>No conversation selected</h1><p>Choose a chat or create a new one.</p><p-button label="New conversation" icon="pi pi-plus" (onClick)="showCreate()" /></section> }
 			</section>
-			<aside class="conversation-workspace__context"><wo-conversation-activity [rows]="activityRows()" (targetRequested)="focusActivity($event)" /><wo-conversation-files-panel [items]="assets()" (actionRequested)="assetAction($event)" /></aside>
+			<aside class="conversation-workspace__context"><p class="sr-only" aria-live="polite">{{ activityAnnouncement() }}</p><wo-conversation-activity [rows]="activityRows()" (targetRequested)="focusActivity($event)" /><wo-conversation-files-panel [items]="assets()" (actionRequested)="assetAction($event)" /></aside>
 		}
 	}
 	<wo-conversation-create [visible]="creating()" [directory]="store.directory()" [mode]="store.creationMode()" [selectedParticipantRefs]="store.selectedParticipantRefs()" [canCreate]="store.canCreate()" [busy]="store.creationState() === creationStates.Creating" (dismissed)="hideCreate()" (modeSelected)="store.selectCreationMode($event)" (participantToggled)="store.toggleParticipant($event)" (createRequested)="create()" />

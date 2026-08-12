@@ -105,6 +105,18 @@ export class ConversationElicitationStore
 	/** Clear a consumed focus restoration signal. */
 	public acknowledgeFocusRestored(): void { this._restoreFocusRequestId.set(null); }
 
+	/** Drop the selected request, its draft, and every recovery coordinate. */
+	public clear(): void
+	{
+		this._generation += 1;
+		this._elicitation.set(null);
+		this._draft.set(null);
+		this._busy.set(false);
+		this._error.set(null);
+		this._stepUpPath.set(null);
+		this._restoreFocusRequestId.set(null);
+	}
+
 	/** Whether exact current state permits one response submission. */
 	private _CanSubmit(): boolean { return !this._busy() && this._draft() !== null && this._elicitation()?.state === ElicitationRequestStates.Requested; }
 

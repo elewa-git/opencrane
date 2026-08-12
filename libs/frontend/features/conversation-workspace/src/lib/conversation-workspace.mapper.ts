@@ -39,11 +39,18 @@ export function _LiveMessageViews(messages: readonly AgUiMessageView[]): readonl
 	return messages.map(function _Message(message): ConversationMessageView
 	{
 		const agent = message.role === MessageRoles.Assistant;
-		const authorName = agent ? "Agent" : "OpenCrane";
-		const presentation: ConversationMessagePresentation = { id: message.id, authorName, authorInitials: agent ? "A" : "OC", avatarTone: agent ? AvatarTones.Brand : AvatarTones.Neutral, timestampLabel: "Now", body: "", tone: agent ? ConversationMessageTones.Agent : ConversationMessageTones.System, accessibleStatus: message.status };
+		const author = _LiveAuthor(agent);
+		const presentation: ConversationMessagePresentation = { id: message.id, authorName: author.name, authorInitials: author.initials, avatarTone: author.avatarTone, timestampLabel: "Now", body: "", tone: author.tone, accessibleStatus: message.status };
 		const html = message.status === AgUiMessageStatuses.Streaming ? toStreamingMarkdownHtml(message.text) : toSanitizedMarkdownHtml(message.text);
-		return { message: presentation, richText: { messageId: message.id, html, label: `${authorName} message` }, agentThread: null };
+		return { message: presentation, richText: { messageId: message.id, html, label: `${author.name} message` }, agentThread: null };
 	});
+}
+
+/** Select the fixed display identity for one admitted live message role. */
+function _LiveAuthor(agent: boolean): { readonly name: string; readonly initials: string; readonly avatarTone: AvatarTones; readonly tone: ConversationMessageTones }
+{
+	if (agent) return { name: "Agent", initials: "A", avatarTone: AvatarTones.Brand, tone: ConversationMessageTones.Agent };
+	return { name: "OpenCrane", initials: "OC", avatarTone: AvatarTones.Neutral, tone: ConversationMessageTones.System };
 }
 
 /** Select display-only authorship without using a role as identity authority. */

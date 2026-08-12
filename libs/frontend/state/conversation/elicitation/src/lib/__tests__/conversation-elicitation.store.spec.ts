@@ -87,4 +87,21 @@ describe("ConversationElicitationStore", function _StoreSuite()
 		expect(rows).toHaveLength(1);
 		expect(rows[0]).toMatchObject({ kind: ConversationActivityKinds.ToolFailure, retrying: true, technicalDetails: { providerCode: "invalid_token", httpStatus: 401 } });
 	});
+
+	it("clears the selected response and recovery coordinates when conversation access ends", async function _ClearsDraft()
+	{
+		const gateway = _Gateway();
+		TestBed.configureTestingModule({ providers: [ConversationElicitationStore, { provide: ELICITATION_GATEWAY, useValue: gateway }] });
+		const store = TestBed.inject(ConversationElicitationStore);
+		await store.load("conversation-1", "request-1");
+		store.select({ kind: ElicitationBodyKinds.FreeText, text: "Private answer" });
+		expect(store.draft()).not.toBeNull();
+
+		store.clear();
+
+		expect(store.elicitation()).toBeNull();
+		expect(store.draft()).toBeNull();
+		expect(store.stepUpPath()).toBeNull();
+		expect(store.restoreFocusRequestId()).toBeNull();
+	});
 });

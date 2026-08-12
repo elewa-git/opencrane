@@ -54,6 +54,8 @@ export class ConversationWorkspacePresenter
 	private readonly _loadEffect = effect(this._Load.bind(this));
 	/** Open existing asset and elicitation state whenever stream coordinates change. */
 	private readonly _selectionEffect = effect(this._OpenComposedState.bind(this));
+	/** Last selected coordinate used to purge composed state before changing scope. */
+	private _composedConversationId: string | null = null;
 
 	/** Show immutable-mode creation. */
 	protected showCreate(): void { this.creating.set(true); }
@@ -92,7 +94,19 @@ export class ConversationWorkspacePresenter
 	private _OpenComposedState(): void
 	{
 		const selected = this.store.selected();
-		if (selected === null) return;
+		if (selected === null)
+		{
+			this._composedConversationId = null;
+			this.assetsStore.clear();
+			this.elicitationStore.clear();
+			return;
+		}
+		if (this._composedConversationId !== selected.id)
+		{
+			this.assetsStore.clear();
+			this.elicitationStore.clear();
+			this._composedConversationId = selected.id;
+		}
 		this.assetsStore.open(selected.id);
 		this.assetsStore.observeInvalidations(selected.id, this.store.live().customEvents);
 		const requestId = this.store.live().interrupts[0]?.id;

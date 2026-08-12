@@ -228,9 +228,9 @@ export default [
 			{ sourceTag: "type:lib", notDependOnLibsWithTags: ["type:app"] },
 			{ sourceTag: "frontend-role:feature", onlyDependOnLibsWithTags: ["frontend-role:elements", "frontend-role:state"] },
 			{ sourceTag: "frontend-role:feature-shell", onlyDependOnLibsWithTags: ["frontend-role:elements", "frontend-role:elements-composite", "frontend-role:feature", "frontend-role:state", "frontend-role:state-composite"] },
-			{ sourceTag: "frontend-role:adapter", onlyDependOnLibsWithTags: ["frontend-role:core", "frontend-role:state"] },
+			{ sourceTag: "frontend-role:adapter", onlyDependOnLibsWithTags: ["frontend-role:core", "frontend-role:state", "frontend-role:state-composite", "layer:contract", "layer:model"] },
 			{ sourceTag: "frontend-role:state", onlyDependOnLibsWithTags: ["frontend-role:core", "layer:contract", "layer:model", "layer:util"] },
-			{ sourceTag: "frontend-role:state-composite", onlyDependOnLibsWithTags: ["frontend-role:adapter", "frontend-role:core", "frontend-role:state", "layer:contract", "layer:model", "layer:util"] },
+			{ sourceTag: "frontend-role:state-composite", onlyDependOnLibsWithTags: ["frontend-role:core", "frontend-role:state", "layer:contract", "layer:model", "layer:util"] },
 			{ sourceTag: "frontend-role:elements", onlyDependOnLibsWithTags: ["frontend-role:core", "layer:contract"] },
 			{ sourceTag: "frontend-role:elements-composite", onlyDependOnLibsWithTags: ["frontend-role:core", "frontend-role:elements"] },
             {

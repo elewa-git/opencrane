@@ -43,6 +43,17 @@ export class ConversationAssetsStore
 		if (this._conversationId() !== conversationId) { this._scopeGeneration += 1; this._observedAssetInvalidations = 0; this._intents.set([]); this.selectionFailure.set(null); this._conversationId.set(conversationId); }
 	}
 
+	/** Drop the selected conversation and every browser-private file or command coordinate. */
+	public clear(): void
+	{
+		this._scopeGeneration += 1;
+		this._observedAssetInvalidations = 0;
+		this._conversationId.set(undefined);
+		this._intents.set([]);
+		this._removingAssetIds.set(new Set());
+		this.selectionFailure.set(null);
+	}
+
 	/** Validate the whole message selection, then transfer independent files concurrently. */
 	public async select(files: readonly File[]): Promise<void>
 	{

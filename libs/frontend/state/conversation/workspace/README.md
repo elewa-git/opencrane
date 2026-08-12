@@ -36,10 +36,10 @@ steer, cancel, and retry controls. The split keeps ordinary chat commands indepe
 
 ## Boundary
 
-Opaque participant references are command coordinates, never labels. The state maps the signed-in entry to
-`You` and other people to stable generic labels such as `Participant 1`; it never interprets an opaque
-reference. On proven access loss, selected messages, live surfaces, run state, and drafts are cleared before
-the access-changed state becomes visible.
+Opaque participant references are command coordinates, never labels. The state supplies those privacy-safe
+references and a self marker without interpreting either one. The feature mapper turns the self marker into
+`You` and other entries into stable generic labels such as `Participant 1`. On proven access loss, selected
+messages, live surfaces, run state, and drafts are cleared before the access-changed state becomes visible.
 
 The package owns no server authority. It cannot admit a message, create a run, approve an elicitation,
 execute an A2UI action, or decide whether a retry is safe. Those decisions stay behind signed-in APIs.

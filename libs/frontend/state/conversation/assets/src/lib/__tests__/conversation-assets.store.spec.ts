@@ -100,6 +100,20 @@ describe("ConversationAssetsStore", function _Suite()
 		expect(gateway.reserve).toHaveBeenCalledOnce();
 	});
 
+	it("clears browser File bytes and selection feedback when conversation access ends", async function _ClearsPrivateFiles()
+	{
+		const gateway = { list: vi.fn().mockResolvedValue([]), reserve: vi.fn().mockRejectedValue(new Error("offline")), upload: vi.fn(), remove: vi.fn() };
+		const store = _Store(gateway);
+		store.open("conversation-1");
+		await store.select([_File("brief.pdf", "application/pdf", "private draft bytes")]);
+		expect(store.pendingUploads()).toHaveLength(1);
+
+		store.clear();
+
+		expect(store.pendingUploads()).toEqual([]);
+		expect(store.selectionFailure()).toBeNull();
+	});
+
 	it("reuses the exact reservation after an ambiguous transport failure", async function _RetriesReservation()
 	{
 		const asset = _Asset();
