@@ -32,9 +32,9 @@ function _ActiveMembership(): object
 }
 
 /** Creates the no-op attachment port used by text-only conversation tests. */
-function _CreateAttachmentAdmission(): { readonly bindReadyAssets: () => Promise<void> }
+function _CreateAttachmentAdmission(): { readonly bindReadyAssets: () => Promise<void>; readonly mirrorReadyAssets: () => Promise<void> }
 {
-	return { bindReadyAssets: vi.fn().mockResolvedValue(undefined) };
+	return { bindReadyAssets: vi.fn().mockResolvedValue(undefined), mirrorReadyAssets: vi.fn().mockResolvedValue(undefined) };
 }
 
 /** Creates message admission over deliberately narrow Prisma and run-admission test doubles. */
@@ -64,7 +64,7 @@ describe("PrismaConversationMessageAdmissionUnitOfWork", function _Suite()
 		await expect(admission.submit(_CALLER, "conversation-1", request)).resolves.toEqual(expect.objectContaining({ outcome: "accepted", agentThread: expect.objectContaining({ firstRunId: "run-1" }) }));
 		expect(runAdmission.admitFirstAgentThreadRun).toHaveBeenCalledWith(expect.objectContaining({ conversationId: expect.any(String) }), "service-1", expect.any(Function), expect.any(Function));
 		expect(prepareAgentThread).toHaveBeenCalledOnce();
-		expect(persistAgentThread).toHaveBeenCalledWith(_CALLER, expect.objectContaining({ firstRunId: "run-1", personaRevisionId: "persona-1" }), "profile-1", expect.any(String), request);
+		expect(persistAgentThread).toHaveBeenCalledWith(_CALLER, expect.objectContaining({ firstRunId: "run-1", personaRevisionId: "persona-1" }), "profile-1", expect.any(String), request, expect.objectContaining({ blocks: request.blocks }), expect.any(Object));
 	});
 
 	it("routes agent-session input through run admission and persists the message in its transaction", async function _AdmitsAgentMessage()

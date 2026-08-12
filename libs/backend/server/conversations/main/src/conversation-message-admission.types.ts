@@ -7,6 +7,8 @@ export interface ConversationAttachmentAdmissionPort
 {
 	/** Bind every referenced ready asset to the newly persisted message or roll the transaction back. */
 	bindReadyAssets(caller: ConversationCaller, conversationId: string, messageId: string, blocks: SubmitConversationMessageRequest["blocks"]): Promise<void>;
+	/** Copy ready parent asset references into a child conversation without copying stored bytes. */
+	mirrorReadyAssets(caller: ConversationCaller, parentConversationId: string, childConversationId: string, childMessageId: string, parentBlocks: SubmitConversationMessageRequest["blocks"], childBlocks: SubmitConversationMessageRequest["blocks"]): Promise<void>;
 }
 
 /** Creates attachment admission over an already-open conversation/run transaction. */

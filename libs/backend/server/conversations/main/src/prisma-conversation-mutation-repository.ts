@@ -136,9 +136,10 @@ export class PrismaConversationMutationRepository implements ConversationMutatio
 	}
 
 	/** Persists the child input and immutable origin after the exact first run is staged. */
-	async persistAgentThread(caller: ConversationCaller, origin: AgentThreadOrigin, personaProfileId: string, childMessageId: string, request: SubmitConversationMessageRequest): Promise<void>
+	async persistAgentThread(caller: ConversationCaller, origin: AgentThreadOrigin, personaProfileId: string, childMessageId: string, parentRequest: SubmitConversationMessageRequest, childRequest: SubmitConversationMessageRequest, attachments: ConversationAttachmentAdmissionPort): Promise<void>
 	{
-		await this.transaction.conversationMessage.create({ data: _messageData(childMessageId, origin.childConversationId, caller.subjectId, request, origin.firstRunId) });
+		await this.transaction.conversationMessage.create({ data: _messageData(childMessageId, origin.childConversationId, caller.subjectId, childRequest, origin.firstRunId) });
+		await attachments.mirrorReadyAssets(caller, origin.parentConversationId, origin.childConversationId, childMessageId, parentRequest.blocks, childRequest.blocks);
 		await this.transaction.conversationAgentThread.create({ data: { childConversationId: origin.childConversationId, parentConversationId: origin.parentConversationId, rootConversationId: origin.rootConversationId, siloId: caller.siloId, parentMessageId: origin.parentMessageId, initiatorUserId: origin.initiatorUserId, agentServiceId: origin.agentServiceId, personaProfileId, personaRevisionId: origin.personaRevisionId, firstRunId: origin.firstRunId } });
 	}
 }

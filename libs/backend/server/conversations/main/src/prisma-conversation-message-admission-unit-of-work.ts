@@ -110,11 +110,12 @@ export class PrismaConversationMessageAdmissionUnitOfWork implements Conversatio
 		const parentMessageId = randomUUID();
 		const childConversationId = randomUUID();
 		const childMessageId = randomUUID();
+		const childRequest = _childRequest(request);
 		const createRepository = this.createMutationRepository;
 		const createAttachments = this.createAttachmentAdmission;
 		let prepared: { readonly personaProfileId: string; readonly personaRevisionId: string } | null = null;
 		const result = await this.runAdmission.admitFirstAgentThreadRun(
-			{ siloId: caller.siloId, executionSubjectId: caller.subjectId, conversationId: childConversationId, requestIdempotencyKey: request.idempotencyKey, inputMessageId: childMessageId, inputMessageBlocks: request.blocks },
+			{ siloId: caller.siloId, executionSubjectId: caller.subjectId, conversationId: childConversationId, requestIdempotencyKey: request.idempotencyKey, inputMessageId: childMessageId, inputMessageBlocks: childRequest.blocks },
 			request.agentTarget.agentServiceId,
 			async function _Prepare(transaction): Promise<void>
 			{
@@ -124,7 +125,7 @@ export class PrismaConversationMessageAdmissionUnitOfWork implements Conversatio
 			{
 				if (prepared === null || value.snapshot.personaRevisionId !== prepared.personaRevisionId) throw new Error("Agent-thread persona authority changed");
 				const origin: AgentThreadOrigin = { childConversationId, parentConversationId, rootConversationId: parentConversationId, parentMessageId, initiatorUserId: caller.subjectId, agentServiceId: request.agentTarget!.agentServiceId, personaRevisionId: prepared.personaRevisionId, firstRunId: value.snapshot.runId };
-				await createRepository(transaction).persistAgentThread(caller, origin, prepared.personaProfileId, childMessageId, request);
+				await createRepository(transaction).persistAgentThread(caller, origin, prepared.personaProfileId, childMessageId, request, childRequest, createAttachments(transaction));
 			},
 		);
 		if (result.outcome === PersonalRunAdmissionOutcomes.Denied) return _denied(_runAdmissionDenial(result.reason));
@@ -226,4 +227,10 @@ function _denied(reason: ConversationWriteDenial): SubmitConversationMessageResu
 function _blocksDigest(blocks: readonly MessageContentBlock[]): string
 {
 	return ___DigestCanonicalJson(blocks as unknown as JsonValue);
+}
+
+/** Gives every child-side asset reference its own conversation-local authority row. */
+function _childRequest(request: SubmitConversationMessageRequest): SubmitConversationMessageRequest
+{
+	return { ...request, blocks: request.blocks.map(function _Block(block): MessageContentBlock { return block.kind === "artifact" ? { ...block, value: randomUUID() } : block; }) };
 }
