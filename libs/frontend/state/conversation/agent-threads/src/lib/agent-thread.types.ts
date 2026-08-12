@@ -166,6 +166,8 @@ export interface AgentThreadSnapshot
 	readonly latestPosition: string;
 	/** Last position fully visible in this bounded snapshot. */
 	readonly representedThroughPosition: string;
+	/** Furthest message position actually rendered, independent from the lower replay cursor. */
+	readonly visibleThroughPosition: string;
 	/** Whether the current state permits another serial follow-up. */
 	readonly canSendFollowUp: boolean;
 }

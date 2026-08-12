@@ -85,7 +85,7 @@ export class AgentThreadStore
 	{
 		const current = this._snapshot();
 		if (current === null || this._routeState() !== AgentThreadRouteStates.Ready || current.recovery !== AgentThreadRecoveryStates.Live) return;
-		const observedPosition = current.representedThroughPosition === current.latestPosition ? current.latestPosition : current.representedThroughPosition;
+		const observedPosition = current.visibleThroughPosition;
 		if (observedPosition === "0" || observedPosition === this._markedThroughPosition) return;
 		const generation = this._generation;
 		try

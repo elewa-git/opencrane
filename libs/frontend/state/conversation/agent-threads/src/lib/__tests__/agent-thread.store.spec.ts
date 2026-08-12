@@ -25,6 +25,7 @@ function _Snapshot(overrides: Partial<AgentThreadSnapshot> = {}): AgentThreadSna
 		cursor: "opaque-cursor",
 		latestPosition: "2",
 		representedThroughPosition: "2",
+		visibleThroughPosition: "2",
 		canSendFollowUp: true,
 		...overrides
 	};
@@ -162,12 +163,12 @@ describe("AgentThreadStore", function _AgentThreadStore()
 		expect(store.snapshot()?.canSendFollowUp).toBe(false);
 	});
 
-	it("marks only the represented visible position and adopts the confirmed reread", async function _MarksVisible()
+	it("marks the furthest rendered message independently from the replay cursor", async function _MarksVisible()
 	{
 		const [store, gateway] = _CreateStore();
-		gateway.readResult = _Snapshot({ latestPosition: "9", representedThroughPosition: "5", summary: { ..._Snapshot().summary, unreadCount: 2 } });
+		gateway.readResult = _Snapshot({ latestPosition: "9", representedThroughPosition: "1", visibleThroughPosition: "5", summary: { ..._Snapshot().summary, unreadCount: 2 } });
 		await store.load("parent-1", "child-1");
-		gateway.readResult = _Snapshot({ latestPosition: "9", representedThroughPosition: "5", summary: { ..._Snapshot().summary, unreadCount: 1 } });
+		gateway.readResult = _Snapshot({ latestPosition: "9", representedThroughPosition: "1", visibleThroughPosition: "5", summary: { ..._Snapshot().summary, unreadCount: 1 } });
 		await store.markVisible();
 		expect(gateway.markedPositions).toEqual(["5"]);
 		expect(store.snapshot()?.summary.unreadCount).toBe(1);

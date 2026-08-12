@@ -28,6 +28,7 @@ export function __AgentThreadSnapshot(value: unknown): AgentThreadSnapshot
 	const preview = latestDelivery?.detail ?? (latestMessage === undefined ? undefined : _MessageText(latestMessage.blocks));
 	const latestUpdateAt = [dto.createdAt, ...dto.messages.map(function _MessageTime(message) { return message.createdAt; }), ...dto.deliveries.map(function _DeliveryTime(delivery) { return delivery.createdAt; })].sort().at(-1) ?? dto.createdAt;
 	const result = [...dto.deliveries].reverse().find(function _Result(delivery) { return delivery.kind === "result" || delivery.kind === "asset"; });
+	const visibleThroughPosition = dto.messages.reduce(function _LatestPosition(latest, message) { return BigInt(message.position) > BigInt(latest) ? message.position : latest; }, "0");
 	return {
 		parentConversationId: dto.parentConversationId,
 		childConversationId: dto.childConversationId,
@@ -38,6 +39,7 @@ export function __AgentThreadSnapshot(value: unknown): AgentThreadSnapshot
 		cursor: dto.cursor,
 		latestPosition: dto.latestPosition,
 		representedThroughPosition: dto.representedThroughPosition,
+		visibleThroughPosition,
 		canSendFollowUp: dto.lifecycle === "open" && (latestRun === undefined || latestRun.state === "completed" || latestRun.state === "failed" || latestRun.state === "cancelled"),
 	};
 }

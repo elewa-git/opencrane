@@ -29,6 +29,7 @@ describe("OpenCraneAgentThreadGateway", function _Suite()
 		const snapshot = await _Gateway({ GET }).read("parent-1", "child-1");
 		expect(GET).toHaveBeenCalledWith("/me/conversations/{parentConversationId}/agent-threads/{childConversationId}", { params: { path: { parentConversationId: "parent-1", childConversationId: "child-1" } } });
 		expect(snapshot).toMatchObject({ parentConversationId: "parent-1", childConversationId: "child-1", origin: { invokedByName: "Invoking participant" }, summary: { unreadCount: 1, replyCount: 2, participants: [{ label: "Participant 1", initials: "P1" }] }, canSendFollowUp: true });
+		expect(snapshot.visibleThroughPosition).toBe("2");
 		expect(JSON.stringify(snapshot)).not.toContain("user-1");
 	});
 

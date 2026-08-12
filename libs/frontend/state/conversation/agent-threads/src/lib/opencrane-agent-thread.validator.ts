@@ -89,10 +89,11 @@ const _Snapshot: z.ZodType<AgentThreadSnapshotDto> = z.object({
 	if (snapshot.unreadMessageCount > snapshot.messageCount) context.addIssue({ code: z.ZodIssueCode.custom, path: ["unreadMessageCount"], message: "cannot exceed messageCount" });
 	if (snapshot.messages.length > snapshot.messageCount) context.addIssue({ code: z.ZodIssueCode.custom, path: ["messages"], message: "cannot exceed messageCount" });
 
-	// 3. Every displayed child-owned row must use this exact route pair and represented window.
+	// 3. Every displayed message must stay within the latest canonical position. The replay cursor
+	// may remain lower when the snapshot omits a stream-only event before a later displayed message.
 	for (const [index, message] of snapshot.messages.entries())
 	{
-		if (BigInt(message.position) > represented) context.addIssue({ code: z.ZodIssueCode.custom, path: ["messages", index, "position"], message: "exceeds representedThroughPosition" });
+		if (BigInt(message.position) > latest) context.addIssue({ code: z.ZodIssueCode.custom, path: ["messages", index, "position"], message: "exceeds latestPosition" });
 	}
 	for (const [index, delivery] of snapshot.deliveries.entries())
 	{
