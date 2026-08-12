@@ -47,3 +47,12 @@ export interface ConversationPresentationContext
 	/** Selected summary carrying immutable mode and participant count. */
 	readonly summary: ConversationSummary;
 }
+
+/** Explicit workspace availability copy derived from the existing privacy-safe directory. */
+export interface ConversationWorkspaceAvailabilityPresentation
+{
+	/** Short state heading. */
+	readonly heading: string;
+	/** Plain explanation that does not disclose hidden identities. */
+	readonly detail: string;
+}

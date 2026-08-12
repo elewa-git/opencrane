@@ -5,9 +5,10 @@ import { ConversationComposerStates, ConversationStatusTones, type ConversationR
 import { ConversationAssetActionKinds, __ConversationAssetPresentation, __ConversationAssetSelectionFeedback, __PendingConversationAssetPresentation, type ConversationAssetActionIntent, type ConversationAssetPresentation, type ConversationAssetSelectionFeedback } from "@opencrane/features/conversation-assets";
 import { ConversationAssetsStore } from "@opencrane/state/conversation/assets";
 import { ConversationElicitationStore, __MapToolActivity, type ElicitationResponseValue } from "@opencrane/state/conversation/elicitation";
-import { AgUiToolStatuses, ConversationCreationStates, ConversationEventStreamStatuses, ConversationLifecycles, ConversationRunStates, ConversationWorkspaceRouteStates, ConversationWorkspaceStore } from "@opencrane/state/conversation/workspace";
+import { AgUiToolStatuses, ConversationCreationStates, ConversationEventStreamStatuses, ConversationLifecycles, ConversationPersonalAgentStatuses, ConversationRunStates, ConversationWorkspaceRouteStates, ConversationWorkspaceStore } from "@opencrane/state/conversation/workspace";
 
 import { _ConversationMessageViews, _ConversationSummaryPresentation, _LiveMessageViews } from "./conversation-workspace.mapper.js";
+import type { ConversationWorkspaceAvailabilityPresentation } from "./conversation-workspace-feature.types.js";
 
 /** Feature-scoped presenter that derives view state and delegates typed intents to owning stores. */
 export class ConversationWorkspacePresenter
@@ -30,6 +31,8 @@ export class ConversationWorkspacePresenter
 	protected readonly toolStatuses = AgUiToolStatuses;
 	/** Privacy-safe list rows. */
 	protected readonly summaries = computed(this._Summaries.bind(this));
+	/** Explicit availability state derived from the existing privacy-safe directory. */
+	protected readonly availabilityNotice = computed(this._AvailabilityNotice.bind(this));
 	/** Privacy-safe row corresponding to the selected authorized snapshot. */
 	protected readonly selectedSummary = computed(() => this.summaries().find(summary => summary.id === this.store.selected()?.id) ?? null);
 	/** Canonical and live transcript rows mapped through the shared sanitizer. */
@@ -118,6 +121,17 @@ export class ConversationWorkspacePresenter
 	{
 		const agentName = this.store.directory()?.personalAgent?.displayName ?? null;
 		return this.store.conversations().map(summary => _ConversationSummaryPresentation(summary, agentName));
+	}
+
+	/** Explain missing workspace or personal-Agent setup without inventing server state. */
+	private _AvailabilityNotice(): ConversationWorkspaceAvailabilityPresentation | null
+	{
+		const directory = this.store.directory();
+		if (directory === null) return null;
+		if (!directory.participants.some(participant => participant.isSelf)) return { heading: "No workspace available", detail: "This account has no workspace membership, so conversations cannot be created here." };
+		if (directory.personalAgentStatus === ConversationPersonalAgentStatuses.Unavailable) return { heading: "No personal Agent assigned", detail: "Direct and group chats remain available. An administrator must finish Agent setup before you can start an Agent session." };
+		if (directory.personalAgentStatus === ConversationPersonalAgentStatuses.Ambiguous) return { heading: "Personal Agent setup needs attention", detail: "More than one personal Agent matched this account. Direct and group chats remain available while an administrator repairs the assignment." };
+		return null;
 	}
 
 	/** Combine snapshot messages with live AG-UI messages without replacing canonical rows. */

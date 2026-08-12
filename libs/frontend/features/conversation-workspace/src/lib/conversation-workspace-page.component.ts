@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, ElementRef, effect, input, output, signal, viewChild } from "@angular/core";
+import { ChangeDetectionStrategy, Component, ElementRef, afterRenderEffect, effect, input, output, signal, viewChild } from "@angular/core";
 import { ButtonModule } from "primeng/button";
 import { MessageModule } from "primeng/message";
 
@@ -25,12 +25,16 @@ export class ConversationWorkspacePageComponent extends ConversationWorkspacePre
 	public readonly threadRequested = output<ConversationThreadNavigationIntent>();
 	/** Reports participant selection so the app can own the canonical URL. */
 	public readonly conversationSelected = output<string>();
+	/** Requests app-owned verified sign-in without letting the feature navigate. */
+	public readonly stepUpRequested = output<string>();
 	/** Keeps a route selection and the component-scoped store aligned. */
 	private readonly _routeSelectionEffect = effect(this._OpenRouteSelection.bind(this));
 	/** Access-change heading rendered after private conversation state is purged. */
 	private readonly _accessChangedHeading = viewChild<ElementRef<HTMLHeadingElement>>("accessChangedHeading");
 	/** Moves keyboard focus to the access-change explanation when it appears. */
 	private readonly _accessChangedFocusEffect = effect(this._FocusAccessChangedHeading.bind(this));
+	/** Restores focus after the app reports that verified sign-in has completed. */
+	private readonly _elicitationFocusEffect = afterRenderEffect(this._RestoreElicitationFocus.bind(this));
 	/** Polite result of following an Activity deep link. */
 	protected readonly activityAnnouncement = signal("");
 
@@ -64,6 +68,12 @@ export class ConversationWorkspacePageComponent extends ConversationWorkspacePre
 		this.activityAnnouncement.set("Opened the selected activity in the conversation.");
 	}
 
+	/** Forward the fixed server-owned sign-in path to the app coordinator. */
+	protected requestStepUp(path: string): void { this.stepUpRequested.emit(path); }
+
+	/** Reconcile the request after the app's verified sign-in window closes. */
+	public async recoverAfterStepUp(): Promise<void> { await this.elicitationStore.recoverAfterStepUp(); }
+
 	/** Adopt only a route coordinate that differs from the selected authorized snapshot. */
 	private _OpenRouteSelection(): void
 	{
@@ -77,5 +87,18 @@ export class ConversationWorkspacePageComponent extends ConversationWorkspacePre
 	{
 		const heading = this._accessChangedHeading();
 		if (this.store.routeState() === ConversationWorkspaceRouteStates.AccessChanged && heading !== undefined) heading.nativeElement.focus();
+	}
+
+	/** Focus the original ask after recovery adopted its current server projection. */
+	private _RestoreElicitationFocus(): void
+	{
+		if (this.elicitationStore.stepUpPath() !== null) return;
+		const requestId = this.elicitationStore.restoreFocusRequestId();
+		if (requestId === null) return;
+		const target = globalThis.document.getElementById(requestId);
+		if (target === null) return;
+		target.scrollIntoView({ block: "center" });
+		target.focus();
+		this.elicitationStore.acknowledgeFocusRestored();
 	}
 }

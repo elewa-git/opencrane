@@ -11,7 +11,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest
 import { CONVERSATION_ELICITATION_VERSION, ElicitationBodyKinds, ElicitationPurposes, ElicitationRequestStates } from "@opencrane/contracts";
 import { CONVERSATION_ASSETS_GATEWAY } from "@opencrane/state/conversation/assets";
 import { type ConversationEventStream, type StreamConversationEventsCommand } from "@opencrane/state/conversation/adapter";
-import { ConversationElicitationStore, ELICITATION_GATEWAY } from "@opencrane/state/conversation/elicitation";
+import { ConversationElicitationStore, ELICITATION_GATEWAY, ElicitationGatewayError, ElicitationGatewayErrorKinds } from "@opencrane/state/conversation/elicitation";
 import { CONVERSATION_WORKSPACE_EVENT_STREAM, CONVERSATION_WORKSPACE_GATEWAY, ConversationRunStore, ConversationWorkspaceStore, type ConversationWorkspaceDetail, type ConversationWorkspaceGateway } from "@opencrane/state/conversation/workspace";
 
 import { ConversationWorkspacePageComponent } from "../conversation-workspace-page.component.js";
@@ -50,9 +50,28 @@ class _EventStream implements ConversationEventStream
 	public async stream(command: StreamConversationEventsCommand) { return command.initialState; }
 }
 
+/** Build one requested free-text projection used by recovery tests. */
+function _Elicitation()
+{
+	return { version: CONVERSATION_ELICITATION_VERSION, requestId: "request-1", conversationId: "conversation-1", runId: "run-1", attempt: 1, assignedParticipantId: "participant-1", purpose: ElicitationPurposes.RuntimeInput, state: ElicitationRequestStates.Requested, body: { kind: ElicitationBodyKinds.FreeText, prompt: "Question", maximumLength: 100, allowEmpty: false }, requiresStepUp: false, requestedAt: "2026-08-12T08:00:00.000Z", expiresAt: "2026-08-12T09:00:00.000Z" } as const;
+}
+
+/** Configure every component-scoped port with a controlled elicitation gateway. */
+function _Configure(elicitationGateway: { readonly read: ReturnType<typeof vi.fn>; readonly respond: ReturnType<typeof vi.fn>; readonly listActivity: ReturnType<typeof vi.fn> }): void
+{
+	TestBed.configureTestingModule({ imports: [ConversationWorkspacePageComponent], providers: [
+		{ provide: CONVERSATION_WORKSPACE_GATEWAY, useClass: _WorkspaceGateway },
+		{ provide: CONVERSATION_WORKSPACE_EVENT_STREAM, useClass: _EventStream },
+		{ provide: CONVERSATION_ASSETS_GATEWAY, useValue: { list: vi.fn(), read: vi.fn(), reserve: vi.fn(), upload: vi.fn(), remove: vi.fn() } },
+		{ provide: ELICITATION_GATEWAY, useValue: elicitationGateway }
+	] });
+}
+
 beforeAll(async function _InitializeAngularTesting()
 {
 	TestBed.initTestEnvironment(BrowserDynamicTestingModule, platformBrowserDynamicTesting());
+	vi.stubGlobal("crypto", { randomUUID: vi.fn().mockReturnValue("response-key") });
+	HTMLElement.prototype.scrollIntoView = vi.fn();
 	const pageTemplate = readFileSync(join(process.cwd(), "src/lib/conversation-workspace-page.component.html"), "utf8");
 	await resolveComponentResources(async function _ResolveResource(url): Promise<string>
 	{
@@ -60,7 +79,7 @@ beforeAll(async function _InitializeAngularTesting()
 		return "";
 	});
 });
-afterAll(function _ResetAngularTesting() { TestBed.resetTestEnvironment(); });
+afterAll(function _ResetAngularTesting() { vi.unstubAllGlobals(); TestBed.resetTestEnvironment(); });
 afterEach(function _ResetTestBed() { TestBed.resetTestingModule(); });
 
 describe("ConversationWorkspacePageComponent", function _PageSuite()
@@ -68,12 +87,7 @@ describe("ConversationWorkspacePageComponent", function _PageSuite()
 	it("constructs its run, asset, elicitation, and workspace stores in one component scope", async function _ComponentScope()
 	{
 		TestBed.overrideComponent(ConversationWorkspacePageComponent, { set: { templateUrl: undefined, template: "", styleUrl: undefined, styleUrls: [], styles: [] } });
-		TestBed.configureTestingModule({ imports: [ConversationWorkspacePageComponent], providers: [
-			{ provide: CONVERSATION_WORKSPACE_GATEWAY, useClass: _WorkspaceGateway },
-			{ provide: CONVERSATION_WORKSPACE_EVENT_STREAM, useClass: _EventStream },
-			{ provide: CONVERSATION_ASSETS_GATEWAY, useValue: { list: vi.fn(), read: vi.fn(), reserve: vi.fn(), upload: vi.fn(), remove: vi.fn() } },
-			{ provide: ELICITATION_GATEWAY, useValue: { read: vi.fn().mockResolvedValue({ version: CONVERSATION_ELICITATION_VERSION, requestId: "request-1", conversationId: "conversation-1", runId: "run-1", attempt: 1, assignedParticipantId: "participant-1", purpose: ElicitationPurposes.RuntimeInput, state: ElicitationRequestStates.Requested, body: { kind: ElicitationBodyKinds.FreeText, prompt: "Question", maximumLength: 100, allowEmpty: false }, requiresStepUp: false, requestedAt: "2026-08-12T08:00:00.000Z", expiresAt: "2026-08-12T09:00:00.000Z" }), respond: vi.fn(), listActivity: vi.fn() } }
-		] });
+		_Configure({ read: vi.fn().mockResolvedValue(_Elicitation()), respond: vi.fn(), listActivity: vi.fn() });
 
 		const fixture = TestBed.createComponent(ConversationWorkspacePageComponent);
 		fixture.detectChanges();
@@ -82,5 +96,29 @@ describe("ConversationWorkspacePageComponent", function _PageSuite()
 		expect(fixture.debugElement.injector.get(ConversationRunStore)).toBeInstanceOf(ConversationRunStore);
 		expect(fixture.debugElement.injector.get(ConversationElicitationStore)).toBeInstanceOf(ConversationElicitationStore);
 		expect(fixture.debugElement.injector.get(ConversationWorkspaceStore)).toBeInstanceOf(ConversationWorkspaceStore);
+	});
+
+	it("forwards verified sign-in and restores focus to the original ask after reconciliation", async function _StepUpFocus()
+	{
+		TestBed.overrideComponent(ConversationWorkspacePageComponent, { set: { templateUrl: undefined, template: "<button id=\"request-1\">Original ask</button><button id=\"recover\" (click)=\"requestStepUp('/api/v1/auth/reauthenticate')\">Sign in again</button>", styleUrl: undefined, styleUrls: [], styles: [] } });
+		const gateway = { read: vi.fn().mockResolvedValue(_Elicitation()), respond: vi.fn().mockRejectedValue(new ElicitationGatewayError(ElicitationGatewayErrorKinds.StepUpRequired, "/api/v1/auth/reauthenticate")), listActivity: vi.fn() };
+		_Configure(gateway);
+		const fixture = TestBed.createComponent(ConversationWorkspacePageComponent);
+		const store = fixture.debugElement.injector.get(ConversationElicitationStore);
+		const requested = vi.fn();
+		fixture.componentInstance.stepUpRequested.subscribe(requested);
+		fixture.detectChanges();
+		await store.load("conversation-1", "request-1");
+		store.select({ kind: ElicitationBodyKinds.FreeText, text: "Keep this answer" });
+		await store.submit();
+		fixture.nativeElement.querySelector("#recover").click();
+
+		expect(requested).toHaveBeenCalledWith("/api/v1/auth/reauthenticate");
+		await fixture.componentInstance.recoverAfterStepUp();
+		fixture.detectChanges();
+		await fixture.whenStable();
+
+		expect(globalThis.document.activeElement?.id).toBe("request-1");
+		expect(store.restoreFocusRequestId()).toBeNull();
 	});
 });

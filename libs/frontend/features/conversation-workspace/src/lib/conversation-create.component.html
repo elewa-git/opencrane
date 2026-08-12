@@ -7,7 +7,8 @@
 	</div>
 	@if (mode() === modes.AgentSession) {
 		@if (directory()?.personalAgentStatus === agentStatuses.Ready) { <p class="conversation-create__choice">Agent: <strong>{{ directory()?.personalAgent?.displayName }}</strong></p> }
-		@else { <p class="conversation-create__notice">Your personal Agent is unavailable. Complete or repair Agent setup before starting this mode.</p> }
+		@else if (directory()?.personalAgentStatus === agentStatuses.Ambiguous) { <p class="conversation-create__notice">More than one personal Agent matched this account. Ask an administrator to repair the assignment before starting this mode.</p> }
+		@else { <p class="conversation-create__notice">No personal Agent is assigned. Ask an administrator to finish Agent setup before starting this mode.</p> }
 	} @else {
 		<div class="conversation-create__people"><strong>Participants</strong>
 			@if ((directory()?.participants?.length ?? 0) <= 1) { <p class="conversation-create__notice">No other participants are available.</p> }
