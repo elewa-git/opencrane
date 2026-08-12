@@ -3,9 +3,9 @@ import type { Router } from "express";
 import type { Logger } from "pino";
 
 import { _ResolveRequestPrincipal } from "@opencrane/backend/server/infra/auth";
+import { CONVERSATION_PROJECTION_CLOCK, CONVERSATION_PROJECTION_LIMITS } from "@opencrane/backend/conversations/projection";
 
 import { _CreateConversationReplayRepository } from "./prisma-conversation-replay.composition.js";
-import { CONVERSATION_LIVE_REPLAY_CLOCK, CONVERSATION_LIVE_REPLAY_LIMITS } from "./conversation-live-replay.js";
 import { __CreateSelfConversationReplayRouter } from "./self-conversation-replay.router.js";
 import type { SelfConversationReplayCaller, SelfConversationReplayCompositionOptions } from "./self-conversation-replay.router.types.js";
 
@@ -27,8 +27,8 @@ export function _CreateSelfConversationReplayRouter(prisma: PrismaClient, logger
 	return __CreateSelfConversationReplayRouter({
 		resolveCaller: _resolveCaller,
 		repository: _CreateConversationReplayRepository(prisma),
-		clock: CONVERSATION_LIVE_REPLAY_CLOCK,
-		limits: CONVERSATION_LIVE_REPLAY_LIMITS,
+		clock: CONVERSATION_PROJECTION_CLOCK,
+		limits: CONVERSATION_PROJECTION_LIMITS,
 		...(options.interrupts === undefined ? {} : { interrupts: options.interrupts }),
 		...(options.shutdownSignal === undefined ? {} : { shutdownSignal: options.shutdownSignal }),
 		logger,

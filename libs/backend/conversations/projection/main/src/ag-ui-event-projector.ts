@@ -1,8 +1,19 @@
 import { EventType } from "@ag-ui/core";
-import { RunEventTypes } from "@opencrane/models/agents";
-import { AG_UI_A2UI_ENVELOPE_VERSION, AG_UI_CHILD_RUN_ENVELOPE_VERSION, AG_UI_TOOL_FAILURE_EVENT, AG_UI_TOOL_RECOVERY_REQUIRED_EVENT, type AgUiProjectionEvent, type AgUiProjectionSourceEvent, type AgUiToolFailureEnvelope, type AgUiToolRecoveryRequiredEnvelope } from "./ag-ui-projection.types.js";
+import { AG_UI_A2UI_ENVELOPE_VERSION, AG_UI_CHILD_RUN_ENVELOPE_VERSION, AG_UI_TOOL_FAILURE_EVENT, AG_UI_TOOL_RECOVERY_REQUIRED_EVENT, type AgUiProjectionEvent, type AgUiProjectionSourceEvent, type AgUiToolFailureEnvelope, type AgUiToolRecoveryRequiredEnvelope } from "@opencrane/contracts";
 
-/** Project one canonical row into its deterministic ordered AG-UI subframes. */
+/**
+ * Maps one redacted source event to deterministic ordered AG-UI subframes.
+ *
+ * Ordinary messages expand to start, optional content and terminal events. Run events select the
+ * narrowest standard event that has all required safe fields; unsupported events become payload-free
+ * custom signals.
+ *
+ * Called by: `__StreamConversationProjection`.
+ *
+ * @param source Display-safe source event produced by `__ProjectConversationEvent`.
+ * @returns One or more ordered events accepted by the pinned `@ag-ui/core` 0.0.57 schemas.
+ * @see https://www.npmjs.com/package/@ag-ui/core/v/0.0.57
+ */
 export function __ProjectAgUiEvents(source: AgUiProjectionSourceEvent): readonly AgUiProjectionEvent[]
 {
 	if (source.eventType === "conversation.message") return _Message(source);
@@ -27,31 +38,31 @@ function _Project(source: AgUiProjectionSourceEvent): AgUiProjectionEvent
 {
 	switch (source.eventType)
 	{
-		case RunEventTypes.RunAccepted:
-		case RunEventTypes.RunStarted:
+		case "run.accepted":
+		case "run.started":
 			return source.runId === undefined ? _Custom(source) : { type: EventType.RUN_STARTED, threadId: source.conversationId, runId: source.runId };
-		case RunEventTypes.RunCompleted:
+		case "run.completed":
 			return source.runId === undefined ? _Custom(source) : { type: EventType.RUN_FINISHED, threadId: source.conversationId, runId: source.runId, outcome: { type: "success" } };
-		case RunEventTypes.RunFailed:
+		case "run.failed":
 			return { type: EventType.RUN_ERROR, message: _TerminalMessage(source, "Run failed"), ...(source.payload.failureCode === undefined ? {} : { code: source.payload.failureCode }) };
-		case RunEventTypes.RunCancelled:
+		case "run.cancelled":
 			return { type: EventType.RUN_ERROR, message: _TerminalMessage(source, "Run cancelled"), code: "RUN_CANCELLED" };
-		case RunEventTypes.ToolApprovalRequired:
+		case "tool.approval_required":
 			return source.payload.interrupt === undefined || source.runId === undefined ? _Custom(source) : { type: EventType.RUN_FINISHED, threadId: source.conversationId, runId: source.runId, outcome: { type: "interrupt", interrupts: [source.payload.interrupt] } };
-		case RunEventTypes.MessageStarted:
+		case "message.started":
 			return typeof source.payload.messageId === "string" ? { type: EventType.TEXT_MESSAGE_START, messageId: source.payload.messageId, role: "assistant" } : _Custom(source);
-		case RunEventTypes.MessageDelta:
+		case "message.delta":
 			return typeof source.payload.messageId === "string" && typeof source.payload.delta === "string" ? { type: EventType.TEXT_MESSAGE_CONTENT, messageId: source.payload.messageId, delta: source.payload.delta } : _Custom(source);
-		case RunEventTypes.MessageCompleted:
+		case "message.completed":
 			return typeof source.payload.messageId === "string" ? { type: EventType.TEXT_MESSAGE_END, messageId: source.payload.messageId } : _Custom(source);
-		case RunEventTypes.ToolRequested:
+		case "tool.requested":
 			return typeof source.payload.toolCallId === "string" && typeof source.payload.toolCallName === "string" ? { type: EventType.TOOL_CALL_START, toolCallId: source.payload.toolCallId, toolCallName: source.payload.toolCallName } : _Custom(source);
-		case RunEventTypes.ToolCompleted:
+		case "tool.completed":
 			if (typeof source.payload.toolCallId !== "string") return _Custom(source);
 			return { type: EventType.TOOL_CALL_END, toolCallId: source.payload.toolCallId };
-		case RunEventTypes.ToolFailed:
+		case "tool.failed":
 			return _ToolFailure(source);
-		case RunEventTypes.ToolRecoveryRequired:
+		case "tool.recovery_required":
 			return _ToolRecoveryRequired(source);
 		default:
 			if (source.payload.a2ui !== undefined) return { type: EventType.CUSTOM, name: AG_UI_A2UI_ENVELOPE_VERSION, value: source.payload.a2ui };
@@ -72,7 +83,7 @@ function _ToolRecoveryRequired(source: AgUiProjectionSourceEvent): AgUiProjectio
 function _ToolFailure(source: AgUiProjectionSourceEvent): AgUiProjectionEvent
 {
 	if (typeof source.payload.toolCallId !== "string") return _Custom(source);
-	const value: AgUiToolFailureEnvelope = { eventType: RunEventTypes.ToolFailed, toolCallId: source.payload.toolCallId, ...(source.payload.failureCode === undefined ? {} : { failureCode: source.payload.failureCode }) };
+	const value: AgUiToolFailureEnvelope = { eventType: "tool.failed", toolCallId: source.payload.toolCallId, ...(source.payload.failureCode === undefined ? {} : { failureCode: source.payload.failureCode }) };
 	return { type: EventType.CUSTOM, name: AG_UI_TOOL_FAILURE_EVENT, value };
 }
 

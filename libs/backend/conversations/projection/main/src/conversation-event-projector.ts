@@ -1,11 +1,22 @@
 import { AG_UI_CHILD_RUN_ENVELOPE_VERSION, AgUiToolRecoveryProviderOutcomes, ___ParseAgUiA2uiEnvelope, type AgUiChildRunEnvelope, type AgUiPublicEventPayload } from "@opencrane/contracts";
 
-import type { ConversationReplayEventRow, ConversationReplayProjectionResult } from "./replay-projection.types.js";
+import type { ConversationEventProjectionResult, ConversationProjectionEventRow } from "./conversation-event-projector.types.js";
 
 const _SAFE_FAILURE_CODES = new Set(["AuthenticationError", "ConnectionError", "HTTPError", "ModelLoopError", "OSError", "PermissionError", "RuntimeError", "TimeoutError", "URLError", "ValueError", "approval_arguments_invalid", "approval_cancelled", "approval_defer_failed", "approval_denied", "approval_expired", "approval_unavailable", "external_action_pre_dispatch_unavailable", "external_action_preparation_failed", "external_action_provider_outcome_ambiguous", "external_action_unsupported", "integration_provider_unavailable", "integration_tool_not_allowed", "malformed_tool_call", "memory_provider_unavailable", "memory_scope_unavailable", "model_loop_error", "sandbox_provider_unavailable"]);
 
-/** Redact one canonical timeline row into only the fields the AG-UI projection contract allows. */
-export function __ProjectConversationReplayEvent(row: ConversationReplayEventRow): ConversationReplayProjectionResult
+/**
+ * Redacts one canonical timeline row to the fields the public AG-UI vocabulary allows.
+ *
+ * Unknown event types remain observable without their payload. Known types copy only fixed display
+ * coordinates and classifications. Provider bodies, credentials, proofs, arbitrary details, tool
+ * arguments and tool results never pass this function.
+ *
+ * Called by: `__StreamConversationProjection`.
+ *
+ * @param row Canonical row returned by an authorised reader; its payload is untrusted JSON.
+ * @returns A display-safe source event, or `null` when the row coordinates are invalid.
+ */
+export function __ProjectConversationEvent(row: ConversationProjectionEventRow): ConversationEventProjectionResult
 {
 	if (!row.cursor || !row.conversationId || !/^[1-9]\d*$/u.test(row.position) || !row.type || Number.isNaN(Date.parse(row.occurredAt))) return null;
 	return { cursor: row.cursor, conversationId: row.conversationId, ...(row.runId === null ? {} : { runId: row.runId }), position: row.position, eventType: row.type, occurredAt: row.occurredAt, payload: _SafePayload(row.type, row.payload, row.conversationId, row.runId) };

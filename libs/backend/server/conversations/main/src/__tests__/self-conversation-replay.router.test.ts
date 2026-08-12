@@ -2,12 +2,12 @@ import express from "express";
 import request from "supertest";
 import { describe, expect, it, vi } from "vitest";
 import type { Logger } from "@opencrane/backend/observability";
+import { ConversationProjectionReadStatuses } from "@opencrane/backend/conversations/projection";
 
 import { __CreateSelfConversationReplayRouter } from "../self-conversation-replay.router.js";
-import { ConversationReplayReadStatuses } from "../replay-reader.types.js";
 
 /** Mount the self-only replay router with caller and event-reader seams. */
-function _app(caller: unknown, readAuthorized = vi.fn(async function _read() { return { status: ConversationReplayReadStatuses.Authorized, rows: [] }; }))
+function _app(caller: unknown, readAuthorized = vi.fn(async function _read() { return { status: ConversationProjectionReadStatuses.Authorized, rows: [] }; }))
 {
 	let now = 0;
 	const app = express();

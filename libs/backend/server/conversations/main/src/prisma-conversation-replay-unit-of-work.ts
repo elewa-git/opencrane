@@ -1,7 +1,8 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
+import type { ConversationProjectionReadResult, ReadConversationProjectionCommand } from "@opencrane/backend/conversations/projection";
 
 import { PrismaConversationReplayRepository } from "./prisma-conversation-replay-repository.js";
-import type { ConversationReplayReadResult, ConversationReplayUnitOfWork, ReadConversationReplayCommand } from "./replay-reader.types.js";
+import type { ConversationReplayUnitOfWork } from "./replay-reader.types.js";
 
 /** Prisma transaction boundary that freezes participant bounds and visible timeline rows together. */
 export class PrismaConversationReplayUnitOfWork implements ConversationReplayUnitOfWork
@@ -16,7 +17,7 @@ export class PrismaConversationReplayUnitOfWork implements ConversationReplayUni
 	}
 
 	/** Recheck authority and rows inside one repeatable-read transaction. */
-	async readAuthorized(command: ReadConversationReplayCommand): Promise<ConversationReplayReadResult>
+	async readAuthorized(command: ReadConversationProjectionCommand): Promise<ConversationProjectionReadResult>
 	{
 		return this.prisma.$transaction(async function _ReadReplaySnapshot(transaction)
 		{

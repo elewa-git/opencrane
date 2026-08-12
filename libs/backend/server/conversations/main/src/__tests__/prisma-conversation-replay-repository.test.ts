@@ -1,8 +1,8 @@
 import { ConversationTimelineEntryKind } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
+import { ConversationProjectionReadStatuses } from "@opencrane/backend/conversations/projection";
 
 import { PrismaConversationReplayRepository } from "../prisma-conversation-replay-repository.js";
-import { ConversationReplayReadStatuses } from "../replay-reader.types.js";
 
 describe("Prisma conversation replay repository", function _Suite()
 {
@@ -18,7 +18,7 @@ describe("Prisma conversation replay repository", function _Suite()
 		const result = await new PrismaConversationReplayRepository(prisma as never).readAuthorized({ conversationId: "conversation-1", siloId: "silo-1", subjectId: "user-1", cursor: { conversationId: "conversation-1", position: "2" }, limit: 10 });
 
 		expect(findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { conversationId: "conversation-1", position: { gt: 2n }, kind: { in: [ConversationTimelineEntryKind.RunEvent, ConversationTimelineEntryKind.Message] } }, orderBy: { position: "asc" } }));
-		expect(result).toEqual({ status: ConversationReplayReadStatuses.Authorized, rows: [{ cursor: expect.stringMatching(/^c\./u), conversationId: "conversation-1", position: "3", runId: "run-1", type: "message.delta", payload: { messageId: "message-1", delta: "later" }, occurredAt: "2026-07-23T10:00:03.000Z" }] });
+		expect(result).toEqual({ status: ConversationProjectionReadStatuses.Authorized, rows: [{ cursor: expect.stringMatching(/^c\./u), conversationId: "conversation-1", position: "3", runId: "run-1", type: "message.delta", payload: { messageId: "message-1", delta: "later" }, occurredAt: "2026-07-23T10:00:03.000Z" }] });
 	});
 
 	it("fails closed before persistence when a cursor belongs to another conversation", async function _RejectsForeignCursor()
@@ -27,7 +27,7 @@ describe("Prisma conversation replay repository", function _Suite()
 		const timeline = vi.fn();
 		const result = await new PrismaConversationReplayRepository({ conversationParticipant: { findUnique: participant }, conversationTimelineEntry: { findMany: timeline } } as never).readAuthorized({ conversationId: "conversation-1", siloId: "silo-1", subjectId: "user-1", cursor: { conversationId: "foreign-conversation", position: "1" }, limit: 10 });
 
-		expect(result).toEqual({ status: ConversationReplayReadStatuses.RevokedOrMissing, rows: [] });
+		expect(result).toEqual({ status: ConversationProjectionReadStatuses.RevokedOrMissing, rows: [] });
 		expect(participant).not.toHaveBeenCalled();
 		expect(timeline).not.toHaveBeenCalled();
 	});
@@ -41,7 +41,7 @@ describe("Prisma conversation replay repository", function _Suite()
 			conversationTimelineEntry: { findMany: timeline },
 		};
 
-		await expect(new PrismaConversationReplayRepository(prisma as never).readAuthorized({ conversationId: "conversation-1", siloId: "silo-1", subjectId: "user-1", cursor: null, limit: 10 })).resolves.toEqual({ status: ConversationReplayReadStatuses.Authorized, rows: [] });
+		await expect(new PrismaConversationReplayRepository(prisma as never).readAuthorized({ conversationId: "conversation-1", siloId: "silo-1", subjectId: "user-1", cursor: null, limit: 10 })).resolves.toEqual({ status: ConversationProjectionReadStatuses.Authorized, rows: [] });
 		expect(timeline).toHaveBeenCalledWith(expect.objectContaining({ where: { conversationId: "conversation-1", position: { gt: 0n, lte: 3n }, kind: { in: [ConversationTimelineEntryKind.RunEvent, ConversationTimelineEntryKind.Message] } } }));
 	});
 
@@ -51,7 +51,7 @@ describe("Prisma conversation replay repository", function _Suite()
 		const timeline = vi.fn();
 		const prisma = { orgMembership: { findFirst: vi.fn().mockResolvedValue(null) }, conversationParticipant: { findUnique: participant }, conversationTimelineEntry: { findMany: timeline } };
 
-		await expect(new PrismaConversationReplayRepository(prisma as never).readAuthorized({ conversationId: "conversation-1", siloId: "silo-1", subjectId: "user-1", cursor: null, limit: 10 })).resolves.toEqual({ status: ConversationReplayReadStatuses.RevokedOrMissing, rows: [] });
+		await expect(new PrismaConversationReplayRepository(prisma as never).readAuthorized({ conversationId: "conversation-1", siloId: "silo-1", subjectId: "user-1", cursor: null, limit: 10 })).resolves.toEqual({ status: ConversationProjectionReadStatuses.RevokedOrMissing, rows: [] });
 		expect(participant).not.toHaveBeenCalled();
 		expect(timeline).not.toHaveBeenCalled();
 	});

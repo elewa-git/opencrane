@@ -2,11 +2,11 @@ import { describe, expect, it } from "vitest";
 
 import { AG_UI_A2UI_ENVELOPE_VERSION, AgUiA2uiSurfaceStates, AgUiToolRecoveryProviderOutcomes } from "@opencrane/contracts";
 
-import { __ProjectConversationReplayEvent } from "../replay-projection.js";
-import type { ConversationReplayEventRow } from "../replay-projection.types.js";
+import { __ProjectConversationEvent } from "../conversation-event-projector.js";
+import type { ConversationProjectionEventRow } from "../conversation-event-projector.types.js";
 
 /** Build one canonical A2UI replay row around an overrideable governed envelope. */
-function _A2uiRow(a2ui: Readonly<Record<string, unknown>>, type = "a2ui.surface.updated"): ConversationReplayEventRow
+function _A2uiRow(a2ui: Readonly<Record<string, unknown>>, type = "a2ui.surface.updated"): ConversationProjectionEventRow
 {
 	return { cursor: "c.a2ui", conversationId: "conversation-1", runId: "run-1", position: "2", type, payload: { a2ui }, occurredAt: "2026-07-23T10:00:01.000Z" };
 }
@@ -39,32 +39,32 @@ describe("conversation timeline projection", function _Suite()
 {
 	it("copies only display-safe message fields", function _Redacts()
 	{
-		const projected = __ProjectConversationReplayEvent({ cursor: "c.cursor", conversationId: "conversation-1", runId: "run-1", position: "1", type: "message.delta", payload: { messageId: "message-1", delta: "hello", capabilityProof: "secret", fence: 3 }, occurredAt: "2026-07-23T10:00:00.000Z" });
+		const projected = __ProjectConversationEvent({ cursor: "c.cursor", conversationId: "conversation-1", runId: "run-1", position: "1", type: "message.delta", payload: { messageId: "message-1", delta: "hello", capabilityProof: "secret", fence: 3 }, occurredAt: "2026-07-23T10:00:00.000Z" });
 		expect(projected?.payload).toEqual({ messageId: "message-1", delta: "hello" });
 	});
 
 	it("shows safe tool and runtime failures without secret-bearing technical detail", function _ProjectsFailures()
 	{
-		const tool = __ProjectConversationReplayEvent({ cursor: "c.tool", conversationId: "conversation-1", runId: "run-1", position: "2", type: "tool.failed", payload: { toolInvocationId: "tool-1", reason: "external_action_preparation_failed", errorType: "AuthenticationError", authorization: "Bearer never", responseBody: "secret" }, occurredAt: "2026-07-23T10:00:01.000Z" });
-		const runtime = __ProjectConversationReplayEvent({ cursor: "c.error", conversationId: "conversation-1", runId: "run-1", position: "3", type: "run.error", payload: { reason: "model_loop_error", errorType: "AuthenticationError", detail: "Bearer never" }, occurredAt: "2026-07-23T10:00:02.000Z" });
+		const tool = __ProjectConversationEvent({ cursor: "c.tool", conversationId: "conversation-1", runId: "run-1", position: "2", type: "tool.failed", payload: { toolInvocationId: "tool-1", reason: "external_action_preparation_failed", errorType: "AuthenticationError", authorization: "Bearer never", responseBody: "secret" }, occurredAt: "2026-07-23T10:00:01.000Z" });
+		const runtime = __ProjectConversationEvent({ cursor: "c.error", conversationId: "conversation-1", runId: "run-1", position: "3", type: "run.error", payload: { reason: "model_loop_error", errorType: "AuthenticationError", detail: "Bearer never" }, occurredAt: "2026-07-23T10:00:02.000Z" });
 
 		expect(tool?.payload).toEqual({ toolCallId: "tool-1", failureCode: "AuthenticationError" });
 		expect(runtime?.payload).toEqual({ failureCode: "AuthenticationError" });
 		expect(JSON.stringify([tool, runtime])).not.toContain("Bearer never");
-		expect(__ProjectConversationReplayEvent({ cursor: "c.secret", conversationId: "conversation-1", runId: "run-1", position: "4", type: "run.error", payload: { errorType: "SecretToken123" }, occurredAt: "2026-07-23T10:00:03.000Z" })?.payload).toEqual({});
+		expect(__ProjectConversationEvent({ cursor: "c.secret", conversationId: "conversation-1", runId: "run-1", position: "4", type: "run.error", payload: { errorType: "SecretToken123" }, occurredAt: "2026-07-23T10:00:03.000Z" })?.payload).toEqual({});
 	});
 
 	it("projects only fixed recovery evidence and strips provider detail", function _ProjectsRecovery()
 	{
-		const recovery = __ProjectConversationReplayEvent({ cursor: "c.recovery", conversationId: "conversation-1", runId: "run-1", position: "4", type: "tool.recovery_required", payload: { toolInvocationId: "tool-1", expectedAttempt: 2, preparationRetryCount: 1, preparationRetryLimit: 3, providerOutcome: AgUiToolRecoveryProviderOutcomes.UnknownAfterDispatch, providerBody: "secret", arguments: { password: "never" } }, occurredAt: "2026-07-23T10:00:03.000Z" });
+		const recovery = __ProjectConversationEvent({ cursor: "c.recovery", conversationId: "conversation-1", runId: "run-1", position: "4", type: "tool.recovery_required", payload: { toolInvocationId: "tool-1", expectedAttempt: 2, preparationRetryCount: 1, preparationRetryLimit: 3, providerOutcome: AgUiToolRecoveryProviderOutcomes.UnknownAfterDispatch, providerBody: "secret", arguments: { password: "never" } }, occurredAt: "2026-07-23T10:00:03.000Z" });
 		expect(recovery?.payload).toEqual({ toolRecovery: { eventType: "tool.recovery_required", expectedAttempt: 2, toolCallId: "tool-1", recoveryCategory: "manual_action_required", preparationRetryCount: 1, preparationRetryLimit: 3, providerOutcome: AgUiToolRecoveryProviderOutcomes.UnknownAfterDispatch } });
 		expect(JSON.stringify(recovery)).not.toContain("secret");
 	});
 
 	it("drops unsupported payloads and invalid canonical rows", function _FailsClosed()
 	{
-		expect(__ProjectConversationReplayEvent({ cursor: "c.cursor", conversationId: "conversation-1", runId: "run-1", position: "1", type: "run.usage", payload: { providerKey: "secret" }, occurredAt: "2026-07-23T10:00:00.000Z" })?.payload).toEqual({});
-		expect(__ProjectConversationReplayEvent({ cursor: "", conversationId: "conversation-1", runId: "run-1", position: "1", type: "run.started", payload: {}, occurredAt: "2026-07-23T10:00:00.000Z" })).toBeNull();
+		expect(__ProjectConversationEvent({ cursor: "c.cursor", conversationId: "conversation-1", runId: "run-1", position: "1", type: "run.usage", payload: { providerKey: "secret" }, occurredAt: "2026-07-23T10:00:00.000Z" })?.payload).toEqual({});
+		expect(__ProjectConversationEvent({ cursor: "", conversationId: "conversation-1", runId: "run-1", position: "1", type: "run.started", payload: {}, occurredAt: "2026-07-23T10:00:00.000Z" })).toBeNull();
 	});
 
 	it("adopts exact ordered A2UI operations, lifecycle, and display-safe reason", function _ProjectsGovernedA2ui()
@@ -75,7 +75,7 @@ describe("conversation timeline projection", function _Suite()
 			{ beginRendering: { surfaceId: "surface-1", root: "text-1" } }
 		];
 		const envelope = { ..._A2uiEnvelope(operations, 4), state: AgUiA2uiSurfaceStates.Ready, reason: "Ready for review" };
-		const projected = __ProjectConversationReplayEvent(_A2uiRow(envelope, "a2ui.rendering.begun"));
+		const projected = __ProjectConversationEvent(_A2uiRow(envelope, "a2ui.rendering.begun"));
 
 		expect(projected?.payload.a2ui).toEqual(envelope);
 		expect(projected?.payload.a2ui?.operations).toEqual(operations);
@@ -91,6 +91,6 @@ describe("conversation timeline projection", function _Suite()
 			{ ..._A2uiEnvelope([{ beginRendering: { surfaceId: "surface-1", root: "root-1" } }]), state: "locally_inferred" },
 			{ ..._A2uiEnvelope([{ beginRendering: { surfaceId: "surface-1", root: "root-1" } }]), capabilityProof: "forbidden" }
 		];
-		for (const envelope of cases) expect(__ProjectConversationReplayEvent(_A2uiRow(envelope))?.payload).toEqual({});
+		for (const envelope of cases) expect(__ProjectConversationEvent(_A2uiRow(envelope))?.payload).toEqual({});
 	});
 });
