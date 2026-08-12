@@ -138,7 +138,7 @@ describe("live conversation projection", function _Suite()
 	{
 		const cases = [
 			{ type: RunEventTypes.RunStarted, payload: {}, expected: '"type":"RUN_STARTED"' },
-			{ type: RunEventTypes.ToolFailed, payload: { toolInvocationId: "tool-1", errorType: "AuthenticationError", authorization: "Bearer never", providerBody: "secret" }, expected: '"failureCode":"AuthenticationError"' },
+			{ type: RunEventTypes.ToolFailed, payload: { toolInvocationId: "tool-1", toolRevisionId: "revision-1", errorType: "AuthenticationError", retryCount: 1, retryLimit: 3, retrying: true, authorization: "Bearer never", providerBody: "secret" }, expected: '"failureCode":"AuthenticationError"' },
 			{ type: RunEventTypes.ToolRecoveryRequired, payload: { toolInvocationId: "tool-1", expectedAttempt: 2, preparationRetryCount: 1, preparationRetryLimit: 3, providerOutcome: AgUiToolRecoveryProviderOutcomes.UnknownAfterDispatch, arguments: { password: "never" } }, expected: '"recoveryCategory":"manual_action_required"' },
 		] as const;
 		for (const [index, fixture] of cases.entries())
