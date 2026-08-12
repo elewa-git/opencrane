@@ -1,7 +1,7 @@
 import { EventType } from "@ag-ui/core";
 import { ___DoWithTrace, ___GetActiveSpan } from "@opencrane/backend/observability";
 import { AG_UI_INTERRUPTS_CLEARED_EVENT } from "@opencrane/contracts";
-import type { ConversationReplayCursor } from "@opencrane/models/conversations";
+import type { ConversationReplayCursor } from "@opencrane/contracts";
 
 import { __ProjectAgUiEvents } from "./ag-ui-event-projector.js";
 import { __EncodeAgUiSseRecord } from "./ag-ui-sse-encoder.js";

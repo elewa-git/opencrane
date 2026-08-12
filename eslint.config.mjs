@@ -129,7 +129,7 @@ export default [
             { sourceTag: "scope:agent-runtime-controller", onlyDependOnLibsWithTags: ["scope:agent-runtime-controller", "scope:agent-runtime-launcher", "scope:shared"] },
             { sourceTag: "scope:agent-controller", onlyDependOnLibsWithTags: ["scope:agent-controller", "scope:agent-runtime-controller", "scope:skills-controller", "scope:shared"] },
             { sourceTag: "scope:cluster-tenants", onlyDependOnLibsWithTags: ["scope:auth", "scope:cluster-tenants", "scope:k8s-api", "scope:shared"] },
-			{ sourceTag: "scope:conversation-projection", onlyDependOnLibsWithTags: ["scope:conversation-projection", "scope:conversations", "scope:shared"] },
+			{ sourceTag: "scope:conversation-projection", onlyDependOnLibsWithTags: ["scope:conversation-projection", "scope:shared"] },
 			{ sourceTag: "scope:conversations", onlyDependOnLibsWithTags: ["scope:agents", "scope:auth", "scope:channel-targets", "scope:conversation-projection", "scope:conversations", "scope:execution-admission", "scope:execution-runs", "scope:shared"] },
 			{ sourceTag: "scope:personal-configuration", onlyDependOnLibsWithTags: ["scope:agent-services", "scope:agents", "scope:auth", "scope:personal-configuration", "scope:shared"] },
 			{ sourceTag: "scope:user-onboarding", onlyDependOnLibsWithTags: ["scope:user-onboarding", "scope:shared"] },

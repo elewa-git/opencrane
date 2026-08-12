@@ -1,8 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
+import { AG_UI_A2UI_ENVELOPE_VERSION, AgUiA2uiSurfaceStates, AgUiToolRecoveryProviderOutcomes, RunEventTypes } from "@opencrane/contracts";
 
 import { __StreamConversationProjection } from "../conversation-projection-stream.js";
 import { ConversationProjectionOutcomes } from "../conversation-projection-stream.types.js";
 import { ConversationProjectionReadStatuses } from "../conversation-projection-reader.types.js";
+import type { ConversationProjectionEventRow } from "../conversation-event-projector.types.js";
 
 /** Deterministic clock that advances only when the live reader waits. */
 function _Clock()
@@ -16,9 +18,25 @@ function _Limits(pageSize = 10)
 	return { pageSize, pollMilliseconds: 25, heartbeatMilliseconds: 50, maximumDurationMilliseconds: 50 };
 }
 
-function _Row()
+function _Row(): ConversationProjectionEventRow
 {
 	return { cursor: "legacy-row-cursor", conversationId: "conversation-1", runId: null, position: "1", type: "conversation.message", payload: { messageId: "message-1", role: "user", state: "completed", blocks: [{ id: "block-1", kind: "text", value: "hello" }] }, occurredAt: "2026-08-11T00:00:00.000Z" };
+}
+
+/** Runs one canonical row through redaction, AG-UI mapping, cursoring and SSE encoding. */
+async function _ProjectRow(row: ConversationProjectionEventRow): Promise<string>
+{
+	const output: string[] = [];
+	const abort = new AbortController();
+	let reads = 0;
+	await __StreamConversationProjection({ reader: { readAuthorized: async function _Read()
+	{
+		reads += 1;
+		if (reads === 1) return { status: ConversationProjectionReadStatuses.Authorized, rows: [row] };
+		abort.abort();
+		return { status: ConversationProjectionReadStatuses.Authorized, rows: [] };
+	} }, clock: _Clock(), limits: _Limits() }, { open: vi.fn(), write: function _Write(value): boolean { output.push(value); return true; }, drain: vi.fn() }, { conversationId: "conversation-1", siloId: "silo-1", subjectId: "user-1", cursor: null, signal: abort.signal });
+	return output.join("");
 }
 
 describe("live conversation projection", function _Suite()
@@ -114,5 +132,33 @@ describe("live conversation projection", function _Suite()
 		const readAuthorized = async function _Read() { return { status: "future_status", rows: [] } as never; };
 		await expect(__StreamConversationProjection({ reader: { readAuthorized }, clock: _Clock(), limits: _Limits() }, { open, write: vi.fn(() => true), drain: vi.fn() }, { conversationId: "conversation-1", siloId: "silo-1", subjectId: "user-1", cursor: null, signal: new AbortController().signal })).rejects.toThrow("unknown authority result");
 		expect(open).not.toHaveBeenCalled();
+	});
+
+	it("projects agent-session run and tool events through the complete public stream", async function _ProjectsAgentSessionEvents()
+	{
+		const cases = [
+			{ type: RunEventTypes.RunStarted, payload: {}, expected: '"type":"RUN_STARTED"' },
+			{ type: RunEventTypes.ToolFailed, payload: { toolInvocationId: "tool-1", errorType: "AuthenticationError", authorization: "Bearer never", providerBody: "secret" }, expected: '"failureCode":"AuthenticationError"' },
+			{ type: RunEventTypes.ToolRecoveryRequired, payload: { toolInvocationId: "tool-1", expectedAttempt: 2, preparationRetryCount: 1, preparationRetryLimit: 3, providerOutcome: AgUiToolRecoveryProviderOutcomes.UnknownAfterDispatch, arguments: { password: "never" } }, expected: '"recoveryCategory":"manual_action_required"' },
+		] as const;
+		for (const [index, fixture] of cases.entries())
+		{
+			const body = await _ProjectRow({ ..._Row(), cursor: `row-${index}`, runId: "run-1", position: `${index + 1}`, type: fixture.type, payload: fixture.payload });
+			expect(body).toContain(fixture.expected);
+			expect(body).toContain("id: c.");
+			expect(body).not.toContain("Bearer never");
+			expect(body).not.toContain("password");
+			expect(body).not.toContain("providerBody");
+		}
+	});
+
+	it("projects governed A2UI only after coordinate validation and redaction", async function _ProjectsGovernedA2ui()
+	{
+		const a2ui = { version: AG_UI_A2UI_ENVELOPE_VERSION, conversationId: "conversation-1", runId: "run-1", messageId: "message-1", surfaceId: "surface-1", sequence: 0, state: AgUiA2uiSurfaceStates.Streaming, operations: [{ beginRendering: { surfaceId: "surface-1", root: "root-1" } }] };
+		const body = await _ProjectRow({ ..._Row(), runId: "run-1", type: RunEventTypes.A2uiRenderingBegun, payload: { a2ui, capabilityProof: "secret" } });
+		expect(body).toContain(`"name":"${AG_UI_A2UI_ENVELOPE_VERSION}"`);
+		expect(body).toContain('"surfaceId":"surface-1"');
+		expect(body).not.toContain("capabilityProof");
+		expect(body).not.toContain("secret");
 	});
 });

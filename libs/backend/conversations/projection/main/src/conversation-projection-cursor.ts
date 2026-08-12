@@ -1,5 +1,5 @@
 import { ___ParseAndValidateJson } from "@opencrane/util";
-import { ___ConversationReplayCursorSchema, type ConversationReplayCursor } from "@opencrane/models/conversations";
+import { ___ConversationReplayCursorSchema, type ConversationReplayCursor } from "@opencrane/contracts";
 
 /**
  * Encodes one canonical timeline position as an opaque browser resume cursor.

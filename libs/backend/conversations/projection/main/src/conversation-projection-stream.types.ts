@@ -1,5 +1,5 @@
 import type { AgUiProjectionSourceEvent } from "@opencrane/contracts";
-import type { ConversationReplayCursor } from "@opencrane/models/conversations";
+import type { ConversationReplayCursor } from "@opencrane/contracts";
 
 import type { ConversationProjectionReader } from "./conversation-projection-reader.types.js";
 

@@ -1,4 +1,4 @@
-import type { ConversationReplayCursor } from "@opencrane/models/conversations";
+import type { ConversationReplayCursor } from "@opencrane/contracts";
 
 import type { ConversationProjectionEventRow } from "./conversation-event-projector.types.js";
 

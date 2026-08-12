@@ -1,4 +1,4 @@
-import { AG_UI_CHILD_RUN_ENVELOPE_VERSION, AgUiToolRecoveryProviderOutcomes, ___ParseAgUiA2uiEnvelope, type AgUiChildRunEnvelope, type AgUiPublicEventPayload } from "@opencrane/contracts";
+import { AG_UI_CHILD_RUN_ENVELOPE_VERSION, AgUiToolRecoveryProviderOutcomes, RunEventTypes, ___ParseAgUiA2uiEnvelope, type AgUiChildRunEnvelope, type AgUiPublicEventPayload } from "@opencrane/contracts";
 
 import type { ConversationEventProjectionResult, ConversationProjectionEventRow } from "./conversation-event-projector.types.js";
 
@@ -25,16 +25,16 @@ export function __ProjectConversationEvent(row: ConversationProjectionEventRow):
 /** Select only schema-free display fields needed by known projected event types. */
 function _SafePayload(type: string, payload: Readonly<Record<string, unknown>>, conversationId: string, runId: string | null): AgUiPublicEventPayload
 {
-	if (type === "message.started" || type === "message.completed") return _Strings(payload, ["messageId"]);
-	if (type === "message.delta") return _Strings(payload, ["messageId", "delta"]);
-	if (type === "tool.requested") return _Strings(payload, ["toolCallId", "toolCallName"]);
-	if (type === "tool.started" || type === "tool.completed") return _Tool(payload);
-	if (type === "tool.failed") return _Failure(payload, true);
-	if (type === "tool.recovery_required") return _ToolRecovery(payload);
-	if (type === "run.error") return _Failure(payload, false);
-	if (type === "run.failed" || type === "run.cancelled") return _Strings(payload, ["terminalReason", "failureCode"]);
+	if (type === RunEventTypes.MessageStarted || type === RunEventTypes.MessageCompleted) return _Strings(payload, ["messageId"]);
+	if (type === RunEventTypes.MessageDelta) return _Strings(payload, ["messageId", "delta"]);
+	if (type === RunEventTypes.ToolRequested) return _Strings(payload, ["toolCallId", "toolCallName"]);
+	if (type === RunEventTypes.ToolStarted || type === RunEventTypes.ToolCompleted) return _Tool(payload);
+	if (type === RunEventTypes.ToolFailed) return _Failure(payload, true);
+	if (type === RunEventTypes.ToolRecoveryRequired) return _ToolRecovery(payload);
+	if (type === RunEventTypes.RunError) return _Failure(payload, false);
+	if (type === RunEventTypes.RunFailed || type === RunEventTypes.RunCancelled) return _Strings(payload, ["terminalReason", "failureCode"]);
 	if (type === "conversation.message") return _Message(payload);
-	if (type === "a2ui.rendering.begun" || type === "a2ui.surface.updated" || type === "a2ui.data_model.updated") return _A2ui(payload, conversationId, runId);
+	if (type === RunEventTypes.A2uiRenderingBegun || type === RunEventTypes.A2uiSurfaceUpdated || type === RunEventTypes.A2uiDataModelUpdated) return _A2ui(payload, conversationId, runId);
 	if (type === "child.run.completed" || type === "child.run.failed" || type === "child.run.cancelled") return _ChildRun(type, payload, runId);
 	return {};
 }
