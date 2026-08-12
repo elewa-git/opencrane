@@ -97,6 +97,42 @@ describe("PrismaRunAdmissionRepository", function _describeAdmissionRepository()
 		expect(order).toEqual(["prepare", "build", "run", "snapshot", "outbox", "commit"]);
 	});
 
+	it("rolls back prepared child authority when snapshot compilation denies", async function _RollsBackPreparedAuthority()
+	{
+		const committedChildren: string[] = [];
+		const transaction = { $queryRaw: vi.fn().mockResolvedValue([]), agentRun: { findUnique: vi.fn().mockResolvedValue(null) } };
+		const prisma = { $transaction: vi.fn(async function _Transaction(callback: (client: typeof transaction) => Promise<unknown>)
+		{
+			const pendingChildren: string[] = [];
+			try
+			{
+				const result = await callback({ ...transaction, pendingChildren } as never);
+				committedChildren.push(...pendingChildren);
+				return result;
+			}
+			catch (error) { throw error; }
+		}) } as unknown as PrismaClient;
+		const repository = new PrismaRunAdmissionRepository(prisma);
+
+		await expect(repository.admit(_command(), async function _Deny() { return { outcome: "denied", reason: "persona_unavailable" } as const; }, undefined, async function _Prepare(context)
+		{
+			(context.prisma as unknown as { pendingChildren: string[] }).pendingChildren.push("child-1");
+		})).resolves.toEqual({ outcome: "denied", reason: "persona_unavailable" });
+		expect(committedChildren).toEqual([]);
+	});
+
+	it("does not replay preparation for an existing exact run", async function _SkipsPrepareForIdempotentRun()
+	{
+		const snapshot = _snapshot();
+		const transaction = { $queryRaw: vi.fn().mockResolvedValue([]), agentRun: { findUnique: vi.fn().mockResolvedValue({ id: snapshot.runId, siloId: snapshot.siloId, agentServiceId: snapshot.agentServiceId, conversationId: snapshot.conversationId, trigger: "Interactive", delegatedUserId: snapshot.identitySnapshot.executionSubjectId, inputSnapshotDigest: snapshot.digest }) }, runInputSnapshot: { findUnique: vi.fn().mockResolvedValue({ ...snapshot, compiledAt: new Date(snapshot.compiledAt) }) } };
+		const prisma = { $transaction: vi.fn(async function _Transaction(callback: (client: typeof transaction) => Promise<unknown>) { return callback(transaction); }) } as unknown as PrismaClient;
+		const repository = new PrismaRunAdmissionRepository(prisma);
+		const prepare = vi.fn();
+
+		await expect(repository.admit(_command(), async function _UnexpectedBuild() { throw new Error("unexpected build"); }, undefined, prepare)).resolves.toEqual({ outcome: "idempotent", snapshot });
+		expect(prepare).not.toHaveBeenCalled();
+	});
+
 	it("returns a null-conversation snapshot before a later retry can load or compile a new request instant", async function _returnsIdempotent()
 	{
 		const snapshot = { ..._snapshot(), conversationId: null };

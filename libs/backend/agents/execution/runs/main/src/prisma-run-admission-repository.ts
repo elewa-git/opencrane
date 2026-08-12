@@ -8,6 +8,21 @@ import type { JsonValue } from "@opencrane/util";
 import { RunAdmissionDenialReasons } from "./run-admission.types.js";
 import type { InitialRunAuthority, RunAdmissionBuild, RunAdmissionBuildResult, RunAdmissionClock, RunAdmissionCommand, RunAdmissionCommit, RunAdmissionPrepare, RunAdmissionRepository, RunAdmissionResult, RunAdmissionTransaction } from "./run-admission.types.js";
 
+/** Carries an expected refusal across the Prisma rollback boundary after preparation wrote rows. */
+class _PreparedAdmissionDenied<TDenial> extends Error
+{
+	/** Refusal produced by snapshot compilation. */
+	readonly reason: TDenial;
+
+	/** Creates the rollback signal without putting refusal detail in its Error message. */
+	constructor(reason: TDenial)
+	{
+		super("prepared run admission denied");
+		this.name = "PreparedAdmissionDenied";
+		this.reason = reason;
+	}
+}
+
 /**
  * Prisma-backed authority for the first durable instant of a logical run.
  * It serialises the caller-visible idempotency key before compilation and commits the run, its sole
@@ -66,7 +81,11 @@ export class PrismaRunAdmissionRepository implements RunAdmissionRepository
 				const admittedAt = admittedAtDate.toISOString();
 				if (prepare) await prepare({ prisma: transaction, admittedAt, admittedAtEpochMs: admittedAtDate.getTime() });
 				const compiled = await build({ prisma: transaction, admittedAt, admittedAtEpochMs: admittedAtDate.getTime() });
-				if (compiled.outcome === "denied") return compiled;
+				if (compiled.outcome === "denied")
+				{
+					if (prepare) throw new _PreparedAdmissionDenied(compiled.reason);
+					return compiled;
+				}
 				if (!_matchesCommand(compiled.value, command) || !_matchesExecutionIdentity(compiled.value.authority, compiled.value.snapshot, command)) return { outcome: "denied", reason: RunAdmissionDenialReasons.AuthorityConflict };
 
 				// 3. Insert both sides of the deferred snapshot relation plus ordered acceptance and dispatch events in one commit.
@@ -77,6 +96,7 @@ export class PrismaRunAdmissionRepository implements RunAdmissionRepository
 		}
 		catch (error)
 		{
+			if (error instanceof _PreparedAdmissionDenied) return { outcome: "denied", reason: error.reason as TDenial };
 			if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002")
 			{
 				try
