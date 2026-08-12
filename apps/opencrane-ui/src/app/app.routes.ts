@@ -42,6 +42,32 @@ export const APP_ROUTES: Routes =
 			});
 		}
 	},
+	{
+		// Canonical first-class Agent-session child conversation route. The parent
+		// workspace from #351 will write exact focus and scroll restoration state.
+		path: "chats/:parentConversationId/threads/:childConversationId",
+		canActivate: [___OperatorAccessGuard],
+		loadComponent: function loadAgentThreadRoute()
+		{
+			return import("./agent-thread/agent-thread-route.component").then(function pickAgentThreadRoute(m)
+			{
+				return m.AgentThreadRouteComponent;
+			});
+		}
+	},
+	{
+		// Non-disclosing fallback. #351 replaces this component with the complete
+		// direct/group conversation workspace without changing child URLs.
+		path: "chats",
+		canActivate: [___OperatorAccessGuard],
+		loadComponent: function loadChatsPending()
+		{
+			return import("./chats/chats-pending.component").then(function pickChatsPending(m)
+			{
+				return m.ChatsPendingComponent;
+			});
+		}
+	},
 	{ path: "", pathMatch: "full", redirectTo: "onboarding" },
 	{
 		path: "**",
