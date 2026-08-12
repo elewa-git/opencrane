@@ -1,5 +1,5 @@
 <label class="elicitation-control" for="elicitation-free-text">
 	<strong>{{ body().prompt }}</strong>
-	<textarea id="elicitation-free-text" rows="4" [maxlength]="body().maximumLength" [disabled]="disabled()" [value]="value()" (input)="update($event)"></textarea>
+	<textarea id="elicitation-free-text" rows="4" [maxLength]="body().maximumLength" [disabled]="disabled()" [value]="value()" (input)="update($event)"></textarea>
 	<small>{{ value().length }} / {{ body().maximumLength }}</small>
 </label>
