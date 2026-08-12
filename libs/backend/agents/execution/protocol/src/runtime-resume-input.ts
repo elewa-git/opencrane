@@ -42,6 +42,11 @@ function _ElicitationResults(value: JsonValue): readonly RuntimeElicitationResul
 		if (typeof requestId !== "string" || typeof requestKey !== "string" || !_ElicitationOutcome(outcome)) return null;
 		if (outcome === "answered")
 		{
+			if (Object.keys(record).length === 3)
+			{
+				results.push({ requestId, requestKey, outcome });
+				continue;
+			}
 			if (Object.keys(record).length !== 4 || !("response" in record)) return null;
 			results.push({ requestId, requestKey, outcome, response: record["response"] });
 			continue;

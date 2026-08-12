@@ -398,13 +398,15 @@ describe("PrismaRuntimeDispatchAuthority", function _describeDispatchAuthority()
 		expect(await context.authority.__NextCommand(_identity, _open, 2)).toBeNull();
 	});
 
-	it("does not expose a protected A2UI result payload to the runtime", async function _ProtectsA2uiResult()
+	it("redelivers a protected A2UI result without exposing its response", async function _ProtectsA2uiResult()
 	{
 		const context = _authority({ runState: "Running", savedElicitationResults: [{ requestId: "request-1", requestKey: "action-1", purpose: "A2uiAction", state: "Answered", payload: { actionDigest: "sha256:protected", response: { kind: "approval", approved: true } } }] });
 		await context.authority.__NextCommand(_identity, _open, 0);
 		const resume = await context.authority.__NextCommand(_identity, _open, 1);
+		const redelivered = await context.authority.__NextCommand(_identity, _open, 1);
 
 		expect(resume?.kind === "resume_attempt" ? resume.payload.elicitationResults : null).toEqual([{ requestId: "request-1", requestKey: "action-1", outcome: "answered" }]);
+		expect(redelivered).toEqual(resume);
 	});
 
 	it("mints one fenced resume carrying pending steering and consumes it only after persistence", async function _mintsSteeringResume()
