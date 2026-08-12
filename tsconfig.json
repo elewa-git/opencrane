@@ -223,6 +223,9 @@
       "@opencrane/features/conversation-elicitation": [
         "./libs/frontend/features/conversation-elicitation/src/index.ts"
       ],
+      "@opencrane/features/agent-threads": [
+        "./libs/frontend/features/agent-threads/src/index.ts"
+      ],
       "@opencrane/features/onboarding": [
         "./libs/frontend/features/onboarding/src/index.ts"
       ],
@@ -285,6 +288,9 @@
     },
     {
       "path": "./libs/frontend/features/conversation-elicitation"
+    },
+    {
+      "path": "./libs/frontend/features/agent-threads"
     },
     {
       "path": "./libs/frontend/features/notifications"

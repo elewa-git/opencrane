@@ -1,0 +1,5 @@
+<article class="delivery" [attr.data-delivery-id]="delivery().id" [attr.data-kind]="delivery().kind">
+	<p-message [severity]="severity()"><strong>{{ delivery().label }}</strong><span>{{ delivery().detail }}</span><small>{{ delivery().timestampLabel }}</small></p-message>
+	<div class="delivery__rich"><ng-content select="[agent-thread-delivery-rich]" /></div>
+	@if (delivery().kind === kinds.Failure) { <wo-collapsible-section [sectionId]="'agent-thread-delivery-technical-' + delivery().id" title="Technical details"><ng-content select="[agent-thread-delivery-technical]" /></wo-collapsible-section> }
+</article>

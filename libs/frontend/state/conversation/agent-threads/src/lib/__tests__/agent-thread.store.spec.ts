@@ -7,7 +7,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest
 import { AgentThreadStore } from "../agent-thread.store.js";
 import { AgentThreadGatewayError, AgentThreadGatewayErrorKinds } from "../agent-thread-gateway.errors.js";
 import { AGENT_THREAD_GATEWAY } from "../agent-thread.gateway.js";
-import { AgentThreadAccessStates, AgentThreadRecoveryStates, AgentThreadRouteStates, AgentThreadRunStates, AgentThreadSummaryStates, type AgentThreadGateway, type AgentThreadSnapshot } from "../agent-thread.types.js";
+import { AgentThreadAccessStates, AgentThreadRecoveryStates, AgentThreadRouteStates, AgentThreadRunStates, AgentThreadSummaryStates, AgentThreadTimelineEntryKinds, type AgentThreadGateway, type AgentThreadSnapshot } from "../agent-thread.types.js";
 
 /** Build one complete display-safe snapshot for store tests. */
 function _Snapshot(overrides: Partial<AgentThreadSnapshot> = {}): AgentThreadSnapshot
@@ -18,9 +18,10 @@ function _Snapshot(overrides: Partial<AgentThreadSnapshot> = {}): AgentThreadSna
 		origin: { parentTitle: "Launch planning", parentMessageId: "message-root", invokedByName: "Alex Kimani", invokedByInitials: "AK", ask: "@agent compare the counterproposal", timestampLabel: "11:07" },
 		summary: { childConversationId: "child-1", state: AgentThreadSummaryStates.Working, access: AgentThreadAccessStates.Available, title: "Compare the counterproposal", preview: "Reviewing the commercial terms", unreadCount: 0, participantInitials: ["AK", "JR"], replyCount: 2 },
 		recovery: AgentThreadRecoveryStates.Live,
-		messages: [{ id: "message-1", authorName: "Nova", authorInitials: "N", authoredByAgent: true, timestampLabel: "11:08", body: "I am comparing the terms." }],
-		runs: [{ runId: "run-1", ordinal: 1, state: AgentThreadRunStates.Working, label: "Run 1" }],
-		deliveries: [],
+		timeline: [
+			{ kind: AgentThreadTimelineEntryKinds.RunBoundary, id: "boundary-run-1", run: { runId: "run-1", ordinal: 1, state: AgentThreadRunStates.Working, label: "Run 1" } },
+			{ kind: AgentThreadTimelineEntryKinds.Message, id: "message-1", message: { id: "message-1", authorName: "Nova", authorInitials: "N", authoredByAgent: true, timestampLabel: "11:08", body: "I am comparing the terms." } }
+		],
 		cursor: "opaque-cursor",
 		canSendFollowUp: true,
 		...overrides

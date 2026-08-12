@@ -109,6 +109,17 @@ export enum AgentThreadDeliveryKinds
 	Asset = "asset"
 }
 
+/** Ordered child timeline entry categories. */
+export enum AgentThreadTimelineEntryKinds
+{
+	/** A serial run began or changed lifecycle state. */
+	RunBoundary = "run_boundary",
+	/** A participant or Agent message. */
+	Message = "message",
+	/** An append-only delivery to the immediate parent. */
+	Delivery = "delivery"
+}
+
 /** Exact typed intent for one authorized parent mention. */
 export interface AgentThreadCreateIntent
 {
@@ -216,6 +227,12 @@ export interface AgentThreadSummaryPresentation
 	readonly replyCount: number;
 }
 
+/** One ordered child timeline entry with exactly one presentation payload. */
+export type AgentThreadTimelineEntry =
+	| { readonly kind: AgentThreadTimelineEntryKinds.RunBoundary; readonly id: string; readonly run: AgentThreadRunBoundaryPresentation }
+	| { readonly kind: AgentThreadTimelineEntryKinds.Message; readonly id: string; readonly message: AgentThreadMessagePresentation }
+	| { readonly kind: AgentThreadTimelineEntryKinds.Delivery; readonly id: string; readonly delivery: AgentThreadDeliveryPresentation };
+
 /** Full authorized child view adopted atomically by the browser store. */
 export interface AgentThreadSnapshot
 {
@@ -229,12 +246,8 @@ export interface AgentThreadSnapshot
 	readonly summary: AgentThreadSummaryPresentation;
 	/** Independent delivery recovery state. */
 	readonly recovery: AgentThreadRecoveryStates;
-	/** Ordered child messages. */
-	readonly messages: readonly AgentThreadMessagePresentation[];
-	/** Ordered serial run boundaries. */
-	readonly runs: readonly AgentThreadRunBoundaryPresentation[];
-	/** Ordered immediate-parent deliveries. */
-	readonly deliveries: readonly AgentThreadDeliveryPresentation[];
+	/** One exact ordered timeline across messages, serial run boundaries, and deliveries. */
+	readonly timeline: readonly AgentThreadTimelineEntry[];
 	/** Opaque cursor accepted only by the gateway implementation. */
 	readonly cursor: string;
 	/** Whether the current state permits another serial follow-up. */

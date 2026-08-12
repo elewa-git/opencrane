@@ -1,0 +1,9 @@
+<section class="mention-control" [attr.data-state]="state()" aria-label="Invoke an Agent for this group message">
+	@if (state() === states.Available || state() === states.Submitting) {
+		<p-autocomplete [ngModel]="query()" (ngModelChange)="queryChange.emit($event)" [suggestions]="suggestions()" (completeMethod)="requestSuggestions($event)" [disabled]="state() === states.Submitting" ariaLabel="Agent mention" />
+		<p-button label="Start Agent thread" icon="pi pi-sparkles" [loading]="state() === states.Submitting" [disabled]="state() !== states.Available" (onClick)="invoke()" />
+	}
+	@if (state() === states.Queued) { <p-message severity="warn" text="The Agent thread exists. Its first run is waiting for capacity." /> }
+	@if (state() === states.Unauthorized) { <p-message severity="error" text="You cannot invoke an Agent in this group." /> }
+	@if (state() === states.NoAgent) { <p-message severity="secondary" text="No Agent is available in this group." /> }
+</section>

@@ -1,0 +1,12 @@
+<article class="thread-summary" [attr.data-state]="summary().state" [attr.data-access]="summary().access">
+	<div class="thread-summary__avatars" aria-label="Agent thread participants">
+		@for (initials of summary().participantInitials.slice(0, 3); track $index) { <wo-avatar-circle [initials]="initials" [tone]="avatarTone" [size]="avatarSize" /> }
+	</div>
+	<div class="thread-summary__body">
+		<div class="thread-summary__title"><strong>{{ summary().title }}</strong>@if (summary().unreadCount > 0) { <p-badge [value]="summary().unreadCount.toString()" severity="info" /> }</div>
+		<wo-conversation-status-line [status]="status()" />
+		<small>{{ summary().replyCount }} {{ summary().replyCount === 1 ? 'reply' : 'replies' }}</small>
+	</div>
+	@if (summary().access === accessStates.Available) { <p-button label="Open Agent thread" icon="pi pi-chevron-right" iconPos="right" [text]="true" (onClick)="open()" /> }
+	@else { <wo-scope-chip label="Restricted" [tone]="restrictedTone" /> }
+</article>

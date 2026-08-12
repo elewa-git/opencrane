@@ -1,0 +1,37 @@
+<main class="agent-thread-page" [attr.data-route-state]="store.routeState()">
+	<header class="agent-thread-page__header">
+		<p-breadcrumb [model]="breadcrumbs()" />
+		<button type="button" class="agent-thread-page__back" (click)="returnToParent()">← Back</button>
+	</header>
+	@switch (store.routeState()) {
+		@case (routeStates.Loading) { <section class="agent-thread-page__loading" role="status" aria-live="polite">Loading Agent thread…</section> }
+		@case (routeStates.Unavailable) { <wo-agent-thread-unavailable (returnRequested)="chatsRequested.emit()" /> }
+		@case (routeStates.AccessChanged) { <wo-agent-thread-access-changed (returnRequested)="returnToParent()" /> }
+		@case (routeStates.Ready) {
+			@if (store.snapshot(); as snapshot) {
+				<section class="agent-thread-page__workspace" aria-labelledby="agent-thread-title">
+					<div class="agent-thread-page__title"><div><small>Agent thread</small><h1 id="agent-thread-title">{{ snapshot.summary.title }}</h1></div><span>{{ snapshot.summary.state }}</span></div>
+					<wo-agent-thread-origin [origin]="snapshot.origin" />
+					@if (snapshot.recovery === recoveryStates.Reconnecting) { <p-message severity="warn" text="Reconnecting from the last received update. Your draft is still here." /> }
+					<section class="agent-thread-page__timeline" aria-label="Agent thread messages and runs">
+						@for (entry of snapshot.timeline; track entry.id) {
+							@switch (entry.kind) {
+								@case (entryKinds.RunBoundary) { <wo-agent-thread-run-boundary [run]="entry.run" /> }
+								@case (entryKinds.Message) { <wo-conversation-message [message]="messagePresentation(entry.message)" /> }
+								@case (entryKinds.Delivery) { <wo-agent-thread-delivery [delivery]="entry.delivery" /> }
+							}
+						}
+					</section>
+					@if (activityRows().length > 0) { <wo-conversation-activity [rows]="activityRows()" (targetRequested)="activityTargetRequested.emit($event)" /> }
+					@if (elicitation(); as request) { <wo-conversation-elicitation-card [elicitation]="request" [draft]="elicitationDraft()" [busy]="elicitationBusy()" [error]="elicitationError()" (draftSelected)="elicitationDraftSelected.emit($event)" (submitRequested)="elicitationSubmitRequested.emit()" /> }
+					@if (asset(); as item) { <wo-conversation-asset-card [item]="item" (actionRequested)="assetActionRequested.emit($event)" /> }
+					@if (a2uiSurface(); as surface) { <wo-a2ui-canvas [presentation]="surface" (displayedAction)="a2uiActionRequested.emit($event)" /> }
+					@if (latestRunIsQueued()) { <wo-agent-thread-queued /> }
+					@else if (store.canSendFollowUp()) { <wo-agent-thread-available /> }
+					@if (store.error(); as error) { <p-message severity="error" [text]="error" /> }
+					<wo-conversation-composer label="Follow up in this Agent thread" placeholder="Ask a follow-up…" [draft]="store.draft()" [state]="composerState()" (draftChange)="updateDraft($event)" (submitted)="submitFollowUp()" />
+				</section>
+			}
+		}
+	}
+</main>
