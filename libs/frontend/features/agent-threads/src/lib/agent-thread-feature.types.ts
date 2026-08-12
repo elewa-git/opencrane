@@ -1,10 +1,19 @@
-/** Parent-owned intent to create or reopen the child for one exact root mention. */
-export interface AgentThreadMentionIntent
+/** One display-safe Agent service that an ordinary group composer may target. */
+export interface AgentThreadAgentOption
 {
-	/** Parent group conversation coordinate. */
-	readonly parentConversationId: string;
-	/** Exact root `@agent` message coordinate. */
-	readonly parentMessageId: string;
+	/** Stable service coordinate submitted only as the atomic message target. */
+	readonly agentServiceId: string;
+	/** Display-safe service name shown in the mention menu. */
+	readonly label: string;
+}
+
+/** Selected Agent target returned to the ordinary group composer before it submits. */
+export interface AgentThreadMentionTarget
+{
+	/** Stable service coordinate sent together with the ordinary group message. */
+	readonly agentServiceId: string;
+	/** Display-safe selected label retained in the controlled composer. */
+	readonly label: string;
 }
 
 /** Parent-owned intent to open one exact child route and remember restoration coordinates. */

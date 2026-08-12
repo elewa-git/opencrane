@@ -9,4 +9,4 @@ export { AgentThreadRunBoundaryComponent } from "./lib/agent-thread-run-boundary
 export { AgentThreadSummaryComponent } from "./lib/agent-thread-summary.component.js";
 export { AgentThreadUnavailableComponent } from "./lib/agent-thread-unavailable.component.js";
 export { __AgentThreadMessagePresentation, __AgentThreadRunStatusPresentation, __AgentThreadSummaryStatusPresentation } from "./lib/agent-thread.mapper.js";
-export type { AgentThreadMentionIntent, AgentThreadOpenIntent } from "./lib/agent-thread-feature.types.js";
+export type { AgentThreadAgentOption, AgentThreadMentionTarget, AgentThreadOpenIntent } from "./lib/agent-thread-feature.types.js";

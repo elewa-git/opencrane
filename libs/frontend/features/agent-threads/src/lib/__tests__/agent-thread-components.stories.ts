@@ -10,6 +10,14 @@ import { AgentThreadMentionControlComponent } from "../agent-thread-mention-cont
 import { AgentThreadPageComponent } from "../agent-thread-page.component.js";
 import { AgentThreadSummaryComponent } from "../agent-thread-summary.component.js";
 import { AgentThreadUnavailableComponent } from "../agent-thread-unavailable.component.js";
+import type { AgentThreadAgentOption } from "../agent-thread-feature.types.js";
+
+/** Display-safe services offered by the controlled group-composer selector. */
+const _AGENT_OPTIONS: readonly AgentThreadAgentOption[] =
+[
+	{ agentServiceId: "service-nova", label: "Nova pod assistant" },
+	{ agentServiceId: "service-research", label: "Research assistant" }
+];
 
 /** Build one compact parent summary state. */
 function _Summary(state: AgentThreadSummaryStates, overrides: Partial<AgentThreadSummaryPresentation> = {}): AgentThreadSummaryPresentation
@@ -136,7 +144,7 @@ export const MentionAdmissionStates: Story =
 	tags: ["visual-test"],
 	render: function render()
 	{
-		return { props: { states: Object.values(AgentThreadAdmissionStates), invoked: fn() }, template: `<div style="display:grid;gap:14px;max-width:780px;padding:20px">@for (state of states; track state) { <div><strong>{{ state }}</strong><wo-agent-thread-mention-control parentConversationId="group-launch" parentMessageId="root-ask" [state]="state" [query]="'@agent with a deliberately long mention query for keyboard and overflow coverage'" (invoked)="invoked($event)" /></div> }</div>` };
+		return { props: { states: Object.values(AgentThreadAdmissionStates), options: _AGENT_OPTIONS, selected: fn() }, template: `<div style="display:grid;gap:14px;max-width:780px;padding:20px">@for (state of states; track state) { <div><strong>{{ state }}</strong><wo-agent-thread-mention-control [state]="state" [suggestions]="options" (targetChange)="selected($event)" /></div> }</div>` };
 	},
 	play: async function play({ canvasElement })
 	{
