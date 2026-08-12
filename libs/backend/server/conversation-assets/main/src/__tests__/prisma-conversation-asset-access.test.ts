@@ -1,4 +1,4 @@
-import { ArtifactUploadLeaseState } from "@prisma/client";
+import { ArtifactUploadLeaseState, ConversationLifecycle } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
 
 import { PrismaConversationAssetRepository } from "../prisma-conversation-asset-repository.js";
@@ -64,6 +64,18 @@ describe("PrismaConversationAssetRepository access continuity", function _Suite(
 
 		expect(transaction.conversationParticipant.findFirst).toHaveBeenCalledWith({ where: { conversationId: "conversation-1", userId: "user-1", accessEndedPosition: null, conversation: { siloId: "silo-1" } } });
 		expect(transaction.conversationAsset.findMany).toHaveBeenCalledOnce();
+	});
+
+	it("denies a reservation when the participant conversation is closed", async function _DeniesClosedMutation()
+	{
+		const findFirst = vi.fn().mockImplementation(async function _Participant({ where }: { readonly where: { readonly conversation: { readonly lifecycle?: ConversationLifecycle } } }) { return where.conversation.lifecycle === ConversationLifecycle.Open ? null : { id: "participant-1" }; });
+		const transaction = { conversationParticipant: { findFirst }, orgMembership: { count: vi.fn().mockResolvedValue(1) }, conversationAsset: { findUnique: vi.fn() } };
+
+		const result = await new PrismaConversationAssetRepository(transaction as never).reserve(_CALLER, "conversation-1", { idempotencyKey: "upload-1", displayName: "brief.pdf", mediaType: "application/pdf", byteLength: 5, contentAddress: _ADDRESS });
+
+		expect(result).toEqual({ outcome: "denied", reason: "conversation_unavailable" });
+		expect(findFirst).toHaveBeenCalledWith({ where: { conversationId: "conversation-1", userId: "user-1", accessEndedPosition: null, conversation: { siloId: "silo-1", lifecycle: ConversationLifecycle.Open } } });
+		expect(transaction.conversationAsset.findUnique).not.toHaveBeenCalled();
 	});
 
 	it("does not issue an upload target after participant access ends", async function _DeniesRevokedTarget()
