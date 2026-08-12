@@ -13,15 +13,21 @@ import uuid
 from ..constants import PROTOCOL_VERSION
 from ..observability import log
 
+# Bound the model-derived scalar fields owned here before transport. External-action arguments and
+# complete A2UI envelopes retain their separate validation and admission boundaries.
 MAX_TEXT_DELTA_LENGTH = 16_384
 MAX_COUNTER_VALUE = 2_147_483_647
 
+# A2UI is an allowlist of complete adapter-owned envelopes. Adding a framework event here is a
+# protocol decision: unknown UI events must remain invisible rather than acquiring guessed shapes.
 _A2UI_EVENT_TYPES = {
     "a2ui_rendering_begun": "a2ui.rendering.begun",
     "a2ui_surface_updated": "a2ui.surface.updated",
     "a2ui_data_model_updated": "a2ui.data_model.updated",
 }
 
+# Provider messages are intentionally absent. Only bounded class-like categories cross the process
+# boundary, so an exception cannot smuggle a URL, credential fragment, or prompt into durable state.
 _SAFE_ERROR_TYPES = {
     "AuthenticationError",
     "ConnectionError",
@@ -48,12 +54,16 @@ def command_coordinates(
     assignment = command.get("assignment")
     command_id = command.get("commandId")
     fence = command.get("fence")
+    # Validate the whole outer authority tuple before reading nested coordinates. Partial fallback
+    # would let a candidate inherit identity from local process state instead of the accepted command.
     if not isinstance(assignment, dict) or not isinstance(command_id, str) or not isinstance(fence, int):
         return None
     run_id = assignment.get("runId")
     attempt = assignment.get("attempt")
     if not isinstance(run_id, str) or not isinstance(attempt, int):
         return None
+    # Coordinates are copied rather than retaining the command mapping. Downstream candidate shaping
+    # therefore cannot accidentally echo compiled input or other command-only material.
     return {
         "protocolVersion": PROTOCOL_VERSION,
         "runtimeInstanceId": runtime_instance_id,
@@ -75,6 +85,8 @@ def candidate(
     after an ambiguous network loss; callers must never create a replacement for that replay because
     the stable ``candidateId`` is the control plane's idempotency coordinate.
     """
+    # Candidate identity belongs to the logical event, not an HTTP attempt. The transport may resend
+    # this returned object unchanged only where the server explicitly permits replay.
     return {
         **coordinates,
         "candidateId": str(uuid.uuid4()),
@@ -90,6 +102,8 @@ def arguments_digest(arguments: object) -> str:
     Sorted keys and compact separators remove presentation differences from JSON objects. The
     ``sha256:`` prefix makes the digest algorithm explicit in the wire value.
     """
+    # The server independently canonicalizes the parsed JSON value. Hashing the raw model string
+    # would make whitespace and object-member order security-significant even though JSON does not.
     canonical = json.dumps(arguments, sort_keys=True, separators=(",", ":"))
     return "sha256:" + hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
@@ -107,6 +121,8 @@ def external_action_candidate(
     invocation identifier, canonical argument digest, and parsed arguments so server authority can
     revalidate and either refuse, defer, or execute through its governed tool boundary.
     """
+    # This remains a proposal: including a revision id records which frozen grant was resolved, but
+    # does not transfer authorization or tool execution authority into the runtime.
     return {
         **coordinates,
         "candidateId": str(uuid.uuid4()),
@@ -127,6 +143,8 @@ def resolve_tool_revision(compiled_input: dict[str, object], tool_name: str) -> 
     tools = compiled_input.get("tools")
     if not isinstance(tools, list):
         return None
+    # Search only the command's frozen list. A similarly named tool in any mutable registry must not
+    # widen the authority of an already-admitted run.
     for tool in tools:
         if isinstance(tool, dict) and tool.get("name") == tool_name:
             revision = tool.get("toolRevisionId")
@@ -148,6 +166,8 @@ def tool_call_candidate(
     tool_name = neutral_event.get("toolName")
     tool_call_id = neutral_event.get("toolCallId")
     raw_arguments = neutral_event.get("arguments")
+    # Tool identity and arguments all originate in model output. Require the neutral adapter's exact
+    # string contract before doing any parsing or grant resolution.
     if (
         not isinstance(tool_name, str)
         or not isinstance(tool_call_id, str)
@@ -156,6 +176,8 @@ def tool_call_candidate(
         # Never include raw malformed fields in the error payload; they may contain model content.
         return candidate(coordinates, "run.error", {"reason": "malformed_tool_call"})
     try:
+        # Parsing establishes a deterministic JSON value for digesting; it is not schema validation
+        # and deliberately occurs before the server's authoritative admission checks.
         arguments = json.loads(raw_arguments)
     except json.JSONDecodeError:
         return candidate(
@@ -172,6 +194,8 @@ def tool_call_candidate(
             "tool.failed",
             {"reason": "unknown_tool", "toolInvocationId": tool_call_id},
         )
+    # Preserve the model's invocation id across proposal, durable execution, and resume matching.
+    # Generating a replacement id here would make a saved tool result impossible to bind safely.
     return external_action_candidate(
         coordinates,
         tool_revision_id,
@@ -194,6 +218,8 @@ def normalize_event(
     kind = neutral_event.get("type")
     if kind == "output_text":
         text = neutral_event.get("text")
+        # A malformed text payload becomes an empty bounded delta rather than serializing an
+        # arbitrary framework object. Message lifecycle ordering is added by the projector.
         return (
             "message.delta",
             {
@@ -202,6 +228,9 @@ def normalize_event(
             },
         )
     if kind == "usage":
+        # Usage is evidence reported by the model adapter, not local budget authority. Bound values
+        # accepted by Python's integer check and reduce invalid or negative counters to zero before
+        # the control plane records or evaluates them.
         return (
             "run.usage",
             {
@@ -210,6 +239,8 @@ def normalize_event(
             },
         )
     if kind == "error":
+        # Do not forward exception text. Even a familiar exception class can carry provider response
+        # bodies, request endpoints, or other secret-bearing context in its message.
         return (
             "run.error",
             {
@@ -231,9 +262,13 @@ def normalize_event(
 
 def _non_negative_int(value: object) -> int:
     """Coerce an untrusted framework usage counter to a safe non-negative integer."""
+    # Saturation preserves the signal that usage was large without allowing an unbounded framework
+    # integer to escape into the stable wire contract.
     return min(value, MAX_COUNTER_VALUE) if isinstance(value, int) and value >= 0 else 0
 
 
 def _safe_error_type(value: object) -> str:
     """Return a bounded class-like error label without provider messages or secret-bearing detail."""
+    # Collapse unknown labels to a stable category; echoing an arbitrary string would turn this
+    # allowlist into a provider-controlled logging channel.
     return value if isinstance(value, str) and value in _SAFE_ERROR_TYPES else "ModelLoopError"
