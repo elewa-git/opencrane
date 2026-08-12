@@ -1,6 +1,6 @@
 import type { AssembleRunInputSnapshotResult, SessionAssemblyRefusalReason } from "@opencrane/backend/agents/execution/inputs";
 import type { Logger } from "@opencrane/backend/observability";
-import type { RunAdmissionCommit, RunAdmissionConcurrencyDenialReasons } from "@opencrane/backend/agents/execution/runs";
+import type { RunAdmissionCommit, RunAdmissionConcurrencyDenialReasons, RunAdmissionPrepare } from "@opencrane/backend/agents/execution/runs";
 import type { MessageContentBlock } from "@opencrane/models/conversations";
 import type { RunAdmissionCapacityGate } from "./managed-run-admission.types.js";
 
@@ -120,7 +120,7 @@ export type PersonalRunIdempotencyResult =
 export interface PersonalRunSnapshotAssembler
 {
 	/** Assembles and persists the immutable input snapshot for an already-resolved personal conversation. */
-	(command: PersonalRunAdmissionCommand, authority: PersonalRunConversationAuthority, commit?: RunAdmissionCommit): Promise<AssembleRunInputSnapshotResult>;
+	(command: PersonalRunAdmissionCommand, authority: PersonalRunConversationAuthority, commit?: RunAdmissionCommit, prepare?: RunAdmissionPrepare): Promise<AssembleRunInputSnapshotResult>;
 }
 
 /**
@@ -235,6 +235,8 @@ export interface PersonalRunAdmissionPort
 	 * {@link PersonalRunAdmissionResult}.
 	 */
 	admitPersonalRun(command: PersonalRunAdmissionCommand, commit?: RunAdmissionCommit): Promise<PersonalRunAdmissionResult>;
+	/** Creates authority in the admission transaction before compiling one child Agent-thread run. */
+	admitFirstAgentThreadRun(command: PersonalRunAdmissionCommand, agentServiceId: string, prepare: RunAdmissionPrepare, commit: RunAdmissionCommit): Promise<PersonalRunAdmissionResult>;
 }
 
 /**

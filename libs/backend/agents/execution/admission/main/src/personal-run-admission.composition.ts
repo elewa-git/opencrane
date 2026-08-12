@@ -44,7 +44,7 @@ export function __CreatePersonalRunAdmissionPort(prisma: PrismaClient, capacityG
 		repository: personalAdmissionRepository,
 		capacityGate,
 		logger: ___CreateLogger("personal-run-admission"),
-		assemble: async function _assemble(command, authority, commit)
+		assemble: async function _assemble(command, authority, commit, prepare)
 		{
 			return __AssembleRunInputSnapshot({
 				runId: randomUUID(),
@@ -57,7 +57,7 @@ export function __CreatePersonalRunAdmissionPort(prisma: PrismaClient, capacityG
 				trigger: "interactive",
 				executionSubjectId: command.executionSubjectId,
 				requestIdempotencyKey: command.requestIdempotencyKey,
-			}, authorities, commit);
+			}, authorities, commit, prepare);
 		},
 	});
 }

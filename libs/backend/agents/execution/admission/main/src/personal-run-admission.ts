@@ -104,6 +104,23 @@ export function __CreatePersonalRunAdmissionPortWithGate(dependencies: PersonalR
 				runId: bounded.value.snapshot.runId,
 			};
 		},
+		async admitFirstAgentThreadRun(command, agentServiceId, prepare, commit): Promise<PersonalRunAdmissionResult>
+		{
+			// 1. Scope the public key to its new child conversation before entering the silo-wide keyspace.
+			const scopedCommand = { ...command, requestIdempotencyKey: _conversationScopedIdempotencyKey(command.conversationId, command.requestIdempotencyKey) };
+
+			// 2. Bound the full atomic child creation and input compilation behind the resolved service lane.
+			const bounded = await dependencies.capacityGate.execute(
+				{ siloId: command.siloId, agentServiceId },
+				async function _AssembleFirstThreadRun(): Promise<AssembleRunInputSnapshotResult>
+				{
+					return dependencies.assemble(scopedCommand, { agentServiceId }, commit, prepare);
+				},
+			);
+			if (bounded.outcome === RunAdmissionConcurrencyOutcomes.Rejected) return { outcome: PersonalRunAdmissionOutcomes.Denied, reason: bounded.reason };
+			if (bounded.value.outcome === SessionAssemblyOutcomes.Denied) return { outcome: PersonalRunAdmissionOutcomes.Denied, reason: bounded.value.reason };
+			return { outcome: bounded.value.admissionOutcome === RunInputSnapshotAdmissionOutcomes.Accepted ? PersonalRunAdmissionOutcomes.Accepted : PersonalRunAdmissionOutcomes.Idempotent, runId: bounded.value.snapshot.runId };
+		},
 	};
 }
 

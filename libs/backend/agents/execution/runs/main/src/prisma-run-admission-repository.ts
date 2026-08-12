@@ -6,7 +6,7 @@ import { ___CloneCanonicalJson } from "@opencrane/util";
 import type { JsonValue } from "@opencrane/util";
 
 import { RunAdmissionDenialReasons } from "./run-admission.types.js";
-import type { InitialRunAuthority, RunAdmissionBuild, RunAdmissionBuildResult, RunAdmissionClock, RunAdmissionCommand, RunAdmissionCommit, RunAdmissionRepository, RunAdmissionResult, RunAdmissionTransaction } from "./run-admission.types.js";
+import type { InitialRunAuthority, RunAdmissionBuild, RunAdmissionBuildResult, RunAdmissionClock, RunAdmissionCommand, RunAdmissionCommit, RunAdmissionPrepare, RunAdmissionRepository, RunAdmissionResult, RunAdmissionTransaction } from "./run-admission.types.js";
 
 /**
  * Prisma-backed authority for the first durable instant of a logical run.
@@ -39,7 +39,7 @@ export class PrismaRunAdmissionRepository implements RunAdmissionRepository
 	 * Returns the first frozen snapshot for duplicate delivery, otherwise compiles under the service
 	 * lock and exposes an accepted result only after every run/snapshot/outbox write can commit.
 	 */
-	async admit<TDenial>(command: RunAdmissionCommand, build: (transaction: RunAdmissionTransaction) => Promise<RunAdmissionBuildResult<TDenial>>, commit?: RunAdmissionCommit): Promise<RunAdmissionResult<TDenial>>
+	async admit<TDenial>(command: RunAdmissionCommand, build: (transaction: RunAdmissionTransaction) => Promise<RunAdmissionBuildResult<TDenial>>, commit?: RunAdmissionCommit, prepare?: RunAdmissionPrepare): Promise<RunAdmissionResult<TDenial>>
 	{
 		const clock = this.clock;
 		try
@@ -64,6 +64,7 @@ export class PrismaRunAdmissionRepository implements RunAdmissionRepository
 				await transaction.$queryRaw(Prisma.sql`SELECT "id" FROM "agent_services" WHERE "id" = ${command.agentServiceId} AND "silo_id" = ${command.siloId} FOR UPDATE`);
 				const admittedAtDate = clock.now();
 				const admittedAt = admittedAtDate.toISOString();
+				if (prepare) await prepare({ prisma: transaction, admittedAt, admittedAtEpochMs: admittedAtDate.getTime() });
 				const compiled = await build({ prisma: transaction, admittedAt, admittedAtEpochMs: admittedAtDate.getTime() });
 				if (compiled.outcome === "denied") return compiled;
 				if (!_matchesCommand(compiled.value, command) || !_matchesExecutionIdentity(compiled.value.authority, compiled.value.snapshot, command)) return { outcome: "denied", reason: RunAdmissionDenialReasons.AuthorityConflict };

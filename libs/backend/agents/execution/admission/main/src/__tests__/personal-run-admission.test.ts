@@ -60,6 +60,25 @@ describe("personal run admission", function _describePersonalRunAdmission()
 		expect(assemble.mock.calls[1]?.[0].requestIdempotencyKey).toBe(secondKey);
 	});
 
+	it("admits a first Agent-thread run without pre-reading a child that is created in the same transaction", async function _AdmitsFirstThreadRun()
+	{
+		const prepare = vi.fn();
+		const commit = vi.fn();
+		const assemble = vi.fn(async function _Assemble(command: PersonalRunAdmissionCommand, authority: { readonly agentServiceId: string }, actualCommit, actualPrepare)
+		{
+			expect(authority.agentServiceId).toBe("service-1");
+			expect(actualPrepare).toBe(prepare);
+			expect(actualCommit).toBe(commit);
+			return { outcome: "assembled", admissionOutcome: "accepted", snapshot: { runId: command.conversationId } } as never;
+		});
+		const dependencies = _Dependencies({ assemble });
+		const port = __CreatePersonalRunAdmissionPortWithGate(dependencies);
+
+		await expect(port.admitFirstAgentThreadRun(_Command(), "service-1", prepare, commit)).resolves.toEqual({ outcome: PersonalRunAdmissionOutcomes.Accepted, runId: "conversation-1" });
+		expect(dependencies.repository.resolve).not.toHaveBeenCalled();
+		expect(dependencies.repository.resolveConversation).not.toHaveBeenCalled();
+	});
+
 	it("preserves exact retry semantics after conversation-scoping the public message key", async function _preservesScopedRetry()
 	{
 		const keys: string[] = [];

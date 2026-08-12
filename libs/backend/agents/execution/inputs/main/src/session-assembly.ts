@@ -1,5 +1,5 @@
 import { __DigestRunInputSnapshot } from "@opencrane/backend/agents/execution/runs";
-import type { InitialRunAuthority, RunAdmissionCommit } from "@opencrane/backend/agents/execution/runs";
+import type { InitialRunAuthority, RunAdmissionCommit, RunAdmissionPrepare } from "@opencrane/backend/agents/execution/runs";
 import type { RunInputSnapshot, RunInputSnapshotIntegrationAssignment } from "@opencrane/contracts";
 import { __AreReviewedIntegrationToolDefinitionsValid, type ReviewedIntegrationToolDefinition } from "@opencrane/models/agents";
 import { ___CloneCanonicalJson, ___SortBy } from "@opencrane/util";
@@ -46,7 +46,7 @@ const _SNAPSHOT_VERSION = 1;
  * @see SessionAssemblyRefusalReason
  * @see RunInputSnapshotAdmissionOutcomes
  */
-export async function __AssembleRunInputSnapshot(command: SessionAssemblyCommand, authorities: SessionAssemblyAuthorities, commit?: RunAdmissionCommit): Promise<AssembleRunInputSnapshotResult>
+export async function __AssembleRunInputSnapshot(command: SessionAssemblyCommand, authorities: SessionAssemblyAuthorities, commit?: RunAdmissionCommit, prepare?: RunAdmissionPrepare): Promise<AssembleRunInputSnapshotResult>
 {
 	// 1. Reject a command with blank or missing ids first, so no authority read can match rows outside this run.
 	if (!_isCommandValid(command)) return { outcome: "denied", reason: "invalid_command" };
@@ -88,7 +88,7 @@ export async function __AssembleRunInputSnapshot(command: SessionAssemblyCommand
 		if (budget.outcome === "denied") return budget;
 		// 8. Compile the immutable snapshot only after every source has re-checked its data inside this transaction.
 		return { outcome: "ready", value: { authority: run.value, snapshot: _compileSnapshot(command, transaction.admittedAt, run.value, persona.value, conversation.value, preferences.value, memory.value, tools.value, budget.value.budgetPolicy, identity.value) } } as const;
-	}, commit);
+	}, commit, prepare);
 	if (admitted.outcome === "denied") return { outcome: "denied", reason: _publicReason(admitted.reason) };
 	return { outcome: "assembled", admissionOutcome: admitted.outcome, snapshot: admitted.snapshot };
 }

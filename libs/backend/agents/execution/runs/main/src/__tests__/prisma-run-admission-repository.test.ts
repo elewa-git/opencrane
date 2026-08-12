@@ -82,6 +82,21 @@ describe("PrismaRunAdmissionRepository", function _describeAdmissionRepository()
 		expect(order).toEqual(["run", "snapshot", "outbox", "message"]);
 	});
 
+	it("prepares child authority before compilation and commits remaining writes last", async function _PreparesChildAuthority()
+	{
+		const order: string[] = [];
+		const transaction = { $queryRaw: vi.fn().mockResolvedValue([]), agentRun: { findUnique: vi.fn().mockResolvedValue(null), create: vi.fn(async function _CreateRun() { order.push("run"); }) }, runInputSnapshot: { create: vi.fn(async function _CreateSnapshot() { order.push("snapshot"); }) }, outboxEvent: { createMany: vi.fn(async function _CreateOutbox() { order.push("outbox"); }) } };
+		const prisma = { $transaction: vi.fn(async function _Transaction(callback: (client: typeof transaction) => Promise<unknown>) { return callback(transaction); }) } as unknown as PrismaClient;
+		const repository = new PrismaRunAdmissionRepository(prisma);
+
+		await expect(repository.admit(_command(), async function _Build()
+		{
+			order.push("build");
+			return { outcome: "ready", value: { authority: _authority(), snapshot: _snapshot() } } as const;
+		}, async function _Commit() { order.push("commit"); }, async function _Prepare() { order.push("prepare"); })).resolves.toMatchObject({ outcome: "accepted" });
+		expect(order).toEqual(["prepare", "build", "run", "snapshot", "outbox", "commit"]);
+	});
+
 	it("returns a null-conversation snapshot before a later retry can load or compile a new request instant", async function _returnsIdempotent()
 	{
 		const snapshot = { ..._snapshot(), conversationId: null };

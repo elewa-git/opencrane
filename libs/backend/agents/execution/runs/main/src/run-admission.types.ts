@@ -126,6 +126,9 @@ export type RunAdmissionResult<TDenial> = { readonly outcome: "accepted" | "idem
 /** Optional same-transaction persistence owned by the caller of initial run admission. */
 export type RunAdmissionCommit = (transaction: RunAdmissionTransaction, value: RunAdmissionBuild) => Promise<void>;
 
+/** Optional write that establishes transaction-local authority before snapshot sources load. */
+export type RunAdmissionPrepare = (transaction: RunAdmissionTransaction) => Promise<void>;
+
 /**
  * The single transaction in which a logical run becomes real.
  *
@@ -159,5 +162,5 @@ export interface RunAdmissionRepository
 	 * carry the same snapshot and both mean the caller may proceed. `denied` carries either the
 	 * reason `build` gave or a {@link RunAdmissionDenialReasons} value.
 	 */
-	admit<TDenial>(command: RunAdmissionCommand, build: (transaction: RunAdmissionTransaction) => Promise<RunAdmissionBuildResult<TDenial>>, commit?: RunAdmissionCommit): Promise<RunAdmissionResult<TDenial>>;
+	admit<TDenial>(command: RunAdmissionCommand, build: (transaction: RunAdmissionTransaction) => Promise<RunAdmissionBuildResult<TDenial>>, commit?: RunAdmissionCommit, prepare?: RunAdmissionPrepare): Promise<RunAdmissionResult<TDenial>>;
 }
