@@ -4,7 +4,7 @@ import { Prisma, type PrismaClient } from "@prisma/client";
 
 import { ___DoWithTrace } from "@opencrane/backend/observability";
 
-import type { AgentThreadSnapshotView, ConversationCaller, ConversationDetail, ConversationSummary, ConversationUnitOfWork, CreateConversationRequest, CreateConversationResult, MarkAgentThreadReadResult, MutateConversationResult, SubmitConversationMessageRequest, SubmitConversationMessageResult } from "./conversation-authority.types.js";
+import type { AgentThreadSnapshotView, ConversationCaller, ConversationCreationDirectory, ConversationDetail, ConversationSummary, ConversationUnitOfWork, CreateConversationRequest, CreateConversationResult, MarkAgentThreadReadResult, MutateConversationResult, SubmitConversationMessageRequest, SubmitConversationMessageResult } from "./conversation-authority.types.js";
 import type { ConversationMessageAdmissionUnitOfWork } from "./conversation-message-admission.types.js";
 import { PrismaConversationMutationRepository } from "./prisma-conversation-mutation-repository.js";
 import type { ConversationMutationRepository } from "./prisma-conversation-mutation-repository.types.js";
@@ -22,6 +22,12 @@ export class PrismaConversationUnitOfWork implements ConversationUnitOfWork
 	{
 		this.prisma = prisma;
 		this.messageAdmission = messageAdmission;
+	}
+
+	/** Returns self-scoped creation choices without exposing login identifiers. */
+	async directory(caller: ConversationCaller): Promise<ConversationCreationDirectory>
+	{
+		return ___DoWithTrace("conversation.directory", { siloId: caller.siloId }, async () => this._read(function _Directory(query) { return query.directory(caller); }));
 	}
 
 	/** Lists current participant conversations without treating participant-local archive as lifecycle. */

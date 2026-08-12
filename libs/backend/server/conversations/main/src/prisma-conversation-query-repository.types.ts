@@ -1,6 +1,6 @@
 import type { ConversationLifecycles, ConversationModes } from "@opencrane/models/conversations";
 
-import type { AgentThreadSnapshotView, ConversationCaller, ConversationDetail, ConversationMessageView, ConversationSummary } from "./conversation-authority.types.js";
+import type { AgentThreadSnapshotView, ConversationCaller, ConversationCreationDirectory, ConversationDetail, ConversationMessageView, ConversationSummary } from "./conversation-authority.types.js";
 
 /**
  * The four stored facts the command decision needs, and nothing else.
@@ -39,6 +39,8 @@ export interface ConversationCommandContext
  */
 export interface ConversationQueryRepository
 {
+	/** Returns active member references and the caller's unambiguous personal Agent projection. */
+	directory(caller: ConversationCaller): Promise<ConversationCreationDirectory>;
 	/**
 	 * @returns True while the caller still has an active organisation membership in their silo.
 	 *   Re-checked on every write path, so a removed user cannot keep writing on an old session.

@@ -28,7 +28,7 @@ function _Prisma(transaction: Record<string, unknown>): object
 /** Builds the active organisation-membership delegate required by every self authority snapshot. */
 function _ActiveMembership(): object
 {
-	return { findFirst: vi.fn().mockResolvedValue({ clusterTenant: "silo-1" }) };
+	return { findFirst: vi.fn().mockResolvedValue({ clusterTenant: "silo-1" }), findMany: vi.fn().mockResolvedValue([{ id: "member-1", subject: "user-1" }]) };
 }
 
 /** Creates the no-op attachment port used by text-only conversation tests. */

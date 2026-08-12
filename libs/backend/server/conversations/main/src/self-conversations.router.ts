@@ -2,8 +2,9 @@ import { Router, type Request, type Response } from "express";
 import type { Logger } from "pino";
 import { z } from "zod";
 
-import { ___ConversationCreationRequestSchema, ___ParticipantInputBlocksSchema } from "@opencrane/models/conversations";
+import { ___ParticipantInputBlocksSchema } from "@opencrane/models/conversations";
 
+import { _ConversationCreationRequestSchema } from "./conversation-creation.validator.js";
 import { AgentThreadReadDenialReasons, ConversationAuthorityOutcomes, ConversationWriteDenialReasons, type ConversationWriteDenial } from "./conversation-authority.types.js";
 import type { SelfConversationsRouterDependencies } from "./self-conversations.router.types.js";
 
@@ -42,6 +43,21 @@ const _AgentThreadReadSchema = z.object({ observedPosition: z.string().regex(/^(
 export function __CreateSelfConversationsRouter(dependencies: SelfConversationsRouterDependencies): Router
 {
 	const router = Router();
+	router.get("/directory", async function _Directory(request: Request, response: Response)
+	{
+		const caller = dependencies.resolveCaller(request);
+		if (caller === null) { response.status(401).json({ error: "conversation_authentication_required" }); return; }
+		try
+		{
+			response.status(200).json({ directory: await dependencies.authority.directory(caller) });
+		}
+		catch (err)
+		{
+			_log(dependencies.logger, err, "conversation.directory", caller.siloId);
+			response.status(503).json({ error: "conversation_unavailable" });
+		}
+	});
+
 	router.get("/", async function _List(request: Request, response: Response)
 	{
 		const caller = dependencies.resolveCaller(request);
@@ -62,7 +78,7 @@ export function __CreateSelfConversationsRouter(dependencies: SelfConversationsR
 	{
 		const caller = dependencies.resolveCaller(request);
 		if (caller === null) { response.status(401).json({ error: "conversation_authentication_required" }); return; }
-		const parsed = ___ConversationCreationRequestSchema.safeParse(request.body);
+		const parsed = _ConversationCreationRequestSchema.safeParse(request.body);
 		if (!parsed.success) { response.status(400).json({ error: "invalid_conversation_request" }); return; }
 		try
 		{

@@ -1,10 +1,10 @@
-import { AgentRunState, AgentThreadDeliveryKind, ConversationLifecycle, ConversationMessageRole, ConversationMessageState, ConversationMode, OrgMemberStatus, Prisma } from "@prisma/client";
+import { AgentRunState, AgentServiceKind, AgentServiceState, AgentThreadDeliveryKind, ConversationLifecycle, ConversationMessageRole, ConversationMessageState, ConversationMode, OrgMemberStatus, Prisma } from "@prisma/client";
 
 import { ConversationLifecycles, ConversationModes, MessageRoles, MessageSources, MessageStates, type MessageContentBlock } from "@opencrane/models/conversations";
 import { AgentThreadDeliveryKinds, type AgentThreadParentDelivery } from "@opencrane/backend/conversations/agent-threads";
 import { __EncodeConversationProjectionCursor } from "@opencrane/backend/conversations/projection";
 
-import { AgentThreadRunViewStates, type AgentThreadMessageView, type AgentThreadRunView, type AgentThreadSnapshotView, type ConversationCaller, type ConversationDetail, type ConversationMessageView, type ConversationSummary } from "./conversation-authority.types.js";
+import { AgentThreadRunViewStates, PersonalAgentDirectoryStatuses, type AgentThreadMessageView, type AgentThreadRunView, type AgentThreadSnapshotView, type ConversationCaller, type ConversationCreationDirectory, type ConversationDetail, type ConversationMessageView, type ConversationSummary } from "./conversation-authority.types.js";
 import type { ConversationCommandContext, ConversationQueryRepository } from "./prisma-conversation-query-repository.types.js";
 
 /** Maximum message rows returned by one participant-bound open operation. */
@@ -62,6 +62,27 @@ export class PrismaConversationQueryRepository implements ConversationQueryRepos
 		return membership !== null;
 	}
 
+	/** Returns active member references and the caller's sole active personal Agent when one exists. */
+	async directory(caller: ConversationCaller): Promise<ConversationCreationDirectory>
+	{
+		// 1. Read active memberships and require the authenticated subject to appear in the selected silo.
+		const memberships = await this.prisma.orgMembership.findMany({ where: { clusterTenant: caller.siloId, status: OrgMemberStatus.Active }, select: { id: true, subject: true }, orderBy: { id: "asc" } });
+		if (!memberships.some(function _Caller(row): boolean { return row.subject === caller.subjectId; })) throw new Error("Conversation directory membership unavailable");
+
+		// 2. Resolve the caller's approved persona revision before looking for its executable personal Agent.
+		const profile = await this.prisma.personaProfile.findUnique({ where: { siloId_userId: { siloId: caller.siloId, userId: caller.subjectId } }, select: { activeRevisionId: true } });
+		const services = profile?.activeRevisionId === null || profile?.activeRevisionId === undefined
+			? []
+			: await this.prisma.agentService.findMany({ where: { siloId: caller.siloId, kind: AgentServiceKind.Personal, state: AgentServiceState.Active, activeRevisionId: { not: null }, activeRevision: { is: { personaRevisionId: profile.activeRevisionId } } }, select: { id: true, name: true }, orderBy: { id: "asc" }, take: 2 });
+
+		// 3. Project opaque member references and refuse to choose when personal Agent ownership is ambiguous.
+		const participants = memberships.map(function _Participant(row) { return { participantRef: row.id, isSelf: row.subject === caller.subjectId }; });
+		if (services.length > 1) return { participants, personalAgentStatus: PersonalAgentDirectoryStatuses.Ambiguous, personalAgent: null };
+		const service = services[0];
+		if (service === undefined) return { participants, personalAgentStatus: PersonalAgentDirectoryStatuses.Unavailable, personalAgent: null };
+		return { participants, personalAgentStatus: PersonalAgentDirectoryStatuses.Ready, personalAgent: { personalAgentRef: service.id, displayName: service.name } };
+	}
+
 	/** Lists current participant conversations without treating participant-local archive as lifecycle. */
 	async list(caller: ConversationCaller, includeArchived: boolean): Promise<readonly ConversationSummary[]>
 	{
@@ -77,7 +98,9 @@ export class PrismaConversationQueryRepository implements ConversationQueryRepos
 		});
 
 		// 3. Project bounded summaries only after both authority fences have succeeded.
-		return participants.map(function _Summary(participant): ConversationSummary { return _summary(participant.conversation, participant); });
+		const subjects = participants.flatMap(function _Subjects(participant): readonly string[] { return participant.conversation.participants.map(function _Subject(row): string { return row.userId; }); });
+		const references = await this._membershipReferences(caller.siloId, subjects);
+		return participants.map(function _Summary(participant): ConversationSummary { return _summary(participant.conversation, participant, references); });
 	}
 
 	/** Returns the exact participant-visible aggregate and latest canonical message window. */
@@ -92,11 +115,13 @@ export class PrismaConversationQueryRepository implements ConversationQueryRepos
 
 		// 3. Clip canonical messages to the durable participant bounds before projecting detail.
 		const entries = await this.prisma.conversationTimelineEntry.findMany({ where: { conversationId, position: { gte: participant.visibleFromPosition, ...(participant.accessEndedPosition === null ? {} : { lte: participant.accessEndedPosition }) }, messageId: { not: null } }, include: { message: { include: { invokedAgentThread: true } } }, orderBy: { position: "desc" }, take: _MESSAGE_LIMIT });
+		const subjects = [...participant.conversation.participants.map(function _Subject(row): string { return row.userId; }), ...entries.flatMap(function _Author(entry): readonly string[] { return entry.message?.userId === null || entry.message?.userId === undefined ? [] : [entry.message.userId]; })];
+		const references = await this._membershipReferences(caller.siloId, subjects);
 		return {
-			..._summary(participant.conversation, participant),
+			..._summary(participant.conversation, participant, references),
 			visibleFromPosition: participant.visibleFromPosition.toString(10),
 			accessEndedPosition: participant.accessEndedPosition?.toString(10) ?? null,
-			messages: [...entries].reverse().flatMap(function _Message(entry): readonly ConversationMessageView[] { return entry.message === null ? [] : [_messageView(entry.message, entry.position)]; }),
+			messages: [...entries].reverse().flatMap(function _Message(entry): readonly ConversationMessageView[] { return entry.message === null ? [] : [_messageView(entry.message, entry.position, references)]; }),
 		};
 	}
 
@@ -187,7 +212,9 @@ export class PrismaConversationQueryRepository implements ConversationQueryRepos
 		const entry = await this.prisma.conversationTimelineEntry.findFirst({ where: { conversationId, message: { is: { idempotencyKey, userId: caller.subjectId, conversation: { ..._ConversationAccess(caller), participants: { some: { userId: caller.subjectId, accessEndedPosition: null } } } } } }, include: { message: { include: { invokedAgentThread: true } } } });
 
 		// 3. Project no foreign or access-ended durable message facts.
-		return entry?.message ? _messageView(entry.message, entry.position) : null;
+		if (entry?.message === null || entry?.message === undefined) return null;
+		const references = await this._membershipReferences(caller.siloId, entry.message.userId === null ? [] : [entry.message.userId]);
+		return _messageView(entry.message, entry.position, references);
 	}
 
 	/** Detects a conversation-scoped key owned by another participant without returning their message. */
@@ -201,6 +228,17 @@ export class PrismaConversationQueryRepository implements ConversationQueryRepos
 
 		// 3. Reveal only the collision boolean required by bounded conflict handling.
 		return message !== null;
+	}
+
+	/** Maps login subjects to opaque membership references inside the current read snapshot. */
+	private async _membershipReferences(siloId: string, subjects: readonly string[]): Promise<ReadonlyMap<string, string>>
+	{
+		const uniqueSubjects = [...new Set(subjects)];
+		if (uniqueSubjects.length === 0) return new Map();
+		const memberships = await this.prisma.orgMembership.findMany({ where: { clusterTenant: siloId, subject: { in: uniqueSubjects } }, select: { id: true, subject: true } });
+		const references = new Map(memberships.map(function _Reference(row): readonly [string, string] { return [row.subject, row.id]; }));
+		if (references.size !== uniqueSubjects.length) throw new Error("Conversation participant reference unavailable");
+		return references;
 	}
 }
 
@@ -267,22 +305,29 @@ function _Delivery(row: { id: string; childConversationId: string; parentConvers
 }
 
 /** Maps one Prisma aggregate to the transport-safe participant summary. */
-function _summary(conversation: { id: string; mode: ConversationMode; lifecycle: ConversationLifecycle; agentServiceId: string | null; updatedAt: Date; participants: readonly { userId: string }[] }, participant: { archivedAt: Date | null; readThroughPosition: bigint }): ConversationSummary
+function _summary(conversation: { id: string; mode: ConversationMode; lifecycle: ConversationLifecycle; agentServiceId: string | null; updatedAt: Date; participants: readonly { userId: string }[] }, participant: { archivedAt: Date | null; readThroughPosition: bigint }, references: ReadonlyMap<string, string>): ConversationSummary
 {
-	return { id: conversation.id, mode: _mode(conversation.mode), lifecycle: _LIFECYCLE_BY_PERSISTED_LIFECYCLE[conversation.lifecycle], agentServiceId: conversation.agentServiceId, participantUserIds: conversation.participants.map(function _UserId(row): string { return row.userId; }).sort(), archivedAt: participant.archivedAt?.toISOString() ?? null, readThroughPosition: participant.readThroughPosition.toString(10), updatedAt: conversation.updatedAt.toISOString() };
+	return { id: conversation.id, mode: _mode(conversation.mode), lifecycle: _LIFECYCLE_BY_PERSISTED_LIFECYCLE[conversation.lifecycle], agentServiceId: conversation.agentServiceId, participantRefs: conversation.participants.map(function _Participant(row): string { return _requireParticipantRef(references, row.userId); }).sort(), archivedAt: participant.archivedAt?.toISOString() ?? null, readThroughPosition: participant.readThroughPosition.toString(10), updatedAt: conversation.updatedAt.toISOString() };
 }
 
 /** Maps a canonical persisted message and database-owned position. */
-function _messageView(message: { id: string; role: ConversationMessageRole; state: ConversationMessageState; source: string; blocks: Prisma.JsonValue; runId: string | null; userId: string | null; createdAt: Date; completedAt: Date | null; invokedAgentThread: { childConversationId: string; parentConversationId: string; rootConversationId: string; parentMessageId: string; initiatorUserId: string; agentServiceId: string; personaRevisionId: string; firstRunId: string } | null }, position: bigint): ConversationMessageView
+function _messageView(message: { id: string; role: ConversationMessageRole; state: ConversationMessageState; source: string; blocks: Prisma.JsonValue; runId: string | null; userId: string | null; createdAt: Date; completedAt: Date | null; invokedAgentThread: { childConversationId: string; parentConversationId: string; rootConversationId: string; parentMessageId: string; initiatorUserId: string; agentServiceId: string; personaRevisionId: string; firstRunId: string } | null }, position: bigint, references: ReadonlyMap<string, string>): ConversationMessageView
 {
-	return { id: message.id, position: position.toString(10), role: _ROLE_BY_PERSISTED_ROLE[message.role], state: _STATE_BY_PERSISTED_STATE[message.state], source: _messageSource(message.source), blocks: message.blocks as unknown as readonly MessageContentBlock[], runId: message.runId, userId: message.userId, createdAt: message.createdAt.toISOString(), completedAt: message.completedAt?.toISOString() ?? null, agentThread: message.invokedAgentThread ?? null };
+	return { id: message.id, position: position.toString(10), role: _ROLE_BY_PERSISTED_ROLE[message.role], state: _STATE_BY_PERSISTED_STATE[message.state], source: _messageSource(message.source), blocks: message.blocks as unknown as readonly MessageContentBlock[], runId: message.runId, participantRef: message.userId === null ? null : _requireParticipantRef(references, message.userId), createdAt: message.createdAt.toISOString(), completedAt: message.completedAt?.toISOString() ?? null, agentThread: message.invokedAgentThread ?? null };
 }
 
 /** Maps a child message without participant login identifiers or nested thread authority. */
 function _agentThreadMessageView(message: Parameters<typeof _messageView>[0], position: bigint): AgentThreadMessageView
 {
-	const projected = _messageView(message, position);
-	return { id: projected.id, position: projected.position, role: projected.role, state: projected.state, source: projected.source, blocks: projected.blocks, runId: projected.runId, createdAt: projected.createdAt, completedAt: projected.completedAt };
+	return { id: message.id, position: position.toString(10), role: _ROLE_BY_PERSISTED_ROLE[message.role], state: _STATE_BY_PERSISTED_STATE[message.state], source: _messageSource(message.source), blocks: message.blocks as unknown as readonly MessageContentBlock[], runId: message.runId, createdAt: message.createdAt.toISOString(), completedAt: message.completedAt?.toISOString() ?? null };
+}
+
+/** Returns one required opaque membership reference without exposing the subject on failure. */
+function _requireParticipantRef(references: ReadonlyMap<string, string>, subjectId: string): string
+{
+	const reference = references.get(subjectId);
+	if (reference === undefined) throw new Error("Conversation participant reference unavailable");
+	return reference;
 }
 
 /** Validates the string-backed persistence column against the complete model-owned source vocabulary. */

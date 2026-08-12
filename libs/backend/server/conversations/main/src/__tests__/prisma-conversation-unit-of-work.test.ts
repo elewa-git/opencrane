@@ -27,7 +27,15 @@ function _Prisma(transaction: Record<string, unknown>): object
 /** Builds the active organisation-membership delegate required by every self authority snapshot. */
 function _ActiveMembership(): object
 {
-	return { findFirst: vi.fn().mockResolvedValue({ clusterTenant: "silo-1" }) };
+	const rows = [{ id: "member-1", subject: "user-1" }, { id: "member-2", subject: "user-2" }];
+	return { findFirst: vi.fn().mockResolvedValue({ id: "member-1", clusterTenant: "silo-1" }), findMany: vi.fn(async function _Memberships(command: { readonly where?: { readonly id?: { readonly in?: readonly string[] }; readonly subject?: { readonly in?: readonly string[] } } })
+	{
+		const ids = command.where?.id?.in;
+		if (ids !== undefined) return rows.filter(function _Id(row): boolean { return ids.includes(row.id); });
+		const subjects = command.where?.subject?.in;
+		if (subjects !== undefined) return rows.filter(function _Subject(row): boolean { return subjects.includes(row.subject); });
+		return rows;
+	}) };
 }
 
 /** Builds one participant row whose aggregate can be projected as conversation detail. */
@@ -44,6 +52,28 @@ function _Authority(prisma: object, messageAdmission: Partial<ConversationMessag
 
 describe("PrismaConversationUnitOfWork", function _Suite()
 {
+	it("returns opaque creation references and one caller-owned personal Agent", async function _ProjectsDirectory()
+	{
+		const transaction = {
+			orgMembership: _ActiveMembership(),
+			personaProfile: { findUnique: vi.fn().mockResolvedValue({ activeRevisionId: "persona-1" }) },
+			agentService: { findMany: vi.fn().mockResolvedValue([{ id: "service-1", name: "My Agent" }]) },
+		};
+
+		await expect(_Authority(_Prisma(transaction)).directory(_CALLER)).resolves.toEqual({ participants: [{ participantRef: "member-1", isSelf: true }, { participantRef: "member-2", isSelf: false }], personalAgentStatus: "ready", personalAgent: { personalAgentRef: "service-1", displayName: "My Agent" } });
+	});
+
+	it("fails closed instead of choosing between matching personal Agents", async function _RejectsAmbiguousAgent()
+	{
+		const transaction = {
+			orgMembership: _ActiveMembership(),
+			personaProfile: { findUnique: vi.fn().mockResolvedValue({ activeRevisionId: "persona-1" }) },
+			agentService: { findMany: vi.fn().mockResolvedValue([{ id: "service-1", name: "First" }, { id: "service-2", name: "Second" }]) },
+		};
+
+		await expect(_Authority(_Prisma(transaction)).directory(_CALLER)).resolves.toMatchObject({ personalAgentStatus: "ambiguous", personalAgent: null });
+	});
+
 	it("opens participant history inside one repeatable-read snapshot", async function _OpensInSnapshot()
 	{
 		const transaction = {
@@ -242,14 +272,14 @@ describe("PrismaConversationUnitOfWork", function _Suite()
 		const createConversation = vi.fn().mockResolvedValue({});
 		const createParticipant = vi.fn().mockResolvedValue({});
 		const transaction = {
-			orgMembership: { count: vi.fn().mockResolvedValue(2), findFirst: vi.fn().mockResolvedValue({ clusterTenant: "silo-1" }) },
+			orgMembership: _ActiveMembership(),
 			conversation: { create: createConversation },
 			conversationParticipant: { create: createParticipant, findFirst: vi.fn().mockResolvedValue(_Participant()) },
 			conversationTimelineEntry: { findMany: vi.fn().mockResolvedValue([]) },
 		};
 		const prisma = _Prisma(transaction) as { readonly $transaction: ReturnType<typeof vi.fn> };
 
-		await expect(_Authority(prisma).create(_CALLER, { mode: ConversationModes.Direct, participantUserIds: ["user-2"] })).resolves.toEqual(expect.objectContaining({ outcome: "created", conversation: expect.objectContaining({ id: "conversation-1", mode: ConversationModes.Direct }) }));
+		await expect(_Authority(prisma).create(_CALLER, { mode: ConversationModes.Direct, participantRefs: ["member-2"] })).resolves.toEqual(expect.objectContaining({ outcome: "created", conversation: expect.objectContaining({ id: "conversation-1", mode: ConversationModes.Direct, participantRefs: ["member-1", "member-2"] }) }));
 		expect(prisma.$transaction).toHaveBeenCalledTimes(1);
 		expect(prisma.$transaction).toHaveBeenCalledWith(expect.any(Function), { isolationLevel: "Serializable" });
 		expect(createConversation).toHaveBeenCalledWith({ data: expect.objectContaining({ siloId: "silo-1", mode: ConversationMode.Direct, agentServiceId: null }) });
@@ -290,11 +320,11 @@ describe("PrismaConversationUnitOfWork", function _Suite()
 	it("rolls back by throwing when a written conversation cannot be projected", async function _RejectsMissingWriteProjection()
 	{
 		const transaction = {
-			orgMembership: { count: vi.fn().mockResolvedValue(2), findFirst: vi.fn().mockResolvedValue({ clusterTenant: "silo-1" }) },
+			orgMembership: _ActiveMembership(),
 			conversation: { create: vi.fn().mockResolvedValue({}) },
 			conversationParticipant: { create: vi.fn().mockResolvedValue({}), findFirst: vi.fn().mockResolvedValue(null) },
 		};
 
-		await expect(_Authority(_Prisma(transaction)).create(_CALLER, { mode: ConversationModes.Direct, participantUserIds: ["user-2"] })).rejects.toThrow("Written conversation projection unavailable");
+		await expect(_Authority(_Prisma(transaction)).create(_CALLER, { mode: ConversationModes.Direct, participantRefs: ["member-2"] })).rejects.toThrow("Written conversation projection unavailable");
 	});
 });

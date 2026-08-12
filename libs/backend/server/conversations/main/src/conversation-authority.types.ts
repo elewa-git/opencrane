@@ -1,4 +1,4 @@
-import { ConversationLifecycles, ConversationModes, MessageRoles, MessageSources, MessageStates, type ConversationCreationRequest, type MessageContentBlock } from "@opencrane/models/conversations";
+import { ConversationLifecycles, ConversationModes, MessageRoles, MessageSources, MessageStates, type MessageContentBlock } from "@opencrane/models/conversations";
 import type { AgentThreadOrigin, AgentThreadParentDelivery, AgentThreadTarget } from "@opencrane/backend/conversations/agent-threads";
 
 /**
@@ -31,7 +31,49 @@ export interface ConversationCaller
  * Re-exported unchanged from the model package so the HTTP layer and the database layer
  * cannot drift apart.
  */
-export type CreateConversationRequest = ConversationCreationRequest;
+export type CreateConversationRequest =
+	| { readonly mode: ConversationModes.AgentSession; readonly personalAgentRef: string; readonly participantRefs?: never }
+	| { readonly mode: ConversationModes.Direct | ConversationModes.Group; readonly participantRefs: readonly string[]; readonly personalAgentRef?: never };
+
+/** State of the caller's personal Agent in the conversation creation directory. */
+export enum PersonalAgentDirectoryStatuses
+{
+	/** Exactly one active personal Agent matches the caller's approved persona. */
+	Ready = "ready",
+	/** No active personal Agent can currently start a conversation for this caller. */
+	Unavailable = "unavailable",
+	/** More than one active personal Agent matches, so the server refuses to choose one. */
+	Ambiguous = "ambiguous",
+}
+
+/** An opaque active-member coordinate accepted by conversation creation. */
+export interface ConversationParticipantDirectoryEntry
+{
+	/** Opaque membership reference; it never contains an OpenID Connect subject or email address. */
+	readonly participantRef: string;
+	/** Whether this entry represents the authenticated caller. */
+	readonly isSelf: boolean;
+}
+
+/** Display-safe projection of the caller's sole active personal Agent. */
+export interface ConversationPersonalAgentDirectoryEntry
+{
+	/** Opaque AgentService reference accepted only for this caller's Agent-session creation. */
+	readonly personalAgentRef: string;
+	/** User-facing Agent name stored on the active AgentService. */
+	readonly displayName: string;
+}
+
+/** Self-scoped choices accepted by the conversation creation command. */
+export interface ConversationCreationDirectory
+{
+	/** Active organisation members represented by opaque references. */
+	readonly participants: readonly ConversationParticipantDirectoryEntry[];
+	/** Explains whether an unambiguous personal Agent is available. */
+	readonly personalAgentStatus: PersonalAgentDirectoryStatuses;
+	/** The caller's personal Agent only when status is `ready`. */
+	readonly personalAgent: ConversationPersonalAgentDirectoryEntry | null;
+}
 
 /**
  * One message a user is trying to post, after the router's size and shape checks passed.
@@ -73,7 +115,8 @@ export interface ConversationSummary
 	readonly mode: ConversationModes;
 	readonly lifecycle: ConversationLifecycles;
 	readonly agentServiceId: string | null;
-	readonly participantUserIds: readonly string[];
+	/** Opaque organisation membership references, never login subjects. */
+	readonly participantRefs: readonly string[];
 	readonly archivedAt: string | null;
 	readonly readThroughPosition: string;
 	readonly updatedAt: string;
@@ -85,7 +128,8 @@ export interface ConversationSummary
  * `position` is the shared timeline number as a decimal string (it is a 64-bit value in the
  * database, so it is not sent as a JSON number). Sort by it to get the true order — do not
  * sort by `createdAt`, which can tie. `runId` is set only when an agent run produced or
- * answered this message; `userId` is set only for human-authored messages.
+ * answered this message; `participantRef` is set only for human-authored messages and cannot be
+ * used as a login identifier.
  */
 export interface ConversationMessageView
 {
@@ -96,7 +140,8 @@ export interface ConversationMessageView
 	readonly source: MessageSources;
 	readonly blocks: readonly MessageContentBlock[];
 	readonly runId: string | null;
-	readonly userId: string | null;
+	/** Opaque author membership reference, or null for a non-human message. */
+	readonly participantRef: string | null;
 	readonly createdAt: string;
 	readonly completedAt: string | null;
 	/** Immutable child origin when this ordinary group message invoked an Agent. */
@@ -238,8 +283,8 @@ export enum ConversationWriteDenialReasons
 	 */
 	IdempotencyConflict = "idempotency_conflict",
 	/**
-	 * Sent as 404, only from create. At least one user named in `participantUserIds` has no
-	 * active membership in this silo. Which one is not disclosed. Re-pick participants from a
+	 * Sent as 404, only from create. At least one opaque reference in `participantRefs` no longer
+	 * resolves to active membership in this silo. Which one is not disclosed. Re-pick participants from a
 	 * fresh directory read.
 	 */
 	ParticipantUnavailable = "participant_unavailable",
@@ -368,6 +413,8 @@ export type MarkAgentThreadReadResult =
  */
 export interface ConversationUnitOfWork
 {
+	/** Lists self-scoped creation choices without returning login subjects, emails, roles, or memory identity. */
+	directory(caller: ConversationCaller): Promise<ConversationCreationDirectory>;
 	/**
 	 * Lists the conversations this caller participates in, newest activity first.
 	 *

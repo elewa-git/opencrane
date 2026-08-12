@@ -32,24 +32,37 @@ export class PrismaConversationMutationRepository implements ConversationMutatio
 	/** Creates one immutable-mode aggregate after checking every initial participant and service. */
 	async create(caller: ConversationCaller, conversationId: string, request: CreateConversationRequest): Promise<CreateConversationResult>
 	{
-		// 1. Derive the exact initial participant set before querying any foreign membership facts.
-		const participantUserIds = _participantIds(caller.subjectId, request);
-		if (participantUserIds === null) return { outcome: ConversationAuthorityOutcomes.Denied, reason: ConversationWriteDenialReasons.ParticipantUnavailable };
+		// 1. Resolve opaque creation references against current membership and personal-Agent authority.
+		const authority = await this._creationAuthority(caller, request);
+		if (authority === null) return { outcome: ConversationAuthorityOutcomes.Denied, reason: request.mode === ConversationModes.AgentSession ? ConversationWriteDenialReasons.AgentServiceUnavailable : ConversationWriteDenialReasons.ParticipantUnavailable };
 
-		// 2. Require every participant, including the caller, to have active membership in this write snapshot.
-		const membershipCount = await this.transaction.orgMembership.count({ where: { clusterTenant: caller.siloId, subject: { in: [...participantUserIds] }, status: OrgMemberStatus.Active } });
-		if (membershipCount !== participantUserIds.length) return { outcome: ConversationAuthorityOutcomes.Denied, reason: ConversationWriteDenialReasons.ParticipantUnavailable };
-		if (request.mode === ConversationModes.AgentSession)
-		{
-			const service = await this.transaction.agentService.findFirst({ where: { id: request.agentServiceId, siloId: caller.siloId, kind: AgentServiceKind.Personal, state: AgentServiceState.Active, activeRevisionId: { not: null } }, select: { id: true } });
-			if (service === null) return { outcome: ConversationAuthorityOutcomes.Denied, reason: ConversationWriteDenialReasons.AgentServiceUnavailable };
-		}
-
-		// 3. Persist the immutable aggregate and every participant before projecting the committed response.
-		await this.transaction.conversation.create({ data: { id: conversationId, siloId: caller.siloId, mode: _prismaMode(request.mode), agentServiceId: request.mode === ConversationModes.AgentSession ? request.agentServiceId : null } });
-		for (const userId of participantUserIds) await this.transaction.conversationParticipant.create({ data: { conversationId, userId } });
+		// 2. Persist the immutable aggregate and every participant before projecting the committed response.
+		await this.transaction.conversation.create({ data: { id: conversationId, siloId: caller.siloId, mode: _prismaMode(request.mode), agentServiceId: authority.agentServiceId } });
+		for (const userId of authority.participantUserIds) await this.transaction.conversationParticipant.create({ data: { conversationId, userId } });
 		const conversation = _requireWrittenConversation(await this.query.open(caller, conversationId));
 		return { outcome: ConversationAuthorityOutcomes.Created, conversation };
+	}
+
+	/** Resolves browser-safe references to internal subjects and the caller-owned personal Agent. */
+	private async _creationAuthority(caller: ConversationCaller, request: CreateConversationRequest): Promise<{ readonly participantUserIds: readonly string[]; readonly agentServiceId: string | null } | null>
+	{
+		const callerMembership = await this.transaction.orgMembership.findFirst({ where: { clusterTenant: caller.siloId, subject: caller.subjectId, status: OrgMemberStatus.Active }, select: { id: true } });
+		if (callerMembership === null) return null;
+		if (request.mode !== ConversationModes.AgentSession)
+		{
+			const uniqueReferences = [...new Set(request.participantRefs)];
+			if (uniqueReferences.length !== request.participantRefs.length || uniqueReferences.includes(callerMembership.id)) return null;
+			const memberships = await this.transaction.orgMembership.findMany({ where: { id: { in: uniqueReferences }, clusterTenant: caller.siloId, status: OrgMemberStatus.Active }, select: { subject: true }, orderBy: { id: "asc" } });
+			if (memberships.length !== uniqueReferences.length) return null;
+			const participantUserIds = [caller.subjectId, ...memberships.map(function _Subject(row): string { return row.subject; })];
+			return { participantUserIds, agentServiceId: null };
+		}
+
+		const profile = await this.transaction.personaProfile.findUnique({ where: { siloId_userId: { siloId: caller.siloId, userId: caller.subjectId } }, select: { activeRevisionId: true } });
+		if (profile?.activeRevisionId === null || profile?.activeRevisionId === undefined) return null;
+		const services = await this.transaction.agentService.findMany({ where: { siloId: caller.siloId, kind: AgentServiceKind.Personal, state: AgentServiceState.Active, activeRevisionId: { not: null }, activeRevision: { is: { personaRevisionId: profile.activeRevisionId } } }, select: { id: true }, orderBy: { id: "asc" }, take: 2 });
+		if (services.length !== 1 || services[0]?.id !== request.personalAgentRef) return null;
+		return { participantUserIds: [caller.subjectId], agentServiceId: services[0].id };
 	}
 
 	/** Changes only the caller's participant-local archived state. */
@@ -164,14 +177,6 @@ export class PrismaConversationMutationRepository implements ConversationMutatio
 }
 
 /** Returns the exact initial participant set or null for an invalid mode cardinality. */
-function _participantIds(subjectId: string, request: CreateConversationRequest): readonly string[] | null
-{
-	if (request.mode === ConversationModes.AgentSession) return [subjectId];
-	const ids = [...new Set([subjectId, ...request.participantUserIds.map(function _Trim(value): string { return value.trim(); })])].filter(Boolean).sort();
-	if (request.mode === ConversationModes.Direct) return ids.length === 2 ? ids : null;
-	return ids.length >= 2 && ids.length <= 100 ? ids : null;
-}
-
 /** Constructs the one legal completed participant-input message row. */
 function _messageData(messageId: string, conversationId: string, userId: string, request: SubmitConversationMessageRequest, runId: string | null): Prisma.ConversationMessageUncheckedCreateInput
 {

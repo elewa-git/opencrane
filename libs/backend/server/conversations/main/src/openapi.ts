@@ -1,6 +1,6 @@
 import { ConversationLifecycles, ConversationModes, MessageContentBlockKinds, MessageRoles, MessageSources, MessageStates } from "@opencrane/models/conversations";
 
-import { ConversationAuthorityOutcomes } from "./conversation-authority.types.js";
+import { ConversationAuthorityOutcomes, PersonalAgentDirectoryStatuses } from "./conversation-authority.types.js";
 
 /**
  * OpenAPI description of the live replay route, owned by this package rather than by the
@@ -41,13 +41,13 @@ export const _SelfConversationReplayOpenapiPaths = {
 const _ConversationSummarySchema = {
 	type: "object",
 	additionalProperties: false,
-	required: ["id", "mode", "lifecycle", "agentServiceId", "participantUserIds", "archivedAt", "readThroughPosition", "updatedAt"],
+	required: ["id", "mode", "lifecycle", "agentServiceId", "participantRefs", "archivedAt", "readThroughPosition", "updatedAt"],
 	properties: {
 		id: { type: "string" },
 		mode: { type: "string", enum: [ConversationModes.AgentSession, ConversationModes.Direct, ConversationModes.Group] },
 		lifecycle: { type: "string", enum: [ConversationLifecycles.Open, ConversationLifecycles.Closed] },
 		agentServiceId: { type: ["string", "null"] },
-		participantUserIds: { type: "array", items: { type: "string" } },
+		participantRefs: { type: "array", items: { type: "string" } },
 		archivedAt: { type: ["string", "null"], format: "date-time" },
 		readThroughPosition: { type: "string", pattern: "^(0|[1-9][0-9]*)$" },
 		updatedAt: { type: "string", format: "date-time" },
@@ -77,7 +77,7 @@ const _AgentThreadOriginSchema = {
 const _ConversationMessageSchema = {
 	type: "object",
 	additionalProperties: false,
-	required: ["id", "position", "role", "state", "source", "blocks", "runId", "userId", "createdAt", "completedAt", "agentThread"],
+	required: ["id", "position", "role", "state", "source", "blocks", "runId", "participantRef", "createdAt", "completedAt", "agentThread"],
 	properties: {
 		id: { type: "string" },
 		position: { type: "string", pattern: "^(0|[1-9][0-9]*)$" },
@@ -86,7 +86,7 @@ const _ConversationMessageSchema = {
 		source: { type: "string", enum: [MessageSources.UserInput, MessageSources.ModelOutput, MessageSources.ToolResult, MessageSources.Platform] },
 		blocks: { type: "array", items: _ConversationMessageBlockSchema },
 		runId: { type: ["string", "null"] },
-		userId: { type: ["string", "null"] },
+		participantRef: { type: ["string", "null"] },
 		createdAt: { type: "string", format: "date-time" },
 		completedAt: { type: ["string", "null"], format: "date-time" },
 		agentThread: { oneOf: [{ type: "null" }, _AgentThreadOriginSchema] },
@@ -171,6 +171,15 @@ const _AgentThreadSnapshotSchema = {
  * @see {@link _SelfConversationReplayOpenapiPaths} for the live stream on the same path prefix.
  */
 export const _SelfConversationsOpenapiPaths = {
+	"/me/conversations/directory": {
+		get: {
+			operationId: "getMyConversationCreationDirectory",
+			summary: "List self-scoped conversation creation choices",
+			description: "Returns opaque active-member references and the caller's personal Agent only when exactly one active service matches their approved persona. It never returns login subjects, emails, roles, or memory identity.",
+			tags: ["Conversations"],
+			responses: { 200: { description: "Privacy-safe creation choices.", content: { "application/json": { schema: { type: "object", additionalProperties: false, required: ["directory"], properties: { directory: { type: "object", additionalProperties: false, required: ["participants", "personalAgentStatus", "personalAgent"], properties: { participants: { type: "array", items: { type: "object", additionalProperties: false, required: ["participantRef", "isSelf"], properties: { participantRef: { type: "string" }, isSelf: { type: "boolean" } } } }, personalAgentStatus: { type: "string", enum: Object.values(PersonalAgentDirectoryStatuses) }, personalAgent: { oneOf: [{ type: "null" }, { type: "object", additionalProperties: false, required: ["personalAgentRef", "displayName"], properties: { personalAgentRef: { type: "string" }, displayName: { type: "string" } } }] } } } } } } } }, 401: { description: "Authentication required." }, 503: { description: "Conversation directory unavailable." } },
+		},
+	},
 	"/me/conversations": {
 		get: {
 			operationId: "listMyConversations",
@@ -184,9 +193,9 @@ export const _SelfConversationsOpenapiPaths = {
 			summary: "Create one immutable-mode conversation",
 			tags: ["Conversations"],
 			requestBody: { required: true, content: { "application/json": { schema: { oneOf: [
-				{ type: "object", additionalProperties: false, required: ["mode", "agentServiceId"], properties: { mode: { type: "string", enum: [ConversationModes.AgentSession] }, agentServiceId: { type: "string" } } },
-				{ type: "object", additionalProperties: false, required: ["mode", "participantUserIds"], properties: { mode: { type: "string", enum: [ConversationModes.Direct] }, participantUserIds: { type: "array", items: { type: "string" }, minItems: 1, maxItems: 1 } } },
-				{ type: "object", additionalProperties: false, required: ["mode", "participantUserIds"], properties: { mode: { type: "string", enum: [ConversationModes.Group] }, participantUserIds: { type: "array", items: { type: "string" }, minItems: 1, maxItems: 99 } } },
+				{ type: "object", additionalProperties: false, required: ["mode", "personalAgentRef"], properties: { mode: { type: "string", enum: [ConversationModes.AgentSession] }, personalAgentRef: { type: "string" } } },
+				{ type: "object", additionalProperties: false, required: ["mode", "participantRefs"], properties: { mode: { type: "string", enum: [ConversationModes.Direct] }, participantRefs: { type: "array", items: { type: "string" }, minItems: 1, maxItems: 1 } } },
+				{ type: "object", additionalProperties: false, required: ["mode", "participantRefs"], properties: { mode: { type: "string", enum: [ConversationModes.Group] }, participantRefs: { type: "array", items: { type: "string" }, minItems: 1, maxItems: 99 } } },
 			] } } } },
 			responses: { 201: { description: "Conversation created with its bounded canonical history.", content: { "application/json": { schema: _ConversationDetailEnvelopeSchema } } }, 400: { description: "Invalid immutable-mode request." }, 401: { description: "Authentication required." }, 404: { description: "A participant or agent service is unavailable." }, 503: { description: "Conversation authority unavailable." } },
 		},

@@ -11,7 +11,7 @@ not bind an agent and their ordinary messages never manufacture runs.
 
 ```
  authenticated participant
-          │ list · create · open · message · archive · close · replay
+          │ directory · list · create · open · message · archive · close · replay
           ▼
  ┌──────────────────────────────────────────┐
  │ conversations  ◄── HERE                   │
@@ -37,6 +37,12 @@ does not expose a separate run-start route.
 The general conversation unit of work owns participant reads and aggregate lifecycle writes. A
 dedicated message-admission unit owns submission routing, retry recovery, denial translation, and
 the handoff into execution admission's authoritative final transaction.
+
+Before creation, the directory returns active organisation members as opaque membership references.
+It never returns login subjects, email addresses, roles, or personal-memory identity. It also
+projects the caller's active personal Agent only when exactly one service matches their approved
+persona; no match is unavailable and more than one match is ambiguous, so the server never silently
+chooses an Agent.
 
 Participant artifact blocks are delegated to the conversation-assets attachment port inside that
 same ordinary-message or run-admission transaction. Any foreign, unchecked, reused, or oversized
@@ -67,7 +73,7 @@ the participant from the signed-in browser session.
 
 ## Public surface
 
-- `_CreateSelfConversationsRouter` composes the participant-bound list, create, open, message,
+- `_CreateSelfConversationsRouter` composes the privacy-safe creation directory, participant-bound list, create, open, message,
   Agent-thread mark-read, archive, and close API over Prisma and the internal run-admission port.
 - `_CreateConversationReplayRepository` composes replay over one `RepeatableRead` transaction so
   access-ending races cannot expose later events.

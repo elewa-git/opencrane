@@ -22,10 +22,18 @@ describe("self conversations router", function _Suite()
 		expect(list).not.toHaveBeenCalled();
 	});
 
+	it("returns only opaque creation references and the caller's projected Agent", async function _ReturnsDirectory()
+	{
+		const directory = vi.fn().mockResolvedValue({ participants: [{ participantRef: "member-1", isSelf: true }, { participantRef: "member-2", isSelf: false }], personalAgentStatus: "ready", personalAgent: { personalAgentRef: "service-1", displayName: "My Agent" } });
+		const response = await request(_App({ directory })).get("/directory").expect(200);
+		expect(response.body).toEqual({ directory: await directory.mock.results[0]?.value });
+		expect(JSON.stringify(response.body)).not.toContain("user-1");
+	});
+
 	it("rejects caller-supplied authority coordinates", async function _RejectsAuthorityCoordinates()
 	{
 		const create = vi.fn();
-		await request(_App({ create })).post("/").send({ mode: "agent_session", agentServiceId: "service-1", siloId: "forged" }).expect(400, { error: "invalid_conversation_request" });
+		await request(_App({ create })).post("/").send({ mode: "agent_session", personalAgentRef: "service-1", siloId: "forged" }).expect(400, { error: "invalid_conversation_request" });
 		expect(create).not.toHaveBeenCalled();
 	});
 
