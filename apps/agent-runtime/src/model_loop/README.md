@@ -28,6 +28,11 @@ framework-neutral events
 The loop cannot execute tools or make its local checkpoint authoritative. Server-compiled tool
 schemas are exposed through Pydantic AI's execution-free `ExternalToolset`; every proposed call is
 handed back as a neutral event and must cross server admission, approval, and worker authority.
+The execution-free model toolset always includes `opencrane_request_input`, even when the run has no
+compiled external tools. Its Pydantic call id is retained only to correlate the server-owned
+elicitation result back into the same deferred-tool history. On resume, exact validated
+participant-input results share the existing `DeferredToolResults` mapping. Ordinary answer content
+is never logged or checkpointed; protected A2UI answers arrive only as redacted terminal markers.
 Completed Pydantic `FilePart` values become neutral generated-output
 events only after the whole response stays within ten files, 200 MiB total, and the approved media
 types. The immutable compiled route alone enables pinned PNG image generation or code execution.

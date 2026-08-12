@@ -134,6 +134,23 @@ def external_action_candidate(
     }
 
 
+def elicitation_candidate(
+    coordinates: dict[str, object],
+    proposal: dict[str, object],
+) -> dict[str, object]:
+    """Build one participant-input proposal for server-side authority binding.
+
+    Called by: ``RuntimeEventProjector`` after the neutral proposal passes the exact body and purpose
+    validator. The candidate deliberately carries no participant or absolute-expiry coordinate.
+    """
+    return {
+        **coordinates,
+        "candidateId": str(uuid.uuid4()),
+        "kind": "elicitation",
+        "proposal": proposal,
+    }
+
+
 def resolve_tool_revision(compiled_input: dict[str, object], tool_name: str) -> str | None:
     """Resolve a tool name the model used, looking only in the immutable compiled grant set.
 

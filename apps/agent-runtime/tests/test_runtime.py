@@ -97,7 +97,7 @@ def _resume_command(attempt: int = 1) -> dict:
         "commandId": "c2",
         "fence": 2,
         "assignment": {"runId": "r1", "attempt": attempt},
-        "payload": {"inputGeneration": 7, "toolResults": [], "steeringRequests": []},
+        "payload": {"inputGeneration": 7, "toolResults": [], "steeringRequests": [], "elicitationResults": []},
     }
 
 
@@ -374,6 +374,15 @@ class RuntimeZeroRetryTests(unittest.TestCase):
                 recorded["agent"] = kwargs
                 self.model = model
 
+        class _ToolDefinition:
+            def __init__(self, **definition: object) -> None:
+                self.definition = definition
+
+        class _ExternalToolset:
+            def __init__(self, definitions: object, **options: object) -> None:
+                self.definitions = definitions
+                self.options = options
+
         _build_zero_retry_agent(
             "silo-default",
             "http://litellm.svc.cluster.local",
@@ -389,6 +398,8 @@ class RuntimeZeroRetryTests(unittest.TestCase):
                 {"openai_include_code_execution_outputs": True, "openai_include_raw_annotations": True},
             ),
             deferred_tool_requests_cls=type("_DeferredToolRequests", (), {}),
+            external_toolset_cls=_ExternalToolset,
+            tool_definition_cls=_ToolDefinition,
         )
         # Provider HTTP / model-request retries land on the OpenAI client transport as max_retries=0.
         self.assertEqual(recorded["client"]["max_retries"], 0)
@@ -403,7 +414,7 @@ class RuntimeZeroRetryTests(unittest.TestCase):
         self.assertEqual(recorded["agent"]["model_settings"], {"openai_include_code_execution_outputs": True, "openai_include_raw_annotations": True})
         self.assertEqual(recorded["agent"]["output_type"][0], str)
         self.assertEqual(recorded["agent"]["output_type"][1].__name__, "_DeferredToolRequests")
-        self.assertEqual(recorded["agent"]["toolsets"], [])
+        self.assertEqual(recorded["agent"]["toolsets"][0].definitions[0].definition["name"], "opencrane_request_input")
 
     def test_compiled_memory_tool_reaches_model_as_external_tool(self) -> None:
         """The sealed memory schema is model-visible but has no runtime execution callback."""
@@ -471,6 +482,7 @@ class RuntimeZeroRetryTests(unittest.TestCase):
             "parameters_json_schema": schema,
         })
         self.assertIsNot(toolsets[0].definitions[0].definition["parameters_json_schema"], schema)
+        self.assertEqual(toolsets[0].definitions[1].definition["name"], "opencrane_request_input")
 
 
 class RuntimeDeferredToolBridgeTests(unittest.TestCase):

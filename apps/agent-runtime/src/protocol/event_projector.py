@@ -7,7 +7,9 @@ durable acceptance: every candidate still crosses the server's fenced persistenc
 import hashlib
 from collections.abc import Callable
 
-from .candidates import candidate, normalize_event, tool_call_candidate
+from .candidates import candidate, elicitation_candidate, normalize_event, tool_call_candidate
+from .elicitation import elicitation_proposal
+from ..attempts.pending_elicitations import record_pending_elicitation
 
 
 class RuntimeEventProjector:
@@ -34,11 +36,22 @@ class RuntimeEventProjector:
         self._message_id = f"assistant:{coordinates['commandId']}"
         self._message_started = False
         self._has_pending_tool_calls = False
+        self._has_pending_elicitations = False
 
     @property
     def has_pending_tool_calls(self) -> bool:
         """Whether this command proposed at least one durable external action."""
         return self._has_pending_tool_calls
+
+    @property
+    def has_pending_input(self) -> bool:
+        """Whether this command proposed a tool action or participant input and must pause."""
+        return self._has_pending_tool_calls or self._has_pending_elicitations
+
+    @property
+    def has_pending_elicitations(self) -> bool:
+        """Whether the model asked its one participant-input question for this command."""
+        return self._has_pending_elicitations
 
     def emit(self, neutral_event: dict[str, object]) -> None:
         """Emit the canonical candidate sequence for one neutral model event."""
@@ -49,6 +62,11 @@ class RuntimeEventProjector:
         if neutral_event.get("type") == "output_asset":
             self._emit_output_asset(neutral_event)
             return
+        if neutral_event.get("type") == "elicitation_request":
+            self._emit_elicitation(neutral_event)
+            return
+        if neutral_event.get("type") == "invalid_elicitation_request":
+            raise ValueError("invalid elicitation request")
         normalized = normalize_event(neutral_event, self._message_id)
         if normalized is None:
             return
@@ -108,6 +126,30 @@ class RuntimeEventProjector:
         # Failed projections still emit their bounded error proposal, while valid proposals are sent
         # only after their explanatory event and resume correlation state have been established.
         self._post_candidate(proposal)
+
+    def _emit_elicitation(self, neutral_event: dict[str, object]) -> None:
+        """Emit one strictly bounded request and pause this local command after delivery."""
+        if self._has_pending_elicitations:
+            raise ValueError("multiple elicitation requests in one command")
+        proposal = elicitation_proposal(neutral_event)
+        if proposal is None:
+            # Failing the command is safer than pretending a malformed model request did not need an
+            # answer. The executor reports only the exception class, never model-authored fields.
+            raise ValueError("invalid elicitation request")
+        framework_call_id = neutral_event.get("frameworkCallId")
+        if not isinstance(framework_call_id, str) or not framework_call_id:
+            raise ValueError("missing elicitation framework call")
+        # Any assistant text explaining the question must become a complete message before the
+        # participant-facing card. The executor stops reading immediately after this candidate.
+        self.complete_message()
+        record_pending_elicitation(
+            str(self._coordinates["runId"]),
+            int(self._coordinates["attempt"]),
+            str(proposal["requestKey"]),
+            framework_call_id,
+        )  # type: ignore[arg-type]
+        self._post_candidate(elicitation_candidate(self._coordinates, proposal))
+        self._has_pending_elicitations = True
 
     def _start_message(self) -> None:
         """Persist the assistant message start once before text or generated outputs."""
