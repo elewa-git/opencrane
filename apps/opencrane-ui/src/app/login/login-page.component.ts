@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, effect, inject } from "@angular/core";
+import { ChangeDetectionStrategy, Component, DestroyRef, computed, effect, inject } from "@angular/core";
 import { Router } from "@angular/router";
 import { Button } from "primeng/button";
 import { Card } from "primeng/card";
@@ -35,23 +35,26 @@ export class LoginPageComponent
 	/** Typed opencrane-ui client (used to launch the OIDC sign-in flow). */
 	private readonly _api = inject(ControlPlaneApiService);
 
+	/** Component lifetime used to remove browser-return listeners. */
+	private readonly _destroyRef = inject(DestroyRef);
+
 	/** Whether the landing card should be shown — once `/auth/me` is no longer
 	 * loading and the session is anonymous. Reading `isLoading` (rather than
 	 * `hasValue`) means an errored `/auth/me` (backend unreachable) still
 	 * surfaces the login affordance instead of staring at a blank page. */
-	public readonly showShell = computed((): boolean =>
-	{
-		return !this._session.me.isLoading() && !this._session.authenticated();
-	});
+	public readonly showShell = computed(this._showShell.bind(this));
 
 	public constructor()
 	{
 		const session = this._session;
 		const router = this._router;
 
-		// An already-signed-in visitor (refresh, bookmark, manual nav) should not
-		// see the login card — bounce them to `/` so the access guard decides
-		// whether they reach the workspace or the no-tenant screen.
+		this._reloadSessionOnBrowserReturn();
+
+		// An already-signed-in visitor (refresh, bookmark, manual nav, or a tab
+		// restored after Zitadel completed login elsewhere) should not see the
+		// login card — bounce them to `/` so the access guard decides whether
+		// they reach the workspace or the no-tenant screen.
 		effect(function _redirectIfAlreadyAuthenticated(): void
 		{
 			if (!session.me.hasValue())
@@ -69,5 +72,42 @@ export class LoginPageComponent
 	public signIn(): void
 	{
 		this._api.signIn("/");
+	}
+
+	/** Decide whether the anonymous login shell should be visible. */
+	private _showShell(): boolean
+	{
+		return !this._session.me.isLoading() && !this._session.authenticated();
+	}
+
+	/** Re-check `/auth/me` when the browser returns from an external login page. */
+	private _reloadSessionOnBrowserReturn(): void
+	{
+		this._session.reload();
+
+		if (typeof window === "undefined" || typeof document === "undefined")
+		{
+			return;
+		}
+
+		const session = this._session;
+		const reloadVisibleSession = function _reloadVisibleSession(): void
+		{
+			if (document.visibilityState === "visible")
+			{
+				session.reload();
+			}
+		};
+
+		window.addEventListener("pageshow", reloadVisibleSession);
+		window.addEventListener("focus", reloadVisibleSession);
+		document.addEventListener("visibilitychange", reloadVisibleSession);
+
+		this._destroyRef.onDestroy(function _removeSessionReloadListeners(): void
+		{
+			window.removeEventListener("pageshow", reloadVisibleSession);
+			window.removeEventListener("focus", reloadVisibleSession);
+			document.removeEventListener("visibilitychange", reloadVisibleSession);
+		});
 	}
 }
