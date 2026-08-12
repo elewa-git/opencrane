@@ -540,7 +540,7 @@ describe("PrismaRuntimeDispatchAuthority", function _describeDispatchAuthority()
 		const compileRunInput: RunInputCompiler = async function _compile(snapshot, attempt): Promise<CompiledRunInput>
 		{
 			const parametersSchema = { type: "object", properties: { query: { type: "string" } }, required: ["query"], additionalProperties: false } as const;
-			return { promptCompilerVersion: "v1", runId: snapshot.runId, attempt, instructions: "compiled", messages: [], tools: [{ name: PERSONAL_MEMORY_RECALL_TOOL_NAME, toolRevisionId: PERSONAL_MEMORY_RECALL_TOOL_REVISION, description: "recall", requiresApproval: false, parametersSchema, parametersSchemaDigest: ___DigestCanonicalJson(parametersSchema) }], model: { modelAlias: "silo-default", maxOutputTokens: null }, budget: { maxTotalTokens: null, maxCostUsdMicros: null, maxToolInvocations: null, wallClockDeadlineEpochMs: null }, digest: `sha256:${snapshot.digest}` };
+			return { promptCompilerVersion: "v1", runId: snapshot.runId, attempt, instructions: "compiled", messages: [], tools: [{ name: PERSONAL_MEMORY_RECALL_TOOL_NAME, toolRevisionId: PERSONAL_MEMORY_RECALL_TOOL_REVISION, description: "recall", requiresApproval: false, parametersSchema, parametersSchemaDigest: ___DigestCanonicalJson(parametersSchema) }], model: { modelAlias: "silo-default", maxOutputTokens: null, generatedOutputCapabilities: [] }, budget: { maxTotalTokens: null, maxCostUsdMicros: null, maxToolInvocations: null, wallClockDeadlineEpochMs: null }, digest: `sha256:${snapshot.digest}` };
 		};
 		const context = _authority({ runState: "Running", compileRunInput });
 		const start = await context.authority.__NextCommand(_identity, _open, 0);

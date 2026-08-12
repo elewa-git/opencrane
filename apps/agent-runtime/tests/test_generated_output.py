@@ -26,6 +26,8 @@ def _compiled_input() -> dict:
     """Build the minimal frozen input needed by one start-attempt command."""
     return {
         "promptCompilerVersion": "v1",
+        "runId": "run-output",
+        "attempt": 2,
         "instructions": "generate one file",
         "messages": [{"role": "user", "content": "create it"}],
         "tools": [],

@@ -4,8 +4,6 @@ import type { NextFunction, Request, Response } from "express";
 import request from "supertest";
 import { describe, expect, it, vi } from "vitest";
 
-import { __UnavailableMemoryGatewayClient } from "@opencrane/backend/server/infra/memory-gateway-client";
-
 import { _CreateInternalApp } from "../internal-app.js";
 import type { InternalRuntimeConfig } from "../config.types.js";
 
@@ -52,7 +50,7 @@ describe("internal workload app", function _Suite()
 {
 	it("rejects scanner JSON above the private command ceiling before route dispatch", async function _RejectsLargeScannerCommand()
 	{
-		const app = _CreateInternalApp({} as PrismaClient, {} as AuthenticationV1Api, _RuntimeConfig(), new __UnavailableMemoryGatewayClient(), [_Continue]);
+		const app = _CreateInternalApp({} as PrismaClient, {} as AuthenticationV1Api, _RuntimeConfig(), [_Continue]);
 		const response = await request(app).put("/api/internal/artifact-scanner/jobs/job-1/result").set("content-type", "application/json").send({ scannerVersion: "x".repeat(20 * 1_024) });
 
 		expect(response.status).toBe(413);
