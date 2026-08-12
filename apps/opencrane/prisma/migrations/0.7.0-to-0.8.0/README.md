@@ -35,6 +35,9 @@ keep those rows immutable and prevent runtime code from manufacturing more. When
 sources are empty, the migration replaces the governed 0.7 persona catalog and legacy conversation
 tables, preserves unrelated rows and unbound runs, applies the reviewed authority functions,
 triggers, constraints, and 0.8 seeds, and records the transition in schema history.
+The personal-configuration proposal trigger admits only an `agent_session` conversation where the
+initiating participant still has current access, so upgraded and freshly provisioned databases
+enforce the same atomic provenance boundary.
 An exact completed history row plus the current governed catalog makes a deploy retry a successful
 no-op. Any history/catalog mismatch is ambiguous and fails closed instead of replaying DDL.
 Retry detection runs under the same session advisory lock as the transition and also binds the

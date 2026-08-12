@@ -1,6 +1,6 @@
 export * from "./attempt-model-key.types.js";
 export * from "./openapi.js";
-export * from "./prisma-run-admission-repository.js";
+export { PrismaRunAdmissionRepository } from "./prisma-run-admission-repository.js";
 export * from "./prisma-run-cancellation-repository.js";
 export * from "./prisma-run-dispatch-repository.js";
 export * from "./prisma-self-run-cancellation.router.js";
