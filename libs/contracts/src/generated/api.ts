@@ -717,7 +717,7 @@ export interface paths {
         put?: never;
         /**
          * Queue one signed-in owner's instruction for a running agent
-         * @description The server derives the owner, silo, and current attempt. The instruction is queued durably and is consumed only at the runtime's fenced safe boundary.
+         * @description The server derives the owner, silo, and current attempt. The instruction is queued durably and exact retries reuse the same client key before consumption at the runtime's fenced safe boundary.
          */
         post: operations["submitRuntimeSteering"];
         delete?: never;
@@ -4574,10 +4574,25 @@ export interface operations {
             content: {
                 "application/json": {
                     text: string;
+                    idempotencyKey: string;
                 };
             };
         };
         responses: {
+            /** @description The exact steering retry was already queued. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        steeringRequestId: string;
+                        attempt: number;
+                        /** @enum {string} */
+                        state: "pending";
+                    };
+                };
+            };
             /** @description Steering request queued for the current run attempt. */
             202: {
                 headers: {

@@ -1,7 +1,7 @@
 import { Injectable, inject } from "@angular/core";
 
 import { ControlPlaneApiService } from "@opencrane/core";
-import { ConversationRunStates, ConversationWorkspaceGatewayError, ConversationWorkspaceGatewayErrorKinds, type ConversationCreationDirectory, type ConversationRun, type ConversationSummary, type ConversationWorkspaceDetail, type ConversationWorkspaceGateway, type CreateConversationCommand, type RetryConversationRunCommand, type SubmitConversationMessageCommand } from "@opencrane/state/conversation/workspace";
+import { ConversationRunStates, ConversationWorkspaceGatewayError, ConversationWorkspaceGatewayErrorKinds, type ConversationCreationDirectory, type ConversationRun, type ConversationSummary, type ConversationWorkspaceDetail, type ConversationWorkspaceGateway, type CreateConversationCommand, type RetryConversationRunCommand, type SubmitConversationMessageCommand, type SubmitConversationSteeringCommand } from "@opencrane/state/conversation/workspace";
 
 import { _ConversationDetail, _ConversationRun, _ConversationSummary, _ConversationWorkspaceDirectory } from "./conversation-workspace.dto.js";
 import type { ConversationDetailDto, ConversationDirectoryDto, ConversationRunDto, ConversationSummaryDto } from "./conversation-workspace.dto.types.js";
@@ -86,9 +86,9 @@ export class OpenCraneConversationWorkspaceGateway implements ConversationWorksp
 	}
 
 	/** @inheritdoc */
-	public async steer(runId: string, text: string): Promise<void>
+	public async steer(command: SubmitConversationSteeringCommand): Promise<void>
 	{
-		const result = await this._api.client.POST("/me/runs/{runId}/steering", { params: { path: { runId } }, body: { text } });
+		const result = await this._api.client.POST("/me/runs/{runId}/steering", { params: { path: { runId: command.runId } }, body: { text: command.text, idempotencyKey: command.idempotencyKey } });
 		if (result.error !== undefined || result.data === undefined) throw _Failure(result.response?.status);
 	}
 

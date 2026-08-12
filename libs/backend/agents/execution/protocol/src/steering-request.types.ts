@@ -13,6 +13,8 @@ export interface SubmitSteeringRequestCommand
 	readonly content: JsonValue;
 	/** Server-computed canonical digest of the accepted instruction. */
 	readonly digest: string;
+	/** Server-computed prefix that identifies retries using the same client key. */
+	readonly idempotencyDigest: string;
 	/** Trusted submission instant. */
 	readonly submittedAt: Date;
 }
@@ -20,6 +22,8 @@ export interface SubmitSteeringRequestCommand
 /** Stable result of attempting to queue steering for the live run attempt. */
 export type SubmitSteeringRequestResult =
 	| { readonly outcome: "queued"; readonly steeringRequestId: string; readonly attempt: number }
+	| { readonly outcome: "idempotent"; readonly steeringRequestId: string; readonly attempt: number }
+	| { readonly outcome: "idempotency_conflict" }
 	| { readonly outcome: "not_found_or_not_owner" }
 	| { readonly outcome: "run_not_steerable" };
 

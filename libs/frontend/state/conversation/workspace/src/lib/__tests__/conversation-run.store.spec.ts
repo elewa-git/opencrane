@@ -94,4 +94,21 @@ describe("ConversationRunStore terminal states", function _RunStateSuite()
 		expect(gateway.run).toHaveBeenCalledTimes(2);
 		expect(store.run()).toEqual(run);
 	});
+
+	it("reuses the exact steering command after an ambiguous response", async function _RetrySteering()
+	{
+		const run = { runId: "run-1", attempt: 1, state: ConversationRunStates.Running, conversationId: "conversation-1" };
+		const gateway = _Gateway(run);
+		vi.mocked(gateway.steer).mockRejectedValueOnce(new Error("connection reset after commit")).mockResolvedValueOnce(undefined);
+		const store = _Store(gateway);
+		await store.observe(run.runId, "conversation-1", AgUiRunStatuses.Running);
+		store.updateSteeringDraft("Focus on risks");
+
+		await store.steer();
+		await store.steer();
+
+		expect(gateway.steer).toHaveBeenCalledTimes(2);
+		expect(vi.mocked(gateway.steer).mock.calls[1]?.[0]).toEqual(vi.mocked(gateway.steer).mock.calls[0]?.[0]);
+		expect(store.steeringDraft()).toBe("");
+	});
 });

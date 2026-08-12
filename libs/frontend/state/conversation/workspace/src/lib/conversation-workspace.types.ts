@@ -207,6 +207,17 @@ export interface RetryConversationRunCommand
 	readonly idempotencyKey: string;
 }
 
+/** Retry-stable steering command for one participant-visible run. */
+export interface SubmitConversationSteeringCommand
+{
+	/** Run selected from the current projection. */
+	readonly runId: string;
+	/** Exact bounded instruction retained after an ambiguous response. */
+	readonly text: string;
+	/** Client command coordinate reused only for this exact instruction. */
+	readonly idempotencyKey: string;
+}
+
 /** Participant-scoped conversation reads and commands. */
 export interface ConversationWorkspaceGateway
 {
@@ -226,8 +237,8 @@ export interface ConversationWorkspaceGateway
 	close(conversationId: string): Promise<ConversationWorkspaceDetail>;
 	/** Read one signed-in user's run projection. */
 	run(runId: string): Promise<ConversationRun>;
-	/** Queue one instruction at the current run's safe boundary. */
-	steer(runId: string, text: string): Promise<void>;
+	/** Queue one retry-stable instruction at the current run's safe boundary. */
+	steer(command: SubmitConversationSteeringCommand): Promise<void>;
 	/** Request cancellation of the exact observed attempt. */
 	cancel(runId: string, expectedAttempt: number): Promise<ConversationRun>;
 	/** Start a new attempt for one failed participant-visible conversation run. */

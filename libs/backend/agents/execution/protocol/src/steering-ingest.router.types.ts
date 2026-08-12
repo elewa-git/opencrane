@@ -13,6 +13,15 @@ export interface SteeringIngestCaller
 	readonly subjectId: string;
 }
 
+/** Bounded client input accepted before server-owned steering authority runs. */
+export interface SteeringIngestRequestBody
+{
+	/** Plain owner instruction for the next safe runtime boundary. */
+	readonly text: string;
+	/** Retry coordinate reused only when the exact instruction is retried. */
+	readonly idempotencyKey: string;
+}
+
 /** Trusted clock injected so steering ingest is deterministic in route tests. */
 export interface SteeringIngestClock
 {

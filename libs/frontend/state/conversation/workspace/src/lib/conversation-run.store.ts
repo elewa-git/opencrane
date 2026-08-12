@@ -2,7 +2,7 @@ import { Injectable, computed, inject, signal } from "@angular/core";
 
 import { CONVERSATION_WORKSPACE_GATEWAY } from "./conversation-workspace.gateway.js";
 import { ConversationWorkspaceGatewayError } from "./conversation-workspace-gateway.errors.js";
-import { ConversationRunStates, type ConversationRun } from "./conversation-workspace.types.js";
+import { ConversationRunStates, type ConversationRun, type SubmitConversationSteeringCommand } from "./conversation-workspace.types.js";
 
 /** Component-scoped run status, steering, cancellation, and retry state. */
 @Injectable()
@@ -18,6 +18,8 @@ export class ConversationRunStore
 	private readonly _busy = signal(false);
 	/** Browser-safe run command error. */
 	private readonly _error = signal<string | null>(null);
+	/** Exact steering command retained until the server confirms durable admission. */
+	private _pendingSteering: SubmitConversationSteeringCommand | null = null;
 	/** Last run and streamed lifecycle coordinate whose status read started. */
 	private _requestedObservation: string | null = null;
 
@@ -64,8 +66,9 @@ export class ConversationRunStore
 		const run = this._run();
 		const text = this._steeringDraft().trim();
 		if (run === null || text.length === 0 || !this._CanSteer()) return;
+		const command = this._PendingSteeringCommand(run.runId, text);
 		this._busy.set(true);
-		try { await this._gateway.steer(run.runId, text); this._steeringDraft.set(""); }
+		try { await this._gateway.steer(command); this._pendingSteering = null; this._steeringDraft.set(""); }
 		catch (error) { this._error.set(_Message(error, "OpenCrane could not steer this run.")); }
 		finally { this._busy.set(false); }
 	}
@@ -98,6 +101,7 @@ export class ConversationRunStore
 		this._requestedObservation = null;
 		this._run.set(null);
 		this._steeringDraft.set("");
+		this._pendingSteering = null;
 		this._error.set(null);
 	}
 
@@ -117,6 +121,15 @@ export class ConversationRunStore
 
 	/** Whether the current run is failed rather than in ambiguous recovery. */
 	private _CanRetry(): boolean { return !this._busy() && this._run()?.state === ConversationRunStates.Failed; }
+
+	/** Reuse an ambiguous steering command instead of queueing the visible instruction twice. */
+	private _PendingSteeringCommand(runId: string, text: string): SubmitConversationSteeringCommand
+	{
+		if (this._pendingSteering !== null && this._pendingSteering.runId === runId) return this._pendingSteering;
+		const command = { runId, text, idempotencyKey: globalThis.crypto.randomUUID() };
+		this._pendingSteering = command;
+		return command;
+	}
 }
 
 /** Reduce an unknown failure to safe existing gateway copy or a fixed fallback. */

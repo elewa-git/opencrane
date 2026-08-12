@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 
 import { Router, type Request, type Response } from "express";
 
-import type { SteeringIngestCaller, SteeringIngestRouterDependencies } from "./steering-ingest.router.types.js";
+import type { SteeringIngestCaller, SteeringIngestRequestBody, SteeringIngestRouterDependencies } from "./steering-ingest.router.types.js";
 
 /** Longest steering instruction accepted, so it stays safe to store and to put in a prompt. */
 const _MAX_STEERING_CHARACTERS = 4_000;
@@ -29,15 +29,18 @@ export function __CreateSteeringIngestRouter(dependencies: SteeringIngestRouterD
 	{
 		const caller = _requireCaller(request, response, dependencies);
 		const runId = request.params["runId"];
-		const text = _text(request.body);
+		const body = _body(request.body);
 		if (caller === null) return;
-		if (typeof runId !== "string" || !runId.trim() || text === null) { _respond(response, 400, "invalid_steering_request"); return; }
+		if (typeof runId !== "string" || !runId.trim() || body === null) { _respond(response, 400, "invalid_steering_request"); return; }
 
 		try
 		{
-			const content = { text };
-			const result = await dependencies.requests.submitAtomically({ runId, siloId: caller.siloId, subjectId: caller.subjectId, content, digest: _digest(content), submittedAt: dependencies.clock.now() });
+			const content = { text: body.text };
+			const idempotencyDigest = _hash(body.idempotencyKey);
+			const result = await dependencies.requests.submitAtomically({ runId, siloId: caller.siloId, subjectId: caller.subjectId, content, idempotencyDigest, digest: `${idempotencyDigest}:${_hash(content)}`, submittedAt: dependencies.clock.now() });
 			if (result.outcome === "queued") { response.status(202).json({ steeringRequestId: result.steeringRequestId, attempt: result.attempt, state: "pending" }); return; }
+			if (result.outcome === "idempotent") { response.status(200).json({ steeringRequestId: result.steeringRequestId, attempt: result.attempt, state: "pending" }); return; }
+			if (result.outcome === "idempotency_conflict") { _respond(response, 409, "steering_idempotency_conflict"); return; }
 			if (result.outcome === "run_not_steerable") { _respond(response, 409, "run_not_steerable"); return; }
 			_respond(response, 404, "run_not_found");
 		}
@@ -60,19 +63,22 @@ function _requireCaller(request: Request, response: Response, dependencies: Stee
 }
 
 /** Accept only a body of `{ text }` within the length limit; the caller cannot send any other field. */
-function _text(body: unknown): string | null
+function _body(body: unknown): SteeringIngestRequestBody | null
 {
-	if (body === null || typeof body !== "object" || Array.isArray(body) || Object.keys(body).length !== 1) return null;
+	if (body === null || typeof body !== "object" || Array.isArray(body) || Object.keys(body).length !== 2) return null;
 	const text = (body as Record<string, unknown>)["text"];
-	if (typeof text !== "string") return null;
+	const idempotencyKey = (body as Record<string, unknown>)["idempotencyKey"];
+	if (typeof text !== "string" || typeof idempotencyKey !== "string") return null;
 	const trimmed = text.trim();
-	return trimmed && trimmed.length <= _MAX_STEERING_CHARACTERS ? trimmed : null;
+	const key = idempotencyKey.trim();
+	return trimmed && trimmed.length <= _MAX_STEERING_CHARACTERS && key && key.length <= 128 ? { text: trimmed, idempotencyKey: key } : null;
 }
 
-/** Hash the accepted instruction. No browser-supplied id is kept. */
-function _digest(content: { readonly text: string }): string
+/** Hash a retry coordinate or accepted instruction without storing the browser key. */
+function _hash(content: string | { readonly text: string }): string
 {
-	return `sha256:${createHash("sha256").update(JSON.stringify(content), "utf8").digest("hex")}`;
+	const value = typeof content === "string" ? content : JSON.stringify(content);
+	return `sha256:${createHash("sha256").update(value, "utf8").digest("hex")}`;
 }
 
 /** Write one bounded JSON problem response. */
