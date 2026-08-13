@@ -1,3 +1,5 @@
+import { AgentThreadDeliveryKinds } from "@opencrane/contracts";
+
 /** The route-level state machine for an Agent-thread page. */
 export enum AgentThreadRouteStates
 {
@@ -115,6 +117,4 @@ export enum AgentThreadTimelineEntryKinds
 	/** An append-only delivery to the immediate parent. */
 	Delivery = "delivery"
 }
-import { AgentThreadDeliveryKinds } from "@opencrane/contracts";
-
 export { AgentThreadDeliveryKinds };

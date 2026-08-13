@@ -7,7 +7,8 @@ import type { ConversationAssetPresentation } from "@opencrane/features/conversa
 import type { AgentThreadParentRestoreIntent, AgentThreadSummaryTarget } from "@opencrane/state/conversation/agent-threads";
 import type { ConversationActivityRow, ConversationElicitation } from "@opencrane/state/conversation/elicitation";
 
-import { _AgentThreadHistoryAfterPurge, _PurgedAgentThreadRouteProjection, type AgentThreadRouteHistoryState } from "./agent-thread-route.state";
+import { _AgentThreadHistoryAfterPurge, _PurgedAgentThreadRouteProjection } from "./agent-thread-route.state";
+import type { AgentThreadRouteHistoryState } from "./agent-thread-route.state.types";
 
 /**
  * Hosts the Agent-thread child conversation at `chats/:parentConversationId/threads/:childConversationId`.

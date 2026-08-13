@@ -1,11 +1,8 @@
-import type { paths } from "@opencrane/contracts";
 import { MessageContentBlockKinds } from "@opencrane/models/conversations";
 
 import { AgentThreadAccessStates, AgentThreadDeliveryKinds, AgentThreadRecoveryStates, AgentThreadRunStates, AgentThreadSummaryStates, AgentThreadSummaryTargetKinds, AgentThreadTimelineEntryKinds, type AgentThreadSnapshot, type AgentThreadSummaryTarget, type AgentThreadTimelineEntry } from "./agent-thread.types.js";
+import type { AgentThreadSnapshotDto } from "./opencrane-agent-thread.mapper.types.js";
 import { __ParseAgentThreadSnapshotDto } from "./opencrane-agent-thread.validator.js";
-
-/** Generated success DTO for one exact authorized Agent-thread route. */
-export type AgentThreadSnapshotDto = paths["/me/conversations/{parentConversationId}/agent-threads/{childConversationId}"]["get"]["responses"][200]["content"]["application/json"]["agentThread"];
 
 /** Map the generated wire DTO into the dependency-neutral Agent-thread view model. */
 export function __AgentThreadSnapshot(value: unknown): AgentThreadSnapshot
