@@ -1,59 +1,80 @@
 import type { ElicitationPurposes, ElicitationRequestStates } from "@opencrane/contracts";
 
-/** Persistence fields needed to build a browser-safe elicitation projection. */
+/**
+ * The stored fields `_ProjectElicitation` reads, and nothing else.
+ *
+ * Deliberately smaller than the `ElicitationRequest` row. Listing only these fields says which parts
+ * of a request may take part in building a browser reply; `purposePayload`, `purposePayloadDigest`,
+ * `bodyDigest`, `requestKey`, and `siloId` are left out because a client never sees them.
+ *
+ * `purpose` and `state` are the contract enums, not Prisma's: the caller converts them before
+ * calling, so this type stays free of `@prisma/client`.
+ */
 export type ElicitationProjectionRow = {
-	/** Stable request identifier. */
+	/** Identifier the browser sends back when answering this request. */
 	readonly id: string;
-	/** Conversation that owns the request. */
+	/** Conversation whose participants can see the request. */
 	readonly conversationId: string;
-	/** Run paused by the request. */
+	/** Run that is paused waiting for the answer. */
 	readonly runId: string;
-	/** Run attempt paused by the request. */
+	/** Attempt of that run. An answer for an older attempt is refused, so the browser must send it back. */
 	readonly attempt: number;
-	/** Participant allowed to answer the request. */
+	/** The one participant allowed to answer. Nobody else in the conversation may respond in their place. */
 	readonly assignedParticipantId: string;
-	/** Persisted purpose vocabulary. */
+	/** Why the server is asking, which decides what happens after an answer is accepted. Already converted out of Prisma's enum. */
 	readonly purpose: ElicitationPurposes;
-	/** Persisted lifecycle state. */
+	/** Where the request is in its lifecycle. Already converted out of Prisma's enum. */
 	readonly state: ElicitationRequestStates;
-	/** Browser-safe request body. */
+	/** The stored question, cast to `ElicitationBody` on the way out. Held as `unknown` because Prisma types a JSON column loosely. */
 	readonly body: unknown;
-	/** Whether the answer requires recent step-up authentication. */
+	/** True when the answer is only accepted after a fresh OpenID Connect sign-in. */
 	readonly requiresStepUp: boolean;
-	/** Time at which the request was created. */
+	/** When the server created the request, sent to the client as `requestedAt`. */
 	readonly createdAt: Date;
-	/** Time after which the request can no longer be answered. */
+	/** The answering deadline. Past it, the request expires and the run resumes without an answer. */
 	readonly expiresAt: Date;
-	/** Time at which the request reached a final state. */
+	/** When the request reached a final state, or null while it can still be answered. */
 	readonly resolvedAt: Date | null;
-	/** Safe public reason for a final state. */
+	/** Short reason for a final state, chosen from a fixed set so it carries no provider text or secret. Null while open. */
 	readonly safeReason: string | null;
 };
 
-/** Stored fields compared with caller-controlled values when a request is replayed. */
+/**
+ * The stored fields `_ElicitationRequestMatchesOpenCommand` compares when the same request is posted
+ * again.
+ *
+ * Wider than {@link ElicitationProjectionRow} on purpose: a replay check has to look at fields a
+ * client is never shown, such as `siloId` and the two digests. The timestamps are absent for the
+ * opposite reason — they are read from the server clock on each post and would differ between two
+ * honest replays.
+ *
+ * `purpose` and `bodyKind` are typed as `string` rather than as Prisma's enums, so this module needs
+ * no `@prisma/client` import. The values are the database's, and the caller converts the command's
+ * contract values to match before comparing.
+ */
 export type ElicitationReplayRow = {
-	/** Stable request identifier. */
+	/** Identifier the caller must reuse for the post to count as a replay. */
 	readonly id: string;
-	/** Silo that owns the request. */
+	/** ClusterTenant silo that owns the request. A request from another silo can never match. */
 	readonly siloId: string;
-	/** Conversation that owns the request. */
+	/** Conversation whose participants can see the request. */
 	readonly conversationId: string;
-	/** Run paused by the request. */
+	/** Run that is paused waiting for the answer. */
 	readonly runId: string;
-	/** Run attempt paused by the request. */
+	/** Attempt of that run. A later attempt asks again under its own request. */
 	readonly attempt: number;
-	/** Participant allowed to answer the request. */
+	/** The one participant allowed to answer. A replay may not reassign the ask. */
 	readonly assignedParticipantId: string;
-	/** Caller-owned replay key. */
+	/** Key the runtime chose for this ask, unique within the run attempt. It is what makes a repeat post findable. */
 	readonly requestKey: string;
-	/** Stored purpose value supplied by the Prisma owner. */
+	/** Stored purpose, in the database's own values. Compared against the converted command purpose. */
 	readonly purpose: string;
-	/** Stored body-kind value supplied by the Prisma owner. */
+	/** Stored body kind, in the database's own values. Compared against the converted command body kind. */
 	readonly bodyKind: string;
-	/** Digest of the public body. */
+	/** Digest of the stored question, so a replay cannot quietly change what is being asked. */
 	readonly bodyDigest: string;
-	/** Digest of the protected purpose payload. */
+	/** Digest of the protected purpose payload, so a replay cannot swap the consent coordinates behind an unchanged question. */
 	readonly purposePayloadDigest: string;
-	/** Whether the answer requires recent step-up authentication. */
+	/** True when the answer is only accepted after a fresh OpenID Connect sign-in. A replay may not lower this. */
 	readonly requiresStepUp: boolean;
 };

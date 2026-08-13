@@ -115,11 +115,17 @@ function _CreateSkillWorkloadRuntimeComposition(prisma: PrismaClient, tokenRevie
  * Bootstrap and streaming must apply the same plane boundary. The durable dispatch authority stays
  * here because it owns the server-side interpretation of runtime candidates, never the runtime Job.
  *
+ * Every router here shares the one runtime reviewer, which is the point: whatever a running agent
+ * sends the server — a bootstrap claim, a stream candidate, a generated file, or an Agent-thread
+ * delivery to a parent group message — is admitted against the same two runtime namespaces. The
+ * authorities behind them are built here rather than inside those libraries because they need this
+ * process's Prisma client and logger, and because none of them may be reachable from a browser router.
+ *
  * @param prisma - The main product database client.
  * @param config - Frozen command time-to-live and recovery settings.
  * @param namespaces - Validated server, personal-runtime, and managed-runtime identity planes.
  * @param tokenReviewer - Reviewer constrained to the two runtime identity planes.
- * @returns Runtime bootstrap and stream routers.
+ * @returns The runtime bootstrap, stream, conversation-file output, and Agent-thread parent-delivery routers.
  */
 function _CreateRuntimeProtocolComposition(prisma: PrismaClient, config: InternalRuntimeConfig, namespaces: RuntimeIdentityNamespaces, tokenReviewer: ReturnType<typeof _CreateRuntimeTokenReviewer>): RuntimeProtocolComposition
 {
@@ -216,6 +222,13 @@ function _CreateOptionalRuntimeComposition(prisma: PrismaClient, authApi: k8s.Au
  * Keeping path selection out of this module makes the trust split visible in `routes.ts`: the
  * composition binds concrete authorities, while the route registry shows exactly which internal
  * area receives each router.
+ *
+ * This runs once while the internal listener is built, and everything it constructs — reviewers,
+ * repositories, unit-of-work authorities, routers — lives as long as the process. So nothing built
+ * here may hold state belonging to a single request or a single caller; per-request work stays inside
+ * the router handlers.
+ *
+ * Called by: `_RegisterInternalRoutes` in routes.ts, which is called by internal-app.ts.
  *
  * @param prisma - The main product database client.
  * @param authApi - Kubernetes TokenReview client for workload identity.

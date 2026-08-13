@@ -9,20 +9,32 @@ import { PersonalRunAdmissionDenialReasons, PersonalRunAdmissionOutcomes, Person
 /** Fake service id used as the gate key for the preflight reads, which run before the real service is known. */
 const _PERSONAL_ADMISSION_PREFLIGHT_SERVICE_ID = "__personal_admission_preflight__";
 
-/** What the read-only preflight stage can find. */
+/**
+ * What the read-only preflight stage of `admitPersonalRun` found, and therefore whether the
+ * expensive assembly transaction is opened at all.
+ *
+ * Only this file reads these values. They are never stored and never sent to a client, so renaming a
+ * member needs no migration. Three of the four end the call immediately; only `Resolved` continues.
+ */
 enum _PersonalRunPreflightOutcomes
 {
-	/** A durable duplicate has already frozen the caller's original snapshot. */
+	/** This idempotency key already has a saved run, so the original `runId` is returned and nothing new is written. */
 	Idempotent = "idempotent",
-	/** The idempotency key already belongs to a different subject, trigger, or conversation. */
+	/** The key is in use by a different subject, trigger, or conversation. Refuse; a retry with the same key cannot succeed. */
 	Conflict = "conflict",
-	/** No duplicate exists but the caller has no eligible active personal conversation. */
+	/** No duplicate exists, but the caller is not a participant in an open personal conversation. Refuse without assembling. */
 	ConversationUnavailable = "conversation_unavailable",
-	/** The caller may enter the final service-specific admission gate. */
+	/** The conversation resolved to an AgentService, so the call may take a slot on that service's lane and assemble. Carries `agentServiceId`. */
 	Resolved = "resolved",
 }
 
-/** Result of the read-only preflight. The only thing it produces is the AgentService the server resolved. */
+/**
+ * Result of the read-only preflight. The only new fact it produces is the AgentService the server
+ * resolved, which decides which capacity lane the assembly stage queues on.
+ *
+ * The preflight grants no access: session assembly re-reads the same conversation inside its own
+ * transaction and refuses there if the caller's participation has since ended.
+ */
 type _PersonalRunPreflightResult =
 	| { readonly outcome: _PersonalRunPreflightOutcomes.Idempotent; readonly runId: string }
 	| { readonly outcome: _PersonalRunPreflightOutcomes.Conflict | _PersonalRunPreflightOutcomes.ConversationUnavailable }
@@ -30,6 +42,14 @@ type _PersonalRunPreflightResult =
 
 /**
  * Creates the personal run admission port. It knows nothing about HTTP.
+ *
+ * The port has two entry points because a run can start against a conversation that already exists
+ * or against one that does not exist yet. `admitPersonalRun` takes the first case and runs the two
+ * gated stages described below. `admitFirstAgentThreadRun` takes the second: its child conversation
+ * is created by the caller's `prepare` write inside the admission transaction, so there is nothing
+ * to look up beforehand and it skips the preflight entirely — see the test
+ * "admits a first Agent-thread run without pre-reading a child that is created in the same
+ * transaction" in `__tests__/personal-run-admission.test.ts`.
  *
  * Two gated stages. The preflight read looks up the conversation for one reason only: to learn which
  * AgentService the final capacity gate should queue against. The assembler reads that conversation
@@ -106,10 +126,15 @@ export function __CreatePersonalRunAdmissionPortWithGate(dependencies: PersonalR
 		},
 		async admitFirstAgentThreadRun(command, agentServiceId, prepare, commit): Promise<PersonalRunAdmissionResult>
 		{
-			// 1. Scope the public key to its new child conversation before entering the silo-wide keyspace.
+			// 1. Hash the caller's key together with the child conversation id, the same way the ordinary
+			// path does, because both keys land in the one silo-wide AgentRun table. The caller reuses its
+			// browser idempotency key for the parent message as well, so without this the two would clash.
 			const scopedCommand = { ...command, requestIdempotencyKey: _conversationScopedIdempotencyKey(command.conversationId, command.requestIdempotencyKey) };
 
-			// 2. Bound the full atomic child creation and input compilation behind the resolved service lane.
+			// 2. Take a slot on the service the caller named, then do everything inside one transaction:
+			// `prepare` writes the parent message and creates the child conversation, the input sources
+			// read that child, and `commit` saves the child message and the thread's origin row. There is
+			// no preflight read here — the child does not exist until `prepare` runs.
 			const bounded = await dependencies.capacityGate.execute(
 				{ siloId: command.siloId, agentServiceId },
 				async function _AssembleFirstThreadRun(): Promise<AssembleRunInputSnapshotResult>
@@ -117,6 +142,11 @@ export function __CreatePersonalRunAdmissionPortWithGate(dependencies: PersonalR
 					return dependencies.assemble(scopedCommand, { agentServiceId }, commit, prepare);
 				},
 			);
+
+			// 3. Translate the two failure shapes and the two success shapes into the port's own result.
+			// A capacity rejection and an assembly refusal are both `Denied` but carry different reasons,
+			// and `Accepted` must stay distinct from `Idempotent` so the caller does not report a fresh
+			// thread for a message it already admitted.
 			if (bounded.outcome === RunAdmissionConcurrencyOutcomes.Rejected) return { outcome: PersonalRunAdmissionOutcomes.Denied, reason: bounded.reason };
 			if (bounded.value.outcome === SessionAssemblyOutcomes.Denied) return { outcome: PersonalRunAdmissionOutcomes.Denied, reason: bounded.value.reason };
 			return { outcome: bounded.value.admissionOutcome === RunInputSnapshotAdmissionOutcomes.Accepted ? PersonalRunAdmissionOutcomes.Accepted : PersonalRunAdmissionOutcomes.Idempotent, runId: bounded.value.snapshot.runId };

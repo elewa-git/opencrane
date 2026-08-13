@@ -8,13 +8,30 @@ import type { JsonValue } from "@opencrane/util";
 import { RunAdmissionDenialReasons } from "./run-admission.types.js";
 import type { InitialRunAuthority, RunAdmissionBuild, RunAdmissionBuildResult, RunAdmissionClock, RunAdmissionCommand, RunAdmissionCommit, RunAdmissionPrepare, RunAdmissionRepository, RunAdmissionResult, RunAdmissionTransaction } from "./run-admission.types.js";
 
-/** Carries an expected refusal across the Prisma rollback boundary after preparation wrote rows. */
+/**
+ * Turns an expected refusal into a throw, so Prisma rolls the transaction back.
+ *
+ * Prisma's interactive `$transaction` commits whenever its callback returns a value and rolls back
+ * only when the callback throws. That is fine while nothing has been written: a `denied` return
+ * commits an empty transaction. It is not fine once `prepare` has run, because the caller has already
+ * inserted the rows its inputs needed — for a group `@agent` mention, the parent message, the child
+ * conversation and its participants. Returning `denied` there would leave a child conversation with no
+ * run in it. So this is thrown instead, and `admit` catches it and hands the caller back the same
+ * ordinary `denied` result it would have returned. Callers never see this type.
+ *
+ * Covered by `prisma-run-admission-repository.test.ts` ("rolls back prepared child authority when
+ * snapshot compilation denies" and "... when compiled coordinates conflict"), which assert that the
+ * prepared rows do not commit.
+ */
 class _PreparedAdmissionDenied<TDenial> extends Error
 {
-	/** Refusal produced by snapshot compilation. */
+	/** The refusal to give back to the caller once the rollback has happened. */
 	readonly reason: TDenial;
 
-	/** Creates the rollback signal without putting refusal detail in its Error message. */
+	/**
+	 * Builds the rollback signal. The `Error` message is fixed text and the reason stays on the field,
+	 * so an unhandled throw cannot print a refusal detail into a log or stack trace.
+	 */
 	constructor(reason: TDenial)
 	{
 		super("prepared run admission denied");
@@ -24,9 +41,27 @@ class _PreparedAdmissionDenied<TDenial> extends Error
 }
 
 /**
- * Prisma-backed authority for the first durable instant of a logical run.
- * It serialises the caller-visible idempotency key before compilation and commits the run, its sole
- * immutable snapshot, and both initial outbox events together; failure leaves none of them visible.
+ * Writes the first durable moment of a run to Postgres.
+ *
+ * One `$transaction` at `Serializable` covers everything: the duplicate check, the caller's optional
+ * preparation writes, the snapshot compilation the caller supplies, the run row, its snapshot row and
+ * its two outbox events. Either all of it commits or none of it does, so no reader can ever see a run
+ * without its snapshot, or a snapshot without the dispatch command that starts it.
+ *
+ * Two locks make that safe under concurrent callers: an advisory lock on silo + idempotency key holds a
+ * second delivery of the same request back until the first finishes, then a `FOR UPDATE` on the
+ * AgentService row is taken before any input is re-read, in the lock order the rest of the run code
+ * follows.
+ *
+ * This class owns the transaction, and that ownership is the contract. Callers hand in callbacks and
+ * receive a `Prisma.TransactionClient`, never the `PrismaClient` held here; they must write only on the
+ * client they are given and must not open a transaction of their own, which would commit separately and
+ * break the all-or-nothing guarantee above. The single read outside the transaction is the duplicate
+ * recovery in the catch block, which uses the root client because the transaction is already gone.
+ *
+ * Called by: `__AssembleRunInputSnapshot` (execution/inputs/main/src/session-assembly.ts), wired in by
+ * `prisma-session-assembly-authorities.ts`.
+ * @implements RunAdmissionRepository
  */
 export class PrismaRunAdmissionRepository implements RunAdmissionRepository
 {
@@ -51,8 +86,27 @@ export class PrismaRunAdmissionRepository implements RunAdmissionRepository
 	}
 
 	/**
-	 * Returns the first frozen snapshot for duplicate delivery, otherwise compiles under the service
-	 * lock and exposes an accepted result only after every run/snapshot/outbox write can commit.
+	 * Admits one run, or gives back the run an identical earlier request already got.
+	 *
+	 * A duplicate is answered from the existing rows and never recompiled, so a retry cannot freeze a
+	 * newer set of inputs under the same key. Only a request that is not a duplicate reaches the clock,
+	 * which is why the admission time is taken after the duplicate check rather than on entry.
+	 *
+	 * The compiled snapshot is then checked back against the command — same run, silo, service,
+	 * conversation, trigger and execution subject — because `build` is the caller's code and a mismatch
+	 * would otherwise store a snapshot describing a different run than the row it is attached to.
+	 *
+	 * @param command - Run coordinates and the `requestIdempotencyKey` that makes a repeat safe.
+	 * @param build - Compiles the snapshot inside the transaction, with the service row already locked.
+	 * @param commit - Optional writes to make after the run row exists.
+	 * @param prepare - Optional writes to make before compilation, for a caller whose inputs do not
+	 * exist yet. Skipped for a duplicate, and rolled back if the admission goes on to refuse.
+	 * @returns `accepted` when this call created the run, `idempotent` when an earlier identical request
+	 * did — both carry the same snapshot, and treating the second as the first starts a duplicate
+	 * runtime. `denied` carries the reason `build` gave, or `AuthorityConflict` when the request clashes
+	 * with an existing run, or `PersistenceUnavailable` when the outcome is unknown and the caller must
+	 * retry with the same key.
+	 * @see RunAdmissionDenialReasons for which refusals a retry can and cannot fix.
 	 */
 	async admit<TDenial>(command: RunAdmissionCommand, build: (transaction: RunAdmissionTransaction) => Promise<RunAdmissionBuildResult<TDenial>>, commit?: RunAdmissionCommit, prepare?: RunAdmissionPrepare): Promise<RunAdmissionResult<TDenial>>
 	{
@@ -79,8 +133,14 @@ export class PrismaRunAdmissionRepository implements RunAdmissionRepository
 				await transaction.$queryRaw(Prisma.sql`SELECT "id" FROM "agent_services" WHERE "id" = ${command.agentServiceId} AND "silo_id" = ${command.siloId} FOR UPDATE`);
 				const admittedAtDate = clock.now();
 				const admittedAt = admittedAtDate.toISOString();
+				// 3. Let the caller create the rows its own inputs need, so a child conversation exists
+				// before the conversation source reads it. It runs here, past the duplicate check, so a
+				// retried request cannot create a second child.
 				if (prepare) await prepare({ prisma: transaction, admittedAt, admittedAtEpochMs: admittedAtDate.getTime() });
 				const compiled = await build({ prisma: transaction, admittedAt, admittedAtEpochMs: admittedAtDate.getTime() });
+
+				// 4. Refuse by throwing whenever preparation already wrote rows, because returning would
+				// commit them without a run; see _PreparedAdmissionDenied.
 				if (compiled.outcome === "denied")
 				{
 					if (prepare) throw new _PreparedAdmissionDenied(compiled.reason);
@@ -92,7 +152,7 @@ export class PrismaRunAdmissionRepository implements RunAdmissionRepository
 					return { outcome: "denied", reason: RunAdmissionDenialReasons.AuthorityConflict };
 				}
 
-				// 3. Insert both sides of the deferred snapshot relation plus ordered acceptance and dispatch events in one commit.
+				// 5. Insert both sides of the deferred snapshot relation plus ordered acceptance and dispatch events in one commit.
 				await _persistInitialAdmission(transaction, command, compiled.value, admittedAtDate);
 				if (commit) await commit({ prisma: transaction, admittedAt, admittedAtEpochMs: admittedAtDate.getTime() }, compiled.value);
 				return { outcome: "accepted", snapshot: compiled.value.snapshot };
@@ -100,6 +160,8 @@ export class PrismaRunAdmissionRepository implements RunAdmissionRepository
 		}
 		catch (error)
 		{
+			// A refusal that had to roll prepared rows back is not a failure: hand the reason straight
+			// back, and do not log it as one.
 			if (error instanceof _PreparedAdmissionDenied) return { outcome: "denied", reason: error.reason as TDenial };
 			if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002")
 			{
@@ -202,7 +264,22 @@ function _trigger(value: InitialRunAuthority["trigger"]): "Interactive" | "Sched
 	return "ManagedInvocation";
 }
 
-/** Initializes the ordered acceptance event and first-attempt command for one admitted run. */
+/**
+ * Builds the two outbox rows every admitted run starts with.
+ *
+ * Admission does not dispatch anything itself; it records what should happen and lets a worker pick it
+ * up, so the run and the intent to start it commit together. `RunAccepted` at sequence 1 is the record
+ * that the run exists, and `RunAttemptRequested` at sequence 2 is the command that gets attempt 1
+ * running — the sequence numbers are what keep a reader from seeing the attempt before the acceptance.
+ * Each `idempotencyKey` is derived from the run id and the attempt, so a worker that redelivers cannot
+ * start attempt 1 twice.
+ *
+ * @param runId - The run both events belong to.
+ * @param inputSnapshotDigest - Carried in both payloads so a worker can confirm it loaded the snapshot
+ * the run was admitted with.
+ * @param availableAt - When a worker may claim the rows; the admission time, so they are claimable at
+ * once.
+ */
 export function _InitialRunOutboxData(runId: string, inputSnapshotDigest: string, availableAt: Date): Prisma.OutboxEventCreateManyInput[]
 {
 	const accepted: Prisma.OutboxEventCreateManyInput = {
@@ -226,7 +303,17 @@ export function _InitialRunOutboxData(runId: string, inputSnapshotDigest: string
 	return [accepted, attemptRequested];
 }
 
-/** Maps the immutable contract snapshot into the canonical Prisma persistence shape. */
+/**
+ * Copies the compiled snapshot into the row shape Prisma writes.
+ *
+ * Fields are listed one by one rather than spread, so a field added to the contract is stored only once
+ * someone names it here — the column set never drifts by accident. Arrays are copied and the JSON fields
+ * go through {@link _json}, so nothing Prisma is handed is still shared with the compiled snapshot.
+ *
+ * Called by: `_persistInitialAdmission` above, and `prisma-child-run-reservation-repository.ts` for a
+ * child run's snapshot. Both write the same row shape, which is what lets {@link _RunInputSnapshot} read
+ * either back.
+ */
 export function _RunInputSnapshotData(snapshot: RunInputSnapshot): Prisma.RunInputSnapshotUncheckedCreateInput
 {
 	const data: Prisma.RunInputSnapshotUncheckedCreateInput = {
@@ -255,7 +342,14 @@ export function _RunInputSnapshotData(snapshot: RunInputSnapshot): Prisma.RunInp
 	return data;
 }
 
-/** Maps one persisted snapshot row back into the immutable cross-domain contract. */
+/**
+ * Reads a stored snapshot row back as the contract shape.
+ *
+ * This is what a duplicate request gets: the snapshot the first request froze, unchanged. The JSON
+ * columns come back from Prisma as generic JSON and are cast to their contract types without
+ * re-validation, which holds because {@link _RunInputSnapshotData} is the only way these rows are
+ * written — a hand-edited row would not be caught here.
+ */
 export function _RunInputSnapshot(row: PrismaRunInputSnapshot): RunInputSnapshot
 {
 	const snapshot: RunInputSnapshot = {

@@ -24,7 +24,10 @@ const _SNAPSHOT_VERSION = 1;
  *
  * Called by: `__CreateManagedRunAdmissionPort` (execution/admission/main/src/managed-run-admission.composition.ts)
  * and `__CreatePersonalRunAdmissionPort` (execution/admission/main/src/personal-run-admission.composition.ts).
- * Both wrap this call in a capacity gate first, so do not call it straight from a route.
+ * Both wrap this call in a capacity gate first, so do not call it straight from a route. The personal
+ * port reaches it twice: once for an ordinary agent-session message, and once through
+ * `admitFirstAgentThreadRun` for the first run of a child Agent thread, which is the only caller that
+ * passes `prepare`.
  *
  * @param command - Run ids, trigger, and identity kind. The caller chooses `runId` and
  * `requestIdempotencyKey` before calling. Sending the same key again returns the first run, so a
@@ -36,6 +39,11 @@ const _SNAPSHOT_VERSION = 1;
  * @param commit - Optional extra write the caller needs inside the same transaction, such as the
  * conversation's input message. It runs only after every source has loaded, so it can never be
  * committed next to a partial snapshot.
+ * @param prepare - Optional write the caller needs *before* the sources load, for the case where the
+ * run's own inputs do not exist yet: the group `@agent` path uses it to create the child conversation
+ * that the conversation source then reads in the same transaction. It is skipped for a duplicate key,
+ * and rolled back with everything else if any source refuses, so it does not weaken the guarantee
+ * above — a refused admission still leaves nothing behind.
  * @returns `assembled` with the snapshot, plus `admissionOutcome`: `accepted` means this call
  * created the run, `idempotent` means the key was already used and the snapshot is the original
  * one. A caller that treats `idempotent` as `accepted` will start a second runtime for one run.
@@ -51,7 +59,9 @@ export async function __AssembleRunInputSnapshot(command: SessionAssemblyCommand
 	// 1. Reject a command with blank or missing ids first, so no authority read can match rows outside this run.
 	if (!_isCommandValid(command)) return { outcome: "denied", reason: "invalid_command" };
 
-	// 2. Resolve a duplicate before compilation, or hold the service lock while every input is revalidated.
+	// 2. Resolve a duplicate before compilation, or hold the service lock while every input is
+	// revalidated. `prepare` runs first inside that same transaction when the caller passed one, so a
+	// source below can read a conversation the caller has only just created.
 	const admitted = await authorities.admission.admit(command, async function _compileWithinAdmission(transaction)
 	{
 		// 3. Load the run and its locked revision first; every later source needs them.

@@ -17,7 +17,14 @@ export interface PersonalRunAdmissionCommand
 	 * subject against signed fleet membership.
 	 */
 	readonly executionSubjectId: string;
-	/** Existing conversation the caller asked the server to continue. */
+	/**
+	 * The conversation the run belongs to.
+	 *
+	 * For {@link PersonalRunAdmissionPort.admitPersonalRun} this is an existing conversation the
+	 * caller asked to continue. For {@link PersonalRunAdmissionPort.admitFirstAgentThreadRun} it is a
+	 * child conversation id the caller has just allocated and will create with its `prepare` write, so
+	 * no row exists for it when admission starts.
+	 */
 	readonly conversationId: string;
 	/** Key the caller sends, unique within the conversation, so a retry returns the first run's snapshot. */
 	readonly requestIdempotencyKey: string;
@@ -116,24 +123,42 @@ export type PersonalRunIdempotencyResult =
 	| { readonly outcome: PersonalRunIdempotencyOutcomes.Idempotent; readonly runId: string }
 	| { readonly outcome: PersonalRunIdempotencyOutcomes.Conflict };
 
-/** Assembles the snapshot. Called only after the shared capacity gate grants a slot. */
+/**
+ * Assembles the snapshot. Called only after the shared capacity gate grants a slot.
+ *
+ * Injected so this package never depends on the input-assembly package directly;
+ * {@link __CreatePersonalRunAdmissionPort} supplies the real implementation, which wraps
+ * `__AssembleRunInputSnapshot`.
+ */
 export interface PersonalRunSnapshotAssembler
 {
-	/** Assembles and persists the immutable input snapshot for an already-resolved personal conversation. */
+	/**
+	 * Assembles and persists the immutable input snapshot, and with it the AgentRun row.
+	 *
+	 * @param command - The admission command, with its idempotency key already scoped to the conversation.
+	 * @param authority - The AgentService this run belongs to, either resolved by the preflight or
+	 * named by the Agent-thread caller.
+	 * @param commit - Extra write the caller needs in the same transaction, run after every input
+	 * source has loaded, so it can never be committed beside a half-built snapshot.
+	 * @param prepare - Write the caller needs before the input sources load. The Agent-thread caller
+	 * creates the child conversation here, because the sources then read it while assembling.
+	 * @returns The assembly result, including whether this call created the run or found the key
+	 * already used. Throws rather than denying when an input source fails.
+	 */
 	(command: PersonalRunAdmissionCommand, authority: PersonalRunConversationAuthority, commit?: RunAdmissionCommit, prepare?: RunAdmissionPrepare): Promise<AssembleRunInputSnapshotResult>;
 }
 
 /**
- * What {@link PersonalRunAdmissionPort.admitPersonalRun} can return.
+ * What either method of {@link PersonalRunAdmissionPort} can return.
  *
  * `Accepted` and `Idempotent` are both successes and both carry a `runId`, but they are not
  * interchangeable: only `Accepted` means this call created the run. A caller that collapses them
  * reports a fresh start for a run that was already admitted, and the user sees their message
  * answered twice.
  *
- * Consumed by: `PrismaConversationUnitOfWork`
- * (libs/backend/server/conversations/main/src/prisma-conversation-unit-of-work.ts), which maps
- * `Idempotent` onto a duplicate-message reply and `Denied` through `_runAdmissionDenial`.
+ * Consumed by: `PrismaConversationMessageAdmissionUnitOfWork`
+ * (libs/backend/server/conversations/main/src/prisma-conversation-message-admission-unit-of-work.ts),
+ * which maps `Idempotent` onto a duplicate-message reply and `Denied` through `_runAdmissionDenial`.
  */
 export enum PersonalRunAdmissionOutcomes
 {
@@ -166,9 +191,14 @@ export enum PersonalRunAdmissionOutcomes
  * happens outside the assembly transaction: it can turn a duplicate request away without opening a
  * serializable transaction at all.
  *
+ * Only `admitPersonalRun` reaches the preflight, so only it returns a member of this enum.
+ * `admitFirstAgentThreadRun` has no preflight: every reason it returns comes from the capacity gate
+ * or from session assembly. `_runAdmissionDenial` compares reasons as plain strings, which is why a
+ * refusal from a lower layer with the same string value maps to the same participant-facing reply.
+ *
  * Consumed by: `_runAdmissionDenial`
- * (libs/backend/server/conversations/main/src/prisma-conversation-unit-of-work.ts), which maps
- * `AuthorityConflict` onto an idempotency conflict and `ConversationUnavailable` onto a
+ * (libs/backend/server/conversations/main/src/prisma-conversation-message-admission-unit-of-work.ts),
+ * which maps `AuthorityConflict` onto an idempotency conflict and `ConversationUnavailable` onto a
  * conversation-unavailable reply.
  */
 export enum PersonalRunAdmissionDenialReasons
@@ -193,6 +223,10 @@ export enum PersonalRunAdmissionDenialReasons
 	 *
 	 * Safe to retry with the SAME idempotency key: if the earlier attempt did in fact commit, the retry
 	 * comes back `Idempotent` instead of creating a second run.
+	 *
+	 * No path in this package returns this member today. The same refusal arrives from session
+	 * assembly as `RunAdmissionDenialReasons.PersistenceUnavailable`, which carries the identical
+	 * string, so a caller comparing strings cannot tell them apart and does not need to.
 	 */
 	PersistenceUnavailable = "persistence_unavailable",
 }
@@ -206,16 +240,17 @@ export type PersonalRunAdmissionResult =
 	| { readonly outcome: PersonalRunAdmissionOutcomes.Denied; readonly reason: PersonalRunAdmissionDenialReason };
 
 /**
- * Starts a user's personal run on a conversation they are already in.
+ * Starts a user's personal run, either on a conversation they are already in or on a child
+ * Agent-thread conversation created in the same transaction as the run.
  *
  * This is the boundary the HTTP layer calls. It knows nothing about HTTP itself: the caller must
  * have already authenticated the browser session and derived the silo from the request host, and it
  * passes only ids in. Nothing in {@link PersonalRunAdmissionCommand} may come from a request body
  * except the message content and the idempotency key.
  *
- * Called by: `PrismaConversationUnitOfWork`
- * (libs/backend/server/conversations/main/src/prisma-conversation-unit-of-work.ts), reached through
- * `_CreateSelfConversationsRouter` in the same package. Built by
+ * Called by: `PrismaConversationMessageAdmissionUnitOfWork`
+ * (libs/backend/server/conversations/main/src/prisma-conversation-message-admission-unit-of-work.ts),
+ * which `_CreateSelfConversationsRouter` builds in the same package. Built by
  * {@link __CreatePersonalRunAdmissionPort} and wired in at apps/opencrane/src/index.ts.
  *
  * @see PersonalRunAdmissionResult
@@ -235,7 +270,36 @@ export interface PersonalRunAdmissionPort
 	 * {@link PersonalRunAdmissionResult}.
 	 */
 	admitPersonalRun(command: PersonalRunAdmissionCommand, commit?: RunAdmissionCommit): Promise<PersonalRunAdmissionResult>;
-	/** Creates authority in the admission transaction before compiling one child Agent-thread run. */
+	/**
+	 * Admits the first run of a new Agent thread, together with the child conversation that run
+	 * belongs to, in one transaction.
+	 *
+	 * You hit this when someone addresses `@agent` in a group conversation. Nothing exists yet: the
+	 * parent message, the child `agent_session` conversation, its first message, and the thread's
+	 * origin row are all written here, and the run's input snapshot is built from the child that
+	 * `prepare` has just created. Because the child cannot be read before it exists, this method runs
+	 * no preflight and takes the AgentService from the caller instead of resolving it. The caller is
+	 * therefore responsible for checking that the user may address that service, and for having
+	 * already rejected a duplicate submission on the parent conversation — `submit` does that with its
+	 * own idempotency read before it gets here.
+	 *
+	 * @param command - Server-derived ids plus the user's message. `conversationId` is the child id the
+	 * caller allocated and is about to create, not an existing conversation.
+	 * @param agentServiceId - The AgentService the thread runs on, taken from the caller's validated
+	 * `agentTarget`. It also selects the capacity lane this admission queues on.
+	 * @param prepare - Write that runs before the input sources load. The caller creates the parent
+	 * message, the child conversation, and its persona here. Required rather than optional, because the
+	 * sources read that child while building the snapshot.
+	 * @param commit - Write that runs after the snapshot is built. The caller saves the child message
+	 * and the thread origin here, and throws if the persona changed between `prepare` and now, which
+	 * rolls the whole transaction back rather than leaving a thread bound to the wrong persona.
+	 * @returns `Accepted` with the new run's id when the thread was created, `Idempotent` with the
+	 * original run's id when the scoped key was already used, or `Denied` with a reason from the
+	 * capacity gate or from session assembly. Nothing is written unless the result is `Accepted`.
+	 * @throws Whatever `prepare` or `commit` throws, since both run inside the admission transaction
+	 * and are not converted into a `Denied` result.
+	 * @see PersonalRunAdmissionResult
+	 */
 	admitFirstAgentThreadRun(command: PersonalRunAdmissionCommand, agentServiceId: string, prepare: RunAdmissionPrepare, commit: RunAdmissionCommit): Promise<PersonalRunAdmissionResult>;
 }
 
@@ -248,9 +312,9 @@ export interface PersonalRunAdmissionPort
  */
 export interface PersonalRunAdmissionDependencies
 {
-	/** Reads the idempotency key and the caller's conversation. Used only after the preflight gate grants a slot. */
+	/** Reads the idempotency key and the caller's conversation. Used only by `admitPersonalRun`, and only after the preflight gate grants a slot. */
 	readonly repository: PersonalRunAdmissionRepository;
-	/** Assembles and saves the immutable snapshot, through the run admission repository. */
+	/** Assembles and saves the immutable snapshot, through the run admission repository. Both entry points end here. */
 	readonly assemble: PersonalRunSnapshotAssembler;
 	/** The one capacity gate for this process. Must be the same instance managed admission was given, or the process runs at double its ceiling. */
 	readonly capacityGate: RunAdmissionCapacityGate;
