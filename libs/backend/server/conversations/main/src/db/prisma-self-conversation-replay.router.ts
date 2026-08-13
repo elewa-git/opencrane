@@ -6,8 +6,8 @@ import { _ResolveRequestPrincipal } from "@opencrane/backend/server/infra/auth";
 import { CONVERSATION_PROJECTION_CLOCK, CONVERSATION_PROJECTION_LIMITS } from "@opencrane/backend/conversations/projection";
 
 import { _CreateConversationReplayRepository } from "./prisma-conversation-replay.composition.js";
-import { __CreateSelfConversationReplayRouter } from "./self-conversation-replay.router.js";
-import type { SelfConversationReplayCaller, SelfConversationReplayCompositionOptions } from "./self-conversation-replay.router.types.js";
+import { __CreateSelfConversationReplayRouter } from "../self-conversation-replay.router.js";
+import type { SelfConversationReplayCaller, SelfConversationReplayCompositionOptions } from "../self-conversation-replay.router.types.js";
 
 /** Maps authenticated request facts to the caller contract owned by conversations. */
 function _resolveCaller(request: Parameters<typeof _ResolveRequestPrincipal>[0]): SelfConversationReplayCaller | null

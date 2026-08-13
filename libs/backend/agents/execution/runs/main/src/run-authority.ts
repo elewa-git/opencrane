@@ -124,7 +124,7 @@ export function __ValidateRunWorkloadAssignment(assignment: RunWorkloadAssignmen
  * which "returns the durable same-key attempt even when the service later retires" pins.
  *
  * Called by: `PrismaConversationUnitOfWork.retryRun`
- * (libs/backend/server/conversations/main/src/prisma-conversation-unit-of-work.ts), reached from
+ * (libs/backend/server/conversations/main/src/db/prisma-conversation-unit-of-work.ts), reached from
  * `POST /api/v1/me/conversations/{conversationId}/runs/{runId}/retry`.
  *
  * @param repository - Where the run is read and the attempt raised; the same instance is used for

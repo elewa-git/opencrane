@@ -2,7 +2,7 @@ import { Prisma, type PrismaClient } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
 import { ConversationProjectionReadStatuses } from "@opencrane/backend/conversations/projection";
 
-import { _CreateConversationReplayRepository } from "../prisma-conversation-replay.composition.js";
+import { _CreateConversationReplayRepository } from "../db/prisma-conversation-replay.composition.js";
 
 describe("Prisma conversation replay unit of work", function _Suite()
 {

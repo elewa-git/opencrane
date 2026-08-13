@@ -19,7 +19,7 @@ import type { CanonicalJsonSha256Digest, JsonValue } from "./json-canonicalizati
  * `libs/models/agents/main/src/agent-tool-definition.validator.ts`,
  * `libs/backend/agents/execution/inputs/main/src/prompt-compiler.ts`,
  * `libs/backend/agents/personal/configuration/main/src/proposal/personal-configuration-proposal.ts`,
- * `libs/backend/server/conversations/main/src/prisma-conversation-unit-of-work.ts`.
+ * `libs/backend/server/conversations/main/src/db/prisma-conversation-unit-of-work.ts`.
  * @param value - JSON value to digest.
  * @returns Lowercase `sha256:<hex>` digest of the canonical JSON.
  * @throws TypeError for any input {@link ___CanonicalizeJson} rejects, so a digest is never taken over a value that could not round-trip.

@@ -5,8 +5,8 @@ import { PersonalRunAdmissionOutcomes, type PersonalRunAdmissionPort } from "@op
 import type { RunAdmissionTransaction } from "@opencrane/backend/agents/execution/runs";
 import { MessageContentBlockKinds, MessageSources } from "@opencrane/models/conversations";
 
-import { PrismaConversationMessageAdmissionUnitOfWork } from "../prisma-conversation-message-admission-unit-of-work.js";
-import { PrismaConversationMutationRepository } from "../prisma-conversation-mutation-repository.js";
+import { PrismaConversationMessageAdmissionUnitOfWork } from "../db/prisma-conversation-message-admission-unit-of-work.js";
+import { PrismaConversationMutationRepository } from "../db/prisma-conversation-mutation-repository.js";
 import type { SubmitConversationMessageRequest } from "../types/conversation-request.types.js";
 
 /** Fixed caller and message request reused across mode-strategy assertions. */

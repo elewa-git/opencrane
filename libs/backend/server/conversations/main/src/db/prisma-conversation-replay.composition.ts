@@ -1,7 +1,7 @@
 import type { PrismaClient } from "@prisma/client";
 
 import { PrismaConversationReplayUnitOfWork } from "./prisma-conversation-replay-unit-of-work.js";
-import type { ConversationReplayUnitOfWork } from "./replay-reader.types.js";
+import type { ConversationReplayUnitOfWork } from "../replay-reader.types.js";
 
 /**
  * Build the replay reader an app hands to a router.

@@ -5,7 +5,7 @@ import { ConversationModes, MessageContentBlockKinds, MessageSources } from "@op
 import type { RunRetryAuthority } from "@opencrane/backend/agents/execution/runs";
 import { __DecodeConversationProjectionCursor } from "@opencrane/backend/conversations/projection";
 
-import { PrismaConversationUnitOfWork } from "../prisma-conversation-unit-of-work.js";
+import { PrismaConversationUnitOfWork } from "../db/prisma-conversation-unit-of-work.js";
 import type { ConversationMessageAdmissionUnitOfWork } from "../conversation-message-admission.types.js";
 import type { SubmitConversationMessageRequest } from "../types/conversation-request.types.js";
 

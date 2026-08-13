@@ -291,28 +291,28 @@
         "constructs": []
       },
       {
-        "path": "libs/backend/server/conversations/main/src/prisma-conversation-replay-repository.ts",
+        "path": "libs/backend/server/conversations/main/src/db/prisma-conversation-replay-repository.ts",
         "adapter": "PrismaConversationReplayRepository",
         "contract": "ConversationReplayRepository",
-        "contractImportPath": "./replay-reader.types.js",
+        "contractImportPath": "../replay-reader.types.js",
         "constructs": []
       },
       {
-        "path": "libs/backend/server/conversations/main/src/prisma-agent-thread-parent-delivery-repository.ts",
+        "path": "libs/backend/server/conversations/main/src/db/prisma-agent-thread-parent-delivery-repository.ts",
         "adapter": "PrismaAgentThreadParentDeliveryRepository",
         "contract": "AgentThreadParentDeliveryRepository",
         "contractImportPath": "./prisma-agent-thread-parent-delivery-repository.types.js",
         "constructs": []
       },
       {
-        "path": "libs/backend/server/conversations/main/src/prisma-conversation-query-repository.ts",
+        "path": "libs/backend/server/conversations/main/src/db/prisma-conversation-query-repository.ts",
         "adapter": "PrismaConversationQueryRepository",
         "contract": "ConversationQueryRepository",
         "contractImportPath": "./prisma-conversation-query-repository.types.js",
         "constructs": []
       },
       {
-        "path": "libs/backend/server/conversations/main/src/prisma-conversation-mutation-repository.ts",
+        "path": "libs/backend/server/conversations/main/src/db/prisma-conversation-mutation-repository.ts",
         "adapter": "PrismaConversationMutationRepository",
         "contract": "ConversationMutationRepository",
         "contractImportPath": "./prisma-conversation-mutation-repository.types.js",
@@ -759,10 +759,10 @@
         ]
       },
       {
-        "path": "libs/backend/server/conversations/main/src/prisma-conversation-message-admission-unit-of-work.ts",
+        "path": "libs/backend/server/conversations/main/src/db/prisma-conversation-message-admission-unit-of-work.ts",
         "adapter": "PrismaConversationMessageAdmissionUnitOfWork",
         "contract": "ConversationMessageAdmissionUnitOfWork",
-        "contractImportPath": "./conversation-message-admission.types.js",
+        "contractImportPath": "../conversation-message-admission.types.js",
         "constructs": [
           {
             "adapter": "PrismaConversationMutationRepository",
@@ -775,10 +775,10 @@
         ]
       },
       {
-        "path": "libs/backend/server/conversations/main/src/prisma-conversation-replay-unit-of-work.ts",
+        "path": "libs/backend/server/conversations/main/src/db/prisma-conversation-replay-unit-of-work.ts",
         "adapter": "PrismaConversationReplayUnitOfWork",
         "contract": "ConversationReplayUnitOfWork",
-        "contractImportPath": "./replay-reader.types.js",
+        "contractImportPath": "../replay-reader.types.js",
         "constructs": [
           {
             "adapter": "PrismaConversationReplayRepository",
@@ -787,10 +787,10 @@
         ]
       },
       {
-        "path": "libs/backend/server/conversations/main/src/prisma-agent-thread-parent-delivery-unit-of-work.ts",
+        "path": "libs/backend/server/conversations/main/src/db/prisma-agent-thread-parent-delivery-unit-of-work.ts",
         "adapter": "PrismaAgentThreadParentDeliveryUnitOfWork",
         "contract": "AgentThreadParentDeliveryUnitOfWork",
-        "contractImportPath": "./agent-thread-parent-delivery.types.js",
+        "contractImportPath": "../agent-thread-parent-delivery.types.js",
         "constructs": [
           {
             "adapter": "PrismaAgentThreadParentDeliveryRepository",
@@ -799,10 +799,10 @@
         ]
       },
       {
-        "path": "libs/backend/server/conversations/main/src/prisma-conversation-unit-of-work.ts",
+        "path": "libs/backend/server/conversations/main/src/db/prisma-conversation-unit-of-work.ts",
         "adapter": "PrismaConversationUnitOfWork",
         "contract": "ConversationUnitOfWork",
-        "contractImportPath": "./types/conversation-unit-of-work.types.js",
+        "contractImportPath": "../types/conversation-unit-of-work.types.js",
         "constructs": [
           {
             "adapter": "PrismaConversationMutationRepository",
@@ -1057,9 +1057,9 @@
 		"libs/backend/agents/execution/admission/main/src/personal-run-admission.composition.ts",
 		"libs/backend/server/agents/artifacts/main/src/prisma-artifact-authority.composition.ts",
 		"libs/backend/server/conversation-assets/main/src/prisma-conversation-asset.composition.ts",
-		"libs/backend/server/conversations/main/src/prisma-conversation-replay.composition.ts",
-		"libs/backend/server/conversations/main/src/prisma-self-conversation-replay.router.ts",
-		"libs/backend/server/conversations/main/src/prisma-self-conversations.router.ts",
+		"libs/backend/server/conversations/main/src/db/prisma-conversation-replay.composition.ts",
+		"libs/backend/server/conversations/main/src/db/prisma-self-conversation-replay.router.ts",
+		"libs/backend/server/conversations/main/src/db/prisma-self-conversations.router.ts",
 		"libs/backend/agents/execution/elicitation/main/src/prisma-self-elicitation.router.ts",
 		"libs/backend/agents/execution/elicitation/main/src/prisma-elicitation-interrupt-reader.ts",
 		"libs/backend/agents/execution/runs/main/src/prisma-self-run-cancellation.router.ts",

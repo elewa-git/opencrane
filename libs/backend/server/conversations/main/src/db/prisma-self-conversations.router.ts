@@ -9,9 +9,9 @@ import { _ResolveRequestPrincipal } from "@opencrane/backend/server/infra/auth";
 import { PrismaConversationMessageAdmissionUnitOfWork } from "./prisma-conversation-message-admission-unit-of-work.js";
 import { PrismaConversationUnitOfWork } from "./prisma-conversation-unit-of-work.js";
 import { PrismaConversationMutationRepository } from "./prisma-conversation-mutation-repository.js";
-import { __CreateSelfConversationsRouter } from "./self-conversations.router.js";
-import type { ConversationCaller } from "./types/conversation-caller.types.js";
-import type { ConversationAttachmentAdmissionFactory } from "./conversation-message-admission.types.js";
+import { __CreateSelfConversationsRouter } from "../self-conversations.router.js";
+import type { ConversationCaller } from "../types/conversation-caller.types.js";
+import type { ConversationAttachmentAdmissionFactory } from "../conversation-message-admission.types.js";
 
 /** Maps authenticated request facts to the caller contract owned by conversations. */
 function _resolveCaller(request: Parameters<typeof _ResolveRequestPrincipal>[0]): ConversationCaller | null

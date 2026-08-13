@@ -2,7 +2,7 @@ import { Prisma, type PrismaClient } from "@prisma/client";
 import type { ConversationProjectionReadResult, ReadConversationProjectionCommand } from "@opencrane/backend/conversations/projection";
 
 import { PrismaConversationReplayRepository } from "./prisma-conversation-replay-repository.js";
-import type { ConversationReplayUnitOfWork } from "./replay-reader.types.js";
+import type { ConversationReplayUnitOfWork } from "../replay-reader.types.js";
 
 /**
  * Reads a replay page inside one repeatable-read transaction, so the access check and the rows

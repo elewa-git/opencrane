@@ -2,7 +2,7 @@ import type { SubmitConversationMessageResult } from "./types/conversation-autho
 import type { ConversationCaller } from "./types/conversation-caller.types.js";
 import type { SubmitConversationMessageRequest } from "./types/conversation-request.types.js";
 import type { ConversationMessageView } from "./types/conversation-view.types.js";
-import type { ConversationCommandContext } from "./prisma-conversation-query-repository.types.js";
+import type { ConversationCommandContext } from "./db/prisma-conversation-query-repository.types.js";
 import type { RunAdmissionTransaction } from "@opencrane/backend/agents/execution/runs";
 
 /** Transaction-bound participant attachment admission owned by conversation assets. */

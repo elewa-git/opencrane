@@ -3,7 +3,7 @@ import { __EncodeConversationProjectionCursor, ConversationProjectionReadStatuse
 import { AgentThreadEventTypes } from "@opencrane/backend/conversations/agent-threads";
 import { ConversationSystemEventTypes } from "@opencrane/models/conversations";
 
-import type { ConversationReplayRepository } from "./replay-reader.types.js";
+import type { ConversationReplayRepository } from "../replay-reader.types.js";
 
 /**
  * The SQL side of a replay page: checks access, then reads rows in timeline order.
