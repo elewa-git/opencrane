@@ -5,9 +5,10 @@ import type { PrismaClient } from "@prisma/client";
 import type { ThirdPartySourceWriteRequest } from "./third-party-sources.types.js";
 
 /** Convert an optional API timestamp into the database value for a named update field. */
-function _OptionalTimestamp(value: string | undefined): Date | null | undefined
+function _OptionalTimestamp(value: string | null | undefined): Date | null | undefined
 {
 	if (value === undefined) return undefined;
+	if (value === null) return null;
 	if (value.length === 0) return null;
 	return new Date(value);
 }
