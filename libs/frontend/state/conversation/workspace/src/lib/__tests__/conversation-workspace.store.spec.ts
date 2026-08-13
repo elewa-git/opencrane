@@ -224,6 +224,7 @@ describe("ConversationWorkspaceStore", function _ConversationWorkspaceStore()
 	it("does not clear a newer selection when an archive completes late", async function _StaleArchive()
 	{
 		const [store, gateway] = _CreateStore();
+		gateway.historyResult = { status: ConversationOnboardingHistoryStatuses.NotRecorded, history: null };
 		await store.load();
 		const deferred = _Deferred<ConversationWorkspaceDetail>();
 		gateway.archiveResult = deferred.promise;
@@ -234,6 +235,17 @@ describe("ConversationWorkspaceStore", function _ConversationWorkspaceStore()
 
 		expect(await archive).toBeNull();
 		expect(store.selected()?.id).toBe("conversation-2");
+	});
+
+	it("moves an archived conversation into history immediately", async function _AdoptArchive()
+	{
+		const [store, gateway] = _CreateStore();
+		gateway.historyResult = { status: ConversationOnboardingHistoryStatuses.NotRecorded, history: null };
+		await store.load();
+
+		expect(await store.archive()).toEqual({ conversationId: null });
+		expect(store.conversations()).toEqual([{ ..._Detail(), archivedAt: "2026-08-12T10:00:00.000Z" }]);
+		expect(store.selected()).toBeNull();
 	});
 
 	it("retains a message draft while the live stream reconnects", async function _ReconnectDraft()

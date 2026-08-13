@@ -254,11 +254,11 @@ export class ConversationWorkspaceStore
 		this._conversationCommandBusy.set(true);
 		try
 		{
-			await this._gateway.archive(selected.id, true);
-			this._conversations.update(current => current.filter(candidate => candidate.id !== selected.id));
+			const archived = await this._gateway.archive(selected.id, true);
+			this._conversations.update(current => current.map(candidate => candidate.id === archived.id ? archived : candidate));
 			if (generation !== this._generation || this._selected()?.id !== selected.id) return null;
 			this._ClearSelection();
-			const next = this._conversations()[0];
+			const next = this._conversations().find(candidate => candidate.archivedAt === null);
 			return { conversationId: next?.id ?? null };
 		}
 		catch (error) { if (generation === this._generation) this._HandleFailure(error, true); }
