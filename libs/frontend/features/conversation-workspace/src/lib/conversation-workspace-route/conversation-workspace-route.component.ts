@@ -4,7 +4,7 @@ import { Router } from "@angular/router";
 import { PLATFORM_BRIDGE, type AuthenticationWindowObservation } from "@opencrane/platform";
 
 import type { ConversationThreadNavigationIntent } from "../conversation-workspace-feature.types.js";
-import { ConversationWorkspacePageComponent } from "../conversation-workspace-page/conversation-workspace-page.component.js";
+import { ConversationWorkspacePageComponent } from "../components/conversation-workspace-page/conversation-workspace-page.component.js";
 import { _ConversationRouteCommands, _ConversationThreadRouteNavigation } from "./conversation-workspace-route.state.js";
 
 /** Feature-local coordinator for canonical chat URLs and breadcrumb child navigation. */

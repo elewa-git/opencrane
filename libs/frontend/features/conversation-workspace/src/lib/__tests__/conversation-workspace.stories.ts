@@ -3,7 +3,7 @@ import { type Meta, moduleMetadata, type StoryObj } from "@storybook/angular";
 import { ConversationOnboardingHistoryStatuses } from "@opencrane/state/conversation/workspace";
 
 import type { ConversationOnboardingHistoryPresentation, ConversationSummaryPresentation } from "../conversation-workspace-feature.types.js";
-import { ConversationListComponent } from "../conversation-list/conversation-list.component.js";
+import { ConversationListComponent } from "../components/conversation-list/conversation-list.component.js";
 
 /** Privacy-safe rows used by desktop and compact visual contracts. */
 const _ITEMS: readonly ConversationSummaryPresentation[] =

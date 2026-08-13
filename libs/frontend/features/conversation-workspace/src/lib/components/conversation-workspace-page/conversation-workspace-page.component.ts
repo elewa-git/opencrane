@@ -1,20 +1,11 @@
 import { ChangeDetectionStrategy, Component, ElementRef, ViewChild, afterRenderEffect, effect, input, output, signal } from "@angular/core";
-import { ButtonModule } from "primeng/button";
-import { MessageModule } from "primeng/message";
-
-import { ConversationComposerComponent, ConversationMessageComponent, ConversationRichTextComponent, ConversationRunActionsComponent, ConversationStatusLineComponent } from "@opencrane/elements/conversation";
-import { ConversationActivityComponent } from "@opencrane/features/conversation-activity";
-import { ConversationAttachmentTrayComponent, ConversationFilesPanelComponent } from "@opencrane/features/conversation-assets";
-import { ConversationElicitationCardComponent } from "@opencrane/features/conversation-elicitation";
 import { ConversationAssetsStore } from "@opencrane/state/conversation/assets";
 import { ConversationElicitationStore, type ConversationActivityTarget } from "@opencrane/state/conversation/elicitation";
 import { ConversationOnboardingHistoryStore, ConversationRunStore, ConversationWorkspaceRouteStates, ConversationWorkspaceStore } from "@opencrane/state/conversation/workspace";
 
-import { ConversationCreateComponent } from "../conversation-create/conversation-create.component.js";
-import { ConversationListComponent } from "../conversation-list/conversation-list.component.js";
-import { ConversationOnboardingHistoryComponent } from "../components/conversation-onboarding-history/conversation-onboarding-history.component.js";
-import type { ConversationThreadNavigationIntent } from "../conversation-workspace-feature.types.js";
-import { ConversationWorkspacePresenter } from "../conversation-workspace.presenter.js";
+import type { ConversationThreadNavigationIntent } from "../../conversation-workspace-feature.types.js";
+import { ConversationWorkspacePresenter } from "../../conversation-workspace.presenter.js";
+import { CONVERSATION_WORKSPACE_PAGE_IMPORTS } from "./conversation-workspace-page.imports.js";
 
 /**
  * Composes the chat workspace and reports navigation intent to its feature route; the app binds the
@@ -32,7 +23,7 @@ import { ConversationWorkspacePresenter } from "../conversation-workspace.presen
  *
  * Called by: feature-local `ConversationWorkspaceRouteComponent`, which owns the child chat URLs.
  */
-@Component({ selector: "wo-conversation-workspace-page", standalone: true, imports: [ButtonModule, ConversationActivityComponent, ConversationAttachmentTrayComponent, ConversationComposerComponent, ConversationCreateComponent, ConversationElicitationCardComponent, ConversationFilesPanelComponent, ConversationListComponent, ConversationMessageComponent, ConversationOnboardingHistoryComponent, ConversationRichTextComponent, ConversationRunActionsComponent, ConversationStatusLineComponent, MessageModule], templateUrl: "./conversation-workspace-page.component.html", styleUrl: "./conversation-workspace-page.component.scss", changeDetection: ChangeDetectionStrategy.OnPush, providers: [ConversationAssetsStore, ConversationElicitationStore, ConversationOnboardingHistoryStore, ConversationRunStore, ConversationWorkspaceStore] })
+@Component({ selector: "wo-conversation-workspace-page", standalone: true, imports: CONVERSATION_WORKSPACE_PAGE_IMPORTS, templateUrl: "./conversation-workspace-page.component.html", styleUrl: "./conversation-workspace-page.component.scss", changeDetection: ChangeDetectionStrategy.OnPush, providers: [ConversationAssetsStore, ConversationElicitationStore, ConversationOnboardingHistoryStore, ConversationRunStore, ConversationWorkspaceStore] })
 export class ConversationWorkspacePageComponent extends ConversationWorkspacePresenter
 {
 	/** Optional app-owned route selection adopted after the workspace list loads. */

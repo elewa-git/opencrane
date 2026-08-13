@@ -3,7 +3,7 @@ import { ButtonModule } from "primeng/button";
 
 import { ConversationOnboardingHistoryStatuses } from "@opencrane/state/conversation/workspace";
 
-import type { ConversationOnboardingHistoryPresentation, ConversationSummaryPresentation } from "../conversation-workspace-feature.types.js";
+import type { ConversationOnboardingHistoryPresentation, ConversationSummaryPresentation } from "../../conversation-workspace-feature.types.js";
 
 /**
  * Draws the left rail of the chat workspace and reports what the user picked.

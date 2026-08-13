@@ -3,7 +3,7 @@ import { ButtonModule } from "primeng/button";
 
 import { ConversationMessageComponent, ConversationRichTextComponent } from "@opencrane/elements/conversation";
 
-import type { ConversationMessageView, ConversationOnboardingHistoryPresentation } from "../conversation-workspace-feature.types.js";
+import type { ConversationMessageView, ConversationOnboardingHistoryPresentation } from "../../conversation-workspace-feature.types.js";
 
 /**
  * Shows the completed onboarding exchange as read-only history in the main area of the chat
