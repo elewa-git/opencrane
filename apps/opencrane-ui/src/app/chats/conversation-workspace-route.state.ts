@@ -1,32 +1,5 @@
-import type { NavigationExtras } from "@angular/router";
-
 import type { ConversationThreadNavigationIntent } from "@opencrane/features/conversation-workspace";
-
-/**
- * Everything `Router.navigate` needs to open a child Agent thread and be able to come back.
- *
- * It is one object rather than two arguments so that the URL and the return coordinates are built
- * together and cannot drift: a caller cannot navigate to the child and forget the state that gets it
- * back to the right message.
- *
- * Called by: `ConversationWorkspaceRouteComponent.openThread` in
- * `conversation-workspace-route.component.ts`, which spreads it straight into `Router.navigate`.
- *
- * @see _ConversationThreadRouteNavigation — the only thing that builds one.
- * @see AgentThreadParentRestoreIntent — the shape carried inside {@link extras}.
- */
-export interface ConversationThreadRouteNavigation
-{
-	/** Router command segments for the canonical breadcrumb child route. */
-	readonly commands: readonly string[];
-	/**
-	 * Browser-history state consumed by the child route coordinator.
-	 *
-	 * Angular puts this on the history entry rather than in the URL, so the child gets its return
-	 * coordinates without them being visible, shareable, or forgeable in the address bar.
-	 */
-	readonly extras: NavigationExtras;
-}
+import type { ConversationThreadRouteNavigation } from "./conversation-workspace-route.state.types.js";
 
 /**
  * Build the canonical URL segments for one selected normal conversation.
