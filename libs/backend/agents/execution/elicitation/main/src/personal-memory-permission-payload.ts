@@ -30,9 +30,10 @@ export function _OpenPersonalMemoryPermissionPayload(invocation: ToolInvocationR
 /**
  * Rebuilds the permission envelope that existed before approval and dispatch claim changed its revision.
  *
- * Approval and claim each advance the invocation revision, while the receipt records the original
- * envelope. It returns `null` unless the invocation is claimed with both revisions present, so the
- * caller must deny verification rather than compare a payload from another state.
+ * The elicitation request records the original envelope. Approval records the next revision in the
+ * receipt, and dispatch claim advances it once more. It returns `null` unless the invocation is
+ * claimed with both revisions present, so the caller must deny verification rather than compare a
+ * payload from another state.
  *
  * Called by: {@link PrismaElicitationRepository.verifyMemoryPermission}.
  * @param invocation - The claimed tool invocation whose earlier approval envelope is needed.
