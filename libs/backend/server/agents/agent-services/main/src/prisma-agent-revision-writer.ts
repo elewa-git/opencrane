@@ -80,11 +80,12 @@ export function _AgentRevisionContentFromRow(row: AgentRevisionWithAssignments):
 }
 
 /**
- * Builds the sole Prisma create representation of immutable agent-revision content.
+ * Builds the one Prisma create input used for every new agent revision.
  *
- * The digest and nested assignment writes derive from the same domain value. Keeping this mapping
- * in the agent-service authority prevents another package from independently reproducing revision
- * persistence rules while still allowing an existing transaction to remain atomic.
+ * The stored digest and the nested skill, integration, and scope rows all come from the same content
+ * value, so the digest always describes exactly what was written. Every writer goes through here —
+ * the lifecycle repository and the model-selection strategy both call it — so no second place can
+ * drift on how a revision is stored, while each keeps its own transaction.
  */
 function _RevisionCreateData(command: CreateAgentRevisionWithinTransactionCommand): Prisma.AgentRevisionCreateInput
 {
@@ -144,7 +145,15 @@ function _RevisionCreateData(command: CreateAgentRevisionWithinTransactionComman
 	};
 }
 
-/** Prisma repository for the canonical immutable revision persistence mapping. */
+/**
+ * Writes new agent revisions through the one shared Prisma mapping.
+ *
+ * It takes a transaction rather than a client, so the calling repository keeps ownership of the
+ * commit and can roll this write back with its own.
+ *
+ * Called by: `prisma-agent-revision-lifecycle.ts` (create, revise, restore) and
+ * `prisma-agent-revision-model-selection.ts` (model swap).
+ */
 export class PrismaAgentRevisionWriterRepository implements AgentRevisionWriterRepository
 {
 	/** Transaction-scoped ORM client supplied by the owning repository or unit of work. */

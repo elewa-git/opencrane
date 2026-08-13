@@ -10,7 +10,7 @@ import type { CreateShareBody, SharePayloadType, ShareRecipientType, ShareScope 
 // Side-effect import: loads the express-session `SessionData.authUser` augmentation.
 import "@opencrane/backend/server/infra/auth";
 
-/** Payload families a user may share (the entitlement surfaces the runtime contract carries). */
+/** The payload kinds a user may share; MCP servers only, today. */
 const _PAYLOAD_TYPES: readonly SharePayloadType[] = ["mcp-server"];
 /** Recipient kinds a share may target. */
 const _RECIPIENT_TYPES: readonly ShareRecipientType[] = ["user", "group"];
@@ -25,7 +25,7 @@ const _SHARES_CATALOG_REVISION = 1;
 const _SHARES_CAPABILITY_ID = "mcp-server:use";
 /** Resource kind written to the AuthorizationGrant for MCP server shares. */
 const _SHARES_RESOURCE_KIND = "mcp-server";
-/** Priority for share-originated grants (user-to-user delegation, lowest tier). */
+/** Priority stamped on grants created by sharing: 0, the tier reserved for one user granting another. */
 const _SHARES_GRANT_PRIORITY = 0;
 
 /** Map each public API scope into the authorization-owned sharing vocabulary. */
@@ -61,13 +61,14 @@ function _DomainScope(scope: ShareScope, organizationId: string, subjectId: stri
 let _sharesCatalogDigest: string | null = null;
 
 /**
- * Ensures the well-known `opencrane-core` capability catalog revision exists.
+ * Makes sure the `opencrane-core` capability catalog revision exists before a grant references it.
  *
- * The authorization adapter performs an idempotent composite-key upsert so concurrent first
- * shares use the same immutable catalog revision rather than racing to create duplicates.
+ * The write is an upsert on the catalog id and revision, so two first shares at once land on the same
+ * catalog revision instead of one failing. The digest is cached for the process after the first call,
+ * since the catalog contents are fixed in this file.
  *
- * @param repository - Authorization-owned catalog persistence seam.
- * @returns The deterministic digest of the seeded catalog revision.
+ * @param repository - Authorization-owned store for capability catalogs.
+ * @returns The catalog revision's digest, which every grant written below needs.
  */
 async function _EnsureSharesCatalog(repository: ShareAuthorizationRepository): Promise<string>
 {
@@ -101,15 +102,19 @@ function _ToShare(row: ShareAuthorizationGrant)
 }
 
 /**
- * Inter-user sharing router (S4). A user shares an entitlement they themselves hold with
- * another user or group; the share is an `Allow` AuthorizationGrant on the recipient, which
- * the recipient's user identity then resolves through deterministic grant evaluation. Sharing
- * is **least-privilege bounded**: the caller may only share a payload for which their own
- * grants resolve to `Allow` -- there is no privilege escalation. The sharer is recorded
- * (`AuthorizationGrant.createdBy`) so they can list and revoke only their own shares.
+ * Lets one user share an MCP server they already have access to with another user or group.
  *
- * @param prisma - Prisma client for authorization grant + payload/recipient lookups.
- * @returns Configured Express router.
+ * A share is just an `Allow` AuthorizationGrant written on the recipient, which their own identity
+ * then resolves like any other grant. Two rules hold it in place. First, the caller's own grants
+ * must already resolve to `Allow` on that payload, so a share can never hand out more than the
+ * sharer holds. Second, the sharer's id is stored on the grant, so they can list and revoke their own
+ * shares and nobody else's. Re-sharing the same payload to the same recipient at the same scope
+ * returns the existing grant instead of creating a second one.
+ *
+ * Called by: apps/opencrane/src/app/routes.ts via _CreateRateLimitedSharesRouter, mounted at
+ * /api/v1/shares behind a per-IP rate limiter.
+ * @param prisma - Silo Prisma client for grants and for payload/recipient existence checks.
+ * @returns Express router with create, list, and revoke routes.
  */
 export function sharesRouter(prisma: PrismaClient): Router
 {

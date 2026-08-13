@@ -8,11 +8,13 @@ import { _AGENT_REVISION_INCLUDE, _AgentRevisionContentFromRow, PrismaAgentRevis
 /**
  * Prisma strategy for model-selection changes inside an owning unit of work.
  *
- * The caller provides a Serializable transaction. This strategy proves that the personal revision
- * the owner reviewed is still active, changes only its registered model definition, then prepares
- * and activates the next immutable revision. The surrounding personal-configuration Unit of Work
- * retains transaction ownership so its proposal journal transition can commit or roll back with
- * these writes.
+ * The caller opens the transaction at Serializable isolation and keeps ownership of it. This class
+ * re-checks that the revision the owner reviewed is still the active one, copies it with only the
+ * model changed, then publishes and activates the copy — all without committing. The caller commits,
+ * so its own proposal-journal update either lands with these writes or rolls back with them.
+ *
+ * Called by:
+ * libs/backend/agents/personal/configuration/main/src/materialization/prisma-personal-configuration-materialization-unit-of-work.ts.
  */
 export class PrismaAgentRevisionModelSelectionRepository implements AgentRevisionModelSelectionRepository
 {
@@ -71,16 +73,18 @@ export class PrismaAgentRevisionModelSelectionRepository implements AgentRevisio
 			return { status: AgentRevisionModelSelectionMaterializationCodes.StaleSource };
 		}
 
-		// 4. Resolve the owner-visible alias only after every source fence has passed.
-		// Tenant definitions take precedence, and no provider identifier crosses the browser boundary.
+		// 4. Only now look up the model, after all three staleness checks have passed.
+		// A silo's own model wins over a global one with the same public name, and the provider's model
+		// id stays server-side — the owner only ever names the public alias.
 		const modelDefinitionId = await this._ResolveModelDefinitionId(command.siloId, command.modelAlias);
 		if (modelDefinitionId === null)
 		{
 			return { status: AgentRevisionModelSelectionMaterializationCodes.ModelUnavailable };
 		}
 
-		// 5. Reconstruct one canonical content value and append the next immutable draft.
-		// Agent-services alone chooses revision lineage and represents that content in Prisma.
+		// 5. Copy the source revision's content with only the model changed, and append it as a new draft.
+		// Revision numbering and the Prisma mapping stay in this package so no other package can
+		// reproduce them and drift.
 		const content: AgentRevisionContent = {
 			..._AgentRevisionContentFromRow(source),
 			modelDefinitionId,
@@ -97,8 +101,9 @@ export class PrismaAgentRevisionModelSelectionRepository implements AgentRevisio
 			createdAt: command.materializedAt,
 		});
 
-		// 6. Publish before activation, while remaining inside the caller-owned transaction.
-		// The caller's later journal CAS can still roll both lifecycle writes back atomically.
+		// 6. Mark the draft published, then point the service at it — both still inside the caller's
+		// transaction and uncommitted. If the caller's own check later fails, both writes roll back
+		// together, so the service can never end up active on an unpublished revision.
 		await this.transaction.agentRevision.update({
 			where: { id: draft.id },
 			data: {

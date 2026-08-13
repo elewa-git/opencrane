@@ -1,7 +1,17 @@
 import type { UserOnboardingCompletionProvenances, UserOnboardingDenialReasons, UserOnboardingStates, UserOnboardingTransitionStatuses } from "./user-onboarding.enums.js";
 import type { ApprovedPersonaBootstrapEvidence } from "./user-onboarding-chat.types.js";
 
-/** Trusted owner coordinates derived from the authenticated server session. */
+/**
+ * The user whose onboarding is being read or changed, taken only from the verified server session.
+ *
+ * Both fields come from the authenticated request principal. Nothing in this package ever accepts a
+ * silo or a subject from a request body, a query string, or a header - if it did, any signed-in
+ * user could drive another user's onboarding. The app builds this value in
+ * apps/opencrane/src/app/routes.ts and passes it in as a {@link UserOnboardingOwnerResolver}.
+ *
+ * The two fields together are the lookup key for every row in this package (the `siloId_userId`
+ * unique key in Postgres).
+ */
 export interface UserOnboardingOwner
 {
 	/** Organisation silo derived from the verified request principal. */
@@ -10,7 +20,18 @@ export interface UserOnboardingOwner
 	readonly subjectId: string;
 }
 
-/** Server projection of one user's pinned onboarding workflow. */
+/**
+ * One user's stored onboarding row, converted for callers so no Prisma model leaks out.
+ *
+ * This is what every route and authority method hands back, and the only place to read the current
+ * state from. The nullable id fields fill in as the user moves forward and are then frozen:
+ * `personaInterviewId` when the survey starts, `personaRevisionId` when the persona is approved,
+ * then the three `bootstrap*` fields when the guided chat starts. A null therefore means "not
+ * reached yet", never "lost". Only `state` should drive routing; the ids are for showing and
+ * checking what is pinned.
+ *
+ * @see {@link UserOnboardingStates} for what each state means.
+ */
 export interface UserOnboardingRecord
 {
 	/** Stable workflow record identifier. */
@@ -58,7 +79,18 @@ export interface ApprovedPersonaEvidence
 	readonly personaRevisionId: string;
 }
 
-/** Persona-owned evidence checks required by onboarding without sharing persistence authority. */
+/**
+ * The four questions onboarding asks the persona package, so neither package touches the other's tables.
+ *
+ * Onboarding stores no persona data and never queries persona tables. Before it will pin an
+ * interview or an approved revision it asks here, and every method takes the session-derived
+ * {@link UserOnboardingOwner} so persona can scope its own query to that user. A null or false
+ * answer always means "refuse" - never "assume yes".
+ *
+ * Called by: __UserOnboardingAuthority and __UserOnboardingChatAuthority in this package;
+ * implemented in apps/opencrane/src/app/user-onboarding-composition.ts over
+ * PersonaWorkflowEvidenceRepository.
+ */
 export interface UserOnboardingPersonaEvidencePort
 {
 	/** Confirm that an interview belongs to the session-derived owner. */
@@ -71,14 +103,39 @@ export interface UserOnboardingPersonaEvidencePort
 	readApprovedBootstrapEvidence(owner: UserOnboardingOwner, personaRevisionId: string): Promise<ApprovedPersonaBootstrapEvidence | null>;
 }
 
-/** Persistence operations owned exclusively by the user-onboarding package. */
+/**
+ * The only writes onboarding may make to its own UserOnboarding row.
+ *
+ * The `mark*` and `replace*` methods return a boolean rather than a record. `true` means this call
+ * made the change; `false` means the row was not in the state the call required, because another
+ * request changed it first or the user is already further along. `false` is expected, not an error -
+ * the caller re-reads the row and lets the state object for the NEW state decide what to report.
+ * Nothing here throws for a lost race.
+ *
+ * Called by: __UserOnboardingAuthority and the state objects in user-onboarding-lifecycle-state.ts;
+ * implemented by PrismaUserOnboardingRepository, composed by _CreateUserOnboardingRepository in
+ * apps/opencrane/src/app/user-onboarding-composition.ts.
+ *
+ * @see {@link UserOnboardingChatRepository} for the guided-chat half of persistence.
+ */
 export interface UserOnboardingRepository
 {
 	/** Return the current workflow or create a pinned survey-pending workflow. */
 	ensure(owner: UserOnboardingOwner, currentWorkflowVersion: number): Promise<UserOnboardingRecord>;
 	/** Return the current owner-bound workflow without creating one. */
 	read(owner: UserOnboardingOwner): Promise<UserOnboardingRecord | null>;
-	/** Atomically pin an interview and enter survey-in-progress from a survey state. */
+	/**
+	 * Pin this interview and move the row to survey-in-progress, in one conditional update.
+	 *
+	 * Also succeeds when the row is already survey-in-progress with this exact interview, so a retry
+	 * is harmless. It will not touch a row that has a different interview pinned or that has moved
+	 * past the survey.
+	 *
+	 * @param owner - Session-derived user whose row may change.
+	 * @param interviewId - Interview the persona package has already confirmed belongs to this user.
+	 * @returns true when this call pinned or re-confirmed the interview; false when the row was in
+	 * some other state, in which case the caller must re-read it.
+	 */
 	markSurveyInProgress(owner: UserOnboardingOwner, interviewId: string): Promise<boolean>;
 	/** Atomically replace the expected initial-survey interview before any later evidence exists. */
 	replaceSurveyInterview(owner: UserOnboardingOwner, expectedInterviewId: string, replacementInterviewId: string): Promise<boolean>;

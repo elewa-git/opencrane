@@ -1,11 +1,12 @@
 import type { JsonValue } from "@opencrane/util";
 
 /**
- * Stable authorization scope categories supported by the sharing capability.
+ * How wide a share reaches.
  *
- * These domain values cross the grants-to-authorization package boundary. The Prisma adapter maps
- * them explicitly to its generated persistence enum rather than leaking database spellings into
- * callers.
+ * These four are a deliberate subset of the scopes authorization supports as a whole — sharing does
+ * not offer the others. Because these values cross into the grants package, the Prisma adapter maps
+ * each one to its database enum by hand rather than letting generated database names reach callers.
+ * A stored grant in any other scope makes `_shareScopeKind` throw.
  */
 export enum ShareAuthorizationScopeKinds
 {

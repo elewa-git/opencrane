@@ -13,7 +13,19 @@ export interface ConversationMutationRepository
 	persistAgentMessage(caller: ConversationCaller, conversationId: string, messageId: string, runId: string, request: SubmitConversationMessageRequest, attachments: ConversationAttachmentAdmissionPort): Promise<void>;
 }
 
-/** Creates a mutation repository over run admission's exact final transaction. */
+/**
+ * Makes a {@link ConversationMutationRepository} bound to a transaction that run admission
+ * owns.
+ *
+ * This exists so the conversation package can write the user's message inside admission's
+ * transaction without ever holding a client of its own. Admission calls the factory with its
+ * live transaction at the moment the run is being committed, which is what makes "message and
+ * run commit together" true rather than merely intended.
+ *
+ * Called by: `PrismaConversationUnitOfWork._admitAgentMessage`
+ * (prisma-conversation-unit-of-work.ts). Supplied by `_CreateSelfConversationsRouter`
+ * (prisma-self-conversations.router.ts).
+ */
 export interface ConversationMutationRepositoryFactory
 {
 	(transaction: RunAdmissionTransaction): ConversationMutationRepository;

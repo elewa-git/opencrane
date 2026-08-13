@@ -33,27 +33,46 @@ interface ClusterTenantCrForLogin
 }
 
 /**
- * Resolve the per-org OIDC client for a request host (S3b) from the cluster-scoped
- * **ClusterTenant CR** — the single source of truth the fleet-manager projects the public
- * Zitadel ids onto (Option A). The silo holds no ClusterTenant read-model of its own.
+ * Find the per-organisation OIDC client for the host a request arrived on, by reading the
+ * cluster-scoped **ClusterTenant custom resource**. The fleet manager writes the public
+ * Zitadel ids onto that resource, and it is the only place this code looks — a silo keeps
+ * no database copy of them.
  *
- * A host resolves to a ClusterTenant two ways, both read from the CR:
- *  - **canonical** `<org>.<base>` — the first DNS label names the CR (one `get`), or
- *  - **customer-vanity** — the full host matches a CR's `spec.vanityDomain` (CNAMEd onto the
- *    org apex), found by listing the cluster-scoped CRs.
- * Either way we return the org's `{clientId, orgId, redirectUri}` so login authorizes against
- * that org's isolated user pool. Fail-closed: returns null for
- *  - no `customApi` wired (dev/test) or a bare host (no label and no vanity match),
- *  - a host matching no ClusterTenant CR by either label or vanity, or
- *  - a CR whose org is not fully provisioned (no `spec.zitadel.clientId`/`orgId`).
- * In every null case the caller falls through to the masters client config — never a partial
- * per-org login. The CR is the authority, so a spoofed host that names no real, fully-provisioned
- * org cannot pick up an org client.
+ * A host maps to a ClusterTenant in one of two ways:
+ *   - `<org>.<base>` — the first DNS label is the resource name, fetched with one `get`.
+ *     This is the common case and is tried first.
+ *   - A customer's own domain — the whole host (port stripped, lower-cased) equals some
+ *     resource's `spec.vanityDomain`, found by listing all of them.
+ *
+ * On a match the organisation's `{clientId, orgId, redirectUri}` is returned so login
+ * authorizes against that organisation's own user pool and nobody else's.
+ *
+ * Returns null — meaning "use the masters client" — in every one of these cases:
+ *   - no Kubernetes client was wired (development and tests),
+ *   - the request carried no host,
+ *   - the host matched no resource, by either name or vanity domain,
+ *   - the matched organisation is only half provisioned, that is missing
+ *     `spec.zitadel.clientId` or `spec.zitadel.orgId`,
+ *   - the `get` or the `list` failed.
+ * There is deliberately no partial per-organisation login: it is either a fully
+ * provisioned organisation client or the masters client. Because the custom resource
+ * decides, a made-up host cannot pick up a client belonging to someone else.
+ *
+ * Logging levels are chosen on purpose: an unmatched host is logged at debug (usually
+ * scanner traffic on the wildcard), while a matched-but-unprovisioned organisation is
+ * logged at warn, because that one is an operational fault a human must fix.
+ *
+ * Called by: `OidcAuthService.resolveLoginClient` in
+ * libs/backend/server/iam/identity/main/src/oidc.service.ts.
  *
  * @param customApi - Kubernetes custom-objects client, or null when no cluster is wired.
- * @param host      - The request host (typically from `_RequestHost`).
- * @param log - Structured logger supplied by the consuming application.
- * @returns The resolved per-org client, or null to fall through to the masters client.
+ * @param host      - The request host, normally from {@link _RequestHost}.
+ * @param log       - Logger supplied by the consuming application.
+ * @returns The organisation's client details, or null to fall back to the masters client.
+ * @see https://kubernetes.io/docs/concepts/extend-kubernetes/api-extension/custom-resources/
+ *      — the custom-resource `get`/`list` calls used below.
+ * @see https://zitadel.com/docs/apis/openidoauth/scopes — what `orgId` is for; see
+ *      {@link _OrgScope}.
  */
 export async function _ResolvePerOrgClient(customApi: k8s.CustomObjectsApi | null, host: string | undefined, log: Logger): Promise<ResolvedPerOrgClient | null>
 {

@@ -213,10 +213,16 @@ export function thirdPartySourcesRouter(prisma: PrismaClient): Router
 }
 
 /**
- * Map a raw third-party source record to the UI response shape.
+ * Convert a stored source row into the API shape.
  *
- * @param source - Raw persisted source record.
- * @returns JSON response payload.
+ * The enum conversion is by string replacement, not by a lookup table: a database value with no
+ * matching replacement is lower-cased and passed through as though it were valid, and the cast
+ * hides that from the compiler. So adding a kind or a status to the schema without adding its
+ * replacement here produces a wrong value in the response rather than a build failure.
+ *
+ * @param source - The stored row, typed loosely because the caller reaches the table
+ *   dynamically.
+ * @returns The source with its item list, ready to serialise.
  */
 function _MapThirdPartySource(source: Record<string, unknown>): ThirdPartySource
 {

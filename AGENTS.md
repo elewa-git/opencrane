@@ -47,16 +47,20 @@ message) wherever the work has no dependency between them.
 | `observability` | Sonnet | Telemetry + logging in one (they share the `@opencrane/backend/observability` lib and trace-wrap seam). Audits or wires a slice so external-I/O paths are traced (`___DoWithTrace` spans) and output is structured (no raw `console.*`, secrets redacted, errors under `err`), plus per-app `instrument.ts`/shutdown-flush/Helm env. Reads the lib barrel each run for current API names. |
 | `deploy` | Sonnet | Deploy/retirement executor + diagnostician for dev/staging clusters. Mutates the cluster ONLY via app-owned deploy or teardown scripts under `apps/_infra/deploy-k8s/`; reads freely for diagnosis (kubectl read verbs, helm status, read-only SQL through the cnpg primary). Reads `docs/agents/deploy-ledger.md` and the immutable release manifest before every run; returns a structured run report (findings classed `chart`/`script`/`config`/`codebase`/`data`/`infra`/`flake`) for `/deploy-loop` to triage. Never edits code. |
 | `memory-engineer` | Sonnet | Memory-layer specialist — the personal/org memory gateway boundary (`libs/backend/server/infra/memory-gateway-client`), the personal memory-fact catalog (`libs/backend/agents/personal/memory/main`), the shared contracts in `libs/contracts/src/memory.types.ts`, and the operator-side Cognee wiring behind the gateway (identity, persistence, LLM/embedding routing through LiteLLM). Use when changing/auditing anything memory-related or when memory isn't recalling/persisting. Enforces the standing policy: **every read and write goes through the gateway port — never a direct Cognee call from a scattered call site**; Cognee holds durable fact content while OpenCrane's catalog holds only metadata, provenance, consent, sensitivity, and a content digest; and a recall must name the gateway-native dataset frozen in the admitted run snapshot, never select one from a subject id alone. Grounds every claim in the package barrels and the live wiring, never a stale doc. Audits by default; applies when asked. |
+| `comments` | Sonnet | Documentation gate — the **last** gate of a turn, after `review` concludes and after `reaper` has deleted what the slice superseded (running it earlier documents code that is about to change or vanish). Owns comments and docstrings in every language the slice touched (`.ts`, `.py`, shell, Helm) against [Comment Language](docs/agents/typescript.md#comment-language); writes and deletes comments, never code. Standing rule: **evidence or a question** — it may only write a *why* it can point at (a deleted line in the diff, a test, a caller, an ADR, the plan slice), and returns an `ASK` rather than inventing a plausible reason, because a confident wrong reason outlives the code it misdescribes. Give it the diff range **including removals** plus the plan/issue; a long `ASK` list is the gate working. `scripts/agent-style-check.sh` only proves a JSDoc block exists — a file of one-line labels passes the script and fails this gate. |
 | `reaper` | Sonnet | Deletion gate for rewrite/refactor slices. Runs before implementation to classify survivor/drop paths and after implementation to remove superseded code, exports, contracts, config, tests, deployment wiring, and docs — a deleted package drops its `README.md` and its parent-index/`app-specific.md` map rows with it. No compatibility shims, migration staging, or deprecation periods; read-only verdicts with evidence. |
 
 **Roadmap execution** is the `/execute-plan` **skill** (`.claude/commands/execute-plan.md`), not an
 agent — it runs in the main session, parallelises via a dependency DAG + waves (one `general-purpose`
 subagent per lane), uses `architecture` before/after structural waves and `reaper` before/after every
-rewrite slice, commits at each gate, and delegates the final review gate to `review` above.
+rewrite slice, commits at each gate, delegates the review gate to `review` above, and then closes with
+the documentation gate — `comments`, given the same explicit range plus the plan slice, once review has
+concluded and the code has stopped moving.
 
 **Cost-tiered review** is the `/review-loop` **skill** (`.claude/commands/review-loop.md`): free
 style + language-neutral module-growth scripts → parallel single-dimension `review` finders → a
-`review-verifier` per candidate finding → one merged severity-first report. Use it for multi-file or
+`review-verifier` per candidate finding → one merged severity-first report → the `comments`
+documentation gate last, never alongside the finders. Use it for multi-file or
 risky diffs; a direct `review` delegation stays right for small ones.
 
 **Deploy fleet** is the `/deploy-loop` **skill** (`.claude/commands/deploy-loop.md`): preflight →
@@ -74,6 +78,18 @@ to the WeOwnAI repo, which still owns the fleet app and the FORK libs (`core`, `
 `state/core`, `state/gateways`, `state/tenant/adapter`) shared with
 `libs/frontend/*` here.
 
-When adding a new agent: put Claude Code subagents in `.claude/agents/` and add a row above — that is
-the single home for agent definitions (do not reintroduce a parallel `.github/agents/` copy). Add a
-user-invocable workflow as a skill under `.claude/commands/`.
+When adding a new agent, write the definition once in `.claude/agents/<name>.md`, add a row above, and
+mirror it to the other two harness surfaces so Claude Code and Codex behave the same:
+
+| Surface | Path | Format |
+|---------|------|--------|
+| Claude Code | `.claude/agents/<name>.md` | Markdown body, YAML frontmatter (`name`, `description`, `tools`, `model`). This is the source the other two are generated from. |
+| Codex | `.codex/agents/<name>.toml` | `name`, `description` (the frontmatter description flattened to one line, quotes escaped), `developer_instructions = """<body>"""`. |
+| Generic skills | `.agents/skills/<name>/SKILL.md` | Byte-identical copy of the `.claude/agents/` file. Mirror the agents that read as documentation or review skills. |
+
+A mirror that drifts is worse than a missing one, because only one harness then follows the rule. After
+editing any agent, `diff` the skills copy against `.claude/agents/` and confirm the TOML still parses
+(`python3 -c "import tomllib,pathlib; tomllib.loads(pathlib.Path('.codex/agents/<name>.toml').read_text())"`).
+Do not reintroduce a parallel `.github/agents/` copy. Add a user-invocable workflow as a skill under
+`.claude/commands/`, and describe its gate order here as well, since Codex has no `.claude/commands/`
+surface and reads this file instead.

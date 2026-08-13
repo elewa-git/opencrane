@@ -37,7 +37,15 @@ function _grant(row: { id: string; siloId: string; subjectId: string; scopeKind:
 	};
 }
 
-/** Prisma-backed candidate-grant reader for deterministic effective-access evaluation. */
+/**
+ * Reads a subject's grants from Postgres.
+ *
+ * Returns every grant for the subject, including expired and revoked ones, ordered by priority then
+ * id. Filtering is left to the pure decision code, which needs the full set to apply
+ * deny-over-allow and priority correctly, and the fixed order keeps results repeatable.
+ *
+ * Constructed by: ./prisma-share-authorization-unit-of-work.ts.
+ */
 export class PrismaAuthorizationGrantRepository implements AuthorizationGrantRepository
 {
 	/** OpenCrane product-authority database client. */

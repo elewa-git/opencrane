@@ -3,7 +3,14 @@ import type * as k8s from "@kubernetes/client-node";
 /** Kubernetes client seam used only to submit projected-token reviews. */
 export type ProjectedTokenReviewApi = Pick<k8s.AuthenticationV1Api, "createTokenReview">;
 
-/** Reviewed fixed ServiceAccount identity used by controller and preprocessing transports. */
+/**
+ * The result of verifying a token against ONE ServiceAccount that deployment configuration
+ * fixed in advance.
+ *
+ * Because the namespace and account name were fixed before the check, the values here
+ * simply repeat what was expected — the information is that the token matched them at all.
+ * Returned by every {@link FixedServiceAccountTokenReviewer}.
+ */
 export interface ReviewedFixedServiceAccountIdentity
 {
 	/** Full Kubernetes ServiceAccount username returned by TokenReview. */
@@ -27,7 +34,15 @@ export interface ChannelProxyTokenReviewerConfig
 	readonly serviceAccountName: string;
 }
 
-/** Reviewed authoring-worker identity whose exact coordinates are checked by durable bootstrap authority. */
+/**
+ * Who an authoring worker is, as parsed out of a verified token: its namespace,
+ * ServiceAccount name, and bound Pod UID.
+ *
+ * Unlike the fixed reviewers, the reviewer that produces this does NOT check the namespace
+ * or the name — it only proves the token is valid for the requested audience. Whether this
+ * is the worker the server was expecting is decided later, against stored bootstrap rows.
+ * So do not treat a non-null value here as authorization.
+ */
 export interface ReviewedSkillWorkloadIdentity
 {
 	/** Namespace parsed from the authenticated Kubernetes subject. */
@@ -38,7 +53,14 @@ export interface ReviewedSkillWorkloadIdentity
 	readonly podUid: string;
 }
 
-/** Verified runtime workload identity associated with one runtime-initiated connection. */
+/**
+ * Who a runtime stream belongs to, as Kubernetes confirmed it.
+ *
+ * Every field is from the TokenReview response, never from the request body. The Pod UID
+ * matters most: the stream transport compares it against the Pod UID the runtime claims in
+ * its stream-open message and rejects a mismatch, so one Pod's token cannot be used to
+ * open a stream on behalf of another.
+ */
 export interface RuntimeWorkloadIdentity
 {
 	/** Kubernetes ServiceAccount subject returned by TokenReview. */
@@ -51,10 +73,32 @@ export interface RuntimeWorkloadIdentity
 	readonly podUid: string;
 }
 
-/** Minimal TokenReview seam consumed by the runtime stream transport. */
+/**
+ * The one thing the runtime stream transport may do with a credential: ask whether it is
+ * valid and, if so, whose it is.
+ *
+ * Kept this narrow on purpose — the transport gets an identity or nothing, and never sees
+ * the TokenReview response, so it cannot start interpreting Kubernetes results itself.
+ *
+ * Implemented by: {@link _CreateRuntimeTokenReviewer} in ./projected-token-reviewer.ts.
+ * Called by: `_RegisterInternalAgentRuntimeStream` in
+ * libs/backend/server/infra/agent-runtime-stream, on both of its routes.
+ *
+ * @see https://kubernetes.io/docs/reference/access-authn-authz/authentication/ — TokenReview
+ *      and the audience-bound ServiceAccount tokens being checked.
+ */
 export interface RuntimeTokenReviewer
 {
-	/** Verify a projected token and return the authenticated workload identity. */
+	/**
+	 * Verify one bearer token.
+	 *
+	 * @param token - The raw token from the `Authorization: Bearer` header.
+	 * @returns The verified workload identity, or null for EVERY failure — invalid token,
+	 *          wrong audience, wrong namespace, unexpected ServiceAccount name, or no bound
+	 *          Pod UID. Callers must treat null as one undifferentiated denial.
+	 * @throws When the Kubernetes API call itself fails; that is an outage, not a denial, and
+	 *         must not be reported to the caller as an authentication failure.
+	 */
 	__Review(token: string): Promise<RuntimeWorkloadIdentity | null>;
 }
 
@@ -74,7 +118,12 @@ export interface RuntimeIdentityNamespaces extends RuntimeTokenReviewerConfig
 	readonly serverNamespace: string;
 }
 
-/** Startup namespace input before fail-closed validation proves all runtime planes are configured. */
+/**
+ * The raw namespace values read from deployment configuration, before checking. The two
+ * runtime namespaces are optional here only because configuration may omit them;
+ * {@link _ValidateRuntimeIdentityNamespaces} then throws rather than defaulting, which is
+ * why the checked type {@link RuntimeIdentityNamespaces} has them required.
+ */
 export interface RuntimeIdentityNamespaceInput
 {
 	/** Namespace containing the trusted OpenCrane server workload. */

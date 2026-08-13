@@ -119,7 +119,19 @@ function _responseSchema(parametersSchema: JsonValue): JsonValue
 	};
 }
 
-/** Validate a complete argument value against the frozen reviewed JSON Schema. */
+/**
+ * Check one complete argument object against the tool's stored parameters schema.
+ *
+ * The schema is the one captured when the approval was opened, never the tool's current schema, so
+ * a reviewer is always judged against what they were actually shown.
+ *
+ * Called by: ./deferred-tool-approval.ts (on the stored arguments and again on the reviewer's
+ * replacement) and ./prisma-deferred-tool-approval-opener.ts.
+ * @param parametersSchema - The stored JSON Schema.
+ * @param argumentsValue - The complete argument object; partial edits are not supported.
+ * @returns True when valid. False for invalid arguments AND for an unusable schema — the schema
+ *   compile is wrapped in a try, so this never throws and always fails closed.
+ */
 export function __ValidateDeferredToolArguments(parametersSchema: JsonValue, argumentsValue: JsonValue): boolean
 {
 	try
@@ -133,7 +145,20 @@ export function __ValidateDeferredToolArguments(parametersSchema: JsonValue, arg
 	}
 }
 
-/** Return whether the frozen schema permits an actor-supplied replacement rather than denial only. */
+/**
+ * Decide whether a reviewer may edit the arguments at all, or may only approve or deny.
+ *
+ * False as soon as any part of the schema marks a value secret — anywhere, including through local
+ * `$ref`s and `allOf`/`anyOf`/`oneOf` branches. If a secret exists we cannot show the reviewer the
+ * real arguments, so we must not accept a replacement either; they would be editing values they
+ * never saw. An unresolvable or external `$ref` is also treated as secret, so an unreadable schema
+ * fails closed.
+ *
+ * Called by: ./deferred-tool-approval.ts (`__DecideDeferredToolRequest`) and
+ * `__ProjectDeferredToolApproval` below.
+ * @param parametersSchema - The stored parameters schema.
+ * @returns True when editing is safe, false when the reviewer may only approve or deny.
+ */
 export function __IsDeferredToolApprovalReplacementAllowed(parametersSchema: JsonValue): boolean
 {
 	return !_containsSecretSchema(parametersSchema, parametersSchema);

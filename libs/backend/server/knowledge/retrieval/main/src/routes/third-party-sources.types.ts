@@ -1,7 +1,15 @@
-/** Supported source kinds for Phase 4 discovery. */
+/**
+ * The kinds of upstream a third-party source can be: an MCP registry, an Anthropic skills
+ * collection, a git repository, or a manual upload.
+ *
+ * These hyphenated values are the API form. The database stores the same set in PascalCase, and
+ * `_MapThirdPartySource` in third-party-sources.ts converts between them by string
+ * replacement — so adding a kind means adding it in both places or the conversion silently
+ * passes the raw database value through.
+ */
 export type ThirdPartySourceRouteKind = "mcp-registry" | "anthropic-skills" | "git-repository" | "manual-upload";
 
-/** Supported sync and approval states for third-party sources. */
+/** State of a source: syncing normally, in progress, failed, or waiting for an operator to approve it. Same PascalCase-to-hyphen conversion caveat as the kind above. */
 export type ThirdPartySourceRouteStatus = "healthy" | "syncing" | "error" | "pending-approval";
 
 /** Supported discovered item kinds linked to a source. */

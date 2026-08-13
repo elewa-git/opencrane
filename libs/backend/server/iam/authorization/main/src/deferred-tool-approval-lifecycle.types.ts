@@ -1,4 +1,12 @@
-/** Dependency-light run states interpreted by the approval lifecycle owner. */
+/**
+ * The run states this package needs to reason about approvals.
+ *
+ * A deliberate copy of the runs package's state names rather than an import, so approval logic
+ * stays independent of the runs package. Only `Running` and `WaitingForApproval` can take part in
+ * an approval; every other member exists so the decision table is exhaustive and adding a run
+ * state forces an explicit choice here.
+ * @see {@link DeferredToolApprovalLifecycleActions}
+ */
 export enum DeferredToolApprovalRunStates
 {
 	/** Accepted but not yet queued. */
@@ -23,7 +31,12 @@ export enum DeferredToolApprovalRunStates
 	Cancelled = "cancelled",
 }
 
-/** Durable events interpreted by the deferred-tool approval run-state owner. */
+/**
+ * The four things that can happen to a run's approvals.
+ *
+ * `Decision` and `Expiry` both resolve one approval and are handled identically by the run-state
+ * table — which one it was matters only for the approval row, not for the run.
+ */
 export enum DeferredToolApprovalLifecycleEvents
 {
 	/** Adds one approval to a running or already-waiting batch. */
@@ -36,7 +49,18 @@ export enum DeferredToolApprovalLifecycleEvents
 	Cancellation = "cancellation",
 }
 
-/** Exhaustive persistence actions selected from run state, event, and pending cardinality. */
+/**
+ * The one write allowed for a run when an approval opens, resolves, or is cancelled.
+ *
+ * Chosen by {@link __PlanDeferredToolApprovalLifecycle} from the run state, the event, and how many
+ * approvals are still pending. The count is what separates the near-identical pairs:
+ * `PauseAndOpen` is the first approval on a running run (pause it), `OpenInBatch` is a later one
+ * (already paused). `Resume` fires only when the last pending approval resolves; `KeepWaiting`
+ * while any remain. Act on `KeepWaiting` as if it were `Resume` and the run restarts while a
+ * reviewer is still deciding.
+ *
+ * `Reject` means the event is invalid for the run's current state and nothing may be written.
+ */
 export enum DeferredToolApprovalLifecycleActions
 {
 	/** Move Running to WaitingForApproval before creating the first approval. */

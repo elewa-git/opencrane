@@ -21,7 +21,15 @@ export interface DeferredToolApprovalClock
 	now(): Date;
 }
 
-/** Composition ports for the self-only deferred-tool approval decision API. */
+/**
+ * Everything {@link __CreateDeferredToolApprovalRouter} needs, all injected.
+ *
+ * `resolveCaller` is the one that matters: identity comes from it and never from request input, so
+ * the router itself has no way to act as another user. The clock is injected so decision expiry can
+ * be tested without waiting.
+ *
+ * Composed in: ./prisma-deferred-tool-approval.router.ts.
+ */
 export interface DeferredToolApprovalRouterDependencies
 {
 	/** Resolves session and host identity, or null when no authenticated caller exists. */

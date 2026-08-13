@@ -65,7 +65,11 @@ function _isPrismaUniqueViolation(err: unknown): boolean
  * the generic 500 path. Routes SHOULD still catch P2002 themselves for a domain-specific
  * message (e.g. POST /cluster-tenants → "workspace name").
  *
+ * Called by: apps/opencrane/src/app/public-app.ts and internal-app.ts, each as the final `app.use`.
+ *
  * @param log - Pino logger instance.
+ * @returns The Express 5 error middleware. Register it after every route, or Express will not select
+ *   it for errors.
  */
 export function _ErrorHandler(log: Logger)
 {

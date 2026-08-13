@@ -22,7 +22,7 @@ const _MAX_TIMEOUT_MILLISECONDS = 300_000;
  */
 export class ObotTransportError extends Error
 {
-	/** Bounded failure class safe to project into durable custody or key-issuance evidence. */
+	/** Which kind of failure it was. It carries no remote content, so it is safe to log or store on a failure row. */
 	readonly code: ObotTransportFailureCode;
 
 	/** Creates a transport failure that names only its bounded class. */
@@ -133,7 +133,16 @@ function _ParseJson(text: string): unknown
 	}
 }
 
-/** Parse the first complete data frame from an MCP server-sent event response. */
+/**
+ * Read the first complete `data:` frame out of a server-sent-events response.
+ *
+ * Obot may answer an MCP call as an event stream instead of plain JSON. One JSON-RPC reply always
+ * fits in a single frame, so the first frame — the one ended by a blank line — is all that is
+ * needed, and later frames are ignored.
+ *
+ * @see https://modelcontextprotocol.io/specification/2025-06-18 - the MCP transport that permits an
+ *   event-stream reply to a JSON-RPC request.
+ */
 function _ParseEventStream(text: string): unknown
 {
 	const dataLines: string[] = [];
@@ -166,7 +175,7 @@ function _McpSessionId(value: string | null): string | null
 	return value;
 }
 
-/** Combine the per-exchange deadline with the process shutdown fence. */
+/** Abort the exchange when either its own timeout expires or the process starts shutting down. */
 function _RequestSignal(timeoutMilliseconds: number, shutdownSignal: AbortSignal): AbortSignal
 {
 	const timeoutSignal = AbortSignal.timeout(timeoutMilliseconds);
@@ -174,16 +183,26 @@ function _RequestSignal(timeoutMilliseconds: number, shutdownSignal: AbortSignal
 }
 
 /**
- * Create the authenticated Obot session used by server-owned custody and action adapters.
+ * Create the authenticated Obot session that the custody and MCP adapters share.
  *
- * Every exchange presents the freshly read Obot service credential as a bearer token, applies one
- * hard timeout, refuses redirects, and bounds the response read. Every fetch runs with automatic
- * child tracing suppressed so bearer headers cannot become child-span attributes; the caller's
- * explicit operation span remains active. Response bodies are returned as parsed JSON — the calling
- * adapter validates every field it consumes and treats anything unrecognised as a protocol error.
+ * Every exchange re-reads the mounted Obot service token and sends it as a bearer token, applies one
+ * hard timeout, refuses redirects, and stops reading after 256 KiB. Every fetch runs with automatic
+ * child tracing switched off so the bearer header cannot become a span attribute; the caller's own
+ * operation span stays active. Bodies come back as parsed JSON only — the calling adapter must check
+ * every field it reads and treat anything unexpected as a protocol error.
  *
- * @param options - Obot origin, timeout, mounted service token, and test seams.
- * @returns A session issuing bounded, timeout-guarded JSON exchanges.
+ * The origin, the timeout, and the token path are all validated here, before any credential file is
+ * read, so a misconfigured deployment fails while it is being composed rather than authenticating
+ * against an unintended host.
+ *
+ * Called by: apps/opencrane/src/infra/obot/obot-adapters.factory.ts, which hands the session to both
+ * `__CreateHttpObotCustodyAdapter` and `__CreateHttpObotMcpInvocationAdapter`.
+ *
+ * @param options - Obot origin, per-exchange timeout, mounted service-token path, shutdown signal,
+ *   and the optional fetch and token-reader overrides used by tests.
+ * @returns A session whose two methods are the only way OpenCrane calls Obot.
+ * @throws Error When the origin is not a single in-cluster HTTP Service origin, the timeout is
+ *   outside 1-300 seconds, or the service-token path is not absolute.
  */
 export function __CreateObotSession(options: ObotHttpOptions): ObotSession
 {

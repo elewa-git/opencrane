@@ -4,7 +4,14 @@ import { PrismaAuthorizationGrantRepository } from "./prisma-authorization-grant
 import { PrismaShareAuthorizationRepository } from "./prisma-share-authorization-repository.js";
 import type { ShareAuthorizationTransaction, ShareAuthorizationUnitOfWork } from "./share-authorization-unit-of-work.types.js";
 
-/** Prisma unit of work that keeps a share decision and its durable grant on one transaction client. */
+/**
+ * Runs one share procedure with both repositories on the same transaction.
+ *
+ * The grant read that authorises a share and the grant write that creates it must not straddle two
+ * transactions, or a revoked permission could still produce a share.
+ *
+ * Called by: libs/backend/server/iam/grants/main/src/routes/shares.ts.
+ */
 export class PrismaShareAuthorizationUnitOfWork implements ShareAuthorizationUnitOfWork
 {
 	/** Product-authority client that starts share transactions. */

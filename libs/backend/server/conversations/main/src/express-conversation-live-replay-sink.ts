@@ -1,7 +1,22 @@
 import type { Response } from "express";
 import type { ConversationProjectionSink } from "@opencrane/backend/conversations/projection";
 
-/** Adapt one Express response into the awaitable bounded replay sink contract. */
+/**
+ * Wrap an Express response as a replay sink.
+ *
+ * `open` is what commits the response to being a stream: it sends 200 with the SSE content
+ * type, `cache-control: no-store` so nothing is stored, and `x-accel-buffering: no` so an
+ * nginx-style proxy forwards each frame instead of holding them until the response ends —
+ * without that last header a live stream arrives in one lump at the end.
+ *
+ * Called by: `__CreateSelfConversationReplayRouter` (self-conversation-replay.router.ts) and
+ * `__CreateConversationReplayRouter` (conversation-replay.router.ts).
+ *
+ * @param response - The response to stream into. Not touched until `open` is called.
+ * @returns The sink the streaming loop writes through.
+ * @see https://html.spec.whatwg.org/multipage/server-sent-events.html — defines the
+ * `text/event-stream` framing these headers set up.
+ */
 export function _CreateExpressConversationLiveReplaySink(response: Response): ConversationProjectionSink
 {
 	return {
@@ -15,7 +30,7 @@ export function _CreateExpressConversationLiveReplaySink(response: Response): Co
 	};
 }
 
-/** Wait until Node's writable buffer accepts more bytes or the request is no longer writable. */
+/** Resolve when the socket can take more bytes, or immediately if the request is aborted, destroyed, or already ended. Never rejects, and removes all four listeners on the way out. */
 function _AwaitDrain(response: Response, signal: AbortSignal): Promise<void>
 {
 	if (signal.aborted || response.destroyed || response.writableEnded) return Promise.resolve();

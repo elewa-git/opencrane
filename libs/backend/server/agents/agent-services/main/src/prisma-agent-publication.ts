@@ -7,7 +7,16 @@ import type { AgentServicePublicationRepository, AtomicAgentRevisionPublication,
 import { _mapRevision, _mapService, _serviceState } from "./prisma-agent-mappers.js";
 import type { AgentPublicationAuditEvidencePort } from "./prisma-agent-publication.types.js";
 
-/** Prisma-backed publication adapter that commits revision, active pointer, and audit atomically. */
+/**
+ * Publishes agent revisions in Postgres, writing the revision, the service's active revision, and the
+ * audit row in one transaction.
+ *
+ * All three land together or none does, so there is no window where a service points at a revision
+ * with no audit trail, and a failed audit write cancels the publication.
+ *
+ * Called by: `_publicationFor` in `prisma-agent-services.router.ts` builds one per request so the
+ * audit row names the administrator publishing.
+ */
 export class PrismaAgentServicePublicationRepository implements AgentServicePublicationRepository
 {
 	/** OpenCrane product-authority database client. */

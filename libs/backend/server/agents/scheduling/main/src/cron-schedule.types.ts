@@ -1,4 +1,16 @@
-/** One parsed standard 5-field cron expression evaluated against a wall clock. */
+/**
+ * A cron expression already parsed into the exact values it matches.
+ *
+ * Every field is expanded up front into a set, so matching one minute is a handful of set lookups
+ * with no re-parsing. Day-of-week is normalised so Sunday is always 0, because cron accepts both 0
+ * and 7 for it.
+ *
+ * The two `*Restricted` flags cannot be derived from the sets - a field written `*` expands to the
+ * same full set as `0-6` - and they are what makes the Vixie day rule possible: when both day fields
+ * were written as something other than `*`, a match on either one is enough.
+ *
+ * @see {@link __CronMatchesWallClock} which consumes these flags.
+ */
 export interface CronExpression
 {
 	/** Matching minute-of-hour values (0-59). */

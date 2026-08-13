@@ -1,13 +1,31 @@
 import type { AuthorizationScope } from "@opencrane/models/authorization";
 import type { SignedFleetMembershipAssertionAuthority } from "@opencrane/backend/server/iam/membership";
 
-/** Stable proxy operation presented to OpenCrane for resolution. */
+/**
+ * The one proxy operation channel-proxy may ask OpenCrane to resolve.
+ *
+ * Deliberately a single-member union: channel-proxy asks "may this browser read events on this
+ * conversation, and where do I send that read?" and nothing else. Adding a member means a new
+ * runtime receiver has to be registered and authorized too, so it is not a one-line change.
+ *
+ * @see {@link ChannelAuthorizedAction} for the product permission this maps onto.
+ */
 export type ChannelResolutionAction = "events.read";
 
 /** Product authorization actions required by a proxy operation. */
 export type ChannelAuthorizedAction = "conversation.read";
 
-/** Trusted input assembled only by the internal HTTP adapter. */
+/**
+ * The resolve request, assembled only by this package's internal HTTP adapter.
+ *
+ * `delegatedIdentity` is the security point of this type: the human subject is taken from the
+ * browser session OpenCrane itself verified, never from a header channel-proxy set. The router
+ * rejects the request outright when it carries any subject-asserting header, so a compromised proxy
+ * cannot name a user it is not entitled to. `trustedHost` is likewise the host the proxy already
+ * matched against the browser Origin, and it selects the silo - it is not a hint.
+ *
+ * Called by: __ResolveChannelTarget; built by `_parseCommand` in channel-targets.router.ts.
+ */
 export interface ResolveChannelTargetCommand
 {
 	/** Projected channel-proxy ServiceAccount token. */
@@ -24,7 +42,17 @@ export interface ResolveChannelTargetCommand
 	readonly cursor?: string;
 }
 
-/** Fixed trust and lifetime policy for one OpenCrane resolver instance. */
+/**
+ * The fixed trust and lifetime rules for one resolver, taken only from deployment configuration.
+ *
+ * Nothing here can be influenced by a request, which is the point: the ServiceAccount name and
+ * namespace decide who may call at all, the DNS suffixes stop a registered route from ever pointing
+ * outside the cluster, and the receiver id and endpoint are chosen by the deployment rather than
+ * discovered. `invocationContextTtlMs` is validated to be positive and at most 300000 (five
+ * minutes), and the real expiry is the earlier of that and the caller's membership trust.
+ *
+ * Built by: `_CreateResolutionConfig` in apps/opencrane/src/app/channel-target-composition.ts.
+ */
 export interface ChannelTargetResolutionConfig
 {
 	/** TokenReview audience required from channel-proxy. */
@@ -56,14 +84,37 @@ export interface VerifiedChannelWorkloadIdentity
 	readonly audiences: readonly string[];
 }
 
-/** TokenReview boundary implemented by the OpenCrane Kubernetes adapter. */
+/**
+ * Confirms the caller really is the channel-proxy workload, using a Kubernetes TokenReview.
+ *
+ * The projected ServiceAccount token from the Authorization header is sent to the API server, which
+ * answers with the identity it belongs to. The adapter fixes the audience, ServiceAccount name and
+ * namespace it will accept, so a token belonging to any other workload is rejected even though it is
+ * perfectly valid. A null return means "not this workload" and must fail the request.
+ *
+ * Called by: __ResolveChannelTarget (step 2); implemented by _CreateChannelProxyTokenReviewer in
+ * libs/backend/server/infra/workload-identity and wired in
+ * apps/opencrane/src/app/channel-target-composition.ts.
+ *
+ * @see Kubernetes TokenReview, API group `authentication.k8s.io/v1` - the request this port makes.
+ */
 export interface ChannelWorkloadIdentityPort
 {
 	/** Reviews one projected token against the adapter's fixed audience and workload subject. */
 	__Review(token: string): Promise<VerifiedChannelWorkloadIdentity | null>;
 }
 
-/** Verified browser subject produced by OpenCrane-owned identity validation. */
+/**
+ * Proof that OpenCrane itself verified which human is behind the proxied request.
+ *
+ * `trustworthySubject: true` and `source: "cookie"` are not decoration - they are the only shapes
+ * the resolver accepts, and they can only be produced by code that read the verified OpenCrane
+ * session cookie. Nothing here may ever be filled in from a header or body field supplied by
+ * channel-proxy, because that would let the proxy choose whose events a caller can read.
+ *
+ * Built by: `_parseCommand` in channel-targets.router.ts from `request.session.authUser.sub`;
+ * re-checked in __ResolveChannelTarget (step 3).
+ */
 export interface TrustedDelegatedBrowserIdentity
 {
 	/** Trustworthy issuer-bound human subject; never read from proxy assertions. */
@@ -133,7 +184,20 @@ export type ChannelActionAuthorizationDecision =
 	| { readonly outcome: "allowed"; readonly authorizationDigest: string }
 	| { readonly outcome: "denied"; readonly reason: string };
 
-/** Atomic invocation-context issuance request. */
+/**
+ * Everything the database needs to hand out one short-lived pass for a single event read.
+ *
+ * `digest` is the SHA-256 of the opaque value channel-proxy receives; the value itself is never
+ * stored, so a database dump cannot be replayed as a valid pass. Every other field is a binding
+ * that will be re-checked inside the transaction before the row is inserted - which is why the
+ * request repeats facts the resolver already checked. The conversation can close, a participant can
+ * be removed, and a route can be retired between the check and the insert. `receiverId` and
+ * `allowedRouteHostSuffixes` come from deployment configuration only, never from the request.
+ *
+ * Called by: __ResolveChannelTarget (step 7), through {@link ChannelTargetAuthorityRepository}.
+ *
+ * @see {@link IssueChannelInvocationContextResult} for the outcomes, including the re-check failures.
+ */
 export interface IssueChannelInvocationContextCommand
 {
 	/** SHA-256 digest of the opaque context returned to channel-proxy. */
@@ -180,7 +244,20 @@ export type IssueChannelInvocationContextResult =
 	| { readonly status: "issued"; readonly context: IssuedChannelInvocationContext }
 	| { readonly status: "conversation_conflict" | "participant_conflict" | "route_unavailable" | "route_ambiguous" };
 
-/** Online runtime-PEP consumption request. */
+/**
+ * A runtime's request to spend one invocation context, made at the moment of the event read.
+ *
+ * The runtime acts here as the policy enforcement point (PEP): it holds no permission logic of its
+ * own and simply presents the opaque value it was given, so this package makes the decision. Only
+ * the digest is sent, and `expectedReceiverId` is the receiver identity configured on that runtime,
+ * so a pass issued for one receiver cannot be spent at another. A context can be spent exactly once.
+ *
+ * Called by: the replay route in
+ * libs/backend/server/conversations/main/src/conversation-replay.router.ts, which digests the
+ * presented value with __DigestChannelInvocationContext first.
+ *
+ * @see {@link ConsumeChannelInvocationContextResult} for the outcomes and every denial reason.
+ */
 export interface ConsumeChannelInvocationContextCommand
 {
 	/** SHA-256 digest of the presented opaque context. */
@@ -212,7 +289,18 @@ export interface ConsumedChannelInvocationContext
 	readonly authorizationDigest: string;
 }
 
-/** One-time online consumption outcome. */
+/**
+ * The outcome of spending one invocation context, with the reason when it is refused.
+ *
+ * Every refusal fails closed, and the reasons are meant to be told apart in logs rather than shown
+ * to a browser: `not_found` (no such digest), `receiver_mismatch` (issued for a different runtime),
+ * `route_mismatch` (the stored route no longer agrees with the context's silo, service, or action),
+ * `expired` (past its hard expiry), `revoked` (deliberately withdrawn), `replayed` (already spent -
+ * treat as an attack signal, not as a retry), and `route_inactive` (the route was retired or
+ * replaced). On `consumed` the caller must use the returned bindings, not its own request fields.
+ *
+ * @see {@link ConsumedChannelInvocationContext} for what the consumed case carries.
+ */
 export type ConsumeChannelInvocationContextResult =
 	| { readonly status: "consumed"; readonly context: ConsumedChannelInvocationContext }
 	| { readonly status: "denied"; readonly reason: "not_found" | "receiver_mismatch" | "route_mismatch" | "expired" | "revoked" | "replayed" | "route_inactive" };
@@ -230,7 +318,22 @@ export interface ReconcileChannelRuntimeRoutesCommand
 	readonly allowedRouteHostSuffixes: readonly string[];
 }
 
-/** Durable conversation, route, and invocation-context authority. */
+/**
+ * The durable authority for conversations, runtime routes, and invocation contexts.
+ *
+ * The `Atomically` suffix on two methods is a promise, not decoration: each of those runs entirely
+ * inside one serializable transaction that re-reads the conversation, its participants and the
+ * route, and only then writes. That is necessary because the resolver checks those same facts
+ * outside any transaction, and a conversation can close or a participant can lose access in
+ * between. The plain `getConversationAuthority` read is only a cheap early rejection - it is never
+ * the decision.
+ *
+ * Called by: __ResolveChannelTarget and __ReconcileChannelTargetRoutes in this package, and the
+ * replay route in libs/backend/server/conversations; implemented by
+ * PrismaChannelTargetAuthorityUnitOfWork.
+ *
+ * @see {@link ChannelTargetAuthorityUnitOfWork} the alias used where the transaction matters.
+ */
 export interface ChannelTargetAuthorityRepository
 {
 	/** Loads current conversation coordinates for pre-authorization checks. */
@@ -243,7 +346,18 @@ export interface ChannelTargetAuthorityRepository
 	consumeInvocationContextAtomically(command: ConsumeChannelInvocationContextCommand): Promise<ConsumeChannelInvocationContextResult>;
 }
 
-/** Owns the serializable transaction that fences one channel-target authority operation. */
+/**
+ * The same operations as {@link ChannelTargetAuthorityRepository}, named for the implementation that
+ * wraps each call in its own serializable transaction.
+ *
+ * Use this name in composition and app wiring to make it obvious that one call means one
+ * transaction, and that the re-checks inside `issueInvocationContextAtomically` and
+ * `consumeInvocationContextAtomically` really are protected against a concurrent change. The two
+ * types are interchangeable; only the intent differs.
+ *
+ * Called by: apps/opencrane/src/app/channel-target-composition.ts and
+ * apps/opencrane/src/app/runtime-composition.ts.
+ */
 export type ChannelTargetAuthorityUnitOfWork = ChannelTargetAuthorityRepository;
 
 /** Injectable wall clock. */
@@ -292,7 +406,17 @@ export interface AuthorizedChannelTargetResult
 	readonly expiresAt: string;
 }
 
-/** Stable fail-closed resolution outcome. */
+/**
+ * The resolver's answer: one authorized route, or a refusal with a stable reason.
+ *
+ * Every refusal fails closed, and the reason picks the status the router returns: `workload_denied`
+ * and `identity_denied` are 401, `route_denied` is 503 because nothing is wrong with the request -
+ * no usable runtime route exists right now, so a retry can succeed - and everything else is 403.
+ * `invalid_request` means the request or the resolver's own configuration failed validation before
+ * any authority was consulted.
+ *
+ * @see {@link AuthorizedChannelTargetResult} for what the authorized case carries.
+ */
 export type ResolveChannelTargetResult =
 	| { readonly outcome: "authorized"; readonly target: AuthorizedChannelTargetResult }
 	| { readonly outcome: "denied"; readonly reason: "invalid_request" | "workload_denied" | "identity_denied" | "host_denied" | "membership_denied" | "conversation_denied" | "authorization_denied" | "route_denied" };

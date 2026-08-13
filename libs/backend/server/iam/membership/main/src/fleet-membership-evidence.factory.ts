@@ -8,10 +8,26 @@ import type { FleetMembershipEvidenceConfig, FleetMembershipSignatureVerifier } 
 /** Longest period a server may reuse its newest signed fleet-membership revision. */
 const _MAXIMUM_STALENESS_MILLISECONDS = 24 * 60 * 60 * 1_000;
 
-/** Synthetic issuer identifier used only to keep absent standalone evidence denied. */
+/** Placeholder issuer id for standalone mode; it matches no real issuer, so lookups find nothing. */
 const _STANDALONE_ISSUER_ID = "opencrane-standalone-unconfigured";
 
-/** Creates one reloadable mounted-key trust configuration without coupling it to an agent type. */
+/**
+ * Reads this deployment's membership trust settings out of the environment.
+ *
+ * `OPENCRANE_MEMBERSHIP_MODE` must say `fleet` or `standalone`; there is no default, because
+ * guessing would decide whether unsigned membership is possible. In `fleet` mode the issuer id, key
+ * id, and public-key file are all required, and the key file is re-read before every signature check
+ * so rotating the mounted key takes effect without a restart. In `standalone` mode there is no key,
+ * so the verifier returned refuses every revision — the silo simply has no fleet membership yet
+ * rather than an unchecked one.
+ *
+ * Called by: apps/opencrane/src/index.ts, apps/opencrane/src/app/channel-target-composition.ts, and
+ * libs/backend/server/agents/agent-services/main/src/prisma-managed-execution-evidence.factory.ts.
+ * @param environment - Process environment to read; defaults to `process.env`, overridden in tests.
+ * @returns Trusted issuer, staleness limit in milliseconds, and the verifier to use.
+ * @throws Error when the mode is missing or unrecognised, when a required `fleet` variable is
+ *         absent, or when the staleness override is not a positive integer of at most 24 hours.
+ */
 export function _CreateFleetMembershipEvidenceConfig(environment: NodeJS.ProcessEnv = process.env): FleetMembershipEvidenceConfig
 {
 	const mode = _DeploymentMode(environment);
@@ -27,7 +43,7 @@ export function _CreateFleetMembershipEvidenceConfig(environment: NodeJS.Process
 	return { trustedIssuerId, maximumStalenessMs, verifier: _CreateReloadingVerifier(source.read, issuerKeyId) };
 }
 
-/** Reads the explicitly selected issuer model; absent configuration never implies Fleet trust. */
+/** Reads the configured mode; a missing or unknown value throws instead of defaulting to fleet. */
 function _DeploymentMode(environment: NodeJS.ProcessEnv): FleetMembershipDeploymentModes
 {
 	const value = environment["OPENCRANE_MEMBERSHIP_MODE"]?.trim();
@@ -36,7 +52,7 @@ function _DeploymentMode(environment: NodeJS.ProcessEnv): FleetMembershipDeploym
 	throw new Error("OPENCRANE_MEMBERSHIP_MODE must be standalone or fleet");
 }
 
-/** Produces matching but unverified evidence so standalone startup can never convert missing trust into access. */
+/** Returns a verifier that always answers "not verified", so a silo with no key grants nothing. */
 function _CreateStandaloneDenyVerifier(): FleetMembershipSignatureVerifier
 {
 	return {
@@ -67,7 +83,7 @@ function _CreateReloadingVerifier(read: () => string, issuerKeyId: string): Flee
 	return { async verify(revision: SignedFleetMembershipRevision): Promise<FleetSignatureVerificationEvidence> { return _Load().verify(revision); } };
 }
 
-/** Reads one mandatory process-owned trust coordinate. */
+/** Reads one required environment variable and trims it. */
 function _Required(environment: NodeJS.ProcessEnv, name: string): string
 {
 	const value = environment[name]?.trim();

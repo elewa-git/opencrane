@@ -2,7 +2,16 @@ import type * as k8s from "@kubernetes/client-node";
 import type { Logger } from "pino";
 import type { PrismaClient, ProviderCredential as PrismaProviderCredential } from "@prisma/client";
 
-/** Inputs required to persist and register a provider's BYOK key. */
+/**
+ * Everything `_ProvisionByokKey` needs to set a provider's raw BYOK key.
+ *
+ * `apiKey` is the only raw secret here. It reaches exactly two places — the provider's Kubernetes
+ * Secret and LiteLLM's `/credentials` store — and is never logged, never stored in Postgres, and
+ * never returned. Only the Secret's NAME is recorded on the `ProviderCredential` row.
+ *
+ * @see {@link ProvisionByokKeyResult} for what comes back, and `requireLiveModels` below for the
+ *      one option that changes whether failures throw.
+ */
 export interface ProvisionByokKeyOptions
 {
   /** Prisma client for credential and model rows. */
@@ -17,11 +26,25 @@ export interface ProvisionByokKeyOptions
   apiKey: string;
   /** Scoped logger for best-effort registration warnings. */
   log: Logger;
-  /** Require exact model reconciliation instead of the interactive route's best-effort seed. */
+  /**
+   * Turns model registration from warn-on-failure into throw-on-failure.
+   *
+   * Left false (the interactive `PUT /providers/byok/:provider` route): if LiteLLM is unconfigured
+   * or down, the key is still set and the failure is only a log line, so an operator setting a key
+   * from the UI is not blocked by a flaky LiteLLM.
+   *
+   * Set true (apps/opencrane/src/app/initial-model-bootstrap.ts): every model and embedding
+   * registration must return a real LiteLLM deployment id, and the first failure throws out of
+   * `_ProvisionByokKey`. A fresh install would otherwise come up with placeholder deployment ids
+   * that never route, and only fail on real traffic.
+   *
+   * Either way the Secret and the `ProviderCredential` row are already written by the time a throw
+   * can happen — this switch changes when you find out, not what was stored.
+   */
   requireLiveModels?: boolean;
 }
 
-/** Inputs required to remove a provider's BYOK key. */
+/** Everything `_DeprovisionByokKey` needs to remove a provider's key. No `log` here, because removal has no best-effort step to warn about — every failure throws. */
 export interface DeprovisionByokKeyOptions
 {
   /** Prisma client for the credential row. */
@@ -34,7 +57,14 @@ export interface DeprovisionByokKeyOptions
   provider: string;
 }
 
-/** Outcome of provisioning a provider's BYOK key. */
+/**
+ * What `_ProvisionByokKey` reports back after a successful set.
+ *
+ * Reaching this result means the Secret and the `ProviderCredential` row were both written. It
+ * does NOT mean LiteLLM took the key: check `litellmRegistered`. When that is false the key works
+ * only through LiteLLM's environment-variable baseline, and models bound to the credential name
+ * will not resolve until a later set succeeds.
+ */
 export interface ProvisionByokKeyResult
 {
   /** True when LiteLLM's `/credentials` accepted the key (false means Secret-only / env baseline). */

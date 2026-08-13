@@ -1,3 +1,11 @@
+const DEVELOP_SMOKE_IMAGES = [
+	"artifact-service",
+	"channel-proxy",
+	"memory-gateway",
+	"opencrane",
+	"opencrane-ui",
+];
+
 /**
  * Returns the publish descriptor owned by one container target.
  *
@@ -44,6 +52,84 @@ export function selectAffectedDeployables(containerProjects)
 		.map(function _Descriptor(project) { return _ReleaseDescriptor(project); });
 }
 
+/**
+ * Returns the complete image set required by the current-silo smoke.
+ *
+ * Release repositories and Dockerfiles remain app-owned target metadata. The local aliases are
+ * smoke-only names consumed by the disposable values profile.
+ *
+ * @param {object[]} containerProjects Every project that owns a container target.
+ * @returns {{ project: string, image: string, dockerfile: string }[]} Complete deterministic image set.
+ * @throws {Error} When a required current-silo owner or its release metadata is absent.
+ */
+export function selectDevelopSmokeImages(containerProjects)
+{
+	const projectsByName = new Map(containerProjects.map(function _ByName(project) { return [project.name, project]; }));
+	return DEVELOP_SMOKE_IMAGES.map(function _SmokeImage(projectName) {
+		const project = projectsByName.get(projectName);
+		if (!project)
+		{
+			throw new Error(`current-silo smoke project '${projectName}' must own a container target`);
+		}
+		return _ReleaseDescriptor(project);
+	});
+}
+
+/** Selects current-silo image owners whose transitive production inputs changed. */
+export function selectDevelopSmokeProjects(affectedContainerProjects)
+{
+	const smokeProjects = new Set(DEVELOP_SMOKE_IMAGES);
+	return [...new Set(affectedContainerProjects)]
+		.filter(function _CurrentSilo(project) { return smokeProjects.has(project); })
+		.sort(function _ByName(left, right) { return left.localeCompare(right); });
+}
+
+/**
+ * Determines whether every changed path is outside the current-silo deployment contract.
+ *
+ * This is deliberately a positive safe-path proof. An unclassified path forces k3d so a new
+ * deployment input cannot silently bypass the disposable-cluster qualification.
+ */
+export function selectDevelopSmokeInputsChanged(changedFiles)
+{
+	return changedFiles.some(function _RequiresCurrentSiloProof(file) {
+		return !(file.startsWith("website/")
+			|| file.startsWith("docs/")
+			|| file.startsWith(".agents/")
+			|| file.startsWith(".claude/")
+			|| file.startsWith(".codex/")
+			|| file.startsWith(".github/ISSUE_TEMPLATE/")
+			|| ["README.md", "CHANGELOG.md", "plan.md", "plan-done.md"].includes(file));
+	});
+}
+
+/**
+ * Selects deterministic image-smoke matrix entries for `scripts/affected-deployables.mjs`.
+ *
+ * Automatic qualification keeps only affected owners. Manual `image-smoke` and `all`
+ * qualification expand the matrix to every project that owns the target; `k3d` does not.
+ *
+ * @param {string[]} affectedProjects Image-smoke owners selected by the affected-project range.
+ * @param {string[]} allProjects Every project that owns an image-smoke target.
+ * @param {string | undefined} heavyQualification Explicit manual heavyweight selector.
+ * @returns {{ project: string }[]} Sorted, de-duplicated GitHub Actions matrix entries.
+ * @throws {Error} When the manual heavyweight selector is not supported.
+ */
+export function selectImageSmokeProjects(affectedProjects, allProjects, heavyQualification)
+{
+	if (heavyQualification && !["none", "image-smoke", "k3d", "all"].includes(heavyQualification))
+	{
+		throw new Error(`unsupported FORCE_HEAVY_QUALIFICATION value: ${heavyQualification}`);
+	}
+
+	const selected = heavyQualification === "image-smoke" || heavyQualification === "all"
+		? allProjects
+		: affectedProjects;
+	return [...new Set(selected)]
+		.sort(function _ByName(left, right) { return left.localeCompare(right); })
+		.map(function _MatrixEntry(project) { return { project }; });
+}
+
 /** Determines whether an affected project can change the generated API contract. */
 export function selectApiContractChanged(affectedProjects)
 {
@@ -62,12 +148,27 @@ export function selectGuardInputsChanged(changedFiles)
 	});
 }
 
-/** Determines whether a pull request changed the live deployment surface exercised by k3d. */
-export function selectDevelopSmokeRequired(changedFiles)
+/**
+ * Selects fast storage for ordinary PRs and the expansion proof for storage-sensitive changes.
+ *
+ * Protected develop pushes and explicit manual k3d qualification always retain the full clean
+ * storage proof. A pull request pays for it only when it can change that proof or the production
+ * storage/deployment owner.
+ */
+export function selectDevelopSmokeStorageMode(changedFiles, eventName, ref, heavyQualification)
 {
-	return changedFiles.some(function _DevelopSmokeInput(file) {
-		return file.startsWith("apps/_infra/deploy-k8s/")
-			|| (file.startsWith("apps/") && (file.includes("/helm/") || file.includes("/deploy/")))
-			|| file === ".github/workflows/docker.yml";
+	if ((eventName === "push" && ref === "refs/heads/develop")
+		|| (eventName === "workflow_dispatch" && ["k3d", "all"].includes(heavyQualification)))
+	{
+		return "full";
+	}
+
+	const fullStorageRequired = changedFiles.some(function _StorageProofInput(file) {
+		return file === ".github/workflows/docker.yml"
+			|| file.startsWith("apps/postgres/")
+			|| file === "apps/_infra/deploy-k8s/deploy.sh"
+			|| file === "apps/_infra/deploy-k8s/platform/k8s-deploy.sh"
+			|| file.startsWith("apps/_infra/deploy-k8s/platform/tests/develop-smoke");
 	});
+	return fullStorageRequired ? "full" : "fast";
 }

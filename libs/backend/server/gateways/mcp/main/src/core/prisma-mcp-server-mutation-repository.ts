@@ -2,10 +2,21 @@ import type { Prisma } from "@prisma/client";
 
 import type { CreateMcpServerWrite, McpServerCredentialWrite, McpServerMutationRepository, McpServerMutationWriteResult, UpdateMcpServerWrite } from "./mcp-server-mutation-repository.types.js";
 
-/** Transaction-scoped repository for MCP server, credential metadata, and audit rows. */
+/**
+ * Writes MCP server rows, their credential label rows, and the audit row — all through a Prisma
+ * transaction that someone else opened.
+ *
+ * It takes a transaction client rather than a `PrismaClient`, so it cannot commit on its own. That
+ * is deliberate: {@link PrismaMcpServerMutationUnitOfWork} owns the commit, and this class only
+ * describes the writes. Use this directly when you are already inside a transaction; otherwise use
+ * the unit of work.
+ *
+ * Called by: `PrismaMcpServerMutationUnitOfWork._withRepository` in
+ * ./prisma-mcp-server-mutation-unit-of-work.ts. No other construction site in this repo.
+ */
 export class PrismaMcpServerMutationRepository implements McpServerMutationRepository
 {
-	/** Exact transaction that owns every aggregate write. */
+	/** The Prisma transaction all writes in this class run on; it is committed by the caller, not here. */
 	private readonly _transaction: Prisma.TransactionClient;
 
 	/** Binds the repository to the transaction opened by its unit of work. */
@@ -14,7 +25,7 @@ export class PrismaMcpServerMutationRepository implements McpServerMutationRepos
 		this._transaction = transaction;
 	}
 
-	/** Creates the server, credential metadata, and audit record. */
+	/** Insert the server row, then its credential rows, then the audit row — all on the held transaction. @returns The new server's id. */
 	async createServer(input: CreateMcpServerWrite): Promise<McpServerMutationWriteResult>
 	{
 		const server = await this._transaction.mcpServer.create({
@@ -35,7 +46,7 @@ export class PrismaMcpServerMutationRepository implements McpServerMutationRepos
 		return { id: server.id };
 	}
 
-	/** Updates the server, replaces credential metadata, and writes the audit record. */
+	/** Patch the supplied server fields, delete and re-insert all credential rows, then add the audit row. */
 	async updateServer(input: UpdateMcpServerWrite): Promise<void>
 	{
 		await this._transaction.mcpServer.update({
@@ -64,7 +75,7 @@ export class PrismaMcpServerMutationRepository implements McpServerMutationRepos
 		await this._transaction.auditEntry.create({ data: { action: "Deleted", resource: `McpServer/${serverId}`, message: `MCP server ${serverId} deleted` } });
 	}
 
-	/** Replaces credential children through the transaction that owns their parent. */
+	/** Delete every credential row for this server, then insert the supplied labels. An empty list just deletes. */
 	private async _replaceCredentials(serverId: string, credentials: readonly McpServerCredentialWrite[]): Promise<void>
 	{
 		await this._transaction.mcpServerCredential.deleteMany({ where: { mcpServerId: serverId } });

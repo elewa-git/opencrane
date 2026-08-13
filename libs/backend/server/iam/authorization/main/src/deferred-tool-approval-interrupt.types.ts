@@ -24,11 +24,27 @@ export interface ApprovalInterruptReadCommand
 /** Reader the conversations package calls; it is declared here so that package need not depend on this one. */
 export interface DeferredToolApprovalInterruptReader
 {
-	/** Read current owner-bound approval overlays without advancing a conversation cursor. */
+	/**
+	 * Lists the approvals this user still has to decide in one conversation.
+	 * @param command - Conversation, silo, and subject taken from the already-authenticated reader.
+	 * @returns Timeline-shaped entries for the live approvals, newest last. Reading these does not
+	 *   move the conversation's read position, so a caller may poll it as often as it likes.
+	 */
 	readOpen(command: ApprovalInterruptReadCommand): Promise<readonly AgUiProjectionSourceEvent[]>;
 }
 
-/** Stable actor-facing states returned for one owned deferred-tool interrupt. */
+/**
+ * The state of one approval as the owning user sees it.
+ *
+ * Not the stored column: `Expired` is also returned for a row still stored as pending whose
+ * deadline has passed, because a sweep may not have run yet. So `Pending` here really does mean
+ * "you can still decide this", and a client may show a decision button on it without re-checking
+ * the clock.
+ *
+ * `Denied` means the user refused. `Cancelled` means the run was torn down before anyone decided —
+ * do not present that as the user's own choice.
+ * @see {@link SelfDeferredToolApproval}
+ */
 export enum DeferredToolApprovalStates
 {
 	/** The interrupt remains actionable before its server-owned expiry. */
@@ -68,7 +84,17 @@ export interface SelfDeferredToolApproval
 	readonly createdAt: string;
 }
 
-/** Read-only persistence boundary for the signed-in owner's approval inbox and detail. */
+/**
+ * The owner-only reads behind the approvals inbox.
+ *
+ * Every method takes both `siloId` and `subjectId` and filters on them in the query, so one user
+ * can never read another's approval by guessing an id. Reads select only pre-redacted columns —
+ * never the reviewed arguments the server keeps for dispatch.
+ *
+ * Callers should use {@link SelfDeferredToolApprovalReadUnitOfWork} instead of this directly; it
+ * adds the membership check in the same transaction.
+ * Implemented by: ./prisma-self-deferred-tool-approval-list-repository.ts.
+ */
 export interface SelfDeferredToolApprovalListRepository
 {
 	/** Proves the caller still owns an active membership in the exact silo snapshot. */
@@ -81,7 +107,18 @@ export interface SelfDeferredToolApprovalListRepository
 	readOwned(approvalRequestId: string, siloId: string, subjectId: string, now: Date): Promise<SelfDeferredToolApproval | null>;
 }
 
-/** Atomic read boundary that snapshots membership and actor-safe approval data together. */
+/**
+ * The approvals inbox reads, each wrapped in one transaction with a membership check.
+ *
+ * Membership is verified and the data is read inside a single serializable transaction, so a user
+ * removed from the silo mid-request cannot come back with data from just before the removal. When
+ * membership fails, every method returns empty or null — never an error — so the API cannot be used
+ * to tell "no access" apart from "nothing pending".
+ *
+ * Called by: ./deferred-tool-approval.router.ts (as `pendingApprovals`) and
+ * ./prisma-deferred-tool-approval-interrupt-reader.ts.
+ * Implemented by: ./prisma-self-deferred-tool-approval-list-repository.ts.
+ */
 export interface SelfDeferredToolApprovalReadUnitOfWork
 {
 	/** Lists actionable approvals only while the caller's membership remains active. */

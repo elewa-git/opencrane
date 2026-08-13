@@ -44,10 +44,17 @@ const _STATE_HANDLERS: Readonly<Record<DeferredToolApprovalRunStates, DeferredTo
 };
 
 /**
- * Select the sole persistence action for one durable State x Event cell.
+ * Decide what happens to the RUN when one of its approvals opens or resolves.
  *
- * Decision kind is deliberately not interpreted here. Approved, denied, and expired payloads use
- * independent result strategies; this owner controls only pause, batching, resume, and rejection.
+ * Deliberately blind to whether the approval was approved, denied, or expired — those produce
+ * different results for the tool call, but the run pauses and resumes the same way regardless. So
+ * this only ever chooses: pause, add to the current batch, keep waiting, resume, cancel, or reject.
+ *
+ * Called by: ./deferred-tool-approval.ts (`__DeferToolRequest` for `Open`, and
+ * `_FinishDeferredToolApprovalBatch` for `Decision` and `Expiry`).
+ * @param input - Run state, the event, and the pending count after the approval row changed.
+ * @returns The single permitted write, or `Reject` when the event is invalid for that run state.
+ *   `_FinishDeferredToolApprovalBatch` throws on anything other than `KeepWaiting` or `Resume`.
  */
 export function __PlanDeferredToolApprovalLifecycle(input: DeferredToolApprovalLifecycleInput): DeferredToolApprovalLifecycleActions
 {

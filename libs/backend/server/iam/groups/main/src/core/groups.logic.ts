@@ -8,7 +8,7 @@ import type { GroupRouteScope, GroupWriteRequest } from "../routes/groups.types.
 
 type _GroupRow = Prisma.GroupGetPayload<{}>;
 
-/** Prisma scope lookup keyed by route values. */
+/** Route scope string ("org", "department", …) to the value stored in the group's scope column. */
 const _PRISMA_SCOPE_BY_ROUTE_SCOPE = {
 	org: "Org",
 	department: "Department",
@@ -16,7 +16,7 @@ const _PRISMA_SCOPE_BY_ROUTE_SCOPE = {
 	personal: "Personal",
 };
 
-/** Route scope lookup keyed by Prisma enum values. */
+/** The reverse: stored scope value to the GrantScope the API returns (includes Team, which routes cannot set). */
 const _ROUTE_SCOPE_BY_PRISMA_SCOPE: Record<string, GrantScope> = {
 	Org: GrantScope.Org,
 	Department: GrantScope.Department,
@@ -26,10 +26,14 @@ const _ROUTE_SCOPE_BY_PRISMA_SCOPE: Record<string, GrantScope> = {
 };
 
 /**
- * Load every persisted group.
+ * Load every group in the silo, newest first.
  *
- * @param prisma - Prisma client used for persistence.
- * @returns Normalized route response rows.
+ * There is no paging and no scope filter: a silo's group list is operator-sized. `grants` comes back
+ * empty — this loads groups only.
+ *
+ * Called by: the GET / handler of groupsRouter in routes/groups.ts.
+ * @param prisma - Silo Prisma client.
+ * @returns One row per group, with members de-duplicated, sorted, and counted.
  */
 export async function listGroups(prisma: PrismaClient): Promise<GroupResponse[]>
 {
@@ -60,11 +64,16 @@ export async function getGroup(prisma: PrismaClient, groupId: string): Promise<G
 }
 
 /**
- * Create a group.
+ * Create a group and record it in the audit-entry table.
  *
- * @param prisma - Prisma client used for persistence.
- * @param body - Route payload provided by the caller.
- * @returns Mutation response consumed by the route.
+ * The two writes are not one transaction, so a failed audit insert still leaves the group created —
+ * this is the operator-facing group list, not the append-only authorization decision log.
+ *
+ * Called by: the POST / handler of groupsRouter in routes/groups.ts.
+ * @param prisma - Silo Prisma client.
+ * @param body - Name, scope, optional description, and raw member list from the request.
+ * @returns The new group's id with status `created`.
+ * @throws Error from Prisma when the group name is already taken (unique constraint).
  */
 export async function createGroup(prisma: PrismaClient, body: GroupWriteRequest): Promise<GroupMutationResponse>
 {
@@ -124,11 +133,13 @@ export async function updateGroup(prisma: PrismaClient, groupId: string, body: P
 }
 
 /**
- * Delete a group.
+ * Delete a group and record it in the audit-entry table.
  *
- * @param prisma - Prisma client used for persistence.
- * @param groupId - Group identifier from the route.
- * @returns Mutation response consumed by the route.
+ * Called by: the DELETE /:id handler of groupsRouter in routes/groups.ts.
+ * @param prisma - Silo Prisma client.
+ * @param groupId - Group identifier from the route path.
+ * @returns The id with status `deleted`.
+ * @throws Error from Prisma when no group has that id.
  */
 export async function deleteGroup(prisma: PrismaClient, groupId: string): Promise<GroupMutationResponse>
 {
@@ -148,10 +159,13 @@ export async function deleteGroup(prisma: PrismaClient, groupId: string): Promis
 }
 
 /**
- * Normalize raw membership JSON into a unique, sorted string array.
+ * Turn a raw membership value into a de-duplicated, sorted list of non-empty strings.
  *
- * @param members - Raw request or database membership value.
- * @returns Canonical principal identifier list.
+ * Used both on the way in and on the way out, so a hand-edited or legacy `members` column still
+ * reads back as a clean list. Non-strings and blanks are dropped, not kept.
+ *
+ * @param members - Raw value from the request body or the database column.
+ * @returns Sorted, unique member identifiers.
  */
 function _NormalizeMembers(members: unknown): string[]
 {

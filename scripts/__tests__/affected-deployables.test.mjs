@@ -3,7 +3,18 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 
-import { selectAffectedDeployables, selectApiContractChanged, selectDevelopSmokeRequired, selectForcedContainerProjects, selectGuardInputsChanged } from "../affected-deployables.core.mjs";
+import {
+	selectAffectedDeployables,
+	selectApiContractChanged,
+	selectDevelopSmokeImages,
+	selectDevelopSmokeInputsChanged,
+	selectDevelopSmokeProjects,
+	selectDevelopSmokeStorageMode,
+	selectForcedContainerProjects,
+	selectGuardInputsChanged,
+	selectImageSmokeProjects,
+} from "../affected-deployables.core.mjs";
+import { hasCompleteDevelopSmokeBaseline } from "../develop-smoke-baseline.core.mjs";
 import { hasSuccessfulDevelopValidation, selectGuardComparisonBase, selectPromotionSource } from "../promotion-guard-base.core.mjs";
 
 /** Reads the stable selector fixture. */
@@ -20,6 +31,13 @@ function _Workflow()
 	return readFileSync(path, "utf8");
 }
 
+/** Reads the remote-only current-silo smoke implementation. */
+function _DevelopSmoke()
+{
+	const path = fileURLToPath(new URL("../../apps/_infra/deploy-k8s/platform/tests/develop-smoke.sh", import.meta.url));
+	return readFileSync(path, "utf8");
+}
+
 test("selects sorted release descriptors owned by affected container apps", function _SelectsDescriptors()
 {
 	const fixture = _Fixture();
@@ -27,6 +45,38 @@ test("selects sorted release descriptors owned by affected container apps", func
 		{ project: "opencrane-ui", image: "opencrane-ui", dockerfile: "apps/opencrane-ui/deploy/Dockerfile" },
 		{ project: "skill-authoring", image: "opencrane-skill-authoring", dockerfile: "apps/skill-authoring/deploy/Dockerfile" },
 	]);
+});
+
+test("selects the complete current-silo image set from app-owned container metadata", function _SelectsDevelopSmokeImages()
+{
+	const projects = [
+		["opencrane", "opencrane-server", "apps/opencrane/deploy/Dockerfile"],
+		["opencrane-ui", "opencrane-ui", "apps/opencrane-ui/deploy/Dockerfile"],
+		["channel-proxy", "opencrane-channel-proxy", "apps/channel-proxy/deploy/Dockerfile"],
+		["memory-gateway", "opencrane-memory-gateway", "apps/memory-gateway/deploy/Dockerfile"],
+		["artifact-service", "opencrane-artifact-service", "apps/artifact-service/deploy/Dockerfile"],
+	].map(function _Project([name, image, dockerfile]) {
+		return { name, targets: { container: { metadata: { release: { image, dockerfile } } } } };
+	});
+	assert.deepEqual(selectDevelopSmokeImages(projects), [
+		{ project: "artifact-service", image: "opencrane-artifact-service", dockerfile: "apps/artifact-service/deploy/Dockerfile" },
+		{ project: "channel-proxy", image: "opencrane-channel-proxy", dockerfile: "apps/channel-proxy/deploy/Dockerfile" },
+		{ project: "memory-gateway", image: "opencrane-memory-gateway", dockerfile: "apps/memory-gateway/deploy/Dockerfile" },
+		{ project: "opencrane", image: "opencrane-server", dockerfile: "apps/opencrane/deploy/Dockerfile" },
+		{ project: "opencrane-ui", image: "opencrane-ui", dockerfile: "apps/opencrane-ui/deploy/Dockerfile" },
+	]);
+	assert.throws(
+		function _MissingOwner() { selectDevelopSmokeImages(projects.filter(function _WithoutServer(project) { return project.name !== "opencrane"; })); },
+		/current-silo smoke project 'opencrane' must own a container target/u,
+	);
+});
+
+test("uses Nx affected container owners to select current-silo rebuilds", function _SelectsDevelopSmokeProjects()
+{
+	assert.deepEqual(
+		selectDevelopSmokeProjects(["skill-authoring", "opencrane-ui", "channel-proxy", "opencrane-ui"]),
+		["channel-proxy", "opencrane-ui"],
+	);
 });
 
 test("fails closed when a container target is not publishable", function _RejectsUndescribedTarget()
@@ -47,6 +97,21 @@ test("uses an explicit publication set and makes manual dispatch validation-only
 	assert.throws(function _UnknownForce() { selectForcedContainerProjects("all"); }, /unsupported FORCE_DEPLOYABLES value: all/u);
 });
 
+test("selects affected image smokes unless manual qualification expands to every owner", function _SelectsImageSmokes()
+{
+	const affected = ["skill-authoring", "skill-authoring"];
+	const all = ["tool-runner", "skill-authoring"];
+	assert.deepEqual(selectImageSmokeProjects(affected, all, ""), [{ project: "skill-authoring" }]);
+	assert.deepEqual(selectImageSmokeProjects(affected, all, "k3d"), [{ project: "skill-authoring" }]);
+	const allProjects = [{ project: "skill-authoring" }, { project: "tool-runner" }];
+	assert.deepEqual(selectImageSmokeProjects(affected, all, "image-smoke"), allProjects);
+	assert.deepEqual(selectImageSmokeProjects(affected, all, "all"), allProjects);
+	assert.throws(
+		function _UnknownForce() { selectImageSmokeProjects(affected, all, "everything"); },
+		/unsupported FORCE_HEAVY_QUALIFICATION value/u,
+	);
+});
+
 test("uses all affected projects for contract verification and changed files for guard fixtures", function _SelectsPipelineInputs()
 {
 	const fixture = _Fixture();
@@ -56,30 +121,125 @@ test("uses all affected projects for contract verification and changed files for
 	assert.equal(selectGuardInputsChanged(["apps/skill-authoring/src/authoring_worker.py"]), false);
 });
 
-test("runs the develop smoke for deployment surfaces and not ordinary application sources", function _SelectsDevelopSmokeInputs()
+test("only classifies explicit non-deployment paths as safe current-silo inputs", function _SelectsDevelopSmokeInputs()
 {
-	assert.equal(selectDevelopSmokeRequired(["apps/_infra/deploy-k8s/values.yaml"]), true);
-	assert.equal(selectDevelopSmokeRequired(["apps/opencrane/helm/templates/_deployment.tpl"]), true);
-	assert.equal(selectDevelopSmokeRequired(["apps/opencrane/deploy/Dockerfile"]), true);
-	assert.equal(selectDevelopSmokeRequired([".github/workflows/docker.yml"]), true);
-	assert.equal(selectDevelopSmokeRequired(["apps/opencrane/src/main.ts"]), false);
-	assert.equal(selectDevelopSmokeRequired(["website/guide.md"]), false);
+	assert.equal(selectDevelopSmokeInputsChanged(["website/guide.md", "docs/agents/infra.md"]), false);
+	assert.equal(selectDevelopSmokeInputsChanged(["README.md", "plan.md"]), false);
+	assert.equal(selectDevelopSmokeInputsChanged(["apps/opencrane/README.md"]), true);
+	assert.equal(selectDevelopSmokeInputsChanged(["apps/_infra/deploy-k8s/templates/review-proof.md"]), true);
+	assert.equal(selectDevelopSmokeInputsChanged(["apps/_infra/deploy-k8s/values.yaml"]), true);
+	assert.equal(selectDevelopSmokeInputsChanged(["apps/opencrane/helm/templates/_deployment.tpl"]), true);
+	assert.equal(selectDevelopSmokeInputsChanged(["apps/opencrane/deploy/Dockerfile"]), true);
+	assert.equal(selectDevelopSmokeInputsChanged(["apps/agent-runtime/src/runtime.py"]), true);
+	assert.equal(selectDevelopSmokeInputsChanged(["package-lock.json"]), true);
+	assert.equal(selectDevelopSmokeInputsChanged(["scripts/affected-deployables.core.mjs"]), true);
+	assert.equal(selectDevelopSmokeInputsChanged(["unclassified/new-input.xyz"]), true);
 });
 
-test("keeps the blocking smoke on develop and ahead of image publication", function _ProtectsDevelopSmokeWiring()
+test("reuses only an exact-SHA baseline with a successful current-silo k3d job", function _SelectsBaselineReuse()
+{
+	const baseSha = "a".repeat(40);
+	const qualifications = [{
+		workflowPath: ".github/workflows/docker.yml",
+		headSha: baseSha,
+		runEvent: "workflow_dispatch",
+		runStatus: "completed",
+		runConclusion: "success",
+		jobName: "k3d current-silo smoke test",
+		jobStatus: "completed",
+		jobConclusion: "success",
+	}];
+	const eligible = {
+		eventName: "pull_request",
+		baseSha,
+		deploymentInputsChanged: false,
+		affectedContainerProjects: [],
+		qualifications,
+	};
+	assert.equal(hasCompleteDevelopSmokeBaseline(eligible), true);
+	assert.equal(hasCompleteDevelopSmokeBaseline({ ...eligible, eventName: "push" }), false);
+	assert.equal(hasCompleteDevelopSmokeBaseline({ ...eligible, baseSha: "short" }), false);
+	assert.equal(hasCompleteDevelopSmokeBaseline({ ...eligible, deploymentInputsChanged: true }), false);
+	assert.equal(hasCompleteDevelopSmokeBaseline({ ...eligible, affectedContainerProjects: ["skill-authoring"] }), false);
+	assert.equal(hasCompleteDevelopSmokeBaseline({ ...eligible, qualifications: [] }), false);
+	assert.equal(hasCompleteDevelopSmokeBaseline({
+		...eligible,
+		qualifications: [{ ...qualifications[0], runEvent: "pull_request" }],
+	}), false);
+	assert.equal(hasCompleteDevelopSmokeBaseline({
+		...eligible,
+		qualifications: [{ ...qualifications[0], jobConclusion: "skipped" }],
+	}), false);
+});
+
+test("overlaps image preparation and imports one complete direct k3d batch", function _ProtectsFastSmokeOrchestration()
+{
+	const smoke = _DevelopSmoke();
+	assert.match(smoke, /_prepare_images &[\s\S]*?IMAGE_PREPARATION_PID=\$!/u);
+	assert.match(smoke, /if ! wait "\$IMAGE_PREPARATION_PID"/u);
+	assert.match(smoke, /cert-manager jetstack\/cert-manager[\s\S]*?&[\s\S]*?CERT_MANAGER_INSTALL_PID=\$![\s\S]*?cnpg cnpg\/cloudnative-pg/u);
+	assert.match(smoke, /if ! wait "\$CERT_MANAGER_INSTALL_PID"/u);
+	assert.match(smoke, /docker buildx build --load/u);
+	assert.match(smoke, /--cache-from "type=gha,scope=\$\{project\},timeout=2m"/u);
+	assert.doesNotMatch(smoke, /--cache-to/u);
+	const imports = smoke.match(/k3d image import/g) ?? [];
+	assert.equal(imports.length, 1);
+	assert.match(smoke, /k3d image import "\$\{SMOKE_IMAGES\[@\]\}" --cluster "\$CLUSTER_NAME" --mode direct/u);
+});
+
+test("keeps the storage expansion proof targeted while preserving protected qualification", function _SelectsStorageMode()
+{
+	assert.equal(selectDevelopSmokeStorageMode(["apps/opencrane/src/main.ts"], "pull_request", "refs/pull/1/merge", ""), "fast");
+	assert.equal(selectDevelopSmokeStorageMode(["apps/postgres/helm/values.yaml"], "pull_request", "refs/pull/1/merge", ""), "full");
+	assert.equal(selectDevelopSmokeStorageMode(["apps/_infra/deploy-k8s/platform/tests/develop-smoke.sh"], "pull_request", "refs/pull/1/merge", ""), "full");
+	assert.equal(selectDevelopSmokeStorageMode([], "push", "refs/heads/develop", ""), "full");
+	assert.equal(selectDevelopSmokeStorageMode([], "workflow_dispatch", "refs/heads/feature", "k3d"), "full");
+});
+
+test("keeps heavyweight remote qualification ahead of image publication", function _ProtectsHeavyQualificationWiring()
 {
 	const workflow = _Workflow();
-	const smokeJob = workflow.match(/\n  develop_smoke:[\s\S]*?\n  build-and-push:/u);
-	assert.ok(smokeJob, "develop smoke job must remain independently inspectable");
+	const developSmokeJob = workflow.match(/\n  develop_smoke:[\s\S]*?\n  image_smoke:/u);
+	const imageSmokeJob = workflow.match(/\n  image_smoke:[\s\S]*?\n  build-and-push:/u);
+	const publishSmokeImagesJob = workflow.match(/\n  publish-develop-smoke-images:[\s\S]*$/u);
+	assert.ok(developSmokeJob, "develop smoke job must remain independently inspectable");
+	assert.ok(imageSmokeJob, "image smoke job must remain independently inspectable");
+	assert.ok(publishSmokeImagesJob, "develop must publish a complete immutable smoke image set");
+	assert.match(workflow, /heavy_qualification:[\s\S]*?- image-smoke[\s\S]*?- k3d[\s\S]*?- all/u);
 	assert.match(workflow, /github\.ref == 'refs\/heads\/develop'/u);
 	assert.match(workflow, /run: \.\/apps\/_infra\/deploy-k8s\/platform\/tests\/develop-smoke\.sh/u);
-	assert.match(workflow, /needs: \[prepare, test, develop_smoke\]/u);
+	assert.match(workflow, /inputs\.heavy_qualification == 'k3d'/u);
+	assert.match(workflow, /inputs\.heavy_qualification == 'all'/u);
+	assert.match(workflow, /needs: \[prepare, test, develop_smoke, image_smoke\]/u);
+	assert.match(developSmokeJob[0], /needs: prepare/u);
+	assert.match(developSmokeJob[0], /needs\.prepare\.outputs\.develop_smoke_can_skip != 'true'/u);
+	assert.match(workflow, /continue-on-error: true[\s\S]*?run: node scripts\/develop-smoke-baseline\.mjs/u);
+	assert.match(imageSmokeJob[0], /needs: prepare/u);
 	assert.match(workflow, /needs\.develop_smoke\.result == 'success'/u);
+	assert.match(workflow, /needs\.image_smoke\.result == 'success'/u);
 	assert.match(workflow, /K3D_LINUX_AMD64_SHA256: [0-9a-f]{64}/u);
 	assert.match(workflow, /sha256sum --check/u);
-	assert.match(smokeJob[0], /uses: actions\/setup-node@v6/u);
-	assert.match(smokeJob[0], /key: node-modules-\$\{\{ runner\.os \}\}-node24-\$\{\{ hashFiles\('package-lock\.json'\) \}\}/u);
-	assert.match(smokeJob[0], /name: Install deploy validation dependencies[\s\S]*?run: npm ci/u);
+	assert.match(developSmokeJob[0], /uses: actions\/setup-node@v6/u);
+	assert.match(
+		developSmokeJob[0],
+		/key: node-modules-\$\{\{ runner\.os \}\}-node24-\$\{\{ hashFiles\('package-lock\.json'\) \}\}/u,
+	);
+	assert.match(developSmokeJob[0], /name: Install deploy validation dependencies[\s\S]*?run: npm ci/u);
+	assert.match(developSmokeJob[0], /SMOKE_AFFECTED_PROJECTS: \$\{\{ needs\.prepare\.outputs\.develop_smoke_projects \}\}/u);
+	assert.match(developSmokeJob[0], /SMOKE_BASE_SHA: \$\{\{ needs\.prepare\.outputs\.nx_base \}\}/u);
+	assert.match(developSmokeJob[0], /SMOKE_STORAGE_MODE: \$\{\{ needs\.prepare\.outputs\.develop_smoke_storage_mode \}\}/u);
+	assert.match(developSmokeJob[0], /uses: crazy-max\/ghaction-github-runtime@04d248b84655b509d8c44dc1d6f990c879747487/u);
+	assert.match(imageSmokeJob[0], /matrix: \$\{\{ fromJSON\(needs\.prepare\.outputs\.image_smokes\) \}\}/u);
+	assert.match(
+		imageSmokeJob[0],
+		/IMAGE_SMOKE_PROJECT: \$\{\{ matrix\.project \}\}[\s\S]*?npx nx run "\$IMAGE_SMOKE_PROJECT:image-smoke"/u,
+	);
+	assert.match(workflow, /cache-from: type=gha,scope=\$\{\{ matrix\.project \}\}/u);
+	assert.match(workflow, /type=raw,value=sha-\$\{\{ github\.sha \}\}/u);
+	assert.match(publishSmokeImagesJob[0], /github\.ref == 'refs\/heads\/develop'/u);
+	assert.match(publishSmokeImagesJob[0], /matrix: \$\{\{ fromJSON\(needs\.prepare\.outputs\.develop_smoke_images\) \}\}/u);
+	assert.match(publishSmokeImagesJob[0], /current_ref="\$\{REMOTE_REPOSITORY\}:sha-\$\{GITHUB_SHA\}"/u);
+	assert.match(publishSmokeImagesJob[0], /docker buildx imagetools create --tag "\$CURRENT_REF" "\$BASE_REF"/u);
 });
 
 test("trusts only an exact develop-to-main promotion source", function _SelectsPromotionSource()

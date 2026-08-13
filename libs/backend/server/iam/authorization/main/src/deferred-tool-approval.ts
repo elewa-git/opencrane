@@ -238,7 +238,12 @@ export async function __ExpireDeferredToolApprovalBatch(transaction: Prisma.Tran
 	return { expiredCount, resumed: after?.state === AgentRunState.Running };
 }
 
-/** Expire one pending approval, fail its invocation, and apply the batch-resume strategy. */
+/**
+ * Close one overdue approval, fail the tool call it was gating, and resume the run if it was the
+ * last pending approval.
+ *
+ * Returns false without writing anything when the row was already decided by someone else.
+ */
 async function _ExpireDeferredToolApproval(transaction: Prisma.TransactionClient, approval: { id: string; runId: string; attempt: number; toolInvocationRowId: string | null }, now: Date): Promise<boolean>
 {
 	if (approval.toolInvocationRowId === null) return false;

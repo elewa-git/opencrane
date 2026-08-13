@@ -15,7 +15,22 @@ const _DEFAULT_BACKOFF_POLICY: RetryBackoffPolicy = { baseDelayMs: 1_000, factor
 /** Bounded number of missed slots a single schedule can process in one scheduler pass. */
 const _MAX_SLOTS_PER_TICK = 60;
 
-/** App-composed scheduler service that coordinates durable snapshots with the shared run-admission port. */
+/**
+ * Runs one pass over every enabled schedule and turns due slots into runs via the shared admission authority.
+ *
+ * One pass is: read all enabled schedules in a short transaction; then for each one work out what is
+ * due and admit it; then try to record the cursor it reached. Admission happens outside any
+ * transaction on purpose, so a slow admission call cannot hold a database connection - the price is
+ * that the schedule can change underneath, which is why the cursor write is conditional and a
+ * refusal is expected rather than an error. This class never creates an AgentRun itself and never
+ * dispatches a Kubernetes Job; it only asks the run-admission authority.
+ *
+ * Safe to run in more than one process: each slot's idempotency key collapses concurrent ticks to a
+ * single run, and the loser sees `Idempotent`.
+ *
+ * Called by: apps/opencrane/src/app/background-workers.ts, on an interval, built by
+ * _CreateScheduleTicker.
+ */
 export class ScheduleTicker
 {
 	/** Opaque scheduling persistence boundary that exclusively owns Prisma transactions. */
@@ -33,7 +48,19 @@ export class ScheduleTicker
 		this.logger = logger;
 	}
 
-	/** Evaluates each enabled schedule at one trusted instant and records only version-fenced cursors. */
+	/**
+	 * Do one pass over every enabled schedule at one instant.
+	 *
+	 * The instant is passed in rather than read here, so a whole pass shares one evaluation time and
+	 * tests are deterministic. Schedules are handled one after another; one whose stored configuration
+	 * is unusable is logged as a warning and reported, not thrown, so a single bad row cannot stop the
+	 * rest of the pass. A cursor that could not be recorded is logged at debug and left to the next
+	 * pass.
+	 *
+	 * @param now - The evaluation instant shared by every schedule in this pass.
+	 * @returns One entry per enabled schedule, each with its schedule id and full tick result.
+	 * @throws Errors from the database or the admission authority are not caught here and reach the caller.
+	 */
 	async runOnce(now: Date): Promise<readonly ScheduleTickerResult[]>
 	{
 		// 1. Snapshot enabled schedules briefly so no database transaction covers external run admission.
@@ -87,7 +114,19 @@ export class ScheduleTicker
 	}
 }
 
-/** Composes the scheduler service without granting the composition root direct persistence operations. */
+/**
+ * Build the scheduler from its persistence boundary and the existing run-admission authority.
+ *
+ * Exists so the app's composition root never holds a Prisma client or any direct database
+ * operation - it passes in the two authorities and gets back something with a single `runOnce`.
+ *
+ * Called by: apps/opencrane/src/app/background-workers.ts.
+ *
+ * @param unitOfWork - Scheduler-only database boundary; the only path to Prisma.
+ * @param admission - The one authority allowed to create an AgentRun.
+ * @param logger - Receives warnings for unusable schedules and debug lines for refused cursor writes.
+ * @returns A ready scheduler; nothing runs until `runOnce` is called.
+ */
 export function _CreateScheduleTicker(unitOfWork: ScheduleTickerUnitOfWork, admission: ManagedRunAdmissionPort, logger: Logger): ScheduleTicker
 {
 	return new ScheduleTicker(unitOfWork, admission, logger);

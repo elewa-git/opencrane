@@ -43,7 +43,7 @@ function _ReadBearerToken(value: string | undefined): string | null
 	return token.length > 0 ? token : null;
 }
 
-/** Validate candidate coordinates that the transport must know before authority admission. */
+/** Check that a request body has the candidate fields this transport needs before it can be forwarded — shape only, no permission or fence checks. */
 function _IsRuntimeCandidate(value: unknown): value is RuntimeCandidate
 {
 	if (!value || typeof value !== "object")
@@ -74,9 +74,12 @@ function _IsRuntimeCandidate(value: unknown): value is RuntimeCandidate
 }
 
 /**
- * Delegate credential verification without allowing transport code to interpret Kubernetes policy.
- * Returning `null` deliberately collapses every missing or rejected credential into the same public
- * denial so TokenReview detail cannot become an identity oracle.
+ * Hand the bearer token to the reviewer and return the identity it verified, or null.
+ *
+ * Null covers every failure without distinction: no header, an unparseable header, a
+ * rejected token, or the wrong audience. That is on purpose — the caller turns any null
+ * into the same bare 401, so a caller cannot probe which part was wrong and learn which
+ * ServiceAccounts or audiences exist.
  */
 async function _AuthenticateRuntime(
 	token: string | null,
@@ -91,8 +94,9 @@ async function _AuthenticateRuntime(
 }
 
 /**
- * Write one server-sent event using JSON data only.
- * Callers must validate and bound authority-owned frames before they reach this framing helper.
+ * Write one server-sent event: an `event:` line naming the type and a `data:` line holding
+ * the JSON. It checks nothing, so callers must have validated and size-bounded whatever
+ * they pass.
  */
 function _WriteEvent(response: Response, event: string, data: unknown): void
 {
@@ -100,14 +104,37 @@ function _WriteEvent(response: Response, event: string, data: unknown): void
 }
 
 /**
- * Build the runtime-initiated internal transport.
+ * Build the internal router that agent runtimes connect OUT to. Two routes:
  *
- * The adapter owns token verification, bounded HTTP/SSE framing, heartbeats, and tracing. Durable
- * assignments, command creation, command ordering, and candidate admission remain injected domain
- * concerns. This separation ensures a wire-format bug cannot grant work or make runtime output
- * durable by itself.
- * @param options - Fixed framing limits plus the identity and domain-authority ports.
- * @returns An Express router for the internal stream and candidate endpoints.
+ *   - `POST /stream` — the runtime opens a long-lived server-sent-event stream. After
+ *     TokenReview, and after checking that the Pod UID in the body matches the one
+ *     Kubernetes attached to the token, the handler loops: read the next command from
+ *     Postgres, write it as a `command` event, and otherwise sleep until a local wake-up
+ *     or the recovery deadline. A command whose sequence is not higher than the last one
+ *     sent ends the stream with a `protocol_error` event rather than delivering it out of
+ *     order. A `heartbeat` event goes out on the configured interval.
+ *   - `POST /candidates` — the runtime submits one event or external action. Replies 202
+ *     when accepted, 409 when rejected, 503 when the server wants the same candidate
+ *     retried, and 401 when the token or the body does not check out.
+ *
+ * This file frames and bounds; it never decides. Commands, their order, and whether a
+ * candidate becomes durable all come from the injected authority backed by Postgres, so a
+ * bug in the wire format cannot hand out work or make runtime output durable by itself.
+ *
+ * Every authentication failure — no header, bad token, wrong audience, mismatched Pod UID,
+ * malformed body — returns the same bare 401, so the response cannot be used to probe
+ * which part was wrong.
+ *
+ * Called by: apps/opencrane/src/app/runtime-composition.ts, which mounts the
+ * returned router on the server's internal listener.
+ *
+ * @param options - The two ports plus the fixed limits and timings; see
+ *                  {@link RuntimeStreamTransportOptions}.
+ * @returns An Express router with the two routes above, ready to mount.
+ * @see https://html.spec.whatwg.org/multipage/server-sent-events.html — the
+ *      `event:`/`data:` framing and the `text/event-stream` content type written here.
+ * @see https://kubernetes.io/docs/reference/access-authn-authz/authentication/ — TokenReview
+ *      and the bound-token audiences the reviewer checks before any of this runs.
  */
 export function _RegisterInternalAgentRuntimeStream(options: RuntimeStreamTransportOptions): Router
 {

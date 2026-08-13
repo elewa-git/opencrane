@@ -17,17 +17,48 @@ import type { AuthUser } from "./session.types.js";
 export type { AuthStatus, AuthStatusUser, LoginClient, ManagerAuthMode } from "./oidc-service.types.js";
 
 /**
- * OpenCrane server OIDC session base: owns provider discovery, the PKCE login redirect,
- * token exchange, claim validation, session lifecycle, and `/auth/me` status.
+ * Base class for the OpenCrane server's browser login. One instance per server process
+ * owns the whole human login story: discovering the identity provider, sending the
+ * browser there with PKCE, exchanging the returned code for tokens, checking the claims
+ * against the configured email allowlists, storing the user in an `express-session`
+ * cookie session, and answering `/auth/me`.
  *
- * Two seams are left for subclasses:
- *   - {@link resolveLoginClient} — which OIDC client + scope to use for a login. The base
- *     uses the single masters client; the identity domain overrides it to resolve a per-org
- *     client from the request host.
- *   - {@link enrichStatusUser} — extra `/auth/me` fields. The base adds none; the
+ * The order is fixed and a subclass cannot change it:
+ *   1. {@link buildLoginUrl} — pick the OIDC client through {@link resolveLoginClient},
+ *      generate the PKCE verifier plus `state` and `nonce`, save them in the session,
+ *      and return the provider URL to redirect to.
+ *   2. The browser returns to the callback route, which calls {@link completeLogin} —
+ *      exchange the code against the SAME client_id the session recorded, merge ID-token
+ *      and UserInfo claims, apply the allowlists, give the session a new id, then store
+ *      `authUser`.
+ *   3. {@link onLoginEstablished} runs last, once per login, with the session already
+ *      saved.
+ *
+ * Only two methods exist to be overridden:
+ *   - {@link resolveLoginClient} — which OIDC client and scope a login uses. The base
+ *     uses the single "masters" client from configuration; the identity domain overrides
+ *     it to look up a per-organisation client from the request host.
+ *   - {@link enrichStatusUser} — extra fields on `/auth/me`. The base adds none; the
  *     identity domain adds the caller's resolved `clusterTenant`.
+ * {@link onLoginEstablished} and {@link isPostLoginFailureFatal} are hooks for side
+ * effects, not for changing the flow above.
  *
- * The base resolves membership-derived `ownedOrgs` and effective `isOrgAdmin` values.
+ * `/auth/me` does not just echo the cookie: {@link getStatus} re-reads `OrgMembership`
+ * on every call, so a user who has just created an organisation counts as an org admin
+ * without logging in again.
+ *
+ * Called by: `OidcAuthService` in libs/backend/server/iam/identity/main/src/oidc.service.ts
+ * extends it; apps/opencrane/src/app/public-app.ts constructs it and mounts
+ * {@link createSessionMiddleware}; libs/backend/server/iam/identity/main/src/auth.router.ts
+ * calls {@link getStatus}, {@link isEnabled}, {@link buildLoginUrl}, and
+ * {@link completeLogin}.
+ *
+ * @see https://openid.net/specs/openid-connect-core-1_0.html — the Authorization Code
+ *      flow, the `state`/`nonce` replay checks, and the ID-token claims used here.
+ * @see https://www.rfc-editor.org/rfc/rfc7636 — PKCE (`code_challenge_method=S256`),
+ *      required because per-organisation clients are public clients with no secret.
+ * @see https://github.com/panva/node-openid-client — `openid-client` (^6.8.4), which
+ *      performs discovery, builds the redirect, and runs the code exchange.
  */
 export abstract class OidcAuthServiceBase
 {
@@ -56,21 +87,47 @@ export abstract class OidcAuthServiceBase
     this.membershipRepository = membershipRepository;
   }
 
-  /** Whether human login should use OIDC-backed sessions. */
+  /**
+   * Whether this process has usable OIDC configuration — that is, whether browser login
+   * is possible at all. False when no OIDC environment variables are set (development
+   * mode). A PARTIAL configuration never reaches here: {@link ___LoadOidcAuthConfig}
+   * throws at startup instead.
+   *
+   * Called by: libs/backend/server/iam/identity/main/src/auth.router.ts lines 46 and 71,
+   * which refuse `/auth/login` and `/auth/callback` when this is false.
+   *
+   * @returns True when a login redirect can be issued; false when this deployment can
+   *          never establish a session.
+   */
   isEnabled(): boolean
   {
     return this.config.enabled;
   }
 
   /**
-   * Build the Express session + CSRF middleware pair required by the OIDC login flow.
+   * Build the two Express handlers the login flow needs: the session itself and a CSRF
+   * check over it.
    *
-   * Returns two handlers that must be mounted together (spread into `app.use`):
-   *   1. `express-session` — establishes the cookie-backed session.
-   *   2. CSRF origin check — on state-changing requests from a session-authenticated caller,
-   *      validates the `Origin` header (or `Referer` when `Origin` is absent) against the
-   *      request's own host. Exempt: safe methods (GET/HEAD/OPTIONS), unauthenticated requests
-   *      (no session `authUser` — token-auth and public routes carry no CSRF surface).
+   * Mount them together, in this order, by spreading the array into `app.use`:
+   *   1. `express-session` — creates the cookie-backed session.
+   *   2. CSRF origin check — for a request that changes state AND comes from a caller with
+   *      a session, compare the `Origin` header (or `Referer` when `Origin` is missing)
+   *      against the host the request arrived on, and reject with 403 when they differ.
+   *      Skipped for GET/HEAD/OPTIONS and for callers with no `authUser`, because a
+   *      request that carries no session cookie cannot be a cross-site request that
+   *      abuses one.
+   *
+   * When OIDC is disabled the array holds a single pass-through handler, so an app can
+   * mount this unconditionally.
+   *
+   * Called by: apps/opencrane/src/app/public-app.ts.
+   *
+   * @returns Two handlers, in mount order; never empty.
+   * @see https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html
+   *      — the Origin/Referer check this implements, and why it is paired with a
+   *      SameSite cookie rather than relied on alone.
+   * @see https://www.rfc-editor.org/rfc/rfc6265 — the cookie attributes set below
+   *      (`HttpOnly`, `Secure`, `Max-Age`).
    */
   createSessionMiddleware(): RequestHandler[]
   {
@@ -98,7 +155,7 @@ export abstract class OidcAuthServiceBase
     ];
   }
 
-  /** CSRF protection via Origin / Referer header validation for session-authenticated mutations. */
+  /** Reject a state-changing request from a session caller whose Origin (or Referer) is not this host. */
   private _csrfOriginCheck(): RequestHandler
   {
     const _SAFE = new Set(["GET", "HEAD", "OPTIONS"]);
@@ -145,9 +202,26 @@ export abstract class OidcAuthServiceBase
   }
 
   /**
-   * Return the auth mode and current human session details. Resolves the
-   * membership-derived `isOrgAdmin` + `ownedOrgs` fresh (so a user who just created an org
-   * is an org admin without re-login) and merges any subclass enrichment.
+   * Answer `/auth/me`: which auth mode this server runs in, and who the caller is.
+   *
+   * Three outcomes:
+   *   - OIDC enabled and a session exists — `authenticated: true` plus the stored
+   *     `authUser`, with `isOrgAdmin` recomputed as "the value stored at login OR owns
+   *     or administers at least one organisation now", `ownedOrgs` read fresh from
+   *     `OrgMembership`, and whatever {@link enrichStatusUser} adds.
+   *   - OIDC enabled and no session — `authenticated: false`, `user: null`.
+   *   - OIDC disabled — `mode: "development"`, so the SPA knows not to offer login.
+   *
+   * `isOrgAdmin` is recomputed here rather than trusted from the cookie so that a user
+   * who created an organisation after logging in gets admin rights without logging in
+   * again. Nothing else on the user is recomputed.
+   *
+   * Called by: libs/backend/server/iam/identity/main/src/auth.router.ts.
+   *
+   * @param req - The `/auth/me` request; only its session and host are read.
+   * @returns The auth mode plus the caller, or a null user when nobody is logged in.
+   * @throws Whatever the membership repository throws when the database is unreachable —
+   *         a failed lookup must not be reported as "administers no organisation".
    */
   async getStatus(req: Request): Promise<AuthStatus>
   {
@@ -179,7 +253,31 @@ export abstract class OidcAuthServiceBase
     return { mode: "development", authenticated: false, user: null };
   }
 
-  /** Build the provider redirect URL and persist PKCE state in the local session. */
+  /**
+   * Start a login: produce the URL to redirect the browser to, and remember in the
+   * session everything {@link completeLogin} will need to finish.
+   *
+   * Stored in `req.session.oidcFlow`: the PKCE code verifier, the `state` and `nonce`
+   * values used to detect a replayed or injected callback, the sanitised page to return
+   * to, and — when {@link resolveLoginClient} chose a per-organisation client — that
+   * client_id, so the code is later exchanged against the SAME client. The session is
+   * saved before the URL is returned, because a redirect that outran the session write
+   * would come back to a callback with no flow to match.
+   *
+   * Called by: libs/backend/server/iam/identity/main/src/auth.router.ts.
+   *
+   * @param req      - The `/auth/login` request; supplies the session and the host the
+   *                   redirect_uri is built from.
+   * @param returnTo - Where to send the browser after login. Anything that is not a
+   *                   local path is replaced with `/` to prevent an open redirect.
+   * @param options  - `prompt` is passed straight through to the provider (for example
+   *                   to force a re-authentication prompt).
+   * @returns The absolute provider URL to redirect to.
+   * @throws When the session cannot be saved, or when provider discovery fails — the
+   *         caller should surface a login error rather than redirect.
+   * @see https://www.rfc-editor.org/rfc/rfc7636 — the PKCE verifier/challenge pair
+   *       generated here.
+   */
   async buildLoginUrl(req: Request, returnTo: string, options?: { prompt?: string }): Promise<string>
   {
     // 1. Resolve which OIDC client + scope to authorize against (base = masters client).
@@ -216,7 +314,32 @@ export abstract class OidcAuthServiceBase
     return loginUrl.href;
   }
 
-  /** Complete the OIDC callback, validate claims, and establish a local session. */
+  /**
+   * Finish a login that {@link buildLoginUrl} started, and return the page to redirect to.
+   *
+   * Steps, in order: read `oidcFlow` from the session; exchange the authorization code
+   * against the client_id the flow recorded (or the masters client when it recorded
+   * none), checking the stored `state` and `nonce`; merge ID-token claims with UserInfo
+   * claims; apply the email allowlists; give the session a new id so a session id fixed
+   * by an attacker before login is discarded; store `authUser` and the id_token; then run
+   * {@link onLoginEstablished}.
+   *
+   * A failure inside {@link onLoginEstablished} is either logged and ignored or destroys
+   * the session and reaches the browser, depending on
+   * {@link isPostLoginFailureFatal}. Everything before it always reaches the browser.
+   *
+   * Called by: libs/backend/server/iam/identity/main/src/auth.router.ts.
+   *
+   * @param req - The callback request; the full callback URL and the session are read.
+   * @returns The local path to redirect the browser to; `/` when the original return
+   *          target was missing or not a local path.
+   * @throws When no login is in flight for this session (a callback that was replayed or
+   *         forged), when the code exchange or the `state`/`nonce` check fails, when the
+   *         claims carry no subject, when the email is unverified or outside the
+   *         allowlists, or when a fatal post-login hook rejects.
+   * @see https://openid.net/specs/openid-connect-core-1_0.html — the token-exchange and
+   *      ID-token validation rules `openid-client` applies here.
+   */
   async completeLogin(req: Request): Promise<string>
   {
     const flow = req.session.oidcFlow;
@@ -270,9 +393,21 @@ export abstract class OidcAuthServiceBase
   }
 
   /**
-   * Destroy the current local session and, when configured, return the IdP's RP-Initiated
-   * Logout URL. Returns null when OIDC is disabled, the session had no captured id_token, or
-   * the IdP does not advertise an `end_session_endpoint`.
+   * Log the user out of THIS server, and say whether the browser should also be sent to
+   * the identity provider to end the session there.
+   *
+   * The local session is always destroyed, even when the provider URL cannot be built —
+   * a provider problem must never leave the user logged in here.
+   *
+   * Called by: libs/backend/server/iam/identity/main/src/auth.router.ts.
+   *
+   * @param req - The logout request; its session and host are read.
+   * @returns The provider's end-session URL to redirect to, or null when there is nothing
+   *          to redirect to: OIDC is disabled, the session captured no id_token, the
+   *          provider advertises no `end_session_endpoint`, or building the URL failed.
+   *          A null result means "logged out locally, stay on this page".
+   * @see https://openid.net/specs/openid-connect-rpinitiated-1_0.html — RP-Initiated
+   *      Logout, including the `id_token_hint` and `post_logout_redirect_uri` parameters.
    */
   async logout(req: Request): Promise<string | null>
   {
@@ -282,10 +417,24 @@ export abstract class OidcAuthServiceBase
   }
 
   /**
-   * Resolve the OIDC client + scope a login should use. The base uses the single masters
-   * client and the configured scopes. Override to select a per-request client (e.g. per-org).
+   * Override point 1 of 2: choose which OIDC client and which scope string this login
+   * uses. Called once, at the start of {@link buildLoginUrl}.
+   *
+   * The base returns the single masters client and the configured scopes. An override may
+   * return a different client, and should also return its `clientId` so
+   * {@link completeLogin} exchanges the code against the same client; it must NOT change
+   * anything else about the flow. Use {@link discoverForClient} to get a configuration
+   * for another client_id at the same issuer.
+   *
+   * Overridden by: `OidcAuthService.resolveLoginClient` in
+   * libs/backend/server/iam/identity/main/src/oidc.service.ts, which resolves a
+   * per-organisation client from the request host and falls back to `super` when the host
+   * maps to no fully provisioned organisation.
    *
    * @param _req - The incoming login request (unused by the base).
+   * @returns The client configuration, the scope string, and optionally the client_id to
+   *          record in the session. Omitting `clientId` means "the masters client".
+   * @throws Anything discovery throws; a login cannot proceed without a client.
    */
   protected async resolveLoginClient(_req: Request): Promise<LoginClient>
   {
@@ -293,11 +442,22 @@ export abstract class OidcAuthServiceBase
   }
 
   /**
-   * Resolve extra `/auth/me` fields beyond the base identity + membership facts. The base
-   * adds none. Override to enrich (for example, add the resolved `clusterTenant`).
+   * Override point 2 of 2: extra fields to add to the `/auth/me` user object. Called on
+   * every `/auth/me`, in parallel with the membership lookup, so keep it cheap.
+   *
+   * The base adds nothing. Returned keys are spread over the user object LAST, so an
+   * override can overwrite a base field — avoid reusing base field names unless that is
+   * the intent.
+   *
+   * Overridden by: `OidcAuthService.enrichStatusUser` in
+   * libs/backend/server/iam/identity/main/src/oidc.service.ts, which adds the caller's
+   * `clusterTenant` resolved server-side from their verified subject.
    *
    * @param _req      - The status request (unused by the base).
-   * @param _authUser - The cached session identity (unused by the base).
+   * @param _authUser - The identity stored in the session (unused by the base).
+   * @returns Extra fields for the `/auth/me` user; an empty object adds nothing.
+   * @throws A rejection fails the whole `/auth/me` call, so an override that talks to a
+   *         database should decide deliberately whether to swallow its own errors.
    */
   protected async enrichStatusUser(_req: Request, _authUser: AuthUser): Promise<Record<string, unknown>>
   {
@@ -305,25 +465,63 @@ export abstract class OidcAuthServiceBase
   }
 
   /**
-   * Extension point invoked exactly once per login, right after a fresh session is
-   * established (post token-exchange, claim validation, and session persistence). The base
-   * does nothing; identity domains may project optional facts or establish a required local
-   * admission record. {@link isPostLoginFailureFatal} controls whether a failure is surfaced.
+   * Side-effect hook, run once per login, after the session has already been saved with
+   * the new user in it.
+   *
+   * A subclass MAY: write rows derived from the verified login (mirror group names, claim
+   * a one-time owner record), and update `req.session.authUser` and save the session
+   * again if it changed a stored flag.
+   * A subclass MUST NOT: treat this as an authorization check for the login itself —
+   * the user is already logged in by the time it runs — and must not assume it runs
+   * before the browser is redirected on to `returnTo`.
+   *
+   * What a failure here does depends on {@link isPostLoginFailureFatal}: false (the base)
+   * logs a warning and the login still succeeds; true destroys the session and rethrows,
+   * so the browser sees the login fail. Nothing else in this class inspects the outcome.
+   *
+   * Overridden by: `OidcAuthService.onLoginEstablished` in
+   * libs/backend/server/iam/identity/main/src/oidc.service.ts, which mirrors group names
+   * (best effort) and then claims the standalone first-owner slot (fatal on failure).
    *
    * @param _req      - The completed callback request (unused by the base).
-   * @param _authUser - The freshly established session identity (unused by the base).
+   * @param _authUser - The identity just stored in the session (unused by the base).
+   * @throws Whatever the override throws; see above for what happens to it.
    */
   protected async onLoginEstablished(_req: Request, _authUser: AuthUser): Promise<void>
   {
   }
 
-  /** Whether a post-login extension failure must be returned to the browser rather than logged. */
+  /**
+   * Whether a failure inside {@link onLoginEstablished} must fail the login.
+   *
+   * False (the base) — log a warning, keep the session, redirect the user on. Choose this
+   * when the hook only does optional work.
+   * True — destroy the session and rethrow, so the user sees a failed login. Choose this
+   * when the hook establishes something the user cannot function without; letting them in
+   * would strand them in a half-set-up state.
+   *
+   * Overridden by: `OidcAuthService.isPostLoginFailureFatal` in
+   * libs/backend/server/iam/identity/main/src/oidc.service.ts, which returns true only
+   * when standalone first-owner admission is configured.
+   *
+   * @returns True to fail the login on a hook error; false to log and continue.
+   */
   protected isPostLoginFailureFatal(): boolean
   {
     return false;
   }
 
-  /** Discover and memoize the provider metadata and client configuration (masters client). */
+  /**
+   * Discover, and remember for this process, the provider metadata and client
+   * configuration for the masters client — the single client from environment
+   * configuration, used for every login that is not per-organisation.
+   *
+   * Unlike {@link discoverForClient}, a failed promise is NOT evicted here, so a
+   * discovery failure at startup persists until the process restarts.
+   *
+   * @returns The discovered masters-client configuration.
+   * @throws When OIDC is not configured for this process.
+   */
   protected async getDiscoveredConfig(): Promise<client.Configuration>
   {
     if (!this.config.enabled)
@@ -342,11 +540,22 @@ export abstract class OidcAuthServiceBase
   }
 
   /**
-   * Discover (and memoize) the OIDC configuration for a SPECIFIC client_id at the configured
-   * issuer. Used for per-org public PKCE clients (no secret). Evicts a rejected promise so a
-   * transient discovery failure is retried rather than cached for the process lifetime.
+   * Discover, and remember for this process, the OIDC configuration for one specific
+   * client_id at the configured issuer. Used for per-organisation public clients, which
+   * have no secret and therefore rely on PKCE.
    *
-   * @param clientId - The org's OIDC client_id resolved from the request host.
+   * A failed discovery is removed from the cache before rethrowing, so a temporary
+   * provider outage is retried on the next login instead of breaking that client for the
+   * lifetime of the process.
+   *
+   * Called by: {@link completeLogin} (for the client_id recorded in the session) and
+   * `OidcAuthService.resolveLoginClient` in
+   * libs/backend/server/iam/identity/main/src/oidc.service.ts.
+   *
+   * @param clientId - The organisation's OIDC client_id, resolved from the request host.
+   * @returns The discovered configuration for that client, ready to authorize against.
+   * @throws When OIDC is disabled for this process, or when discovery fails — login is
+   *         then unavailable for that client and the caller must not fall back silently.
    */
   protected async discoverForClient(clientId: string): Promise<client.Configuration>
   {
@@ -438,7 +647,22 @@ export abstract class OidcAuthServiceBase
     }
   }
 
-  /** Validate the resolved claims and project them into the local session user shape. */
+  /**
+   * Check the claims a login produced and convert them into the {@link AuthUser} stored
+   * in the session.
+   *
+   * The checks, in order: there must be a `sub`; when either email allowlist is
+   * configured there must be an email; an email the provider marked as NOT verified is
+   * rejected outright; and the email must appear in the allowed-addresses list or its
+   * domain in the allowed-domains list. Group and role claims are then turned into
+   * `groups`, `isPlatformOperator`, and `isOrgAdmin` by {@link _ResolveIdentityClaims}.
+   *
+   * @param claims - The merged ID-token and UserInfo claims.
+   * @returns The user to store in the session.
+   * @throws When there is no usable subject, when an email is required but absent, when
+   *         the email is not verified, or when it is outside the allowlists. Every one of
+   *         these aborts the login and reaches the browser.
+   */
   private _buildAuthUser(claims: Record<string, unknown>): AuthUser
   {
     const subject = typeof claims.sub === "string" ? claims.sub : "";

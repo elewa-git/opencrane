@@ -6,11 +6,18 @@ interface _WakeWaiter
 }
 
 /**
- * Disposable process-local wake-up fan-out for idle runtime streams.
+ * Nudges streams that are sleeping inside this process, so a newly due command is read
+ * promptly instead of on the next timer.
  *
- * This is deliberately not an authority and holds neither command payloads nor run state. Postgres
- * remains the source of truth: a wake-up only asks a stream to perform its next fenced durable read,
- * while a bounded recovery wait prevents a dropped in-process signal from delaying that read forever.
+ * It holds no commands and no run state, and grants nothing. Postgres decides what exists;
+ * a wake-up only says "ask again now". That is why a lost wake-up is harmless: a stream
+ * that misses one still re-reads when its recovery timeout expires, so the worst outcome
+ * is a command arriving one recovery interval late, never one lost. It also only reaches
+ * streams in the SAME process — with several replicas, other replicas' streams rely on
+ * their own recovery timeout.
+ *
+ * Used by: `_RegisterInternalAgentRuntimeStream` in ./agent-runtime-stream.ts, which
+ * creates one per router unless the app passes a shared instance.
  */
 export class RuntimeCommandWakeup
 {
@@ -19,13 +26,24 @@ export class RuntimeCommandWakeup
 	/** Pending stream waits that may all re-check Postgres after one state-change hint. */
 	private readonly waiters = new Set<_WakeWaiter>();
 
-	/** Returns the current revision before a stream begins its durable command lookup. */
+	/**
+	 * The current counter value. Read it BEFORE the database lookup and pass it to
+	 * {@link RuntimeCommandWakeup.waitForChange}; reading it afterwards would hide a wake-up
+	 * that arrived during the lookup and cost a full recovery interval.
+	 *
+	 * @returns A counter that only ever increases within this process.
+	 */
 	currentRevision(): number
 	{
 		return this.revision;
 	}
 
-	/** Wakes all local streams after a candidate may have made a lifecycle command due. */
+	/**
+	 * Bump the counter and release every waiting stream in this process, so each re-reads
+	 * Postgres. Cheap and safe to over-call: a stream that finds nothing due just sleeps
+	 * again. The transport calls it only for an accepted external action, because waking on
+	 * every accepted event would turn frequent message updates into a read storm.
+	 */
 	wake(): void
 	{
 		this.revision += 1;
@@ -33,7 +51,24 @@ export class RuntimeCommandWakeup
 		this.waiters.clear();
 	}
 
-	/** Waits for a newer revision, recovery timeout, or stream-abort signal without retaining command state. */
+	/**
+	 * Sleep until it is worth asking Postgres again. Returns as soon as any of these happens:
+	 * the revision moved, the recovery timeout expired, or the stream was aborted.
+	 *
+	 * Returns immediately when the revision already moved or the signal is already aborted,
+	 * which is what closes the gap between a stream reading the revision and registering its
+	 * wait — a wake-up landing in between is not missed.
+	 *
+	 * @param observedRevision     - The value {@link RuntimeCommandWakeup.currentRevision}
+	 *                               returned BEFORE the durable read; passing a stale value
+	 *                               makes this return at once.
+	 * @param recoveryMilliseconds - Longest sleep, in milliseconds; the safety net that makes
+	 *                               a lost wake-up a delay rather than a hang.
+	 * @param signal               - Aborted when the stream closes, so a dead connection does
+	 *                               not hold a timer.
+	 * @returns Resolves when it is time to re-read. It never says WHY it woke, because the
+	 *          caller re-reads Postgres either way; it never rejects.
+	 */
 	waitForChange(observedRevision: number, recoveryMilliseconds: number, signal?: AbortSignal): Promise<void>
 	{
 		if (this.revision !== observedRevision || signal?.aborted === true) return Promise.resolve();

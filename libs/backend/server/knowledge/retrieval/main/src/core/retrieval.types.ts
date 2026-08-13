@@ -3,13 +3,28 @@
  * Shared between the retrieval route and conformance tests.
  */
 
-/** Dataset scopes supported by retrieval authorization and dataset partitioning. */
+/**
+ * How wide a body of knowledge a retrieval query is asking against.
+ *
+ * The scope does two jobs at once, which is why it appears in both the request and the
+ * response: it decides which dataset is searched, and it decides what the caller must be
+ * allowed to read. Widening the scope on a request therefore widens the authorisation check
+ * too — it is not a filter applied afterwards.
+ *
+ * Declaration order here is NOT meaningful. For relevance ordering use
+ * {@link DATASET_SCOPE_RETRIEVAL_PRECEDENCE}, which is the single source of truth for it.
+ */
 export enum DatasetScope
 {
+  /** Everything shared across the whole organisation. The broadest scope, and the default when none is given. */
   Org = "org",
+  /** One team's material. */
   Team = "team",
+  /** One department's material; wider than a team, narrower than the organisation. */
   Department = "department",
+  /** One project's material. */
   Project = "project",
+  /** The caller's own material. The narrowest scope, and the most relevant to them. */
   Personal = "personal",
 }
 
@@ -30,7 +45,15 @@ export const DATASET_SCOPE_RETRIEVAL_PRECEDENCE: readonly DatasetScope[] = [
   DatasetScope.Org,
 ];
 
-/** Request body for a retrieval query. */
+/**
+ * Body of a retrieval query.
+ *
+ * `tenantName` is what the authorisation check is resolved against, so a caller cannot broaden
+ * their reach by naming a different tenant here. `datasetScope` defaults to
+ * {@link DatasetScope.Org} and `datasetId` defaults to `default` for org scope, which means
+ * omitting both gives the widest search rather than the narrowest — pass them explicitly when
+ * you mean something narrower.
+ */
 export interface RetrievalQueryRequest
 {
   /** Full-text search query string. */
@@ -83,7 +106,15 @@ export interface RetrievalResult
   ingestedAt: string;
 }
 
-/** Successful retrieval response. */
+/**
+ * A successful retrieval answer.
+ *
+ * `datasetScope` and `datasetId` are echoed back as the values actually USED after defaults
+ * were applied, so a client can see which body of knowledge answered. `count` is the number of
+ * results in this response, not the number of documents that matched. `authOutcome` records
+ * what was written to the audit log; a `denied` outcome still arrives as a success response
+ * with no results.
+ */
 export interface RetrievalQueryResponse
 {
   /** Documents that matched the query and passed authorization checks. */

@@ -10,7 +10,23 @@ import { __ResolveChannelTarget } from "./channel-target-resolution.js";
 /** Public identity assertions that an internal workload must never submit on behalf of a browser. */
 const _FORBIDDEN_IDENTITY_HEADERS = ["x-opencrane-subject", "x-forwarded-user", "x-auth-request-user", "x-remote-user"];
 
-/** Builds the workload-authenticated internal channel target resolver router. */
+/**
+ * Build the internal resolver router for channel-proxy, served at /api/internal/channel-targets:resolve.
+ *
+ * The route is workload-authenticated, not user-authenticated: the bearer token must be a projected
+ * channel-proxy ServiceAccount token, while the human identity comes from the browser session this
+ * process has already verified. Any request carrying a subject-asserting header is rejected with
+ * 400 `forged_identity` before anything else runs, so a proxy can never name a user itself. A
+ * missing bearer token is 401 and a malformed body is 400 - kept apart so an operator can tell a
+ * misconfigured proxy from a broken one. Every decision is delegated to __ResolveChannelTarget; an
+ * unexpected throw is logged and answered 503 with no internal detail.
+ *
+ * Called by: _CreateChannelTargetResolver in apps/opencrane/src/app/channel-target-composition.ts.
+ *
+ * @param dependencies - Fixed resolver policy and its identity, membership, and route authorities.
+ * @param log - Structured logger, used only for unexpected authority failures.
+ * @returns A router ready to mount; it adds no authentication middleware of its own.
+ */
 export function __CreateChannelTargetsRouter(dependencies: ChannelTargetResolutionDependencies, log: Logger): Router
 {
 	const router = Router();
@@ -86,7 +102,7 @@ function _bearerValue(value: string | undefined): string | null
 	return match?.[1] ?? null;
 }
 
-/** Narrows an untrusted value to the public channel action vocabulary. */
+/** Accept only the one action name this resolver serves, so any other body value is rejected. */
 function _isAction(value: unknown): value is ChannelResolutionAction
 {
 	return value === "events.read";

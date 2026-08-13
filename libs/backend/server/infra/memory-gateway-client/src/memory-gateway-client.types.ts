@@ -1,4 +1,11 @@
-/** One recalled memory fact returned by the memory gateway. */
+/**
+ * One fact the memory gateway returned for a recall.
+ *
+ * Both fields come from the gateway. `factId` is its own identifier and is the ONLY handle a caller
+ * may later use to correct or forget the fact — nothing local ever names a fact. Facts arrive in the
+ * gateway's own order. Nothing here says which run or agent produced the fact; for that use
+ * {@link ScopedMemoryFact}, which carries provenance.
+ */
 export interface MemoryFact
 {
 	/** Opaque identifier minted by the gateway; never locally synthesized. */
@@ -7,7 +14,18 @@ export interface MemoryFact
 	readonly content: string;
 }
 
-/** Request to recall personal-memory facts for one subject within a silo. */
+/**
+ * A recall against one subject's personal memory.
+ *
+ * `cogneeDatasetId` is the Cognee dataset UUID frozen into the admitted run snapshot. It is never
+ * derived from `subjectId` and never built from a name, so a run can only read the dataset it was
+ * admitted for. `maxResults` is a hard ceiling: the adapter passes it to the gateway as `top_k` and
+ * truncates again on the way back.
+ *
+ * Called by: libs/backend/agents/execution/protocol/src/prisma-run-input-compiler.ts,
+ * memory-external-action-executor.ts, and gateway-memory-fact-selector.ts, all through
+ * {@link MemoryGatewayClient.query}.
+ */
 export interface MemoryQueryCommand
 {
 	/** Silo that owns the memory scope. */
@@ -29,7 +47,16 @@ export interface MemoryQueryResult
 	readonly facts: readonly MemoryFact[];
 }
 
-/** Request to durably retain one authenticated subject's personal-memory fact. */
+/**
+ * A request to store one fact in a subject's personal memory.
+ *
+ * Nothing here is derived by the client: the caller supplies the Cognee dataset UUID (OpenCrane's own
+ * catalog id never crosses this boundary), the exact text to store, and a delivery key it can repeat
+ * safely. No shipped client performs this write yet — both throw `MemoryGatewayUnavailableError` —
+ * so treat this as the contract a write-capable gateway must meet.
+ *
+ * @see {@link PersonalMemoryRecordResult} for the two outcomes a write can have.
+ */
 export interface PersonalMemoryRecordCommand
 {
 	/** Silo that owns the personal-memory dataset. */
@@ -40,32 +67,51 @@ export interface PersonalMemoryRecordCommand
 	readonly cogneeDatasetId: string;
 	/** Exact durable fact content, sent only to the remote memory gateway. */
 	readonly content: string;
-	/** Stable delivery key: it may be replayed only with byte-identical content in this subject and dataset. */
+	/**
+	 * Key that makes retrying a delivery safe.
+	 *
+	 * Sending the same key again with byte-identical `content`, for the same subject and dataset, is
+	 * allowed and stores nothing new — the result comes back with `idempotent` set. Sending the same
+	 * key with DIFFERENT content is refused; see {@link PersonalMemoryRecordDenied}.
+	 */
 	readonly idempotencyKey: string;
 }
 
-/** Gateway evidence returned only after a personal fact has durably been accepted. */
+/**
+ * The outcome of one personal-memory write: either accepted or refused.
+ *
+ * Callers MUST branch on `outcome`. {@link PersonalMemoryRecorded} means the fact is stored and
+ * carries the gateway's own identifier and digest; {@link PersonalMemoryRecordDenied} means nothing
+ * was stored because the delivery key was reused with different content. Neither arm throws, so code
+ * that assumes success silently loses a refused write.
+ */
 export type PersonalMemoryRecordResult = PersonalMemoryRecorded | PersonalMemoryRecordDenied;
 
-/** Gateway evidence returned only after a personal fact has durably been accepted. */
+/** The gateway stored the fact (or found it already stored) and returned its own record of it. */
 export interface PersonalMemoryRecorded
 {
-	/** Durable gateway acceptance outcome. */
+	/** Always "recorded". This is the tag that tells this arm apart from the refusal. */
 	readonly outcome: "recorded";
-	/** True when an identical earlier delivery already retained this exact content. */
+	/** True when an earlier delivery with the same key had already stored this exact content, so nothing new was written. */
 	readonly idempotent: boolean;
-	/** Stable fact identifier minted by the remote memory gateway. */
+	/** The fact's identifier, minted by the gateway. The only handle for a later correction or deletion. */
 	readonly cogneeExternalId: string;
-	/** Canonical lowercase sha256: content address computed over accepted durable content. */
+	/** Digest of the stored content, always lowercase `sha256:<64 hex chars>`; compare it against your own hash of what you sent. */
 	readonly contentDigest: string;
 }
 
-/** Gateway denial that leaves no new durable personal-memory fact. */
+/**
+ * The gateway refused the write and stored nothing new.
+ *
+ * This happens when the `idempotencyKey` has already been used for different content in this subject
+ * and dataset. Retrying is pointless: either resend the original content under that key, or choose a
+ * new key. The fact stored by the first delivery is untouched.
+ */
 export interface PersonalMemoryRecordDenied
 {
-	/** Durable gateway denial outcome. */
+	/** Always "denied". This is the tag that tells this arm apart from the acceptance. */
 	readonly outcome: "denied";
-	/** Reused delivery key names content different from its already accepted request. */
+	/** The only refusal reason: this delivery key was already used for different content. */
 	readonly reason: "idempotency_conflict";
 }
 
@@ -96,9 +142,15 @@ export interface MemoryForgetCommand
 /**
  * Provenance stamped on every record a central agent injects into a shared knowledge scope.
  *
- * A scoped write is only ever attributable when it names the central agent, the exact revision, the
- * run that produced it, when it was recorded, and the upstream source it derived from. All fields
- * are required; an incomplete provenance fails closed rather than writing an unattributable fact.
+ * A scoped write is only traceable when it names the central agent, the exact revision, the run that
+ * produced it, when it was recorded, and the upstream source it came from. All five fields are
+ * required; an incomplete provenance fails closed rather than writing a record nobody can attribute.
+ * `__AssertMemoryProvenanceComplete` in memory-provenance.ts is where that check happens, and
+ * `__DecodeScopedEnvelope` in cognee-payloads.ts re-checks the same five fields on the way back out.
+ *
+ * NOTE: this is NOT the same type as `MemoryProvenance` in libs/contracts/src/memory.types.ts, which
+ * describes stored-fact provenance in the API contract. Import the one that matches the boundary you
+ * are working on.
  */
 export interface MemoryProvenance
 {
@@ -114,7 +166,17 @@ export interface MemoryProvenance
 	readonly sourceRef: string;
 }
 
-/** Request to recall facts from a knowledge SCOPE (not a single subject's personal memory). */
+/**
+ * A recall against a shared knowledge scope rather than one person's memory.
+ *
+ * The difference from {@link MemoryQueryCommand} matters: there is no `subjectId`, because the facts
+ * belong to a scope many agents may read, and every fact that comes back carries provenance (see
+ * {@link ScopedMemoryFact}). Records that cannot prove complete provenance are dropped on the way
+ * out, so a result can be shorter than the store actually holds.
+ *
+ * Called by: no non-test caller in this repo yet; reached through
+ * {@link MemoryGatewayClient.recallScoped}.
+ */
 export interface ScopedMemoryRecallCommand
 {
 	/** Silo that owns the scope. */
@@ -127,7 +189,14 @@ export interface ScopedMemoryRecallCommand
 	readonly maxResults: number;
 }
 
-/** One recalled scoped fact, carrying the provenance stamped when it was injected. */
+/**
+ * A fact recalled from a shared knowledge scope, together with who put it there.
+ *
+ * The provenance is not decoration: only records that still prove all five provenance fields survive
+ * decoding, and `__ParseScopedFacts` in cognee-payloads.ts drops anything else instead of returning
+ * it with partial attribution. So every fact in a result is fully attributable, and a short result
+ * may mean records were dropped, not that the scope is empty.
+ */
 export interface ScopedMemoryFact extends MemoryFact
 {
 	/** Provenance recorded with the fact. */
@@ -141,7 +210,14 @@ export interface ScopedMemoryRecallResult
 	readonly facts: readonly ScopedMemoryFact[];
 }
 
-/** Request to inject one record into a knowledge scope with mandatory provenance. */
+/**
+ * A request to write one record into a shared knowledge scope.
+ *
+ * The provenance is checked before anything else happens: both the HTTP client and the unavailable
+ * stub call `__AssertMemoryProvenanceComplete` first, so an unattributable record is refused rather
+ * than written. No shipped client performs the write yet — after that check both throw
+ * `MemoryGatewayUnavailableError`.
+ */
 export interface ScopedMemoryInjectionCommand
 {
 	/** Silo that owns the scope. */
@@ -154,19 +230,79 @@ export interface ScopedMemoryInjectionCommand
 	readonly provenance: MemoryProvenance;
 }
 
-/** Runtime-neutral boundary for the personal-memory and scoped-knowledge gateway authority. */
+/**
+ * The one way OpenCrane reads and writes memory: a subject's personal memory, and shared knowledge
+ * scopes.
+ *
+ * Only the two recalls work today. `recordPersonalFact`, `correct`, `forget`, and `injectScoped`
+ * throw `MemoryGatewayUnavailableError` in BOTH shipped implementations, because the gateway does not
+ * yet own a durable write lifecycle that can be tied back to a remote record. Treat those four as
+ * the agreed contract, not as working calls.
+ *
+ * Two implementations: the HTTP client in http-cognee-memory-gateway-client.ts, and
+ * `__UnavailableMemoryGatewayClient`, which refuses everything when no gateway is configured.
+ *
+ * Called by: libs/backend/agents/execution/protocol/src/prisma-run-input-compiler.ts,
+ * gateway-memory-fact-selector.ts, memory-external-action-executor.ts, and
+ * external-action-executor.types.ts; composed in
+ * apps/opencrane/src/infra/memory/memory-gateway-client.factory.ts.
+ */
 export interface MemoryGatewayClient
 {
-	/** Recalls facts for a subject and returns only gateway-originated results. */
+	/**
+	 * Recalls facts from one subject's personal memory.
+	 *
+	 * @param command - Silo, frozen Cognee dataset UUID, subject, query text, and result ceiling.
+	 * @returns Only gateway-returned facts, at most `maxResults` of them. An empty list means the
+	 *   gateway matched nothing — a broken response shape throws instead, so empty is trustworthy.
+	 * @throws MemoryGatewayProtocolError When the response shape is unrecognised or is not valid JSON.
+	 * @throws MemoryGatewayTransportError When the gateway cannot be reached, times out, answers
+	 *   non-2xx, or exceeds the response ceiling.
+	 * @throws MemoryGatewayUnavailableError When no gateway is configured.
+	 */
 	query(command: MemoryQueryCommand): Promise<MemoryQueryResult>;
-	/** Retains one fact for the authenticated subject and returns gateway-minted evidence. */
+	/**
+	 * Stores one fact in the authenticated subject's personal memory.
+	 *
+	 * @param command - Subject, dataset, exact content, and the repeatable delivery key.
+	 * @returns Either the gateway's record of the stored fact, or a refusal when the delivery key was
+	 *   reused with different content. Branch on `outcome`; a refusal does not throw.
+	 * @throws MemoryGatewayUnavailableError Always, in both shipped implementations today.
+	 */
 	recordPersonalFact(command: PersonalMemoryRecordCommand): Promise<PersonalMemoryRecordResult>;
-	/** Corrects one stored fact's content remotely. */
+	/**
+	 * Replaces the content of one stored fact.
+	 *
+	 * @param command - Subject and the gateway-minted `factId`, plus the replacement content.
+	 * @throws MemoryGatewayUnavailableError Always, in both shipped implementations today.
+	 */
 	correct(command: MemoryCorrectionCommand): Promise<void>;
-	/** Forgets one stored fact remotely. */
+	/**
+	 * Deletes one stored fact.
+	 *
+	 * @param command - Subject and the gateway-minted `factId` to remove.
+	 * @throws MemoryGatewayUnavailableError Always, in both shipped implementations today.
+	 */
 	forget(command: MemoryForgetCommand): Promise<void>;
-	/** Recalls provenance-carrying facts from one knowledge scope. */
+	/**
+	 * Recalls facts from a shared knowledge scope, each with the provenance stamped when it was written.
+	 *
+	 * @param command - Silo, frozen dataset UUID, query text, and result ceiling.
+	 * @returns Only facts that still prove complete provenance; unattributable records are dropped, so
+	 *   a short result does not mean the scope is nearly empty.
+	 * @throws MemoryGatewayProtocolError When the response shape is unrecognised or is not valid JSON.
+	 * @throws MemoryGatewayTransportError For any transport failure.
+	 * @throws MemoryGatewayUnavailableError When no gateway is configured.
+	 */
 	recallScoped(command: ScopedMemoryRecallCommand): Promise<ScopedMemoryRecallResult>;
-	/** Injects one record into a knowledge scope; the provenance is mandatory and validated. */
+	/**
+	 * Writes one record into a shared knowledge scope.
+	 *
+	 * @param command - Silo, frozen dataset UUID, the content, and the mandatory provenance.
+	 * @throws MemoryProvenanceIncompleteError When any provenance field is missing, blank, or (for
+	 *   `recordedAt`) not a parseable date. Checked first, before anything else.
+	 * @throws MemoryGatewayUnavailableError After that check passes, in both shipped implementations
+	 *   today.
+	 */
 	injectScoped(command: ScopedMemoryInjectionCommand): Promise<void>;
 }

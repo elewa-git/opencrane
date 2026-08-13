@@ -38,12 +38,26 @@ function _decideForSubject(command: ResolveEffectiveAccessCommand, subjectId: st
 }
 
 /**
- * Resolves effective access as the deterministic intersection of actor and AgentService grants.
- * Current signed membership is a mandatory first gate and may never be inferred from grants.
- * @param membershipAuthority - Signed fleet-membership authority port.
- * @param grantRepository - Candidate grant persistence port.
- * @param command - Actor, service, scope, membership, and capability request.
- * @returns Only capabilities independently allowed to both principals.
+ * Work out what an agent may do on a person's behalf, and nothing more.
+ *
+ * Runs in a fixed order, and the order is the security property:
+ * 1. Validate the request. A person acting as their own agent, or a mismatched scope, is rejected
+ *    before any query runs.
+ * 2. Require a current signed membership — never inferred from grants — and independently re-check
+ *    the expiry the membership authority returned.
+ * 3. Narrow the requested capabilities to what the agent revision published and what this run
+ *    compiled, before reading a single grant.
+ * 4. Read each principal's grants separately, so neither side can widen the other.
+ * 5. Keep only capabilities both sides allow. An empty result is a denial, never an empty allow.
+ *
+ * Called by: no caller in this repo yet — only its own tests in ./__tests__/effective-access.test.ts.
+ * @param membershipAuthority - The mandatory first gate; see
+ *   {@link AuthorizationMembershipAuthority}.
+ * @param grantRepository - Reads candidate grants for one subject.
+ * @param command - The person, the agent authority, the scope and resource, and the capabilities
+ *   being requested.
+ * @returns `allowed` with the surviving capabilities and the membership revision, or `denied` with
+ *   the reason the request died. See {@link ResolveEffectiveAccessResult}.
  */
 export async function __ResolveEffectiveAccess(membershipAuthority: AuthorizationMembershipAuthority, grantRepository: AuthorizationGrantRepository, command: ResolveEffectiveAccessCommand): Promise<ResolveEffectiveAccessResult>
 {
