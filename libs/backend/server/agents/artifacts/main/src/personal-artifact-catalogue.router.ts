@@ -2,7 +2,21 @@ import { Router, type Request, type Response } from "express";
 
 import type { PersonalArtifactCatalogueRouterDependencies } from "./personal-artifact-catalogue.router.types.js";
 
-/** Create the browser-session-authenticated, owner-only personal asset catalogue router. */
+/**
+ * Build the one route a signed-in user calls to list their own assets.
+ *
+ * `GET /` returns `{ assets }`. The owner and silo come from `resolveCaller`, never from the
+ * query string or body, so a user cannot ask for someone else's assets. A missing session is 401
+ * and a database failure is 503 with a fixed error string - no artifact metadata is included in
+ * either, and only the silo id is logged.
+ *
+ * Called by: `_CreatePersonalArtifactCatalogueRouter` in
+ * prisma-personal-artifact-catalogue.router.ts, mounted at `/api/v1/me/assets` by
+ * apps/opencrane/src/app/routes.ts.
+ *
+ * @param dependencies - Caller resolver, catalogue repository, and logger.
+ * @returns An Express router to mount under the authenticated public API.
+ */
 export function __CreatePersonalArtifactCatalogueRouter(dependencies: PersonalArtifactCatalogueRouterDependencies): Router
 {
 	const router = Router();

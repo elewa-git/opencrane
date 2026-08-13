@@ -13,29 +13,36 @@ export interface SelfConversationReplayCaller
 	readonly subjectId: string;
 }
 
-/** Optional process-owned seams supplied by the app composition root. */
+/**
+ * The two things only the running process can supply, both optional so tests and simple setups
+ * can leave them out.
+ *
+ * Called by: `_CreateSelfConversationReplayRouter`
+ * (prisma-self-conversation-replay.router.ts); both values are passed in from
+ * apps/opencrane/src/app/routes.ts.
+ */
 export interface SelfConversationReplayCompositionOptions
 {
-	/** Current open-approval overlay, kept outside canonical cursor authority. */
+	/** Reader for approvals currently awaiting the user. Its events carry no cursor, so they never move the client's resume point. Omit it and the stream carries stored events only. */
 	readonly interrupts?: ConversationOpenInterruptReader;
-	/** Process shutdown signal that drains long-lived streams before telemetry flush. */
+	/** Aborts on shutdown so open streams close before the process exits, rather than being cut off mid-frame with traces and logs still unflushed. */
 	readonly shutdownSignal?: AbortSignal;
 }
 
 /** App-composed ports for self-only canonical conversation replay. */
 export interface SelfConversationReplayRouterDependencies
 {
-	/** Resolves authenticated session and host identity without trusting request coordinates. */
+	/** Works out who is calling from the session cookie and the request host. Returns null when there is no session, which the route answers with 401. Nothing here comes from the path, query, or body. */
 	resolveCaller(request: Request): SelfConversationReplayCaller | null;
 	/** Reads canonical events only after the router derives owner coordinates. */
 	repository: ConversationReplayUnitOfWork;
-	/** Current open-approval overlay, kept outside canonical cursor authority. */
+	/** Reader for approvals currently awaiting the user. Its events carry no cursor, so they never move the client's resume point. Omit it and the stream carries stored events only. */
 	interrupts?: ConversationOpenInterruptReader;
 	/** Bounded live-tail clock. */
 	clock: ConversationProjectionClock;
 	/** Bounded page, heartbeat, polling, and response-duration limits. */
 	limits: ConversationProjectionLimits;
-	/** Process shutdown signal that drains long-lived streams before telemetry flush. */
+	/** Aborts on shutdown so open streams close before the process exits, rather than being cut off mid-frame with traces and logs still unflushed. */
 	shutdownSignal?: AbortSignal;
 	/** Records unexpected persistence failures without event content. */
 	logger: Logger;

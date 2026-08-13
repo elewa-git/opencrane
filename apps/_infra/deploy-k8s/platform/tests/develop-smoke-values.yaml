@@ -1,5 +1,5 @@
-# Disposable k3d overrides for develop-smoke.sh. OpenCrane-owned workloads use images built from
-# the checked-out commit; third-party planes stay on the pinned chart defaults.
+# Disposable k3d overrides for develop-smoke.sh. Nx-affected workloads are built from the checkout;
+# unaffected workloads use the digest-validated baseline. Third-party planes remain pinned.
 clustertenantManager:
   image:
     repository: opencrane/opencrane-server

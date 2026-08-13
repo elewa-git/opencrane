@@ -7,18 +7,18 @@ import type { McpOperatorCaller } from "../core/mcp-operator.logic.types.js";
 import type { McpAccessPolicyRequest, McpEnabledRequest, McpInstallRequest } from "./mcp-operator.types.js";
 
 /**
- * Operator-API router for the MCP consumption + governance surface (`/api/v1/mcp/*`).
+ * Operator-API router for the MCP endpoints under `/api/v1/mcp/*` — using servers, and governing them.
  *
  * Layers the entitlement-scoped catalogue, per-user installs / credential connect,
  * and org-admin governance + access-policy endpoints ON TOP of the existing
- * `/mcp-servers` admin registry (which stays as-is). Two authorization postures:
+ * `/mcp-servers` admin registry (which stays as-is). Two authorization rules apply:
  *
  * - **User-facing** (`/catalog`, `/installed/*`) — scoped to the calling user via
  *   {@link _ResolveCaller}; entitlement filtering decides catalogue visibility.
  * - **Admin** (`/servers/*`, `/directory`) — gated by `_RequireOrgAdmin`, matching
  *   the registry's curate-is-an-admin-action posture (fail-open dev / fail-closed real auth).
  *
- * Custody: no response on any route serialises credential material — a connected
+ * Secrets: no response on any route returns credential material — a connected
  * install reports only its connection status (the secret is brokered by the gateway plane).
  *
  * @param prisma - Prisma client used for persistence.

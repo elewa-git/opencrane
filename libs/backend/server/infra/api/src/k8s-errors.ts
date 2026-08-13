@@ -1,8 +1,18 @@
 /**
- * Whether a Kubernetes API error carries a given numeric status code.
+ * Whether a thrown value is a Kubernetes API error with this HTTP status code.
  *
- * The @kubernetes/client-node library surfaces HTTP failures in at least three
- * shapes (`statusCode`, `code`, `body.code`); this helper normalises them.
+ * `@kubernetes/client-node` (^1.0.0) reports failures in several shapes depending on the
+ * call — `statusCode`, `code`, `response.statusCode`, or `body.code` — so checking one
+ * field misses real matches. This checks all of them, and returns false for anything that
+ * is not an object, so it is safe to call on an unknown catch value.
+ *
+ * Called by: {@link _IsK8sNotFound} and {@link _IsK8sConflict} in this file; those two are
+ * what callers use. `_IsK8sNotFound` is used by
+ * libs/backend/server/infra/auth/src/per-org-client.ts.
+ *
+ * @param err  - The value from a `catch`; any type is accepted.
+ * @param code - The HTTP status code to look for, for example 404.
+ * @returns True when any of those fields equals the code.
  */
 export function _IsK8sStatus(err: unknown, code: number): boolean
 {

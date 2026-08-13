@@ -2,10 +2,10 @@ import { __DigestCanonicalJson } from "@opencrane/backend/server/iam/authorizati
 import type { AuthorizationScope, SignedFleetMembershipRevision } from "@opencrane/models/authorization";
 import type { JsonValue } from "@opencrane/util";
 
-/** Signed membership fields whose canonical digest excludes only the digest and signature envelope. */
+/** The revision fields the digest covers: everything except the digest and signature themselves. */
 type FleetMembershipSignedPayload = Omit<SignedFleetMembershipRevision, "payloadDigest" | "signature">;
 
-/** Copies one typed scope into the canonical JSON vocabulary without weakening its type globally. */
+/** Copies one scope into plain JSON, keeping only the fields that scope kind actually has. */
 function _CanonicalScope(scope: AuthorizationScope): JsonValue
 {
 	if (scope.kind === "organization") return { kind: scope.kind, organizationId: scope.organizationId };
@@ -16,14 +16,16 @@ function _CanonicalScope(scope: AuthorizationScope): JsonValue
 }
 
 /**
- * Computes the canonical digest that a fleet issuer signs and OpenCrane independently verifies.
+ * Computes the digest a fleet issuer signs and that OpenCrane recomputes before trusting a revision.
  *
- * Assertions are sorted by their complete canonical content so database row order cannot change the
- * signed meaning, while any issuer, time, silo, subject, assertion, or scope mutation changes the
- * digest and invalidates the detached signature.
+ * Assertions are sorted by the digest of their own content, so the order rows came back from the
+ * database cannot change what was signed. Any change to the issuer, times, silo, subject, assertion,
+ * or scope changes this digest, which makes the issuer's existing signature stop matching.
  *
- * @param revision - Complete signer-owned membership payload without envelope digest or signature.
- * @returns Canonical SHA-256 digest signed as its UTF-8 `sha256:<hex>` representation.
+ * Called by: Ed25519FleetMembershipSignatureVerifier.verify in this package; no caller outside the
+ * package yet, though the barrel exports it for the signing side.
+ * @param revision - A revision's signed fields, without its digest or signature.
+ * @returns The digest as a `sha256:<hex>` string; that string's UTF-8 bytes are what gets signed.
  */
 export function __DigestFleetMembershipSignedPayload(revision: FleetMembershipSignedPayload): string
 {

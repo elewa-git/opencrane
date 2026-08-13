@@ -8,7 +8,7 @@ import type { ConversationCommandContext, ConversationQueryRepository } from "./
 /** Maximum message rows returned by one participant-bound open operation. */
 const _MESSAGE_LIMIT = 100;
 
-/** Exhaustive adapter mapping from persisted modes to the dependency-light model vocabulary. */
+/** Database mode enum to API mode enum. Typed as a complete record, so adding a mode to the schema without mapping it fails the build. */
 const _MODE_BY_PERSISTED_MODE: Readonly<Record<ConversationMode, ConversationModes>> = {
 	[ConversationMode.AgentSession]: ConversationModes.AgentSession,
 	[ConversationMode.Direct]: ConversationModes.Direct,

@@ -104,13 +104,20 @@ function _receiptMatchesIntent<TResult>(receipt: CapabilityActionReceipt<TResult
 }
 
 /**
- * Validate and atomically consume a one-time runtime bootstrap claim.
- * Cryptographic key shape and every independently observed workload coordinate are checked before
- * persistence; a replay or repository conflict remains a denial and never returns prior authority.
- * @param repository - Durable single-consumption and public-proof-key binding authority.
- * @param claim - Candidate bootstrap and runtime-generated public proof key.
- * @param expectation - Trusted assignment, TokenReview identity, attempt, and server time.
- * @returns A receipt only for the first exact bootstrap consumption, otherwise a typed denial.
+ * Check a runtime's bootstrap against independently observed facts, then spend it.
+ *
+ * Everything is verified before any write: the public key is a valid P-256 point, the thumbprint is
+ * re-derived from that key rather than trusted, and every workload and run-attempt field is
+ * compared against the assignment row and the TokenReview identity. Only then is the bootstrap
+ * spent. A second attempt is denied as `bootstrap_replay` and never receives the first receipt, so
+ * a leaked bootstrap reference cannot be reused.
+ *
+ * Called by: ./runtime-bootstrap.router.ts (the POST /bootstrap handler).
+ * @param repository - Spends the bootstrap and stores the public key in one transaction.
+ * @param claim - Bootstrap facts from the database plus the runtime's proposed public key.
+ * @param expectation - The independently sourced facts to compare against, and the server time.
+ * @returns `consumed` with a receipt id on first use only; otherwise `denied` with a reason from
+ *   {@link RuntimeBootstrapFailureReason}, or `bootstrap_replay` / `bootstrap_conflict`.
  */
 export async function __ConsumeRuntimeBootstrap(repository: RuntimeBootstrapRepository, claim: RuntimeBootstrapClaim, expectation: RuntimeBootstrapExpectation): Promise<ConsumeRuntimeBootstrapResult>
 {
@@ -123,11 +130,23 @@ export async function __ConsumeRuntimeBootstrap(repository: RuntimeBootstrapRepo
 }
 
 /**
- * Verifies a compact ES256 proof, reserves its JTI durably, then performs external I/O.
- * @param repository - Durable capability receipt and replay authority.
- * @param command - Compact proof, trusted expectation, and explicit replay mode.
- * @param executor - Deferred action invoked only for the first accepted JTI.
- * @returns First execution, allowed idempotent replay, or fail-closed denial.
+ * Run one signed action at most once, whatever crashes in between.
+ *
+ * The order is the safety property: verify the proof, commit a reservation keyed by the proof's
+ * `jti`, then perform the external call outside any transaction, then record the outcome. A crash
+ * after the reservation leaves a row that blocks every retry, so the action cannot run twice.
+ *
+ * An action that throws is recorded as failed and reported as `action_execution_failed`. If we
+ * cannot record the outcome at all, the result is `action_execution_ambiguous` — the action may
+ * have taken effect, so a caller must surface it as unresolved and must not retry.
+ *
+ * Called by: no caller in this repo yet — only its own tests in
+ * ./__tests__/runtime-proof.test.ts.
+ * @param repository - Reservation and receipt store; see {@link CapabilityActionReceiptRepository}.
+ * @param command - The compact proof, the trusted facts to verify it against, and the replay mode.
+ * @param executor - The external action; called at most once, and never inside a transaction.
+ * @returns `executed` on first success, `replayed` when an identical idempotent request already
+ *   succeeded, or `denied` with a reason. See {@link ExecuteCapabilityActionResult}.
  */
 export async function __ExecuteCapabilityAction<TResult>(repository: CapabilityActionReceiptRepository, command: ExecuteCapabilityActionCommand, executor: CapabilityActionExecutor<TResult>): Promise<ExecuteCapabilityActionResult<TResult>>
 {

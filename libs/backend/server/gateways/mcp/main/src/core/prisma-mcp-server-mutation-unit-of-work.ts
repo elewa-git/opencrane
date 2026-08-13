@@ -3,7 +3,21 @@ import type { PrismaClient } from "@prisma/client";
 import type { CreateMcpServerWrite, McpServerMutationRepository, McpServerMutationUnitOfWork, McpServerMutationWriteResult, UpdateMcpServerWrite } from "./mcp-server-mutation-repository.types.js";
 import { PrismaMcpServerMutationRepository } from "./prisma-mcp-server-mutation-repository.js";
 
-/** Prisma transaction owner for one MCP server aggregate and its audit trail. */
+/**
+ * Opens one Prisma transaction per call and runs the server write, its credential rows, and the
+ * audit row inside it, so all of them land or none of them do.
+ *
+ * This is what a route should use: it needs no ambient transaction, and it guarantees the
+ * catalogue can never show a server whose credential rows or audit entry are missing. Code that
+ * already holds a transaction should use `PrismaMcpServerMutationRepository` instead, so the two
+ * do not nest.
+ *
+ * Called by: `mcpServersRouter` in ../routes/mcp-servers.ts, which builds one instance and passes
+ * it to `createMcpServer`, `updateMcpServer` and `deleteMcpServer`.
+ *
+ * @see https://www.prisma.io/docs/orm/prisma-client/queries/transactions — the interactive
+ *      `$transaction` callback form used by `_withRepository`.
+ */
 export class PrismaMcpServerMutationUnitOfWork implements McpServerMutationUnitOfWork
 {
 	/** Canonical product-authority client that opens the transaction. */
@@ -15,7 +29,7 @@ export class PrismaMcpServerMutationUnitOfWork implements McpServerMutationUnitO
 		this._prisma = prisma;
 	}
 
-	/** Creates the complete MCP server aggregate atomically. */
+	/** Create the server, its credential rows, and the audit row in one transaction. @returns The new server's id. */
 	async createServer(input: CreateMcpServerWrite): Promise<McpServerMutationWriteResult>
 	{
 		return this._withRepository(async function _Create(repository)
@@ -24,7 +38,7 @@ export class PrismaMcpServerMutationUnitOfWork implements McpServerMutationUnitO
 		});
 	}
 
-	/** Updates the complete MCP server aggregate atomically. */
+	/** Change the server, replace its credential rows, and add the audit row in one transaction. */
 	async updateServer(input: UpdateMcpServerWrite): Promise<void>
 	{
 		await this._withRepository(async function _Update(repository): Promise<void>
@@ -33,7 +47,7 @@ export class PrismaMcpServerMutationUnitOfWork implements McpServerMutationUnitO
 		});
 	}
 
-	/** Deletes the complete MCP server aggregate atomically. */
+	/** Delete the credential rows, the server row, and add the audit row in one transaction. */
 	async deleteServer(serverId: string): Promise<void>
 	{
 		await this._withRepository(async function _Delete(repository): Promise<void>
@@ -42,7 +56,7 @@ export class PrismaMcpServerMutationUnitOfWork implements McpServerMutationUnitO
 		});
 	}
 
-	/** Opens one transaction and binds its exact client to the aggregate repository. */
+	/** Open one Prisma transaction, hand its client to a fresh `PrismaMcpServerMutationRepository`, and run the caller's writes on it. */
 	private async _withRepository<Result>(operation: (repository: McpServerMutationRepository) => Promise<Result>): Promise<Result>
 	{
 		return this._prisma.$transaction(async function _Run(transaction)

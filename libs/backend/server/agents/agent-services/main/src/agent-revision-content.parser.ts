@@ -8,7 +8,7 @@ function _isNonEmptyString(value: unknown): value is string
 	return typeof value === "string" && value.trim().length > 0;
 }
 
-/** Returns whether a string is safe as one segment of the runtime integration tool revision. */
+/** Returns whether a string can be used in a colon-joined runtime tool name: non-empty and containing no `:`. A colon inside a segment would let two different integrations produce the same joined name. */
 function _isToolRevisionSegment(value: unknown): value is string
 {
 	return _isNonEmptyString(value) && !value.includes(":");
@@ -61,7 +61,7 @@ function _parseIntegrations(raw: unknown): AgentRevisionContent["integrationAssi
 	return assignments.some(assignment => assignment === null) ? null : (assignments as AgentRevisionContent["integrationAssignments"]);
 }
 
-/** Parses the optional revision-scoped scope-attachment array against the canonical vocabulary. */
+/** Parses the optional scope-attachment array, accepting only the five known scope names and the three known subject types. Absent means no attachments; malformed means the whole request is rejected. */
 function _parseScopeAttachments(raw: unknown): AgentRevisionContent["scopeAttachments"] | null
 {
 	if (raw === undefined) return [];
@@ -77,7 +77,22 @@ function _parseScopeAttachments(raw: unknown): AgentRevisionContent["scopeAttach
 	return attachments.some(attachment => attachment === null) ? null : (attachments as AgentRevisionContent["scopeAttachments"]);
 }
 
-/** Parses and validates immutable executable content from the reviewed administrator payload. */
+/**
+ * Turns an untrusted request body into agent revision content, or returns null.
+ *
+ * This is the only door between JSON off the wire and anything the runtime will execute, so it
+ * accepts nothing it cannot fully check and never fills in a default for a malformed field. It
+ * rejects a body whose `promptPolicyVersion` is not the compiler version this build ships, so a
+ * revision authored against a different prompt compiler cannot be stored and later mis-compiled.
+ *
+ * Called by: the create and revise handlers in `agent-revision.router.ts`, both of which answer 400
+ * `VALIDATION_ERROR` on null.
+ *
+ * @param raw - `req.body.content`, entirely untrusted.
+ * @returns Content safe to hand to {@link __CreateManagedAgentService} / {@link __ReviseAgentRevision},
+ *   or null when anything is missing, malformed, or of the wrong type. Null carries no detail on
+ *   purpose — the response must not tell a caller which internal check tripped.
+ */
 export function _ParseAgentRevisionContent(raw: unknown): AgentRevisionContent | null
 {
 	// 1. Bound the top-level JSON object before inspecting any executable field.
@@ -85,18 +100,18 @@ export function _ParseAgentRevisionContent(raw: unknown): AgentRevisionContent |
 	const body = raw as Record<string, unknown>;
 	const budget = body.budget as Record<string, unknown> | undefined;
 
-	// 2. Require the deployed compiler pin and complete primitive revision coordinates.
+	// 2. Require the prompt-compiler version this build ships, plus a model id and all three budget numbers.
 	if (body.promptPolicyVersion !== PROMPT_COMPILER_VERSION || !_isNonEmptyString(body.modelDefinitionId) || budget === undefined || typeof budget !== "object") return null;
 	if (typeof budget.maxTurns !== "number" || typeof budget.maxTokens !== "number" || typeof budget.maxDurationMs !== "number") return null;
 	const personaRevisionId = body.personaRevisionId === undefined || body.personaRevisionId === null ? null : body.personaRevisionId;
 	if (personaRevisionId !== null && !_isNonEmptyString(personaRevisionId)) return null;
 
-	// 3. Parse every nested authority with no fallback for malformed assignments or schemas.
+	// 3. Parse the nested arrays. One malformed entry rejects the whole body — never a partial list.
 	const skills = _parseSkills(body.skills);
 	const integrationAssignments = _parseIntegrations(body.integrationAssignments);
 	const scopeAttachments = _parseScopeAttachments(body.scopeAttachments);
 	if (skills === null || integrationAssignments === null || scopeAttachments === null) return null;
 
-	// 4. Return only the canonical domain shape consumed by revision validation and persistence.
+	// 4. Rebuild the value field by field, so nothing extra from the request body is carried through.
 	return { promptPolicyVersion: body.promptPolicyVersion, personaRevisionId, modelDefinitionId: body.modelDefinitionId, budget: { maxTurns: budget.maxTurns, maxTokens: budget.maxTokens, maxDurationMs: budget.maxDurationMs }, skills, integrationAssignments, scopeAttachments };
 }

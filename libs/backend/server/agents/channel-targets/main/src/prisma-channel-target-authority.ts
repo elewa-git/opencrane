@@ -23,7 +23,20 @@ function _endpointIsAllowed(endpoint: string, allowedSuffixes: readonly string[]
 		&& allowedSuffixes.some(suffix => suffix.startsWith(".") && url.hostname.endsWith(suffix) && url.hostname.length > suffix.length);
 }
 
-/** Prisma unit of work that supplies one transaction snapshot to each channel authority operation. */
+/**
+ * The Prisma-backed channel authority: one serializable transaction per operation.
+ *
+ * Serializable is chosen deliberately. Issuing and spending an invocation context both re-read the
+ * conversation, its participants and the route and then write, and at a weaker isolation level a
+ * concurrent close, participant removal, or route swap could slip between the read and the write.
+ * Each operation is traced and its outcome recorded on the span, so a refusal can be explained
+ * afterwards without ever logging the opaque context itself.
+ *
+ * Called by: apps/opencrane/src/app/channel-target-composition.ts and
+ * apps/opencrane/src/app/runtime-composition.ts.
+ *
+ * @see {@link ChannelTargetAuthorityUnitOfWork} the port this satisfies.
+ */
 export class PrismaChannelTargetAuthorityUnitOfWork implements ChannelTargetAuthorityUnitOfWork
 {
 	/** Canonical OpenCrane product database. */
@@ -57,7 +70,7 @@ export class PrismaChannelTargetAuthorityUnitOfWork implements ChannelTargetAuth
 		});
 	}
 
-	/** Rechecks every mutable authority coordinate while persisting only the opaque digest. */
+	/** Re-reads the conversation, participants and route inside the transaction, then stores only the context's digest. */
 	async issueInvocationContextAtomically(command: IssueChannelInvocationContextCommand): Promise<IssueChannelInvocationContextResult>
 	{
 		const self = this;
@@ -138,7 +151,7 @@ class PrismaChannelTargetAuthorityTransactionRepository implements ChannelTarget
 		return services.length;
 	}
 
-	/** Rechecks every mutable authority coordinate while persisting only the opaque digest. */
+	/** Re-reads the conversation, participants and route inside the transaction, then stores only the context's digest. */
 	async issueInvocationContextAtomically(command: IssueChannelInvocationContextCommand): Promise<IssueChannelInvocationContextResult>
 	{
 		const conversation = await this.transaction.conversation.findUnique({ where: { id: command.conversationId }, include: { participants: true } });

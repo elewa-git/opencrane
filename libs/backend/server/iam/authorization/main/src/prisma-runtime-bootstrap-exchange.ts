@@ -40,7 +40,13 @@ export class PrismaRuntimeBootstrapExchange implements RuntimeBootstrapExchangeR
 		this.authority = new PrismaRuntimeAuthorityRepository(prisma);
 	}
 
-	/** Loads the durable bootstrap and its registered assignment, or null when either is absent. */
+	/**
+	 * Loads one bootstrap plus the separately written assignment for the same run attempt.
+	 * @param bootstrapReference - The opaque one-use reference projected into the runtime pod.
+	 * @returns Both rows' fields side by side, deliberately not merged. Null when the bootstrap is
+	 *   missing, when no pod has registered yet, or when either row carries an audience we do not
+	 *   recognise — the router turns all three into one 409 so nothing about stored state leaks.
+	 */
 	async loadBootstrapExchange(bootstrapReference: string): Promise<RuntimeBootstrapExchangeRecord | null>
 	{
 		// 1. Load the bootstrap row keyed by the opaque reference.

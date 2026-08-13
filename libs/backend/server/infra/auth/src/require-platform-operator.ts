@@ -1,23 +1,33 @@
 import type { RequestHandler } from "express";
 
 /**
- * Authorization guard restricting a route to the PLATFORM OPERATOR — the fleet-wide
- * superadmin (env-seeded via `OPENCRANE_PLATFORM_OPERATOR_GROUPS` / seed email). This is
- * the strongest gate and the only acceptable one for the master IdP-credential rotation
- * route: a per-org owner/admin must NEVER be able to rotate the platform's Zitadel
- * service-account key.
+ * Express guard that lets only the platform operator reach a route — the fleet-wide
+ * superadmin, granted by `OPENCRANE_PLATFORM_OPERATOR_GROUPS` or by the per-cluster seed
+ * email.
  *
- * IAM-first: the decision is derived purely from the caller's IdP-verified session
- * (`session.authUser.isPlatformOperator`), never from request input.
+ * This is the strongest gate in the server and the only correct one for anything touching
+ * platform-wide credentials: an organisation owner or admin must never be able to rotate
+ * the platform's Zitadel service-account key. Prefer {@link _RequireOrgAdmin} for
+ * anything scoped to a single organisation.
  *
- * Posture:
- *   1. No established session — fail closed (403).
- *   2. Session present — allow iff `isPlatformOperator`; else 403.
+ * The decision comes only from `session.authUser.isPlatformOperator`, computed at login
+ * from verified claims and the verified email; nothing in the request can influence it.
  *
- * TODO (S5): `isPlatformOperator` is the config-driven stopgap until OpenCrane has a role
- * model. This MUST tighten to a first-class super-admin role once that model lands.
+ * Two cases, both fail-closed:
+ *   1. No session — 403.
+ *   2. Session present but not a platform operator — 403.
  *
- * @returns Express middleware that continues for platform operators and rejects others (403).
+ * The 403 body is identical in both cases, so a caller cannot tell "not logged in" from
+ * "logged in but not an operator". Keep it that way.
+ *
+ * Called by: no caller in this repo yet — it is exported from the package barrel ready for
+ * the credential-rotation route.
+ *
+ * TODO (S5): `isPlatformOperator` is a configuration-driven stopgap until OpenCrane has a
+ * role model; this must tighten to a real super-admin role once that lands.
+ *
+ * @returns Middleware that calls `next()` for the platform operator and sends 403 to
+ *          everyone else.
  */
 export function _RequirePlatformOperator(): RequestHandler
 {
@@ -44,7 +54,7 @@ export function _RequirePlatformOperator(): RequestHandler
   };
 }
 
-/** Emit the canonical 403 envelope; never leak which specific check failed. */
+/** Send the one fixed 403 body used for every rejection here, so a caller cannot tell which check failed. */
 function _deny(res: Parameters<RequestHandler>[1]): void
 {
   res.status(403).json({ error: "Platform operator role required.", code: "FORBIDDEN_NOT_PLATFORM_OPERATOR" });

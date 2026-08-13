@@ -23,7 +23,14 @@ export interface CreateAgentRevisionWithinTransactionCommand
 	readonly createdAt: Date;
 }
 
-/** Canonical agent-revision persistence mapping used by transaction-owning repositories. */
+/**
+ * Writes one new agent revision inside a transaction the caller owns.
+ *
+ * `Row` is left generic so a caller can get back whatever include shape it needs without this
+ * package depending on the caller's query.
+ *
+ * Implemented by: `PrismaAgentRevisionWriterRepository` in `prisma-agent-revision-writer.ts`.
+ */
 export interface AgentRevisionWriterRepository<Row = unknown>
 {
 	/** Creates one draft revision and every immutable assignment inside the current transaction. */

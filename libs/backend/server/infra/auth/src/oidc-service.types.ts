@@ -19,7 +19,14 @@ export interface AuthStatusUser extends AuthUser
   ownedOrgs: OwnedOrg[];
 }
 
-/** Session auth status returned to the SPA bootstrap logic. */
+/**
+ * The `/auth/me` response: what the browser app reads at startup to decide whether to show
+ * the application or send the user to log in.
+ *
+ * Produced only by `OidcAuthServiceBase.getStatus`. `user` is null whenever
+ * `authenticated` is false, and `mode` is `development` on a server with no OIDC
+ * configuration, which tells the app not to offer login at all.
+ */
 export interface AuthStatus
 {
   /** Effective auth mode for the current server configuration. */
@@ -32,7 +39,15 @@ export interface AuthStatus
   user: (AuthStatusUser & Record<string, unknown>) | null;
 }
 
-/** The OIDC client and scope a login should use, resolved for the current request. */
+/**
+ * What `resolveLoginClient` returns: which OIDC client a login authorizes against, and
+ * with which scope.
+ *
+ * Omitting {@link LoginClient.clientId} means "the masters client". Setting it makes
+ * `buildLoginUrl` record that client_id in the session, so `completeLogin` exchanges the
+ * code against the same client — a per-organisation override must set it, or the exchange
+ * will use the wrong client and fail.
+ */
 export interface LoginClient
 {
   /** The discovered OIDC client configuration to authorize against. */

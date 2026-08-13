@@ -7,7 +7,23 @@ import { _ParseUserOnboardingAnswerBody } from "./user-onboarding.http.validator
 import type { ApprovedPersonaEvidence, UserOnboardingOwner } from "./user-onboarding.types.js";
 import { __UserOnboardingAuthority } from "./user-onboarding-authority.js";
 
-/** Create the owner-only durable onboarding status router. */
+/**
+ * Build the Express router for the signed-in user's own onboarding, mounted at /api/v1/me/onboarding.
+ *
+ * Five routes: `GET /` returns the workflow state and creates a survey-pending row on the first
+ * visit; `GET /chat` and `POST /chat/start` read and start the guided bootstrap chat;
+ * `POST /chat/answers` appends one answer; `POST /chat/conclude` completes onboarding. Every route
+ * resolves the user from the session and answers 401 when there is none - no route accepts a user id
+ * from the request. Expected chat refusals become fixed status codes (400, 409, 503) with a stable
+ * `error` string, while anything unexpected is logged and returned as 503 so no internal detail
+ * reaches the browser.
+ *
+ * Called by: _CreateUserOnboardingComposition in
+ * apps/opencrane/src/app/user-onboarding-composition.ts, mounted in apps/opencrane/src/app/routes.ts.
+ *
+ * @param dependencies - Workflow authority, chat authority, session owner resolver, and logger.
+ * @returns A router ready to mount; it registers no authentication middleware of its own.
+ */
 export function __CreateUserOnboardingRouter(dependencies: UserOnboardingRouterDependencies): Router
 {
 	const router = Router();
@@ -43,7 +59,21 @@ export function __CreateUserOnboardingRouter(dependencies: UserOnboardingRouterD
 	return router;
 }
 
-/** Adapter that advances workflow state only after persona authority success. */
+/**
+ * Passes persona's survey and approval events into the durable onboarding workflow.
+ *
+ * Called only after the persona package has already committed its own change, so it must be safe to
+ * call twice: `surveyStarted` first re-reads the row, which also repairs the case where a persona
+ * approval was committed but its notification to onboarding never arrived. A refusal is turned into
+ * a thrown error rather than being reported, so the persona request fails instead of leaving the two
+ * sides disagreeing about the user's state.
+ *
+ * Called by: _CreatePersonaOnboardingWorkflow in
+ * apps/opencrane/src/app/user-onboarding-composition.ts.
+ *
+ * @implements {UserOnboardingPersonaWorkflowPort}
+ * @throws Error when the workflow denies the notification, with the denial reason in the message.
+ */
 export class UserOnboardingPersonaWorkflowCoordinator implements UserOnboardingPersonaWorkflowPort
 {
 	/** Durable workflow authority. */

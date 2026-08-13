@@ -37,7 +37,14 @@ function _claimKind(kind: ExternalActionClaimKind | null): ExternalActionClaimKi
 	return kind === ExternalActionClaimKind.Dispatch ? ExternalActionClaimKinds.Dispatch : ExternalActionClaimKinds.Reconcile;
 }
 
-/** Prisma cancellation repository bound to the caller-owned run transaction. */
+/**
+ * The database writes cancellation needs, all on the caller's transaction.
+ *
+ * Exported for tests and for the unit of work in this file; production code should call
+ * {@link __CancelPendingRunApprovalAuthority}, which runs the three steps in the required order.
+ * Every query re-asserts that the run is on the expected attempt and in `Cancelling`, so a stale
+ * cancellation cannot close work on a newer attempt.
+ */
 export class PrismaRunApprovalCancellationRepository implements RunApprovalCancellationRepository
 {
 	/** Exact cancellation transaction. */
@@ -49,7 +56,7 @@ export class PrismaRunApprovalCancellationRepository implements RunApprovalCance
 		this._transaction = transaction;
 	}
 
-	/** Snapshot every nonterminal invocation after the run enters Cancelling. */
+	/** List the unfinished tool calls that can be closed safely — those holding no provider claim. The claim check is what keeps in-flight provider work out of this list. */
 	async findCancellableInvocations(runId: string, attempt: number): Promise<readonly RunCancellationToolInvocation[]>
 	{
 		const rows = await this._transaction.toolInvocation.findMany({ where: { runId, attempt, state: { in: [..._CANCELLABLE_INVOCATION_STATES] }, claimKind: null, run: { is: { attempt, state: AgentRunState.Cancelling } } }, select: { id: true, toolInvocationId: true, state: true, recoveryMode: true, claimKind: true, preparationAttempt: true, retryDeadlineAt: true, revision: true }, orderBy: { id: "asc" } });
@@ -93,12 +100,26 @@ export class PrismaRunApprovalCancellationRepository implements RunApprovalCance
 }
 
 /**
- * Cancels pending approval authority inside a caller-owned run cancellation transaction.
- * Decided approvals remain immutable; only Pending rows for the exact run attempt are closed, and
-	 * no late approval can resume cancelled work.
- * @param transaction - Prisma transaction already holding the owning run cancellation fence.
- * @param command - Exact run attempt and trusted cancellation instant.
- * @returns The number of Pending approvals transitioned to Cancelled.
+ * Shut down one cancelling run's approvals and its unfinished tool calls, in the caller's
+ * transaction.
+ *
+ * Does three things, in order: snapshot every tool call that can still be closed safely, cancel
+ * every pending approval (never resuming the run), and fail those tool calls with `run_cancelled`
+ * plus a result delivery each. Already-decided approvals are left untouched, so a late approval
+ * cannot resurrect cancelled work.
+ *
+ * Deliberately does NOT touch tool calls that currently hold a provider claim — those may have a
+ * request in flight. It counts them instead and returns the count, and the runs package must wait
+ * for that count to reach zero before reporting the run fully cancelled. Report the run as torn
+ * down while `activeClaimCount` is above zero and you will claim a pod is gone while it is still
+ * talking to a provider.
+ *
+ * Called by: libs/backend/agents/execution/runs/main/src/prisma-run-cancellation-repository.ts.
+ * @param transaction - Prisma transaction that has already moved the run to `Cancelling`.
+ * @param command - Run id, expected attempt, and the trusted cancellation time.
+ * @returns Counts of approvals cancelled, tool calls failed, and provider claims still active.
+ * @throws When a snapshotted tool call is no longer closable, or when the state machine refuses to
+ *   fail it — both mean the run moved unexpectedly and the transaction must roll back.
  */
 export async function __CancelPendingRunApprovalAuthority(transaction: Prisma.TransactionClient, command: CancelPendingRunApprovalAuthorityCommand): Promise<CancelPendingRunApprovalAuthorityResult>
 {

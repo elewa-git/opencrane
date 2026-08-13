@@ -12,31 +12,74 @@ import { __ResolveEffectiveScopeAttachments } from "./scope-attachment-authority
 import { PrismaScopeGrantResolver } from "./prisma-scope-grant-resolver.js";
 import type { ManagedExecutionEvidenceAuthority, ManagedExecutionEvidenceCommand, ManagedExecutionEvidenceConfig, ManagedExecutionEvidenceResult, ManagedExecutionEvidenceTransaction } from "./managed-execution-evidence.types.js";
 
-/** Canonical principal exercised by one managed AgentService. */
+/**
+ * Builds the principal name a managed agent acts as: `agent-service:<id>`.
+ *
+ * A managed agent has no human behind it, so grants, membership, and audit rows are all recorded
+ * against this derived name rather than a user id. Everything that has to agree on that name calls
+ * this function instead of formatting the string itself, so the prefix can never drift between the
+ * writer and the reader.
+ *
+ * Called by: {@link PrismaManagedExecutionEvidenceAuthority.load} in this file, and
+ * `ManagedExecutionIdentityEnvelopeSource` in
+ * libs/backend/agents/execution/inputs/main/src/managed-execution-identity-envelope-source.ts, which
+ * checks the snapshot's execution subject against it before trusting a run.
+ *
+ * @param agentServiceId - The managed service's id.
+ * @returns The principal name used for grants, membership lookups, and audit rows.
+ */
 export function __ManagedAgentServicePrincipal(agentServiceId: string): string
 {
 	return `agent-service:${agentServiceId}`;
 }
 
 /**
- * Resolves signed membership and effective revision capabilities for one managed service.
+ * Checks a managed service's membership and access against Postgres, inside the caller's transaction.
  *
- * The service, revision, membership high-water mark, grants, and final snapshot all share the
- * caller's admission transaction. The human requester is deliberately absent from this authority.
+ * Reading the service, the revision, the newest signed membership, and the grants under one
+ * transaction is what stops any of them changing between the check and the run being written.
+ *
+ * A managed agent acts as itself, not on behalf of whoever pressed run-now, so nothing about the
+ * human requester reaches this class — the access it grants must be the agent's own.
+ *
+ * Called by: `ManagedExecutionIdentityEnvelopeSource` in
+ * libs/backend/agents/execution/inputs/main/src/managed-execution-identity-envelope-source.ts;
+ * constructed by `_CreateManagedExecutionEvidenceAuthority` in
+ * `prisma-managed-execution-evidence.factory.ts`.
  */
 export class PrismaManagedExecutionEvidenceAuthority implements ManagedExecutionEvidenceAuthority
 {
 	/** Trusted membership configuration fixed by app composition. */
 	private readonly config: ManagedExecutionEvidenceConfig;
 
-	/** Creates the production evidence authority. */
+	/**
+	 * @param config - Trusted issuer, staleness limit, and signature verifier, fixed at composition.
+	 * @throws Error when the issuer id is blank or the staleness limit is not a positive safe integer.
+	 *   Failing here rather than per request means a misconfigured deployment cannot silently accept
+	 *   membership evidence of any age.
+	 */
 	constructor(config: ManagedExecutionEvidenceConfig)
 	{
 		if (config.trustedIssuerId.trim().length === 0 || !Number.isSafeInteger(config.maximumStalenessMs) || config.maximumStalenessMs <= 0) throw new Error("managed execution evidence requires a trusted issuer and positive staleness bound");
 		this.config = config;
 	}
 
-	/** Loads exact current service, membership, attachment, and assignment evidence. */
+	/**
+	 * Re-reads everything a managed run's access depends on, inside the caller's transaction.
+	 *
+	 * In order: the revision must still be the published active revision of an active managed service
+	 * in this silo; the agent's principal must have exactly one organisation's signed membership in the
+	 * issuer's newest revision, and that signature must verify and be within the staleness limit; the
+	 * revision must declare no `personal` scope; and every declared scope must be backed by a real
+	 * grant. Only then are the identity and capability digest built.
+	 *
+	 * @param command - Silo, service, and the revision the caller believes is active.
+	 * @param transaction - The caller's open transaction and the admission time.
+	 * @returns `loaded` with the run's identity and its capability digest, or `denied` — see
+	 *   {@link ManagedExecutionEvidenceResult} for what each reason means and whether to retry.
+	 * @throws Whatever the database or the signature verifier throws. A throw is not a denial; the
+	 *   caller's transaction rolls back and no run is admitted.
+	 */
 	async load(command: ManagedExecutionEvidenceCommand, transaction: ManagedExecutionEvidenceTransaction): Promise<ManagedExecutionEvidenceResult>
 	{
 		const revision = await transaction.prisma.agentRevision.findFirst({
@@ -117,11 +160,17 @@ export class PrismaManagedExecutionEvidenceAuthority implements ManagedExecution
 }
 
 /**
- * Selects the lowest stable assertion identifier inside one organization.
+ * Picks one signed membership assertion for the agent principal, or refuses.
  *
- * Multiple same-organization membership scopes are valid. This choice freezes one exact signed
- * membership assertion as identity evidence; executable knowledge scope remains the separate
- * intersection of revision attachments and effective grants.
+ * An agent may legitimately hold several membership scopes within one organisation, so the
+ * lowest-sorting assertion id is chosen to make the choice repeatable. If the assertions span more
+ * than one organisation, this returns null and the run is denied: there would be no single
+ * organisation to record on the run.
+ *
+ * Choosing an assertion only fixes *who* the agent is. What it may reach is decided separately, by
+ * intersecting the revision's scope attachments against the grants actually held.
+ *
+ * @returns The chosen assertion, or null when the principal has no membership or spans organisations.
  */
 async function _SelectMembershipAssertion(prisma: Prisma.TransactionClient, trustedIssuerId: string, siloId: string, subjectId: string): Promise<{ assertionId: string; scopeKind: FleetMembershipScopeKind; organizationId: string; scopeResourceId: string | null } | null>
 {
@@ -135,7 +184,7 @@ async function _SelectMembershipAssertion(prisma: Prisma.TransactionClient, trus
 	return assertions[0] ?? null;
 }
 
-/** Returns the organization coordinate for ambiguity detection. */
+/** Reads one assertion's organisation id, so the caller can check that all of them agree. */
 function _OrganizationId(assertion: { organizationId: string }): string
 {
 	return assertion.organizationId;
@@ -169,7 +218,13 @@ function _IsPersonalAttachment(value: RevisionScopeAttachment): boolean
 	return value.scope === "personal";
 }
 
-/** Compares canonical ASCII coordinates without locale- or ICU-dependent collation. */
+/**
+ * Compares two strings by raw code unit, not by locale.
+ *
+ * `String.prototype.localeCompare` and the default `Array.sort` comparator can order the same two
+ * strings differently on different builds or locales. Sorting is what makes the capability digest
+ * reproducible, so the comparison has to be one that never varies.
+ */
 function _CompareCanonicalCoordinate(left: string, right: string): number
 {
 	if (left < right) return -1;
@@ -177,7 +232,15 @@ function _CompareCanonicalCoordinate(left: string, right: string): number
 	return 0;
 }
 
-/** Canonicalizes effective attachments before persistence and digesting. */
+/**
+ * Copies the authorised attachments and sorts them by scope, then subject type, then subject id.
+ *
+ * The sort is not cosmetic. RFC 8785 fixes object key order but leaves array order alone, so if this
+ * list arrived in whatever order Postgres returned it, the same revision would produce a different
+ * digest on different reads.
+ * @see https://www.rfc-editor.org/rfc/rfc8785 — why array order must be fixed here rather than by
+ *   the JSON serializer.
+ */
 function _CanonicalAttachments(values: readonly RevisionScopeAttachment[]): readonly ManagedRunInputScopeAttachment[]
 {
 	return [...values]
@@ -185,13 +248,13 @@ function _CanonicalAttachments(values: readonly RevisionScopeAttachment[]): read
 		.sort(function _ByTriple(left, right): number { return _CompareCanonicalCoordinate(`${left.scope}\u0000${left.subjectType}\u0000${left.subjectId}`, `${right.scope}\u0000${right.subjectType}\u0000${right.subjectId}`); });
 }
 
-/** Canonicalizes revision skill coordinates for capability digesting. */
+/** Sorts the assigned skill revisions by skill id, then revision id, so the capability digest does not depend on database row order. */
 function _CanonicalSkillAssignments(values: readonly { skillId: string; skillRevisionId: string }[]): JsonValue
 {
 	return [...values].sort(function _BySkill(left, right): number { return _CompareCanonicalCoordinate(`${left.skillId}\u0000${left.skillRevisionId}`, `${right.skillId}\u0000${right.skillRevisionId}`); }) as JsonValue;
 }
 
-/** Canonicalizes integration custody and exact tool allowances for capability digesting. */
+/** Rebuilds each integration assignment with only the fields that affect access — custody reference and reviewed tool definitions — and sorts both the tools by name and the integrations by id, so the capability digest does not depend on database row order. */
 function _CanonicalIntegrationAssignments(values: readonly { integrationId: string; custodyReferenceId: string; toolDefinitions: Prisma.JsonValue }[]): JsonValue
 {
 	return [...values]

@@ -1,19 +1,33 @@
 import type { RequestHandler } from "express";
 
 /**
- * Reusable authorization guard restricting a route to organisation admins — the role
- * allowed to curate the MCP catalogue and approve servers (P0.5).
+ * Express guard that lets only organisation admins reach a route — the role allowed to
+ * curate the MCP catalogue and approve servers.
  *
- * IAM-first: the decision is derived purely from the caller's IdP-verified identity
- * (`session.authUser.isOrgAdmin`, set from `OPENCRANE_ORG_ADMIN_GROUPS`), never from
- * request input.
+ * The decision comes only from `session.authUser.isOrgAdmin`, which was set at login from
+ * the caller's verified group claims (`OPENCRANE_ORG_ADMIN_GROUPS`); nothing in the
+ * request body, query, or headers can influence it. Platform operators pass too, because
+ * the login rules already mark them as org admins.
  *
- * Posture:
- *   1. No established session — fail closed (403).
- *   2. Session present — allow iff `isOrgAdmin` (platform operators are org admins by
- *      derivation, being the broader role).
+ * Two cases, both fail-closed:
+ *   1. No session — 403.
+ *   2. Session present but `isOrgAdmin` is false — 403.
  *
- * @returns An Express middleware that continues for org admins and rejects others with 403.
+ * The 403 body is byte-for-byte the same in both cases, and identical for every route
+ * using this guard. That is a security property, not tidiness: a caller must not be able
+ * to tell "you are not logged in" from "you are logged in but not an admin", or probe
+ * which check failed. Do not add a reason field, a route name, or a differing message.
+ *
+ * NOTE: this reads the value stored at login. A user who became an org admin by creating
+ * an organisation after logging in is reported as an admin by `/auth/me` but still
+ * rejected here until their session is refreshed.
+ *
+ * Called by: libs/backend/server/gateways/mcp/main/src/routes/mcp-operator.ts (8 routes),
+ * .../routes/mcp-servers.ts (3 routes),
+ * libs/backend/server/gateways/providers/main/src/routes/provider-byok.ts (2 routes), and
+ * libs/backend/server/gateways/integrations/main/src/integration-custody.router.ts.
+ *
+ * @returns Middleware that calls `next()` for org admins and sends 403 to everyone else.
  */
 export function _RequireOrgAdmin(): RequestHandler
 {
@@ -40,7 +54,7 @@ export function _RequireOrgAdmin(): RequestHandler
   };
 }
 
-/** Emit the canonical 403 envelope; never leak which specific check failed. */
+/** Send the one fixed 403 body used for every rejection here, so a caller cannot tell which check failed. */
 function _deny(res: Parameters<RequestHandler>[1]): void
 {
   res.status(403).json({ error: "Organisation admin role required.", code: "FORBIDDEN_NOT_ORG_ADMIN" });

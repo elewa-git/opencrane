@@ -4,8 +4,16 @@ import { _ClaimStandaloneFirstUserOwner, PrismaStandaloneFirstUserAdmissionRepos
 import { type StandaloneFirstUserAdmissionAuditPort, type StandaloneFirstUserAdmissionResult, type StandaloneFirstUserAdmissionUnitOfWork, type StandaloneFirstUserOwnerClaim } from "./standalone-first-user-admission.types.js";
 
 /**
- * Owns the serializable transaction that makes a standalone silo's first-owner claim atomic.
- * A one-time retry turns a concurrent unique/serialization collision into the durable result.
+ * Opens the serializable transaction for a first-owner claim and retries a lost race exactly once.
+ *
+ * Serializable isolation plus the unique constraint on the owner row means two simultaneous logins
+ * cannot both create an owner: one fails with a unique violation (P2002) or a serialization failure
+ * (P2034). Retrying once is enough, because the slot is now filled — the second attempt reads it and
+ * returns `AlreadyOwner` or `AlreadyClaimed` instead of racing again.
+ *
+ * Called by: OidcAuthService.onLoginEstablished in this package, composed with the audit appender
+ * from apps/opencrane/src/app/public-app.ts.
+ * @implements StandaloneFirstUserAdmissionUnitOfWork
  */
 export class PrismaStandaloneFirstUserAdmissionUnitOfWork implements StandaloneFirstUserAdmissionUnitOfWork
 {
@@ -14,7 +22,10 @@ export class PrismaStandaloneFirstUserAdmissionUnitOfWork implements StandaloneF
   /** Audit authority composed outside identity and invoked inside the selected transaction. */
   private readonly audit: StandaloneFirstUserAdmissionAuditPort;
 
-  /** @param prisma - Root client used solely to select serializable owner-claim transactions. @param audit - Audit authority for accepted claims. */
+  /**
+   * @param prisma - Full client, used only to open serializable owner-claim transactions.
+   * @param audit - Audit appender invoked inside each of those transactions.
+   */
   constructor(prisma: PrismaClient, audit: StandaloneFirstUserAdmissionAuditPort)
   {
     this.prisma = prisma;
@@ -49,7 +60,7 @@ export class PrismaStandaloneFirstUserAdmissionUnitOfWork implements StandaloneF
   }
 }
 
-/** Identifies Prisma's retryable unique or serialization outcomes for one owner-slot race. */
+/** Returns true for the two Prisma errors a concurrent owner claim raises: P2002 and P2034. */
 function _isConcurrentClaimError(error: unknown): boolean
 {
   return error instanceof Prisma.PrismaClientKnownRequestError

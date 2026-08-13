@@ -3,10 +3,18 @@ import type { Prisma, PrismaClient } from "@prisma/client";
 import type { EffectiveScopeGrant, ScopeGrantResolver } from "./scope-attachment-authority.types.js";
 
 /**
- * Stub scope-grant resolver.
+ * Not implemented yet — always returns no grants.
  *
- * Returns an empty effective-grant set. The grant-compiler that previously backed this resolver
- * has been reaped; a follow-up wires RbacAuthority as the production source of scope grants.
+ * The grant compiler that used to back this was removed and RbacAuthority has not been wired in. The
+ * consequence is not neutral: with no grants, every declared scope attachment is rejected, so
+ * authoring a revision with any attachment is refused with 403 `FORBIDDEN_SCOPE_ATTACHMENT`, and
+ * admitting a managed run whose revision has any attachment is denied `memory_scope_unavailable`.
+ * Revisions with no attachments are unaffected. Failing closed like this is the right direction for
+ * a missing authorisation source, but it is a stub, not the finished behaviour.
+ *
+ * Called by: injected as `scopeGrantResolver` in `prisma-agent-services.router.ts`, and constructed
+ * inline by `PrismaManagedExecutionEvidenceAuthority.load` in
+ * `prisma-managed-execution-evidence.ts`.
  */
 export class PrismaScopeGrantResolver implements ScopeGrantResolver
 {
@@ -22,7 +30,7 @@ export class PrismaScopeGrantResolver implements ScopeGrantResolver
 		this.prisma = prisma;
 	}
 
-	/** Compiles the allow-only effective knowledge-scope grants for the principal set. */
+	/** Always returns an empty list; see the note on the class. The `prisma` field and `principalIds` are unused until a real grant source is wired in. */
 	async resolveEffectiveScopeGrants(principalIds: readonly string[]): Promise<readonly EffectiveScopeGrant[]>
 	{
 		void principalIds;

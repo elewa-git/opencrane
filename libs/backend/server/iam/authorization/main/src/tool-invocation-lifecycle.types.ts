@@ -7,7 +7,30 @@
  */
 export const TOOL_INVOCATION_PREPARATION_POLICY = Object.freeze({ attemptLimit: 3, retryWindowMilliseconds: 300_000, retryDelayMilliseconds: 1_000 } as const);
 
-/** Durable states owned by the external-action ToolInvocation authority. */
+/**
+ * The states one external tool call moves through in the database.
+ *
+ * Read this as three groups. Nothing has touched the provider yet in `Preparing`,
+ * `AwaitingApproval`, or `Ready`. Exactly one worker may be talking to the provider right now in
+ * `Claimed` (a real dispatch) or `Reconciling` (a read-only "did it happen?" check). `Succeeded`,
+ * `Failed`, and `RecoveryRequired` are the end of the line for the worker.
+ *
+ * The two pairs callers get wrong:
+ * - `Claimed` vs `Reconciling`. Both mean a claim is held, but `Claimed` permits one mutating
+ *   dispatch and `Reconciling` permits only a read. Treat `Reconciling` as if it were `Claimed`
+ *   and you re-fire an action the provider may already have performed.
+ * - `Failed` vs `RecoveryRequired`. `Failed` means we know the action did not take effect and a
+ *   result was delivered to the runtime. `RecoveryRequired` means we do NOT know: the provider may
+ *   have done the work. Reporting `RecoveryRequired` as a failure tells the user nothing happened
+ *   when money may already have moved. No automatic retry is allowed from that state; a person
+ *   must decide.
+ *
+ * Only `Cancelled` events are accepted once a state is terminal, and only server-side
+ * cancellation may send one.
+ * @see {@link ToolInvocationLifecycleActions} for the write each State x Event pair permits.
+ * @see {@link ExternalActionRecoveryModes} for what decides between reconcile, redispatch, and
+ *   manual recovery.
+ */
 export enum ToolInvocationStates
 {
 	/** The invocation is stored, but the work that runs before any provider call is not finished. */
@@ -28,7 +51,22 @@ export enum ToolInvocationStates
 	RecoveryRequired = "recovery_required",
 }
 
-/** Recovery capability frozen from the trusted adapter before dispatch starts. */
+/**
+ * What the tool adapter can do for us if a dispatch ends with an unknown outcome.
+ *
+ * This is read from the adapter and written onto the invocation row BEFORE the first provider
+ * call, so a later crash cannot change the answer to "how do we clean up?". When a dispatch
+ * result is ambiguous, this value alone decides the next state:
+ * - `ProviderIdempotency` -> go back to `Ready` and send the same request again with the stored
+ *   `recoveryKey`, because a duplicate cannot double-charge.
+ * - `Reconciliation` -> go to `Reconciling` and ask the provider what happened; never redispatch.
+ * - `Manual` -> go to `RecoveryRequired` and stop; a person decides.
+ *
+ * `Manual` requires `recoveryKey` to be null; the other two require a non-empty key (enforced by
+ * `_recoveryKeyIsValid` in prisma-tool-invocation-repository.ts). Pick a mode the adapter cannot
+ * actually honour and you either duplicate a real-world effect or strand a run.
+ * @see {@link ToolInvocationStates}
+ */
 export enum ExternalActionRecoveryModes
 {
 	/** The adapter guarantees repeated dispatches with the same key have one provider effect. */
@@ -48,7 +86,13 @@ export enum ExternalActionClaimKinds
 	Reconcile = "reconcile",
 }
 
-/** Events interpreted by the ToolInvocation state owner. */
+/**
+ * Things that happen to one tool call, fed into {@link __PlanToolInvocationLifecycle}.
+ *
+ * Each member is a fact already established by the caller — preparation finished, the provider
+ * answered, a lease expired — never a request for a transition. The planner turns a
+ * state-plus-event pair into a {@link ToolInvocationLifecycleActions} member.
+ */
 export enum ToolInvocationLifecycleEvents
 {
 	/** Provider-free preparation completed and no approval is required. */
@@ -124,7 +168,14 @@ export enum ToolInvocationLifecycleActions
 	Reject = "reject",
 }
 
-/** Complete input needed for one deterministic State x Event decision. */
+/**
+ * Everything {@link __PlanToolInvocationLifecycle} needs to pick the next write.
+ *
+ * Deliberately plain data with no database or clock access, so the decision can be unit-tested
+ * and replayed. The caller reads all of it from the invocation row it holds under a revision
+ * check, and computes `withinPreparationDeadline` from the trusted server clock rather than
+ * passing a clock in.
+ */
 export interface ToolInvocationLifecycleInput
 {
 	/** Durable state observed under the invocation CAS revision. */

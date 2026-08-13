@@ -9,10 +9,20 @@ const _PUBLICATION_ATTEMPT_LIMIT = 3;
 /** Prisma conflict codes that prove the database rolled an attempt back before any durable effect. */
 const _RETRYABLE_PUBLICATION_CODES = new Set(["P2002", "P2034"]);
 
-/** Prisma implementation that solely owns artifact-publication transaction creation and retry. */
+/**
+ * Opens one SERIALIZABLE transaction per publication step and retries safe collisions.
+ *
+ * Up to three complete attempts, with fresh transaction-scoped repositories each time. Only the
+ * two codes in `_RETRYABLE_PUBLICATION_CODES` are retried, because they prove the attempt rolled
+ * back with nothing written. When the last attempt still collides, the Prisma error is converted
+ * into {@link _ArtifactPublicationConflictError} so nothing above this file has to know which
+ * database is underneath.
+ *
+ * Called by: `_CreateArtifactUploadAuthority` in prisma-artifact-authority.composition.ts.
+ */
 export class PrismaArtifactPublicationUnitOfWork implements ArtifactPublicationUnitOfWork
 {
-	/** Canonical product database client; it never leaves this composition seam. */
+	/** The product database client. Held privately so no repository or use case above this class can open its own transaction. */
 	private readonly prisma: PrismaClient;
 
 	/** Creates the transaction boundary for artifact publication. */
@@ -21,7 +31,15 @@ export class PrismaArtifactPublicationUnitOfWork implements ArtifactPublicationU
 		this.prisma = prisma;
 	}
 
-	/** Runs one complete operation with fresh transaction-scoped repositories on every safe retry. */
+	/**
+	 * Runs the work in one SERIALIZABLE transaction, up to three attempts.
+	 *
+	 * @param work - Function given repositories bound to the transaction. Must be safe to re-run.
+	 * @returns Whatever the work returned, from the attempt that committed.
+	 * @throws {@link _ArtifactPublicationConflictError} when the last attempt collides; nothing
+	 *   was written. Any error that does not prove a full rollback is rethrown unchanged, so an
+	 *   unrecognised failure is never retried.
+	 */
 	async run<Result>(work: ArtifactPublicationWork<Result>): Promise<Result>
 	{
 		for (let attempt = 1; attempt <= _PUBLICATION_ATTEMPT_LIMIT; attempt += 1)

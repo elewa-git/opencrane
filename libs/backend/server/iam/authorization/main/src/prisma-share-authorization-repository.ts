@@ -51,7 +51,15 @@ function _share(row: ShareAuthorizationGrantRow): ShareAuthorizationGrant
 	};
 }
 
-/** Prisma adapter that owns the authorization rows required by the sharing capability. */
+/**
+ * Writes and reads the grant rows behind sharing.
+ *
+ * Takes a transaction client, not the root client, so a share can be created in the same
+ * transaction as the decision that authorised it. Every method scopes to one silo, and list and
+ * revoke also scope to `createdBy`.
+ *
+ * Constructed by: ./prisma-share-authorization-unit-of-work.ts.
+ */
 export class PrismaShareAuthorizationRepository implements ShareAuthorizationRepository
 {
 	/** Product-authority client that owns the catalog and authorization-grant tables. */
@@ -63,7 +71,13 @@ export class PrismaShareAuthorizationRepository implements ShareAuthorizationRep
 		this._prisma = prisma;
 	}
 
-	/** Creates the fixed share catalog revision once and returns its canonical stored digest. */
+	/**
+	 * Creates the share capability set if it is missing, and confirms the stored one matches.
+	 * @returns The stored digest, which always equals the one passed in.
+	 * @throws When a revision with this number already exists with a different digest — the capability
+	 *   set was changed without a new revision number, and existing shares would silently mean
+	 *   something else.
+	 */
 	async ensureCatalogRevision(revision: ShareCapabilityCatalogRevision): Promise<string>
 	{
 		const catalog = await this._prisma.capabilityCatalogRevision.upsert({

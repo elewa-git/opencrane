@@ -7,10 +7,17 @@ import { __DigestFleetMembershipSignedPayload } from "./fleet-membership-payload
 import type { FleetMembershipSignatureVerifier } from "./membership-authority.types.js";
 
 /**
- * Verifies fleet membership payload digests with an exact Ed25519 issuer-key ring.
+ * Checks Ed25519 signatures on stored membership revisions against a fixed set of issuer keys.
  *
- * Fleet signs the UTF-8 `sha256:<hex>` payload-digest string. That digest covers the canonical
- * complete membership payload before the revision enters the verified local projection.
+ * The issuer signs the UTF-8 bytes of the `sha256:<hex>` digest string, and that digest covers the
+ * whole membership payload. So this class recomputes the digest itself and refuses a revision whose
+ * stored digest disagrees, before it even looks at the signature — a caller cannot get a signature
+ * checked against bytes of its own choosing.
+ *
+ * Called by: _CreateFleetMembershipEvidenceConfig in this package builds one per key read; the
+ * resulting verifier is used by __VerifyCurrentFleetMembershipEvidence.
+ * @implements FleetMembershipSignatureVerifier
+ * @throws Error from the constructor when a key is blank, not Ed25519, or absent entirely.
  */
 export class Ed25519FleetMembershipSignatureVerifier implements FleetMembershipSignatureVerifier
 {
@@ -18,9 +25,13 @@ export class Ed25519FleetMembershipSignatureVerifier implements FleetMembershipS
 	private readonly keys: ReadonlyMap<string, KeyObject>;
 
 	/**
-	 * Creates a verifier from mounted PEM public keys.
+	 * Creates a verifier from PEM public keys read off disk.
 	 *
-	 * @param publicKeysById - Trusted key identifiers and their SPKI PEM public keys.
+	 * @param publicKeysById - Key identifiers, as they appear in a revision's `issuerKeyId`, mapped to
+	 *                         their SPKI PEM public keys.
+	 * @throws Error when an identifier or PEM value is blank, when a key is not Ed25519, or when the
+	 *         map is empty — starting with no usable key is a configuration mistake, not a state to
+	 *         run in.
 	 */
 	constructor(publicKeysById: Readonly<Record<string, string>>)
 	{
@@ -36,7 +47,14 @@ export class Ed25519FleetMembershipSignatureVerifier implements FleetMembershipS
 		this.keys = keys;
 	}
 
-	/** Verifies the detached base64url signature over the canonical payload digest. */
+	/**
+	 * Recomputes the digest, then checks the base64url signature over it.
+	 *
+	 * @param revision - Stored revision with its claimed digest and signature.
+	 * @returns Evidence echoing what was seen, with `verified` true only when the key id is known, the
+	 *          stored digest matches the recomputed one, and the signature holds. An unknown key or a
+	 *          malformed signature gives `verified: false` rather than an exception.
+	 */
 	async verify(revision: SignedFleetMembershipRevision): Promise<FleetSignatureVerificationEvidence>
 	{
 		const key = this.keys.get(revision.issuerKeyId);

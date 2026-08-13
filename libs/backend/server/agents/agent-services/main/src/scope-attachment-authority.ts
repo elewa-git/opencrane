@@ -9,16 +9,19 @@ function _tripleKey(triple: { scope: string; subjectType: string; subjectId: str
 }
 
 /**
- * Intersect declared scope attachments against a set of effective allow grants.
+ * Splits requested attachments into those backed by a real grant and those not.
  *
- * Pure: an attachment survives only when its exact `{ scope, subjectType, subjectId }` triple is
- * present among the effective grants. Because the grant set is allow-only, the intersection can
- * never grant access the principal does not already hold — a stored attachment is a filter over real
- * access, never a widening.
+ * No database, no clock: an attachment survives only when its exact `{ scope, subjectType,
+ * subjectId }` triple appears in the grant list. Since that list holds allow entries only, the
+ * result can never contain access the principals do not already hold — an attachment narrows what
+ * they can reach, it never widens it.
  *
- * @param attachments - Declared revision-scope attachments.
- * @param effectiveGrants - Allow-only effective knowledge-scope grants.
- * @returns The authorised (backed) and rejected (unbacked) attachment partition.
+ * Called by: {@link __ResolveEffectiveScopeAttachments} in this file, which is the only production
+ * entry point; tests call this directly with fixed grant lists.
+ *
+ * @param attachments - The attachments a revision declares.
+ * @param effectiveGrants - Allow-only grants the principals hold.
+ * @returns `authorized` (backed) and `rejected` (unbacked), preserving input order in both.
  */
 export function __IntersectScopeAttachments(attachments: readonly RevisionScopeAttachment[], effectiveGrants: readonly EffectiveScopeGrant[]): ScopeAttachmentIntersection
 {
@@ -41,10 +44,14 @@ export function __IntersectScopeAttachments(attachments: readonly RevisionScopeA
  * — a project-scoped agent gets its project attachment and nothing for a peer project, personal,
  * department, or org scope it was never granted.
  *
- * @param resolver - Effective-grant resolver.
- * @param principalIds - The agent's execution principals.
- * @param attachments - Declared revision-scope attachments.
- * @returns The authorised/rejected intersection.
+ * Called by: {@link __ValidateAttachAuthority} in this file, and
+ * `PrismaManagedExecutionEvidenceAuthority.load` in `prisma-managed-execution-evidence.ts`, which
+ * denies the run outright if anything is rejected.
+ *
+ * @param resolver - Grant lookup. Not called at all when `attachments` is empty.
+ * @param principalIds - The principals the agent runs as.
+ * @param attachments - The attachments the revision declares.
+ * @returns `authorized` (given to the runtime) and `rejected` (dropped).
  */
 export async function __ResolveEffectiveScopeAttachments(resolver: ScopeGrantResolver, principalIds: readonly string[], attachments: readonly RevisionScopeAttachment[]): Promise<ScopeAttachmentIntersection>
 {

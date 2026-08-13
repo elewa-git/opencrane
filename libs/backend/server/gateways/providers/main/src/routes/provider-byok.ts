@@ -11,13 +11,17 @@ import { _DeprovisionByokKey, _ProvisionByokKey } from "@opencrane/backend/serve
 const _BYOK_PROVIDERS = Object.values(ByokProvider) as readonly string[];
 
 /**
- * Project a persisted {@link PrismaProviderCredential} row (or its absence) into the read-side
- * status DTO. `litellmRegistered` reflects whether the row carries a `litellmCredentialName` — set
- * only when LiteLLM accepted the key on the dynamic path; a Secret-only key reports `false`. Never
- * carries key material.
+ * Build the read-only status for one provider from its credential row, or from the absence of one.
+ *
+ * `configured` says a key is set; `litellmRegistered` says LiteLLM also accepted it. The second can
+ * be false while the first is true — the key is then in its Kubernetes Secret only, and models
+ * bound to the credential name will not resolve until a later set succeeds. No key material is
+ * ever included.
  *
  * @param provider - The provider this status describes.
  * @param row      - The persisted credential row, or undefined when no key is set.
+ * @returns The status DTO: provider, whether a key is set, whether LiteLLM took it, and when it
+ *          last changed.
  */
 function _toStatus(provider: string, row: PrismaProviderCredential | undefined): ProviderKeyStatus
 {

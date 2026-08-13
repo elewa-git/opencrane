@@ -21,7 +21,7 @@ docker run --rm --network none --no-healthcheck --entrypoint /bin/sh "$image" -e
   clamscan --database=/opt/opencrane/clamav-db --infected --no-summary /tmp/eicar.com > /tmp/scan.txt 2>&1
   result=$?
   set -e
-  if test "$result" != 1 || ! grep -Fq "Eicar-Signature FOUND" /tmp/scan.txt; then
+  if test "$result" != 1 || ! grep -Eq "Eicar(-Test)?-Signature FOUND" /tmp/scan.txt; then
     cat /tmp/scan.txt >&2
     exit 1
   fi

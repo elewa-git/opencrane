@@ -27,7 +27,20 @@ function _existing<TResult>(row: { state: string; jti: string; requestFingerprin
 	return { status: "existing_succeeded", receipt: _receipt<TResult>(row) };
 }
 
-/** Prisma-backed runtime bootstrap and proof-bound action receipt authority. */
+/**
+ * Stores runtime proof keys and action receipts in Postgres.
+ *
+ * Implements two ports at once because both hinge on the same rows: a bootstrap is spent and its
+ * public key registered in one transaction, and every action receipt is looked up against a
+ * registered key.
+ *
+ * Both transactions take explicit `FOR UPDATE` row locks in a fixed order — run, then assignment,
+ * then bootstrap — so two runtimes racing on the same bootstrap serialise instead of deadlocking.
+ * Reserving an action also appends its audit entry in the same transaction, so an action can never
+ * run without a recorded decision.
+ *
+ * Used by: ./prisma-runtime-bootstrap-exchange.ts, which delegates its consume step here.
+ */
 export class PrismaRuntimeAuthorityRepository implements RuntimeBootstrapRepository, CapabilityActionReceiptRepository
 {
 	/** OpenCrane product-authority database client. */
@@ -86,7 +99,14 @@ export class PrismaRuntimeAuthorityRepository implements RuntimeBootstrapReposit
 		}
 	}
 
-	/** Atomically reserves a verified JTI and appends its allow decision before external I/O. */
+	/**
+	 * Claims the right to run one verified action, and records the decision, before any external call.
+	 *
+	 * Committing this first is what makes the action at-most-once: a crash afterwards leaves a
+	 * `Reserved` row that blocks every retry.
+	 * @throws When the verified proof key is not registered to any run, or when a uniqueness conflict
+	 *   cannot be resolved by re-reading the existing row.
+	 */
 	async reserve<TResult>(intent: CapabilityActionIntent): Promise<CapabilityActionReservationResult<TResult>>
 	{
 		try

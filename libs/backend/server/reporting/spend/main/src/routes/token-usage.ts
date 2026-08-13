@@ -2,9 +2,13 @@ import { Router } from "express";
 import type { PrismaClient } from "@prisma/client";
 
 /**
- * Creates router that returns token usage statistics by account.
- * @param prisma - Prisma ORM client
- * @returns Configured Express router
+ * Build the token-usage route: recorded usage per user, newest sample first, with each user's
+ * effective ceiling resolved for them — their own if they have one, otherwise the global one.
+ *
+ * Called by: apps/opencrane/src/app/routes.ts, mounted at `/api/v1/token-usage`.
+ *
+ * @param prisma - Database client used to read usage samples and both kinds of budget row.
+ * @returns An Express router carrying the usage route.
  */
 export function tokenUsageRouter(prisma: PrismaClient): Router
 {

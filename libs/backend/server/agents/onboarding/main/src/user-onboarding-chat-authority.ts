@@ -7,7 +7,17 @@ import type { ApprovedPersonaBootstrapEvidence, SubmitUserOnboardingAnswerComman
 import type { UserOnboardingOwner, UserOnboardingPersonaEvidencePort, UserOnboardingRecord } from "./user-onboarding.types.js";
 import type { __UserOnboardingAuthority } from "./user-onboarding-authority.js";
 
-/** Expected fail-closed chat denial carrying one stable HTTP-safe reason. */
+/**
+ * Thrown for a refusal the router is expected to translate, not to log as a fault.
+ *
+ * Carrying a {@link UserOnboardingChatFailureReasons} member lets the router choose a fixed status
+ * (400, 409, or 503) and send `onboarding_chat_<reason>` to the browser. Anything else thrown out of
+ * the chat authority is treated as an unexpected fault: logged, and answered 503. The message
+ * deliberately contains only the reason - never the user's answer text or their identifiers.
+ *
+ * Called by: thrown throughout __UserOnboardingChatAuthority and by the answer route in
+ * user-onboarding.http.ts; caught by `_ChatRequest` in that same file.
+ */
 export class UserOnboardingChatError extends Error
 {
 	/** Stable reason used by the HTTP adapter. */

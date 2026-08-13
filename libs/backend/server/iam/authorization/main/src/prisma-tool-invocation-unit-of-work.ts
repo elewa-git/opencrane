@@ -13,7 +13,23 @@ const _EXPIRED_CLAIM_FAILURE_CODE = "external_action_claim_expired";
 /** Safe failure category emitted when the start event could not be persisted. */
 const _START_EVENT_FAILURE_CODE = "external_action_start_event_failed";
 
-/** Process-scoped transaction owner for the complete ToolInvocation lifecycle. */
+/**
+ * Every tool-call transition, each as its own serializable transaction.
+ *
+ * This is what the external-action worker holds. Each method opens one transaction, performs the
+ * state change through {@link ToolInvocationTransactionRepository}, and appends the run-timeline
+ * event in that same transaction — so a timeline entry can never survive a rolled-back transition.
+ * The event sinks are ports rather than direct calls because the run-event and recovery tables
+ * belong to the runs package.
+ *
+ * The three sinks and authorities passed to the constructor all participate in the same
+ * transaction, and any of them refusing causes a throw that rolls the whole transition back. That
+ * is deliberate: a state change nobody can see is worse than a retried transaction.
+ *
+ * Composed in: apps/opencrane/src/app/external-action-composition.ts.
+ * Called by: libs/backend/agents/execution/protocol/src/external-action-worker.ts (through
+ * `ExternalActionWorkerDependencies.invocations`).
+ */
 export class PrismaToolInvocationUnitOfWork implements ToolInvocationUnitOfWork
 {
 	/** Product-authority client that opens serializable units of work. */
@@ -205,20 +221,20 @@ function _failedEvent(invocation: ToolInvocationRecord, reason: string, retrying
 	return { runId: invocation.runId, attempt: invocation.attempt, eventType: ToolInvocationEventTypes.Failed, payload: { toolInvocationId: invocation.toolInvocationId, reason, retryCount: invocation.preparationAttempt, retryLimit, retrying } };
 }
 
-/** Append one lifecycle event or roll back the owning transition. */
+/** Append the timeline entry, and throw if the run refuses it — that rolls back the state change too, so a transition can never happen invisibly. */
 async function _appendLifecycleEvent(sink: ToolInvocationLifecycleEventSink, transaction: Prisma.TransactionClient, event: ToolInvocationLifecycleEvent): Promise<void>
 {
 	if (!await sink.appendInTransaction(transaction, event)) throw new Error("tool invocation transition requires its canonical lifecycle event");
 }
 
-/** Append visible manual-recovery evidence or roll back the owning transition. */
+/** Append the "a person must decide this" entry, and throw if the run refuses it, so a tool call can never reach `RecoveryRequired` unnoticed. */
 async function _appendRecoveryEvent(sink: ToolInvocationRecoveryEventSink, transaction: Prisma.TransactionClient, invocation: ToolInvocationRecord): Promise<void>
 {
 	const event: ToolInvocationRecoveryEvent = { runId: invocation.runId, expectedAttempt: invocation.attempt, toolInvocationId: invocation.toolInvocationId, preparationRetryCount: invocation.preparationAttempt, preparationRetryLimit: TOOL_INVOCATION_PREPARATION_POLICY.attemptLimit, providerOutcome: "unknown_after_dispatch" };
 	if (!await sink.appendInTransaction(transaction, event)) throw new Error("tool recovery state requires its canonical recovery event");
 }
 
-/** Couple the authorization transition to the runs-owned recovery state and visible event. */
+/** Move the run into manual recovery and record it, in the same transaction as the tool call's change. See the comment inside for why a cancelling run is the one case that records nothing. */
 async function _enterRecoveryRequired(authority: ToolInvocationRunRecoveryAuthority, sink: ToolInvocationRecoveryEventSink, transaction: Prisma.TransactionClient, invocation: ToolInvocationRecord): Promise<void>
 {
 	const outcome = await authority.enterRecoveryRequiredInTransaction(transaction, { runId: invocation.runId, attempt: invocation.attempt });
