@@ -1,4 +1,11 @@
-/** Server-owned onboarding route used by both navigation and the first-chat projection. */
+/**
+ * Says which onboarding screen the user may enter.
+ *
+ * The onboarding authority sends these string values in route and first-chat responses. Frontend
+ * routing reads them but must never advance them locally: reconnecting must return to the step the
+ * server actually saved. The values cross the API boundary, so renaming one is a breaking change.
+ * Runtime validators reject unknown values before they reach browser state.
+ */
 export enum UserOnboardingRouteStates
 {
 	/** The reviewed persona interview has not started. */
@@ -13,7 +20,13 @@ export enum UserOnboardingRouteStates
 	Completed = "completed"
 }
 
-/** Approved persona archetype that selects reviewed first-chat material. */
+/**
+ * Selects the reviewed tone and question set for the first chat.
+ *
+ * The approved persona revision supplies this value and frontend presentation reads it; neither
+ * layer may choose a different archetype. These strings cross the API boundary, and the runtime
+ * parser rejects values outside this closed set.
+ */
 export enum PersonaFirstChatArchetypes
 {
 	/** Direct and decisive pacing. */
@@ -26,7 +39,13 @@ export enum PersonaFirstChatArchetypes
 	Analyst = "analyst"
 }
 
-/** Approved persona colour coordinate carried by the projection. */
+/**
+ * Selects the approved display tone for the first-chat persona.
+ *
+ * The value comes from the approved persona revision and maps to a frontend tone rather than a CSS
+ * colour. It crosses the API boundary as a string, so changing a value breaks saved responses;
+ * runtime parsing rejects unknown values.
+ */
 export enum PersonaFirstChatColours
 {
 	/** Commander colour. */
@@ -39,7 +58,12 @@ export enum PersonaFirstChatColours
 	Blue = "blue"
 }
 
-/** Speaker role for one transcript entry. */
+/**
+ * Says whether the assistant or the account owner spoke one first-chat transcript line.
+ *
+ * The onboarding authority sends this string in every transcript entry and the workspace mapper
+ * uses it for safe presentation alignment. Runtime parsing rejects any other role.
+ */
 export enum PersonaFirstChatTranscriptRoles
 {
 	/** Reviewed opening or question material. */
@@ -48,7 +72,13 @@ export enum PersonaFirstChatTranscriptRoles
 	User = "user"
 }
 
-/** Evidence kind for one transcript entry. */
+/**
+ * Says whether a first-chat transcript line is the opening, a reviewed question, or an answer.
+ *
+ * The onboarding authority sends this string and the validator checks it against the line's role,
+ * question number, and saved answer count. Unknown values are rejected before feature code reads
+ * them.
+ */
 export enum PersonaFirstChatTranscriptKinds
 {
 	/** One-time reviewed introduction. */
@@ -107,7 +137,15 @@ export interface PersonaFirstChatCurrentQuestion
 	readonly text: string;
 }
 
-/** Complete resumable first-chat projection returned by the onboarding authority. */
+/**
+ * Carries the onboarding authority's complete, resumable view of the first chat.
+ *
+ * Every first-chat response replaces the browser's previous snapshot; callers must not merge local
+ * progress into it. Before the chat starts, conversation evidence is null and the transcript is
+ * empty. After the final answer, `currentQuestion` is null and `canConclude` says whether the
+ * authority currently permits completion. {@link ___ParsePersonaFirstChatSnapshot} checks these
+ * relationships before a feature or workspace projection can use the response.
+ */
 export interface PersonaFirstChatSnapshot
 {
 	/** Workflow definition version pinned to the owner record. */

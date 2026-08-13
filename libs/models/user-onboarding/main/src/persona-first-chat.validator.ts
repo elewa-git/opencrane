@@ -104,7 +104,19 @@ const _SnapshotSchema: z.ZodType<PersonaFirstChatSnapshot> = z.object({
 	if (!_TranscriptMatchesEvidence(snapshot)) context.addIssue({ code: z.ZodIssueCode.custom, path: ["transcript"], message: "does not match admitted answer evidence" });
 });
 
-/** Parse one first-chat response, throwing before it can reach UI state if anything is wrong. */
+/**
+ * Parses one onboarding-authority response before frontend code can adopt it.
+ *
+ * This is the single runtime boundary for first-chat snapshots. It checks field limits, workflow
+ * state, transcript order, and agreement between the saved answer count and the next question.
+ *
+ * Called by: `_ParsePersonaFirstChatSnapshot` in onboarding state and
+ * `_ConversationOnboardingHistory` in the workspace adapter.
+ *
+ * @param value - Untrusted response payload from the onboarding authority.
+ * @returns The validated replacement snapshot, including its server-ordered transcript.
+ * @throws Error when the payload is malformed or its fields describe an impossible workflow state.
+ */
 export function ___ParsePersonaFirstChatSnapshot(value: unknown): PersonaFirstChatSnapshot
 {
 	const parsed = _SnapshotSchema.safeParse(value);

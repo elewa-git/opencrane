@@ -54,7 +54,12 @@ export enum ConversationOnboardingHistoryStatuses
 	Unavailable = "unavailable"
 }
 
-/** One server-recorded line in the completed onboarding exchange. */
+/**
+ * Carries one validated line from a completed onboarding exchange into workspace presentation.
+ *
+ * The adapter preserves server order and maps onboarding speaker roles into shared message roles;
+ * this type deliberately omits message commands, run coordinates, and conversation-mode fields.
+ */
 export interface ConversationOnboardingHistoryEntry
 {
 	/** One-based server order retained without sorting in the browser. */
@@ -65,7 +70,13 @@ export interface ConversationOnboardingHistoryEntry
 	readonly text: string;
 }
 
-/** Completed onboarding exchange shown inside the normal workspace without becoming a conversation mode. */
+/**
+ * Carries completed onboarding evidence into the normal workspace as read-only history.
+ *
+ * The workspace may select and display this projection, but it must not open a conversation stream,
+ * create a run, or submit messages against its onboarding-owned identifier. The separate shape keeps
+ * the one-time bootstrap exchange outside the immutable direct, group, and Agent-session modes.
+ */
 export interface ConversationOnboardingHistory
 {
 	/** Onboarding-owned conversation coordinate used only as a stable browser key. */
@@ -80,7 +91,13 @@ export interface ConversationOnboardingHistory
 	readonly transcript: readonly ConversationOnboardingHistoryEntry[];
 }
 
-/** Result of reading onboarding history without making it an ordinary conversation. */
+/**
+ * Reports whether the workspace can show completed onboarding history.
+ *
+ * The gateway returns this independently from the conversation list so an unavailable or migrated
+ * history does not make ordinary chats unavailable. `history` is present only for `Ready`; callers
+ * must branch on {@link ConversationOnboardingHistoryStatuses} instead of guessing from null.
+ */
 export interface ConversationOnboardingHistoryProjection
 {
 	/** Honest availability state for the optional history panel. */

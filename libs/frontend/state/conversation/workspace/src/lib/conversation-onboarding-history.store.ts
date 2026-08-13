@@ -6,7 +6,14 @@ import { ConversationOnboardingHistoryStatuses, type ConversationOnboardingHisto
 /** Initial honest state before the optional onboarding history read completes. */
 const _UNAVAILABLE_ONBOARDING_HISTORY: ConversationOnboardingHistoryProjection = { status: ConversationOnboardingHistoryStatuses.Unavailable, history: null };
 
-/** Component-scoped owner for the optional read-only onboarding projection and its selection. */
+/**
+ * Owns the optional onboarding-history read and its workspace selection.
+ *
+ * {@link ConversationWorkspaceStore} calls {@link load}, applies its own load-generation check, and
+ * then calls {@link adopt}. Keeping those steps separate prevents a late optional request from
+ * replacing state loaded by a newer workspace navigation. Selecting this history never opens the
+ * conversation stream or grants message and run commands.
+ */
 @Injectable()
 export class ConversationOnboardingHistoryStore
 {
@@ -21,21 +28,39 @@ export class ConversationOnboardingHistoryStore
 	/** Public read-only selection state. */
 	public readonly selected = this._selected.asReadonly();
 
-	/** Read optional onboarding history without adopting it ahead of the workspace generation fence. */
+	/**
+	 * Reads optional onboarding history without changing browser state.
+	 *
+	 * Called by: {@link ConversationWorkspaceStore.load} as part of the parallel workspace read.
+	 *
+	 * @returns The validated projection, or `Unavailable` when the optional request fails.
+	 */
 	public async load(): Promise<ConversationOnboardingHistoryProjection>
 	{
 		try { return await this._gateway.onboardingHistory(); }
 		catch { return _UNAVAILABLE_ONBOARDING_HISTORY; }
 	}
 
-	/** Adopt only the history result admitted by the owning workspace load generation. */
+	/**
+	 * Adopts a result after the workspace store confirms that its load generation is still current.
+	 *
+	 * Called by: {@link ConversationWorkspaceStore.load} after its stale-load check.
+	 *
+	 * @param projection - The result admitted by the owning workspace load.
+	 */
 	public adopt(projection: ConversationOnboardingHistoryProjection): void
 	{
 		this._projection.set(projection);
 		if (this._projection().status !== ConversationOnboardingHistoryStatuses.Ready) this._selected.set(false);
 	}
 
-	/** Select history only when a completed transcript is present. */
+	/**
+	 * Selects history only when the authority returned a completed transcript.
+	 *
+	 * Called by: {@link ConversationWorkspaceStore.openOnboardingHistory}.
+	 *
+	 * @returns `true` when history became selected; otherwise `false` and selection is unchanged.
+	 */
 	public select(): boolean
 	{
 		if (this._projection().status !== ConversationOnboardingHistoryStatuses.Ready) return false;
@@ -43,6 +68,10 @@ export class ConversationOnboardingHistoryStore
 		return true;
 	}
 
-	/** Clear history selection when an ordinary conversation or access state takes over. */
+	/**
+	 * Clears history selection when an ordinary conversation or access state takes over.
+	 *
+	 * Called by: {@link ConversationWorkspaceStore.open} and its selection cleanup paths.
+	 */
 	public clearSelection(): void { this._selected.set(false); }
 }
