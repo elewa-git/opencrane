@@ -4,4 +4,4 @@ export { _CreateElicitationInterruptReader } from "./prisma-elicitation-interrup
 export { _ElicitationOpenapiPaths } from "./openapi.js";
 export { _CreateSelfElicitationActivityRouter, _CreateSelfElicitationRouter } from "./prisma-self-elicitation.router.js";
 export { PersonalMemoryPermissionVerificationOutcomes } from "./elicitation.types.js";
-export type { ExpireElicitationBatchCommand, ExpireElicitationBatchResult, OpenElicitationCommand, PersonalMemoryPermissionAuthority, PersonalMemoryPermissionVerificationResult } from "./elicitation.types.js";
+export type { ExpireElicitationBatchCommand, ExpireElicitationBatchResult, OpenElicitationCommand, PersonalMemoryPermissionAuthority, PersonalMemoryPermissionVerificationResult, RuntimeElicitationUnitOfWork } from "./elicitation.types.js";

@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { AgentRunState as PrismaAgentRunState, AgentRunTerminalReason, Prisma, RuntimeCommandKind, RuntimeSteeringRequestState, WorkloadAssignmentState, type PrismaClient } from "@prisma/client";
 
+import type { RuntimeElicitationUnitOfWork } from "@opencrane/backend/agents/execution/elicitation";
 import { AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, AGENT_RUNTIME_PROTOCOL_V1, ElicitationPurposes, MANAGED_AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, RunInputSnapshotIdentityKinds, RuntimeCandidateKinds, ___IsAgentRuntimeServiceAccountName, ___IsManagedAgentRuntimeServiceAccountName, type CancelAttemptCommand, type CompiledRunInput, type ResumeAttemptCommand, type RunInputSnapshot, type RuntimeAssignment, type RuntimeAssignmentIdentity, type RuntimeCandidate, type RuntimeCommand, type RuntimeCommandEnvelope, type RuntimeElicitationCandidate, type RuntimeExternalActionCandidate, type RuntimeStreamOpen } from "@opencrane/contracts";
 import { ___DoWithTrace } from "@opencrane/backend/observability";
 import { ExternalActionRecoveryModes, TOOL_INVOCATION_PREPARATION_POLICY, ToolInvocationAdmissionOutcomes, __AdmitPreparingToolInvocationInTransaction, __DigestCanonicalJson, __ValidateDeferredToolArguments, type ToolInvocationIntent } from "@opencrane/backend/server/iam/authorization";
@@ -16,7 +17,7 @@ import { __ProjectRuntimeInputSnapshot } from "./runtime-input-snapshot-projecto
 import { _ParseRuntimeResumeInput } from "./runtime-resume-input.js";
 import { __AdmitRuntimeCandidate, __AdmitRuntimeCommand } from "./runtime-protocol-authority.js";
 import { RuntimeAdmissionOutcomes, type RuntimeAdmissionRunState, type RuntimeAttemptAuthority, type RuntimeProtocolClock } from "./runtime-protocol-authority.types.js";
-import type { RunInputCompiler, RuntimeApprovalExpiry, RuntimeCandidateDispatchResult, RuntimeDispatchAuthorityConfig, RuntimeElicitationUnitOfWork, RuntimeElicitationUnitOfWorkFactory, RuntimeEventReporter, RuntimeStreamWorkloadIdentity } from "./prisma-runtime-dispatch-authority.types.js";
+import type { RunInputCompiler, RuntimeApprovalExpiry, RuntimeCandidateDispatchResult, RuntimeDispatchAuthorityConfig, RuntimeElicitationUnitOfWorkFactory, RuntimeEventReporter, RuntimeStreamWorkloadIdentity } from "./prisma-runtime-dispatch-authority.types.js";
 
 /** Database facts about one connected runtime Pod's run and assignment, read under a row lock. */
 interface RuntimeDispatchContext

@@ -123,6 +123,21 @@ export interface ExpireElicitationBatchResult
 	readonly resumed: boolean;
 }
 
+/**
+ * Applies runtime-proposed elicitation inside a dispatch transaction that already owns the run.
+ *
+ * Runtime command polling and candidate admission bind this authority before they decide whether
+ * the run can continue. It deliberately has no transaction-opening method: dispatch retains that
+ * responsibility so request changes and the surrounding run decision commit or roll back together.
+ */
+export interface RuntimeElicitationUnitOfWork
+{
+	/** Open or exactly replay one validated request before the candidate is accepted. */
+	open(command: OpenElicitationCommand): Promise<ConversationElicitation | null>;
+	/** Expire due requests while the dispatch transaction retains the run lock. */
+	expireDue(command: ExpireElicitationBatchCommand): Promise<ExpireElicitationBatchResult>;
+}
+
 /** Transaction-bound persistence authority constructed only by the unit of work. */
 export interface ElicitationRepository extends ElicitationUnitOfWork, PersonalMemoryPermissionAuthority
 {

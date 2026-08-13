@@ -822,6 +822,18 @@
 		]
 	  },
 	  {
+		"path": "libs/backend/agents/execution/elicitation/main/src/prisma-runtime-elicitation-unit-of-work.ts",
+		"adapter": "PrismaRuntimeElicitationUnitOfWork",
+		"contract": "RuntimeElicitationUnitOfWork",
+		"contractImportPath": "./elicitation.types.js",
+		"constructs": [
+		  {
+			"adapter": "PrismaElicitationRepository",
+			"importPath": "./prisma-elicitation-unit-of-work.js"
+		  }
+		]
+	  },
+	  {
 		"path": "libs/backend/server/iam/authorization/main/src/prisma-tool-invocation-unit-of-work.ts",
 		"adapter": "PrismaToolInvocationUnitOfWork",
 		"contract": "ToolInvocationUnitOfWork",

@@ -1,12 +1,13 @@
 import type { PrismaClient } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
 
+import type { RuntimeElicitationUnitOfWork } from "@opencrane/backend/agents/execution/elicitation";
 import { AGENT_RUNTIME_PROTOCOL_V1, ElicitationBodyKinds, ElicitationPurposes, RuntimeCandidateKinds, type CompiledRunInput, type RuntimeCandidate, type RuntimeCommandEnvelope } from "@opencrane/contracts";
 import { PERSONAL_MEMORY_RECALL_TOOL_NAME, PERSONAL_MEMORY_RECALL_TOOL_REVISION } from "@opencrane/models/agents";
 import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 
 import { PrismaRuntimeDispatchAuthority } from "../prisma-runtime-dispatch-authority.js";
-import type { RunInputCompiler, RuntimeApprovalExpiry, RuntimeElicitationUnitOfWork, RuntimeElicitationUnitOfWorkFactory, RuntimeEventReporter, RuntimeStreamWorkloadIdentity } from "../prisma-runtime-dispatch-authority.types.js";
+import type { RunInputCompiler, RuntimeApprovalExpiry, RuntimeElicitationUnitOfWorkFactory, RuntimeEventReporter, RuntimeStreamWorkloadIdentity } from "../prisma-runtime-dispatch-authority.types.js";
 import type { RuntimeProtocolClock } from "../runtime-protocol-authority.types.js";
 
 /** Workload identity of the registered runtime Pod under test. */

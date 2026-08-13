@@ -1,7 +1,7 @@
 import type { Prisma, RuntimeCommandKind } from "@prisma/client";
 
 import type { CompiledRunInput, RunInputSnapshot } from "@opencrane/contracts";
-import type { ExpireElicitationBatchCommand, ExpireElicitationBatchResult, OpenElicitationCommand } from "@opencrane/backend/agents/execution/elicitation";
+import type { ExpireElicitationBatchCommand, OpenElicitationCommand, RuntimeElicitationUnitOfWork } from "@opencrane/backend/agents/execution/elicitation";
 import type { JsonValue } from "@opencrane/util";
 
 import type { RuntimeAdmissionRunState } from "./runtime-protocol-authority.types.js";
@@ -91,23 +91,6 @@ export interface RuntimeApprovalExpiry
 	 * re-reads the run state afterwards rather than trusting either number.
 	 */
 	expireInTransaction(transaction: Prisma.TransactionClient, command: { readonly runId: string; readonly attempt: number; readonly now: Date }): Promise<{ readonly expiredCount: number; readonly resumed: boolean }>;
-}
-
-/**
- * Applies runtime questions inside the dispatch transaction that already owns the run lock.
- *
- * Candidate admission calls {@link open} before accepting the candidate id. Command polling calls
- * {@link expireDue} before deciding whether a waiting run can resume. Sharing the dispatch
- * transaction keeps each request change and its surrounding decision in one commit.
- *
- * Called by: `_admitCandidate` and `_nextCommand` in prisma-runtime-dispatch-authority.ts.
- */
-export interface RuntimeElicitationUnitOfWork
-{
-	/** Open or exactly replay one validated request before candidate-id acceptance. */
-	open(command: OpenElicitationCommand): Promise<unknown | null>;
-	/** Expire due generic requests while command polling retains the run lock. */
-	expireDue(command: ExpireElicitationBatchCommand): Promise<ExpireElicitationBatchResult>;
 }
 
 /**

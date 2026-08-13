@@ -2,7 +2,7 @@ import type { Prisma } from "@prisma/client";
 
 import type { ConversationElicitation } from "@opencrane/contracts";
 
-import type { ExpireElicitationBatchCommand, ExpireElicitationBatchResult, OpenElicitationCommand } from "./elicitation.types.js";
+import type { ExpireElicitationBatchCommand, ExpireElicitationBatchResult, OpenElicitationCommand, RuntimeElicitationUnitOfWork } from "./elicitation.types.js";
 import { PrismaElicitationRepository } from "./prisma-elicitation-unit-of-work.js";
 
 /**
@@ -15,12 +15,10 @@ import { PrismaElicitationRepository } from "./prisma-elicitation-unit-of-work.j
  * Called by: `_CreateProductionRuntimeElicitationUnitOfWorkFactory` binds an instance inside every
  * command-polling and candidate-admission transaction.
  *
- * @see RuntimeElicitationUnitOfWork in prisma-runtime-dispatch-authority.types.ts
+ * @see RuntimeElicitationUnitOfWork in elicitation.types.ts
  */
-export class PrismaRuntimeElicitationUnitOfWork
+export class PrismaRuntimeElicitationUnitOfWork implements RuntimeElicitationUnitOfWork
 {
-	/** Keeps every repository operation inside the dispatch transaction that owns the run lock. */
-	private readonly _transaction: Prisma.TransactionClient;
 	/** Applies elicitation changes through that same dispatch transaction. */
 	private readonly _repository: PrismaElicitationRepository;
 
@@ -31,8 +29,7 @@ export class PrismaRuntimeElicitationUnitOfWork
 	 */
 	constructor(transaction: Prisma.TransactionClient)
 	{
-		this._transaction = transaction;
-		this._repository = new PrismaElicitationRepository(this._transaction);
+		this._repository = new PrismaElicitationRepository(transaction);
 	}
 
 	/**
