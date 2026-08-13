@@ -14,12 +14,10 @@ from .pending_result_lock import PENDING_RESULT_LOCK
 # Upper bound on simultaneously pending proposed calls; a run beyond this is already pathological.
 _MAX_PENDING_TOOL_CALLS = 256
 
-# Looking up and removing are separate functions so that one caller can hold the shared lock across
-# both this registry and the questions registry, and treat the pair as a single step. Do not rely on
-# the GIL for that: it does not make a lookup and a delete one operation, and the stream and the worker
-# can run on different threads.
-# Keys include run and attempt so a provider-chosen call id cannot alias a call from another fenced
-# execution. Stored values are model-loop correlation data, never approval or execution receipts.
+# Looking up and removing are separate so one caller can hold the shared lock across this registry and
+# the questions registry and treat the pair as one step. The GIL does not make a lookup and a delete one
+# operation, and the stream and the worker run on different threads.
+# Keys include run and attempt so a provider-chosen call id cannot alias a call from another attempt.
 _PENDING: dict[tuple[str, int, str], dict[str, object]] = {}
 
 
@@ -36,29 +34,22 @@ def record_pending_tool_call(
     invocation instead of this registry growing without limit.
     """
     with PENDING_RESULT_LOCK:
-        # Capacity is checked while holding the same lock as insertion. Concurrent proposals cannot
-        # both observe free capacity and push the process registry past its defensive ceiling.
+        # Checked under the insert's own lock, so two proposals cannot both find room.
         if len(_PENDING) >= _MAX_PENDING_TOOL_CALLS:
             return
-        # Below the ceiling, re-recording the same composite identity replaces only ephemeral
-        # correlation data. Durable idempotency and action execution remain control-plane concerns.
         _PENDING[(run_id, attempt, tool_invocation_id)] = {"toolName": tool_name, "arguments": arguments}
 
 
 def peek_pending_tool_calls(run_id: str, attempt: int, tool_invocation_ids: list[str]) -> dict[str, dict[str, object]] | None:
     """Look up the calls a resume names, without removing them.
 
-    The caller must already hold ``PENDING_RESULT_LOCK``, because it also checks the questions in the
-    same resume and both lookups have to describe the same moment. Nothing is removed here, so a resume
-    rejected for some other reason leaves this registry as it was and the server can send the same
-    command again.
-
-    Called by: ``resolve_resume_results`` in ``resume_results.py``.
+    The caller must already hold ``PENDING_RESULT_LOCK``: it checks the questions registry in the same
+    resume, and both lookups have to describe the same moment. Removing nothing here is what lets a
+    resume rejected for some other reason be sent again.
 
     Returns:
-        The matching entries, keyed by invocation id. ``None`` when an id is repeated, or when any id
-        was not proposed by this attempt — in that case no id in the batch counts as found, and calls
-        belonging to a different resume are left where they are.
+        The matching entries, keyed by invocation id. ``None`` if an id repeats or was not proposed by
+        this attempt, in which case none of the batch counts as found.
     """
     keys = [(run_id, attempt, tool_invocation_id) for tool_invocation_id in tool_invocation_ids]
     if len(keys) != len(set(keys)) or any(key not in _PENDING for key in keys):
@@ -69,16 +60,11 @@ def peek_pending_tool_calls(run_id: str, attempt: int, tool_invocation_ids: list
 def consume_pending_tool_calls(run_id: str, attempt: int, tool_invocation_ids: list[str]) -> None:
     """Remove calls that ``peek_pending_tool_calls`` has already found.
 
-    Call this only after that lookup succeeded while holding the same lock, and never on its own. The
-    deletes below assume every id is present.
-
-    Removing the ids is what stops one result being used twice. Because the caller still holds the lock
-    it took for the lookup, no second resume can slip in between the two steps.
-
-    Called by: ``resolve_resume_results`` in ``resume_results.py``.
+    Call this only after that lookup succeeded under the same held lock — the deletes assume every id is
+    present. Removing them under that lock is what stops one result being used twice.
 
     Raises:
-        KeyError: When an id is not in the registry, which means the caller skipped the lookup.
+        KeyError: When an id is missing, which means the caller skipped the lookup.
     """
     for tool_invocation_id in tool_invocation_ids:
         del _PENDING[(run_id, attempt, tool_invocation_id)]
