@@ -698,7 +698,7 @@ BEGIN
             OR assignment_state IS DISTINCT FROM 'registered'::"WorkloadAssignmentState"
             OR assignment_expires_at <= decision_time OR proof_revoked_at IS NOT NULL
             OR proof_expires_at <= decision_time THEN
-            RAISE EXCEPTION 'ApprovalRequest requires current WaitingForApproval run, assignment, and proof authority';
+            RAISE EXCEPTION 'ApprovalRequest requires current WaitingForInput run, assignment, and proof authority';
         END IF;
         RETURN NEW;
     END IF;
@@ -3459,30 +3459,39 @@ BEGIN
     IF TG_OP = 'DELETE' THEN
         RAISE EXCEPTION 'RuntimeSteeringRequest rows cannot be deleted';
     END IF;
+
+    -- 1. Admit only a pending request for the locked current attempt, silo, and delegated owner.
     IF TG_OP = 'INSERT' THEN
         IF NEW."state" <> 'pending' OR NEW."consumed_at" IS NOT NULL THEN
             RAISE EXCEPTION 'a new RuntimeSteeringRequest must begin pending without consumption evidence';
         END IF;
+
         SELECT "attempt", "silo_id", "delegated_user_id", "state"
         INTO run_attempt, run_silo_id, run_subject_id, run_state
         FROM "agent_runs"
         WHERE "id" = NEW."run_id"
         FOR UPDATE;
+
         IF run_attempt IS DISTINCT FROM NEW."attempt"
             OR run_silo_id IS DISTINCT FROM NEW."silo_id"
             OR run_subject_id IS DISTINCT FROM NEW."subject_id"
             OR run_state NOT IN ('assigned', 'running', 'waiting_for_input') THEN
             RAISE EXCEPTION 'RuntimeSteeringRequest requires the current owner-bound steerable AgentRun attempt';
         END IF;
+
         IF EXISTS (
-            SELECT 1 FROM "runtime_dispatched_commands"
-            WHERE "run_id" = NEW."run_id" AND "attempt" = NEW."attempt"
+            SELECT 1
+            FROM "runtime_dispatched_commands"
+            WHERE "run_id" = NEW."run_id"
+              AND "attempt" = NEW."attempt"
               AND "kind" = 'resume_attempt'::"RuntimeCommandKind"
         ) THEN
             RAISE EXCEPTION 'RuntimeSteeringRequest must be submitted before its sole resume command';
         END IF;
         RETURN NEW;
     END IF;
+
+    -- 2. Preserve the evidence that was accepted by the public steering boundary.
     IF NEW."id" IS DISTINCT FROM OLD."id"
         OR NEW."run_id" IS DISTINCT FROM OLD."run_id"
         OR NEW."attempt" IS DISTINCT FROM OLD."attempt"
@@ -3493,18 +3502,25 @@ BEGIN
         OR NEW."submitted_at" IS DISTINCT FROM OLD."submitted_at" THEN
         RAISE EXCEPTION 'RuntimeSteeringRequest identity and content are immutable';
     END IF;
+
     IF OLD."state" <> 'pending' THEN
         RAISE EXCEPTION 'consumed RuntimeSteeringRequest is terminal';
     END IF;
+
     IF NEW."state" = 'pending' AND NEW."consumed_at" IS NULL THEN
         RETURN NEW;
     END IF;
+
     IF NEW."state" <> 'consumed' OR NEW."consumed_at" IS NULL OR NEW."consumed_at" < OLD."submitted_at" THEN
         RAISE EXCEPTION 'RuntimeSteeringRequest may only transition once from Pending to Consumed';
     END IF;
+
+    -- 3. Close the lifecycle only after the server has durably embedded this content in a resume.
     IF NOT EXISTS (
-        SELECT 1 FROM "runtime_dispatched_commands" command
-        WHERE command."run_id" = OLD."run_id" AND command."attempt" = OLD."attempt"
+        SELECT 1
+        FROM "runtime_dispatched_commands" command
+        WHERE command."run_id" = OLD."run_id"
+          AND command."attempt" = OLD."attempt"
           AND command."kind" = 'resume_attempt'::"RuntimeCommandKind"
           AND command."payload"->'steeringRequests' @> jsonb_build_array(OLD."content")
     ) THEN
@@ -3542,14 +3558,21 @@ ALTER TABLE "personal_memory_permission_receipts" ADD CONSTRAINT "personal_memor
     AND (("state" = 'active' AND "consumed_at" IS NULL) OR ("state" = 'consumed' AND "consumed_at" IS NOT NULL))
 );
 
-CREATE FUNCTION "enforce_elicitation_request_authority"() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE current_silo TEXT; current_conversation TEXT; current_attempt INTEGER; current_state "AgentRunState"; participant_ended BIGINT;
+CREATE OR REPLACE FUNCTION "enforce_elicitation_request_authority"() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+    current_silo TEXT;
+    current_conversation TEXT;
+    current_attempt INTEGER;
+    current_state "AgentRunState";
+    participant_ended BIGINT;
 BEGIN
     IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'ElicitationRequest rows cannot be deleted'; END IF;
     IF TG_OP = 'INSERT' THEN
-        SELECT "silo_id", "conversation_id", "attempt", "state" INTO current_silo, current_conversation, current_attempt, current_state
+        SELECT "silo_id", "conversation_id", "attempt", "state"
+          INTO current_silo, current_conversation, current_attempt, current_state
           FROM "agent_runs" WHERE "id" = NEW."run_id" FOR UPDATE;
-        SELECT "access_ended_position" INTO participant_ended FROM "conversation_participants"
+        SELECT "access_ended_position" INTO participant_ended
+          FROM "conversation_participants"
           WHERE "conversation_id" = NEW."conversation_id" AND "user_id" = NEW."assigned_participant_id" FOR UPDATE;
         IF current_silo IS DISTINCT FROM NEW."silo_id" OR current_conversation IS DISTINCT FROM NEW."conversation_id"
             OR current_attempt IS DISTINCT FROM NEW."attempt" OR current_state IS DISTINCT FROM 'waiting_for_input'
@@ -3560,21 +3583,26 @@ BEGIN
         RETURN NEW;
     END IF;
     IF NEW."id" IS DISTINCT FROM OLD."id" OR NEW."silo_id" IS DISTINCT FROM OLD."silo_id"
-        OR NEW."conversation_id" IS DISTINCT FROM OLD."conversation_id" OR NEW."run_id" IS DISTINCT FROM OLD."run_id"
-        OR NEW."attempt" IS DISTINCT FROM OLD."attempt" OR NEW."assigned_participant_id" IS DISTINCT FROM OLD."assigned_participant_id"
-        OR NEW."request_key" IS DISTINCT FROM OLD."request_key" OR NEW."purpose" IS DISTINCT FROM OLD."purpose"
-        OR NEW."body_kind" IS DISTINCT FROM OLD."body_kind" OR NEW."body" IS DISTINCT FROM OLD."body"
-        OR NEW."body_digest" IS DISTINCT FROM OLD."body_digest" OR NEW."purpose_payload" IS DISTINCT FROM OLD."purpose_payload"
-        OR NEW."purpose_payload_digest" IS DISTINCT FROM OLD."purpose_payload_digest"
+        OR NEW."conversation_id" IS DISTINCT FROM OLD."conversation_id"
+        OR NEW."run_id" IS DISTINCT FROM OLD."run_id" OR NEW."attempt" IS DISTINCT FROM OLD."attempt"
+        OR NEW."assigned_participant_id" IS DISTINCT FROM OLD."assigned_participant_id" OR NEW."request_key" IS DISTINCT FROM OLD."request_key"
+        OR NEW."purpose" IS DISTINCT FROM OLD."purpose" OR NEW."body_kind" IS DISTINCT FROM OLD."body_kind"
+        OR NEW."body" IS DISTINCT FROM OLD."body" OR NEW."body_digest" IS DISTINCT FROM OLD."body_digest"
+        OR NEW."purpose_payload" IS DISTINCT FROM OLD."purpose_payload" OR NEW."purpose_payload_digest" IS DISTINCT FROM OLD."purpose_payload_digest"
         OR NEW."requires_step_up" IS DISTINCT FROM OLD."requires_step_up" OR NEW."expires_at" IS DISTINCT FROM OLD."expires_at"
-        OR NEW."created_at" IS DISTINCT FROM OLD."created_at" OR OLD."state" <> 'requested' OR NEW."state" = 'requested' THEN
-        RAISE EXCEPTION 'ElicitationRequest may resolve exactly once without changing authority coordinates';
+        OR NEW."created_at" IS DISTINCT FROM OLD."created_at" THEN
+        RAISE EXCEPTION 'ElicitationRequest authority coordinates are immutable';
+    END IF;
+    IF OLD."state" <> 'requested' OR NEW."state" = 'requested' THEN
+        RAISE EXCEPTION 'ElicitationRequest may resolve exactly once';
     END IF;
     RETURN NEW;
 END;
 $$;
-CREATE FUNCTION "enforce_elicitation_response_attempt_authority"() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE request_row "elicitation_requests"%ROWTYPE; participant_ended BIGINT;
+CREATE OR REPLACE FUNCTION "enforce_elicitation_response_attempt_authority"() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+    request_row "elicitation_requests"%ROWTYPE;
+    participant_ended BIGINT;
 BEGIN
     IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'ElicitationResponseAttempt rows cannot be deleted'; END IF;
     IF TG_OP = 'INSERT' THEN
@@ -3584,7 +3612,7 @@ BEGIN
         IF request_row."id" IS NULL OR request_row."state" <> 'requested' OR request_row."expires_at" <= clock_timestamp()
             OR request_row."assigned_participant_id" IS DISTINCT FROM NEW."responding_subject_id" OR NOT FOUND OR participant_ended IS NOT NULL
             OR (request_row."requires_step_up" AND
-              (NEW."verified_step_up_at" IS NULL OR NEW."verified_step_up_at" < request_row."created_at" OR NEW."verified_step_up_at" > clock_timestamp())) THEN
+                (NEW."verified_step_up_at" IS NULL OR NEW."verified_step_up_at" < request_row."created_at" OR NEW."verified_step_up_at" > clock_timestamp())) THEN
             RAISE EXCEPTION 'ElicitationResponseAttempt lacks current participant or step-up authority';
         END IF;
         RETURN NEW;
