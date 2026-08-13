@@ -1,8 +1,8 @@
-import { AgentRunState, AgentServiceState as PrismaAgentServiceState, OrgMemberStatus, Prisma, RunOutboxEventKind, type PrismaClient } from "@prisma/client";
+import { AgentRunState, AgentServiceState as PrismaAgentServiceState, OrgMemberStatus, RunOutboxEventKind, type Prisma } from "@prisma/client";
 
 import type { AgentRun, AgentRunState as DomainAgentRunState, AgentRunTerminalReason, AgentRunTrigger, AgentServiceState as DomainAgentServiceState } from "@opencrane/models/agents";
 
-import type { AgentRunAuthorityRepository, AgentRunAuthoritySnapshot, AtomicRunAttemptResult, AtomicStartNextRunAttemptCommand } from "./run-authority.types.js";
+import type { AgentRunAuthoritySnapshot, AgentRunRetryTransactionRepository, AtomicRunAttemptResult, AtomicStartNextRunAttemptCommand, StartNextRunAttemptCommand, StartNextRunAttemptResult } from "./run-authority.types.js";
 
 /** Maps a Prisma AgentRun lifecycle identifier to the target contract value. */
 function _runState(value: string): DomainAgentRunState
@@ -86,38 +86,32 @@ function _mapRun(row: { id: string; siloId: string; agentServiceId: string; agen
 }
 
 /**
- * Reads and retries one AgentRun in Postgres, keeping the same row while its attempt counter goes up.
+ * Reads and retries one AgentRun through a transaction supplied by the retry unit of work.
  *
- * Transaction ownership: this class opens its own transaction in each method, so it takes the root
- * `PrismaClient` and cannot be nested inside a caller's transaction — passing it a
- * `Prisma.TransactionClient` would not type-check. Its two methods are separate transactions on
- * purpose: the read is advisory and the write re-checks everything the read saw, so nothing is
- * gained by holding one transaction across both, and holding a run lock across an HTTP round trip
- * would be worse. Everything the retry needs to be atomic — the authorisation checks, the
- * conditional update, and the outbox event — happens inside `startNextAttemptAtomically`, so either
- * an attempt and its dispatch event both exist or neither does.
+ * This adapter cannot open or retry a transaction. `PrismaAgentRunRetryUnitOfWork` constructs a new
+ * instance for every complete transaction attempt, which prevents a repository from carrying state
+ * across a rollback.
  *
  * Concurrency: the write is guarded by conditions on the update itself, not by row locks. An earlier
  * version took `SELECT ... FOR UPDATE` on the service and then the run before writing; those raw
  * locks are gone, and the single conditional `updateMany` in `startNextAttemptAtomically` is now the
  * only thing stopping two concurrent retries from both incrementing.
  *
- * Called by: `PrismaConversationUnitOfWork.retryRun`, which constructs one per retry and hands it to
- * `__StartNextRunAttempt`.
+ * Called by: `PrismaAgentRunRetryUnitOfWork`.
  *
- * @implements AgentRunAuthorityRepository
+ * @implements AgentRunRetryTransactionRepository
  * @see docs/agents/prisma.md, "Runtime ORM ownership", for the repository and transaction rules this
  * adapter sits under.
  */
-export class PrismaAgentRunAuthorityRepository implements AgentRunAuthorityRepository
+export class PrismaAgentRunAuthorityRepository implements AgentRunRetryTransactionRepository
 {
-	/** Client for the main OpenCrane database. Must be the root client, since each method opens its own transaction. */
-	private readonly prisma: PrismaClient;
+	/** Transaction opened by the retry unit of work. */
+	private readonly _transaction: Prisma.TransactionClient;
 
-	/** Creates the adapter around the server-owned Prisma client. */
-	constructor(prisma: PrismaClient)
+	/** Creates the adapter around one transaction attempt. */
+	constructor(transaction: Prisma.TransactionClient)
 	{
-		this.prisma = prisma;
+		this._transaction = transaction;
 	}
 
 	/**
@@ -135,18 +129,15 @@ export class PrismaAgentRunAuthorityRepository implements AgentRunAuthorityRepos
 	 */
 	async getRunAuthority(runId: string): Promise<AgentRunAuthoritySnapshot | null>
 	{
-		return this.prisma.$transaction(async function _load(transaction: Prisma.TransactionClient)
-		{
-			const run = await transaction.agentRun.findUnique({ where: { id: runId } });
-			if (run === null) return null;
-			const service = await transaction.agentService.findUnique({ where: { id: run.agentServiceId } });
-			return {
-				run: _mapRun(run),
-				agentServiceSiloId: service?.siloId ?? null,
-				agentServiceState: _serviceState(service?.state ?? null),
-				activeAgentRevisionId: service?.activeRevisionId ?? null,
-			};
-		});
+		const run = await this._transaction.agentRun.findUnique({ where: { id: runId } });
+		if (run === null) return null;
+		const service = await this._transaction.agentService.findUnique({ where: { id: run.agentServiceId } });
+		return {
+			run: _mapRun(run),
+			agentServiceSiloId: service?.siloId ?? null,
+			agentServiceState: _serviceState(service?.state ?? null),
+			activeAgentRevisionId: service?.activeRevisionId ?? null,
+		};
 	}
 
 	/**
@@ -172,89 +163,104 @@ export class PrismaAgentRunAuthorityRepository implements AgentRunAuthorityRepos
 	 */
 	async startNextAttemptAtomically(command: AtomicStartNextRunAttemptCommand): Promise<AtomicRunAttemptResult>
 	{
-		return this.prisma.$transaction(async function _start(transaction)
+		const transaction = this._transaction;
+		// 1. Check that the person asking is still an active org member and still in the conversation,
+		// before reading or writing anything else. Both can be revoked after the request was sent, and
+		// `accessEndedPosition: null` is what distinguishes a current participant from a removed one.
+		const participant = await transaction.conversationParticipant.findFirst({ where: { conversationId: command.conversationId, userId: command.requestedBy, accessEndedPosition: null, conversation: { siloId: command.siloId } }, select: { conversationId: true } });
+		const membership = await transaction.orgMembership.findFirst({ where: { clusterTenant: command.siloId, subject: command.requestedBy, status: OrgMemberStatus.Active }, select: { id: true } });
+		if (participant === null || membership === null) return { status: "unauthorized" } as const;
+
+		// 2. Read the run and service and answer the cases that need no write. A run already one
+		// attempt ahead is checked against the stored outbox payload first: if that attempt was started
+		// by this same person and retry key, this is a repeat and the answer is `idempotent` rather than
+		// a conflict. That order matters — checking the attempt first would report a caller's own retry
+		// as somebody else's change.
+		const service = await transaction.agentService.findUnique({ where: { id: command.expectedAgentServiceId }, select: { id: true, siloId: true, state: true, activeRevisionId: true } });
+		const run = await transaction.agentRun.findUnique({ where: { id: command.runId } });
+		if (run === null) return { status: "not_found" } as const;
+		if (run.siloId !== command.siloId || run.conversationId !== command.conversationId) return { status: "unauthorized" } as const;
+		if (run.attempt === command.expectedAttempt + 1)
 		{
-			// 1. Check that the person asking is still an active org member and still in the conversation,
-			// before reading or writing anything else. Both can be revoked after the request was sent, and
-			// `accessEndedPosition: null` is what distinguishes a current participant from a removed one.
-			const participant = await transaction.conversationParticipant.findFirst({ where: { conversationId: command.conversationId, userId: command.requestedBy, accessEndedPosition: null, conversation: { siloId: command.siloId } }, select: { conversationId: true } });
-			const membership = await transaction.orgMembership.findFirst({ where: { clusterTenant: command.siloId, subject: command.requestedBy, status: OrgMemberStatus.Active }, select: { id: true } });
-			if (participant === null || membership === null) return { status: "unauthorized" } as const;
+			const event = await transaction.outboxEvent.findUnique({ where: { idempotencyKey: `${run.id}:attempt:${run.attempt}` }, select: { payload: true } });
+			if (_RetryMatches(event?.payload, command)) return { status: "idempotent", run: _mapRun(run) } as const;
+		}
+		if (run.attempt !== command.expectedAttempt) return { status: "attempt_conflict", currentAttempt: run.attempt } as const;
+		if (run.agentServiceId !== command.expectedAgentServiceId || service?.state !== PrismaAgentServiceState.Active || service.siloId !== command.expectedAgentServiceSiloId || service.activeRevisionId !== command.expectedActiveAgentRevisionId)
+		{
+			return { status: "agent_service_authority_conflict", currentAgentServiceState: _serviceState(service?.state ?? null), currentAgentServiceSiloId: service?.siloId ?? null, currentActiveAgentRevisionId: service?.activeRevisionId ?? null } as const;
+		}
 
-			// 2. Read the run and service and answer the cases that need no write. A run already one
-			// attempt ahead is checked against the stored outbox payload first: if that attempt was started
-			// by this same person and retry key, this is a repeat and the answer is `idempotent` rather than
-			// a conflict. That order matters — checking the attempt first would report a caller's own retry
-			// as somebody else's change.
-			const service = await transaction.agentService.findUnique({ where: { id: command.expectedAgentServiceId }, select: { id: true, siloId: true, state: true, activeRevisionId: true } });
-			const run = await transaction.agentRun.findUnique({ where: { id: command.runId } });
-			if (run === null) return { status: "not_found" } as const;
-			if (run.siloId !== command.siloId || run.conversationId !== command.conversationId) return { status: "unauthorized" } as const;
-			if (run.attempt === command.expectedAttempt + 1)
-			{
-				const event = await transaction.outboxEvent.findUnique({ where: { idempotencyKey: `${run.id}:attempt:${run.attempt}` }, select: { payload: true } });
-				if (_RetryMatches(event?.payload, command)) return { status: "idempotent", run: _mapRun(run) } as const;
-			}
-			if (run.attempt !== command.expectedAttempt) return { status: "attempt_conflict", currentAttempt: run.attempt } as const;
-			if (run.agentServiceId !== command.expectedAgentServiceId || service?.state !== "Active" || service.siloId !== command.expectedAgentServiceSiloId || service.activeRevisionId !== command.expectedActiveAgentRevisionId)
-			{
-				return { status: "agent_service_authority_conflict", currentAgentServiceState: _serviceState(service?.state ?? null), currentAgentServiceSiloId: service?.siloId ?? null, currentActiveAgentRevisionId: service?.activeRevisionId ?? null } as const;
-			}
-
-			// 3. Write the new attempt onto the same row, with every observed fact repeated as a condition
-			// so the update applies to nothing if any of them changed since step 2. This one statement is
-			// what makes the retry safe under concurrency, now that the `FOR UPDATE` locks an earlier version
-			// took are gone. Only the fields that belong to an attempt are reset — cost, timings, and
-			// terminal reason go back to null — while the id, conversation, service, and revision stay, so
-			// the run keeps its identity and its history rather than becoming a new run.
-			// A count other than 1 means somebody else got there first, so the row is read again to say
-			// which of the three things happened: the same retry replayed, a different attempt now, or the
-			// service having changed underneath.
-			const nextAttempt = command.expectedAttempt + 1;
-			const changed = await transaction.agentRun.updateMany({
-				where: { id: run.id, attempt: command.expectedAttempt, state: { in: [AgentRunState.Failed, AgentRunState.Cancelled] }, agentServiceId: command.expectedAgentServiceId, agentRevisionId: command.expectedActiveAgentRevisionId, siloId: command.expectedAgentServiceSiloId, service: { is: { state: PrismaAgentServiceState.Active, siloId: command.expectedAgentServiceSiloId, activeRevisionId: command.expectedActiveAgentRevisionId } } },
-				data: { attempt: nextAttempt, state: AgentRunState.Accepted, acceptedAt: new Date(command.acceptedAt), startedAt: null, finishedAt: null, terminalReason: null, costAmount: null, costCurrency: null },
-			});
-			if (changed.count !== 1)
-			{
-				const current = await transaction.agentRun.findUnique({ where: { id: run.id } });
-				if (current === null) return { status: "not_found" } as const;
-				if (current.attempt === nextAttempt)
-				{
-					const event = await transaction.outboxEvent.findUnique({ where: { idempotencyKey: `${run.id}:attempt:${nextAttempt}` }, select: { payload: true } });
-					if (_RetryMatches(event?.payload, command)) return { status: "idempotent", run: _mapRun(current) } as const;
-				}
-				if (current.attempt !== command.expectedAttempt) return { status: "attempt_conflict", currentAttempt: current.attempt } as const;
-				const currentService = await transaction.agentService.findUnique({ where: { id: command.expectedAgentServiceId }, select: { siloId: true, state: true, activeRevisionId: true } });
-				return { status: "agent_service_authority_conflict", currentAgentServiceState: _serviceState(currentService?.state ?? null), currentAgentServiceSiloId: currentService?.siloId ?? null, currentActiveAgentRevisionId: currentService?.activeRevisionId ?? null } as const;
-			}
-			const updated = await transaction.agentRun.findUnique({ where: { id: run.id } });
-			if (updated === null) return { status: "not_found" } as const;
-
-			// 4. Write the dispatch event in the same transaction as the attempt, so a retry can never be
-			// recorded with nothing coming to collect it. The sequence continues this run's own numbering,
-			// and the `${runId}:attempt:${n}` key gives one event per attempt — a second insert for the same
-			// attempt would violate the unique key rather than dispatch twice. The payload keeps who asked
-			// and their retry key, which is what step 2 reads to recognise a repeat.
-			const maximum = await transaction.outboxEvent.aggregate({ where: { runId: run.id }, _max: { sequence: true } });
-			await transaction.outboxEvent.create({
-				data: {
-					runId: run.id,
-					attempt: nextAttempt,
-					sequence: (maximum._max.sequence ?? 0) + 1,
-					kind: RunOutboxEventKind.RunAttemptRequested,
-					idempotencyKey: `${run.id}:attempt:${nextAttempt}`,
-					payload: { runId: run.id, attempt: nextAttempt, requestedBy: command.requestedBy, retryIdempotencyKey: command.idempotencyKey },
-					availableAt: new Date(command.acceptedAt),
-				},
-			});
-			return { status: "started", run: _mapRun(updated) } as const;
+		// 3. Write the new attempt onto the same row, with every observed fact repeated as a condition
+		// so the update applies to nothing if any of them changed since step 2. This one statement is
+		// what makes the retry safe under concurrency, now that the `FOR UPDATE` locks an earlier version
+		// took are gone. Only the fields that belong to an attempt are reset — cost, timings, and
+		// terminal reason go back to null — while the id, conversation, service, and revision stay, so
+		// the run keeps its identity and its history rather than becoming a new run.
+		// A count other than 1 means somebody else got there first, so the row is read again to say
+		// which of the three things happened: the same retry replayed, a different attempt now, or the
+		// service having changed underneath.
+		const nextAttempt = command.expectedAttempt + 1;
+		const changed = await transaction.agentRun.updateMany({
+			where: { id: run.id, attempt: command.expectedAttempt, state: { in: [AgentRunState.Failed, AgentRunState.Cancelled] }, agentServiceId: command.expectedAgentServiceId, agentRevisionId: command.expectedActiveAgentRevisionId, siloId: command.expectedAgentServiceSiloId, service: { is: { state: PrismaAgentServiceState.Active, siloId: command.expectedAgentServiceSiloId, activeRevisionId: command.expectedActiveAgentRevisionId } } },
+			data: { attempt: nextAttempt, state: AgentRunState.Accepted, acceptedAt: new Date(command.acceptedAt), startedAt: null, finishedAt: null, terminalReason: null, costAmount: null, costCurrency: null },
 		});
+		if (changed.count !== 1)
+		{
+			const current = await transaction.agentRun.findUnique({ where: { id: run.id } });
+			if (current === null) return { status: "not_found" } as const;
+			if (current.attempt === nextAttempt)
+			{
+				const event = await transaction.outboxEvent.findUnique({ where: { idempotencyKey: `${run.id}:attempt:${nextAttempt}` }, select: { payload: true } });
+				if (_RetryMatches(event?.payload, command)) return { status: "idempotent", run: _mapRun(current) } as const;
+			}
+			if (current.attempt !== command.expectedAttempt) return { status: "attempt_conflict", currentAttempt: current.attempt } as const;
+			const currentService = await transaction.agentService.findUnique({ where: { id: command.expectedAgentServiceId }, select: { siloId: true, state: true, activeRevisionId: true } });
+			return { status: "agent_service_authority_conflict", currentAgentServiceState: _serviceState(currentService?.state ?? null), currentAgentServiceSiloId: currentService?.siloId ?? null, currentActiveAgentRevisionId: currentService?.activeRevisionId ?? null } as const;
+		}
+		const updated = await transaction.agentRun.findUnique({ where: { id: run.id } });
+		if (updated === null) return { status: "not_found" } as const;
+
+		// 4. Write the dispatch event in the same transaction as the attempt, so a retry can never be
+		// recorded with nothing coming to collect it. The sequence continues this run's own numbering,
+		// and the `${runId}:attempt:${n}` key gives one event per attempt — a second insert for the same
+		// attempt would violate the unique key rather than dispatch twice. The payload keeps who asked
+		// and their retry key, which is what step 2 reads to recognise a repeat.
+		const maximum = await transaction.outboxEvent.aggregate({ where: { runId: run.id }, _max: { sequence: true } });
+		await transaction.outboxEvent.create({
+			data: {
+				runId: run.id,
+				attempt: nextAttempt,
+				sequence: (maximum._max.sequence ?? 0) + 1,
+				kind: RunOutboxEventKind.RunAttemptRequested,
+				idempotencyKey: `${run.id}:attempt:${nextAttempt}`,
+				payload: { runId: run.id, attempt: nextAttempt, requestedBy: command.requestedBy, retryIdempotencyKey: command.idempotencyKey },
+				availableAt: new Date(command.acceptedAt),
+			},
+		});
+		return { status: "started", run: _mapRun(updated) } as const;
+	}
+
+	/** Reads the committed next attempt after the transaction that tried to create it rolled back. */
+	async readRetryWinner(command: StartNextRunAttemptCommand): Promise<StartNextRunAttemptResult | null>
+	{
+		const participant = await this._transaction.conversationParticipant.findFirst({ where: { conversationId: command.conversationId, userId: command.requestedBy, accessEndedPosition: null, conversation: { siloId: command.siloId } }, select: { conversationId: true } });
+		const membership = await this._transaction.orgMembership.findFirst({ where: { clusterTenant: command.siloId, subject: command.requestedBy, status: OrgMemberStatus.Active }, select: { id: true } });
+		if (participant === null || membership === null) return { outcome: "denied", reason: "unauthorized" };
+		const run = await this._transaction.agentRun.findUnique({ where: { id: command.runId } });
+		if (run === null) return null;
+		if (run.siloId !== command.siloId || run.conversationId !== command.conversationId) return { outcome: "denied", reason: "unauthorized" };
+		const nextAttempt = command.expectedAttempt + 1;
+		if (run.attempt !== nextAttempt) return null;
+		const event = await this._transaction.outboxEvent.findUnique({ where: { idempotencyKey: `${run.id}:attempt:${nextAttempt}` }, select: { payload: true } });
+		return _RetryMatches(event?.payload, command)
+			? { outcome: "idempotent", run: _mapRun(run) }
+			: { outcome: "denied", reason: "attempt_conflict", currentAttempt: run.attempt };
 	}
 }
 
 /** Checks whether the already-started next attempt belongs to this exact browser retry request. */
-function _RetryMatches(payload: unknown, command: AtomicStartNextRunAttemptCommand): boolean
+function _RetryMatches(payload: unknown, command: StartNextRunAttemptCommand): boolean
 {
 	if (payload === null || typeof payload !== "object" || Array.isArray(payload)) return false;
 	const fields = payload as Readonly<Record<string, unknown>>;

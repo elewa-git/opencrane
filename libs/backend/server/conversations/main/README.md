@@ -37,6 +37,9 @@ does not expose a separate run-start route.
 The general conversation unit of work owns participant reads and aggregate lifecycle writes. A
 dedicated message-admission unit owns submission routing, retry recovery, denial translation, and
 the handoff into execution admission's authoritative final transaction.
+Participant run retry is injected through the runs package's `RunRetryAuthority`; conversation
+composition supplies route and session facts but neither constructs a run repository nor owns its
+transaction retries.
 
 Before creation, the directory returns active organisation members as opaque membership references.
 It never returns login subjects, email addresses, roles, or personal-memory identity. It also

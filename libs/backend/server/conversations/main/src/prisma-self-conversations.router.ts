@@ -3,7 +3,7 @@ import type { Router } from "express";
 import type { Logger } from "pino";
 
 import type { PersonalRunAdmissionPort } from "@opencrane/backend/agents/execution/admission";
-import type { RunAdmissionTransaction } from "@opencrane/backend/agents/execution/runs";
+import { PrismaAgentRunRetryUnitOfWork, type RunAdmissionTransaction } from "@opencrane/backend/agents/execution/runs";
 import { _ResolveRequestPrincipal } from "@opencrane/backend/server/infra/auth";
 
 import { PrismaConversationMessageAdmissionUnitOfWork } from "./prisma-conversation-message-admission-unit-of-work.js";
@@ -44,6 +44,6 @@ function _createMutationRepository(transaction: RunAdmissionTransaction): Prisma
 export function _CreateSelfConversationsRouter(prisma: PrismaClient, runAdmission: PersonalRunAdmissionPort, createAttachmentAdmission: ConversationAttachmentAdmissionFactory, logger: Logger): Router
 {
 	const messageAdmission = new PrismaConversationMessageAdmissionUnitOfWork(prisma, runAdmission, _createMutationRepository, createAttachmentAdmission);
-	const authority = new PrismaConversationUnitOfWork(prisma, messageAdmission);
+	const authority = new PrismaConversationUnitOfWork(prisma, messageAdmission, new PrismaAgentRunRetryUnitOfWork(prisma));
 	return __CreateSelfConversationsRouter({ resolveCaller: _resolveCaller, authority, logger });
 }

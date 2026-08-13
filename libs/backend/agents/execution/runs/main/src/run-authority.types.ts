@@ -259,6 +259,42 @@ export interface AgentRunAuthorityRepository
 }
 
 /**
+ * Adds the committed-winner read needed after the retry unit of work exhausts database conflicts.
+ *
+ * Called by: `PrismaAgentRunRetryUnitOfWork` after its third P2002 or P2034 rollback.
+ * Implemented by: `PrismaAgentRunAuthorityRepository` on a fresh transaction.
+ */
+export interface AgentRunRetryTransactionRepository extends AgentRunAuthorityRepository
+{
+	/**
+	 * Checks whether the requested next attempt committed in another transaction.
+	 * @param command - Original owner-bound retry request.
+	 * @returns The idempotent winner, an authority or attempt denial, or null when no matching next
+	 * attempt committed.
+	 */
+	readRetryWinner(command: StartNextRunAttemptCommand): Promise<StartNextRunAttemptResult | null>;
+}
+
+/**
+ * Runs one participant-authorized retry without exposing persistence to conversation composition.
+ *
+ * The conversation package supplies browser and route coordinates, then this authority owns domain
+ * validation, transaction retries, and the final committed-winner read.
+ *
+ * Called by: `PrismaConversationUnitOfWork.retryRun` through constructor injection.
+ * Implemented by: `PrismaAgentRunRetryUnitOfWork`.
+ */
+export interface RunRetryAuthority
+{
+	/**
+	 * Starts or replays the next attempt of an existing run.
+	 * @param command - Run, observed attempt, signed-in owner, route, retry key, and server time.
+	 * @returns The user-facing retry outcome.
+	 */
+	retry(command: StartNextRunAttemptCommand): Promise<StartNextRunAttemptResult>;
+}
+
+/**
  * What to tell the participant who asked to retry a run.
  *
  * Two of these are successes and differ only in who started the attempt: `started` means this

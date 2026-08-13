@@ -68,7 +68,7 @@ export interface SteeringIngestClock
  * knowledge.
  *
  * Implemented by: `_CreateSteeringIngestRouter` in prisma-steering-ingest.router.ts, which binds
- * the real session resolver, `PrismaSteeringRequestRepository`, the production clock, and the
+ * the real session resolver, `PrismaSteeringRequestUnitOfWork`, the production clock, and the
  * server logger. Route tests pass fakes for all four.
  *
  * @see SteeringRequestRepository — where ownership is actually proved, and which outcome maps to

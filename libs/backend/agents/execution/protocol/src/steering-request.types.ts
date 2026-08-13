@@ -69,9 +69,9 @@ export type SubmitSteeringRequestResult =
 /**
  * Saves owner-submitted steering, in one transaction.
  *
- * Ownership and steerability are checked in the same transaction as the insert, under the run's
- * lock, because both can change between an HTTP request arriving and the row being written. Doing
- * it in one step is what stops a run being steered by someone who no longer owns it.
+ * Ownership and steerability are checked in the same Serializable transaction as the insert,
+ * because both can change between an HTTP request arriving and the row being written. The typed
+ * transaction either commits the complete decision or rolls it back before a bounded retry.
  *
  * Called by: `__CreateSteeringIngestRouter` (steering-ingest.router.ts) through its injected
  * `requests` port. Implemented by `PrismaSteeringRequestRepository`.
@@ -90,4 +90,35 @@ export interface SteeringRequestRepository
 	 * `steering_unavailable` after logging without the instruction text.
 	 */
 	submitAtomically(command: SubmitSteeringRequestCommand): Promise<SubmitSteeringRequestResult>;
+}
+
+/**
+ * Performs steering reads and writes on a transaction opened by the unit of work.
+ *
+ * The request id is derived from the run, owner, and idempotency digest before this port is called.
+ * That id makes concurrent inserts collide on the primary key, so the unit of work can retry a
+ * rolled-back transaction and then compare the stored winner without adding another database key.
+ *
+ * Called by: `PrismaSteeringRequestUnitOfWork` in prisma-steering-request-unit-of-work.ts.
+ * Implemented by: `PrismaSteeringRequestRepository` in prisma-steering-request-repository.ts.
+ */
+export interface SteeringRequestTransactionRepository
+{
+	/**
+	 * Tries to queue the request inside the caller's transaction.
+	 * @param command - Owner-bound request assembled by the HTTP authority.
+	 * @param steeringRequestId - Server-derived primary key for this idempotency request.
+	 * @returns The normal steering outcome when the transaction can decide without a database race.
+	 * @throws A Prisma P2002 or P2034 when the transaction lost a concurrent insert or serialization
+	 * race. The unit of work retries only those failures.
+	 */
+	submit(command: SubmitSteeringRequestCommand, steeringRequestId: string): Promise<SubmitSteeringRequestResult>;
+	/**
+	 * Reads the row that won after Prisma rolled the submitting transaction back.
+	 * @param command - Original request whose owner and digest must still match.
+	 * @param steeringRequestId - Same derived primary key used by {@link submit}.
+	 * @returns `idempotent` for the same digest, `idempotency_conflict` for a different digest, or
+	 * null when no committed winner exists yet.
+	 */
+	readWinner(command: SubmitSteeringRequestCommand, steeringRequestId: string): Promise<SubmitSteeringRequestResult | null>;
 }

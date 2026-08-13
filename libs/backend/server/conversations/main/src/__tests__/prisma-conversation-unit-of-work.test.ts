@@ -2,6 +2,7 @@ import { AgentRunState, ConversationLifecycle, ConversationMessageRole, Conversa
 import { describe, expect, it, vi } from "vitest";
 
 import { ConversationModes, MessageContentBlockKinds, MessageSources } from "@opencrane/models/conversations";
+import type { RunRetryAuthority } from "@opencrane/backend/agents/execution/runs";
 import { __DecodeConversationProjectionCursor } from "@opencrane/backend/conversations/projection";
 
 import { PrismaConversationUnitOfWork } from "../prisma-conversation-unit-of-work.js";
@@ -45,9 +46,9 @@ function _Participant(lifecycle: ConversationLifecycle = ConversationLifecycle.O
 }
 
 /** Creates the aggregate authority with a replaceable message-admission collaborator. */
-function _Authority(prisma: object, messageAdmission: Partial<ConversationMessageAdmissionUnitOfWork> = {}): PrismaConversationUnitOfWork
+function _Authority(prisma: object, messageAdmission: Partial<ConversationMessageAdmissionUnitOfWork> = {}, runRetry: RunRetryAuthority = { retry: vi.fn().mockResolvedValue({ outcome: "denied", reason: "run_not_found" }) }): PrismaConversationUnitOfWork
 {
-	return new PrismaConversationUnitOfWork(prisma as never, messageAdmission as ConversationMessageAdmissionUnitOfWork);
+	return new PrismaConversationUnitOfWork(prisma as never, messageAdmission as ConversationMessageAdmissionUnitOfWork, runRetry);
 }
 
 describe("PrismaConversationUnitOfWork", function _Suite()
@@ -109,6 +110,17 @@ describe("PrismaConversationUnitOfWork", function _Suite()
 
 		await expect(authority.submitMessage(_CALLER, "conversation-1", _REQUEST)).resolves.toEqual({ outcome: "denied", reason: "conversation_unavailable" });
 		expect(submit).toHaveBeenCalledWith(_CALLER, "conversation-1", _REQUEST);
+		expect(transaction).not.toHaveBeenCalled();
+	});
+
+	it("delegates retries through the injected run authority without opening an aggregate transaction", async function _DelegatesRunRetry()
+	{
+		const retry = vi.fn().mockResolvedValue({ outcome: "started", run: { id: "run-1", attempt: 2 } });
+		const transaction = vi.fn();
+		const authority = _Authority({ $transaction: transaction }, {}, { retry } as never);
+
+		await expect(authority.retryRun(_CALLER, "conversation-1", "run-1", { expectedAttempt: 1, idempotencyKey: "retry-1" })).resolves.toMatchObject({ outcome: "started", run: { attempt: 2 } });
+		expect(retry).toHaveBeenCalledWith(expect.objectContaining({ runId: "run-1", expectedAttempt: 1, siloId: "silo-1", conversationId: "conversation-1", requestedBy: "user-1", idempotencyKey: "retry-1" }));
 		expect(transaction).not.toHaveBeenCalled();
 	});
 

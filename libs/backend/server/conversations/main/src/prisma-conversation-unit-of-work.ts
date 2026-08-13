@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { Prisma, type PrismaClient } from "@prisma/client";
 
 import { ___DoWithTrace } from "@opencrane/backend/observability";
-import { __StartNextRunAttempt, PrismaAgentRunAuthorityRepository } from "@opencrane/backend/agents/execution/runs";
+import type { RunRetryAuthority } from "@opencrane/backend/agents/execution/runs";
 
 import type { AgentThreadSnapshotView, ConversationCaller, ConversationCreationDirectory, ConversationDetail, ConversationSummary, ConversationUnitOfWork, CreateConversationRequest, CreateConversationResult, MarkAgentThreadReadResult, MutateConversationResult, RetryConversationRunRequest, RetryConversationRunResult, SubmitConversationMessageRequest, SubmitConversationMessageResult } from "./conversation-authority.types.js";
 import type { ConversationMessageAdmissionUnitOfWork } from "./conversation-message-admission.types.js";
@@ -41,12 +41,15 @@ export class PrismaConversationUnitOfWork implements ConversationUnitOfWork
 {
 	private readonly prisma: PrismaClient;
 	private readonly messageAdmission: ConversationMessageAdmissionUnitOfWork;
+	/** Run-owned authority that validates and persists participant retry requests. */
+	private readonly runRetry: RunRetryAuthority;
 
-	/** Creates the aggregate authority and its dedicated participant-message collaborator. */
-	constructor(prisma: PrismaClient, messageAdmission: ConversationMessageAdmissionUnitOfWork)
+	/** Creates the aggregate authority with its message-admission and run-retry collaborators. */
+	constructor(prisma: PrismaClient, messageAdmission: ConversationMessageAdmissionUnitOfWork, runRetry: RunRetryAuthority)
 	{
 		this.prisma = prisma;
 		this.messageAdmission = messageAdmission;
+		this.runRetry = runRetry;
 	}
 
 	/**
@@ -93,7 +96,7 @@ export class PrismaConversationUnitOfWork implements ConversationUnitOfWork
 	 *
 	 * Retrying raises the attempt counter on the same run row instead of creating a second run, and
 	 * that increment is a compare-and-swap on the attempt the caller says they saw, so two people
-	 * retrying the same failed attempt cannot both start one. `__StartNextRunAttempt` owns that
+	 * retrying the same failed attempt cannot both start one. The injected run authority owns that
 	 * decision and its own atomic write, which is why this method neither opens a transaction nor uses
 	 * `_read`/`_mutate` — the run authority is not this package's aggregate to write. The caller's silo
 	 * and conversation are passed in so the run authority can refuse a run belonging to anyone else.
@@ -109,15 +112,11 @@ export class PrismaConversationUnitOfWork implements ConversationUnitOfWork
 	 * @returns `started` for a new attempt, `idempotent` when the same retry key already started it,
 	 *   or `denied` with a reason; `_runRetryDenialStatus` in self-conversations.router.ts turns each
 	 *   reason into a status.
-	 * @see __StartNextRunAttempt in libs/backend/agents/execution/runs — the authority that decides.
-	 *
-	 * NOTE: constructing `PrismaAgentRunAuthorityRepository` here is not yet declared in
-	 * docs/agents/prisma-boundary-policy.json; PR #630 lists that declaration as an open blocker
-	 * awaiting owner approval, so this wiring may move before it merges.
+	 * @see RunRetryAuthority in `@opencrane/backend/agents/execution/runs`.
 	 */
 	async retryRun(caller: ConversationCaller, conversationId: string, runId: string, request: RetryConversationRunRequest): Promise<RetryConversationRunResult>
 	{
-		return ___DoWithTrace("conversation.run.retry", { siloId: caller.siloId, conversationId, runId, expectedAttempt: request.expectedAttempt }, async () => __StartNextRunAttempt(new PrismaAgentRunAuthorityRepository(this.prisma), { runId, expectedAttempt: request.expectedAttempt, siloId: caller.siloId, conversationId, requestedBy: caller.subjectId, idempotencyKey: request.idempotencyKey, acceptedAt: new Date().toISOString() }));
+		return ___DoWithTrace("conversation.run.retry", { siloId: caller.siloId, conversationId, runId, expectedAttempt: request.expectedAttempt }, async () => this.runRetry.retry({ runId, expectedAttempt: request.expectedAttempt, siloId: caller.siloId, conversationId, requestedBy: caller.subjectId, idempotencyKey: request.idempotencyKey, acceptedAt: new Date().toISOString() }));
 	}
 
 	/** Writes the conversation and participant rows atomically; the selected mode can never change. */

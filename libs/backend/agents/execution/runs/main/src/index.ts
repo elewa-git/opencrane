@@ -3,16 +3,14 @@
  * of one agent run: admitting it, dispatching it, reporting on it, cancelling it, and retrying it.
  *
  * What comes out of here is what another package needs to compose or drive a run — ready-to-mount
- * routers, the Prisma adapters behind them, the OpenAPI path fragments, the run-input digest, the
+ * routers, transaction-owning authorities, the OpenAPI path fragments, the run-input digest, the
  * workload cleanup, and the port types an app must implement or pass through.
  *
  * The narrowed `export type` lists further down are deliberate. Anything not named there stays
- * inside the package, and the retry surface is the clearest case: `__StartNextRunAttempt` and
- * {@link AgentRunAuthorityRepository} are exported, but `AtomicStartNextRunAttemptCommand` and
- * `AtomicRunAttemptResult` are not, so no other package can build the argument to
- * `startNextAttemptAtomically` and go around the checks in `__StartNextRunAttempt`. The same applies
- * to `__ValidateRunWorkloadAssignment` and the workload-assignment shapes, which are not exported at
- * all. Reach for the exported function, not for a deeper file path.
+ * inside the package. Run retry exposes only `RunRetryAuthority` and its request/result shapes;
+ * transaction repositories and the domain decision remain internal so another package cannot go
+ * around the package-owned transaction boundary. The same applies to workload-assignment helpers
+ * and shapes, which are not exported at all.
  *
  * Imported by: apps/opencrane composition and route files, libs/backend/agents/execution
  * (admission, inputs, protocol), libs/backend/server/conversations, and
@@ -42,6 +40,5 @@ export type { RunCancellationRepository } from "./run-cancellation.types.js";
 export * from "./run-dispatch.router.js";
 export * from "./run-input-snapshot-digest.js";
 export * from "./runtime-workload-cleanup.js";
-export { __StartNextRunAttempt } from "./run-authority.js";
-export type { AgentRunAuthorityRepository, StartNextRunAttemptCommand, StartNextRunAttemptResult } from "./run-authority.types.js";
-export { PrismaAgentRunAuthorityRepository } from "./prisma-run-authority.js";
+export type { RunRetryAuthority, StartNextRunAttemptCommand, StartNextRunAttemptResult } from "./run-authority.types.js";
+export { PrismaAgentRunRetryUnitOfWork } from "./prisma-run-retry-unit-of-work.js";

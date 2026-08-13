@@ -17,6 +17,20 @@
         "constructs": []
       },
       {
+        "path": "libs/backend/agents/execution/protocol/src/prisma-steering-request-repository.ts",
+        "adapter": "PrismaSteeringRequestRepository",
+        "contract": "SteeringRequestTransactionRepository",
+        "contractImportPath": "./steering-request.types.js",
+        "constructs": []
+      },
+      {
+        "path": "libs/backend/agents/execution/runs/main/src/prisma-run-authority.ts",
+        "adapter": "PrismaAgentRunAuthorityRepository",
+        "contract": "AgentRunRetryTransactionRepository",
+        "contractImportPath": "./run-authority.types.js",
+        "constructs": []
+      },
+      {
         "path": "libs/backend/agents/personal/configuration/main/src/materialization/prisma-personal-configuration-materialization.ts",
         "adapter": "PrismaPersonalConfigurationMaterializationRepository",
         "contract": "PersonalConfigurationMaterializationRepository",
@@ -849,6 +863,30 @@
 		  {
 			"adapter": "PrismaElicitationRepository",
 			"importPath": "./prisma-elicitation-unit-of-work.js"
+		  }
+		]
+	  },
+	  {
+		"path": "libs/backend/agents/execution/protocol/src/prisma-steering-request-unit-of-work.ts",
+		"adapter": "PrismaSteeringRequestUnitOfWork",
+		"contract": "SteeringRequestRepository",
+		"contractImportPath": "./steering-request.types.js",
+		"constructs": [
+		  {
+			"adapter": "PrismaSteeringRequestRepository",
+			"importPath": "./prisma-steering-request-repository.js"
+		  }
+		]
+	  },
+	  {
+		"path": "libs/backend/agents/execution/runs/main/src/prisma-run-retry-unit-of-work.ts",
+		"adapter": "PrismaAgentRunRetryUnitOfWork",
+		"contract": "RunRetryAuthority",
+		"contractImportPath": "./run-authority.types.js",
+		"constructs": [
+		  {
+			"adapter": "PrismaAgentRunAuthorityRepository",
+			"importPath": "./prisma-run-authority.js"
 		  }
 		]
 	  },

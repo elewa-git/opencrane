@@ -4,7 +4,7 @@ import type { Logger } from "pino";
 
 import { _ResolveRequestPrincipal } from "@opencrane/backend/server/infra/auth";
 
-import { PrismaSteeringRequestRepository } from "./prisma-steering-request-repository.js";
+import { PrismaSteeringRequestUnitOfWork } from "./prisma-steering-request-unit-of-work.js";
 import { __CreateSteeringIngestRouter } from "./steering-ingest.router.js";
 import type { SteeringIngestCaller } from "./steering-ingest.router.types.js";
 
@@ -25,7 +25,7 @@ export function _CreateSteeringIngestRouter(prisma: PrismaClient, logger: Logger
 {
 	return __CreateSteeringIngestRouter({
 		resolveCaller: _resolveCaller,
-		requests: new PrismaSteeringRequestRepository(prisma),
+		requests: new PrismaSteeringRequestUnitOfWork(prisma),
 		clock: { now(): Date { return new Date(); } },
 		logger,
 	});

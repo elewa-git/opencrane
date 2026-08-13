@@ -71,6 +71,12 @@ durable table the dispatcher polls) so a started attempt can never be lost betwe
 launching. Repeating the same retry key returns that durable next attempt; a different key for the
 already-advanced terminal attempt is a conflict.
 
+`PrismaAgentRunRetryUnitOfWork` keeps that authority behind a persistence-neutral port used by the
+conversation package. It opens fresh transactions around the advisory read and the guarded write,
+and retries the complete decision at most three times when Prisma proves P2002 or P2034 rolled it
+back. After the last collision it reads the committed next-attempt outbox event and accepts it only
+when the stored owner and browser retry key match the request.
+
 `__ValidateRunWorkloadAssignment` is the mirror check at launch time: it accepts only a one-attempt
 Job, confirms the workload's full identity (who / where / which attempt) matches the expected authority exactly, and selects the dedicated personal or managed namespace together with its matching projected-token audience and ServiceAccount grammar.
 
@@ -203,6 +209,8 @@ credential material under an innocuous field name such as `detail`.
   to the shared durable cancellation authority.
 - `PrismaRuntimeTerminalReporter` — commits a protocol-approved terminal result through the run
   authority.
+- `PrismaAgentRunRetryUnitOfWork` and `RunRetryAuthority` — compose participant run retry without
+  exposing a root Prisma client or transaction repository to the conversation package.
 - `PrismaToolInvocationRunRecoveryAuthority` — changes only the exact run attempt's recovery state
   inside the authorization-owned invocation transaction.
 - `_SelfRunStatusOpenapiPaths` — contributes the self-run status contract to the server API spec.
