@@ -11,10 +11,9 @@ import type { ConversationActivityRow, ConversationElicitation } from "@opencran
  * browser history entry rather than a shared service, so they survive back, forward, and a reload of
  * the child URL, and so two history entries for the same child can remember different positions.
  *
- * Both fields are optional because nothing writes them in this build: the `/chats` route is a safe
- * fallback, and the parent workspace that captures these coordinates arrives with #351. A reader
- * who opens the child URL directly gets an entry holding only Angular Router's
- * own keys, so the route component treats a missing field as "no restoration available".
+ * Both fields are optional because someone can open a child URL directly or revisit an older history
+ * entry that predates the parent workspace. In either case, the route component treats a missing
+ * field as "no restoration available".
  *
  * Called by: the feature-local Agent-thread route coordinator.
  * @see AgentThreadPageComponent for the page that consumes both fields as inputs.
