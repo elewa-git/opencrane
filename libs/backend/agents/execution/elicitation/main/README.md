@@ -31,8 +31,6 @@ the generic elicitation result.
   reads, and personal-memory permission checks.
 - `PrismaRuntimeElicitationUnitOfWork` — opens runtime proposals and expires due requests on the
   dispatch transaction that already holds the run lock; it never nests another transaction.
-- `PrismaElicitationRepository` — the exact-transaction persistence adapter used by both units of
-  work. Callers should prefer a unit of work instead of constructing it directly.
 - `PersonalMemoryPermissionAuthority` — opens and verifies the exact execution-user receipt without reading or consuming remembered content.
 - `_CreateElicitationInterruptReader` — generic cursorless reconnect overlay for every body type.
 - `_CreateSelfElicitationActivityRouter` — bounded derived Activity references over canonical requests.

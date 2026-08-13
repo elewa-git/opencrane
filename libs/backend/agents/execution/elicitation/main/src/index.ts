@@ -1,4 +1,4 @@
-export { PrismaElicitationRepository, PrismaElicitationUnitOfWork } from "./prisma-elicitation-unit-of-work.js";
+export { PrismaElicitationUnitOfWork } from "./prisma-elicitation-unit-of-work.js";
 export { PrismaRuntimeElicitationUnitOfWork } from "./prisma-runtime-elicitation-unit-of-work.js";
 export { _CreateElicitationInterruptReader } from "./prisma-elicitation-interrupt-reader.js";
 export { _ElicitationOpenapiPaths } from "./openapi.js";
