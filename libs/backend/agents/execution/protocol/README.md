@@ -21,6 +21,9 @@ Runtime input follows the same rule. A bounded `runtime_input` or reviewed `a2ui
 turned into a durable elicitation request on the locked candidate transaction before its candidate
 id is accepted. Replays must match the exact saved request. Command polling expires tool approvals
 and generic requests on that same transaction, and resumes only after neither kind remains pending.
+Each transaction binds one `RuntimeElicitationUnitOfWork` through the injected factory and reuses
+that bound object for all generic request work in the callback. The port carries request commands,
+not a Prisma client, so the persistence transaction cannot leak into a generic domain function.
 
 This package owns both that pure decision and the Prisma-backed adapter that drives it. The adapter
 loads and locks the live workload assignment for a connected runtime Pod, mints only the command the
@@ -106,6 +109,11 @@ are rechecked at execution, so the runtime never sees either credential or mutab
 Pure protocol decisions, Prisma adapters, provider executor construction, and recovery strategies
 remain inside this package. Provider results are persisted before the runtime receives them; the
 runtime never receives a provider credential or calls Obot directly.
+
+`RuntimeElicitationUnitOfWork` and `RuntimeElicitationUnitOfWorkFactory` are package-private ports.
+Production composition binds them to the elicitation package's exact-transaction adapter. Tests may
+supply a small fake, but runtime dispatch always requires a factory and never guesses around a
+missing request authority.
 
 ## Boundary
 

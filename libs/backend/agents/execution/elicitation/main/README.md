@@ -27,9 +27,12 @@ the generic elicitation result.
 
 ## Public surface
 
-- `PrismaElicitationUnitOfWork` — transaction-bound request, response, and resume authority.
-- `__RuntimeElicitationTransactionAuthority` — opens runtime proposals and expires due requests on
-  the dispatch transaction that already holds the run lock; it never nests another transaction.
+- `PrismaElicitationUnitOfWork` — starts serializable transactions for browser responses, request
+  reads, and personal-memory permission checks.
+- `PrismaRuntimeElicitationUnitOfWork` — opens runtime proposals and expires due requests on the
+  dispatch transaction that already holds the run lock; it never nests another transaction.
+- `PrismaElicitationRepository` — the exact-transaction persistence adapter used by both units of
+  work. Callers should prefer a unit of work instead of constructing it directly.
 - `PersonalMemoryPermissionAuthority` — opens and verifies the exact execution-user receipt without reading or consuming remembered content.
 - `_CreateElicitationInterruptReader` — generic cursorless reconnect overlay for every body type.
 - `_CreateSelfElicitationActivityRouter` — bounded derived Activity references over canonical requests.
@@ -39,6 +42,11 @@ the generic elicitation result.
 The package owns request, response-attempt, result-delivery, and one-use memory-permission records.
 Tool approval keeps its own audit row, and runtime, browser, and A2UI payloads cannot select the
 respondent, dataset, or protected action.
+
+Runtime protocol code passes its existing transaction into `PrismaRuntimeElicitationUnitOfWork`.
+That unit constructs one repository from the same transaction and reuses it for the callback. This
+keeps the run lock, request change, candidate acceptance, and expiry decision in one commit without
+letting a generic function carry a Prisma client across the boundary.
 
 ## Dependency direction
 

@@ -1,4 +1,5 @@
-export { PrismaElicitationUnitOfWork, __ExpireRuntimeElicitationInTransaction, __OpenRuntimeElicitationInTransaction } from "./prisma-elicitation-unit-of-work.js";
+export { PrismaElicitationRepository, PrismaElicitationUnitOfWork } from "./prisma-elicitation-unit-of-work.js";
+export { PrismaRuntimeElicitationUnitOfWork } from "./prisma-runtime-elicitation-unit-of-work.js";
 export { _CreateElicitationInterruptReader } from "./prisma-elicitation-interrupt-reader.js";
 export { _ElicitationOpenapiPaths } from "./openapi.js";
 export { _CreateSelfElicitationActivityRouter, _CreateSelfElicitationRouter } from "./prisma-self-elicitation.router.js";

@@ -16,7 +16,7 @@ import { __ProjectRuntimeInputSnapshot } from "./runtime-input-snapshot-projecto
 import { _ParseRuntimeResumeInput } from "./runtime-resume-input.js";
 import { __AdmitRuntimeCandidate, __AdmitRuntimeCommand } from "./runtime-protocol-authority.js";
 import { RuntimeAdmissionOutcomes, type RuntimeAdmissionRunState, type RuntimeAttemptAuthority, type RuntimeProtocolClock } from "./runtime-protocol-authority.types.js";
-import type { RunInputCompiler, RuntimeApprovalExpiry, RuntimeCandidateDispatchResult, RuntimeDispatchAuthorityConfig, RuntimeElicitationAuthority, RuntimeEventReporter, RuntimeStreamWorkloadIdentity } from "./prisma-runtime-dispatch-authority.types.js";
+import type { RunInputCompiler, RuntimeApprovalExpiry, RuntimeCandidateDispatchResult, RuntimeDispatchAuthorityConfig, RuntimeElicitationUnitOfWork, RuntimeElicitationUnitOfWorkFactory, RuntimeEventReporter, RuntimeStreamWorkloadIdentity } from "./prisma-runtime-dispatch-authority.types.js";
 
 /** Database facts about one connected runtime Pod's run and assignment, read under a row lock. */
 interface RuntimeDispatchContext
@@ -121,8 +121,8 @@ export class PrismaRuntimeDispatchAuthority
 	private readonly eventReporter: RuntimeEventReporter | null;
 	/** Optional port that closes approvals whose deadline has passed. */
 	private readonly approvalExpiry: RuntimeApprovalExpiry | null;
-	/** Generic request creation and expiry authority bound to the dispatch transaction. */
-	private readonly elicitationAuthority: RuntimeElicitationAuthority | null;
+	/** Creates generic request work bound to each exact dispatch transaction. */
+	private readonly elicitationUnitOfWorkFactory: RuntimeElicitationUnitOfWorkFactory;
 
 	/**
 	 * Creates the dispatcher over Postgres.
@@ -135,13 +135,13 @@ export class PrismaRuntimeDispatchAuthority
 	 * @param clock - Server clock; defaults to `Date.now`. Pass one in tests to fix the time.
 	 * @param approvalExpiry - Closes approvals whose deadline has passed. When omitted, a run waiting
 	 * for approval never advances: `__NextCommand` returns null instead of guessing the wait is over.
-	 * @param elicitationAuthority - Creates and expires generic participant requests in the dispatch
-	 * transaction. When omitted, elicitation candidates are refused and waiting runs stay paused.
+	 * @param elicitationUnitOfWorkFactory - Binds generic participant request work to each dispatch
+	 * transaction. It is required because runtime proposals and expiry share the dispatch lock.
 	 * @throws {Error} When `config` does not hold two different valid namespaces and a command
 	 * lifetime between 1s and 300s. Thrown at construction, so a misconfigured deployment fails at
 	 * startup instead of mid-stream.
 	 */
-	constructor(prisma: PrismaClient, config: RuntimeDispatchAuthorityConfig, compileRunInput: RunInputCompiler, eventReporter?: RuntimeEventReporter, clock?: RuntimeProtocolClock, approvalExpiry?: RuntimeApprovalExpiry, elicitationAuthority?: RuntimeElicitationAuthority)
+	constructor(prisma: PrismaClient, config: RuntimeDispatchAuthorityConfig, compileRunInput: RunInputCompiler, eventReporter: RuntimeEventReporter | undefined, clock: RuntimeProtocolClock | undefined, approvalExpiry: RuntimeApprovalExpiry | undefined, elicitationUnitOfWorkFactory: RuntimeElicitationUnitOfWorkFactory)
 	{
 		if (!_configIsValid(config)) throw new Error("runtime dispatch authority requires distinct bounded runtime namespaces and command lifetime");
 		this.prisma = prisma;
@@ -150,7 +150,7 @@ export class PrismaRuntimeDispatchAuthority
 		this.clock = clock ?? { nowEpochMs(): number { return Date.now(); } };
 		this.eventReporter = eventReporter ?? null;
 		this.approvalExpiry = approvalExpiry ?? null;
-		this.elicitationAuthority = elicitationAuthority ?? null;
+		this.elicitationUnitOfWorkFactory = elicitationUnitOfWorkFactory;
 	}
 
 	/**
@@ -184,10 +184,10 @@ export class PrismaRuntimeDispatchAuthority
 		const clock = this.clock;
 		const compileRunInput = this.compileRunInput;
 		const approvalExpiry = this.approvalExpiry;
-		const elicitationAuthority = this.elicitationAuthority;
+		const elicitationUnitOfWorkFactory = this.elicitationUnitOfWorkFactory;
 		return ___DoWithTrace("runtime_dispatch.command.next", { namespace: identity.namespace }, async function _traceNext(): Promise<RuntimeCommandEnvelope | null>
 		{
-			return _nextCommand(prisma, config, clock, compileRunInput, approvalExpiry, elicitationAuthority, identity, open, afterSequence);
+			return _nextCommand(prisma, config, clock, compileRunInput, approvalExpiry, elicitationUnitOfWorkFactory, identity, open, afterSequence);
 		});
 	}
 
@@ -220,10 +220,10 @@ export class PrismaRuntimeDispatchAuthority
 		const clock = this.clock;
 		const compileRunInput = this.compileRunInput;
 		const eventReporter = this.eventReporter;
-		const elicitationAuthority = this.elicitationAuthority;
+		const elicitationUnitOfWorkFactory = this.elicitationUnitOfWorkFactory;
 		return ___DoWithTrace("runtime_dispatch.candidate.admit", { namespace: identity.namespace }, async function _traceAdmit(): Promise<RuntimeCandidateDispatchResult>
 		{
-			return _admitCandidate(prisma, config, clock, compileRunInput, identity, candidate, eventReporter, elicitationAuthority);
+			return _admitCandidate(prisma, config, clock, compileRunInput, identity, candidate, eventReporter, elicitationUnitOfWorkFactory);
 		});
 	}
 
@@ -281,11 +281,12 @@ function _IsNamespace(value: string): boolean
 }
 
 /** Create a new command, or re-send a stored one, inside a single locked transaction. */
-async function _nextCommand(prisma: PrismaClient, config: RuntimeDispatchAuthorityConfig, clock: RuntimeProtocolClock, compileRunInput: RunInputCompiler, approvalExpiry: RuntimeApprovalExpiry | null, elicitationAuthority: RuntimeElicitationAuthority | null, identity: RuntimeStreamWorkloadIdentity, open: RuntimeStreamOpen, afterSequence: number): Promise<RuntimeCommandEnvelope | null>
+async function _nextCommand(prisma: PrismaClient, config: RuntimeDispatchAuthorityConfig, clock: RuntimeProtocolClock, compileRunInput: RunInputCompiler, approvalExpiry: RuntimeApprovalExpiry | null, elicitationUnitOfWorkFactory: RuntimeElicitationUnitOfWorkFactory, identity: RuntimeStreamWorkloadIdentity, open: RuntimeStreamOpen, afterSequence: number): Promise<RuntimeCommandEnvelope | null>
 {
 	if (!Number.isSafeInteger(afterSequence) || afterSequence < 0) return null;
 	return prisma.$transaction(async function _dispatch(transaction: Prisma.TransactionClient): Promise<RuntimeCommandEnvelope | null>
 	{
+		const elicitationUnitOfWork = elicitationUnitOfWorkFactory.bind(transaction);
 		// 1. Load and lock the live assignment, run, and snapshot before any authority decision.
 		let context = await _loadContext(transaction, config, identity);
 		if (context === null) return null;
@@ -293,7 +294,7 @@ async function _nextCommand(prisma: PrismaClient, config: RuntimeDispatchAuthori
 		// in this same transaction and under the same run lock, and then the context is read again, so
 		// the next command is chosen from what the database says now, not from the values read earlier.
 		const decisionUnitOfWork = new PrismaRuntimeCommandDecisionUnitOfWork(transaction);
-		const expiry = await decisionUnitOfWork.expireWaiting(context, approvalExpiry, elicitationAuthority, new Date(clock.nowEpochMs()));
+		const expiry = await decisionUnitOfWork.expireWaiting(context, approvalExpiry, elicitationUnitOfWork, new Date(clock.nowEpochMs()));
 		if (expiry === "unavailable") return null;
 		if (expiry === "applied")
 		{
@@ -347,7 +348,7 @@ async function _nextCommand(prisma: PrismaClient, config: RuntimeDispatchAuthori
 	});
 }
 /** Admit one runtime candidate and durably record its id when the pure authority accepts it. */
-async function _admitCandidate(prisma: PrismaClient, config: RuntimeDispatchAuthorityConfig, clock: RuntimeProtocolClock, compileRunInput: RunInputCompiler, identity: RuntimeStreamWorkloadIdentity, candidate: RuntimeCandidate, eventReporter: RuntimeEventReporter | null, elicitationAuthority: RuntimeElicitationAuthority | null): Promise<RuntimeCandidateDispatchResult>
+async function _admitCandidate(prisma: PrismaClient, config: RuntimeDispatchAuthorityConfig, clock: RuntimeProtocolClock, compileRunInput: RunInputCompiler, identity: RuntimeStreamWorkloadIdentity, candidate: RuntimeCandidate, eventReporter: RuntimeEventReporter | null, elicitationUnitOfWorkFactory: RuntimeElicitationUnitOfWorkFactory): Promise<RuntimeCandidateDispatchResult>
 {
 	if (candidate.kind === RuntimeCandidateKinds.Event && candidate.eventType === RunEventTypes.RunCancelled) return { accepted: false, reason: "runtime_cancellation_not_authoritative" };
 	if (_RuntimeCandidateRequiresEventReporter(candidate) && eventReporter === null) return { accepted: false, reason: "event_reporter_unavailable" };
@@ -355,6 +356,7 @@ async function _admitCandidate(prisma: PrismaClient, config: RuntimeDispatchAuth
 	{
 		return await prisma.$transaction(async function _admit(transaction: Prisma.TransactionClient): Promise<RuntimeCandidateDispatchResult>
 		{
+			const elicitationUnitOfWork = elicitationUnitOfWorkFactory.bind(transaction);
 			// 1. Load and lock the live assignment, run, and snapshot for the Pod that is asking.
 			const context = await _loadContext(transaction, config, identity);
 			if (context === null) return { accepted: false, reason: "unknown_workload" };
@@ -368,8 +370,7 @@ async function _admitCandidate(prisma: PrismaClient, config: RuntimeDispatchAuth
 			{
 				if (candidate.kind === RuntimeCandidateKinds.Elicitation)
 				{
-					if (elicitationAuthority === null) return { accepted: false, reason: "elicitation_authority_unavailable" };
-					return await _OpenRuntimeElicitation(transaction, context, candidate, elicitationAuthority, new Date(clock.nowEpochMs())) ? { accepted: true } : { accepted: false, reason: "elicitation_replay_conflict" };
+					return await _OpenRuntimeElicitation(context, candidate, elicitationUnitOfWork, new Date(clock.nowEpochMs())) ? { accepted: true } : { accepted: false, reason: "elicitation_replay_conflict" };
 				}
 				if (candidate.kind !== RuntimeCandidateKinds.ExternalAction) return { accepted: true };
 				const invocation = await new PrismaRuntimeDispatchStateUnitOfWork(transaction).findToolInvocation(candidate.runId, candidate.attempt, candidate.candidateId);
@@ -390,8 +391,7 @@ async function _admitCandidate(prisma: PrismaClient, config: RuntimeDispatchAuth
 			}
 			if (candidate.kind === RuntimeCandidateKinds.Elicitation)
 			{
-				if (elicitationAuthority === null) return { accepted: false, reason: "elicitation_authority_unavailable" };
-				if (!await _OpenRuntimeElicitation(transaction, context, candidate, elicitationAuthority, new Date(clock.nowEpochMs()))) return { accepted: false, reason: "elicitation_invalid" };
+				if (!await _OpenRuntimeElicitation(context, candidate, elicitationUnitOfWork, new Date(clock.nowEpochMs()))) return { accepted: false, reason: "elicitation_invalid" };
 			}
 			// 2c. Apply transaction-local canonical event effects before accepting the id.
 			const sideEffectDenial = await _ApplyRuntimeCandidateSideEffects(transaction, candidate, context.runId, context.attempt, sourceCommand.kind === RuntimeCommandKind.StartAttempt, eventReporter);
@@ -410,7 +410,7 @@ async function _admitCandidate(prisma: PrismaClient, config: RuntimeDispatchAuth
 }
 
 /** Bind one generic runtime proposal to locked run, conversation, participant, and server time. */
-async function _OpenRuntimeElicitation(transaction: Prisma.TransactionClient, context: RuntimeDispatchContext, candidate: RuntimeElicitationCandidate, authority: RuntimeElicitationAuthority, now: Date): Promise<boolean>
+async function _OpenRuntimeElicitation(context: RuntimeDispatchContext, candidate: RuntimeElicitationCandidate, elicitationUnitOfWork: RuntimeElicitationUnitOfWork, now: Date): Promise<boolean>
 {
 	if (context.identity.kind !== RunInputSnapshotIdentityKinds.User || context.conversationId === null) return false;
 	if (candidate.proposal.purpose !== ElicitationPurposes.RuntimeInput && candidate.proposal.purpose !== ElicitationPurposes.A2uiAction) return false;
@@ -420,7 +420,7 @@ async function _OpenRuntimeElicitation(transaction: Prisma.TransactionClient, co
 	const expiresAt = new Date(Math.min(now.getTime() + candidate.proposal.expiresInSeconds * 1_000, context.leaseExpiresAtEpochMs));
 	if (expiresAt.getTime() <= now.getTime()) return false;
 	const fingerprint = __DigestCanonicalJson({ protocolVersion: candidate.protocolVersion, runtimeInstanceId: candidate.runtimeInstanceId, commandId: candidate.commandId, candidateId: candidate.candidateId, runId: context.runId, attempt: context.attempt, fence: candidate.fence, proposal: candidate.proposal } as unknown as JsonValue);
-	const opened = await authority.openInTransaction(transaction, {
+	const opened = await elicitationUnitOfWork.open({
 		requestId: `elicitation-${fingerprint.slice("sha256:".length)}`,
 		siloId: context.siloId,
 		conversationId: context.conversationId,

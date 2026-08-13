@@ -5,7 +5,8 @@ import { __DigestCanonicalJson, ExternalActionClaimKinds, ExternalActionRecovery
 import { ElicitationBodyKinds, ElicitationPurposes, RunInputSnapshotIdentityKinds, type RunInputSnapshot } from "@opencrane/contracts";
 import { PERSONAL_MEMORY_RECALL_TOOL_REVISION } from "@opencrane/models/agents";
 
-import { PrismaElicitationUnitOfWork, __ExpireRuntimeElicitationInTransaction, __OpenRuntimeElicitationInTransaction } from "../prisma-elicitation-unit-of-work.js";
+import { PrismaElicitationUnitOfWork } from "../prisma-elicitation-unit-of-work.js";
+import { PrismaRuntimeElicitationUnitOfWork } from "../prisma-runtime-elicitation-unit-of-work.js";
 
 const NOW = new Date("2026-08-11T10:00:00.000Z");
 
@@ -72,9 +73,10 @@ describe("PrismaElicitationUnitOfWork", function _Suite()
 		const existing = _Request({ body, bodyDigest: __DigestCanonicalJson(body), purposePayloadDigest: command.purposePayloadDigest });
 		const transaction = { elicitationRequest: { findUnique: vi.fn().mockResolvedValue(existing) } };
 
-		await expect(__OpenRuntimeElicitationInTransaction(transaction as never, command)).resolves.toMatchObject({ requestId: "request-1" });
-		await expect(__OpenRuntimeElicitationInTransaction(transaction as never, { ...command, body: { ...body, prompt: "Changed" } })).resolves.toBeNull();
-		await expect(__OpenRuntimeElicitationInTransaction(transaction as never, { ...command, requestId: "request-changed" })).resolves.toBeNull();
+		const unitOfWork = new PrismaRuntimeElicitationUnitOfWork(transaction as never);
+		await expect(unitOfWork.open(command)).resolves.toMatchObject({ requestId: "request-1" });
+		await expect(unitOfWork.open({ ...command, body: { ...body, prompt: "Changed" } })).resolves.toBeNull();
+		await expect(unitOfWork.open({ ...command, requestId: "request-changed" })).resolves.toBeNull();
 	});
 
 	it.each([ElicitationPurpose.RuntimeInput, ElicitationPurpose.A2uiAction])("expires due generic %s input with one terminal delivery before resuming", async function _ExpiresGenericRequest(purpose)
@@ -91,7 +93,7 @@ describe("PrismaElicitationUnitOfWork", function _Suite()
 			},
 		};
 
-		await expect(__ExpireRuntimeElicitationInTransaction(transaction as never, { runId: "run-1", attempt: 2, now: NOW })).resolves.toEqual({ expiredCount: 1, resumed: true });
+		await expect(new PrismaRuntimeElicitationUnitOfWork(transaction as never).expireDue({ runId: "run-1", attempt: 2, now: NOW })).resolves.toEqual({ expiredCount: 1, resumed: true });
 		expect(transaction.elicitationResultDelivery.create).toHaveBeenCalledWith({ data: { requestId: "request-1" } });
 		expect(transaction.elicitationResultDelivery.create.mock.invocationCallOrder[0]).toBeLessThan(transaction.elicitationRequest.updateMany.mock.invocationCallOrder[0] ?? 0);
 		expect(transaction.elicitationRequest.updateMany).toHaveBeenCalledWith(expect.objectContaining({ data: { state: ElicitationRequestState.Expired, resolvedAt: NOW, safeReason: "response_window_expired" } }));
@@ -106,7 +108,7 @@ describe("PrismaElicitationUnitOfWork", function _Suite()
 			agentRun: { findUnique: vi.fn().mockResolvedValue({ id: "run-1", attempt: 2, state: AgentRunState.WaitingForInput }), updateMany: vi.fn() },
 		};
 
-		await expect(__ExpireRuntimeElicitationInTransaction(transaction as never, { runId: "run-1", attempt: 2, now: NOW })).resolves.toEqual({ expiredCount: 1, resumed: false });
+		await expect(new PrismaRuntimeElicitationUnitOfWork(transaction as never).expireDue({ runId: "run-1", attempt: 2, now: NOW })).resolves.toEqual({ expiredCount: 1, resumed: false });
 		expect(transaction.agentRun.updateMany).not.toHaveBeenCalled();
 	});
 
@@ -119,7 +121,7 @@ describe("PrismaElicitationUnitOfWork", function _Suite()
 			agentRun: { findUnique: vi.fn().mockResolvedValue({ id: "run-1", attempt: 2, state: AgentRunState.WaitingForInput }), updateMany: vi.fn() },
 		};
 
-		await expect(__ExpireRuntimeElicitationInTransaction(transaction as never, { runId: "run-1", attempt: 2, now: NOW })).resolves.toEqual({ expiredCount: 1, resumed: false });
+		await expect(new PrismaRuntimeElicitationUnitOfWork(transaction as never).expireDue({ runId: "run-1", attempt: 2, now: NOW })).resolves.toEqual({ expiredCount: 1, resumed: false });
 		expect(transaction.agentRun.updateMany).not.toHaveBeenCalled();
 	});
 

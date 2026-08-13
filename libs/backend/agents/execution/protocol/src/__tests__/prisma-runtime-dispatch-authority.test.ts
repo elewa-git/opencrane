@@ -6,7 +6,7 @@ import { PERSONAL_MEMORY_RECALL_TOOL_NAME, PERSONAL_MEMORY_RECALL_TOOL_REVISION 
 import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 
 import { PrismaRuntimeDispatchAuthority } from "../prisma-runtime-dispatch-authority.js";
-import type { RunInputCompiler, RuntimeApprovalExpiry, RuntimeElicitationAuthority, RuntimeEventReporter, RuntimeStreamWorkloadIdentity } from "../prisma-runtime-dispatch-authority.types.js";
+import type { RunInputCompiler, RuntimeApprovalExpiry, RuntimeElicitationUnitOfWork, RuntimeElicitationUnitOfWorkFactory, RuntimeEventReporter, RuntimeStreamWorkloadIdentity } from "../prisma-runtime-dispatch-authority.types.js";
 import type { RuntimeProtocolClock } from "../runtime-protocol-authority.types.js";
 
 /** Workload identity of the registered runtime Pod under test. */
@@ -87,8 +87,8 @@ interface FakeOptions
 	readonly eventReporter?: RuntimeEventReporter;
 	/** Optional transaction-scoped approval expiry bridge supplied by the composition root. */
 	readonly approvalExpiry?: RuntimeApprovalExpiry;
-	/** Optional generic elicitation authority supplied by the composition root. */
-	readonly elicitationAuthority?: RuntimeElicitationAuthority;
+	/** Optional factory for generic elicitation work bound to each fake transaction. */
+	readonly elicitationUnitOfWorkFactory?: RuntimeElicitationUnitOfWorkFactory;
 	/** Agent-session conversation fixed in the immutable input snapshot. */
 	readonly conversationId?: string | null;
 	/** Optional trusted clock for retry-window expiry assertions. */
@@ -243,8 +243,9 @@ function _authority(options: FakeOptions)
 {
 	const fake = _fakePrisma(options);
 	const eventReporter = options.eventReporter ?? { reportInTransaction: vi.fn().mockResolvedValue({ outcome: "reported" as const }) };
-	const elicitationAuthority = options.elicitationAuthority ?? { openInTransaction: vi.fn().mockResolvedValue(null), expireInTransaction: vi.fn().mockResolvedValue({ expiredCount: 0, resumed: false }) };
-	return { authority: new PrismaRuntimeDispatchAuthority(fake.prisma, { personalRuntimeNamespace: "runtime-ns", managedRuntimeNamespace: "managed-runtime-ns", commandTtlMilliseconds: 60_000 }, options.compileRunInput ?? _compileRunInput, eventReporter, options.clock ?? _clock, options.approvalExpiry, elicitationAuthority), elicitationAuthority, ...fake };
+	const elicitationUnitOfWork: RuntimeElicitationUnitOfWork = { open: vi.fn().mockResolvedValue(null), expireDue: vi.fn().mockResolvedValue({ expiredCount: 0, resumed: false }) };
+	const elicitationUnitOfWorkFactory = options.elicitationUnitOfWorkFactory ?? { bind: vi.fn().mockReturnValue(elicitationUnitOfWork) };
+	return { authority: new PrismaRuntimeDispatchAuthority(fake.prisma, { personalRuntimeNamespace: "runtime-ns", managedRuntimeNamespace: "managed-runtime-ns", commandTtlMilliseconds: 60_000 }, options.compileRunInput ?? _compileRunInput, eventReporter, options.clock ?? _clock, options.approvalExpiry, elicitationUnitOfWorkFactory), elicitationUnitOfWork, elicitationUnitOfWorkFactory, ...fake };
 }
 
 /** Build a runtime event candidate bound to a dispatched command. */
@@ -507,7 +508,8 @@ describe("PrismaRuntimeDispatchAuthority", function _describeDispatchAuthority()
 		const resume = await context.authority.__NextCommand(_identity, _open, 1);
 
 		expect(expiry.expireInTransaction).toHaveBeenCalledWith(expect.anything(), { runId: "run-1", attempt: 1, now: new Date("2026-07-20T00:01:00.000Z") });
-		expect(context.elicitationAuthority.expireInTransaction).toHaveBeenCalledWith(expect.anything(), { runId: "run-1", attempt: 1, now: new Date("2026-07-20T00:01:00.000Z") });
+		expect(context.elicitationUnitOfWork.expireDue).toHaveBeenCalledWith({ runId: "run-1", attempt: 1, now: new Date("2026-07-20T00:01:00.000Z") });
+		expect(context.elicitationUnitOfWorkFactory.bind).toHaveBeenCalledTimes(1);
 		expect(resume?.kind).toBe("resume_attempt");
 	});
 
@@ -516,11 +518,9 @@ describe("PrismaRuntimeDispatchAuthority", function _describeDispatchAuthority()
 		const transactions: unknown[] = [];
 		let resumeRun = function _Noop(): void {};
 		const approvalExpiry: RuntimeApprovalExpiry = { async expireInTransaction(transaction) { transactions.push(transaction); return { expiredCount: 0, resumed: false }; } };
-		const elicitationAuthority: RuntimeElicitationAuthority = {
-			async openInTransaction() { return null; },
-			async expireInTransaction(transaction) { transactions.push(transaction); resumeRun(); return { expiredCount: 1, resumed: true }; },
-		};
-		const context = _authority({ runState: "WaitingForInput", savedElicitationResults: [{ requestId: "request-1", requestKey: "question-1", purpose: "RuntimeInput", state: "Expired", payload: null }], approvalExpiry, elicitationAuthority });
+		const elicitationUnitOfWork: RuntimeElicitationUnitOfWork = { async open() { return null; }, async expireDue() { resumeRun(); return { expiredCount: 1, resumed: true }; } };
+		const elicitationUnitOfWorkFactory: RuntimeElicitationUnitOfWorkFactory = { bind(transaction) { transactions.push(transaction); return elicitationUnitOfWork; } };
+		const context = _authority({ runState: "WaitingForInput", savedElicitationResults: [{ requestId: "request-1", requestKey: "question-1", purpose: "RuntimeInput", state: "Expired", payload: null }], approvalExpiry, elicitationUnitOfWorkFactory });
 		resumeRun = function _Resume(): void { context.run.state = "Running"; };
 		context.streams.push({ runId: "run-1", attempt: 1, fence: 1, inputGeneration: 0, runtimeInstanceId: "instance-1", nextCommandSequence: 2, acceptedCandidateIds: [] });
 		context.commands.push({ runId: "run-1", attempt: 1, sequence: 1, commandId: "command-start", kind: "StartAttempt", fence: 1, issuedAt: new Date("2026-07-20T00:00:30.000Z"), expiresAt: new Date("2026-07-20T00:01:30.000Z") });
@@ -567,27 +567,30 @@ describe("PrismaRuntimeDispatchAuthority", function _describeDispatchAuthority()
 	it("opens a runtime request before accepting its candidate id and exactly replays it", async function _OpensRuntimeElicitation()
 	{
 		let context: ReturnType<typeof _authority>;
-		const opened = vi.fn<RuntimeElicitationAuthority["openInTransaction"]>(async function _Open(_transaction, command)
+		const opened = vi.fn<RuntimeElicitationUnitOfWork["open"]>(async function _Open(command)
 		{
 			if (opened.mock.calls.length === 1) expect(context.streams[0]?.acceptedCandidateIds).toEqual([]);
 			return { version: "opencrane.elicitation.v1", requestId: command.requestId, conversationId: command.conversationId, runId: command.runId, attempt: command.attempt, assignedParticipantId: command.assignedParticipantId, purpose: command.purpose, state: "requested", body: command.body, requiresStepUp: false, requestedAt: command.now.toISOString(), expiresAt: command.expiresAt.toISOString() } as never;
 		});
-		const elicitationAuthority: RuntimeElicitationAuthority = { openInTransaction: opened, expireInTransaction: vi.fn().mockResolvedValue({ expiredCount: 0, resumed: false }) };
-		context = _authority({ runState: "Running", conversationId: "conversation-1", elicitationAuthority });
+		const elicitationUnitOfWork: RuntimeElicitationUnitOfWork = { open: opened, expireDue: vi.fn().mockResolvedValue({ expiredCount: 0, resumed: false }) };
+		const elicitationUnitOfWorkFactory: RuntimeElicitationUnitOfWorkFactory = { bind: vi.fn().mockReturnValue(elicitationUnitOfWork) };
+		context = _authority({ runState: "Running", conversationId: "conversation-1", elicitationUnitOfWorkFactory });
 		const start = await context.authority.__NextCommand(_identity, _open, 0);
 		const candidate: RuntimeCandidate = { protocolVersion: AGENT_RUNTIME_PROTOCOL_V1, runtimeInstanceId: "instance-1", commandId: start?.commandId ?? "command-1", candidateId: "candidate-input", runId: "run-1", attempt: 1, fence: 1, kind: RuntimeCandidateKinds.Elicitation, proposal: { requestKey: "question-1", purpose: ElicitationPurposes.RuntimeInput, body: { kind: ElicitationBodyKinds.FreeText, prompt: "What should I do next?", maximumLength: 500, allowEmpty: false }, purposePayloadDigest: ___DigestCanonicalJson(null), expiresInSeconds: 300 } };
 
 		await expect(context.authority.__AdmitCandidate(_identity, candidate)).resolves.toEqual({ accepted: true });
 		await expect(context.authority.__AdmitCandidate(_identity, candidate)).resolves.toEqual({ accepted: true });
 		expect(opened).toHaveBeenCalledTimes(2);
-		expect(opened.mock.calls[0]?.[1]).toMatchObject({ siloId: "silo-1", conversationId: "conversation-1", runId: "run-1", attempt: 1, assignedParticipantId: "user-1", requestKey: "question-1", purpose: ElicitationPurposes.RuntimeInput, expiresAt: new Date("2026-07-20T00:05:00.000Z") });
+		expect(opened.mock.calls[0]?.[0]).toMatchObject({ siloId: "silo-1", conversationId: "conversation-1", runId: "run-1", attempt: 1, assignedParticipantId: "user-1", requestKey: "question-1", purpose: ElicitationPurposes.RuntimeInput, expiresAt: new Date("2026-07-20T00:05:00.000Z") });
+		expect(elicitationUnitOfWorkFactory.bind).toHaveBeenCalledTimes(3);
 		expect(context.streams[0]?.acceptedCandidateIds).toEqual(["candidate-input"]);
 	});
 
 	it("refuses an elicitation replay when the durable request no longer matches", async function _RefusesElicitationReplayConflict()
 	{
-		const open = vi.fn<RuntimeElicitationAuthority["openInTransaction"]>().mockResolvedValueOnce({} as never).mockResolvedValueOnce(null);
-		const context = _authority({ runState: "Running", conversationId: "conversation-1", elicitationAuthority: { openInTransaction: open, expireInTransaction: vi.fn().mockResolvedValue({ expiredCount: 0, resumed: false }) } });
+		const open = vi.fn<RuntimeElicitationUnitOfWork["open"]>().mockResolvedValueOnce({} as never).mockResolvedValueOnce(null);
+		const elicitationUnitOfWork: RuntimeElicitationUnitOfWork = { open, expireDue: vi.fn().mockResolvedValue({ expiredCount: 0, resumed: false }) };
+		const context = _authority({ runState: "Running", conversationId: "conversation-1", elicitationUnitOfWorkFactory: { bind: vi.fn().mockReturnValue(elicitationUnitOfWork) } });
 		const start = await context.authority.__NextCommand(_identity, _open, 0);
 		const candidate: RuntimeCandidate = { protocolVersion: AGENT_RUNTIME_PROTOCOL_V1, runtimeInstanceId: "instance-1", commandId: start?.commandId ?? "command-1", candidateId: "candidate-input", runId: "run-1", attempt: 1, fence: 1, kind: RuntimeCandidateKinds.Elicitation, proposal: { requestKey: "question-1", purpose: ElicitationPurposes.RuntimeInput, body: { kind: ElicitationBodyKinds.FreeText, prompt: "Original?", maximumLength: 500, allowEmpty: false }, purposePayloadDigest: ___DigestCanonicalJson(null), expiresInSeconds: 300 } };
 

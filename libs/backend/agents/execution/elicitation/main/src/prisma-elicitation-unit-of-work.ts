@@ -17,7 +17,7 @@ import { _ParsePersonalMemoryPermissionPayload } from "./personal-memory-permiss
 const _PERSONAL_MEMORY_PERMISSION_EXTENSION_MILLISECONDS = 10 * 60 * 1_000;
 
 /** Prisma repository bound to exactly one serializable elicitation transaction. */
-class PrismaElicitationRepository implements ElicitationRepository
+export class PrismaElicitationRepository implements ElicitationRepository
 {
 	/** Exact transaction used by every read and write. */
 	private readonly _transaction: Prisma.TransactionClient;
@@ -327,18 +327,6 @@ export class PrismaElicitationUnitOfWork implements ElicitationUnitOfWork, Perso
 		this._prisma = prisma;
 	}
 
-	/** Open one runtime request on a dispatch transaction that already owns the run lock. */
-	static __OpenInTransaction(transaction: Prisma.TransactionClient, command: OpenElicitationCommand): Promise<ConversationElicitation | null>
-	{
-		return PrismaElicitationUnitOfWork._Repository(transaction).open(command);
-	}
-
-	/** Expire due runtime requests on a dispatch transaction that already owns the run lock. */
-	static __ExpireInTransaction(transaction: Prisma.TransactionClient, command: ExpireElicitationBatchCommand): Promise<ExpireElicitationBatchResult>
-	{
-		return PrismaElicitationUnitOfWork._Repository(transaction).expireDue(command);
-	}
-
 	/** Open one request atomically. */
 	async open(command: OpenElicitationCommand): Promise<ConversationElicitation | null>
 	{
@@ -393,27 +381,10 @@ export class PrismaElicitationUnitOfWork implements ElicitationUnitOfWork, Perso
 	{
 		return this._prisma.$transaction(async function _Transaction(transaction): Promise<TResult>
 		{
-			return work(PrismaElicitationUnitOfWork._Repository(transaction));
+			const repository = new PrismaElicitationRepository(transaction);
+			return work(repository);
 		}, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 	}
-
-	/** Construct the sole exact transaction-bound repository for all unit-of-work entry points. */
-	private static _Repository(transaction: Prisma.TransactionClient): ElicitationRepository
-	{
-		return new PrismaElicitationRepository(transaction);
-	}
-}
-
-/** Open one runtime request without nesting a second Prisma transaction. */
-export function __OpenRuntimeElicitationInTransaction(transaction: Prisma.TransactionClient, command: OpenElicitationCommand): Promise<ConversationElicitation | null>
-{
-	return PrismaElicitationUnitOfWork.__OpenInTransaction(transaction, command);
-}
-
-/** Expire due runtime requests without nesting a second Prisma transaction. */
-export function __ExpireRuntimeElicitationInTransaction(transaction: Prisma.TransactionClient, command: ExpireElicitationBatchCommand): Promise<ExpireElicitationBatchResult>
-{
-	return PrismaElicitationUnitOfWork.__ExpireInTransaction(transaction, command);
 }
 
 /** Project a persistence row into the browser-safe contract without protected payloads. */

@@ -1,7 +1,7 @@
 import { RuntimeCommandKind, type Prisma } from "@prisma/client";
 
 import { PrismaRuntimeResumeInputRepository } from "./prisma-runtime-resume-input-repository.js";
-import type { RuntimeApprovalExpiry, RuntimeCommandDecisionUnitOfWork, RuntimeElicitationAuthority } from "./prisma-runtime-dispatch-authority.types.js";
+import type { RuntimeApprovalExpiry, RuntimeCommandDecisionUnitOfWork, RuntimeElicitationUnitOfWork } from "./prisma-runtime-dispatch-authority.types.js";
 import type { RuntimeAdmissionRunState } from "./runtime-protocol-authority.types.js";
 
 /**
@@ -31,19 +31,19 @@ export class PrismaRuntimeCommandDecisionUnitOfWork implements RuntimeCommandDec
 	 *
 	 * @param context - Run, attempt, and current run state.
 	 * @param approvalExpiry - The injected expiry port, or null when none was wired.
-	 * @param elicitationAuthority - Generic request expiry bound to this same transaction.
+	 * @param elicitationUnitOfWork - Generic request expiry already bound to this same transaction.
 	 * @param now - Trusted server time.
 	 * @returns `not_required` - the run is not waiting for approval; carry on and decide a command.
 	 * `applied` - deadlines were processed, which obliges the caller to re-read the run before deciding,
 	 * because it may now be resumable or cancelling. `unavailable` - the run is waiting but no expiry
 	 * port exists, so the caller must send nothing at all rather than guess the wait is over.
 	 */
-	async expireWaiting(context: { readonly runId: string; readonly attempt: number; readonly runState: RuntimeAdmissionRunState }, approvalExpiry: RuntimeApprovalExpiry | null, elicitationAuthority: RuntimeElicitationAuthority | null, now: Date): Promise<"not_required" | "applied" | "unavailable">
+	async expireWaiting(context: { readonly runId: string; readonly attempt: number; readonly runState: RuntimeAdmissionRunState }, approvalExpiry: RuntimeApprovalExpiry | null, elicitationUnitOfWork: RuntimeElicitationUnitOfWork, now: Date): Promise<"not_required" | "applied" | "unavailable">
 	{
 		if (context.runState !== "waiting_for_input") return "not_required";
-		if (approvalExpiry === null || elicitationAuthority === null) return "unavailable";
+		if (approvalExpiry === null) return "unavailable";
 		await approvalExpiry.expireInTransaction(this._transaction, { runId: context.runId, attempt: context.attempt, now });
-		await elicitationAuthority.expireInTransaction(this._transaction, { runId: context.runId, attempt: context.attempt, now });
+		await elicitationUnitOfWork.expireDue({ runId: context.runId, attempt: context.attempt, now });
 		return "applied";
 	}
 

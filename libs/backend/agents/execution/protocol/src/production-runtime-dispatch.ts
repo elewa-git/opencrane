@@ -1,7 +1,7 @@
 import { type Prisma, type PrismaClient } from "@prisma/client";
 
 import { __AppendCompiledTool } from "@opencrane/backend/agents/execution/inputs";
-import { __ExpireRuntimeElicitationInTransaction, __OpenRuntimeElicitationInTransaction } from "@opencrane/backend/agents/execution/elicitation";
+import { PrismaRuntimeElicitationUnitOfWork } from "@opencrane/backend/agents/execution/elicitation";
 import { PrismaRuntimeEventReporter } from "@opencrane/backend/agents/execution/runs";
 import { __IsUpgradeSessionAvailable, UPGRADE_SESSION_TOOL } from "@opencrane/backend/agents/personal/configuration";
 import { __ExpireDeferredToolApprovalBatch } from "@opencrane/backend/server/iam/authorization";
@@ -11,7 +11,7 @@ import { ___DigestCanonicalJson } from "@opencrane/util";
 
 import { __CreatePrismaRunInputCompiler } from "./prisma-run-input-compiler.js";
 import { PrismaRuntimeDispatchAuthority } from "./prisma-runtime-dispatch-authority.js";
-import type { RunInputCompiler, RuntimeApprovalExpiry, RuntimeDispatchAuthorityConfig } from "./prisma-runtime-dispatch-authority.types.js";
+import type { RunInputCompiler, RuntimeApprovalExpiry, RuntimeDispatchAuthorityConfig, RuntimeElicitationUnitOfWorkFactory } from "./prisma-runtime-dispatch-authority.types.js";
 
 /** Reviewed arguments for one model-proposed personal-memory recall. */
 const _PERSONAL_MEMORY_RECALL_PARAMETERS_SCHEMA = {
@@ -58,6 +58,12 @@ function _CreateProductionApprovalExpiry(): RuntimeApprovalExpiry
 	return { expireInTransaction: __ExpireDeferredToolApprovalBatch };
 }
 
+/** Bind runtime elicitation work to each existing dispatch transaction. */
+function _CreateProductionRuntimeElicitationUnitOfWorkFactory(): RuntimeElicitationUnitOfWorkFactory
+{
+	return { bind(transaction) { return new PrismaRuntimeElicitationUnitOfWork(transaction); } };
+}
+
 /**
  * Construct the production runtime dispatch authority behind the workload stream.
  *
@@ -71,5 +77,5 @@ function _CreateProductionApprovalExpiry(): RuntimeApprovalExpiry
  */
 export function __CreateProductionRuntimeDispatchAuthority(prisma: PrismaClient, config: RuntimeDispatchAuthorityConfig): PrismaRuntimeDispatchAuthority
 {
-	return new PrismaRuntimeDispatchAuthority(prisma, config, __CreateProductionRunInputCompiler(), new PrismaRuntimeEventReporter(), undefined, _CreateProductionApprovalExpiry(), { openInTransaction: __OpenRuntimeElicitationInTransaction, expireInTransaction: __ExpireRuntimeElicitationInTransaction });
+	return new PrismaRuntimeDispatchAuthority(prisma, config, __CreateProductionRunInputCompiler(), new PrismaRuntimeEventReporter(), undefined, _CreateProductionApprovalExpiry(), _CreateProductionRuntimeElicitationUnitOfWorkFactory());
 }
