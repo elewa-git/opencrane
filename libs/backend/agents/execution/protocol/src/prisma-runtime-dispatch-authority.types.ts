@@ -93,7 +93,15 @@ export interface RuntimeApprovalExpiry
 	expireInTransaction(transaction: Prisma.TransactionClient, command: { readonly runId: string; readonly attempt: number; readonly now: Date }): Promise<{ readonly expiredCount: number; readonly resumed: boolean }>;
 }
 
-/** Durable generic elicitation work already bound to the dispatch transaction holding the run lock. */
+/**
+ * Applies runtime questions inside the dispatch transaction that already owns the run lock.
+ *
+ * Candidate admission calls {@link open} before accepting the candidate id. Command polling calls
+ * {@link expireDue} before deciding whether a waiting run can resume. Sharing the dispatch
+ * transaction keeps each request change and its surrounding decision in one commit.
+ *
+ * Called by: `_admitCandidate` and `_nextCommand` in prisma-runtime-dispatch-authority.ts.
+ */
 export interface RuntimeElicitationUnitOfWork
 {
 	/** Open or exactly replay one validated request before candidate-id acceptance. */
@@ -102,7 +110,15 @@ export interface RuntimeElicitationUnitOfWork
 	expireDue(command: ExpireElicitationBatchCommand): Promise<ExpireElicitationBatchResult>;
 }
 
-/** Creates one elicitation unit of work for one exact runtime dispatch transaction. */
+/**
+ * Binds runtime elicitation work to the transaction opened by dispatch.
+ *
+ * The factory keeps the protocol package independent from Prisma elicitation storage while ensuring
+ * the concrete adapter cannot open a nested transaction.
+ *
+ * Called by: `_admitCandidate` and `_nextCommand` in prisma-runtime-dispatch-authority.ts. Production
+ * composition provides it through `_CreateProductionRuntimeElicitationUnitOfWorkFactory`.
+ */
 export interface RuntimeElicitationUnitOfWorkFactory
 {
 	/** Bind generic request work to the caller's existing transaction without starting another one. */

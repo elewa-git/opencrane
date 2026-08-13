@@ -132,9 +132,7 @@ def build_zero_retry_agent(
         },
         capabilities=output_configuration.capabilities,
         model_settings=output_configuration.model_settings,
-        # A turn may end in one of two ways: text, or a set of calls the framework hands back instead of
-        # running. That second option is what lets a tool call or a question stop the turn here and go to
-        # the server, rather than the framework trying to carry it out itself.
+        # Return calls to the server instead of letting the framework run them.
         output_type=[str, deferred_tool_requests_cls],
         toolsets=toolsets,
     )
@@ -148,19 +146,14 @@ def _external_toolsets(
 ) -> list[object]:
     """Describe the granted tools to the model, in a way the framework cannot run itself.
 
-    The framework's ``ExternalToolset`` shows the model a tool's name and parameters but has no code to
-    call, so every call the model makes comes back to OpenCrane as an event instead of being executed
-    here. That is what forces each one through the server's admission, approval, and worker steps.
-
-    The built-in question tool is added to whatever the server granted, so a model can always ask the
-    participant something even when it has no tools at all.
+    ``ExternalToolset`` describes calls but cannot run them. It therefore returns every call to the
+    server for admission, approval, and worker execution. The built-in question tool remains
+    available even when the server granted no other tools.
 
     Called by: ``build_zero_retry_agent`` in this module.
 
     Raises:
-        RuntimeError: When a compiled tool is missing fields, when two share a name, or when one uses the
-            built-in question tool's name. Each of these would leave the model with a tool the server
-            could not match a call back to, so the attempt fails instead.
+        RuntimeError: When the server could not match a future call to one granted tool.
     """
     if external_toolset_cls is None or tool_definition_cls is None:
         from pydantic_ai import ExternalToolset, ToolDefinition
@@ -176,9 +169,7 @@ def _external_toolsets(
         description = compiled_tool.get("description")
         requires_approval = compiled_tool.get("requiresApproval")
         parameters_schema = compiled_tool.get("parametersSchema")
-        # The revision and the approval flag are checked here but never shown to the model. They have to
-        # be present all the same: an entry without them did not come from the server that decides
-        # approval, and this runtime is not going to choose a value for either.
+        # Require the server-owned revision and approval decision even though the model does not see them.
         if (
             not isinstance(name, str)
             or _MODEL_TOOL_NAME.fullmatch(name) is None
@@ -189,12 +180,10 @@ def _external_toolsets(
             or not isinstance(parameters_schema, dict)
         ):
             raise RuntimeError("compiled input contains a malformed tool definition")
-        # Refuse two tools sharing a name. A call names the tool it wants, so the server would have no
-        # way to tell which of the two revisions the model meant.
+        # Refuse duplicate names because a future call could not identify the intended revision.
         if name in names:
             raise RuntimeError("compiled input contains duplicate model-visible tool names")
-        # Refuse a granted tool that uses the built-in question tool's name. Calls to it would be read as
-        # questions to the participant, and would skip tool admission completely.
+        # Reserve the question name so a granted tool cannot bypass normal tool admission.
         if name == ELICITATION_TOOL_NAME:
             raise RuntimeError("compiled input shadows the built-in elicitation tool")
         names.add(name)
@@ -206,8 +195,7 @@ def _external_toolsets(
                 parameters_json_schema=copy.deepcopy(parameters_schema),
             ),
         )
-    # Add the question tool last, and add it always. Asking the participant something is part of how the
-    # runtime works, not a tool a silo hands out, so an agent with no granted tools still has this one.
+    # Add the server-handled question tool even when the agent has no granted tools.
     definitions.append(
         tool_definition_cls(
             name=ELICITATION_TOOL_NAME,
@@ -312,8 +300,7 @@ def pydantic_ai_resume_source(
         raise RuntimeError("deferred tool resume has no same-attempt model history")
     if not isinstance(tool_results, dict):
         raise RuntimeError("deferred tool resume requires exact call results")
-    # The mapping is already keyed by the framework's own call ids, and ``resolve_resume_results`` has
-    # already made sure each result is used once, so it goes to the framework as it is.
+    # Pass through results after ``resolve_resume_results`` has matched and consumed each call id.
     deferred_tool_results = DeferredToolResults(calls=tool_results)
 
     async def _collect() -> list[dict[str, object]]:
@@ -322,8 +309,7 @@ def pydantic_ai_resume_source(
         # adapter never calls the external tool or recreates a result from pending-call metadata.
         events: list[dict[str, object]] = []
         output_ordinal = 0
-        # Resume from the stored messages and the results, with no new prompt. Sending the prompt again
-        # would read to the model as the participant repeating their original request.
+        # Do not repeat the prompt because the stored messages already contain the participant's request.
         async with agent.iter(message_history=message_history, deferred_tool_results=deferred_tool_results) as run:
             async for node in run:
                 # A resumed graph is no less cancellable than a fresh graph; do not enter another node
@@ -391,11 +377,7 @@ def prompt(compiled_input: dict[str, object]) -> str:
 
 
 def _run_usage(run: object) -> object:
-    """Read a run's token counts, whether the framework exposes them as a method or a property.
-
-    Pydantic AI changed ``usage`` from a method to a property. Handling both means the token counts stay
-    right against the pinned version and against the stand-ins the offline tests use.
-    """
+    """Read usage from the pinned property and the callable stand-ins used by offline tests."""
     usage = getattr(run, "usage", None)
     return usage() if callable(usage) else usage
 
@@ -498,11 +480,7 @@ def _model_loop_components(compiled_input: dict[str, object]) -> tuple[object, O
 
 
 def _history_coordinates(compiled_input: dict[str, object]) -> tuple[str, int]:
-    """Read the run and attempt out of the compiled input.
-
-    Stored messages are keyed by these two values, so they are taken from the compiled input the server
-    sealed rather than from anything this process is holding. A wrong key would either hide the messages
-    of a live attempt or read another attempt's.
+    """Read the server-sealed key used to isolate one attempt's stored messages.
 
     Raises:
         RuntimeError: When either value is missing or malformed.

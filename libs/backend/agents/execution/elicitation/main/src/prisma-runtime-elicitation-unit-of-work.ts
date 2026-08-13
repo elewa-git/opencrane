@@ -11,28 +11,47 @@ import { PrismaElicitationRepository } from "./prisma-elicitation-unit-of-work.j
  * This adapter never starts a nested transaction. Its repository is constructed from the exact
  * transaction supplied by runtime dispatch, so opening and expiring requests share the caller's
  * locks and commit or roll back with the surrounding command or candidate decision.
+ *
+ * Called by: `_CreateProductionRuntimeElicitationUnitOfWorkFactory` binds an instance inside every
+ * command-polling and candidate-admission transaction.
+ *
+ * @see RuntimeElicitationUnitOfWork in prisma-runtime-dispatch-authority.types.ts
  */
 export class PrismaRuntimeElicitationUnitOfWork
 {
-	/** Exact runtime dispatch transaction used by this unit of work. */
+	/** Keeps every repository operation inside the dispatch transaction that owns the run lock. */
 	private readonly _transaction: Prisma.TransactionClient;
-	/** Elicitation repository bound to the exact runtime dispatch transaction. */
+	/** Applies elicitation changes through that same dispatch transaction. */
 	private readonly _repository: PrismaElicitationRepository;
 
-	/** Bind runtime elicitation work to the caller's existing transaction. */
+	/**
+	 * Binds elicitation work to the caller's existing transaction without starting another one.
+	 *
+	 * @param transaction - The dispatch transaction that already owns the run lock.
+	 */
 	constructor(transaction: Prisma.TransactionClient)
 	{
 		this._transaction = transaction;
 		this._repository = new PrismaElicitationRepository(this._transaction);
 	}
 
-	/** Open or exactly replay one validated runtime request. */
+	/**
+	 * Opens a validated request or replays the matching request within the dispatch decision.
+	 *
+	 * @param command - The request already bound to the admitted run, attempt, and participant.
+	 * @returns The stored browser-safe request, or null when the proposal conflicts with live state.
+	 */
 	open(command: OpenElicitationCommand): Promise<ConversationElicitation | null>
 	{
 		return this._repository.open(command);
 	}
 
-	/** Expire due runtime requests while the caller still holds the run lock. */
+	/**
+	 * Expires due requests before command polling decides whether the waiting run can resume.
+	 *
+	 * @param command - The locked run attempt and trusted server time.
+	 * @returns How many requests expired and whether their consequences resumed the run.
+	 */
 	expireDue(command: ExpireElicitationBatchCommand): Promise<ExpireElicitationBatchResult>
 	{
 		return this._repository.expireDue(command);

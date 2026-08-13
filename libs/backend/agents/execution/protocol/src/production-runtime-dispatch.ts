@@ -58,7 +58,7 @@ function _CreateProductionApprovalExpiry(): RuntimeApprovalExpiry
 	return { expireInTransaction: __ExpireDeferredToolApprovalBatch };
 }
 
-/** Bind runtime elicitation work to each existing dispatch transaction. */
+/** Bind elicitation work to the dispatch transaction so it cannot commit apart from the decision. */
 function _CreateProductionRuntimeElicitationUnitOfWorkFactory(): RuntimeElicitationUnitOfWorkFactory
 {
 	return { bind(transaction) { return new PrismaRuntimeElicitationUnitOfWork(transaction); } };
