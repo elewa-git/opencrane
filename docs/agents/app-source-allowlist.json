@@ -58,6 +58,7 @@
     { "path": "apps/opencrane-ui/src/app/app.routes.ts", "owner": "apps/opencrane-ui", "classification": "browser-route-composition" },
     { "path": "apps/opencrane-ui/src/app/agent-thread/agent-thread-route.component.ts", "owner": "apps/opencrane-ui", "classification": "browser-route-composition" },
     { "path": "apps/opencrane-ui/src/app/agent-thread/agent-thread-route.state.ts", "owner": "apps/opencrane-ui", "classification": "browser-route-composition" },
+    { "path": "apps/opencrane-ui/src/app/agent-thread/agent-thread-route.state.types.ts", "owner": "apps/opencrane-ui", "classification": "browser-route-composition" },
     { "path": "apps/opencrane-ui/src/app/chats/chats-pending.component.ts", "owner": "apps/opencrane-ui", "classification": "browser-entry-view" },
     { "path": "apps/opencrane-ui/src/app/login/login-page.component.ts", "owner": "apps/opencrane-ui", "classification": "browser-entry-view" },
     { "path": "apps/opencrane-ui/src/app/operator-access.guard.ts", "owner": "apps/opencrane-ui", "classification": "browser-entry-guard" },
