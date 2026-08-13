@@ -9,7 +9,7 @@ enum AgentRunState {
   Queued             @map("queued")
   Assigned           @map("assigned")
   Running            @map("running")
-  WaitingForApproval @map("waiting_for_approval")
+  WaitingForInput    @map("waiting_for_input")
   RecoveryRequired   @map("recovery_required")
   Cancelling         @map("cancelling")
   Completed          @map("completed")
@@ -82,6 +82,7 @@ model AgentRun {
   workloadAssignments      WorkloadAssignment[]
   proofKeys                RunProofKey[]
   approvalRequests         ApprovalRequest[]
+  elicitationRequests      ElicitationRequest[]
   executionReceipts        ActionExecutionReceipt[]
   toolInvocations          ToolInvocation[]
   outboxEvents             OutboxEvent[]
@@ -95,6 +96,7 @@ model AgentRun {
 
   @@unique([siloId, requestIdempotencyKey])
   @@unique([id, agentServiceId, agentRevisionId])
+  @@unique([id, attempt])
   @@unique([id, siloId, agentServiceId, agentRevisionId])
   @@unique([id, agentRevisionId])
   @@unique([id, inputSnapshotDigest])
@@ -155,7 +157,7 @@ model RunInputSnapshot {
   messageIds              String[]  @default([]) @map("message_ids")
   preferenceFactIds       String[]  @default([]) @map("preference_fact_ids")
   artifactRevisionIds     String[]  @default([]) @map("artifact_revision_ids")
-  memoryFacts             Json      @map("memory_facts")
+  retiredMemoryFacts      Json      @default("[]") @map("memory_facts")
   identitySnapshot        Json      @map("identity_snapshot")
   modelRoute              Json      @map("model_route")
   integrationAssignments  Json      @map("integration_assignments")

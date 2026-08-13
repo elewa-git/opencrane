@@ -24,6 +24,8 @@
     "../../../features/onboarding/src/**/__tests__/*.stories.ts",
 	"../../../features/context/src/**/__tests__/*.stories.ts",
 	"../../../features/conversation-assets/src/**/__tests__/*.stories.ts",
+	"../../../features/conversation-activity/src/**/__tests__/*.stories.ts",
+	"../../../features/conversation-elicitation/src/**/__tests__/*.stories.ts",
     "preview.ts"
   ]
 }

@@ -13,7 +13,7 @@ function _runState(value: string): DomainAgentRunState
 		case "Queued": return "queued";
 		case "Assigned": return "assigned";
 		case "Running": return "running";
-		case "WaitingForApproval": return "waiting_for_approval";
+		case "WaitingForInput": return "waiting_for_input";
 		case "Cancelling": return "cancelling";
 		case "Completed": return "completed";
 		case "Failed": return "failed";

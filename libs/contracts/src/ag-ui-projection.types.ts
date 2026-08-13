@@ -3,6 +3,7 @@ import type { BeginRenderingMessage, DataModelUpdate, SurfaceUpdateMessage } fro
 
 import type { RunEventType } from "@opencrane/models/agents";
 import type { ConversationId } from "@opencrane/models/conversations";
+import type { SafeToolTechnicalDetails } from "./conversation-elicitation.types.js";
 
 /**
  * Version tag for OpenCrane's AG-UI event projection.
@@ -89,6 +90,19 @@ export interface AgUiA2uiEnvelope
 	readonly state: AgUiA2uiSurfaceStates;
 	readonly operations: readonly AgUiA2uiOperation[];
 	readonly reason?: string;
+	/** Server-projected displayed action binding; presentation alone never grants authority. */
+	readonly actionBinding?: AgUiA2uiActionBinding;
+}
+
+/** One displayed A2UI action bound to an already-admitted elicitation request. */
+export interface AgUiA2uiActionBinding
+{
+	/** Display-only action identifier from the reviewed surface. */
+	readonly displayedActionId: string;
+	/** Exact component that emitted the display intent. */
+	readonly sourceComponentId: string;
+	/** Existing elicitation request on the same conversation, run, and attempt. */
+	readonly elicitationRequestId: string;
 }
 
 /** How a child run ended, as reported to its immediate parent run. */
@@ -121,6 +135,10 @@ export interface AgUiToolFailureEnvelope
 	readonly toolCallId: string;
 	/** Optional failure code the server picks from a fixed safe list. */
 	readonly failureCode?: string;
+	/** Whether the server will retry after surfacing this failed attempt. */
+	readonly retrying: boolean;
+	/** Explicitly typed provider-free details available behind progressive disclosure. */
+	readonly technicalDetails: SafeToolTechnicalDetails;
 }
 
 /** The reasons a provider call can be left in an unknown state after it was sent. */
@@ -170,6 +188,7 @@ export interface AgUiPublicEventPayload
 	readonly toolResult?: string;
 	readonly terminalReason?: string;
 	readonly failureCode?: string;
+	readonly toolFailure?: Omit<AgUiToolFailureEnvelope, "eventType" | "toolCallId">;
 	readonly interrupt?: Interrupt;
 	readonly a2ui?: AgUiA2uiEnvelope;
 	readonly childRun?: AgUiChildRunEnvelope;

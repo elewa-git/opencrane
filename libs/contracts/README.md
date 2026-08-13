@@ -83,11 +83,9 @@ runtime from silently interpreting a frozen snapshot with different assembly rul
   text, raw arguments, credentials, or retry authority.
 - Hand-written DTOs/enums: `Grant`/`GrantScope`/`GrantAccess`, `Group`, `ClusterTenant*`,
   `McpServer*`/`Mcp*` operator types (MCP — the Model Context Protocol for connecting external tools),
-  model-routing types, `Memory*`, `Approval`, `ThirdPartySource*`, `RuntimeAssignment`,
+  model-routing types, memory-gateway constants, `ThirdPartySource*`, `RuntimeAssignment`,
   `RunInputSnapshot`/`RunInputSnapshotIdentity`/`RunInputSnapshotIdentityKinds`/`RunInputSnapshotIntegrationAssignment`,
-  `MemoryFactReference`, `TenantModelSet`, and
-  domain-topology host builders. A memory fact reference pins an immutable content digest and its
-  provenance rather than a mutable revision counter.
+  `TenantModelSet`, and domain-topology host builders.
 - `PROMPT_COMPILER_VERSION` — the immutable compiler-version pin every executable agent revision
   must name before it can admit a run.
 - `AgentConfigPatchKinds` — the durable `persona_refresh` and `model_alias` vocabulary shared by
@@ -103,6 +101,8 @@ runtime from silently interpreting a frozen snapshot with different assembly rul
   runtime instance to the Pod UID independently verified from its Kubernetes credential. Personal
   and managed runtimes use distinct projected-token audiences and ServiceAccount grammars, so one
   workload class cannot borrow the other's transport identity.
+- `RuntimeCommandKinds` and `RuntimeCandidateKinds` — documented string-backed discriminants that
+  keep workload command and candidate control flow exhaustive while preserving protocol bytes.
 - `AGENT_CONTROLLER_PROJECTED_TOKEN_AUDIENCE`, `AGENT_CONTROLLER_SERVICE_ACCOUNT_NAME`, and
   `AgentControllerRunAttempt*`/`AgentControllerSkillWorkload*` — the private controller handshake for claiming one authorised run or governed skill workload,
   reporting the Kubernetes-issued Job identity, and committing that identity under the same database

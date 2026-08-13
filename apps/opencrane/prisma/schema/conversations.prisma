@@ -51,6 +51,7 @@ model Conversation {
   timelineEntries      ConversationTimelineEntry[]
   contextRevisions     ConversationContextRevision[] @relation("ConversationContextRevisions")
   runs                 AgentRun[]
+  elicitationRequests  ElicitationRequest[]
   activeContext        ConversationContextRevision?  @relation("ActiveConversationContext", fields: [id, contextRevisionId], references: [conversationId, id], onDelete: Restrict)
   assets               ConversationAsset[]
   assetOutputTickets   ConversationAssetOutputTicket[]
@@ -74,6 +75,7 @@ model ConversationParticipant {
   joinedAt            DateTime     @default(now()) @map("joined_at")
   conversation        Conversation @relation(fields: [conversationId], references: [id], onDelete: Restrict)
   timelineEntries     ConversationTimelineEntry[]
+  assignedElicitations ElicitationRequest[]
 
   @@id([conversationId, userId])
   @@index([userId, archivedAt, conversationId])

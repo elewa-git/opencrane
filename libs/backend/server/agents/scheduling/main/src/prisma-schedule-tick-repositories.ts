@@ -6,7 +6,7 @@ import { ScheduleCursorAdvanceOutcomes } from "./schedule-tick.enums.js";
 import type { ActiveScheduledRunRepository, AdvanceScheduleCursorCommand, AdvanceScheduleCursorResult, EnabledScheduleSnapshot, EnabledScheduleSnapshotRepository, ScheduleCursorRepository } from "./schedule-ticker-unit-of-work.types.js";
 
 /** Non-terminal states that count as an in-flight scheduled run for overlap skipping. */
-const _ACTIVE_SCHEDULED_RUN_STATES = [AgentRunState.Accepted, AgentRunState.Queued, AgentRunState.Assigned, AgentRunState.Running, AgentRunState.WaitingForApproval, AgentRunState.Cancelling];
+const _ACTIVE_SCHEDULED_RUN_STATES = [AgentRunState.Accepted, AgentRunState.Queued, AgentRunState.Assigned, AgentRunState.Running, AgentRunState.WaitingForInput, AgentRunState.Cancelling];
 
 /** Prisma row shape required to produce one version-fenced enabled schedule snapshot. */
 interface _EnabledScheduleRow

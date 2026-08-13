@@ -1,4 +1,5 @@
 import type { UpgradeSessionProposalRepository } from "@opencrane/backend/agents/personal/configuration";
+import type { PersonalMemoryPermissionAuthority } from "@opencrane/backend/agents/execution/elicitation";
 
 import type { ProductionExternalActionTransports } from "./external-action-executor.types.js";
 
@@ -9,6 +10,8 @@ export interface ProductionExternalActionAdapterDependencies
 	readonly transports: ProductionExternalActionTransports;
 	/** Writes upgrade-session proposals for the built-in personal configuration tool. */
 	readonly personalConfiguration: UpgradeSessionProposalRepository;
-	/** Server clock used to timestamp built-in proposals. */
+	/** Exact execution-user receipt verifier for personal-memory recall. */
+	readonly personalMemoryPermissions: PersonalMemoryPermissionAuthority;
+	/** Trusted server wall clock for built-in proposal evidence. */
 	readonly now: () => Date;
 }

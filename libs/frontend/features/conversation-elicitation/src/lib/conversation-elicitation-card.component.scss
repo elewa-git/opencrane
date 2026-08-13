@@ -1,0 +1,7 @@
+:host { display: block; }
+.elicitation-card { display: grid; gap: var(--oc-space-4); padding: var(--oc-space-4); border: 1px solid var(--oc-border-default); border-radius: var(--oc-radius-card); background: var(--oc-surface-raised); box-shadow: var(--oc-shadow-card); }
+.elicitation-card__actions { display: flex; justify-content: flex-end; gap: var(--oc-space-2); }
+.elicitation-card__outcome { display: grid; gap: var(--oc-space-1); margin: 0; }
+.elicitation-card__outcome span { color: var(--oc-ink-muted); }
+@media (max-width: 640px) { .elicitation-card__actions { align-items: stretch; flex-direction: column; } }
+@media (prefers-reduced-motion: reduce) { :host, :host * { scroll-behavior: auto; transition: none; animation: none; } }

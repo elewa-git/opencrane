@@ -59,7 +59,7 @@ SELECT (
         WHERE "schema_version" = '0.8.0'
           AND "source_schema_version" = '0.7.0'
           AND "source_baseline_sha256" = :'source_baseline_sha256'
-          AND "target_baseline_sha256" = '32797f3ab1a6b2960c5761890b0605a1467430758abedf7bf4396f41a59e1d57'
+          AND "target_baseline_sha256" = 'f13768489dcdf7d0878919f2c2cd6f4ceb8550e0ff9eab0cc61f712911fd7a20'
           AND "sql_sha256" = :'migration_sql_sha256'
           AND "migration_id" = '0.7.0-to-0.8.0') = 1
     AND (SELECT "baseline_sha256" FROM "opencrane_bootstrap"."target_baseline" WHERE "singleton" = TRUE)
@@ -389,7 +389,8 @@ $migration_preflight$;
 -- ToolInvocation is a destructive pre-release replacement. The user approved discarding the old
 -- 0.7 invocation/retry rows; the preflight above separately protects any governed workload that
 -- still points at one of those obsolete rows instead of silently deleting that history.
-ALTER TYPE "AgentRunState" ADD VALUE IF NOT EXISTS 'recovery_required' AFTER 'waiting_for_approval';
+ALTER TYPE "AgentRunState" RENAME VALUE 'waiting_for_approval' TO 'waiting_for_input';
+ALTER TYPE "AgentRunState" ADD VALUE IF NOT EXISTS 'recovery_required' AFTER 'waiting_for_input';
 ALTER TABLE "approval_requests" DROP CONSTRAINT "approval_requests_tool_invocation_row_id_fkey";
 ALTER TABLE "skill_workloads" DROP CONSTRAINT "skill_workloads_tool_invocation_id_fkey";
 DELETE FROM "tool_invocations";
@@ -693,7 +694,7 @@ BEGIN
           AND "key_thumbprint" = NEW."proof_key_thumbprint" AND "pod_uid" = NEW."pod_uid"
         FOR UPDATE;
         IF current_attempt IS DISTINCT FROM NEW."attempt"
-            OR current_run_state IS DISTINCT FROM 'waiting_for_approval'::"AgentRunState"
+            OR current_run_state IS DISTINCT FROM 'waiting_for_input'::"AgentRunState"
             OR assignment_state IS DISTINCT FROM 'registered'::"WorkloadAssignmentState"
             OR assignment_expires_at <= decision_time OR proof_revoked_at IS NOT NULL
             OR proof_expires_at <= decision_time THEN
@@ -763,7 +764,7 @@ BEGIN
         SELECT "expires_at", "revoked_at" INTO proof_expires_at, proof_revoked_at
         FROM "run_proof_keys" WHERE "id" = OLD."proof_key_id" FOR UPDATE;
         IF current_attempt IS DISTINCT FROM OLD."attempt"
-            OR current_run_state IS DISTINCT FROM 'waiting_for_approval'::"AgentRunState"
+            OR current_run_state IS DISTINCT FROM 'waiting_for_input'::"AgentRunState"
             OR assignment_state IS DISTINCT FROM 'registered'::"WorkloadAssignmentState"
             OR assignment_expires_at <= decision_time OR proof_revoked_at IS NOT NULL
             OR proof_expires_at <= decision_time THEN
@@ -846,6 +847,8 @@ ALTER TABLE "run_input_snapshots"
 ALTER TABLE "personal_configuration_changes" RENAME COLUMN "source_thread_id" TO "source_conversation_id";
 ALTER TABLE "agent_runs" RENAME COLUMN "thread_id" TO "conversation_id";
 ALTER TABLE "run_input_snapshots" RENAME COLUMN "thread_id" TO "conversation_id";
+-- Preserve the retired compile-time fact-reference data while allowing new snapshots to omit it.
+ALTER TABLE "run_input_snapshots" ALTER COLUMN "memory_facts" SET DEFAULT '[]'::jsonb;
 
 CREATE TABLE "channel_invocation_contexts" (
     "id" TEXT NOT NULL,
@@ -1168,8 +1171,8 @@ BEGIN
             (OLD."state" = 'accepted' AND NEW."state" IN ('queued', 'failed', 'cancelling')) OR
             (OLD."state" = 'queued' AND NEW."state" IN ('assigned', 'failed', 'cancelling')) OR
             (OLD."state" = 'assigned' AND NEW."state" IN ('running', 'failed', 'cancelling')) OR
-            (OLD."state" = 'running' AND NEW."state" IN ('waiting_for_approval', 'completed', 'failed', 'cancelling')) OR
-            (OLD."state" = 'waiting_for_approval' AND NEW."state" IN ('running', 'completed', 'failed', 'cancelling')) OR
+            (OLD."state" = 'running' AND NEW."state" IN ('waiting_for_input', 'completed', 'failed', 'cancelling')) OR
+            (OLD."state" = 'waiting_for_input' AND NEW."state" IN ('running', 'completed', 'failed', 'cancelling')) OR
             (OLD."state" = 'cancelling' AND NEW."state" = 'cancelled')
         ) THEN
             RAISE EXCEPTION 'invalid AgentRun state transition';
@@ -3354,6 +3357,287 @@ INSERT INTO "user_onboarding_bootstrap_questions" ("content_revision_id", "ordin
     ('bootstrap-analyst-v1', 2, $prompt_analyst_2$What level of detail do you typically want in an initial response?$prompt_analyst_2$),
     ('bootstrap-analyst-v1', 3, $prompt_analyst_3$What standards or references should I use as authoritative in your field?$prompt_analyst_3$);
 
+-- Generic conversation elicitation replaces browser-facing approval-only authority. The retained
+-- ApprovalRequest remains the tool-specific audit row and keeps its opaque resume-token evidence.
+CREATE TYPE "ElicitationRequestState" AS ENUM ('requested', 'answered', 'declined', 'expired', 'cancelled');
+CREATE TYPE "ElicitationBodyKind" AS ENUM ('approval', 'single_choice', 'multiple_choice', 'free_text');
+CREATE TYPE "ElicitationPurpose" AS ENUM ('runtime_input', 'tool_approval', 'personal_memory_permission', 'a2ui_action');
+CREATE TYPE "ElicitationResultDeliveryState" AS ENUM ('pending', 'consumed');
+CREATE TYPE "PersonalMemoryPermissionReceiptState" AS ENUM ('active', 'consumed');
+
+ALTER TABLE "approval_requests" ADD COLUMN "elicitation_request_id" TEXT;
+CREATE UNIQUE INDEX "approval_requests_elicitation_request_id_key" ON "approval_requests"("elicitation_request_id");
+CREATE UNIQUE INDEX "agent_runs_id_attempt_key" ON "agent_runs"("id", "attempt");
+
+CREATE TABLE "elicitation_requests" (
+    "id" TEXT NOT NULL, "silo_id" TEXT NOT NULL, "conversation_id" TEXT NOT NULL,
+    "run_id" TEXT NOT NULL, "attempt" INTEGER NOT NULL,
+    "assigned_participant_id" TEXT NOT NULL, "request_key" TEXT NOT NULL,
+    "purpose" "ElicitationPurpose" NOT NULL, "body_kind" "ElicitationBodyKind" NOT NULL,
+    "body" JSONB NOT NULL, "body_digest" TEXT NOT NULL, "purpose_payload" JSONB,
+    "purpose_payload_digest" TEXT NOT NULL, "state" "ElicitationRequestState" NOT NULL DEFAULT 'requested',
+    "requires_step_up" BOOLEAN NOT NULL DEFAULT false, "expires_at" TIMESTAMP(3) NOT NULL,
+    "resolved_at" TIMESTAMP(3), "resolved_by" TEXT, "safe_reason" TEXT,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "elicitation_requests_pkey" PRIMARY KEY ("id")
+);
+CREATE TABLE "elicitation_response_attempts" (
+    "id" TEXT NOT NULL, "request_id" TEXT NOT NULL, "idempotency_key" TEXT NOT NULL,
+    "responding_subject_id" TEXT NOT NULL, "response" JSONB NOT NULL, "response_digest" TEXT NOT NULL,
+    "verified_step_up_at" TIMESTAMP(3),
+    "submitted_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "elicitation_response_attempts_pkey" PRIMARY KEY ("id")
+);
+CREATE TABLE "elicitation_result_deliveries" (
+    "id" TEXT NOT NULL, "request_id" TEXT NOT NULL,
+    "state" "ElicitationResultDeliveryState" NOT NULL DEFAULT 'pending', "payload" JSONB,
+    "payload_digest" TEXT, "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "consumed_at" TIMESTAMP(3), CONSTRAINT "elicitation_result_deliveries_pkey" PRIMARY KEY ("id")
+);
+CREATE TABLE "personal_memory_permission_receipts" (
+    "id" TEXT NOT NULL, "request_id" TEXT NOT NULL, "tool_invocation_id" TEXT NOT NULL,
+    "tool_invocation_revision" INTEGER NOT NULL, "run_id" TEXT NOT NULL, "attempt" INTEGER NOT NULL,
+    "execution_subject_id" TEXT NOT NULL, "responding_subject_id" TEXT NOT NULL,
+    "query_digest" TEXT NOT NULL, "input_snapshot_digest" TEXT NOT NULL, "persona_revision_id" TEXT NOT NULL,
+    "purpose_digest" TEXT NOT NULL, "state" "PersonalMemoryPermissionReceiptState" NOT NULL DEFAULT 'active',
+    "expires_at" TIMESTAMP(3) NOT NULL, "consumed_at" TIMESTAMP(3),
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "personal_memory_permission_receipts_pkey" PRIMARY KEY ("id")
+);
+
+CREATE INDEX "elicitation_requests_conversation_id_state_created_at_idx" ON "elicitation_requests"("conversation_id", "state", "created_at");
+CREATE INDEX "elicitation_requests_assigned_participant_id_state_expires__idx" ON "elicitation_requests"("assigned_participant_id", "state", "expires_at");
+CREATE INDEX "elicitation_requests_run_id_attempt_state_idx" ON "elicitation_requests"("run_id", "attempt", "state");
+CREATE UNIQUE INDEX "elicitation_requests_run_id_attempt_request_key_key" ON "elicitation_requests"("run_id", "attempt", "request_key");
+CREATE UNIQUE INDEX "elicitation_requests_id_run_id_attempt_key" ON "elicitation_requests"("id", "run_id", "attempt");
+CREATE INDEX "elicitation_response_attempts_request_id_submitted_at_idx" ON "elicitation_response_attempts"("request_id", "submitted_at");
+CREATE UNIQUE INDEX "elicitation_response_attempts_request_id_idempotency_key_key" ON "elicitation_response_attempts"("request_id", "idempotency_key");
+CREATE UNIQUE INDEX "elicitation_result_deliveries_request_id_key" ON "elicitation_result_deliveries"("request_id");
+CREATE INDEX "elicitation_result_deliveries_state_created_at_idx" ON "elicitation_result_deliveries"("state", "created_at");
+CREATE UNIQUE INDEX "personal_memory_permission_receipts_request_id_key" ON "personal_memory_permission_receipts"("request_id");
+CREATE UNIQUE INDEX "personal_memory_permission_receipts_tool_invocation_id_key" ON "personal_memory_permission_receipts"("tool_invocation_id");
+CREATE INDEX "personal_memory_permission_receipts_run_id_attempt_executio_idx" ON "personal_memory_permission_receipts"("run_id", "attempt", "execution_subject_id", "state", "expires_at");
+CREATE UNIQUE INDEX "personal_memory_permission_receipts_request_id_run_id_attem_key" ON "personal_memory_permission_receipts"("request_id", "run_id", "attempt");
+
+ALTER TABLE "elicitation_requests" ADD CONSTRAINT "elicitation_requests_conversation_id_fkey" FOREIGN KEY ("conversation_id") REFERENCES "conversations"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "elicitation_requests" ADD CONSTRAINT "elicitation_requests_run_id_attempt_fkey" FOREIGN KEY ("run_id", "attempt") REFERENCES "agent_runs"("id", "attempt") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "elicitation_requests" ADD CONSTRAINT "elicitation_requests_conversation_id_assigned_participant__fkey" FOREIGN KEY ("conversation_id", "assigned_participant_id") REFERENCES "conversation_participants"("conversation_id", "user_id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "elicitation_response_attempts" ADD CONSTRAINT "elicitation_response_attempts_request_id_fkey" FOREIGN KEY ("request_id") REFERENCES "elicitation_requests"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "elicitation_result_deliveries" ADD CONSTRAINT "elicitation_result_deliveries_request_id_fkey" FOREIGN KEY ("request_id") REFERENCES "elicitation_requests"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "personal_memory_permission_receipts" ADD CONSTRAINT "personal_memory_permission_receipts_request_id_run_id_atte_fkey" FOREIGN KEY ("request_id", "run_id", "attempt") REFERENCES "elicitation_requests"("id", "run_id", "attempt") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "personal_memory_permission_receipts" ADD CONSTRAINT "personal_memory_permission_receipts_tool_invocation_id_fkey" FOREIGN KEY ("tool_invocation_id") REFERENCES "tool_invocations"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "approval_requests" ADD CONSTRAINT "approval_requests_elicitation_request_id_fkey" FOREIGN KEY ("elicitation_request_id") REFERENCES "elicitation_requests"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- Align the inherited 0.7 steering authority with the renamed 0.8 input-waiting state.
+CREATE OR REPLACE FUNCTION "enforce_runtime_steering_request_lifecycle"() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+    run_attempt INTEGER;
+    run_silo_id TEXT;
+    run_subject_id TEXT;
+    run_state "AgentRunState";
+BEGIN
+    IF TG_OP = 'DELETE' THEN
+        RAISE EXCEPTION 'RuntimeSteeringRequest rows cannot be deleted';
+    END IF;
+    IF TG_OP = 'INSERT' THEN
+        IF NEW."state" <> 'pending' OR NEW."consumed_at" IS NOT NULL THEN
+            RAISE EXCEPTION 'a new RuntimeSteeringRequest must begin pending without consumption evidence';
+        END IF;
+        SELECT "attempt", "silo_id", "delegated_user_id", "state"
+        INTO run_attempt, run_silo_id, run_subject_id, run_state
+        FROM "agent_runs"
+        WHERE "id" = NEW."run_id"
+        FOR UPDATE;
+        IF run_attempt IS DISTINCT FROM NEW."attempt"
+            OR run_silo_id IS DISTINCT FROM NEW."silo_id"
+            OR run_subject_id IS DISTINCT FROM NEW."subject_id"
+            OR run_state NOT IN ('assigned', 'running', 'waiting_for_input') THEN
+            RAISE EXCEPTION 'RuntimeSteeringRequest requires the current owner-bound steerable AgentRun attempt';
+        END IF;
+        IF EXISTS (
+            SELECT 1 FROM "runtime_dispatched_commands"
+            WHERE "run_id" = NEW."run_id" AND "attempt" = NEW."attempt"
+              AND "kind" = 'resume_attempt'::"RuntimeCommandKind"
+        ) THEN
+            RAISE EXCEPTION 'RuntimeSteeringRequest must be submitted before its sole resume command';
+        END IF;
+        RETURN NEW;
+    END IF;
+    IF NEW."id" IS DISTINCT FROM OLD."id"
+        OR NEW."run_id" IS DISTINCT FROM OLD."run_id"
+        OR NEW."attempt" IS DISTINCT FROM OLD."attempt"
+        OR NEW."silo_id" IS DISTINCT FROM OLD."silo_id"
+        OR NEW."subject_id" IS DISTINCT FROM OLD."subject_id"
+        OR NEW."content" IS DISTINCT FROM OLD."content"
+        OR NEW."digest" IS DISTINCT FROM OLD."digest"
+        OR NEW."submitted_at" IS DISTINCT FROM OLD."submitted_at" THEN
+        RAISE EXCEPTION 'RuntimeSteeringRequest identity and content are immutable';
+    END IF;
+    IF OLD."state" <> 'pending' THEN
+        RAISE EXCEPTION 'consumed RuntimeSteeringRequest is terminal';
+    END IF;
+    IF NEW."state" = 'pending' AND NEW."consumed_at" IS NULL THEN
+        RETURN NEW;
+    END IF;
+    IF NEW."state" <> 'consumed' OR NEW."consumed_at" IS NULL OR NEW."consumed_at" < OLD."submitted_at" THEN
+        RAISE EXCEPTION 'RuntimeSteeringRequest may only transition once from Pending to Consumed';
+    END IF;
+    IF NOT EXISTS (
+        SELECT 1 FROM "runtime_dispatched_commands" command
+        WHERE command."run_id" = OLD."run_id" AND command."attempt" = OLD."attempt"
+          AND command."kind" = 'resume_attempt'::"RuntimeCommandKind"
+          AND command."payload"->'steeringRequests' @> jsonb_build_array(OLD."content")
+    ) THEN
+        RAISE EXCEPTION 'consumed RuntimeSteeringRequest requires its persisted resume command payload';
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
+ALTER TABLE "elicitation_requests" ADD CONSTRAINT "elicitation_requests_exact_check" CHECK (
+    btrim("id") <> '' AND btrim("silo_id") <> '' AND btrim("conversation_id") <> ''
+    AND btrim("run_id") <> '' AND "attempt" > 0 AND btrim("assigned_participant_id") <> '' AND btrim("request_key") <> ''
+    AND jsonb_typeof("body") = 'object' AND "body_digest" ~ '^sha256:[0-9a-f]{64}$'
+    AND "purpose_payload_digest" ~ '^sha256:[0-9a-f]{64}$' AND "expires_at" > "created_at"
+    AND (("state" = 'requested' AND "resolved_at" IS NULL AND "resolved_by" IS NULL AND "safe_reason" IS NULL)
+      OR ("state" IN ('answered', 'declined') AND "resolved_at" IS NOT NULL AND btrim("resolved_by") <> '')
+      OR ("state" IN ('expired', 'cancelled') AND "resolved_at" IS NOT NULL AND "resolved_by" IS NULL))
+);
+ALTER TABLE "elicitation_response_attempts" ADD CONSTRAINT "elicitation_response_attempts_exact_check" CHECK (
+    btrim("id") <> '' AND btrim("request_id") <> '' AND btrim("idempotency_key") <> '' AND btrim("responding_subject_id") <> ''
+    AND jsonb_typeof("response") = 'object' AND "response_digest" ~ '^sha256:[0-9a-f]{64}$'
+);
+ALTER TABLE "elicitation_result_deliveries" ADD CONSTRAINT "elicitation_result_deliveries_exact_check" CHECK (
+    btrim("id") <> '' AND btrim("request_id") <> ''
+    AND (("payload" IS NULL AND "payload_digest" IS NULL) OR ("payload" IS NOT NULL AND "payload_digest" ~ '^sha256:[0-9a-f]{64}$'))
+    AND (("state" = 'pending' AND "consumed_at" IS NULL) OR ("state" = 'consumed' AND "consumed_at" IS NOT NULL))
+);
+ALTER TABLE "personal_memory_permission_receipts" ADD CONSTRAINT "personal_memory_permission_receipts_exact_check" CHECK (
+    btrim("id") <> '' AND btrim("request_id") <> '' AND btrim("tool_invocation_id") <> ''
+    AND "tool_invocation_revision" > 0 AND btrim("run_id") <> '' AND "attempt" > 0
+    AND btrim("execution_subject_id") <> '' AND btrim("responding_subject_id") <> ''
+    AND "query_digest" ~ '^sha256:[0-9a-f]{64}$' AND "input_snapshot_digest" ~ '^sha256:[0-9a-f]{64}$'
+    AND btrim("persona_revision_id") <> '' AND "purpose_digest" ~ '^sha256:[0-9a-f]{64}$'
+    AND "expires_at" > "created_at"
+    AND (("state" = 'active' AND "consumed_at" IS NULL) OR ("state" = 'consumed' AND "consumed_at" IS NOT NULL))
+);
+
+CREATE FUNCTION "enforce_elicitation_request_authority"() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE current_silo TEXT; current_conversation TEXT; current_attempt INTEGER; current_state "AgentRunState"; participant_ended BIGINT;
+BEGIN
+    IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'ElicitationRequest rows cannot be deleted'; END IF;
+    IF TG_OP = 'INSERT' THEN
+        SELECT "silo_id", "conversation_id", "attempt", "state" INTO current_silo, current_conversation, current_attempt, current_state
+          FROM "agent_runs" WHERE "id" = NEW."run_id" FOR UPDATE;
+        SELECT "access_ended_position" INTO participant_ended FROM "conversation_participants"
+          WHERE "conversation_id" = NEW."conversation_id" AND "user_id" = NEW."assigned_participant_id" FOR UPDATE;
+        IF current_silo IS DISTINCT FROM NEW."silo_id" OR current_conversation IS DISTINCT FROM NEW."conversation_id"
+            OR current_attempt IS DISTINCT FROM NEW."attempt" OR current_state IS DISTINCT FROM 'waiting_for_input'
+            OR NOT FOUND OR participant_ended IS NOT NULL OR NEW."state" <> 'requested'
+            OR NEW."created_at" > clock_timestamp() OR NEW."expires_at" <= clock_timestamp() THEN
+            RAISE EXCEPTION 'ElicitationRequest requires the exact waiting run and active assigned participant';
+        END IF;
+        RETURN NEW;
+    END IF;
+    IF NEW."id" IS DISTINCT FROM OLD."id" OR NEW."silo_id" IS DISTINCT FROM OLD."silo_id"
+        OR NEW."conversation_id" IS DISTINCT FROM OLD."conversation_id" OR NEW."run_id" IS DISTINCT FROM OLD."run_id"
+        OR NEW."attempt" IS DISTINCT FROM OLD."attempt" OR NEW."assigned_participant_id" IS DISTINCT FROM OLD."assigned_participant_id"
+        OR NEW."request_key" IS DISTINCT FROM OLD."request_key" OR NEW."purpose" IS DISTINCT FROM OLD."purpose"
+        OR NEW."body_kind" IS DISTINCT FROM OLD."body_kind" OR NEW."body" IS DISTINCT FROM OLD."body"
+        OR NEW."body_digest" IS DISTINCT FROM OLD."body_digest" OR NEW."purpose_payload" IS DISTINCT FROM OLD."purpose_payload"
+        OR NEW."purpose_payload_digest" IS DISTINCT FROM OLD."purpose_payload_digest"
+        OR NEW."requires_step_up" IS DISTINCT FROM OLD."requires_step_up" OR NEW."expires_at" IS DISTINCT FROM OLD."expires_at"
+        OR NEW."created_at" IS DISTINCT FROM OLD."created_at" OR OLD."state" <> 'requested' OR NEW."state" = 'requested' THEN
+        RAISE EXCEPTION 'ElicitationRequest may resolve exactly once without changing authority coordinates';
+    END IF;
+    RETURN NEW;
+END;
+$$;
+CREATE FUNCTION "enforce_elicitation_response_attempt_authority"() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE request_row "elicitation_requests"%ROWTYPE; participant_ended BIGINT;
+BEGIN
+    IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'ElicitationResponseAttempt rows cannot be deleted'; END IF;
+    IF TG_OP = 'INSERT' THEN
+        SELECT * INTO request_row FROM "elicitation_requests" WHERE "id" = NEW."request_id" FOR UPDATE;
+        SELECT "access_ended_position" INTO participant_ended FROM "conversation_participants"
+          WHERE "conversation_id" = request_row."conversation_id" AND "user_id" = NEW."responding_subject_id" FOR UPDATE;
+        IF request_row."id" IS NULL OR request_row."state" <> 'requested' OR request_row."expires_at" <= clock_timestamp()
+            OR request_row."assigned_participant_id" IS DISTINCT FROM NEW."responding_subject_id" OR NOT FOUND OR participant_ended IS NOT NULL
+            OR (request_row."requires_step_up" AND
+              (NEW."verified_step_up_at" IS NULL OR NEW."verified_step_up_at" < request_row."created_at" OR NEW."verified_step_up_at" > clock_timestamp())) THEN
+            RAISE EXCEPTION 'ElicitationResponseAttempt lacks current participant or step-up authority';
+        END IF;
+        RETURN NEW;
+    END IF;
+    RAISE EXCEPTION 'ElicitationResponseAttempt rows are immutable';
+END;
+$$;
+CREATE FUNCTION "enforce_personal_memory_permission_authority"() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+    request_row "elicitation_requests"%ROWTYPE;
+    invocation_row "tool_invocations"%ROWTYPE;
+    snapshot_row "run_input_snapshots"%ROWTYPE;
+    accepted_response BOOLEAN;
+BEGIN
+    IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'PersonalMemoryPermissionReceipt rows cannot be deleted'; END IF;
+    IF TG_OP = 'UPDATE' THEN
+        IF OLD."state" <> 'active' OR NEW."state" <> 'consumed' OR NEW."consumed_at" IS NULL
+            OR NEW."id" IS DISTINCT FROM OLD."id" OR NEW."request_id" IS DISTINCT FROM OLD."request_id"
+            OR NEW."tool_invocation_id" IS DISTINCT FROM OLD."tool_invocation_id"
+            OR NEW."tool_invocation_revision" IS DISTINCT FROM OLD."tool_invocation_revision"
+            OR NEW."run_id" IS DISTINCT FROM OLD."run_id" OR NEW."attempt" IS DISTINCT FROM OLD."attempt"
+            OR NEW."execution_subject_id" IS DISTINCT FROM OLD."execution_subject_id"
+            OR NEW."responding_subject_id" IS DISTINCT FROM OLD."responding_subject_id"
+            OR NEW."query_digest" IS DISTINCT FROM OLD."query_digest"
+            OR NEW."input_snapshot_digest" IS DISTINCT FROM OLD."input_snapshot_digest"
+            OR NEW."persona_revision_id" IS DISTINCT FROM OLD."persona_revision_id"
+            OR NEW."purpose_digest" IS DISTINCT FROM OLD."purpose_digest"
+            OR NEW."expires_at" IS DISTINCT FROM OLD."expires_at" OR NEW."created_at" IS DISTINCT FROM OLD."created_at" THEN
+            RAISE EXCEPTION 'PersonalMemoryPermissionReceipt may only be consumed once';
+        END IF;
+        RETURN NEW;
+    END IF;
+    SELECT * INTO request_row FROM "elicitation_requests" WHERE "id" = NEW."request_id" FOR UPDATE;
+    SELECT * INTO invocation_row FROM "tool_invocations" WHERE "id" = NEW."tool_invocation_id" FOR UPDATE;
+    SELECT * INTO snapshot_row FROM "run_input_snapshots" WHERE "run_id" = NEW."run_id";
+    SELECT EXISTS (
+        SELECT 1 FROM "elicitation_response_attempts"
+        WHERE "request_id" = NEW."request_id"
+          AND "responding_subject_id" = NEW."responding_subject_id"
+          AND "response"->>'kind' = 'approval' AND ("response"->>'approved')::boolean IS TRUE
+    ) INTO accepted_response;
+    IF request_row."id" IS NULL OR request_row."purpose" <> 'personal_memory_permission'
+        OR request_row."state" <> 'answered' OR request_row."resolved_by" IS DISTINCT FROM NEW."responding_subject_id"
+        OR request_row."assigned_participant_id" IS DISTINCT FROM NEW."execution_subject_id"
+        OR NEW."responding_subject_id" IS DISTINCT FROM NEW."execution_subject_id"
+        OR request_row."run_id" IS DISTINCT FROM NEW."run_id" OR request_row."attempt" IS DISTINCT FROM NEW."attempt"
+        OR request_row."expires_at" IS DISTINCT FROM NEW."expires_at"
+        OR request_row."purpose_payload_digest" IS DISTINCT FROM NEW."purpose_digest" OR NOT accepted_response
+        OR invocation_row."id" IS NULL OR invocation_row."tool_revision_id" <> 'memory:recall'
+        OR invocation_row."run_id" IS DISTINCT FROM NEW."run_id" OR invocation_row."attempt" IS DISTINCT FROM NEW."attempt"
+        OR invocation_row."subject_id" IS DISTINCT FROM NEW."execution_subject_id"
+        OR invocation_row."state" <> 'ready' OR invocation_row."revision" IS DISTINCT FROM NEW."tool_invocation_revision"
+        OR snapshot_row."run_id" IS NULL OR snapshot_row."input_digest" IS DISTINCT FROM NEW."input_snapshot_digest"
+        OR snapshot_row."persona_revision_id" IS DISTINCT FROM NEW."persona_revision_id"
+        OR request_row."purpose_payload"->>'toolInvocationId' IS DISTINCT FROM NEW."tool_invocation_id"
+        OR (request_row."purpose_payload"->>'toolInvocationRevision')::integer + 1 IS DISTINCT FROM NEW."tool_invocation_revision"
+        OR request_row."purpose_payload"->>'runId' IS DISTINCT FROM NEW."run_id"
+        OR (request_row."purpose_payload"->>'attempt')::integer IS DISTINCT FROM NEW."attempt"
+        OR request_row."purpose_payload"->>'executionSubjectId' IS DISTINCT FROM NEW."execution_subject_id"
+        OR request_row."purpose_payload"->>'queryDigest' IS DISTINCT FROM NEW."query_digest"
+        OR request_row."purpose_payload"->>'inputSnapshotDigest' IS DISTINCT FROM NEW."input_snapshot_digest"
+        OR request_row."purpose_payload"->>'personaRevisionId' IS DISTINCT FROM NEW."persona_revision_id"
+        OR (request_row."purpose_payload"->>'expiresAt')::timestamp IS DISTINCT FROM NEW."expires_at"
+        OR NEW."state" <> 'active' OR NEW."consumed_at" IS NOT NULL OR NEW."expires_at" <= clock_timestamp() THEN
+        RAISE EXCEPTION 'PersonalMemoryPermissionReceipt requires the exact accepted execution-user invocation';
+    END IF;
+    RETURN NEW;
+END;
+$$;
+CREATE TRIGGER "elicitation_requests_authority" BEFORE INSERT OR UPDATE OR DELETE ON "elicitation_requests" FOR EACH ROW EXECUTE FUNCTION "enforce_elicitation_request_authority"();
+CREATE TRIGGER "elicitation_response_attempts_authority" BEFORE INSERT OR UPDATE OR DELETE ON "elicitation_response_attempts" FOR EACH ROW EXECUTE FUNCTION "enforce_elicitation_response_attempt_authority"();
+CREATE TRIGGER "personal_memory_permission_receipts_authority" BEFORE INSERT OR UPDATE OR DELETE ON "personal_memory_permission_receipts" FOR EACH ROW EXECUTE FUNCTION "enforce_personal_memory_permission_authority"();
+
 -- CreateTable
 CREATE TABLE "artifact_scan_jobs" (
     "id" TEXT NOT NULL,
@@ -3544,7 +3828,7 @@ INSERT INTO "opencrane_migrations"."schema_history" (
     "target_baseline_sha256", "sql_sha256", "migration_id"
 ) VALUES (
     '0.8.0', '0.7.0', current_setting('opencrane.expected_source_baseline_sha256'),
-    '32797f3ab1a6b2960c5761890b0605a1467430758abedf7bf4396f41a59e1d57',
+    'f13768489dcdf7d0878919f2c2cd6f4ceb8550e0ff9eab0cc61f712911fd7a20',
     current_setting('opencrane.expected_migration_sql_sha256'),
     '0.7.0-to-0.8.0'
 );

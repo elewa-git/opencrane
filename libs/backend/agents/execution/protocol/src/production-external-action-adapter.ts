@@ -1,14 +1,15 @@
-import { ExternalActionRecoveryModes, __DigestCanonicalJson } from "@opencrane/backend/server/iam/authorization";
+import { ExternalActionRecoveryModes, __DigestCanonicalJson, type ToolInvocationClaim, type ToolInvocationRecord } from "@opencrane/backend/server/iam/authorization";
+import { PersonalMemoryPermissionVerificationOutcomes } from "@opencrane/backend/agents/execution/elicitation";
 import { UPGRADE_SESSION_TOOL_REVISION } from "@opencrane/backend/agents/personal/configuration";
 import { ___DoWithTrace, ___MarkActiveSpanFailed } from "@opencrane/backend/observability";
-import { MemoryGatewayUnavailableError } from "@opencrane/backend/server/infra/memory-gateway-client";
 import { ObotMcpAuthenticationError, ObotMcpAuthorizationError, ObotMcpInvocationUnavailableError, ObotMcpToolNotAllowedError } from "@opencrane/backend/server/infra/obot-custody";
 import { SandboxExecutionUnavailableError } from "@opencrane/backend/server/infra/sandbox-execution";
+import { PERSONAL_MEMORY_RECALL_TOOL_REVISION } from "@opencrane/models/agents";
 import type { JsonValue } from "@opencrane/util";
 
-import { __CreateExternalActionExecutor, __PersonalMemoryDatasetId, MemoryScopeUnavailableError, UnsupportedExternalActionError } from "./external-action-executor.js";
-import type { DurableExternalActionCommand, ExternalActionExecutor } from "./external-action-executor.types.js";
-import { IntegrationAssignmentUnavailableError, IntegrationToolReturnedError } from "./external-action-errors.js";
+import { __CreateExternalActionExecutor, __PersonalMemoryDatasetId, UnsupportedExternalActionError } from "./external-action-executor.js";
+import { type DurableExternalActionCommand, type ExternalActionExecutor } from "./external-action-executor.types.js";
+import { IntegrationAssignmentUnavailableError, IntegrationToolReturnedError, PersonalMemoryPermissionUnavailableError, PersonalMemorySafeDeliveryRequiredError } from "./external-action-errors.js";
 import { ExternalActionProviderOutcomeKinds, type ExternalActionAdapterFactory, type ExternalActionExecutionContext, type ExternalActionProviderOutcome, type ExternalActionWorkerInvocation, type PreparedExternalActionAdapter } from "./external-action-worker.types.js";
 import type { ProductionExternalActionAdapterDependencies } from "./production-external-action-adapter.types.js";
 
@@ -23,43 +24,50 @@ function _provenPreDispatchFailure(error: unknown): string | null
 {
 	if (error instanceof IntegrationAssignmentUnavailableError) return _integrationFailureCode(error);
 	if (error instanceof UnsupportedExternalActionError) return "external_action_unsupported";
-	if (error instanceof MemoryScopeUnavailableError) return "memory_scope_unavailable";
+	if (error instanceof PersonalMemoryPermissionUnavailableError) return "memory_permission_unavailable";
+	if (error instanceof PersonalMemorySafeDeliveryRequiredError) return "safe_delivery_required";
 	if (error instanceof ObotMcpToolNotAllowedError) return "integration_tool_not_allowed";
 	if (error instanceof ObotMcpAuthenticationError) return "AuthenticationError";
 	if (error instanceof ObotMcpAuthorizationError) return "PermissionError";
 	if (error instanceof IntegrationToolReturnedError) return "RuntimeError";
 	if (error instanceof ObotMcpInvocationUnavailableError) return "integration_provider_unavailable";
 	if (error instanceof SandboxExecutionUnavailableError) return "sandbox_provider_unavailable";
-	if (error instanceof MemoryGatewayUnavailableError) return "memory_provider_unavailable";
 	return null;
 }
 
-/** Adapter for transports that support neither a repeat-safe key nor readback, so their recovery mode is Manual. */
+/** Provider executor that receives the exact claimed row and monotonic claim fence. */
+interface ClaimBoundExternalActionExecutor
+{
+	/** Execute only under the claim acquired immediately before this call. */
+	execute(invocation: ToolInvocationRecord, claim: ToolInvocationClaim): Promise<JsonValue>;
+}
+
+/** Current server transports have no provider idempotency or readback contract, so they are manual. */
 class _ManualPreparedExternalActionAdapter implements PreparedExternalActionAdapter
 {
 	/** Always Manual: the Obot, sandbox, and memory ports cannot prove what happened after a failure. */
 	readonly recoveryMode = ExternalActionRecoveryModes.Manual;
-	/** The executor chosen from the invocation's tool revision. */
-	private readonly executor: ExternalActionExecutor<JsonValue>;
-	/** Fields added to every provider trace span; none of them is a credential. */
+	/** One durable-command executor selected from the frozen tool revision. */
+	private readonly executor: ClaimBoundExternalActionExecutor;
+	/** Credential-free fields shared by provider operation spans. */
 	private readonly traceFields: Readonly<Record<string, unknown>>;
 
 	/** Create one manual adapter around an existing server-owned executor. */
-	constructor(executor: ExternalActionExecutor<JsonValue>, invocation: ExternalActionWorkerInvocation)
+	constructor(executor: ClaimBoundExternalActionExecutor, invocation: ExternalActionWorkerInvocation)
 	{
 		this.executor = executor;
 		this.traceFields = { runId: invocation.runId, attempt: invocation.attempt, toolInvocationId: invocation.toolInvocationId, toolRevisionId: invocation.toolRevisionId, recoveryMode: invocation.recoveryMode };
 	}
 
-	/** Send the request once. An error we cannot classify stays ambiguous, because the request may already have gone out. */
-	dispatch(_recoveryKey: string | null): Promise<ExternalActionProviderOutcome>
+	/** Dispatch once; unknown exceptions stay ambiguous because a request may have left the process. */
+	dispatch(_recoveryKey: string | null, invocation: ToolInvocationRecord, claim: ToolInvocationClaim): Promise<ExternalActionProviderOutcome>
 	{
 		const self = this;
 		return ___DoWithTrace("external_action.provider.dispatch", this.traceFields, async function _dispatch()
 		{
 			try
 			{
-				return { kind: ExternalActionProviderOutcomeKinds.Succeeded, result: await self.executor.execute() };
+				return { kind: ExternalActionProviderOutcomeKinds.Succeeded, result: await self.executor.execute(invocation, claim) };
 			}
 			catch (error)
 			{
@@ -73,7 +81,7 @@ class _ManualPreparedExternalActionAdapter implements PreparedExternalActionAdap
 	}
 
 	/** Current manual adapters cannot perform provider readback. */
-	async reconcile(_recoveryKey: string): Promise<ExternalActionProviderOutcome>
+	async reconcile(_recoveryKey: string, _invocation: ToolInvocationRecord, _claim: ToolInvocationClaim): Promise<ExternalActionProviderOutcome>
 	{
 		return { kind: ExternalActionProviderOutcomeKinds.Ambiguous };
 	}
@@ -135,21 +143,35 @@ export class ProductionExternalActionAdapterFactory implements ExternalActionAda
 			const personalConfiguration = this.dependencies.personalConfiguration;
 			const now = this.dependencies.now;
 			const command = _command(invocation);
-			const executor: ExternalActionExecutor<JsonValue> = {
-				async execute(): Promise<JsonValue>
+			const executor: ClaimBoundExternalActionExecutor = {
+				async execute(_claimedInvocation, _claim): Promise<JsonValue>
 				{
 					return personalConfiguration.proposeUpgradeSession(command, snapshot, now().toISOString());
 				},
 			};
 			return new _ManualPreparedExternalActionAdapter(executor, invocation);
 		}
-		const executor = __CreateExternalActionExecutor(_command(invocation), {
+		if (invocation.toolRevisionId === PERSONAL_MEMORY_RECALL_TOOL_REVISION)
+		{
+			const permissions = this.dependencies.personalMemoryPermissions;
+			const now = this.dependencies.now;
+			const executor: ClaimBoundExternalActionExecutor = {
+				async execute(claimedInvocation, claim): Promise<JsonValue>
+				{
+					const verified = await permissions.verifyMemoryPermission(claimedInvocation, claim, snapshot, now());
+					if (verified.outcome !== PersonalMemoryPermissionVerificationOutcomes.Authorized) throw new PersonalMemoryPermissionUnavailableError();
+					throw new PersonalMemorySafeDeliveryRequiredError();
+				},
+			};
+			return new _ManualPreparedExternalActionAdapter(executor, invocation);
+		}
+		const executor: ExternalActionExecutor<JsonValue> = __CreateExternalActionExecutor(_command(invocation), {
 			siloId: snapshot.siloId,
 			subjectId: snapshot.identitySnapshot.executionSubjectId,
 			cogneeDatasetId: __PersonalMemoryDatasetId(snapshot),
 			agentRevisionId: snapshot.agentRevisionId,
 			...this.dependencies.transports,
 		});
-		return new _ManualPreparedExternalActionAdapter(executor, invocation);
+		return new _ManualPreparedExternalActionAdapter({ execute: function _Execute() { return executor.execute(); } }, invocation);
 	}
 }

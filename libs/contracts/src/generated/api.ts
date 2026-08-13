@@ -646,7 +646,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/me/approvals": {
+    "/me/activity/elicitations": {
         parameters: {
             query?: never;
             header?: never;
@@ -654,10 +654,10 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * List the signed-in owner's pending tool approvals
-         * @description The server derives the owner and silo from the browser session and host. It returns at most fifty actionable interrupts with pre-redacted proposed arguments and an exact decision response schema derived from the frozen reviewed tool schema. It never returns secret-marked values, raw authority evidence, policy digests, or resume material.
+         * List recent participant-input activity
+         * @description Derives a bounded index from canonical elicitation references. It does not copy the transcript or expose protected purpose payloads.
          */
-        get: operations["listMyPendingToolApprovals"];
+        get: operations["listMyElicitationActivity"];
         put?: never;
         post?: never;
         delete?: never;
@@ -666,7 +666,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/me/approvals/{approvalRequestId}": {
+    "/me/conversations/{conversationId}/elicitations/{requestId}": {
         parameters: {
             query?: never;
             header?: never;
@@ -674,10 +674,10 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Read one tool interrupt owned by the signed-in user
-         * @description The approval id is the interrupt id. The response reports actor-relevant state, pre-redacted proposed arguments, and the frozen decision response schema without returning server-only reviewed arguments or resume material.
+         * Read one participant-input request
+         * @description Returns the browser-safe request only to its active assigned participant. Protected purpose payloads, dataset identifiers, credentials, and resume material are never returned.
          */
-        get: operations["getMyToolApproval"];
+        get: operations["getMyConversationElicitation"];
         put?: never;
         post?: never;
         delete?: never;
@@ -686,7 +686,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/me/approvals/{approvalRequestId}/decision": {
+    "/me/conversations/{conversationId}/elicitations/{requestId}/responses": {
         parameters: {
             query?: never;
             header?: never;
@@ -696,10 +696,10 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Approve or deny one pending tool action owned by the signed-in user
-         * @description The server derives the owner and silo from the browser session. Approval must carry one complete argument value, which the server validates against the frozen reviewed response schema; denial carries no arguments. Partial edits, run coordinates, tool results, and resume material are rejected.
+         * Answer one participant-input request
+         * @description Submits one typed, idempotent answer. The server derives the actor, run, participant, purpose strategy, protected payload, and any verified step-up evidence.
          */
-        post: operations["decideDeferredToolApproval"];
+        post: operations["respondToMyConversationElicitation"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1344,6 +1344,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/auth/reauthenticate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Force fresh OIDC authentication for a sensitive action */
+        get: operations["reauthenticate"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/callback": {
         parameters: {
             query?: never;
@@ -1903,7 +1920,7 @@ export interface components {
             runId: string;
             attempt: number;
             /** @enum {string} */
-            state: "accepted" | "queued" | "assigned" | "running" | "waiting_for_approval" | "recovery_required" | "cancelling" | "completed" | "failed" | "cancelled";
+            state: "accepted" | "queued" | "assigned" | "running" | "waiting_for_input" | "recovery_required" | "cancelling" | "completed" | "failed" | "cancelled";
             conversationId: string | null;
             agentRevisionId: string;
             /** Format: date-time */
@@ -1916,21 +1933,6 @@ export interface components {
             attempt: number;
             /** @enum {string} */
             state: "cancelling" | "cancelled";
-        };
-        SelfDeferredToolApproval: {
-            approvalRequestId: string;
-            runId: string;
-            attempt: number;
-            toolRevisionId: string;
-            toolInvocationId: string;
-            /** @enum {string} */
-            state: "pending" | "approved" | "denied" | "expired" | "cancelled";
-            proposedArguments: unknown;
-            responseSchema: Record<string, never>;
-            /** Format: date-time */
-            expiresAt: string;
-            /** Format: date-time */
-            createdAt: string;
         };
         AgentService: {
             id: string;
@@ -4134,70 +4136,86 @@ export interface operations {
             };
         };
     };
-    listMyPendingToolApprovals: {
+    listMyElicitationActivity: {
         parameters: {
-            query?: never;
+            query?: {
+                limit?: number;
+            };
             header?: never;
             path?: never;
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description Pending owner-bound tool approvals. */
+            /** @description Recent owned elicitation references. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
                     "application/json": {
-                        approvals: components["schemas"]["SelfDeferredToolApproval"][];
+                        elicitations: {
+                            /** @constant */
+                            version: "opencrane.elicitation.v1";
+                            requestId: string;
+                            conversationId: string;
+                            runId: string;
+                            attempt: number;
+                            assignedParticipantId: string;
+                            /** @enum {string} */
+                            purpose: "runtime_input" | "tool_approval" | "personal_memory_permission" | "a2ui_action";
+                            /** @enum {string} */
+                            state: "requested" | "answered" | "declined" | "expired" | "cancelled" | "failed";
+                            body: {
+                                /** @constant */
+                                kind: "approval";
+                                prompt: string;
+                                action: string;
+                                target: string;
+                                dataUse: string;
+                                externalSystem?: string;
+                                consequence: string;
+                                cost?: string;
+                            } | {
+                                /** @constant */
+                                kind: "single_choice";
+                                prompt: string;
+                                choices: {
+                                    value: string;
+                                    label: string;
+                                    description?: string;
+                                }[];
+                            } | {
+                                /** @constant */
+                                kind: "multiple_choice";
+                                prompt: string;
+                                choices: {
+                                    value: string;
+                                    label: string;
+                                    description?: string;
+                                }[];
+                                minimumSelections: number;
+                                maximumSelections: number;
+                            } | {
+                                /** @constant */
+                                kind: "free_text";
+                                prompt: string;
+                                maximumLength: number;
+                                allowEmpty: boolean;
+                            };
+                            requiresStepUp: boolean;
+                            /** Format: date-time */
+                            requestedAt: string;
+                            /** Format: date-time */
+                            expiresAt: string;
+                            /** Format: date-time */
+                            resolvedAt?: string;
+                            safeReason?: string;
+                        }[];
                     };
                 };
             };
-            /** @description No authenticated browser session owns the request. */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description The product authority could not read pending approvals. */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-        };
-    };
-    getMyToolApproval: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description Interrupt identifier for the owned approval. */
-                approvalRequestId: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Owned tool interrupt. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        approval: components["schemas"]["SelfDeferredToolApproval"];
-                    };
-                };
-            };
-            /** @description The interrupt identifier is empty. */
+            /** @description The requested Activity limit is invalid. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -4206,7 +4224,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description No authenticated browser session owns the request. */
+            /** @description No authenticated browser session owns the Activity index. */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -4215,16 +4233,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description The interrupt is absent or belongs to another actor or silo. */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description The product authority could not read the interrupt. */
+            /** @description The elicitation Activity index is temporarily unavailable. */
             503: {
                 headers: {
                     [name: string]: unknown;
@@ -4235,43 +4244,173 @@ export interface operations {
             };
         };
     };
-    decideDeferredToolApproval: {
+    getMyConversationElicitation: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                /** @description Opaque identifier for the pending approval. */
-                approvalRequestId: string;
+                /** @description Conversation containing the request. */
+                conversationId: string;
+                /** @description Opaque elicitation identifier. */
+                requestId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Owned request. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        elicitation: {
+                            /** @constant */
+                            version: "opencrane.elicitation.v1";
+                            requestId: string;
+                            conversationId: string;
+                            runId: string;
+                            attempt: number;
+                            assignedParticipantId: string;
+                            /** @enum {string} */
+                            purpose: "runtime_input" | "tool_approval" | "personal_memory_permission" | "a2ui_action";
+                            /** @enum {string} */
+                            state: "requested" | "answered" | "declined" | "expired" | "cancelled" | "failed";
+                            body: {
+                                /** @constant */
+                                kind: "approval";
+                                prompt: string;
+                                action: string;
+                                target: string;
+                                dataUse: string;
+                                externalSystem?: string;
+                                consequence: string;
+                                cost?: string;
+                            } | {
+                                /** @constant */
+                                kind: "single_choice";
+                                prompt: string;
+                                choices: {
+                                    value: string;
+                                    label: string;
+                                    description?: string;
+                                }[];
+                            } | {
+                                /** @constant */
+                                kind: "multiple_choice";
+                                prompt: string;
+                                choices: {
+                                    value: string;
+                                    label: string;
+                                    description?: string;
+                                }[];
+                                minimumSelections: number;
+                                maximumSelections: number;
+                            } | {
+                                /** @constant */
+                                kind: "free_text";
+                                prompt: string;
+                                maximumLength: number;
+                                allowEmpty: boolean;
+                            };
+                            requiresStepUp: boolean;
+                            /** Format: date-time */
+                            requestedAt: string;
+                            /** Format: date-time */
+                            expiresAt: string;
+                            /** Format: date-time */
+                            resolvedAt?: string;
+                            safeReason?: string;
+                        };
+                    };
+                };
+            };
+            /** @description No authenticated browser session owns the request. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The request is absent or belongs to another participant. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The elicitation authority is temporarily unavailable. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    respondToMyConversationElicitation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Conversation containing the request. */
+                conversationId: string;
+                /** @description Opaque elicitation identifier. */
+                requestId: string;
             };
             cookie?: never;
         };
         requestBody: {
             content: {
                 "application/json": {
-                    /** @constant */
-                    decision: "approved";
-                    arguments: unknown;
-                } | {
-                    /** @constant */
-                    decision: "denied";
+                    idempotencyKey: string;
+                    response: {
+                        /** @constant */
+                        kind: "approval";
+                        approved: boolean;
+                    } | {
+                        /** @constant */
+                        kind: "single_choice";
+                        selection: string;
+                    } | {
+                        /** @constant */
+                        kind: "multiple_choice";
+                        selections: string[];
+                    } | {
+                        /** @constant */
+                        kind: "free_text";
+                        text: string;
+                    };
                 };
             };
         };
         responses: {
-            /** @description Decision recorded or identical terminal decision replayed. */
+            /** @description Answer accepted or replayed idempotently. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
                     "application/json": {
-                        approvalRequestId: string;
-                        /** @enum {string} */
-                        state: "approved" | "denied";
+                        response: {
+                            requestId: string;
+                            /** @enum {string} */
+                            state: "requested" | "answered" | "declined" | "expired" | "cancelled" | "failed";
+                            idempotent: boolean;
+                            /** Format: date-time */
+                            resolvedAt: string;
+                        };
                     };
                 };
             };
-            /** @description The request body is not the exact decision shape, or approved arguments fail the frozen reviewed schema. */
+            /** @description The response does not match the exact request body. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -4289,7 +4428,16 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description The approval is absent, terminal in another way, or not owned by the caller. */
+            /** @description The caller is not the active assigned participant. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The request is absent. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -4298,7 +4446,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description The approval expired before the decision. */
+            /** @description The request is terminal, expired, or conflicts with an idempotent retry. */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -4307,7 +4455,21 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description The product authority could not persist the decision. */
+            /** @description Fresh verified OpenID Connect reauthentication is required. */
+            428: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @constant */
+                        error: "elicitation_step_up_required";
+                        /** @constant */
+                        reauthenticatePath: "/api/v1/auth/reauthenticate";
+                    };
+                };
+            };
+            /** @description The elicitation authority is temporarily unavailable. */
             503: {
                 headers: {
                     [name: string]: unknown;
@@ -7287,6 +7449,43 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["Error"];
                 };
+            };
+        };
+    };
+    reauthenticate: {
+        parameters: {
+            query?: {
+                /** @description Local path restored after the verified callback. */
+                returnTo?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Redirect to the configured provider with prompt=login. */
+            302: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description An authenticated session is required before step-up. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description OIDC is not configured. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

@@ -7,6 +7,9 @@ access, provider fallback, or implicit retry.
 """
 
 import asyncio
+import copy
+import json
+import re
 import threading
 from collections.abc import Callable, Iterator
 
@@ -14,7 +17,13 @@ from ..config import environment, read_attempt_litellm_key
 from ..constants import DEFAULT_LITELLM_KEY_PATH
 from .generated_output_policy import order_generated_outputs as _order_generated_outputs
 from .generated_output_policy import validate_generated_output_batch
+from .histories import load_model_history, store_model_history
 from .openai_generated_outputs import OpenAIGeneratedOutputCollector, OpenAIGeneratedOutputConfiguration, openai_generated_output_configuration
+from ..protocol.elicitation import ELICITATION_TOOL_NAME, elicitation_proposal, elicitation_tool_schema
+
+# Deliberately narrower than the identifier rule the protocol uses elsewhere. This name goes to the
+# provider as a tool name, and providers reject names with anything outside these characters in them.
+_MODEL_TOOL_NAME = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 
 
 def absorb_steering(steering_buffer: list[str]) -> list[str]:
@@ -53,6 +62,7 @@ def build_zero_retry_agent(
     base_url: str,
     attempt_key: str,
     instructions: str,
+    compiled_tools: list[dict[str, object]] | None = None,
     *,
     agent_cls: Callable[..., object] | None = None,
     model_cls: Callable[..., object] | None = None,
@@ -60,6 +70,9 @@ def build_zero_retry_agent(
     async_openai: Callable[..., object] | None = None,
     generated_output_capabilities: tuple[str, ...] = (),
     generated_output_configuration: OpenAIGeneratedOutputConfiguration | None = None,
+    external_toolset_cls: Callable[..., object] | None = None,
+    tool_definition_cls: Callable[..., object] | None = None,
+    deferred_tool_requests_cls: type[object] | None = None,
 ) -> object:
     """Construct an attempt-scoped agent with every implicit retry path disabled.
 
@@ -85,6 +98,10 @@ def build_zero_retry_agent(
         from openai import AsyncOpenAI
 
         async_openai = AsyncOpenAI
+    if deferred_tool_requests_cls is None:
+        from pydantic_ai import DeferredToolRequests
+
+        deferred_tool_requests_cls = DeferredToolRequests
 
     settings = zero_retry_openai_settings()
     # Both named retry settings land on one AsyncOpenAI value. If they ever disagreed, the setting
@@ -101,6 +118,11 @@ def build_zero_retry_agent(
     provider = provider_cls(openai_client=openai_client)
     model = model_cls(model_alias, provider=provider)
     output_configuration = generated_output_configuration or openai_generated_output_configuration(generated_output_capabilities)
+    toolsets = _external_toolsets(
+        compiled_tools or [],
+        external_toolset_cls=external_toolset_cls,
+        tool_definition_cls=tool_definition_cls,
+    )
     return agent_cls(
         model,
         system_prompt=instructions,
@@ -110,7 +132,78 @@ def build_zero_retry_agent(
         },
         capabilities=output_configuration.capabilities,
         model_settings=output_configuration.model_settings,
+        # Return calls to the server instead of letting the framework run them.
+        output_type=[str, deferred_tool_requests_cls],
+        toolsets=toolsets,
     )
+
+
+def _external_toolsets(
+    compiled_tools: list[dict[str, object]],
+    *,
+    external_toolset_cls: Callable[..., object] | None = None,
+    tool_definition_cls: Callable[..., object] | None = None,
+) -> list[object]:
+    """Describe the granted tools to the model, in a way the framework cannot run itself.
+
+    ``ExternalToolset`` describes calls but cannot run them. It therefore returns every call to the
+    server for admission, approval, and worker execution. The built-in question tool remains
+    available even when the server granted no other tools.
+
+    Called by: ``build_zero_retry_agent`` in this module.
+
+    Raises:
+        RuntimeError: When the server could not match a future call to one granted tool.
+    """
+    if external_toolset_cls is None or tool_definition_cls is None:
+        from pydantic_ai import ExternalToolset, ToolDefinition
+
+        external_toolset_cls = external_toolset_cls or ExternalToolset
+        tool_definition_cls = tool_definition_cls or ToolDefinition
+
+    definitions: list[object] = []
+    names: set[str] = set()
+    for compiled_tool in compiled_tools:
+        name = compiled_tool.get("name")
+        revision = compiled_tool.get("toolRevisionId")
+        description = compiled_tool.get("description")
+        requires_approval = compiled_tool.get("requiresApproval")
+        parameters_schema = compiled_tool.get("parametersSchema")
+        # Require the server-owned revision and approval decision even though the model does not see them.
+        if (
+            not isinstance(name, str)
+            or _MODEL_TOOL_NAME.fullmatch(name) is None
+            or not isinstance(revision, str)
+            or not revision
+            or not isinstance(description, str)
+            or not isinstance(requires_approval, bool)
+            or not isinstance(parameters_schema, dict)
+        ):
+            raise RuntimeError("compiled input contains a malformed tool definition")
+        # Refuse duplicate names because a future call could not identify the intended revision.
+        if name in names:
+            raise RuntimeError("compiled input contains duplicate model-visible tool names")
+        # Reserve the question name so a granted tool cannot bypass normal tool admission.
+        if name == ELICITATION_TOOL_NAME:
+            raise RuntimeError("compiled input shadows the built-in elicitation tool")
+        names.add(name)
+        definitions.append(
+            tool_definition_cls(
+                name=name,
+                description=description,
+                # Copy the schema, so nothing downstream can change the compiled input in place.
+                parameters_json_schema=copy.deepcopy(parameters_schema),
+            ),
+        )
+    # Add the server-handled question tool even when the agent has no granted tools.
+    definitions.append(
+        tool_definition_cls(
+            name=ELICITATION_TOOL_NAME,
+            description="Ask the active participant one bounded question and wait for the server-owned result.",
+            parameters_json_schema=elicitation_tool_schema(),
+        ),
+    )
+    return [external_toolset_cls(definitions, id="opencrane-compiled-tools")]
 
 
 def pydantic_ai_event_source(
@@ -159,7 +252,11 @@ def pydantic_ai_event_source(
         events = _order_generated_outputs(events)
         # Usage is translated after the framework closes the run so the counters represent the whole
         # bounded request sequence rather than an intermediate node.
-        usage = run.usage()
+        # Keep the messages only if the attempt was not cancelled. A cancelled attempt must leave nothing
+        # for a later resume to pick up as though this turn had finished normally.
+        if not cancel_event.is_set():
+            store_model_history(*_history_coordinates(compiled_input), run.all_messages())
+        usage = _run_usage(run)
         events.append(
             {
                 "type": "usage",
@@ -191,9 +288,20 @@ def pydantic_ai_resume_source(
     context into a bounded framework resume, so it cannot reread a checkpoint with a different
     process cipher or silently select stale tool grants.
     """
-    from pydantic_ai import Agent
+    from pydantic_ai import Agent, DeferredToolResults
 
     agent, output_collector, output_base_url, output_attempt_key = _model_loop_components(compiled_input)
+    coordinates = _history_coordinates(compiled_input)
+    message_history = load_model_history(*coordinates)
+    # Stop if the messages are gone, which is what happens when the process has been replaced. Rebuilding
+    # the conversation from the compiled input would leave out the turn that made the call, so the model
+    # would be handed an answer to something it has no record of asking.
+    if message_history is None:
+        raise RuntimeError("deferred tool resume has no same-attempt model history")
+    if not isinstance(tool_results, dict):
+        raise RuntimeError("deferred tool resume requires exact call results")
+    # Pass through results after ``resolve_resume_results`` has matched and consumed each call id.
+    deferred_tool_results = DeferredToolResults(calls=tool_results)
 
     async def _collect() -> list[dict[str, object]]:
         """Collect one authorised resume while keeping its framework state inside this adapter."""
@@ -201,10 +309,8 @@ def pydantic_ai_resume_source(
         # adapter never calls the external tool or recreates a result from pending-call metadata.
         events: list[dict[str, object]] = []
         output_ordinal = 0
-        async with agent.iter(
-            prompt(compiled_input),
-            deferred_tool_results=tool_results,
-        ) as run:
+        # Do not repeat the prompt because the stored messages already contain the participant's request.
+        async with agent.iter(message_history=message_history, deferred_tool_results=deferred_tool_results) as run:
             async for node in run:
                 # A resumed graph is no less cancellable than a fresh graph; do not enter another node
                 # after the shared attempt signal has been set.
@@ -229,8 +335,11 @@ def pydantic_ai_resume_source(
                                 output_ordinal += 1
         if not cancel_event.is_set():
             events.extend(await output_collector.finish(base_url=output_base_url, attempt_key=output_attempt_key))
+            # Replace the stored messages with this turn's. A resumed turn can stop on another call or
+            # question, and the resume after it has to carry on from here, not from the earlier turn.
+            store_model_history(*coordinates, run.all_messages())
         events = _order_generated_outputs(events)
-        usage = run.usage()
+        usage = _run_usage(run)
         events.append(
             {
                 "type": "usage",
@@ -267,6 +376,12 @@ def prompt(compiled_input: dict[str, object]) -> str:
     return "\n".join(part for part in parts if isinstance(part, str))
 
 
+def _run_usage(run: object) -> object:
+    """Read usage from the pinned property and the callable stand-ins used by offline tests."""
+    usage = getattr(run, "usage", None)
+    return usage() if callable(usage) else usage
+
+
 def translate_framework_event(event: object) -> dict[str, object]:
     """Translate the supported Pydantic event shapes into plain dictionaries.
 
@@ -282,7 +397,24 @@ def translate_framework_event(event: object) -> dict[str, object]:
         return {"type": "output_text", "text": delta}
     part = getattr(event, "part", None)
     tool_name = getattr(part, "tool_name", None)
-    if getattr(part, "part_kind", None) == "tool-call" and isinstance(tool_name, str):
+    # Wait for the end of the part rather than its start. A tool call's arguments arrive a piece at a
+    # time, so there is nothing complete to read until the part closes.
+    if getattr(event, "event_kind", None) == "part_end" and isinstance(tool_name, str):
+        if tool_name == ELICITATION_TOOL_NAME:
+            framework_call_id = getattr(part, "tool_call_id", "")
+            try:
+                arguments = json.loads(getattr(part, "args_as_json_str", lambda: "{}")())
+            # A model can produce arguments that are not valid JSON. That is a badly formed question, not
+            # a fault in this runtime, so report it as an event and let the projector fail the turn.
+            except (json.JSONDecodeError, TypeError, ValueError):
+                return {"type": "invalid_elicitation_request"}
+            if not isinstance(arguments, dict) or not isinstance(framework_call_id, str) or not framework_call_id:
+                return {"type": "invalid_elicitation_request"}
+            neutral_event = {"type": "elicitation_request", "frameworkCallId": framework_call_id, **arguments}
+            # Check the question here as well as in the projector. If this returned a well-formed event
+            # for a question that cannot be used, the problem would surface later, where the code can no
+            # longer say which question caused it.
+            return neutral_event if elicitation_proposal(neutral_event) is not None else {"type": "invalid_elicitation_request"}
         return {
             "type": "tool_call",
             "toolName": tool_name,
@@ -331,11 +463,30 @@ def _model_loop_components(compiled_input: dict[str, object]) -> tuple[object, O
     generated_output_capabilities = model_route.get("generatedOutputCapabilities") if isinstance(model_route, dict) else None
     if not isinstance(generated_output_capabilities, list) or any(not isinstance(value, str) for value in generated_output_capabilities):
         raise RuntimeError("compiled input is missing generated-output capabilities")
+    compiled_tools = compiled_input.get("tools")
+    # An empty list is fine and means the agent was granted no tools. A missing list is not the same
+    # thing, and treating it as empty would be this runtime deciding what the server granted.
+    if not isinstance(compiled_tools, list) or not all(isinstance(tool, dict) for tool in compiled_tools):
+        raise RuntimeError("compiled input is missing its sealed tool list")
     agent = build_zero_retry_agent(
         model_alias,
         base_url,
         attempt_key,
         instructions if isinstance(instructions, str) else "",
+        compiled_tools,
         generated_output_capabilities=tuple(generated_output_capabilities),
     )
     return agent, OpenAIGeneratedOutputCollector(), base_url, attempt_key
+
+
+def _history_coordinates(compiled_input: dict[str, object]) -> tuple[str, int]:
+    """Read the server-sealed key used to isolate one attempt's stored messages.
+
+    Raises:
+        RuntimeError: When either value is missing or malformed.
+    """
+    run_id = compiled_input.get("runId")
+    attempt = compiled_input.get("attempt")
+    if not isinstance(run_id, str) or not run_id or not isinstance(attempt, int) or attempt < 1:
+        raise RuntimeError("compiled input is missing exact model-history coordinates")
+    return (run_id, attempt)

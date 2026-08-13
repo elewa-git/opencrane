@@ -74,7 +74,6 @@ function _snapshot(): RunInputSnapshot
 		preferenceFactIds: [],
 		artifactRevisionIds: [],
 		skillRevisionIds: [],
-		memoryFacts: [],
 		memoryQueryPolicy: {},
 		integrationAssignments: [{ integrationId: "calendar", toolDefinitions: [{ name: "read", description: "Read a calendar", parametersSchema, parametersSchemaDigest: __DigestCanonicalJson(parametersSchema) }] }],
 		modelRoute: {},

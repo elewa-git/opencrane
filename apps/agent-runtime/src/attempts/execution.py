@@ -12,13 +12,15 @@ from urllib.error import HTTPError, URLError
 
 from ..model_loop.checkpoints import read_checkpoint, write_checkpoint
 from ..model_loop.driver import pydantic_ai_event_source, pydantic_ai_resume_source
+from ..model_loop.histories import clear_model_history
 from ..observability import log, run_evidence, trace
 from ..protocol.candidates import (
     candidate,
     command_coordinates,
 )
 from ..protocol.event_projector import RuntimeEventProjector
-from .tool_results import resolve_tool_results
+from .pending_elicitations import clear_pending_elicitations
+from .resume_results import resolve_resume_results
 from .pending_tools import record_pending_tool_call
 from .terminal import TerminalGate
 
@@ -60,6 +62,15 @@ def execute_start_attempt(
             candidate(coordinates, "run.failed", {"reason": "missing_compiled_input"}),
         )
         return
+    # Refuse before the model runs if the compiled input names a different run or attempt from the
+    # command. The messages of this turn are stored under these two values, so a mismatch would file
+    # them against an attempt that never produced them.
+    if not _compiled_input_matches_coordinates(compiled_input, coordinates):
+        terminal_gate.post_completion(
+            post_candidate,
+            candidate(coordinates, "run.failed", {"reason": "compiled_input_coordinate_mismatch"}),
+        )
+        return
     # Announce the attempt before touching the model adapter. This keeps the candidate stream ordered
     # even when model construction fails immediately after admission.
     post_candidate(
@@ -96,22 +107,34 @@ def execute_start_attempt(
                     # response cannot become a late candidate.
                     break
                 projector.emit(neutral_event)
-            # Do not close a partial message after cancellation. Leaving it open accurately records
-            # where local production stopped and avoids inventing a successful message boundary.
-            if not cancel_event.is_set():
-                projector.complete_message()
-            if projector.has_pending_tool_calls:
-                # A tool proposal pauses the model loop. Completion belongs after the control plane
-                # authorises and returns the saved result through a later resume command.
+            # Return without closing the message when the attempt was cancelled. Leaving it open records
+            # where output actually stopped, rather than adding an ending the model never produced. The
+            # stored messages and pending questions go too, because no resume will follow.
+            if cancel_event.is_set():
+                clear_model_history(str(coordinates["runId"]), int(coordinates["attempt"]))
+                clear_pending_elicitations(str(coordinates["runId"]), int(coordinates["attempt"]))
                 return
+            projector.complete_message()
+            if projector.has_pending_input:
+                # A tool call or a question stops the loop here. The run is finished only once the server
+                # sends back a result and a later resume carries on from it. Keep the stored messages and
+                # the pending questions: that resume needs both to find its way back.
+                return
+            # Nothing is waiting, so this turn ended the run. Drop what was kept for a resume before
+            # reporting completion, so memory lasts no longer than the attempt does.
+            clear_model_history(str(coordinates["runId"]), int(coordinates["attempt"]))
+            clear_pending_elicitations(str(coordinates["runId"]), int(coordinates["attempt"]))
             if terminal_gate.post_completion(
                 post_candidate,
                 candidate(coordinates, "run.completed", {}),
             ):
                 run_evidence(coordinates, "completed")
         except (HTTPError, URLError, OSError, RuntimeError, ValueError) as error:
-            # Report only the exception type. Messages may contain provider URLs, content, or other
-            # data that does not belong in a candidate or structured log.
+            # Report the exception type and nothing else. The message can hold provider URLs, request
+            # content, or credentials, none of which belong in a candidate or a log line.
+            # A failed attempt will get no resume, so drop the stored messages and pending questions.
+            clear_model_history(str(coordinates["runId"]), int(coordinates["attempt"]))
+            clear_pending_elicitations(str(coordinates["runId"]), int(coordinates["attempt"]))
             if terminal_gate.post_completion(
                 post_candidate,
                 candidate(
@@ -162,11 +185,18 @@ def execute_resume_attempt(
     # compiled before later steering or control-plane input was accepted.
     input_generation = payload.get("inputGeneration")
     tool_results = payload.get("toolResults")
+    elicitation_results = payload.get("elicitationResults")
     steering_requests = payload.get("steeringRequests")
     if not isinstance(tool_results, list):
         terminal_gate.post_completion(
             post_candidate,
             candidate(coordinates, "run.failed", {"reason": "invalid_tool_results"}),
+        )
+        return
+    if not isinstance(elicitation_results, list):
+        terminal_gate.post_completion(
+            post_candidate,
+            candidate(coordinates, "run.failed", {"reason": "invalid_elicitation_results"}),
         )
         return
     if (
@@ -192,20 +222,23 @@ def execute_resume_attempt(
         input_generation,
         checkpoint_cipher,
     )
-    # The control plane already executed or refused each call and persisted its terminal result.
-    # The runtime only maps those exact results into the model framework.
-    # Resolution atomically consumes the pending calls named by this command. This must precede
-    # announcing ``run.resumed`` so an unknown, duplicated, or replayed result cannot masquerade as
-    # accepted continuation; other pending calls may remain for a later resume.
-    resolved_tool_results = resolve_tool_results(
-        coordinates,
-        tool_results,
-        post_candidate,
-    )
-    if resolved_tool_results is None:
+    # Recovered input has to belong to this attempt. If it does not, the checkpoint on disk is from
+    # another run or attempt, and the messages stored under these coordinates cannot be trusted either,
+    # so they go. Pending questions stay: they were keyed from the command and are not in doubt.
+    if compiled_input and not _compiled_input_matches_coordinates(compiled_input, coordinates):
+        clear_model_history(str(coordinates["runId"]), int(coordinates["attempt"]))
         terminal_gate.post_completion(
             post_candidate,
-            candidate(coordinates, "run.failed", {"reason": "invalid_tool_results"}),
+            candidate(coordinates, "run.failed", {"reason": "compiled_input_coordinate_mismatch"}),
+        )
+        return
+    # Tool and participant-input results share one framework deferred-call namespace. Validate,
+    # correlate, collision-check, and consume both batches under one process-local lock.
+    model_resume_results = resolve_resume_results(coordinates, tool_results, elicitation_results)
+    if model_resume_results is None:
+        terminal_gate.post_completion(
+            post_candidate,
+            candidate(coordinates, "run.failed", {"reason": "invalid_resume_results"}),
         )
         return
     # At this point coordinates, resume structure, and the supplied pending-call identities have
@@ -233,7 +266,7 @@ def execute_resume_attempt(
         try:
             for neutral_event in resume_event_source(
                 compiled_input,
-                resolved_tool_results,
+                model_resume_results,
                 cancel_event,
                 steering_buffer,
             ):
@@ -241,21 +274,27 @@ def execute_resume_attempt(
                     # A resume is subject to the same late-output suppression as a fresh attempt.
                     break
                 projector.emit(neutral_event)
-            # Once cancellation is observed here, suppress the synthetic message end and subsequent
-            # local completion work. The terminal gate samples the signal again before posting, while
-            # the server remains authoritative for cancellation racing an already in-flight post.
-            if not cancel_event.is_set():
-                projector.complete_message()
-            if projector.has_pending_tool_calls:
-                # Additional tool calls create another control-plane round trip; a resume may pause
-                # repeatedly, and none of those intermediate pauses is a completed run.
+            # A resumed turn follows the same rule as a fresh one: no message ending added after
+            # cancellation, and nothing kept for a resume that is not going to happen.
+            if cancel_event.is_set():
+                clear_model_history(str(coordinates["runId"]), int(coordinates["attempt"]))
+                clear_pending_elicitations(str(coordinates["runId"]), int(coordinates["attempt"]))
                 return
+            projector.complete_message()
+            if projector.has_pending_input:
+                # Additional tool calls or questions create another control-plane round trip. A
+                # resume may pause repeatedly, and none of those pauses is a completed run.
+                return
+            clear_model_history(str(coordinates["runId"]), int(coordinates["attempt"]))
+            clear_pending_elicitations(str(coordinates["runId"]), int(coordinates["attempt"]))
             if terminal_gate.post_completion(
                 post_candidate,
                 candidate(coordinates, "run.completed", {}),
             ):
                 run_evidence(coordinates, "completed")
         except (HTTPError, URLError, OSError, RuntimeError, ValueError) as error:
+            clear_model_history(str(coordinates["runId"]), int(coordinates["attempt"]))
+            clear_pending_elicitations(str(coordinates["runId"]), int(coordinates["attempt"]))
             if terminal_gate.post_completion(
                 post_candidate,
                 candidate(
@@ -290,6 +329,8 @@ def execute_cancel_attempt(
         # Set the shared event before recording evidence so the worker observes cancellation as soon
         # as possible and cannot race a late completion through the terminal gate.
         cancel_event.set()
+    clear_model_history(str(coordinates["runId"]), int(coordinates["attempt"]))
+    clear_pending_elicitations(str(coordinates["runId"]), int(coordinates["attempt"]))
     # The reason is evidence only. It cannot alter cancellation semantics or select a different local
     # worker, because command routing already paired this signal with the active attempt.
     payload = command.get("payload")
@@ -305,6 +346,24 @@ def _snapshot_input_generation(payload: dict[str, object]) -> object:
     if isinstance(snapshot, dict) and isinstance(snapshot.get("inputGeneration"), int):
         return snapshot["inputGeneration"]
     return 0
+
+
+def _compiled_input_matches_coordinates(
+    compiled_input: dict[str, object],
+    coordinates: dict[str, object],
+) -> bool:
+    """Check that the compiled input names the same run and attempt as the command.
+
+    Called by: ``execute_start_attempt`` and ``execute_resume_attempt`` in this module.
+
+    Returns:
+        ``True`` when both values match. ``False`` when either differs, which means the input was
+        compiled for a different run or attempt and this one must not use it.
+    """
+    return (
+        compiled_input.get("runId") == coordinates.get("runId")
+        and compiled_input.get("attempt") == coordinates.get("attempt")
+    )
 
 
 def _try_write_checkpoint(

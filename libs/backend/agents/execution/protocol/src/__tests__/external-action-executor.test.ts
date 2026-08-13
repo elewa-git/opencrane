@@ -1,18 +1,18 @@
-import type { RunInputSnapshot, RuntimeExternalActionCandidate } from "@opencrane/contracts";
+import { RuntimeCandidateKinds, type RunInputSnapshot, type RuntimeExternalActionCandidate } from "@opencrane/contracts";
 import { __UnavailableObotMcpInvocationAdapter } from "@opencrane/backend/server/infra/obot-custody";
 import type { ObotMcpInvocationPort, ObotMcpToolInvocationCommand } from "@opencrane/backend/server/infra/obot-custody";
 import { __UnavailableSandboxJobExecutor } from "@opencrane/backend/server/infra/sandbox-execution";
-import { __UnavailableMemoryGatewayClient } from "@opencrane/backend/server/infra/memory-gateway-client";
 import { describe, expect, it, vi } from "vitest";
+import { PERSONAL_MEMORY_RECALL_TOOL_REVISION } from "@opencrane/models/agents";
 import { ___DigestCanonicalJson } from "@opencrane/util";
 
-import { __CreateExternalActionExecutor, __PersonalMemoryDatasetId, MemoryScopeUnavailableError, UnsupportedExternalActionError } from "../external-action-executor.js";
+import { __CreateExternalActionExecutor, __PersonalMemoryDatasetId, UnsupportedExternalActionError } from "../external-action-executor.js";
 import type { IntegrationAssignmentUnavailableReason } from "../external-action-executor.types.js";
 
 /** Build a candidate for the given tool revision prefix. */
 function _candidate(toolRevisionId: string): RuntimeExternalActionCandidate
 {
-	return { protocolVersion: "opencrane.agent-runtime/v1", runtimeInstanceId: "instance-1", commandId: "command-1", candidateId: "candidate-1", runId: "run-1", attempt: 1, fence: 1, kind: "external_action", toolRevisionId, toolInvocationId: "invocation-1", argumentsDigest: "sha256:d", arguments: { query: "a" } };
+	return { protocolVersion: "opencrane.agent-runtime/v1", runtimeInstanceId: "instance-1", commandId: "command-1", candidateId: "candidate-1", runId: "run-1", attempt: 1, fence: 1, kind: RuntimeCandidateKinds.ExternalAction, toolRevisionId, toolInvocationId: "invocation-1", argumentsDigest: "sha256:d", arguments: { query: "a" } };
 }
 
 /** Build one reviewed integration tool definition. */
@@ -23,7 +23,7 @@ function _Tool(name = "calendar.read")
 }
 
 /** The composition root wires only fail-closed transports until a real one is verified. */
-const DEPENDENCIES = { siloId: "silo-1", subjectId: "user-1", cogneeDatasetId: "cognee-personal-1", agentRevisionId: "revision-1", integrations: { resolveAssignment: async function _resolve() { return { outcome: "resolved" as const, assignment: { integrationId: "calendar", obotCatalogEntryId: "calendar", obotCustodyReference: "obot:calendar", toolDefinitions: [_Tool()] } }; } }, obotMcpInvocation: new __UnavailableObotMcpInvocationAdapter(), sandboxExecutor: new __UnavailableSandboxJobExecutor(), memoryGateway: new __UnavailableMemoryGatewayClient() };
+const DEPENDENCIES = { siloId: "silo-1", subjectId: "user-1", cogneeDatasetId: "cognee-personal-1", agentRevisionId: "revision-1", integrations: { resolveAssignment: async function _resolve() { return { outcome: "resolved" as const, assignment: { integrationId: "calendar", obotCatalogEntryId: "calendar", obotCustodyReference: "obot:calendar", toolDefinitions: [_Tool()] } }; } }, obotMcpInvocation: new __UnavailableObotMcpInvocationAdapter(), sandboxExecutor: new __UnavailableSandboxJobExecutor() };
 
 /** Test-local successful Obot port; production exports only the fail-closed unavailable adapter. */
 class _RecordingObotInvocation implements ObotMcpInvocationPort
@@ -92,16 +92,10 @@ describe("composition-root external action executor", function _suite()
 		await expect(executor.execute()).rejects.toThrow(/Sandbox execution authority is unavailable/);
 	});
 
-	it("fails closed for a memory tool call when no memory gateway is available", async function _memory()
+	it("never sends a generic memory tool call to Cognee or returns fact content", async function _memory()
 	{
-		const executor = __CreateExternalActionExecutor(_candidate("memory:recall"), DEPENDENCIES);
-		await expect(executor.execute()).rejects.toThrow(/Memory gateway is unavailable/);
-	});
-
-	it("refuses a memory tool call when the admitted snapshot did not select a personal dataset", async function _deniesMissingMemoryScope()
-	{
-		const executor = __CreateExternalActionExecutor(_candidate("memory:recall"), { ...DEPENDENCIES, cogneeDatasetId: null });
-		await expect(executor.execute()).rejects.toBeInstanceOf(MemoryScopeUnavailableError);
+		const executor = __CreateExternalActionExecutor(_candidate(PERSONAL_MEMORY_RECALL_TOOL_REVISION), DEPENDENCIES);
+		await expect(executor.execute()).rejects.toMatchObject({ name: "PersonalMemorySafeDeliveryRequiredError" });
 	});
 
 	it("selects personal memory only from the frozen user policy", function _selectsFrozenMemory()

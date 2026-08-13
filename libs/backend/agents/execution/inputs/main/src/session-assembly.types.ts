@@ -1,4 +1,4 @@
-import type { MemoryFactReference, RunInputSnapshotIdentity, RunInputSnapshotIntegrationAssignment } from "@opencrane/contracts";
+import type { RunInputSnapshotIdentity, RunInputSnapshotIntegrationAssignment } from "@opencrane/contracts";
 import type { InitialRunAuthority, RunAdmissionCommand, RunAdmissionRepository, RunAdmissionTransaction } from "@opencrane/backend/agents/execution/runs";
 import type { PersonaRevisionId } from "@opencrane/models/agents";
 import type { MessageContentBlock, MessageId } from "@opencrane/models/conversations";
@@ -58,13 +58,11 @@ export interface PreferenceFactInput
 	id: string;
 }
 
-/** Holds the memory facts a run may use, plus the policy for recalling more later. */
+/** Authorised memory dataset coordinates frozen for a single run. */
 export interface MemoryScopeInput
 {
 	/** Limits what the runtime may recall from memory later in the run. */
 	memoryQueryPolicy: JsonValue;
-	/** References to the stored facts allowed into this run's prompt: ids and digests only, never fact text. */
-	memoryFacts: readonly MemoryFactReference[];
 }
 
 /** Holds the model, tools, skills, and artifacts the published revision assigned to this run. */
@@ -269,18 +267,7 @@ export interface PreferenceFactSource
 	load(command: SessionAssemblyCommand, run: InitialRunAuthority, identity: IdentityEnvelopeInput, transaction: RunAdmissionTransaction): Promise<SessionAssemblyLoad<readonly PreferenceFactInput[]>>;
 }
 
-/**
- * Decides which memory this run may use, and which facts to freeze into its snapshot.
- *
- * Two implementations, and which one is wired in decides what a run can remember:
- * {@link PersonalMemoryScopeSource} resolves the user's own dataset and asks the memory gateway
- * for facts; {@link ManagedNoPersonalMemoryScopeSource} gives managed services an empty scope.
- * Each refuses the other's run kind, so a managed service can never fall back to a user's dataset.
- *
- * It receives the already-frozen `conversation` because the recall query is built from the newest
- * user message in that transcript — recall can therefore never reach beyond what the snapshot
- * already names.
- */
+/** Reads authorised memory dataset scope. */
 export interface MemoryScopeSource
 {
 	/**

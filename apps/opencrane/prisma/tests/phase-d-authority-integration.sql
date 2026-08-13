@@ -420,7 +420,7 @@ UPDATE "agent_runs" SET "state" = 'assigned'
 WHERE "id" IN ('run-cancel-assigned', 'run-cancel-running', 'run-cancel-waiting');
 UPDATE "agent_runs" SET "state" = 'running', "started_at" = clock_timestamp()
 WHERE "id" IN ('run-cancel-running', 'run-cancel-waiting');
-UPDATE "agent_runs" SET "state" = 'waiting_for_approval' WHERE "id" = 'run-cancel-waiting';
+UPDATE "agent_runs" SET "state" = 'waiting_for_input' WHERE "id" = 'run-cancel-waiting';
 
 SELECT pg_temp.expect_failure(
     'an active AgentRun cannot skip Cancelling',
@@ -1064,7 +1064,7 @@ INSERT INTO "capability_catalog_revisions" (
 UPDATE "agent_runs"
 SET "state" = 'running', "started_at" = clock_timestamp()
 WHERE "id" = 'run-action';
-UPDATE "agent_runs" SET "state" = 'waiting_for_approval' WHERE "id" = 'run-action';
+UPDATE "agent_runs" SET "state" = 'waiting_for_input' WHERE "id" = 'run-action';
 
 SELECT pg_temp.expect_failure(
     'new ApprovalRequest cannot begin Approved',
@@ -1170,7 +1170,7 @@ SELECT pg_temp.expect_failure(
             "approver_policy_revision", "effective_policy_digest", clock_timestamp() + interval '1 hour'
         FROM "approval_requests" WHERE "id" = 'approval-1'
     $statement$,
-    'requires current WaitingForApproval run, assignment, and proof authority'
+    'requires current WaitingForInput run, assignment, and proof authority'
 );
 
 SELECT pg_temp.expect_failure(
@@ -1346,7 +1346,7 @@ FROM "approval_requests" WHERE "id" = 'approval-1';
 
 UPDATE "agent_runs" SET "state" = 'running' WHERE "id" = 'run-action';
 SELECT pg_temp.expect_failure(
-    'approval decision fails when the run is no longer WaitingForApproval',
+    'approval decision fails when the run is no longer WaitingForInput',
     $statement$
         UPDATE "approval_requests"
         SET "state" = 'approved', "decided_by" = 'approver-1', "resume_token_hash" = 'resume-stale-state'
@@ -1360,7 +1360,7 @@ SELECT pg_temp.assert_true(
      FROM "approval_requests" WHERE "id" = 'approval-stale-state')
 );
 
-UPDATE "agent_runs" SET "state" = 'waiting_for_approval' WHERE "id" = 'run-action';
+UPDATE "agent_runs" SET "state" = 'waiting_for_input' WHERE "id" = 'run-action';
 SELECT pg_temp.expect_failure(
     'ActionExecutionReceipt cannot reserve while its current run is waiting',
     $statement$

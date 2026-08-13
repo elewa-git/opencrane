@@ -1,60 +1,45 @@
-"""Map saved control-plane tool results into the model loop.
+"""Checks the shape of tool results the server saved, before they reach the model.
 
-A ``resume_attempt`` carries only server-owned terminal results. The runtime never calls an
-external provider while resolving them. Each result must still match a pending tool call from the
-same run attempt before it can enter model context.
+A ``resume_attempt`` command carries results the server has already produced and stored. The runtime
+never calls an external tool while handling them; it only decides whether each result looks like
+something the server could have written, and turns it into what the model framework expects.
 """
 
-from .pending_tools import take_pending_tool_calls
-from ..protocol.candidates import candidate
+def validate_tool_results(tool_results: list[object]) -> tuple[list[str], dict[str, object]] | None:
+    """Check every saved tool result and convert it into what the model framework takes.
 
+    This function reads no registry and removes nothing, so calling it has no effect you have to undo.
+    Its caller checks the participant answers in the same command before removing anything, which is
+    what lets a command the server sends twice be handled the same way the second time.
 
-def resolve_tool_results(
-    coordinates: dict[str, object],
-    tool_results: list[object],
-    post_candidate,
-) -> dict[str, object] | None:
-    """Validate and consume the saved tool results, or reject the whole batch."""
-    # Keep validation output separate from registry state. Only after the complete wire batch has a
-    # recognised terminal shape may this function consume the corresponding pending calls.
-    validated: list[tuple[str, object]] = []
-    tool_invocation_ids: list[str] = []
-    # Validate every result before touching the pending-call registry. This keeps malformed commands
-    # from partially consuming state that a byte-identical reconnect replay still needs.
+    Called by: ``resolve_resume_results`` in ``resume_results.py``.
+
+    Returns:
+        A pair. First the invocation ids in the order they arrived, which the caller uses to find the
+        matching pending calls. Second a mapping from invocation id to the value the model will see.
+        ``None`` when any result in the batch is unusable; the batch is then rejected whole, because a
+        partly accepted batch would leave the model waiting on a call the server thinks is answered.
+    """
+    validated: dict[str, object] = {}
+    identifiers: list[str] = []
     for entry in tool_results:
         if not isinstance(entry, dict) or not isinstance(entry.get("toolInvocationId"), str):
-            post_candidate(candidate(coordinates, "run.error", {"reason": "invalid_tool_result"}))
             return None
-        tool_invocation_id = entry["toolInvocationId"]
-        outcome = entry.get("outcome")
-        # Success requires an explicit result member, including when its value is null. Absence is not
-        # silently converted into a provider result because the server owns the terminal receipt.
-        if outcome == "succeeded" and "result" in entry:
-            validated.append((tool_invocation_id, entry["result"]))
+        identifier = entry["toolInvocationId"]
+        # The same invocation id twice does not say which result wins; the later one would quietly
+        # replace the earlier.
+        if identifier in validated:
+            return None
+        # A success has to carry a "result" member, even when its value is null. A missing member is
+        # not read as an empty success, because the server writes the result and this runtime does not
+        # get to invent one.
+        if entry.get("outcome") == "succeeded" and set(entry) == {"toolInvocationId", "outcome", "result"}:
+            validated[identifier] = entry["result"]
+        # For a failure the model sees the failure code and nothing else. Messages from the provider
+        # can carry URLs, credentials, or request content, so they stop at the server.
+        elif entry.get("outcome") == "failed" and set(entry) == {"toolInvocationId", "outcome", "failureCode"} and isinstance(entry.get("failureCode"), str) and entry["failureCode"]:
+            validated[identifier] = {"error": entry["failureCode"]}
         else:
-            failure_code = entry.get("failureCode")
-            if outcome != "failed" or not isinstance(failure_code, str) or not failure_code:
-                post_candidate(candidate(coordinates, "run.error", {"reason": "invalid_tool_result"}))
-                return None
-            # Feed only the stable failure code back to the model. Provider messages and execution
-            # detail remain behind the control-plane boundary and cannot leak into model context.
-            validated.append((tool_invocation_id, {"error": failure_code}))
-        tool_invocation_ids.append(tool_invocation_id)
-
-    # Pending-call identity is checked after structural validation and consumed atomically. This is
-    # the replay fence that rejects duplicate, foreign-attempt, and never-proposed results.
-    pending = take_pending_tool_calls(
-        str(coordinates["runId"]),
-        int(coordinates["attempt"]),
-        tool_invocation_ids,
-    )  # type: ignore[arg-type]
-    if pending is None:
-        post_candidate(candidate(coordinates, "run.error", {"reason": "unknown_tool_result"}))
-        return None
-
-    # The model adapter receives only invocation-to-result mappings. Stored tool names and arguments
-    # are correlation evidence; replaying them here could be mistaken for authority to execute again.
-    results: dict[str, object] = {}
-    for tool_invocation_id, result in validated:
-        results[tool_invocation_id] = result
-    return results
+            return None
+        identifiers.append(identifier)
+    return identifiers, validated

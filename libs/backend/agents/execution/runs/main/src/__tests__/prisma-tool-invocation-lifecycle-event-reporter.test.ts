@@ -30,7 +30,7 @@ describe("Prisma tool invocation lifecycle event reporter", function _suite()
 		const transaction = _transaction(AgentRunState.RecoveryRequired);
 		const reporter = new PrismaToolInvocationLifecycleEventUnitOfWork({} as never);
 
-		await expect(reporter.appendInTransaction(transaction, { runId: "run-1", attempt: 2, eventType: ToolInvocationEventTypes.Failed, payload: { toolInvocationId: "call-1", reason: "external_action_provider_outcome_ambiguous", retryCount: 1, retryLimit: 3, retrying: false } })).resolves.toBe(true);
+		await expect(reporter.appendInTransaction(transaction, { runId: "run-1", attempt: 2, eventType: ToolInvocationEventTypes.Failed, payload: { toolInvocationId: "call-1", toolRevisionId: "revision-1", reason: "external_action_provider_outcome_ambiguous", retryCount: 1, retryLimit: 3, retrying: false } })).resolves.toBe(true);
 		expect(transaction.conversationRunEvent.create).toHaveBeenCalledOnce();
 	});
 
@@ -42,7 +42,7 @@ describe("Prisma tool invocation lifecycle event reporter", function _suite()
 		const reporter = new PrismaToolInvocationLifecycleEventUnitOfWork({} as never);
 
 		await expect(reporter.appendInTransaction(completed, { runId: "run-1", attempt: 2, eventType: ToolInvocationEventTypes.Completed, payload: { toolInvocationId: "call-1" } })).resolves.toBe(true);
-		await expect(reporter.appendInTransaction(failed, { runId: "run-1", attempt: 2, eventType: ToolInvocationEventTypes.Failed, payload: { toolInvocationId: "call-1", reason: "external_action_failed", retryCount: 1, retryLimit: 3, retrying: false } })).resolves.toBe(true);
+		await expect(reporter.appendInTransaction(failed, { runId: "run-1", attempt: 2, eventType: ToolInvocationEventTypes.Failed, payload: { toolInvocationId: "call-1", toolRevisionId: "revision-1", reason: "external_action_failed", retryCount: 1, retryLimit: 3, retrying: false } })).resolves.toBe(true);
 		await expect(reporter.appendInTransaction(started, { runId: "run-1", attempt: 2, eventType: ToolInvocationEventTypes.Started, payload: { toolInvocationId: "call-1" } })).resolves.toBe(false);
 		expect(completed.conversationRunEvent.create).toHaveBeenCalledOnce();
 		expect(failed.conversationRunEvent.create).toHaveBeenCalledOnce();
@@ -53,6 +53,6 @@ describe("Prisma tool invocation lifecycle event reporter", function _suite()
 	{
 		const reporter = new PrismaToolInvocationLifecycleEventUnitOfWork({} as never);
 
-		await expect(reporter.appendInTransaction(_transaction(), { runId: "run-1", attempt: 2, eventType: ToolInvocationEventTypes.Failed, payload: { toolInvocationId: "call-1", reason: "token=secret", retryCount: 1, retryLimit: 3, retrying: false } })).resolves.toBe(false);
+		await expect(reporter.appendInTransaction(_transaction(), { runId: "run-1", attempt: 2, eventType: ToolInvocationEventTypes.Failed, payload: { toolInvocationId: "call-1", toolRevisionId: "revision-1", reason: "token=secret", retryCount: 1, retryLimit: 3, retrying: false } })).resolves.toBe(false);
 	});
 });

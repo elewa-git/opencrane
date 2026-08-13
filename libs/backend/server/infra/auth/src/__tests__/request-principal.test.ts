@@ -21,10 +21,12 @@ describe("_ResolveRequestPrincipal", function _suite()
 {
   it("resolves subject, silo, and administrator authority from trusted request facts", function _test()
   {
-    expect(_ResolveRequestPrincipal(_request({ sub: " user-1 ", email: "fallback@example.test", isOrgAdmin: true }))).toEqual({
+	const authenticatedAt = "2026-08-11T10:00:00.000Z";
+    expect(_ResolveRequestPrincipal(_request({ sub: " user-1 ", email: "fallback@example.test", isOrgAdmin: true, authenticatedAt }))).toEqual({
       subjectId: "user-1",
       siloId: "acme",
       isOrgAdmin: true,
+	  verifiedAuthenticationAt: new Date(authenticatedAt),
     });
   });
 
@@ -34,6 +36,7 @@ describe("_ResolveRequestPrincipal", function _suite()
       subjectId: "user@example.test",
       siloId: "acme",
       isOrgAdmin: false,
+	  verifiedAuthenticationAt: null,
     });
   });
 

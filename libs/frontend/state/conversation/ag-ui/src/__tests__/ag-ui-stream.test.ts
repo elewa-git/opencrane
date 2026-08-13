@@ -7,6 +7,12 @@ import { __DecodeAgUiSseRecord } from "../ag-ui-sse-decoder.js";
 import { AgUiMessageStatuses, AgUiRunStatuses, AgUiToolStatuses, type AgUiStreamRecord } from "../ag-ui-stream.types.js";
 import { __AgUiResumeCursor, __CreateAgUiStreamState, __ReduceAgUiStream } from "../ag-ui-stream.js";
 
+/** Exact safe progressive-disclosure fixture. */
+function _ToolFailureEnvelope(failureCode = "AuthenticationError", retrying = true)
+{
+	return { eventType: "tool.failed" as const, toolCallId: "tool-1", failureCode, retrying, technicalDetails: { toolIdentifier: "tool-1", toolRevision: "revision-1", failureCategory: failureCode, summary: failureCode === "AuthenticationError" ? "Authentication failed." : "The tool attempt failed.", occurredAt: "2026-07-23T00:00:00.000Z", retryCount: 1, retryLimit: 3 } };
+}
+
 /** Decode one valid pinned projection frame or fail the focused test immediately. */
 function _Record(id: string | undefined, data: object): AgUiStreamRecord
 {
@@ -68,38 +74,38 @@ describe("AG-UI stream state", function _Suite()
 	it("keeps a failed tool visibly failed with only its safe technical classification", function _ToolFailure()
 	{
 		let state = __ReduceAgUiStream(__CreateAgUiStreamState(), _Record("cursor-tool-1", { type: EventType.TOOL_CALL_START, toolCallId: "tool-1", toolCallName: "search" }));
-		state = __ReduceAgUiStream(state, _Record("cursor-tool-2", { type: EventType.CUSTOM, name: AG_UI_TOOL_FAILURE_EVENT, value: { eventType: "tool.failed", toolCallId: "tool-1", failureCode: "AuthenticationError" } }));
+		state = __ReduceAgUiStream(state, _Record("cursor-tool-2", { type: EventType.CUSTOM, name: AG_UI_TOOL_FAILURE_EVENT, value: _ToolFailureEnvelope() }));
 
 		expect(state.tools["tool-1"]).toMatchObject({ status: AgUiToolStatuses.Failed, failureCode: "AuthenticationError", result: null });
-		expect(state.tools["tool-1"]?.failures).toEqual([{ code: "AuthenticationError" }]);
+		expect(state.tools["tool-1"]?.failures).toEqual([{ code: "AuthenticationError", retrying: true, technicalDetails: _ToolFailureEnvelope().technicalDetails }]);
 		expect(state.customEvents).toContain(AG_UI_TOOL_FAILURE_EVENT);
 		expect(function _SecretExtension(): void
 		{
-			__ReduceAgUiStream(state, _Record("cursor-tool-3", { type: EventType.CUSTOM, name: AG_UI_TOOL_FAILURE_EVENT, value: { eventType: "tool.failed", toolCallId: "tool-1", failureCode: "AuthenticationError", detail: "secret" } }));
+			__ReduceAgUiStream(state, _Record("cursor-tool-3", { type: EventType.CUSTOM, name: AG_UI_TOOL_FAILURE_EVENT, value: { ..._ToolFailureEnvelope(), detail: "secret" } }));
 		}).toThrow("tool failure is invalid");
 	});
 
 	it("retains a failed attempt when a later tool result recovers", function _ToolRecovery()
 	{
 		let state = __ReduceAgUiStream(__CreateAgUiStreamState(), _Record("cursor-tool-1", { type: EventType.TOOL_CALL_START, toolCallId: "tool-1", toolCallName: "search" }));
-		state = __ReduceAgUiStream(state, _Record("cursor-tool-2", { type: EventType.CUSTOM, name: AG_UI_TOOL_FAILURE_EVENT, value: { eventType: "tool.failed", toolCallId: "tool-1", failureCode: "AuthenticationError" } }));
+		state = __ReduceAgUiStream(state, _Record("cursor-tool-2", { type: EventType.CUSTOM, name: AG_UI_TOOL_FAILURE_EVENT, value: _ToolFailureEnvelope() }));
 		state = __ReduceAgUiStream(state, _Record("cursor-tool-3", { type: EventType.TOOL_CALL_RESULT, toolCallId: "tool-1", messageId: "tool-message-1", role: "tool", content: "recovered" }));
 
 		expect(state.tools["tool-1"]).toMatchObject({ status: AgUiToolStatuses.Recovered, result: "recovered", failureCode: "AuthenticationError" });
-		expect(state.tools["tool-1"]?.failures).toEqual([{ code: "AuthenticationError" }]);
+		expect(state.tools["tool-1"]?.failures).toEqual([{ code: "AuthenticationError", retrying: true, technicalDetails: _ToolFailureEnvelope().technicalDetails }]);
 	});
 
 	it("stops a run in Needs recovery, preserves prior failure evidence, and accepts authoritative cancellation", function _NeedsRecovery()
 	{
 		let state = __ReduceAgUiStream(__CreateAgUiStreamState(), _Record("cursor-recovery-1", { type: EventType.RUN_STARTED, threadId: "conversation-1", runId: "run-1" }));
 		state = __ReduceAgUiStream(state, _Record("cursor-recovery-2", { type: EventType.TOOL_CALL_START, toolCallId: "tool-1", toolCallName: "create_invoice" }));
-		state = __ReduceAgUiStream(state, _Record("cursor-recovery-3", { type: EventType.CUSTOM, name: AG_UI_TOOL_FAILURE_EVENT, value: { eventType: "tool.failed", toolCallId: "tool-1", failureCode: "TimeoutError" } }));
+		state = __ReduceAgUiStream(state, _Record("cursor-recovery-3", { type: EventType.CUSTOM, name: AG_UI_TOOL_FAILURE_EVENT, value: _ToolFailureEnvelope("TimeoutError", false) }));
 		state = __ReduceAgUiStream(state, _Record("cursor-recovery-4", { type: EventType.CUSTOM, name: AG_UI_TOOL_RECOVERY_REQUIRED_EVENT, value: _Recovery() }));
 
 		expect(state.runStatus).toBe(AgUiRunStatuses.NeedsRecovery);
 		expect(state.runRecovery).toEqual(_Recovery());
 		expect(state.interrupts).toEqual([]);
-		expect(state.tools["tool-1"]).toMatchObject({ status: AgUiToolStatuses.NeedsRecovery, failureCode: "TimeoutError", failures: [{ code: "TimeoutError" }], recovery: _Recovery() });
+		expect(state.tools["tool-1"]).toMatchObject({ status: AgUiToolStatuses.NeedsRecovery, failureCode: "TimeoutError", failures: [{ code: "TimeoutError", retrying: false }], recovery: _Recovery() });
 		expect(function _CannotGuessSuccess(): void
 		{
 			__ReduceAgUiStream(state, _Record("cursor-recovery-5", { type: EventType.RUN_FINISHED, threadId: "conversation-1", runId: "run-1", outcome: { type: "success" } }));
@@ -108,7 +114,7 @@ describe("AG-UI stream state", function _Suite()
 		state = __ReduceAgUiStream(state, _Record("cursor-recovery-6", { type: EventType.RUN_ERROR, message: "Run cancelled: user_cancelled", code: "RUN_CANCELLED" }));
 		expect(state.runStatus).toBe(AgUiRunStatuses.Cancelled);
 		expect(state.runRecovery).toEqual(_Recovery());
-		expect(state.tools["tool-1"]).toMatchObject({ status: AgUiToolStatuses.NeedsRecovery, failures: [{ code: "TimeoutError" }], recovery: _Recovery() });
+		expect(state.tools["tool-1"]).toMatchObject({ status: AgUiToolStatuses.NeedsRecovery, failures: [{ code: "TimeoutError", retrying: false }], recovery: _Recovery() });
 	});
 
 	it("rejects a tool end as proof of recovery", function _RejectsToolEndAfterRecoveryRequirement()

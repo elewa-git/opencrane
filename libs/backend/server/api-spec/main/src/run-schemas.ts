@@ -5,7 +5,7 @@ export const _SelfRunStatusSchema = {
 	properties: {
 		runId: { type: "string" },
 		attempt: { type: "integer", minimum: 1 },
-		state: { type: "string", enum: ["accepted", "queued", "assigned", "running", "waiting_for_approval", "recovery_required", "cancelling", "completed", "failed", "cancelled"] },
+		state: { type: "string", enum: ["accepted", "queued", "assigned", "running", "waiting_for_input", "recovery_required", "cancelling", "completed", "failed", "cancelled"] },
 		conversationId: { type: "string", nullable: true },
 		agentRevisionId: { type: "string" },
 		acceptedAt: { type: "string", format: "date-time" },

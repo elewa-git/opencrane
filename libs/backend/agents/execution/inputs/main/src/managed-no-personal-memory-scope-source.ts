@@ -25,6 +25,6 @@ export class ManagedNoPersonalMemoryScopeSource implements MemoryScopeSource
 		if (run.agentKind !== "managed" || identity.kind !== "service" || identity.agentServiceId !== run.agentServiceId) return { outcome: "denied", reason: "memory_scope_unavailable" };
 
 		// 2. Freeze an explicit empty scope rather than silently reading an arbitrary user, organization, or workspace dataset.
-		return { outcome: "loaded", value: { memoryQueryPolicy: { scope: "none" }, memoryFacts: [] } };
+		return { outcome: "loaded", value: { memoryQueryPolicy: { scope: "none" } } };
 	}
 }

@@ -11,12 +11,14 @@ elements into their screens; elements themselves know nothing about which featur
 | Package | What it owns |
 | --- | --- |
 | [`a2ui`](./a2ui/README.md) | In-process A2UI canvas renderer. |
+| [`elicitation`](./elicitation/README.md) | Typed approval, choice, and free-text controls that emit drafts only. |
 | [`ui`](./ui/README.md) | Shared presentational UI components. |
 
 ```
      features (screens)  ──imports──►  elements
                                        ├── ui    (buttons, tables, dialogs…)
-                                       └── a2ui  (agent-authored canvases)
+                                       ├── a2ui  (agent-authored canvases)
+                                       └── elicitation (recoverable questions)
         elements import nothing sideways ──►
 ```
 

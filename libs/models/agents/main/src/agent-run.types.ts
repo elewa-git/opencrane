@@ -4,8 +4,33 @@ import type { AgentRevisionId, AgentRunId, AgentServiceId, SiloId, UserId } from
 /** Trigger that created an agent run. */
 export type AgentRunTrigger = "interactive" | "schedule" | "managed_invocation";
 
-/** Durable lifecycle state of an agent run attempt, including nonterminal cleanup after cancellation is requested. */
-export type AgentRunState = "accepted" | "queued" | "assigned" | "running" | "waiting_for_approval" | "recovery_required" | "cancelling" | "completed" | "failed" | "cancelled";
+/** Stable durable lifecycle vocabulary for one agent-run attempt. */
+export enum AgentRunStates
+{
+	/** Product authority accepted the run. */
+	Accepted = "accepted",
+	/** Capacity policy queued the run. */
+	Queued = "queued",
+	/** A workload assignment exists. */
+	Assigned = "assigned",
+	/** The runtime is actively processing the attempt. */
+	Running = "running",
+	/** The attempt is paused for governed participant input. */
+	WaitingForInput = "waiting_for_input",
+	/** Provider ambiguity requires operator recovery. */
+	RecoveryRequired = "recovery_required",
+	/** Cancellation is requested while the stop signal drains. */
+	Cancelling = "cancelling",
+	/** The run completed successfully. */
+	Completed = "completed",
+	/** The run ended in failure. */
+	Failed = "failed",
+	/** The run ended after cancellation. */
+	Cancelled = "cancelled",
+}
+
+/** Durable lifecycle state serialized for one agent-run attempt. */
+export type AgentRunState = `${AgentRunStates}`;
 
 /** Terminal classification recorded for a finished run. */
 export type AgentRunTerminalReason = "success" | "user_cancelled" | "policy_denied" | "budget_exhausted" | "runtime_failure" | "invalid_input";

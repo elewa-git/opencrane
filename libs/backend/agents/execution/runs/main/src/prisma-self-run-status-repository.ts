@@ -38,6 +38,6 @@ function _toSelfRunStatus(run: { id: string; attempt: number; state: { toString(
 /** Map Prisma's PascalCase lifecycle enum to the product API's stable lowercase spelling. */
 function _state(value: string): string
 {
-	if (value === "WaitingForApproval") return "waiting_for_approval";
+	if (value === "WaitingForInput") return "waiting_for_input";
 	return value.replace(/([a-z])([A-Z])/gu, "$1_$2").toLowerCase();
 }

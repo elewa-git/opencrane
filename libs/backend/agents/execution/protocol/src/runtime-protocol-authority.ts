@@ -1,6 +1,7 @@
-import { AGENT_RUNTIME_PROTOCOL_V1 } from "@opencrane/contracts";
+import { AGENT_RUNTIME_PROTOCOL_V1, RuntimeCommandKinds } from "@opencrane/contracts";
+import { AgentRunStates } from "@opencrane/models/agents";
 
-import type { RuntimeAdmissionRunState, RuntimeCandidateAdmission, RuntimeCandidateAdmissionInput, RuntimeCommandAdmission, RuntimeCommandAdmissionInput } from "./runtime-protocol-authority.types.js";
+import { RuntimeAdmissionOutcomes, type RuntimeAdmissionRunState, type RuntimeCandidateAdmission, type RuntimeCandidateAdmissionInput, type RuntimeCommandAdmission, type RuntimeCommandAdmissionInput } from "./runtime-protocol-authority.types.js";
 
 /** Returns whether a runtime identifier is a string with something in it. */
 function _hasIdentifier(value: unknown): value is string
@@ -21,7 +22,7 @@ function _isTerminalForAdmission(state: RuntimeAdmissionRunState): boolean
 		&& state !== "queued"
 		&& state !== "assigned"
 		&& state !== "running"
-		&& state !== "waiting_for_approval";
+		&& state !== "waiting_for_input";
 }
 
 /**
@@ -71,35 +72,35 @@ export function __AdmitRuntimeCommand(input: RuntimeCommandAdmissionInput): Runt
 	// 1. Reject a malformed frame before comparing any value an attacker might control.
 	if (!_hasIdentifier(command.runtimeInstanceId) || !_hasIdentifier(command.commandId) || !_hasIdentifier(command.assignment.assignmentDigest) || !_hasPositiveCounter(command.sequence) || !_hasPositiveCounter(command.fence) || issuedAtEpochMs === null || expiresAtEpochMs === null || assignmentExpiresAtEpochMs === null || issuedAtEpochMs >= expiresAtEpochMs)
 	{
-		return { outcome: "denied", reason: "invalid_frame" };
+		return { outcome: RuntimeAdmissionOutcomes.Denied, reason: "invalid_frame" };
 	}
-	if (command.protocolVersion !== AGENT_RUNTIME_PROTOCOL_V1) return { outcome: "denied", reason: "unsupported_protocol" };
-	if (nowEpochMs < issuedAtEpochMs) return { outcome: "denied", reason: "not_yet_valid" };
-	if (nowEpochMs >= expiresAtEpochMs || nowEpochMs >= assignmentExpiresAtEpochMs) return { outcome: "denied", reason: "expired" };
-	if (!Number.isSafeInteger(authority.leaseExpiresAtEpochMs) || nowEpochMs >= authority.leaseExpiresAtEpochMs) return { outcome: "denied", reason: "expired" };
-	// While the run is `cancelling`, nothing new is normally allowed, but a `cancel_attempt` is how the
-	// runtime is told to stop, so that one kind is still accepted. Every other kind is refused there,
-	// and once the run has finished even a cancel is refused. Candidates are never accepted while
-	// cancelling, so cancelled work can neither carry on nor reopen a finished run.
-	if (_isTerminalForAdmission(authority.runState) && !(authority.runState === "cancelling" && command.kind === "cancel_attempt")) return { outcome: "denied", reason: "terminal_run" };
+	if (command.protocolVersion !== AGENT_RUNTIME_PROTOCOL_V1) return { outcome: RuntimeAdmissionOutcomes.Denied, reason: "unsupported_protocol" };
+	if (nowEpochMs < issuedAtEpochMs) return { outcome: RuntimeAdmissionOutcomes.Denied, reason: "not_yet_valid" };
+	if (nowEpochMs >= expiresAtEpochMs || nowEpochMs >= assignmentExpiresAtEpochMs) return { outcome: RuntimeAdmissionOutcomes.Denied, reason: "expired" };
+	if (!Number.isSafeInteger(authority.leaseExpiresAtEpochMs) || nowEpochMs >= authority.leaseExpiresAtEpochMs) return { outcome: RuntimeAdmissionOutcomes.Denied, reason: "expired" };
+	// A `cancel_attempt` is a positive stop signal, so it is admitted while the run is `cancelling`
+	// even though that state is otherwise closed to admission; every other kind stays denied there,
+	// and once the run is fully terminal even a cancel is refused. Late candidates are never admitted
+	// during `cancelling`, so cancelled work can neither continue nor reopen a terminal run.
+	if (_isTerminalForAdmission(authority.runState) && !(authority.runState === AgentRunStates.Cancelling && command.kind === RuntimeCommandKinds.CancelAttempt)) return { outcome: RuntimeAdmissionOutcomes.Denied, reason: "terminal_run" };
 
 	// 2. Check the command against the assignment it was issued for and the attempt's current lease.
 	if (command.assignment.runId !== authority.runId || command.assignment.attempt !== authority.attempt || command.assignment.assignmentDigest !== authority.assignmentDigest)
 	{
-		return { outcome: "denied", reason: "assignment_mismatch" };
+		return { outcome: RuntimeAdmissionOutcomes.Denied, reason: "assignment_mismatch" };
 	}
-	if (assignmentExpiresAtEpochMs > authority.leaseExpiresAtEpochMs) return { outcome: "denied", reason: "assignment_mismatch" };
-	if (command.runtimeInstanceId !== authority.runtimeInstanceId) return { outcome: "denied", reason: "runtime_instance_mismatch" };
-	if (command.fence !== authority.fence) return { outcome: "denied", reason: "fence_mismatch" };
-	if (authority.acceptedCommandIds.includes(command.commandId)) return { outcome: "idempotent" };
-	if (command.sequence !== authority.nextCommandSequence) return { outcome: "denied", reason: "sequence_mismatch" };
+	if (assignmentExpiresAtEpochMs > authority.leaseExpiresAtEpochMs) return { outcome: RuntimeAdmissionOutcomes.Denied, reason: "assignment_mismatch" };
+	if (command.runtimeInstanceId !== authority.runtimeInstanceId) return { outcome: RuntimeAdmissionOutcomes.Denied, reason: "runtime_instance_mismatch" };
+	if (command.fence !== authority.fence) return { outcome: RuntimeAdmissionOutcomes.Denied, reason: "fence_mismatch" };
+	if (authority.acceptedCommandIds.includes(command.commandId)) return { outcome: RuntimeAdmissionOutcomes.Idempotent };
+	if (command.sequence !== authority.nextCommandSequence) return { outcome: RuntimeAdmissionOutcomes.Denied, reason: "sequence_mismatch" };
 
-	// 3. Refuse a start command whose snapshot is not the one this attempt was admitted with.
-	if (command.kind === "start_attempt" && command.payload.snapshot.digest !== authority.inputSnapshotDigest)
+	// 3. Refuse a start frame whose immutable snapshot differs from the attempt authority.
+	if (command.kind === RuntimeCommandKinds.StartAttempt && command.payload.snapshot.digest !== authority.inputSnapshotDigest)
 	{
-		return { outcome: "denied", reason: "snapshot_mismatch" };
+		return { outcome: RuntimeAdmissionOutcomes.Denied, reason: "snapshot_mismatch" };
 	}
-	return { outcome: "accepted", nextCommandSequence: authority.nextCommandSequence + 1 };
+	return { outcome: RuntimeAdmissionOutcomes.Accepted, nextCommandSequence: authority.nextCommandSequence + 1 };
 }
 
 /**
@@ -129,17 +130,17 @@ export function __AdmitRuntimeCandidate(input: RuntimeCandidateAdmissionInput): 
 	// 1. Reject a malformed candidate before it reaches the event or external-action code.
 	if (!_hasIdentifier(candidate.runtimeInstanceId) || !_hasIdentifier(candidate.commandId) || !_hasIdentifier(candidate.candidateId) || !_hasPositiveCounter(candidate.attempt) || !_hasPositiveCounter(candidate.fence))
 	{
-		return { outcome: "denied", reason: "invalid_candidate" };
+		return { outcome: RuntimeAdmissionOutcomes.Denied, reason: "invalid_candidate" };
 	}
-	if (candidate.protocolVersion !== AGENT_RUNTIME_PROTOCOL_V1) return { outcome: "denied", reason: "unsupported_protocol" };
-	if (_isTerminalForAdmission(authority.runState)) return { outcome: "denied", reason: "terminal_run" };
-	if (!Number.isSafeInteger(authority.leaseExpiresAtEpochMs) || input.clock.nowEpochMs() >= authority.leaseExpiresAtEpochMs) return { outcome: "denied", reason: "expired" };
+	if (candidate.protocolVersion !== AGENT_RUNTIME_PROTOCOL_V1) return { outcome: RuntimeAdmissionOutcomes.Denied, reason: "unsupported_protocol" };
+	if (_isTerminalForAdmission(authority.runState)) return { outcome: RuntimeAdmissionOutcomes.Denied, reason: "terminal_run" };
+	if (!Number.isSafeInteger(authority.leaseExpiresAtEpochMs) || input.clock.nowEpochMs() >= authority.leaseExpiresAtEpochMs) return { outcome: RuntimeAdmissionOutcomes.Denied, reason: "expired" };
 
-	// 2. Require the current stream and attempt, so an old runtime that reconnects is not served.
-	if (candidate.runId !== authority.runId || candidate.attempt !== authority.attempt) return { outcome: "denied", reason: "assignment_mismatch" };
-	if (candidate.runtimeInstanceId !== authority.runtimeInstanceId) return { outcome: "denied", reason: "runtime_instance_mismatch" };
-	if (candidate.fence !== authority.fence) return { outcome: "denied", reason: "fence_mismatch" };
-	if (!authority.acceptedCommandIds.includes(candidate.commandId)) return { outcome: "denied", reason: "command_not_accepted" };
-	if (authority.acceptedCandidateIds.includes(candidate.candidateId)) return { outcome: "idempotent" };
-	return { outcome: "accepted" };
+	// 2. Require the exact current stream and attempt rather than accepting a stale runtime reconnect.
+	if (candidate.runId !== authority.runId || candidate.attempt !== authority.attempt) return { outcome: RuntimeAdmissionOutcomes.Denied, reason: "assignment_mismatch" };
+	if (candidate.runtimeInstanceId !== authority.runtimeInstanceId) return { outcome: RuntimeAdmissionOutcomes.Denied, reason: "runtime_instance_mismatch" };
+	if (candidate.fence !== authority.fence) return { outcome: RuntimeAdmissionOutcomes.Denied, reason: "fence_mismatch" };
+	if (!authority.acceptedCommandIds.includes(candidate.commandId)) return { outcome: RuntimeAdmissionOutcomes.Denied, reason: "command_not_accepted" };
+	if (authority.acceptedCandidateIds.includes(candidate.candidateId)) return { outcome: RuntimeAdmissionOutcomes.Idempotent };
+	return { outcome: RuntimeAdmissionOutcomes.Accepted };
 }

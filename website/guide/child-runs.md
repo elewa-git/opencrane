@@ -53,7 +53,7 @@ accountable:
 There is no agent-to-agent channel. The run tree is the protocol:
 
 1. **Context in.** A child sees exactly what its parent puts in its immutable input snapshot —
-   selected messages, memory facts, artifact and skill revisions. Nothing else. The snapshot
+   selected messages, verified memory-dataset coordinates, artifact and skill revisions. Nothing else. The snapshot
    digest makes that choice permanent and auditable.
 2. **Context out.** The child's result — terminal state, output, artifact receipts — returns to
    the parent as the spawn tool's result. A child failure surfaces as a tool error, so a parent

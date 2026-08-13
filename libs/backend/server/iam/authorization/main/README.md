@@ -74,21 +74,17 @@ carries a concrete, currently authorized human approval subject.
 - `__CancelPendingRunApprovalAuthority` — closes pending approvals and only provider-free or
   unclaimed invocations for an exact run attempt on a caller-owned database transaction. Active
   provider claims remain fenced until their definite result or recovery decision becomes durable.
-- `__CreateDeferredToolApprovalRouter`, `PrismaDeferredToolApprovalDecisionRepository`,
-  `PrismaSelfDeferredToolApprovalListRepository` — the owner-only approval inbox, interrupt detail,
-  decision surface, and persistence adapters. The router derives the person and silo from the
-  signed-in browser session; actor reads select only pre-redacted arguments and the derived response
-  schema, never raw reviewed or final arguments, proof data, policy digests, or resume material.
-- `_CreateDeferredToolApprovalRouter` — the ready-to-mount Prisma composition that maps the shared
-  authenticated request principal into the approval caller and owns the adapters and clock.
+- `ApprovalRequest` remains internal tool audit evidence. Browser reads, live overlays, and decisions
+  use the conversation-scoped elicitation authority; reviewed arguments, proof data, policy digests,
+  and resume material remain internal here.
 - `__OpenDeferredToolApproval` — atomically links an awaiting ToolInvocation to its approval, then
   recovers an ambiguous commit or terminalises the invocation so it cannot be replayed.
 - `__ProjectDeferredToolApproval`, `__ValidateDeferredToolArguments` — derive the secret-safe actor
   projection and validate a complete approved replacement against the frozen reviewed tool schema.
 - Deferred-approval contracts are split by authority: `DeferredToolApprovalLifecycle*` owns the
-  exhaustive run-state table; `DeferredToolApprovalInterrupt*` and `SelfDeferredToolApproval*` own
-  actor-safe reads; `DeferredToolDecision*` owns decision and expiry commands; and
-  `DeferredToolApprovalOpen*` owns invocation-linked opening and ambiguous-commit recovery.
+  exhaustive run-state table; `DeferredToolDecision*` owns decision and expiry commands;
+  `DeferredToolApprovalOpen*` owns invocation-linked opening and ambiguous-commit recovery; and the
+  schema helper owns the pre-redacted internal projection stored with audit evidence.
 - `__DigestCanonicalJson` — an authorization-domain wrapper over the shared environment-neutral
   canonical JSON hash, preserving one SHA-256 implementation across server and browser consumers.
 - `PrismaRuntimeAuthorityRepository`, `PrismaAuthorizationGrantRepository` — the database-backed
@@ -102,6 +98,12 @@ carries a concrete, currently authorized human approval subject.
   canonical lifecycle event in the same transaction; its transaction repository remains
   package-private. Runs owns the injected run-state recovery port; authorization never writes
   `AgentRun.state` directly.
+- `ToolInvocationAdmissionOutcomes`, `ToolInvocationClaimOutcomes`, `ToolResultDeliveryOutcomes`,
+  and `DeferredToolDecisionOutcomes` are stable transaction result vocabularies shared by the
+  authorization owner and its protocol consumers.
+- `PrismaToolInvocationElicitationRepository` — binds the narrow ToolInvocation read,
+  approve/reject, safe failure-delivery, and active dispatch-claim checks to an existing elicitation
+  transaction without exporting the full persistence repository.
 - `TOOL_INVOCATION_PREPARATION_POLICY` — the one frozen provider-free retry policy consumed by
   admission, scheduling, lifecycle decisions, cancellation, and durable recovery events.
 - `ShareAuthorizationScopeKinds` — the four domain scope categories that sharing accepts; the
@@ -187,11 +189,11 @@ and expiry carry an explicit refusal and never execute the awaiting invocation.
 
 | Run state | Event | Pending after event | Action | Atomic owner |
 |---|---|---:|---|---|
-| `Running` | open | 0 before create | move to `WaitingForApproval`, then create | approval-open unit of work |
-| `WaitingForApproval` | open | one or more | add to the current batch | approval-open unit of work |
-| `WaitingForApproval` | decision or expiry | one or more | remain waiting | approval-decision or expiry unit of work |
-| `WaitingForApproval` | decision or expiry | 0 | move to `Running`; make the batch resumable | approval-decision or expiry unit of work |
-| `Running` or `WaitingForApproval` | cancellation | any | cancel pending rows without resume authority | caller-owned cancellation transaction |
+| `Running` | open | 0 before create | move to `WaitingForInput`, then create | approval-open unit of work |
+| `WaitingForInput` | open | one or more | add to the current batch | approval-open unit of work |
+| `WaitingForInput` | decision or expiry | one or more | remain waiting | approval-decision or expiry unit of work |
+| `WaitingForInput` | decision or expiry | 0 | move to `Running`; make the batch resumable | approval-decision or expiry unit of work |
+| `Running` or `WaitingForInput` | cancellation | any | cancel pending rows without resume authority | caller-owned cancellation transaction |
 | any other state | open, decision, or expiry | any | reject | exhaustive lifecycle state registry |
 
 Multiple requests may share one pause. The dispatcher consumes all resolved rows in deterministic

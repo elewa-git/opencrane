@@ -139,8 +139,11 @@ deletion or authoritative absence moves `Cancelling` to `Cancelled` and emits `r
 `PrismaRuntimeTerminalReporter` is the matching completion boundary for an authenticated runtime
 Pod. It accepts only a protocol-fenced `run.completed` or `run.failed` report for the currently
 running attempt, serialises terminal writers on the run, and commits the lifecycle state, canonical
-conversation event, and any child-to-parent completion delivery together. Runtime Pods have no
-`run.cancelled` authority: cancellation continues to flow through the server-owned cleanup process.
+conversation event, and any child-to-parent completion delivery together. The sole pre-start
+exception is an exact `compiled_input_coordinate_mismatch` failure bound by the protocol authority
+to the accepted `start_attempt` command; it moves that assigned attempt directly to failed instead
+of leaving it stranded. Runtime Pods have no `run.cancelled` authority: cancellation continues to
+flow through the server-owned cleanup process.
 
 `PrismaToolInvocationRunRecoveryAuthority` is the transaction-bound bridge through which the
 authorization domain may change run recovery posture. It compare-and-sets only the exact attempt

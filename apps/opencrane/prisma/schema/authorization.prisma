@@ -147,6 +147,7 @@ model ApprovalRequest {
   decidedAt                DateTime?                  @map("decided_at")
   decidedBy                String?                    @map("decided_by")
   resumeTokenHash          String?                    @unique @map("resume_token_hash")
+  elicitationRequestId     String?                    @unique @map("elicitation_request_id")
   toolInvocationRowId      String?                    @map("tool_invocation_row_id")
   reviewedToolArguments    Json?                      @map("reviewed_tool_arguments")
   reviewedToolSchema       Json?                      @map("reviewed_tool_schema")
@@ -158,6 +159,7 @@ model ApprovalRequest {
   createdAt                DateTime                   @default(now()) @map("created_at")
   run                      AgentRun                   @relation(fields: [runId, agentServiceId, agentRevisionId], references: [id, agentServiceId, agentRevisionId], onDelete: Restrict)
   toolInvocation           ToolInvocation?            @relation(fields: [toolInvocationRowId], references: [id], onDelete: Restrict)
+  elicitationRequest       ElicitationRequest?         @relation(fields: [elicitationRequestId], references: [id], onDelete: Restrict)
   proofKey                 RunProofKey                @relation(fields: [proofKeyId, runId, attempt, workloadKind, workloadUid, proofKeyThumbprint, podUid], references: [id, runId, attempt, workloadKind, workloadUid, keyThumbprint, podUid], onDelete: Restrict)
   assignment               WorkloadAssignment         @relation(fields: [runId, attempt, agentServiceId, agentRevisionId, siloId, subjectId, workloadAudience, serviceAccountName, namespace, workloadKind, workloadUid], references: [runId, attempt, agentServiceId, agentRevisionId, siloId, subjectId, audience, serviceAccountName, namespace, workloadKind, workloadUid], onDelete: Restrict)
   catalog                  CapabilityCatalogRevision? @relation(fields: [catalogId, catalogRevision, catalogDigest], references: [catalogId, revision, digest], onDelete: Restrict)
@@ -212,6 +214,7 @@ model ToolInvocation {
   approvalRequests         ApprovalRequest[]
   resultDelivery           ToolResultDelivery?
   skillWorkload            SkillWorkload?
+  personalMemoryPermission PersonalMemoryPermissionReceipt?
 
   @@unique([runId, attempt, toolInvocationId])
   @@unique([runId, attempt, candidateId])

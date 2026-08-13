@@ -40,7 +40,7 @@ evidence to the owning file. Do not silently change a blocked story into fronten
 | Identity and onboarding | [identity-and-onboarding.md](identity-and-onboarding.md) | OIDC works; the server-tracked survey and bootstrap-chat workflow is a required API gap. |
 | Persona | [persona.md](persona.md) | Governed interview lifecycle exists; UI and mutation contract generation are missing. |
 | Workspace and conversations | [workspace-and-conversations.md](workspace-and-conversations.md) | Participant list/create/open/message/archive/close and replay APIs exist; the routed workspace UI follows in later tracks. |
-| Runs and approvals | [runs-and-approvals.md](runs-and-approvals.md) | Admission, status and steering exist; cancellation and production approval resume are incomplete. |
+| Runs and participant input | [runs-and-approvals.md](runs-and-approvals.md) | Conversation-scoped elicitation API and reusable UI are ready; workspace mounting follows in #351. |
 | Personal configuration | [personal-configuration.md](personal-configuration.md) | Proposal consent and future-run materialization exist without a UI. |
 | Managed agents | [managed-agents.md](managed-agents.md) | Revision, lifecycle, run-now, history and schedule APIs exist. |
 | Tools and integrations | [tools-and-integrations.md](tools-and-integrations.md) | Catalogue metadata exists; credential/OAuth connection is not a real handshake. |

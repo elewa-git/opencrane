@@ -4,6 +4,7 @@ import type { JsonValue } from "@opencrane/util";
 import type { CompiledRunInput } from "./compiled-run-input.types.js";
 import type { RunInputSnapshot } from "./run-input-snapshot.types.js";
 import type { RuntimeAssignment } from "./runtime-assignment.types.js";
+import type { RuntimeElicitationProposal } from "./conversation-elicitation.types.js";
 
 /** The only wire-protocol version the runtime boundary accepts today; a frame declaring anything else is rejected. */
 export const AGENT_RUNTIME_PROTOCOL_V1 = "opencrane.agent-runtime/v1";
@@ -123,6 +124,21 @@ export interface ResumeAttemptCommand
 	readonly toolResults: readonly RuntimeToolResult[];
 	/** Steering text the owner wrote, delivered once at this fenced command. */
 	readonly steeringRequests: JsonValue;
+	/** Exact server-owned elicitation results whose one-time delivery rows were consumed. */
+	readonly elicitationResults: readonly RuntimeElicitationResult[];
+}
+
+/** Exact elicitation outcome delivered after the server accepts participant input. */
+export interface RuntimeElicitationResult
+{
+	/** Stable server-owned request coordinate. */
+	readonly requestId: string;
+	/** Runtime caller-stable request key. */
+	readonly requestKey: string;
+	/** Accepted answer body or a terminal refusal marker. */
+	readonly outcome: "answered" | "declined" | "expired" | "cancelled" | "failed";
+	/** Answer content only for ordinary runtime input; protected strategy results stay server-side. */
+	readonly response?: JsonValue;
 }
 
 /** Command that stops one attempt. The server decides the final state, not the runtime. */
@@ -132,7 +148,18 @@ export interface CancelAttemptCommand
 	readonly reason: "cancelled" | "deadline_exceeded" | "budget_exhausted" | "capability_revoked";
 }
 
-/** Every command the control plane can send one runtime instance. A runtime must reject any other `type`. */
+/** Stable command discriminants serialized on the runtime protocol. */
+export enum RuntimeCommandKinds
+{
+	/** Starts one attempt from immutable input. */
+	StartAttempt = "start_attempt",
+	/** Resumes an attempt with server-owned results. */
+	ResumeAttempt = "resume_attempt",
+	/** Stops an attempt for a server-owned reason. */
+	CancelAttempt = "cancel_attempt",
+}
+
+/** Versioned command union issued by the control plane to one runtime instance. */
 export type RuntimeCommand =
 	| { readonly kind: "start_attempt"; readonly payload: StartAttemptCommand }
 	| { readonly kind: "resume_attempt"; readonly payload: ResumeAttemptCommand }
@@ -160,11 +187,22 @@ export interface RuntimeCandidateCoordinates
 	readonly fence: number;
 }
 
-/** An event the runtime proposes. The control plane decides whether to store it; the runtime never writes directly. */
+/** Stable runtime-candidate discriminants serialized on the workload protocol. */
+export enum RuntimeCandidateKinds
+{
+	/** Proposes one canonical run event for server admission. */
+	Event = "event",
+	/** Proposes one governed external action. */
+	ExternalAction = "external_action",
+	/** Proposes one participant input request. */
+	Elicitation = "elicitation",
+}
+
+/** Runtime-proposed canonical event, never a direct durable write. */
 export interface RuntimeEventCandidate extends RuntimeCandidateCoordinates
 {
-	/** Tag marking this candidate as an event the control plane must approve. */
-	readonly kind: "event";
+	/** Candidate category that requires control-plane event admission. */
+	readonly kind: RuntimeCandidateKinds.Event;
 	/** Proposed canonical event type. */
 	readonly eventType: string;
 	/** Validated, bounded event body for the control-plane authority to inspect. */
@@ -175,7 +213,7 @@ export interface RuntimeEventCandidate extends RuntimeCandidateCoordinates
 export interface RuntimeExternalActionCandidate extends RuntimeCandidateCoordinates
 {
 	/** Candidate category requiring deferred external-action authorization. */
-	readonly kind: "external_action";
+	readonly kind: RuntimeCandidateKinds.ExternalAction;
 	/** Immutable tool revision fixed by the accepted RunInputSnapshot. */
 	readonly toolRevisionId: string;
 	/** Caller-provided unique invocation identifier. */
@@ -186,5 +224,14 @@ export interface RuntimeExternalActionCandidate extends RuntimeCandidateCoordina
 	readonly arguments: JsonValue;
 }
 
-/** Everything a runtime may return to the control plane. Nothing in it is stored until the control plane admits it. */
-export type RuntimeCandidate = RuntimeEventCandidate | RuntimeExternalActionCandidate;
+/** Runtime proposal for participant input, never authority to choose the respondent. */
+export interface RuntimeElicitationCandidate extends RuntimeCandidateCoordinates
+{
+	/** Candidate category requiring generic elicitation admission. */
+	readonly kind: RuntimeCandidateKinds.Elicitation;
+	/** Bounded proposal interpreted and bound by the server. */
+	readonly proposal: RuntimeElicitationProposal;
+}
+
+/** Candidate union returned by the runtime to the control-plane authority. */
+export type RuntimeCandidate = RuntimeEventCandidate | RuntimeExternalActionCandidate | RuntimeElicitationCandidate;

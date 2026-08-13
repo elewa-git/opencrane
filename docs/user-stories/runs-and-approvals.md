@@ -5,9 +5,9 @@
 Make execution understandable and controllable without exposing workload credentials, Kubernetes
 coordinates, proof keys, or internal retry machinery.
 
-Current status: `API partial`, `UI missing`, `Design ready` for list/status/steering and the approval
-inbox. Interactive runs now start only through agent-session messages. Owner cancellation is
-available, public retry remains blocked, and production approval activation is incomplete.
+Current status: run APIs are partial; the conversation-scoped elicitation API and reusable UI are
+ready, with workspace mounting owned by issue #351. Interactive runs start only through
+agent-session messages. Owner cancellation is available and public retry remains blocked.
 
 ## RUN-01 — Start a run from an authoritative agent session
 
@@ -36,7 +36,7 @@ what is active, waiting, complete, failed, or cancelled.
 
 Acceptance criteria:
 
-- Canonical states are `accepted`, `queued`, `assigned`, `running`, `waiting_for_approval`,
+- Canonical states are `accepted`, `queued`, `assigned`, `running`, `waiting_for_input`,
   `recovery_required`, `cancelling`, `completed`, `failed`, and `cancelled`.
 - Terminal reason text is stable and user-safe. Safe technical context, such as an authentication
   failure or a failed tool call, may be disclosed behind details controls; credentials, tokens,
@@ -52,40 +52,46 @@ can correct direction without mutating its admitted authority snapshot.
 
 Acceptance criteria:
 
-- Steering is available only for eligible assigned, running, or approval-waiting attempts.
+- Steering is available only for eligible assigned, running, or input-waiting attempts.
 - Text is trimmed, required, and limited to 4,000 characters.
 - The UI distinguishes pending, accepted, conflict/not-steerable, not-found, and unavailable states.
 - A second resume boundary is not implied when the attempt has already consumed it.
 
 API: `POST /api/v1/me/runs/{runId}/steering`.
 
-## RUN-04 — Decide a deferred tool approval
+## RUN-04 — Answer a recoverable participant request
 
-**As an** Owner, **I want** to approve or deny a pending external action **so that** sensitive work
-continues only with my explicit consent.
+**As a** selected conversation participant, **I want** to answer a pending question or approval
+**so that** a run continues only with my exact input or consent.
 
 Acceptance criteria:
 
-- The inbox contains only the current owner's pending approvals.
-- The UI displays safe identity and timing metadata, not raw tool arguments, policy proofs, or
-  resume credentials.
-- Decision values are exactly `approved` or `denied`.
-- Same-decision replay is idempotent; expired, foreign, and terminal requests fail closed.
+- The request is visible only to the exact active participant selected by the server.
+- One contract supports approval, single choice, multiple choice, and bounded free text.
+- Approval discloses the action, target, data use, external system, consequence, and cost when
+  present. Raw tool arguments, policy proofs, protected memory payloads, and resume credentials
+  never reach the browser.
+- Choosing an answer does not submit it. The participant uses a separate Submit action.
+- The selected draft survives verified sign-in recovery and reconnect reconciliation.
+- Identical replay is idempotent; mismatched replay, expired, foreign, stale-run, and terminal
+  requests fail closed.
 
-APIs: `GET /api/v1/me/approvals`, `POST /api/v1/me/approvals/{approvalRequestId}/decision`.
+APIs: `GET /api/v1/me/conversations/{conversationId}/elicitations/{requestId}`,
+`POST /api/v1/me/conversations/{conversationId}/elicitations/{requestId}/responses`, and the
+derived-reference index `GET /api/v1/me/activity/elicitations`.
 
-Status: `API partial`; the finite browser API exists, but production creation and post-decision
-resume transitions are not yet complete.
+Status: `API ready`, `reusable UI ready`, `workspace mount in #351`.
 
 ## RUN-05 — Cancel an active run
 
 **As a** user, **I want** to cancel an eligible active attempt **so that** execution and pending
-approvals stop promptly.
+participant requests stop promptly.
 
 Acceptance criteria:
 
 - Cancellation is expected-attempt fenced and visibly moves through `cancelling` to `cancelled`.
-- Pending approvals and runtime authority are revoked before cleanup is treated as complete.
+- Pending elicitations, linked tool approvals, and runtime authority are revoked before cleanup is
+  treated as complete.
 - Duplicate, stale-attempt, already-terminal, and cleanup-delayed outcomes are defined.
 - The server derives owner and silo from the signed-in session; an absent or foreign run is the same
   `not found` response.

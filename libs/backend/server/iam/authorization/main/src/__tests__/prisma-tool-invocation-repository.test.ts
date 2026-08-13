@@ -171,7 +171,7 @@ describe("PrismaToolInvocationUnitOfWork", function _unitOfWorkSuite()
 		const runRecovery = { enterRecoveryRequiredInTransaction: vi.fn().mockResolvedValue(ToolInvocationRunRecoveryEnterResults.Entered), resumeRunningInTransaction: vi.fn().mockResolvedValue(true) };
 		const unit = new PrismaToolInvocationUnitOfWork(prisma, { appendInTransaction: appendLifecycle }, { appendInTransaction: vi.fn().mockResolvedValue(true) }, runRecovery);
 		await unit.recordPreparationFailure("invocation-row-1", 0, new Date("2026-08-11T10:00:01.000Z"), _policy(), "preparation_failed");
-		expect(appendLifecycle).toHaveBeenCalledWith(transaction, { runId: "run-1", attempt: 2, eventType: ToolInvocationEventTypes.Failed, payload: { toolInvocationId: "tool-1", reason: "preparation_failed", retryCount: 1, retryLimit: 3, retrying: true } });
+		expect(appendLifecycle).toHaveBeenCalledWith(transaction, { runId: "run-1", attempt: 2, eventType: ToolInvocationEventTypes.Failed, payload: { toolInvocationId: "tool-1", toolRevisionId: "integration:calendar:create", reason: "preparation_failed", retryCount: 1, retryLimit: 3, retrying: true } });
 	});
 
 	it("keeps a cancelling run cancelling while committing exact recovery evidence", async function _cancellingRecovery()

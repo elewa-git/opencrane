@@ -57,7 +57,8 @@ describe("AG-UI projection", function _Suite()
 
 	it("projects tool failure with safe coordinates and technical classification", function _ProjectsToolFailure()
 	{
-		expect(_ProjectOne(_Source("tool.failed", { toolCallId: "tool-1", failureCode: "AuthenticationError" }))).toEqual({ type: "CUSTOM", name: AG_UI_TOOL_FAILURE_EVENT, value: { eventType: "tool.failed", toolCallId: "tool-1", failureCode: "AuthenticationError" } });
+		const technicalDetails = { toolIdentifier: "tool-1", toolRevision: "revision-1", failureCategory: "AuthenticationError", summary: "Authentication failed.", occurredAt: "2026-07-23T00:00:00.000Z", retryCount: 1, retryLimit: 3 };
+		expect(_ProjectOne(_Source("tool.failed", { toolCallId: "tool-1", failureCode: "AuthenticationError", toolFailure: { retrying: true, technicalDetails } }))).toEqual({ type: "CUSTOM", name: AG_UI_TOOL_FAILURE_EVENT, value: { eventType: "tool.failed", toolCallId: "tool-1", failureCode: "AuthenticationError", retrying: true, technicalDetails } });
 	});
 
 	it("projects recovery as a distinct nonterminal custom event with only fixed safe evidence", function _ProjectsToolRecovery()
@@ -68,7 +69,7 @@ describe("AG-UI projection", function _Suite()
 
 	it("retains every unsupported or incomplete canonical event as a payload-free custom signal", function _ProjectsCustom()
 	{
-		const eventTypes: readonly AgUiProjectionSourceEvent["eventType"][] = ["tool.started", "tool.progress", "tool.approval_required", "context.compaction_started", "context.compaction_completed", "run.usage", "future.event"];
+		const eventTypes: readonly AgUiProjectionSourceEvent["eventType"][] = ["tool.started", "tool.progress", "context.compaction_started", "context.compaction_completed", "run.usage", "future.event"];
 		for (const eventType of eventTypes)
 		{
 			expect(_ProjectOne(_Source(eventType, { delta: "do-not-forward" }))).toEqual({ type: "CUSTOM", name: `opencrane.${eventType.replaceAll(".", "_")}`, value: { eventType } });
@@ -85,7 +86,7 @@ describe("AG-UI projection", function _Suite()
 
 	it("re-presents an open interrupt without advancing the durable cursor", function _ProjectsInterruptOverlay()
 	{
-		const source = { ..._Source("tool.approval_required", { interrupt: { id: "approval-1", reason: "tool_approval", toolCallId: "tool-1", expiresAt: "2026-07-23T00:05:00.000Z", responseSchema: { type: "object" } } }), cursor: undefined };
+		const source = { ..._Source("elicitation.requested", { interrupt: { id: "elicitation-1", reason: "tool_approval", toolCallId: "tool-1", expiresAt: "2026-07-23T00:05:00.000Z", responseSchema: { type: "object" } } }), cursor: undefined };
 		const record = _Record(source);
 		expect(record.id).toBeUndefined();
 		expect(record.data).toEqual({ type: "RUN_FINISHED", threadId: "conversation-2", runId: "run-3", outcome: { type: "interrupt", interrupts: [source.payload.interrupt] } });

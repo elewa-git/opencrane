@@ -58,7 +58,7 @@ runtime.py
 ```
 
 `src/bootstrap/` owns proof binding, `src/transport/` owns control-plane I/O, `src/attempts/` executes
-commands, `src/model_loop/` adapts the bounded model loop, and `src/protocol/` projects stable
+commands and validates returned results, `src/model_loop/` adapts the bounded model loop, and `src/protocol/` projects stable
 candidates. The [source architecture](src/README.md) follows the complete runtime sequence and
 records the dependency, authority, retry, cancellation, and checkpoint rules in one place.
 
@@ -71,11 +71,16 @@ Raw framework events are normalized into stable protocol candidates while the at
 output text becomes a canonical message start/delta/end lifecycle; usage and credential-free error
 classification become bounded `event` candidates; and a model tool call first reports
 `tool.requested` before becoming a bounded `external_action` candidate whose `toolRevisionId` is resolved from the compiled grant set
-and whose `argumentsDigest` is a deterministic `sha256:<hex>` the control plane re-derives. Pydantic
+and whose `argumentsDigest` is a deterministic `sha256:<hex>` the control plane re-derives. A neutral
+adapter may also emit one `elicitation_request`. The runtime accepts only bounded `runtime_input` or
+reviewed `a2ui_action` shapes, computes the protected-payload digest itself, and pauses after posting
+the candidate. The server chooses the participant, durable request id, and absolute expiry. Pydantic
 AI types, ids, and checkpoints never cross that seam. Resume delivers saved server-owned tool
-results (`{toolInvocationId, outcome, result|failureCode}`). The runtime maps each result back to its
-recorded pending call and feeds only that per-call mapping into the framework. It has no provider
-credential and cannot repeat the external action after a reconnect. A neutral adapter may also supply a complete versioned A2UI
+results (`{toolInvocationId, outcome, result|failureCode}`) plus exact terminal elicitation results
+(`{requestId, requestKey, outcome, response?}`). The runtime maps each tool result back to its
+recorded pending call and gives the model only validated elicitation content. Protected A2UI answers
+return as a terminal marker without response content. It has no provider credential and cannot
+repeat the external action after a reconnect. A neutral adapter may also supply a complete versioned A2UI
 envelope for one of the three canonical A2UI event types; the default Pydantic adapter emits none and
 the runtime never invents UI shapes. Cancel is a positive signal that suppresses any late candidate; steering is
 absorbed only at the safe pre-model-request boundary. Any executor failure surfaces as a real

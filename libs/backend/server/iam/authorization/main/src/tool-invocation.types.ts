@@ -128,9 +128,20 @@ export interface ToolInvocationRecord
  * candidate id already belongs to different arguments, the request fingerprint is already taken,
  * or the preparation policy was not the fixed one. Do not retry a `conflict`.
  */
+export enum ToolInvocationAdmissionOutcomes
+{
+	/** A new preparing invocation became durable. */
+	Admitted = "admitted",
+	/** The exact invocation was already durable. */
+	Idempotent = "idempotent",
+	/** Existing durable authority disagreed with the candidate. */
+	Conflict = "conflict",
+}
+
+/** Result of atomic candidate and Preparing-invocation admission. */
 export type ToolInvocationAdmissionResult =
-	| { readonly outcome: "admitted" | "idempotent"; readonly invocation: ToolInvocationRecord }
-	| { readonly outcome: "conflict" };
+	| { readonly outcome: ToolInvocationAdmissionOutcomes.Admitted | ToolInvocationAdmissionOutcomes.Idempotent; readonly invocation: ToolInvocationRecord }
+	| { readonly outcome: ToolInvocationAdmissionOutcomes.Conflict };
 
 /** Proof that this worker may run one provider operation, for as long as its fence still matches the row. */
 export interface ToolInvocationClaim
@@ -156,10 +167,30 @@ export interface ToolInvocationClaim
  * Making a provider call after anything other than `claimed` risks a duplicate real-world effect.
  * @see {@link ToolInvocationClaim}
  */
+export enum ToolInvocationClaimOutcomes
+{
+	/** This worker acquired the exact fenced provider claim. */
+	Claimed = "claimed",
+	/** Another durable transition already won. */
+	Winner = "winner",
+	/** The invocation no longer exists. */
+	Missing = "missing",
+}
+
+/** Outcome of claiming prepared work. */
 export type ToolInvocationClaimResult =
-	| { readonly outcome: "claimed"; readonly claim: ToolInvocationClaim; readonly invocation: ToolInvocationRecord }
-	| { readonly outcome: "winner"; readonly invocation: ToolInvocationRecord }
-	| { readonly outcome: "missing" };
+	| { readonly outcome: ToolInvocationClaimOutcomes.Claimed; readonly claim: ToolInvocationClaim; readonly invocation: ToolInvocationRecord }
+	| { readonly outcome: ToolInvocationClaimOutcomes.Winner; readonly invocation: ToolInvocationRecord }
+	| { readonly outcome: ToolInvocationClaimOutcomes.Missing };
+
+/** Stable result categories delivered back to the runtime. */
+export enum ToolResultDeliveryOutcomes
+{
+	/** The provider returned a canonical result. */
+	Succeeded = "succeeded",
+	/** The provider returned or proved a terminal failure. */
+	Failed = "failed",
+}
 
 /** Result body stored for the runtime, written before the server creates the command that delivers it. */
 export type ToolResultDeliveryPayload =
@@ -210,7 +241,7 @@ export enum ToolInvocationEventTypes
 export type ToolInvocationLifecycleEvent =
 	| { readonly runId: string; readonly attempt: number; readonly eventType: ToolInvocationEventTypes.Started; readonly payload: { readonly toolInvocationId: string } }
 	| { readonly runId: string; readonly attempt: number; readonly eventType: ToolInvocationEventTypes.Completed; readonly payload: { readonly toolInvocationId: string } }
-	| { readonly runId: string; readonly attempt: number; readonly eventType: ToolInvocationEventTypes.Failed; readonly payload: { readonly toolInvocationId: string; readonly reason: string; readonly retryCount: number; readonly retryLimit: number; readonly retrying: boolean } };
+	| { readonly runId: string; readonly attempt: number; readonly eventType: ToolInvocationEventTypes.Failed; readonly payload: { readonly toolInvocationId: string; readonly toolRevisionId: string; readonly reason: string; readonly retryCount: number; readonly retryLimit: number; readonly retrying: boolean } };
 
 /** Appends tool lifecycle events using the caller's transaction. */
 export interface ToolInvocationLifecycleEventSink

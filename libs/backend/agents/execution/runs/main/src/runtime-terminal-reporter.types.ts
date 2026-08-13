@@ -1,5 +1,7 @@
 import type { Prisma } from "@prisma/client";
 
+import type { JsonValue } from "@opencrane/util";
+
 /** Terminal runtime event types that an authenticated workload may propose. */
 export type RuntimeTerminalEventType = "run.completed" | "run.failed";
 
@@ -10,8 +12,12 @@ export interface RuntimeTerminalReportCommand
 	readonly runId: string;
 	/** Exact attempt bound to the authenticated workload assignment. */
 	readonly attempt: number;
+	/** Whether the exact accepted command authorising this candidate was start_attempt. */
+	readonly sourceIsStartAttempt: boolean;
 	/** Only success or runtime-failure may be proposed by the workload. */
 	readonly eventType: RuntimeTerminalEventType;
+	/** Validated, bounded runtime payload used only for narrow lifecycle decisions. */
+	readonly payload: JsonValue;
 }
 
 /** Result of turning one admitted terminal runtime report into durable run evidence. */

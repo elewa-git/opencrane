@@ -1,0 +1,135 @@
+/// Durable terminal lifecycle of a participant-input request. Transient submission is owned by a
+/// response-attempt row so a process failure cannot strand the request in an ambiguous state.
+enum ElicitationRequestState {
+  Requested @map("requested")
+  Answered  @map("answered")
+  Declined  @map("declined")
+  Expired   @map("expired")
+  Cancelled @map("cancelled")
+}
+
+/// Participant interaction shape rendered by every client.
+enum ElicitationBodyKind {
+  Approval       @map("approval")
+  SingleChoice   @map("single_choice")
+  MultipleChoice @map("multiple_choice")
+  FreeText       @map("free_text")
+}
+
+/// Server-owned strategy used after an answer is admitted.
+enum ElicitationPurpose {
+  RuntimeInput             @map("runtime_input")
+  ToolApproval             @map("tool_approval")
+  PersonalMemoryPermission @map("personal_memory_permission")
+  A2uiAction               @map("a2ui_action")
+}
+
+/// One-time result delivery state for the exact paused runtime attempt.
+enum ElicitationResultDeliveryState {
+  Pending  @map("pending")
+  Consumed @map("consumed")
+}
+
+/// One-use state for an exact personal-memory permission receipt.
+enum PersonalMemoryPermissionReceiptState {
+  Active   @map("active")
+  Consumed @map("consumed")
+}
+
+/// Canonical participant-input authority. The runtime may propose a body and purpose, but the server
+/// derives conversation, run, participant, and expiry coordinates before creating this row.
+model ElicitationRequest {
+  id                       String                           @id @default(cuid())
+  siloId                   String                           @map("silo_id")
+  conversationId           String                           @map("conversation_id")
+  runId                    String                           @map("run_id")
+  attempt                  Int
+  assignedParticipantId    String                           @map("assigned_participant_id")
+  requestKey               String                           @map("request_key")
+  purpose                  ElicitationPurpose
+  bodyKind                 ElicitationBodyKind              @map("body_kind")
+  body                     Json
+  bodyDigest               String                           @map("body_digest")
+  purposePayload           Json?                            @map("purpose_payload")
+  purposePayloadDigest     String                           @map("purpose_payload_digest")
+  state                    ElicitationRequestState          @default(Requested)
+  requiresStepUp           Boolean                          @default(false) @map("requires_step_up")
+  expiresAt                DateTime                         @map("expires_at")
+  resolvedAt               DateTime?                        @map("resolved_at")
+  resolvedBy               String?                          @map("resolved_by")
+  safeReason               String?                          @map("safe_reason")
+  createdAt                DateTime                         @default(now()) @map("created_at")
+  conversation             Conversation                     @relation(fields: [conversationId], references: [id], onDelete: Restrict)
+  run                      AgentRun                         @relation(fields: [runId, attempt], references: [id, attempt], onDelete: Restrict)
+  assignedParticipant      ConversationParticipant          @relation(fields: [conversationId, assignedParticipantId], references: [conversationId, userId], onDelete: Restrict)
+  responseAttempts         ElicitationResponseAttempt[]
+  resultDelivery           ElicitationResultDelivery?
+  toolApproval             ApprovalRequest?
+  personalMemoryPermission PersonalMemoryPermissionReceipt?
+
+  @@unique([runId, attempt, requestKey])
+  @@unique([id, runId, attempt])
+  @@index([conversationId, state, createdAt])
+  @@index([assignedParticipantId, state, expiresAt])
+  @@index([runId, attempt, state])
+  @@map("elicitation_requests")
+}
+
+/// One response submission, retained for exact attribution and idempotent conflict detection.
+model ElicitationResponseAttempt {
+  id                  String                          @id @default(cuid())
+  requestId           String                          @map("request_id")
+  idempotencyKey      String                          @map("idempotency_key")
+  respondingSubjectId String                          @map("responding_subject_id")
+  response            Json
+  responseDigest      String                          @map("response_digest")
+  verifiedStepUpAt    DateTime?                       @map("verified_step_up_at")
+  submittedAt         DateTime                        @default(now()) @map("submitted_at")
+  request             ElicitationRequest              @relation(fields: [requestId], references: [id], onDelete: Restrict)
+
+  @@unique([requestId, idempotencyKey])
+  @@index([requestId, submittedAt])
+  @@map("elicitation_response_attempts")
+}
+
+/// One runtime-resume intent created in the same transaction that terminalises its request.
+model ElicitationResultDelivery {
+  id            String                         @id @default(cuid())
+  requestId     String                         @unique @map("request_id")
+  state         ElicitationResultDeliveryState @default(Pending)
+  payload       Json?
+  payloadDigest String?                        @map("payload_digest")
+  createdAt     DateTime                       @default(now()) @map("created_at")
+  consumedAt    DateTime?                      @map("consumed_at")
+  request       ElicitationRequest             @relation(fields: [requestId], references: [id], onDelete: Restrict)
+
+  @@index([state, createdAt])
+  @@map("elicitation_result_deliveries")
+}
+
+/// One-use personal-memory permission. It grants only the exact invocation revision and execution
+/// subject bound to the immutable run snapshot; recalled fact content never enters this row.
+model PersonalMemoryPermissionReceipt {
+  id                     String                               @id @default(cuid())
+  requestId              String                               @unique @map("request_id")
+  toolInvocationId       String                               @unique @map("tool_invocation_id")
+  toolInvocationRevision Int                                  @map("tool_invocation_revision")
+  runId                  String                               @map("run_id")
+  attempt                Int
+  executionSubjectId     String                               @map("execution_subject_id")
+  respondingSubjectId    String                               @map("responding_subject_id")
+  queryDigest            String                               @map("query_digest")
+  inputSnapshotDigest    String                               @map("input_snapshot_digest")
+  personaRevisionId      String                               @map("persona_revision_id")
+  purposeDigest          String                               @map("purpose_digest")
+  state                  PersonalMemoryPermissionReceiptState @default(Active)
+  expiresAt              DateTime                             @map("expires_at")
+  consumedAt             DateTime?                            @map("consumed_at")
+  createdAt              DateTime                             @default(now()) @map("created_at")
+  request                ElicitationRequest                   @relation(fields: [requestId, runId, attempt], references: [id, runId, attempt], onDelete: Restrict)
+  invocation             ToolInvocation                      @relation(fields: [toolInvocationId], references: [id], onDelete: Restrict)
+
+  @@unique([requestId, runId, attempt])
+  @@index([runId, attempt, executionSubjectId, state, expiresAt])
+  @@map("personal_memory_permission_receipts")
+}

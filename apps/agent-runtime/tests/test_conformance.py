@@ -60,6 +60,8 @@ def _compiled_input() -> dict:
     """Build an independently authored compiled input fixing the ``search`` and ``write`` grants."""
     return {
         "promptCompilerVersion": "v1",
+        "runId": "run-conf",
+        "attempt": 1,
         "instructions": "answer precisely",
         "messages": [{"role": "user", "content": "hello"}],
         "tools": [
@@ -90,7 +92,12 @@ def _resume_command(tool_results: list, input_generation: int = 9) -> dict:
         "commandId": "cmd-resume",
         "fence": 3,
         "assignment": {"runId": "run-conf", "attempt": 1},
-        "payload": {"inputGeneration": input_generation, "toolResults": tool_results, "steeringRequests": []},
+        "payload": {
+            "inputGeneration": input_generation,
+            "toolResults": tool_results,
+            "steeringRequests": [],
+            "elicitationResults": [],
+        },
     }
 
 
@@ -185,6 +192,7 @@ class ConformanceToolCallTests(unittest.TestCase):
         authored stand-in framework object, not a real framework type.
         """
         reassembled = types.SimpleNamespace(
+            event_kind="part_end",
             delta=None,
             part=types.SimpleNamespace(part_kind="tool-call", tool_name="search", tool_call_id="call-frag", args_as_json_str=lambda: '{"q":"reassembled"}'),
         )
@@ -193,6 +201,35 @@ class ConformanceToolCallTests(unittest.TestCase):
         emitted = _run_start(_start_command(), [neutral])
         action = next(candidate for candidate in emitted if candidate["kind"] == "external_action")
         self.assertEqual(action["arguments"], {"q": "reassembled"})
+
+    def test_tool_stream_emits_only_one_complete_memory_call(self) -> None:
+        """Tool start and argument deltas stay internal; only the complete final call is surfaced."""
+        events = [
+            types.SimpleNamespace(
+                event_kind="part_start",
+                delta=None,
+                part=types.SimpleNamespace(tool_name="memory_recall", tool_call_id="memory-1", args_as_json_str=lambda: "{}"),
+            ),
+            types.SimpleNamespace(
+                event_kind="part_delta",
+                delta=types.SimpleNamespace(args_delta='{"query":"remember this"}'),
+                part=None,
+            ),
+            types.SimpleNamespace(
+                event_kind="part_end",
+                delta=None,
+                part=types.SimpleNamespace(tool_name="memory_recall", tool_call_id="memory-1", args_as_json_str=lambda: '{"query":"remember this"}'),
+            ),
+        ]
+
+        neutral = [_translate_framework_event(event) for event in events]
+        tool_calls = [event for event in neutral if event.get("type") == "tool_call"]
+        self.assertEqual(tool_calls, [{
+            "type": "tool_call",
+            "toolName": "memory_recall",
+            "toolCallId": "memory-1",
+            "arguments": '{"query":"remember this"}',
+        }])
 
     def test_malformed_arguments_are_a_hard_error_not_an_action(self) -> None:
         """Unparseable arguments surface a ``malformed_tool_call`` error, never an external action."""
@@ -273,7 +310,7 @@ class ConformanceApprovalResumeTests(unittest.TestCase):
 
         self.assertNotIn("results", captured)
         reasons = [candidate["payload"].get("reason") for candidate in resume_emitted if candidate.get("eventType") in ("run.error", "run.failed")]
-        self.assertEqual(reasons, ["invalid_tool_result", "invalid_tool_results"])
+        self.assertEqual(reasons, ["invalid_resume_results"])
         self.assertNotIn("must-not-enter", json.dumps(captured))
 
 

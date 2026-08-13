@@ -37,6 +37,7 @@ app's source.
 | `libs/backend/agents/personal/*` | Persona, verified personal-memory selection, and configuration authorities owned by a person. |
 | `libs/backend/agents/memory/*` | Generic durable fact metadata and catalog-outbox authority; fact content remains in Cognee. |
 | `libs/backend/agents/execution/*` | Immutable run inputs, run lifecycle, and runtime protocol admission. |
+| [`libs/backend/agents/execution/elicitation`](../../libs/backend/agents/execution/elicitation/main/README.md) | Recoverable participant input, exact response authority, and purpose-specific completion. |
 | `libs/backend/agents/runtime/*` | Kubernetes Job projection and controller orchestration. |
 | `libs/backend/agents/skills/*` | Governed skill authoring and execution workloads. |
 | `libs/backend/artifacts/*` | Artifact authorization, storage, preprocessing, and fenced malware scanning. |
@@ -77,6 +78,13 @@ The governed persona onboarding path is split deliberately:
   port, validated projection, and resumable orchestration without becoming a persistence authority; and
 - [`state/persona/adapter`](../../libs/frontend/state/persona/adapter/README.md) is the typed adapter
   over the generated signed-in-owner API.
+
+Recoverable conversation input follows the same ownership direction:
+
+- [`elements/elicitation`](../../libs/frontend/elements/elicitation/README.md) owns the four typed draft controls;
+- [`features/conversation-elicitation`](../../libs/frontend/features/conversation-elicitation/README.md) owns the recoverable card and separate submit intent;
+- [`features/conversation-activity`](../../libs/frontend/features/conversation-activity/README.md) owns safe failure disclosure and canonical deep-link intents; and
+- [`state/conversation/elicitation`](../../libs/frontend/state/conversation/elicitation/README.md) owns the generated-client gateway, command state, reconciliation, and derived Activity rows.
 
 Legacy frontend packages use `scope:web`; new capability slices use bounded ownership scopes. The
 persona onboarding feature, state port, and adapter use `scope:persona-onboarding` plus role tags

@@ -7,7 +7,9 @@ export interface RuntimeResumeInputLoad
 	readonly resume: ResumeAttemptCommand;
 	/** Result-delivery rows to mark consumed, but only after this body is saved. */
 	readonly toolResultDeliveryIds: string[];
-	/** Pending steering rows that went into this body. */
+	/** Elicitation-result rows consumed only after this exact body is persisted. */
+	readonly elicitationResultDeliveryIds: string[];
+	/** Steering ids whose pending state belongs to this body. */
 	readonly steeringRequestIds: string[];
 }
 

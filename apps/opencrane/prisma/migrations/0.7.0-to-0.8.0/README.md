@@ -15,6 +15,13 @@ replacement arguments that the runtime executes. Those semantics cannot be recon
 existing 0.7 approval row, so the automatic path requires `approval_requests` to be empty and fails
 with `OC711` otherwise.
 
+The same transition adds one generic, run-bound elicitation authority for approvals, choices,
+bounded text, personal-memory permission, and reviewed A2UI actions. It renames the active run pause
+state to `waiting_for_input`, while retaining the tool-specific ApprovalRequest audit record and its
+unique `resume_token_hash`. Each accepted response is written once inside the same serializable
+transaction that resolves the request and applies its purpose-specific consequence. Conflicting or
+failed submissions roll back without leaving a response-attempt row.
+
 The 0.8 revision contract replaces integration tool-name arrays with complete reviewed tool
 definitions containing a description, object JSON Schema, and canonical schema digest. An old name
 cannot establish that authority, so the automatic path also requires
