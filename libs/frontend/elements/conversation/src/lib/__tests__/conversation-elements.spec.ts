@@ -11,14 +11,14 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { AvatarTones } from "@opencrane/elements/ui";
 
 import { ConversationComposerComponent } from "../conversation-composer.component.js";
-import { ConversationMessageComponent } from "../conversation-message.component.js";
+import { ConversationMessageComponent } from "../conversation-message/conversation-message.component.js";
 import { ConversationStatusLineComponent } from "../conversation-status-line.component.js";
 import { ConversationComposerStates, ConversationMessageTones, ConversationStatusTones, type ConversationMessagePresentation, type ConversationStatusPresentation } from "../conversation.types.js";
 
 /** Production templates resolved by Angular TestBed. */
 const _RESOURCES: Readonly<Record<string, string>> = {
 	"conversation-composer.component.html": readFileSync(join(process.cwd(), "src/lib/conversation-composer.component.html"), "utf8"),
-	"conversation-message.component.html": readFileSync(join(process.cwd(), "src/lib/conversation-message.component.html"), "utf8"),
+	"conversation-message.component.html": readFileSync(join(process.cwd(), "src/lib/conversation-message/conversation-message.component.html"), "utf8"),
 	"conversation-status-line.component.html": readFileSync(join(process.cwd(), "src/lib/conversation-status-line.component.html"), "utf8"),
 	"avatar-circle.component.html": readFileSync(join(process.cwd(), "../ui/src/lib/components/avatar-circle/avatar-circle.component.html"), "utf8")
 };

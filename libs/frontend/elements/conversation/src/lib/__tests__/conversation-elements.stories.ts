@@ -5,7 +5,7 @@ import { expect, fn, userEvent, within } from "storybook/test";
 import { AvatarTones } from "@opencrane/elements/ui";
 
 import { ConversationComposerComponent } from "../conversation-composer.component.js";
-import { ConversationMessageComponent } from "../conversation-message.component.js";
+import { ConversationMessageComponent } from "../conversation-message/conversation-message.component.js";
 import { ConversationStatusLineComponent } from "../conversation-status-line.component.js";
 import { ConversationComposerStates, ConversationMessageTones, ConversationStatusTones } from "../conversation.types.js";
 
