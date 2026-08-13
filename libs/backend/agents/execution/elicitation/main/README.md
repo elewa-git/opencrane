@@ -46,6 +46,10 @@ That unit constructs one repository from the same transaction and reuses it for 
 keeps the run lock, request change, candidate acceptance, and expiry decision in one commit without
 letting a generic function carry a Prisma client across the boundary.
 
+The internal personal-memory payload module owns construction, reconstruction, and receipt matching
+for the protected memory-permission envelope. The Prisma repository supplies the live invocation,
+snapshot, and receipt; the module never opens a transaction or reads remembered facts.
+
 ## Dependency direction
 
 Tagged `scope:execution-elicitation` in the backend layer. It may depend on execution-run,
