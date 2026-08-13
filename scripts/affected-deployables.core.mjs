@@ -44,6 +44,33 @@ export function selectAffectedDeployables(containerProjects)
 		.map(function _Descriptor(project) { return _ReleaseDescriptor(project); });
 }
 
+/**
+ * Selects deterministic image-smoke matrix entries for `scripts/affected-deployables.mjs`.
+ *
+ * Automatic qualification keeps only affected owners. Manual `image-smoke` and `all`
+ * qualification expand the matrix to every project that owns the target; `k3d` does not.
+ *
+ * @param {string[]} affectedProjects Image-smoke owners selected by the affected-project range.
+ * @param {string[]} allProjects Every project that owns an image-smoke target.
+ * @param {string | undefined} heavyQualification Explicit manual heavyweight selector.
+ * @returns {{ project: string }[]} Sorted, de-duplicated GitHub Actions matrix entries.
+ * @throws {Error} When the manual heavyweight selector is not supported.
+ */
+export function selectImageSmokeProjects(affectedProjects, allProjects, heavyQualification)
+{
+	if (heavyQualification && !["none", "image-smoke", "k3d", "all"].includes(heavyQualification))
+	{
+		throw new Error(`unsupported FORCE_HEAVY_QUALIFICATION value: ${heavyQualification}`);
+	}
+
+	const selected = heavyQualification === "image-smoke" || heavyQualification === "all"
+		? allProjects
+		: affectedProjects;
+	return [...new Set(selected)]
+		.sort(function _ByName(left, right) { return left.localeCompare(right); })
+		.map(function _MatrixEntry(project) { return { project }; });
+}
+
 /** Determines whether an affected project can change the generated API contract. */
 export function selectApiContractChanged(affectedProjects)
 {

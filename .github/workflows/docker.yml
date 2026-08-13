@@ -11,6 +11,16 @@ on:
   pull_request:
   workflow_dispatch:
     inputs:
+      heavy_qualification:
+        description: Run heavyweight qualification even when the affected graph does not select it
+        required: true
+        type: choice
+        default: none
+        options:
+          - none
+          - image-smoke
+          - k3d
+          - all
       publish_deployables:
         description: Publish the named deployable image set from this exact commit
         required: true
@@ -46,6 +56,8 @@ jobs:
       guard_base: ${{ steps.guard-base.outputs.guard_base }}
       deployables: ${{ steps.affected.outputs.deployables }}
       has_deployables: ${{ steps.affected.outputs.has_deployables }}
+      image_smokes: ${{ steps.affected.outputs.image_smokes }}
+      has_image_smokes: ${{ steps.affected.outputs.has_image_smokes }}
       api_contract_changed: ${{ steps.affected.outputs.api_contract_changed }}
       develop_smoke_required: ${{ steps.affected.outputs.develop_smoke_required }}
       guard_inputs_changed: ${{ steps.affected.outputs.guard_inputs_changed }}
@@ -93,6 +105,7 @@ jobs:
         id: affected
         env:
           FORCE_DEPLOYABLES: ${{ github.event_name == 'workflow_dispatch' && inputs.publish_deployables || '' }}
+          FORCE_HEAVY_QUALIFICATION: ${{ github.event_name == 'workflow_dispatch' && inputs.heavy_qualification || '' }}
         run: node scripts/affected-deployables.mjs
 
   test:
@@ -297,7 +310,9 @@ jobs:
     if: >-
       ${{
         (github.event_name == 'push' && github.ref == 'refs/heads/develop') ||
-        (github.event_name == 'pull_request' && needs.prepare.outputs.develop_smoke_required == 'true')
+        (github.event_name == 'pull_request' && needs.prepare.outputs.develop_smoke_required == 'true') ||
+        (github.event_name == 'workflow_dispatch' &&
+          (inputs.heavy_qualification == 'k3d' || inputs.heavy_qualification == 'all'))
       }}
     steps:
       - uses: actions/checkout@v6
@@ -342,16 +357,50 @@ jobs:
           KEEP_CLUSTER: "0"
           TIMEOUT_SECONDS: "300"
 
+  image_smoke:
+    name: Image smoke (${{ matrix.project }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: [prepare, test]
+    if: needs.test.result == 'success' && needs.prepare.outputs.has_image_smokes == 'true'
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.prepare.outputs.image_smokes) }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Restore node_modules
+        id: node-modules
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: node-modules-${{ runner.os }}-node24-${{ hashFiles('package-lock.json') }}
+
+      - name: Install image smoke dependencies
+        if: steps.node-modules.outputs.cache-hit != 'true'
+        run: npm ci
+
+      - name: Run the app-owned image smoke
+        env:
+          IMAGE_SMOKE_PROJECT: ${{ matrix.project }}
+        run: npx nx run "$IMAGE_SMOKE_PROJECT:image-smoke"
+
   build-and-push:
     name: Build and publish affected images
     runs-on: ubuntu-latest
-    needs: [prepare, test, develop_smoke]
+    needs: [prepare, test, develop_smoke, image_smoke]
     if: >-
       ${{
         always() &&
         needs.prepare.outputs.has_deployables == 'true' &&
         needs.test.result == 'success' &&
-        (needs.develop_smoke.result == 'success' || needs.develop_smoke.result == 'skipped')
+        (needs.develop_smoke.result == 'success' || needs.develop_smoke.result == 'skipped') &&
+        (needs.image_smoke.result == 'success' || needs.image_smoke.result == 'skipped')
       }}
     permissions:
       contents: read
