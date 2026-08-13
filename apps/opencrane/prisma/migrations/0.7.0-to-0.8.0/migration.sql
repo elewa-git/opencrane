@@ -1101,7 +1101,7 @@ CREATE UNIQUE INDEX "agent_runs_one_foreground_per_conversation"
 ALTER TABLE "conversation_run_events" ADD CONSTRAINT "conversation_run_events_sequence_check" CHECK ("sequence" > 0);
 ALTER TABLE "conversation_run_events" ADD CONSTRAINT "conversation_run_events_type_check" CHECK ("type" IN (
         'run.accepted', 'run.started', 'message.started', 'message.delta', 'message.completed',
-        'tool.requested', 'tool.approval_required', 'tool.started', 'tool.progress', 'tool.completed', 'tool.failed',
+        'tool.requested', 'elicitation.requested', 'tool.started', 'tool.progress', 'tool.completed', 'tool.failed',
         'a2ui.rendering.begun', 'a2ui.surface.updated', 'a2ui.data_model.updated',
         'context.compaction_started', 'context.compaction_completed', 'run.usage',
         'run.completed', 'run.failed', 'run.cancelled', 'run.error',
@@ -3531,13 +3531,15 @@ END;
 $$;
 
 ALTER TABLE "elicitation_requests" ADD CONSTRAINT "elicitation_requests_exact_check" CHECK (
-    btrim("id") <> '' AND btrim("silo_id") <> '' AND btrim("conversation_id") <> ''
-    AND btrim("run_id") <> '' AND "attempt" > 0 AND btrim("assigned_participant_id") <> '' AND btrim("request_key") <> ''
-    AND jsonb_typeof("body") = 'object' AND "body_digest" ~ '^sha256:[0-9a-f]{64}$'
-    AND "purpose_payload_digest" ~ '^sha256:[0-9a-f]{64}$' AND "expires_at" > "created_at"
-    AND (("state" = 'requested' AND "resolved_at" IS NULL AND "resolved_by" IS NULL AND "safe_reason" IS NULL)
-      OR ("state" IN ('answered', 'declined') AND "resolved_at" IS NOT NULL AND btrim("resolved_by") <> '')
-      OR ("state" IN ('expired', 'cancelled') AND "resolved_at" IS NOT NULL AND "resolved_by" IS NULL))
+	btrim("id") <> '' AND btrim("silo_id") <> '' AND btrim("conversation_id") <> '' AND
+	btrim("run_id") <> '' AND "attempt" > 0 AND
+	btrim("assigned_participant_id") <> '' AND btrim("request_key") <> '' AND
+	jsonb_typeof("body") = 'object' AND "body_digest" ~ '^sha256:[0-9a-f]{64}$' AND
+	"purpose_payload_digest" ~ '^sha256:[0-9a-f]{64}$' AND "expires_at" > "created_at" AND
+	(("state" = 'requested' AND "resolved_at" IS NULL AND "resolved_by" IS NULL AND "safe_reason" IS NULL) OR
+	 ("state" = 'answered' AND "resolved_at" IS NOT NULL AND "resolved_by" IS NOT NULL AND btrim("resolved_by") <> '') OR
+	 ("state" = 'declined' AND "resolved_at" IS NOT NULL AND "resolved_by" IS NOT NULL AND btrim("resolved_by") <> '') OR
+	 ("state" IN ('expired', 'cancelled') AND "resolved_at" IS NOT NULL AND "resolved_by" IS NULL))
 );
 ALTER TABLE "elicitation_response_attempts" ADD CONSTRAINT "elicitation_response_attempts_exact_check" CHECK (
     btrim("id") <> '' AND btrim("request_id") <> '' AND btrim("idempotency_key") <> '' AND btrim("responding_subject_id") <> ''
@@ -3932,13 +3934,15 @@ ALTER TABLE "agent_thread_parent_deliveries" ADD CONSTRAINT "agent_thread_parent
     AND (("kind" = 'asset' AND "asset_id" IS NOT NULL) OR ("kind" <> 'asset' AND "asset_id" IS NULL))
 );
 
-CREATE FUNCTION "enforce_conversation_agent_thread_authority"() RETURNS trigger LANGUAGE plpgsql AS $$
+CREATE OR REPLACE FUNCTION "enforce_conversation_agent_thread_authority"() RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE
     child_mode "ConversationMode";
     parent_mode "ConversationMode";
     root_mode "ConversationMode";
 BEGIN
-    IF TG_OP <> 'INSERT' THEN RAISE EXCEPTION 'ConversationAgentThread rows are immutable'; END IF;
+    IF TG_OP <> 'INSERT' THEN
+        RAISE EXCEPTION 'ConversationAgentThread rows are immutable';
+    END IF;
     SELECT "mode" INTO child_mode FROM "conversations"
     WHERE "id" = NEW."child_conversation_id" AND "silo_id" = NEW."silo_id"
       AND "agent_service_id" = NEW."agent_service_id" AND "lifecycle" = 'open';
@@ -3955,7 +3959,9 @@ BEGIN
         WHERE message."conversation_id" = NEW."parent_conversation_id" AND message."id" = NEW."parent_message_id"
           AND message."run_id" IS NULL AND message."user_id" = NEW."initiator_user_id"
           AND message."role" = 'user' AND message."state" = 'completed' AND message."source" = 'user_input'
-    ) THEN RAISE EXCEPTION 'Agent thread requires its exact ordinary parent group message'; END IF;
+    ) THEN
+        RAISE EXCEPTION 'Agent thread requires its exact ordinary parent group message';
+    END IF;
     IF EXISTS (
         (SELECT participant."user_id" FROM "conversation_participants" participant
          WHERE participant."conversation_id" = NEW."parent_conversation_id" AND participant."access_ended_position" IS NULL)
@@ -3968,7 +3974,9 @@ BEGIN
         EXCEPT
         (SELECT participant."user_id" FROM "conversation_participants" participant
          WHERE participant."conversation_id" = NEW."parent_conversation_id" AND participant."access_ended_position" IS NULL)
-    ) THEN RAISE EXCEPTION 'Agent thread child participants must mirror active parent participants'; END IF;
+    ) THEN
+        RAISE EXCEPTION 'Agent thread child participants must mirror active parent participants';
+    END IF;
     IF NOT EXISTS (
         SELECT 1 FROM "agent_runs" run
         JOIN "run_input_snapshots" snapshot ON snapshot."run_id" = run."id"
@@ -3978,22 +3986,29 @@ BEGIN
           AND run."delegated_user_id" = NEW."initiator_user_id" AND run."state" = 'accepted'
           AND snapshot."persona_revision_id" = NEW."persona_revision_id"
           AND revision."persona_profile_id" = NEW."persona_profile_id" AND revision."state" = 'approved'
-    ) THEN RAISE EXCEPTION 'Agent thread requires the initiating user persona frozen in its exact first run'; END IF;
+    ) THEN
+        RAISE EXCEPTION 'Agent thread requires the initiating user persona frozen in its exact first run';
+    END IF;
     RETURN NEW;
 END;
 $$;
 
-CREATE FUNCTION "enforce_agent_thread_parent_delivery"() RETURNS trigger LANGUAGE plpgsql AS $$
+CREATE OR REPLACE FUNCTION "enforce_agent_thread_parent_delivery"() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
-    IF TG_OP <> 'INSERT' THEN RAISE EXCEPTION 'AgentThreadParentDelivery rows are append-only'; END IF;
+    IF TG_OP <> 'INSERT' THEN
+        RAISE EXCEPTION 'AgentThreadParentDelivery rows are append-only';
+    END IF;
     RETURN NEW;
 END;
 $$;
 
-CREATE FUNCTION "append_agent_thread_parent_delivery_timeline"() RETURNS trigger LANGUAGE plpgsql AS $$
+CREATE OR REPLACE FUNCTION "append_agent_thread_parent_delivery_timeline"() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
-    INSERT INTO "conversation_timeline_entries" ("conversation_id", "kind", "parent_delivery_agent_thread_id")
-    VALUES (NEW."parent_conversation_id", 'parent_delivery', NEW."id");
+    INSERT INTO "conversation_timeline_entries" (
+        "conversation_id", "kind", "parent_delivery_agent_thread_id"
+    ) VALUES (
+        NEW."parent_conversation_id", 'parent_delivery', NEW."id"
+    );
     RETURN NULL;
 END;
 $$;
