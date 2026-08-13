@@ -1,7 +1,9 @@
-import { ChangeDetectionStrategy, Component, DestroyRef, computed, effect, inject } from "@angular/core";
+import { ChangeDetectionStrategy, Component, computed, effect, inject } from "@angular/core";
+import { toSignal } from "@angular/core/rxjs-interop";
 import { Router } from "@angular/router";
 import { Button } from "primeng/button";
 import { Card } from "primeng/card";
+import { fromEvent, merge } from "rxjs";
 
 import { ControlPlaneApiService } from "@opencrane/core";
 import { SessionStore } from "@opencrane/state/core";
@@ -35,9 +37,6 @@ export class LoginPageComponent
 	/** Typed opencrane-ui client (used to launch the OIDC sign-in flow). */
 	private readonly _api = inject(ControlPlaneApiService);
 
-	/** Component lifetime used to remove browser-return listeners. */
-	private readonly _destroyRef = inject(DestroyRef);
-
 	/** Whether the landing card should be shown — once `/auth/me` is no longer
 	 * loading and the session is anonymous. Reading `isLoading` (rather than
 	 * `hasValue`) means an errored `/auth/me` (backend unreachable) still
@@ -61,6 +60,7 @@ export class LoginPageComponent
 			{
 				return;
 			}
+
 			if (session.authenticated())
 			{
 				void router.navigateByUrl("/");
@@ -91,23 +91,29 @@ export class LoginPageComponent
 		}
 
 		const session = this._session;
-		const reloadVisibleSession = function _reloadVisibleSession(): void
+		const browserReturn = toSignal(
+			merge(
+				fromEvent(window, "pageshow"),
+				fromEvent(window, "focus"),
+				fromEvent(document, "visibilitychange")
+			),
+			{
+				initialValue: null
+			}
+		);
+
+		effect(function _reloadWhenBrowserReturns(): void
 		{
+			const browserReturnEvent = browserReturn();
+			if (browserReturnEvent === null)
+			{
+				return;
+			}
+			
 			if (document.visibilityState === "visible")
 			{
 				session.reload();
 			}
-		};
-
-		window.addEventListener("pageshow", reloadVisibleSession);
-		window.addEventListener("focus", reloadVisibleSession);
-		document.addEventListener("visibilitychange", reloadVisibleSession);
-
-		this._destroyRef.onDestroy(function _removeSessionReloadListeners(): void
-		{
-			window.removeEventListener("pageshow", reloadVisibleSession);
-			window.removeEventListener("focus", reloadVisibleSession);
-			document.removeEventListener("visibilitychange", reloadVisibleSession);
 		});
 	}
 }
