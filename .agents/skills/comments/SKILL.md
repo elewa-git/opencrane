@@ -123,10 +123,12 @@ where comments outnumber code is usually telling you something is misplaced, rep
 padded — go back and cut rather than rationalising it. A two-line barrel does not carry a
 twenty-line essay.
 
-Very small modules are the honest exception. A file holding one constant that exists for a
-non-obvious reason will be mostly comment whatever you do, and that is fine: judge those by
-whether any single sentence could go, not by the ratio. The ratio is a smell test for files
-with real code in them, not a target to hit.
+Two things make that number lie, and neither is a reason to keep padding. A file holding one
+constant that exists for a non-obvious reason will be mostly comment whatever you do. And a
+file of one-line declarations has a floor built in, because every JSDoc block spends three
+lines on `/**`, ` *` and ` */` before it says anything. In both cases judge by the prose: ask
+whether any single sentence could go, and ignore the ratio. It is a smell test for files with
+real code in them, not a target to hit.
 
 Either way, aim to leave a file more readable, not longer: if a reader would skip your block
 to reach the code, it failed.
