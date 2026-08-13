@@ -7,7 +7,7 @@ import { CONVERSATION_ASSETS_GATEWAY } from "@opencrane/state/conversation/asset
 import { ELICITATION_GATEWAY } from "@opencrane/state/conversation/elicitation";
 import { CONVERSATION_WORKSPACE_EVENT_STREAM, CONVERSATION_WORKSPACE_GATEWAY, ConversationPersonalAgentStatuses, ConversationRunStates, type ConversationCreationDirectory, type ConversationRun, type ConversationWorkspaceDetail, type ConversationWorkspaceGateway } from "@opencrane/state/conversation/workspace";
 
-import { ConversationWorkspacePageComponent } from "../conversation-workspace-page.component.js";
+import { ConversationWorkspacePageComponent } from "../conversation-workspace-page/conversation-workspace-page.component.js";
 
 /** Privacy-safe directory used by the full workspace stories. */
 const _DIRECTORY: ConversationCreationDirectory = { participants: [{ participantRef: "self", isSelf: true, label: "You" }, { participantRef: "participant-1", isSelf: false, label: "Participant 1" }], personalAgentStatus: ConversationPersonalAgentStatuses.Ready, personalAgent: { personalAgentRef: "agent-1", displayName: "Nova" } };

@@ -13,10 +13,10 @@
 // Today that string comes from _ConversationMessageView in conversation-workspace.mapper.ts, which
 // builds it with toSanitizedMarkdownHtml/toStreamingMarkdownHtml (DOMPurify) from
 // @opencrane/state/conversation/render. A new host must run the same renderer.
-export { ConversationComposerComponent } from "./lib/conversation-composer.component.js";
+export { ConversationComposerComponent } from "./lib/conversation-composer/conversation-composer.component.js";
 export { ConversationMessageComponent } from "./lib/conversation-message/conversation-message.component.js";
-export { ConversationStatusLineComponent } from "./lib/conversation-status-line.component.js";
-export { ConversationRichTextComponent } from "./lib/conversation-rich-text.component.js";
-export { ConversationRunActionsComponent } from "./lib/conversation-run-actions.component.js";
+export { ConversationStatusLineComponent } from "./lib/conversation-status-line/conversation-status-line.component.js";
+export { ConversationRichTextComponent } from "./lib/conversation-rich-text/conversation-rich-text.component.js";
+export { ConversationRunActionsComponent } from "./lib/conversation-run-actions/conversation-run-actions.component.js";
 export { ConversationComposerStates, ConversationMessageTones, ConversationStatusTones } from "./lib/conversation.types.js";
 export type { ConversationMessagePresentation, ConversationRichTextPresentation, ConversationRunActionsPresentation, ConversationStatusPresentation } from "./lib/conversation.types.js";

@@ -10,22 +10,20 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest
 
 import { AvatarTones } from "@opencrane/elements/ui";
 
-import { ConversationComposerComponent } from "../conversation-composer.component.js";
-<<<<<<< HEAD
+import { ConversationComposerComponent } from "../conversation-composer/conversation-composer.component.js";
 import { ConversationMessageComponent } from "../conversation-message/conversation-message.component.js";
-import { ConversationRichTextComponent } from "../conversation-rich-text.component.js";
-import { ConversationRunActionsComponent } from "../conversation-run-actions.component.js";
-import { ConversationStatusLineComponent } from "../conversation-status-line.component.js";
+import { ConversationRichTextComponent } from "../conversation-rich-text/conversation-rich-text.component.js";
+import { ConversationRunActionsComponent } from "../conversation-run-actions/conversation-run-actions.component.js";
+import { ConversationStatusLineComponent } from "../conversation-status-line/conversation-status-line.component.js";
 import { ConversationComposerStates, ConversationMessageTones, ConversationStatusTones, type ConversationMessagePresentation, type ConversationStatusPresentation } from "../conversation.types.js";
 
 /** Production templates resolved by Angular TestBed. */
 const _RESOURCES: Readonly<Record<string, string>> = {
-	"conversation-composer.component.html": readFileSync(join(process.cwd(), "src/lib/conversation-composer.component.html"), "utf8"),
-<<<<<<< HEAD
+	"conversation-composer.component.html": readFileSync(join(process.cwd(), "src/lib/conversation-composer/conversation-composer.component.html"), "utf8"),
 	"conversation-message.component.html": readFileSync(join(process.cwd(), "src/lib/conversation-message/conversation-message.component.html"), "utf8"),
-	"conversation-rich-text.component.html": readFileSync(join(process.cwd(), "src/lib/conversation-rich-text.component.html"), "utf8"),
-	"conversation-run-actions.component.html": readFileSync(join(process.cwd(), "src/lib/conversation-run-actions.component.html"), "utf8"),
-	"conversation-status-line.component.html": readFileSync(join(process.cwd(), "src/lib/conversation-status-line.component.html"), "utf8"),
+	"conversation-rich-text.component.html": readFileSync(join(process.cwd(), "src/lib/conversation-rich-text/conversation-rich-text.component.html"), "utf8"),
+	"conversation-run-actions.component.html": readFileSync(join(process.cwd(), "src/lib/conversation-run-actions/conversation-run-actions.component.html"), "utf8"),
+	"conversation-status-line.component.html": readFileSync(join(process.cwd(), "src/lib/conversation-status-line/conversation-status-line.component.html"), "utf8"),
 	"avatar-circle.component.html": readFileSync(join(process.cwd(), "../ui/src/lib/components/avatar-circle/avatar-circle.component.html"), "utf8")
 };
 

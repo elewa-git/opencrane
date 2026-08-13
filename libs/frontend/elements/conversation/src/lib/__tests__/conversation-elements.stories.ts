@@ -4,12 +4,11 @@ import { expect, fn, userEvent, within } from "storybook/test";
 
 import { AvatarTones } from "@opencrane/elements/ui";
 
-import { ConversationComposerComponent } from "../conversation-composer.component.js";
-<<<<<<< HEAD
+import { ConversationComposerComponent } from "../conversation-composer/conversation-composer.component.js";
 import { ConversationMessageComponent } from "../conversation-message/conversation-message.component.js";
-import { ConversationRichTextComponent } from "../conversation-rich-text.component.js";
-import { ConversationRunActionsComponent } from "../conversation-run-actions.component.js";
-import { ConversationStatusLineComponent } from "../conversation-status-line.component.js";
+import { ConversationRichTextComponent } from "../conversation-rich-text/conversation-rich-text.component.js";
+import { ConversationRunActionsComponent } from "../conversation-run-actions/conversation-run-actions.component.js";
+import { ConversationStatusLineComponent } from "../conversation-status-line/conversation-status-line.component.js";
 import { ConversationComposerStates, ConversationMessageTones, ConversationStatusTones } from "../conversation.types.js";
 
 /** Records emitted draft intent from the Storybook-only composer host. */

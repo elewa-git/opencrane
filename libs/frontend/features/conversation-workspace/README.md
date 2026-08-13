@@ -7,7 +7,8 @@
 This package owns the normal workspace where a participant can open, create, read, and contribute
 to direct, group, and Agent-session conversations. Its thin page composes the approved conversation,
 asset, Activity, elicitation, and A2UI elements. A feature presenter derives browser-safe display
-models and delegates every command to the existing state stores.
+models and delegates every command to the existing state stores. Its feature-local route coordinator
+owns index/selection URLs, child Agent-thread navigation, and sign-in recovery through the platform seam.
 
 ```
  bounded snapshot ──► workspace store ──► feature presenter ──► thin page
@@ -21,8 +22,9 @@ their capability checks and audit trail. Tool failures stay visible even when a 
 
 ## Public surface
 
-- `ConversationWorkspacePageComponent` is the route-ready composition shell. It emits exact child
-  Agent-thread navigation coordinates and does not own browser navigation.
+- `CONVERSATION_WORKSPACE_ROUTES` is the child route table the app mounts at `/chats`.
+- `ConversationWorkspacePageComponent` is the composition shell. It emits exact navigation intents
+  to the feature-local route coordinator.
 - `ConversationWorkspacePresenter` maps store projections to shared element presentations and
   delegates typed user intents to the stores that own them.
 - The feature-local list and create controls render privacy-safe rows and immutable conversation

@@ -1,4 +1,4 @@
-import type { ConversationThreadNavigationIntent } from "@opencrane/features/conversation-workspace";
+import type { ConversationThreadNavigationIntent } from "../conversation-workspace-feature.types.js";
 import type { ConversationThreadRouteNavigation } from "./conversation-workspace-route.state.types.js";
 
 /**
@@ -26,8 +26,8 @@ export function _ConversationRouteCommands(conversationId: string | null): reado
 /**
  * Turn the feature's "open this thread" request into a child URL plus the state that returns from it.
  *
- * The workspace feature is not allowed to navigate, so it emits an intent and the app decides both
- * the URL and what the child will be able to use to come back. The return coordinates travel as
+ * The workspace page emits an intent and its feature-local route coordinator decides both the URL
+ * and what the child will be able to use to come back. The return coordinates travel as
  * browser-history state, which is what makes the back journey exact: `AgentThreadRouteComponent`
  * reads `parentRestore` off the history entry and accepts it only when its parent conversation
  * matches the route it is on, and `AgentThreadPageComponent.returnToParent` additionally checks

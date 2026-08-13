@@ -7,6 +7,7 @@
     { "path": "../../elements/a2ui" },
     { "path": "../../elements/conversation" },
     { "path": "../../elements/ui" },
+	{ "path": "../../platform" },
     { "path": "../conversation-activity" },
     { "path": "../conversation-assets" },
     { "path": "../conversation-elicitation" },

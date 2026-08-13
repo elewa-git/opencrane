@@ -10,12 +10,12 @@ import { ConversationAssetsStore } from "@opencrane/state/conversation/assets";
 import { ConversationElicitationStore, type ConversationActivityTarget } from "@opencrane/state/conversation/elicitation";
 import { ConversationRunStore, ConversationWorkspaceRouteStates, ConversationWorkspaceStore } from "@opencrane/state/conversation/workspace";
 
-import { ConversationCreateComponent } from "./conversation-create.component.js";
-import { ConversationListComponent } from "./conversation-list.component.js";
-import type { ConversationThreadNavigationIntent } from "./conversation-workspace-feature.types.js";
-import { ConversationWorkspacePresenter } from "./conversation-workspace.presenter.js";
+import { ConversationCreateComponent } from "../conversation-create/conversation-create.component.js";
+import { ConversationListComponent } from "../conversation-list/conversation-list.component.js";
+import type { ConversationThreadNavigationIntent } from "../conversation-workspace-feature.types.js";
+import { ConversationWorkspacePresenter } from "../conversation-workspace.presenter.js";
 
-/** Thin route-ready workspace shell; the app owns URLs and provider implementation choices. */
+/** Workspace screen; its feature route owns URL coordination while the app binds concrete gateways. */
 @Component({ selector: "wo-conversation-workspace-page", standalone: true, imports: [ButtonModule, ConversationActivityComponent, ConversationAttachmentTrayComponent, ConversationComposerComponent, ConversationCreateComponent, ConversationElicitationCardComponent, ConversationFilesPanelComponent, ConversationListComponent, ConversationMessageComponent, ConversationRichTextComponent, ConversationRunActionsComponent, ConversationStatusLineComponent, MessageModule], templateUrl: "./conversation-workspace-page.component.html", styleUrl: "./conversation-workspace-page.component.scss", changeDetection: ChangeDetectionStrategy.OnPush, providers: [ConversationAssetsStore, ConversationElicitationStore, ConversationRunStore, ConversationWorkspaceStore] })
 export class ConversationWorkspacePageComponent extends ConversationWorkspacePresenter
 {

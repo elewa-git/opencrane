@@ -94,7 +94,7 @@ Group-chat Agent threads add one route-ready composition without moving authorit
 
 The normal conversation workspace keeps transport, state, and presentation separate:
 
-- [`features/conversation-workspace`](../../libs/frontend/features/conversation-workspace/README.md) owns the thin route-ready chat shell and browser-safe presentation composition;
+- [`features/conversation-workspace`](../../libs/frontend/features/conversation-workspace/README.md) owns chat child routes, route coordination, and browser-safe presentation composition;
 - [`state/conversation/workspace`](../../libs/frontend/state/conversation/workspace/README.md) owns snapshot-tail selection, immutable creation choices, controlled drafts, access purge, and separate run command state;
 - [`state/conversation/workspace/adapter`](../../libs/frontend/state/conversation/workspace/adapter/README.md) maps the generated signed-in API into that port; and
 - the workspace reuses [`state/conversation/adapter`](../../libs/frontend/state/conversation/adapter/README.md) for the shared direct, group, and Agent-session event stream instead of creating another stream implementation.

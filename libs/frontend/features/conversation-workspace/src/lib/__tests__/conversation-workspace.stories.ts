@@ -1,7 +1,7 @@
 import { type Meta, moduleMetadata, type StoryObj } from "@storybook/angular";
 
 import type { ConversationSummaryPresentation } from "../conversation-workspace-feature.types.js";
-import { ConversationListComponent } from "../conversation-list.component.js";
+import { ConversationListComponent } from "../conversation-list/conversation-list.component.js";
 
 /** Privacy-safe rows used by desktop and compact visual contracts. */
 const _ITEMS: readonly ConversationSummaryPresentation[] =

@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 
-import { APP_ROUTES } from "../../app.routes.js";
 import { _ConversationRouteCommands, _ConversationThreadRouteNavigation } from "../conversation-workspace-route.state.js";
 
 describe("Conversation workspace route composition", function _ConversationWorkspaceRouteComposition()
@@ -9,13 +8,6 @@ describe("Conversation workspace route composition", function _ConversationWorks
 	{
 		expect(_ConversationRouteCommands("conversation-1")).toEqual(["/chats", "conversation-1"]);
 		expect(_ConversationRouteCommands(null)).toEqual(["/chats"]);
-	});
-
-	it("matches the child route before selected-conversation and index routes", function _RoutePrecedence()
-	{
-		const paths = APP_ROUTES.map(route => route.path);
-		expect(paths.indexOf("chats/:parentConversationId/threads/:childConversationId")).toBeLessThan(paths.indexOf("chats/:conversationId"));
-		expect(paths.indexOf("chats/:conversationId")).toBeLessThan(paths.indexOf("chats"));
 	});
 
 	it("carries exact breadcrumb restoration into a child Agent thread", function _ChildThreadRoute()

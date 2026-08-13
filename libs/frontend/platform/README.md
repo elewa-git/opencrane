@@ -4,11 +4,10 @@
 
 ## What it owns
 
-This is a frontend **platform** package: the seam that isolates the one difference between running
-in a browser and running in a future desktop shell. Some capabilities only exist on the desktop —
-for example, picking a local folder from the native filesystem. Rather than let feature code branch
-on "am I on desktop?", this package defines an abstract `PlatformBridge` interface, and features
-program against that. Each app supplies the concrete implementation.
+This is a frontend **platform** package: the seam that isolates runtime-specific browser and future
+desktop behavior. Capabilities include picking a native folder and opening and observing an
+authentication window. Rather than let feature code call runtime globals or branch on "am I on
+desktop?", this package defines a `PlatformBridge` interface and each app supplies its implementation.
 
 That indirection is the whole point: the web app binds the browser implementation, where
 desktop-only methods report as unsupported; a future desktop app binds an Electron- or Tauri-backed
@@ -27,8 +26,8 @@ may appear. Keep them out of features, and the frontend stays portable across sh
 
 ## Public surface
 
-- `PlatformBridge` — the runtime-capability interface (`isDesktop`, `bindFolder(projectId)`) and its
-  `BoundFolder` result type.
+- `PlatformBridge` — the runtime-capability interface (`isDesktop`, `bindFolder(projectId)`, and
+  `openAuthenticationWindow(path, onClosed)`) plus its result types.
 - `PLATFORM_BRIDGE` — the injection token features depend on.
 - `provideWebPlatform()` — binds `WebPlatformBridge` (desktop-only methods reject as unsupported).
 

@@ -15,7 +15,7 @@ import { ConversationEventStreamStatuses, type ConversationEventStream, type Str
 import { ConversationElicitationStore, ELICITATION_GATEWAY, ElicitationGatewayError, ElicitationGatewayErrorKinds } from "@opencrane/state/conversation/elicitation";
 import { CONVERSATION_WORKSPACE_EVENT_STREAM, CONVERSATION_WORKSPACE_GATEWAY, ConversationRunStore, ConversationWorkspaceStore, type ConversationWorkspaceDetail, type ConversationWorkspaceGateway } from "@opencrane/state/conversation/workspace";
 
-import { ConversationWorkspacePageComponent } from "../conversation-workspace-page.component.js";
+import { ConversationWorkspacePageComponent } from "../conversation-workspace-page/conversation-workspace-page.component.js";
 
 /** Return an empty authorized workspace for component construction. */
 class _WorkspaceGateway implements ConversationWorkspaceGateway
@@ -96,7 +96,7 @@ beforeAll(async function _InitializeAngularTesting()
 	TestBed.initTestEnvironment(BrowserDynamicTestingModule, platformBrowserDynamicTesting());
 	vi.stubGlobal("crypto", { randomUUID: vi.fn().mockReturnValue("response-key") });
 	HTMLElement.prototype.scrollIntoView = vi.fn();
-	const pageTemplate = readFileSync(join(process.cwd(), "src/lib/conversation-workspace-page.component.html"), "utf8");
+	const pageTemplate = readFileSync(join(process.cwd(), "src/lib/conversation-workspace-page/conversation-workspace-page.component.html"), "utf8");
 	await resolveComponentResources(async function _ResolveResource(url): Promise<string>
 	{
 		if (url.endsWith("conversation-workspace-page.component.html")) return pageTemplate;

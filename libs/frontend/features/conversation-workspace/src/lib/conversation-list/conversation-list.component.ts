@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, input, output } from "@angular/core";
 import { ButtonModule } from "primeng/button";
 
-import type { ConversationSummaryPresentation } from "./conversation-workspace-feature.types.js";
+import type { ConversationSummaryPresentation } from "../conversation-workspace-feature.types.js";
 
 /** Feature-local conversation rail for selection and new-conversation intent. */
 @Component({ selector: "wo-conversation-list", standalone: true, imports: [ButtonModule], templateUrl: "./conversation-list.component.html", styleUrl: "./conversation-list.component.scss", changeDetection: ChangeDetectionStrategy.OnPush })

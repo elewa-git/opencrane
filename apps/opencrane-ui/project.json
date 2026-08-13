@@ -11,6 +11,13 @@
 		"scope:opencrane-ui"
 	],
 	"targets": {
+		"test": {
+			"executor": "nx:run-commands",
+			"options": {
+				"command": "vitest run --passWithNoTests",
+				"cwd": "apps/opencrane-ui"
+			}
+		},
 		"container": {
 			"executor": "nx:run-commands",
 			"metadata": {
