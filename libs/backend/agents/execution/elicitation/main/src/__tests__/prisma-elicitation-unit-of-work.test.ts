@@ -243,6 +243,10 @@ describe("PrismaElicitationUnitOfWork", function _Suite()
 		await expect(_Unit(responseTransaction).respond({ siloId: "silo-1", conversationId: "child-1", requestId: "request-1", subjectId: "user-1", verifiedStepUpAt: null, submission: { idempotencyKey: "retry-child", response: { kind: ElicitationBodyKinds.FreeText, text: "Answer" } }, now: NOW })).resolves.toEqual({ outcome: "unauthorized" });
 		expect(responseTransaction.elicitationResponseAttempt.findUnique).not.toHaveBeenCalled();
 
+		const readTransaction = { ...access, elicitationRequest: { findFirst: vi.fn() } };
+		await expect(_Unit(readTransaction).readOwned("silo-1", "child-1", "request-1", "user-1", NOW)).resolves.toBeNull();
+		expect(readTransaction.elicitationRequest.findFirst).not.toHaveBeenCalled();
+
 		const activityTransaction = { ...access, elicitationRequest: { findMany: vi.fn().mockResolvedValue([]) } };
 		await expect(_Unit(activityTransaction).listOpenOwned("silo-1", "child-1", "user-1", NOW)).resolves.toEqual([]);
 		await expect(_Unit(activityTransaction).listActivityOwned("silo-1", "user-1", 20, NOW)).resolves.toEqual([]);

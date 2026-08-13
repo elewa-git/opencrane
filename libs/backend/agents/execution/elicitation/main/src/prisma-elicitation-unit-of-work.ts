@@ -46,7 +46,7 @@ export class PrismaElicitationRepository implements ElicitationRepository
 	{
 		const transaction = this._transaction;
 		const bodyDigest = __DigestCanonicalJson(command.body as unknown as JsonValue);
-		if (!await _CanParticipantAccess(transaction, command.siloId, command.conversationId, command.assignedParticipantId)) return null;
+		if (!await this._canParticipantAccess(command.siloId, command.conversationId, command.assignedParticipantId)) return null;
 		const existing = await transaction.elicitationRequest.findUnique({ where: { runId_attempt_requestKey: { runId: command.runId, attempt: command.attempt, requestKey: command.requestKey } } });
 		if (existing !== null) return _ElicitationRequestMatchesOpenCommand(existing, command, bodyDigest, _PrismaPurpose(command.purpose), _PrismaBodyKind(command.body.kind)) ? _Projection(existing) : null;
 		const run = await transaction.agentRun.findUnique({ where: { id: command.runId } });
@@ -129,7 +129,7 @@ export class PrismaElicitationRepository implements ElicitationRepository
 		const request = await transaction.elicitationRequest.findUnique({ where: { id: command.requestId } });
 		if (request === null || request.siloId !== command.siloId || request.conversationId !== command.conversationId) return { outcome: "not_found" };
 		if (request.assignedParticipantId !== command.subjectId) return { outcome: "unauthorized" };
-		if (!await _CanParticipantAccess(transaction, command.siloId, command.conversationId, command.subjectId)) return { outcome: "unauthorized" };
+		if (!await this._canParticipantAccess(command.siloId, command.conversationId, command.subjectId)) return { outcome: "unauthorized" };
 		const responseDigest = __DigestCanonicalJson(command.submission.response as unknown as JsonValue);
 		const prior = await transaction.elicitationResponseAttempt.findUnique({ where: { requestId_idempotencyKey: { requestId: request.id, idempotencyKey: command.submission.idempotencyKey } } });
 		if (prior !== null)
@@ -167,7 +167,7 @@ export class PrismaElicitationRepository implements ElicitationRepository
 	/** Read one request only for its still-active assigned participant. */
 	async readOwned(siloId: string, conversationId: string, requestId: string, subjectId: string, now: Date): Promise<ConversationElicitation | null>
 	{
-		if (!await _CanParticipantAccess(this._transaction, siloId, conversationId, subjectId)) return null;
+		if (!await this._canParticipantAccess(siloId, conversationId, subjectId)) return null;
 		const row = await this._transaction.elicitationRequest.findFirst({ where: { id: requestId, siloId, conversationId, assignedParticipantId: subjectId, assignedParticipant: { accessEndedPosition: null } } });
 		if (row === null) return null;
 		return _ProjectionAt(row, now);
@@ -176,7 +176,7 @@ export class PrismaElicitationRepository implements ElicitationRepository
 	/** List still-actionable requests for one exact conversation and participant. */
 	async listOpenOwned(siloId: string, conversationId: string, subjectId: string, now: Date): Promise<readonly ConversationElicitation[]>
 	{
-		if (!await _CanParticipantAccess(this._transaction, siloId, conversationId, subjectId)) return [];
+		if (!await this._canParticipantAccess(siloId, conversationId, subjectId)) return [];
 		const rows = await this._transaction.elicitationRequest.findMany({ where: { siloId, conversationId, assignedParticipantId: subjectId, state: ElicitationRequestState.Requested, expiresAt: { gt: now }, assignedParticipant: { accessEndedPosition: null } }, orderBy: [{ createdAt: "asc" }, { id: "asc" }], take: 50 });
 		return rows.map(_Projection);
 	}
@@ -189,6 +189,20 @@ export class PrismaElicitationRepository implements ElicitationRepository
 		if (membership !== 1) return [];
 		const rows = await this._transaction.elicitationRequest.findMany({ where: { siloId, assignedParticipantId: subjectId, assignedParticipant: { accessEndedPosition: null, conversation: _ConversationAccessWhere(siloId, subjectId) } }, orderBy: [{ createdAt: "desc" }, { id: "desc" }], take: limit });
 		return rows.map(function _ProjectActivity(row) { return _ProjectionAt(row, now); });
+	}
+
+	/** Checks current silo membership and continuing access to the conversation's immediate parent. */
+	private async _canParticipantAccess(siloId: string, conversationId: string, subjectId: string): Promise<boolean>
+	{
+		const membership = await this._transaction.orgMembership.count({ where: { clusterTenant: siloId, subject: subjectId, status: OrgMemberStatus.Active } });
+		if (membership !== 1) return false;
+		const participant = await this._transaction.conversationParticipant.findFirst({ where: {
+			conversationId,
+			userId: subjectId,
+			accessEndedPosition: null,
+			conversation: _ConversationAccessWhere(siloId, subjectId),
+		} });
+		return participant !== null;
 	}
 
 	/** Expire every due request through its purpose strategy under the caller's run lock. */
@@ -315,24 +329,6 @@ export class PrismaElicitationRepository implements ElicitationRepository
 		const resumed = await this._transaction.agentRun.updateMany({ where: { id: request.runId, attempt: request.attempt, state: AgentRunState.WaitingForInput }, data: { state: AgentRunState.Running } });
 		if (resumed.count !== 1) throw new Error("elicitation expiry lost its waiting run fence");
 	}
-}
-
-/**
- * Prove both current silo membership and continuing parent-mirrored Agent-thread access.
- * Ordinary conversations satisfy the null-origin branch; child sessions additionally require the
- * same subject to remain an active participant of their immutable immediate parent.
- */
-async function _CanParticipantAccess(transaction: Prisma.TransactionClient, siloId: string, conversationId: string, subjectId: string): Promise<boolean>
-{
-	const membership = await transaction.orgMembership.count({ where: { clusterTenant: siloId, subject: subjectId, status: OrgMemberStatus.Active } });
-	if (membership !== 1) return false;
-	const participant = await transaction.conversationParticipant.findFirst({ where: {
-		conversationId,
-		userId: subjectId,
-		accessEndedPosition: null,
-		conversation: _ConversationAccessWhere(siloId, subjectId),
-	} });
-	return participant !== null;
 }
 
 /** Current parent-coupled conversation relation used by single and activity reads. */
