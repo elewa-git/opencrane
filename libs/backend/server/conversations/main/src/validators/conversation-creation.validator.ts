@@ -30,7 +30,7 @@ import { z } from "zod";
 
 import { ConversationModes } from "@opencrane/models/conversations";
 
-import type { CreateConversationRequest } from "./conversation-authority.types.js";
+import type { CreateConversationRequest } from "../types/conversation-request.types.js";
 
 /**
  * One opaque reference from the creation directory: an org-membership row id, or an AgentService

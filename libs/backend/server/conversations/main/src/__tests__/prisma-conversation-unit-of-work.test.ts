@@ -7,7 +7,7 @@ import { __DecodeConversationProjectionCursor } from "@opencrane/backend/convers
 
 import { PrismaConversationUnitOfWork } from "../prisma-conversation-unit-of-work.js";
 import type { ConversationMessageAdmissionUnitOfWork } from "../conversation-message-admission.types.js";
-import type { SubmitConversationMessageRequest } from "../conversation-authority.types.js";
+import type { SubmitConversationMessageRequest } from "../types/conversation-request.types.js";
 
 /** Fixed caller and message request reused across authority assertions. */
 const _CALLER = { siloId: "silo-1", subjectId: "user-1" } as const;

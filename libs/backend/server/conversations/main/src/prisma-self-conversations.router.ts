@@ -10,7 +10,7 @@ import { PrismaConversationMessageAdmissionUnitOfWork } from "./prisma-conversat
 import { PrismaConversationUnitOfWork } from "./prisma-conversation-unit-of-work.js";
 import { PrismaConversationMutationRepository } from "./prisma-conversation-mutation-repository.js";
 import { __CreateSelfConversationsRouter } from "./self-conversations.router.js";
-import type { ConversationCaller } from "./conversation-authority.types.js";
+import type { ConversationCaller } from "./types/conversation-caller.types.js";
 import type { ConversationAttachmentAdmissionFactory } from "./conversation-message-admission.types.js";
 
 /** Maps authenticated request facts to the caller contract owned by conversations. */

@@ -7,7 +7,7 @@ import { MessageContentBlockKinds, MessageSources } from "@opencrane/models/conv
 
 import { PrismaConversationMessageAdmissionUnitOfWork } from "../prisma-conversation-message-admission-unit-of-work.js";
 import { PrismaConversationMutationRepository } from "../prisma-conversation-mutation-repository.js";
-import type { SubmitConversationMessageRequest } from "../conversation-authority.types.js";
+import type { SubmitConversationMessageRequest } from "../types/conversation-request.types.js";
 
 /** Fixed caller and message request reused across mode-strategy assertions. */
 const _CALLER = { siloId: "silo-1", subjectId: "user-1" } as const;

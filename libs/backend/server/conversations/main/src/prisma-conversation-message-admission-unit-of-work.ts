@@ -9,8 +9,10 @@ import { ___DoWithTrace } from "@opencrane/backend/observability";
 import { __DecideConversationCommand, ConversationCommandActions, ConversationCommandDenialReasons, ConversationCommandKinds, type MessageContentBlock } from "@opencrane/models/conversations";
 import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 
-import { ConversationAuthorityOutcomes, ConversationWriteDenialReasons } from "./conversation-authority.types.js";
-import type { ConversationCaller, ConversationMessageView, ConversationWriteDenial, SubmitConversationMessageRequest, SubmitConversationMessageResult } from "./conversation-authority.types.js";
+import { ConversationAuthorityOutcomes, ConversationWriteDenialReasons, type ConversationWriteDenial, type SubmitConversationMessageResult } from "./types/conversation-authority-result.types.js";
+import type { ConversationCaller } from "./types/conversation-caller.types.js";
+import type { SubmitConversationMessageRequest } from "./types/conversation-request.types.js";
+import type { ConversationMessageView } from "./types/conversation-view.types.js";
 import type { ConversationAttachmentAdmissionFactory, ConversationMessageAdmissionUnitOfWork, ConversationMessageIdempotencyConflict, ConversationMessageSubmissionPreflight } from "./conversation-message-admission.types.js";
 import { PrismaConversationMutationRepository } from "./prisma-conversation-mutation-repository.js";
 import type { ConversationMutationRepository, ConversationMutationRepositoryFactory } from "./prisma-conversation-mutation-repository.types.js";

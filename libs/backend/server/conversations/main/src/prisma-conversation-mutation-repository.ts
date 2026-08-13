@@ -3,8 +3,10 @@ import { AgentServiceKind, AgentServiceState, ConversationLifecycle, Conversatio
 import type { AgentThreadOrigin } from "@opencrane/backend/conversations/agent-threads";
 import { __DecideConversationCommand, ConversationCommandActions, ConversationCommandDenialReasons, ConversationCommandKinds, ConversationLifecycles, ConversationModes, MessageSources } from "@opencrane/models/conversations";
 
-import { AgentThreadReadDenialReasons, ConversationAuthorityOutcomes, ConversationWriteDenialReasons } from "./conversation-authority.types.js";
-import type { ConversationCaller, ConversationDetail, ConversationWriteDenial, CreateConversationRequest, CreateConversationResult, MarkAgentThreadReadResult, MutateConversationResult, SubmitConversationMessageRequest } from "./conversation-authority.types.js";
+import { AgentThreadReadDenialReasons, ConversationAuthorityOutcomes, ConversationWriteDenialReasons, type ConversationWriteDenial, type CreateConversationResult, type MarkAgentThreadReadResult, type MutateConversationResult } from "./types/conversation-authority-result.types.js";
+import type { ConversationCaller } from "./types/conversation-caller.types.js";
+import type { CreateConversationRequest, SubmitConversationMessageRequest } from "./types/conversation-request.types.js";
+import type { ConversationDetail } from "./types/conversation-view.types.js";
 import type { ConversationMutationRepository } from "./prisma-conversation-mutation-repository.types.js";
 import type { ConversationAttachmentAdmissionPort } from "./conversation-message-admission.types.js";
 import { PrismaConversationQueryRepository } from "./prisma-conversation-query-repository.js";
@@ -115,7 +117,7 @@ export class PrismaConversationMutationRepository implements ConversationMutatio
 			// deduplicated: accepting either would make a "direct" conversation of one person, or a
 			// group whose member count does not match what the client asked for. The size limits (one
 			// other for direct, up to 99 for group) are already enforced by
-			// `_ConversationCreationRequestSchema` in conversation-creation.validator.ts.
+			// `_ConversationCreationRequestSchema` in validators/conversation-creation.validator.ts.
 			const uniqueReferences = [...new Set(request.participantRefs)];
 			if (uniqueReferences.length !== request.participantRefs.length || uniqueReferences.includes(callerMembership.id)) return null;
 

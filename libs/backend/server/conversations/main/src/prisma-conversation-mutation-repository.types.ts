@@ -1,7 +1,9 @@
 import type { RunAdmissionTransaction } from "@opencrane/backend/agents/execution/runs";
 import type { AgentThreadOrigin } from "@opencrane/backend/conversations/agent-threads";
 
-import { ConversationAuthorityOutcomes, type ConversationCaller, type ConversationWriteDenial, type CreateConversationRequest, type CreateConversationResult, type MarkAgentThreadReadResult, type MutateConversationResult, type SubmitConversationMessageRequest } from "./conversation-authority.types.js";
+import { ConversationAuthorityOutcomes, type ConversationWriteDenial, type CreateConversationResult, type MarkAgentThreadReadResult, type MutateConversationResult } from "./types/conversation-authority-result.types.js";
+import type { ConversationCaller } from "./types/conversation-caller.types.js";
+import type { CreateConversationRequest, SubmitConversationMessageRequest } from "./types/conversation-request.types.js";
 import type { ConversationAttachmentAdmissionPort } from "./conversation-message-admission.types.js";
 
 /** Transaction-scoped durable conversation mutations. */

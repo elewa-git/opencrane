@@ -1,4 +1,7 @@
-import type { ConversationCaller, ConversationMessageView, SubmitConversationMessageRequest, SubmitConversationMessageResult } from "./conversation-authority.types.js";
+import type { SubmitConversationMessageResult } from "./types/conversation-authority-result.types.js";
+import type { ConversationCaller } from "./types/conversation-caller.types.js";
+import type { SubmitConversationMessageRequest } from "./types/conversation-request.types.js";
+import type { ConversationMessageView } from "./types/conversation-view.types.js";
 import type { ConversationCommandContext } from "./prisma-conversation-query-repository.types.js";
 import type { RunAdmissionTransaction } from "@opencrane/backend/agents/execution/runs";
 

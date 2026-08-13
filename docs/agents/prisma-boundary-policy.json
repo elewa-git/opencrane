@@ -802,7 +802,7 @@
         "path": "libs/backend/server/conversations/main/src/prisma-conversation-unit-of-work.ts",
         "adapter": "PrismaConversationUnitOfWork",
         "contract": "ConversationUnitOfWork",
-        "contractImportPath": "./conversation-authority.types.js",
+        "contractImportPath": "./types/conversation-unit-of-work.types.js",
         "constructs": [
           {
             "adapter": "PrismaConversationMutationRepository",

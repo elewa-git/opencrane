@@ -95,7 +95,7 @@ export enum AgentThreadSummaryStates
  * an Agent thread is asked for without it. A direct or agent-session conversation must not carry one.
  *
  * Used by: `SubmitConversationMessageRequest.agentTarget`
- * (server/conversations/main/src/conversation-authority.types.ts) and checked without I/O by
+ * (server/conversations/main/src/types/agent-thread-view.types.ts) and checked without I/O by
  * {@link AgentThreadTargetDecision}.
  */
 export interface AgentThreadTarget
