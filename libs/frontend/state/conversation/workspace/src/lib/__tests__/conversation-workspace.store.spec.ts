@@ -4,15 +4,22 @@ import { TestBed } from "@angular/core/testing";
 import { BrowserDynamicTestingModule, platformBrowserDynamicTesting } from "@angular/platform-browser-dynamic/testing";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
-import { ConversationLifecycles, ConversationModes, MessageContentBlockKinds } from "@opencrane/models/conversations";
+import { ConversationLifecycles, ConversationModes, MessageContentBlockKinds, MessageRoles } from "@opencrane/models/conversations";
 import { ConversationEventStreamStatuses, type ConversationEventStream, type StreamConversationEventsCommand } from "@opencrane/state/conversation/adapter";
 import { __CreateAgUiStreamState } from "@opencrane/state/conversation/ag-ui";
 
 import { ConversationRunStore } from "../conversation-run.store.js";
+import { ConversationOnboardingHistoryStore } from "../conversation-onboarding-history.store.js";
 import { ConversationWorkspaceGatewayError, ConversationWorkspaceGatewayErrorKinds } from "../conversation-workspace-gateway.errors.js";
 import { CONVERSATION_WORKSPACE_EVENT_STREAM, CONVERSATION_WORKSPACE_GATEWAY } from "../conversation-workspace.gateway.js";
 import { ConversationWorkspaceStore } from "../conversation-workspace.store.js";
-import { ConversationPersonalAgentStatuses, ConversationWorkspaceRouteStates, type ConversationRun, type ConversationWorkspaceDetail, type ConversationWorkspaceGateway, type CreateConversationCommand, type RetryConversationRunCommand, type SubmitConversationMessageCommand } from "../conversation-workspace.types.js";
+import { ConversationOnboardingHistoryStatuses, ConversationPersonalAgentStatuses, ConversationWorkspaceRouteStates, type ConversationOnboardingHistoryProjection, type ConversationRun, type ConversationWorkspaceDetail, type ConversationWorkspaceGateway, type CreateConversationCommand, type RetryConversationRunCommand, type SubmitConversationMessageCommand } from "../conversation-workspace.types.js";
+
+/** Build one completed read-only onboarding exchange. */
+function _OnboardingHistory(): ConversationOnboardingHistoryProjection
+{
+	return { status: ConversationOnboardingHistoryStatuses.Ready, history: { id: "onboarding-1", personaDisplayName: "Nova", startedAt: "2026-08-12T08:00:00.000Z", completedAt: "2026-08-12T08:05:00.000Z", transcript: [{ ordinal: 1, role: MessageRoles.Assistant, text: "Welcome" }, { ordinal: 2, role: MessageRoles.User, text: "Hello" }] } };
+}
 
 /** Build one complete authorized conversation snapshot. */
 function _Detail(id = "conversation-1"): ConversationWorkspaceDetail
@@ -99,16 +106,8 @@ function _CreateStore(): readonly [ConversationWorkspaceStore, _FakeGateway, _Fa
 {
 	const gateway = new _FakeGateway();
 	const stream = new _FakeStream();
-	TestBed.configureTestingModule({ providers: [ConversationRunStore, ConversationWorkspaceStore, { provide: CONVERSATION_WORKSPACE_GATEWAY, useValue: gateway }, { provide: CONVERSATION_WORKSPACE_EVENT_STREAM, useValue: stream }] });
+	TestBed.configureTestingModule({ providers: [ConversationOnboardingHistoryStore, ConversationRunStore, ConversationWorkspaceStore, { provide: CONVERSATION_WORKSPACE_GATEWAY, useValue: gateway }, { provide: CONVERSATION_WORKSPACE_EVENT_STREAM, useValue: stream }] });
 	return [TestBed.inject(ConversationWorkspaceStore), gateway, stream];
-}
-
-/** Controlled promise used to prove late mutation results cannot replace a newer selection. */
-function _Deferred<Value>(): { readonly promise: Promise<Value>; readonly resolve: (value: Value) => void }
-{
-	let resolvePromise: ((value: Value) => void) | undefined;
-	const promise = new Promise<Value>(function _Create(resolve) { resolvePromise = resolve; });
-	return { promise, resolve: function _Resolve(value) { if (resolvePromise === undefined) throw new Error("Deferred promise is unavailable."); resolvePromise(value); } };
 }
 
 beforeAll(function _InitializeAngularTesting()
@@ -195,6 +194,7 @@ describe("ConversationWorkspaceStore", function _ConversationWorkspaceStore()
 	it("creates the fixed selected mode with opaque coordinates only", async function _CreateDirect()
 	{
 		const [store, gateway] = _CreateStore();
+		gateway.historyResult = { status: ConversationOnboardingHistoryStatuses.NotRecorded, history: null };
 		await store.load();
 		store.selectCreationMode(ConversationModes.Direct);
 		store.toggleParticipant("other-ref");
@@ -238,7 +238,8 @@ describe("ConversationWorkspaceStore", function _ConversationWorkspaceStore()
 
 	it("retains a message draft while the live stream reconnects", async function _ReconnectDraft()
 	{
-		const [store, _gateway, stream] = _CreateStore();
+		const [store, gateway, stream] = _CreateStore();
+		gateway.historyResult = { status: ConversationOnboardingHistoryStatuses.NotRecorded, history: null };
 		stream.status = ConversationEventStreamStatuses.Reconnecting;
 		await store.load();
 		store.updateDraft("Keep this draft");
@@ -250,6 +251,7 @@ describe("ConversationWorkspaceStore", function _ConversationWorkspaceStore()
 	it("reuses the exact message command after an ambiguous response", async function _RetryExactMessage()
 	{
 		const [store, gateway] = _CreateStore();
+		gateway.historyResult = { status: ConversationOnboardingHistoryStatuses.NotRecorded, history: null };
 		await store.load();
 		store.updateDraft("Send once");
 		gateway.sendError = new Error("connection reset after commit");
@@ -266,6 +268,7 @@ describe("ConversationWorkspaceStore", function _ConversationWorkspaceStore()
 	it("submits an attachment-only message using a durable asset reference", async function _AttachmentOnly()
 	{
 		const [store, gateway] = _CreateStore();
+		gateway.historyResult = { status: ConversationOnboardingHistoryStatuses.NotRecorded, history: null };
 		await store.load();
 
 		expect(await store.send(["asset-1"])).toBe(true);
@@ -276,6 +279,7 @@ describe("ConversationWorkspaceStore", function _ConversationWorkspaceStore()
 	it("purges a previously visible snapshot and draft on proven access loss", async function _AccessLoss()
 	{
 		const [store, gateway] = _CreateStore();
+		gateway.historyResult = { status: ConversationOnboardingHistoryStatuses.NotRecorded, history: null };
 		await store.load();
 		store.updateDraft("Private draft");
 		gateway.openResult = new ConversationWorkspaceGatewayError(ConversationWorkspaceGatewayErrorKinds.AccessChanged, "This conversation is no longer available.");

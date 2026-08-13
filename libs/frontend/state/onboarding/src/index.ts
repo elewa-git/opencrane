@@ -3,7 +3,7 @@ export * from "./lib/persona-gateway.validator";
 export * from "./lib/persona-onboarding.service";
 export * from "./lib/persona-onboarding.store";
 export { PERSONA_FIRST_CHAT_GATEWAY, PersonaFirstChatConflictError } from "./lib/persona-first-chat.types.js";
-export type { PersonaFirstChatAnswerCommand, PersonaFirstChatGateway, UserOnboardingRouteSnapshot } from "./lib/persona-first-chat.types.js";
+export type { UserOnboardingRouteSnapshot } from "./lib/persona-first-chat.types.js";
 export * from "./lib/opencrane-persona-first-chat.gateway.js";
 export * from "./lib/persona-first-chat.service.js";
 export * from "./lib/persona-first-chat.store.js";
