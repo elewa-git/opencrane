@@ -6,7 +6,7 @@ import type { JsonValue } from "@opencrane/util";
 import type { PersonalMemoryPermissionPayload } from "./personal-memory-permission-payload.types.js";
 import { _ParsePersonalMemoryPermissionPayload } from "./personal-memory-permission-payload.validator.js";
 
-/** Adds fifteen minutes to the invocation retry deadline when calculating permission expiry. */
+/** Adds ten minutes to the invocation retry deadline when calculating permission expiry. */
 const _EXTENSION_MILLISECONDS = 10 * 60 * 1_000;
 
 /**
