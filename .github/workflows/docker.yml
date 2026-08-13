@@ -58,8 +58,11 @@ jobs:
       has_deployables: ${{ steps.affected.outputs.has_deployables }}
       image_smokes: ${{ steps.affected.outputs.image_smokes }}
       has_image_smokes: ${{ steps.affected.outputs.has_image_smokes }}
+      develop_smoke_images: ${{ steps.affected.outputs.develop_smoke_images }}
+      develop_smoke_projects: ${{ steps.affected.outputs.develop_smoke_projects }}
       api_contract_changed: ${{ steps.affected.outputs.api_contract_changed }}
-      develop_smoke_required: ${{ steps.affected.outputs.develop_smoke_required }}
+      develop_smoke_can_skip: ${{ steps.develop-smoke-baseline.outputs.develop_smoke_can_skip }}
+      develop_smoke_storage_mode: ${{ steps.affected.outputs.develop_smoke_storage_mode }}
       guard_inputs_changed: ${{ steps.affected.outputs.guard_inputs_changed }}
     steps:
       - uses: actions/checkout@v6
@@ -107,6 +110,18 @@ jobs:
           FORCE_DEPLOYABLES: ${{ github.event_name == 'workflow_dispatch' && inputs.publish_deployables || '' }}
           FORCE_HEAVY_QUALIFICATION: ${{ github.event_name == 'workflow_dispatch' && inputs.heavy_qualification || '' }}
         run: node scripts/affected-deployables.mjs
+
+      # This is one positive skip proof. API failure, missing output, a base without an exact-SHA
+      # push/dispatch k3d job, affected containers, or any unclassified path all retain k3d.
+      - name: Prove the exact base current-silo baseline remains reusable
+        id: develop-smoke-baseline
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NX_BASE: ${{ steps.affected.outputs.nx_base }}
+          AFFECTED_CONTAINER_PROJECTS: ${{ steps.affected.outputs.affected_container_projects }}
+          DEPLOYMENT_INPUTS_CHANGED: ${{ steps.affected.outputs.develop_smoke_inputs_changed }}
+        run: node scripts/develop-smoke-baseline.mjs
 
   test:
     name: Build, test, and lint affected projects
@@ -304,13 +319,18 @@ jobs:
     name: k3d current-silo smoke test
     runs-on: ubuntu-latest
     timeout-minutes: 45
-    needs: [prepare, test]
-    # Every accepted develop commit proves the current deployment path. Pull requests pay for the
-    # live cluster only when they move that surface, so the smoke implementation proves itself.
+    needs: prepare
+    permissions:
+      contents: read
+      packages: read
+    # Every accepted develop commit proves the current deployment path. A pull request skips the
+    # live cluster only when its exact base SHA already completed the same k3d job successfully.
+    # Missing or malformed proof output deliberately compares unequal to true and runs k3d.
     if: >-
       ${{
         (github.event_name == 'push' && github.ref == 'refs/heads/develop') ||
-        (github.event_name == 'pull_request' && needs.prepare.outputs.develop_smoke_required == 'true') ||
+        (github.event_name == 'pull_request' &&
+          needs.prepare.outputs.develop_smoke_can_skip != 'true') ||
         (github.event_name == 'workflow_dispatch' &&
           (inputs.heavy_qualification == 'k3d' || inputs.heavy_qualification == 'all'))
       }}
@@ -351,18 +371,37 @@ jobs:
         with:
           version: v4.1.4
 
+      - name: Log in to the validated develop image set
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      # Docker's GHA cache backend requires these runtime variables for an inline buildx command.
+      # Pin the helper by commit so the remote action cannot move underneath qualification.
+      - name: Expose the GitHub Actions cache runtime
+        uses: crazy-max/ghaction-github-runtime@04d248b84655b509d8c44dc1d6f990c879747487
+
       - name: Run the current-silo smoke
         run: ./apps/_infra/deploy-k8s/platform/tests/develop-smoke.sh
         env:
           KEEP_CLUSTER: "0"
           TIMEOUT_SECONDS: "300"
+          SMOKE_AFFECTED_PROJECTS: ${{ needs.prepare.outputs.develop_smoke_projects }}
+          SMOKE_BASE_SHA: ${{ needs.prepare.outputs.nx_base }}
+          SMOKE_REGISTRY: ${{ env.REGISTRY }}/${{ github.repository_owner }}
+          SMOKE_STORAGE_MODE: ${{ needs.prepare.outputs.develop_smoke_storage_mode }}
 
   image_smoke:
     name: Image smoke (${{ matrix.project }})
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    needs: [prepare, test]
-    if: needs.test.result == 'success' && needs.prepare.outputs.has_image_smokes == 'true'
+    needs: prepare
+    if: needs.prepare.outputs.has_image_smokes == 'true'
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.prepare.outputs.image_smokes) }}
@@ -428,7 +467,7 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ matrix.image }}
           tags: |
-            type=sha,prefix=sha-
+            type=raw,value=sha-${{ github.sha }}
             type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
 
       - name: Build and publish ${{ matrix.project }}
@@ -439,5 +478,75 @@ jobs:
           push: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.publish_deployables != 'none') }}
           tags: ${{ steps.metadata.outputs.tags }}
           labels: ${{ steps.metadata.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=${{ matrix.project }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.project }}
+
+  publish-develop-smoke-images:
+    name: Publish develop smoke image (${{ matrix.project }})
+    runs-on: ubuntu-latest
+    needs: [prepare, test, develop_smoke, image_smoke, build-and-push]
+    if: >-
+      ${{
+        always() &&
+        github.event_name == 'push' &&
+        github.ref == 'refs/heads/develop' &&
+        needs.test.result == 'success' &&
+        needs.develop_smoke.result == 'success' &&
+        (needs.image_smoke.result == 'success' || needs.image_smoke.result == 'skipped') &&
+        (needs['build-and-push'].result == 'success' || needs['build-and-push'].result == 'skipped')
+      }}
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.prepare.outputs.develop_smoke_images) }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Resolve the complete immutable image set
+        id: image-set
+        shell: bash
+        env:
+          NX_BASE: ${{ needs.prepare.outputs.nx_base }}
+          REMOTE_REPOSITORY: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ matrix.image }}
+        run: |
+          current_ref="${REMOTE_REPOSITORY}:sha-${GITHUB_SHA}"
+          base_ref="${REMOTE_REPOSITORY}:sha-${NX_BASE}"
+          echo "current_ref=$current_ref" >> "$GITHUB_OUTPUT"
+          echo "base_ref=$base_ref" >> "$GITHUB_OUTPUT"
+          if docker buildx imagetools inspect "$current_ref" >/dev/null 2>&1; then
+            echo "action=existing" >> "$GITHUB_OUTPUT"
+          elif [[ "$base_ref" != "$current_ref" ]] && docker buildx imagetools inspect "$base_ref" >/dev/null 2>&1; then
+            echo "action=copy" >> "$GITHUB_OUTPUT"
+          else
+            echo "action=build" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Carry the unchanged validated image forward
+        if: steps.image-set.outputs.action == 'copy'
+        env:
+          BASE_REF: ${{ steps.image-set.outputs.base_ref }}
+          CURRENT_REF: ${{ steps.image-set.outputs.current_ref }}
+        run: docker buildx imagetools create --tag "$CURRENT_REF" "$BASE_REF"
+
+      - name: Bootstrap a missing validated image
+        if: steps.image-set.outputs.action == 'build'
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          push: true
+          tags: ${{ steps.image-set.outputs.current_ref }}
+          cache-from: type=gha,scope=${{ matrix.project }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.project }}
