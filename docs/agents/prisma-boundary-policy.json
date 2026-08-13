@@ -284,6 +284,13 @@
         "constructs": []
       },
       {
+        "path": "libs/backend/server/conversations/main/src/prisma-agent-thread-parent-delivery-repository.ts",
+        "adapter": "PrismaAgentThreadParentDeliveryRepository",
+        "contract": "AgentThreadParentDeliveryRepository",
+        "contractImportPath": "./prisma-agent-thread-parent-delivery-repository.types.js",
+        "constructs": []
+      },
+      {
         "path": "libs/backend/server/conversations/main/src/prisma-conversation-query-repository.ts",
         "adapter": "PrismaConversationQueryRepository",
         "contract": "ConversationQueryRepository",
@@ -762,6 +769,18 @@
           {
             "adapter": "PrismaConversationReplayRepository",
             "importPath": "./prisma-conversation-replay-repository.js"
+          }
+        ]
+      },
+      {
+        "path": "libs/backend/server/conversations/main/src/prisma-agent-thread-parent-delivery-unit-of-work.ts",
+        "adapter": "PrismaAgentThreadParentDeliveryUnitOfWork",
+        "contract": "AgentThreadParentDeliveryUnitOfWork",
+        "contractImportPath": "./agent-thread-parent-delivery.types.js",
+        "constructs": [
+          {
+            "adapter": "PrismaAgentThreadParentDeliveryRepository",
+            "importPath": "./prisma-agent-thread-parent-delivery-repository.js"
           }
         ]
       },
