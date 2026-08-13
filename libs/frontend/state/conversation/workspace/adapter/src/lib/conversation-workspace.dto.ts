@@ -1,3 +1,7 @@
+import { MessageRoles } from "@opencrane/models/conversations";
+import { ___ParsePersonaFirstChatSnapshot, PersonaFirstChatTranscriptRoles, UserOnboardingRouteStates, type PersonaFirstChatTranscriptEntry } from "@opencrane/models/user-onboarding";
+import { ConversationOnboardingHistoryStatuses, type ConversationOnboardingHistoryEntry, type ConversationOnboardingHistoryProjection } from "@opencrane/state/conversation/workspace";
+
 /**
  * Turns signed-in HTTP responses into the shapes the workspace state package declares.
  *
@@ -12,10 +16,6 @@
  * @see OpenCraneConversationWorkspaceGateway — the only caller of anything in this file.
  */
 export { _ParseConversationDetail as _ConversationDetail, _ParseConversationRun as _ConversationRun, _ParseConversationSummary as _ConversationSummary, _ParseConversationWorkspaceDirectory as _ConversationWorkspaceDirectory } from "@opencrane/state/conversation/workspace";
-
-import { MessageRoles } from "@opencrane/models/conversations";
-import { ___ParsePersonaFirstChatSnapshot, PersonaFirstChatTranscriptRoles, UserOnboardingRouteStates, type PersonaFirstChatTranscriptEntry } from "@opencrane/models/user-onboarding";
-import { ConversationOnboardingHistoryStatuses, type ConversationOnboardingHistoryEntry, type ConversationOnboardingHistoryProjection } from "@opencrane/state/conversation/workspace";
 
 /**
  * Checks the onboarding response, then reduces it to what the workspace is allowed to show as history.
