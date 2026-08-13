@@ -19,6 +19,8 @@ import { PrismaElicitationRepository } from "./prisma-elicitation-unit-of-work.j
  */
 export class PrismaRuntimeElicitationUnitOfWork implements RuntimeElicitationUnitOfWork
 {
+	/** Keeps every repository operation inside the dispatch transaction that owns the run lock. */
+	private readonly _transaction: Prisma.TransactionClient;
 	/** Applies elicitation changes through that same dispatch transaction. */
 	private readonly _repository: PrismaElicitationRepository;
 
@@ -29,7 +31,8 @@ export class PrismaRuntimeElicitationUnitOfWork implements RuntimeElicitationUni
 	 */
 	constructor(transaction: Prisma.TransactionClient)
 	{
-		this._repository = new PrismaElicitationRepository(transaction);
+		this._transaction = transaction;
+		this._repository = new PrismaElicitationRepository(this._transaction);
 	}
 
 	/**
