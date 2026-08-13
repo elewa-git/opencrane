@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import { ControlPlaneApiService } from "@opencrane/core";
 
 import { AgentThreadGatewayErrorKinds } from "../agent-thread-gateway.errors.js";
+import { AgentThreadSummaryStates, AgentThreadSummaryTargetKinds, AgentThreadTimelineEntryKinds } from "../agent-thread.types.js";
 import { OpenCraneAgentThreadGateway } from "../opencrane-agent-thread.gateway.js";
 
 /** Generated success fixture containing only truthful canonical fields. */
@@ -46,6 +47,19 @@ describe("OpenCraneAgentThreadGateway", function _Suite()
 
 		expect(snapshot.timeline.filter(function _Message(entry) { return entry.kind === "message" })).toHaveLength(1);
 		expect(snapshot.visibleThroughPosition).toBe("2");
+	});
+
+	it("orders mixed timeline rows and derives the waiting summary independently", async function _MapsTimelineAndSummary()
+	{
+		const waitingRun = { ..._DTO.runs[0], state: "waiting" as const, finishedAt: null };
+		const question = { id: "delivery-1", childConversationId: "child-1", parentConversationId: "parent-1", runId: "run-1", kind: "question" as const, label: "Clarification needed", detail: "Which renewal term should I compare?", assetId: null, createdAt: "2026-08-12T10:00:45.000Z" };
+		const GET = vi.fn().mockResolvedValue({ data: { agentThread: { ..._DTO, runs: [waitingRun], deliveries: [question] } }, error: undefined, response: { status: 200 } });
+
+		const snapshot = await _Gateway({ GET }).read("parent-1", "child-1");
+
+		expect(snapshot.timeline.map(function _Kind(entry) { return entry.kind; })).toEqual([AgentThreadTimelineEntryKinds.RunBoundary, AgentThreadTimelineEntryKinds.Delivery, AgentThreadTimelineEntryKinds.Message]);
+		expect(snapshot.summary).toMatchObject({ state: AgentThreadSummaryStates.Waiting, preview: question.detail, target: { kind: AgentThreadSummaryTargetKinds.WaitingRequest, id: "delivery:delivery-1" } });
+		expect(snapshot.canSendFollowUp).toBe(false);
 	});
 
 	it("submits one serial follow-up and re-reads the exact pair", async function _Submits()
