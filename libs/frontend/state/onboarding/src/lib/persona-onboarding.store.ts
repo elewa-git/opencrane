@@ -36,7 +36,8 @@ export class PersonaOnboardingStore
 	/** Whether a command is running; while true, new commands are ignored. */
 	private readonly _commandActive = signal(false);
 
-	/** Whether the post-persona route projection is already being resolved. */
+	/** Whether the route load is already running, so calling {@link resolveReadyRoute} from an effect
+	 *  cannot start a second one. */
 	private readonly _readyRouteActive = signal(false);
 
 	/** Message from the last failed command; the onboarding state itself is unchanged. */
@@ -48,19 +49,22 @@ export class PersonaOnboardingStore
 	/** Where to send the user next, loaded only once the persona is Ready. */
 	private readonly _readyRoute = signal<UserOnboardingRouteSnapshot | null>(null);
 
-	/** Bounded post-persona route failure that keeps the ready state retryable. */
+	/** Why the route could not be loaded, if it could not. Kept separate from a command failure because
+	 *  this one is always worth retrying: the persona is already approved, only the route is missing. */
 	private readonly _readyRouteError = signal<string | null>(null);
 
 	/** The onboarding state, as a read-only `resource`; commands push their results into it. */
 	public readonly onboarding = resource({ loader: this._persona.read.bind(this._persona) });
 
-	/** Bounded command or route-resolution failure exposed to the routed shell. */
+	/** The message to show for the last failure, whether it came from a command or from loading the
+	 *  route. Null when nothing has failed. */
 	public readonly actionError = computed(this._actionError.bind(this));
 
 	/** Whether a command is running; while true, new commands are ignored. */
 	public readonly busy = this._commandActive.asReadonly();
 
-	/** Durable post-persona route projection exposed for the shell's navigation effect. */
+	/** Where the server says to send the user next, or null until it has been loaded. The page's
+	 *  navigation effect watches this and navigates once it is set. */
 	public readonly readyRoute = this._readyRoute.asReadonly();
 
 	/** Reload the onboarding state after the initial load failed. */

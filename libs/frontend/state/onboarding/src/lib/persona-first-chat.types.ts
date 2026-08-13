@@ -11,21 +11,21 @@ import { UserOnboardingRouteStates, type PersonaFirstChatSnapshot } from "@openc
  */
 export interface UserOnboardingRouteSnapshot
 {
-	/** Workflow definition version pinned to the owner record. */
+	/** Version of the onboarding workflow definition this user's record was created under. */
 	readonly workflowVersion: number;
-	/** Current durable onboarding route state. */
+	/** Which onboarding step the user is on. This is the field routing decisions are made from. */
 	readonly state: UserOnboardingRouteStates;
-	/** Exact persona interview pinned to the survey, when present. */
+	/** The persona interview attached to this user's survey, or null before one is started. */
 	readonly personaInterviewId: string | null;
-	/** Exact approved persona revision pinned to onboarding, when present. */
+	/** The approved persona revision, or null until the survey has been approved. */
 	readonly personaRevisionId: string | null;
-	/** Exact onboarding-only conversation, once started. */
+	/** The user's one onboarding conversation, or null until it has been started. */
 	readonly bootstrapConversationId: string | null;
-	/** Server timestamp for workflow creation. */
+	/** When the onboarding record was created, as an ISO 8601 timestamp with an offset. Always set. */
 	readonly startedAt: string;
-	/** Server timestamp for the last durable workflow change. */
+	/** When the server last changed this record, as an ISO 8601 timestamp with an offset. */
 	readonly updatedAt: string;
-	/** Server timestamp for validated completion, or null while unfinished. */
+	/** When the server accepted onboarding as finished, or null while it is unfinished. */
 	readonly completedAt: string | null;
 }
 
@@ -42,9 +42,11 @@ export interface PersonaFirstChatAnswerCommand
 {
 	/** The conversation id from the snapshot this answer was written against. */
 	readonly expectedConversationId: string;
-	/** One-based question ordinal returned by the authoritative projection. */
+	/** The question number, from 1, that the snapshot said was current when the user answered. The
+	 *  server compares it with its own and refuses the answer if the chat has since moved on. */
 	readonly expectedQuestionOrdinal: number;
-	/** What the user typed, kept exactly as-is until the server accepts it. */
+	/** What the user typed, sent unchanged. The server trims and length-checks it, so do not do either
+	 *  here — the text the server accepts is the text that appears in the transcript. */
 	readonly text: string;
 	/** Retry key for this answer. Keep it the same when retrying; change it only for a new answer. */
 	readonly idempotencyKey: string;
@@ -149,5 +151,17 @@ export interface PersonaFirstChatGateway
 	conclude(): Promise<PersonaFirstChatSnapshot>;
 }
 
-/** Dependency-injection token for the active first-chat API adapter. */
+/**
+ * The injection token every first-chat caller depends on, instead of depending on a concrete adapter.
+ *
+ * There is a token rather than a class here so the HTTP adapter can be swapped without touching the
+ * services or stores above it. In the running application it is bound to
+ * OpenCranePersonaFirstChatGateway in `apps/opencrane-ui/src/app/app.config.ts`; in a test, provide a
+ * stub at this token and no network call happens.
+ *
+ * Injected by: PersonaFirstChatService, which is the only thing that should read it — stores and
+ * components go through that service.
+ *
+ * @see PersonaFirstChatGateway for the five calls a binding must implement.
+ */
 export const PERSONA_FIRST_CHAT_GATEWAY: InjectionToken<PersonaFirstChatGateway> = new InjectionToken<PersonaFirstChatGateway>("PERSONA_FIRST_CHAT_GATEWAY");

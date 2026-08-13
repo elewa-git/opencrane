@@ -130,7 +130,17 @@ export class PersonaOnboardingPageComponent
 		void untracked(this._store.resolveReadyRoute.bind(this._store));
 	}
 
-	/** Navigate when the store has loaded the next route. Reads store state only; writes nothing. */
+	/**
+	 * Navigate when the store has loaded the next route. Reads store state only; writes nothing.
+	 *
+	 * A user who has already finished the whole flow can still land here, and they go to `/chats` rather
+	 * than `/admin`: the workspace there reads their finished onboarding exchange back as read-only
+	 * history, so they arrive at the conversation they already had instead of an empty admin screen.
+	 * Asserted by "routes an already completed onboarding authority directly to chats" in
+	 * __tests__/persona-onboarding-shell.spec.ts.
+	 *
+	 * @see ConversationOnboardingHistoryStore
+	 */
 	private _navigateFromReadyRoute(): void
 	{
 		const onboarding = this._store.readyRoute();
@@ -144,6 +154,7 @@ export class PersonaOnboardingPageComponent
 			case UserOnboardingRouteStates.Completed:
 				void this._router.navigateByUrl("/chats");
 				return;
+			// The persona survey is still owned by this page, so neither state redirects away from it.
 			case UserOnboardingRouteStates.SurveyPending:
 			case UserOnboardingRouteStates.SurveyInProgress:
 				return;

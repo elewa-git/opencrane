@@ -6,15 +6,22 @@ import { type PersonaFirstChatIdentity, PersonaFirstChatMessageRoles, type Perso
 /**
  * Turns a server snapshot into the view model the chat component renders.
  *
- * Pure and total: given the same snapshot it always returns the same view. It renames fields and
- * maps enums but invents nothing — the transcript keeps the server's order, and revision labels are
- * passed through unchanged rather than prettified, so what the user checks is what the server said.
+ * Pure: given the same snapshot it always returns the same view. It renames fields and maps enums but
+ * invents nothing — the transcript keeps the server's order, and revision labels are passed through
+ * unchanged rather than prettified, so what the user checks is what the server said.
  *
- * Called by: PersonaFirstChatPageComponent, which only calls it once the persona and content source
- * are present.
+ * The snapshot types come from `@opencrane/state/onboarding/projection`, the read-only projection barrel
+ * over the onboarding model package, so this mapper pulls in no gateway or store code.
  *
- * @param chat - The server snapshot; its persona and contentRevision must be non-null.
- * @returns The view model for the chat component.
+ * Called by: {@link PersonaFirstChatPageComponent}'s private `_view`, which calls it for any snapshot the
+ * resource has loaded and simply renders its preparing state when the result is null.
+ *
+ * @param snapshot - The server snapshot to render.
+ * @returns The view model, or null when the snapshot has no persona or no content revision yet — the
+ * shape of a chat that has not started, which the caller shows as its preparing state rather than an
+ * error. Covered by the null cases in __tests__/persona-first-chat.view.spec.ts.
+ * @throws Error when the snapshot names a question number outside 1-3, so a fourth question is refused
+ * instead of drawn. See {@link _QuestionOrdinal}.
  * @see PersonaFirstChatView
  */
 export function _PersonaFirstChatView(snapshot: PersonaFirstChatSnapshot): PersonaFirstChatView | null

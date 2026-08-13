@@ -124,7 +124,16 @@ export class PersonaFirstChatPageComponent
 		return this._store.phase() === PersonaFirstChatCommandPhases.Entering && this.view() === null;
 	}
 
-	/** Navigate only from state the server has confirmed. Never write product state from inside this effect. */
+	/**
+	 * Navigate only from state the server has confirmed. Never write product state from inside this effect.
+	 *
+	 * `Completed` goes to `/chats` rather than `/admin`, because the workspace there reads this finished
+	 * exchange back as read-only onboarding history and selects it by default — so the conversation the
+	 * user has just had is the first thing they see on the other side. Asserted by "enters explicitly and
+	 * navigates only when authoritative state changes" in __tests__/persona-first-chat-page.spec.ts.
+	 *
+	 * @see ConversationOnboardingHistoryStore
+	 */
 	private _routeFromAuthority(): void
 	{
 		if (!this.chat.hasValue()) return;
@@ -137,6 +146,7 @@ export class PersonaFirstChatPageComponent
 			case UserOnboardingRouteStates.Completed:
 				void this._router.navigateByUrl("/chats");
 				return;
+			// The user belongs on this page while the first chat is pending or running, so neither state redirects.
 			case UserOnboardingRouteStates.BootstrapChatPending:
 			case UserOnboardingRouteStates.BootstrapChatInProgress:
 				return;
