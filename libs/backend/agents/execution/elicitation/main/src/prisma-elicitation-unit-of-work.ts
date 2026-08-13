@@ -2,7 +2,7 @@ import { AgentRunState, ApprovalRequestState, ElicitationBodyKind, ElicitationPu
 
 import { ___DoWithTrace } from "@opencrane/backend/observability";
 import { __DecideDeferredToolRequest, __DigestCanonicalJson, __ExpireDeferredToolApprovalBatch, DeferredToolDecisionKinds, DeferredToolDecisionOutcomes, PrismaToolInvocationElicitationRepository, ToolInvocationStates, type ToolInvocationClaim, type ToolInvocationElicitationRepository, type ToolInvocationRecord } from "@opencrane/backend/server/iam/authorization";
-import { CONVERSATION_ELICITATION_VERSION, ElicitationBodyKinds, ElicitationPurposes, ElicitationRequestStates, RunInputSnapshotIdentityKinds, type ConversationElicitation, type ElicitationBody, type ElicitationResponseValue, type RunInputSnapshot } from "@opencrane/contracts";
+import { CONVERSATION_ELICITATION_VERSION, ElicitationBodyKinds, ElicitationPurposes, ElicitationRequestStates, type ConversationElicitation, type ElicitationBody, type ElicitationResponseValue, type RunInputSnapshot } from "@opencrane/contracts";
 import { PERSONAL_MEMORY_RECALL_TOOL_REVISION } from "@opencrane/models/agents";
 import type { JsonValue } from "@opencrane/util";
 
@@ -10,11 +10,8 @@ import { _ElicitationStateForResponse, _IsElicitationResponseValid } from "./eli
 import { _ElicitationPurposeStrategies } from "./elicitation-purpose-strategies.js";
 import type { ElicitationPurposeRequest, ElicitationPurposeStrategyRegistry } from "./elicitation-purpose-strategy.types.js";
 import { PersonalMemoryPermissionVerificationOutcomes, type ElicitationRepository, type ElicitationUnitOfWork, type ExpireElicitationBatchCommand, type ExpireElicitationBatchResult, type OpenElicitationCommand, type PersonalMemoryPermissionAuthority, type PersonalMemoryPermissionVerificationResult, type RespondToElicitationCommand, type RespondToElicitationResult } from "./elicitation.types.js";
-import type { PersonalMemoryPermissionPayload } from "./personal-memory-permission-payload.types.js";
+import { _ClaimedPersonalMemoryPermissionPayload, _OpenPersonalMemoryPermissionPayload, _PersonalMemoryPurposeMatchesReceipt, _PersonalMemoryQueryDigest } from "./personal-memory-permission-payload.js";
 import { _ParsePersonalMemoryPermissionPayload } from "./personal-memory-permission-payload.validator.js";
-
-/** Permission remains actionable for fifteen minutes from invocation admission. */
-const _PERSONAL_MEMORY_PERMISSION_EXTENSION_MILLISECONDS = 10 * 60 * 1_000;
 
 /** Prisma repository bound to exactly one serializable elicitation transaction. */
 export class PrismaElicitationRepository implements ElicitationRepository
@@ -74,7 +71,7 @@ export class PrismaElicitationRepository implements ElicitationRepository
 	/** Open or replay one exact personal-memory permission for the execution user. */
 	async openMemoryPermission(invocation: ToolInvocationRecord, snapshot: RunInputSnapshot, now: Date): Promise<boolean>
 	{
-		const payload = _MemoryPermissionPayload(invocation, snapshot);
+		const payload = _OpenPersonalMemoryPermissionPayload(invocation, snapshot);
 		if (payload === null) return false;
 		const body = { kind: ElicitationBodyKinds.Approval, prompt: "Allow this agent to use your personal memory for this answer?", action: "Use personal memory", target: "Your saved memory", dataUse: "Use remembered facts only for this answer", consequence: "The agent will answer this request using relevant saved memory" } as const;
 		const opened = await this.open({
@@ -99,7 +96,7 @@ export class PrismaElicitationRepository implements ElicitationRepository
 	/** Verify an accepted exact receipt without consuming it or reading personal-memory content. */
 	async verifyMemoryPermission(invocation: ToolInvocationRecord, claim: ToolInvocationClaim, snapshot: RunInputSnapshot, now: Date): Promise<PersonalMemoryPermissionVerificationResult>
 	{
-		const expectedPayload = _MemoryPermissionPayloadForClaimedInvocation(invocation, snapshot);
+		const expectedPayload = _ClaimedPersonalMemoryPermissionPayload(invocation, snapshot);
 		if (expectedPayload === null || !await this._toolInvocations.verifyActiveDispatchClaim(invocation, claim, now)) return { outcome: PersonalMemoryPermissionVerificationOutcomes.Denied };
 		const receipt = await this._transaction.personalMemoryPermissionReceipt.findUnique({ where: { toolInvocationId: invocation.id }, include: { request: true } });
 		if (receipt === null) return { outcome: PersonalMemoryPermissionVerificationOutcomes.Denied };
@@ -120,7 +117,7 @@ export class PrismaElicitationRepository implements ElicitationRepository
 			&& request.assignedParticipantId === invocation.subjectId
 			&& request.resolvedBy === invocation.subjectId
 			&& request.purposePayloadDigest === receipt.purposeDigest
-			&& _MemoryPurposeMatchesReceipt(request.purposePayload, receipt);
+			&& _PersonalMemoryPurposeMatchesReceipt(request.purposePayload, receipt);
 		return { outcome: matches ? PersonalMemoryPermissionVerificationOutcomes.Authorized : PersonalMemoryPermissionVerificationOutcomes.Denied };
 	}
 
@@ -241,7 +238,7 @@ export class PrismaElicitationRepository implements ElicitationRepository
 			&& invocation.subjectId === subjectId
 			&& request.assignedParticipantId === subjectId
 			&& payload.executionSubjectId === subjectId
-			&& payload.queryDigest === _QueryDigest(invocation.effectiveArguments as unknown as JsonValue)
+			&& payload.queryDigest === _PersonalMemoryQueryDigest(invocation.effectiveArguments as unknown as JsonValue)
 			&& payload.inputSnapshotDigest === snapshot.digest
 			&& payload.personaRevisionId === snapshot.personaRevisionId
 			&& payload.expiresAt === request.expiresAt.toISOString()
@@ -446,69 +443,6 @@ function _PublicState(state: ElicitationRequestState): ElicitationRequestStates
 
 /** Whether one protected purpose payload is a non-array JSON record. */
 function _Record(value: unknown): value is { readonly [key: string]: JsonValue }
-{
-	return value !== null && typeof value === "object" && !Array.isArray(value);
-}
-
-/** Derive the protected permission payload only from an exact awaiting invocation and snapshot. */
-function _MemoryPermissionPayload(invocation: ToolInvocationRecord, snapshot: RunInputSnapshot): PersonalMemoryPermissionPayload | null
-{
-	if (invocation.state !== ToolInvocationStates.AwaitingApproval) return null;
-	return _MemoryPermissionPayloadAtRevision(invocation, snapshot, invocation.revision);
-}
-
-/** Reconstruct the original protected payload after approval and claim advanced two revisions. */
-function _MemoryPermissionPayloadForClaimedInvocation(invocation: ToolInvocationRecord, snapshot: RunInputSnapshot): PersonalMemoryPermissionPayload | null
-{
-	if (invocation.state !== ToolInvocationStates.Claimed || invocation.revision < 2) return null;
-	return _MemoryPermissionPayloadAtRevision(invocation, snapshot, invocation.revision - 2);
-}
-
-/** Bind immutable invocation, execution-user, query, snapshot, persona, and expiry coordinates. */
-function _MemoryPermissionPayloadAtRevision(invocation: ToolInvocationRecord, snapshot: RunInputSnapshot, toolInvocationRevision: number): PersonalMemoryPermissionPayload | null
-{
-	const queryDigest = _QueryDigest(invocation.effectiveArguments);
-	if (invocation.toolRevisionId !== PERSONAL_MEMORY_RECALL_TOOL_REVISION
-		|| snapshot.identitySnapshot.kind !== RunInputSnapshotIdentityKinds.User
-		|| snapshot.identitySnapshot.executionSubjectId !== invocation.subjectId
-		|| snapshot.runId !== invocation.runId
-		|| snapshot.siloId !== invocation.siloId
-		|| snapshot.agentRevisionId !== invocation.agentRevisionId
-		|| snapshot.conversationId === null
-		|| snapshot.conversationId.trim().length === 0
-		|| snapshot.personaRevisionId === null
-		|| snapshot.personaRevisionId.trim().length === 0
-		|| queryDigest === null) return null;
-	const expiresAt = new Date(invocation.retryDeadlineAt.getTime() + _PERSONAL_MEMORY_PERMISSION_EXTENSION_MILLISECONDS);
-	return { toolInvocationId: invocation.id, toolInvocationRevision, runId: invocation.runId, attempt: invocation.attempt, executionSubjectId: invocation.subjectId, queryDigest, inputSnapshotDigest: snapshot.digest, personaRevisionId: snapshot.personaRevisionId, expiresAt: expiresAt.toISOString() };
-}
-
-/** Digest the exact admitted memory query without retaining it in permission persistence. */
-function _QueryDigest(argumentsValue: JsonValue): string | null
-{
-	if (!_JsonRecord(argumentsValue)) return null;
-	const query = argumentsValue["query"];
-	return typeof query === "string" ? __DigestCanonicalJson(query) : null;
-}
-
-/** Compare the hidden purpose envelope with the receipt that may authorize safe delivery. */
-function _MemoryPurposeMatchesReceipt(value: Prisma.JsonValue | null, receipt: { toolInvocationId: string; toolInvocationRevision: number; runId: string; attempt: number; executionSubjectId: string; queryDigest: string; inputSnapshotDigest: string; personaRevisionId: string; expiresAt: Date }): boolean
-{
-	const payload = _ParsePersonalMemoryPermissionPayload(value);
-	return payload !== null
-		&& payload.toolInvocationId === receipt.toolInvocationId
-		&& payload.toolInvocationRevision + 1 === receipt.toolInvocationRevision
-		&& payload.runId === receipt.runId
-		&& payload.attempt === receipt.attempt
-		&& payload.executionSubjectId === receipt.executionSubjectId
-		&& payload.queryDigest === receipt.queryDigest
-		&& payload.inputSnapshotDigest === receipt.inputSnapshotDigest
-		&& payload.personaRevisionId === receipt.personaRevisionId
-		&& payload.expiresAt === receipt.expiresAt.toISOString();
-}
-
-/** Whether one generic JSON value is a non-array object. */
-function _JsonRecord(value: JsonValue): value is { readonly [key: string]: JsonValue }
 {
 	return value !== null && typeof value === "object" && !Array.isArray(value);
 }
