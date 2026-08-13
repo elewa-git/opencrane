@@ -2,11 +2,9 @@ import type { paths } from "@opencrane/contracts";
 
 import type { AgentThreadTimelineEntry } from "./agent-thread.types.js";
 
-/** Validated child-conversation lifecycle values crossing the generated API boundary. */
+/** Terminal child-conversation lifecycle value recognized at this generated API boundary. */
 export enum _AgentThreadLifecycleStates
 {
-	/** The child remains available for work after its current run settles. */
-	Open = "open",
 	/** The child is terminal and admits no further run. */
 	Closed = "closed"
 }
