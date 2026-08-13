@@ -145,7 +145,33 @@ independent review is required before the turn can end. When the gate asks for r
    finders + a `review-verifier` per candidate finding); either satisfies the gate.
 2. Resolve every **Critical** and **High** finding it returns — fix it, or justify in
    your response why it is not applicable.
-3. Only then finish the turn.
+3. Delegate to the **`@comments` subagent** once review has concluded and the code has stopped
+   moving (see [Documentation gate](#documentation-gate) below).
+4. Only then finish the turn.
+
+## Documentation gate
+
+Review asks whether the code is right. It does not ask whether the next reader can learn why the
+code is the way it is, and that is the part that rots first. The **`@comments` subagent** owns it,
+and it runs as the last gate of a turn — after `review` has concluded and after `reaper` has removed
+whatever the slice superseded.
+
+The ordering is the point. Running it earlier wastes the work: `reaper` deletes code, and review
+fixes move code, so comments written before either are stale before the turn ends.
+
+Hand it the **decision record**, not just the final tree — the diff range including removals, and
+the plan slice, issue, or PR body behind the change. A refactor routinely deletes the comment that
+held the reason, and an agent given only `git show HEAD` cannot recover it; it can then only infer
+intent, which means guessing. The agent's standing rule is evidence or a question, so give it the
+evidence.
+
+Expect an **ASK** list and treat it as the gate working. A why that nobody can reconstruct is a real
+finding about the change, and answering it in your response is cheaper than leaving a confident wrong
+comment in the tree. A PASS with no ASKs on a large slice usually means something was guessed.
+
+`scripts/agent-style-check.sh` covers only the mechanics — that a JSDoc block exists at all. A file
+where every export carries a one-line label passes that script and fails this gate; see
+[Comment Language](./typescript.md#comment-language) for the standard being applied.
 
 A change to a package's public surface, boundary, invariant, owned Prisma models, or config that
 does **not** update that package's `README.md` in the same change is an incomplete change — the
