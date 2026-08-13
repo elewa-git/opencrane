@@ -178,6 +178,13 @@ blocker; do not hide it behind an interface.
    findings. If review fixes change replacement/deletion boundaries, rerun reaper and architecture,
    revalidate, commit the resolution as a separate checkpoint, and review the refreshed explicit
    range again. Do not push or open a PR unless explicitly asked.
+12. **Delegate the documentation gate to the `comments` subagent** once review has concluded and no
+   further code changes are pending — it runs last because `reaper` has by then deleted what the
+   slice superseded and review fixes have stopped moving the code. Give it the same explicit
+   `WAVE_BASE...HEAD` range **and** the plan slice or issue behind the work: it may only document a
+   *why* it can point at, so without the decision record it can only return questions. Apply its
+   writes, answer its **ASK** list in your output rather than leaving the questions open, and commit
+   the comment changes as their own checkpoint. A long ASK list is the gate working.
 
 At the final replacement phase, run `WHOLE-REPO-DECOMMISSION` against the entire repository; a
 diff-local clean result is insufficient.
@@ -191,6 +198,8 @@ diff-local clean result is insufficient.
 5. **plan.md updates** — exactly which items changed state
 6. **Blockers** — items skipped and why (BLOCKED annotation, missing decision/tooling, etc.)
 7. **Review findings summary** — from the review subagent, with resolution status
-8. **Commits** — the gate commits made this cycle (branch + subject line per commit)
+8. **Documentation gate** — from the `comments` subagent: what it documented, and every unanswered
+   **ASK** with your answer, since an unexplained why is a finding about the change itself
+9. **Commits** — the gate commits made this cycle (branch + subject line per commit)
 
 If fully blocked: **Blocker**, **Evidence**, **Proposed unblocking options**, **Minimal fallback slice**.

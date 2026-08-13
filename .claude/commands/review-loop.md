@@ -83,3 +83,15 @@ Produce one report, sections in order:
 
 If the review gate invoked this pipeline, resolve every Critical and High finding
 (fix or justify) before ending the turn — same rule as a direct `review` delegation.
+
+## Tier 4 — documentation gate
+
+Once the findings above are resolved and no further code changes are pending, delegate to the
+`comments` subagent with the same diff range **and** the plan slice, issue, or PR body behind the
+change. It owns whether the next reader can learn *why* the code is the way it is, which no tier
+above asks about.
+
+Run it last, never in parallel with the finders: it may only document a why it can point at, and
+comments written while review fixes are still landing describe code that no longer exists. Answer its
+**ASK** list in your report rather than leaving the questions open — an unexplained why is a finding
+about the change, not a gap in the agent.
