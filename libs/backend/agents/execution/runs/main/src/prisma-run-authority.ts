@@ -92,10 +92,8 @@ function _mapRun(row: { id: string; siloId: string; agentServiceId: string; agen
  * instance for every complete transaction attempt, which prevents a repository from carrying state
  * across a rollback.
  *
- * Concurrency: the write is guarded by conditions on the update itself, not by row locks. An earlier
- * version took `SELECT ... FOR UPDATE` on the service and then the run before writing; those raw
- * locks are gone, and the single conditional `updateMany` in `startNextAttemptAtomically` is now the
- * only thing stopping two concurrent retries from both incrementing.
+ * The conditional `updateMany` in `startNextAttemptAtomically` repeats every observed authority
+ * fact on the write. Only one concurrent retry can match those conditions and increment the run.
  *
  * Called by: `PrismaAgentRunRetryUnitOfWork`.
  *
@@ -192,11 +190,10 @@ export class PrismaAgentRunAuthorityRepository implements AgentRunRetryTransacti
 		}
 
 		// 3. Write the new attempt onto the same row, with every observed fact repeated as a condition
-		// so the update applies to nothing if any of them changed since step 2. This one statement is
-		// what makes the retry safe under concurrency, now that the `FOR UPDATE` locks an earlier version
-		// took are gone. Only the fields that belong to an attempt are reset — cost, timings, and
-		// terminal reason go back to null — while the id, conversation, service, and revision stay, so
-		// the run keeps its identity and its history rather than becoming a new run.
+		// so the update applies to nothing if any of them changed since step 2. This one statement makes
+		// the retry safe under concurrency. Only the fields that belong to an attempt are reset — cost,
+		// timings, and terminal reason go back to null — while the id, conversation, service, and
+		// revision stay, so the run keeps its identity and history rather than becoming a new run.
 		// A count other than 1 means somebody else got there first, so the row is read again to say
 		// which of the three things happened: the same retry replayed, a different attempt now, or the
 		// service having changed underneath.

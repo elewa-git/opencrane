@@ -23,17 +23,16 @@ export interface SubmitSteeringRequestCommand
 	/** Bounded JSON instruction accepted from the owner. */
 	readonly content: JsonValue;
 	/**
-	 * `${idempotencyDigest}:${sha256 of the content}` — what actually gets stored on the row.
+	 * `${idempotencyDigest}:${sha256 of the content}` — what gets stored on the row.
 	 *
-	 * Two requests carrying the same client key produce the same prefix, and the same key with
-	 * different text produces the same prefix with a different suffix. That is how the repository
-	 * separates an honest retry from a reused key, without keeping the client's key anywhere.
+	 * The unit of work derives the row id from `idempotencyDigest`, then compares this full digest with
+	 * the stored value. An equal value is an honest retry; a different value means the key was reused
+	 * for different text. The client's key is never stored.
 	 */
 	readonly digest: string;
 	/**
-	 * Hash of the client's `idempotencyKey`, used as the prefix of {@link
-	 * SubmitSteeringRequestCommand.digest} and matched with `startsWith` to find an earlier request
-	 * from the same key. Hashed rather than stored so a browser-chosen key never lands in the
+	 * Hash of the client's `idempotencyKey`, used in the server-derived row id and as the prefix of
+	 * {@link SubmitSteeringRequestCommand.digest}. Hashing keeps the browser-chosen key out of the
 	 * database.
 	 */
 	readonly idempotencyDigest: string;
@@ -49,10 +48,10 @@ export interface SubmitSteeringRequestCommand
  * `run_not_steerable` admits the run exists and is the caller's, while `not_found_or_not_owner`
  * admits nothing, so the endpoint cannot be used to find out whether somebody else's run exists.
  *
- * `PrismaSteeringRequestRepository` returns exactly one of these from inside its transaction and
- * `__CreateSteeringIngestRouter` turns it into a status code; nothing branches on it in between.
- * None of the values are persisted — the row carries the digest, not the outcome — so renaming one
- * needs no migration, though it does change the HTTP contract clients see.
+ * `PrismaSteeringRequestRepository` produces these inside a transaction. Its unit of work resolves
+ * database conflicts, then `__CreateSteeringIngestRouter` turns the result into a status code. None
+ * of the values are persisted — the row carries the digest, not the outcome — so renaming one needs
+ * no migration, though it does change the HTTP contract clients see.
  */
 export type SubmitSteeringRequestResult =
 	/** The instruction was written and the runtime will pick it up at its next safe boundary. The router answers 202 and reports the request as `pending`. */
@@ -67,14 +66,14 @@ export type SubmitSteeringRequestResult =
 	| { readonly outcome: "run_not_steerable" };
 
 /**
- * Saves owner-submitted steering, in one transaction.
+ * Saves owner-submitted steering through a transaction-owning unit of work.
  *
- * Ownership and steerability are checked in the same Serializable transaction as the insert,
- * because both can change between an HTTP request arriving and the row being written. The typed
- * transaction either commits the complete decision or rolls it back before a bounded retry.
+ * Each attempt checks ownership and steerability in the same Serializable transaction as the
+ * insert, because both can change between an HTTP request arriving and the row being written. The
+ * unit of work retries only a transaction that Prisma confirms was rolled back.
  *
  * Called by: `__CreateSteeringIngestRouter` (steering-ingest.router.ts) through its injected
- * `requests` port. Implemented by `PrismaSteeringRequestRepository`.
+ * `requests` port. Implemented by `PrismaSteeringRequestUnitOfWork`.
  */
 export interface SteeringRequestRepository
 {

@@ -31,9 +31,9 @@ export class PrismaSteeringRequestRepository implements SteeringRequestTransacti
 	 *
 	 * A submission that repeats an earlier one is answered from the earlier row instead of queueing a
 	 * second instruction, which is how a browser can safely retry a request whose answer it lost.
-	 * "Repeats" means the same retry key and the same words: the stored digest is the key's hash, a
-	 * colon, then the instruction's hash, so a prefix match finds any earlier use of the key and
-	 * comparing the whole digest says whether the words also match.
+	 * The unit of work derives one row id from the owner, run, and retry-key digest. Finding that id
+	 * proves the key was used before, and comparing the stored content digest says whether the words
+	 * also match.
 	 *
 	 * @param command - Run, silo, subject, instruction, digest, and submission time.
 	 * @returns `queued` with the new row's id and the attempt it belongs to.
@@ -71,7 +71,13 @@ export class PrismaSteeringRequestRepository implements SteeringRequestTransacti
 		return { outcome: "queued", steeringRequestId: created.id, attempt: run.attempt };
 	}
 
-	/** Reads and verifies the committed row for this server-derived request id. */
+	/**
+	 * Reads the row for this server-derived request id and verifies it belongs to the same request.
+	 * @param command - Original request whose owner, run, and content digest must match.
+	 * @param steeringRequestId - Primary key derived by the steering unit of work.
+	 * @returns `idempotent` for the same request, `idempotency_conflict` for a mismatched row, or null
+	 * when no transaction has committed this id.
+	 */
 	async readWinner(command: SubmitSteeringRequestCommand, steeringRequestId: string): Promise<SubmitSteeringRequestResult | null>
 	{
 		const prior = await this._transaction.runtimeSteeringRequest.findUnique({ where: { id: steeringRequestId }, select: { id: true, runId: true, siloId: true, subjectId: true, attempt: true, digest: true } });
