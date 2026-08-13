@@ -1,3 +1,23 @@
+/**
+ * Public entry point for `@opencrane/backend/agents/execution/runs`, the package that owns the life
+ * of one agent run: admitting it, dispatching it, reporting on it, cancelling it, and retrying it.
+ *
+ * What comes out of here is what another package needs to compose or drive a run — ready-to-mount
+ * routers, the Prisma adapters behind them, the OpenAPI path fragments, the run-input digest, the
+ * workload cleanup, and the port types an app must implement or pass through.
+ *
+ * The narrowed `export type` lists further down are deliberate. Anything not named there stays
+ * inside the package, and the retry surface is the clearest case: `__StartNextRunAttempt` and
+ * {@link AgentRunAuthorityRepository} are exported, but `AtomicStartNextRunAttemptCommand` and
+ * `AtomicRunAttemptResult` are not, so no other package can build the argument to
+ * `startNextAttemptAtomically` and go around the checks in `__StartNextRunAttempt`. The same applies
+ * to `__ValidateRunWorkloadAssignment` and the workload-assignment shapes, which are not exported at
+ * all. Reach for the exported function, not for a deeper file path.
+ *
+ * Imported by: apps/opencrane composition and route files, libs/backend/agents/execution
+ * (admission, inputs, protocol), libs/backend/server/conversations, and
+ * libs/backend/server/api-spec for the OpenAPI fragments.
+ */
 export * from "./attempt-model-key.types.js";
 export * from "./openapi.js";
 export { PrismaRunAdmissionRepository } from "./prisma-run-admission-repository.js";

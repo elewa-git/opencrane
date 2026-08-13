@@ -3,6 +3,10 @@ import type { StorybookConfig } from "@storybook/angular";
 /** Storybook catalogue configuration for shared OpenCrane UI elements. */
 const config: StorybookConfig =
 {
+	// One Storybook for the whole frontend, hosted by this package: the globs reach out into sibling
+	// element packages and into feature packages so a reviewer sees every component in one catalogue.
+	// Adding a package here also means adding it to `.storybook/tsconfig.json`, or its stories compile
+	// against no project references.
 	stories:
 	[
 		"../src/**/__tests__/*.stories.@(js|jsx|mjs|ts|tsx)",
@@ -36,6 +40,10 @@ const config: StorybookConfig =
 				extensionAlias:
 				{
 					...config.resolve?.extensionAlias,
+					// Storybook builds these packages from source, but the repo writes relative imports
+					// the NodeNext way, ending in `.js` while the file on disk is `.ts`. Without this
+					// alias webpack looks for a `.js` file that was never emitted and every story fails
+					// to resolve its component.
 					".js": [".js", ".ts"]
 				}
 			}

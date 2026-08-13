@@ -3,5 +3,15 @@ import tsconfigPaths from "vite-tsconfig-paths";
 
 import { _PackageCacheDir } from "../../../../../vitest.cache.js";
 
-/** Vitest configuration for the conversation workspace browser state. */
+/**
+ * Vitest configuration for the conversation workspace browser state.
+ *
+ * `tsconfigPaths` is what resolves the `@opencrane/*` imports: this library has no build target of its
+ * own (project.json defines only lint and test), so specs load its sources through the workspace
+ * aliases.
+ *
+ * `environment: "node"` even though this is frontend code. The specs here drive stores through Angular
+ * DI and signals, not the DOM, and vitest.frontend.setup.ts loads Angular's JIT compiler so `TestBed`
+ * works without jsdom. A sibling package that does touch the DOM sets `environment: "jsdom"` instead.
+ */
 export default defineConfig({ cacheDir: _PackageCacheDir(import.meta.url), plugins: [tsconfigPaths({ projects: ["../../../../../tsconfig.vitest.json"] })], test: { globals: true, environment: "node", setupFiles: ["../../../vitest.frontend.setup.ts"], passWithNoTests: true } });

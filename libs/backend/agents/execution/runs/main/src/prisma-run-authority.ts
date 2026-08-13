@@ -85,19 +85,54 @@ function _mapRun(row: { id: string; siloId: string; agentServiceId: string; agen
 	};
 }
 
-/** Prisma-backed single-run authority with atomic retry and outbox publication. */
+/**
+ * Reads and retries one AgentRun in Postgres, keeping the same row while its attempt counter goes up.
+ *
+ * Transaction ownership: this class opens its own transaction in each method, so it takes the root
+ * `PrismaClient` and cannot be nested inside a caller's transaction — passing it a
+ * `Prisma.TransactionClient` would not type-check. Its two methods are separate transactions on
+ * purpose: the read is advisory and the write re-checks everything the read saw, so nothing is
+ * gained by holding one transaction across both, and holding a run lock across an HTTP round trip
+ * would be worse. Everything the retry needs to be atomic — the authorisation checks, the
+ * conditional update, and the outbox event — happens inside `startNextAttemptAtomically`, so either
+ * an attempt and its dispatch event both exist or neither does.
+ *
+ * Concurrency: the write is guarded by conditions on the update itself, not by row locks. An earlier
+ * version took `SELECT ... FOR UPDATE` on the service and then the run before writing; those raw
+ * locks are gone, and the single conditional `updateMany` in `startNextAttemptAtomically` is now the
+ * only thing stopping two concurrent retries from both incrementing.
+ *
+ * Called by: `PrismaConversationUnitOfWork.retryRun`, which constructs one per retry and hands it to
+ * `__StartNextRunAttempt`.
+ *
+ * @implements AgentRunAuthorityRepository
+ * @see docs/agents/prisma.md, "Runtime ORM ownership", for the repository and transaction rules this
+ * adapter sits under.
+ */
 export class PrismaAgentRunAuthorityRepository implements AgentRunAuthorityRepository
 {
-	/** OpenCrane product-authority database client. */
+	/** Client for the main OpenCrane database. Must be the root client, since each method opens its own transaction. */
 	private readonly prisma: PrismaClient;
 
-	/** Creates a run-authority adapter over canonical Postgres. */
+	/** Creates the adapter around the server-owned Prisma client. */
 	constructor(prisma: PrismaClient)
 	{
 		this.prisma = prisma;
 	}
 
-	/** Loads run and referenced service state inside one database transaction. */
+	/**
+	 * Reads the run and the AgentService it names in one transaction.
+	 *
+	 * Both rows are read in the same transaction so they describe one moment; two separate queries
+	 * could report a run and a service that were never in those states at the same time, and the
+	 * retry decision compares facts from both.
+	 *
+	 * @param runId - The run to read.
+	 * @returns The snapshot, or null when no run has that id. The three service fields are null when
+	 * the referenced AgentService no longer exists, which the domain treats as unusable.
+	 * @throws When a stored enum value is not one the mapping functions know, or when the database is
+	 * unreachable.
+	 */
 	async getRunAuthority(runId: string): Promise<AgentRunAuthoritySnapshot | null>
 	{
 		return this.prisma.$transaction(async function _load(transaction: Prisma.TransactionClient)
@@ -114,17 +149,43 @@ export class PrismaAgentRunAuthorityRepository implements AgentRunAuthorityRepos
 		});
 	}
 
-	/** Atomically starts the next attempt and appends its run-domain outbox event. */
+	/**
+	 * Raises the attempt counter and writes the event that gets the new attempt dispatched, in one
+	 * transaction.
+	 *
+	 * Authorisation is re-checked here rather than trusted from the HTTP layer, because a person can
+	 * lose their org membership or be removed from the conversation between pressing retry and this
+	 * write landing. "denies a retry before mutation when current participant authority is absent"
+	 * asserts that the update is not even attempted in that case.
+	 *
+	 * The attempt row and its outbox event are written together so a retry cannot be recorded without
+	 * anything picking it up, and cannot be dispatched twice: the event's idempotency key is
+	 * `${runId}:attempt:${attempt}`, one per attempt, and its payload also records who asked and with
+	 * which retry key. That stored payload is what lets a repeated request be recognised as the same
+	 * retry instead of a new one.
+	 *
+	 * @param command - The retry, plus the run and service coordinates the domain observed.
+	 * @returns One {@link AtomicRunAttemptResult}. `started` is the only value that wrote anything;
+	 * `idempotent` means the attempt was already there and this call left the database alone.
+	 * @throws When a stored enum value is unknown, or the transaction fails or is rolled back — in
+	 * which case neither the attempt nor its event exists.
+	 */
 	async startNextAttemptAtomically(command: AtomicStartNextRunAttemptCommand): Promise<AtomicRunAttemptResult>
 	{
 		return this.prisma.$transaction(async function _start(transaction)
 		{
-			// 1. Require current organisation membership and conversation participation inside the retry transaction.
+			// 1. Check that the person asking is still an active org member and still in the conversation,
+			// before reading or writing anything else. Both can be revoked after the request was sent, and
+			// `accessEndedPosition: null` is what distinguishes a current participant from a removed one.
 			const participant = await transaction.conversationParticipant.findFirst({ where: { conversationId: command.conversationId, userId: command.requestedBy, accessEndedPosition: null, conversation: { siloId: command.siloId } }, select: { conversationId: true } });
 			const membership = await transaction.orgMembership.findFirst({ where: { clusterTenant: command.siloId, subject: command.requestedBy, status: OrgMemberStatus.Active }, select: { id: true } });
 			if (participant === null || membership === null) return { status: "unauthorized" } as const;
 
-			// 2. Read the current run and service before one conditional write closes concurrent retry and revision races.
+			// 2. Read the run and service and answer the cases that need no write. A run already one
+			// attempt ahead is checked against the stored outbox payload first: if that attempt was started
+			// by this same person and retry key, this is a repeat and the answer is `idempotent` rather than
+			// a conflict. That order matters — checking the attempt first would report a caller's own retry
+			// as somebody else's change.
 			const service = await transaction.agentService.findUnique({ where: { id: command.expectedAgentServiceId }, select: { id: true, siloId: true, state: true, activeRevisionId: true } });
 			const run = await transaction.agentRun.findUnique({ where: { id: command.runId } });
 			if (run === null) return { status: "not_found" } as const;
@@ -140,7 +201,15 @@ export class PrismaAgentRunAuthorityRepository implements AgentRunAuthorityRepos
 				return { status: "agent_service_authority_conflict", currentAgentServiceState: _serviceState(service?.state ?? null), currentAgentServiceSiloId: service?.siloId ?? null, currentActiveAgentRevisionId: service?.activeRevisionId ?? null } as const;
 			}
 
-			// 3. Reset only attempt-local coordinates while preserving the single logical run identity.
+			// 3. Write the new attempt onto the same row, with every observed fact repeated as a condition
+			// so the update applies to nothing if any of them changed since step 2. This one statement is
+			// what makes the retry safe under concurrency, now that the `FOR UPDATE` locks an earlier version
+			// took are gone. Only the fields that belong to an attempt are reset — cost, timings, and
+			// terminal reason go back to null — while the id, conversation, service, and revision stay, so
+			// the run keeps its identity and its history rather than becoming a new run.
+			// A count other than 1 means somebody else got there first, so the row is read again to say
+			// which of the three things happened: the same retry replayed, a different attempt now, or the
+			// service having changed underneath.
 			const nextAttempt = command.expectedAttempt + 1;
 			const changed = await transaction.agentRun.updateMany({
 				where: { id: run.id, attempt: command.expectedAttempt, state: { in: [AgentRunState.Failed, AgentRunState.Cancelled] }, agentServiceId: command.expectedAgentServiceId, agentRevisionId: command.expectedActiveAgentRevisionId, siloId: command.expectedAgentServiceSiloId, service: { is: { state: PrismaAgentServiceState.Active, siloId: command.expectedAgentServiceSiloId, activeRevisionId: command.expectedActiveAgentRevisionId } } },
@@ -162,7 +231,11 @@ export class PrismaAgentRunAuthorityRepository implements AgentRunAuthorityRepos
 			const updated = await transaction.agentRun.findUnique({ where: { id: run.id } });
 			if (updated === null) return { status: "not_found" } as const;
 
-			// 4. Commit the retry request through the run-owned outbox so dispatch cannot be lost.
+			// 4. Write the dispatch event in the same transaction as the attempt, so a retry can never be
+			// recorded with nothing coming to collect it. The sequence continues this run's own numbering,
+			// and the `${runId}:attempt:${n}` key gives one event per attempt — a second insert for the same
+			// attempt would violate the unique key rather than dispatch twice. The payload keeps who asked
+			// and their retry key, which is what step 2 reads to recognise a repeat.
 			const maximum = await transaction.outboxEvent.aggregate({ where: { runId: run.id }, _max: { sequence: true } });
 			await transaction.outboxEvent.create({
 				data: {

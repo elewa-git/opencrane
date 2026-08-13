@@ -37,7 +37,15 @@ export const _SelfConversationReplayOpenapiPaths = {
 	},
 };
 
-/** Shared participant conversation summary schema kept local to the owning OpenAPI fragment. */
+/**
+ * Shared participant conversation summary schema kept local to the owning OpenAPI fragment.
+ *
+ * `participantRefs` holds opaque OrgMembership row identifiers, not login subjects: the query
+ * repository translates every subject through `_membershipReferences` before projecting a summary.
+ * The field was called `participantUserIds` and carried the OIDC subject until this slice, so a
+ * generated client that still reads that name is out of date, and the two identifier spaces must
+ * not be mixed: a `participantRef` is only meaningful inside the caller's own silo.
+ */
 const _ConversationSummarySchema = {
 	type: "object",
 	additionalProperties: false,
@@ -73,7 +81,16 @@ const _AgentThreadOriginSchema = {
 	properties: { childConversationId: { type: "string" }, parentConversationId: { type: "string" }, rootConversationId: { type: "string" }, parentMessageId: { type: "string" }, initiatorUserId: { type: "string" }, agentServiceId: { type: "string" }, personaRevisionId: { type: "string" }, firstRunId: { type: "string" } },
 } as const;
 
-/** Canonical participant-visible message schema shared by detail and submission responses. */
+/**
+ * Canonical participant-visible message schema shared by detail and submission responses.
+ *
+ * `participantRef` names the author with the same opaque membership reference as
+ * {@link _ConversationSummarySchema}, replacing the `userId` field that used to carry the OIDC
+ * subject. It is null for anything a person did not write, and never for participant input: the
+ * reviewed baseline's `conversation_messages_provenance_check` requires `user_id` on `user_input`
+ * rows and forbids it on model output, tool results, and platform messages. So a client may read
+ * null as "the Agent or the platform wrote this", not as "unknown user".
+ */
 const _ConversationMessageSchema = {
 	type: "object",
 	additionalProperties: false,
@@ -160,17 +177,25 @@ const _AgentThreadSnapshotSchema = {
 } as const;
 
 /**
- * OpenAPI description of the five conversation routes, kept beside the router that serves them.
+ * OpenAPI description of the ten conversation operations, kept beside the router that serves them.
  *
  * Merged into the full document by `_DomainOpenapiPaths`
  * (libs/backend/server/api-spec/main/src/domain-openapi-paths.ts) and used to generate the
  * frontend client, so the documented statuses must match `_STATUS_BY_DENIAL` in
  * self-conversations.router.ts. In particular the message route documents 201 for a new message
  * and 200 for an identical retry — two different bodies, distinguished by the `outcome` field.
+ * The run-retry route repeats that pair, and `_runRetryDenialStatus` maps its denials.
  *
  * @see {@link _SelfConversationReplayOpenapiPaths} for the live stream on the same path prefix.
  */
 export const _SelfConversationsOpenapiPaths = {
+	// The directory is what a client must call before it can create anything: creation now accepts
+	// only references issued here, never a login subject. `openapi.test.ts` asserts this response
+	// schema contains neither `subject` nor `email`.
+	//
+	// There is no 404 and no 403. A caller whose organisation membership has been revoked makes
+	// `PrismaConversationQueryRepository.directory` throw, and the router turns any throw into 503 —
+	// so a revoked user sees "unavailable", not a distinct "you were removed" answer.
 	"/me/conversations/directory": {
 		get: {
 			operationId: "getMyConversationCreationDirectory",
@@ -267,6 +292,14 @@ export const _SelfConversationsOpenapiPaths = {
 			responses: { 201: { description: "Message accepted.", content: { "application/json": { schema: _AcceptedConversationMessageEnvelopeSchema } } }, 200: { description: "Exact idempotent retry returned the canonical message.", content: { "application/json": { schema: _IdempotentConversationMessageEnvelopeSchema } } }, 400: { description: "Invalid message body." }, 401: { description: "Authentication required." }, 404: { description: "Conversation unavailable." }, 409: { description: "Closed, active-run, mode, or idempotency conflict." }, 429: { description: "Conversation admission capacity is currently full; retry later." }, 503: { description: "Admission authority unavailable." } },
 		},
 	},
+	// Retry increases the attempt counter on the SAME run rather than creating a second one, which
+	// is why the success bodies return `attempt` with a minimum of 2 and why `expectedAttempt` is
+	// required: `__StartNextRunAttempt` uses it as a compare-and-swap guard, so two clients racing
+	// on the same failed attempt cannot both start one.
+	//
+	// 200 versus 201 is the client's only way to tell a fresh start from a replay of the same retry
+	// key, and 404 deliberately covers both "no such run" and "that run is not in a conversation you
+	// participate in" so the route cannot be used to discover other people's runs.
 	"/me/conversations/{conversationId}/runs/{runId}/retry": {
 		post: {
 			operationId: "retryMyConversationRun",

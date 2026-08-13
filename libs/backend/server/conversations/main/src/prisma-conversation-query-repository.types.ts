@@ -39,7 +39,18 @@ export interface ConversationCommandContext
  */
 export interface ConversationQueryRepository
 {
-	/** Returns active member references and the caller's unambiguous personal Agent projection. */
+	/**
+	 * Lists what the caller may start a conversation with: the active members of their organisation
+	 * as opaque references, and their own personal Agent.
+	 *
+	 * @returns The references creation will accept, plus a personal-Agent status. `Ready` carries the
+	 *   Agent; `Unavailable` and `Ambiguous` carry none, and a client must then offer direct and group
+	 *   conversations only — trying to create an Agent session will be denied.
+	 * @throws Error when the caller has no active membership in the silo. Unlike the other methods
+	 *   here, this one does not answer with an empty result: there is no such thing as an empty
+	 *   directory for a legitimate caller, since they are always in it themselves.
+	 * @see PersonalAgentDirectoryStatuses for what each status obliges the caller to do.
+	 */
 	directory(caller: ConversationCaller): Promise<ConversationCreationDirectory>;
 	/**
 	 * @returns True while the caller still has an active organisation membership in their silo.

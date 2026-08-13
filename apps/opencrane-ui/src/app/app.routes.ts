@@ -2,7 +2,22 @@ import { Routes } from "@angular/router";
 
 import { ___OperatorAccessGuard } from "./operator-access.guard";
 
-/** Top-level route table; feature pages are lazy-loaded route containers. */
+/**
+ * Top-level route table; feature pages are lazy-loaded route containers.
+ *
+ * Every entry loads its component or child routes on demand, so no feature is in the initial bundle.
+ * Order matters here: Angular tries these in declaration order and takes the first that matches, so
+ * the more specific chat routes stay above the bare `chats` index. `_RoutePrecedence` in
+ * `chats/__tests__/conversation-workspace-route.state.spec.ts` asserts that order, which means moving
+ * a chat entry will fail a test rather than quietly change which screen a URL opens.
+ *
+ * Every signed-in route carries `___OperatorAccessGuard`; only `login` and the redirects do not,
+ * because `login` is where the guard sends anonymous visitors.
+ *
+ * Called by: `appConfig` in `app.config.ts`, through `provideRouter`.
+ *
+ * @see ___OperatorAccessGuard for what "signed in" means on this surface.
+ */
 export const APP_ROUTES: Routes =
 [
 	{
@@ -56,7 +71,11 @@ export const APP_ROUTES: Routes =
 		}
 	},
 	{
-		// Canonical selected-conversation route; the same shell also owns /chats.
+		// Canonical selected-conversation route; the same shell also owns /chats. One component serves
+		// both because selecting a conversation does not change the screen, only what is open in it —
+		// `withComponentInputBinding()` in app.config.ts delivers :conversationId to the component's
+		// `conversationId` input, and the workspace opens it once its list has loaded. Keeping this
+		// above the "chats" entry below preserves the declaration order the route spec asserts.
 		path: "chats/:conversationId",
 		canActivate: [___OperatorAccessGuard],
 		loadComponent: function loadConversationWorkspaceRoute()
@@ -68,7 +87,10 @@ export const APP_ROUTES: Routes =
 		}
 	},
 	{
-		// Post-onboarding direct, group, and Agent-session workspace index.
+		// Post-onboarding direct, group, and Agent-session workspace index. This is the URL with nothing
+		// selected: where archiving the last conversation returns to, and the deliberately
+		// non-disclosing destination the Agent-thread route falls back to when its restoration state
+		// does not belong to it.
 		path: "chats",
 		canActivate: [___OperatorAccessGuard],
 		loadComponent: function loadConversationWorkspaceRoute()

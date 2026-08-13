@@ -21,12 +21,22 @@ const _ArchiveSchema = z.object({ archived: z.boolean() }).strict();
 /** Exact canonical child position the participant has actually observed. */
 const _AgentThreadReadSchema = z.object({ observedPosition: z.string().regex(/^(0|[1-9][0-9]*)$/u).max(19).refine(function _DatabaseBigInt(value) { return BigInt(value) <= 9_223_372_036_854_775_807n; }) }).strict();
 
-/** Fresh idempotent retry request bound to the terminal attempt the participant observed. */
+/**
+ * Body for retrying a run: the attempt the participant was looking at, plus their retry key.
+ *
+ * `expectedAttempt` is what makes the retry safe rather than optional — `__StartNextRunAttempt` uses
+ * it as a compare-and-swap guard, so a stale number is a conflict instead of a second attempt.
+ * Rejecting a non-integer or a value below 1 here means the run authority is never asked at all;
+ * `_RejectsMalformedRetry` in self-conversations.router.test.ts asserts that. The key bound matches
+ * {@link _MessageSchema}; the run authority stores it on the attempt's outbox event and compares it
+ * there, which is how a repeated request is recognised as the same retry.
+ */
 const _RunRetrySchema = z.object({ expectedAttempt: z.number().int().min(1), idempotencyKey: z.string().trim().min(1).max(128) }).strict();
 
 /**
- * Build the HTTP routes a signed-in user uses for their own conversations: list, create, open,
- * post a message, archive, close.
+ * Build the HTTP routes a signed-in user uses for their own conversations: read the creation
+ * directory, list, create, open, open an Agent thread, mark one read, post a message, retry a run,
+ * archive, close.
  *
  * The router owns three jobs and nothing else. It derives the caller from the session (never
  * from the path or body, so there is no route for reading someone else's conversations), checks
@@ -35,17 +45,28 @@ const _RunRetrySchema = z.object({ expectedAttempt: z.number().int().min(1), ide
  * becomes 503 with a generic code. Authorisation itself happens in the database layer behind
  * `dependencies.authority`.
  *
+ * So every route follows the same three steps: 401 when there is no session, 400 when the path
+ * parameters or body do not parse, and only then a call into the authority. Nothing below reads a
+ * silo, subject, or participant identifier out of the request — a body that tries to supply one is
+ * rejected by the strict schemas, which `_RejectsAuthorityCoordinates` in the router test asserts.
+ *
  * Called by: `_CreateSelfConversationsRouter` (prisma-self-conversations.router.ts), which is
  * mounted at `/api/v1/me/conversations` by apps/opencrane/src/app/routes.ts.
  *
  * @param dependencies - Caller resolver, the conversation authority port, and the logger.
- * @returns An Express router with the six participant routes mounted on it.
+ * @returns An Express router with the ten participant routes mounted on it.
  * @see _SelfConversationsOpenapiPaths in openapi.ts — the documented contract these routes
  * must match.
  */
 export function __CreateSelfConversationsRouter(dependencies: SelfConversationsRouterDependencies): Router
 {
 	const router = Router();
+
+	// The directory has no request shape to validate and only two answers: 200 with opaque member
+	// references, or 503. There is no 404 and no 403 — a caller whose membership has been revoked
+	// makes the authority throw, and that lands in the catch below, so being removed from the
+	// organisation is indistinguishable from the database being unreachable. This route must be
+	// declared before `/:conversationId`, or Express would match "directory" as a conversation id.
 	router.get("/directory", async function _Directory(request: Request, response: Response)
 	{
 		const caller = dependencies.resolveCaller(request);
@@ -176,6 +197,13 @@ export function __CreateSelfConversationsRouter(dependencies: SelfConversationsR
 		}
 	});
 
+	// Retry is the one write here whose authority lives outside this package: the runs package checks
+	// that the caller is still an active member and still a participant, and that the run belongs to
+	// the conversation in the path. This route only proves there is a session, that both path
+	// parameters and the body parse, and then maps the outcome — 201 for a new attempt, 200 for a
+	// replay of the same retry key, and `_runRetryDenialStatus` for a denial. `currentAttempt` is
+	// echoed because an attempt conflict is recoverable: the client can re-read the run and retry the
+	// attempt that is actually current.
 	router.post("/:conversationId/runs/:runId/retry", async function _RetryRun(request: Request, response: Response)
 	{
 		const caller = dependencies.resolveCaller(request);
@@ -251,7 +279,23 @@ function _denialStatus(reason: ConversationWriteDenial): number
 	return _STATUS_BY_DENIAL[reason];
 }
 
-/** Maps retry denials without revealing whether another participant's run exists. */
+/**
+ * Look up the HTTP status for a retry denial from the runs package.
+ *
+ * The three groups mean different things to a client. 404 covers `run_not_found` and `unauthorized`
+ * together: the run authority answers `unauthorized` when the run exists but sits in another
+ * conversation, silo, or belongs to a caller who is no longer a participant, so collapsing the two
+ * is what stops this route being used to discover other people's runs. 400 is `invalid_command`,
+ * which means the coordinates never made sense. Everything else is 409 — `run_not_terminal`,
+ * `attempt_conflict`, `agent_service_inactive`, `agent_service_silo_mismatch`,
+ * `agent_revision_superseded` — and all of those say the request was understood but the run's current
+ * state refuses it, so the client should re-read the run rather than repeat the call.
+ *
+ * @param reason - The `reason` from a denied {@link RetryConversationRunResult}.
+ * @returns The status to send. Unknown reasons fall to 409, which is the safe default here: a new
+ *   refusal reason is reported as a state conflict rather than as success or as a missing run.
+ * @see _MapsRetryDenials in self-conversations.router.test.ts, which pins the 404 and 409 cases.
+ */
 function _runRetryDenialStatus(reason: string): number
 {
 	if (reason === "run_not_found" || reason === "unauthorized") return 404;
