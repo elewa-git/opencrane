@@ -24,7 +24,7 @@ import { AgentThreadQueuedComponent } from "./agent-thread-queued.component.js";
 import { AgentThreadRunBoundaryComponent } from "./agent-thread-run-boundary.component.js";
 import { AgentThreadUnavailableComponent } from "./agent-thread-unavailable.component.js";
 
-/** Thin route-ready child workspace; the app route coordinator still owns navigation and restoration. */
+/** Thin child workspace; the feature-local route coordinator owns navigation and restoration. */
 @Component({ selector: "wo-agent-thread-page", standalone: true, imports: [A2uiCanvasComponent, AgentThreadAccessChangedComponent, AgentThreadAvailableComponent, AgentThreadDeliveryComponent, AgentThreadOriginComponent, AgentThreadQueuedComponent, AgentThreadRunBoundaryComponent, AgentThreadUnavailableComponent, BreadcrumbModule, ButtonModule, ConversationActivityComponent, ConversationAssetCardComponent, ConversationComposerComponent, ConversationElicitationCardComponent, ConversationMessageComponent, MessageModule], templateUrl: "./agent-thread-page.component.html", styleUrl: "./agent-thread-page.component.scss", changeDetection: ChangeDetectionStrategy.OnPush, providers: [AgentThreadStore] })
 export class AgentThreadPageComponent
 {
@@ -56,7 +56,7 @@ export class AgentThreadPageComponent
 	public readonly a2uiSurface = input<A2uiSurfacePresentation | null>(null);
 	/** Requests exact parent focus and scroll restoration. */
 	public readonly parentRestoreRequested = output<AgentThreadParentRestoreIntent>();
-	/** Requests a safe return to the chat index when no parent restoration is available. */
+	/** Requests the safe `/chats` fallback when no parent restoration is available. */
 	public readonly chatsRequested = output<void>();
 	/** Requests one atomic purge of all child-owned projections composed outside this package. */
 	public readonly childProjectionPurgeRequested = output<AgentThreadProjectionPurgeIntent>();
@@ -94,7 +94,7 @@ export class AgentThreadPageComponent
 	/** Last exact target already focused for the current authorized snapshot. */
 	private _focusedTargetKey: string | null = null;
 
-	/** Forward exact parent restoration, or fall back to the non-disclosing chat index. */
+	/** Forward exact parent restoration, or fall back to the non-disclosing `/chats` route. */
 	protected returnToParent(): void
 	{
 		const restore = this.parentRestore();
@@ -141,7 +141,7 @@ export class AgentThreadPageComponent
 	/** Read the exact route pair; the route coordinator remains responsible for URL ownership. */
 	private _LoadRoute(): void { void this.store.load(this.parentConversationId(), this.childConversationId()); }
 
-	/** Emit a chat-index route intent from the first breadcrumb. */
+	/** Emit the safe `/chats` fallback intent from the first breadcrumb. */
 	private _RequestChats(): void { this.chatsRequested.emit(); }
 
 	/** Forward each store purge exactly once with the exact route being discarded. */

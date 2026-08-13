@@ -1,4 +1,4 @@
-import type { AgentThreadRouteProjection } from "./agent-thread-route.state.types";
+import type { AgentThreadRouteProjection } from "./agent-thread-route.state.types.js";
 
 /**
  * Builds the emptied route projection to assign when the Agent-thread store purges a child.

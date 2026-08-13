@@ -1,14 +1,16 @@
+import { Location } from "@angular/common";
 import { ChangeDetectionStrategy, Component, computed, inject, input, signal } from "@angular/core";
 import { Router } from "@angular/router";
 
 import type { A2uiSurfacePresentation } from "@opencrane/elements/a2ui";
-import { AgentThreadPageComponent, type AgentThreadProjectionPurgeIntent } from "@opencrane/features/agent-threads";
 import type { ConversationAssetPresentation } from "@opencrane/features/conversation-assets";
 import type { AgentThreadParentRestoreIntent, AgentThreadSummaryTarget } from "@opencrane/state/conversation/agent-threads";
 import type { ConversationActivityRow, ConversationElicitation } from "@opencrane/state/conversation/elicitation";
 
-import { _AgentThreadHistoryAfterPurge, _PurgedAgentThreadRouteProjection } from "./agent-thread-route.state";
-import type { AgentThreadRouteHistoryState } from "./agent-thread-route.state.types";
+import type { AgentThreadProjectionPurgeIntent } from "./agent-thread-feature.types.js";
+import { AgentThreadPageComponent } from "./agent-thread-page.component.js";
+import { _AgentThreadHistoryAfterPurge, _PurgedAgentThreadRouteProjection } from "./agent-thread-route.state.js";
+import type { AgentThreadRouteHistoryState } from "./agent-thread-route.state.types.js";
 
 /**
  * Hosts the Agent-thread child conversation at `chats/:parentConversationId/threads/:childConversationId`.
@@ -17,9 +19,10 @@ import type { AgentThreadRouteHistoryState } from "./agent-thread-route.state.ty
  * component owns the URL and the browser history entry, and the page plus its `AgentThreadStore` own
  * every piece of child state. So the route reads the two path parameters, reads the restoration and
  * focus coordinates the parent workspace left in `history.state`, hands both down as inputs, and
- * answers the three intents the page emits back: go to the parent, go to the chat index, and drop
- * everything about a purged child. It never calls a gateway and never decides a child state — the app
- * layer stays a thin composition and routing root.
+ * answers the three intents the page emits back: go to the parent, use the safe `/chats` fallback,
+ * and drop
+ * everything about a purged child. It never calls a gateway and never decides a child state, so the
+ * application only has to mount this feature behind its access guard.
  *
  * It also holds the child projections that belong to other feature packages (Activity rows,
  * elicitation, asset, A2UI surface). Those are empty in this build: no producer wires them yet, and
@@ -29,8 +32,8 @@ import type { AgentThreadRouteHistoryState } from "./agent-thread-route.state.ty
  * ships, or by hand today. Either way `___OperatorAccessGuard` has already confirmed a signed-in
  * session, and the server still decides whether this reader may see the child.
  *
- * Called by: apps/opencrane-ui/src/app/app.routes.ts, as the lazy `loadComponent` for the
- * `chats/:parentConversationId/threads/:childConversationId` path behind `___OperatorAccessGuard`.
+ * Called by: apps/opencrane-ui/src/app/app.routes.ts through the feature package's public barrel,
+ * as the lazy component behind the `chats/:parentConversationId/threads/:childConversationId` path.
  * @see AgentThreadRouteHistoryState for what the parent workspace is expected to leave in history.
  */
 @Component({ selector: "wo-agent-thread-route", standalone: true, imports: [AgentThreadPageComponent], templateUrl: "./agent-thread-route.component.html", changeDetection: ChangeDetectionStrategy.OnPush })
@@ -45,15 +48,17 @@ export class AgentThreadRouteComponent
 	 * `provideRouter(APP_ROUTES, withComponentInputBinding())` in app.config.ts.
 	 */
 	public readonly childConversationId = input.required<string>();
-	/** Router used for the one navigation this class performs, away to the chat index. */
+	/** Router used for the one navigation this class performs, to the safe `/chats` fallback. */
 	private readonly _router = inject(Router);
+	/** Angular browser-history seam used without reaching for a raw runtime global from the feature. */
+	private readonly _location = inject(Location);
 	/**
 	 * Snapshot of the browser history entry this route was opened with.
 	 *
 	 * Read once while Angular creates the component, and rewritten only by `purgeChildProjection`,
 	 * which keeps this field in step with the entry it just replaced.
 	 */
-	private _history = globalThis.history.state as AgentThreadRouteHistoryState;
+	private _history = this._location.getState() as AgentThreadRouteHistoryState;
 	/**
 	 * Highest purge generation this route has already applied; 0 means it has applied none.
 	 *
@@ -93,17 +98,17 @@ export class AgentThreadRouteComponent
 	 * Going back reuses the history entry the parent workspace created, so the parent regains the scroll
 	 * position and focus it recorded there; a forward navigation would push a new entry and lose it.
 	 * That only holds while the entry below this one really is that parent, so an intent naming a
-	 * different parent falls back to the chat index instead of stepping somewhere unrelated.
+	 * different parent uses the `/chats` fallback instead of stepping somewhere unrelated.
 	 * @param intent - Parent coordinate and restoration anchors emitted by the page.
 	 */
 	protected restoreParent(intent: AgentThreadParentRestoreIntent): void
 	{
 		if (intent.parentConversationId !== this.parentConversationId()) { void this.openChats(); return; }
-		globalThis.history.back();
+		this._location.back();
 	}
 
 	/**
-	 * Navigates to `/chats`, the fallback whenever no trustworthy way back to the parent exists.
+	 * Navigates to `/chats`, which redirects to onboarding until the durable chat workspace ships.
 	 *
 	 * The page asks for this from its "Chats" breadcrumb, and `restoreParent` and
 	 * `AgentThreadPageComponent.returnToParent` fall through to it. `/chats` says nothing about which
@@ -142,8 +147,8 @@ export class AgentThreadRouteComponent
 
 		// 5. Drop the focus target from the history entry too, keeping the router's keys and the parent
 		// return path, then hold the same object so `parentRestore` reads what the browser now has.
-		const retainedHistory = _AgentThreadHistoryAfterPurge(globalThis.history.state);
-		globalThis.history.replaceState(retainedHistory, "");
+		const retainedHistory = _AgentThreadHistoryAfterPurge(this._location.getState());
+		this._location.replaceState(this._location.path(true), "", retainedHistory);
 		this._history = retainedHistory;
 	}
 

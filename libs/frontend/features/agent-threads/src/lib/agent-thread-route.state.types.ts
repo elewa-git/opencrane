@@ -11,12 +11,12 @@ import type { ConversationActivityRow, ConversationElicitation } from "@opencran
  * browser history entry rather than a shared service, so they survive back, forward, and a reload of
  * the child URL, and so two history entries for the same child can remember different positions.
  *
- * Both fields are optional because nothing writes them in this build: the `/chats` index is still
- * the `chats-pending` placeholder, and the parent workspace that captures these coordinates arrives
- * with #351. A reader who opens the child URL directly gets an entry holding only Angular Router's
+ * Both fields are optional because nothing writes them in this build: the `/chats` route is a safe
+ * fallback, and the parent workspace that captures these coordinates arrives with #351. A reader
+ * who opens the child URL directly gets an entry holding only Angular Router's
  * own keys, so the route component treats a missing field as "no restoration available".
  *
- * Called by: apps/opencrane-ui/src/app/agent-thread/agent-thread-route.component.ts.
+ * Called by: the feature-local Agent-thread route coordinator.
  * @see AgentThreadPageComponent for the page that consumes both fields as inputs.
  */
 export interface AgentThreadRouteHistoryState
@@ -38,7 +38,7 @@ export interface AgentThreadRouteHistoryState
 }
 
 /**
- * The child-derived values the Angular application route holds itself, outside the Agent-thread store.
+ * The child-derived values the feature route holds itself, outside the Agent-thread store.
  *
  * Activity rows, elicitations, assets, and A2UI surfaces belong to other feature packages, so the
  * route composes them and passes them down as inputs instead of the Agent-thread store owning them.

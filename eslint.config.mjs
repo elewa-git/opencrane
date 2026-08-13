@@ -177,7 +177,7 @@ export default [
 			{ sourceTag: "scope:conversation-elicitation", onlyDependOnLibsWithTags: ["scope:conversation-elicitation", "scope:shared", "scope:web"] },
 			{ sourceTag: "scope:agent-threads", onlyDependOnLibsWithTags: ["scope:agent-threads", "scope:conversation-assets", "scope:conversation-elicitation", "scope:shared", "scope:web"] },
 			{ sourceTag: "scope:web", onlyDependOnLibsWithTags: ["scope:web", "scope:shared"] },
-			{ sourceTag: "scope:opencrane-ui", onlyDependOnLibsWithTags: ["scope:conversation-assets", "scope:persona-onboarding", "scope:shared", "scope:web"] },
+			{ sourceTag: "scope:opencrane-ui", onlyDependOnLibsWithTags: ["scope:agent-threads", "scope:conversation-assets", "scope:persona-onboarding", "scope:shared", "scope:web"] },
             {
               sourceTag: "scope:opencrane",
               onlyDependOnLibsWithTags: [

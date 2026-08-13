@@ -89,7 +89,7 @@ Recoverable conversation input follows the same ownership direction:
 Group-chat Agent threads add one route-ready composition without moving authority into the browser:
 
 - [`elements/conversation`](../../libs/frontend/elements/conversation/README.md) owns shared message, composer, and status presentations;
-- [`features/agent-threads`](../../libs/frontend/features/agent-threads/README.md) composes the child workspace from existing asset, elicitation, Activity, and A2UI features; and
+- [`features/agent-threads`](../../libs/frontend/features/agent-threads/README.md) owns the routed child coordinator, browser-history restoration, and workspace composition from existing asset, elicitation, Activity, and A2UI features; and
 - [`state/conversation/agent-threads`](../../libs/frontend/state/conversation/agent-threads/README.md) owns the transport-neutral child-reader port, independent route/run/recovery state, and fail-closed access purge.
 
 Legacy frontend packages use `scope:web`; new capability slices use bounded ownership scopes. The

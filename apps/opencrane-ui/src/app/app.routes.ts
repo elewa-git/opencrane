@@ -49,24 +49,17 @@ export const APP_ROUTES: Routes =
 		canActivate: [___OperatorAccessGuard],
 		loadComponent: function loadAgentThreadRoute()
 		{
-			return import("./agent-thread/agent-thread-route.component").then(function pickAgentThreadRoute(m)
+			return import("@opencrane/features/agent-threads").then(function pickAgentThreadRoute(m)
 			{
 				return m.AgentThreadRouteComponent;
 			});
 		}
 	},
 	{
-		// Non-disclosing fallback. #351 replaces this component with the complete
-		// direct/group conversation workspace without changing child URLs.
+		// Non-disclosing fallback until #351 mounts the complete direct/group conversation feature.
 		path: "chats",
 		canActivate: [___OperatorAccessGuard],
-		loadComponent: function loadChatsPending()
-		{
-			return import("./chats/chats-pending.component").then(function pickChatsPending(m)
-			{
-				return m.ChatsPendingComponent;
-			});
-		}
+		redirectTo: "/onboarding"
 	},
 	{ path: "", pathMatch: "full", redirectTo: "onboarding" },
 	{

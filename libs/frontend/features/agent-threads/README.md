@@ -6,21 +6,22 @@
 
 This package owns the UI for invoking an Agent from a group message, showing the compact child
 summary below that message, and presenting the linked child conversation as a full workspace. The
-application supplies immutable route ids and owns navigation, focus, and scroll restoration; this
-feature renders the route-ready page and returns exact typed intents. It persists unread state only
-after Angular has rendered the represented snapshot, and then adopts the server's confirmed count.
+application mounts the guarded URL and supplies the production gateway; this feature owns the route
+coordinator, navigation, browser-history restoration, focus, and the complete child workspace. It
+persists unread state only after Angular has rendered the represented snapshot, and then adopts the
+server's confirmed count.
 
 ```
  parent group message ── @agent intent ──► backend admission
           │                                      │ child snapshot
           ▼                                      ▼
  compact summary                         agent-threads  ◄── HERE
-                                                 │ exact parent restore intent
+                                                 │ exact parent restore coordinate
                                                  ▼
-                                         app route coordinator
+                                       feature route coordinator
 ```
 
-**In this flow:** [`state/conversation/agent-threads`](../../state/conversation/agent-threads/README.md) · the application route coordinator
+**In this flow:** [`state/conversation/agent-threads`](../../state/conversation/agent-threads/README.md) · the application route mount
 
 Run lifecycle, conversation access, live-delivery recovery, and mention admission remain separate
 dimensions. The page uses an explicit route-state switch. It reuses the shared conversation,
@@ -34,8 +35,10 @@ asset, elicitation, Activity, and A2UI renderers rather than copying their contr
   together with exact parent restoration coordinates.
 - `AgentThreadPageComponent` is the thin route-ready child workspace. Its breadcrumbs emit route
   intents, its post-render hook focuses the canonical target and marks only rendered positions read,
-  and its purge intent tells the app to discard Activity, elicitation, asset, A2UI, draft, and cursor
-  projections together.
+  and its purge intent tells the feature route coordinator to discard Activity, elicitation, asset,
+  A2UI, draft, and cursor projections together.
+- `AgentThreadRouteComponent` binds immutable route ids to that workspace, restores the exact parent
+  browser-history coordinate, owns external child projections, and purges them as one projection.
 - Origin, run-boundary, delivery, queued, available, access-changed, and unavailable components keep
   those states independently testable.
 - Mapper functions translate dependency-neutral store models into shared conversation elements.
@@ -44,7 +47,7 @@ asset, elicitation, Activity, and A2UI renderers rather than copying their contr
 
 This feature neither calls HTTP nor starts a run. It cannot grant access, infer a missing route's
 existence, select personal memory, or deliver beyond the immediate parent. The generated-client
-adapter lives in state; the production app route owns browser history and every external projection.
+adapter lives in state; the production app only mounts the guarded route and binds that adapter.
 
 ## Dependency direction
 
