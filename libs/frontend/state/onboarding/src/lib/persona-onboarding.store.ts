@@ -1,8 +1,9 @@
 import { Injectable, computed, inject, resource, signal } from "@angular/core";
+import { UserOnboardingRouteStates } from "@opencrane/models/user-onboarding";
 
 import { PersonaOnboardingSnapshot, PersonaOnboardingStates, PersonaResolutionKinds } from "./persona-gateway.types";
 import { PersonaFirstChatService } from "./persona-first-chat.service.js";
-import { UserOnboardingRouteSnapshot, UserOnboardingRouteStates } from "./persona-first-chat.types.js";
+import type { UserOnboardingRouteSnapshot } from "./persona-first-chat.types.js";
 import { PersonaOnboardingService } from "./persona-onboarding.service";
 
 /**

@@ -3,10 +3,11 @@
 import { TestBed } from "@angular/core/testing";
 import { BrowserDynamicTestingModule, platformBrowserDynamicTesting } from "@angular/platform-browser-dynamic/testing";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { UserOnboardingRouteStates } from "@opencrane/models/user-onboarding";
 
 import { PersonaColours, PersonaModifiers, PersonaOnboardingSnapshot, PersonaOnboardingStates } from "../persona-gateway.types";
 import { PersonaFirstChatService } from "../persona-first-chat.service.js";
-import { UserOnboardingRouteSnapshot, UserOnboardingRouteStates } from "../persona-first-chat.types.js";
+import type { UserOnboardingRouteSnapshot } from "../persona-first-chat.types.js";
 import { PersonaOnboardingService } from "../persona-onboarding.service";
 import { PersonaOnboardingStore } from "../persona-onboarding.store";
 

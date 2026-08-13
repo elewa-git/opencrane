@@ -1,9 +1,10 @@
 import { Injectable, inject } from "@angular/core";
 
 import { ControlPlaneApiService } from "@opencrane/core";
+import { ___ParsePersonaFirstChatSnapshot, type PersonaFirstChatSnapshot } from "@opencrane/models/user-onboarding";
 
-import { PersonaFirstChatAnswerCommand, PersonaFirstChatConflictError, PersonaFirstChatGateway, PersonaFirstChatSnapshot, UserOnboardingRouteSnapshot } from "./persona-first-chat.types.js";
-import { _ParsePersonaFirstChatConflictSnapshot, _ParsePersonaFirstChatSnapshot, _ParseUserOnboardingRouteSnapshot } from "./persona-first-chat.validator.js";
+import { PersonaFirstChatConflictError, type PersonaFirstChatAnswerCommand, type PersonaFirstChatGateway, type UserOnboardingRouteSnapshot } from "./persona-first-chat.types.js";
+import { _ParsePersonaFirstChatConflictSnapshot, _ParseUserOnboardingRouteSnapshot } from "./persona-first-chat.validator.js";
 
 /** Live first-chat gateway backed exclusively by the generated signed-in-owner API client. */
 @Injectable()
@@ -55,5 +56,5 @@ export class OpenCranePersonaFirstChatGateway implements PersonaFirstChatGateway
 function _RequireSnapshot(data: unknown, error: unknown, message: string): PersonaFirstChatSnapshot
 {
 	if (error || !data) throw new Error(message);
-	return _ParsePersonaFirstChatSnapshot(data);
+	return ___ParsePersonaFirstChatSnapshot(data);
 }

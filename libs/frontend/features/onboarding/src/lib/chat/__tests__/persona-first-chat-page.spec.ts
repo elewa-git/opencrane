@@ -4,7 +4,8 @@ import { BrowserDynamicTestingModule, platformBrowserDynamicTesting } from "@ang
 import { Router } from "@angular/router";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { PersonaFirstChatArchetypes, PersonaFirstChatColours, PersonaFirstChatCommandPhases, PersonaFirstChatStore, type PersonaFirstChatSnapshot, PersonaFirstChatTranscriptKinds, PersonaFirstChatTranscriptRoles, UserOnboardingRouteStates } from "@opencrane/state/onboarding";
+import { PersonaFirstChatArchetypes, PersonaFirstChatColours, PersonaFirstChatTranscriptKinds, PersonaFirstChatTranscriptRoles, UserOnboardingRouteStates, type PersonaFirstChatSnapshot } from "@opencrane/state/onboarding/projection";
+import { PersonaFirstChatCommandPhases, PersonaFirstChatStore } from "@opencrane/state/onboarding";
 
 import { PersonaFirstChatPageComponent } from "../persona-first-chat-page.component.js";
 import { PersonaFirstChatStates } from "../persona-first-chat.types.js";

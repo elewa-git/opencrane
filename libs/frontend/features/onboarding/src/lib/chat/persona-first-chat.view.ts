@@ -1,5 +1,5 @@
 import { PersonaArchetypeTones } from "@opencrane/elements/ui";
-import { PersonaFirstChatArchetypes, type PersonaFirstChatContentRevision, type PersonaFirstChatCurrentQuestion, type PersonaFirstChatPersona, type PersonaFirstChatSnapshot, type PersonaFirstChatTranscriptEntry, PersonaFirstChatTranscriptRoles } from "@opencrane/state/onboarding";
+import { PersonaFirstChatArchetypes, PersonaFirstChatTranscriptRoles, type PersonaFirstChatContentRevision, type PersonaFirstChatCurrentQuestion, type PersonaFirstChatPersona, type PersonaFirstChatSnapshot, type PersonaFirstChatTranscriptEntry } from "@opencrane/state/onboarding/projection";
 
 import { type PersonaFirstChatIdentity, PersonaFirstChatMessageRoles, type PersonaFirstChatProvenance, type PersonaFirstChatQuestion, type PersonaFirstChatQuestionOrdinal, type PersonaFirstChatTranscriptMessage, type PersonaFirstChatView } from "./persona-first-chat.types.js";
 

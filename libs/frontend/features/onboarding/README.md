@@ -24,6 +24,7 @@ bootstrap exchange.
 ```
 
 **In this flow:** [state/onboarding](../../state/onboarding/README.md) ·
+[state/onboarding/projection](../../state/onboarding/projection/README.md) ·
 [state/persona/adapter](../../state/persona/adapter/README.md)
 
 Each state component receives read-only evidence and emits typed intents. The component-scoped
@@ -60,11 +61,13 @@ onboarding exchange, not a general chat client.
 ## Dependency direction
 
 Tagged `scope:persona-onboarding`, `type:lib`, `layer:frontend`, and `frontend-role:feature`. The
-role constraint admits only shared elements and onboarding state; it cannot import the HTTP adapter,
-another feature, an app, or backend source.
+role constraint admits shared elements, onboarding command state, and the narrow onboarding
+projection facade; it cannot import the pure model directly, the HTTP adapter, another feature, an
+app, or backend source.
 
 ## See also
 
 - Parent index: [features](../README.md)
 - State orchestration: [onboarding](../../state/onboarding/README.md)
+- Projection vocabulary: [onboarding/projection](../../state/onboarding/projection/README.md)
 - Shared presentation: [elements/ui](../../elements/ui/README.md)

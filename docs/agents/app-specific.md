@@ -74,8 +74,13 @@ The governed persona onboarding path is split deliberately:
 
 - [`features/onboarding`](../../libs/frontend/features/onboarding/README.md) owns one routed shell
   with interview, tie-resolution, review, and ready state components;
+- [`models/user-onboarding`](../../libs/models/user-onboarding/main/README.md) owns the validated
+  first-chat projection and pure runtime parser;
 - [`state/onboarding`](../../libs/frontend/state/onboarding/README.md) owns the transport-neutral
-  port, validated projection, and resumable orchestration without becoming a persistence authority; and
+  port, route and conflict-envelope validation, and resumable orchestration without becoming a
+  persistence authority;
+- [`state/onboarding/projection`](../../libs/frontend/state/onboarding/projection/README.md) exposes
+  only the projection vocabulary to the onboarding feature; and
 - [`state/persona/adapter`](../../libs/frontend/state/persona/adapter/README.md) is the typed adapter
   over the generated signed-in-owner API.
 
@@ -102,10 +107,13 @@ The normal conversation workspace keeps transport, state, and presentation separ
 Legacy frontend packages use `scope:web`; new capability slices use bounded ownership scopes. The
 persona onboarding feature, state port, and adapter use `scope:persona-onboarding` plus role tags
 that enforce feature → state and adapter → state/core direction. Cross-cutting core and UI elements
-use `scope:shared`. The conversation workspace may depend on `scope:persona-onboarding` only to
-reuse its model-adjacent validator for the separate read-only onboarding-history projection; the
-onboarding authority and commands remain owned by the onboarding slice. The UI is an API client,
-never a privileged product authority.
+use `scope:shared`. The pure first-chat projection and validator live in
+[`models/user-onboarding`](../../libs/models/user-onboarding/main/README.md) under
+`scope:user-onboarding`; both onboarding state and conversation workspace may consume that model,
+without gaining access to each other's stores or commands. The onboarding feature consumes only the
+narrow [`state/onboarding/projection`](../../libs/frontend/state/onboarding/projection/README.md)
+facade, so the general feature role does not gain access to arbitrary model packages. The UI is an
+API client, never a privileged product authority.
 
 ## API-first rule
 

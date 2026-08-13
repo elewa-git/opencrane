@@ -1,13 +1,13 @@
 export { _ParseConversationDetail as _ConversationDetail, _ParseConversationRun as _ConversationRun, _ParseConversationSummary as _ConversationSummary, _ParseConversationWorkspaceDirectory as _ConversationWorkspaceDirectory } from "@opencrane/state/conversation/workspace";
 
 import { MessageRoles } from "@opencrane/models/conversations";
-import { _ParsePersonaFirstChatSnapshot, PersonaFirstChatTranscriptRoles, UserOnboardingRouteStates, type PersonaFirstChatTranscriptEntry } from "@opencrane/state/onboarding";
+import { ___ParsePersonaFirstChatSnapshot, PersonaFirstChatTranscriptRoles, UserOnboardingRouteStates, type PersonaFirstChatTranscriptEntry } from "@opencrane/models/user-onboarding";
 import { ConversationOnboardingHistoryStatuses, type ConversationOnboardingHistoryEntry, type ConversationOnboardingHistoryProjection } from "@opencrane/state/conversation/workspace";
 
 /** Validate onboarding authority state, then map it to a separate read-only projection. */
 export function _ConversationOnboardingHistory(value: unknown): ConversationOnboardingHistoryProjection
 {
-	const snapshot = _ParsePersonaFirstChatSnapshot(value);
+	const snapshot = ___ParsePersonaFirstChatSnapshot(value);
 	if (snapshot.state !== UserOnboardingRouteStates.Completed) return { status: ConversationOnboardingHistoryStatuses.NotCompleted, history: null };
 	if (snapshot.conversationId === null) return { status: ConversationOnboardingHistoryStatuses.NotRecorded, history: null };
 	if (snapshot.persona === null || snapshot.startedAt === null || snapshot.completedAt === null) throw new Error("Completed onboarding history is missing required evidence.");

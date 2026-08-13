@@ -5,7 +5,8 @@ import { MessageModule } from "primeng/message";
 import { ProgressSpinnerModule } from "primeng/progressspinner";
 
 import { JourneyShellComponent, JourneyShellLayouts } from "@opencrane/elements/ui";
-import { PersonaFirstChatCommandPhases, PersonaFirstChatStore, UserOnboardingRouteStates } from "@opencrane/state/onboarding";
+import { UserOnboardingRouteStates } from "@opencrane/state/onboarding/projection";
+import { PersonaFirstChatCommandPhases, PersonaFirstChatStore } from "@opencrane/state/onboarding";
 
 import { PersonaFirstChatComponent } from "./persona-first-chat.component.js";
 import { type PersonaFirstChatAnswerIntent, PersonaFirstChatStates, type PersonaFirstChatView } from "./persona-first-chat.types.js";

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { PersonaArchetypeTones } from "@opencrane/elements/ui";
-import { PersonaFirstChatArchetypes, PersonaFirstChatColours, type PersonaFirstChatSnapshot, PersonaFirstChatTranscriptKinds, PersonaFirstChatTranscriptRoles, UserOnboardingRouteStates } from "@opencrane/state/onboarding";
+import { PersonaFirstChatArchetypes, PersonaFirstChatColours, PersonaFirstChatTranscriptKinds, PersonaFirstChatTranscriptRoles, UserOnboardingRouteStates, type PersonaFirstChatSnapshot } from "@opencrane/state/onboarding/projection";
 
 import { PersonaFirstChatMessageRoles } from "../persona-first-chat.types.js";
 import { _PersonaFirstChatView } from "../persona-first-chat.view.js";

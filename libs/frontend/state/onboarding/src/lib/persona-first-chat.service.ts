@@ -1,6 +1,7 @@
 import { Injectable, inject } from "@angular/core";
+import { UserOnboardingRouteStates, type PersonaFirstChatSnapshot } from "@opencrane/models/user-onboarding";
 
-import { PERSONA_FIRST_CHAT_GATEWAY, PersonaFirstChatAnswerCommand, PersonaFirstChatGateway, PersonaFirstChatSnapshot, UserOnboardingRouteSnapshot, UserOnboardingRouteStates } from "./persona-first-chat.types.js";
+import { PERSONA_FIRST_CHAT_GATEWAY, type PersonaFirstChatAnswerCommand, type PersonaFirstChatGateway, type UserOnboardingRouteSnapshot } from "./persona-first-chat.types.js";
 
 /** Server-backed orchestration for the resumable, deterministic first-chat workflow. */
 @Injectable({ providedIn: "root" })
