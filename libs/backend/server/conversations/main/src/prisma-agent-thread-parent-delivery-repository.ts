@@ -28,7 +28,8 @@ const _PUBLIC_KIND: Readonly<Record<AgentThreadDeliveryKind, AgentThreadDelivery
 };
 
 /**
- * Resolves runtime and thread authority, then persists a display-safe parent delivery.
+ * Resolves runtime and thread authority, then persists the parent delivery validated by the unit
+ * of work.
  *
  * The constructor accepts a Prisma transaction client, never the process client, so assignment,
  * immediate-parent, idempotency, and insert decisions share the unit of work's serializable
@@ -49,6 +50,14 @@ export class PrismaAgentThreadParentDeliveryRepository implements AgentThreadPar
 
 	/**
 	 * Appends or replays one delivery after proving the active assignment and immediate parent.
+	 *
+	 * A registered workload remains authoritative only while its lease is current, its run is
+	 * running on the same attempt, and the requested child still belongs to that agent service. An
+	 * idempotency replay succeeds only when every stored delivery coordinate and display field still
+	 * matches the request.
+	 *
+	 * Called by: `PrismaAgentThreadParentDeliveryUnitOfWork.deliver`.
+	 *
 	 * @param identity - Runtime identity derived from the reviewed workload token.
 	 * @param command - Display-safe delivery coordinates and idempotency key.
 	 * @returns An accepted delivery, its identical replay, or a fail-closed denial.

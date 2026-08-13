@@ -191,7 +191,13 @@ export class PrismaElicitationRepository implements ElicitationRepository
 		return rows.map(function _ProjectActivity(row) { return _ProjectionAt(row, now); });
 	}
 
-	/** Checks current silo membership and continuing access to the conversation's immediate parent. */
+	/**
+	 * Checks current silo membership and continuing access to the requested conversation.
+	 *
+	 * Ordinary conversations use the null-origin branch in `_ConversationAccessWhere`. An Agent
+	 * thread also requires the subject to remain an active participant in its immediate parent, so
+	 * losing parent access stops new requests, responses, and reads from the child.
+	 */
 	private async _canParticipantAccess(siloId: string, conversationId: string, subjectId: string): Promise<boolean>
 	{
 		const membership = await this._transaction.orgMembership.count({ where: { clusterTenant: siloId, subject: subjectId, status: OrgMemberStatus.Active } });

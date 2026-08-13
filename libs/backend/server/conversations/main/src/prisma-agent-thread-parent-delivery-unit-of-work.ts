@@ -7,11 +7,33 @@ import { ___CreateLogger, ___DoWithTrace } from "@opencrane/backend/observabilit
 import type { AgentThreadParentDeliveryCommand, AgentThreadParentDeliveryUnitOfWork, AgentThreadRuntimeIdentity, DeliverAgentThreadParentResult } from "./agent-thread-parent-delivery.types.js";
 import { PrismaAgentThreadParentDeliveryRepository } from "./prisma-agent-thread-parent-delivery-repository.js";
 
-/** Persists runtime-authored display-safe deliveries and their parent timeline append atomically. */
+/**
+ * Opens the serializable transaction for a runtime-authored Agent-thread parent delivery.
+ *
+ * The private runtime router has already reviewed the workload token before calling this class.
+ * This owner validates the display payload, traces the operation, and maps database failures to a
+ * stable denial while the transaction-bound repository resolves assignment and thread authority.
+ * Keeping those reads and the insert in one transaction prevents an authority change from leaving
+ * a parent delivery committed against facts read from another snapshot.
+ *
+ * Called by: `__CreateAgentThreadParentDeliveryRouter`; production constructs it in
+ * `apps/opencrane/src/app/runtime-composition.ts`.
+ *
+ * @implements AgentThreadParentDeliveryUnitOfWork
+ */
 export class PrismaAgentThreadParentDeliveryUnitOfWork implements AgentThreadParentDeliveryUnitOfWork
 {
 	constructor(private readonly prisma: PrismaClient, private readonly logger: Logger = ___CreateLogger("agent-thread-parent-delivery")) {}
 
+	/**
+	 * Validates and persists one delivery without exposing database failures to the runtime.
+	 *
+	 * Called by: the POST handler returned by `__CreateAgentThreadParentDeliveryRouter`.
+	 *
+	 * @param identity - Workload coordinates derived from the reviewed runtime token.
+	 * @param command - The requested immediate-parent delivery and its idempotency key.
+	 * @returns The committed delivery, its identical replay, or a stable denial reason.
+	 */
 	async deliver(identity: AgentThreadRuntimeIdentity, command: AgentThreadParentDeliveryCommand): Promise<DeliverAgentThreadParentResult>
 	{
 		const unit = this;
@@ -34,6 +56,7 @@ export class PrismaAgentThreadParentDeliveryUnitOfWork implements AgentThreadPar
 	}
 }
 
+/** Rejects oversized display text and prevents non-asset deliveries from carrying an asset ID. */
 function _valid(command: AgentThreadParentDeliveryCommand): boolean
 {
 	return command.idempotencyKey.trim().length > 0 && command.idempotencyKey.length <= 128
