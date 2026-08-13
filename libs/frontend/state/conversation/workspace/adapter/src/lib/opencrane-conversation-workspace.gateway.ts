@@ -4,7 +4,6 @@ import { ControlPlaneApiService } from "@opencrane/core";
 import { ConversationRunStates, ConversationWorkspaceGatewayError, ConversationWorkspaceGatewayErrorKinds, type ConversationCreationDirectory, type ConversationRun, type ConversationSummary, type ConversationWorkspaceDetail, type ConversationWorkspaceGateway, type CreateConversationCommand, type RetryConversationRunCommand, type SubmitConversationMessageCommand, type SubmitConversationSteeringCommand } from "@opencrane/state/conversation/workspace";
 
 import { _ConversationDetail, _ConversationRun, _ConversationSummary, _ConversationWorkspaceDirectory } from "./conversation-workspace.dto.js";
-import type { ConversationDetailDto, ConversationDirectoryDto, ConversationRunDto, ConversationSummaryDto } from "./conversation-workspace.dto.types.js";
 
 /** Generated-client adapter for participant-scoped workspace reads and commands. */
 @Injectable()
@@ -18,7 +17,7 @@ export class OpenCraneConversationWorkspaceGateway implements ConversationWorksp
 	{
 		const result = await this._api.client.GET("/me/conversations/directory");
 		if (result.error !== undefined || result.data === undefined) throw _Failure(result.response?.status);
-		try { return _ConversationWorkspaceDirectory(result.data.directory as ConversationDirectoryDto); }
+		try { return _ConversationWorkspaceDirectory(result.data.directory); }
 		catch { throw _InvalidResponse(); }
 	}
 
@@ -27,7 +26,7 @@ export class OpenCraneConversationWorkspaceGateway implements ConversationWorksp
 	{
 		const result = await this._api.client.GET("/me/conversations", { params: { query: { includeArchived: false } } });
 		if (result.error !== undefined || result.data === undefined) throw _Failure(result.response?.status);
-		try { return result.data.conversations.map(function _Summary(dto) { return _ConversationSummary(dto as ConversationSummaryDto); }); }
+		try { return result.data.conversations.map(_ConversationSummary); }
 		catch { throw _InvalidResponse(); }
 	}
 
@@ -36,7 +35,7 @@ export class OpenCraneConversationWorkspaceGateway implements ConversationWorksp
 	{
 		const result = await this._api.client.GET("/me/conversations/{conversationId}", { params: { path: { conversationId } } });
 		if (result.error !== undefined || result.data === undefined) throw _Failure(result.response?.status);
-		try { return _ConversationDetail(result.data.conversation as ConversationDetailDto); }
+		try { return _ConversationDetail(result.data.conversation); }
 		catch { throw _InvalidResponse(); }
 	}
 
@@ -46,7 +45,7 @@ export class OpenCraneConversationWorkspaceGateway implements ConversationWorksp
 		const body = "participantRefs" in command ? { ...command, participantRefs: [...command.participantRefs] } : command;
 		const result = await this._api.client.POST("/me/conversations", { body });
 		if (result.error !== undefined || result.data === undefined) throw _Failure(result.response?.status);
-		try { return _ConversationDetail(result.data.conversation as ConversationDetailDto); }
+		try { return _ConversationDetail(result.data.conversation); }
 		catch { throw _InvalidResponse(); }
 	}
 
@@ -63,7 +62,7 @@ export class OpenCraneConversationWorkspaceGateway implements ConversationWorksp
 	{
 		const result = await this._api.client.PATCH("/me/conversations/{conversationId}/archive", { params: { path: { conversationId } }, body: { archived } });
 		if (result.error !== undefined || result.data === undefined) throw _Failure(result.response?.status);
-		try { return _ConversationDetail(result.data.conversation as ConversationDetailDto); }
+		try { return _ConversationDetail(result.data.conversation); }
 		catch { throw _InvalidResponse(); }
 	}
 
@@ -72,7 +71,7 @@ export class OpenCraneConversationWorkspaceGateway implements ConversationWorksp
 	{
 		const result = await this._api.client.POST("/me/conversations/{conversationId}/close", { params: { path: { conversationId } } });
 		if (result.error !== undefined || result.data === undefined) throw _Failure(result.response?.status);
-		try { return _ConversationDetail(result.data.conversation as ConversationDetailDto); }
+		try { return _ConversationDetail(result.data.conversation); }
 		catch { throw _InvalidResponse(); }
 	}
 
@@ -81,7 +80,7 @@ export class OpenCraneConversationWorkspaceGateway implements ConversationWorksp
 	{
 		const result = await this._api.client.GET("/me/runs/{runId}", { params: { path: { runId } } });
 		if (result.error !== undefined || result.data === undefined) throw _Failure(result.response?.status);
-		try { return _ConversationRun(result.data as ConversationRunDto); }
+		try { return _ConversationRun(result.data); }
 		catch { throw _InvalidResponse(); }
 	}
 

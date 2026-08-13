@@ -23,8 +23,16 @@ describe("conversation workspace DTO mapping", function _ConversationWorkspaceDt
 
 	it("rejects unknown categorical values instead of guessing", function _RejectsUnknown()
 	{
-		expect(function _InvalidDirectory() { _ConversationWorkspaceDirectory({ participants: [], personalAgentStatus: "mystery", personalAgent: null }); }).toThrow("invalid personal Agent status");
-		expect(function _InvalidRun() { _ConversationRun({ runId: "run-1", attempt: 1, state: "mystery", conversationId: "conversation-1" }); }).toThrow("invalid run state");
+		expect(function _InvalidDirectory() { _ConversationWorkspaceDirectory({ participants: [], personalAgentStatus: "mystery", personalAgent: null }); }).toThrow();
+		expect(function _InvalidRun() { _ConversationRun({ runId: "run-1", attempt: 1, state: "mystery", conversationId: "conversation-1" }); }).toThrow();
 		expect(_ConversationRun({ runId: "run-1", attempt: 1, state: "failed", conversationId: "conversation-1" }).state).toBe(ConversationRunStates.Failed);
+	});
+
+	it("rejects malformed nested message values at the model boundary", function _RejectsMalformedNestedMessage()
+	{
+		expect(function _InvalidNestedMessage()
+		{
+			_ConversationDetail({ id: "conversation-1", mode: "group", lifecycle: "open", agentServiceId: null, participantRefs: ["member-1"], archivedAt: null, updatedAt: "2026-08-12T09:00:00.000Z", visibleFromPosition: "1", accessEndedPosition: null, messages: [{ id: "message-1", position: "1", role: "user", state: "completed", source: "user_input", blocks: [{ id: "", kind: "text", value: "Invalid" }], runId: null, participantRef: "member-1", createdAt: "2026-08-12T09:00:00.000Z", agentThread: null }] });
+		}).toThrow();
 	});
 });

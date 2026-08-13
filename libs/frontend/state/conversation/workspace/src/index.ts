@@ -2,6 +2,7 @@ export { CONVERSATION_WORKSPACE_EVENT_STREAM, CONVERSATION_WORKSPACE_GATEWAY } f
 export { ConversationWorkspaceGatewayError, ConversationWorkspaceGatewayErrorKinds } from "./lib/conversation-workspace-gateway.errors.js";
 export { ConversationWorkspaceStore } from "./lib/conversation-workspace.store.js";
 export { ConversationRunStore } from "./lib/conversation-run.store.js";
+export { _ParseConversationDetail, _ParseConversationRun, _ParseConversationSummary, _ParseConversationWorkspaceDirectory } from "./lib/conversation-workspace.validator.js";
 export { ConversationCreationStates, ConversationPersonalAgentStatuses, ConversationRunStates, ConversationWorkspaceRouteStates } from "./lib/conversation-workspace.types.js";
 export { ConversationLifecycles, ConversationModes, MessageRoles, MessageSources, MessageStates } from "@opencrane/models/conversations";
 export { ConversationEventStreamStatuses } from "@opencrane/state/conversation/adapter";

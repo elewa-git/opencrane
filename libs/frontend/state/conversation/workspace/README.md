@@ -25,6 +25,8 @@ steer, cancel, and retry controls. The split keeps ordinary chat commands indepe
 
 ## Public surface
 
+The package also owns the Zod response validators used by its transport adapter. Keeping runtime acceptance beside the workspace models means HTTP code only authenticates and transports data; it does not rebuild the domain shape.
+
 - `ConversationWorkspaceGateway` is the participant-scoped read and command port.
 - `CONVERSATION_WORKSPACE_EVENT_STREAM` binds the existing `ConversationEventStream` port; this package
   does not define a second stream contract.
