@@ -1,4 +1,5 @@
 import { type Meta, moduleMetadata, type StoryObj } from "@storybook/angular";
+import { expect, waitFor } from "storybook/test";
 
 import { ConversationLifecycles, ConversationModes, MessageRoles, MessageSources, MessageStates } from "@opencrane/models/conversations";
 import { ConversationEventStreamStatuses, type ConversationEventStream, type StreamConversationEventsCommand } from "@opencrane/state/conversation/adapter";
@@ -112,9 +113,26 @@ export default meta;
 type Story = StoryObj<ConversationWorkspacePageComponent>;
 
 /** Complete desktop shell using the real page and component-scoped stores. */
-export const Desktop: Story = { tags: ["visual-test"], decorators: [_Providers(new _StoryGateway(_Detail()), new _StoryStream(ConversationEventStreamStatuses.Live, __CreateAgUiStreamState()))] };
+export const Desktop: Story =
+{
+	tags: ["visual-test"],
+	decorators: [_Providers(new _StoryGateway(_Detail()), new _StoryStream(ConversationEventStreamStatuses.Live, __CreateAgUiStreamState()))],
+	play: async function play({ canvasElement })
+	{
+		const attachInput = await waitFor(function _FindAttachInput()
+		{
+			const input = canvasElement.querySelector<HTMLInputElement>('input[type="file"]');
+			expect(input).not.toBeNull();
+			if (input === null) throw new Error("Attach input is not rendered yet.");
+			return input;
+		}, { timeout: 5000 });
+		attachInput.focus();
+		await expect(attachInput).toHaveFocus();
+	}
+};
+
 /** Compact shell retains transcript, Activity, and Files in document order. */
-export const Compact: Story = { tags: ["visual-test"], decorators: [_Providers(new _StoryGateway(_Detail()), new _StoryStream(ConversationEventStreamStatuses.Live, __CreateAgUiStreamState()))], parameters: { viewport: { defaultViewport: "mobile1" } } };
+export const Compact: Story = { tags: ["visual-test", "visual-test-narrow"], decorators: [_Providers(new _StoryGateway(_Detail()), new _StoryStream(ConversationEventStreamStatuses.Live, __CreateAgUiStreamState()))], parameters: { viewport: { defaultViewport: "mobile1" } } };
 /** Reconnect keeps the last snapshot while explaining that the draft remains local. */
 export const Reconnecting: Story = { tags: ["visual-test"], decorators: [_Providers(new _StoryGateway(_Detail()), new _StoryStream(ConversationEventStreamStatuses.Reconnecting, __CreateAgUiStreamState()))] };
 /** Access loss purges a previously visible conversation through its live projection. */

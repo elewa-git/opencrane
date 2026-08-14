@@ -34,7 +34,7 @@ type Story = StoryObj<ConversationListComponent>;
 export const DesktopModes: Story = { tags: ["visual-test"], args: { items: _ITEMS, onboardingHistory: _ONBOARDING, onboardingHistoryStatus: ConversationOnboardingHistoryStatuses.Ready, selectedId: "agent-session" }, parameters: { viewport: { defaultViewport: "responsive" } } };
 
 /** Compact rail keeps the same readable selection contract. */
-export const CompactModes: Story = { tags: ["visual-test"], args: { items: _ITEMS, onboardingHistory: _ONBOARDING, onboardingHistoryStatus: ConversationOnboardingHistoryStatuses.Ready, onboardingSelected: true, selectedId: null }, parameters: { viewport: { defaultViewport: "mobile1" } } };
+export const CompactModes: Story = { tags: ["visual-test", "visual-test-narrow"], args: { items: _ITEMS, onboardingHistory: _ONBOARDING, onboardingHistoryStatus: ConversationOnboardingHistoryStatuses.Ready, onboardingSelected: true, selectedId: null }, parameters: { viewport: { defaultViewport: "mobile1" } } };
 
 /** Empty state gives the participant a clear next action. */
 export const Empty: Story = { tags: ["visual-test"], args: { items: [], onboardingHistoryStatus: ConversationOnboardingHistoryStatuses.NotRecorded, selectedId: null } };

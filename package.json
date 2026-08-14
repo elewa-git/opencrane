@@ -68,7 +68,6 @@
     "@types/supertest": "^6.0.0",
     "@typescript-eslint/eslint-plugin": "^8.63.0",
     "@typescript-eslint/parser": "^8.63.0",
-    "axe-playwright": "2.2.2",
     "esbuild": "^0.28.1",
     "eslint": "^10.7.0",
     "express-session": "^1.19.0",
