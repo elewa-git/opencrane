@@ -80,7 +80,7 @@ Build-time and container config (there is no server-side env here — it is a st
 | API/environment selection | `src/environments/environment*.ts` | `environment.ts` (mock) · `.prod.ts` (live) · `.dev-live.ts` (dev against live backend); chosen by build `fileReplacements` |
 | Static serving | `deploy/nginx.conf` | `nginxinc/nginx-unprivileged`, listens `:8080`, `/healthz` probe, immutable caching for hashed assets, SPA fallback to `index.html` |
 | Image | `deploy/Dockerfile` | `ghcr.io/elewa-git/opencrane-ui` |
-| Chart-native SPA workload | `helm/templates/_deployment.tpl`, `_service.tpl` | This app owns its optional Deployment/Service as named templates (see `HELM.md`), composed by the silo umbrella chart |
+| Chart-native SPA workload | `helm/templates/_deployment.tpl`, `_service.tpl` | This app owns its optional Deployment/Service as named templates (see `HELM.md`), composed by the silo umbrella chart. The composer supplies the reviewed image's exact OCI digest; deployment fails rather than reporting success if this workload does not roll out with that digest. |
 
 ## See also
 

@@ -16,7 +16,8 @@
 #   apps/_infra/deploy-k8s/platform/k8s-deploy.sh --release-version VERSION
 #     --from-release-version fresh|VERSION [--base-domain DOMAIN] [--namespace NS] [--release NAME]
 #                            [--image-tag TAG] [--storage-class SC]
-#                            [--opencrane-server-tag TAG]
+#                            [--opencrane-server-tag TAG] [--opencrane-ui-tag TAG]
+#                            [--opencrane-ui-digest sha256:DIGEST]
 #                            [--registry-pull-secret NAME --registry-pull-config-file FILE]
 #                            [--oidc-issuer-url URL] [--oidc-client-id ID]
 #                            [--oidc-redirect-uri URI] [--oidc-client-secret SECRET]
@@ -41,12 +42,9 @@
 # inherit the last release verbatim without refreshing chart defaults, or --reset-values to
 # intentionally drop prior overrides and start from chart defaults + this run's flags.
 #
-# Image-tag float guard: after a prior release's --reset-then-reuse-values upgrade, component
-# images may be pinned to a specific tag (e.g. sha-5036a0a). If this invocation does not restate
-# that tag (no --opencrane-server-tag) and does not explicitly float
-# (OPENCRANE_ALLOW_TAG_FLOAT=1), the script detects the prior pin, warns loudly, and
-# automatically re-pins from the last release so pinned tags float silently (a live gotcha from
-# 2026-07-12 deploy). Pass OPENCRANE_ALLOW_TAG_FLOAT=1 to intentionally float tags to chart-default.
+# Image-reference guard: the SPA is pinned by an OCI digest. An upgrade reuses its prior digest
+# before preflight when the caller does not supply one. OPENCRANE_ALLOW_TAG_FLOAT=1 is limited to
+# a disposable `.test` install that deliberately uses a local tag instead of an immutable browser build.
 #
 # Raw Helm-arg passthrough: --helm-arg ARG (or OPENCRANE_HELM_EXTRA_ARGS='ARG1 ARG2 …')
 # appends verbatim arguments to the final helm upgrade invocation. Useful for sanctioned
@@ -73,9 +71,9 @@
 # provider-custody Secret; the server then registers it with LiteLLM's encrypted credentials API
 # and seeds the provider model catalogue before it becomes ready. Never pass the API key as a flag.
 #
-# --image-tag pins the OpenCrane server image. To roll it to a different build,
-# pass --opencrane-server-tag (for example, sha-abc123); it overrides --image-tag.
-# Always bump component images this way —
+# --image-tag pins the OpenCrane server image. The SPA requires --opencrane-ui-digest, which is an
+# OCI digest from the reviewed build output. --opencrane-ui-tag is available only with
+# OPENCRANE_ALLOW_TAG_FLOAT=1 for a disposable local install. Always bump component images this way —
 # never `kubectl set image` / `kubectl patch` a managed deployment. An imperative
 # patch creates a `kubectl-*` field manager that owns the image field on the live
 # object and makes every later `helm upgrade` fail with a field-ownership conflict.
@@ -97,6 +95,7 @@ source "$SCRIPT_DIR/kubernetes-api-helm-args.sh"
 source "$SCRIPT_DIR/postgres-connection.sh"
 source "$SCRIPT_DIR/registry-pull-secret.sh"
 source "$SCRIPT_DIR/current-chart-sources.sh"
+source "$SCRIPT_DIR/control-plane-image-policy.sh"
 source "$SCRIPT_DIR/initial-model-provider.sh"
 source "$SCRIPT_DIR/database-convergence-classifier.sh"
 source "$SCRIPT_DIR/database-convergence-policy.sh"
@@ -137,6 +136,10 @@ NAMESPACE="opencrane-system"
 RELEASE="opencrane"
 IMAGE_TAG="latest"
 CONTROL_PLANE_TAG=""    # empty → falls back to IMAGE_TAG
+CONTROL_PLANE_SPA_TAG="${OPENCRANE_UI_TAG:-}" # empty → falls back to IMAGE_TAG
+CONTROL_PLANE_SPA_DIGEST="${OPENCRANE_UI_DIGEST:-}"
+CONTROL_PLANE_SPA_IMAGE=""
+KUBERNETES_CONTEXT=""
 REGISTRY_PULL_SECRET=""
 REGISTRY_PULL_CONFIG_FILE=""
 # --base-domain is the platform BASE domain for this install (e.g. dev.opencrane.ai).
@@ -155,7 +158,7 @@ if [[ -n "${OPENCRANE_HELM_EXTRA_ARGS:-}" ]]; then
   read -ra _env_helm_args <<< "$OPENCRANE_HELM_EXTRA_ARGS"
   EXTRA_HELM_ARGS+=("${_env_helm_args[@]}")
 fi
-ALLOW_TAG_FLOAT="${OPENCRANE_ALLOW_TAG_FLOAT:-0}"  # allow component images to float to chart-default
+ALLOW_TAG_FLOAT="${OPENCRANE_ALLOW_TAG_FLOAT:-0}"  # `.test`-only local image-tag escape
 # OIDC + per-cluster operator bootstrap. All default empty (OIDC stays disabled and the
 # seed grants operator to nobody — fail-closed). The seed also accepts an env var so a
 # secret manager / CI can supply it without it appearing on the command line.
@@ -233,6 +236,8 @@ while [[ $# -gt 0 ]]; do
     --release)       RELEASE="$2"; shift 2 ;;
     --image-tag)        IMAGE_TAG="$2"; shift 2 ;;
     --opencrane-server-tag) CONTROL_PLANE_TAG="$2"; shift 2 ;;
+    --opencrane-ui-tag) CONTROL_PLANE_SPA_TAG="$2"; shift 2 ;;
+    --opencrane-ui-digest) CONTROL_PLANE_SPA_DIGEST="$2"; shift 2 ;;
     --registry-pull-secret) REGISTRY_PULL_SECRET="$2"; shift 2 ;;
     --registry-pull-config-file) REGISTRY_PULL_CONFIG_FILE="$2"; shift 2 ;;
     --storage-class) STORAGE_CLASS="$2"; shift 2 ;;
@@ -292,6 +297,7 @@ if [[ "$DATABASE_CONVERGENCE_MIGRATION" == "null" ]]; then
   fi
 fi
 kubectl cluster-info >/dev/null 2>&1 || { err "kubectl can't reach a cluster. Point your context at the target cluster first."; exit 1; }
+KUBERNETES_CONTEXT="$(kubectl config current-context 2>/dev/null || true)"
 # --base-domain validation. When supplied it must be a syntactically valid, lowercase
 # FQDN (≥2 labels, no scheme/port/path, no trailing dot) so it can stand in for
 # release hosts.
@@ -306,6 +312,31 @@ _validate_base_domain() {
 if [[ -n "$BASE_DOMAIN" ]]; then
   _validate_base_domain "$BASE_DOMAIN"
 fi
+
+# Resolve the server and browser image before preflight. An upgrade may need the last Helm digest
+# because reset-then-reuse does not preserve an omitted component override in a visible argument.
+_resolve_control_plane_image_tags() {
+  local prior_server_tag
+  local prior_spa_digest
+  local prior_values
+  if helm status "$RELEASE" -n "$NAMESPACE" >/dev/null 2>&1 && [[ "$ALLOW_TAG_FLOAT" != "1" ]]; then
+    prior_values="$(helm get values "$RELEASE" -n "$NAMESPACE" -o json 2>/dev/null || echo '{}')"
+    prior_server_tag="$(jq -r '.clustertenantManager.image.tag // empty' <<<"$prior_values")"
+    prior_spa_digest="$(jq -r '.controlPlaneSpa.image.digest // empty' <<<"$prior_values")"
+    if [[ -n "$prior_server_tag" && -z "$CONTROL_PLANE_TAG" ]]; then
+      warn "Prior release pins the OpenCrane server to '$prior_server_tag'; reusing it. Pass OPENCRANE_ALLOW_TAG_FLOAT=1 to choose a chart default deliberately."
+      CONTROL_PLANE_TAG="$prior_server_tag"
+    fi
+    if [[ -n "$prior_spa_digest" && -z "$CONTROL_PLANE_SPA_DIGEST" ]]; then
+      warn "Prior release pins the OpenCrane SPA to '$prior_spa_digest'; reusing it."
+      CONTROL_PLANE_SPA_DIGEST="$prior_spa_digest"
+    fi
+  fi
+
+  resolve_control_plane_image_reference || exit 1
+}
+_resolve_control_plane_image_tags
+
 # --preflight: fail-FAST environment validation, run BEFORE any cluster mutation. Each
 # check appends to PF_FAILS; a non-empty list at the end exits 1 with every remediation,
 # so the operator fixes the cluster ONCE rather than chasing one half-broken install at a
@@ -374,15 +405,25 @@ _run_preflight() {
   fi
 
   # 3. First-party images pullable — catch a private/typo'd registry before the rollout
-  #    sits in ImagePullBackOff. A best-effort manifest check (skopeo/crane/docker) that
-  #    only WARNS if no inspector is available (we never block on a missing local tool).
-  local _img="ghcr.io/elewa-git/opencrane-server:${CONTROL_PLANE_TAG:-$IMAGE_TAG}"
+  #    sits in ImagePullBackOff. The server and SPA are one browser release, so validate both
+  #    resolved images. A missing local inspector warns rather than changing cluster state.
+  local _img
+  local _images=(
+    "ghcr.io/elewa-git/opencrane-server:${CP_TAG}"
+    "$CONTROL_PLANE_SPA_IMAGE"
+  )
   if command -v skopeo >/dev/null 2>&1; then
-    skopeo inspect "docker://$_img" >/dev/null 2>&1 || PF_FAILS+=("First-party image not pullable: $_img (skopeo inspect failed). Check the registry/tag and your pull credentials.")
+    for _img in "${_images[@]}"; do
+      skopeo inspect "docker://$_img" >/dev/null 2>&1 || PF_FAILS+=("First-party image not pullable: $_img (skopeo inspect failed). Check the registry/tag and your pull credentials.")
+    done
   elif command -v crane >/dev/null 2>&1; then
-    crane manifest "$_img" >/dev/null 2>&1 || PF_FAILS+=("First-party image not pullable: $_img (crane manifest failed). Check the registry/tag and your pull credentials.")
+    for _img in "${_images[@]}"; do
+      crane manifest "$_img" >/dev/null 2>&1 || PF_FAILS+=("First-party image not pullable: $_img (crane manifest failed). Check the registry/tag and your pull credentials.")
+    done
   elif command -v docker >/dev/null 2>&1; then
-    docker manifest inspect "$_img" >/dev/null 2>&1 || PF_FAILS+=("First-party image not pullable: $_img (docker manifest inspect failed). Check the registry/tag and your pull credentials.")
+    for _img in "${_images[@]}"; do
+      docker manifest inspect "$_img" >/dev/null 2>&1 || PF_FAILS+=("First-party image not pullable: $_img (docker manifest inspect failed). Check the registry/tag and your pull credentials.")
+    done
   else
     warn "Preflight: no image inspector (skopeo/crane/docker) — skipping the image-pull check."
   fi
@@ -451,8 +492,10 @@ if [[ -z "${LITELLM_SALT_KEY:-}" ]]; then
   LITELLM_SALT_KEY="${LITELLM_SALT_KEY:-sk-$(_gen_secret)}"
 fi
 
-log "Target cluster: $(kubectl config current-context)"
-log "Namespace: $NAMESPACE   Release: $RELEASE   Image tag: $IMAGE_TAG"
+log "Target cluster: $KUBERNETES_CONTEXT"
+log "Namespace: $NAMESPACE   Release: $RELEASE"
+log "OpenCrane server image: ghcr.io/elewa-git/opencrane-server:${CP_TAG}"
+log "OpenCrane SPA image: $CONTROL_PLANE_SPA_IMAGE"
 
 # 1. Install one app-owned PostgreSQL server for this ClusterTenant. Logical databases
 # share its pod/PVC but never credentials: each has its own login role, basic-auth input,
@@ -828,51 +871,17 @@ helm_args=(upgrade --install "$RELEASE" "$CHART_DIR" --namespace "$NAMESPACE" --
   --set "litellm.existingSecret=opencrane-litellm"
   "${MEMORY_GATEWAY_KUBERNETES_API_ARGS[@]}")
 [[ -n "$REGISTRY_PULL_SECRET" ]] && helm_args+=(--set-string "global.imagePullSecret=$REGISTRY_PULL_SECRET")
-# Pinned-tag float guard: detect if the prior release pinned component images to a specific
-# tag. If this invocation does not restate it (no --opencrane-server-tag),
-# re-pin from the prior release so they don't silently float to chart-default (a 2026-07-12 live gotcha).
-# Escape: OPENCRANE_ALLOW_TAG_FLOAT=1 to intentionally float tags.
-_enforce_tag_pins() {
-  # Only check on an existing release (upgrade path). Fresh installs have no prior values.
-  if ! helm status "$RELEASE" -n "$NAMESPACE" >/dev/null 2>&1; then
-    return 0
-  fi
-  # Allow explicit float escape.
-  if [[ "$ALLOW_TAG_FLOAT" == "1" ]]; then
-    return 0
-  fi
-  # Check what tags are pinned in the PRIOR release, and what THIS run explicitly sets.
-  local prior_cp prior_vals
-  prior_vals="$(helm get values "$RELEASE" -n "$NAMESPACE" -o json 2>/dev/null || echo '{}')"
-
-  # Extract tags using jq if available, otherwise fall back to grep.
-  if command -v jq >/dev/null 2>&1; then
-    prior_cp="$(echo "$prior_vals" | jq -r '.clustertenantManager.image.tag // empty')"
-  else
-    # Grep fallback for when jq is not available (simple pattern, may miss nested structures).
-    prior_cp="$(echo "$prior_vals" | grep -o '"clustertenantManager":[^}]*"tag":"[^"]*' | grep -o '"tag":"[^"]*' | head -1 | cut -d'"' -f4 || true)"
-  fi
-
-  local need_warn=0
-  # If prior release had a tag and this run doesn't set one, re-pin it.
-  if [[ -n "$prior_cp" && -z "$CONTROL_PLANE_TAG" ]]; then
-    warn "Prior release had clustertenantManager.image.tag='$prior_cp' — re-pinning (to avoid silent float to chart-default). Pass OPENCRANE_ALLOW_TAG_FLOAT=1 to float intentionally."
-    CONTROL_PLANE_TAG="$prior_cp"
-    need_warn=1
-  fi
-  if [[ "$need_warn" == "1" ]]; then
-    warn "Image-tag re-pin: tags were auto-restored from the prior release. Run evidence: $(date -u +%Y-%m-%dT%H:%M:%SZ) $(hostname)"
-  fi
-}
-_enforce_tag_pins
-
 # Per-component tags override the unified --image-tag so a single component can be
 # rolled through Helm (which keeps Helm the sole owner of the image field). Each
 # falls back to IMAGE_TAG when its flag is unset, preserving the all-same default.
-CP_TAG="${CONTROL_PLANE_TAG:-$IMAGE_TAG}"
 # --set-string: a tag like "1.2.3" or a numeric-looking sha must never be parsed by YAML as a number
 # (same guideline as the OIDC string values below; see the deploy ledger).
 [[ -n "$CP_TAG" ]] && helm_args+=(--set-string "clustertenantManager.image.tag=$CP_TAG")
+if [[ "$ALLOW_TAG_FLOAT" == "1" ]]; then
+  helm_args+=(--set-string "controlPlaneSpa.image.digest=" --set-string "controlPlaneSpa.image.tag=$CONTROL_PLANE_SPA_TAG")
+else
+  helm_args+=(--set-string "controlPlaneSpa.image.digest=$CONTROL_PLANE_SPA_DIGEST")
+fi
 # --base-domain drives ingress.domain; controlPlaneHost defaults to platform.<domain>
 # in the chart. Setting it explicitly here keeps one source of truth for release hosts.
 [[ -n "$BASE_DOMAIN" ]] && helm_args+=(--set "ingress.domain=$BASE_DOMAIN")
@@ -944,6 +953,8 @@ run_opencrane_finalization_stage restart_database_consumers_for_finalization "$N
 for _comp in fleet-manager clustertenant-manager; do
   run_opencrane_finalization_stage wait_for_final_deployment_if_present "${RELEASE}-${_comp}" || exit $?
 done
+run_opencrane_finalization_stage wait_for_final_deployment_if_present "${RELEASE}-opencrane-ui-spa" || exit $?
+run_opencrane_finalization_stage _verify_control_plane_spa_rollout || exit $?
 
 run_opencrane_finalization_stage _wait_for_release_certificate || exit $?
 run_opencrane_finalization_stage _post_deploy_verify || exit $?

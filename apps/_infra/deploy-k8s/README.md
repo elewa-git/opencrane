@@ -65,8 +65,9 @@ if the controller identity is compromised. The admission boundary requires Kuber
 
 `Entrypoint: deploy.sh` — the per-ClusterTenant silo deploy profile, a thin wrapper over the shared
 install core (`platform/k8s-deploy.sh`). It requires a base domain, a ClusterTenant name, one
-`--first-user-email` value, and one pre-created PostgreSQL basic-auth Secret per logical database
-(server, obot, litellm). The named email is non-secret and only selects the verified OIDC identity
+`--first-user-email` value, one pre-created PostgreSQL basic-auth Secret per logical database
+(server, Obot, LiteLLM, and database administration), and the reviewed single-page application (SPA)
+`--opencrane-ui-digest`. The named email is non-secret and only selects the verified OIDC identity
 that can claim the silo's one subject-bound Owner row at first login; deployment never writes a user
 row directly. A new silo can also pass `--initial-model-provider` with
 `OPENCRANE_INITIAL_MODEL_API_KEY` in its environment; the key never enters Helm values and is
@@ -123,6 +124,11 @@ package imports it.
 - `--initial-model-provider` plus `OPENCRANE_INITIAL_MODEL_API_KEY` — optional bootstrap of the first
   supported model provider. The engine writes the key to the release-local provider-custody Secret;
   the server then registers its encrypted LiteLLM credential and catalogue before accepting work.
+- `--opencrane-ui-digest` — required Open Container Initiative (OCI) `sha256:` identity of the reviewed SPA build. The engine
+  renders `repository@digest`, waits for the SPA rollout, and refuses success if the Deployment or
+  ready Pods do not show that image. `OPENCRANE_ALLOW_TAG_FLOAT=1` is only for a disposable local
+  install on a k3d context under a `.test` domain whose image never left the local runtime; it is
+  rejected for every browser release hostname, including `testv4.dev.opencrane.ai`.
 - `teardown.sh --release-version <version> --confirm-retire <tenant>` — destructive retirement; the repository-owned `protected-cluster-tenants.json` registry blocks active tenants independently of caller input
   requires the exact installed repository version, tenant text, kubectl context, and external
   retirement acknowledgements for the derived DNS host and Zitadel callback. The release manifest

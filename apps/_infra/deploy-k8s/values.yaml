@@ -781,7 +781,10 @@ controlPlaneSpa:
     # apps/opencrane-ui/deploy/Dockerfile — a static `nx build opencrane-ui` bundle
     # served by nginxinc/nginx-unprivileged.
     repository: ghcr.io/elewa-git/opencrane-ui
-    tag: latest
+    # The deploy engine sets an exact OCI digest for every supported install. This unconfigured
+    # tag exists only so direct Helm rendering is explicit rather than silently floating latest.
+    tag: unconfigured
+    digest: ""
     pullPolicy: IfNotPresent
   replicas: 1
   service:

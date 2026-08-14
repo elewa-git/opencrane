@@ -37,6 +37,62 @@ _wait_for_release_certificate() {
   fi
 }
 
+# Reject a Helm success that leaves a stale, missing, or unavailable browser build. This check is
+# separate from the advisory endpoint diagnostics because onboarding must not claim readiness when
+# the same-release SPA has not actually rolled out.
+_verify_control_plane_spa_rollout() {
+  local available_replicas
+  local conditions
+  local deployment
+  local desired_replicas
+  local expected_digest
+  local observed_image
+  local observed_image_ids
+  local ready_replicas
+  local unavailable_replicas
+  local updated_replicas
+  if [[ -z "${CONTROL_PLANE_SPA_IMAGE:-}" ]]; then
+    err "OpenCrane SPA rollout cannot be verified because its desired image was not resolved."
+    return 1
+  fi
+  if ! deployment="$(kubectl get "deployment/${RELEASE}-opencrane-ui-spa" -n "$NAMESPACE" -o json)"; then
+    err "OpenCrane SPA Deployment '${RELEASE}-opencrane-ui-spa' is missing or cannot be read."
+    return 1
+  fi
+  observed_image="$(jq -r '.spec.template.spec.containers[] | select(.name == "opencrane-ui-spa") | .image // empty' <<<"$deployment")"
+  desired_replicas="$(jq -r '.spec.replicas // 1' <<<"$deployment")"
+  updated_replicas="$(jq -r '.status.updatedReplicas // 0' <<<"$deployment")"
+  ready_replicas="$(jq -r '.status.readyReplicas // 0' <<<"$deployment")"
+  available_replicas="$(jq -r '.status.availableReplicas // 0' <<<"$deployment")"
+  unavailable_replicas="$(jq -r '.status.unavailableReplicas // 0' <<<"$deployment")"
+  conditions="$(jq -r '[.status.conditions[]? | "\(.type)=\(.status) reason=\(.reason // "none") message=\(.message // "none")"] | join("; ")' <<<"$deployment")"
+  observed_image_ids="$(kubectl get pods -n "$NAMESPACE" \
+    -l "app.kubernetes.io/instance=${RELEASE},app.kubernetes.io/component=opencrane-ui-spa" -o json \
+    | jq -r '[.items[].status.containerStatuses[]? | select(.name == "opencrane-ui-spa") | .imageID // empty] | unique | join(", ")')"
+
+  log "OpenCrane SPA rollout: desired image=$CONTROL_PLANE_SPA_IMAGE observed image=${observed_image:-missing} replicas desired=$desired_replicas updated=$updated_replicas ready=$ready_replicas available=$available_replicas unavailable=$unavailable_replicas"
+  log "OpenCrane SPA observed image IDs: ${observed_image_ids:-missing}"
+  log "OpenCrane SPA rollout conditions: ${conditions:-none}"
+  if [[ "$observed_image" != "$CONTROL_PLANE_SPA_IMAGE" ]]; then
+    err "OpenCrane SPA rollout uses '${observed_image:-no image}' instead of '$CONTROL_PLANE_SPA_IMAGE'."
+    return 1
+  fi
+  if [[ "$updated_replicas" != "$desired_replicas" || "$ready_replicas" != "$desired_replicas" \
+    || "$available_replicas" != "$desired_replicas" || "$unavailable_replicas" != "0" ]]; then
+    err "OpenCrane SPA rollout is not fully available. Check Deployment '${RELEASE}-opencrane-ui-spa' and the reported rollout conditions."
+    return 1
+  fi
+  if [[ -z "$observed_image_ids" ]]; then
+    err "OpenCrane SPA rollout has no observed container image ID."
+    return 1
+  fi
+  expected_digest="${CONTROL_PLANE_SPA_IMAGE##*@}"
+  if [[ "$expected_digest" == sha256:* && "$observed_image_ids" != *"$expected_digest"* ]]; then
+    err "OpenCrane SPA Pod image IDs do not include the deployed digest '$expected_digest'."
+    return 1
+  fi
+}
+
 # Verification stays advisory: every failed diagnostic becomes a warning, never a failed release.
 _post_deploy_verify() {
   [[ "$VERIFY" == "1" ]] || return 0

@@ -1,4 +1,8 @@
 {{- define "opencrane.ui.deployment" -}}
+{{- $image := printf "%s:%s" .Values.controlPlaneSpa.image.repository .Values.controlPlaneSpa.image.tag -}}
+{{- if .Values.controlPlaneSpa.image.digest -}}
+{{- $image = printf "%s@%s" .Values.controlPlaneSpa.image.repository .Values.controlPlaneSpa.image.digest -}}
+{{- end -}}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -22,7 +26,7 @@ spec:
         {{- toYaml .Values.controlPlaneSpa.podSecurityContext | nindent 8 }}
       containers:
         - name: opencrane-ui-spa
-          image: "{{ .Values.controlPlaneSpa.image.repository }}:{{ .Values.controlPlaneSpa.image.tag }}"
+          image: "{{ $image }}"
           imagePullPolicy: {{ .Values.controlPlaneSpa.image.pullPolicy }}
           securityContext:
             {{- toYaml .Values.controlPlaneSpa.securityContext | nindent 12 }}
