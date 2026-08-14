@@ -4,6 +4,8 @@ import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { releaseStampComparable, validateWorkspace } from "./release-versioning/core.mjs";
 
+const _GIT_TEXT_MAX_BUFFER = 16 * 1024 * 1024;
+
 function _Argument(name)
 {
 	const index = process.argv.indexOf(name);
@@ -40,6 +42,7 @@ function _BaseText(base, file)
 	{
 		return execFileSync("git", ["show", `${base}:${file}`], {
 			encoding: "utf8",
+			maxBuffer: _GIT_TEXT_MAX_BUFFER,
 			stdio: ["ignore", "pipe", "ignore"],
 		});
 	}
