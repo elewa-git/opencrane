@@ -229,7 +229,7 @@
       "id": "cognee",
       "podClass": "Deployment/cognee",
       "renderedPodClass": "Deployment/opencrane-cognee",
-      "image": "cognee/cognee:1.2.1",
+      "image": "ghcr.io/elewa-git/opencrane-cognee@sha256:<release-digest>",
       "owner": "apps/_infra/cognee",
       "source": { "type": "file", "path": "apps/_infra/cognee/helm/templates/_resources.tpl", "anchor": "kind: Deployment", "coversLocalTemplate": true },
       "composition": { "path": "apps/_infra/deploy-k8s/templates/app-rollups.yaml", "anchor": "include \"opencrane.cognee.resources\"" }

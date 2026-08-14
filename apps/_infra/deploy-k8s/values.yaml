@@ -527,10 +527,10 @@ clustertenantManager:
     install: true
     # -- In-chart Cognee workload settings (only consumed when `install` is true).
     image:
-      repository: cognee/cognee
-      # -- Pinned to an audited stable tag for supply-chain integrity + reproducible
-      #    deploys. Bump deliberately after re-auditing; never use a rolling `latest`.
-      tag: "1.2.1"
+      repository: ghcr.io/elewa-git/opencrane-cognee
+      # -- Thin OpenCrane derivative of Cognee 1.2.1 with its checksum-pinned LadybugDB
+      #    json extension already present. Bump deliberately; never use a rolling `latest`.
+      tag: "0.8.1"
       pullPolicy: IfNotPresent
     service:
       port: 8000

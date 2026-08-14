@@ -59,9 +59,9 @@
     },
     "cognee": {
       "root": "apps/_infra/cognee",
-      "adaptedVersion": "0.8.0",
-      "chartVersion": "0.8.0",
-      "chartAppVersion": "0.8.0"
+      "adaptedVersion": "0.8.1",
+      "chartVersion": "0.8.1",
+      "chartAppVersion": "0.8.1"
     },
     "deploy-k8s": {
       "root": "apps/_infra/deploy-k8s",

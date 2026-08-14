@@ -34,6 +34,7 @@ SMOKE_IMAGES=(
   opencrane/channel-proxy:develop-smoke
   opencrane/memory-gateway:develop-smoke
   opencrane/artifact-service:develop-smoke
+  opencrane/cognee:develop-smoke
 )
 
 # Every image this script builds carries this label so teardown can prune exactly the run's
@@ -213,6 +214,8 @@ _prepare_images()
     opencrane-memory-gateway apps/memory-gateway/deploy/Dockerfile
   _prepare_image artifact-service opencrane/artifact-service:develop-smoke \
     opencrane-artifact-service apps/artifact-service/deploy/Dockerfile
+  _prepare_image cognee opencrane/cognee:develop-smoke \
+    opencrane-cognee apps/_infra/cognee/deploy/Dockerfile
 }
 
 _create_database_credentials()

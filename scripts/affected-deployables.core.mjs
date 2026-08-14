@@ -1,6 +1,7 @@
 const DEVELOP_SMOKE_IMAGES = [
 	"artifact-service",
 	"channel-proxy",
+	"cognee",
 	"memory-gateway",
 	"opencrane",
 	"opencrane-ui",

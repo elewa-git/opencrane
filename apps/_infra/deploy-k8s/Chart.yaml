@@ -59,7 +59,7 @@ dependencies:
     version: 0.8.0
     repository: "file://../../tool-runner/helm"
   - name: opencrane-cognee
-    version: 0.8.0
+    version: 0.8.1
     repository: "file://../cognee/helm"
   - name: opencrane-litellm
     version: 0.8.0
