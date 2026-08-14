@@ -13,7 +13,7 @@ import { ConversationAuthorityOutcomes, ConversationWriteDenialReasons, type Con
 import type { ConversationCaller } from "../types/conversation-caller.types.js";
 import type { SubmitConversationMessageRequest } from "../types/conversation-request.types.js";
 import type { ConversationMessageView } from "../types/conversation-view.types.js";
-import type { ConversationAttachmentAdmissionFactory, ConversationMessageAdmissionUnitOfWork, ConversationMessageIdempotencyConflict, ConversationMessageSubmissionPreflight } from "../conversation-message-admission.types.js";
+import type { ConversationAttachmentAdmissionFactory, ConversationAttachmentAdmissionPort, ConversationMessageAdmissionUnitOfWork, ConversationMessageIdempotencyConflict, ConversationMessageSubmissionPreflight } from "../conversation-message-admission.types.js";
 import { PrismaConversationMutationRepository } from "./prisma-conversation-mutation-repository.js";
 import type { ConversationMutationRepository, ConversationMutationRepositoryFactory } from "./prisma-conversation-mutation-repository.types.js";
 import { PrismaConversationQueryRepository } from "./prisma-conversation-query-repository.js";
@@ -178,7 +178,7 @@ export class PrismaConversationMessageAdmissionUnitOfWork implements Conversatio
 	}
 
 	/** Runs one ordinary-message write against an exact serializable mutation repository. */
-	private async _mutate<T>(operation: (repository: ConversationMutationRepository, attachments: import("../conversation-message-admission.types.js").ConversationAttachmentAdmissionPort) => Promise<T>): Promise<T>
+	private async _mutate<T>(operation: (repository: ConversationMutationRepository, attachments: ConversationAttachmentAdmissionPort) => Promise<T>): Promise<T>
 	{
 		const createAttachmentAdmission = this.createAttachmentAdmission;
 		return this.prisma.$transaction(async function _Mutate(transaction)
