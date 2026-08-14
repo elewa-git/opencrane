@@ -9,6 +9,7 @@ clustertenantManager:
     image:
       repository: opencrane/cognee
       tag: develop-smoke
+      digest: ""
       pullPolicy: IfNotPresent
     persistence:
       size: 1Gi

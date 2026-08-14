@@ -77,7 +77,11 @@ spec:
     spec:
       containers:
         - name: cognee
-          image: "{{ .Values.clustertenantManager.cognee.image.repository }}:{{ .Values.clustertenantManager.cognee.image.tag }}"
+          {{- with .Values.clustertenantManager.cognee.image.digest }}
+          image: "{{ $.Values.clustertenantManager.cognee.image.repository }}@{{ . }}"
+          {{- else }}
+          image: "{{ .Values.clustertenantManager.cognee.image.repository }}:{{ required "Cognee image tag is required when no digest is supplied" .Values.clustertenantManager.cognee.image.tag }}"
+          {{- end }}
           imagePullPolicy: {{ .Values.clustertenantManager.cognee.image.pullPolicy }}
           ports:
             - name: http

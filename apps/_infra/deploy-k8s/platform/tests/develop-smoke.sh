@@ -488,6 +488,7 @@ export TIMEOUT_SECONDS
   --release-version "$(jq -r '.version' "$ROOT_DIR/package.json")" \
   --from-release-version fresh \
   --image-tag develop-smoke \
+  --cognee-tag develop-smoke \
   --storage-class "$SMOKE_STORAGE_CLASS" \
   --postgres-credentials-secret "$POSTGRES_CREDENTIALS_SECRET" \
   --obot-postgres-credentials-secret "$OBOT_POSTGRES_CREDENTIALS_SECRET" \

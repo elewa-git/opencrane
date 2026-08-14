@@ -10,10 +10,20 @@ docker run --rm --network none --platform linux/amd64 --entrypoint python "$imag
 import hashlib
 import pathlib
 import platform
+import tempfile
+
+import ladybug
 
 extension = pathlib.Path("'"$extension_path"'")
 assert platform.machine() in {"amd64", "x86_64"}
 assert extension.is_file()
 assert hashlib.sha256(extension.read_bytes()).hexdigest() == "'"$extension_sha"'"
-print("Cognee LadybugDB json extension is available with networking disabled.")
+with tempfile.TemporaryDirectory() as directory:
+    database = ladybug.Database(str(pathlib.Path(directory) / "offline-smoke"))
+    database.init_database()
+    connection = ladybug.Connection(database)
+    connection.execute("LOAD EXTENSION JSON;")
+    connection.close()
+    database.close()
+print("Cognee loaded the pinned LadybugDB json extension with networking disabled.")
 '

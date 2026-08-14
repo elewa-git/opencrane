@@ -1,6 +1,10 @@
 # syntax=docker/dockerfile:1.7
 FROM --platform=linux/amd64 cognee/cognee:1.2.1
 
+# LadybugDB derives its extension cache from HOME. Kubernetes does not synthesize HOME when the
+# image omits it, so make the build-time and pod runtime path identical.
+ENV HOME=/root
+
 ARG TARGETARCH
 RUN test "${TARGETARCH:-amd64}" = "amd64" \
   && mkdir -p /root/.lbdb/extension/v0.17.0/linux_amd64/json

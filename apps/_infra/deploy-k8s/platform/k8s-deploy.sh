@@ -18,6 +18,7 @@
 #                            [--image-tag TAG] [--storage-class SC]
 #                            [--opencrane-server-tag TAG] [--opencrane-ui-tag TAG]
 #                            [--opencrane-ui-digest sha256:DIGEST]
+#                            [--cognee-digest sha256:DIGEST] [--cognee-tag TAG]
 #                            [--registry-pull-secret NAME --registry-pull-config-file FILE]
 #                            [--oidc-issuer-url URL] [--oidc-client-id ID]
 #                            [--oidc-redirect-uri URI] [--oidc-client-secret SECRET]
@@ -42,9 +43,9 @@
 # inherit the last release verbatim without refreshing chart defaults, or --reset-values to
 # intentionally drop prior overrides and start from chart defaults + this run's flags.
 #
-# Image-reference guard: the SPA is pinned by an OCI digest. An upgrade reuses its prior digest
-# before preflight when the caller does not supply one. OPENCRANE_ALLOW_TAG_FLOAT=1 is limited to
-# a disposable `.test` install that deliberately uses a local tag instead of an immutable browser build.
+# Image-reference guard: the SPA and Cognee are pinned by OCI digests. An upgrade reuses their prior
+# digests before preflight when the caller does not supply them. OPENCRANE_ALLOW_TAG_FLOAT=1 is
+# limited to a disposable `.test` install that deliberately uses local imported tags.
 #
 # Raw Helm-arg passthrough: --helm-arg ARG (or OPENCRANE_HELM_EXTRA_ARGS='ARG1 ARG2 …')
 # appends verbatim arguments to the final helm upgrade invocation. Useful for sanctioned
@@ -71,9 +72,9 @@
 # provider-custody Secret; the server then registers it with LiteLLM's encrypted credentials API
 # and seeds the provider model catalogue before it becomes ready. Never pass the API key as a flag.
 #
-# --image-tag pins the OpenCrane server image. The SPA requires --opencrane-ui-digest, which is an
-# OCI digest from the reviewed build output. --opencrane-ui-tag is available only with
-# OPENCRANE_ALLOW_TAG_FLOAT=1 for a disposable local install. Always bump component images this way —
+# --image-tag pins the OpenCrane server image. The SPA and Cognee require exact OCI digests from the
+# reviewed build output. Their tag flags are available only with OPENCRANE_ALLOW_TAG_FLOAT=1 for a
+# disposable local install. Always bump component images this way —
 # never `kubectl set image` / `kubectl patch` a managed deployment. An imperative
 # patch creates a `kubectl-*` field manager that owns the image field on the live
 # object and makes every later `helm upgrade` fail with a field-ownership conflict.
@@ -96,6 +97,12 @@ source "$SCRIPT_DIR/postgres-connection.sh"
 source "$SCRIPT_DIR/registry-pull-secret.sh"
 source "$SCRIPT_DIR/current-chart-sources.sh"
 source "$SCRIPT_DIR/control-plane-image-policy.sh"
+COGNEE_IMAGE_POLICY="$SCRIPT_DIR/../../cognee/deploy/image-policy.sh"
+if [[ ! -f "$COGNEE_IMAGE_POLICY" ]]; then
+  echo "[k8s-deploy] Cognee image policy is missing at '$COGNEE_IMAGE_POLICY'." >&2
+  exit 1
+fi
+source "$COGNEE_IMAGE_POLICY"
 source "$SCRIPT_DIR/initial-model-provider.sh"
 source "$SCRIPT_DIR/database-convergence-classifier.sh"
 source "$SCRIPT_DIR/database-convergence-policy.sh"
@@ -139,6 +146,9 @@ CONTROL_PLANE_TAG=""    # empty → falls back to IMAGE_TAG
 CONTROL_PLANE_SPA_TAG="${OPENCRANE_UI_TAG:-}" # empty → falls back to IMAGE_TAG
 CONTROL_PLANE_SPA_DIGEST="${OPENCRANE_UI_DIGEST:-}"
 CONTROL_PLANE_SPA_IMAGE=""
+COGNEE_TAG="${OPENCRANE_COGNEE_TAG:-}"
+COGNEE_DIGEST="${OPENCRANE_COGNEE_DIGEST:-}"
+COGNEE_IMAGE=""
 KUBERNETES_CONTEXT=""
 REGISTRY_PULL_SECRET=""
 REGISTRY_PULL_CONFIG_FILE=""
@@ -238,6 +248,8 @@ while [[ $# -gt 0 ]]; do
     --opencrane-server-tag) CONTROL_PLANE_TAG="$2"; shift 2 ;;
     --opencrane-ui-tag) CONTROL_PLANE_SPA_TAG="$2"; shift 2 ;;
     --opencrane-ui-digest) CONTROL_PLANE_SPA_DIGEST="$2"; shift 2 ;;
+    --cognee-tag) COGNEE_TAG="$2"; shift 2 ;;
+    --cognee-digest) COGNEE_DIGEST="$2"; shift 2 ;;
     --registry-pull-secret) REGISTRY_PULL_SECRET="$2"; shift 2 ;;
     --registry-pull-config-file) REGISTRY_PULL_CONFIG_FILE="$2"; shift 2 ;;
     --storage-class) STORAGE_CLASS="$2"; shift 2 ;;
@@ -313,16 +325,18 @@ if [[ -n "$BASE_DOMAIN" ]]; then
   _validate_base_domain "$BASE_DOMAIN"
 fi
 
-# Resolve the server and browser image before preflight. An upgrade may need the last Helm digest
-# because reset-then-reuse does not preserve an omitted component override in a visible argument.
-_resolve_control_plane_image_tags() {
+# Resolve release images before preflight. An upgrade may need the last Helm digests because
+# reset-then-reuse does not preserve an omitted component override in a visible argument.
+_resolve_release_images() {
   local prior_server_tag
   local prior_spa_digest
+  local prior_cognee_digest
   local prior_values
   if helm status "$RELEASE" -n "$NAMESPACE" >/dev/null 2>&1 && [[ "$ALLOW_TAG_FLOAT" != "1" ]]; then
     prior_values="$(helm get values "$RELEASE" -n "$NAMESPACE" -o json 2>/dev/null || echo '{}')"
     prior_server_tag="$(jq -r '.clustertenantManager.image.tag // empty' <<<"$prior_values")"
     prior_spa_digest="$(jq -r '.controlPlaneSpa.image.digest // empty' <<<"$prior_values")"
+    prior_cognee_digest="$(jq -r '.clustertenantManager.cognee.image.digest // empty' <<<"$prior_values")"
     if [[ -n "$prior_server_tag" && -z "$CONTROL_PLANE_TAG" ]]; then
       warn "Prior release pins the OpenCrane server to '$prior_server_tag'; reusing it. Pass OPENCRANE_ALLOW_TAG_FLOAT=1 to choose a chart default deliberately."
       CONTROL_PLANE_TAG="$prior_server_tag"
@@ -331,11 +345,16 @@ _resolve_control_plane_image_tags() {
       warn "Prior release pins the OpenCrane SPA to '$prior_spa_digest'; reusing it."
       CONTROL_PLANE_SPA_DIGEST="$prior_spa_digest"
     fi
+    if [[ -n "$prior_cognee_digest" && -z "$COGNEE_DIGEST" ]]; then
+      warn "Prior release pins Cognee to '$prior_cognee_digest'; reusing it."
+      COGNEE_DIGEST="$prior_cognee_digest"
+    fi
   fi
 
   resolve_control_plane_image_reference || exit 1
+  resolve_cognee_image_reference || exit 1
 }
-_resolve_control_plane_image_tags
+_resolve_release_images
 
 # --preflight: fail-FAST environment validation, run BEFORE any cluster mutation. Each
 # check appends to PF_FAILS; a non-empty list at the end exits 1 with every remediation,
@@ -411,6 +430,7 @@ _run_preflight() {
   local _images=(
     "ghcr.io/elewa-git/opencrane-server:${CP_TAG}"
     "$CONTROL_PLANE_SPA_IMAGE"
+    "$COGNEE_IMAGE"
   )
   if command -v skopeo >/dev/null 2>&1; then
     for _img in "${_images[@]}"; do
@@ -496,6 +516,7 @@ log "Target cluster: $KUBERNETES_CONTEXT"
 log "Namespace: $NAMESPACE   Release: $RELEASE"
 log "OpenCrane server image: ghcr.io/elewa-git/opencrane-server:${CP_TAG}"
 log "OpenCrane SPA image: $CONTROL_PLANE_SPA_IMAGE"
+log "Cognee image: $COGNEE_IMAGE"
 
 # 1. Install one app-owned PostgreSQL server for this ClusterTenant. Logical databases
 # share its pod/PVC but never credentials: each has its own login role, basic-auth input,
@@ -879,8 +900,10 @@ helm_args=(upgrade --install "$RELEASE" "$CHART_DIR" --namespace "$NAMESPACE" --
 [[ -n "$CP_TAG" ]] && helm_args+=(--set-string "clustertenantManager.image.tag=$CP_TAG")
 if [[ "$ALLOW_TAG_FLOAT" == "1" ]]; then
   helm_args+=(--set-string "controlPlaneSpa.image.digest=" --set-string "controlPlaneSpa.image.tag=$CONTROL_PLANE_SPA_TAG")
+  helm_args+=(--set-string "clustertenantManager.cognee.image.digest=" --set-string "clustertenantManager.cognee.image.tag=$COGNEE_TAG")
 else
   helm_args+=(--set-string "controlPlaneSpa.image.digest=$CONTROL_PLANE_SPA_DIGEST")
+  helm_args+=(--set-string "clustertenantManager.cognee.image.digest=$COGNEE_DIGEST" --set-string "clustertenantManager.cognee.image.tag=")
 fi
 # --base-domain drives ingress.domain; controlPlaneHost defaults to platform.<domain>
 # in the chart. Setting it explicitly here keeps one source of truth for release hosts.

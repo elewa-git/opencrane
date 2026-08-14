@@ -529,8 +529,10 @@ clustertenantManager:
     image:
       repository: ghcr.io/elewa-git/opencrane-cognee
       # -- Thin OpenCrane derivative of Cognee 1.2.1 with its checksum-pinned LadybugDB
-      #    json extension already present. Bump deliberately; never use a rolling `latest`.
+      #    json extension already present. The app-owned deployer replaces the human-readable
+      #    chart tag with an exact digest; tags are accepted only by the disposable k3d smoke.
       tag: "0.8.1"
+      digest: ""
       pullPolicy: IfNotPresent
     service:
       port: 8000
