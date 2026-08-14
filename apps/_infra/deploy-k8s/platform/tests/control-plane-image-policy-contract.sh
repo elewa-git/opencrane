@@ -44,7 +44,7 @@ BASE_DOMAIN="develop-smoke.opencrane.test"
 KUBERNETES_CONTEXT="k3d-develop-smoke"
 CONTROL_PLANE_SPA_TAG="develop-smoke"
 resolve_control_plane_image_reference
-[[ "$CONTROL_PLANE_SPA_IMAGE" == "ghcr.io/elewa-git/opencrane-ui:develop-smoke" ]]
+[[ "$CONTROL_PLANE_SPA_IMAGE" == "opencrane/opencrane-ui:develop-smoke" ]]
 
 _reset_inputs
 resolve_control_plane_image_reference

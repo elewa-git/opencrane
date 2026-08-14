@@ -21,7 +21,7 @@ resolve_control_plane_image_reference()
       return 1
     fi
     CONTROL_PLANE_SPA_TAG="${CONTROL_PLANE_SPA_TAG:-$IMAGE_TAG}"
-    CONTROL_PLANE_SPA_IMAGE="ghcr.io/elewa-git/opencrane-ui:${CONTROL_PLANE_SPA_TAG}"
+    CONTROL_PLANE_SPA_IMAGE="opencrane/opencrane-ui:${CONTROL_PLANE_SPA_TAG}"
     return 0
   fi
 
