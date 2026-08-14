@@ -3,9 +3,9 @@ FROM node:22-bookworm-slim AS build
 
 WORKDIR /app
 COPY package.json package-lock.json tsconfig.json nx.json ./
-COPY libs libs
 COPY apps/agent-controller/package.json apps/agent-controller/project.json apps/agent-controller/tsconfig.json apps/agent-controller/
 RUN npm ci
+COPY libs libs
 
 COPY apps/agent-controller/src apps/agent-controller/src
 RUN npx nx run agent-controller:build

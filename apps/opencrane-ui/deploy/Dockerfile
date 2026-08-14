@@ -11,6 +11,12 @@ FROM node:22-bookworm-slim AS build
 
 WORKDIR /app
 COPY package.json package-lock.json tsconfig.json tsconfig.frontend.json nx.json ./
+# Nothing but the root manifests is copied before the install. The whole app and every lib used
+# to come first, so editing a single component invalidated this layer and paid for a full npm ci
+# on every build. This app has no package.json of its own, and `libs` is not an npm workspace
+# (the root "workspaces" field is apps/* and website), so the install needs neither.
+RUN npm ci
+
 # All workspace libs (frontend/*, backend/*/main, contracts, state/*) come in wholesale so
 # the image never needs editing when a lib is added; the root .dockerignore keeps
 # node_modules/dist out of the context. The Angular app types against @opencrane/contracts'
@@ -18,8 +24,6 @@ COPY package.json package-lock.json tsconfig.json tsconfig.frontend.json nx.json
 # dist OpenAPI artifact) — no OpenAPI spec or codegen step needed here.
 COPY libs libs
 COPY apps/opencrane-ui apps/opencrane-ui
-# npm workspaces install: root package.json's "workspaces" field includes apps/* and website
-RUN npm ci
 
 RUN npx nx build opencrane-ui
 

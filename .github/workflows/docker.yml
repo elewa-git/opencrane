@@ -71,8 +71,10 @@ jobs:
 
       - uses: actions/setup-node@v6
         with:
+          # No `cache: npm` here — this job caches the resolved node_modules tree directly
+          # below, and both caches key off the same lockfile, so the npm download cache only
+          # ever hits when node_modules already hit. It was pure repo cache-quota spend.
           node-version: 24
-          cache: npm
 
       - name: Restore node_modules
         id: node-modules
@@ -153,8 +155,10 @@ jobs:
 
       - uses: actions/setup-node@v6
         with:
+          # No `cache: npm` here — this job caches the resolved node_modules tree directly
+          # below, and both caches key off the same lockfile, so the npm download cache only
+          # ever hits when node_modules already hit. It was pure repo cache-quota spend.
           node-version: 24
-          cache: npm
 
       - name: Restore node_modules
         id: node-modules
@@ -258,21 +262,80 @@ jobs:
       - name: Apply the fresh target database baseline
         run: psql "$DATABASE_URL" -X --set=ON_ERROR_STOP=1 --file=apps/opencrane/prisma/bootstrap/target-baseline.sql
 
+      # Restored before the first Nx invocation so the SQL suites replay too. The save half
+      # is a separate step at the end of the job: actions/cache only writes its cache when the
+      # job succeeded, and a run that fails late would otherwise leave the next run cold.
+      - name: Restore the Nx computation cache
+        uses: actions/cache/restore@v4
+        with:
+          path: .nx/cache
+          key: nx-${{ runner.os }}-${{ hashFiles('package-lock.json') }}-${{ github.run_id }}
+          restore-keys: |
+            nx-${{ runner.os }}-${{ hashFiles('package-lock.json') }}-
+
       # Every suite validates the shared target baseline. A baseline-only change belongs to the
       # opencrane app and therefore cannot make the library-owned SQL suites "affected" in Nx.
       - name: Run every PostgreSQL authority suite
         run: npx nx run-many -t test:sql --parallel=1
 
-      - name: Restore the Nx computation cache
-        uses: actions/cache@v4
-        with:
-          path: .nx/cache
-          key: nx-${{ runner.os }}-${{ hashFiles('package-lock.json') }}-${{ github.sha }}
-          restore-keys: |
-            nx-${{ runner.os }}-${{ hashFiles('package-lock.json') }}-
-
       - name: Build, test, and lint affected projects
         run: npx nx affected -t build test lint
+
+      - name: Enforce monorepo dependency boundaries
+        run: npm run lint:boundaries
+
+      - name: Verify API reference and generated client when affected
+        if: needs.prepare.outputs.api_contract_changed == 'true'
+        run: |
+          npx nx run opencrane:build
+          npm run sync-openapi -w @opencrane/website
+          git diff --exit-code -- website/public/openapi.json
+          npx nx run contracts:generate
+          git diff --exit-code -- libs/contracts/src/generated/api.ts
+
+      # Saved even when the job failed. A failing guard says nothing about the build/test/lint
+      # tasks that already passed, and discarding their results made every later run start cold.
+      - name: Save the Nx computation cache
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: .nx/cache
+          key: nx-${{ runner.os }}-${{ hashFiles('package-lock.json') }}-test-${{ github.run_id }}
+
+  storybook:
+    name: Storybook component contracts
+    runs-on: ubuntu-latest
+    needs: prepare
+    env:
+      NX_BASE: ${{ needs.prepare.outputs.nx_base }}
+      NX_HEAD: ${{ needs.prepare.outputs.nx_head }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Restore node_modules
+        id: node-modules
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: node-modules-${{ runner.os }}-node24-${{ hashFiles('package-lock.json') }}
+
+      - name: Install dependencies
+        if: steps.node-modules.outputs.cache-hit != 'true'
+        run: npm ci
+
+      - name: Restore the Nx computation cache
+        uses: actions/cache/restore@v4
+        with:
+          path: .nx/cache
+          key: nx-${{ runner.os }}-${{ hashFiles('package-lock.json') }}-storybook-${{ github.run_id }}
+          restore-keys: |
+            nx-${{ runner.os }}-${{ hashFiles('package-lock.json') }}-
 
       - name: Detect affected Storybook regression coverage
         id: storybook-regression
@@ -285,10 +348,21 @@ jobs:
             echo "required=false" >> "$GITHUB_OUTPUT"
           fi
 
+      # Keyed on the lockfile, which pins the Playwright version the browser build must match.
+      - name: Restore the Chromium build
+        id: playwright-browsers
+        if: steps.storybook-regression.outputs.required == 'true'
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+
       - name: Install Chromium for affected Storybook regressions
         if: steps.storybook-regression.outputs.required == 'true'
         run: npx playwright install --with-deps chromium
 
+      # --parallel=1 is required, not conservative: test-storybook and test-storybook-visual
+      # both serve the catalogue on port 4400, so running them at once makes them fight for it.
       - name: Build and test affected Storybook component contracts
         if: steps.storybook-regression.outputs.required == 'true'
         run: npx nx affected -t build-storybook test-storybook test-storybook-visual --base="$NX_BASE" --head="$NX_HEAD" --parallel=1
@@ -303,17 +377,12 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
-      - name: Enforce monorepo dependency boundaries
-        run: npm run lint:boundaries
-
-      - name: Verify API reference and generated client when affected
-        if: needs.prepare.outputs.api_contract_changed == 'true'
-        run: |
-          npx nx run opencrane:build
-          npm run sync-openapi -w @opencrane/website
-          git diff --exit-code -- website/public/openapi.json
-          npx nx run contracts:generate
-          git diff --exit-code -- libs/contracts/src/generated/api.ts
+      - name: Save the Nx computation cache
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: .nx/cache
+          key: nx-${{ runner.os }}-${{ hashFiles('package-lock.json') }}-storybook-${{ github.run_id }}
 
   develop_smoke:
     name: k3d current-silo smoke test
@@ -339,8 +408,10 @@ jobs:
 
       - uses: actions/setup-node@v6
         with:
+          # No `cache: npm` here — this job caches the resolved node_modules tree directly
+          # below, and both caches key off the same lockfile, so the npm download cache only
+          # ever hits when node_modules already hit. It was pure repo cache-quota spend.
           node-version: 24
-          cache: npm
 
       # The production deploy wrapper resolves and schema-validates the database transition before
       # it mutates the cluster. The smoke job is a fresh checkout, so restore the same exact
@@ -410,8 +481,10 @@ jobs:
 
       - uses: actions/setup-node@v6
         with:
+          # No `cache: npm` here — this job caches the resolved node_modules tree directly
+          # below, and both caches key off the same lockfile, so the npm download cache only
+          # ever hits when node_modules already hit. It was pure repo cache-quota spend.
           node-version: 24
-          cache: npm
 
       - name: Restore node_modules
         id: node-modules
@@ -432,12 +505,13 @@ jobs:
   build-and-push:
     name: Build and publish affected images
     runs-on: ubuntu-latest
-    needs: [prepare, test, develop_smoke, image_smoke]
+    needs: [prepare, test, storybook, develop_smoke, image_smoke]
     if: >-
       ${{
         always() &&
         needs.prepare.outputs.has_deployables == 'true' &&
         needs.test.result == 'success' &&
+        (needs.storybook.result == 'success' || needs.storybook.result == 'skipped') &&
         (needs.develop_smoke.result == 'success' || needs.develop_smoke.result == 'skipped') &&
         (needs.image_smoke.result == 'success' || needs.image_smoke.result == 'skipped')
       }}
@@ -484,13 +558,14 @@ jobs:
   publish-develop-smoke-images:
     name: Publish develop smoke image (${{ matrix.project }})
     runs-on: ubuntu-latest
-    needs: [prepare, test, develop_smoke, image_smoke, build-and-push]
+    needs: [prepare, test, storybook, develop_smoke, image_smoke, build-and-push]
     if: >-
       ${{
         always() &&
         github.event_name == 'push' &&
         github.ref == 'refs/heads/develop' &&
         needs.test.result == 'success' &&
+        (needs.storybook.result == 'success' || needs.storybook.result == 'skipped') &&
         needs.develop_smoke.result == 'success' &&
         (needs.image_smoke.result == 'success' || needs.image_smoke.result == 'skipped') &&
         (needs['build-and-push'].result == 'success' || needs['build-and-push'].result == 'skipped')

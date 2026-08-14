@@ -3,9 +3,9 @@ FROM node:22-bookworm-slim AS build
 
 WORKDIR /app
 COPY package.json package-lock.json tsconfig.json nx.json ./
-COPY libs libs
 COPY apps/artifact-preprocessor/package.json apps/artifact-preprocessor/project.json apps/artifact-preprocessor/tsconfig.json apps/artifact-preprocessor/
 RUN npm ci
+COPY libs libs
 
 COPY apps/artifact-preprocessor/src apps/artifact-preprocessor/src
 RUN npx nx run artifact-preprocessor:build

@@ -2,8 +2,8 @@ import { Injectable, inject } from "@angular/core";
 
 import { ControlPlaneApiService, McpAccessPolicy, McpDirectory, McpInstalledServer, McpServer } from "@opencrane/core";
 
-import { McpGateway } from "./mcp-gateway.types";
-import { McpAccessPolicyWire, McpInstalledWire, McpServerWire, _MapAccessPolicy, _MapDirectory, _MapInstalled, _MapServer } from "./mcp-mapper.util";
+import { McpAccessPolicyWire, McpGateway, McpInstalledWire, McpServerWire } from "./mcp-gateway.types";
+import { _MapAccessPolicy, _MapDirectory, _MapInstalled, _MapServer } from "./mcp-mapper.util";
 
 /**
  * Live {@link McpGateway} backed by the OpenCrane opencrane-ui MCP API.

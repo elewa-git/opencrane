@@ -64,10 +64,17 @@ function _app(options: { record: RuntimeBootstrapExchangeRecord | null; consumpt
 		async loadBootstrapExchange() { return options.record; },
 		consumeAndBindProofKeyAtomically: consume,
 	};
+	// No identity override means the default identity; an explicit null means the
+	// reviewer accepted the token but resolved no identity.
+	function _reviewedIdentity()
+	{
+		return options.identity === undefined ? _identity : options.identity;
+	}
+
 	const app = express();
 	app.use(express.json());
 	app.use("/api/internal/agent-runtime", __CreateRuntimeBootstrapRouter({
-		tokenReviewer: { async __Review(token: string) { return token === "valid" ? (options.identity === undefined ? _identity : options.identity) : null; } },
+		tokenReviewer: { async __Review(token: string) { return token === "valid" ? _reviewedIdentity() : null; } },
 		runtimeNamespaces: ["runtime-ns", "managed-runtime-ns"],
 		repository,
 		clock: { nowEpochMs(): number { return Date.parse("2026-07-20T00:01:00.000Z"); } },

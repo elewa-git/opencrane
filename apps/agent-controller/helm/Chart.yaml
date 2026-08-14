@@ -3,4 +3,4 @@ name: opencrane-agent-controller
 description: App-owned named-template library for the personal-runtime workload controller.
 type: library
 version: 0.8.0
-appVersion: "0.8.0"
+appVersion: "0.8.1"

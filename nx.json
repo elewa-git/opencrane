@@ -13,6 +13,12 @@
     "production": [
       "default",
       "!{projectRoot}/src/__tests__/**"
+    ],
+    "storybookCatalogue": [
+      "{workspaceRoot}/libs/frontend/**/*",
+      "{workspaceRoot}/libs/frontend/elements/ui/.storybook/**/*",
+      "{workspaceRoot}/playwright.storybook.config.ts",
+      "{workspaceRoot}/tests/storybook/**/*"
     ]
   },
   "targetDefaults": {

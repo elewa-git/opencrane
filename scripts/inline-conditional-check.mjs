@@ -23,17 +23,25 @@ export function inlineConditionalDensity(sourcePath, source)
 	return [...counts.entries()].filter(function _Repeated(entry) { return entry[1] > 1; }).map(function _Line(entry) { return entry[0]; }).sort(function _Ascending(left, right) { return left - right; });
 }
 
-/** Print checker-compatible line coordinates when invoked as a command. */
-function _Main(sourcePath)
+/**
+ * Print checker-compatible coordinates for every path given on the command line.
+ * The whole file list arrives in one call: loading the TypeScript compiler costs
+ * far more than parsing a file, so one process per file made this the slowest
+ * step in CI.
+ */
+function _Main(sourcePaths)
 {
-	const source = readFileSync(sourcePath, "utf8");
-	for (const line of inlineConditionalDensity(sourcePath, source))
+	for (const sourcePath of sourcePaths)
 	{
-		process.stdout.write(`${line}:inline conditional density\n`);
+		const source = readFileSync(sourcePath, "utf8");
+		for (const line of inlineConditionalDensity(sourcePath, source))
+		{
+			process.stdout.write(`${sourcePath}:${line}:inline conditional density\n`);
+		}
 	}
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url) && process.argv[2] !== undefined)
 {
-	_Main(process.argv[2]);
+	_Main(process.argv.slice(2));
 }
