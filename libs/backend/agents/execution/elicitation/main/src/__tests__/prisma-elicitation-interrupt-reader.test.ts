@@ -17,7 +17,7 @@ describe("_CreateElicitationInterruptReader", function _Suite()
 	{
 		const row = { id: "request-1", siloId: "silo-1", conversationId: "conversation-1", runId: "run-1", attempt: 2, assignedParticipantId: "user-1", purpose: ElicitationPurpose.RuntimeInput, state: ElicitationRequestState.Requested, body: { kind: ElicitationBodyKinds.FreeText, prompt: "Which option?", maximumLength: 200, allowEmpty: false }, requiresStepUp: false, createdAt: new Date("2026-08-11T10:00:00.000Z"), expiresAt: new Date("2026-08-11T10:05:00.000Z"), resolvedAt: null, safeReason: null, purposePayload: { secret: "never" } };
 		const findMany = vi.fn().mockResolvedValue([row]);
-		const reader = _CreateElicitationInterruptReader(_Prisma({ elicitationRequest: { findMany } }));
+		const reader = _CreateElicitationInterruptReader(_Prisma({ orgMembership: { count: vi.fn().mockResolvedValue(1) }, conversationParticipant: { findFirst: vi.fn().mockResolvedValue({ userId: "user-1" }) }, elicitationRequest: { findMany } }));
 
 		const [event] = await reader.readOpen({ conversationId: "conversation-1", siloId: "silo-1", subjectId: "user-1" });
 

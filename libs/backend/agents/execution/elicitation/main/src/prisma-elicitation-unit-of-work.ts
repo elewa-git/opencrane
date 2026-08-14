@@ -1,20 +1,18 @@
-import { AgentRunState, ApprovalRequestState, ElicitationBodyKind, ElicitationPurpose, ElicitationRequestState, PersonalMemoryPermissionReceiptState, Prisma, type PrismaClient } from "@prisma/client";
+import { AgentRunState, ApprovalRequestState, ElicitationBodyKind, ElicitationPurpose, ElicitationRequestState, OrgMemberStatus, PersonalMemoryPermissionReceiptState, Prisma, type PrismaClient } from "@prisma/client";
 
 import { ___DoWithTrace } from "@opencrane/backend/observability";
 import { __DecideDeferredToolRequest, __DigestCanonicalJson, __ExpireDeferredToolApprovalBatch, DeferredToolDecisionKinds, DeferredToolDecisionOutcomes, PrismaToolInvocationElicitationRepository, ToolInvocationStates, type ToolInvocationClaim, type ToolInvocationElicitationRepository, type ToolInvocationRecord } from "@opencrane/backend/server/iam/authorization";
-import { CONVERSATION_ELICITATION_VERSION, ElicitationBodyKinds, ElicitationPurposes, ElicitationRequestStates, RunInputSnapshotIdentityKinds, type ConversationElicitation, type ElicitationBody, type ElicitationResponseValue, type RunInputSnapshot } from "@opencrane/contracts";
+import { ElicitationBodyKinds, ElicitationPurposes, ElicitationRequestStates, type ConversationElicitation, type ElicitationBody, type ElicitationResponseValue, type RunInputSnapshot } from "@opencrane/contracts";
 import { PERSONAL_MEMORY_RECALL_TOOL_REVISION } from "@opencrane/models/agents";
 import type { JsonValue } from "@opencrane/util";
 
 import { _ElicitationStateForResponse, _IsElicitationResponseValid } from "./elicitation-response.js";
+import { _ElicitationRequestMatchesOpenCommand, _ProjectElicitation as _BuildElicitationProjection } from "./elicitation-persistence-mapping.js";
 import { _ElicitationPurposeStrategies } from "./elicitation-purpose-strategies.js";
 import type { ElicitationPurposeRequest, ElicitationPurposeStrategyRegistry } from "./elicitation-purpose-strategy.types.js";
 import { PersonalMemoryPermissionVerificationOutcomes, type ElicitationRepository, type ElicitationUnitOfWork, type ExpireElicitationBatchCommand, type ExpireElicitationBatchResult, type OpenElicitationCommand, type PersonalMemoryPermissionAuthority, type PersonalMemoryPermissionVerificationResult, type RespondToElicitationCommand, type RespondToElicitationResult } from "./elicitation.types.js";
-import type { PersonalMemoryPermissionPayload } from "./personal-memory-permission-payload.types.js";
+import { _BuildMemoryPermissionPayload, _BuildMemoryPermissionPayloadForClaimedInvocation, _MemoryPurposeMatchesReceipt, _MemoryQueryDigest } from "./personal-memory-permission-payload.js";
 import { _ParsePersonalMemoryPermissionPayload } from "./personal-memory-permission-payload.validator.js";
-
-/** Permission remains actionable for fifteen minutes from invocation admission. */
-const _PERSONAL_MEMORY_PERMISSION_EXTENSION_MILLISECONDS = 10 * 60 * 1_000;
 
 /** Prisma repository bound to exactly one serializable elicitation transaction. */
 export class PrismaElicitationRepository implements ElicitationRepository
@@ -48,11 +46,11 @@ export class PrismaElicitationRepository implements ElicitationRepository
 	{
 		const transaction = this._transaction;
 		const bodyDigest = __DigestCanonicalJson(command.body as unknown as JsonValue);
+		if (!await this._canParticipantAccess(command.siloId, command.conversationId, command.assignedParticipantId)) return null;
 		const existing = await transaction.elicitationRequest.findUnique({ where: { runId_attempt_requestKey: { runId: command.runId, attempt: command.attempt, requestKey: command.requestKey } } });
-		if (existing !== null) return _RequestMatchesOpenCommand(existing, command, bodyDigest) ? _Projection(existing) : null;
+		if (existing !== null) return _ElicitationRequestMatchesOpenCommand(existing, command, bodyDigest, _PrismaPurpose(command.purpose), _PrismaBodyKind(command.body.kind)) ? _Projection(existing) : null;
 		const run = await transaction.agentRun.findUnique({ where: { id: command.runId } });
-		const participant = await transaction.conversationParticipant.findUnique({ where: { conversationId_userId: { conversationId: command.conversationId, userId: command.assignedParticipantId } } });
-		if (run === null || run.siloId !== command.siloId || run.conversationId !== command.conversationId || run.attempt !== command.attempt || participant === null || participant.accessEndedPosition !== null || command.expiresAt.getTime() <= command.now.getTime()) return null;
+		if (run === null || run.siloId !== command.siloId || run.conversationId !== command.conversationId || run.attempt !== command.attempt || command.expiresAt.getTime() <= command.now.getTime()) return null;
 		if (run.state === AgentRunState.Running)
 		{
 			const paused = await transaction.agentRun.updateMany({ where: { id: run.id, attempt: run.attempt, state: AgentRunState.Running }, data: { state: AgentRunState.WaitingForInput } });
@@ -74,7 +72,7 @@ export class PrismaElicitationRepository implements ElicitationRepository
 	/** Open or replay one exact personal-memory permission for the execution user. */
 	async openMemoryPermission(invocation: ToolInvocationRecord, snapshot: RunInputSnapshot, now: Date): Promise<boolean>
 	{
-		const payload = _MemoryPermissionPayload(invocation, snapshot);
+		const payload = _BuildMemoryPermissionPayload(invocation, snapshot);
 		if (payload === null) return false;
 		const body = { kind: ElicitationBodyKinds.Approval, prompt: "Allow this agent to use your personal memory for this answer?", action: "Use personal memory", target: "Your saved memory", dataUse: "Use remembered facts only for this answer", consequence: "The agent will answer this request using relevant saved memory" } as const;
 		const opened = await this.open({
@@ -99,7 +97,7 @@ export class PrismaElicitationRepository implements ElicitationRepository
 	/** Verify an accepted exact receipt without consuming it or reading personal-memory content. */
 	async verifyMemoryPermission(invocation: ToolInvocationRecord, claim: ToolInvocationClaim, snapshot: RunInputSnapshot, now: Date): Promise<PersonalMemoryPermissionVerificationResult>
 	{
-		const expectedPayload = _MemoryPermissionPayloadForClaimedInvocation(invocation, snapshot);
+		const expectedPayload = _BuildMemoryPermissionPayloadForClaimedInvocation(invocation, snapshot);
 		if (expectedPayload === null || !await this._toolInvocations.verifyActiveDispatchClaim(invocation, claim, now)) return { outcome: PersonalMemoryPermissionVerificationOutcomes.Denied };
 		const receipt = await this._transaction.personalMemoryPermissionReceipt.findUnique({ where: { toolInvocationId: invocation.id }, include: { request: true } });
 		if (receipt === null) return { outcome: PersonalMemoryPermissionVerificationOutcomes.Denied };
@@ -131,6 +129,7 @@ export class PrismaElicitationRepository implements ElicitationRepository
 		const request = await transaction.elicitationRequest.findUnique({ where: { id: command.requestId } });
 		if (request === null || request.siloId !== command.siloId || request.conversationId !== command.conversationId) return { outcome: "not_found" };
 		if (request.assignedParticipantId !== command.subjectId) return { outcome: "unauthorized" };
+		if (!await this._canParticipantAccess(command.siloId, command.conversationId, command.subjectId)) return { outcome: "unauthorized" };
 		const responseDigest = __DigestCanonicalJson(command.submission.response as unknown as JsonValue);
 		const prior = await transaction.elicitationResponseAttempt.findUnique({ where: { requestId_idempotencyKey: { requestId: request.id, idempotencyKey: command.submission.idempotencyKey } } });
 		if (prior !== null)
@@ -139,9 +138,8 @@ export class PrismaElicitationRepository implements ElicitationRepository
 			return { outcome: "accepted", projection: { requestId: request.id, state: _PublicState(request.state), idempotent: true, resolvedAt: request.resolvedAt.toISOString() } };
 		}
 		if (request.state !== ElicitationRequestState.Requested) return { outcome: "conflict" };
-		const participant = await transaction.conversationParticipant.findUnique({ where: { conversationId_userId: { conversationId: request.conversationId, userId: command.subjectId } } });
 		const run = await transaction.agentRun.findUnique({ where: { id: request.runId } });
-		if (participant === null || participant.accessEndedPosition !== null || run === null || run.attempt !== request.attempt || run.state !== AgentRunState.WaitingForInput) return { outcome: "unauthorized" };
+		if (run === null || run.attempt !== request.attempt || run.state !== AgentRunState.WaitingForInput) return { outcome: "unauthorized" };
 		if (request.expiresAt.getTime() <= command.now.getTime())
 		{
 			await this._expireRequest(request, command.now);
@@ -169,6 +167,7 @@ export class PrismaElicitationRepository implements ElicitationRepository
 	/** Read one request only for its still-active assigned participant. */
 	async readOwned(siloId: string, conversationId: string, requestId: string, subjectId: string, now: Date): Promise<ConversationElicitation | null>
 	{
+		if (!await this._canParticipantAccess(siloId, conversationId, subjectId)) return null;
 		const row = await this._transaction.elicitationRequest.findFirst({ where: { id: requestId, siloId, conversationId, assignedParticipantId: subjectId, assignedParticipant: { accessEndedPosition: null } } });
 		if (row === null) return null;
 		return _ProjectionAt(row, now);
@@ -177,6 +176,7 @@ export class PrismaElicitationRepository implements ElicitationRepository
 	/** List still-actionable requests for one exact conversation and participant. */
 	async listOpenOwned(siloId: string, conversationId: string, subjectId: string, now: Date): Promise<readonly ConversationElicitation[]>
 	{
+		if (!await this._canParticipantAccess(siloId, conversationId, subjectId)) return [];
 		const rows = await this._transaction.elicitationRequest.findMany({ where: { siloId, conversationId, assignedParticipantId: subjectId, state: ElicitationRequestState.Requested, expiresAt: { gt: now }, assignedParticipant: { accessEndedPosition: null } }, orderBy: [{ createdAt: "asc" }, { id: "asc" }], take: 50 });
 		return rows.map(_Projection);
 	}
@@ -185,8 +185,30 @@ export class PrismaElicitationRepository implements ElicitationRepository
 	async listActivityOwned(siloId: string, subjectId: string, limit: number, now: Date): Promise<readonly ConversationElicitation[]>
 	{
 		if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100) throw new TypeError("elicitation activity limit must be between one and one hundred");
-		const rows = await this._transaction.elicitationRequest.findMany({ where: { siloId, assignedParticipantId: subjectId, assignedParticipant: { accessEndedPosition: null } }, orderBy: [{ createdAt: "desc" }, { id: "desc" }], take: limit });
+		const membership = await this._transaction.orgMembership.count({ where: { clusterTenant: siloId, subject: subjectId, status: OrgMemberStatus.Active } });
+		if (membership !== 1) return [];
+		const rows = await this._transaction.elicitationRequest.findMany({ where: { siloId, assignedParticipantId: subjectId, assignedParticipant: { accessEndedPosition: null, conversation: _ConversationAccessWhere(siloId, subjectId) } }, orderBy: [{ createdAt: "desc" }, { id: "desc" }], take: limit });
 		return rows.map(function _ProjectActivity(row) { return _ProjectionAt(row, now); });
+	}
+
+	/**
+	 * Checks current silo membership and continuing access to the requested conversation.
+	 *
+	 * Ordinary conversations use the null-origin branch in `_ConversationAccessWhere`. An Agent
+	 * thread also requires the subject to remain an active participant in its immediate parent, so
+	 * losing parent access stops new requests, responses, and reads from the child.
+	 */
+	private async _canParticipantAccess(siloId: string, conversationId: string, subjectId: string): Promise<boolean>
+	{
+		const membership = await this._transaction.orgMembership.count({ where: { clusterTenant: siloId, subject: subjectId, status: OrgMemberStatus.Active } });
+		if (membership !== 1) return false;
+		const participant = await this._transaction.conversationParticipant.findFirst({ where: {
+			conversationId,
+			userId: subjectId,
+			accessEndedPosition: null,
+			conversation: _ConversationAccessWhere(siloId, subjectId),
+		} });
+		return participant !== null;
 	}
 
 	/** Expire every due request through its purpose strategy under the caller's run lock. */
@@ -241,7 +263,7 @@ export class PrismaElicitationRepository implements ElicitationRepository
 			&& invocation.subjectId === subjectId
 			&& request.assignedParticipantId === subjectId
 			&& payload.executionSubjectId === subjectId
-			&& payload.queryDigest === _QueryDigest(invocation.effectiveArguments as unknown as JsonValue)
+			&& payload.queryDigest === _MemoryQueryDigest(invocation.effectiveArguments as unknown as JsonValue)
 			&& payload.inputSnapshotDigest === snapshot.digest
 			&& payload.personaRevisionId === snapshot.personaRevisionId
 			&& payload.expiresAt === request.expiresAt.toISOString()
@@ -313,6 +335,18 @@ export class PrismaElicitationRepository implements ElicitationRepository
 		const resumed = await this._transaction.agentRun.updateMany({ where: { id: request.runId, attempt: request.attempt, state: AgentRunState.WaitingForInput }, data: { state: AgentRunState.Running } });
 		if (resumed.count !== 1) throw new Error("elicitation expiry lost its waiting run fence");
 	}
+}
+
+/** Current parent-coupled conversation relation used by single and activity reads. */
+function _ConversationAccessWhere(siloId: string, subjectId: string): Prisma.ConversationWhereInput
+{
+	return {
+		siloId,
+		OR: [
+			{ originAgentThread: { is: null } },
+			{ originAgentThread: { is: { parentConversation: { participants: { some: { userId: subjectId, accessEndedPosition: null } } } } } },
+		],
+	};
 }
 
 /** Process-scoped owner of serializable elicitation transactions. */
@@ -387,128 +421,33 @@ export class PrismaElicitationUnitOfWork implements ElicitationUnitOfWork, Perso
 	}
 }
 
-/** Project a persistence row into the browser-safe contract without protected payloads. */
+/** Project a Prisma row after mapping its persistence enums to the public vocabulary. */
 function _Projection(row: { id: string; conversationId: string; runId: string; attempt: number; assignedParticipantId: string; purpose: ElicitationPurpose; state: ElicitationRequestState; body: Prisma.JsonValue; requiresStepUp: boolean; createdAt: Date; expiresAt: Date; resolvedAt: Date | null; safeReason: string | null }): ConversationElicitation
 {
-	let projection: ConversationElicitation = { version: CONVERSATION_ELICITATION_VERSION, requestId: row.id, conversationId: row.conversationId, runId: row.runId, attempt: row.attempt, assignedParticipantId: row.assignedParticipantId, purpose: _PublicPurpose(row.purpose), state: _PublicState(row.state), body: row.body as unknown as ElicitationBody, requiresStepUp: row.requiresStepUp, requestedAt: row.createdAt.toISOString(), expiresAt: row.expiresAt.toISOString() };
-	if (row.resolvedAt !== null) projection = { ...projection, resolvedAt: row.resolvedAt.toISOString() };
-	if (row.safeReason !== null) projection = { ...projection, safeReason: row.safeReason };
-	return projection;
+	return _BuildElicitationProjection({ ...row, purpose: _PublicPurpose(row.purpose), state: _PublicState(row.state) });
 }
 
-/** Compare every runtime-controlled request field on replay; trusted times may differ between posts. */
-function _RequestMatchesOpenCommand(row: { id: string; siloId: string; conversationId: string; runId: string; attempt: number; assignedParticipantId: string; requestKey: string; purpose: ElicitationPurpose; bodyKind: ElicitationBodyKind; bodyDigest: string; purposePayloadDigest: string; requiresStepUp: boolean }, command: OpenElicitationCommand, bodyDigest: string): boolean
-{
-	return row.id === command.requestId
-		&& row.siloId === command.siloId
-		&& row.conversationId === command.conversationId
-		&& row.runId === command.runId
-		&& row.attempt === command.attempt
-		&& row.assignedParticipantId === command.assignedParticipantId
-		&& row.requestKey === command.requestKey
-		&& row.purpose === _PrismaPurpose(command.purpose)
-		&& row.bodyKind === _PrismaBodyKind(command.body.kind)
-		&& row.bodyDigest === bodyDigest
-		&& row.purposePayloadDigest === command.purposePayloadDigest
-		&& row.requiresStepUp === command.requiresStepUp;
-}
-
-/** Derive deadline expiry for reads without mutating canonical request authority. */
+/** Derive deadline expiry for reads without mutating the stored request. */
 function _ProjectionAt(row: Parameters<typeof _Projection>[0], now: Date): ConversationElicitation
 {
 	if (row.state !== ElicitationRequestState.Requested || row.expiresAt.getTime() > now.getTime()) return _Projection(row);
 	return { ..._Projection(row), state: ElicitationRequestStates.Expired, resolvedAt: now.toISOString(), safeReason: "response_window_expired" };
 }
 
-/** Map public body kinds to persistence vocabulary. */
-function _PrismaBodyKind(kind: ElicitationBodyKinds): ElicitationBodyKind
-{
-	return { [ElicitationBodyKinds.Approval]: ElicitationBodyKind.Approval, [ElicitationBodyKinds.SingleChoice]: ElicitationBodyKind.SingleChoice, [ElicitationBodyKinds.MultipleChoice]: ElicitationBodyKind.MultipleChoice, [ElicitationBodyKinds.FreeText]: ElicitationBodyKind.FreeText }[kind];
-}
+/** Map the public body kind to Prisma vocabulary. */
+function _PrismaBodyKind(kind: ElicitationBodyKinds): ElicitationBodyKind { return { [ElicitationBodyKinds.Approval]: ElicitationBodyKind.Approval, [ElicitationBodyKinds.SingleChoice]: ElicitationBodyKind.SingleChoice, [ElicitationBodyKinds.MultipleChoice]: ElicitationBodyKind.MultipleChoice, [ElicitationBodyKinds.FreeText]: ElicitationBodyKind.FreeText }[kind]; }
 
-/** Map public purposes to persistence vocabulary. */
-function _PrismaPurpose(purpose: ElicitationPurposes): ElicitationPurpose
-{
-	return { [ElicitationPurposes.RuntimeInput]: ElicitationPurpose.RuntimeInput, [ElicitationPurposes.ToolApproval]: ElicitationPurpose.ToolApproval, [ElicitationPurposes.PersonalMemoryPermission]: ElicitationPurpose.PersonalMemoryPermission, [ElicitationPurposes.A2uiAction]: ElicitationPurpose.A2uiAction }[purpose];
-}
+/** Map the public purpose to Prisma vocabulary. */
+function _PrismaPurpose(purpose: ElicitationPurposes): ElicitationPurpose { return { [ElicitationPurposes.RuntimeInput]: ElicitationPurpose.RuntimeInput, [ElicitationPurposes.ToolApproval]: ElicitationPurpose.ToolApproval, [ElicitationPurposes.PersonalMemoryPermission]: ElicitationPurpose.PersonalMemoryPermission, [ElicitationPurposes.A2uiAction]: ElicitationPurpose.A2uiAction }[purpose]; }
 
-/** Map persistence purposes to the public contract. */
-function _PublicPurpose(purpose: ElicitationPurpose): ElicitationPurposes
-{
-	return { [ElicitationPurpose.RuntimeInput]: ElicitationPurposes.RuntimeInput, [ElicitationPurpose.ToolApproval]: ElicitationPurposes.ToolApproval, [ElicitationPurpose.PersonalMemoryPermission]: ElicitationPurposes.PersonalMemoryPermission, [ElicitationPurpose.A2uiAction]: ElicitationPurposes.A2uiAction }[purpose];
-}
+/** Map a Prisma purpose to the public vocabulary. */
+function _PublicPurpose(purpose: ElicitationPurpose): ElicitationPurposes { return { [ElicitationPurpose.RuntimeInput]: ElicitationPurposes.RuntimeInput, [ElicitationPurpose.ToolApproval]: ElicitationPurposes.ToolApproval, [ElicitationPurpose.PersonalMemoryPermission]: ElicitationPurposes.PersonalMemoryPermission, [ElicitationPurpose.A2uiAction]: ElicitationPurposes.A2uiAction }[purpose]; }
 
-/** Map persistence lifecycle to the public contract. */
-function _PublicState(state: ElicitationRequestState): ElicitationRequestStates
-{
-	return { [ElicitationRequestState.Requested]: ElicitationRequestStates.Requested, [ElicitationRequestState.Answered]: ElicitationRequestStates.Answered, [ElicitationRequestState.Declined]: ElicitationRequestStates.Declined, [ElicitationRequestState.Expired]: ElicitationRequestStates.Expired, [ElicitationRequestState.Cancelled]: ElicitationRequestStates.Cancelled }[state];
-}
+/** Map a Prisma lifecycle state to the public vocabulary. */
+function _PublicState(state: ElicitationRequestState): ElicitationRequestStates { return { [ElicitationRequestState.Requested]: ElicitationRequestStates.Requested, [ElicitationRequestState.Answered]: ElicitationRequestStates.Answered, [ElicitationRequestState.Declined]: ElicitationRequestStates.Declined, [ElicitationRequestState.Expired]: ElicitationRequestStates.Expired, [ElicitationRequestState.Cancelled]: ElicitationRequestStates.Cancelled }[state]; }
 
 /** Whether one protected purpose payload is a non-array JSON record. */
 function _Record(value: unknown): value is { readonly [key: string]: JsonValue }
-{
-	return value !== null && typeof value === "object" && !Array.isArray(value);
-}
-
-/** Derive the protected permission payload only from an exact awaiting invocation and snapshot. */
-function _MemoryPermissionPayload(invocation: ToolInvocationRecord, snapshot: RunInputSnapshot): PersonalMemoryPermissionPayload | null
-{
-	if (invocation.state !== ToolInvocationStates.AwaitingApproval) return null;
-	return _MemoryPermissionPayloadAtRevision(invocation, snapshot, invocation.revision);
-}
-
-/** Reconstruct the original protected payload after approval and claim advanced two revisions. */
-function _MemoryPermissionPayloadForClaimedInvocation(invocation: ToolInvocationRecord, snapshot: RunInputSnapshot): PersonalMemoryPermissionPayload | null
-{
-	if (invocation.state !== ToolInvocationStates.Claimed || invocation.revision < 2) return null;
-	return _MemoryPermissionPayloadAtRevision(invocation, snapshot, invocation.revision - 2);
-}
-
-/** Bind immutable invocation, execution-user, query, snapshot, persona, and expiry coordinates. */
-function _MemoryPermissionPayloadAtRevision(invocation: ToolInvocationRecord, snapshot: RunInputSnapshot, toolInvocationRevision: number): PersonalMemoryPermissionPayload | null
-{
-	const queryDigest = _QueryDigest(invocation.effectiveArguments);
-	if (invocation.toolRevisionId !== PERSONAL_MEMORY_RECALL_TOOL_REVISION
-		|| snapshot.identitySnapshot.kind !== RunInputSnapshotIdentityKinds.User
-		|| snapshot.identitySnapshot.executionSubjectId !== invocation.subjectId
-		|| snapshot.runId !== invocation.runId
-		|| snapshot.siloId !== invocation.siloId
-		|| snapshot.agentRevisionId !== invocation.agentRevisionId
-		|| snapshot.conversationId === null
-		|| snapshot.conversationId.trim().length === 0
-		|| snapshot.personaRevisionId === null
-		|| snapshot.personaRevisionId.trim().length === 0
-		|| queryDigest === null) return null;
-	const expiresAt = new Date(invocation.retryDeadlineAt.getTime() + _PERSONAL_MEMORY_PERMISSION_EXTENSION_MILLISECONDS);
-	return { toolInvocationId: invocation.id, toolInvocationRevision, runId: invocation.runId, attempt: invocation.attempt, executionSubjectId: invocation.subjectId, queryDigest, inputSnapshotDigest: snapshot.digest, personaRevisionId: snapshot.personaRevisionId, expiresAt: expiresAt.toISOString() };
-}
-
-/** Digest the exact admitted memory query without retaining it in permission persistence. */
-function _QueryDigest(argumentsValue: JsonValue): string | null
-{
-	if (!_JsonRecord(argumentsValue)) return null;
-	const query = argumentsValue["query"];
-	return typeof query === "string" ? __DigestCanonicalJson(query) : null;
-}
-
-/** Compare the hidden purpose envelope with the receipt that may authorize safe delivery. */
-function _MemoryPurposeMatchesReceipt(value: Prisma.JsonValue | null, receipt: { toolInvocationId: string; toolInvocationRevision: number; runId: string; attempt: number; executionSubjectId: string; queryDigest: string; inputSnapshotDigest: string; personaRevisionId: string; expiresAt: Date }): boolean
-{
-	const payload = _ParsePersonalMemoryPermissionPayload(value);
-	return payload !== null
-		&& payload.toolInvocationId === receipt.toolInvocationId
-		&& payload.toolInvocationRevision + 1 === receipt.toolInvocationRevision
-		&& payload.runId === receipt.runId
-		&& payload.attempt === receipt.attempt
-		&& payload.executionSubjectId === receipt.executionSubjectId
-		&& payload.queryDigest === receipt.queryDigest
-		&& payload.inputSnapshotDigest === receipt.inputSnapshotDigest
-		&& payload.personaRevisionId === receipt.personaRevisionId
-		&& payload.expiresAt === receipt.expiresAt.toISOString();
-}
-
-/** Whether one generic JSON value is a non-array object. */
-function _JsonRecord(value: JsonValue): value is { readonly [key: string]: JsonValue }
 {
 	return value !== null && typeof value === "object" && !Array.isArray(value);
 }

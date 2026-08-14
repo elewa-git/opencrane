@@ -40,6 +40,8 @@ import { _CreateConversationAssetAuthority } from "../infra/artifacts/artifact-u
 /**
  * Register the authenticated product API from functional route lists.
  *
+ * Called by: public-app.ts, after it has mounted the session middleware and `___AuthMiddleware`.
+ *
  * @param app - Public Express listener, already protected by browser-session authentication.
  * @param prisma - The main product database client.
  * @param coreApi - Kubernetes client used only by the provider bring-your-own-key capability.
@@ -94,6 +96,10 @@ export function _RegisterRoutes(app: Express, prisma: PrismaClient, coreApi: k8s
 		{ method: "use", path: "/api/v1/ai-budget", handler: aiBudgetRouter(prisma) },
 		{ method: "use", path: "/api/v1/token-usage", handler: tokenUsageRouter(prisma) },
 	];
+	// Every mount above needs the browser session that `___AuthMiddleware` demands. `/healthz` below is
+	// the one route here that does not: that middleware lets `/healthz` and `/api/v1/auth` through so a
+	// probe works before login, so keep anything that reads product data out of this list.
+	// @see ___AuthMiddleware in libs/backend/server/infra/auth/src/auth-middleware.ts.
 	const infrastructureRoutes: readonly RouteMount[] = [
 		{ method: "use", path: "/api/v1/openapi.json", handler: _OpenapiRouter(spec) },
 		{ method: "get", path: "/healthz", handler: _CheckDbHealth(___CreateDbHealthProbe(prisma)) },
@@ -129,6 +135,9 @@ const _ResolveConversationAssetCaller = function _ConversationAssetCaller(reques
  *
  * The grants domain stays transport-agnostic; the OpenCrane app owns HTTP abuse protection.
  *
+ * Called by: `_RegisterRoutes` above for `/api/v1/shares`, and
+ * apps/opencrane/src/__tests__/shares-rate-limit.test.ts, which is why the limiter is tunable.
+ *
  * @param prisma - The main product database client.
  * @param options - Optional bounded limiter tuning for an isolated application test.
  * @returns The protected sharing router.
@@ -143,6 +152,18 @@ export function _CreateRateLimitedSharesRouter(prisma: PrismaClient, options?: S
 
 /**
  * Register the workload-facing API from explicit controller, runtime, worker, and replay lists.
+ *
+ * None of these routes sits behind the browser-session guard, because none of their callers is a
+ * browser. Each one authorises the bearer token on the request itself: the controller, runtime, and
+ * worker routers put it through Kubernetes TokenReview and accept only a ServiceAccount from the
+ * namespace their reviewer was built for, and `/api/internal/conversation-replay` instead spends a
+ * single-use channel context token. Being on the internal listener is not the protection — a router
+ * mounted here without its own check would be open to every workload in the cluster.
+ *
+ * The runtime routers all share the `/api/internal/agent-runtime` base path and each declares its own
+ * subpath, so `_MountRouteAreas` keeps them in list order rather than giving each a distinct mount.
+ *
+ * Called by: internal-app.ts, which builds the workload-facing Express listener.
  *
  * @param app - Internal Express listener, unreachable from the public ingress.
  * @param prisma - The main product database client.
@@ -163,6 +184,7 @@ export function _RegisterInternalRoutes(app: Express, prisma: PrismaClient, auth
 		{ method: "use", path: "/api/internal/agent-runtime", handler: runtime.runtimeBootstrap },
 		{ method: "use", path: "/api/internal/agent-runtime", handler: runtime.runtimeStream },
 		{ method: "use", path: "/api/internal/agent-runtime", handler: runtime.conversationAssetOutputs },
+		{ method: "use", path: "/api/internal/agent-runtime", handler: runtime.agentThreadParentDeliveries },
 	];
 	const internalWorkerRoutes = _OptionalRoute("/api/internal/artifact-preprocessor", runtime.artifactPreprocessor);
 	const internalScannerRoutes = _OptionalRoute("/api/internal/artifact-scanner", runtime.artifactScanner);

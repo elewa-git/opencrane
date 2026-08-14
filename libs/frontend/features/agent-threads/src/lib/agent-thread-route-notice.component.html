@@ -1,0 +1,7 @@
+<section class="route-state" [attr.aria-labelledby]="headingId()">
+	<p-message [severity]="severity()">
+		<h2 [id]="headingId()" tabindex="-1">{{ title() }}</h2>
+		<p>{{ detail() }}</p>
+	</p-message>
+	<p-button [label]="actionLabel()" icon="pi pi-arrow-left" [severity]="buttonSeverity()" (onClick)="returnRequested.emit()" />
+</section>

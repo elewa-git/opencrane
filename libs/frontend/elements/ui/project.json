@@ -38,6 +38,8 @@
 				"{workspaceRoot}/libs/frontend/features/conversation-assets/src/**/*",
 				"{workspaceRoot}/libs/frontend/features/conversation-activity/src/**/*",
 				"{workspaceRoot}/libs/frontend/features/conversation-elicitation/src/**/*"
+				,"{workspaceRoot}/libs/frontend/elements/conversation/src/**/*"
+				,"{workspaceRoot}/libs/frontend/features/agent-threads/src/**/*"
 			],
 			"options": {
 				"browserTarget": "frontend-elements-ui:build-storybook",
@@ -71,6 +73,8 @@
 				"{workspaceRoot}/libs/frontend/features/conversation-assets/src/**/*",
 				"{workspaceRoot}/libs/frontend/features/conversation-activity/src/**/*",
 				"{workspaceRoot}/libs/frontend/features/conversation-elicitation/src/**/*"
+				,"{workspaceRoot}/libs/frontend/elements/conversation/src/**/*"
+				,"{workspaceRoot}/libs/frontend/features/agent-threads/src/**/*"
 			],
 			"outputs": [
 				"{options.outputDir}"

@@ -5,6 +5,13 @@ import type { Router } from "express";
  *
  * The type deliberately carries no paths. `routes.ts` owns the visible transport map, while the
  * composition module owns the concrete identity reviewers, repositories, and external-I/O ports.
+ *
+ * The `Pick` aliases below exist so each composition step declares the routers it builds and can
+ * return nothing else. A step that accidentally built a router with another caller plane's token
+ * reviewer would have to name it in its own return type first.
+ *
+ * Called by: `_CreateInternalRuntimeComposition` in runtime-composition.ts builds it, and
+ * `_RegisterInternalRoutes` in routes.ts mounts every router in it.
  */
 export interface InternalRuntimeComposition
 {
@@ -32,6 +39,17 @@ export interface InternalRuntimeComposition
 	readonly runtimeStream: Router;
 	/** Runtime-only broker for generated conversation-file output. */
 	readonly conversationAssetOutputs: Router;
+	/**
+	 * Runtime-only router that accepts one display-safe delivery from an Agent-thread child up to its
+	 * parent group message.
+	 *
+	 * A run inside a child conversation reports its result, question, or failure back to the parent
+	 * through this route, so the parent summary can change without the browser being trusted to say what
+	 * a run produced. It stays out of every browser router on purpose: only a workload whose Kubernetes
+	 * ServiceAccount token passes TokenReview may produce a delivery.
+	 * @see AgentThreadParentDeliveryUnitOfWork for the port behind it and its denial reasons.
+	 */
+	readonly agentThreadParentDeliveries: Router;
 }
 
 /** The subset of routers built by the controller-only composition step. */
@@ -47,7 +65,7 @@ export type SkillWorkloadRuntimeComposition = Pick<
 >;
 
 /** The subset of routers built by the runtime-protocol composition step. */
-export type RuntimeProtocolComposition = Pick<InternalRuntimeComposition, "runtimeBootstrap" | "runtimeStream" | "conversationAssetOutputs">;
+export type RuntimeProtocolComposition = Pick<InternalRuntimeComposition, "runtimeBootstrap" | "runtimeStream" | "conversationAssetOutputs" | "agentThreadParentDeliveries">;
 
 /** The subset of routers built by the optional worker and replay composition step. */
 export type OptionalRuntimeComposition = Pick<InternalRuntimeComposition, "artifactPreprocessor" | "artifactScanner" | "channelTargetResolver" | "conversationReplay">;

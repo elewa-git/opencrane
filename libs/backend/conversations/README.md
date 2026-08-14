@@ -9,9 +9,12 @@ kept outside `server/` when it does not own HTTP routes, authentication or datab
 
 | Package | Responsibility | Scope |
 |---------|----------------|-------|
+| [`agent-threads`](./agent-threads/main/README.md) | Defines child Agent-thread admission, parent delivery and summary contracts without owning transport or persistence. | `conversation-agent-threads` |
 | [`projection`](./projection/main/README.md) | Turns an authorised canonical timeline into one safe, resumable browser event stream. | `conversation-projection` |
 
 ```text
+ parent group message ──► agent-threads ──► child agent session
+                               │
  canonical conversation timeline
                │ authorised rows
                ▼

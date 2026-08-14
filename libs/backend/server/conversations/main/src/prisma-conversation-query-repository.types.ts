@@ -1,6 +1,6 @@
 import type { ConversationLifecycles, ConversationModes } from "@opencrane/models/conversations";
 
-import type { ConversationCaller, ConversationDetail, ConversationMessageView, ConversationSummary } from "./conversation-authority.types.js";
+import type { AgentThreadSnapshotView, ConversationCaller, ConversationDetail, ConversationMessageView, ConversationSummary } from "./conversation-authority.types.js";
 
 /**
  * The four stored facts the command decision needs, and nothing else.
@@ -55,6 +55,8 @@ export interface ConversationQueryRepository
 	 *   deliberately not distinguished.
 	 */
 	open(caller: ConversationCaller, conversationId: string): Promise<ConversationDetail | null>;
+	/** Opens one bounded child snapshot through exact current parent and child access. */
+	openAgentThread(caller: ConversationCaller, parentConversationId: string, childConversationId: string): Promise<AgentThreadSnapshotView | null>;
 	/**
 	 * @returns The four facts needed to decide whether a command is allowed, or null when the
 	 *   caller may not see this conversation.

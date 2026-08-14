@@ -36,7 +36,18 @@ function _parseField(field: string, min: number, max: number): Set<number> | nul
 			const bounds = rangePart.split("-");
 			if (bounds.length > 2 || bounds.some(part => !/^[0-9]+$/.test(part))) return null;
 			low = Number(bounds[0]);
-			high = bounds.length === 2 ? Number(bounds[1]) : (term.includes("/") ? max : low);
+			if (bounds.length === 2)
+			{
+				high = Number(bounds[1]);
+			}
+			else if (term.includes("/"))
+			{
+				high = max;
+			}
+			else
+			{
+				high = low;
+			}
 			if (low < min || high > max || low > high) return null;
 		}
 		for (let value = low; value <= high; value += step) values.add(value);

@@ -32,6 +32,15 @@ enum ConversationTimelineEntryKind {
   ParentDelivery @map("parent_delivery")
 }
 
+enum AgentThreadDeliveryKind {
+  Status   @map("status")
+  Question @map("question")
+  Approval @map("approval")
+  Result   @map("result")
+  Failure  @map("failure")
+  Asset    @map("asset")
+}
+
 model Conversation {
   id                   String                        @id @default(cuid())
   siloId               String                        @map("silo_id")
@@ -55,6 +64,11 @@ model Conversation {
   activeContext        ConversationContextRevision?  @relation("ActiveConversationContext", fields: [id, contextRevisionId], references: [conversationId, id], onDelete: Restrict)
   assets               ConversationAsset[]
   assetOutputTickets   ConversationAssetOutputTicket[]
+  originAgentThread             ConversationAgentThread?        @relation("AgentThreadChild")
+  childAgentThreads             ConversationAgentThread[]       @relation("AgentThreadParent")
+  rootedAgentThreads            ConversationAgentThread[]       @relation("AgentThreadRoot")
+  receivedAgentThreadDeliveries AgentThreadParentDelivery[]     @relation("AgentThreadDeliveryParent")
+  sentAgentThreadDeliveries     AgentThreadParentDelivery[]     @relation("AgentThreadDeliveryChild")
   service              AgentService?                 @relation(fields: [agentServiceId, siloId], references: [id, siloId], onDelete: Restrict)
 
   @@unique([id, siloId])
@@ -76,6 +90,7 @@ model ConversationParticipant {
   conversation        Conversation @relation(fields: [conversationId], references: [id], onDelete: Restrict)
   timelineEntries     ConversationTimelineEntry[]
   assignedElicitations ElicitationRequest[]
+  initiatedAgentThreads ConversationAgentThread[]
 
   @@id([conversationId, userId])
   @@index([userId, archivedAt, conversationId])
@@ -97,6 +112,7 @@ model ConversationMessage {
   conversation   Conversation               @relation(fields: [conversationId], references: [id], onDelete: Restrict)
   timelineEntry  ConversationTimelineEntry?
   assets         ConversationAsset[]
+  invokedAgentThread ConversationAgentThread?   @relation("AgentThreadParentMessage")
 
   @@unique([conversationId, id])
   @@unique([conversationId, idempotencyKey])
@@ -135,6 +151,7 @@ model ConversationTimelineEntry {
   participantUserId       String?                      @map("participant_user_id")
   systemEventId           String?                      @map("system_event_id")
   parentDeliveryChildRunId String?                      @map("parent_delivery_child_run_id")
+  parentDeliveryAgentThreadId String?                       @map("parent_delivery_agent_thread_id")
   payload                 Json?
   occurredAt              DateTime                     @default(now()) @map("occurred_at")
   conversation            Conversation                 @relation(fields: [conversationId], references: [id], onDelete: Restrict)
@@ -142,6 +159,7 @@ model ConversationTimelineEntry {
   runEvent                ConversationRunEvent?        @relation(fields: [conversationId, runId, runEventSequence], references: [conversationId, runId, sequence], onDelete: Restrict)
   participant             ConversationParticipant?     @relation(fields: [conversationId, participantUserId], references: [conversationId, userId], onDelete: Restrict)
   parentDelivery          ChildRunCompletionDelivery?  @relation(fields: [parentDeliveryChildRunId], references: [childRunId], onDelete: Restrict)
+  agentThreadDelivery         AgentThreadParentDelivery?    @relation(fields: [parentDeliveryAgentThreadId], references: [id], onDelete: Restrict)
 
   @@id([conversationId, position])
   @@unique([conversationId, messageId])
@@ -149,8 +167,68 @@ model ConversationTimelineEntry {
   @@unique([conversationId, membershipEventId])
   @@unique([conversationId, systemEventId])
   @@unique([parentDeliveryChildRunId])
+  @@unique([parentDeliveryAgentThreadId])
   @@index([conversationId, occurredAt])
   @@map("conversation_timeline_entries")
+}
+
+/// Immutable link from one ordinary group message to one child agent-session conversation.
+model ConversationAgentThread {
+  childConversationId  String                      @id @map("child_conversation_id")
+  parentConversationId String                      @map("parent_conversation_id")
+  rootConversationId   String                      @map("root_conversation_id")
+  siloId               String                      @map("silo_id")
+  parentMessageId      String                      @map("parent_message_id")
+  initiatorUserId      String                      @map("initiator_user_id")
+  agentServiceId       String                      @map("agent_service_id")
+  personaProfileId     String                      @map("persona_profile_id")
+  personaRevisionId    String                      @map("persona_revision_id")
+  firstRunId           String                      @unique @map("first_run_id")
+  createdAt            DateTime                    @default(now()) @map("created_at")
+  childConversation    Conversation                @relation("AgentThreadChild", fields: [childConversationId, siloId, agentServiceId], references: [id, siloId, agentServiceId], onDelete: Restrict)
+  parentConversation   Conversation                @relation("AgentThreadParent", fields: [parentConversationId, siloId], references: [id, siloId], onDelete: Restrict)
+  rootConversation     Conversation                @relation("AgentThreadRoot", fields: [rootConversationId, siloId], references: [id, siloId], onDelete: Restrict)
+  parentMessage        ConversationMessage         @relation("AgentThreadParentMessage", fields: [parentConversationId, parentMessageId], references: [conversationId, id], onDelete: Restrict)
+  initiator            ConversationParticipant     @relation(fields: [parentConversationId, initiatorUserId], references: [conversationId, userId], onDelete: Restrict)
+  firstRun             AgentRun                    @relation(fields: [firstRunId, childConversationId, siloId, agentServiceId], references: [id, conversationId, siloId, agentServiceId], onDelete: Restrict)
+  personaProfile       PersonaProfile              @relation(fields: [personaProfileId, initiatorUserId], references: [id, userId], onDelete: Restrict)
+  personaRevision      PersonaRevision             @relation(fields: [personaProfileId, personaRevisionId], references: [personaProfileId, id], onDelete: Restrict)
+  deliveries           AgentThreadParentDelivery[]
+
+  @@unique([parentConversationId, parentMessageId])
+  @@unique([childConversationId, siloId, agentServiceId], map: "conversation_agent_threads_child_authority_key")
+  @@unique([firstRunId, childConversationId, siloId, agentServiceId], map: "conversation_agent_threads_first_run_authority_key")
+  @@unique([childConversationId, parentConversationId], map: "conversation_agent_threads_child_parent_key")
+  @@index([rootConversationId, createdAt])
+  @@index([initiatorUserId, createdAt])
+  @@map("conversation_agent_threads")
+}
+
+/// Append-only display-safe delivery from one child Agent thread to its immediate parent.
+model AgentThreadParentDelivery {
+  id                   String                     @id @default(cuid())
+  childConversationId  String                     @map("child_conversation_id")
+  parentConversationId String                     @map("parent_conversation_id")
+  siloId               String                     @map("silo_id")
+  agentServiceId       String                     @map("agent_service_id")
+  runId                String                     @map("run_id")
+  kind                 AgentThreadDeliveryKind
+  idempotencyKey       String                     @map("idempotency_key")
+  label                String
+  detail               String
+  assetId              String?                    @map("asset_id")
+  createdAt            DateTime                   @default(now()) @map("created_at")
+  thread               ConversationAgentThread    @relation(fields: [childConversationId, parentConversationId], references: [childConversationId, parentConversationId], onDelete: Restrict, map: "agent_thread_deliveries_thread_fkey")
+  childConversation    Conversation               @relation("AgentThreadDeliveryChild", fields: [childConversationId, siloId, agentServiceId], references: [id, siloId, agentServiceId], onDelete: Restrict, map: "agent_thread_deliveries_child_fkey")
+  parentConversation   Conversation               @relation("AgentThreadDeliveryParent", fields: [parentConversationId, siloId], references: [id, siloId], onDelete: Restrict)
+  run                  AgentRun                   @relation(fields: [runId, childConversationId, siloId, agentServiceId], references: [id, conversationId, siloId, agentServiceId], onDelete: Restrict)
+  asset                ConversationAsset?         @relation(fields: [parentConversationId, assetId], references: [conversationId, id], onDelete: Restrict)
+  timelineEntry        ConversationTimelineEntry?
+
+  @@unique([childConversationId, idempotencyKey])
+  @@index([parentConversationId, createdAt])
+  @@index([runId, createdAt])
+  @@map("agent_thread_parent_deliveries")
 }
 
 model ConversationContextRevision {

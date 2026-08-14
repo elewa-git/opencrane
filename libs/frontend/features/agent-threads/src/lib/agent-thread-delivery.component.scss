@@ -1,0 +1,6 @@
+:host { display: block; }
+.delivery { display: grid; gap: .5rem; min-width: 0; overflow-wrap: anywhere; }
+:host ::ng-deep .p-message-content { align-items: flex-start; }
+:host ::ng-deep .p-message-text strong, :host ::ng-deep .p-message-text span, :host ::ng-deep .p-message-text small { display: block; }
+:host ::ng-deep .p-message-text small { margin-top: .2rem; }
+.delivery__rich:empty { display: none; }

@@ -1,7 +1,7 @@
 import { EventType } from "@ag-ui/core";
-import { AG_UI_A2UI_ENVELOPE_VERSION, AG_UI_INTERRUPTS_CLEARED_EVENT, AG_UI_TOOL_FAILURE_EVENT, AG_UI_TOOL_RECOVERY_REQUIRED_EVENT, AgUiToolRecoveryProviderOutcomes, ___ParseAgUiA2uiEnvelope, type AgUiA2uiEnvelope, type AgUiProjectionEvent, type AgUiToolFailureEnvelope, type AgUiToolRecoveryRequiredEnvelope } from "@opencrane/contracts";
+import { AG_UI_A2UI_ENVELOPE_VERSION, AG_UI_AGENT_THREAD_PARENT_DELIVERY_EVENT, AG_UI_INTERRUPTS_CLEARED_EVENT, AG_UI_TOOL_FAILURE_EVENT, AG_UI_TOOL_RECOVERY_REQUIRED_EVENT, AgentThreadDeliveryKinds, AgUiToolRecoveryProviderOutcomes, ___ParseAgUiA2uiEnvelope, type AgUiA2uiEnvelope, type AgUiProjectionEvent, type AgUiToolFailureEnvelope, type AgUiToolRecoveryRequiredEnvelope } from "@opencrane/contracts";
 
-import { AgUiMessageStatuses, AgUiRunStatuses, AgUiToolStatuses, type AgUiMessageView, type AgUiStreamRecord, type AgUiStreamState } from "./ag-ui-stream.types.js";
+import { AgUiMessageStatuses, AgUiRunStatuses, AgUiToolStatuses, type AgUiAgentThreadParentDelivery, type AgUiMessageView, type AgUiStreamRecord, type AgUiStreamState } from "./ag-ui-stream.types.js";
 
 /** Most operations kept for one surface; a surface that exceeds this makes the reducer throw. */
 const _MAX_MATERIALIZED_A2UI_OPERATIONS = 256;
@@ -23,7 +23,7 @@ const _TOOL_RECOVERY_PROVIDER_OUTCOMES = new Set<string>(Object.values(AgUiToolR
  */
 export function __CreateAgUiStreamState(): AgUiStreamState
 {
-	return { cursor: null, seenCursors: new Map(), runId: null, runStatus: AgUiRunStatuses.Idle, runFailure: null, runRecovery: null, interrupts: [], messages: {}, tools: {}, surfaces: new Map(), surfaceFingerprints: new Map(), customEvents: [], accessRevoked: false };
+	return { cursor: null, seenCursors: new Map(), runId: null, runStatus: AgUiRunStatuses.Idle, runFailure: null, runRecovery: null, interrupts: [], messages: {}, tools: {}, surfaces: new Map(), surfaceFingerprints: new Map(), customEvents: [], agentThreadParentDeliveries: {}, accessRevoked: false };
 }
 
 /**
@@ -196,7 +196,32 @@ function _Custom(state: AgUiStreamState, name: string, value: unknown): AgUiStre
 	if (name === AG_UI_TOOL_FAILURE_EVENT) return _ToolFailure(state, value, name);
 	if (name === AG_UI_TOOL_RECOVERY_REQUIRED_EVENT) return _ToolRecoveryRequired(state, value, name);
 	if (name === AG_UI_A2UI_ENVELOPE_VERSION) return _A2uiSurface(state, ___ParseAgUiA2uiEnvelope(value), name);
+	if (name === AG_UI_AGENT_THREAD_PARENT_DELIVERY_EVENT) return _AgentThreadParentDelivery(state, value, name);
 	return { ...state, customEvents: [...state.customEvents, name] };
+}
+
+/** Adopt one exact display-safe immediate-parent delivery; runtime authority fields are rejected. */
+function _AgentThreadParentDelivery(state: AgUiStreamState, value: unknown, name: string): AgUiStreamState
+{
+	if (!_IsAgentThreadParentDelivery(value)) throw new Error("AG-UI Agent-thread parent delivery is invalid");
+	const existing = state.agentThreadParentDeliveries[value.id];
+	if (existing !== undefined && JSON.stringify(existing) !== JSON.stringify(value)) throw new Error("AG-UI Agent-thread parent delivery changed payload");
+	if (existing !== undefined) return state;
+	return { ...state, agentThreadParentDeliveries: { ...state.agentThreadParentDeliveries, [value.id]: value }, customEvents: [...state.customEvents, name] };
+}
+
+/** Validate exact bounded display fields and reject every unexpected authority or provider field. */
+function _IsAgentThreadParentDelivery(value: unknown): value is AgUiAgentThreadParentDelivery
+{
+	if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
+	const candidate = value as Record<string, unknown>;
+	const keys = ["id", "childConversationId", "kind", "label", "detail", "assetId"];
+	if (Object.keys(candidate).length !== keys.length || keys.some(function _Missing(key) { return !Object.hasOwn(candidate, key); })) return false;
+	if (!_BoundedIdentifier(candidate["id"]) || !_BoundedIdentifier(candidate["childConversationId"])) return false;
+	if (typeof candidate["kind"] !== "string" || !Object.values(AgentThreadDeliveryKinds).includes(candidate["kind"] as AgentThreadDeliveryKinds)) return false;
+	if (typeof candidate["label"] !== "string" || candidate["label"].trim().length === 0 || candidate["label"].length > 160) return false;
+	if (typeof candidate["detail"] !== "string" || candidate["detail"].trim().length === 0 || candidate["detail"].length > 4000) return false;
+	return candidate["assetId"] === null || _BoundedIdentifier(candidate["assetId"]);
 }
 
 /** Stop the run and mark it NeedsRecovery, so an unclear provider outcome is shown as neither a failure nor a request for input. */

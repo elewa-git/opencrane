@@ -1,0 +1,12 @@
+{
+  "name": "frontend-elements-conversation",
+  "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
+  "projectType": "library",
+  "sourceRoot": "libs/frontend/elements/conversation/src",
+  "prefix": "wo",
+  "tags": ["scope:shared", "type:lib", "layer:frontend", "frontend-role:elements-composite"],
+  "targets": {
+    "lint": { "executor": "nx:run-commands", "options": { "command": "tsc -p tsconfig.lint.json", "cwd": "libs/frontend/elements/conversation" } },
+    "test": { "executor": "nx:run-commands", "options": { "command": "vitest run --passWithNoTests", "cwd": "libs/frontend/elements/conversation" } }
+  }
+}

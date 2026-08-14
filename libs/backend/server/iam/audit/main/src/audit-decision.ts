@@ -2,6 +2,26 @@ import { AuditDecisionActorKind, AuditDecisionOutcome, WorkloadKind, type Prisma
 
 import type { AuditDecisionRecord } from "./audit-decision.types.js";
 
+function _WorkloadKind(value: AuditDecisionRecord["workloadKind"]): WorkloadKind | undefined
+{
+	if (value === undefined) return undefined;
+	if (value === "job") return WorkloadKind.Job;
+	return WorkloadKind.Deployment;
+}
+
+function _Outcome(value: AuditDecisionRecord["outcome"]): AuditDecisionOutcome
+{
+	switch (value)
+	{
+		case "allow":
+			return AuditDecisionOutcome.Allow;
+		case "deny":
+			return AuditDecisionOutcome.Deny;
+		case "error":
+			return AuditDecisionOutcome.Error;
+	}
+}
+
 /**
  * Writes one row into the append-only decision log, using the transaction the caller is already in.
  *
@@ -35,7 +55,7 @@ export async function __AppendAuditDecision(transaction: Prisma.TransactionClien
 			audience: decision.audience,
 			namespace: decision.namespace,
 			serviceAccountName: decision.serviceAccountName,
-			workloadKind: decision.workloadKind === undefined ? undefined : decision.workloadKind === "job" ? WorkloadKind.Job : WorkloadKind.Deployment,
+			workloadKind: _WorkloadKind(decision.workloadKind),
 			workloadUid: decision.workloadUid,
 			podUid: decision.podUid,
 			runId: decision.runId,
@@ -54,7 +74,7 @@ export async function __AppendAuditDecision(transaction: Prisma.TransactionClien
 			policyRevisionHash: decision.policyRevisionHash,
 			effectiveAuthorizationDigest: decision.effectiveAuthorizationDigest,
 			membershipRevision: decision.membershipRevision,
-			outcome: decision.outcome === "allow" ? AuditDecisionOutcome.Allow : decision.outcome === "deny" ? AuditDecisionOutcome.Deny : AuditDecisionOutcome.Error,
+			outcome: _Outcome(decision.outcome),
 			reasonCode: decision.reasonCode,
 			decidedAt: decision.decidedAt,
 		},

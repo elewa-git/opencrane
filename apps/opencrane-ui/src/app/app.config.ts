@@ -5,6 +5,7 @@ import { provideHttpClient, withFetch } from "@angular/common/http";
 import { providePrimeNG } from "primeng/config";
 
 import { OpenCranePreset } from "@opencrane/core";
+import { AGENT_THREAD_GATEWAY, OpenCraneAgentThreadGateway } from "@opencrane/state/conversation/agent-threads";
 import { PLATFORM_SURFACE } from "@opencrane/state/core";
 import { provideControlPlaneGateways } from "@opencrane/state/gateways";
 import { OpenCranePersonaFirstChatGateway, PERSONA_FIRST_CHAT_GATEWAY, PERSONA_GATEWAY } from "@opencrane/state/onboarding";
@@ -33,6 +34,7 @@ export const appConfig: ApplicationConfig =
 		provideWebPlatform(),
 		{ provide: PERSONA_GATEWAY, useClass: OpenCranePersonaGateway },
 		{ provide: PERSONA_FIRST_CHAT_GATEWAY, useClass: OpenCranePersonaFirstChatGateway },
+		{ provide: AGENT_THREAD_GATEWAY, useClass: OpenCraneAgentThreadGateway },
 		// This app is the org/customer surface — capabilities derive from the
 		// org-admin claim only (platform-operator claims grant nothing here).
 		{ provide: PLATFORM_SURFACE, useValue: "org" },

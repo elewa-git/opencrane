@@ -9,11 +9,11 @@ import { BrowserDynamicTestingModule, platformBrowserDynamicTesting } from "@ang
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 
 import { AG_UI_A2UI_ENVELOPE_VERSION, AgUiA2uiSurfaceStates, type AgUiA2uiOperation } from "@opencrane/contracts";
-import { toSanitizedMarkdownHtml } from "@opencrane/state/conversation/render";
 
 import { A2uiCanvasComponent } from "../a2ui-canvas.component.js";
 import { provideOpenCraneA2ui } from "../a2ui.providers.js";
 import { type A2uiDisplayedActionIntent, type A2uiSurfacePresentation } from "../a2ui.types.js";
+import { __A2uiTestSanitizer } from "./a2ui-test-sanitizer.js";
 
 /** Real component template compiled by Angular TestBed for DOM and accessibility contracts. */
 const _CANVAS_TEMPLATE = readFileSync(join(process.cwd(), "src/lib/a2ui-canvas.component.html"), "utf8");
@@ -144,7 +144,7 @@ function _presentation(overrides: Partial<A2uiSurfacePresentation> = {}): A2uiSu
 /** Create and settle the production component with its real A2UI providers. */
 async function _createFixture(presentation: A2uiSurfacePresentation): Promise<ComponentFixture<_A2uiCanvasTestHostComponent>>
 {
-	TestBed.configureTestingModule({ imports: [_A2uiCanvasTestHostComponent], providers: [...provideOpenCraneA2ui(toSanitizedMarkdownHtml), { provide: PLATFORM_ID, useValue: "server" }] });
+	TestBed.configureTestingModule({ imports: [_A2uiCanvasTestHostComponent], providers: [...provideOpenCraneA2ui(__A2uiTestSanitizer), { provide: PLATFORM_ID, useValue: "server" }] });
 	const fixture = TestBed.createComponent(_A2uiCanvasTestHostComponent);
 	fixture.componentInstance.presentation.set(presentation);
 	fixture.detectChanges();

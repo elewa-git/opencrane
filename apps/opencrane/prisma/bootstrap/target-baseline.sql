@@ -104,6 +104,9 @@ CREATE TYPE "ConversationMessageState" AS ENUM ('pending', 'streaming', 'complet
 CREATE TYPE "ConversationTimelineEntryKind" AS ENUM ('message', 'run_event', 'membership', 'system', 'parent_delivery');
 
 -- CreateEnum
+CREATE TYPE "AgentThreadDeliveryKind" AS ENUM ('status', 'question', 'approval', 'result', 'failure', 'asset');
+
+-- CreateEnum
 CREATE TYPE "ElicitationRequestState" AS ENUM ('requested', 'answered', 'declined', 'expired', 'cancelled');
 
 -- CreateEnum
@@ -786,6 +789,7 @@ CREATE TABLE "conversation_timeline_entries" (
     "participant_user_id" TEXT,
     "system_event_id" TEXT,
     "parent_delivery_child_run_id" TEXT,
+    "parent_delivery_agent_thread_id" TEXT,
     "payload" JSONB,
     "occurred_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
@@ -4281,6 +4285,7 @@ BEGIN
         IF NEW."message_id" IS NULL OR NEW."run_id" IS NOT NULL OR NEW."run_event_sequence" IS NOT NULL
             OR NEW."membership_event_id" IS NOT NULL OR NEW."participant_user_id" IS NOT NULL
             OR NEW."system_event_id" IS NOT NULL OR NEW."parent_delivery_child_run_id" IS NOT NULL
+            OR NEW."parent_delivery_agent_thread_id" IS NOT NULL
             OR NEW."payload" IS NOT NULL THEN
             RAISE EXCEPTION 'message timeline entry requires only exact Message provenance';
         END IF;
@@ -4288,6 +4293,7 @@ BEGIN
         IF NEW."message_id" IS NOT NULL OR NEW."run_id" IS NULL OR NEW."run_event_sequence" IS NULL
             OR NEW."membership_event_id" IS NOT NULL OR NEW."participant_user_id" IS NOT NULL
             OR NEW."system_event_id" IS NOT NULL OR NEW."parent_delivery_child_run_id" IS NOT NULL
+            OR NEW."parent_delivery_agent_thread_id" IS NOT NULL
             OR NEW."payload" IS NOT NULL THEN
             RAISE EXCEPTION 'run-event timeline entry requires only exact RunEvent provenance';
         END IF;
@@ -4295,6 +4301,7 @@ BEGIN
         IF NEW."message_id" IS NOT NULL OR NEW."run_id" IS NOT NULL OR NEW."run_event_sequence" IS NOT NULL
             OR NEW."membership_event_id" IS NULL OR NEW."participant_user_id" IS NULL
             OR NEW."system_event_id" IS NOT NULL OR NEW."parent_delivery_child_run_id" IS NOT NULL
+            OR NEW."parent_delivery_agent_thread_id" IS NOT NULL
             OR jsonb_typeof(NEW."payload") IS DISTINCT FROM 'object' THEN
             RAISE EXCEPTION 'membership timeline entry requires only exact participant event provenance';
         END IF;
@@ -4306,17 +4313,20 @@ BEGIN
         IF NEW."message_id" IS NOT NULL OR NEW."run_id" IS NOT NULL OR NEW."run_event_sequence" IS NOT NULL
             OR NEW."membership_event_id" IS NOT NULL OR NEW."participant_user_id" IS NOT NULL
             OR NEW."system_event_id" IS NULL OR NEW."parent_delivery_child_run_id" IS NOT NULL
+            OR NEW."parent_delivery_agent_thread_id" IS NOT NULL
             OR jsonb_typeof(NEW."payload") IS DISTINCT FROM 'object' THEN
             RAISE EXCEPTION 'system timeline entry requires only exact system event provenance';
         END IF;
     ELSIF NEW."kind" = 'parent_delivery' THEN
         IF NEW."message_id" IS NOT NULL OR NEW."run_id" IS NOT NULL OR NEW."run_event_sequence" IS NOT NULL
             OR NEW."membership_event_id" IS NOT NULL OR NEW."participant_user_id" IS NOT NULL
-            OR NEW."system_event_id" IS NOT NULL OR NEW."parent_delivery_child_run_id" IS NULL
+            OR NEW."system_event_id" IS NOT NULL
+            OR (NEW."parent_delivery_child_run_id" IS NULL AND NEW."parent_delivery_agent_thread_id" IS NULL)
+            OR (NEW."parent_delivery_child_run_id" IS NOT NULL AND NEW."parent_delivery_agent_thread_id" IS NOT NULL)
             OR NEW."payload" IS NOT NULL THEN
             RAISE EXCEPTION 'parent-delivery timeline entry requires only exact delivery provenance';
         END IF;
-        IF NOT EXISTS (
+        IF NEW."parent_delivery_child_run_id" IS NOT NULL AND NOT EXISTS (
             SELECT 1
             FROM "child_run_completion_deliveries" delivery
             JOIN "agent_runs" parent_run ON parent_run."id" = delivery."parent_run_id"
@@ -4325,6 +4335,14 @@ BEGIN
               AND parent_run."conversation_id" = NEW."conversation_id"
         ) THEN
             RAISE EXCEPTION 'parent-delivery timeline entry requires exact immediate-parent delivery authority';
+        END IF;
+        IF NEW."parent_delivery_agent_thread_id" IS NOT NULL AND NOT EXISTS (
+            SELECT 1
+            FROM "agent_thread_parent_deliveries" delivery
+            WHERE delivery."id" = NEW."parent_delivery_agent_thread_id"
+              AND delivery."parent_conversation_id" = NEW."conversation_id"
+        ) THEN
+            RAISE EXCEPTION 'Agent-thread delivery timeline entry requires exact immediate-parent authority';
         END IF;
     ELSE
         RAISE EXCEPTION 'unsupported ConversationTimelineEntry kind';
@@ -6055,20 +6073,23 @@ ALTER TABLE "conversation_run_events" ADD CONSTRAINT "conversation_run_events_me
 ALTER TABLE "conversation_timeline_entries" ADD CONSTRAINT "conversation_timeline_entries_reference_shape_check" CHECK (
         ("kind" = 'message' AND "message_id" IS NOT NULL AND "run_id" IS NULL AND "run_event_sequence" IS NULL
             AND "membership_event_id" IS NULL AND "participant_user_id" IS NULL AND "system_event_id" IS NULL
-            AND "parent_delivery_child_run_id" IS NULL AND "payload" IS NULL) OR
+            AND "parent_delivery_child_run_id" IS NULL AND "parent_delivery_agent_thread_id" IS NULL AND "payload" IS NULL) OR
         ("kind" = 'run_event' AND "message_id" IS NULL AND "run_id" IS NOT NULL AND "run_event_sequence" IS NOT NULL
             AND "membership_event_id" IS NULL AND "participant_user_id" IS NULL AND "system_event_id" IS NULL
-            AND "parent_delivery_child_run_id" IS NULL AND "payload" IS NULL) OR
+            AND "parent_delivery_child_run_id" IS NULL AND "parent_delivery_agent_thread_id" IS NULL AND "payload" IS NULL) OR
         ("kind" = 'membership' AND "message_id" IS NULL AND "run_id" IS NULL AND "run_event_sequence" IS NULL
             AND "membership_event_id" IS NOT NULL AND btrim("membership_event_id") <> '' AND "participant_user_id" IS NOT NULL
             AND btrim("participant_user_id") <> '' AND "system_event_id" IS NULL AND "parent_delivery_child_run_id" IS NULL
-            AND jsonb_typeof("payload") = 'object') OR
+            AND "parent_delivery_agent_thread_id" IS NULL AND jsonb_typeof("payload") = 'object') OR
         ("kind" = 'system' AND "message_id" IS NULL AND "run_id" IS NULL AND "run_event_sequence" IS NULL
             AND "membership_event_id" IS NULL AND "participant_user_id" IS NULL AND "system_event_id" IS NOT NULL
-            AND btrim("system_event_id") <> '' AND "parent_delivery_child_run_id" IS NULL AND jsonb_typeof("payload") = 'object') OR
+            AND btrim("system_event_id") <> '' AND "parent_delivery_child_run_id" IS NULL
+            AND "parent_delivery_agent_thread_id" IS NULL AND jsonb_typeof("payload") = 'object') OR
         ("kind" = 'parent_delivery' AND "message_id" IS NULL AND "run_id" IS NULL AND "run_event_sequence" IS NULL
             AND "membership_event_id" IS NULL AND "participant_user_id" IS NULL AND "system_event_id" IS NULL
-            AND "parent_delivery_child_run_id" IS NOT NULL AND btrim("parent_delivery_child_run_id") <> '' AND "payload" IS NULL)
+            AND (("parent_delivery_child_run_id" IS NOT NULL AND btrim("parent_delivery_child_run_id") <> '' AND "parent_delivery_agent_thread_id" IS NULL)
+              OR ("parent_delivery_child_run_id" IS NULL AND "parent_delivery_agent_thread_id" IS NOT NULL AND btrim("parent_delivery_agent_thread_id") <> ''))
+            AND "payload" IS NULL)
     );
 ALTER TABLE "conversation_context_revisions" ADD CONSTRAINT "conversation_context_revisions_revision_check" CHECK ("revision" > 0);
 ALTER TABLE "conversation_context_revisions" ADD CONSTRAINT "conversation_context_revisions_digest_check" CHECK ("digest" ~ '^sha256:[0-9a-f]{64}$');
@@ -7089,6 +7110,39 @@ CREATE TABLE "conversation_assets" (
     CONSTRAINT "conversation_assets_pkey" PRIMARY KEY ("id")
 );
 
+-- One immutable ordinary group-message mention owns one child Agent-session conversation.
+CREATE TABLE "conversation_agent_threads" (
+    "child_conversation_id" TEXT NOT NULL,
+    "parent_conversation_id" TEXT NOT NULL,
+    "root_conversation_id" TEXT NOT NULL,
+    "silo_id" TEXT NOT NULL,
+    "parent_message_id" TEXT NOT NULL,
+    "initiator_user_id" TEXT NOT NULL,
+    "agent_service_id" TEXT NOT NULL,
+    "persona_profile_id" TEXT NOT NULL,
+    "persona_revision_id" TEXT NOT NULL,
+    "first_run_id" TEXT NOT NULL,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "conversation_agent_threads_pkey" PRIMARY KEY ("child_conversation_id")
+);
+
+-- Display-safe, append-only communication from a child Agent session to its immediate parent group.
+CREATE TABLE "agent_thread_parent_deliveries" (
+    "id" TEXT NOT NULL,
+    "child_conversation_id" TEXT NOT NULL,
+    "parent_conversation_id" TEXT NOT NULL,
+    "silo_id" TEXT NOT NULL,
+    "agent_service_id" TEXT NOT NULL,
+    "run_id" TEXT NOT NULL,
+    "kind" "AgentThreadDeliveryKind" NOT NULL,
+    "idempotency_key" TEXT NOT NULL,
+    "label" TEXT NOT NULL,
+    "detail" TEXT NOT NULL,
+    "asset_id" TEXT,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT "agent_thread_parent_deliveries_pkey" PRIMARY KEY ("id")
+);
+
 CREATE UNIQUE INDEX "artifact_scan_jobs_artifact_revision_id_key" ON "artifact_scan_jobs"("artifact_revision_id");
 CREATE INDEX "artifact_scan_jobs_state_next_attempt_at_claim_expires_at_idx" ON "artifact_scan_jobs"("state", "next_attempt_at", "claim_expires_at");
 CREATE UNIQUE INDEX "conversation_asset_output_tickets_run_id_run_attempt_idempo_key" ON "conversation_asset_output_tickets"("run_id", "run_attempt", "idempotency_key");
@@ -7104,6 +7158,18 @@ CREATE INDEX "conversation_assets_conversation_id_state_created_at_idx" ON "conv
 CREATE INDEX "conversation_assets_message_id_idx" ON "conversation_assets"("message_id");
 CREATE INDEX "conversation_assets_run_id_run_attempt_idx" ON "conversation_assets"("run_id", "run_attempt");
 CREATE INDEX "conversation_assets_artifact_id_revision_id_idx" ON "conversation_assets"("artifact_id", "revision_id");
+CREATE UNIQUE INDEX "conversation_agent_threads_first_run_id_key" ON "conversation_agent_threads"("first_run_id");
+CREATE INDEX "conversation_agent_threads_root_conversation_id_created_at_idx" ON "conversation_agent_threads"("root_conversation_id", "created_at");
+CREATE INDEX "conversation_agent_threads_initiator_user_id_created_at_idx" ON "conversation_agent_threads"("initiator_user_id", "created_at");
+CREATE UNIQUE INDEX "conversation_agent_threads_parent_conversation_id_parent_me_key" ON "conversation_agent_threads"("parent_conversation_id", "parent_message_id");
+CREATE UNIQUE INDEX "conversation_agent_threads_child_authority_key" ON "conversation_agent_threads"("child_conversation_id", "silo_id", "agent_service_id");
+CREATE UNIQUE INDEX "conversation_agent_threads_first_run_authority_key" ON "conversation_agent_threads"("first_run_id", "child_conversation_id", "silo_id", "agent_service_id");
+CREATE UNIQUE INDEX "conversation_agent_threads_child_parent_key" ON "conversation_agent_threads"("child_conversation_id", "parent_conversation_id");
+CREATE INDEX "agent_thread_parent_deliveries_parent_conversation_id_creat_idx" ON "agent_thread_parent_deliveries"("parent_conversation_id", "created_at");
+CREATE INDEX "agent_thread_parent_deliveries_run_id_created_at_idx" ON "agent_thread_parent_deliveries"("run_id", "created_at");
+CREATE UNIQUE INDEX "agent_thread_parent_deliveries_child_conversation_id_idempo_key" ON "agent_thread_parent_deliveries"("child_conversation_id", "idempotency_key");
+CREATE UNIQUE INDEX "conversation_timeline_entries_parent_delivery_agent_thread__key" ON "conversation_timeline_entries"("parent_delivery_agent_thread_id");
+CREATE UNIQUE INDEX "agent_runs_thread_authority_key" ON "agent_runs"("id", "conversation_id", "silo_id", "agent_service_id");
 
 ALTER TABLE "artifact_scan_jobs" ADD CONSTRAINT "artifact_scan_jobs_artifact_revision_id_fkey" FOREIGN KEY ("artifact_revision_id") REFERENCES "artifact_revisions"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 ALTER TABLE "conversation_asset_output_tickets" ADD CONSTRAINT "conversation_asset_output_tickets_conversation_id_silo_id_fkey" FOREIGN KEY ("conversation_id", "silo_id") REFERENCES "conversations"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
@@ -7118,6 +7184,20 @@ ALTER TABLE "conversation_assets" ADD CONSTRAINT "conversation_assets_artifact_i
 ALTER TABLE "conversation_assets" ADD CONSTRAINT "conversation_assets_artifact_id_revision_id_fkey" FOREIGN KEY ("artifact_id", "revision_id") REFERENCES "artifact_revisions"("artifact_id", "id") ON DELETE RESTRICT ON UPDATE CASCADE;
 ALTER TABLE "conversation_assets" ADD CONSTRAINT "conversation_assets_upload_lease_id_fkey" FOREIGN KEY ("upload_lease_id") REFERENCES "artifact_upload_leases"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 ALTER TABLE "conversation_assets" ADD CONSTRAINT "conversation_assets_exact_output_ticket_fkey" FOREIGN KEY ("output_ticket_id", "silo_id", "conversation_id", "run_id", "run_attempt", "run_event_sequence", "run_message_id") REFERENCES "conversation_asset_output_tickets"("id", "silo_id", "conversation_id", "run_id", "run_attempt", "run_event_sequence", "output_message_id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "conversation_timeline_entries" ADD CONSTRAINT "conversation_timeline_entries_parent_delivery_agent_thread_fkey" FOREIGN KEY ("parent_delivery_agent_thread_id") REFERENCES "agent_thread_parent_deliveries"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "conversation_agent_threads" ADD CONSTRAINT "conversation_agent_threads_child_conversation_id_silo_id_a_fkey" FOREIGN KEY ("child_conversation_id", "silo_id", "agent_service_id") REFERENCES "conversations"("id", "silo_id", "agent_service_id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "conversation_agent_threads" ADD CONSTRAINT "conversation_agent_threads_parent_conversation_id_silo_id_fkey" FOREIGN KEY ("parent_conversation_id", "silo_id") REFERENCES "conversations"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "conversation_agent_threads" ADD CONSTRAINT "conversation_agent_threads_root_conversation_id_silo_id_fkey" FOREIGN KEY ("root_conversation_id", "silo_id") REFERENCES "conversations"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "conversation_agent_threads" ADD CONSTRAINT "conversation_agent_threads_parent_conversation_id_parent_m_fkey" FOREIGN KEY ("parent_conversation_id", "parent_message_id") REFERENCES "conversation_messages"("conversation_id", "id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "conversation_agent_threads" ADD CONSTRAINT "conversation_agent_threads_parent_conversation_id_initiato_fkey" FOREIGN KEY ("parent_conversation_id", "initiator_user_id") REFERENCES "conversation_participants"("conversation_id", "user_id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "conversation_agent_threads" ADD CONSTRAINT "conversation_agent_threads_first_run_id_child_conversation_fkey" FOREIGN KEY ("first_run_id", "child_conversation_id", "silo_id", "agent_service_id") REFERENCES "agent_runs"("id", "conversation_id", "silo_id", "agent_service_id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "conversation_agent_threads" ADD CONSTRAINT "conversation_agent_threads_persona_profile_id_initiator_us_fkey" FOREIGN KEY ("persona_profile_id", "initiator_user_id") REFERENCES "persona_profiles"("id", "user_id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "conversation_agent_threads" ADD CONSTRAINT "conversation_agent_threads_persona_profile_id_persona_revi_fkey" FOREIGN KEY ("persona_profile_id", "persona_revision_id") REFERENCES "persona_revisions"("persona_profile_id", "id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "agent_thread_parent_deliveries" ADD CONSTRAINT "agent_thread_deliveries_thread_fkey" FOREIGN KEY ("child_conversation_id", "parent_conversation_id") REFERENCES "conversation_agent_threads"("child_conversation_id", "parent_conversation_id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "agent_thread_parent_deliveries" ADD CONSTRAINT "agent_thread_deliveries_child_fkey" FOREIGN KEY ("child_conversation_id", "silo_id", "agent_service_id") REFERENCES "conversations"("id", "silo_id", "agent_service_id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "agent_thread_parent_deliveries" ADD CONSTRAINT "agent_thread_parent_deliveries_parent_conversation_id_silo_fkey" FOREIGN KEY ("parent_conversation_id", "silo_id") REFERENCES "conversations"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "agent_thread_parent_deliveries" ADD CONSTRAINT "agent_thread_parent_deliveries_run_id_child_conversation_i_fkey" FOREIGN KEY ("run_id", "child_conversation_id", "silo_id", "agent_service_id") REFERENCES "agent_runs"("id", "conversation_id", "silo_id", "agent_service_id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "agent_thread_parent_deliveries" ADD CONSTRAINT "agent_thread_parent_deliveries_parent_conversation_id_asse_fkey" FOREIGN KEY ("parent_conversation_id", "asset_id") REFERENCES "conversation_assets"("conversation_id", "id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 ALTER TABLE "artifact_scan_jobs" ADD CONSTRAINT "artifact_scan_jobs_state_check" CHECK (
     ("state" IN ('pending', 'retryable_failed') AND "claim_fence" IS NULL AND "claim_expires_at" IS NULL AND "completed_at" IS NULL)
@@ -7198,3 +7278,107 @@ END;
 $$;
 CREATE TRIGGER "conversation_asset_output_tickets_lifecycle_guard" BEFORE INSERT OR UPDATE OR DELETE ON "conversation_asset_output_tickets"
     FOR EACH ROW EXECUTE FUNCTION "enforce_conversation_asset_output_ticket_lifecycle"();
+
+ALTER TABLE "conversation_agent_threads" ADD CONSTRAINT "conversation_agent_threads_identity_check" CHECK (
+    "child_conversation_id" <> "parent_conversation_id"
+    AND "child_conversation_id" <> "root_conversation_id"
+    AND "parent_conversation_id" = "root_conversation_id"
+    AND length(btrim("parent_message_id")) BETWEEN 1 AND 256
+    AND length(btrim("initiator_user_id")) BETWEEN 1 AND 256
+    AND length(btrim("agent_service_id")) BETWEEN 1 AND 256
+    AND length(btrim("persona_profile_id")) BETWEEN 1 AND 256
+    AND length(btrim("persona_revision_id")) BETWEEN 1 AND 256
+    AND length(btrim("first_run_id")) BETWEEN 1 AND 256
+);
+ALTER TABLE "agent_thread_parent_deliveries" ADD CONSTRAINT "agent_thread_parent_deliveries_display_check" CHECK (
+    length(btrim("idempotency_key")) BETWEEN 1 AND 128
+    AND length(btrim("label")) BETWEEN 1 AND 160
+    AND length(btrim("detail")) BETWEEN 1 AND 4000
+    AND (("kind" = 'asset' AND "asset_id" IS NOT NULL) OR ("kind" <> 'asset' AND "asset_id" IS NULL))
+);
+
+CREATE FUNCTION "enforce_conversation_agent_thread_authority"() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+    child_mode "ConversationMode";
+    parent_mode "ConversationMode";
+    root_mode "ConversationMode";
+BEGIN
+    IF TG_OP <> 'INSERT' THEN
+        RAISE EXCEPTION 'ConversationAgentThread rows are immutable';
+    END IF;
+    SELECT "mode" INTO child_mode FROM "conversations"
+    WHERE "id" = NEW."child_conversation_id" AND "silo_id" = NEW."silo_id"
+      AND "agent_service_id" = NEW."agent_service_id" AND "lifecycle" = 'open';
+    SELECT "mode" INTO parent_mode FROM "conversations"
+    WHERE "id" = NEW."parent_conversation_id" AND "silo_id" = NEW."silo_id" AND "lifecycle" = 'open';
+    SELECT "mode" INTO root_mode FROM "conversations"
+    WHERE "id" = NEW."root_conversation_id" AND "silo_id" = NEW."silo_id" AND "lifecycle" = 'open';
+    IF child_mode IS DISTINCT FROM 'agent_session' OR parent_mode IS DISTINCT FROM 'group'
+        OR root_mode IS DISTINCT FROM 'group' THEN
+        RAISE EXCEPTION 'Agent thread requires an open Agent-session child and open group parent/root';
+    END IF;
+    IF NOT EXISTS (
+        SELECT 1 FROM "conversation_messages" message
+        WHERE message."conversation_id" = NEW."parent_conversation_id" AND message."id" = NEW."parent_message_id"
+          AND message."run_id" IS NULL AND message."user_id" = NEW."initiator_user_id"
+          AND message."role" = 'user' AND message."state" = 'completed' AND message."source" = 'user_input'
+    ) THEN
+        RAISE EXCEPTION 'Agent thread requires its exact ordinary parent group message';
+    END IF;
+    IF EXISTS (
+        (SELECT participant."user_id" FROM "conversation_participants" participant
+         WHERE participant."conversation_id" = NEW."parent_conversation_id" AND participant."access_ended_position" IS NULL)
+        EXCEPT
+        (SELECT participant."user_id" FROM "conversation_participants" participant
+         WHERE participant."conversation_id" = NEW."child_conversation_id" AND participant."access_ended_position" IS NULL)
+    ) OR EXISTS (
+        (SELECT participant."user_id" FROM "conversation_participants" participant
+         WHERE participant."conversation_id" = NEW."child_conversation_id" AND participant."access_ended_position" IS NULL)
+        EXCEPT
+        (SELECT participant."user_id" FROM "conversation_participants" participant
+         WHERE participant."conversation_id" = NEW."parent_conversation_id" AND participant."access_ended_position" IS NULL)
+    ) THEN
+        RAISE EXCEPTION 'Agent thread child participants must mirror active parent participants';
+    END IF;
+    IF NOT EXISTS (
+        SELECT 1 FROM "agent_runs" run
+        JOIN "run_input_snapshots" snapshot ON snapshot."run_id" = run."id"
+        JOIN "persona_revisions" revision ON revision."id" = snapshot."persona_revision_id"
+        WHERE run."id" = NEW."first_run_id" AND run."conversation_id" = NEW."child_conversation_id"
+          AND run."silo_id" = NEW."silo_id" AND run."agent_service_id" = NEW."agent_service_id"
+          AND run."delegated_user_id" = NEW."initiator_user_id" AND run."state" = 'accepted'
+          AND snapshot."persona_revision_id" = NEW."persona_revision_id"
+          AND revision."persona_profile_id" = NEW."persona_profile_id" AND revision."state" = 'approved'
+    ) THEN
+        RAISE EXCEPTION 'Agent thread requires the initiating user persona frozen in its exact first run';
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
+CREATE FUNCTION "enforce_agent_thread_parent_delivery"() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+    IF TG_OP <> 'INSERT' THEN
+        RAISE EXCEPTION 'AgentThreadParentDelivery rows are append-only';
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
+CREATE FUNCTION "append_agent_thread_parent_delivery_timeline"() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+    INSERT INTO "conversation_timeline_entries" (
+        "conversation_id", "kind", "parent_delivery_agent_thread_id"
+    ) VALUES (
+        NEW."parent_conversation_id", 'parent_delivery', NEW."id"
+    );
+    RETURN NULL;
+END;
+$$;
+
+CREATE TRIGGER "conversation_agent_threads_authority" BEFORE INSERT OR UPDATE OR DELETE ON "conversation_agent_threads"
+    FOR EACH ROW EXECUTE FUNCTION "enforce_conversation_agent_thread_authority"();
+CREATE TRIGGER "agent_thread_parent_deliveries_append_only" BEFORE INSERT OR UPDATE OR DELETE ON "agent_thread_parent_deliveries"
+    FOR EACH ROW EXECUTE FUNCTION "enforce_agent_thread_parent_delivery"();
+CREATE TRIGGER "agent_thread_parent_deliveries_timeline" AFTER INSERT ON "agent_thread_parent_deliveries"
+    FOR EACH ROW EXECUTE FUNCTION "append_agent_thread_parent_delivery_timeline"();

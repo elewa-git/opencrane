@@ -1,5 +1,6 @@
 import { ConversationTimelineEntryKind, OrgMemberStatus, type Prisma } from "@prisma/client";
 import { __EncodeConversationProjectionCursor, ConversationProjectionReadStatuses, type ConversationProjectionEventRow, type ConversationProjectionReadResult, type ReadConversationProjectionCommand } from "@opencrane/backend/conversations/projection";
+import { AgentThreadEventTypes } from "@opencrane/backend/conversations/agent-threads";
 import { ConversationSystemEventTypes } from "@opencrane/models/conversations";
 
 import type { ConversationReplayRepository } from "./replay-reader.types.js";
@@ -42,7 +43,7 @@ export class PrismaConversationReplayRepository implements ConversationReplayRep
 		// 2. Prove access twice: an active membership in this silo, and a participant row on a conversation in the same silo. Both read in this transaction, so they agree with the rows below.
 		const membership = await this.prisma.orgMembership.findFirst({ where: { clusterTenant: command.siloId, subject: command.subjectId, status: OrgMemberStatus.Active }, select: { clusterTenant: true } });
 		if (membership === null) return { status: ConversationProjectionReadStatuses.RevokedOrMissing, rows: [] };
-		const participant = await this.prisma.conversationParticipant.findUnique({ where: { conversationId_userId: { conversationId: command.conversationId, userId: command.subjectId } }, include: { conversation: { select: { siloId: true } } } });
+		const participant = await this.prisma.conversationParticipant.findFirst({ where: { conversationId: command.conversationId, userId: command.subjectId, conversation: _ConversationAccess(command) }, include: { conversation: { select: { siloId: true } } } });
 		if (participant === null || participant.conversation.siloId !== command.siloId) return { status: ConversationProjectionReadStatuses.RevokedOrMissing, rows: [] };
 
 		// 3. Read only rows inside the caller's visible range: start after the cursor (or at the range start), and stop at accessEndedPosition when their access has ended.
@@ -56,10 +57,11 @@ export class PrismaConversationReplayRepository implements ConversationReplayRep
 				position: boundedPosition,
 				OR: [
 					{ kind: { in: [ConversationTimelineEntryKind.RunEvent, ConversationTimelineEntryKind.Message] } },
+					{ kind: ConversationTimelineEntryKind.ParentDelivery, parentDeliveryAgentThreadId: { not: null } },
 					{ kind: ConversationTimelineEntryKind.System, payload: { equals: { eventType: ConversationSystemEventTypes.AssetsChanged } } },
 				],
 			},
-			include: { runEvent: true, message: true },
+			include: { runEvent: true, message: true, agentThreadDelivery: true },
 			orderBy: { position: "asc" },
 			take: command.limit,
 		});
@@ -77,6 +79,11 @@ export class PrismaConversationReplayRepository implements ConversationReplayRep
 			{
 				return [{ cursor: __EncodeConversationProjectionCursor({ conversationId: command.conversationId, position }), conversationId: command.conversationId, position, runId: null, type: ConversationSystemEventTypes.AssetsChanged, payload: {}, occurredAt: entry.occurredAt.toISOString() }];
 			}
+			if (entry.agentThreadDelivery != null)
+			{
+				const delivery = entry.agentThreadDelivery;
+				return [{ cursor: __EncodeConversationProjectionCursor({ conversationId: command.conversationId, position }), conversationId: command.conversationId, position, runId: delivery.runId, type: AgentThreadEventTypes.ParentDelivery, payload: { id: delivery.id, childConversationId: delivery.childConversationId, kind: delivery.kind, label: delivery.label, detail: delivery.detail, assetId: delivery.assetId }, occurredAt: entry.occurredAt.toISOString() }];
+			}
 			if (entry.runEvent === null || entry.runId === null) return [];
 			return [{
 				cursor: __EncodeConversationProjectionCursor({ conversationId: command.conversationId, position }),
@@ -90,6 +97,18 @@ export class PrismaConversationReplayRepository implements ConversationReplayRep
 		});
 		return { status: ConversationProjectionReadStatuses.Authorized, rows };
 	}
+}
+
+/** Require a child Agent-thread reader to retain active access to its immediate parent. */
+function _ConversationAccess(command: ReadConversationProjectionCommand): Prisma.ConversationWhereInput
+{
+	return {
+		siloId: command.siloId,
+		OR: [
+			{ originAgentThread: { is: null } },
+			{ originAgentThread: { is: { parentConversation: { participants: { some: { userId: command.subjectId, accessEndedPosition: null } } } } } },
+		],
+	};
 }
 
 /** Admit only the exact payload-free asset-list invalidation marker. */

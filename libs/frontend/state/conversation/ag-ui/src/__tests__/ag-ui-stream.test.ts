@@ -1,7 +1,7 @@
 import { EventType } from "@ag-ui/core";
 import { describe, expect, it } from "vitest";
 
-import { AG_UI_A2UI_ENVELOPE_VERSION, AG_UI_INTERRUPTS_CLEARED_EVENT, AG_UI_TOOL_FAILURE_EVENT, AG_UI_TOOL_RECOVERY_REQUIRED_EVENT, AgUiA2uiSurfaceStates, AgUiToolRecoveryProviderOutcomes } from "@opencrane/contracts";
+import { AG_UI_A2UI_ENVELOPE_VERSION, AG_UI_AGENT_THREAD_PARENT_DELIVERY_EVENT, AG_UI_INTERRUPTS_CLEARED_EVENT, AG_UI_TOOL_FAILURE_EVENT, AG_UI_TOOL_RECOVERY_REQUIRED_EVENT, AgentThreadDeliveryKinds, AgUiA2uiSurfaceStates, AgUiToolRecoveryProviderOutcomes } from "@opencrane/contracts";
 
 import { __DecodeAgUiSseRecord } from "../ag-ui-sse-decoder.js";
 import { AgUiMessageStatuses, AgUiRunStatuses, AgUiToolStatuses, type AgUiStreamRecord } from "../ag-ui-stream.types.js";
@@ -300,5 +300,24 @@ describe("AG-UI stream state", function _Suite()
 		{
 			__ReduceAgUiStream(__CreateAgUiStreamState(), _Record("cursor-1", { type: EventType.TEXT_MESSAGE_CONTENT, messageId: "missing", delta: "hello" }));
 		}).toThrow("no active message");
+	});
+
+	it("adopts exact display-safe Agent-thread parent deliveries", function _AdoptsParentDelivery()
+	{
+		const delivery = { id: "delivery-1", childConversationId: "child-1", kind: AgentThreadDeliveryKinds.Failure, label: "Could not finish", detail: "Authentication failed. No result was delivered.", assetId: null };
+		const record = _Record("cursor-delivery-1", { type: EventType.CUSTOM, name: AG_UI_AGENT_THREAD_PARENT_DELIVERY_EVENT, value: delivery });
+		const state = __ReduceAgUiStream(__CreateAgUiStreamState(), record);
+
+		expect(state.agentThreadParentDeliveries).toEqual({ "delivery-1": delivery });
+		expect(state.customEvents).toContain(AG_UI_AGENT_THREAD_PARENT_DELIVERY_EVENT);
+	});
+
+	it("rejects Agent-thread parent delivery secrets, extra fields, and changed ids", function _RejectsUnsafeParentDelivery()
+	{
+		const delivery = { id: "delivery-1", childConversationId: "child-1", kind: AgentThreadDeliveryKinds.Result, label: "Done", detail: "Ready.", assetId: null };
+		const unsafe = _Record("cursor-delivery-unsafe", { type: EventType.CUSTOM, name: AG_UI_AGENT_THREAD_PARENT_DELIVERY_EVENT, value: { ...delivery, authorization: "Bearer secret" } });
+		expect(function _Unsafe(): void { __ReduceAgUiStream(__CreateAgUiStreamState(), unsafe); }).toThrow("parent delivery is invalid");
+		const accepted = __ReduceAgUiStream(__CreateAgUiStreamState(), _Record(undefined, { type: EventType.CUSTOM, name: AG_UI_AGENT_THREAD_PARENT_DELIVERY_EVENT, value: delivery }));
+		expect(function _Changed(): void { __ReduceAgUiStream(accepted, _Record(undefined, { type: EventType.CUSTOM, name: AG_UI_AGENT_THREAD_PARENT_DELIVERY_EVENT, value: { ...delivery, detail: "Changed" } })); }).toThrow("changed payload");
 	});
 });

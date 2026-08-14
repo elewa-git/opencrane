@@ -1,5 +1,7 @@
 import { ConversationLifecycles, ConversationModes, MessageContentBlockKinds, MessageRoles, MessageSources, MessageStates } from "@opencrane/models/conversations";
 
+import { ConversationAuthorityOutcomes } from "./conversation-authority.types.js";
+
 /**
  * OpenAPI description of the live replay route, owned by this package rather than by the
  * central spec file, so the route and its documentation move together.
@@ -64,11 +66,18 @@ const _ConversationMessageBlockSchema = {
 	},
 } as const;
 
+/** Immutable breadcrumb coordinates returned for an Agent-targeted group message. */
+const _AgentThreadOriginSchema = {
+	type: "object", additionalProperties: false,
+	required: ["childConversationId", "parentConversationId", "rootConversationId", "parentMessageId", "initiatorUserId", "agentServiceId", "personaRevisionId", "firstRunId"],
+	properties: { childConversationId: { type: "string" }, parentConversationId: { type: "string" }, rootConversationId: { type: "string" }, parentMessageId: { type: "string" }, initiatorUserId: { type: "string" }, agentServiceId: { type: "string" }, personaRevisionId: { type: "string" }, firstRunId: { type: "string" } },
+} as const;
+
 /** Canonical participant-visible message schema shared by detail and submission responses. */
 const _ConversationMessageSchema = {
 	type: "object",
 	additionalProperties: false,
-	required: ["id", "position", "role", "state", "source", "blocks", "runId", "userId", "createdAt", "completedAt"],
+	required: ["id", "position", "role", "state", "source", "blocks", "runId", "userId", "createdAt", "completedAt", "agentThread"],
 	properties: {
 		id: { type: "string" },
 		position: { type: "string", pattern: "^(0|[1-9][0-9]*)$" },
@@ -80,6 +89,7 @@ const _ConversationMessageSchema = {
 		userId: { type: ["string", "null"] },
 		createdAt: { type: "string", format: "date-time" },
 		completedAt: { type: ["string", "null"], format: "date-time" },
+		agentThread: { oneOf: [{ type: "null" }, _AgentThreadOriginSchema] },
 	},
 } as const;
 
@@ -108,16 +118,45 @@ const _ConversationDetailEnvelopeSchema = {
 const _AcceptedConversationMessageEnvelopeSchema = {
 	type: "object",
 	additionalProperties: false,
-	required: ["outcome", "message"],
-	properties: { outcome: { type: "string", enum: ["accepted"] }, message: _ConversationMessageSchema },
+	required: ["outcome", "message", "agentThread"],
+	properties: { outcome: { type: "string", enum: ["accepted"] }, message: _ConversationMessageSchema, agentThread: { oneOf: [{ type: "null" }, _AgentThreadOriginSchema] } },
 } as const;
 
 /** Exact idempotent-message response, distinct from a newly accepted write. */
 const _IdempotentConversationMessageEnvelopeSchema = {
 	type: "object",
 	additionalProperties: false,
-	required: ["outcome", "message"],
-	properties: { outcome: { type: "string", enum: ["idempotent"] }, message: _ConversationMessageSchema },
+	required: ["outcome", "message", "agentThread"],
+	properties: { outcome: { type: "string", enum: ["idempotent"] }, message: _ConversationMessageSchema, agentThread: { oneOf: [{ type: "null" }, _AgentThreadOriginSchema] } },
+} as const;
+
+/** Child message schema that omits participant login identifiers and nested authority. */
+const _AgentThreadMessageSchema = {
+	type: "object",
+	additionalProperties: false,
+	required: ["id", "position", "role", "state", "source", "blocks", "runId", "createdAt", "completedAt"],
+	properties: {
+		id: { type: "string" },
+		position: { type: "string", pattern: "^(0|[1-9][0-9]*)$" },
+		role: { type: "string", enum: [MessageRoles.User, MessageRoles.Assistant, MessageRoles.Tool, MessageRoles.System] },
+		state: { type: "string", enum: [MessageStates.Pending, MessageStates.Streaming, MessageStates.Completed, MessageStates.Failed, MessageStates.Cancelled] },
+		source: { type: "string", enum: [MessageSources.UserInput, MessageSources.ModelOutput, MessageSources.ToolResult, MessageSources.Platform] },
+		blocks: { type: "array", items: _ConversationMessageBlockSchema },
+		runId: { type: ["string", "null"] },
+		createdAt: { type: "string", format: "date-time" },
+		completedAt: { type: ["string", "null"], format: "date-time" },
+	},
+} as const;
+
+/** Bounded Agent-thread read model that omits participant login identifiers. */
+const _AgentThreadSnapshotSchema = {
+	type: "object", additionalProperties: false,
+	required: ["parentConversationId", "childConversationId", "rootConversationId", "parentMessageId", "agentServiceId", "agentName", "ask", "createdAt", "lifecycle", "participantCount", "readThroughPosition", "latestPosition", "representedThroughPosition", "messageCount", "unreadMessageCount", "cursor", "messages", "runs", "deliveries"],
+	properties: {
+		parentConversationId: { type: "string" }, childConversationId: { type: "string" }, rootConversationId: { type: "string" }, parentMessageId: { type: "string" }, agentServiceId: { type: "string" }, agentName: { type: "string" }, ask: { type: "string" }, createdAt: { type: "string", format: "date-time" }, lifecycle: { type: "string", enum: [ConversationLifecycles.Open, ConversationLifecycles.Closed] }, participantCount: { type: "integer", minimum: 1 }, readThroughPosition: { type: "string", pattern: "^(0|[1-9][0-9]*)$" }, latestPosition: { type: "string", pattern: "^(0|[1-9][0-9]*)$" }, representedThroughPosition: { type: "string", pattern: "^(0|[1-9][0-9]*)$" }, messageCount: { type: "integer", minimum: 0 }, unreadMessageCount: { type: "integer", minimum: 0 }, cursor: { type: ["string", "null"] }, messages: { type: "array", items: _AgentThreadMessageSchema },
+		runs: { type: "array", items: { type: "object", additionalProperties: false, required: ["id", "ordinal", "attempt", "state", "acceptedAt", "finishedAt"], properties: { id: { type: "string" }, ordinal: { type: "integer", minimum: 1 }, attempt: { type: "integer", minimum: 1 }, state: { type: "string", enum: ["queued", "working", "waiting", "retrying", "completed", "failed", "cancelled"] }, acceptedAt: { type: "string", format: "date-time" }, finishedAt: { type: ["string", "null"], format: "date-time" } } } },
+		deliveries: { type: "array", items: { type: "object", additionalProperties: false, required: ["id", "childConversationId", "parentConversationId", "runId", "kind", "label", "detail", "assetId", "createdAt"], properties: { id: { type: "string" }, childConversationId: { type: "string" }, parentConversationId: { type: "string" }, runId: { type: "string" }, kind: { type: "string", enum: ["status", "question", "approval", "result", "failure", "asset"] }, label: { type: "string" }, detail: { type: "string" }, assetId: { type: ["string", "null"] }, createdAt: { type: "string", format: "date-time" } } } },
+	},
 } as const;
 
 /**
@@ -152,13 +191,34 @@ export const _SelfConversationsOpenapiPaths = {
 			responses: { 201: { description: "Conversation created with its bounded canonical history.", content: { "application/json": { schema: _ConversationDetailEnvelopeSchema } } }, 400: { description: "Invalid immutable-mode request." }, 401: { description: "Authentication required." }, 404: { description: "A participant or agent service is unavailable." }, 503: { description: "Conversation authority unavailable." } },
 		},
 	},
-	"/me/conversations/{conversationId}": {
+"/me/conversations/{conversationId}": {
 		get: {
 			operationId: "openMyConversation",
 			summary: "Open one participant-bound conversation",
 			tags: ["Conversations"],
 			parameters: [{ name: "conversationId", in: "path", required: true, schema: { type: "string" } }],
 			responses: { 200: { description: "Conversation detail with bounded canonical message history.", content: { "application/json": { schema: _ConversationDetailEnvelopeSchema } } }, 401: { description: "Authentication required." }, 404: { description: "Conversation unavailable." }, 503: { description: "Conversation authority unavailable." } },
+		},
+	},
+	"/me/conversations/{parentConversationId}/agent-threads/{childConversationId}": {
+		get: {
+			operationId: "openMyAgentThread",
+			summary: "Open one authorized child Agent-thread read model",
+			description: "Composes a bounded view from canonical conversation, run, and parent-delivery authorities. It creates no second ledger and requires current participant access in both parent and child.",
+			tags: ["Conversations"],
+			parameters: [{ name: "parentConversationId", in: "path", required: true, schema: { type: "string" } }, { name: "childConversationId", in: "path", required: true, schema: { type: "string" } }],
+			responses: { 200: { description: "Authorized Agent-thread snapshot.", content: { "application/json": { schema: { type: "object", additionalProperties: false, required: ["agentThread"], properties: { agentThread: _AgentThreadSnapshotSchema } } } } }, 401: { description: "Authentication required." }, 404: { description: "Agent thread unavailable." }, 503: { description: "Conversation authority unavailable." } },
+		},
+	},
+	"/me/conversations/{parentConversationId}/agent-threads/{childConversationId}/read-through": {
+		put: {
+			operationId: "markMyAgentThreadRead",
+			summary: "Advance this participant's Agent-thread read position",
+			description: "Idempotently advances one participant-local coordinate only after current parent and child access are rechecked. The observed position cannot exceed the current child timeline.",
+			tags: ["Conversations"],
+			parameters: [{ name: "parentConversationId", in: "path", required: true, schema: { type: "string" } }, { name: "childConversationId", in: "path", required: true, schema: { type: "string" } }],
+			requestBody: { required: true, content: { "application/json": { schema: { type: "object", additionalProperties: false, required: ["observedPosition"], properties: { observedPosition: { type: "string", pattern: "^(0|[1-9][0-9]*)$", maxLength: 19 } } } } } },
+			responses: { 200: { description: "Participant read coordinate changed or was already at least this position.", content: { "application/json": { schema: { type: "object", additionalProperties: false, required: ["outcome", "readThroughPosition"], properties: { outcome: { type: "string", enum: [ConversationAuthorityOutcomes.Changed, ConversationAuthorityOutcomes.Idempotent] }, readThroughPosition: { type: "string", pattern: "^(0|[1-9][0-9]*)$" } } } } } }, 400: { description: "Malformed observed position." }, 401: { description: "Authentication required." }, 404: { description: "Agent thread unavailable." }, 409: { description: "Observed position exceeds the current child timeline." }, 503: { description: "Conversation authority unavailable." } },
 		},
 	},
 	"/me/conversations/{conversationId}/messages": {
@@ -189,6 +249,7 @@ export const _SelfConversationsOpenapiPaths = {
 										properties: { id: { type: "string" }, kind: { type: "string", enum: [MessageContentBlockKinds.Text, MessageContentBlockKinds.Artifact] }, value: { type: "string", maxLength: 32000 } },
 									},
 								},
+								agentTarget: { type: "object", additionalProperties: false, required: ["agentServiceId"], properties: { agentServiceId: { type: "string", maxLength: 128 } }, description: "In a group only, create a child Agent session using the caller's active approved persona." },
 							},
 						},
 					},

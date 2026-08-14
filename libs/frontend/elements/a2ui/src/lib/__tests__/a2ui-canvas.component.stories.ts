@@ -2,11 +2,11 @@ import { applicationConfig } from "@storybook/angular";
 import type { Meta, StoryObj } from "@storybook/angular";
 
 import { AG_UI_A2UI_ENVELOPE_VERSION, AgUiA2uiSurfaceStates, type AgUiA2uiOperation } from "@opencrane/contracts";
-import { toSanitizedMarkdownHtml } from "@opencrane/state/conversation/render";
 
 import { A2uiCanvasComponent } from "../a2ui-canvas.component.js";
 import { provideOpenCraneA2ui } from "../a2ui.providers.js";
 import { type A2uiSurfacePresentation } from "../a2ui.types.js";
+import { __A2uiTestSanitizer } from "./a2ui-test-sanitizer.js";
 
 /** Reviewed interactive form used by every canonical lifecycle visual contract. */
 const _SURFACE_OPERATIONS: readonly AgUiA2uiOperation[] =
@@ -91,7 +91,7 @@ const meta: Meta<A2uiCanvasComponent> =
 	title: "Foundation/A2UI canvas",
 	component: A2uiCanvasComponent,
 	tags: ["autodocs", "visual-test"],
-	decorators: [applicationConfig({ providers: [...provideOpenCraneA2ui(toSanitizedMarkdownHtml)] })],
+	decorators: [applicationConfig({ providers: [...provideOpenCraneA2ui(__A2uiTestSanitizer)] })],
 	parameters:
 	{
 		docs:

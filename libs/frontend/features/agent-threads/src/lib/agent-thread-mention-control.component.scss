@@ -1,0 +1,5 @@
+:host { display: block; }
+.mention-control { display: grid; gap: .35rem; }
+p-autocomplete { flex: 1 1 15rem; min-width: 0; }
+:host ::ng-deep .p-autocomplete, :host ::ng-deep .p-autocomplete-input { width: 100%; }
+small { color: var(--oc-ink-muted); }

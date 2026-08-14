@@ -1,0 +1,4 @@
+<article id="agent-thread-origin" class="thread-origin" aria-labelledby="agent-thread-origin-title" tabindex="-1">
+	<wo-avatar-circle [initials]="origin().invokedByInitials" [tone]="avatarTone" [size]="avatarSize" [label]="origin().invokedByName" />
+	<div><small id="agent-thread-origin-title">Origin in {{ origin().parentTitle }} · {{ origin().timestampLabel }}</small><strong>{{ origin().invokedByName }}</strong><p>{{ origin().ask }}</p></div>
+</article>

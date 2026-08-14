@@ -4,6 +4,21 @@ import type { PrismaClient } from "@prisma/client";
 
 import type { ThirdPartySourceWriteRequest } from "./third-party-sources.types.js";
 
+/** Convert an optional API timestamp into the database value for a named update field. */
+function _OptionalTimestamp(value: string | null | undefined): Date | null | undefined
+{
+	if (value === undefined) return undefined;
+	if (value === null) return null;
+	if (value.length === 0) return null;
+	return new Date(value);
+}
+
+function _OptionalUpdate<T>(key: string, value: T | undefined): Record<string, T>
+{
+	if (value === undefined) return {};
+	return { [key]: value };
+}
+
 /**
  * CRUD router for third-party source inventory and discovery results.
  *
@@ -138,8 +153,8 @@ export function thirdPartySourcesRouter(prisma: PrismaClient): Router
         ...(body.status ? { status: body.status } : {}),
         ...(body.originUrl ? { originUrl: body.originUrl } : {}),
         ...(body.syncMode ? { syncMode: body.syncMode } : {}),
-        ...(body.lastSyncedAt !== undefined ? { lastSyncedAt: body.lastSyncedAt ? new Date(body.lastSyncedAt) : null } : {}),
-        ...(body.nextRunAt !== undefined ? { nextRunAt: body.nextRunAt ? new Date(body.nextRunAt) : null } : {}),
+        ..._OptionalUpdate("lastSyncedAt", _OptionalTimestamp(body.lastSyncedAt)),
+        ..._OptionalUpdate("nextRunAt", _OptionalTimestamp(body.nextRunAt)),
         ...(body.notes !== undefined ? { notes: body.notes } : {}),
       },
     });

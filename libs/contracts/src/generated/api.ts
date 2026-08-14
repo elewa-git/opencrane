@@ -1062,6 +1062,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/me/conversations/{parentConversationId}/agent-threads/{childConversationId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Open one authorized child Agent-thread read model
+         * @description Composes a bounded view from canonical conversation, run, and parent-delivery authorities. It creates no second ledger and requires current participant access in both parent and child.
+         */
+        get: operations["openMyAgentThread"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/conversations/{parentConversationId}/agent-threads/{childConversationId}/read-through": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Advance this participant's Agent-thread read position
+         * @description Idempotently advances one participant-local coordinate only after current parent and child access are rechecked. The observed position cannot exceed the current child timeline.
+         */
+        put: operations["markMyAgentThreadRead"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/me/conversations/{conversationId}/messages": {
         parameters: {
             query?: never;
@@ -4165,7 +4205,7 @@ export interface operations {
                             /** @enum {string} */
                             purpose: "runtime_input" | "tool_approval" | "personal_memory_permission" | "a2ui_action";
                             /** @enum {string} */
-                            state: "requested" | "answered" | "declined" | "expired" | "cancelled" | "failed";
+                            state: "requested" | "answered" | "declined" | "expired" | "cancelled";
                             body: {
                                 /** @constant */
                                 kind: "approval";
@@ -4276,7 +4316,7 @@ export interface operations {
                             /** @enum {string} */
                             purpose: "runtime_input" | "tool_approval" | "personal_memory_permission" | "a2ui_action";
                             /** @enum {string} */
-                            state: "requested" | "answered" | "declined" | "expired" | "cancelled" | "failed";
+                            state: "requested" | "answered" | "declined" | "expired" | "cancelled";
                             body: {
                                 /** @constant */
                                 kind: "approval";
@@ -4402,7 +4442,7 @@ export interface operations {
                         response: {
                             requestId: string;
                             /** @enum {string} */
-                            state: "requested" | "answered" | "declined" | "expired" | "cancelled" | "failed";
+                            state: "requested" | "answered" | "declined" | "expired" | "cancelled";
                             idempotent: boolean;
                             /** Format: date-time */
                             resolvedAt: string;
@@ -6206,6 +6246,16 @@ export interface operations {
                                 createdAt: string;
                                 /** Format: date-time */
                                 completedAt: string | null;
+                                agentThread: null | {
+                                    childConversationId: string;
+                                    parentConversationId: string;
+                                    rootConversationId: string;
+                                    parentMessageId: string;
+                                    initiatorUserId: string;
+                                    agentServiceId: string;
+                                    personaRevisionId: string;
+                                    firstRunId: string;
+                                };
                             }[];
                         };
                     };
@@ -6295,6 +6345,16 @@ export interface operations {
                                 createdAt: string;
                                 /** Format: date-time */
                                 completedAt: string | null;
+                                agentThread: null | {
+                                    childConversationId: string;
+                                    parentConversationId: string;
+                                    rootConversationId: string;
+                                    parentMessageId: string;
+                                    initiatorUserId: string;
+                                    agentServiceId: string;
+                                    personaRevisionId: string;
+                                    firstRunId: string;
+                                };
                             }[];
                         };
                     };
@@ -6309,6 +6369,184 @@ export interface operations {
             };
             /** @description Conversation unavailable. */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Conversation authority unavailable. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    openMyAgentThread: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                parentConversationId: string;
+                childConversationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Authorized Agent-thread snapshot. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        agentThread: {
+                            parentConversationId: string;
+                            childConversationId: string;
+                            rootConversationId: string;
+                            parentMessageId: string;
+                            agentServiceId: string;
+                            agentName: string;
+                            ask: string;
+                            /** Format: date-time */
+                            createdAt: string;
+                            /** @enum {string} */
+                            lifecycle: "open" | "closed";
+                            participantCount: number;
+                            readThroughPosition: string;
+                            latestPosition: string;
+                            representedThroughPosition: string;
+                            messageCount: number;
+                            unreadMessageCount: number;
+                            cursor: string | null;
+                            messages: {
+                                id: string;
+                                position: string;
+                                /** @enum {string} */
+                                role: "user" | "assistant" | "tool" | "system";
+                                /** @enum {string} */
+                                state: "pending" | "streaming" | "completed" | "failed" | "cancelled";
+                                /** @enum {string} */
+                                source: "user_input" | "model_output" | "tool_result" | "platform";
+                                blocks: {
+                                    id: string;
+                                    /** @enum {string} */
+                                    kind: "text" | "artifact" | "tool_call" | "tool_result";
+                                    value: string;
+                                }[];
+                                runId: string | null;
+                                /** Format: date-time */
+                                createdAt: string;
+                                /** Format: date-time */
+                                completedAt: string | null;
+                            }[];
+                            runs: {
+                                id: string;
+                                ordinal: number;
+                                attempt: number;
+                                /** @enum {string} */
+                                state: "queued" | "working" | "waiting" | "retrying" | "completed" | "failed" | "cancelled";
+                                /** Format: date-time */
+                                acceptedAt: string;
+                                /** Format: date-time */
+                                finishedAt: string | null;
+                            }[];
+                            deliveries: {
+                                id: string;
+                                childConversationId: string;
+                                parentConversationId: string;
+                                runId: string;
+                                /** @enum {string} */
+                                kind: "status" | "question" | "approval" | "result" | "failure" | "asset";
+                                label: string;
+                                detail: string;
+                                assetId: string | null;
+                                /** Format: date-time */
+                                createdAt: string;
+                            }[];
+                        };
+                    };
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Agent thread unavailable. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Conversation authority unavailable. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    markMyAgentThreadRead: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                parentConversationId: string;
+                childConversationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    observedPosition: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Participant read coordinate changed or was already at least this position. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {string} */
+                        outcome: "changed" | "idempotent";
+                        readThroughPosition: string;
+                    };
+                };
+            };
+            /** @description Malformed observed position. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Agent thread unavailable. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Observed position exceeds the current child timeline. */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -6342,6 +6580,10 @@ export interface operations {
                         kind: "text" | "artifact";
                         value: string;
                     }[];
+                    /** @description In a group only, create a child Agent session using the caller's active approved persona. */
+                    agentTarget?: {
+                        agentServiceId: string;
+                    };
                 };
             };
         };
@@ -6376,6 +6618,26 @@ export interface operations {
                             createdAt: string;
                             /** Format: date-time */
                             completedAt: string | null;
+                            agentThread: null | {
+                                childConversationId: string;
+                                parentConversationId: string;
+                                rootConversationId: string;
+                                parentMessageId: string;
+                                initiatorUserId: string;
+                                agentServiceId: string;
+                                personaRevisionId: string;
+                                firstRunId: string;
+                            };
+                        };
+                        agentThread: null | {
+                            childConversationId: string;
+                            parentConversationId: string;
+                            rootConversationId: string;
+                            parentMessageId: string;
+                            initiatorUserId: string;
+                            agentServiceId: string;
+                            personaRevisionId: string;
+                            firstRunId: string;
                         };
                     };
                 };
@@ -6410,6 +6672,26 @@ export interface operations {
                             createdAt: string;
                             /** Format: date-time */
                             completedAt: string | null;
+                            agentThread: null | {
+                                childConversationId: string;
+                                parentConversationId: string;
+                                rootConversationId: string;
+                                parentMessageId: string;
+                                initiatorUserId: string;
+                                agentServiceId: string;
+                                personaRevisionId: string;
+                                firstRunId: string;
+                            };
+                        };
+                        agentThread: null | {
+                            childConversationId: string;
+                            parentConversationId: string;
+                            rootConversationId: string;
+                            parentMessageId: string;
+                            initiatorUserId: string;
+                            agentServiceId: string;
+                            personaRevisionId: string;
+                            firstRunId: string;
                         };
                     };
                 };
@@ -6518,6 +6800,16 @@ export interface operations {
                                 createdAt: string;
                                 /** Format: date-time */
                                 completedAt: string | null;
+                                agentThread: null | {
+                                    childConversationId: string;
+                                    parentConversationId: string;
+                                    rootConversationId: string;
+                                    parentMessageId: string;
+                                    initiatorUserId: string;
+                                    agentServiceId: string;
+                                    personaRevisionId: string;
+                                    firstRunId: string;
+                                };
                             }[];
                         };
                     };
@@ -6607,6 +6899,16 @@ export interface operations {
                                 createdAt: string;
                                 /** Format: date-time */
                                 completedAt: string | null;
+                                agentThread: null | {
+                                    childConversationId: string;
+                                    parentConversationId: string;
+                                    rootConversationId: string;
+                                    parentMessageId: string;
+                                    initiatorUserId: string;
+                                    agentServiceId: string;
+                                    personaRevisionId: string;
+                                    firstRunId: string;
+                                };
                             }[];
                         };
                     };

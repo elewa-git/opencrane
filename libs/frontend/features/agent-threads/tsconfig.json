@@ -1,0 +1,7 @@
+{
+  "extends": "../../../../tsconfig.frontend.json",
+  "compilerOptions": { "outDir": "../../../../dist/out-tsc", "types": [], "composite": true, "tsBuildInfoFile": "../../../../dist/out-tsc/libs/frontend/features/agent-threads/tsconfig.tsbuildinfo" },
+  "include": ["src/**/*.ts"],
+  "exclude": ["**/*.spec.ts", "**/*.stories.ts"],
+  "references": [{ "path": "../../elements/a2ui" }, { "path": "../../elements/conversation" }, { "path": "../../elements/ui" }, { "path": "../conversation-activity" }, { "path": "../conversation-assets" }, { "path": "../conversation-elicitation" }, { "path": "../../state/conversation/agent-threads" }, { "path": "../../state/conversation/elicitation" }]
+}

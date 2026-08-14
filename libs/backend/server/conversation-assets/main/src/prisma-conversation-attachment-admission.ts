@@ -27,4 +27,28 @@ export class PrismaConversationAttachmentAdmissionRepository implements Conversa
 		const changed = await this.transaction.conversationAsset.updateMany({ where: { id: { in: assetIds }, messageId: null, state: ConversationAssetState.Ready }, data: { messageId } });
 		if (changed.count !== assetIds.length) throw new Error("Conversation attachment authority changed");
 	}
+
+	/** Mirrors logical asset references into a child conversation while reusing immutable Artifact bytes. */
+	async mirrorReadyAssets(caller: { readonly siloId: string; readonly subjectId: string }, parentConversationId: string, childConversationId: string, childMessageId: string, parentBlocks: readonly MessageContentBlock[], childBlocks: readonly MessageContentBlock[]): Promise<void>
+	{
+		const parentIds = _ArtifactIds(parentBlocks);
+		const childIds = _ArtifactIds(childBlocks);
+		if (parentIds.length === 0 && childIds.length === 0) return;
+		if (parentIds.length !== childIds.length || new Set(childIds).size !== childIds.length) throw new Error("Agent-thread attachment mapping is invalid");
+		const assets = await this.transaction.conversationAsset.findMany({ where: { id: { in: [...parentIds] }, siloId: caller.siloId, conversationId: parentConversationId, createdByUserId: caller.subjectId, provenance: ConversationAssetProvenance.ParticipantUpload, state: ConversationAssetState.Ready, messageId: { not: null } }, select: { id: true, artifactId: true, revisionId: true, displayName: true, mediaType: true, byteLength: true } });
+		const byId = new Map(assets.map(function _Pair(asset): readonly [string, typeof asset] { return [asset.id, asset]; }));
+		for (let index = 0; index < parentIds.length; index += 1)
+		{
+			const parentId = parentIds[index];
+			const childId = childIds[index];
+			const asset = parentId === undefined ? undefined : byId.get(parentId);
+			if (asset === undefined || childId === undefined || asset.artifactId === null || asset.revisionId === null || asset.byteLength === null) throw new Error("Agent-thread attachment authority unavailable");
+			await this.transaction.conversationAsset.create({ data: { id: childId, siloId: caller.siloId, conversationId: childConversationId, messageId: childMessageId, idempotencyKey: `agent-thread:${parentId}`, provenance: ConversationAssetProvenance.ParticipantUpload, state: ConversationAssetState.Ready, displayName: asset.displayName, mediaType: asset.mediaType, byteLength: asset.byteLength, artifactId: asset.artifactId, revisionId: asset.revisionId, createdByUserId: caller.subjectId } });
+		}
+	}
+}
+
+function _ArtifactIds(blocks: readonly MessageContentBlock[]): readonly string[]
+{
+	return blocks.filter(function _Artifact(block): boolean { return block.kind === MessageContentBlockKinds.Artifact; }).map(function _AssetId(block): string { return block.value; });
 }

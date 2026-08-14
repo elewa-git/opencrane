@@ -1,4 +1,5 @@
 import { ConversationLifecycles, ConversationModes, MessageRoles, MessageSources, MessageStates, type ConversationCreationRequest, type MessageContentBlock } from "@opencrane/models/conversations";
+import type { AgentThreadOrigin, AgentThreadParentDelivery, AgentThreadTarget } from "@opencrane/backend/conversations/agent-threads";
 
 /**
  * Who the caller is, as the server worked it out from the browser session.
@@ -52,6 +53,8 @@ export interface SubmitConversationMessageRequest
 	readonly idempotencyKey: string;
 	/** The message content, in display order. At least one block; order is preserved exactly as sent. */
 	readonly blocks: readonly MessageContentBlock[];
+	/** Exact structured target; accepted only for a root message in a group conversation. */
+	readonly agentTarget?: AgentThreadTarget;
 }
 
 /**
@@ -96,6 +99,8 @@ export interface ConversationMessageView
 	readonly userId: string | null;
 	readonly createdAt: string;
 	readonly completedAt: string | null;
+	/** Immutable child origin when this ordinary group message invoked an Agent. */
+	readonly agentThread: AgentThreadOrigin | null;
 }
 
 /**
@@ -114,6 +119,69 @@ export interface ConversationDetail extends ConversationSummary
 	readonly visibleFromPosition: string;
 	readonly accessEndedPosition: string | null;
 	readonly messages: readonly ConversationMessageView[];
+}
+
+/** One serial governed run included in the bounded Agent-thread read model. */
+export enum AgentThreadRunViewStates
+{
+	Queued = "queued",
+	Working = "working",
+	Waiting = "waiting",
+	Retrying = "retrying",
+	Completed = "completed",
+	Failed = "failed",
+	Cancelled = "cancelled",
+}
+
+/** One serial governed run included in the bounded Agent-thread read model. */
+export interface AgentThreadRunView
+{
+	readonly id: string;
+	readonly ordinal: number;
+	readonly attempt: number;
+	readonly state: AgentThreadRunViewStates;
+	readonly acceptedAt: string;
+	readonly finishedAt: string | null;
+}
+
+/** Participant-visible child message without login identifiers or nested thread authority. */
+export interface AgentThreadMessageView
+{
+	readonly id: string;
+	readonly position: string;
+	readonly role: MessageRoles;
+	readonly state: MessageStates;
+	readonly source: MessageSources;
+	readonly blocks: readonly MessageContentBlock[];
+	readonly runId: string | null;
+	readonly createdAt: string;
+	readonly completedAt: string | null;
+}
+
+/** Canonical authorized child read model without participant login identifiers. */
+export interface AgentThreadSnapshotView
+{
+	readonly parentConversationId: string;
+	readonly childConversationId: string;
+	readonly rootConversationId: string;
+	readonly parentMessageId: string;
+	readonly agentServiceId: string;
+	readonly agentName: string;
+	readonly ask: string;
+	readonly createdAt: string;
+	readonly lifecycle: ConversationLifecycles;
+	readonly participantCount: number;
+	readonly readThroughPosition: string;
+	readonly latestPosition: string;
+	readonly representedThroughPosition: string;
+	readonly messageCount: number;
+	/** Exact canonical message count after this participant's read coordinate. */
+	readonly unreadMessageCount: number;
+	/** Resume cursor for representedThroughPosition; never skips an omitted event. */
+	readonly cursor: string | null;
+	readonly messages: readonly AgentThreadMessageView[];
+	readonly runs: readonly AgentThreadRunView[];
+	readonly deliveries: readonly AgentThreadParentDelivery[];
 }
 
 /**
@@ -256,7 +324,7 @@ export type CreateConversationResult = { readonly outcome: ConversationAuthority
  * For an agent-session conversation an `Accepted` result also means a run was started in the
  * same database transaction, so the message and the run can never exist without each other.
  */
-export type SubmitConversationMessageResult = { readonly outcome: ConversationAuthorityOutcomes.Accepted | ConversationAuthorityOutcomes.Idempotent; readonly message: ConversationMessageView } | { readonly outcome: ConversationAuthorityOutcomes.Denied; readonly reason: ConversationWriteDenial };
+export type SubmitConversationMessageResult = { readonly outcome: ConversationAuthorityOutcomes.Accepted | ConversationAuthorityOutcomes.Idempotent; readonly message: ConversationMessageView; readonly agentThread: AgentThreadOrigin | null } | { readonly outcome: ConversationAuthorityOutcomes.Denied; readonly reason: ConversationWriteDenial };
 
 /**
  * What {@link ConversationUnitOfWork.setArchived} and {@link ConversationUnitOfWork.close}
@@ -264,6 +332,18 @@ export type SubmitConversationMessageResult = { readonly outcome: ConversationAu
  * from it without a follow-up read; `Denied` carries a reason and nothing was changed.
  */
 export type MutateConversationResult = { readonly outcome: ConversationAuthorityOutcomes.Changed; readonly conversation: ConversationDetail } | { readonly outcome: ConversationAuthorityOutcomes.Denied; readonly reason: ConversationWriteDenial };
+
+/** Stable non-disclosing denials for one participant's Agent-thread read coordinate. */
+export enum AgentThreadReadDenialReasons
+{
+	ConversationUnavailable = "conversation_unavailable",
+	ObservedPositionUnavailable = "observed_position_unavailable",
+}
+
+/** Result of monotonically advancing one participant's Agent-thread read coordinate. */
+export type MarkAgentThreadReadResult =
+	| { readonly outcome: ConversationAuthorityOutcomes.Changed | ConversationAuthorityOutcomes.Idempotent; readonly readThroughPosition: string }
+	| { readonly outcome: ConversationAuthorityOutcomes.Denied; readonly reason: AgentThreadReadDenialReasons };
 
 /**
  * Everything the conversation HTTP layer is allowed to do, as one port.
@@ -307,6 +387,10 @@ export interface ConversationUnitOfWork
 	 * @throws When the database is unreachable.
 	 */
 	open(caller: ConversationCaller, conversationId: string): Promise<ConversationDetail | null>;
+	/** Opens one bounded child snapshot only for current participants in both conversations. */
+	openAgentThread(caller: ConversationCaller, parentConversationId: string, childConversationId: string): Promise<AgentThreadSnapshotView | null>;
+	/** Advances this caller's child read position only up to the canonical position they observed. */
+	markAgentThreadRead(caller: ConversationCaller, parentConversationId: string, childConversationId: string, observedPosition: string): Promise<MarkAgentThreadReadResult>;
 	/**
 	 * Creates one conversation and its participant rows in a single transaction, so a
 	 * conversation with missing participants can never be left behind.

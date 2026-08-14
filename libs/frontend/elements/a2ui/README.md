@@ -56,9 +56,9 @@ audit, and command execution. Agent-authored text reaches HTML only through the 
 
 ## Dependency direction
 
-Tagged `type:lib`, `layer:frontend`, and `scope:web`. It depends on Angular and the directly pinned
-upstream A2UI renderer, but never imports frontend state, a feature package, backend code, or app
-source.
+Tagged `type:lib`, `layer:frontend`, `scope:web`, and `frontend-role:elements`. It depends on Angular,
+the canonical display contracts, and the directly pinned upstream A2UI renderer, but never imports
+frontend state in production, a feature package, backend code, or app source.
 
 ## See also
 

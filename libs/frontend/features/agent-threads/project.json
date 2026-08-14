@@ -1,0 +1,12 @@
+{
+  "name": "frontend-features-agent-threads",
+  "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
+  "projectType": "library",
+  "sourceRoot": "libs/frontend/features/agent-threads/src",
+  "prefix": "wo",
+  "tags": ["scope:agent-threads", "type:lib", "layer:frontend", "frontend-role:feature-shell"],
+  "targets": {
+    "lint": { "executor": "nx:run-commands", "options": { "command": "tsc -p tsconfig.lint.json", "cwd": "libs/frontend/features/agent-threads" } },
+    "test": { "executor": "nx:run-commands", "options": { "command": "vitest run --passWithNoTests", "cwd": "libs/frontend/features/agent-threads" } }
+  }
+}

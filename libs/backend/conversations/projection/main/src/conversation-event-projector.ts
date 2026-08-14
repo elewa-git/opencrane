@@ -1,4 +1,5 @@
 import { AG_UI_CHILD_RUN_ENVELOPE_VERSION, AgUiToolRecoveryProviderOutcomes, RunEventTypes, ___ParseAgUiA2uiEnvelope, type AgUiChildRunEnvelope, type AgUiPublicEventPayload, type SafeToolTechnicalDetails } from "@opencrane/contracts";
+import { AgentThreadDeliveryKinds, AgentThreadEventTypes } from "@opencrane/backend/conversations/agent-threads";
 
 import type { ConversationEventProjectionResult, ConversationProjectionEventRow } from "./conversation-event-projector.types.js";
 
@@ -48,6 +49,8 @@ function _SafePayload(type: string, payload: Readonly<Record<string, unknown>>, 
 			return _Strings(payload, ["terminalReason", "failureCode"]);
 		case "conversation.message":
 			return _Message(payload);
+		case AgentThreadEventTypes.ParentDelivery:
+			return _AgentThreadDelivery(payload);
 		case RunEventTypes.A2uiRenderingBegun:
 		case RunEventTypes.A2uiSurfaceUpdated:
 		case RunEventTypes.A2uiDataModelUpdated:
@@ -55,6 +58,19 @@ function _SafePayload(type: string, payload: Readonly<Record<string, unknown>>, 
 	}
 	if (type === "child.run.completed" || type === "child.run.failed" || type === "child.run.cancelled") return _ChildRun(type, payload, runId);
 	return {};
+}
+
+/** Accept only the already-sanitized bounded parent-delivery shape. */
+function _AgentThreadDelivery(payload: Readonly<Record<string, unknown>>): AgUiPublicEventPayload
+{
+	const id = payload["id"];
+	const childConversationId = payload["childConversationId"];
+	const kind = payload["kind"];
+	const label = payload["label"];
+	const detail = payload["detail"];
+	const assetId = payload["assetId"];
+	if (typeof id !== "string" || typeof childConversationId !== "string" || !Object.values(AgentThreadDeliveryKinds).includes(kind as AgentThreadDeliveryKinds) || typeof label !== "string" || typeof detail !== "string" || (assetId !== null && typeof assetId !== "string")) return {};
+	return { agentThreadDelivery: { id, childConversationId, kind: kind as AgentThreadDeliveryKinds, label, detail, assetId } };
 }
 
 /** Project a visible failure on every attempt, including attempts the server will retry. */

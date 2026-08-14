@@ -1,0 +1,4 @@
+<div class="conversation-status" [attr.data-tone]="status().tone" [attr.role]="status().assertive ? 'alert' : 'status'" [attr.aria-live]="status().assertive ? 'assertive' : 'polite'">
+	<span class="conversation-status__dot" aria-hidden="true"></span>
+	<div><strong>{{ status().label }}</strong>@if (status().detail) { <span>{{ status().detail }}</span> }</div>
+</div>

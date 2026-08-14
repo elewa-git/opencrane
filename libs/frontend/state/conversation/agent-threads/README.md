@@ -1,0 +1,52 @@
+# @opencrane/state/conversation/agent-threads — Agent-thread browser state
+
+> [frontend](../../../README.md) › [state](../../README.md) › [conversation](../README.md) › agent-threads
+
+## What it owns
+
+This package owns the browser port, generated-client adapter, view models, and component-scoped store
+for a group chat's child Agent conversation. The adapter translates the public OpenAPI contract into
+these view models; the store then handles reads, reconnects, controlled drafts, idempotent follow-ups,
+late-result fencing, and authoritative snapshot adoption.
+
+```
+ generated API ──► OpenCraneAgentThreadGateway ──► AgentThreadStore  ◄── HERE
+                                                      │ view state
+                                                      ▼
+                                              agent-threads feature
+                                                      │ typed intent
+                                                      └──► gateway command
+```
+
+**In this flow:** the generated API adapter · [`agent-threads feature`](../../../features/agent-threads/README.md)
+
+Run, conversation access, delivery recovery, and admission remain separate dimensions. A first-view
+missing, foreign, or denied route is deliberately indistinguishable. When a previously authorized
+view proves access changed, the store purges its snapshot, draft, cursor, filenames, and ask before it
+exposes the `access_changed` route state.
+
+## Public surface
+
+- `AgentThreadGateway` is the dependency-neutral read and follow-up port.
+- `OpenCraneAgentThreadGateway` calls only generated participant routes and maps their DTOs.
+- `AgentThreadStore` owns exact-route loading, reconnect, command fencing, drafts, and purging.
+- The exported enums and view models define finite browser states without copying wire DTOs.
+- `AgentThreadGatewayError` carries only browser-safe failure categories and copy.
+
+## Boundary
+
+The HTTP adapter depends on the generated OpenAPI path map and sends only parent/child coordinates,
+message copy, and caller-created idempotency fences. Browser session identity remains owned by the
+shared control-plane client. This package grants no conversation, run, memory, or delivery authority
+and never receives runtime proof, provider bodies, persona content, or secret-bearing tool details.
+
+## Dependency direction
+
+The package carries `scope:agent-threads` and `frontend-role:state`. It may depend only on frontend
+core, shared contracts or models, and utilities; it must not import a feature, element, backend
+package, app, or concrete adapter.
+
+## See also
+
+- Parent index: [`libs/frontend/state/conversation`](../README.md)
+- Siblings: [`conversation/ag-ui`](../ag-ui/README.md) · [`conversation/assets`](../assets/README.md) · [`conversation/elicitation`](../elicitation/README.md)

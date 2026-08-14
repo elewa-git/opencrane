@@ -173,6 +173,7 @@ model PersonaProfile {
   interviews       PersonaInterview[]
   revisions        PersonaRevision[]  @relation("PersonaProfileRevisions")
   activeRevision   PersonaRevision?   @relation("ActivePersonaRevision", fields: [id, activeRevisionId], references: [personaProfileId, id], onDelete: Restrict)
+  agentThreadOrigins ConversationAgentThread[]
 
   @@unique([siloId, userId])
   @@unique([id, userId])
@@ -303,6 +304,7 @@ model PersonaRevision {
   previousRevision          PersonaRevision?        @relation("PersonaRevisionHistory", fields: [previousRevisionId], references: [id], onDelete: Restrict)
   laterRevisions            PersonaRevision[]       @relation("PersonaRevisionHistory")
   insights                  PersonaInsight[]
+  agentThreadOrigins        ConversationAgentThread[]
 
   @@unique([personaProfileId, revision])
   @@unique([personaProfileId, id])

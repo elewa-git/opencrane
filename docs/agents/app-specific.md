@@ -86,6 +86,12 @@ Recoverable conversation input follows the same ownership direction:
 - [`features/conversation-activity`](../../libs/frontend/features/conversation-activity/README.md) owns safe failure disclosure and canonical deep-link intents; and
 - [`state/conversation/elicitation`](../../libs/frontend/state/conversation/elicitation/README.md) owns the generated-client gateway, command state, reconciliation, and derived Activity rows.
 
+Group-chat Agent threads add one route-ready composition without moving authority into the browser:
+
+- [`elements/conversation`](../../libs/frontend/elements/conversation/README.md) owns shared message, composer, and status presentations;
+- [`features/agent-threads`](../../libs/frontend/features/agent-threads/README.md) owns the routed child coordinator, browser-history restoration, and workspace composition from existing asset, elicitation, Activity, and A2UI features; and
+- [`state/conversation/agent-threads`](../../libs/frontend/state/conversation/agent-threads/README.md) owns the transport-neutral child-reader port, independent route/run/recovery state, and fail-closed access purge.
+
 Legacy frontend packages use `scope:web`; new capability slices use bounded ownership scopes. The
 persona onboarding feature, state port, and adapter use `scope:persona-onboarding` plus role tags
 that enforce feature → state and adapter → state/core direction. Cross-cutting core and UI elements

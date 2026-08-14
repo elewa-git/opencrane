@@ -67,6 +67,13 @@ describe("conversation timeline projection", function _Suite()
 		expect(__ProjectConversationEvent({ cursor: "", conversationId: "conversation-1", runId: "run-1", position: "1", type: "run.started", payload: {}, occurredAt: "2026-07-23T10:00:00.000Z" })).toBeNull();
 	});
 
+	it("projects only bounded Agent-thread delivery fields", function _ProjectsAgentThreadDelivery()
+	{
+		const projected = __ProjectConversationEvent({ cursor: "c.delivery", conversationId: "parent-1", runId: "run-1", position: "5", type: "conversation.agent_thread.parent_delivery", payload: { id: "delivery-1", childConversationId: "child-1", kind: "failure", label: "Could not finish", detail: "Authentication failed.", assetId: null, providerBody: "secret", authorization: "Bearer never" }, occurredAt: "2026-08-12T10:00:00.000Z" });
+		expect(projected?.payload).toEqual({ agentThreadDelivery: { id: "delivery-1", childConversationId: "child-1", kind: "failure", label: "Could not finish", detail: "Authentication failed.", assetId: null } });
+		expect(JSON.stringify(projected)).not.toContain("Bearer never");
+	});
+
 	it("adopts exact ordered A2UI operations, lifecycle, and display-safe reason", function _ProjectsGovernedA2ui()
 	{
 		const operations = [
