@@ -52,13 +52,13 @@ export function groupsRouter(prisma: PrismaClient): Router
   router.put("/:id", _RequireOrgAdmin(), async function _updateGroup(req, res)
   {
     const body = req.body as Partial<GroupWriteRequest>;
-    res.json(await updateGroup(prisma, req.params.id, body));
+    res.json(await updateGroup(prisma, String(req.params.id), body));
   });
 
   /** Delete a group — requires organisation administrator authority. */
   router.delete("/:id", _RequireOrgAdmin(), async function _deleteGroup(req, res)
   {
-    res.json(await deleteGroup(prisma, req.params.id));
+    res.json(await deleteGroup(prisma, String(req.params.id)));
   });
 
   return router;
