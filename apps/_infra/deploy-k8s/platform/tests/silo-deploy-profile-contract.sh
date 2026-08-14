@@ -68,6 +68,7 @@ grep -Fq -- '--cognee-digest) COGNEE_DIGEST="$2"' "$DEPLOY_CORE"
 grep -Fq -- 'clustertenantManager.cognee.image.digest // empty' "$DEPLOY_CORE"
 grep -Fq -- 'Cognee must use --cognee-digest with an exact sha256 OCI digest' "$ROOT_DIR/apps/_infra/cognee/deploy/image-policy.sh"
 grep -Fq -- 'clustertenantManager.cognee.image.digest=$COGNEE_DIGEST' "$COGNEE_POLICY"
+grep -Fq -- 'clustertenantManager.cognee.image.repository=$COGNEE_IMAGE_REPOSITORY' "$COGNEE_POLICY"
 grep -Fq -- 'validate_cognee_helm_passthrough' "$DEPLOY_CORE"
 grep -Fq -- 'append_authoritative_cognee_image_helm_args' "$DEPLOY_CORE"
 grep -Fq -- '--post-renderer|--post-renderer=*|--post-renderer-args|--post-renderer-args=*' "$COGNEE_POLICY"
@@ -88,8 +89,9 @@ COGNEE_TAG=""
 helm_args=(
   --set-string 'memoryGateway.kubernetesApiServerCidrs[0]=10.43.0.1/32'
   --set-string 'memoryGateway.kubernetesApiServerEndpointCidrs[0]=172.18.0.2/32'
-  --set-string 'clustertenantManager.cognee.image.digest='
-  --set-string 'clustertenantManager.cognee.image.tag=latest')
+  --set-literal 'clustertenantManager.cognee.image.repository=registry.invalid/alternate-cognee'
+  --set-literal 'clustertenantManager.cognee.image.digest='
+  --set-literal 'clustertenantManager.cognee.image.tag=latest')
 append_authoritative_cognee_image_helm_args
 cognee_deployment="$(helm template opencrane-silo "$ROOT_DIR/apps/_infra/deploy-k8s" \
   "${helm_args[@]}" --show-only templates/app-rollups.yaml \

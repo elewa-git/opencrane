@@ -27,17 +27,21 @@ resolve_cognee_image_reference
 [[ "$COGNEE_IMAGE" == "ghcr.io/elewa-git/opencrane-cognee@${COGNEE_DIGEST}" ]]
 
 EXTRA_HELM_ARGS=(
-  --set-string
+  --set-literal
+  "clustertenantManager.cognee.image.repository=registry.invalid/alternate-cognee"
+  --set-literal
   "clustertenantManager.cognee.image.digest="
-  --set-string
+  --set-literal
   "clustertenantManager.cognee.image.tag=latest")
 validate_cognee_helm_passthrough
 helm_args=("${EXTRA_HELM_ARGS[@]}")
 append_authoritative_cognee_image_helm_args
 argument_count="${#helm_args[@]}"
-[[ "${helm_args[$((argument_count - 4))]}" == "--set-string" ]]
+[[ "${helm_args[$((argument_count - 6))]}" == "--set-literal" ]]
+[[ "${helm_args[$((argument_count - 5))]}" == "clustertenantManager.cognee.image.repository=$COGNEE_IMAGE_REPOSITORY" ]]
+[[ "${helm_args[$((argument_count - 4))]}" == "--set-literal" ]]
 [[ "${helm_args[$((argument_count - 3))]}" == "clustertenantManager.cognee.image.digest=$COGNEE_DIGEST" ]]
-[[ "${helm_args[$((argument_count - 2))]}" == "--set-string" ]]
+[[ "${helm_args[$((argument_count - 2))]}" == "--set-literal" ]]
 [[ "${helm_args[$((argument_count - 1))]}" == "clustertenantManager.cognee.image.tag=" ]]
 
 _reset_inputs

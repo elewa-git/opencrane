@@ -3,9 +3,10 @@
 # Resolves the Cognee image without reading or changing the cluster. Real silo deployments use an
 # exact Open Container Initiative (OCI) digest. The disposable k3d smoke may use its imported local
 # tag only behind the same explicit `.test` escape as the browser image.
+readonly COGNEE_IMAGE_REPOSITORY="ghcr.io/elewa-git/opencrane-cognee"
+
 resolve_cognee_image_reference()
 {
-  local repository="ghcr.io/elewa-git/opencrane-cognee"
   local requested_tag="$COGNEE_TAG"
 
   if [[ "$ALLOW_TAG_FLOAT" == "1" ]]; then
@@ -19,7 +20,7 @@ resolve_cognee_image_reference()
     fi
     COGNEE_TAG="${COGNEE_TAG:-$IMAGE_TAG}"
     COGNEE_DIGEST=""
-    COGNEE_IMAGE="${repository}:${COGNEE_TAG}"
+    COGNEE_IMAGE="${COGNEE_IMAGE_REPOSITORY}:${COGNEE_TAG}"
     return 0
   fi
 
@@ -33,7 +34,7 @@ resolve_cognee_image_reference()
   fi
 
   COGNEE_TAG=""
-  COGNEE_IMAGE="${repository}@${COGNEE_DIGEST}"
+  COGNEE_IMAGE="${COGNEE_IMAGE_REPOSITORY}@${COGNEE_DIGEST}"
 }
 
 # Reject Helm post-rendering because it runs after every value and can rewrite the verified image.
@@ -51,16 +52,20 @@ validate_cognee_helm_passthrough()
   done
 }
 
-# Appends the verified image tuple after all operator-controlled values and Helm passthrough.
+# Appends the complete verified image tuple after all operator-controlled values and Helm
+# passthrough. Helm merges literal setters last, so the final literal tuple also outranks hostile
+# lower-precedence setter classes supplied earlier on the command line.
 append_authoritative_cognee_image_helm_args()
 {
   if [[ "$ALLOW_TAG_FLOAT" == "1" ]]; then
     helm_args+=(
-      --set-string "clustertenantManager.cognee.image.digest="
-      --set-string "clustertenantManager.cognee.image.tag=$COGNEE_TAG")
+      --set-literal "clustertenantManager.cognee.image.repository=$COGNEE_IMAGE_REPOSITORY"
+      --set-literal "clustertenantManager.cognee.image.digest="
+      --set-literal "clustertenantManager.cognee.image.tag=$COGNEE_TAG")
     return
   fi
   helm_args+=(
-    --set-string "clustertenantManager.cognee.image.digest=$COGNEE_DIGEST"
-    --set-string "clustertenantManager.cognee.image.tag=")
+    --set-literal "clustertenantManager.cognee.image.repository=$COGNEE_IMAGE_REPOSITORY"
+    --set-literal "clustertenantManager.cognee.image.digest=$COGNEE_DIGEST"
+    --set-literal "clustertenantManager.cognee.image.tag=")
 }
