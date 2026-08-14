@@ -72,6 +72,7 @@ KUBERNETES_CONTEXT="k3d-develop-smoke"
 COGNEE_TAG="develop-smoke"
 resolve_cognee_image_reference
 [[ "$COGNEE_DIGEST" == "" ]]
-[[ "$COGNEE_IMAGE" == "ghcr.io/elewa-git/opencrane-cognee:develop-smoke" ]]
+[[ "$COGNEE_IMAGE_REPOSITORY" == "opencrane/cognee" ]]
+[[ "$COGNEE_IMAGE" == "opencrane/cognee:develop-smoke" ]]
 
 echo "Cognee image policy contract: PASS"

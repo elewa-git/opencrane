@@ -3,7 +3,9 @@
 # Resolves the Cognee image without reading or changing the cluster. Real silo deployments use an
 # exact Open Container Initiative (OCI) digest. The disposable k3d smoke may use its imported local
 # tag only behind the same explicit `.test` escape as the browser image.
-readonly COGNEE_IMAGE_REPOSITORY="ghcr.io/elewa-git/opencrane-cognee"
+readonly COGNEE_REMOTE_IMAGE_REPOSITORY="ghcr.io/elewa-git/opencrane-cognee"
+readonly COGNEE_LOCAL_IMAGE_REPOSITORY="opencrane/cognee"
+COGNEE_IMAGE_REPOSITORY="$COGNEE_REMOTE_IMAGE_REPOSITORY"
 
 resolve_cognee_image_reference()
 {
@@ -20,6 +22,7 @@ resolve_cognee_image_reference()
     fi
     COGNEE_TAG="${COGNEE_TAG:-$IMAGE_TAG}"
     COGNEE_DIGEST=""
+    COGNEE_IMAGE_REPOSITORY="$COGNEE_LOCAL_IMAGE_REPOSITORY"
     COGNEE_IMAGE="${COGNEE_IMAGE_REPOSITORY}:${COGNEE_TAG}"
     return 0
   fi
@@ -34,6 +37,7 @@ resolve_cognee_image_reference()
   fi
 
   COGNEE_TAG=""
+  COGNEE_IMAGE_REPOSITORY="$COGNEE_REMOTE_IMAGE_REPOSITORY"
   COGNEE_IMAGE="${COGNEE_IMAGE_REPOSITORY}@${COGNEE_DIGEST}"
 }
 

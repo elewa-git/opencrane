@@ -103,6 +103,24 @@ if grep -Fq 'opencrane-cognee:latest' <<<"$cognee_deployment"; then
   exit 1
 fi
 
+# The one allowed floating-tag path is the disposable local smoke. It must retain the repository
+# that develop-smoke.sh builds and imports into k3d instead of trying to pull the production image.
+ALLOW_TAG_FLOAT=1
+BASE_DOMAIN="develop-smoke.opencrane.test"
+KUBERNETES_CONTEXT="k3d-develop-smoke"
+IMAGE_TAG="develop-smoke"
+COGNEE_TAG="develop-smoke"
+COGNEE_DIGEST=""
+resolve_cognee_image_reference
+helm_args=(
+  --set-string 'memoryGateway.kubernetesApiServerCidrs[0]=10.43.0.1/32'
+  --set-string 'memoryGateway.kubernetesApiServerEndpointCidrs[0]=172.18.0.2/32')
+append_authoritative_cognee_image_helm_args
+local_cognee_deployment="$(helm template opencrane-silo "$ROOT_DIR/apps/_infra/deploy-k8s" \
+  "${helm_args[@]}" --show-only templates/app-rollups.yaml \
+  | awk 'BEGIN { RS="---" } /kind: Deployment/ && /name: opencrane-silo-cognee/ { print }')"
+grep -Fq 'image: "opencrane/cognee:develop-smoke"' <<<"$local_cognee_deployment"
+
 # Strict mode must not abort the immutable issuer guard when the normal
 # deployment path provides no raw Helm arguments. Bash may expand this as zero
 # entries or one empty entry, neither of which is a supplied Helm argument.
