@@ -5,8 +5,8 @@ import { describe, expect, it, vi } from "vitest";
 import { AG_UI_TOOL_FAILURE_EVENT, AG_UI_TOOL_RECOVERY_REQUIRED_EVENT, AgUiToolRecoveryProviderOutcomes } from "@opencrane/contracts";
 import { ControlPlaneApiService } from "@opencrane/core";
 import { AgUiRunStatuses, AgUiToolStatuses, __CreateAgUiStreamState, __DecodeAgUiSseRecord, __ReduceAgUiStream, type AgUiStreamState } from "@opencrane/state/conversation/ag-ui";
+import { ConversationEventStreamStatuses, type ConversationEventStreamUpdate } from "@opencrane/state/conversation/stream";
 
-import { ConversationEventStreamStatuses, type ConversationEventStreamUpdate } from "../conversation-event-stream.types";
 import { OpenCraneConversationEventStream } from "../opencrane-conversation-event-stream";
 
 /** Encode text chunks as one incrementally consumable byte stream. */

@@ -5,8 +5,8 @@ import { BrowserDynamicTestingModule, platformBrowserDynamicTesting } from "@ang
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { ConversationLifecycles, ConversationModes, MessageContentBlockKinds, MessageRoles } from "@opencrane/models/conversations";
-import { ConversationEventStreamStatuses, type ConversationEventStream, type StreamConversationEventsCommand } from "@opencrane/state/conversation/adapter";
 import { __CreateAgUiStreamState } from "@opencrane/state/conversation/ag-ui";
+import { ConversationEventStreamStatuses, type ConversationEventStream, type StreamConversationEventsCommand } from "@opencrane/state/conversation/stream";
 
 import { ConversationRunStore } from "../conversation-run.store";
 import { ConversationOnboardingHistoryStore } from "../conversation-onboarding-history.store";

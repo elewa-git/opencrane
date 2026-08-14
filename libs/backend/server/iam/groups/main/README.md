@@ -47,8 +47,9 @@ access. Those entitlements belong to [authorization](../../authorization/main/RE
 
 ## Dependency direction
 
-Tagged `scope:groups`: it may depend only on `scope:groups` and `scope:shared` — never on apps or
-other sibling domains.
+Tagged `scope:groups`: it may depend on its own scope, shared contracts, and the authentication
+scope that supplies the organisation-admin route guard. It never imports an app or another IAM
+domain's persistence or policy decisions.
 
 ## Data & persistence
 

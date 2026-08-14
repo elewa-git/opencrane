@@ -8,7 +8,8 @@ participants, assets, elicitation, or access decisions.
 
 | Package | Responsibility |
 |---------|----------------|
-| [`adapter`](./adapter/README.md) | Generated-client translation for canonical conversation replay. |
+| [`stream`](./stream/README.md) | Transport-neutral live conversation stream port and connection states. |
+| [`adapter`](./adapter/README.md) | Signed-in HTTP implementation of the conversation stream port. |
 | [`ag-ui`](./ag-ui/README.md) | Safe projected-event state for A2UI surfaces. |
 | [`agent-threads`](./agent-threads/README.md) | Child Agent-session route state, follow-up commands, and access purge. |
 | [`assets`](./assets/README.md) | Upload, retry, and safe attachment lifecycle state. |

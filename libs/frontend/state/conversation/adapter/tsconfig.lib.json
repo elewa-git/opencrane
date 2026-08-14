@@ -17,6 +17,9 @@
       "path": "../ag-ui/tsconfig.lib.json"
     },
     {
+      "path": "../stream/tsconfig.lib.json"
+    },
+    {
       "path": "../../core"
     },
     {

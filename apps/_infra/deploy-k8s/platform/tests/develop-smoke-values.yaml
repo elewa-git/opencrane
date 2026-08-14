@@ -1,11 +1,16 @@
 # Disposable k3d overrides for develop-smoke.sh. Nx-affected workloads are built from the checkout;
-# unaffected workloads use the digest-validated baseline. Third-party planes remain pinned.
+# unaffected workloads use the digest-validated baseline. External vendor planes remain pinned.
 clustertenantManager:
   image:
     repository: opencrane/opencrane-server
     tag: develop-smoke
     pullPolicy: IfNotPresent
   cognee:
+    image:
+      repository: opencrane/cognee
+      tag: develop-smoke
+      digest: ""
+      pullPolicy: IfNotPresent
     persistence:
       size: 1Gi
 

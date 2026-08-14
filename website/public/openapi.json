@@ -900,7 +900,8 @@
           "publicModelName",
           "litellmModelId",
           "upstreamModel",
-          "isDefault"
+          "isDefault",
+          "generatedOutputCapabilities"
         ],
         "properties": {
           "id": {
@@ -945,6 +946,17 @@
             "type": "string",
             "nullable": true,
             "description": "The provider credential backing this model, when set."
+          },
+          "generatedOutputCapabilities": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "image_png",
+                "code_execution_files"
+              ]
+            },
+            "description": "Provider-native generated outputs this model route may use."
           },
           "createdAt": {
             "type": "string",
@@ -994,6 +1006,17 @@
           "providerCredentialId": {
             "type": "string",
             "description": "Provider credential backing this model."
+          },
+          "generatedOutputCapabilities": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "image_png",
+                "code_execution_files"
+              ]
+            },
+            "description": "Provider-native generated outputs this model route may use."
           }
         }
       },
@@ -5443,7 +5466,7 @@
       "post": {
         "operationId": "submitRuntimeSteering",
         "summary": "Queue one signed-in owner's instruction for a running agent",
-        "description": "The server derives the owner, silo, and current attempt. The instruction is queued durably and is consumed only at the runtime's fenced safe boundary.",
+        "description": "The server derives the owner, silo, and current attempt. The instruction is queued durably and exact retries reuse the same client key before consumption at the runtime's fenced safe boundary.",
         "tags": [
           "Runs"
         ],
@@ -5465,7 +5488,8 @@
               "schema": {
                 "type": "object",
                 "required": [
-                  "text"
+                  "text",
+                  "idempotencyKey"
                 ],
                 "additionalProperties": false,
                 "properties": {
@@ -5473,6 +5497,11 @@
                     "type": "string",
                     "minLength": 1,
                     "maxLength": 4000
+                  },
+                  "idempotencyKey": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
                   }
                 }
               }
@@ -5480,6 +5509,36 @@
           }
         },
         "responses": {
+          "200": {
+            "description": "The exact steering retry was already queued.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "steeringRequestId",
+                    "attempt",
+                    "state"
+                  ],
+                  "properties": {
+                    "steeringRequestId": {
+                      "type": "string"
+                    },
+                    "attempt": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "state": {
+                      "type": "string",
+                      "enum": [
+                        "pending"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
           "202": {
             "description": "Steering request queued for the current run attempt.",
             "content": {
@@ -8990,6 +9049,101 @@
         }
       }
     },
+    "/me/conversations/directory": {
+      "get": {
+        "operationId": "getMyConversationCreationDirectory",
+        "summary": "List self-scoped conversation creation choices",
+        "description": "Returns opaque active-member references and the caller's personal Agent only when exactly one active service matches their approved persona. It never returns login subjects, emails, roles, or memory identity.",
+        "tags": [
+          "Conversations"
+        ],
+        "responses": {
+          "200": {
+            "description": "Privacy-safe creation choices.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "directory"
+                  ],
+                  "properties": {
+                    "directory": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "participants",
+                        "personalAgentStatus",
+                        "personalAgent"
+                      ],
+                      "properties": {
+                        "participants": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "required": [
+                              "participantRef",
+                              "isSelf"
+                            ],
+                            "properties": {
+                              "participantRef": {
+                                "type": "string"
+                              },
+                              "isSelf": {
+                                "type": "boolean"
+                              }
+                            }
+                          }
+                        },
+                        "personalAgentStatus": {
+                          "type": "string",
+                          "enum": [
+                            "ready",
+                            "unavailable",
+                            "ambiguous"
+                          ]
+                        },
+                        "personalAgent": {
+                          "oneOf": [
+                            {
+                              "type": "null"
+                            },
+                            {
+                              "type": "object",
+                              "additionalProperties": false,
+                              "required": [
+                                "personalAgentRef",
+                                "displayName"
+                              ],
+                              "properties": {
+                                "personalAgentRef": {
+                                  "type": "string"
+                                },
+                                "displayName": {
+                                  "type": "string"
+                                }
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required."
+          },
+          "503": {
+            "description": "Conversation directory unavailable."
+          }
+        }
+      }
+    },
     "/me/conversations": {
       "get": {
         "operationId": "listMyConversations",
@@ -9030,7 +9184,7 @@
                           "mode",
                           "lifecycle",
                           "agentServiceId",
-                          "participantUserIds",
+                          "participantRefs",
                           "archivedAt",
                           "readThroughPosition",
                           "updatedAt"
@@ -9060,7 +9214,7 @@
                               "null"
                             ]
                           },
-                          "participantUserIds": {
+                          "participantRefs": {
                             "type": "array",
                             "items": {
                               "type": "string"
@@ -9114,7 +9268,7 @@
                     "additionalProperties": false,
                     "required": [
                       "mode",
-                      "agentServiceId"
+                      "personalAgentRef"
                     ],
                     "properties": {
                       "mode": {
@@ -9123,7 +9277,7 @@
                           "agent_session"
                         ]
                       },
-                      "agentServiceId": {
+                      "personalAgentRef": {
                         "type": "string"
                       }
                     }
@@ -9133,7 +9287,7 @@
                     "additionalProperties": false,
                     "required": [
                       "mode",
-                      "participantUserIds"
+                      "participantRefs"
                     ],
                     "properties": {
                       "mode": {
@@ -9142,7 +9296,7 @@
                           "direct"
                         ]
                       },
-                      "participantUserIds": {
+                      "participantRefs": {
                         "type": "array",
                         "items": {
                           "type": "string"
@@ -9157,7 +9311,7 @@
                     "additionalProperties": false,
                     "required": [
                       "mode",
-                      "participantUserIds"
+                      "participantRefs"
                     ],
                     "properties": {
                       "mode": {
@@ -9166,7 +9320,7 @@
                           "group"
                         ]
                       },
-                      "participantUserIds": {
+                      "participantRefs": {
                         "type": "array",
                         "items": {
                           "type": "string"
@@ -9201,7 +9355,7 @@
                         "mode",
                         "lifecycle",
                         "agentServiceId",
-                        "participantUserIds",
+                        "participantRefs",
                         "archivedAt",
                         "readThroughPosition",
                         "updatedAt",
@@ -9234,7 +9388,7 @@
                             "null"
                           ]
                         },
-                        "participantUserIds": {
+                        "participantRefs": {
                           "type": "array",
                           "items": {
                             "type": "string"
@@ -9279,9 +9433,10 @@
                               "source",
                               "blocks",
                               "runId",
-                              "userId",
+                              "participantRef",
                               "createdAt",
-                              "completedAt"
+                              "completedAt",
+                              "agentThread"
                             ],
                             "properties": {
                               "id": {
@@ -9354,7 +9509,7 @@
                                   "null"
                                 ]
                               },
-                              "userId": {
+                              "participantRef": {
                                 "type": [
                                   "string",
                                   "null"
@@ -9370,6 +9525,53 @@
                                   "null"
                                 ],
                                 "format": "date-time"
+                              },
+                              "agentThread": {
+                                "oneOf": [
+                                  {
+                                    "type": "null"
+                                  },
+                                  {
+                                    "type": "object",
+                                    "additionalProperties": false,
+                                    "required": [
+                                      "childConversationId",
+                                      "parentConversationId",
+                                      "rootConversationId",
+                                      "parentMessageId",
+                                      "initiatorUserId",
+                                      "agentServiceId",
+                                      "personaRevisionId",
+                                      "firstRunId"
+                                    ],
+                                    "properties": {
+                                      "childConversationId": {
+                                        "type": "string"
+                                      },
+                                      "parentConversationId": {
+                                        "type": "string"
+                                      },
+                                      "rootConversationId": {
+                                        "type": "string"
+                                      },
+                                      "parentMessageId": {
+                                        "type": "string"
+                                      },
+                                      "initiatorUserId": {
+                                        "type": "string"
+                                      },
+                                      "agentServiceId": {
+                                        "type": "string"
+                                      },
+                                      "personaRevisionId": {
+                                        "type": "string"
+                                      },
+                                      "firstRunId": {
+                                        "type": "string"
+                                      }
+                                    }
+                                  }
+                                ]
                               }
                             }
                           }
@@ -9433,7 +9635,7 @@
                         "mode",
                         "lifecycle",
                         "agentServiceId",
-                        "participantUserIds",
+                        "participantRefs",
                         "archivedAt",
                         "readThroughPosition",
                         "updatedAt",
@@ -9466,7 +9668,7 @@
                             "null"
                           ]
                         },
-                        "participantUserIds": {
+                        "participantRefs": {
                           "type": "array",
                           "items": {
                             "type": "string"
@@ -9511,7 +9713,306 @@
                               "source",
                               "blocks",
                               "runId",
-                              "userId",
+                              "participantRef",
+                              "createdAt",
+                              "completedAt",
+                              "agentThread"
+                            ],
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "position": {
+                                "type": "string",
+                                "pattern": "^(0|[1-9][0-9]*)$"
+                              },
+                              "role": {
+                                "type": "string",
+                                "enum": [
+                                  "user",
+                                  "assistant",
+                                  "tool",
+                                  "system"
+                                ]
+                              },
+                              "state": {
+                                "type": "string",
+                                "enum": [
+                                  "pending",
+                                  "streaming",
+                                  "completed",
+                                  "failed",
+                                  "cancelled"
+                                ]
+                              },
+                              "source": {
+                                "type": "string",
+                                "enum": [
+                                  "user_input",
+                                  "model_output",
+                                  "tool_result",
+                                  "platform"
+                                ]
+                              },
+                              "blocks": {
+                                "type": "array",
+                                "items": {
+                                  "type": "object",
+                                  "additionalProperties": false,
+                                  "required": [
+                                    "id",
+                                    "kind",
+                                    "value"
+                                  ],
+                                  "properties": {
+                                    "id": {
+                                      "type": "string"
+                                    },
+                                    "kind": {
+                                      "type": "string",
+                                      "enum": [
+                                        "text",
+                                        "artifact",
+                                        "tool_call",
+                                        "tool_result"
+                                      ]
+                                    },
+                                    "value": {
+                                      "type": "string"
+                                    }
+                                  }
+                                }
+                              },
+                              "runId": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "participantRef": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "createdAt": {
+                                "type": "string",
+                                "format": "date-time"
+                              },
+                              "completedAt": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ],
+                                "format": "date-time"
+                              },
+                              "agentThread": {
+                                "oneOf": [
+                                  {
+                                    "type": "null"
+                                  },
+                                  {
+                                    "type": "object",
+                                    "additionalProperties": false,
+                                    "required": [
+                                      "childConversationId",
+                                      "parentConversationId",
+                                      "rootConversationId",
+                                      "parentMessageId",
+                                      "initiatorUserId",
+                                      "agentServiceId",
+                                      "personaRevisionId",
+                                      "firstRunId"
+                                    ],
+                                    "properties": {
+                                      "childConversationId": {
+                                        "type": "string"
+                                      },
+                                      "parentConversationId": {
+                                        "type": "string"
+                                      },
+                                      "rootConversationId": {
+                                        "type": "string"
+                                      },
+                                      "parentMessageId": {
+                                        "type": "string"
+                                      },
+                                      "initiatorUserId": {
+                                        "type": "string"
+                                      },
+                                      "agentServiceId": {
+                                        "type": "string"
+                                      },
+                                      "personaRevisionId": {
+                                        "type": "string"
+                                      },
+                                      "firstRunId": {
+                                        "type": "string"
+                                      }
+                                    }
+                                  }
+                                ]
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required."
+          },
+          "404": {
+            "description": "Conversation unavailable."
+          },
+          "503": {
+            "description": "Conversation authority unavailable."
+          }
+        }
+      }
+    },
+    "/me/conversations/{parentConversationId}/agent-threads/{childConversationId}": {
+      "get": {
+        "operationId": "openMyAgentThread",
+        "summary": "Open one authorized child Agent-thread read model",
+        "description": "Composes a bounded view from canonical conversation, run, and parent-delivery authorities. It creates no second ledger and requires current participant access in both parent and child.",
+        "tags": [
+          "Conversations"
+        ],
+        "parameters": [
+          {
+            "name": "parentConversationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "childConversationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Authorized Agent-thread snapshot.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "agentThread"
+                  ],
+                  "properties": {
+                    "agentThread": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "parentConversationId",
+                        "childConversationId",
+                        "rootConversationId",
+                        "parentMessageId",
+                        "agentServiceId",
+                        "agentName",
+                        "ask",
+                        "createdAt",
+                        "lifecycle",
+                        "participantCount",
+                        "readThroughPosition",
+                        "latestPosition",
+                        "representedThroughPosition",
+                        "messageCount",
+                        "unreadMessageCount",
+                        "cursor",
+                        "messages",
+                        "runs",
+                        "deliveries"
+                      ],
+                      "properties": {
+                        "parentConversationId": {
+                          "type": "string"
+                        },
+                        "childConversationId": {
+                          "type": "string"
+                        },
+                        "rootConversationId": {
+                          "type": "string"
+                        },
+                        "parentMessageId": {
+                          "type": "string"
+                        },
+                        "agentServiceId": {
+                          "type": "string"
+                        },
+                        "agentName": {
+                          "type": "string"
+                        },
+                        "ask": {
+                          "type": "string"
+                        },
+                        "createdAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "lifecycle": {
+                          "type": "string",
+                          "enum": [
+                            "open",
+                            "closed"
+                          ]
+                        },
+                        "participantCount": {
+                          "type": "integer",
+                          "minimum": 1
+                        },
+                        "readThroughPosition": {
+                          "type": "string",
+                          "pattern": "^(0|[1-9][0-9]*)$"
+                        },
+                        "latestPosition": {
+                          "type": "string",
+                          "pattern": "^(0|[1-9][0-9]*)$"
+                        },
+                        "representedThroughPosition": {
+                          "type": "string",
+                          "pattern": "^(0|[1-9][0-9]*)$"
+                        },
+                        "messageCount": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "unreadMessageCount": {
+                          "type": "integer",
+                          "minimum": 0
+                        },
+                        "cursor": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "messages": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "required": [
+                              "id",
+                              "position",
+                              "role",
+                              "state",
+                              "source",
+                              "blocks",
+                              "runId",
                               "createdAt",
                               "completedAt"
                             ],
@@ -9586,12 +10087,6 @@
                                   "null"
                                 ]
                               },
-                              "userId": {
-                                "type": [
-                                  "string",
-                                  "null"
-                                ]
-                              },
                               "createdAt": {
                                 "type": "string",
                                 "format": "date-time"
@@ -9601,6 +10096,116 @@
                                   "string",
                                   "null"
                                 ],
+                                "format": "date-time"
+                              }
+                            }
+                          }
+                        },
+                        "runs": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "required": [
+                              "id",
+                              "ordinal",
+                              "attempt",
+                              "state",
+                              "acceptedAt",
+                              "finishedAt"
+                            ],
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "ordinal": {
+                                "type": "integer",
+                                "minimum": 1
+                              },
+                              "attempt": {
+                                "type": "integer",
+                                "minimum": 1
+                              },
+                              "state": {
+                                "type": "string",
+                                "enum": [
+                                  "queued",
+                                  "working",
+                                  "waiting",
+                                  "retrying",
+                                  "completed",
+                                  "failed",
+                                  "cancelled"
+                                ]
+                              },
+                              "acceptedAt": {
+                                "type": "string",
+                                "format": "date-time"
+                              },
+                              "finishedAt": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ],
+                                "format": "date-time"
+                              }
+                            }
+                          }
+                        },
+                        "deliveries": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "required": [
+                              "id",
+                              "childConversationId",
+                              "parentConversationId",
+                              "runId",
+                              "kind",
+                              "label",
+                              "detail",
+                              "assetId",
+                              "createdAt"
+                            ],
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "childConversationId": {
+                                "type": "string"
+                              },
+                              "parentConversationId": {
+                                "type": "string"
+                              },
+                              "runId": {
+                                "type": "string"
+                              },
+                              "kind": {
+                                "type": "string",
+                                "enum": [
+                                  "status",
+                                  "question",
+                                  "approval",
+                                  "result",
+                                  "failure",
+                                  "asset"
+                                ]
+                              },
+                              "label": {
+                                "type": "string"
+                              },
+                              "detail": {
+                                "type": "string"
+                              },
+                              "assetId": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "createdAt": {
+                                "type": "string",
                                 "format": "date-time"
                               }
                             }
@@ -9617,7 +10222,101 @@
             "description": "Authentication required."
           },
           "404": {
-            "description": "Conversation unavailable."
+            "description": "Agent thread unavailable."
+          },
+          "503": {
+            "description": "Conversation authority unavailable."
+          }
+        }
+      }
+    },
+    "/me/conversations/{parentConversationId}/agent-threads/{childConversationId}/read-through": {
+      "put": {
+        "operationId": "markMyAgentThreadRead",
+        "summary": "Advance this participant's Agent-thread read position",
+        "description": "Idempotently advances one participant-local coordinate only after current parent and child access are rechecked. The observed position cannot exceed the current child timeline.",
+        "tags": [
+          "Conversations"
+        ],
+        "parameters": [
+          {
+            "name": "parentConversationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "childConversationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "observedPosition"
+                ],
+                "properties": {
+                  "observedPosition": {
+                    "type": "string",
+                    "pattern": "^(0|[1-9][0-9]*)$",
+                    "maxLength": 19
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Participant read coordinate changed or was already at least this position.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "outcome",
+                    "readThroughPosition"
+                  ],
+                  "properties": {
+                    "outcome": {
+                      "type": "string",
+                      "enum": [
+                        "changed",
+                        "idempotent"
+                      ]
+                    },
+                    "readThroughPosition": {
+                      "type": "string",
+                      "pattern": "^(0|[1-9][0-9]*)$"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed observed position."
+          },
+          "401": {
+            "description": "Authentication required."
+          },
+          "404": {
+            "description": "Agent thread unavailable."
+          },
+          "409": {
+            "description": "Observed position exceeds the current child timeline."
           },
           "503": {
             "description": "Conversation authority unavailable."
@@ -9688,6 +10387,20 @@
                         }
                       }
                     }
+                  },
+                  "agentTarget": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "agentServiceId"
+                    ],
+                    "properties": {
+                      "agentServiceId": {
+                        "type": "string",
+                        "maxLength": 128
+                      }
+                    },
+                    "description": "In a group only, create a child Agent session using the caller's active approved persona."
                   }
                 }
               }
@@ -9704,7 +10417,8 @@
                   "additionalProperties": false,
                   "required": [
                     "outcome",
-                    "message"
+                    "message",
+                    "agentThread"
                   ],
                   "properties": {
                     "outcome": {
@@ -9724,9 +10438,10 @@
                         "source",
                         "blocks",
                         "runId",
-                        "userId",
+                        "participantRef",
                         "createdAt",
-                        "completedAt"
+                        "completedAt",
+                        "agentThread"
                       ],
                       "properties": {
                         "id": {
@@ -9799,7 +10514,7 @@
                             "null"
                           ]
                         },
-                        "userId": {
+                        "participantRef": {
                           "type": [
                             "string",
                             "null"
@@ -9815,8 +10530,102 @@
                             "null"
                           ],
                           "format": "date-time"
+                        },
+                        "agentThread": {
+                          "oneOf": [
+                            {
+                              "type": "null"
+                            },
+                            {
+                              "type": "object",
+                              "additionalProperties": false,
+                              "required": [
+                                "childConversationId",
+                                "parentConversationId",
+                                "rootConversationId",
+                                "parentMessageId",
+                                "initiatorUserId",
+                                "agentServiceId",
+                                "personaRevisionId",
+                                "firstRunId"
+                              ],
+                              "properties": {
+                                "childConversationId": {
+                                  "type": "string"
+                                },
+                                "parentConversationId": {
+                                  "type": "string"
+                                },
+                                "rootConversationId": {
+                                  "type": "string"
+                                },
+                                "parentMessageId": {
+                                  "type": "string"
+                                },
+                                "initiatorUserId": {
+                                  "type": "string"
+                                },
+                                "agentServiceId": {
+                                  "type": "string"
+                                },
+                                "personaRevisionId": {
+                                  "type": "string"
+                                },
+                                "firstRunId": {
+                                  "type": "string"
+                                }
+                              }
+                            }
+                          ]
                         }
                       }
+                    },
+                    "agentThread": {
+                      "oneOf": [
+                        {
+                          "type": "null"
+                        },
+                        {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "required": [
+                            "childConversationId",
+                            "parentConversationId",
+                            "rootConversationId",
+                            "parentMessageId",
+                            "initiatorUserId",
+                            "agentServiceId",
+                            "personaRevisionId",
+                            "firstRunId"
+                          ],
+                          "properties": {
+                            "childConversationId": {
+                              "type": "string"
+                            },
+                            "parentConversationId": {
+                              "type": "string"
+                            },
+                            "rootConversationId": {
+                              "type": "string"
+                            },
+                            "parentMessageId": {
+                              "type": "string"
+                            },
+                            "initiatorUserId": {
+                              "type": "string"
+                            },
+                            "agentServiceId": {
+                              "type": "string"
+                            },
+                            "personaRevisionId": {
+                              "type": "string"
+                            },
+                            "firstRunId": {
+                              "type": "string"
+                            }
+                          }
+                        }
+                      ]
                     }
                   }
                 }
@@ -9832,7 +10641,8 @@
                   "additionalProperties": false,
                   "required": [
                     "outcome",
-                    "message"
+                    "message",
+                    "agentThread"
                   ],
                   "properties": {
                     "outcome": {
@@ -9852,9 +10662,10 @@
                         "source",
                         "blocks",
                         "runId",
-                        "userId",
+                        "participantRef",
                         "createdAt",
-                        "completedAt"
+                        "completedAt",
+                        "agentThread"
                       ],
                       "properties": {
                         "id": {
@@ -9927,7 +10738,7 @@
                             "null"
                           ]
                         },
-                        "userId": {
+                        "participantRef": {
                           "type": [
                             "string",
                             "null"
@@ -9943,8 +10754,102 @@
                             "null"
                           ],
                           "format": "date-time"
+                        },
+                        "agentThread": {
+                          "oneOf": [
+                            {
+                              "type": "null"
+                            },
+                            {
+                              "type": "object",
+                              "additionalProperties": false,
+                              "required": [
+                                "childConversationId",
+                                "parentConversationId",
+                                "rootConversationId",
+                                "parentMessageId",
+                                "initiatorUserId",
+                                "agentServiceId",
+                                "personaRevisionId",
+                                "firstRunId"
+                              ],
+                              "properties": {
+                                "childConversationId": {
+                                  "type": "string"
+                                },
+                                "parentConversationId": {
+                                  "type": "string"
+                                },
+                                "rootConversationId": {
+                                  "type": "string"
+                                },
+                                "parentMessageId": {
+                                  "type": "string"
+                                },
+                                "initiatorUserId": {
+                                  "type": "string"
+                                },
+                                "agentServiceId": {
+                                  "type": "string"
+                                },
+                                "personaRevisionId": {
+                                  "type": "string"
+                                },
+                                "firstRunId": {
+                                  "type": "string"
+                                }
+                              }
+                            }
+                          ]
                         }
                       }
+                    },
+                    "agentThread": {
+                      "oneOf": [
+                        {
+                          "type": "null"
+                        },
+                        {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "required": [
+                            "childConversationId",
+                            "parentConversationId",
+                            "rootConversationId",
+                            "parentMessageId",
+                            "initiatorUserId",
+                            "agentServiceId",
+                            "personaRevisionId",
+                            "firstRunId"
+                          ],
+                          "properties": {
+                            "childConversationId": {
+                              "type": "string"
+                            },
+                            "parentConversationId": {
+                              "type": "string"
+                            },
+                            "rootConversationId": {
+                              "type": "string"
+                            },
+                            "parentMessageId": {
+                              "type": "string"
+                            },
+                            "initiatorUserId": {
+                              "type": "string"
+                            },
+                            "agentServiceId": {
+                              "type": "string"
+                            },
+                            "personaRevisionId": {
+                              "type": "string"
+                            },
+                            "firstRunId": {
+                              "type": "string"
+                            }
+                          }
+                        }
+                      ]
                     }
                   }
                 }
@@ -9968,6 +10873,139 @@
           },
           "503": {
             "description": "Admission authority unavailable."
+          }
+        }
+      }
+    },
+    "/me/conversations/{conversationId}/runs/{runId}/retry": {
+      "post": {
+        "operationId": "retryMyConversationRun",
+        "summary": "Start a fresh attempt for one failed conversation run",
+        "description": "Requires current organisation membership, active conversation participation, the exact terminal attempt, the still-active Agent revision, and a fresh retry key. Repeating the same key returns the same new attempt.",
+        "tags": [
+          "Conversations"
+        ],
+        "parameters": [
+          {
+            "name": "conversationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "runId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "expectedAttempt",
+                  "idempotencyKey"
+                ],
+                "properties": {
+                  "expectedAttempt": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "idempotencyKey": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The same retry key already started this attempt.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "outcome",
+                    "runId",
+                    "attempt"
+                  ],
+                  "properties": {
+                    "outcome": {
+                      "type": "string",
+                      "enum": [
+                        "idempotent"
+                      ]
+                    },
+                    "runId": {
+                      "type": "string"
+                    },
+                    "attempt": {
+                      "type": "integer",
+                      "minimum": 2
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Fresh attempt started.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "outcome",
+                    "runId",
+                    "attempt"
+                  ],
+                  "properties": {
+                    "outcome": {
+                      "type": "string",
+                      "enum": [
+                        "started"
+                      ]
+                    },
+                    "runId": {
+                      "type": "string"
+                    },
+                    "attempt": {
+                      "type": "integer",
+                      "minimum": 2
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed retry request."
+          },
+          "401": {
+            "description": "Authentication required."
+          },
+          "404": {
+            "description": "Conversation run unavailable to this participant."
+          },
+          "409": {
+            "description": "Attempt, terminal state, active Agent service, or revision no longer permits retry."
+          },
+          "503": {
+            "description": "Retry authority unavailable."
           }
         }
       }
@@ -10028,7 +11066,7 @@
                         "mode",
                         "lifecycle",
                         "agentServiceId",
-                        "participantUserIds",
+                        "participantRefs",
                         "archivedAt",
                         "readThroughPosition",
                         "updatedAt",
@@ -10061,7 +11099,7 @@
                             "null"
                           ]
                         },
-                        "participantUserIds": {
+                        "participantRefs": {
                           "type": "array",
                           "items": {
                             "type": "string"
@@ -10106,9 +11144,10 @@
                               "source",
                               "blocks",
                               "runId",
-                              "userId",
+                              "participantRef",
                               "createdAt",
-                              "completedAt"
+                              "completedAt",
+                              "agentThread"
                             ],
                             "properties": {
                               "id": {
@@ -10181,7 +11220,7 @@
                                   "null"
                                 ]
                               },
-                              "userId": {
+                              "participantRef": {
                                 "type": [
                                   "string",
                                   "null"
@@ -10197,6 +11236,53 @@
                                   "null"
                                 ],
                                 "format": "date-time"
+                              },
+                              "agentThread": {
+                                "oneOf": [
+                                  {
+                                    "type": "null"
+                                  },
+                                  {
+                                    "type": "object",
+                                    "additionalProperties": false,
+                                    "required": [
+                                      "childConversationId",
+                                      "parentConversationId",
+                                      "rootConversationId",
+                                      "parentMessageId",
+                                      "initiatorUserId",
+                                      "agentServiceId",
+                                      "personaRevisionId",
+                                      "firstRunId"
+                                    ],
+                                    "properties": {
+                                      "childConversationId": {
+                                        "type": "string"
+                                      },
+                                      "parentConversationId": {
+                                        "type": "string"
+                                      },
+                                      "rootConversationId": {
+                                        "type": "string"
+                                      },
+                                      "parentMessageId": {
+                                        "type": "string"
+                                      },
+                                      "initiatorUserId": {
+                                        "type": "string"
+                                      },
+                                      "agentServiceId": {
+                                        "type": "string"
+                                      },
+                                      "personaRevisionId": {
+                                        "type": "string"
+                                      },
+                                      "firstRunId": {
+                                        "type": "string"
+                                      }
+                                    }
+                                  }
+                                ]
                               }
                             }
                           }
@@ -10260,7 +11346,7 @@
                         "mode",
                         "lifecycle",
                         "agentServiceId",
-                        "participantUserIds",
+                        "participantRefs",
                         "archivedAt",
                         "readThroughPosition",
                         "updatedAt",
@@ -10293,7 +11379,7 @@
                             "null"
                           ]
                         },
-                        "participantUserIds": {
+                        "participantRefs": {
                           "type": "array",
                           "items": {
                             "type": "string"
@@ -10338,9 +11424,10 @@
                               "source",
                               "blocks",
                               "runId",
-                              "userId",
+                              "participantRef",
                               "createdAt",
-                              "completedAt"
+                              "completedAt",
+                              "agentThread"
                             ],
                             "properties": {
                               "id": {
@@ -10413,7 +11500,7 @@
                                   "null"
                                 ]
                               },
-                              "userId": {
+                              "participantRef": {
                                 "type": [
                                   "string",
                                   "null"
@@ -10429,6 +11516,53 @@
                                   "null"
                                 ],
                                 "format": "date-time"
+                              },
+                              "agentThread": {
+                                "oneOf": [
+                                  {
+                                    "type": "null"
+                                  },
+                                  {
+                                    "type": "object",
+                                    "additionalProperties": false,
+                                    "required": [
+                                      "childConversationId",
+                                      "parentConversationId",
+                                      "rootConversationId",
+                                      "parentMessageId",
+                                      "initiatorUserId",
+                                      "agentServiceId",
+                                      "personaRevisionId",
+                                      "firstRunId"
+                                    ],
+                                    "properties": {
+                                      "childConversationId": {
+                                        "type": "string"
+                                      },
+                                      "parentConversationId": {
+                                        "type": "string"
+                                      },
+                                      "rootConversationId": {
+                                        "type": "string"
+                                      },
+                                      "parentMessageId": {
+                                        "type": "string"
+                                      },
+                                      "initiatorUserId": {
+                                        "type": "string"
+                                      },
+                                      "agentServiceId": {
+                                        "type": "string"
+                                      },
+                                      "personaRevisionId": {
+                                        "type": "string"
+                                      },
+                                      "firstRunId": {
+                                        "type": "string"
+                                      }
+                                    }
+                                  }
+                                ]
                               }
                             }
                           }
@@ -10501,6 +11635,7 @@
                           "byteLength",
                           "disposition",
                           "failureCode",
+                          "canRemove",
                           "createdAt"
                         ],
                         "properties": {
@@ -10530,7 +11665,6 @@
                               "processing",
                               "ready",
                               "failed",
-                              "cancelled",
                               "removed"
                             ]
                           },
@@ -10563,6 +11697,9 @@
                               "string",
                               "null"
                             ]
+                          },
+                          "canRemove": {
+                            "type": "boolean"
                           },
                           "createdAt": {
                             "type": "string",
@@ -10677,6 +11814,7 @@
                         "byteLength",
                         "disposition",
                         "failureCode",
+                        "canRemove",
                         "createdAt"
                       ],
                       "properties": {
@@ -10706,7 +11844,6 @@
                             "processing",
                             "ready",
                             "failed",
-                            "cancelled",
                             "removed"
                           ]
                         },
@@ -10739,6 +11876,9 @@
                             "string",
                             "null"
                           ]
+                        },
+                        "canRemove": {
+                          "type": "boolean"
                         },
                         "createdAt": {
                           "type": "string",
@@ -10784,6 +11924,7 @@
                         "byteLength",
                         "disposition",
                         "failureCode",
+                        "canRemove",
                         "createdAt"
                       ],
                       "properties": {
@@ -10813,7 +11954,6 @@
                             "processing",
                             "ready",
                             "failed",
-                            "cancelled",
                             "removed"
                           ]
                         },
@@ -10846,6 +11986,9 @@
                             "string",
                             "null"
                           ]
+                        },
+                        "canRemove": {
+                          "type": "boolean"
                         },
                         "createdAt": {
                           "type": "string",
@@ -10934,6 +12077,54 @@
       }
     },
     "/me/conversations/{conversationId}/assets/{assetId}/content": {
+      "get": {
+        "operationId": "readMyConversationAssetContent",
+        "summary": "Read one checked conversation file",
+        "description": "Rechecks current participant access and ready state, then streams the exact published bytes. Storage coordinates and short-lived internal read authority never cross this boundary.",
+        "tags": [
+          "Conversation assets"
+        ],
+        "parameters": [
+          {
+            "name": "conversationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "assetId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Exact checked bytes with safe media type and inline-or-download disposition.",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required."
+          },
+          "404": {
+            "description": "The caller cannot currently read this ready asset."
+          },
+          "503": {
+            "description": "Conversation asset authority or private byte broker unavailable."
+          }
+        }
+      },
       "put": {
         "operationId": "uploadMyConversationAssetContent",
         "summary": "Upload exact bytes into quarantine",
@@ -11004,6 +12195,7 @@
                         "byteLength",
                         "disposition",
                         "failureCode",
+                        "canRemove",
                         "createdAt"
                       ],
                       "properties": {
@@ -11033,7 +12225,6 @@
                             "processing",
                             "ready",
                             "failed",
-                            "cancelled",
                             "removed"
                           ]
                         },
@@ -11067,6 +12258,9 @@
                             "null"
                           ]
                         },
+                        "canRemove": {
+                          "type": "boolean"
+                        },
                         "createdAt": {
                           "type": "string",
                           "format": "date-time"
@@ -11083,6 +12277,185 @@
           },
           "409": {
             "description": "Upload unavailable or conflicting.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "outcome",
+                    "reason"
+                  ],
+                  "properties": {
+                    "outcome": {
+                      "type": "string",
+                      "enum": [
+                        "denied"
+                      ]
+                    },
+                    "reason": {
+                      "type": "string",
+                      "enum": [
+                        "invalid_request",
+                        "conversation_unavailable",
+                        "asset_unavailable",
+                        "upload_failed",
+                        "idempotency_conflict"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Conversation asset authority unavailable."
+          }
+        }
+      }
+    },
+    "/me/conversations/{conversationId}/assets/{assetId}": {
+      "delete": {
+        "operationId": "removeMyConversationAsset",
+        "summary": "Remove one unlinked upload reservation",
+        "description": "Removal succeeds only while the returned canRemove capability is true. The response is a metadata-only tombstone.",
+        "tags": [
+          "Conversation assets"
+        ],
+        "parameters": [
+          {
+            "name": "conversationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "assetId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Reservation removed or exact retry returned its tombstone.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "outcome",
+                    "asset"
+                  ],
+                  "properties": {
+                    "outcome": {
+                      "type": "string",
+                      "enum": [
+                        "accepted",
+                        "idempotent"
+                      ]
+                    },
+                    "asset": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "required": [
+                        "id",
+                        "conversationId",
+                        "messageId",
+                        "provenance",
+                        "state",
+                        "displayName",
+                        "mediaType",
+                        "byteLength",
+                        "disposition",
+                        "failureCode",
+                        "canRemove",
+                        "createdAt"
+                      ],
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "conversationId": {
+                          "type": "string"
+                        },
+                        "messageId": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "provenance": {
+                          "type": "string",
+                          "enum": [
+                            "participant_upload",
+                            "agent_output"
+                          ]
+                        },
+                        "state": {
+                          "type": "string",
+                          "enum": [
+                            "uploading",
+                            "processing",
+                            "ready",
+                            "failed",
+                            "removed"
+                          ]
+                        },
+                        "displayName": {
+                          "type": "string"
+                        },
+                        "mediaType": {
+                          "type": "string"
+                        },
+                        "byteLength": {
+                          "type": [
+                            "integer",
+                            "null"
+                          ],
+                          "minimum": 1
+                        },
+                        "disposition": {
+                          "type": [
+                            "string",
+                            "null"
+                          ],
+                          "enum": [
+                            "preview",
+                            "download",
+                            null
+                          ]
+                        },
+                        "failureCode": {
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "canRemove": {
+                          "type": "boolean"
+                        },
+                        "createdAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required."
+          },
+          "409": {
+            "description": "Removal is unavailable at this lifecycle point.",
             "content": {
               "application/json": {
                 "schema": {

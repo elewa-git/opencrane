@@ -34,6 +34,7 @@ SMOKE_IMAGES=(
   opencrane/channel-proxy:develop-smoke
   opencrane/memory-gateway:develop-smoke
   opencrane/artifact-service:develop-smoke
+  opencrane/cognee:develop-smoke
 )
 
 # Every image this script builds carries this label so teardown can prune exactly the run's
@@ -213,6 +214,8 @@ _prepare_images()
     opencrane-memory-gateway apps/memory-gateway/deploy/Dockerfile
   _prepare_image artifact-service opencrane/artifact-service:develop-smoke \
     opencrane-artifact-service apps/artifact-service/deploy/Dockerfile
+  _prepare_image cognee opencrane/cognee:develop-smoke \
+    opencrane-cognee apps/_infra/cognee/deploy/Dockerfile
 }
 
 _create_database_credentials()
@@ -485,6 +488,7 @@ export TIMEOUT_SECONDS
   --release-version "$(jq -r '.version' "$ROOT_DIR/package.json")" \
   --from-release-version fresh \
   --image-tag develop-smoke \
+  --cognee-tag develop-smoke \
   --storage-class "$SMOKE_STORAGE_CLASS" \
   --postgres-credentials-secret "$POSTGRES_CREDENTIALS_SECRET" \
   --obot-postgres-credentials-secret "$OBOT_POSTGRES_CREDENTIALS_SECRET" \

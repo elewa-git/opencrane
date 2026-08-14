@@ -253,6 +253,9 @@
       "@opencrane/state/conversation/adapter": [
         "./libs/frontend/state/conversation/adapter/src/index.ts"
       ],
+      "@opencrane/state/conversation/stream": [
+        "./libs/frontend/state/conversation/stream/src/index.ts"
+      ],
       "@opencrane/state/conversation/render": [
         "./libs/frontend/state/conversation/render/src/index.ts"
       ],

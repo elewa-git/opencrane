@@ -2,9 +2,31 @@
   "name": "cognee",
   "$schema": "../../../node_modules/nx/schemas/project-schema.json",
   "projectType": "application",
-  "metadata": { "release": { "adaptedVersion": "0.8.0" } },
+  "metadata": { "release": { "adaptedVersion": "0.8.1" } },
   "tags": ["type:app", "layer:entrypoint", "scope:cognee"],
   "targets": {
+    "lint": {
+      "executor": "nx:run-commands",
+      "options": { "command": "bash -n apps/_infra/cognee/deploy/image-policy.sh apps/_infra/cognee/tests/image-contract.sh apps/_infra/cognee/tests/image-policy-contract.sh apps/_infra/cognee/tests/image-smoke.sh" }
+    },
+    "test": {
+      "executor": "nx:run-commands",
+      "options": { "command": "bash apps/_infra/cognee/tests/image-contract.sh && bash apps/_infra/cognee/tests/image-policy-contract.sh" }
+    },
+    "container": {
+      "executor": "nx:run-commands",
+      "metadata": {
+        "release": {
+          "image": "opencrane-cognee",
+          "dockerfile": "apps/_infra/cognee/deploy/Dockerfile"
+        }
+      },
+      "options": { "command": "docker build --platform linux/amd64 -f apps/_infra/cognee/deploy/Dockerfile ." }
+    },
+    "image-smoke": {
+      "executor": "nx:run-commands",
+      "options": { "command": "bash apps/_infra/cognee/tests/image-smoke.sh", "cwd": "." }
+    },
     "helm-lint": {
       "executor": "nx:run-commands",
       "options": { "command": "helm lint apps/_infra/cognee/helm" }

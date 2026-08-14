@@ -76,6 +76,10 @@ export const OpenCranePreset = definePreset(Aura,
 						primary:
 						{
 							color: "{primary.700}"
+						},
+						danger:
+						{
+							color: "var(--oc-danger)"
 						}
 					}
 				}

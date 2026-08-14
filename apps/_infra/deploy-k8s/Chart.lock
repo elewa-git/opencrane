@@ -37,12 +37,12 @@ dependencies:
   version: 0.8.0
 - name: opencrane-cognee
   repository: file://../cognee/helm
-  version: 0.8.0
+  version: 0.8.1
 - name: opencrane-litellm
   repository: file://../litellm/helm
   version: 0.8.0
 - name: opencrane-obot
   repository: file://../obot/helm
   version: 0.8.0
-digest: sha256:16b059edf16625f6de60468f84d2622bed0e3eed08c67546acd1b225a745bf0c
-generated: "2026-08-14T11:56:39.083309+03:00"
+digest: sha256:a83e5dae662925f891ad63015c79c8e7fe01600952a082c16574d92cd7261df8
+generated: "2026-08-14T15:40:46.606515+03:00"

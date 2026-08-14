@@ -5,7 +5,7 @@
  * consumer that reaches into `./lib/*` is bypassing the boundary this file draws.
  *
  * Some lines re-export from neighbouring packages — conversation models, the shared event-stream
- * adapter, AG-UI state — so one import covers the whole screen and this package stays the single place
+ * contract, AG-UI state — so one import covers the whole screen and this package stays the single place
  * a consumer looks up a workspace name. Each declaration keeps its own documentation, and hovering a
  * name here follows through to it.
  *
@@ -19,6 +19,6 @@ export { ConversationRunStore } from "./lib/conversation-run.store";
 export { _ParseConversationDetail, _ParseConversationRun, _ParseConversationSummary, _ParseConversationWorkspaceDirectory } from "./lib/conversation-workspace.validator";
 export { ConversationCreationStates, ConversationOnboardingHistoryStatuses, ConversationPersonalAgentStatuses, ConversationRunStates, ConversationWorkspaceRouteStates } from "./lib/conversation-workspace.types";
 export { ConversationLifecycles, ConversationModes, MessageRoles, MessageSources, MessageStates } from "@opencrane/models/conversations";
-export { ConversationEventStreamStatuses } from "@opencrane/state/conversation/adapter";
+export { ConversationEventStreamStatuses } from "@opencrane/state/conversation/stream";
 export { AgUiToolStatuses } from "@opencrane/state/conversation/ag-ui";
 export type { ConversationCreationDirectory, ConversationDirectoryParticipant, ConversationMessage, ConversationOnboardingHistory, ConversationOnboardingHistoryEntry, ConversationOnboardingHistoryProjection, ConversationPersonalAgent, ConversationRun, ConversationSummary, ConversationWorkspaceDetail, ConversationWorkspaceGateway, ConversationWorkspaceNavigationIntent, CreateConversationCommand, RetryConversationRunCommand, SubmitConversationMessageBlock, SubmitConversationMessageCommand, SubmitConversationSteeringCommand } from "./lib/conversation-workspace.types";

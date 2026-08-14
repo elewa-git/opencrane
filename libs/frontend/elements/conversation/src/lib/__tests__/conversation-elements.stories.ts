@@ -14,6 +14,9 @@ import { ConversationComposerStates, ConversationMessageTones, ConversationStatu
 /** Records emitted draft intent from the Storybook-only composer host. */
 const _DRAFT_CHANGED = fn();
 
+/** Records the explicit failed-run retry intent emitted by the shared action row. */
+const _RETRY_REQUESTED = fn();
+
 /** Storybook host that proves the controlled composer output binding in a real Angular template. */
 @Component({ selector: "wo-desktop-conversation-story", standalone: true, imports: [ConversationComposerComponent], template: `<div style="max-width:720px;padding:20px"><wo-conversation-composer [draft]="draft" [state]="state" placeholder="Message this conversation…" (draftChange)="recordDraft($event)" /></div>`, changeDetection: ChangeDetectionStrategy.OnPush })
 class _DesktopConversationStoryComponent
@@ -33,7 +36,7 @@ const meta: Meta<ConversationComposerComponent> =
 	title: "Conversations/Shared elements",
 	component: ConversationComposerComponent,
 	tags: ["autodocs"],
-	decorators: [moduleMetadata({ imports: [_DesktopConversationStoryComponent, ConversationMessageComponent, ConversationStatusLineComponent] })],
+	decorators: [moduleMetadata({ imports: [_DesktopConversationStoryComponent, ConversationMessageComponent, ConversationRichTextComponent, ConversationRunActionsComponent, ConversationStatusLineComponent] })],
 	parameters: { docs: { description: { component: "Presentation-only message and controlled composer primitives shared by direct, group, and Agent-session conversations." } } }
 };
 
@@ -95,12 +98,14 @@ export const RichMessageAndFailedRun: Story =
 	tags: ["visual-test"],
 	render: function render()
 	{
-		return { props: { rich: { messageId: "message-rich", html: "<h3>Comparison</h3><p>The proposed term is <strong>lower risk</strong>.</p>", label: "Agent comparison" }, run: { statusLabel: "Run failed", canCancel: false, canRetry: true, canSteer: false, busy: false }, retryRequested: fn() }, template: `<div style="display:grid;gap:16px;max-width:720px;padding:20px"><wo-conversation-rich-text [presentation]="rich" /><wo-conversation-run-actions [presentation]="run" (retryRequested)="retryRequested()" /></div>` };
+		return { props: { rich: { messageId: "message-rich", html: "<h3>Comparison</h3><p>The proposed term is <strong>lower risk</strong>.</p>", label: "Agent comparison" }, run: { statusLabel: "Run failed", canCancel: false, canRetry: true, canSteer: false, busy: false }, retryRequested: _RETRY_REQUESTED }, template: `<div style="display:grid;gap:16px;max-width:720px;padding:20px"><wo-conversation-rich-text [presentation]="rich" /><wo-conversation-run-actions [presentation]="run" (retryRequested)="retryRequested()" /></div>` };
 	},
 	play: async function play({ canvasElement })
 	{
+		_RETRY_REQUESTED.mockClear();
 		const canvas = within(canvasElement);
 		await expect(canvas.getByRole("button", { name: "Retry run" })).toBeEnabled();
 		await userEvent.click(canvas.getByRole("button", { name: "Retry run" }));
+		await expect(_RETRY_REQUESTED).toHaveBeenCalledTimes(1);
 	}
 };

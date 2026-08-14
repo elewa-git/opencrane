@@ -81,6 +81,8 @@ class PinnedGeneratedOutputQualificationTests(unittest.TestCase):
             "payload": {
                 "snapshot": {"inputGeneration": 1},
                 "compiledInput": {
+                    "runId": "run-pinned",
+                    "attempt": 1,
                     "promptCompilerVersion": "v1",
                     "instructions": "generate one image",
                     "messages": [],

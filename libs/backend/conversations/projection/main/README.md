@@ -96,9 +96,10 @@ the contracts, never this backend package.
 
 ## Dependency direction
 
-Tagged `scope:conversation-projection` and `layer:backend`: it may depend only on shared models,
-contracts, utilities, observability, and its own scope. It cannot import server
-authority packages, apps or frontend code.
+Tagged `scope:conversation-projection` and `layer:backend`: it may depend on shared models,
+contracts, utilities, observability, its own scope, and the child-agent delivery vocabulary it
+projects back to a parent conversation. It cannot import server authority packages, apps or
+frontend code.
 
 ## Runtime & config
 
