@@ -8,6 +8,3 @@ RUN test "${TARGETARCH:-amd64}" = "amd64" \
 ADD --checksum=sha256:8a5eb3c6c70cc86ea34aea777e9fc78687f69d1396055d878d2b9e0a79cb5114 \
   http://extension.ladybugdb.com/v0.17.0/linux_amd64/json/libjson.lbug_extension \
   /root/.lbdb/extension/v0.17.0/linux_amd64/json/libjson.lbug_extension
-
-RUN echo "8a5eb3c6c70cc86ea34aea777e9fc78687f69d1396055d878d2b9e0a79cb5114  /root/.lbdb/extension/v0.17.0/linux_amd64/json/libjson.lbug_extension" \
-  | sha256sum --check

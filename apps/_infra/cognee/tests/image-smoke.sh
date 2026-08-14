@@ -4,7 +4,6 @@ set -euo pipefail
 image="opencrane-cognee:smoke"
 extension_path="/root/.lbdb/extension/v0.17.0/linux_amd64/json/libjson.lbug_extension"
 extension_sha="8a5eb3c6c70cc86ea34aea777e9fc78687f69d1396055d878d2b9e0a79cb5114"
-export DOCKER_DEFAULT_PLATFORM="linux/amd64"
 
 docker build --platform linux/amd64 -t "$image" -f apps/_infra/cognee/deploy/Dockerfile .
 docker run --rm --network none --platform linux/amd64 --entrypoint python "$image" -c '
