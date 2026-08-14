@@ -62,15 +62,17 @@ composes it; no package imports it.
 | Part | Pinned value |
 | --- | --- |
 | OpenCrane image | `ghcr.io/elewa-git/opencrane-cognee@sha256:…` |
-| Upstream base | `cognee/cognee:1.2.1` |
+| Upstream base | `cognee/cognee:1.2.1@sha256:08216665edfbfb1509f1fe866f9e3ff14c1aa930cd2d0d06e81e6549382519a1` |
 | LadybugDB extension | `json`, LadybugDB `0.17.0`, Linux AMD64 |
 | Extension SHA-256 | `8a5eb3c6c70cc86ea34aea777e9fc78687f69d1396055d878d2b9e0a79cb5114` |
-| Runtime path | `/root/.lbdb/extension/v0.17.0/linux_amd64/json/libjson.lbug_extension` |
+| Runtime path | `/root/.lbdb/extension/0.17.0/linux_amd64/json/libjson.lbug_extension` |
 
 The image is AMD64-only because the extension is a native binary. The Dockerfile fixes the platform
 and sets `HOME=/root`, because LadybugDB derives its extension path from `HOME` and Kubernetes does
-not add that variable when an image omits it. The image smoke starts LadybugDB without networking and
-loads the extension, so a present-but-unusable file cannot pass publication.
+not add that variable when an image omits it. LadybugDB's download URL includes `v0.17.0`, while its
+local loader directory is `0.17.0` without the `v`; keep those distinct. The image smoke starts
+LadybugDB without networking and loads the extension, so a present-but-unusable file cannot pass
+publication.
 The app-owned deployer requires the exact published digest for every real silo and reuses the prior
 digest on upgrades. A tag is accepted only for the imported image in the disposable local k3d smoke.
 To bump Cognee or LadybugDB, update the base, extension URL, path, checksum, tests, chart dependency,
