@@ -22,11 +22,11 @@
 ---
 {{ include "opencrane.server.service" . }}
 ---
-{{ include "opencrane.server.networkPolicy" . }}
----
 {{ include "opencrane.ui.deployment" . }}
 ---
 {{ include "opencrane.ui.service" . }}
+---
+{{ include "opencrane.server.networkPolicy" . }}
 ---
 {{ include "opencrane.channelProxy.resources" . }}
 ---

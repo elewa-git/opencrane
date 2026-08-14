@@ -18,6 +18,8 @@ for contract in \
   server-network-policy-contract.sh \
   platform-network-policy-contract.sh \
   post-deploy-health-contract.sh \
+  control-plane-image-policy-contract.sh \
+  silo-deploy-profile-contract.sh \
   silo-teardown-contract.sh \
   skill-workload-contract.sh; do
   bash "$ROOT_DIR/apps/_infra/deploy-k8s/platform/tests/$contract"

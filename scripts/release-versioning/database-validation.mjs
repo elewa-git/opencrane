@@ -105,11 +105,13 @@ export function resolveDatabaseTransition(repositoryRoot, releaseVersion, fromRe
 		}
 		if (target.previousRepositoryVersion !== fromReleaseVersion)
 			errors.push(`automatic database migration requires exact previous release '${target.previousRepositoryVersion}'`);
-		if (!isAdjacentMinor(fromReleaseVersion, releaseVersion))
+		if (target.database.schemaVersion !== source.database.schemaVersion && !isAdjacentMinor(fromReleaseVersion, releaseVersion))
 			errors.push(`automatic database migration permits only an adjacent minor transition: '${fromReleaseVersion}' -> '${releaseVersion}'`);
-		kind = "migration";
+		if (target.database.schemaVersion !== source.database.schemaVersion) kind = "migration";
 	}
-	validateDatabase(repositoryRoot, target, source, source ? [target.database.baselinePath] : [], errors);
+	// A release transition alone does not change the bootstrap SQL. Compare its digest to the
+	// source manifest; only the workspace validator receives an actual changed-file list.
+	validateDatabase(repositoryRoot, target, source, [], errors);
 	if (errors.length > 0) throw new Error(errors.join("; "));
 	let migration = null;
 	if (kind === "migration")

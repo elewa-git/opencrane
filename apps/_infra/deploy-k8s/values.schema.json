@@ -4,6 +4,30 @@
   "description": "Fail-fast guards for the clean OpenCrane target. Only selected values are constrained; Helm validates merged values on every install, template, and lint.",
   "type": "object",
   "properties": {
+    "controlPlaneSpa": {
+      "type": "object",
+      "required": ["image", "replicas", "service"],
+      "properties": {
+        "image": {
+          "type": "object",
+          "required": ["repository", "tag", "digest", "pullPolicy"],
+          "properties": {
+            "repository": { "type": "string", "minLength": 1 },
+            "tag": { "type": "string", "minLength": 1 },
+            "digest": { "type": "string", "pattern": "^$|^sha256:[a-f0-9]{64}$" },
+            "pullPolicy": { "type": "string", "enum": ["Always", "IfNotPresent", "Never"] }
+          }
+        },
+        "replicas": { "type": "integer", "minimum": 1 },
+        "service": {
+          "type": "object",
+          "required": ["port"],
+          "properties": {
+            "port": { "type": "integer", "minimum": 1, "maximum": 65535 }
+          }
+        }
+      }
+    },
     "channelProxy": {
       "type": "object",
       "required": ["enabled", "image", "service", "targetHostSuffixes", "projectedTokenTtlSeconds"],

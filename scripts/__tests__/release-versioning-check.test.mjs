@@ -8,6 +8,7 @@ import {
 	releaseStampComparable,
 	validateWorkspace,
 } from "../release-versioning/core.mjs";
+import { resolveDatabaseTransition } from "../release-versioning/database-validation.mjs";
 import { isAdjacentMinor, parseSemver, sha256 } from "../release-versioning/version-utils.mjs";
 
 function _WriteJson(path, value)
@@ -22,6 +23,7 @@ function _Fixture({
 	repositoryVersion = "0.7.0",
 	previousRepositoryVersion = null,
 	previousSchemaVersion = previousRepositoryVersion,
+	schemaVersion = repositoryVersion,
 	previousChartVersion = adaptedVersion,
 	adoptionBaseline = previousRepositoryVersion === null,
 	manualTransition,
@@ -45,7 +47,7 @@ function _Fixture({
 		previousRepositoryVersion,
 		adoptionBaseline,
 		database: {
-			schemaVersion: repositoryVersion,
+			schemaVersion,
 			baselinePath: "apps/opencrane/prisma/bootstrap/target-baseline.sql",
 			baselineSha256: sha256(baselinePath),
 		},
@@ -400,6 +402,22 @@ test("accepts an explicitly approved manual transition", async () =>
 	});
 	_WriteDatabaseMigration(fixture.root, "0.7.0", "0.7.1");
 	assert.deepEqual(await validateWorkspace(fixture.root, [], fixture.graph), []);
+});
+
+test("resolves an approved patch release with unchanged database state as current", () =>
+{
+	const fixture = _Fixture({
+		repositoryVersion: "0.7.1",
+		previousRepositoryVersion: "0.7.0",
+		previousSchemaVersion: "0.7.0",
+		schemaVersion: "0.7.0",
+		adaptedVersion: "0.7.1",
+		manualTransition: { approved: true, reason: "Operator-reviewed patch transition" },
+	});
+	const transition = resolveDatabaseTransition(fixture.root, "0.7.1", "0.7.0");
+	assert.equal(transition.kind, "current");
+	assert.equal(transition.targetSchemaVersion, "0.7.0");
+	assert.equal(transition.migration, null);
 });
 
 test("rejects a manual transition without a non-empty review reason", async () =>

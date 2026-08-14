@@ -24,6 +24,8 @@
 #       --postgres-credentials-secret opencrane-postgres-bootstrap \
 #       --obot-postgres-credentials-secret opencrane-obot-postgres-bootstrap \
 #       --litellm-postgres-credentials-secret opencrane-litellm-postgres-bootstrap \
+#       --postgres-admin-credentials-secret opencrane-admin-postgres-bootstrap \
+#       --opencrane-ui-digest sha256:REVIEWED_BROWSER_BUILD_DIGEST \
 #       [--namespace opencrane-acme] \
 #       [ANY k8s-deploy.sh flag]
 #
@@ -32,6 +34,8 @@
 # `--initial-model-provider` plus
 # OPENCRANE_INITIAL_MODEL_API_KEY seed the first routable model through LiteLLM. The silo is installed into namespace
 # `opencrane-<cluster-tenant>` unless --namespace overrides it.
+# Fresh browser deploys require `--opencrane-ui-digest`. An upgrade may omit it only to retain the
+# exact digest already recorded by the release; a tag is never accepted for a browser release.
 #
 # Prereqs: kubectl, helm, the cluster-wide controllers, and the PostgreSQL credentials
 # Secrets already present in the target namespace.
