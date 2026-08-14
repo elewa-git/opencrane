@@ -5,6 +5,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../../.." && pwd)"
 DEPLOY_SCRIPT="$ROOT_DIR/apps/_infra/deploy-k8s/deploy.sh"
 DEVELOP_SMOKE="$ROOT_DIR/apps/_infra/deploy-k8s/platform/tests/develop-smoke.sh"
 MODEL_HELPER="$ROOT_DIR/apps/_infra/deploy-k8s/platform/initial-model-provider.sh"
+COGNEE_POLICY="$ROOT_DIR/apps/_infra/cognee/deploy/image-policy.sh"
 
 grep -Fq -- '--acme-email' "$DEPLOY_SCRIPT"
 grep -Fq -- '--first-user-email' "$DEPLOY_SCRIPT"
@@ -66,12 +67,39 @@ grep -Fq -- '--opencrane-ui-digest) CONTROL_PLANE_SPA_DIGEST="$2"' "$DEPLOY_CORE
 grep -Fq -- '--cognee-digest) COGNEE_DIGEST="$2"' "$DEPLOY_CORE"
 grep -Fq -- 'clustertenantManager.cognee.image.digest // empty' "$DEPLOY_CORE"
 grep -Fq -- 'Cognee must use --cognee-digest with an exact sha256 OCI digest' "$ROOT_DIR/apps/_infra/cognee/deploy/image-policy.sh"
-grep -Fq -- 'clustertenantManager.cognee.image.digest=$COGNEE_DIGEST' "$DEPLOY_CORE"
+grep -Fq -- 'clustertenantManager.cognee.image.digest=$COGNEE_DIGEST' "$COGNEE_POLICY"
+grep -Fq -- 'validate_cognee_helm_passthrough' "$DEPLOY_CORE"
+grep -Fq -- 'append_authoritative_cognee_image_helm_args' "$DEPLOY_CORE"
+grep -Fq -- '--post-renderer|--post-renderer=*|--post-renderer-args|--post-renderer-args=*' "$COGNEE_POLICY"
 grep -Fq -- 'controlPlaneSpa.image.digest // empty' "$DEPLOY_CORE"
 grep -Fq -- 'OpenCrane SPA must use --opencrane-ui-digest with an exact sha256 OCI digest' "$IMAGE_POLICY"
 grep -Fq -- 'controlPlaneSpa.image.digest=$CONTROL_PLANE_SPA_DIGEST' "$DEPLOY_CORE"
 grep -Fq -- 'wait_for_final_deployment_if_present "${RELEASE}-opencrane-ui-spa"' "$DEPLOY_CORE"
 grep -Fq -- '_verify_control_plane_spa_rollout' "$DEPLOY_CORE"
+grep -Fq -- 'wait_for_final_deployment_if_present "${RELEASE}-cognee"' "$DEPLOY_CORE"
+grep -Fq -- '_verify_cognee_rollout' "$DEPLOY_CORE"
+
+# Even an operator override assembled through normal Helm passthrough loses to the digest that the
+# deployer verified. This renders the actual chart to prove Helm receives the authority tuple last.
+source "$COGNEE_POLICY"
+ALLOW_TAG_FLOAT=0
+COGNEE_DIGEST="sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+COGNEE_TAG=""
+helm_args=(
+  --set-string 'memoryGateway.kubernetesApiServerCidrs[0]=10.43.0.1/32'
+  --set-string 'memoryGateway.kubernetesApiServerEndpointCidrs[0]=172.18.0.2/32'
+  --set-string 'clustertenantManager.cognee.image.digest='
+  --set-string 'clustertenantManager.cognee.image.tag=latest')
+append_authoritative_cognee_image_helm_args
+cognee_deployment="$(helm template opencrane-silo "$ROOT_DIR/apps/_infra/deploy-k8s" \
+  "${helm_args[@]}" --show-only templates/app-rollups.yaml \
+  | awk 'BEGIN { RS="---" } /kind: Deployment/ && /name: opencrane-silo-cognee/ { print }')"
+[[ -n "$cognee_deployment" ]]
+grep -Fq 'image: "ghcr.io/elewa-git/opencrane-cognee@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"' <<<"$cognee_deployment"
+if grep -Fq 'opencrane-cognee:latest' <<<"$cognee_deployment"; then
+  echo "operator Cognee tag override survived the authoritative digest" >&2
+  exit 1
+fi
 
 # Strict mode must not abort the immutable issuer guard when the normal
 # deployment path provides no raw Helm arguments. Bash may expand this as zero

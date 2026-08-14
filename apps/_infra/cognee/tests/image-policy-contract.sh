@@ -18,11 +18,34 @@ _reset_inputs()
   COGNEE_DIGEST="sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
   COGNEE_IMAGE=""
   KUBERNETES_CONTEXT="gke_weownai-proto_europe-west1_opencrane-dev"
+  EXTRA_HELM_ARGS=()
+  helm_args=()
 }
 
 _reset_inputs
 resolve_cognee_image_reference
 [[ "$COGNEE_IMAGE" == "ghcr.io/elewa-git/opencrane-cognee@${COGNEE_DIGEST}" ]]
+
+EXTRA_HELM_ARGS=(
+  --set-string
+  "clustertenantManager.cognee.image.digest="
+  --set-string
+  "clustertenantManager.cognee.image.tag=latest")
+validate_cognee_helm_passthrough
+helm_args=("${EXTRA_HELM_ARGS[@]}")
+append_authoritative_cognee_image_helm_args
+argument_count="${#helm_args[@]}"
+[[ "${helm_args[$((argument_count - 4))]}" == "--set-string" ]]
+[[ "${helm_args[$((argument_count - 3))]}" == "clustertenantManager.cognee.image.digest=$COGNEE_DIGEST" ]]
+[[ "${helm_args[$((argument_count - 2))]}" == "--set-string" ]]
+[[ "${helm_args[$((argument_count - 1))]}" == "clustertenantManager.cognee.image.tag=" ]]
+
+_reset_inputs
+EXTRA_HELM_ARGS=(--post-renderer /tmp/rewrite-cognee-image)
+if validate_cognee_helm_passthrough; then
+  echo "a Helm post-renderer that can rewrite the verified Cognee image was accepted" >&2
+  exit 1
+fi
 
 _reset_inputs
 COGNEE_DIGEST=""

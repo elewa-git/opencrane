@@ -353,6 +353,7 @@ _resolve_release_images() {
 
   resolve_control_plane_image_reference || exit 1
   resolve_cognee_image_reference || exit 1
+  validate_cognee_helm_passthrough || exit 1
 }
 _resolve_release_images
 
@@ -900,10 +901,8 @@ helm_args=(upgrade --install "$RELEASE" "$CHART_DIR" --namespace "$NAMESPACE" --
 [[ -n "$CP_TAG" ]] && helm_args+=(--set-string "clustertenantManager.image.tag=$CP_TAG")
 if [[ "$ALLOW_TAG_FLOAT" == "1" ]]; then
   helm_args+=(--set-string "controlPlaneSpa.image.digest=" --set-string "controlPlaneSpa.image.tag=$CONTROL_PLANE_SPA_TAG")
-  helm_args+=(--set-string "clustertenantManager.cognee.image.digest=" --set-string "clustertenantManager.cognee.image.tag=$COGNEE_TAG")
 else
   helm_args+=(--set-string "controlPlaneSpa.image.digest=$CONTROL_PLANE_SPA_DIGEST")
-  helm_args+=(--set-string "clustertenantManager.cognee.image.digest=$COGNEE_DIGEST" --set-string "clustertenantManager.cognee.image.tag=")
 fi
 # --base-domain drives ingress.domain; controlPlaneHost defaults to platform.<domain>
 # in the chart. Setting it explicitly here keeps one source of truth for release hosts.
@@ -963,6 +962,9 @@ if [[ -n "$DATABASE_FENCE_PRIOR_REPLICAS" ]]; then
     --set-string "migrationFence.fromReleaseVersion=$FROM_RELEASE_VERSION"
     --set-string "migrationFence.toReleaseVersion=$RELEASE_VERSION")
 fi
+# This must remain the final value-setting step. Values files, --set variants, reuse modes, and raw
+# passthrough are intentionally assembled first so none can replace the verified Cognee identity.
+append_authoritative_cognee_image_helm_args
 run_opencrane_finalization_stage helm "${helm_args[@]}" || exit $?
 run_opencrane_finalization_stage restart_database_consumers_for_finalization "$NAMESPACE" "$TIMEOUT" \
   "${RELEASE}-opencrane-server" "${RELEASE}-litellm" "${RELEASE}-mcp-gateway" || exit $?
@@ -978,6 +980,8 @@ for _comp in fleet-manager clustertenant-manager; do
 done
 run_opencrane_finalization_stage wait_for_final_deployment_if_present "${RELEASE}-opencrane-ui-spa" || exit $?
 run_opencrane_finalization_stage _verify_control_plane_spa_rollout || exit $?
+run_opencrane_finalization_stage wait_for_final_deployment_if_present "${RELEASE}-cognee" || exit $?
+run_opencrane_finalization_stage _verify_cognee_rollout || exit $?
 
 run_opencrane_finalization_stage _wait_for_release_certificate || exit $?
 run_opencrane_finalization_stage _post_deploy_verify || exit $?

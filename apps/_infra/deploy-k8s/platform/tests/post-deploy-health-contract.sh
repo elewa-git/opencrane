@@ -167,4 +167,56 @@ if (
   exit 1
 fi
 
+_verify_cognee_rollout_contract()
+{
+  local result
+  COGNEE_IMAGE="ghcr.io/elewa-git/opencrane-cognee@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+  NAMESPACE=opencrane-acme
+  RELEASE=opencrane-silo
+  log() { printf '%s\n' "$*"; }
+  err() { printf '%s\n' "$*" >&2; }
+  kubectl()
+  {
+    if [[ "$*" == *'get deployment/opencrane-silo-cognee'* ]]; then
+      cat <<'JSON'
+{"spec":{"replicas":1,"template":{"spec":{"containers":[{"name":"cognee","image":"ghcr.io/elewa-git/opencrane-cognee@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"}]}}},"status":{"updatedReplicas":1,"readyReplicas":1,"availableReplicas":1,"unavailableReplicas":0,"conditions":[{"type":"Available","status":"True","reason":"MinimumReplicasAvailable","message":"Deployment has minimum availability."}]}}
+JSON
+    elif [[ "$*" == *'get pods'* ]]; then
+      cat <<'JSON'
+{"items":[{"status":{"containerStatuses":[{"name":"cognee","imageID":"ghcr.io/elewa-git/opencrane-cognee@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"}]}}]}
+JSON
+    else
+      printf 'unexpected kubectl call: %s\n' "$*" >&2
+      return 1
+    fi
+  }
+  result="$(_verify_cognee_rollout)"
+  grep -Fq 'Cognee rollout: desired image=ghcr.io/elewa-git/opencrane-cognee@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc' <<<"$result"
+  grep -Fq 'Cognee observed image IDs: ghcr.io/elewa-git/opencrane-cognee@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc' <<<"$result"
+}
+
+_verify_cognee_rollout_contract
+
+if (
+  COGNEE_IMAGE="ghcr.io/elewa-git/opencrane-cognee@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+  NAMESPACE=opencrane-acme
+  RELEASE=opencrane-silo
+  log() { :; }
+  err() { :; }
+  kubectl()
+  {
+    if [[ "$*" == *'get deployment/opencrane-silo-cognee'* ]]; then
+      printf '%s\n' '{"spec":{"replicas":1,"template":{"spec":{"containers":[{"name":"cognee","image":"ghcr.io/elewa-git/opencrane-cognee@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"}]}}},"status":{"updatedReplicas":1,"readyReplicas":1,"availableReplicas":1,"unavailableReplicas":0}}'
+    elif [[ "$*" == *'get pods'* ]]; then
+      printf '%s\n' '{"items":[{"status":{"containerStatuses":[{"name":"cognee","imageID":"ghcr.io/elewa-git/opencrane-cognee@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"}]}}]}'
+    else
+      return 1
+    fi
+  }
+  _verify_cognee_rollout
+); then
+  echo "Cognee rollout verification accepted a mismatched image" >&2
+  exit 1
+fi
+
 echo "post-deploy health contract: PASS"

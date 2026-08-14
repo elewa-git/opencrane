@@ -35,3 +35,32 @@ resolve_cognee_image_reference()
   COGNEE_TAG=""
   COGNEE_IMAGE="${repository}@${COGNEE_DIGEST}"
 }
+
+# Reject Helm post-rendering because it runs after every value and can rewrite the verified image.
+# Ordinary values and --set passthrough remain supported; the authoritative tuple is appended last.
+validate_cognee_helm_passthrough()
+{
+  local argument
+  for argument in "${EXTRA_HELM_ARGS[@]-}"; do
+    case "$argument" in
+      --post-renderer|--post-renderer=*|--post-renderer-args|--post-renderer-args=*)
+        err "Cognee's verified image cannot be combined with Helm post-renderer passthrough."
+        return 1
+        ;;
+    esac
+  done
+}
+
+# Appends the verified image tuple after all operator-controlled values and Helm passthrough.
+append_authoritative_cognee_image_helm_args()
+{
+  if [[ "$ALLOW_TAG_FLOAT" == "1" ]]; then
+    helm_args+=(
+      --set-string "clustertenantManager.cognee.image.digest="
+      --set-string "clustertenantManager.cognee.image.tag=$COGNEE_TAG")
+    return
+  fi
+  helm_args+=(
+    --set-string "clustertenantManager.cognee.image.digest=$COGNEE_DIGEST"
+    --set-string "clustertenantManager.cognee.image.tag=")
+}
