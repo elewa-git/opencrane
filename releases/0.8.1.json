@@ -20,10 +20,10 @@
     },
     "agent-controller": {
       "root": "apps/agent-controller",
-      "adaptedVersion": "0.8.0",
-      "packageVersion": "0.8.0",
+      "adaptedVersion": "0.8.1",
+      "packageVersion": "0.8.1",
       "chartVersion": "0.8.0",
-      "chartAppVersion": "0.8.0"
+      "chartAppVersion": "0.8.1"
     },
     "agent-runtime": {
       "root": "apps/agent-runtime",
@@ -31,31 +31,31 @@
     },
     "artifact-preprocessor": {
       "root": "apps/artifact-preprocessor",
-      "adaptedVersion": "0.8.0",
-      "packageVersion": "0.8.0",
+      "adaptedVersion": "0.8.1",
+      "packageVersion": "0.8.1",
       "chartVersion": "0.8.0",
-      "chartAppVersion": "0.8.0"
+      "chartAppVersion": "0.8.1"
     },
     "artifact-scanner": {
       "root": "apps/artifact-scanner",
-      "adaptedVersion": "0.8.0",
-      "packageVersion": "0.8.0",
+      "adaptedVersion": "0.8.1",
+      "packageVersion": "0.8.1",
       "chartVersion": "0.8.0",
-      "chartAppVersion": "0.8.0"
+      "chartAppVersion": "0.8.1"
     },
     "artifact-service": {
       "root": "apps/artifact-service",
-      "adaptedVersion": "0.8.0",
-      "packageVersion": "0.8.0",
+      "adaptedVersion": "0.8.1",
+      "packageVersion": "0.8.1",
       "chartVersion": "0.8.0",
-      "chartAppVersion": "0.8.0"
+      "chartAppVersion": "0.8.1"
     },
     "channel-proxy": {
       "root": "apps/channel-proxy",
-      "adaptedVersion": "0.8.0",
-      "packageVersion": "0.8.0",
+      "adaptedVersion": "0.8.1",
+      "packageVersion": "0.8.1",
       "chartVersion": "0.8.0",
-      "chartAppVersion": "0.8.0"
+      "chartAppVersion": "0.8.1"
     },
     "cognee": {
       "root": "apps/_infra/cognee",
@@ -83,10 +83,10 @@
     },
     "memory-gateway": {
       "root": "apps/memory-gateway",
-      "adaptedVersion": "0.8.0",
-      "packageVersion": "0.8.0",
+      "adaptedVersion": "0.8.1",
+      "packageVersion": "0.8.1",
       "chartVersion": "0.8.0",
-      "chartAppVersion": "0.8.0"
+      "chartAppVersion": "0.8.1"
     },
     "obot": {
       "root": "apps/_infra/obot",
@@ -96,10 +96,10 @@
     },
     "opencrane": {
       "root": "apps/opencrane",
-      "adaptedVersion": "0.8.0",
-      "packageVersion": "0.8.0",
+      "adaptedVersion": "0.8.1",
+      "packageVersion": "0.8.1",
       "chartVersion": "0.8.0",
-      "chartAppVersion": "0.8.0"
+      "chartAppVersion": "0.8.1"
     },
     "opencrane-ui": {
       "root": "apps/opencrane-ui",
