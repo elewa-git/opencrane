@@ -13,9 +13,9 @@ import { ConversationLifecycles, ConversationModes } from "@opencrane/models/con
 import { CONVERSATION_ASSETS_GATEWAY } from "@opencrane/state/conversation/assets";
 import { ConversationEventStreamStatuses, type ConversationEventStream, type StreamConversationEventsCommand } from "@opencrane/state/conversation/adapter";
 import { ConversationElicitationStore, ELICITATION_GATEWAY, ElicitationGatewayError, ElicitationGatewayErrorKinds } from "@opencrane/state/conversation/elicitation";
-import { CONVERSATION_WORKSPACE_EVENT_STREAM, CONVERSATION_WORKSPACE_GATEWAY, ConversationRunStore, ConversationWorkspaceStore, type ConversationWorkspaceDetail, type ConversationWorkspaceGateway } from "@opencrane/state/conversation/workspace";
+import { CONVERSATION_WORKSPACE_EVENT_STREAM, CONVERSATION_WORKSPACE_GATEWAY, ConversationOnboardingHistoryStatuses, ConversationRunStore, ConversationWorkspaceStore, type ConversationWorkspaceDetail, type ConversationWorkspaceGateway } from "@opencrane/state/conversation/workspace";
 
-import { ConversationWorkspacePageComponent } from "../conversation-workspace-page/conversation-workspace-page.component.js";
+import { ConversationWorkspacePageComponent } from "../components/conversation-workspace-page/conversation-workspace-page.component.js";
 
 /** Return an empty authorized workspace for component construction. */
 class _WorkspaceGateway implements ConversationWorkspaceGateway
@@ -30,6 +30,8 @@ class _WorkspaceGateway implements ConversationWorkspaceGateway
 	public async directory() { return { participants: [], personalAgentStatus: "unavailable" as const, personalAgent: null }; }
 	/** Return the configured authorized row when present. */
 	public async list() { return this._detail === null ? [] : [this._detail]; }
+	/** Return a migration-safe empty onboarding history projection. */
+	public async onboardingHistory() { return { status: ConversationOnboardingHistoryStatuses.NotRecorded, history: null } as const; }
 	/** Return the configured authorized conversation. */
 	public async open(): Promise<ConversationWorkspaceDetail> { if (this._detail === null) throw new Error("No conversation selected."); return this._detail; }
 	/** Reject an unused create command. */
@@ -96,10 +98,12 @@ beforeAll(async function _InitializeAngularTesting()
 	TestBed.initTestEnvironment(BrowserDynamicTestingModule, platformBrowserDynamicTesting());
 	vi.stubGlobal("crypto", { randomUUID: vi.fn().mockReturnValue("response-key") });
 	HTMLElement.prototype.scrollIntoView = vi.fn();
-	const pageTemplate = readFileSync(join(process.cwd(), "src/lib/conversation-workspace-page/conversation-workspace-page.component.html"), "utf8");
+	const pageTemplate = readFileSync(join(process.cwd(), "src/lib/components/conversation-workspace-page/conversation-workspace-page.component.html"), "utf8");
+	const onboardingTemplate = readFileSync(join(process.cwd(), "src/lib/components/conversation-onboarding-history/conversation-onboarding-history.component.html"), "utf8");
 	await resolveComponentResources(async function _ResolveResource(url): Promise<string>
 	{
 		if (url.endsWith("conversation-workspace-page.component.html")) return pageTemplate;
+		if (url.endsWith("conversation-onboarding-history.component.html")) return onboardingTemplate;
 		return "";
 	});
 });
@@ -182,5 +186,14 @@ describe("ConversationWorkspacePageComponent", function _PageSuite()
 		expect(destination.scrollIntoView).toHaveBeenCalledWith({ block: "center", behavior: "smooth" });
 		expect(globalThis.document.activeElement).toBe(destination);
 		expect(fixture.nativeElement.querySelector("#announcement").textContent).toContain("Opened the selected activity");
+	});
+
+	it("keeps the completed onboarding template read-only and accessibly labelled", function _ReadOnlyOnboarding()
+	{
+		const template = readFileSync(join(process.cwd(), "src/lib/components/conversation-onboarding-history/conversation-onboarding-history.component.html"), "utf8");
+		expect(template).toContain('aria-labelledby="onboarding-history-title"');
+		expect(template).toContain('role="status"');
+		expect(template).toContain('label="Start a new chat"');
+		expect(template).not.toContain("wo-conversation-composer");
 	});
 });

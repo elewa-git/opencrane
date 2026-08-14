@@ -4,7 +4,7 @@ import { Router } from "@angular/router";
 import { PLATFORM_BRIDGE, type AuthenticationWindowObservation } from "@opencrane/platform";
 
 import type { ConversationThreadNavigationIntent } from "../conversation-workspace-feature.types.js";
-import { ConversationWorkspacePageComponent } from "../conversation-workspace-page/conversation-workspace-page.component.js";
+import { ConversationWorkspacePageComponent } from "../components/conversation-workspace-page/conversation-workspace-page.component.js";
 import { _ConversationRouteCommands, _ConversationThreadRouteNavigation } from "./conversation-workspace-route.state.js";
 
 /** Feature-local coordinator for canonical chat URLs and breadcrumb child navigation. */
@@ -31,6 +31,25 @@ export class ConversationWorkspaceRouteComponent
 	protected async selectConversation(conversationId: string | null): Promise<void>
 	{
 		await this._router.navigate(_ConversationRouteCommands(conversationId));
+	}
+
+	/**
+	 * Puts the plain workspace index in the address bar after the page switched to onboarding history.
+	 *
+	 * There is no URL for a completed onboarding exchange, and deliberately so: it is not a conversation,
+	 * and its id is a browser key that no conversation route or API would accept. `/chats` is the right
+	 * destination instead, because that route resolves the signed-in user's history projection on load —
+	 * so reloading or sharing the address lands back on the same history without encoding it in the path.
+	 *
+	 * This also has to clear any conversation id left over from an earlier selection. If it did not, the
+	 * `conversationId` route input would still name that conversation and the page would reopen it on top
+	 * of the history the user just chose.
+	 *
+	 * Called by: the `(workspaceIndexSelected)` binding in this component's own template.
+	 */
+	protected async selectWorkspaceIndex(): Promise<void>
+	{
+		await this._router.navigate(["/chats"]);
 	}
 
 	/** Open one child Agent session with exact parent breadcrumb restoration state. */

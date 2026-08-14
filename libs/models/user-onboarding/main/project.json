@@ -1,0 +1,11 @@
+{
+  "name": "models-user-onboarding",
+  "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
+  "projectType": "library",
+  "sourceRoot": "libs/models/user-onboarding/main/src",
+  "tags": ["type:lib", "layer:model", "scope:user-onboarding"],
+  "targets": {
+    "lint": { "executor": "nx:run-commands", "options": { "command": "tsc -p tsconfig.json --noEmit", "cwd": "libs/models/user-onboarding/main" } },
+    "test": { "executor": "nx:run-commands", "options": { "command": "vitest run", "cwd": "libs/models/user-onboarding/main" } }
+  }
+}

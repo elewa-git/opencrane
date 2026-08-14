@@ -1,5 +1,6 @@
 import { ConversationLifecycles, ConversationModes, MessageRoles, MessageSources, MessageStates } from "@opencrane/models/conversations";
-import { ConversationPersonalAgentStatuses, ConversationRunStates } from "@opencrane/state/conversation/workspace";
+import { PersonaFirstChatArchetypes, PersonaFirstChatColours, PersonaFirstChatTranscriptKinds, PersonaFirstChatTranscriptRoles, UserOnboardingRouteStates, type PersonaFirstChatSnapshot } from "@opencrane/models/user-onboarding";
+import { ConversationOnboardingHistoryStatuses, ConversationPersonalAgentStatuses, ConversationRunStates } from "@opencrane/state/conversation/workspace";
 
 import { _ConversationDetail, _ConversationRun, _ConversationWorkspaceDirectory } from "../conversation-workspace.dto.js";
 

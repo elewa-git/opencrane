@@ -2,11 +2,12 @@ import { Injector, runInInjectionContext } from "@angular/core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ControlPlaneApiService } from "@opencrane/core";
+import { PersonaFirstChatArchetypes, PersonaFirstChatColours, PersonaFirstChatTranscriptKinds, PersonaFirstChatTranscriptRoles, UserOnboardingRouteStates, type PersonaFirstChatSnapshot } from "@opencrane/models/user-onboarding";
 
 import { OpenCranePersonaFirstChatGateway } from "../opencrane-persona-first-chat.gateway.js";
 import { PersonaFirstChatService } from "../persona-first-chat.service.js";
-import { PERSONA_FIRST_CHAT_GATEWAY, PersonaFirstChatArchetypes, PersonaFirstChatColours, PersonaFirstChatConflictError, PersonaFirstChatGateway, PersonaFirstChatSnapshot, PersonaFirstChatTranscriptKinds, PersonaFirstChatTranscriptRoles, UserOnboardingRouteStates } from "../persona-first-chat.types.js";
-import { _ParsePersonaFirstChatSnapshot, _ParseUserOnboardingRouteSnapshot } from "../persona-first-chat.validator.js";
+import { PERSONA_FIRST_CHAT_GATEWAY, PersonaFirstChatConflictError, type PersonaFirstChatGateway } from "../persona-first-chat.types.js";
+import { _ParseUserOnboardingRouteSnapshot } from "../persona-first-chat.validator.js";
 
 /** Build one valid started first-chat projection for state, adapter, and service tests. */
 function _Snapshot(overrides: Partial<PersonaFirstChatSnapshot> = {}): PersonaFirstChatSnapshot
@@ -41,55 +42,6 @@ function _Adapter(get: ReturnType<typeof vi.fn>, post: ReturnType<typeof vi.fn>)
 
 describe("persona first-chat response validation", function _PersonaFirstChatValidationSuite()
 {
-	it("accepts the exact resumable projection and strips unknown response extensions", function _ValidProjection()
-	{
-		const parsed = _ParsePersonaFirstChatSnapshot({ ..._Snapshot(), ignored: "future-field" });
-		expect(parsed.state).toBe(UserOnboardingRouteStates.BootstrapChatInProgress);
-		expect(parsed).not.toHaveProperty("ignored");
-	});
-
-	it("accepts migrated completion without inventing first-chat evidence", function _MigratedCompletion()
-	{
-		const parsed = _ParsePersonaFirstChatSnapshot(_Snapshot({
-			state: UserOnboardingRouteStates.Completed,
-			conversationId: null,
-			persona: null,
-			contentRevision: null,
-			transcript: [],
-			currentQuestion: null,
-			questionCount: 0,
-			startedAt: null,
-			completedAt: "2026-08-08T11:00:00.000Z"
-		}));
-
-		expect(parsed.state).toBe(UserOnboardingRouteStates.Completed);
-		expect(parsed.conversationId).toBeNull();
-	});
-
-	it("rejects reordered transcript evidence and a question that disagrees with admitted count", function _InvalidOrdering()
-	{
-		expect(function _ParseReordered() { return _ParsePersonaFirstChatSnapshot(_Snapshot({ transcript: [{ ..._Snapshot().transcript[0], ordinal: 2 }] })); }).toThrow("invalid first-chat projection");
-		expect(function _ParseWrongQuestion() { return _ParsePersonaFirstChatSnapshot(_Snapshot({ answerCount: 1, currentQuestion: { ordinal: 3, text: "Wrong" } })); }).toThrow("invalid first-chat projection");
-	});
-
-	it("rejects conversation evidence without complete persona and script provenance", function _MissingProvenance()
-	{
-		expect(function _ParseMissingPersona() { return _ParsePersonaFirstChatSnapshot(_Snapshot({ persona: null })); }).toThrow("invalid first-chat projection");
-	});
-
-	it("rejects lifecycle states whose question and conclusion evidence is incomplete", function _IncompleteLifecycleEvidence()
-	{
-		expect(function _ParseBlankConclusion() { return _ParsePersonaFirstChatSnapshot(_Snapshot({ answerCount: 3, currentQuestion: null, canConclude: false })); }).toThrow("invalid first-chat projection");
-		expect(function _ParseMissingQuestion() { return _ParsePersonaFirstChatSnapshot(_Snapshot({ answerCount: 1, currentQuestion: null })); }).toThrow("invalid first-chat projection");
-		expect(function _ParseIncompleteCompletion() { return _ParsePersonaFirstChatSnapshot(_Snapshot({ state: UserOnboardingRouteStates.Completed, completedAt: "2026-08-08T11:00:00.000Z" })); }).toThrow("invalid first-chat projection");
-	});
-
-	it("rejects transcript roles, kinds, and question coordinates that disagree with evidence", function _InvalidTranscriptSemantics()
-	{
-		const invalidOpening = { ..._Snapshot().transcript[0], role: PersonaFirstChatTranscriptRoles.User, kind: PersonaFirstChatTranscriptKinds.Answer, questionOrdinal: 1 };
-		expect(function _ParseInvalidOpening() { return _ParsePersonaFirstChatSnapshot(_Snapshot({ transcript: [invalidOpening, _Snapshot().transcript[1]] })); }).toThrow("invalid first-chat projection");
-	});
-
 	it("validates the public route projection used after persona approval", function _RouteProjection()
 	{
 		const route = _ParseUserOnboardingRouteSnapshot({ workflowVersion: 1, state: "bootstrap_chat_pending", personaInterviewId: "interview-1", personaRevisionId: "revision-1", bootstrapConversationId: null, startedAt: "2026-08-08T09:00:00.000Z", updatedAt: "2026-08-08T10:00:00.000Z", completedAt: null });

@@ -4,10 +4,12 @@
 		@case (routeStates.Unavailable) { <section class="conversation-workspace__route-state"><h1>Chats are unavailable</h1><p>OpenCrane could not load this workspace. Try again when the connection is available.</p><p-button label="Try again" icon="pi pi-refresh" (onClick)="store.load()" /></section> }
 		@case (routeStates.AccessChanged) { <section class="conversation-workspace__route-state"><h1 #accessChangedHeading tabindex="-1">Access changed</h1><p>This conversation is no longer available. Its messages, files, questions, and drafts have been removed from this screen.</p><p-button label="Back to chats" (onClick)="store.load()" /></section> }
 		@case (routeStates.Ready) {
-			<wo-conversation-list [items]="summaries()" [selectedId]="store.selected()?.id ?? null" (createRequested)="showCreate()" (selected)="openConversation($event)" />
+			<wo-conversation-list [items]="summaries()" [onboardingHistory]="onboardingHistoryPresentation()" [onboardingHistoryStatus]="store.onboardingHistory().status" [onboardingSelected]="store.onboardingHistorySelected()" [selectedId]="store.selected()?.id ?? null" (createRequested)="showCreate()" (onboardingHistorySelected)="openOnboardingHistory()" (selected)="openConversation($event)" />
 			<section class="conversation-workspace__main">
 				@if (availabilityNotice(); as notice) { <div class="conversation-workspace__availability" role="status"><strong>{{ notice.heading }}</strong><span>{{ notice.detail }}</span></div> }
-				@if (store.selected(); as selected) {
+				@if (store.onboardingHistorySelected() && onboardingHistoryPresentation(); as history) {
+					<wo-conversation-onboarding-history [presentation]="history" [messages]="onboardingHistoryMessages()" (newChatRequested)="showCreate()" />
+				} @else if (store.selected(); as selected) {
 					<header class="conversation-workspace__header"><div><small>{{ selectedSummary()?.modeLabel }}</small><h1>{{ selectedSummary()?.title }}</h1><p>{{ selectedSummary()?.participantLabel }}</p></div><div><p-button label="Archive" icon="pi pi-inbox" severity="secondary" [text]="true" [disabled]="store.conversationCommandBusy()" (onClick)="archiveConversation()" /><p-button label="Close" icon="pi pi-lock" severity="danger" [text]="true" [disabled]="store.conversationCommandBusy() || selected.lifecycle === lifecycles.Closed" (onClick)="store.close()" /></div></header>
 					@if (liveStatus(); as status) { <wo-conversation-status-line [status]="status" /> }
 					<section class="conversation-workspace__transcript" aria-label="Conversation messages" aria-live="polite">
@@ -30,7 +32,7 @@
 					</footer>
 				} @else { <section class="conversation-workspace__empty conversation-workspace__empty--page"><h1>No conversation selected</h1><p>Choose a chat or create a new one.</p><p-button label="New conversation" icon="pi pi-plus" (onClick)="showCreate()" /></section> }
 			</section>
-			<aside class="conversation-workspace__context"><p class="sr-only" aria-live="polite">{{ activityAnnouncement() }}</p><wo-conversation-activity [rows]="activityRows()" (targetRequested)="focusActivity($event)" /><wo-conversation-files-panel [items]="assets()" (actionRequested)="assetAction($event)" /></aside>
+			@if (store.selected() !== null) { <aside class="conversation-workspace__context"><p class="sr-only" aria-live="polite">{{ activityAnnouncement() }}</p><wo-conversation-activity [rows]="activityRows()" (targetRequested)="focusActivity($event)" /><wo-conversation-files-panel [items]="assets()" (actionRequested)="assetAction($event)" /></aside> }
 		}
 	}
 	<wo-conversation-create [visible]="creating()" [directory]="store.directory()" [mode]="store.creationMode()" [selectedParticipantRefs]="store.selectedParticipantRefs()" [canCreate]="store.canCreate()" [busy]="store.creationState() === creationStates.Creating" (dismissed)="hideCreate()" (modeSelected)="store.selectCreationMode($event)" (participantToggled)="store.toggleParticipant($event)" (createRequested)="create()" />

@@ -4,7 +4,8 @@ import { BrowserDynamicTestingModule, platformBrowserDynamicTesting } from "@ang
 import { Router } from "@angular/router";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { PersonaFirstChatArchetypes, PersonaFirstChatColours, PersonaFirstChatCommandPhases, PersonaFirstChatStore, type PersonaFirstChatSnapshot, PersonaFirstChatTranscriptKinds, PersonaFirstChatTranscriptRoles, UserOnboardingRouteStates } from "@opencrane/state/onboarding";
+import { PersonaFirstChatArchetypes, PersonaFirstChatColours, PersonaFirstChatTranscriptKinds, PersonaFirstChatTranscriptRoles, UserOnboardingRouteStates, type PersonaFirstChatSnapshot } from "@opencrane/state/onboarding/projection";
+import { PersonaFirstChatCommandPhases, PersonaFirstChatStore } from "@opencrane/state/onboarding";
 
 import { PersonaFirstChatPageComponent } from "../persona-first-chat-page.component.js";
 import { PersonaFirstChatStates } from "../persona-first-chat.types.js";
@@ -125,7 +126,7 @@ describe("persona first-chat route shell", function _PersonaFirstChatPageSuite()
 
 		_snapshot.set(_Snapshot(UserOnboardingRouteStates.Completed));
 		TestBed.flushEffects();
-		expect(_navigateByUrl).toHaveBeenLastCalledWith("/admin");
+		expect(_navigateByUrl).toHaveBeenLastCalledWith("/chats");
 	});
 
 	it("delegates only an intent matching the currently rendered question", async function _DelegatesCurrentIntent()

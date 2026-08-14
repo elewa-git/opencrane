@@ -15,5 +15,5 @@
  * feature route hosts the page and turns its typed intents into canonical URLs.
  */
 export { CONVERSATION_WORKSPACE_ROUTES } from "./lib/conversation-workspace-route/conversation-workspace.routes.js";
-export { ConversationWorkspacePageComponent } from "./lib/conversation-workspace-page/conversation-workspace-page.component.js";
+export { ConversationWorkspacePageComponent } from "./lib/components/conversation-workspace-page/conversation-workspace-page.component.js";
 export type { ConversationThreadNavigationIntent } from "./lib/conversation-workspace-feature.types.js";

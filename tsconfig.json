@@ -142,6 +142,9 @@
       "@opencrane/models/conversation-assets": [
         "./libs/models/conversation-assets/main/src/index.ts"
       ],
+      "@opencrane/models/user-onboarding": [
+        "./libs/models/user-onboarding/main/src/index.ts"
+      ],
       "@opencrane/models/artifacts": [
         "./libs/models/artifacts/main/src/index.ts"
       ],
@@ -285,6 +288,9 @@
       "@opencrane/state/onboarding": [
         "./libs/frontend/state/onboarding/src/index.ts"
       ],
+      "@opencrane/state/onboarding/projection": [
+        "./libs/frontend/state/onboarding/projection/src/index.ts"
+      ],
       "@opencrane/state/persona/adapter": [
         "./libs/frontend/state/persona/adapter/src/index.ts"
       ]
@@ -333,6 +339,9 @@
     },
     {
       "path": "./libs/frontend/state/onboarding"
+    },
+    {
+      "path": "./libs/frontend/state/onboarding/projection"
     },
     {
       "path": "./libs/frontend/state/conversation/elicitation"

@@ -5,9 +5,9 @@ import { ConversationEventStreamStatuses, type ConversationEventStream, type Str
 import { __CreateAgUiStreamState, type AgUiStreamState } from "@opencrane/state/conversation/ag-ui";
 import { CONVERSATION_ASSETS_GATEWAY } from "@opencrane/state/conversation/assets";
 import { ELICITATION_GATEWAY } from "@opencrane/state/conversation/elicitation";
-import { CONVERSATION_WORKSPACE_EVENT_STREAM, CONVERSATION_WORKSPACE_GATEWAY, ConversationPersonalAgentStatuses, ConversationRunStates, type ConversationCreationDirectory, type ConversationRun, type ConversationWorkspaceDetail, type ConversationWorkspaceGateway } from "@opencrane/state/conversation/workspace";
+import { CONVERSATION_WORKSPACE_EVENT_STREAM, CONVERSATION_WORKSPACE_GATEWAY, ConversationOnboardingHistoryStatuses, ConversationPersonalAgentStatuses, ConversationRunStates, type ConversationCreationDirectory, type ConversationOnboardingHistoryProjection, type ConversationRun, type ConversationWorkspaceDetail, type ConversationWorkspaceGateway } from "@opencrane/state/conversation/workspace";
 
-import { ConversationWorkspacePageComponent } from "../conversation-workspace-page/conversation-workspace-page.component.js";
+import { ConversationWorkspacePageComponent } from "../components/conversation-workspace-page/conversation-workspace-page.component.js";
 
 /** Privacy-safe directory used by the full workspace stories. */
 const _DIRECTORY: ConversationCreationDirectory = { participants: [{ participantRef: "self", isSelf: true, label: "You" }, { participantRef: "participant-1", isSelf: false, label: "Participant 1" }], personalAgentStatus: ConversationPersonalAgentStatuses.Ready, personalAgent: { personalAgentRef: "agent-1", displayName: "Nova" } };
@@ -16,6 +16,12 @@ const _DIRECTORY: ConversationCreationDirectory = { participants: [{ participant
 function _Detail(body = "I reviewed the proposal and kept the important constraints."): ConversationWorkspaceDetail
 {
 	return { id: "conversation-1", mode: ConversationModes.AgentSession, lifecycle: ConversationLifecycles.Open, agentServiceId: "agent-1", participantRefs: ["self"], archivedAt: null, updatedAt: "2026-08-12T19:30:00.000Z", visibleFromPosition: "1", accessEndedPosition: null, messages: [{ id: "message-1", position: "1", role: MessageRoles.Assistant, state: MessageStates.Completed, source: MessageSources.ModelOutput, blocks: [{ id: "block-1", kind: "text", value: body }], runId: "run-1", participantRef: null, createdAt: "2026-08-12T19:30:00.000Z", agentThread: null }] };
+}
+
+/** Build one completed onboarding projection with no conversation mode or run. */
+function _OnboardingHistory(): ConversationOnboardingHistoryProjection
+{
+	return { status: ConversationOnboardingHistoryStatuses.Ready, history: { id: "onboarding-1", personaDisplayName: "Nova", startedAt: "2026-08-12T18:00:00.000Z", completedAt: "2026-08-12T18:05:00.000Z", transcript: [{ ordinal: 1, role: MessageRoles.Assistant, text: "Welcome. I would like to learn how we should work together." }, { ordinal: 2, role: MessageRoles.User, text: "Keep decisions clear and show me when something needs approval." }] } };
 }
 
 /** Test-only participant API used by one deterministic shell story. */
@@ -27,19 +33,24 @@ class _StoryGateway implements ConversationWorkspaceGateway
 	private readonly _detail: ConversationWorkspaceDetail | Error;
 	/** Run lifecycle rendered by this story. */
 	private readonly _run: ConversationRun;
+	/** Separate onboarding-history result rendered by this story. */
+	private readonly _onboardingHistory: ConversationOnboardingHistoryProjection;
 
 	/** Capture one deterministic story scenario. */
-	public constructor(detail: ConversationWorkspaceDetail | Error, runState: ConversationRunStates = ConversationRunStates.Completed, directory: ConversationCreationDirectory = _DIRECTORY)
+	public constructor(detail: ConversationWorkspaceDetail | Error, runState: ConversationRunStates = ConversationRunStates.Completed, directory: ConversationCreationDirectory = _DIRECTORY, onboardingHistory: ConversationOnboardingHistoryProjection = { status: ConversationOnboardingHistoryStatuses.NotRecorded, history: null })
 	{
 		this._detail = detail;
 		this._directory = directory;
 		this._run = { runId: "run-1", attempt: 1, state: runState, conversationId: "conversation-1" };
+		this._onboardingHistory = onboardingHistory;
 	}
 
 	/** Return the story directory. */
 	public async directory() { return this._directory; }
 	/** Return one row so the real page follows its snapshot-first flow. */
 	public async list() { return [_Detail()]; }
+	/** Return the configured separate onboarding history projection. */
+	public async onboardingHistory() { return this._onboardingHistory; }
 	/** Return or reject the configured authorized snapshot. */
 	public async open(): Promise<ConversationWorkspaceDetail> { if (this._detail instanceof Error) throw this._detail; return this._detail; }
 	/** Return the configured snapshot for unused create interactions. */
@@ -114,3 +125,5 @@ export const FailedRun: Story = { tags: ["visual-test"], decorators: [_Providers
 export const CancelledRun: Story = { tags: ["visual-test"], decorators: [_Providers(new _StoryGateway(_Detail(), ConversationRunStates.Cancelled), new _StoryStream(ConversationEventStreamStatuses.Live, { ...__CreateAgUiStreamState(), runId: "run-1" }))] };
 /** Hostile and oversized-looking text passes through the real shared sanitizer and bounded shell. */
 export const HostileLongContent: Story = { tags: ["visual-test"], decorators: [_Providers(new _StoryGateway(_Detail(`# Review\n\n<script>window.secret = true</script>\n\n${"A very long governed answer. ".repeat(80)}`)), new _StoryStream(ConversationEventStreamStatuses.Live, __CreateAgUiStreamState()))] };
+/** Completed onboarding opens selected and read-only inside the normal workspace shell. */
+export const OnboardingHistory: Story = { tags: ["visual-test"], decorators: [_Providers(new _StoryGateway(_Detail(), ConversationRunStates.Completed, _DIRECTORY, _OnboardingHistory()), new _StoryStream(ConversationEventStreamStatuses.Live, __CreateAgUiStreamState()))] };

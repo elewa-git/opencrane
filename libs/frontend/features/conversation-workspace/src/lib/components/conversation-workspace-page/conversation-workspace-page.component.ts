@@ -1,22 +1,29 @@
 import { ChangeDetectionStrategy, Component, ElementRef, ViewChild, afterRenderEffect, effect, input, output, signal } from "@angular/core";
-import { ButtonModule } from "primeng/button";
-import { MessageModule } from "primeng/message";
-
-import { ConversationComposerComponent, ConversationMessageComponent, ConversationRichTextComponent, ConversationRunActionsComponent, ConversationStatusLineComponent } from "@opencrane/elements/conversation";
-import { ConversationActivityComponent } from "@opencrane/features/conversation-activity";
-import { ConversationAttachmentTrayComponent, ConversationFilesPanelComponent } from "@opencrane/features/conversation-assets";
-import { ConversationElicitationCardComponent } from "@opencrane/features/conversation-elicitation";
 import { ConversationAssetsStore } from "@opencrane/state/conversation/assets";
 import { ConversationElicitationStore, type ConversationActivityTarget } from "@opencrane/state/conversation/elicitation";
-import { ConversationRunStore, ConversationWorkspaceRouteStates, ConversationWorkspaceStore } from "@opencrane/state/conversation/workspace";
+import { ConversationOnboardingHistoryStore, ConversationRunStore, ConversationWorkspaceRouteStates, ConversationWorkspaceStore } from "@opencrane/state/conversation/workspace";
 
-import { ConversationCreateComponent } from "../conversation-create/conversation-create.component.js";
-import { ConversationListComponent } from "../conversation-list/conversation-list.component.js";
-import type { ConversationThreadNavigationIntent } from "../conversation-workspace-feature.types.js";
-import { ConversationWorkspacePresenter } from "../conversation-workspace.presenter.js";
+import type { ConversationThreadNavigationIntent } from "../../conversation-workspace-feature.types.js";
+import { ConversationWorkspacePresenter } from "../../conversation-workspace.presenter.js";
+import { CONVERSATION_WORKSPACE_PAGE_IMPORTS } from "./conversation-workspace-page.imports.js";
 
-/** Workspace screen; its feature route owns URL coordination while the app binds concrete gateways. */
-@Component({ selector: "wo-conversation-workspace-page", standalone: true, imports: [ButtonModule, ConversationActivityComponent, ConversationAttachmentTrayComponent, ConversationComposerComponent, ConversationCreateComponent, ConversationElicitationCardComponent, ConversationFilesPanelComponent, ConversationListComponent, ConversationMessageComponent, ConversationRichTextComponent, ConversationRunActionsComponent, ConversationStatusLineComponent, MessageModule], templateUrl: "./conversation-workspace-page.component.html", styleUrl: "./conversation-workspace-page.component.scss", changeDetection: ChangeDetectionStrategy.OnPush, providers: [ConversationAssetsStore, ConversationElicitationStore, ConversationRunStore, ConversationWorkspaceStore] })
+/**
+ * Composes the chat workspace and reports navigation intent to its feature route; the app binds the
+ * concrete gateways used by its component-scoped stores.
+ *
+ * The main area shows one of three things, and the template picks between them in that order: the
+ * completed onboarding history, the selected conversation, or an empty-state prompt. History wins when
+ * it is selected because it replaces the transcript rather than sitting beside it — which is also why
+ * the Activity and Files rail is rendered only while a conversation is selected, there being no assets
+ * or tool activity behind a finished onboarding exchange.
+ *
+ * Every store it needs is listed in `providers`, so each one is created per page instance and destroyed
+ * with it. That includes the onboarding history store: its transcript and selection belong to this
+ * screen and must not outlive it.
+ *
+ * Called by: feature-local `ConversationWorkspaceRouteComponent`, which owns the child chat URLs.
+ */
+@Component({ selector: "wo-conversation-workspace-page", standalone: true, imports: CONVERSATION_WORKSPACE_PAGE_IMPORTS, templateUrl: "./conversation-workspace-page.component.html", styleUrl: "./conversation-workspace-page.component.scss", changeDetection: ChangeDetectionStrategy.OnPush, providers: [ConversationAssetsStore, ConversationElicitationStore, ConversationOnboardingHistoryStore, ConversationRunStore, ConversationWorkspaceStore] })
 export class ConversationWorkspacePageComponent extends ConversationWorkspacePresenter
 {
 	/** Optional app-owned route selection adopted after the workspace list loads. */
@@ -25,6 +32,16 @@ export class ConversationWorkspacePageComponent extends ConversationWorkspacePre
 	public readonly threadRequested = output<ConversationThreadNavigationIntent>();
 	/** Reports participant selection so the app can own the canonical URL. */
 	public readonly conversationSelected = output<string | null>();
+	/**
+	 * Fires when the workspace has switched to the onboarding history, so the app can put the plain
+	 * workspace index in the address bar.
+	 *
+	 * It carries no id because history is not a conversation and has no URL of its own. The app answers
+	 * this by navigating to `/chats`, which clears any conversation id left in the URL from a previous
+	 * selection — otherwise the route input would keep pointing at that conversation and the page would
+	 * reopen it over the history the user just chose.
+	 */
+	public readonly workspaceIndexSelected = output<void>();
 	/** Requests app-owned verified sign-in without letting the feature navigate. */
 	public readonly stepUpRequested = output<string>();
 	/** Keeps a route selection and the component-scoped store aligned. */
@@ -55,6 +72,20 @@ export class ConversationWorkspacePageComponent extends ConversationWorkspacePre
 		if (navigation === null) return;
 		this.creating.set(false);
 		this.conversationSelected.emit(navigation.conversationId);
+	}
+
+	/**
+	 * Asks the store to switch to the onboarding history, then tells the app to update the URL.
+	 *
+	 * The store refuses the switch unless it holds a completed transcript, and it refuses silently, so
+	 * the emit is guarded by reading the selection back rather than by assuming the call worked. Without
+	 * that guard a rail press during an unavailable history read would still rewrite the URL and drop the
+	 * conversation the user was reading.
+	 */
+	protected openOnboardingHistory(): void
+	{
+		this.store.openOnboardingHistory();
+		if (this.store.onboardingHistorySelected()) this.workspaceIndexSelected.emit();
 	}
 
 	/** Ask the app to replace an archived selection with the next authorized row. */

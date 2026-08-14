@@ -8,7 +8,8 @@ import { By } from "@angular/platform-browser";
 import { Router } from "@angular/router";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { PersonaColours, PersonaFirstChatArchetypes, PersonaFirstChatColours, PersonaFirstChatCommandPhases, PersonaFirstChatService, PersonaFirstChatSnapshot, PersonaFirstChatStore, PersonaModifiers, PersonaOnboardingService, PersonaOnboardingSnapshot, PersonaOnboardingStates, PersonaOnboardingStore, PersonaResolutionKinds, UserOnboardingRouteSnapshot, UserOnboardingRouteStates } from "@opencrane/state/onboarding";
+import { PersonaFirstChatArchetypes, PersonaFirstChatColours, UserOnboardingRouteStates, type PersonaFirstChatSnapshot } from "@opencrane/state/onboarding/projection";
+import { PersonaColours, PersonaFirstChatCommandPhases, PersonaFirstChatService, PersonaFirstChatStore, PersonaModifiers, PersonaOnboardingService, PersonaOnboardingSnapshot, PersonaOnboardingStates, PersonaOnboardingStore, PersonaResolutionKinds, UserOnboardingRouteSnapshot } from "@opencrane/state/onboarding";
 
 import { PersonaFirstChatPageComponent } from "../chat/persona-first-chat-page.component";
 import { PersonaOnboardingPageComponent } from "../persona-onboarding-page.component";
@@ -466,6 +467,15 @@ describe("persona onboarding shell orchestration", function _PersonaOnboardingSh
 		TestBed.flushEffects();
 
 		expect(_navigateByUrl).toHaveBeenCalledWith("/onboarding");
+	});
+
+	it("routes an already completed onboarding authority directly to chats", async function _CompletedRoute()
+	{
+		const ready = _ReviewSnapshot("revision-1", PersonaOnboardingStates.Ready);
+		_loadRouteState.mockResolvedValue(_RouteSnapshot(UserOnboardingRouteStates.Completed));
+		await _RenderShell(ready);
+
+		await vi.waitFor(function _WorkspaceSelected() { expect(_navigateByUrl).toHaveBeenCalledWith("/chats"); });
 	});
 
 });

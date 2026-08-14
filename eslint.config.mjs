@@ -163,7 +163,7 @@ export default [
             { sourceTag: "scope:memory-gateway", onlyDependOnLibsWithTags: ["scope:memory-gateway", "scope:shared", "scope:workload-identity"] },
             { sourceTag: "scope:model-routing", onlyDependOnLibsWithTags: ["scope:auth", "scope:cluster-tenants", "scope:http", "scope:model-routing", "scope:shared"] },
 			{ sourceTag: "scope:personal-personas", onlyDependOnLibsWithTags: ["scope:auth", "scope:personal-configuration", "scope:personal-personas", "scope:shared"] },
-			{ sourceTag: "scope:persona-onboarding", onlyDependOnLibsWithTags: ["scope:persona-onboarding", "scope:shared"] },
+			{ sourceTag: "scope:persona-onboarding", onlyDependOnLibsWithTags: ["scope:persona-onboarding", "scope:shared", "scope:user-onboarding"] },
             { sourceTag: "scope:execution-inputs", onlyDependOnLibsWithTags: ["scope:agent-services", "scope:agents", "scope:artifacts", "scope:authorization", "scope:conversations", "scope:membership", "scope:execution-runs", "scope:execution-inputs", "scope:personal-memory", "scope:shared"] },
             { sourceTag: "scope:execution-admission", onlyDependOnLibsWithTags: ["scope:agent-services", "scope:conversations", "scope:execution-admission", "scope:execution-inputs", "scope:execution-runs", "scope:membership", "scope:shared"] },
             { sourceTag: "scope:providers", onlyDependOnLibsWithTags: ["scope:auth", "scope:cluster-tenants", "scope:model-routing", "scope:providers", "scope:shared"] },
@@ -176,7 +176,7 @@ export default [
 			{ sourceTag: "scope:spend", onlyDependOnLibsWithTags: ["scope:shared", "scope:spend"] },
 			{ sourceTag: "scope:conversation-elicitation", onlyDependOnLibsWithTags: ["scope:conversation-elicitation", "scope:shared", "scope:web"] },
 			{ sourceTag: "scope:agent-threads", onlyDependOnLibsWithTags: ["scope:agent-threads", "scope:conversation-assets", "scope:conversation-elicitation", "scope:shared", "scope:web"] },
-			{ sourceTag: "scope:conversation-workspace", onlyDependOnLibsWithTags: ["scope:agent-threads", "scope:conversation-assets", "scope:conversation-elicitation", "scope:conversation-workspace", "scope:conversations", "scope:shared", "scope:web"] },
+			{ sourceTag: "scope:conversation-workspace", onlyDependOnLibsWithTags: ["scope:agent-threads", "scope:conversation-assets", "scope:conversation-elicitation", "scope:conversation-workspace", "scope:conversations", "scope:shared", "scope:user-onboarding", "scope:web"] },
 			{ sourceTag: "scope:web", onlyDependOnLibsWithTags: ["scope:web", "scope:shared"] },
 			{ sourceTag: "scope:opencrane-ui", onlyDependOnLibsWithTags: ["scope:agent-threads", "scope:conversation-assets", "scope:conversation-workspace", "scope:persona-onboarding", "scope:shared", "scope:web"] },
             {

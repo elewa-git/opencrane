@@ -35,6 +35,77 @@ export enum ConversationPersonalAgentStatuses
 	Ambiguous = "ambiguous"
 }
 
+/**
+ * What the workspace can truthfully show for the signed-in user's completed onboarding exchange.
+ *
+ * The onboarding API sends this value to the workspace adapter, which keeps the first exchange
+ * separate from ordinary conversation modes. The value lives only in browser state. An unknown
+ * value is rejected by the adapter instead of being treated as a successful history read.
+ */
+export enum ConversationOnboardingHistoryStatuses
+{
+	/** The completed onboarding exchange is available as a read-only transcript. */
+	Ready = "ready",
+	/** Onboarding is not complete, so the workspace must not invent a completed transcript. */
+	NotCompleted = "not_completed",
+	/** This account was completed without a saved bootstrap exchange, as with an existing-user migration. */
+	NotRecorded = "not_recorded",
+	/** The history read failed while the rest of the workspace remained available. */
+	Unavailable = "unavailable"
+}
+
+/**
+ * Carries one validated line from a completed onboarding exchange into workspace presentation.
+ *
+ * The adapter preserves server order and maps onboarding speaker roles into shared message roles;
+ * this type deliberately omits message commands, run coordinates, and conversation-mode fields.
+ */
+export interface ConversationOnboardingHistoryEntry
+{
+	/** One-based server order retained without sorting in the browser. */
+	readonly ordinal: number;
+	/** Speaker role used only for presentation alignment. */
+	readonly role: MessageRoles.Assistant | MessageRoles.User;
+	/** Plain bounded text returned by the onboarding projection. */
+	readonly text: string;
+}
+
+/**
+ * Carries completed onboarding evidence into the normal workspace as read-only history.
+ *
+ * The workspace may select and display this projection, but it must not open a conversation stream,
+ * create a run, or submit messages against its onboarding-owned identifier. The separate shape keeps
+ * the one-time bootstrap exchange outside the immutable direct, group, and Agent-session modes.
+ */
+export interface ConversationOnboardingHistory
+{
+	/** Onboarding-owned conversation coordinate used only as a stable browser key. */
+	readonly id: string;
+	/** Server-approved persona name used for the assistant label. */
+	readonly personaDisplayName: string;
+	/** Server time at which the exchange started. */
+	readonly startedAt: string;
+	/** Server time at which onboarding was validated as complete. */
+	readonly completedAt: string;
+	/** Complete read-only transcript in server order. */
+	readonly transcript: readonly ConversationOnboardingHistoryEntry[];
+}
+
+/**
+ * Reports whether the workspace can show completed onboarding history.
+ *
+ * The gateway returns this independently from the conversation list so an unavailable or migrated
+ * history does not make ordinary chats unavailable. `history` is present only for `Ready`; callers
+ * must branch on {@link ConversationOnboardingHistoryStatuses} instead of guessing from null.
+ */
+export interface ConversationOnboardingHistoryProjection
+{
+	/** Honest availability state for the optional history panel. */
+	readonly status: ConversationOnboardingHistoryStatuses;
+	/** Completed transcript only when status is {@link ConversationOnboardingHistoryStatuses.Ready}. */
+	readonly history: ConversationOnboardingHistory | null;
+}
+
 /** Run lifecycle values returned by the signed-in user's run-status API. */
 export enum ConversationRunStates
 {
@@ -225,6 +296,8 @@ export interface ConversationWorkspaceGateway
 	directory(): Promise<ConversationCreationDirectory>;
 	/** List the signed-in participant's current conversations. */
 	list(): Promise<readonly ConversationSummary[]>;
+	/** Read the completed onboarding exchange as a separate, read-only workspace projection. */
+	onboardingHistory(): Promise<ConversationOnboardingHistoryProjection>;
 	/** Read one authorized bounded conversation snapshot. */
 	open(conversationId: string): Promise<ConversationWorkspaceDetail>;
 	/** Create one conversation whose mode can never change. */

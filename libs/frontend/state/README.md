@@ -25,6 +25,7 @@ owns the client-side stores and caches that hold fetched data.
 | [`conversation/assets`](./conversation/assets/README.md) | Component-scoped conversation upload, retry, and safe lifecycle state. |
 | [`mcp/adapter`](./mcp/adapter/README.md) | Live MCP gateway. |
 | [`onboarding`](./onboarding/README.md) | Server-backed persona onboarding orchestration. |
+| [`onboarding/projection`](./onboarding/projection/README.md) | Narrow frontend first-chat projection vocabulary. |
 | [`persona`](./persona/README.md) | Personal-persona browser adapters. |
 | [`provider-key/adapter`](./provider-key/adapter/README.md) | Live BYOK provider-key gateway. |
 | [`settings/adapter`](./settings/adapter/README.md) | Live settings gateway. |

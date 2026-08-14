@@ -1,10 +1,11 @@
 import { type ResourceStatus, Injectable, inject, linkedSignal, resource, signal } from "@angular/core";
 import { toObservable } from "@angular/core/rxjs-interop";
 import { filter, firstValueFrom } from "rxjs";
+import { UserOnboardingRouteStates, type PersonaFirstChatSnapshot } from "@opencrane/models/user-onboarding";
 
 import { PersonaFirstChatService } from "./persona-first-chat.service.js";
 import { PersonaFirstChatCommandPhases, type PersonaFirstChatPendingAnswer } from "./persona-first-chat.store.types.js";
-import { PersonaFirstChatConflictError, type PersonaFirstChatSnapshot, UserOnboardingRouteStates } from "./persona-first-chat.types.js";
+import { PersonaFirstChatConflictError } from "./persona-first-chat.types.js";
 
 /**
  * Holds the first-chat state for one visit to the first-chat route.

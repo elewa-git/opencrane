@@ -6,8 +6,9 @@ import { __CreateAgUiStreamState, type AgUiStreamState } from "@opencrane/state/
 
 import { ConversationWorkspaceGatewayError, ConversationWorkspaceGatewayErrorKinds } from "./conversation-workspace-gateway.errors.js";
 import { CONVERSATION_WORKSPACE_EVENT_STREAM, CONVERSATION_WORKSPACE_GATEWAY } from "./conversation-workspace.gateway.js";
+import { ConversationOnboardingHistoryStore } from "./conversation-onboarding-history.store.js";
 import { ConversationRunStore } from "./conversation-run.store.js";
-import { ConversationCreationStates, ConversationPersonalAgentStatuses, ConversationWorkspaceRouteStates, type ConversationCreationDirectory, type ConversationSummary, type ConversationWorkspaceDetail, type ConversationWorkspaceNavigationIntent, type CreateConversationCommand, type SubmitConversationMessageBlock, type SubmitConversationMessageCommand } from "./conversation-workspace.types.js";
+import { ConversationCreationStates, ConversationOnboardingHistoryStatuses, ConversationPersonalAgentStatuses, ConversationWorkspaceRouteStates, type ConversationCreationDirectory, type ConversationSummary, type ConversationWorkspaceDetail, type ConversationWorkspaceNavigationIntent, type CreateConversationCommand, type SubmitConversationMessageBlock, type SubmitConversationMessageCommand } from "./conversation-workspace.types.js";
 
 /** Component-scoped owner for workspace reads, live tailing, drafts, and commands. */
 @Injectable()
@@ -53,6 +54,8 @@ export class ConversationWorkspaceStore
 	private _streamAbort: AbortController | null = null;
 	/** Separate run-status and run-command owner. */
 	public readonly runs = inject(ConversationRunStore);
+	/** Separate onboarding-history read and selection owner. */
+	public readonly history = inject(ConversationOnboardingHistoryStore);
 
 	/** Public route state. */
 	public readonly routeState = this._routeState.asReadonly();
@@ -60,6 +63,10 @@ export class ConversationWorkspaceStore
 	public readonly directory = this._directory.asReadonly();
 	/** Public conversation list. */
 	public readonly conversations = this._conversations.asReadonly();
+	/** Public onboarding history availability and transcript. */
+	public readonly onboardingHistory = this.history.projection;
+	/** Whether the read-only onboarding transcript is selected. */
+	public readonly onboardingHistorySelected = this.history.selected;
 	/** Public selected snapshot. */
 	public readonly selected = this._selected.asReadonly();
 	/** Public live projection. */
@@ -99,12 +106,14 @@ export class ConversationWorkspaceStore
 		this._error.set(null);
 		try
 		{
-			const [directory, conversations] = await Promise.all([this._gateway.directory(), this._gateway.list()]);
+			const [directory, conversations, onboardingHistory] = await Promise.all([this._gateway.directory(), this._gateway.list(), this.history.load()]);
 			if (generation !== this._generation) return;
+			this.history.adopt(onboardingHistory);
 			this._directory.set(directory);
 			this._conversations.set(conversations);
 			this._routeState.set(ConversationWorkspaceRouteStates.Ready);
-			if (conversations.length > 0) await this.open(conversations[0]!.id);
+			if (this.history.projection().status === ConversationOnboardingHistoryStatuses.Ready) this.openOnboardingHistory();
+			else if (conversations.length > 0) await this.open(conversations[0]!.id);
 		}
 		catch (error)
 		{
@@ -120,6 +129,7 @@ export class ConversationWorkspaceStore
 		const generation = ++this._generation;
 		const previouslyVisible = this._selected()?.id === conversationId;
 		this._Abort();
+		this.history.clearSelection();
 		this._selected.set(null);
 		this._live.set(__CreateAgUiStreamState());
 		this.runs.clear();
@@ -140,6 +150,21 @@ export class ConversationWorkspaceStore
 			if (generation !== this._generation) return;
 			this._HandleFailure(error, previouslyVisible);
 		}
+	}
+
+	/** Select the completed onboarding transcript without opening a conversation stream. */
+	public openOnboardingHistory(): void
+	{
+		if (!this.history.select()) return;
+		this._generation += 1;
+		this._Abort();
+		this._selected.set(null);
+		this._live.set(__CreateAgUiStreamState());
+		this.runs.clear();
+		this._draft.set("");
+		this._pendingMessage = null;
+		this._streamStatus.set(null);
+		this._error.set(null);
 	}
 
 	/** Select the immutable mode for a conversation that does not exist yet. */
@@ -229,11 +254,11 @@ export class ConversationWorkspaceStore
 		this._conversationCommandBusy.set(true);
 		try
 		{
-			await this._gateway.archive(selected.id, true);
-			this._conversations.update(current => current.filter(candidate => candidate.id !== selected.id));
+			const archived = await this._gateway.archive(selected.id, true);
+			this._conversations.update(current => current.map(candidate => candidate.id === archived.id ? archived : candidate));
 			if (generation !== this._generation || this._selected()?.id !== selected.id) return null;
 			this._ClearSelection();
-			const next = this._conversations()[0];
+			const next = this._conversations().find(candidate => candidate.archivedAt === null);
 			return { conversationId: next?.id ?? null };
 		}
 		catch (error) { if (generation === this._generation) this._HandleFailure(error, true); }
@@ -301,6 +326,7 @@ export class ConversationWorkspaceStore
 		this._selected.set(null);
 		this._live.set(__CreateAgUiStreamState());
 		this.runs.clear();
+		this.history.clearSelection();
 		this._draft.set("");
 		this._pendingMessage = null;
 		this._routeState.set(ConversationWorkspaceRouteStates.AccessChanged);
@@ -313,6 +339,7 @@ export class ConversationWorkspaceStore
 		this._generation += 1;
 		this._Abort();
 		this._selected.set(null);
+		this.history.clearSelection();
 		this._live.set(__CreateAgUiStreamState());
 		this.runs.clear();
 		this._draft.set("");

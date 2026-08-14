@@ -7,7 +7,7 @@ import { ConversationAssetsStore } from "@opencrane/state/conversation/assets";
 import { ConversationElicitationStore, __MapToolActivity, type ElicitationResponseValue } from "@opencrane/state/conversation/elicitation";
 import { AgUiToolStatuses, ConversationCreationStates, ConversationEventStreamStatuses, ConversationLifecycles, ConversationPersonalAgentStatuses, ConversationRunStates, ConversationWorkspaceRouteStates, ConversationWorkspaceStore } from "@opencrane/state/conversation/workspace";
 
-import { _ConversationMessageViews, _ConversationSummaryPresentation, _LiveMessageViews } from "./conversation-workspace.mapper.js";
+import { _ConversationMessageViews, _ConversationOnboardingHistoryMessageViews, _ConversationOnboardingHistoryPresentation, _ConversationSummaryPresentation, _LiveMessageViews } from "./conversation-workspace.mapper.js";
 import type { ConversationWorkspaceAvailabilityPresentation } from "./conversation-workspace-feature.types.js";
 
 /** Feature-scoped presenter that derives view state and delegates typed intents to owning stores. */
@@ -31,6 +31,20 @@ export class ConversationWorkspacePresenter
 	protected readonly toolStatuses = AgUiToolStatuses;
 	/** Privacy-safe list rows. */
 	protected readonly summaries = computed(this._Summaries.bind(this));
+	/**
+	 * Header copy for the onboarding history, or `null` when the server recorded no completed exchange.
+	 *
+	 * The template uses the `null` here as its test for whether history can be shown at all, in both the
+	 * rail row and the main panel, so this signal doubles as the "is there a transcript" answer.
+	 */
+	protected readonly onboardingHistoryPresentation = computed(this._OnboardingHistoryPresentation.bind(this));
+	/**
+	 * The onboarding transcript as rows the shared message elements can render.
+	 *
+	 * Kept separate from {@link messages} on purpose: these rows never join the live conversation
+	 * stream, and the panel that shows them is rendered instead of the transcript, not alongside it.
+	 */
+	protected readonly onboardingHistoryMessages = computed(this._OnboardingHistoryMessages.bind(this));
 	/** Explicit availability state derived from the existing privacy-safe directory. */
 	protected readonly availabilityNotice = computed(this._AvailabilityNotice.bind(this));
 	/** Privacy-safe row corresponding to the selected authorized snapshot. */
@@ -123,6 +137,33 @@ export class ConversationWorkspacePresenter
 	{
 		const agentName = this.store.directory()?.personalAgent?.displayName ?? null;
 		return this.store.conversations().map(summary => _ConversationSummaryPresentation(summary, agentName));
+	}
+
+	/**
+	 * Builds the history header, checking for a transcript before mapping one.
+	 *
+	 * The `null` branch is not defensive padding. The store's projection carries a transcript only in the
+	 * `Ready` state, and it starts and stays `null` for a user who has not completed onboarding, whose
+	 * account was migrated without a recorded exchange, or whose history read failed — so the common case
+	 * is that there is nothing here to map.
+	 */
+	private _OnboardingHistoryPresentation()
+	{
+		const history = this.store.onboardingHistory().history;
+		return history === null ? null : _ConversationOnboardingHistoryPresentation(history);
+	}
+
+	/**
+	 * Builds the history transcript rows, checking for a transcript before mapping one.
+	 *
+	 * Returns an empty list rather than `null` so the history panel's `messages` input is always a real
+	 * array; the panel is only rendered when {@link onboardingHistoryPresentation} is non-`null`, so an
+	 * empty result never reaches the screen as an empty transcript.
+	 */
+	private _OnboardingHistoryMessages()
+	{
+		const history = this.store.onboardingHistory().history;
+		return history === null ? [] : _ConversationOnboardingHistoryMessageViews(history);
 	}
 
 	/** Explain missing workspace or personal-Agent setup without inventing server state. */

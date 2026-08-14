@@ -24,6 +24,7 @@ bootstrap exchange.
 ```
 
 **In this flow:** [state/onboarding](../../state/onboarding/README.md) ·
+[state/onboarding/projection](../../state/onboarding/projection/README.md) ·
 [state/persona/adapter](../../state/persona/adapter/README.md)
 
 Each state component receives read-only evidence and emits typed intents. The component-scoped
@@ -37,6 +38,9 @@ component-scoped store and a pure snapshot-to-view mapper. The store owns its re
 sequencing, retry identity, conflicts, and question-keyed draft; the routed page owns only typed
 intent delegation and authority-derived navigation. A failed answer retains its exact text and
 idempotency key while the browser can neither select the next question nor assert completion.
+Only a server-confirmed `Completed` state navigates to `/chats`. The normal workspace then reads the
+saved bootstrap coordinate and transcript from the same signed-in authority; this feature never
+invents or copies an onboarding conversation into an ordinary chat mode.
 
 ## Public surface
 
@@ -57,11 +61,13 @@ onboarding exchange, not a general chat client.
 ## Dependency direction
 
 Tagged `scope:persona-onboarding`, `type:lib`, `layer:frontend`, and `frontend-role:feature`. The
-role constraint admits only shared elements and onboarding state; it cannot import the HTTP adapter,
-another feature, an app, or backend source.
+role constraint admits shared elements, onboarding command state, and the narrow onboarding
+projection facade; it cannot import the pure model directly, the HTTP adapter, another feature, an
+app, or backend source.
 
 ## See also
 
 - Parent index: [features](../README.md)
 - State orchestration: [onboarding](../../state/onboarding/README.md)
+- Projection vocabulary: [onboarding/projection](../../state/onboarding/projection/README.md)
 - Shared presentation: [elements/ui](../../elements/ui/README.md)
