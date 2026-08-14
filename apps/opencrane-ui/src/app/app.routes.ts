@@ -1,8 +1,21 @@
 import { Routes } from "@angular/router";
 
-import { ___OperatorAccessGuard } from "./operator-access.guard";
+import { ___OperatorAccessGuard } from "./operator-access.guard.js";
 
-/** Top-level route table; feature pages are lazy-loaded route containers. */
+/**
+ * Top-level route table; feature pages are lazy-loaded route containers.
+ *
+ * Every entry loads its component or child routes on demand, so no feature is in the initial bundle.
+ * Order matters here: Angular tries these in declaration order and takes the first that matches, so
+ * the first-class Agent-thread route stays above the conversation workspace mount.
+ *
+ * Every signed-in route carries `___OperatorAccessGuard`; only `login` and the redirects do not,
+ * because `login` is where the guard sends anonymous visitors.
+ *
+ * Called by: `appConfig` in `app.config.ts`, through `provideRouter`.
+ *
+ * @see ___OperatorAccessGuard for what "signed in" means on this surface.
+ */
 export const APP_ROUTES: Routes =
 [
 	{
@@ -56,10 +69,17 @@ export const APP_ROUTES: Routes =
 		}
 	},
 	{
-		// Non-disclosing fallback until #351 mounts the complete direct/group conversation feature.
+		// The app owns only the guarded mount. The feature owns selected/index child routes and their
+		// navigation lifecycle; concrete gateways remain bound in app.config.ts.
 		path: "chats",
 		canActivate: [___OperatorAccessGuard],
-		redirectTo: "/onboarding"
+		loadChildren: function loadConversationWorkspaceRoutes()
+		{
+			return import("@opencrane/features/conversation-workspace").then(function pickConversationWorkspaceRoutes(m)
+			{
+				return m.CONVERSATION_WORKSPACE_ROUTES;
+			});
+		}
 	},
 	{ path: "", pathMatch: "full", redirectTo: "onboarding" },
 	{

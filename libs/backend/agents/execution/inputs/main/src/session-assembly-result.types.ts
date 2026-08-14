@@ -98,7 +98,7 @@ export enum RunInputSnapshotAdmissionOutcomes
  *   reason that is safe to retry with the SAME idempotency key.
  *
  * Consumed by: `_runAdmissionDenial` in
- * libs/backend/server/conversations/main/src/prisma-conversation-unit-of-work.ts, which maps these
+ * libs/backend/server/conversations/main/src/db/prisma-conversation-unit-of-work.ts, which maps these
  * onto the conversation write denials the HTTP layer returns. A new member added here without
  * updating that mapper falls through to its default.
  */

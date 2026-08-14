@@ -19,7 +19,7 @@ The backend that serves its APIs is [`apps/opencrane`](../opencrane/README.md) (
 this app only renders screens and calls that server.
 
 It composes the frontend feature and state libraries under `libs/frontend/*` — the route table
-lazy-loads the persona survey, review, bounded first-chat, and MCP tool-administration screens. MCP is the Model Context Protocol for
+lazy-loads the persona survey, review, bounded first-chat, normal conversation workspace, and MCP tool-administration screens. MCP is the Model Context Protocol for
 connecting tools. Two beats
 define what it *is* as a deployable:
 
@@ -52,12 +52,12 @@ If the backend is unreachable the app refuses authenticated actions.
 
 `Entrypoint: src/main.ts` (bootstraps `AppComponent` with `appConfig` from `src/app/app.config.ts`).
 Route table `src/app/app.routes.ts`: `login`, `onboarding` (the server-authoritative persona state
-shell and first chat), `chats/:parentConversationId/threads/:childConversationId` (first-class
-Agent-session child workspace), `chats` (safe fallback until #351 composes direct/group
-workspaces), and `admin` (MCP tool administration). The root route redirects to
-`/onboarding`; protected routes use
-`OperatorAccessGuard`. The app only mounts and guards the Agent-thread URL; the feature library owns
-its routed component, browser-history restoration, navigation intents, and child projection purge.
+shell and first chat), `chats` and `chats/:conversationId` (direct, group, and Agent-session
+workspace), `chats/:parentConversationId/threads/:childConversationId` (breadcrumb child Agent
+session), and `admin` (MCP tool administration). The root route redirects to
+`/onboarding`; protected routes use `OperatorAccessGuard`. The app mounts and guards the Agent-thread
+URL; the feature library owns its routed component, browser-history restoration, navigation intents,
+and child projection purge.
 
 ## Boundary
 

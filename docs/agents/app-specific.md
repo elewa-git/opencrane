@@ -92,6 +92,13 @@ Group-chat Agent threads add one route-ready composition without moving authorit
 - [`features/agent-threads`](../../libs/frontend/features/agent-threads/README.md) owns the routed child coordinator, browser-history restoration, and workspace composition from existing asset, elicitation, Activity, and A2UI features; and
 - [`state/conversation/agent-threads`](../../libs/frontend/state/conversation/agent-threads/README.md) owns the transport-neutral child-reader port, independent route/run/recovery state, and fail-closed access purge.
 
+The normal conversation workspace keeps transport, state, and presentation separate:
+
+- [`features/conversation-workspace`](../../libs/frontend/features/conversation-workspace/README.md) owns chat child routes, route coordination, and browser-safe presentation composition;
+- [`state/conversation/workspace`](../../libs/frontend/state/conversation/workspace/README.md) owns snapshot-tail selection, immutable creation choices, controlled drafts, access purge, and separate run command state;
+- [`state/conversation/workspace/adapter`](../../libs/frontend/state/conversation/workspace/adapter/README.md) maps the generated signed-in API into that port; and
+- the workspace reuses [`state/conversation/adapter`](../../libs/frontend/state/conversation/adapter/README.md) for the shared direct, group, and Agent-session event stream instead of creating another stream implementation.
+
 Legacy frontend packages use `scope:web`; new capability slices use bounded ownership scopes. The
 persona onboarding feature, state port, and adapter use `scope:persona-onboarding` plus role tags
 that enforce feature → state and adapter → state/core direction. Cross-cutting core and UI elements

@@ -157,7 +157,7 @@ export interface PersonalRunSnapshotAssembler
  * answered twice.
  *
  * Consumed by: `PrismaConversationMessageAdmissionUnitOfWork`
- * (libs/backend/server/conversations/main/src/prisma-conversation-message-admission-unit-of-work.ts),
+ * (libs/backend/server/conversations/main/src/db/prisma-conversation-message-admission-unit-of-work.ts),
  * which maps `Idempotent` onto a duplicate-message reply and `Denied` through `_runAdmissionDenial`.
  */
 export enum PersonalRunAdmissionOutcomes
@@ -197,7 +197,7 @@ export enum PersonalRunAdmissionOutcomes
  * refusal from a lower layer with the same string value maps to the same participant-facing reply.
  *
  * Consumed by: `_runAdmissionDenial`
- * (libs/backend/server/conversations/main/src/prisma-conversation-message-admission-unit-of-work.ts),
+ * (libs/backend/server/conversations/main/src/db/prisma-conversation-message-admission-unit-of-work.ts),
  * which maps `AuthorityConflict` onto an idempotency conflict and `ConversationUnavailable` onto a
  * conversation-unavailable reply.
  */
@@ -249,7 +249,7 @@ export type PersonalRunAdmissionResult =
  * except the message content and the idempotency key.
  *
  * Called by: `PrismaConversationMessageAdmissionUnitOfWork`
- * (libs/backend/server/conversations/main/src/prisma-conversation-message-admission-unit-of-work.ts),
+ * (libs/backend/server/conversations/main/src/db/prisma-conversation-message-admission-unit-of-work.ts),
  * which `_CreateSelfConversationsRouter` builds in the same package. Built by
  * {@link __CreatePersonalRunAdmissionPort} and wired in at apps/opencrane/src/index.ts.
  *

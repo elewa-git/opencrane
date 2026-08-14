@@ -5,9 +5,9 @@ import { PersonalRunAdmissionOutcomes, type PersonalRunAdmissionPort } from "@op
 import type { RunAdmissionTransaction } from "@opencrane/backend/agents/execution/runs";
 import { MessageContentBlockKinds, MessageSources } from "@opencrane/models/conversations";
 
-import { PrismaConversationMessageAdmissionUnitOfWork } from "../prisma-conversation-message-admission-unit-of-work.js";
-import { PrismaConversationMutationRepository } from "../prisma-conversation-mutation-repository.js";
-import type { SubmitConversationMessageRequest } from "../conversation-authority.types.js";
+import { PrismaConversationMessageAdmissionUnitOfWork } from "../db/prisma-conversation-message-admission-unit-of-work.js";
+import { PrismaConversationMutationRepository } from "../db/prisma-conversation-mutation-repository.js";
+import type { SubmitConversationMessageRequest } from "../types/conversation-request.types.js";
 
 /** Fixed caller and message request reused across mode-strategy assertions. */
 const _CALLER = { siloId: "silo-1", subjectId: "user-1" } as const;
@@ -28,7 +28,7 @@ function _Prisma(transaction: Record<string, unknown>): object
 /** Builds the active organisation-membership delegate required by every self authority snapshot. */
 function _ActiveMembership(): object
 {
-	return { findFirst: vi.fn().mockResolvedValue({ clusterTenant: "silo-1" }) };
+	return { findFirst: vi.fn().mockResolvedValue({ clusterTenant: "silo-1" }), findMany: vi.fn().mockResolvedValue([{ id: "member-1", subject: "user-1" }]) };
 }
 
 /** Creates the no-op attachment port used by text-only conversation tests. */

@@ -11,7 +11,7 @@ not bind an agent and their ordinary messages never manufacture runs.
 
 ```
  authenticated participant
-          │ list · create · open · message · archive · close · replay
+          │ directory · list · create · open · message · retry run · archive · close · replay
           ▼
  ┌──────────────────────────────────────────┐
  │ conversations  ◄── HERE                   │
@@ -37,6 +37,15 @@ does not expose a separate run-start route.
 The general conversation unit of work owns participant reads and aggregate lifecycle writes. A
 dedicated message-admission unit owns submission routing, retry recovery, denial translation, and
 the handoff into execution admission's authoritative final transaction.
+Participant run retry is injected through the runs package's `RunRetryAuthority`; conversation
+composition supplies route and session facts but neither constructs a run repository nor owns its
+transaction retries.
+
+Before creation, the directory returns active organisation members as opaque membership references.
+It never returns login subjects, email addresses, roles, or personal-memory identity. It also
+projects the caller's active personal Agent only when exactly one service matches their approved
+persona; no match is unavailable and more than one match is ambiguous, so the server never silently
+chooses an Agent.
 
 Participant artifact blocks are delegated to the conversation-assets attachment port inside that
 same ordinary-message or run-admission transaction. Any foreign, unchecked, reused, or oversized
@@ -67,8 +76,10 @@ the participant from the signed-in browser session.
 
 ## Public surface
 
-- `_CreateSelfConversationsRouter` composes the participant-bound list, create, open, message,
-  Agent-thread mark-read, archive, and close API over Prisma and the internal run-admission port.
+- `_CreateSelfConversationsRouter` composes the privacy-safe creation directory, participant-bound list, create, open, message,
+  Agent-thread mark-read, failed-run retry, archive, and close API over Prisma and the internal
+  execution ports. Retry accepts only an observed terminal attempt and a fresh idempotency key; all
+  identity and authority coordinates come from the signed-in route and are rechecked transactionally.
 - `_CreateConversationReplayRepository` composes replay over one `RepeatableRead` transaction so
   access-ending races cannot expose later events.
 - `__CreateConversationReplayRouter` mounts internal context-authorized AG-UI snapshot-to-live replay.

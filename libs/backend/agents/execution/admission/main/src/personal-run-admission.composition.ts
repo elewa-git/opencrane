@@ -22,7 +22,7 @@ import type { RunAdmissionCapacityGate } from "./managed-run-admission.types.js"
  *
  * Called by: apps/opencrane/src/index.ts. The result is passed to `_CreateSelfConversationsRouter`,
  * which hands it to `PrismaConversationMessageAdmissionUnitOfWork`
- * (libs/backend/server/conversations/main/src/prisma-conversation-message-admission-unit-of-work.ts).
+ * (libs/backend/server/conversations/main/src/db/prisma-conversation-message-admission-unit-of-work.ts).
  *
  * @param prisma - The product database client.
  * @param capacityGate - The shared capacity gate. Pass the same instance

@@ -2,7 +2,7 @@ import { ConversationTimelineEntryKind } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
 import { ConversationProjectionReadStatuses } from "@opencrane/backend/conversations/projection";
 
-import { PrismaConversationReplayRepository } from "../prisma-conversation-replay-repository.js";
+import { PrismaConversationReplayRepository } from "../db/prisma-conversation-replay-repository.js";
 
 describe("Prisma conversation replay repository", function _Suite()
 {

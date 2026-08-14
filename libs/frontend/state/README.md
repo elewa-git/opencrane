@@ -19,6 +19,8 @@ owns the client-side stores and caches that hold fetched data.
 | [`conversation/ag-ui`](./conversation/ag-ui/README.md) | Safe projected-event browser state. |
 | [`conversation/elicitation`](./conversation/elicitation/README.md) | Recoverable participant-input gateway, store, and Activity mapping. |
 | [`conversation/agent-threads`](./conversation/agent-threads/README.md) | Dependency-neutral Agent-thread gateway, state dimensions, store, and purge rules. |
+| [`conversation/workspace`](./conversation/workspace/README.md) | Snapshot-tail conversation workspace and separate run command state. |
+| [`conversation/workspace/adapter`](./conversation/workspace/adapter/README.md) | Signed-in generated-client adapter for workspace commands. |
 | [`assets/adapter`](./assets/adapter/README.md) | Live owner-bound personal-asset catalogue gateway. |
 | [`conversation/assets`](./conversation/assets/README.md) | Component-scoped conversation upload, retry, and safe lifecycle state. |
 | [`mcp/adapter`](./mcp/adapter/README.md) | Live MCP gateway. |

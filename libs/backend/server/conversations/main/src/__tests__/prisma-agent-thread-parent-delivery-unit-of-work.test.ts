@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { AgentThreadDeliveryKinds } from "@opencrane/backend/conversations/agent-threads";
 
-import { PrismaAgentThreadParentDeliveryUnitOfWork } from "../prisma-agent-thread-parent-delivery-unit-of-work.js";
+import { PrismaAgentThreadParentDeliveryUnitOfWork } from "../db/prisma-agent-thread-parent-delivery-unit-of-work.js";
 
 const _IDENTITY = { namespace: "runtime", serviceAccountName: "agent-runtime-service-1", podUid: "pod-1" } as const;
 const _COMMAND = { childConversationId: "child-1", runId: "run-1", idempotencyKey: "delivery-1", kind: AgentThreadDeliveryKinds.Result, label: "Done", detail: "The requested work is ready.", assetId: null } as const;

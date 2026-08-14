@@ -132,8 +132,8 @@ const _STATE_COMMAND_STRATEGIES: Readonly<Record<ConversationLifecycles, Readonl
  * command the mode does not support, an unknown mode, and an unknown command all deny. The caller
  * must branch on `allowed` and must never fall through to a default action.
  *
- * Called by: `libs/backend/server/conversations/main/src/prisma-conversation-mutation-repository.ts`,
- * `libs/backend/server/conversations/main/src/prisma-conversation-unit-of-work.ts`.
+ * Called by: `libs/backend/server/conversations/main/src/db/prisma-conversation-mutation-repository.ts`,
+ * `libs/backend/server/conversations/main/src/db/prisma-conversation-unit-of-work.ts`.
  * @param context - The stored mode, lifecycle, agent binding, active run, and the requested command.
  * @returns An allowed decision naming exactly one action to perform, or a denial with a stable reason safe to log and to map to an HTTP status.
  * @see {@link ConversationCommandActions}

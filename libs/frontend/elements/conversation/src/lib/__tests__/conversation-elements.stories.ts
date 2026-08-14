@@ -4,9 +4,11 @@ import { expect, fn, userEvent, within } from "storybook/test";
 
 import { AvatarTones } from "@opencrane/elements/ui";
 
-import { ConversationComposerComponent } from "../conversation-composer.component.js";
+import { ConversationComposerComponent } from "../conversation-composer/conversation-composer.component.js";
 import { ConversationMessageComponent } from "../conversation-message/conversation-message.component.js";
-import { ConversationStatusLineComponent } from "../conversation-status-line.component.js";
+import { ConversationRichTextComponent } from "../conversation-rich-text/conversation-rich-text.component.js";
+import { ConversationRunActionsComponent } from "../conversation-run-actions/conversation-run-actions.component.js";
+import { ConversationStatusLineComponent } from "../conversation-status-line/conversation-status-line.component.js";
 import { ConversationComposerStates, ConversationMessageTones, ConversationStatusTones } from "../conversation.types.js";
 
 /** Records emitted draft intent from the Storybook-only composer host. */
@@ -84,5 +86,21 @@ export const MessageAndStatusStates: Story =
 	render: function render()
 	{
 		return { props: { messages: [{ id: "participant", authorName: "Alex", authorInitials: "AK", avatarTone: AvatarTones.Blue, timestampLabel: "11:07", body: "Participant message", tone: ConversationMessageTones.Participant }, { id: "agent", authorName: "Nova", authorInitials: "N", avatarTone: AvatarTones.Brand, timestampLabel: "11:08", body: "Agent message", tone: ConversationMessageTones.Agent }, { id: "system", authorName: "OpenCrane", authorInitials: "OC", avatarTone: AvatarTones.Neutral, timestampLabel: "11:09", body: "System notice", tone: ConversationMessageTones.System }], statuses: Object.values(ConversationStatusTones).map(function _Status(tone) { return { label: tone, detail: `Shared ${tone} state`, tone }; }) }, template: `<div style="display:grid;gap:16px;max-width:720px;padding:20px">@for (message of messages; track message.id) { <wo-conversation-message [message]="message" /> } @for (status of statuses; track status.tone) { <wo-conversation-status-line [status]="status" /> }</div>` };
+	}
+};
+
+/** Sanitized rich content and failed-run actions stay presentation-only. */
+export const RichMessageAndFailedRun: Story =
+{
+	tags: ["visual-test"],
+	render: function render()
+	{
+		return { props: { rich: { messageId: "message-rich", html: "<h3>Comparison</h3><p>The proposed term is <strong>lower risk</strong>.</p>", label: "Agent comparison" }, run: { statusLabel: "Run failed", canCancel: false, canRetry: true, canSteer: false, busy: false }, retryRequested: fn() }, template: `<div style="display:grid;gap:16px;max-width:720px;padding:20px"><wo-conversation-rich-text [presentation]="rich" /><wo-conversation-run-actions [presentation]="run" (retryRequested)="retryRequested()" /></div>` };
+	},
+	play: async function play({ canvasElement })
+	{
+		const canvas = within(canvasElement);
+		await expect(canvas.getByRole("button", { name: "Retry run" })).toBeEnabled();
+		await userEvent.click(canvas.getByRole("button", { name: "Retry run" }));
 	}
 };

@@ -1,0 +1,12 @@
+{
+  "name": "frontend-conversation-workspace-state",
+  "$schema": "../../../../../node_modules/nx/schemas/project-schema.json",
+  "projectType": "library",
+  "sourceRoot": "libs/frontend/state/conversation/workspace/src",
+  "prefix": "wo",
+  "tags": ["scope:conversation-workspace", "type:lib", "layer:frontend", "frontend-role:state-composite"],
+  "targets": {
+    "lint": { "executor": "nx:run-commands", "options": { "command": "tsc -p tsconfig.lint.json", "cwd": "libs/frontend/state/conversation/workspace" } },
+    "test": { "executor": "nx:run-commands", "options": { "command": "vitest run --passWithNoTests", "cwd": "libs/frontend/state/conversation/workspace" } }
+  }
+}

@@ -7,6 +7,13 @@ export interface BoundFolder
 	label: string;
 }
 
+/** Active runtime observation of one authentication window. */
+export interface AuthenticationWindowObservation
+{
+	/** Stop observing the window and release runtime resources. */
+	stop(): void;
+}
+
 /**
  * Capabilities that differ by runtime (browser vs desktop).
  *
@@ -24,4 +31,12 @@ export interface PlatformBridge
 	 * Desktop-only; the web implementation rejects with an unsupported error.
 	 */
 	bindFolder(projectId: string): Promise<BoundFolder>;
+
+	/**
+	 * Open a runtime-owned authentication window and report when the user closes it.
+	 * @param path - Same-origin authentication path selected by the calling feature.
+	 * @param onClosed - Callback invoked once after the opened window closes.
+	 * @returns A stoppable observation, or null when the runtime refused to open a window.
+	 */
+	openAuthenticationWindow(path: string, onClosed: () => void): AuthenticationWindowObservation | null;
 }

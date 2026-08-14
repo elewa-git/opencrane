@@ -22,10 +22,18 @@ describe("self conversations router", function _Suite()
 		expect(list).not.toHaveBeenCalled();
 	});
 
+	it("returns only opaque creation references and the caller's projected Agent", async function _ReturnsDirectory()
+	{
+		const directory = vi.fn().mockResolvedValue({ participants: [{ participantRef: "member-1", isSelf: true }, { participantRef: "member-2", isSelf: false }], personalAgentStatus: "ready", personalAgent: { personalAgentRef: "service-1", displayName: "My Agent" } });
+		const response = await request(_App({ directory })).get("/directory").expect(200);
+		expect(response.body).toEqual({ directory: await directory.mock.results[0]?.value });
+		expect(JSON.stringify(response.body)).not.toContain("user-1");
+	});
+
 	it("rejects caller-supplied authority coordinates", async function _RejectsAuthorityCoordinates()
 	{
 		const create = vi.fn();
-		await request(_App({ create })).post("/").send({ mode: "agent_session", agentServiceId: "service-1", siloId: "forged" }).expect(400, { error: "invalid_conversation_request" });
+		await request(_App({ create })).post("/").send({ mode: "agent_session", personalAgentRef: "service-1", siloId: "forged" }).expect(400, { error: "invalid_conversation_request" });
 		expect(create).not.toHaveBeenCalled();
 	});
 
@@ -58,6 +66,38 @@ describe("self conversations router", function _Suite()
 	{
 		const submitMessage = vi.fn().mockResolvedValue({ outcome: "denied", reason: "capacity_limited" });
 		await request(_App({ submitMessage })).post("/conversation-1/messages").send({ idempotencyKey: "request-1", blocks: [{ id: "block-1", kind: "text", value: "Later" }] }).expect(429, { error: "capacity_limited" });
+	});
+
+	it("starts and idempotently replays an exact participant run retry", async function _RetriesRun()
+	{
+		const retryRun = vi.fn()
+			.mockResolvedValueOnce({ outcome: "started", run: { id: "run-1", attempt: 2 } })
+			.mockResolvedValueOnce({ outcome: "idempotent", run: { id: "run-1", attempt: 2 } });
+		const app = _App({ retryRun });
+		const body = { expectedAttempt: 1, idempotencyKey: "retry-1" };
+
+		await request(app).post("/conversation-1/runs/run-1/retry").send(body).expect(201, { outcome: "started", runId: "run-1", attempt: 2 });
+		await request(app).post("/conversation-1/runs/run-1/retry").send(body).expect(200, { outcome: "idempotent", runId: "run-1", attempt: 2 });
+		expect(retryRun).toHaveBeenCalledWith({ siloId: "silo-1", subjectId: "user-1" }, "conversation-1", "run-1", body);
+	});
+
+	it("hides unauthorized retries and exposes only the current conflicting attempt", async function _MapsRetryDenials()
+	{
+		const retryRun = vi.fn()
+			.mockResolvedValueOnce({ outcome: "denied", reason: "unauthorized" })
+			.mockResolvedValueOnce({ outcome: "denied", reason: "attempt_conflict", currentAttempt: 3 });
+		const app = _App({ retryRun });
+		const body = { expectedAttempt: 1, idempotencyKey: "retry-1" };
+
+		await request(app).post("/conversation-1/runs/run-1/retry").send(body).expect(404, { error: "unauthorized" });
+		await request(app).post("/conversation-1/runs/run-1/retry").send(body).expect(409, { error: "attempt_conflict", currentAttempt: 3 });
+	});
+
+	it("rejects malformed retry coordinates before run authority", async function _RejectsMalformedRetry()
+	{
+		const retryRun = vi.fn();
+		await request(_App({ retryRun })).post("/conversation-1/runs/run-1/retry").send({ expectedAttempt: 0, idempotencyKey: "retry-1" }).expect(400, { error: "invalid_run_retry" });
+		expect(retryRun).not.toHaveBeenCalled();
 	});
 
 	it("converts an unexpected authority failure into a bounded persistence response", async function _BoundsFailure()

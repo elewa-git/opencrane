@@ -12,7 +12,8 @@ import { OpenCranePersonaFirstChatGateway, PERSONA_FIRST_CHAT_GATEWAY, PERSONA_G
 import { OpenCranePersonaGateway } from "@opencrane/state/persona/adapter";
 import { provideWebPlatform } from "@opencrane/platform";
 
-import { APP_ROUTES } from "./app.routes";
+import { APP_ROUTES } from "./app.routes.js";
+import { provideConversationWorkspaceComposition } from "./conversation-workspace.providers.js";
 
 /**
  * Root application configuration for the OpenCrane frontend.
@@ -20,6 +21,13 @@ import { APP_ROUTES } from "./app.routes";
  * Change detection is zoneless: the app is fully signal-driven with OnPush
  * components, so zone.js is not bundled (see the empty polyfills in the build).
  * The web PlatformBridge is provided here; a desktop app swaps in its own.
+ *
+ * `withComponentInputBinding()` is load-bearing rather than decorative: route
+ * parameters such as :conversationId reach a route component as a signal input
+ * instead of the component reading ActivatedRoute, so a route component can stay
+ * a thin coordinator. Removing it silently leaves those inputs undefined.
+ *
+ * Called by: `bootstrapApplication` in src/main.ts.
  */
 export const appConfig: ApplicationConfig =
 {
@@ -35,6 +43,11 @@ export const appConfig: ApplicationConfig =
 		{ provide: PERSONA_GATEWAY, useClass: OpenCranePersonaGateway },
 		{ provide: PERSONA_FIRST_CHAT_GATEWAY, useClass: OpenCranePersonaFirstChatGateway },
 		{ provide: AGENT_THREAD_GATEWAY, useClass: OpenCraneAgentThreadGateway },
+		// Chat gateways, the shared event stream, and A2UI are bound here rather than inside the
+		// workspace feature — the app is the only layer allowed to name a concrete adapter. They sit at
+		// the root because the chat routes are lazily loaded and must find these bindings already in
+		// place.
+		...provideConversationWorkspaceComposition(),
 		// This app is the org/customer surface — capabilities derive from the
 		// org-admin claim only (platform-operator claims grant nothing here).
 		{ provide: PLATFORM_SURFACE, useValue: "org" },

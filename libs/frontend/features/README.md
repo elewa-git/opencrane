@@ -17,6 +17,7 @@ its slot; the shell itself is `workspace`.
 | [`conversation`](./conversation/README.md) | The centre conversation pane. |
 | [`conversation-activity`](./conversation-activity/README.md) | Derived request and tool-failure index with canonical deep links. |
 | [`conversation-elicitation`](./conversation-elicitation/README.md) | Recoverable question and approval card. |
+| [`conversation-workspace`](./conversation-workspace/README.md) | Normal direct, group, and Agent-session chat workspace. |
 | [`notifications`](./notifications/README.md) | The notification popover. |
 | [`onboarding`](./onboarding/README.md) | One resumable lifecycle shell with interview, resolution, review, and ready states. |
 | [`settings`](./settings/README.md) | The settings page. |

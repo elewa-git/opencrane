@@ -176,8 +176,9 @@ export default [
 			{ sourceTag: "scope:spend", onlyDependOnLibsWithTags: ["scope:shared", "scope:spend"] },
 			{ sourceTag: "scope:conversation-elicitation", onlyDependOnLibsWithTags: ["scope:conversation-elicitation", "scope:shared", "scope:web"] },
 			{ sourceTag: "scope:agent-threads", onlyDependOnLibsWithTags: ["scope:agent-threads", "scope:conversation-assets", "scope:conversation-elicitation", "scope:shared", "scope:web"] },
+			{ sourceTag: "scope:conversation-workspace", onlyDependOnLibsWithTags: ["scope:agent-threads", "scope:conversation-assets", "scope:conversation-elicitation", "scope:conversation-workspace", "scope:conversations", "scope:shared", "scope:web"] },
 			{ sourceTag: "scope:web", onlyDependOnLibsWithTags: ["scope:web", "scope:shared"] },
-			{ sourceTag: "scope:opencrane-ui", onlyDependOnLibsWithTags: ["scope:agent-threads", "scope:conversation-assets", "scope:persona-onboarding", "scope:shared", "scope:web"] },
+			{ sourceTag: "scope:opencrane-ui", onlyDependOnLibsWithTags: ["scope:agent-threads", "scope:conversation-assets", "scope:conversation-workspace", "scope:persona-onboarding", "scope:shared", "scope:web"] },
             {
               sourceTag: "scope:opencrane",
               onlyDependOnLibsWithTags: [
@@ -226,9 +227,10 @@ export default [
             { sourceTag: "type:app", notDependOnLibsWithTags: ["type:app"] },
 			{ sourceTag: "type:lib", notDependOnLibsWithTags: ["type:app"] },
 			{ sourceTag: "frontend-role:feature", onlyDependOnLibsWithTags: ["frontend-role:elements", "frontend-role:state"] },
-			{ sourceTag: "frontend-role:feature-shell", onlyDependOnLibsWithTags: ["frontend-role:elements", "frontend-role:elements-composite", "frontend-role:feature", "frontend-role:state"] },
-			{ sourceTag: "frontend-role:adapter", onlyDependOnLibsWithTags: ["frontend-role:core", "frontend-role:state"] },
+			{ sourceTag: "frontend-role:feature-shell", onlyDependOnLibsWithTags: ["frontend-role:elements", "frontend-role:elements-composite", "frontend-role:feature", "frontend-role:state", "frontend-role:state-composite"] },
+			{ sourceTag: "frontend-role:adapter", onlyDependOnLibsWithTags: ["frontend-role:core", "frontend-role:state", "frontend-role:state-composite", "layer:contract", "layer:model"] },
 			{ sourceTag: "frontend-role:state", onlyDependOnLibsWithTags: ["frontend-role:core", "layer:contract", "layer:model", "layer:util"] },
+			{ sourceTag: "frontend-role:state-composite", onlyDependOnLibsWithTags: ["frontend-role:core", "frontend-role:state", "layer:contract", "layer:model", "layer:util"] },
 			{ sourceTag: "frontend-role:elements", onlyDependOnLibsWithTags: ["frontend-role:core", "layer:contract"] },
 			{ sourceTag: "frontend-role:elements-composite", onlyDependOnLibsWithTags: ["frontend-role:core", "frontend-role:elements"] },
             {

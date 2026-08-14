@@ -29,6 +29,8 @@ contracts.
 - `ConversationMessageComponent` renders one message and a named rich-card slot.
 - `ConversationComposerComponent` displays a host-owned draft and emits edit or submit intents.
 - `ConversationStatusLineComponent` announces one display-safe status.
+- `ConversationRichTextComponent` displays HTML already sanitized by the shared conversation renderer.
+- `ConversationRunActionsComponent` displays run status and emits controlled steer, cancel, and retry intents.
 - The exported enums and presentation types keep those components finite and testable.
 
 ## Boundary

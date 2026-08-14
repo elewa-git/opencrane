@@ -103,7 +103,9 @@ are rechecked at execution, so the runtime never sees either credential or mutab
 - `__CreateProductionExternalActionApprovalOpener` — binds an approval-required invocation to its
   frozen schema and opens or recovers the canonical bounded approval request.
 - `_CreateSteeringIngestRouter` — the ready-to-mount Prisma composition that maps the shared
-  authenticated request principal into the steering caller and supplies the queue and clock.
+  authenticated request principal into the steering caller and supplies the queue and clock. Its
+  unit of work uses a server-derived request id, retries only rolled-back P2002/P2034 transactions
+  three times, then verifies the committed row before reporting an idempotent replay or key conflict.
 - `_RuntimeSteeringOpenapiPaths` — contributes the steering contract to the server-owned API spec.
 
 Pure protocol decisions, Prisma adapters, provider executor construction, and recovery strategies

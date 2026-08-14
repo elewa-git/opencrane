@@ -717,7 +717,7 @@ export interface paths {
         put?: never;
         /**
          * Queue one signed-in owner's instruction for a running agent
-         * @description The server derives the owner, silo, and current attempt. The instruction is queued durably and is consumed only at the runtime's fenced safe boundary.
+         * @description The server derives the owner, silo, and current attempt. The instruction is queued durably and exact retries reuse the same client key before consumption at the runtime's fenced safe boundary.
          */
         post: operations["submitRuntimeSteering"];
         delete?: never;
@@ -1027,6 +1027,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/me/conversations/directory": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List self-scoped conversation creation choices
+         * @description Returns opaque active-member references and the caller's personal Agent only when exactly one active service matches their approved persona. It never returns login subjects, emails, roles, or memory identity.
+         */
+        get: operations["getMyConversationCreationDirectory"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/me/conversations": {
         parameters: {
             query?: never;
@@ -1116,6 +1136,26 @@ export interface paths {
          * @description Agent-session input is committed atomically with a governed run. Direct and ordinary group input is committed without creating an AgentRun.
          */
         post: operations["submitMyConversationMessage"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/conversations/{conversationId}/runs/{runId}/retry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start a fresh attempt for one failed conversation run
+         * @description Requires current organisation membership, active conversation participation, the exact terminal attempt, the still-active Agent revision, and a fresh retry key. Repeating the same key returns the same new attempt.
+         */
+        post: operations["retryMyConversationRun"];
         delete?: never;
         options?: never;
         head?: never;
@@ -4534,10 +4574,25 @@ export interface operations {
             content: {
                 "application/json": {
                     text: string;
+                    idempotencyKey: string;
                 };
             };
         };
         responses: {
+            /** @description The exact steering retry was already queued. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        steeringRequestId: string;
+                        attempt: number;
+                        /** @enum {string} */
+                        state: "pending";
+                    };
+                };
+            };
             /** @description Steering request queued for the current run attempt. */
             202: {
                 headers: {
@@ -6127,6 +6182,53 @@ export interface operations {
             };
         };
     };
+    getMyConversationCreationDirectory: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Privacy-safe creation choices. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        directory: {
+                            participants: {
+                                participantRef: string;
+                                isSelf: boolean;
+                            }[];
+                            /** @enum {string} */
+                            personalAgentStatus: "ready" | "unavailable" | "ambiguous";
+                            personalAgent: null | {
+                                personalAgentRef: string;
+                                displayName: string;
+                            };
+                        };
+                    };
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Conversation directory unavailable. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     listMyConversations: {
         parameters: {
             query?: {
@@ -6152,7 +6254,7 @@ export interface operations {
                             /** @enum {string} */
                             lifecycle: "open" | "closed";
                             agentServiceId: string | null;
-                            participantUserIds: string[];
+                            participantRefs: string[];
                             /** Format: date-time */
                             archivedAt: string | null;
                             readThroughPosition: string;
@@ -6190,15 +6292,15 @@ export interface operations {
                 "application/json": {
                     /** @enum {string} */
                     mode: "agent_session";
-                    agentServiceId: string;
+                    personalAgentRef: string;
                 } | {
                     /** @enum {string} */
                     mode: "direct";
-                    participantUserIds: string[];
+                    participantRefs: string[];
                 } | {
                     /** @enum {string} */
                     mode: "group";
-                    participantUserIds: string[];
+                    participantRefs: string[];
                 };
             };
         };
@@ -6217,7 +6319,7 @@ export interface operations {
                             /** @enum {string} */
                             lifecycle: "open" | "closed";
                             agentServiceId: string | null;
-                            participantUserIds: string[];
+                            participantRefs: string[];
                             /** Format: date-time */
                             archivedAt: string | null;
                             readThroughPosition: string;
@@ -6241,7 +6343,7 @@ export interface operations {
                                     value: string;
                                 }[];
                                 runId: string | null;
-                                userId: string | null;
+                                participantRef: string | null;
                                 /** Format: date-time */
                                 createdAt: string;
                                 /** Format: date-time */
@@ -6316,7 +6418,7 @@ export interface operations {
                             /** @enum {string} */
                             lifecycle: "open" | "closed";
                             agentServiceId: string | null;
-                            participantUserIds: string[];
+                            participantRefs: string[];
                             /** Format: date-time */
                             archivedAt: string | null;
                             readThroughPosition: string;
@@ -6340,7 +6442,7 @@ export interface operations {
                                     value: string;
                                 }[];
                                 runId: string | null;
-                                userId: string | null;
+                                participantRef: string | null;
                                 /** Format: date-time */
                                 createdAt: string;
                                 /** Format: date-time */
@@ -6613,7 +6715,7 @@ export interface operations {
                                 value: string;
                             }[];
                             runId: string | null;
-                            userId: string | null;
+                            participantRef: string | null;
                             /** Format: date-time */
                             createdAt: string;
                             /** Format: date-time */
@@ -6667,7 +6769,7 @@ export interface operations {
                                 value: string;
                             }[];
                             runId: string | null;
-                            userId: string | null;
+                            participantRef: string | null;
                             /** Format: date-time */
                             createdAt: string;
                             /** Format: date-time */
@@ -6740,6 +6842,90 @@ export interface operations {
             };
         };
     };
+    retryMyConversationRun: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversationId: string;
+                runId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    expectedAttempt: number;
+                    idempotencyKey: string;
+                };
+            };
+        };
+        responses: {
+            /** @description The same retry key already started this attempt. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {string} */
+                        outcome: "idempotent";
+                        runId: string;
+                        attempt: number;
+                    };
+                };
+            };
+            /** @description Fresh attempt started. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {string} */
+                        outcome: "started";
+                        runId: string;
+                        attempt: number;
+                    };
+                };
+            };
+            /** @description Malformed retry request. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Conversation run unavailable to this participant. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Attempt, terminal state, active Agent service, or revision no longer permits retry. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Retry authority unavailable. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
     archiveMyConversation: {
         parameters: {
             query?: never;
@@ -6771,7 +6957,7 @@ export interface operations {
                             /** @enum {string} */
                             lifecycle: "open" | "closed";
                             agentServiceId: string | null;
-                            participantUserIds: string[];
+                            participantRefs: string[];
                             /** Format: date-time */
                             archivedAt: string | null;
                             readThroughPosition: string;
@@ -6795,7 +6981,7 @@ export interface operations {
                                     value: string;
                                 }[];
                                 runId: string | null;
-                                userId: string | null;
+                                participantRef: string | null;
                                 /** Format: date-time */
                                 createdAt: string;
                                 /** Format: date-time */
@@ -6870,7 +7056,7 @@ export interface operations {
                             /** @enum {string} */
                             lifecycle: "open" | "closed";
                             agentServiceId: string | null;
-                            participantUserIds: string[];
+                            participantRefs: string[];
                             /** Format: date-time */
                             archivedAt: string | null;
                             readThroughPosition: string;
@@ -6894,7 +7080,7 @@ export interface operations {
                                     value: string;
                                 }[];
                                 runId: string | null;
-                                userId: string | null;
+                                participantRef: string | null;
                                 /** Format: date-time */
                                 createdAt: string;
                                 /** Format: date-time */

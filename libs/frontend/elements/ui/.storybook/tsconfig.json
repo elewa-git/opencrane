@@ -28,6 +28,7 @@
 	"../../../features/conversation-elicitation/src/**/__tests__/*.stories.ts",
 	"../../conversation/src/**/__tests__/*.stories.ts",
 	"../../../features/agent-threads/src/**/__tests__/*.stories.ts",
+	"../../../features/conversation-workspace/src/**/__tests__/*.stories.ts",
     "preview.ts"
   ]
 }
