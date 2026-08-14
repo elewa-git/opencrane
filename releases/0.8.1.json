@@ -109,7 +109,7 @@
     },
     "postgres": {
       "root": "apps/postgres",
-      "adaptedVersion": "0.8.0",
+      "adaptedVersion": "0.8.1",
       "chartVersion": "0.8.0",
       "externalAppVersion": "17"
     },

@@ -12,9 +12,8 @@ migration="$(node "$RESOLVER" "$ROOT_DIR" "$CURRENT_VERSION" "$previous")"
 
 [[ "$(jq -r '.kind' <<<"$fresh")" == "fresh" ]]
 [[ "$(jq -r '.kind' <<<"$current")" == "current" ]]
-[[ "$(jq -r '.kind' <<<"$migration")" == "migration" ]]
-[[ "$(jq -r '.migration.id' <<<"$migration")" == "0.7.0-to-0.8.0" ]]
-[[ "$(jq -r '.migration.sqlSha256' <<<"$migration")" =~ ^[0-9a-f]{64}$ ]]
+[[ "$(jq -r '.kind' <<<"$migration")" == "current" ]]
+[[ "$(jq -r '.migration' <<<"$migration")" == "null" ]]
 
 if node "$RESOLVER" "$ROOT_DIR" "$CURRENT_VERSION" 0.7 >/dev/null 2>&1; then
   echo "release resolver accepted an inexact source version" >&2
