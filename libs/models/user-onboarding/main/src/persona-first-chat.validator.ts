@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { PersonaFirstChatArchetypes, PersonaFirstChatColours, PersonaFirstChatContentRevision, PersonaFirstChatCurrentQuestion, PersonaFirstChatPersona, PersonaFirstChatSnapshot, PersonaFirstChatTranscriptEntry, PersonaFirstChatTranscriptKinds, PersonaFirstChatTranscriptRoles, UserOnboardingRouteStates } from "./persona-first-chat.types.js";
+import { PersonaFirstChatArchetypes, PersonaFirstChatColours, PersonaFirstChatContentRevision, PersonaFirstChatCurrentQuestion, PersonaFirstChatPersona, PersonaFirstChatSnapshot, PersonaFirstChatTranscriptEntry, PersonaFirstChatTranscriptKinds, PersonaFirstChatTranscriptRoles, UserOnboardingRouteStates } from "./persona-first-chat.types";
 
 /**
  * Runtime checks for every first-chat response, kept next to the model they validate.

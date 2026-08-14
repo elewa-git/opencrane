@@ -2,8 +2,8 @@ import { createPrivateKey, createPublicKey, sign, verify } from "node:crypto";
 
 import { ___CanonicalizeJson, ___ParseAndValidateJson } from "@opencrane/util";
 
-import { __IsSafeArtifactMediaType } from "./artifact-media-type.js";
-import type { ArtifactPromotionReceiptClaims, ArtifactReadLeaseClaims, ArtifactWriteLeaseClaims } from "./artifact-lease.types.js";
+import { __IsSafeArtifactMediaType } from "./artifact-media-type";
+import type { ArtifactPromotionReceiptClaims, ArtifactReadLeaseClaims, ArtifactWriteLeaseClaims } from "./artifact-lease.types";
 
 const _LEASE_AUDIENCE = "artifact-service";
 const _LEASE_TYPE = "opencrane.artifact-write-lease";

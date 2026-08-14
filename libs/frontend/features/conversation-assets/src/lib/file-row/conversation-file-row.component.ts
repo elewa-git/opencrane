@@ -3,8 +3,8 @@ import { ButtonModule } from "primeng/button";
 
 import { ConversationAssetProvenance } from "@opencrane/state/conversation/assets";
 
-import { __ConversationAssetTypeLabel } from "../conversation-asset-presentation.js";
-import { ConversationAssetActionKinds, ConversationAssetPresentationStates, type ConversationAssetActionIntent, type ConversationAssetPresentation } from "../conversation-asset-presentation.types.js";
+import { __ConversationAssetTypeLabel } from "../conversation-asset-presentation";
+import { ConversationAssetActionKinds, ConversationAssetPresentationStates, type ConversationAssetActionIntent, type ConversationAssetPresentation } from "../conversation-asset-presentation.types";
 
 /** Compact Files-index row backed by one canonical asset reference. */
 @Component({

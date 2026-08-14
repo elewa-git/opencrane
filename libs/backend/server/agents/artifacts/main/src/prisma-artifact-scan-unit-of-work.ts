@@ -3,8 +3,8 @@ import { Prisma, type PrismaClient } from "@prisma/client";
 import type { ArtifactScannerFailureCommand, ArtifactScannerJobClaim, ArtifactScannerResultCommand } from "@opencrane/contracts";
 import { ___DoWithTrace } from "@opencrane/backend/observability";
 
-import type { ArtifactScanRepository, ArtifactScanSourceRead, ConversationAssetScanLifecycleRepository } from "./artifact-scanning.types.js";
-import { PrismaArtifactScanRepository } from "./prisma-artifact-scan-repository.js";
+import type { ArtifactScanRepository, ArtifactScanSourceRead, ConversationAssetScanLifecycleRepository } from "./artifact-scanning.types";
+import { PrismaArtifactScanRepository } from "./prisma-artifact-scan-repository";
 
 /** Transaction owner for each short fenced scanner lifecycle operation. */
 export class PrismaArtifactScanUnitOfWork implements ArtifactScanRepository

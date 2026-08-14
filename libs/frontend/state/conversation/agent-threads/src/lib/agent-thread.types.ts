@@ -1,6 +1,6 @@
-import { AgentThreadAccessStates, AgentThreadDeliveryKinds, AgentThreadRecoveryStates, AgentThreadRunStates, AgentThreadSummaryStates, AgentThreadSummaryTargetKinds, AgentThreadTimelineEntryKinds } from "./agent-thread-state.types.js";
+import { AgentThreadAccessStates, AgentThreadDeliveryKinds, AgentThreadRecoveryStates, AgentThreadRunStates, AgentThreadSummaryStates, AgentThreadSummaryTargetKinds, AgentThreadTimelineEntryKinds } from "./agent-thread-state.types";
 
-export { AgentThreadAccessStates, AgentThreadAdmissionStates, AgentThreadDeliveryKinds, AgentThreadRecoveryStates, AgentThreadRouteStates, AgentThreadRunStates, AgentThreadSummaryStates, AgentThreadSummaryTargetKinds, AgentThreadTimelineEntryKinds } from "./agent-thread-state.types.js";
+export { AgentThreadAccessStates, AgentThreadAdmissionStates, AgentThreadDeliveryKinds, AgentThreadRecoveryStates, AgentThreadRouteStates, AgentThreadRunStates, AgentThreadSummaryStates, AgentThreadSummaryTargetKinds, AgentThreadTimelineEntryKinds } from "./agent-thread-state.types";
 
 /** Exact typed intent for one authorized parent mention. */
 export interface AgentThreadCreateIntent

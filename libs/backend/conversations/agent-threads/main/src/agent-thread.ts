@@ -1,4 +1,4 @@
-import type { AgentThreadTarget, AgentThreadTargetDecision } from "./agent-thread.types.js";
+import type { AgentThreadTarget, AgentThreadTargetDecision } from "./agent-thread.types";
 
 /**
  * Longest `agentServiceId` this check will accept.

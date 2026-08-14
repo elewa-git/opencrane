@@ -1,9 +1,9 @@
 import type { FleetSignatureVerificationEvidence, SignedFleetMembershipRevision } from "@opencrane/models/authorization";
 import { _CreateMountedPublicKeySource } from "@opencrane/backend/server/infra/auth";
 
-import { Ed25519FleetMembershipSignatureVerifier } from "./ed25519-fleet-membership-signature-verifier.js";
-import { FleetMembershipDeploymentModes } from "./membership-authority.types.js";
-import type { FleetMembershipEvidenceConfig, FleetMembershipSignatureVerifier } from "./membership-authority.types.js";
+import { Ed25519FleetMembershipSignatureVerifier } from "./ed25519-fleet-membership-signature-verifier";
+import { FleetMembershipDeploymentModes } from "./membership-authority.types";
+import type { FleetMembershipEvidenceConfig, FleetMembershipSignatureVerifier } from "./membership-authority.types";
 
 /** Longest period a server may reuse its newest signed fleet-membership revision. */
 const _MAXIMUM_STALENESS_MILLISECONDS = 24 * 60 * 60 * 1_000;

@@ -1,8 +1,8 @@
 import { Injectable, inject } from "@angular/core";
 
 import type { paths } from "@opencrane/contracts";
-import { CONTROL_PLANE_BASE_URL } from "./api-client.types.js";
-import { OpenCraneApiClientBase } from "./api-client.base.js";
+import { CONTROL_PLANE_BASE_URL } from "./api-client.types";
+import { OpenCraneApiClientBase } from "./api-client.base";
 
 /**
  * Typed HTTP client for the OpenCrane **Control Plane** API (per-tenant/org

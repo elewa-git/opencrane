@@ -5,7 +5,7 @@ import { join } from "node:path";
 import type { ArtifactPreprocessorJobClaim } from "@opencrane/contracts";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { _CreateArtifactPreprocessorRemote } from "../remote.js";
+import { _CreateArtifactPreprocessorRemote } from "../remote";
 
 /** Fixed broker-only claim fixture used by transport assertions. */
 function _Claim(): ArtifactPreprocessorJobClaim

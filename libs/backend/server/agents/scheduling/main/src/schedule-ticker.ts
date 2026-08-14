@@ -1,10 +1,10 @@
 import type { ManagedRunAdmissionPort } from "@opencrane/backend/server/agents/agent-services";
 import type { Logger } from "pino";
 
-import { __RunScheduleTick } from "./schedule-tick.js";
-import { ScheduleCursorAdvanceOutcomes, ScheduleTickStatuses } from "./schedule-tick.enums.js";
-import type { ScheduleTickerResult, ScheduleTickerUnitOfWork } from "./schedule-ticker-unit-of-work.types.js";
-import type { RetryBackoffPolicy, ScheduleTickResult } from "./schedule-tick.types.js";
+import { __RunScheduleTick } from "./schedule-tick";
+import { ScheduleCursorAdvanceOutcomes, ScheduleTickStatuses } from "./schedule-tick.enums";
+import type { ScheduleTickerResult, ScheduleTickerUnitOfWork } from "./schedule-ticker-unit-of-work.types";
+import type { RetryBackoffPolicy, ScheduleTickResult } from "./schedule-tick.types";
 
 /** Stable subject recorded as the requester of every scheduled admission. */
 const _SCHEDULER_SUBJECT_ID = "system:scheduler";

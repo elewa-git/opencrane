@@ -3,7 +3,7 @@ import { EventEmitter } from "node:events";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { _CreatePdfTextExtractor } from "../extractor.js";
+import { _CreatePdfTextExtractor } from "../extractor";
 
 vi.mock("node:child_process", function _MockChildProcess()
 {

@@ -6,8 +6,8 @@ import { AG_UI_TOOL_FAILURE_EVENT, AG_UI_TOOL_RECOVERY_REQUIRED_EVENT, AgUiToolR
 import { ControlPlaneApiService } from "@opencrane/core";
 import { AgUiRunStatuses, AgUiToolStatuses, __CreateAgUiStreamState, __DecodeAgUiSseRecord, __ReduceAgUiStream, type AgUiStreamState } from "@opencrane/state/conversation/ag-ui";
 
-import { ConversationEventStreamStatuses, type ConversationEventStreamUpdate } from "../conversation-event-stream.types.js";
-import { OpenCraneConversationEventStream } from "../opencrane-conversation-event-stream.js";
+import { ConversationEventStreamStatuses, type ConversationEventStreamUpdate } from "../conversation-event-stream.types";
+import { OpenCraneConversationEventStream } from "../opencrane-conversation-event-stream";
 
 /** Encode text chunks as one incrementally consumable byte stream. */
 function _Stream(...chunks: readonly string[]): ReadableStream<Uint8Array>

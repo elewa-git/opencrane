@@ -4,7 +4,7 @@ import type { Logger } from "pino";
 import request from "supertest";
 import { describe, expect, it, vi } from "vitest";
 
-import { _CreatePersonalArtifactCatalogueRouter } from "../prisma-personal-artifact-catalogue.router.js";
+import { _CreatePersonalArtifactCatalogueRouter } from "../prisma-personal-artifact-catalogue.router";
 
 /** Builds the public route with a deterministic browser session and persistence adapter. */
 function _app(authUser: Readonly<Record<string, unknown>> | null, prisma: PrismaClient): ReturnType<typeof express>

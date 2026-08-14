@@ -2,9 +2,9 @@ import { Prisma, type PrismaClient } from "@prisma/client";
 
 import type { JsonValue } from "@opencrane/util";
 
-import { PrismaToolInvocationRepository } from "./prisma-tool-invocation-repository.js";
-import { TOOL_INVOCATION_PREPARATION_POLICY, ToolInvocationStates } from "./tool-invocation-lifecycle.types.js";
-import { ToolInvocationEventTypes, ToolInvocationRunRecoveryEnterResults, type ToolInvocationAdmissionResult, type ToolInvocationClaim, type ToolInvocationClaimResult, type ToolInvocationCompletionResult, type ToolInvocationIntent, type ToolInvocationLifecycleEvent, type ToolInvocationLifecycleEventSink, type ToolInvocationPreparationPolicy, type ToolInvocationRecord, type ToolInvocationRecoveryEvent, type ToolInvocationRecoveryEventSink, type ToolInvocationRunRecoveryAuthority, type ToolInvocationUnitOfWork, type ToolResultDeliveryPayload } from "./tool-invocation.types.js";
+import { PrismaToolInvocationRepository } from "./prisma-tool-invocation-repository";
+import { TOOL_INVOCATION_PREPARATION_POLICY, ToolInvocationStates } from "./tool-invocation-lifecycle.types";
+import { ToolInvocationEventTypes, ToolInvocationRunRecoveryEnterResults, type ToolInvocationAdmissionResult, type ToolInvocationClaim, type ToolInvocationClaimResult, type ToolInvocationCompletionResult, type ToolInvocationIntent, type ToolInvocationLifecycleEvent, type ToolInvocationLifecycleEventSink, type ToolInvocationPreparationPolicy, type ToolInvocationRecord, type ToolInvocationRecoveryEvent, type ToolInvocationRecoveryEventSink, type ToolInvocationRunRecoveryAuthority, type ToolInvocationUnitOfWork, type ToolResultDeliveryPayload } from "./tool-invocation.types";
 
 /** Safe failure category emitted when the provider outcome cannot be proven. */
 const _AMBIGUOUS_FAILURE_CODE = "external_action_provider_outcome_ambiguous";

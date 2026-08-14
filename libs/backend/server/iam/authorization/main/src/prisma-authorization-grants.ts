@@ -2,7 +2,7 @@ import type { Prisma } from "@prisma/client";
 
 import type { AuthorizationGrant, AuthorizationScope } from "@opencrane/models/authorization";
 
-import type { AuthorizationGrantRepository } from "./effective-access.types.js";
+import type { AuthorizationGrantRepository } from "./effective-access.types";
 
 /** Builds the AuthorizationScope value for one grant row's scope kind and its organization/resource ids. */
 function _scope(kind: string, organizationId: string, resourceId: string | null): AuthorizationScope

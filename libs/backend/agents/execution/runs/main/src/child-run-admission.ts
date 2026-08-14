@@ -1,4 +1,4 @@
-import type { ChildRunAdmissionLimits, ChildRunParentAuthority, ChildRunTargetAuthorization, PrepareChildRunAdmissionCommand, PrepareChildRunAdmissionResult } from "./child-run-admission.types.js";
+import type { ChildRunAdmissionLimits, ChildRunParentAuthority, ChildRunTargetAuthorization, PrepareChildRunAdmissionCommand, PrepareChildRunAdmissionResult } from "./child-run-admission.types";
 
 /**
  * Works out whether a parent run may spawn this child, and with what budget.

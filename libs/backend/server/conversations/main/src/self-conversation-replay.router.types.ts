@@ -2,7 +2,7 @@ import type { Request } from "express";
 import type { Logger } from "@opencrane/backend/observability";
 import type { ConversationOpenInterruptReader, ConversationProjectionClock, ConversationProjectionLimits } from "@opencrane/backend/conversations/projection";
 
-import type { ConversationReplayUnitOfWork } from "./replay-reader.types.js";
+import type { ConversationReplayUnitOfWork } from "./replay-reader.types";
 
 /** Session-derived participant identity for the self-only conversation history surface. */
 export interface SelfConversationReplayCaller

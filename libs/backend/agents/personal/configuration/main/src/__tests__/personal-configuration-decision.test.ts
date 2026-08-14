@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { __DecidePersonalConfigurationChange } from "../decision/personal-configuration-decision.js";
-import { PersonalConfigurationDecisionCodes } from "../decision/personal-configuration-decision.types.js";
+import { __DecidePersonalConfigurationChange } from "../decision/personal-configuration-decision";
+import { PersonalConfigurationDecisionCodes } from "../decision/personal-configuration-decision.types";
 
 /** Build one valid owner decision with optional test overrides. */
 function _Command(overrides: Partial<Parameters<typeof __DecidePersonalConfigurationChange>[1]> = {}): Parameters<typeof __DecidePersonalConfigurationChange>[1]

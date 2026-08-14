@@ -3,9 +3,9 @@ import { Injectable, InjectionToken, inject } from "@angular/core";
 import { ControlPlaneApiService } from "@opencrane/core";
 import { ElicitationBodyKinds, type ConversationElicitation, type SubmitElicitationResponse } from "@opencrane/contracts";
 
-import { ElicitationGatewayError, ElicitationGatewayErrorKinds } from "./elicitation-gateway.errors.js";
-import type { ConversationElicitationGateway, GeneratedElicitationSubmission } from "./elicitation-gateway.types.js";
-import { __ParseConversationElicitation, __ParseElicitationResponseProjection } from "./elicitation-response.validator.js";
+import { ElicitationGatewayError, ElicitationGatewayErrorKinds } from "./elicitation-gateway.errors";
+import type { ConversationElicitationGateway, GeneratedElicitationSubmission } from "./elicitation-gateway.types";
+import { __ParseConversationElicitation, __ParseElicitationResponseProjection } from "./elicitation-response.validator";
 
 /** Browser composition token for the elicitation port. */
 export const ELICITATION_GATEWAY = new InjectionToken<ConversationElicitationGateway>("ELICITATION_GATEWAY", { providedIn: "root", factory: function _Factory() { return inject(OpenCraneConversationElicitationGateway); } });

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { __ValidateArtifactStorePromotion, __ValidateStageArtifactCommand, __ValidateStagedArtifact, __ValidateVerifiedArtifactWriteLease } from "../artifact-store.js";
+import { __ValidateArtifactStorePromotion, __ValidateStageArtifactCommand, __ValidateStagedArtifact, __ValidateVerifiedArtifactWriteLease } from "../artifact-store";
 
 /** Builds one valid durable write lease. */
 function _lease(): { readonly leaseId: string; readonly siloId: string; readonly artifactId: string; readonly action: "artifact.write"; readonly expiresAtEpochSeconds: number }

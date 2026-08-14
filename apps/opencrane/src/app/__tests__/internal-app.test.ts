@@ -4,11 +4,11 @@ import type { NextFunction, Request, Response } from "express";
 import request from "supertest";
 import { describe, expect, it, vi } from "vitest";
 
-import { _CreateInternalApp } from "../internal-app.js";
-import type { InternalRuntimeConfig } from "../config.types.js";
+import { _CreateInternalApp } from "../internal-app";
+import type { InternalRuntimeConfig } from "../config.types";
 
 /** Keep parser tests independent from mounted ArtifactStore credentials. */
-vi.mock("../../infra/artifacts/artifact-upload.factory.js", function _MockArtifactUploadFactory()
+vi.mock("../../infra/artifacts/artifact-upload.factory", function _MockArtifactUploadFactory()
 {
 	return {
 		_CreateArtifactPreprocessOutputBroker: function _CreateArtifactPreprocessOutputBroker() { return {}; },

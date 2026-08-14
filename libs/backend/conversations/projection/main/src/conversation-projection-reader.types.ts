@@ -1,6 +1,6 @@
 import type { ConversationReplayCursor } from "@opencrane/contracts";
 
-import type { ConversationProjectionEventRow } from "./conversation-event-projector.types.js";
+import type { ConversationProjectionEventRow } from "./conversation-event-projector.types";
 
 /**
  * Names the authority result returned with one page of conversation events.

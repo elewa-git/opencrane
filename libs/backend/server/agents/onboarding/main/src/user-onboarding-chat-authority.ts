@@ -2,10 +2,10 @@ import { randomUUID } from "node:crypto";
 
 import { ___DoWithTrace } from "@opencrane/backend/observability";
 
-import { UserOnboardingAnswerStatuses, UserOnboardingChatFailureReasons, UserOnboardingChatMessageKinds, UserOnboardingChatRoles, UserOnboardingStates } from "./user-onboarding.enums.js";
-import type { ApprovedPersonaBootstrapEvidence, SubmitUserOnboardingAnswerCommand, UserOnboardingAnswerResult, UserOnboardingBootstrapContentRevision, UserOnboardingBootstrapConversation, UserOnboardingChatProjection, UserOnboardingChatRepository, UserOnboardingChatTranscriptItem } from "./user-onboarding-chat.types.js";
-import type { UserOnboardingOwner, UserOnboardingPersonaEvidencePort, UserOnboardingRecord } from "./user-onboarding.types.js";
-import type { __UserOnboardingAuthority } from "./user-onboarding-authority.js";
+import { UserOnboardingAnswerStatuses, UserOnboardingChatFailureReasons, UserOnboardingChatMessageKinds, UserOnboardingChatRoles, UserOnboardingStates } from "./user-onboarding.enums";
+import type { ApprovedPersonaBootstrapEvidence, SubmitUserOnboardingAnswerCommand, UserOnboardingAnswerResult, UserOnboardingBootstrapContentRevision, UserOnboardingBootstrapConversation, UserOnboardingChatProjection, UserOnboardingChatRepository, UserOnboardingChatTranscriptItem } from "./user-onboarding-chat.types";
+import type { UserOnboardingOwner, UserOnboardingPersonaEvidencePort, UserOnboardingRecord } from "./user-onboarding.types";
+import type { __UserOnboardingAuthority } from "./user-onboarding-authority";
 
 /**
  * Thrown for a refusal the router is expected to translate, not to log as a fault.

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { __CronMatchesWallClock, __DueScheduledSlots, __IsValidCronExpression, __IsValidTimezone, __ParseCronExpression, __WallClockInZone } from "../cron-schedule.js";
+import { __CronMatchesWallClock, __DueScheduledSlots, __IsValidCronExpression, __IsValidTimezone, __ParseCronExpression, __WallClockInZone } from "../cron-schedule";
 
 describe("cron expression parsing", function _ParseSuite()
 {

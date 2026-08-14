@@ -7,11 +7,11 @@ import { SandboxExecutionUnavailableError } from "@opencrane/backend/server/infr
 import { PERSONAL_MEMORY_RECALL_TOOL_REVISION } from "@opencrane/models/agents";
 import type { JsonValue } from "@opencrane/util";
 
-import { __CreateExternalActionExecutor, __PersonalMemoryDatasetId, UnsupportedExternalActionError } from "./external-action-executor.js";
-import { type DurableExternalActionCommand, type ExternalActionExecutor } from "./external-action-executor.types.js";
-import { IntegrationAssignmentUnavailableError, IntegrationToolReturnedError, PersonalMemoryPermissionUnavailableError, PersonalMemorySafeDeliveryRequiredError } from "./external-action-errors.js";
-import { ExternalActionProviderOutcomeKinds, type ExternalActionAdapterFactory, type ExternalActionExecutionContext, type ExternalActionProviderOutcome, type ExternalActionWorkerInvocation, type PreparedExternalActionAdapter } from "./external-action-worker.types.js";
-import type { ProductionExternalActionAdapterDependencies } from "./production-external-action-adapter.types.js";
+import { __CreateExternalActionExecutor, __PersonalMemoryDatasetId, UnsupportedExternalActionError } from "./external-action-executor";
+import { type DurableExternalActionCommand, type ExternalActionExecutor } from "./external-action-executor.types";
+import { IntegrationAssignmentUnavailableError, IntegrationToolReturnedError, PersonalMemoryPermissionUnavailableError, PersonalMemorySafeDeliveryRequiredError } from "./external-action-errors";
+import { ExternalActionProviderOutcomeKinds, type ExternalActionAdapterFactory, type ExternalActionExecutionContext, type ExternalActionProviderOutcome, type ExternalActionWorkerInvocation, type PreparedExternalActionAdapter } from "./external-action-worker.types";
+import type { ProductionExternalActionAdapterDependencies } from "./production-external-action-adapter.types";
 
 /** Failure code for an integration assignment that was revoked before anything reached the provider. */
 function _integrationFailureCode(error: IntegrationAssignmentUnavailableError): string

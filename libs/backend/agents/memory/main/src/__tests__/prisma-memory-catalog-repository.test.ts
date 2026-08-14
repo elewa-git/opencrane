@@ -2,8 +2,8 @@ import { MemoryDatasetState, MemoryOutboxEventKind } from "@prisma/client";
 import { MemoryFactProvenanceSourceKinds } from "@opencrane/contracts";
 import { describe, expect, it, vi } from "vitest";
 
-import { MemoryCatalogAtomicStatuses, MemoryFactConsentStates } from "../memory-catalog.types.js";
-import { PrismaMemoryCatalogRepository } from "../prisma-memory-catalog-repository.js";
+import { MemoryCatalogAtomicStatuses, MemoryFactConsentStates } from "../memory-catalog.types";
+import { PrismaMemoryCatalogRepository } from "../prisma-memory-catalog-repository";
 
 /** Builds a valid, content-free catalog persistence command. */
 function _Command()

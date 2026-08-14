@@ -5,7 +5,7 @@ import { PROMPT_COMPILER_VERSION, RunInputSnapshotIdentityKinds, type RunInputSn
 import { PERSONAL_MEMORY_RECALL_TOOL_NAME, PERSONAL_MEMORY_RECALL_TOOL_REVISION } from "@opencrane/models/agents";
 import { ___DigestCanonicalJson } from "@opencrane/util";
 
-import { __CreateProductionRunInputCompiler, PERSONAL_MEMORY_RECALL_TOOL } from "../production-runtime-dispatch.js";
+import { __CreateProductionRunInputCompiler, PERSONAL_MEMORY_RECALL_TOOL } from "../production-runtime-dispatch";
 
 /** Carry legacy private memory fields to prove the production compiler excludes them. */
 function _PersonalSnapshot(): RunInputSnapshot

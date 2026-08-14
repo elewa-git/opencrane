@@ -13,16 +13,16 @@ import { ConversationElicitationCardComponent } from "@opencrane/features/conver
 import { AgentThreadRecoveryStates, AgentThreadRouteStates, AgentThreadRunStates, AgentThreadStore, AgentThreadTimelineEntryKinds, type AgentThreadParentRestoreIntent, type AgentThreadSummaryTarget } from "@opencrane/state/conversation/agent-threads";
 import type { ConversationActivityRow, ConversationActivityTarget, ConversationElicitation, ElicitationResponseValue } from "@opencrane/state/conversation/elicitation";
 
-import { AgentThreadAccessChangedComponent } from "./agent-thread-access-changed.component.js";
-import { AgentThreadAvailableComponent } from "./agent-thread-available.component.js";
-import { AgentThreadDeliveryComponent } from "./agent-thread-delivery.component.js";
-import { _AgentThreadAuthorizedFocusTarget } from "./agent-thread-focus-target.js";
-import type { AgentThreadProjectionPurgeIntent } from "./agent-thread-feature.types.js";
-import { __AgentThreadMessagePresentation } from "./agent-thread.mapper.js";
-import { AgentThreadOriginComponent } from "./agent-thread-origin.component.js";
-import { AgentThreadQueuedComponent } from "./agent-thread-queued.component.js";
-import { AgentThreadRunBoundaryComponent } from "./agent-thread-run-boundary.component.js";
-import { AgentThreadUnavailableComponent } from "./agent-thread-unavailable.component.js";
+import { AgentThreadAccessChangedComponent } from "./agent-thread-access-changed.component";
+import { AgentThreadAvailableComponent } from "./agent-thread-available.component";
+import { AgentThreadDeliveryComponent } from "./agent-thread-delivery.component";
+import { _AgentThreadAuthorizedFocusTarget } from "./agent-thread-focus-target";
+import type { AgentThreadProjectionPurgeIntent } from "./agent-thread-feature.types";
+import { __AgentThreadMessagePresentation } from "./agent-thread.mapper";
+import { AgentThreadOriginComponent } from "./agent-thread-origin.component";
+import { AgentThreadQueuedComponent } from "./agent-thread-queued.component";
+import { AgentThreadRunBoundaryComponent } from "./agent-thread-run-boundary.component";
+import { AgentThreadUnavailableComponent } from "./agent-thread-unavailable.component";
 
 /** Thin child workspace; the feature-local route coordinator owns navigation and restoration. */
 @Component({ selector: "wo-agent-thread-page", standalone: true, imports: [A2uiCanvasComponent, AgentThreadAccessChangedComponent, AgentThreadAvailableComponent, AgentThreadDeliveryComponent, AgentThreadOriginComponent, AgentThreadQueuedComponent, AgentThreadRunBoundaryComponent, AgentThreadUnavailableComponent, BreadcrumbModule, ButtonModule, ConversationActivityComponent, ConversationAssetCardComponent, ConversationComposerComponent, ConversationElicitationCardComponent, ConversationMessageComponent, MessageModule], templateUrl: "./agent-thread-page.component.html", styleUrl: "./agent-thread-page.component.scss", changeDetection: ChangeDetectionStrategy.OnPush, providers: [AgentThreadStore] })

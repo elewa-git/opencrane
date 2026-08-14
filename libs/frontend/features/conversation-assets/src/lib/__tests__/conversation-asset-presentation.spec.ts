@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import { ConversationAssetDisposition, ConversationAssetLifecycle, ConversationAssetProvenance, ConversationAssetSelectionFailures, ConversationAssetTransferPhases } from "@opencrane/state/conversation/assets";
 
-import { __ConversationAssetByteLabel, __ConversationAssetPresentation, __ConversationAssetSelectionFeedback, __PendingConversationAssetPresentation } from "../conversation-asset-presentation.js";
-import { ConversationAssetPresentationStates } from "../conversation-asset-presentation.types.js";
+import { __ConversationAssetByteLabel, __ConversationAssetPresentation, __ConversationAssetSelectionFeedback, __PendingConversationAssetPresentation } from "../conversation-asset-presentation";
+import { ConversationAssetPresentationStates } from "../conversation-asset-presentation.types";
 
 describe("conversation asset presentation", function _Suite()
 {

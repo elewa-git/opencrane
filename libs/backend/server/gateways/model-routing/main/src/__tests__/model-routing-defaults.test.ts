@@ -8,7 +8,7 @@ import { describe, expect, it } from "vitest";
 import "@opencrane/backend/server/infra/auth";
 import { _ErrorHandler } from "@opencrane/backend/server/infra/http";
 import type { AuthUser } from "@opencrane/backend/server/infra/auth";
-import { modelRoutingDefaultsRouter } from "../routes/model-routing-defaults.js";
+import { modelRoutingDefaultsRouter } from "../routes/model-routing-defaults";
 
 /** In-memory model_routing_defaults store backing the mock Prisma client. */
 type Row = Record<string, unknown>;

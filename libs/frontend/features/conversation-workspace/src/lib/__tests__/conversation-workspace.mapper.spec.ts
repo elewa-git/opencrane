@@ -1,6 +1,6 @@
 import { ConversationLifecycles, ConversationModes, ConversationPersonalAgentStatuses, MessageRoles, MessageSources, MessageStates, type ConversationMessage, type ConversationSummary } from "@opencrane/state/conversation/workspace";
 
-import { _ConversationMessageView, _ConversationSummaryPresentation } from "../conversation-workspace.mapper.js";
+import { _ConversationMessageView, _ConversationSummaryPresentation } from "../conversation-workspace.mapper";
 
 /** Build one direct-conversation summary without introducing display names. */
 function _Summary(): ConversationSummary

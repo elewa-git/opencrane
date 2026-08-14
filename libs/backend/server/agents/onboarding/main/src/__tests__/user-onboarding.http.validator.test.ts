@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { _ParseUserOnboardingAnswerBody } from "../user-onboarding.http.validator.js";
+import { _ParseUserOnboardingAnswerBody } from "../user-onboarding.http.validator";
 
 /** Build one valid answer at the lower question boundary. */
 function _AnswerBody(): Record<string, unknown>

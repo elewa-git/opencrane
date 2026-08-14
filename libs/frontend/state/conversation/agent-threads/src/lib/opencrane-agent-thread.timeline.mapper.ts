@@ -1,7 +1,7 @@
 import { MessageContentBlockKinds } from "@opencrane/models/conversations";
 
-import { AgentThreadDeliveryKinds, AgentThreadRunStates, AgentThreadTimelineEntryKinds, type AgentThreadDeliveryPresentation, type AgentThreadMessagePresentation, type AgentThreadRunBoundaryPresentation, type AgentThreadTimelineEntry } from "./agent-thread.types.js";
-import type { AgentThreadDeliveryDto, AgentThreadMessageDto, AgentThreadRunDto, AgentThreadSnapshotDto, AgentThreadTimelineRow } from "./opencrane-agent-thread.mapper.types.js";
+import { AgentThreadDeliveryKinds, AgentThreadRunStates, AgentThreadTimelineEntryKinds, type AgentThreadDeliveryPresentation, type AgentThreadMessagePresentation, type AgentThreadRunBoundaryPresentation, type AgentThreadTimelineEntry } from "./agent-thread.types";
+import type { AgentThreadDeliveryDto, AgentThreadMessageDto, AgentThreadRunDto, AgentThreadSnapshotDto, AgentThreadTimelineRow } from "./opencrane-agent-thread.mapper.types";
 
 /** Exhaustive mapping from validated wire run states to browser state. */
 const _RUN_STATES: Readonly<Record<AgentThreadRunDto["state"], AgentThreadRunStates>> = {

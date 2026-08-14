@@ -1,10 +1,10 @@
 import { Router, type Request } from "express";
 import type { PrismaClient } from "@prisma/client";
 
-import { addMcpServerCredential, createMcpServer, deleteMcpServer, deleteMcpServerCredential, getMcpServer, listMcpServerCredentials, listMcpServers, updateMcpServer } from "../core/mcp-servers.logic.js";
-import { PrismaMcpServerMutationUnitOfWork } from "../core/prisma-mcp-server-mutation-unit-of-work.js";
+import { addMcpServerCredential, createMcpServer, deleteMcpServer, deleteMcpServerCredential, getMcpServer, listMcpServerCredentials, listMcpServers, updateMcpServer } from "../core/mcp-servers.logic";
+import { PrismaMcpServerMutationUnitOfWork } from "../core/prisma-mcp-server-mutation-unit-of-work";
 import { _RequireOrgAdmin } from "@opencrane/backend/server/infra/auth";
-import type { McpServerCredentialInput, McpServerWriteRequest } from "./mcp-servers.types.js";
+import type { McpServerCredentialInput, McpServerWriteRequest } from "./mcp-servers.types";
 
 /**
  * CRUD router for the MCP server catalog.

@@ -1,6 +1,6 @@
-import { _ParsePersonalConfigurationProposalCommand } from "./personal-configuration-proposal.validator.js";
-import type { PersonalConfigurationProposalRepository } from "./personal-configuration-proposal-repository.types.js";
-import { PersonalConfigurationProposalCodes, type ProposePersonalConfigurationChangeCommand, type ProposePersonalConfigurationChangeResult } from "./personal-configuration-proposal.types.js";
+import { _ParsePersonalConfigurationProposalCommand } from "./personal-configuration-proposal.validator";
+import type { PersonalConfigurationProposalRepository } from "./personal-configuration-proposal-repository.types";
+import { PersonalConfigurationProposalCodes, type ProposePersonalConfigurationChangeCommand, type ProposePersonalConfigurationChangeResult } from "./personal-configuration-proposal.types";
 
 /**
  * Validates a requested configuration change and records it for the user to decide later.

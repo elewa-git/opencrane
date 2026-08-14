@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 
-import { AGENT_RUNTIME_PROTOCOL_V1, RuntimeCandidateKinds } from "../agent-runtime-protocol.types.js";
-import { ElicitationBodyKinds, ElicitationPurposes } from "../conversation-elicitation.types.js";
-import { ___ParseRuntimeElicitationCandidate } from "../conversation-elicitation.validator.js";
+import { AGENT_RUNTIME_PROTOCOL_V1, RuntimeCandidateKinds } from "../agent-runtime-protocol.types";
+import { ElicitationBodyKinds, ElicitationPurposes } from "../conversation-elicitation.types";
+import { ___ParseRuntimeElicitationCandidate } from "../conversation-elicitation.validator";
 
 /** One complete runtime-input candidate used to vary trust-boundary fields. */
 function _Candidate(): unknown

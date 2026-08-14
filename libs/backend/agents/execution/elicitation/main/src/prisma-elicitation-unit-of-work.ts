@@ -6,13 +6,13 @@ import { ElicitationBodyKinds, ElicitationPurposes, ElicitationRequestStates, ty
 import { PERSONAL_MEMORY_RECALL_TOOL_REVISION } from "@opencrane/models/agents";
 import type { JsonValue } from "@opencrane/util";
 
-import { _ElicitationStateForResponse, _IsElicitationResponseValid } from "./elicitation-response.js";
-import { _ElicitationRequestMatchesOpenCommand, _ProjectElicitation as _BuildElicitationProjection } from "./elicitation-persistence-mapping.js";
-import { _ElicitationPurposeStrategies } from "./elicitation-purpose-strategies.js";
-import type { ElicitationPurposeRequest, ElicitationPurposeStrategyRegistry } from "./elicitation-purpose-strategy.types.js";
-import { PersonalMemoryPermissionVerificationOutcomes, type ElicitationRepository, type ElicitationUnitOfWork, type ExpireElicitationBatchCommand, type ExpireElicitationBatchResult, type OpenElicitationCommand, type PersonalMemoryPermissionAuthority, type PersonalMemoryPermissionVerificationResult, type RespondToElicitationCommand, type RespondToElicitationResult } from "./elicitation.types.js";
-import { _BuildMemoryPermissionPayload, _BuildMemoryPermissionPayloadForClaimedInvocation, _MemoryPurposeMatchesReceipt, _MemoryQueryDigest } from "./personal-memory-permission-payload.js";
-import { _ParsePersonalMemoryPermissionPayload } from "./personal-memory-permission-payload.validator.js";
+import { _ElicitationStateForResponse, _IsElicitationResponseValid } from "./elicitation-response";
+import { _ElicitationRequestMatchesOpenCommand, _ProjectElicitation as _BuildElicitationProjection } from "./elicitation-persistence-mapping";
+import { _ElicitationPurposeStrategies } from "./elicitation-purpose-strategies";
+import type { ElicitationPurposeRequest, ElicitationPurposeStrategyRegistry } from "./elicitation-purpose-strategy.types";
+import { PersonalMemoryPermissionVerificationOutcomes, type ElicitationRepository, type ElicitationUnitOfWork, type ExpireElicitationBatchCommand, type ExpireElicitationBatchResult, type OpenElicitationCommand, type PersonalMemoryPermissionAuthority, type PersonalMemoryPermissionVerificationResult, type RespondToElicitationCommand, type RespondToElicitationResult } from "./elicitation.types";
+import { _BuildMemoryPermissionPayload, _BuildMemoryPermissionPayloadForClaimedInvocation, _MemoryPurposeMatchesReceipt, _MemoryQueryDigest } from "./personal-memory-permission-payload";
+import { _ParsePersonalMemoryPermissionPayload } from "./personal-memory-permission-payload.validator";
 
 /** Prisma repository bound to exactly one serializable elicitation transaction. */
 export class PrismaElicitationRepository implements ElicitationRepository

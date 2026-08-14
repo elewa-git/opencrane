@@ -6,12 +6,12 @@ import type { PersonalRunAdmissionPort } from "@opencrane/backend/agents/executi
 import { PrismaAgentRunRetryUnitOfWork, type RunAdmissionTransaction } from "@opencrane/backend/agents/execution/runs";
 import { _ResolveRequestPrincipal } from "@opencrane/backend/server/infra/auth";
 
-import { PrismaConversationMessageAdmissionUnitOfWork } from "./prisma-conversation-message-admission-unit-of-work.js";
-import { PrismaConversationUnitOfWork } from "./prisma-conversation-unit-of-work.js";
-import { PrismaConversationMutationRepository } from "./prisma-conversation-mutation-repository.js";
-import { __CreateSelfConversationsRouter } from "../self-conversations.router.js";
-import type { ConversationCaller } from "../types/conversation-caller.types.js";
-import type { ConversationAttachmentAdmissionFactory } from "../conversation-message-admission.types.js";
+import { PrismaConversationMessageAdmissionUnitOfWork } from "./prisma-conversation-message-admission-unit-of-work";
+import { PrismaConversationUnitOfWork } from "./prisma-conversation-unit-of-work";
+import { PrismaConversationMutationRepository } from "./prisma-conversation-mutation-repository";
+import { __CreateSelfConversationsRouter } from "../self-conversations.router";
+import type { ConversationCaller } from "../types/conversation-caller.types";
+import type { ConversationAttachmentAdmissionFactory } from "../conversation-message-admission.types";
 
 /** Maps authenticated request facts to the caller contract owned by conversations. */
 function _resolveCaller(request: Parameters<typeof _ResolveRequestPrincipal>[0]): ConversationCaller | null

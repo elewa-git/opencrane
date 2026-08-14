@@ -1,8 +1,8 @@
 import type { ArtifactScanSourceBroker, ArtifactScanSourceRead } from "@opencrane/backend/server/agents/artifacts";
 import { ___DoWithTrace } from "@opencrane/backend/observability";
 
-import { _CreateArtifactReadLeaseSigner } from "./artifact-read-lease-signer.factory.js";
-import { _CreateArtifactServiceReadPort, _InternalArtifactServiceUrl } from "./artifact-service-read-port.factory.js";
+import { _CreateArtifactReadLeaseSigner } from "./artifact-read-lease-signer.factory";
+import { _CreateArtifactServiceReadPort, _InternalArtifactServiceUrl } from "./artifact-service-read-port.factory";
 
 /**
  * Compose the scanner's server-only ArtifactStore byte broker.

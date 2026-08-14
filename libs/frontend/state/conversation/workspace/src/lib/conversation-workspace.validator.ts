@@ -23,7 +23,7 @@ import { z } from "zod";
 
 import { ConversationLifecycles, ConversationModes, MessageRoles, MessageSources, MessageStates } from "@opencrane/models/conversations";
 
-import { ConversationPersonalAgentStatuses, ConversationRunStates, type ConversationCreationDirectory, type ConversationMessage, type ConversationRun, type ConversationSummary, type ConversationWorkspaceDetail } from "./conversation-workspace.types.js";
+import { ConversationPersonalAgentStatuses, ConversationRunStates, type ConversationCreationDirectory, type ConversationMessage, type ConversationRun, type ConversationSummary, type ConversationWorkspaceDetail } from "./conversation-workspace.types";
 
 /**
  * Accepts a non-empty string and returns it trimmed.

@@ -1,7 +1,7 @@
 import { AgentConfigPatchKinds } from "@opencrane/contracts";
 import { z } from "zod";
 
-import type { PersonalConfigurationPatch } from "./personal-configuration-patch.types.js";
+import type { PersonalConfigurationPatch } from "./personal-configuration-patch.types";
 
 /** Model alias the materialisation authority accepts, with a length cap. */
 const _ModelAliasSchema = z.string().max(200).refine(function _NonBlank(value) { return value.trim().length > 0; }, "must not be blank");

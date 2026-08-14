@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { __DecideAgentThreadTarget } from "../agent-thread.js";
+import { __DecideAgentThreadTarget } from "../agent-thread";
 
 describe("Agent-thread target", function _AgentThreadTarget()
 {

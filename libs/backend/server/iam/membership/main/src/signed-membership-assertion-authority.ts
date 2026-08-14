@@ -1,7 +1,7 @@
 import { __AuthorizationScopesEqual, type AuthorizationScope } from "@opencrane/models/authorization";
 
-import { __VerifyCurrentFleetMembership } from "./membership-authority.js";
-import type { FleetMembershipAuthorityRepository, FleetMembershipEvidenceConfig, SignedFleetMembershipAssertionAuthority, VerifyFleetMembershipResult } from "./membership-authority.types.js";
+import { __VerifyCurrentFleetMembership } from "./membership-authority";
+import type { FleetMembershipAuthorityRepository, FleetMembershipEvidenceConfig, SignedFleetMembershipAssertionAuthority, VerifyFleetMembershipResult } from "./membership-authority.types";
 
 /**
  * Answers membership questions for callers that do not know which assertion applies.

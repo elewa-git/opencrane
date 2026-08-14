@@ -1,4 +1,4 @@
-import type { PersonalConfigurationMaterializationPersistenceResult } from "./personal-configuration-materialization.types.js";
+import type { PersonalConfigurationMaterializationPersistenceResult } from "./personal-configuration-materialization.types";
 
 /** Proposal states, spelled out here so this package does not depend on Prisma's generated enum. */
 export enum PersonalConfigurationMaterializationLifecycleStates

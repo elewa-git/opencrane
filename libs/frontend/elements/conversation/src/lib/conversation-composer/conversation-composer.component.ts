@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, input, output } from "@angular/core
 import { ButtonModule } from "primeng/button";
 import { TextareaModule } from "primeng/textarea";
 
-import { ConversationComposerStates } from "../conversation.types.js";
+import { ConversationComposerStates } from "../conversation.types";
 
 /**
  * The message box at the bottom of a conversation: it displays a draft the parent owns and reports

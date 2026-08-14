@@ -12,10 +12,10 @@ import { ___RequestContext } from "@opencrane/backend/observability";
 import { ___AuthMiddleware } from "@opencrane/backend/server/infra/auth";
 import { _ErrorHandler, _RateLimit, _TransportSecurity } from "@opencrane/backend/server/infra/http";
 
-import { _log } from "./log.js";
-import type { PublicAuthenticationComposition } from "./public-app.types.js";
-import { _RegisterRoutes } from "./routes.js";
-import { _CreateHttpRequestLogger } from "./telemetry.js";
+import { _log } from "./log";
+import type { PublicAuthenticationComposition } from "./public-app.types";
+import { _RegisterRoutes } from "./routes";
+import { _CreateHttpRequestLogger } from "./telemetry";
 
 /**
  * Build the audit-log appender for the standalone first-owner claim, or null when that claim is not configured.

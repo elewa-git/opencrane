@@ -4,10 +4,10 @@ import type { Logger } from "pino";
 
 import { _ResolveRequestPrincipal } from "@opencrane/backend/server/infra/auth";
 
-import { PrismaSelfRunCancellationRepository } from "./prisma-self-run-cancellation-repository.js";
-import type { RunCancellationRepository } from "./run-cancellation.types.js";
-import { __CreateSelfRunCancellationRouter } from "./self-run-cancellation.router.js";
-import type { SelfRunCancellationCaller } from "./self-run-cancellation.types.js";
+import { PrismaSelfRunCancellationRepository } from "./prisma-self-run-cancellation-repository";
+import type { RunCancellationRepository } from "./run-cancellation.types";
+import { __CreateSelfRunCancellationRouter } from "./self-run-cancellation.router";
+import type { SelfRunCancellationCaller } from "./self-run-cancellation.types";
 
 /** Turns the authenticated request's principal into the caller shape cancellation expects. */
 function _resolveCaller(request: Parameters<typeof _ResolveRequestPrincipal>[0]): SelfRunCancellationCaller | null

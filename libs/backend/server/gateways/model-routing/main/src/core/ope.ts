@@ -1,4 +1,4 @@
-import type { OpeCiOptions, OpeEstimate, OpeSample } from "./ope.types.js";
+import type { OpeCiOptions, OpeEstimate, OpeSample } from "./ope.types";
 
 /** Default number of bootstrap resamples for the OPE CI helper. */
 const _DEFAULT_BOOTSTRAP = 1000;

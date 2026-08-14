@@ -4,8 +4,8 @@ import type { KeyObject } from "node:crypto";
 import type { SignedFleetMembershipRevision } from "@opencrane/models/authorization";
 import { describe, expect, it } from "vitest";
 
-import { Ed25519FleetMembershipSignatureVerifier } from "../ed25519-fleet-membership-signature-verifier.js";
-import { __DigestFleetMembershipSignedPayload } from "../fleet-membership-payload-digest.js";
+import { Ed25519FleetMembershipSignatureVerifier } from "../ed25519-fleet-membership-signature-verifier";
+import { __DigestFleetMembershipSignedPayload } from "../fleet-membership-payload-digest";
 
 /** Creates one signed membership revision for cryptographic adapter tests. */
 function _Revision(privateKey: KeyObject, issuerKeyId = "fleet-key-1"): SignedFleetMembershipRevision

@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { RunEventTypes } from "@opencrane/models/agents";
 
-import { PrismaToolRecoveryEventReporter } from "../prisma-tool-recovery-event-reporter.js";
+import { PrismaToolRecoveryEventReporter } from "../prisma-tool-recovery-event-reporter";
 
 /** Build the transaction seam needed by the canonical recovery reporter. */
 function _transaction(run: unknown): { readonly transaction: Prisma.TransactionClient; readonly create: ReturnType<typeof vi.fn> }

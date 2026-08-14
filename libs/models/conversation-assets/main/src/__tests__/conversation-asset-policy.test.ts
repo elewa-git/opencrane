@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ___CONVERSATION_ASSET_MAX_TOTAL_BYTES, ___ConversationAssetMediaDisposition, ___DecideConversationAssetBatch, ConversationAssetDisposition } from "../index.js";
+import { ___CONVERSATION_ASSET_MAX_TOTAL_BYTES, ___ConversationAssetMediaDisposition, ___DecideConversationAssetBatch, ConversationAssetDisposition } from "../index";
 
 describe("conversation asset policy", () =>
 {

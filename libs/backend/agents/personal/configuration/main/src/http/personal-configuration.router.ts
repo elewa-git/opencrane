@@ -1,9 +1,9 @@
 import { Router } from "express";
 
-import { _CreateDecidePersonalConfigurationChangeHandler } from "./decide-personal-configuration-change.handler.js";
-import { _CreateListPersonalConfigurationChangesHandler } from "./list-personal-configuration-changes.handler.js";
-import { _CreateMaterializePersonalConfigurationChangeHandler } from "./materialize-personal-configuration-change.handler.js";
-import type { PersonalConfigurationRouterDependencies } from "./personal-configuration.router.types.js";
+import { _CreateDecidePersonalConfigurationChangeHandler } from "./decide-personal-configuration-change.handler";
+import { _CreateListPersonalConfigurationChangesHandler } from "./list-personal-configuration-changes.handler";
+import { _CreateMaterializePersonalConfigurationChangeHandler } from "./materialize-personal-configuration-change.handler";
+import type { PersonalConfigurationRouterDependencies } from "./personal-configuration.router.types";
 
 /**
  * Creates the three configuration-proposal routes, all requiring a browser session.

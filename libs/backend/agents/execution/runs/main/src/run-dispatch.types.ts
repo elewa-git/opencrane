@@ -1,6 +1,6 @@
 import type { AgentControllerRunAttemptAssignmentCommand, AgentControllerRunAttemptAssignmentResult, AgentControllerRunAttemptClaim, AgentControllerRunOutboxPruneResult, AgentControllerRunWorkloadRegistrationCommand, AgentControllerRunWorkloadRegistrationResult, AgentControllerRunWorkloadReleaseClaim } from "@opencrane/contracts";
 
-import type { AttemptModelKeyIssuer } from "./attempt-model-key.types.js";
+import type { AttemptModelKeyIssuer } from "./attempt-model-key.types";
 
 /**
  * What the database layer tells the agent controller to do next.

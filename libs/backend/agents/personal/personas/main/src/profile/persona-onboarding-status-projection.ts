@@ -1,7 +1,7 @@
-import { PersonaOnboardingApiStates } from "./persona-lifecycle.types.js";
-import { PersonaOnboardingStatusInterviewStates, PersonaOnboardingStatusProjectionStates, PersonaOnboardingStatusRevisionStates } from "./persona-onboarding-status-projection.types.js";
-import type { PersonaOnboardingStatusFacts, PersonaOnboardingStatusProjectionState } from "./persona-onboarding-status-projection.types.js";
-import type { PersonaOnboardingStatus } from "./persona-onboarding-status.types.js";
+import { PersonaOnboardingApiStates } from "./persona-lifecycle.types";
+import { PersonaOnboardingStatusInterviewStates, PersonaOnboardingStatusProjectionStates, PersonaOnboardingStatusRevisionStates } from "./persona-onboarding-status-projection.types";
+import type { PersonaOnboardingStatusFacts, PersonaOnboardingStatusProjectionState } from "./persona-onboarding-status-projection.types";
+import type { PersonaOnboardingStatus } from "./persona-onboarding-status.types";
 
 /** Turns the loaded facts into the status the owner sees, by first working out which of the nine situations they are in. */
 export function _ProjectPersonaOnboardingStatus(facts: PersonaOnboardingStatusFacts): PersonaOnboardingStatus

@@ -1,4 +1,4 @@
-import type { PersonaScoreResult, PersonaTieChoice, PersonaTieKinds, PersonaWeightedAnswer } from "./persona-scorer.types.js";
+import type { PersonaScoreResult, PersonaTieChoice, PersonaTieKinds, PersonaWeightedAnswer } from "./persona-scorer.types";
 
 /** The scoring inputs a completed interview is pinned to: its policy, its weighted answers, and the owner's tie choices. */
 export interface PersonaScoringEvidence

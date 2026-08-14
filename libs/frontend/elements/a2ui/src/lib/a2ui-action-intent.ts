@@ -2,7 +2,7 @@ import type { A2UIClientEvent } from "@a2ui/angular/v0_8";
 
 import { AgUiA2uiSurfaceStates } from "@opencrane/contracts";
 
-import type { A2uiDisplayedActionIntent, A2uiDisplayedValue, A2uiDisplayedValueScalar, A2uiSurfacePresentation } from "./a2ui.types.js";
+import type { A2uiDisplayedActionIntent, A2uiDisplayedValue, A2uiDisplayedValueScalar, A2uiSurfacePresentation } from "./a2ui.types";
 
 /** Maximum length of a displayed action or source-component identifier. */
 const _MAX_IDENTIFIER_LENGTH = 256;

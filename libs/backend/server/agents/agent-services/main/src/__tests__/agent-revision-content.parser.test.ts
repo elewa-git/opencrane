@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { PROMPT_COMPILER_VERSION } from "@opencrane/contracts";
 import { ___DigestCanonicalJson } from "@opencrane/util";
 
-import { _ParseAgentRevisionContent } from "../agent-revision-content.parser.js";
+import { _ParseAgentRevisionContent } from "../agent-revision-content.parser";
 
 /** Build reviewed administrator revision content around one tool-definition overlay. */
 function _Content(toolOverrides: Record<string, unknown> = {})

@@ -1,5 +1,5 @@
-import { PersonaOnboardingApiStates } from "./persona-lifecycle.types.js";
-import type { PersonaColourValues, PersonaModifierValues, PersonaScoreResult } from "../scoring/persona-scorer.types.js";
+import { PersonaOnboardingApiStates } from "./persona-lifecycle.types";
+import type { PersonaColourValues, PersonaModifierValues, PersonaScoreResult } from "../scoring/persona-scorer.types";
 
 /** What the owner still has to do in persona onboarding, plus enough detail to resume it. */
 export interface PersonaOnboardingStatus

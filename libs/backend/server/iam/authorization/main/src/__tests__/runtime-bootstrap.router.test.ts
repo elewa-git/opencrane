@@ -5,10 +5,10 @@ import { describe, expect, it, vi } from "vitest";
 
 import type { Es256PublicJwk } from "@opencrane/models/authorization";
 
-import { __ComputeEs256JwkThumbprint } from "../capability-proof.js";
-import { __CreateRuntimeBootstrapRouter } from "../runtime-bootstrap.router.js";
-import type { RuntimeBootstrapClaim, RuntimeBootstrapConsumptionResult } from "../runtime-proof.types.js";
-import type { RuntimeBootstrapExchangeRecord, RuntimeBootstrapReviewedIdentity, RuntimeBootstrapExchangeRepository } from "../runtime-bootstrap.types.js";
+import { __ComputeEs256JwkThumbprint } from "../capability-proof";
+import { __CreateRuntimeBootstrapRouter } from "../runtime-bootstrap.router";
+import type { RuntimeBootstrapClaim, RuntimeBootstrapConsumptionResult } from "../runtime-proof.types";
+import type { RuntimeBootstrapExchangeRecord, RuntimeBootstrapReviewedIdentity, RuntimeBootstrapExchangeRepository } from "../runtime-bootstrap.types";
 
 /** Fixed opaque bootstrap reference matching the provisioning grammar. */
 const _BOOTSTRAP_REFERENCE = `bootstrap-v1_${"a".repeat(64)}`;

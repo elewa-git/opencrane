@@ -1,6 +1,6 @@
 import { Prisma } from "@prisma/client";
 
-import type { RunCancellationEventDeferralCommand, RunCancellationEventDeferralRepository, RunCancellationEventDeferralUnitOfWork } from "./run-cancellation-event-deferral.types.js";
+import type { RunCancellationEventDeferralCommand, RunCancellationEventDeferralRepository, RunCancellationEventDeferralUnitOfWork } from "./run-cancellation-event-deferral.types";
 
 /** Prisma repository for one exact cleanup-event deferral compare-and-set. */
 export class PrismaRunCancellationEventDeferralRepository implements RunCancellationEventDeferralRepository

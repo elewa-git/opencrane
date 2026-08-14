@@ -1,7 +1,7 @@
 import { AgentConfigPatchKinds } from "@opencrane/contracts";
 import { describe, expect, it } from "vitest";
 
-import { _IsPersonalConfigurationPatch } from "../proposal/personal-configuration-patch.validator.js";
+import { _IsPersonalConfigurationPatch } from "../proposal/personal-configuration-patch.validator";
 
 /** Malformed patch values rejected by every proposal, replay, and materialisation consumer. */
 const _INVALID_PATCHES = [

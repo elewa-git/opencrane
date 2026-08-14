@@ -1,10 +1,10 @@
 import { createHash } from "node:crypto";
 import type { V1Job } from "@kubernetes/client-node";
 
-import { __BuildSkillAuthoringWorkloadJob } from "./skill-authoring-workload-job.js";
-import { SkillWorkloadKinds } from "./skill-workload-job.types.js";
-import type { SkillWorkloadJobAssignment, SkillWorkloadJobProfile } from "./skill-workload-job.types.js";
-import { __BuildToolRunnerWorkloadJob } from "./tool-runner-workload-job.js";
+import { __BuildSkillAuthoringWorkloadJob } from "./skill-authoring-workload-job";
+import { SkillWorkloadKinds } from "./skill-workload-job.types";
+import type { SkillWorkloadJobAssignment, SkillWorkloadJobProfile } from "./skill-workload-job.types";
+import { __BuildToolRunnerWorkloadJob } from "./tool-runner-workload-job";
 
 /** Maximum size of the scratch filesystem. Nothing the platform relies on is stored there. */
 const _MAX_SCRATCH_BYTES = 1_073_741_824n;

@@ -1,7 +1,7 @@
 import { signal } from "@angular/core";
 
-import { AgentThreadRecoveryStates, AgentThreadRouteStates } from "./agent-thread-state.types.js";
-import type { AgentThreadSnapshot } from "./agent-thread.types.js";
+import { AgentThreadRecoveryStates, AgentThreadRouteStates } from "./agent-thread-state.types";
+import type { AgentThreadSnapshot } from "./agent-thread.types";
 
 /** Local controlled-draft and one-command fence for a component-scoped Agent-thread store. */
 export class _AgentThreadFollowUpState

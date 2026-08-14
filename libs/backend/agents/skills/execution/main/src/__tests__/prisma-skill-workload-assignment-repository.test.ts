@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { __CreateSkillWorkloadBootstrapReference } from "@opencrane/contracts";
 
-import { PrismaSkillWorkloadAssignmentRepository } from "../prisma-skill-workload-assignment-repository.js";
+import { PrismaSkillWorkloadAssignmentRepository } from "../prisma-skill-workload-assignment-repository";
 
 /** Builds a transaction double with the rows required by a successful assignment transition. */
 function _Transaction()

@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { __DecideAuthorization } from "../authorization-decision.js";
-import type { AuthorizationScope } from "../authorization-scope.types.js";
-import type { CapabilityReference } from "../capability.types.js";
-import type { AuthorizationGrant, AuthorizationRequest } from "../grant.types.js";
-import { __AuthorizationScopesEqual } from "../scope-matching.js";
+import { __DecideAuthorization } from "../authorization-decision";
+import type { AuthorizationScope } from "../authorization-scope.types";
+import type { CapabilityReference } from "../capability.types";
+import type { AuthorizationGrant, AuthorizationRequest } from "../grant.types";
+import { __AuthorizationScopesEqual } from "../scope-matching";
 
 /** Capability used by the grant decision table. */
 const CAPABILITY: CapabilityReference = {

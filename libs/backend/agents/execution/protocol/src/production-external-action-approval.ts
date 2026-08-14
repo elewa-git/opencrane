@@ -4,8 +4,8 @@ import { __DigestCanonicalJson, __OpenDeferredToolApproval, type OpenDeferredToo
 import type { Logger } from "@opencrane/backend/observability";
 import type { RunInputSnapshotToolDefinition } from "@opencrane/contracts";
 
-import { ExternalActionRevisionKinds } from "./external-action-executor.types.js";
-import type { ExternalActionApprovalOpener, ExternalActionExecutionContext, ExternalActionWorkerInvocation } from "./external-action-worker.types.js";
+import { ExternalActionRevisionKinds } from "./external-action-executor.types";
+import type { ExternalActionApprovalOpener, ExternalActionExecutionContext, ExternalActionWorkerInvocation } from "./external-action-worker.types";
 
 /** How long someone has to decide a tool approval. */
 const _APPROVAL_EXPIRY_MILLISECONDS = 15 * 60 * 1_000;

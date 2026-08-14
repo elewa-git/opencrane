@@ -1,4 +1,4 @@
-import type { RateLimiterClock, SubjectRateLimiter } from "./channel-proxy.types.js";
+import type { RateLimiterClock, SubjectRateLimiter } from "./channel-proxy.types";
 
 /** One fixed-window counter. */
 interface RateBucket

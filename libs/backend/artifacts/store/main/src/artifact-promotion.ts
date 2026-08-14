@@ -1,4 +1,4 @@
-import type { ArtifactPromotionProtocolConfig, ArtifactPromotionLeaseVerifier, ArtifactStore, BoundedArtifactUploadByteSource, PromoteArtifactUploadResult } from "./artifact-store.types.js";
+import type { ArtifactPromotionProtocolConfig, ArtifactPromotionLeaseVerifier, ArtifactStore, BoundedArtifactUploadByteSource, PromoteArtifactUploadResult } from "./artifact-store.types";
 
 /**
  * Run one artifact upload end to end: verify the lease, stage the bytes, publish them, and sign a

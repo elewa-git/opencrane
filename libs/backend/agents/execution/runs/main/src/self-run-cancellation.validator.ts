@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import type { SelfRunCancellationBody } from "./self-run-cancellation.types.js";
+import type { SelfRunCancellationBody } from "./self-run-cancellation.types";
 
 /** Strict cancellation body; extra fields cannot smuggle alternate owner or run authority. */
 const _SelfRunCancellationBodySchema = z.object({

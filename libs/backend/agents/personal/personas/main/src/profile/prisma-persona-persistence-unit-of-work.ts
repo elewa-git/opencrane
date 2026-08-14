@@ -2,19 +2,19 @@ import { Prisma, type PrismaClient } from "@prisma/client";
 
 import type { Logger } from "@opencrane/backend/observability";
 
-import { PersonaApprovalTransactionConflict, PrismaPersonaAuthorityRepository } from "../approval/prisma-persona-authority-repository.js";
-import { PersonaApprovalPersistenceStatuses, type ApprovePersonaCommand, type AtomicApprovePersonaCommand, type AtomicApprovePersonaResult, type PersonaApprovalSnapshot } from "../approval/persona-authority.types.js";
-import { PersonaDraftDenialReasons, type CreatePersonaDraftCommand, type CreatePersonaDraftPersistenceResult } from "../drafting/persona-draft-authority.types.js";
-import { PrismaPersonaDraftRepository } from "../drafting/prisma-persona-draft-repository.js";
-import { PrismaPersonaInterviewRepository } from "../interview/prisma-persona-interview-repository.js";
-import type { CompletePersonaInterviewCommand, PersonaInterviewQuestionReader, RecordPersonaInterviewAnswerCommand, ResolvePersonaInterviewTieCommand, StartPersonaInterviewCommand } from "../interview/persona-interview-authority.types.js";
-import { _DoPersonaPersistenceWithTrace } from "../persona-persistence-observability.js";
-import { PersonaInterviewDenialReasons, PersonaLifecycleOutcomes } from "./persona-lifecycle.types.js";
-import { PersonaOnboardingDenialReasons, type EnsurePersonaOnboardingCommand, type EnsurePersonaOnboardingResult } from "./persona-onboarding-authority.types.js";
-import type { PersonaOnboardingStatus } from "./persona-onboarding-status.types.js";
-import type { PersonaPersistenceUnitOfWork } from "./persona-persistence-unit-of-work.types.js";
-import { PrismaPersonaOnboardingRepository } from "./prisma-persona-onboarding-repository.js";
-import { PrismaPersonaOnboardingStatusRepository } from "./prisma-persona-onboarding-status-repository.js";
+import { PersonaApprovalTransactionConflict, PrismaPersonaAuthorityRepository } from "../approval/prisma-persona-authority-repository";
+import { PersonaApprovalPersistenceStatuses, type ApprovePersonaCommand, type AtomicApprovePersonaCommand, type AtomicApprovePersonaResult, type PersonaApprovalSnapshot } from "../approval/persona-authority.types";
+import { PersonaDraftDenialReasons, type CreatePersonaDraftCommand, type CreatePersonaDraftPersistenceResult } from "../drafting/persona-draft-authority.types";
+import { PrismaPersonaDraftRepository } from "../drafting/prisma-persona-draft-repository";
+import { PrismaPersonaInterviewRepository } from "../interview/prisma-persona-interview-repository";
+import type { CompletePersonaInterviewCommand, PersonaInterviewQuestionReader, RecordPersonaInterviewAnswerCommand, ResolvePersonaInterviewTieCommand, StartPersonaInterviewCommand } from "../interview/persona-interview-authority.types";
+import { _DoPersonaPersistenceWithTrace } from "../persona-persistence-observability";
+import { PersonaInterviewDenialReasons, PersonaLifecycleOutcomes } from "./persona-lifecycle.types";
+import { PersonaOnboardingDenialReasons, type EnsurePersonaOnboardingCommand, type EnsurePersonaOnboardingResult } from "./persona-onboarding-authority.types";
+import type { PersonaOnboardingStatus } from "./persona-onboarding-status.types";
+import type { PersonaPersistenceUnitOfWork } from "./persona-persistence-unit-of-work.types";
+import { PrismaPersonaOnboardingRepository } from "./prisma-persona-onboarding-repository";
+import { PrismaPersonaOnboardingStatusRepository } from "./prisma-persona-onboarding-status-repository";
 
 /** Runs each persona operation in its own Serializable Prisma transaction. */
 export class PrismaPersonaPersistenceUnitOfWork implements PersonaPersistenceUnitOfWork

@@ -5,16 +5,16 @@ import session from "express-session";
 import * as client from "openid-client";
 import type { Logger } from "pino";
 
-import { ___LoadOidcAuthConfig } from "./oidc-config.js";
-import type { OidcAuthConfig } from "./oidc-config.types.js";
-import { _ResolveIdentityClaims } from "./identity-claims.js";
-import { _ResolveOrgMembershipFacts } from "./org-membership.js";
-import type { OrgMembershipRepository } from "./org-membership.types.js";
-import type { AuthStatus, LoginClient } from "./oidc-service.types.js";
-import { _buildCurrentUrl, _buildPostLogoutRedirectUri, _buildRedirectUri, _destroySession, _regenerateSession, _sanitizeReturnTo, _saveSession } from "./session.js";
-import type { AuthUser } from "./session.types.js";
+import { ___LoadOidcAuthConfig } from "./oidc-config";
+import type { OidcAuthConfig } from "./oidc-config.types";
+import { _ResolveIdentityClaims } from "./identity-claims";
+import { _ResolveOrgMembershipFacts } from "./org-membership";
+import type { OrgMembershipRepository } from "./org-membership.types";
+import type { AuthStatus, LoginClient } from "./oidc-service.types";
+import { _buildCurrentUrl, _buildPostLogoutRedirectUri, _buildRedirectUri, _destroySession, _regenerateSession, _sanitizeReturnTo, _saveSession } from "./session";
+import type { AuthUser } from "./session.types";
 
-export type { AuthStatus, AuthStatusUser, LoginClient, ManagerAuthMode } from "./oidc-service.types.js";
+export type { AuthStatus, AuthStatusUser, LoginClient, ManagerAuthMode } from "./oidc-service.types";
 
 /**
  * Base class for the OpenCrane server's browser login. One instance per server process

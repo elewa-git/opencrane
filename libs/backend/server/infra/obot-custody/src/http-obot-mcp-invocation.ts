@@ -2,10 +2,10 @@ import { ___DoWithTrace } from "@opencrane/backend/observability";
 import { ___CloneCanonicalJson } from "@opencrane/util";
 import type { JsonValue } from "@opencrane/util";
 
-import { __AssertToolAllowed, ObotMcpAuthenticationError, ObotMcpAuthorizationError } from "./obot-mcp-invocation.js";
-import type { ObotMcpInvocationPort, ObotMcpToolInvocationCommand, ObotMcpToolResult } from "./obot-mcp-invocation.types.js";
-import { ObotProtocolError, ObotTransportError } from "./obot-http.js";
-import type { ObotSession } from "./obot-http.types.js";
+import { __AssertToolAllowed, ObotMcpAuthenticationError, ObotMcpAuthorizationError } from "./obot-mcp-invocation";
+import type { ObotMcpInvocationPort, ObotMcpToolInvocationCommand, ObotMcpToolResult } from "./obot-mcp-invocation.types";
+import { ObotProtocolError, ObotTransportError } from "./obot-http";
+import type { ObotSession } from "./obot-http.types";
 
 /**
  * MCP protocol revision this client announces, and the only one it will accept back.

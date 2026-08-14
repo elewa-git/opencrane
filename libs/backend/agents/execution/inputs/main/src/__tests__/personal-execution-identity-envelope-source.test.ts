@@ -4,8 +4,8 @@ import { describe, expect, it, vi } from "vitest";
 
 import { AgentServiceKinds } from "@opencrane/models/agents";
 
-import { PersonalExecutionIdentityEnvelopeSource } from "../personal-execution-identity-envelope-source.js";
-import type { SessionAssemblyCommand } from "../session-assembly.types.js";
+import { PersonalExecutionIdentityEnvelopeSource } from "../personal-execution-identity-envelope-source";
+import type { SessionAssemblyCommand } from "../session-assembly.types";
 
 /** Builds a final-admission command whose silo and subject came from trusted server context. */
 function _Command(): SessionAssemblyCommand

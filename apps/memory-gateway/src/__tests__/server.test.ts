@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import request from "supertest";
 import type { FixedServiceAccountTokenReviewer } from "@opencrane/backend/server/infra/workload-identity";
 
-import { _CreateServer } from "../server.js";
+import { _CreateServer } from "../server";
 
 /** Fixed private-gateway configuration used by the transport-boundary cases. */
 const _CONFIG = { port: 8080, cogneeUrl: "http://opencrane-cognee.default.svc.cluster.local:8000", namespace: "default", serverServiceAccountName: "opencrane-opencrane-server", serverTokenAudience: "opencrane-memory-gateway", requestTimeoutMilliseconds: 30_000 };

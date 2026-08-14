@@ -1,4 +1,4 @@
-import type { MemoryProvenance } from "./memory-gateway-client.types.js";
+import type { MemoryProvenance } from "./memory-gateway-client.types";
 
 /**
  * Thrown when a scoped memory write does not name all five provenance fields.

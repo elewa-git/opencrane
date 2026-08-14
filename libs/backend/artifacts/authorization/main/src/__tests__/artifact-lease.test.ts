@@ -2,7 +2,7 @@ import { createPrivateKey, generateKeyPairSync, sign } from "node:crypto";
 
 import { describe, expect, it } from "vitest";
 
-import { __SignArtifactPromotionReceipt, __SignArtifactReadLease, __SignArtifactWriteLease, __VerifyArtifactPromotionReceipt, __VerifyArtifactReadLease, __VerifyArtifactWriteLease } from "../artifact-lease.js";
+import { __SignArtifactPromotionReceipt, __SignArtifactReadLease, __SignArtifactWriteLease, __VerifyArtifactPromotionReceipt, __VerifyArtifactReadLease, __VerifyArtifactWriteLease } from "../artifact-lease";
 
 const _leaseKeys = generateKeyPairSync("ed25519");
 const _receiptKeys = generateKeyPairSync("ed25519");

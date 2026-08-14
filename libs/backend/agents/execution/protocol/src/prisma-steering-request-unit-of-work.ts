@@ -2,8 +2,8 @@ import { createHash } from "node:crypto";
 
 import { Prisma, type PrismaClient } from "@prisma/client";
 
-import { PrismaSteeringRequestRepository } from "./prisma-steering-request-repository.js";
-import type { SteeringRequestRepository, SteeringRequestTransactionRepository, SubmitSteeringRequestCommand, SubmitSteeringRequestResult } from "./steering-request.types.js";
+import { PrismaSteeringRequestRepository } from "./prisma-steering-request-repository";
+import type { SteeringRequestRepository, SteeringRequestTransactionRepository, SubmitSteeringRequestCommand, SubmitSteeringRequestResult } from "./steering-request.types";
 
 /** Maximum number of complete steering transactions after PostgreSQL reports a safe rollback. */
 const _STEERING_ATTEMPT_LIMIT = 3;

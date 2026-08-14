@@ -3,7 +3,7 @@ import type { InitialRunAuthority, RunAdmissionTransaction } from "@opencrane/ba
 import { RunInputSnapshotIdentityKinds } from "@opencrane/contracts";
 import { AgentServiceKinds } from "@opencrane/models/agents";
 
-import type { IdentityEnvelopeInput, PreferenceFactInput, PreferenceFactSource, SessionAssemblyCommand, SessionAssemblyLoad } from "./session-assembly.types.js";
+import type { IdentityEnvelopeInput, PreferenceFactInput, PreferenceFactSource, SessionAssemblyCommand, SessionAssemblyLoad } from "./session-assembly.types";
 
 /**
  * Freezes the ids of the user's consented preference facts, chosen from the verified run identity.

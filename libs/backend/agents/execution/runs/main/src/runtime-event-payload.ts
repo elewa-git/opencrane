@@ -2,7 +2,7 @@ import { ___ParseAgUiA2uiEnvelope } from "@opencrane/contracts";
 import { RunEventTypes } from "@opencrane/models/agents";
 import type { JsonValue } from "@opencrane/util";
 
-import { RuntimeRunFailureReasons } from "./runtime-event-reporter.types.js";
+import { RuntimeRunFailureReasons } from "./runtime-event-reporter.types";
 
 const _SECRET_FIELD = /token|secret|password|authorization|cookie|credential|proof|private.?key/iu;
 const _ERROR_TYPES = new Set(["AuthenticationError", "ConnectionError", "HTTPError", "ModelLoopError", "OSError", "PermissionError", "RuntimeError", "TimeoutError", "URLError", "ValueError"]);

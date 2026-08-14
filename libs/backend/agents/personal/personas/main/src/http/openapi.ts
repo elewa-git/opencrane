@@ -1,5 +1,5 @@
-import { PersonaOnboardingApiStates } from "../profile/persona-lifecycle.types.js";
-import { PersonaColourValues, PersonaModifierValues, PersonaTieKinds } from "../scoring/persona-scorer.types.js";
+import { PersonaOnboardingApiStates } from "../profile/persona-lifecycle.types";
+import { PersonaColourValues, PersonaModifierValues, PersonaTieKinds } from "../scoring/persona-scorer.types";
 
 /** Stable colour values exposed by persona score and review schemas. */
 const _COLOUR_VALUES: readonly PersonaColourValues[] = Object.values(PersonaColourValues);

@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 
-import type { AgentRuntimeJobAssignment } from "./agent-runtime-job.types.js";
-import { _IsBoundedAgentRuntimeCoordinate } from "./agent-runtime-profile.js";
+import type { AgentRuntimeJobAssignment } from "./agent-runtime-job.types";
+import { _IsBoundedAgentRuntimeCoordinate } from "./agent-runtime-profile";
 
 /**
  * Throw unless every assignment field is safe to write into Kubernetes names, labels, and annotations.

@@ -2,8 +2,8 @@ import type { V1Job } from "@kubernetes/client-node";
 import { type Logger } from "@opencrane/backend/observability";
 import { describe, expect, it } from "vitest";
 
-import { __ReconcileNextSkillWorkload, __ReconcileNextSkillWorkloadRelease, __RunSkillWorkloadController, __ValidateSkillWorkloadControllerProfiles } from "../skill-workload-controller.js";
-import type { SkillWorkloadControllerAuthority, SkillWorkloadControllerKubernetesStore, SkillWorkloadControllerOptions } from "../skill-workload-controller.types.js";
+import { __ReconcileNextSkillWorkload, __ReconcileNextSkillWorkloadRelease, __RunSkillWorkloadController, __ValidateSkillWorkloadControllerProfiles } from "../skill-workload-controller";
+import type { SkillWorkloadControllerAuthority, SkillWorkloadControllerKubernetesStore, SkillWorkloadControllerOptions } from "../skill-workload-controller.types";
 
 /** Silent structured logger used by focused reconciliation tests. */
 const _Log = { info: function _Info() {}, error: function _Error() {} } as unknown as Logger;

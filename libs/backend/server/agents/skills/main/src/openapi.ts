@@ -1,4 +1,4 @@
-import { SkillCatalogueRevisionStates, SkillCatalogueStates } from "./skill-catalogue.types.js";
+import { SkillCatalogueRevisionStates, SkillCatalogueStates } from "./skill-catalogue.types";
 
 /** OpenAPI path fragment for the browser-safe silo-scoped skill catalogue. */
 export const _SkillCatalogueOpenapiPaths = {

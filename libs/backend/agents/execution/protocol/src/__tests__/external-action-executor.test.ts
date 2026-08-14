@@ -6,8 +6,8 @@ import { describe, expect, it, vi } from "vitest";
 import { PERSONAL_MEMORY_RECALL_TOOL_REVISION } from "@opencrane/models/agents";
 import { ___DigestCanonicalJson } from "@opencrane/util";
 
-import { __CreateExternalActionExecutor, __PersonalMemoryDatasetId, UnsupportedExternalActionError } from "../external-action-executor.js";
-import type { IntegrationAssignmentUnavailableReason } from "../external-action-executor.types.js";
+import { __CreateExternalActionExecutor, __PersonalMemoryDatasetId, UnsupportedExternalActionError } from "../external-action-executor";
+import type { IntegrationAssignmentUnavailableReason } from "../external-action-executor.types";
 
 /** Build a candidate for the given tool revision prefix. */
 function _candidate(toolRevisionId: string): RuntimeExternalActionCandidate

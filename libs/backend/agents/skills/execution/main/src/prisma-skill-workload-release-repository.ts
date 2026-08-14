@@ -1,8 +1,8 @@
 import { SkillWorkloadKind, SkillWorkloadState, type Prisma } from "@prisma/client";
 
-import type { SkillWorkloadPodRegistrationCommand, SkillWorkloadReleaseClaim, SkillWorkloadReleaseCommand } from "./skill-workload-claims.types.js";
-import { _SkillWorkloadLeaseExpiryProposal, _SkillWorkloadTimestampProposal } from "./prisma-skill-workload-timestamps.js";
-import type { SkillWorkloadReleaseRepository } from "./skill-workload-unit-of-work.types.js";
+import type { SkillWorkloadPodRegistrationCommand, SkillWorkloadReleaseClaim, SkillWorkloadReleaseCommand } from "./skill-workload-claims.types";
+import { _SkillWorkloadLeaseExpiryProposal, _SkillWorkloadTimestampProposal } from "./prisma-skill-workload-timestamps";
+import type { SkillWorkloadReleaseRepository } from "./skill-workload-unit-of-work.types";
 
 /** Records Job unsuspends and first-Pod registrations in Postgres, inside one transaction. */
 export class PrismaSkillWorkloadReleaseRepository implements SkillWorkloadReleaseRepository

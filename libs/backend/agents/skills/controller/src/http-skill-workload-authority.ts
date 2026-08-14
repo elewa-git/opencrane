@@ -5,7 +5,7 @@ import { ___IsAgentControllerIdentifier, ___ParseAgentControllerSkillWorkloadAss
 import { ___DoWithTrace } from "@opencrane/backend/observability";
 import { ___ParseAndValidateJson } from "@opencrane/util";
 
-import type { SkillWorkloadControllerAuthority, SkillWorkloadControllerFetch, SkillWorkloadControllerHttpAuthorityOptions, SkillWorkloadControllerTokenReader } from "./skill-workload-controller.types.js";
+import type { SkillWorkloadControllerAuthority, SkillWorkloadControllerFetch, SkillWorkloadControllerHttpAuthorityOptions, SkillWorkloadControllerTokenReader } from "./skill-workload-controller.types";
 
 /** Maximum JSON response accepted from one internal controller authority call. */
 const _MAX_RESPONSE_BYTES = 16 * 1024;

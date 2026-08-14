@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { ConsumeChannelInvocationContextCommand } from "@opencrane/backend/server/agents/channel-targets";
 import { __EncodeConversationProjectionCursor, ConversationProjectionReadStatuses } from "@opencrane/backend/conversations/projection";
 
-import { __CreateConversationReplayRouter } from "../conversation-replay.router.js";
+import { __CreateConversationReplayRouter } from "../conversation-replay.router";
 
 /** Deterministic bounded tail dependencies for router tests. */
 function _Live()

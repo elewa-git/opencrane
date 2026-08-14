@@ -2,7 +2,7 @@ import { Router, type Request, type Response } from "express";
 
 import { __HashSkillWorkloadBootstrapReference, __IsSkillWorkloadBootstrapReference } from "@opencrane/contracts";
 
-import type { SkillWorkloadBootstrapRouterDependencies } from "./skill-workload-bootstrap.types.js";
+import type { SkillWorkloadBootstrapRouterDependencies } from "./skill-workload-bootstrap.types";
 
 /**
  * Build the route where a worker acknowledges its bootstrap, once.

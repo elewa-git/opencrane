@@ -1,7 +1,7 @@
 import { ArtifactIndexState, ArtifactKind, ArtifactState, type PrismaClient } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
 
-import { PrismaArtifactCatalogueRepository } from "../prisma-artifact-catalogue-repository.js";
+import { PrismaArtifactCatalogueRepository } from "../prisma-artifact-catalogue-repository";
 
 /** Builds one persisted asset row containing only browser-safe metadata. */
 function _artifactRow()

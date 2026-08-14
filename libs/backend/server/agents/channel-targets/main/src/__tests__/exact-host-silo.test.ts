@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { __ExactHostSiloResolver } from "../exact-host-silo.js";
+import { __ExactHostSiloResolver } from "../exact-host-silo";
 
 describe("exact host silo resolution", function _DescribeExactHostSiloResolution()
 {

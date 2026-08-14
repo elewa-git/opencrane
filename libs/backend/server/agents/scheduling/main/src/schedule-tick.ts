@@ -2,9 +2,9 @@ import { createHash } from "node:crypto";
 
 import { AgentScheduleOverlapPolicies, ManagedRunAdmissionOutcomes, type AgentRevisionLifecycleDenial } from "@opencrane/backend/server/agents/agent-services";
 
-import { __DueScheduledSlots, __IsValidTimezone, __ParseCronExpression } from "./cron-schedule.js";
-import { ScheduleInvalidReasons, ScheduledSlotOutcomes, ScheduleTickStatuses } from "./schedule-tick.enums.js";
-import type { AgentServiceSchedule, RetryBackoffPolicy, ScheduleTickDependencies, ScheduleTickResult, ScheduledSlotOutcome } from "./schedule-tick.types.js";
+import { __DueScheduledSlots, __IsValidTimezone, __ParseCronExpression } from "./cron-schedule";
+import { ScheduleInvalidReasons, ScheduledSlotOutcomes, ScheduleTickStatuses } from "./schedule-tick.enums";
+import type { AgentServiceSchedule, RetryBackoffPolicy, ScheduleTickDependencies, ScheduleTickResult, ScheduledSlotOutcome } from "./schedule-tick.types";
 
 /** Admission denial reasons that are transient and warrant a backed-off retry rather than a drop. */
 const _RETRYABLE_DENIALS: ReadonlySet<AgentRevisionLifecycleDenial> = new Set(["membership_stale", "admission_concurrency_limited", "persistence_unavailable", "authority_conflict"]);

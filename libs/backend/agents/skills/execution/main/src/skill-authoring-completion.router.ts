@@ -1,6 +1,6 @@
 import { Router, type Request, type Response } from "express";
 
-import { SkillAuthoringCompletionOutcomes, type SkillAuthoringCheckReport, type SkillAuthoringCompletionCommand, type SkillAuthoringCompletionRouterDependencies } from "./skill-authoring-completion.types.js";
+import { SkillAuthoringCompletionOutcomes, type SkillAuthoringCheckReport, type SkillAuthoringCompletionCommand, type SkillAuthoringCompletionRouterDependencies } from "./skill-authoring-completion.types";
 
 /** Fixed projected-token audience for the isolated authoring worker class. */
 const _AUTHORING_AUDIENCE = "opencrane-skill-authoring";

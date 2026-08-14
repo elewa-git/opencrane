@@ -4,7 +4,7 @@ import { __DigestAgentRevisionContent } from "@opencrane/models/agents";
 import type { AgentBudget, AgentRevisionContent, GrantScope as DomainGrantScope, GrantSubjectType as DomainGrantSubjectType, ReviewedIntegrationToolDefinition } from "@opencrane/models/agents";
 import { ___CloneCanonicalJson, type JsonValue } from "@opencrane/util";
 
-import { type AgentRevisionWriterRepository, type CreateAgentRevisionWithinTransactionCommand } from "./prisma-agent-revision-writer.types.js";
+import { type AgentRevisionWriterRepository, type CreateAgentRevisionWithinTransactionCommand } from "./prisma-agent-revision-writer.types";
 
 /** Include every nested assignment required to map a persisted revision back to the domain model. */
 export const _AGENT_REVISION_INCLUDE = {

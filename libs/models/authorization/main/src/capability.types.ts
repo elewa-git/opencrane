@@ -1,6 +1,6 @@
 import type { CanonicalJsonSha256Digest } from "@opencrane/util";
 
-import type { AuthorizationResourceLocator } from "./resource-locator.types.js";
+import type { AuthorizationResourceLocator } from "./resource-locator.types";
 
 export type { CanonicalJsonSha256Digest } from "@opencrane/util";
 

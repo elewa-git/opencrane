@@ -5,10 +5,10 @@ import express, { type Express, type RequestHandler } from "express";
 import { ___RequestContext } from "@opencrane/backend/observability";
 import { _ErrorHandler } from "@opencrane/backend/server/infra/http";
 
-import type { InternalRuntimeConfig } from "./config.types.js";
-import { _log } from "./log.js";
-import { _RegisterInternalRoutes } from "./routes.js";
-import { _CreateHttpRequestLogger } from "./telemetry.js";
+import type { InternalRuntimeConfig } from "./config.types";
+import { _log } from "./log";
+import { _RegisterInternalRoutes } from "./routes";
+import { _CreateHttpRequestLogger } from "./telemetry";
 
 /**
  * Build the workload-facing Express application.

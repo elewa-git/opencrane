@@ -1,9 +1,9 @@
-import { PersonaColourValues } from "../scoring/persona-scorer.types.js";
+import { PersonaColourValues } from "../scoring/persona-scorer.types";
 
-import { _CompilePersonaDraftInstructions } from "./persona-draft-instruction-compiler.js";
-import { PersonaTemplateVariable, type PersonaTemplateVariables } from "./persona-draft-instruction-compiler.types.js";
-import type { PersonaDraftDirectives, PersonaDraftSourceAnswer, PersonaDraftSourceDerivationInput, PersonaDraftSourceDerivationResult } from "./persona-draft-source-deriver.types.js";
-import { _ParsePersonaDraftDirectives } from "./persona-draft-source-deriver.validator.js";
+import { _CompilePersonaDraftInstructions } from "./persona-draft-instruction-compiler";
+import { PersonaTemplateVariable, type PersonaTemplateVariables } from "./persona-draft-instruction-compiler.types";
+import type { PersonaDraftDirectives, PersonaDraftSourceAnswer, PersonaDraftSourceDerivationInput, PersonaDraftSourceDerivationResult } from "./persona-draft-source-deriver.types";
+import { _ParsePersonaDraftDirectives } from "./persona-draft-source-deriver.validator";
 
 /** The question each template placeholder is filled from. */
 const _VARIABLE_QUESTIONS = {

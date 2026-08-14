@@ -1,11 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 import type { Prisma } from "@prisma/client";
 
-import { PersonaLifecycleOutcomes } from "../../profile/persona-lifecycle.types.js";
-import { __CompletePersonaInterview, __RecordPersonaInterviewAnswer, __StartPersonaInterview } from "../persona-interview-authority.js";
-import type { PersonaInterviewRepository } from "../persona-interview-authority.types.js";
-import { PrismaPersonaInterviewRepository } from "../prisma-persona-interview-repository.js";
-import { PersonaColourValues, PersonaModifierValues } from "../../scoring/persona-scorer.types.js";
+import { PersonaLifecycleOutcomes } from "../../profile/persona-lifecycle.types";
+import { __CompletePersonaInterview, __RecordPersonaInterviewAnswer, __StartPersonaInterview } from "../persona-interview-authority";
+import type { PersonaInterviewRepository } from "../persona-interview-authority.types";
+import { PrismaPersonaInterviewRepository } from "../prisma-persona-interview-repository";
+import { PersonaColourValues, PersonaModifierValues } from "../../scoring/persona-scorer.types";
 
 /** Fully resolved score used by lifecycle fakes. */
 const _SCORE = { orderedAnswerIds: ["answer-1"], orderedChoiceIds: ["q1:a"], colours: { red: 1, yellow: 0, green: 0, blue: 1, total: 2 }, openness: { explorer: 1, guardian: 0, total: 1 }, tieResolutions: [], primary: PersonaColourValues.Red, secondary: PersonaColourValues.Blue, modifier: PersonaModifierValues.Explorer, resolutionRequired: null } as const;

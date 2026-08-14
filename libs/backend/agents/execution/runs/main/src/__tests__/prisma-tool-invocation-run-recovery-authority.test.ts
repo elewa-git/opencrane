@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { ToolInvocationRunRecoveryEnterResults } from "@opencrane/backend/server/iam/authorization";
 
-import { PrismaToolInvocationRunRecoveryAuthority } from "../prisma-tool-invocation-run-recovery-authority.js";
+import { PrismaToolInvocationRunRecoveryAuthority } from "../prisma-tool-invocation-run-recovery-authority";
 
 /** Create the minimum transaction fake for exact run recovery state transitions. */
 function _Transaction(updateCount: number, current: { readonly attempt: number; readonly state: AgentRunState } | null)

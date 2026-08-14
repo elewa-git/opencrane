@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { ___ConversationCreationRequestSchema, ___ConversationParticipantSchema, ___ConversationReplayCursorSchema, ___ConversationSchema, ___ConversationTimelineEntrySchema, ___MessageSchema, ___ParticipantInputBlocksSchema, ConversationLifecycles, ConversationModes, ConversationTimelineEntryKinds, MessageContentBlockKinds, MessageRoles, MessageSources, MessageStates } from "../index.js";
+import { ___ConversationCreationRequestSchema, ___ConversationParticipantSchema, ___ConversationReplayCursorSchema, ___ConversationSchema, ___ConversationTimelineEntrySchema, ___MessageSchema, ___ParticipantInputBlocksSchema, ConversationLifecycles, ConversationModes, ConversationTimelineEntryKinds, MessageContentBlockKinds, MessageRoles, MessageSources, MessageStates } from "../index";
 
 /** Builds one valid exact immutable-mode conversation value. */
 function _conversation(mode: ConversationModes): Record<string, unknown>

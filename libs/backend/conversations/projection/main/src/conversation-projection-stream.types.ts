@@ -1,7 +1,7 @@
 import type { AgUiProjectionSourceEvent } from "@opencrane/contracts";
 import type { ConversationReplayCursor } from "@opencrane/contracts";
 
-import type { ConversationProjectionReader } from "./conversation-projection-reader.types.js";
+import type { ConversationProjectionReader } from "./conversation-projection-reader.types";
 
 /**
  * Sets safe bounds for one live projection response.

@@ -1,10 +1,10 @@
 import { PersonalConfigurationChangeState, type Prisma } from "@prisma/client";
 
-import { PersonalConfigurationMaterializationCodes, type MaterializePersonalConfigurationChangeCommand, type PersonalConfigurationMaterializationPersistenceResult } from "./personal-configuration-materialization.types.js";
-import { _ResolvePersonalConfigurationMaterializationStrategy } from "./personal-configuration-materialization-strategy.js";
-import { _TerminalProposalResolution } from "./personal-configuration-materialization-state.js";
-import { PersonalConfigurationMaterializationLifecycleStates, type PersonalConfigurationMaterializationChange, type PersonalConfigurationMaterializationResolution } from "./personal-configuration-materialization-state.types.js";
-import type { PersonalConfigurationMaterializationRepository } from "./personal-configuration-materialization-unit-of-work.types.js";
+import { PersonalConfigurationMaterializationCodes, type MaterializePersonalConfigurationChangeCommand, type PersonalConfigurationMaterializationPersistenceResult } from "./personal-configuration-materialization.types";
+import { _ResolvePersonalConfigurationMaterializationStrategy } from "./personal-configuration-materialization-strategy";
+import { _TerminalProposalResolution } from "./personal-configuration-materialization-state";
+import { PersonalConfigurationMaterializationLifecycleStates, type PersonalConfigurationMaterializationChange, type PersonalConfigurationMaterializationResolution } from "./personal-configuration-materialization-state.types";
+import type { PersonalConfigurationMaterializationRepository } from "./personal-configuration-materialization-unit-of-work.types";
 
 /**
  * Reads a proposal for materialisation and, at the end, marks it applied.

@@ -1,7 +1,7 @@
 import type { Prisma } from "@prisma/client";
 
-import { RunCancellationConflictReasons, RunCancellationResultStatuses, type RequestRunCancellationResult, type RunCancellationRepository } from "./run-cancellation.types.js";
-import { SelfRunCancellationOutcomes, type SelfRunCancellationCommand, type SelfRunCancellationRepository, type SelfRunCancellationResult } from "./self-run-cancellation.types.js";
+import { RunCancellationConflictReasons, RunCancellationResultStatuses, type RequestRunCancellationResult, type RunCancellationRepository } from "./run-cancellation.types";
+import { SelfRunCancellationOutcomes, type SelfRunCancellationCommand, type SelfRunCancellationRepository, type SelfRunCancellationResult } from "./self-run-cancellation.types";
 
 /** Prisma owner check in front of the shared durable run-cancellation authority. */
 export class PrismaSelfRunCancellationRepository implements SelfRunCancellationRepository

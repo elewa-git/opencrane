@@ -1,9 +1,9 @@
 import { ___CreateLogger, type Logger } from "@opencrane/backend/observability";
 import { AgentRevisionModelSelectionMaterializationCodes } from "@opencrane/backend/server/agents/agent-services";
 
-import { PersonalConfigurationMaterializationCodes, type MaterializePersonalConfigurationChangeCommand, type PersonalConfigurationChangeMaterializationRepository, type PersonalConfigurationMaterializationPersistenceResult } from "./personal-configuration-materialization.types.js";
-import { PersonalConfigurationMaterializationResolutionOutcomes } from "./personal-configuration-materialization-state.types.js";
-import type { PersonalConfigurationMaterializationTransaction, PersonalConfigurationMaterializationUnitOfWork } from "./personal-configuration-materialization-unit-of-work.types.js";
+import { PersonalConfigurationMaterializationCodes, type MaterializePersonalConfigurationChangeCommand, type PersonalConfigurationChangeMaterializationRepository, type PersonalConfigurationMaterializationPersistenceResult } from "./personal-configuration-materialization.types";
+import { PersonalConfigurationMaterializationResolutionOutcomes } from "./personal-configuration-materialization-state.types";
+import type { PersonalConfigurationMaterializationTransaction, PersonalConfigurationMaterializationUnitOfWork } from "./personal-configuration-materialization-unit-of-work.types";
 
 /**
  * Applies an accepted proposal by driving this package's repository and agent-services' revision

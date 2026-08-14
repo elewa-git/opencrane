@@ -3,11 +3,11 @@ import { AgentRunState, AgentRunTrigger, Prisma, type AgentRun as PrismaAgentRun
 import type { RunInputSnapshot } from "@opencrane/contracts";
 import { ___CreateLogger, type Logger } from "@opencrane/backend/observability";
 
-import { __PrepareChildRunAdmission } from "./child-run-admission.js";
-import type { ChildRunParentAuthority, PrepareChildRunAdmissionCommand, PreparedChildRunAdmission } from "./child-run-admission.types.js";
-import { _InitialRunOutboxData, _RunInputSnapshot, _RunInputSnapshotData } from "./prisma-run-admission-repository.js";
-import { __DigestRunInputSnapshot } from "./run-input-snapshot-digest.js";
-import type { ChildRunReservationBuild, ChildRunReservationCommand, ChildRunReservationRepository, ChildRunReservationResult } from "./child-run-reservation.types.js";
+import { __PrepareChildRunAdmission } from "./child-run-admission";
+import type { ChildRunParentAuthority, PrepareChildRunAdmissionCommand, PreparedChildRunAdmission } from "./child-run-admission.types";
+import { _InitialRunOutboxData, _RunInputSnapshot, _RunInputSnapshotData } from "./prisma-run-admission-repository";
+import { __DigestRunInputSnapshot } from "./run-input-snapshot-digest";
+import type { ChildRunReservationBuild, ChildRunReservationCommand, ChildRunReservationRepository, ChildRunReservationResult } from "./child-run-reservation.types";
 
 /** Atomically persists one child admission while its direct parent is locked. */
 export class PrismaChildRunReservationRepository implements ChildRunReservationRepository

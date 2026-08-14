@@ -1,5 +1,5 @@
-import type { ActionCapability, CanonicalJsonSha256Digest, CapabilityReference } from "./capability.types.js";
-import type { AuthorizationResourceLocator } from "./resource-locator.types.js";
+import type { ActionCapability, CanonicalJsonSha256Digest, CapabilityReference } from "./capability.types";
+import type { AuthorizationResourceLocator } from "./resource-locator.types";
 
 /** Public P-256 JSON Web Key accepted for ES256 proof verification. */
 export interface Es256PublicJwk

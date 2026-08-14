@@ -2,10 +2,10 @@ import type { Request } from "express";
 
 import type { Logger } from "@opencrane/backend/observability";
 
-import type { AgentServicePublicationRepository } from "./agent-publication.types.js";
-import type { AgentRevisionLifecycleRepository, ManagedRunAdmissionPort } from "./agent-revision-lifecycle.types.js";
-import type { AgentScheduleRepository } from "./agent-schedule.types.js";
-import type { ScopeGrantResolver } from "./scope-attachment-authority.types.js";
+import type { AgentServicePublicationRepository } from "./agent-publication.types";
+import type { AgentRevisionLifecycleRepository, ManagedRunAdmissionPort } from "./agent-revision-lifecycle.types";
+import type { AgentScheduleRepository } from "./agent-schedule.types";
+import type { ScopeGrantResolver } from "./scope-attachment-authority.types";
 
 /**
  * Who is making a management request, worked out by the app from the browser session and request

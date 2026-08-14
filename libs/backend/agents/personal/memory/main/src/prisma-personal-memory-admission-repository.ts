@@ -2,7 +2,7 @@ import { AuthorizationScopeKind, MemoryConsentState, MemoryDatasetState, MemoryF
 
 import { MemoryFactProvenanceSourceKinds } from "@opencrane/contracts";
 
-import type { PersonalMemoryAdmissionRepository, PersonalMemoryDataset, ResolvePersonalMemoryDatasetCommand } from "./personal-memory-dataset.types.js";
+import type { PersonalMemoryAdmissionRepository, PersonalMemoryDataset, ResolvePersonalMemoryDatasetCommand } from "./personal-memory-dataset.types";
 
 /**
  * Reads a user's personal dataset and preference facts inside the run-admission transaction.

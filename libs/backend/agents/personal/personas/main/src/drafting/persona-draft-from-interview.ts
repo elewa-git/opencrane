@@ -1,5 +1,5 @@
-import { PersonaDraftDenialReasons, type CreatePersonaDraftCommand, type CreatePersonaDraftResult, type PersonaDraftFromInterviewRepository } from "./persona-draft-authority.types.js";
-import { PersonaLifecycleOutcomes } from "../profile/persona-lifecycle.types.js";
+import { PersonaDraftDenialReasons, type CreatePersonaDraftCommand, type CreatePersonaDraftResult, type PersonaDraftFromInterviewRepository } from "./persona-draft-authority.types";
+import { PersonaLifecycleOutcomes } from "../profile/persona-lifecycle.types";
 
 /**
  * Creates the persona draft the owner reviews before approving it.

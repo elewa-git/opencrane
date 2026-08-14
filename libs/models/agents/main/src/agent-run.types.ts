@@ -1,5 +1,5 @@
 import type { ConversationId } from "@opencrane/models/conversations";
-import type { AgentRevisionId, AgentRunId, AgentServiceId, SiloId, UserId } from "./identifiers.types.js";
+import type { AgentRevisionId, AgentRunId, AgentServiceId, SiloId, UserId } from "./identifiers.types";
 
 /** Trigger that created an agent run. */
 export type AgentRunTrigger = "interactive" | "schedule" | "managed_invocation";

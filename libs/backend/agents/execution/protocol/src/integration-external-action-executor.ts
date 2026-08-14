@@ -1,8 +1,8 @@
 import type { JsonValue } from "@opencrane/util";
 import type { ResolveIntegrationAssignmentResult } from "@opencrane/backend/server/gateways/integrations";
 
-import { IntegrationAssignmentUnavailableError, IntegrationToolReturnedError } from "./external-action-errors.js";
-import { ExternalActionRevisionKinds, type DurableExternalActionCommand, type ExternalActionExecutorDependencies } from "./external-action-executor.types.js";
+import { IntegrationAssignmentUnavailableError, IntegrationToolReturnedError } from "./external-action-errors";
+import { ExternalActionRevisionKinds, type DurableExternalActionCommand, type ExternalActionExecutorDependencies } from "./external-action-executor.types";
 
 /** The success outcome value `resolveAssignment` returns, written out once here. */
 const _resolvedIntegrationAssignmentOutcome: Extract<ResolveIntegrationAssignmentResult, { readonly assignment: unknown }>["outcome"] = "resolved";

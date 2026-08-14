@@ -1,5 +1,5 @@
-import type { TrustedHostSiloBinding, TrustedHostSiloPort } from "./channel-target-resolution.types.js";
-import type { ExactHostSiloConfig } from "./exact-host-silo.types.js";
+import type { TrustedHostSiloBinding, TrustedHostSiloPort } from "./channel-target-resolution.types";
+import type { ExactHostSiloConfig } from "./exact-host-silo.types";
 
 /** Exact deployment-owned host-to-silo authority. */
 export class __ExactHostSiloResolver implements TrustedHostSiloPort

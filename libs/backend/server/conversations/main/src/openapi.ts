@@ -1,7 +1,7 @@
 import { ConversationLifecycles, ConversationModes, MessageContentBlockKinds, MessageRoles, MessageSources, MessageStates } from "@opencrane/models/conversations";
 
-import { ConversationAuthorityOutcomes } from "./types/conversation-authority-result.types.js";
-import { PersonalAgentDirectoryStatuses } from "./types/conversation-directory.types.js";
+import { ConversationAuthorityOutcomes } from "./types/conversation-authority-result.types";
+import { PersonalAgentDirectoryStatuses } from "./types/conversation-directory.types";
 
 /**
  * OpenAPI description of the live replay route, owned by this package rather than by the

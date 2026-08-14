@@ -1,10 +1,10 @@
 import type { AgentRunId } from "@opencrane/models/agents";
 import type { JsonValue } from "@opencrane/util";
 
-import type { CompiledRunInput } from "./compiled-run-input.types.js";
-import type { RunInputSnapshot } from "./run-input-snapshot.types.js";
-import type { RuntimeAssignment } from "./runtime-assignment.types.js";
-import type { RuntimeElicitationProposal } from "./conversation-elicitation.types.js";
+import type { CompiledRunInput } from "./compiled-run-input.types";
+import type { RunInputSnapshot } from "./run-input-snapshot.types";
+import type { RuntimeAssignment } from "./runtime-assignment.types";
+import type { RuntimeElicitationProposal } from "./conversation-elicitation.types";
 
 /** The only wire-protocol version the runtime boundary accepts today; a frame declaring anything else is rejected. */
 export const AGENT_RUNTIME_PROTOCOL_V1 = "opencrane.agent-runtime/v1";

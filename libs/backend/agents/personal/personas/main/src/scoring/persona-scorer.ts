@@ -1,4 +1,4 @@
-import { PersonaColourValues, PersonaModifierValues, PersonaTieKinds, type PersonaAuthoritativeScoreResult, type PersonaScoreReplayEvidence, type PersonaScoreResult, type PersonaSelectionValue, type PersonaTieChoice, type PersonaWeightedAnswer } from "./persona-scorer.types.js";
+import { PersonaColourValues, PersonaModifierValues, PersonaTieKinds, type PersonaAuthoritativeScoreResult, type PersonaScoreReplayEvidence, type PersonaScoreResult, type PersonaSelectionValue, type PersonaTieChoice, type PersonaWeightedAnswer } from "./persona-scorer.types";
 
 /** Fixed display order for the four colours. Used only to list tied candidates; it never decides which one wins. */
 const _COLOUR_ORDER: readonly PersonaColourValues[] = [PersonaColourValues.Red, PersonaColourValues.Yellow, PersonaColourValues.Green, PersonaColourValues.Blue];

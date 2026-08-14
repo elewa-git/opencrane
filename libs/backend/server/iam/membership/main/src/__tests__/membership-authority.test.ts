@@ -1,8 +1,8 @@
 import type { FleetSignatureVerificationEvidence, SignedFleetMembershipRevision } from "@opencrane/models/authorization";
 import { describe, expect, it } from "vitest";
 
-import { __VerifyCurrentFleetMembership } from "../membership-authority.js";
-import type { FleetMembershipAcceptance, FleetMembershipAcceptanceResult, FleetMembershipAuthorityRepository, FleetMembershipSignatureVerifier, VerifyFleetMembershipCommand } from "../membership-authority.types.js";
+import { __VerifyCurrentFleetMembership } from "../membership-authority";
+import type { FleetMembershipAcceptance, FleetMembershipAcceptanceResult, FleetMembershipAuthorityRepository, FleetMembershipSignatureVerifier, VerifyFleetMembershipCommand } from "../membership-authority.types";
 
 /** Creates a signed fleet revision whose assertion matches the command fixture. */
 function _revision(issuedAtEpochMs = 1000, revision = 7): SignedFleetMembershipRevision

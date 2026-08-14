@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { ___CONVERSATION_ASSET_MAX_TOTAL_BYTES } from "@opencrane/models/conversation-assets";
 
-import { _ConversationAssetFileMediaType, _DecideConversationAssetFiles } from "../conversation-asset-file.js";
+import { _ConversationAssetFileMediaType, _DecideConversationAssetFiles } from "../conversation-asset-file";
 
 describe("conversation asset file policy", function _Suite()
 {

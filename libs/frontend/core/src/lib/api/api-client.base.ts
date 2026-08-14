@@ -1,6 +1,6 @@
 import createClient, { Client, Middleware } from "openapi-fetch";
 
-import { _CreateOpenCraneApiError } from "./api-error.js";
+import { _CreateOpenCraneApiError } from "./api-error";
 
 /**
  * Shared base for the frontend's typed OpenCrane clients.

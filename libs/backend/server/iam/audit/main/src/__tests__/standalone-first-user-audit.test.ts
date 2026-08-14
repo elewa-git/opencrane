@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { __CreateStandaloneFirstUserAdmissionAuditAppender } from "../standalone-first-user-audit.js";
+import { __CreateStandaloneFirstUserAdmissionAuditAppender } from "../standalone-first-user-audit";
 
 describe("__CreateStandaloneFirstUserAdmissionAuditAppender", function _suite()
 {

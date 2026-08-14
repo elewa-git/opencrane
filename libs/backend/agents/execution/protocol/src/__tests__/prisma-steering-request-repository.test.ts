@@ -1,8 +1,8 @@
 import { AgentRunState, Prisma } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
 
-import { PrismaSteeringRequestRepository } from "../prisma-steering-request-repository.js";
-import { PrismaSteeringRequestUnitOfWork } from "../prisma-steering-request-unit-of-work.js";
+import { PrismaSteeringRequestRepository } from "../prisma-steering-request-repository";
+import { PrismaSteeringRequestUnitOfWork } from "../prisma-steering-request-unit-of-work";
 
 /** Defines the owner-bound steering request reused across transaction and retry assertions. */
 const _COMMAND = { runId: "run-1", siloId: "silo-1", subjectId: "user-1", content: { text: "Focus." }, idempotencyDigest: "sha256:key", digest: "sha256:key:sha256:text", submittedAt: new Date("2026-07-26T12:00:00.000Z") } as const;

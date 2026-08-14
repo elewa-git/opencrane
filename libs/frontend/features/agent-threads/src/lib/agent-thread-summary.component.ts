@@ -6,8 +6,8 @@ import { AvatarCircleComponent, AvatarSizes, AvatarTones, ScopeChipComponent, Sc
 import { ConversationStatusLineComponent } from "@opencrane/elements/conversation";
 import { AgentThreadAccessStates, type AgentThreadSummaryPresentation } from "@opencrane/state/conversation/agent-threads";
 
-import { __AgentThreadSummaryStatusPresentation } from "./agent-thread.mapper.js";
-import type { AgentThreadOpenIntent } from "./agent-thread-feature.types.js";
+import { __AgentThreadSummaryStatusPresentation } from "./agent-thread.mapper";
+import type { AgentThreadOpenIntent } from "./agent-thread-feature.types";
 
 /** Compact child summary rendered directly beneath one root parent message. */
 @Component({ selector: "wo-agent-thread-summary", standalone: true, imports: [AvatarCircleComponent, BadgeModule, ButtonModule, ConversationStatusLineComponent, ScopeChipComponent], templateUrl: "./agent-thread-summary.component.html", styleUrl: "./agent-thread-summary.component.scss", changeDetection: ChangeDetectionStrategy.OnPush })

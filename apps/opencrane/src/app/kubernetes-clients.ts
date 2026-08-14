@@ -1,6 +1,6 @@
 import * as k8s from "@kubernetes/client-node";
 
-import type { OpenCraneKubernetesClients } from "./kubernetes-clients.types.js";
+import type { OpenCraneKubernetesClients } from "./kubernetes-clients.types";
 
 /**
  * Create all Kubernetes clients from one resolved process identity.

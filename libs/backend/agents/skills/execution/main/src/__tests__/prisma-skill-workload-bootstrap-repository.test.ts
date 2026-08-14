@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { PrismaSkillWorkloadBootstrapRepository } from "../prisma-skill-workload-bootstrap-repository.js";
+import { PrismaSkillWorkloadBootstrapRepository } from "../prisma-skill-workload-bootstrap-repository";
 
 /** Worker identity used by the bootstrap tests below. */
 const _IDENTITY = { namespace: "opencrane-skill-authoring", serviceAccountName: "skill-authoring-default", podUid: "pod-uid-1" };

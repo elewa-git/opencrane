@@ -4,8 +4,8 @@ import request from "supertest";
 import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 
-import { _ErrorHandler } from "../error-handler.js";
-import { ___WithValidatedPublicBody } from "../request-validation.js";
+import { _ErrorHandler } from "../error-handler";
+import { ___WithValidatedPublicBody } from "../request-validation";
 
 /** Build a test app whose public route uses the shared validation boundary. */
 function _BuildApp()

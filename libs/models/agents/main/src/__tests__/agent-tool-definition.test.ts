@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 
-import { __AreReviewedIntegrationToolDefinitionsValid, __IsReviewedIntegrationToolDefinitionValid } from "../agent-tool-definition.validator.js";
-import type { ReviewedIntegrationToolDefinition } from "../agent-revision.types.js";
+import { __AreReviewedIntegrationToolDefinitionsValid, __IsReviewedIntegrationToolDefinitionValid } from "../agent-tool-definition.validator";
+import type { ReviewedIntegrationToolDefinition } from "../agent-revision.types";
 
 /** Build one reviewed definition with required, typed, closed input members. */
 function _Definition(parametersSchema: JsonValue = { type: "object", additionalProperties: false, required: ["query"], properties: { query: { type: "string" } } }): ReviewedIntegrationToolDefinition

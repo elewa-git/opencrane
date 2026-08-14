@@ -6,8 +6,8 @@ import { PrismaChannelTargetAuthorityUnitOfWork, __CreateChannelTargetsRouter, _
 import { PrismaFleetMembershipAuthorityRepository, SignedFleetMembershipAssertionVerifier, _CreateFleetMembershipEvidenceConfig } from "@opencrane/backend/server/iam/membership";
 import { _CreateChannelProxyTokenReviewer } from "@opencrane/backend/server/infra/workload-identity";
 
-import type { ChannelTargetRuntimeConfig } from "./config.types.js";
-import { _log } from "./log.js";
+import type { ChannelTargetRuntimeConfig } from "./config.types";
+import { _log } from "./log";
 
 /** Internal Kubernetes DNS suffix accepted for the release-local replay receiver. */
 const _INTERNAL_ROUTE_HOST_SUFFIXES = [".svc.cluster.local"] as const;

@@ -2,7 +2,7 @@ import { PersonaRevisionState } from "@prisma/client";
 
 import type { InitialRunAuthority, RunAdmissionTransaction } from "@opencrane/backend/agents/execution/runs";
 
-import type { ApprovedPersonaInput, ApprovedPersonaSource, SessionAssemblyCommand, SessionAssemblyLoad } from "./session-assembly.types.js";
+import type { ApprovedPersonaInput, ApprovedPersonaSource, SessionAssemblyCommand, SessionAssemblyLoad } from "./session-assembly.types";
 
 /**
  * Reads the one approved persona a personal service may put in a new snapshot.

@@ -1,8 +1,8 @@
 import type { AuthorizationGrant, CapabilityReference } from "@opencrane/models/authorization";
 import { describe, expect, it } from "vitest";
 
-import { __ResolveEffectiveAccess } from "../effective-access.js";
-import type { AuthorizationGrantRepository, AuthorizationMembershipAuthority, AuthorizationMembershipDecision, AuthorizationMembershipRequirement, ResolveEffectiveAccessCommand } from "../effective-access.types.js";
+import { __ResolveEffectiveAccess } from "../effective-access";
+import type { AuthorizationGrantRepository, AuthorizationMembershipAuthority, AuthorizationMembershipDecision, AuthorizationMembershipRequirement, ResolveEffectiveAccessCommand } from "../effective-access.types";
 
 /** Creates one immutable capability reference. */
 function _capability(capabilityId: string): CapabilityReference

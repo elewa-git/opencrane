@@ -1,15 +1,15 @@
 import { PersonaColour, PersonaOpennessModifier, Prisma } from "@prisma/client";
 
-import { PersonaLifecycleOutcomes } from "../profile/persona-lifecycle.types.js";
-import type { PersonaProfileRecord } from "../profile/persona-aggregate-read-repository.types.js";
-import { PrismaPersonaAggregateReadRepository } from "../profile/prisma-persona-aggregate-read-repository.js";
-import { PersonaColourValues, PersonaModifierValues, type PersonaScoreResult } from "../scoring/persona-scorer.types.js";
-import { PersonaScoringPersistenceStatuses } from "../scoring/persona-scoring-repository.types.js";
-import { PrismaPersonaScoringRepository } from "../scoring/prisma-persona-scoring-repository.js";
+import { PersonaLifecycleOutcomes } from "../profile/persona-lifecycle.types";
+import type { PersonaProfileRecord } from "../profile/persona-aggregate-read-repository.types";
+import { PrismaPersonaAggregateReadRepository } from "../profile/prisma-persona-aggregate-read-repository";
+import { PersonaColourValues, PersonaModifierValues, type PersonaScoreResult } from "../scoring/persona-scorer.types";
+import { PersonaScoringPersistenceStatuses } from "../scoring/persona-scoring-repository.types";
+import { PrismaPersonaScoringRepository } from "../scoring/prisma-persona-scoring-repository";
 
-import { PersonaDraftDenialReasons, type CreatePersonaDraftCommand, type CreatePersonaDraftPersistenceResult, type PersonaDraftFromInterviewRepository } from "./persona-draft-authority.types.js";
-import { _DerivePersonaDraftSources } from "./persona-draft-source-deriver.js";
-import type { PersonaDraftInsightEvidence } from "./persona-draft-persistence.types.js";
+import { PersonaDraftDenialReasons, type CreatePersonaDraftCommand, type CreatePersonaDraftPersistenceResult, type PersonaDraftFromInterviewRepository } from "./persona-draft-authority.types";
+import { _DerivePersonaDraftSources } from "./persona-draft-source-deriver";
+import type { PersonaDraftInsightEvidence } from "./persona-draft-persistence.types";
 
 /** Prisma adapter that turns one completed interview's score into a persona draft revision. */
 export class PrismaPersonaDraftRepository implements PersonaDraftFromInterviewRepository

@@ -3,9 +3,9 @@ import { ConversationAssetsStore } from "@opencrane/state/conversation/assets";
 import { ConversationElicitationStore, type ConversationActivityTarget } from "@opencrane/state/conversation/elicitation";
 import { ConversationOnboardingHistoryStore, ConversationRunStore, ConversationWorkspaceRouteStates, ConversationWorkspaceStore } from "@opencrane/state/conversation/workspace";
 
-import type { ConversationThreadNavigationIntent } from "../../conversation-workspace-feature.types.js";
-import { ConversationWorkspacePresenter } from "../../conversation-workspace.presenter.js";
-import { CONVERSATION_WORKSPACE_PAGE_IMPORTS } from "./conversation-workspace-page.imports.js";
+import type { ConversationThreadNavigationIntent } from "../../conversation-workspace-feature.types";
+import { ConversationWorkspacePresenter } from "../../conversation-workspace.presenter";
+import { CONVERSATION_WORKSPACE_PAGE_IMPORTS } from "./conversation-workspace-page.imports";
 
 /**
  * Composes the chat workspace and reports navigation intent to its feature route; the app binds the

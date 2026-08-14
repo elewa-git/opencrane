@@ -4,9 +4,9 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest
 
 import { ConversationAssetDisposition, ConversationAssetLifecycle, ConversationAssetProvenance } from "@opencrane/models/conversation-assets";
 
-import { CONVERSATION_ASSETS_GATEWAY, type ConversationAssetsGateway } from "../conversation-assets-gateway.types.js";
-import { ConversationAssetsStore } from "../conversation-assets.store.js";
-import { ConversationAssetTransferPhases, type ConversationAsset } from "../conversation-assets.types.js";
+import { CONVERSATION_ASSETS_GATEWAY, type ConversationAssetsGateway } from "../conversation-assets-gateway.types";
+import { ConversationAssetsStore } from "../conversation-assets.store";
+import { ConversationAssetTransferPhases, type ConversationAsset } from "../conversation-assets.types";
 
 /** One safe server projection fixture. */
 function _Asset(state: ConversationAssetLifecycle = ConversationAssetLifecycle.Processing): ConversationAsset

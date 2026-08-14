@@ -1,6 +1,6 @@
 import { PersonaColour, PersonaRevisionState, type Prisma, type PrismaClient } from "@prisma/client";
 
-import { PersonaWorkflowColours, type PersonaWorkflowApprovedBootstrapEvidence, type PersonaWorkflowApprovedEvidence, type PersonaWorkflowEvidenceRepository, type PersonaWorkflowOwner } from "./persona-workflow-evidence.types.js";
+import { PersonaWorkflowColours, type PersonaWorkflowApprovedBootstrapEvidence, type PersonaWorkflowApprovedEvidence, type PersonaWorkflowEvidenceRepository, type PersonaWorkflowOwner } from "./persona-workflow-evidence.types";
 
 /** Builds the persona workflow evidence reader over a Prisma client. */
 export function _CreatePersonaWorkflowEvidenceRepository(prisma: PrismaClient): PersonaWorkflowEvidenceRepository

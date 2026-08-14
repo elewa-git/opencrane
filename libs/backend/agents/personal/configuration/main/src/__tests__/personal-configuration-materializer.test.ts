@@ -2,8 +2,8 @@ import { describe, expect, it, vi } from "vitest";
 
 import { AgentRevisionModelSelectionMaterializationCodes } from "@opencrane/backend/server/agents/agent-services";
 
-import { PersonalConfigurationMaterializationResolutionOutcomes } from "../materialization/personal-configuration-materialization-state.types.js";
-import { _PersonalConfigurationMaterializer } from "../materialization/personal-configuration-materializer.js";
+import { PersonalConfigurationMaterializationResolutionOutcomes } from "../materialization/personal-configuration-materialization-state.types";
+import { _PersonalConfigurationMaterializer } from "../materialization/personal-configuration-materializer";
 
 /** Trusted owner command for repository-orchestration tests. */
 function _Command()

@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { ___DoWithTrace, ___GetActiveSpan } from "@opencrane/backend/observability";
 import type { ArtifactScannerClaimCommand, ArtifactScannerFailureCommand, ArtifactScannerJobClaim } from "@opencrane/contracts";
 
-import type { ArtifactScannerDependencies } from "./scanner.types.js";
+import type { ArtifactScannerDependencies } from "./scanner.types";
 
 /** Run the outbound-only scan loop until shutdown. */
 export async function __RunArtifactScanner(dependencies: ArtifactScannerDependencies, signal: AbortSignal): Promise<void>

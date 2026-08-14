@@ -1,6 +1,6 @@
-import type { ArtifactAuthorityRepository } from "./artifact-finalization.types.js";
-import type { ArtifactPreprocessRepository } from "./artifact-preprocessing.types.js";
-import type { ArtifactUploadLeaseRepository } from "./artifact-upload.types.js";
+import type { ArtifactAuthorityRepository } from "./artifact-finalization.types";
+import type { ArtifactPreprocessRepository } from "./artifact-preprocessing.types";
+import type { ArtifactUploadLeaseRepository } from "./artifact-upload.types";
 
 /**
  * Thrown when two publications collided and retrying inside the transaction did not help.

@@ -3,7 +3,7 @@ import type { InitialRunAuthority, RunAdmissionTransaction } from "@opencrane/ba
 import { RunInputSnapshotIdentityKinds } from "@opencrane/contracts";
 import { AgentServiceKinds } from "@opencrane/models/agents";
 
-import type { ConversationContextInput, IdentityEnvelopeInput, MemoryScopeInput, MemoryScopeSource, SessionAssemblyCommand, SessionAssemblyLoad } from "./session-assembly.types.js";
+import type { ConversationContextInput, IdentityEnvelopeInput, MemoryScopeInput, MemoryScopeSource, SessionAssemblyCommand, SessionAssemblyLoad } from "./session-assembly.types";
 
 /**
  * Chooses the personal Cognee dataset for a run and freezes the facts the gateway picked.

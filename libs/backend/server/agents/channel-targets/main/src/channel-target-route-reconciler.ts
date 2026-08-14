@@ -1,4 +1,4 @@
-import type { ChannelTargetRouteReconciler, ChannelTargetRouteReconcilerDependencies } from "./channel-target-route-reconciler.types.js";
+import type { ChannelTargetRouteReconciler, ChannelTargetRouteReconcilerDependencies } from "./channel-target-route-reconciler.types";
 
 /** Reconcile the current deployment route set once, or no-op when the capability is disabled. */
 export async function __ReconcileChannelTargetRoutes(dependencies: ChannelTargetRouteReconcilerDependencies): Promise<number>

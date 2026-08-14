@@ -6,9 +6,9 @@ import { describe, expect, it, vi } from "vitest";
 import { AgentThreadDeliveryKinds } from "@opencrane/backend/conversations/agent-threads";
 import { ConversationProjectionReadStatuses } from "@opencrane/backend/conversations/projection";
 
-import { __CreateAgentThreadParentDeliveryRouter } from "../agent-thread-parent-delivery.router.js";
-import { PrismaAgentThreadParentDeliveryUnitOfWork } from "../db/prisma-agent-thread-parent-delivery-unit-of-work.js";
-import { PrismaConversationReplayRepository } from "../db/prisma-conversation-replay-repository.js";
+import { __CreateAgentThreadParentDeliveryRouter } from "../agent-thread-parent-delivery.router";
+import { PrismaAgentThreadParentDeliveryUnitOfWork } from "../db/prisma-agent-thread-parent-delivery-unit-of-work";
+import { PrismaConversationReplayRepository } from "../db/prisma-conversation-replay-repository";
 
 const _IDENTITY = { namespace: "runtime", serviceAccountName: "agent-runtime-service-1", podUid: "pod-1" } as const;
 const _BODY = { runId: "run-1", childConversationId: "child-1", idempotencyKey: "delivery-1", kind: AgentThreadDeliveryKinds.Result, label: "Done", detail: "The requested work is ready.", assetId: null } as const;

@@ -1,4 +1,4 @@
-import type { Artifact, ArtifactContentReference, ArtifactRevision, ArtifactRevisionReference, SkillRevision } from "./artifact.types.js";
+import type { Artifact, ArtifactContentReference, ArtifactRevision, ArtifactRevisionReference, SkillRevision } from "./artifact.types";
 
 /** Canonical lowercase SHA-256 content-address pattern. */
 export const ___SHA256_CONTENT_ADDRESS_PATTERN = /^sha256:[a-f0-9]{64}$/;

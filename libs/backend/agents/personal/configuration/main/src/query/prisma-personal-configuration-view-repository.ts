@@ -1,7 +1,7 @@
 import { PersonalConfigurationChangeState, Prisma, type PrismaClient } from "@prisma/client";
 
-import { _IsPersonalConfigurationPatch } from "../proposal/personal-configuration-patch.validator.js";
-import { PersonalConfigurationChangeViewStates, type PersonalConfigurationChangeView, type PersonalConfigurationChangeViewRepository } from "./personal-configuration-view.types.js";
+import { _IsPersonalConfigurationPatch } from "../proposal/personal-configuration-patch.validator";
+import { PersonalConfigurationChangeViewStates, type PersonalConfigurationChangeView, type PersonalConfigurationChangeViewRepository } from "./personal-configuration-view.types";
 
 /** The proposal columns this repository selects, before they are mapped to the user-facing view. */
 interface PersonalConfigurationViewRow

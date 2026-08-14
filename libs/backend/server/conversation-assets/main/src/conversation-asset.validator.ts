@@ -4,7 +4,7 @@ import { z, type ZodType } from "zod";
 import { ___DecideConversationAssetBatch } from "@opencrane/models/conversation-assets";
 import { ___IsSha256ContentAddress } from "@opencrane/models/artifacts";
 
-import type { ReserveConversationAssetRequest } from "./conversation-asset.types.js";
+import type { ReserveConversationAssetRequest } from "./conversation-asset.types";
 
 /** Strict participant upload reservation shape shared by transport and durable authority. */
 const _ReserveConversationAssetSchema: ZodType<ReserveConversationAssetRequest> = z.object({

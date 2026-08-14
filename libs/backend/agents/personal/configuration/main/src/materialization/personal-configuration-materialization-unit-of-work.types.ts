@@ -1,7 +1,7 @@
 import type { AgentRevisionModelSelectionRepository } from "@opencrane/backend/server/agents/agent-services";
 
-import type { MaterializePersonalConfigurationChangeCommand, PersonalConfigurationMaterializationPersistenceResult } from "./personal-configuration-materialization.types.js";
-import type { PersonalConfigurationMaterializationResolution } from "./personal-configuration-materialization-state.types.js";
+import type { MaterializePersonalConfigurationChangeCommand, PersonalConfigurationMaterializationPersistenceResult } from "./personal-configuration-materialization.types";
+import type { PersonalConfigurationMaterializationResolution } from "./personal-configuration-materialization-state.types";
 
 /**
  * Reads a proposal for materialisation and, at the very end, marks it applied.

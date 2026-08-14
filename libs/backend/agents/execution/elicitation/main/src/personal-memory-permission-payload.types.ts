@@ -1,6 +1,6 @@
 import type { z } from "zod";
 
-import type { PersonalMemoryPermissionPayloadSchema } from "./personal-memory-permission-payload.validator.js";
+import type { PersonalMemoryPermissionPayloadSchema } from "./personal-memory-permission-payload.validator";
 
 /**
  * The consent record stored on a personal-memory permission question, and what an accepted answer

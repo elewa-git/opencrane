@@ -1,7 +1,7 @@
 import { AgentRunState, ApprovalRequestState, ExternalActionRecoveryMode, ToolInvocationState, type Prisma } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
 
-import { __CancelPendingRunApprovalAuthority } from "../run-approval-cancellation.js";
+import { __CancelPendingRunApprovalAuthority } from "../run-approval-cancellation";
 
 describe("run approval cancellation authority", function _suite()
 {

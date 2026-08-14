@@ -1,8 +1,8 @@
 import type { ArtifactPreprocessSourceBroker, ArtifactPreprocessSourceLeaseIssuer } from "@opencrane/backend/server/agents/artifacts";
 import { ___DoWithTrace } from "@opencrane/backend/observability";
 
-import { _CreateArtifactReadLeaseSigner } from "./artifact-read-lease-signer.factory.js";
-import { _CreateArtifactServiceReadPort, _InternalArtifactServiceUrl } from "./artifact-service-read-port.factory.js";
+import { _CreateArtifactReadLeaseSigner } from "./artifact-read-lease-signer.factory";
+import { _CreateArtifactServiceReadPort, _InternalArtifactServiceUrl } from "./artifact-service-read-port.factory";
 
 /**
  * Compose the server-side preprocessing source broker from the named

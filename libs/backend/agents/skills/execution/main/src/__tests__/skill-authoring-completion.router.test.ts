@@ -2,8 +2,8 @@ import express from "express";
 import request from "supertest";
 import { describe, expect, it, vi } from "vitest";
 
-import { __CreateSkillAuthoringCompletionRouter } from "../skill-authoring-completion.router.js";
-import type { SkillAuthoringCompletionRouterDependencies } from "../skill-authoring-completion.types.js";
+import { __CreateSkillAuthoringCompletionRouter } from "../skill-authoring-completion.router";
+import type { SkillAuthoringCompletionRouterDependencies } from "../skill-authoring-completion.types";
 
 /** A passing report body from an authoring worker. */
 const _SUCCESS = { workloadId: "workload-1", outcome: "succeeded", testReport: { passed: true, summary: "all checks passed", checksRun: 2 }, scanResult: { passed: true, summary: "no findings", checksRun: 3 } };

@@ -1,8 +1,8 @@
 import { AgentRunState, ExternalActionRecoveryMode, Prisma, ToolInvocationState, WorkloadAssignmentState } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
 
-import { __OpenDeferredToolApproval } from "../prisma-deferred-tool-approval-opener.js";
-import { __DigestCanonicalJson } from "../canonical-json-digest.js";
+import { __OpenDeferredToolApproval } from "../prisma-deferred-tool-approval-opener";
+import { __DigestCanonicalJson } from "../canonical-json-digest";
 
 /** Structured logger double used to verify ambiguous-recovery evidence. */
 function _Logger()

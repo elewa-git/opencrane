@@ -1,11 +1,11 @@
 import { PersonaColour, PersonaTieKind, type Prisma } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
 
-import { __ResolvePersonaInterviewTie } from "../../interview/persona-interview-authority.js";
-import { PrismaPersonaInterviewRepository } from "../../interview/prisma-persona-interview-repository.js";
-import { PersonaScoringPersistenceStatuses } from "../persona-scoring-repository.types.js";
-import { PrismaPersonaScoringRepository } from "../prisma-persona-scoring-repository.js";
-import { PersonaColourValues, PersonaTieKinds } from "../persona-scorer.types.js";
+import { __ResolvePersonaInterviewTie } from "../../interview/persona-interview-authority";
+import { PrismaPersonaInterviewRepository } from "../../interview/prisma-persona-interview-repository";
+import { PersonaScoringPersistenceStatuses } from "../persona-scoring-repository.types";
+import { PrismaPersonaScoringRepository } from "../prisma-persona-scoring-repository";
+import { PersonaColourValues, PersonaTieKinds } from "../persona-scorer.types";
 
 /** Build the ten exact weighted answers used by repository replay tests. */
 function _Answers()

@@ -3,14 +3,14 @@ import { AgentRunState, ApprovalRequestState, ElicitationBodyKind, ElicitationPu
 import { ElicitationBodyKinds, type ElicitationApprovalBody } from "@opencrane/contracts";
 import { ___CloneCanonicalJson, type JsonValue } from "@opencrane/util";
 
-import { __DigestCanonicalJson } from "./canonical-json-digest.js";
-import { __PlanDeferredToolApprovalLifecycle } from "./deferred-tool-approval-lifecycle.js";
-import { __IsDeferredToolApprovalReplacementAllowed, __ProjectDeferredToolApproval, __ValidateDeferredToolArguments } from "./deferred-tool-approval-schema.js";
-import { DeferredToolDecisionKinds, DeferredToolDecisionOutcomes, type DecideDeferredToolRequestCommand, type DecideDeferredToolRequestResult, type ExpireDeferredToolApprovalBatchCommand, type ExpireDeferredToolApprovalBatchResult } from "./deferred-tool-approval-decision.types.js";
-import { DeferredToolApprovalLifecycleActions, DeferredToolApprovalLifecycleEvents, DeferredToolApprovalRunStates } from "./deferred-tool-approval-lifecycle.types.js";
-import type { DeferToolRequestCommand, DeferToolRequestResult } from "./deferred-tool-approval-open.types.js";
-import { ToolInvocationStates } from "./tool-invocation-lifecycle.types.js";
-import { __FindToolInvocationInTransaction, __MarkToolInvocationApprovalRejectedInTransaction, __MarkToolInvocationApprovedInTransaction } from "./prisma-tool-invocation-repository.js";
+import { __DigestCanonicalJson } from "./canonical-json-digest";
+import { __PlanDeferredToolApprovalLifecycle } from "./deferred-tool-approval-lifecycle";
+import { __IsDeferredToolApprovalReplacementAllowed, __ProjectDeferredToolApproval, __ValidateDeferredToolArguments } from "./deferred-tool-approval-schema";
+import { DeferredToolDecisionKinds, DeferredToolDecisionOutcomes, type DecideDeferredToolRequestCommand, type DecideDeferredToolRequestResult, type ExpireDeferredToolApprovalBatchCommand, type ExpireDeferredToolApprovalBatchResult } from "./deferred-tool-approval-decision.types";
+import { DeferredToolApprovalLifecycleActions, DeferredToolApprovalLifecycleEvents, DeferredToolApprovalRunStates } from "./deferred-tool-approval-lifecycle.types";
+import type { DeferToolRequestCommand, DeferToolRequestResult } from "./deferred-tool-approval-open.types";
+import { ToolInvocationStates } from "./tool-invocation-lifecycle.types";
+import { __FindToolInvocationInTransaction, __MarkToolInvocationApprovalRejectedInTransaction, __MarkToolInvocationApprovedInTransaction } from "./prisma-tool-invocation-repository";
 
 /** Converts the only two run states that can have open approvals into the lifecycle enum; anything else gives null. */
 function _approvalRunState(state: AgentRunState): DeferredToolApprovalRunStates | null

@@ -2,7 +2,7 @@ import express from "express";
 import request from "supertest";
 import { describe, expect, it, vi } from "vitest";
 
-import { __CreateConversationAssetOutputRouter } from "../conversation-asset-output.router.js";
+import { __CreateConversationAssetOutputRouter } from "../conversation-asset-output.router";
 
 const _IDENTITY = { namespace: "runtime-ns", serviceAccountName: "agent-runtime-default", podUid: "pod-1" } as const;
 

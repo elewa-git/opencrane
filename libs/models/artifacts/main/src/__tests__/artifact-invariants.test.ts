@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { ___IsArtifact, ___IsArtifactRevision, ___IsSha256ContentAddress, ___IsSkillRevision, ___SkillRevisionMatchesArtifactRevision } from "../artifact-invariants.js";
-import type { Artifact, ArtifactRevision, SkillRevision } from "../artifact.types.js";
+import { ___IsArtifact, ___IsArtifactRevision, ___IsSha256ContentAddress, ___IsSkillRevision, ___SkillRevisionMatchesArtifactRevision } from "../artifact-invariants";
+import type { Artifact, ArtifactRevision, SkillRevision } from "../artifact.types";
 
 const _DIGEST = `sha256:${"a".repeat(64)}`;
 

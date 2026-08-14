@@ -15,7 +15,7 @@ import { ConversationEventStreamStatuses, type ConversationEventStream, type Str
 import { ConversationElicitationStore, ELICITATION_GATEWAY, ElicitationGatewayError, ElicitationGatewayErrorKinds } from "@opencrane/state/conversation/elicitation";
 import { CONVERSATION_WORKSPACE_EVENT_STREAM, CONVERSATION_WORKSPACE_GATEWAY, ConversationOnboardingHistoryStatuses, ConversationRunStore, ConversationWorkspaceStore, type ConversationWorkspaceDetail, type ConversationWorkspaceGateway } from "@opencrane/state/conversation/workspace";
 
-import { ConversationWorkspacePageComponent } from "../components/conversation-workspace-page/conversation-workspace-page.component.js";
+import { ConversationWorkspacePageComponent } from "../components/conversation-workspace-page/conversation-workspace-page.component";
 
 /** Return an empty authorized workspace for component construction. */
 class _WorkspaceGateway implements ConversationWorkspaceGateway

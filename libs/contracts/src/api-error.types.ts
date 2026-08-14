@@ -1,4 +1,4 @@
-import type { components } from "./generated/api.js";
+import type { components } from "./generated/api";
 
 /** The size caps on a public error body. All three of the server error projector, the OpenAPI schema, and the browser parser read these, so changing one number changes every side at once. */
 export const API_ERROR_LIMITS = {

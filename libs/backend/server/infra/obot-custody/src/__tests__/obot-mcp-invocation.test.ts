@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 
-import { __AssertToolAllowed, ObotMcpInvocationUnavailableError, ObotMcpToolNotAllowedError } from "../obot-mcp-invocation.js";
-import type { ObotMcpToolInvocationCommand } from "../obot-mcp-invocation.types.js";
-import { __UnavailableObotMcpInvocationAdapter } from "../unavailable-obot-mcp-invocation.js";
+import { __AssertToolAllowed, ObotMcpInvocationUnavailableError, ObotMcpToolNotAllowedError } from "../obot-mcp-invocation";
+import type { ObotMcpToolInvocationCommand } from "../obot-mcp-invocation.types";
+import { __UnavailableObotMcpInvocationAdapter } from "../unavailable-obot-mcp-invocation";
 
 /** Builds an invocation command with an allow-list of one tool by default. */
 function _command(overrides: Partial<ObotMcpToolInvocationCommand> = {}): ObotMcpToolInvocationCommand

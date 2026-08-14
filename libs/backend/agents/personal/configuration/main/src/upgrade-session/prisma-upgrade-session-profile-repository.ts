@@ -1,6 +1,6 @@
 import { Prisma } from "@prisma/client";
 
-import type { UpgradeSessionProfileReadCommand, UpgradeSessionProfileRepository } from "./upgrade-session.types.js";
+import type { UpgradeSessionProfileReadCommand, UpgradeSessionProfileRepository } from "./upgrade-session.types";
 
 /** Transaction-scoped Prisma reader for the personal profile bound to an upgrade session. */
 export class PrismaUpgradeSessionProfileRepository implements UpgradeSessionProfileRepository

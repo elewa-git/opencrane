@@ -2,7 +2,7 @@ import { ConversationLifecycles, ConversationModes } from "@opencrane/contracts"
 import { __AuthorizationScopesEqual } from "@opencrane/models/authorization";
 import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 
-import type { AuthorizeChannelActionsCommand, ChannelActionAuthorizationDecision, ChannelConversationAuthority } from "./channel-target-resolution.types.js";
+import type { AuthorizeChannelActionsCommand, ChannelActionAuthorizationDecision, ChannelConversationAuthority } from "./channel-target-resolution.types";
 
 /** Authorize one participant-bound conversation read and digest the exact accepted evidence. */
 export function __AuthorizeConversationRead(conversation: ChannelConversationAuthority, command: AuthorizeChannelActionsCommand): ChannelActionAuthorizationDecision

@@ -2,9 +2,9 @@ import type { CapabilityProofExpectation } from "@opencrane/models/authorization
 import { AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, MANAGED_AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE } from "@opencrane/contracts";
 import type { JsonValue } from "@opencrane/util";
 
-import { __ComputeEs256JwkThumbprint, __NormalizeDpopTargetUri, __VerifyCapabilityProof } from "./capability-proof.js";
-import { __DigestCanonicalJson } from "./canonical-json-digest.js";
-import type { CapabilityActionExecutor, CapabilityActionIntent, CapabilityActionReceipt, CapabilityActionReceiptRepository, ConsumeRuntimeBootstrapResult, ExecuteCapabilityActionCommand, ExecuteCapabilityActionResult, RuntimeBootstrapClaim, RuntimeBootstrapExpectation, RuntimeBootstrapFailureReason, RuntimeBootstrapRepository } from "./runtime-proof.types.js";
+import { __ComputeEs256JwkThumbprint, __NormalizeDpopTargetUri, __VerifyCapabilityProof } from "./capability-proof";
+import { __DigestCanonicalJson } from "./canonical-json-digest";
+import type { CapabilityActionExecutor, CapabilityActionIntent, CapabilityActionReceipt, CapabilityActionReceiptRepository, ConsumeRuntimeBootstrapResult, ExecuteCapabilityActionCommand, ExecuteCapabilityActionResult, RuntimeBootstrapClaim, RuntimeBootstrapExpectation, RuntimeBootstrapFailureReason, RuntimeBootstrapRepository } from "./runtime-proof.types";
 
 /** Returns whether a value is one of the two accepted controller workload kinds. */
 function _isWorkloadKind(value: string): value is "job" | "deployment"

@@ -1,6 +1,6 @@
 import type { Prisma } from "@prisma/client";
 
-import type { CreateMcpServerWrite, McpServerCredentialWrite, McpServerMutationRepository, McpServerMutationWriteResult, UpdateMcpServerWrite } from "./mcp-server-mutation-repository.types.js";
+import type { CreateMcpServerWrite, McpServerCredentialWrite, McpServerMutationRepository, McpServerMutationWriteResult, UpdateMcpServerWrite } from "./mcp-server-mutation-repository.types";
 
 /**
  * Writes MCP server rows, their credential label rows, and the audit row — all through a Prisma

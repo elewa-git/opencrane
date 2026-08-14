@@ -1,6 +1,6 @@
-import type { ArtifactAuthorityRepository } from "./artifact-finalization.types.js";
-import { _ArtifactPublicationConflictError, type ArtifactPublicationUnitOfWork } from "./artifact-unit-of-work.types.js";
-import type { ArtifactUploadLeaseRepository, VerifiedArtifactUploadCommand } from "./artifact-upload.types.js";
+import type { ArtifactAuthorityRepository } from "./artifact-finalization.types";
+import { _ArtifactPublicationConflictError, type ArtifactPublicationUnitOfWork } from "./artifact-unit-of-work.types";
+import type { ArtifactUploadLeaseRepository, VerifiedArtifactUploadCommand } from "./artifact-upload.types";
 
 /**
  * Runs each publication step in its own transaction, so none is held open while bytes are in flight.

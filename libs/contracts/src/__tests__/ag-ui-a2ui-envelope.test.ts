@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { AG_UI_A2UI_ENVELOPE_VERSION, AgUiA2uiSurfaceStates, ___ParseAgUiA2uiEnvelope } from "../index.js";
+import { AG_UI_A2UI_ENVELOPE_VERSION, AgUiA2uiSurfaceStates, ___ParseAgUiA2uiEnvelope } from "../index";
 
 describe("AG-UI A2UI envelope", function _Suite()
 {

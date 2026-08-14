@@ -2,8 +2,8 @@ import express from "express";
 import request from "supertest";
 import { describe, expect, it, vi } from "vitest";
 
-import { __CreateSkillWorkloadBootstrapRouter } from "../skill-workload-bootstrap.router.js";
-import type { SkillWorkloadBootstrapRouterDependencies } from "../skill-workload-bootstrap.types.js";
+import { __CreateSkillWorkloadBootstrapRouter } from "../skill-workload-bootstrap.router";
+import type { SkillWorkloadBootstrapRouterDependencies } from "../skill-workload-bootstrap.types";
 
 /** Fixed opaque reference used solely by the focused HTTP boundary tests. */
 const _REFERENCE = `skill-bootstrap-v1_${"a".repeat(64)}`;

@@ -5,7 +5,7 @@ import type { ExternalActionApprovalOpener, ExternalActionWorker } from "@opencr
 import type { Logger } from "@opencrane/backend/observability";
 import type { ObotMcpInvocationPort } from "@opencrane/backend/server/infra/obot-custody";
 
-import { _CreateExternalActionWorker } from "../external-action-composition.js";
+import { _CreateExternalActionWorker } from "../external-action-composition";
 
 /** Hoisted production-factory doubles used to inspect the app-owned composition edge. */
 const _factories = vi.hoisted(function _factoryMocks()

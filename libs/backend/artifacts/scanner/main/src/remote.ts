@@ -6,7 +6,7 @@ import { pipeline } from "node:stream/promises";
 import type { ArtifactScannerClaimCommand, ArtifactScannerFailureCommand, ArtifactScannerJobClaim, ArtifactScannerResultCommand } from "@opencrane/contracts";
 import { ___DoWithTrace } from "@opencrane/backend/observability";
 
-import type { ArtifactScannerRemote, ArtifactScannerRemoteConfig } from "./scanner.types.js";
+import type { ArtifactScannerRemote, ArtifactScannerRemoteConfig } from "./scanner.types";
 
 /** Create the projected-token OpenCrane scanner adapter. */
 export function _CreateArtifactScannerRemote(config: ArtifactScannerRemoteConfig): ArtifactScannerRemote

@@ -1,7 +1,7 @@
 import type { AgentRevision, AgentService } from "@opencrane/models/agents";
 
 import type { AuditDecisionRecord } from "@opencrane/backend/server/iam/audit";
-import type { AtomicAgentRevisionPublication } from "./agent-publication.types.js";
+import type { AtomicAgentRevisionPublication } from "./agent-publication.types";
 
 /**
  * Builds the audit row for one publication, while the publication transaction is still open.

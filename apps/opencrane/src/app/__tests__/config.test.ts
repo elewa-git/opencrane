@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { _ReadProcessConfig } from "../config.js";
+import { _ReadProcessConfig } from "../config";
 
 describe("opencrane process config", function _ProcessConfigSuite()
 {

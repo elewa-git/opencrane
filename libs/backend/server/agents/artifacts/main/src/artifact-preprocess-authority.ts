@@ -1,7 +1,7 @@
 import type { ArtifactPreprocessorClaimCommand, ArtifactPreprocessorFailureCommand } from "@opencrane/contracts";
 
-import type { ArtifactPreprocessCompletionRequest, ArtifactPreprocessOutputLeaseRequest, ArtifactPreprocessRepository, ClaimNextArtifactPreprocessJobResult, CompleteArtifactPreprocessJobResult, FailArtifactPreprocessJobResult, IssueArtifactPreprocessOutputLeaseResult } from "./artifact-preprocessing.types.js";
-import type { ArtifactPreprocessUnitOfWork } from "./artifact-unit-of-work.types.js";
+import type { ArtifactPreprocessCompletionRequest, ArtifactPreprocessOutputLeaseRequest, ArtifactPreprocessRepository, ClaimNextArtifactPreprocessJobResult, CompleteArtifactPreprocessJobResult, FailArtifactPreprocessJobResult, IssueArtifactPreprocessOutputLeaseResult } from "./artifact-preprocessing.types";
+import type { ArtifactPreprocessUnitOfWork } from "./artifact-unit-of-work.types";
 
 /**
  * Wraps every preprocessing operation in its own database transaction.

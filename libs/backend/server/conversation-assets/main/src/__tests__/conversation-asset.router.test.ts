@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { ConversationAssetDisposition } from "@opencrane/models/conversation-assets";
 
-import { __CreateConversationAssetRouter } from "../conversation-asset.router.js";
+import { __CreateConversationAssetRouter } from "../conversation-asset.router";
 
 const _CALLER = { siloId: "silo-1", subjectId: "user-1" } as const;
 

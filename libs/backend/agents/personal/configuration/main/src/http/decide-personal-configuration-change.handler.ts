@@ -1,8 +1,8 @@
 import type { Request, RequestHandler, Response } from "express";
 
-import { __DecidePersonalConfigurationChange } from "../decision/personal-configuration-decision.js";
-import { PersonalConfigurationDecisionCodes } from "../decision/personal-configuration-decision.types.js";
-import { PersonalConfigurationHttpErrors, type PersonalConfigurationRouterDependencies } from "./personal-configuration.router.types.js";
+import { __DecidePersonalConfigurationChange } from "../decision/personal-configuration-decision";
+import { PersonalConfigurationDecisionCodes } from "../decision/personal-configuration-decision.types";
+import { PersonalConfigurationHttpErrors, type PersonalConfigurationRouterDependencies } from "./personal-configuration.router.types";
 
 /** Validated owner decision body accepted by the HTTP boundary. */
 interface PersonalConfigurationDecisionBody

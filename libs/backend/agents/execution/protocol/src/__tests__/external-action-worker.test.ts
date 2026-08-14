@@ -5,8 +5,8 @@ import { PERSONAL_MEMORY_RECALL_TOOL_REVISION } from "@opencrane/models/agents";
 import type { JsonValue } from "@opencrane/util";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { ExternalActionWorker } from "../external-action-worker.js";
-import { ExternalActionProviderOutcomeKinds, type ExternalActionAdapterFactory, type ExternalActionExecutionContext, type ExternalActionExecutionContextLoader, type ExternalActionWorkerDependencies, type ExternalActionWorkerEvent, type ExternalActionWorkerInvocation, type ExternalActionWorkerUnitOfWork, type PreparedExternalActionAdapter, type ToolInvocationWorkSource } from "../external-action-worker.types.js";
+import { ExternalActionWorker } from "../external-action-worker";
+import { ExternalActionProviderOutcomeKinds, type ExternalActionAdapterFactory, type ExternalActionExecutionContext, type ExternalActionExecutionContextLoader, type ExternalActionWorkerDependencies, type ExternalActionWorkerEvent, type ExternalActionWorkerInvocation, type ExternalActionWorkerUnitOfWork, type PreparedExternalActionAdapter, type ToolInvocationWorkSource } from "../external-action-worker.types";
 
 /** Trace span names recorded during one worker test. */
 const _traceOperations = vi.hoisted(function _TraceOperations() { return [] as string[]; });

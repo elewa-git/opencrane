@@ -1,6 +1,6 @@
-import { PersonaApprovalDenialReasons, PersonaApprovalInterviewStates, PersonaApprovalPersistenceStatuses, PersonaApprovalRevisionStates } from "./persona-authority.types.js";
-import { PersonaLifecycleOutcomes } from "../profile/persona-lifecycle.types.js";
-import type { ApprovePersonaCommand, ApprovePersonaResult, PersonaApprovalSnapshot, PersonaAuthorityRepository } from "./persona-authority.types.js";
+import { PersonaApprovalDenialReasons, PersonaApprovalInterviewStates, PersonaApprovalPersistenceStatuses, PersonaApprovalRevisionStates } from "./persona-authority.types";
+import { PersonaLifecycleOutcomes } from "../profile/persona-lifecycle.types";
+import type { ApprovePersonaCommand, ApprovePersonaResult, PersonaApprovalSnapshot, PersonaAuthorityRepository } from "./persona-authority.types";
 
 /** Runs the approval step that belongs to the revision state in this snapshot. */
 export async function _ApprovePersonaRevisionState(repository: PersonaAuthorityRepository, snapshot: PersonaApprovalSnapshot, command: ApprovePersonaCommand): Promise<ApprovePersonaResult>

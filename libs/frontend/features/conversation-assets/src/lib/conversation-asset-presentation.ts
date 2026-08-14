@@ -1,6 +1,6 @@
 import { ConversationAssetDisposition, ConversationAssetLifecycle, ConversationAssetProvenance, ConversationAssetSelectionFailures, ConversationAssetTransferPhases, type ConversationAsset, type ConversationAssetSelectionFailure, type PendingConversationAssetUpload } from "@opencrane/state/conversation/assets";
 
-import { ConversationAssetPresentationStates, type ConversationAssetPresentation, type ConversationAssetSelectionFeedback } from "./conversation-asset-presentation.types.js";
+import { ConversationAssetPresentationStates, type ConversationAssetPresentation, type ConversationAssetSelectionFeedback } from "./conversation-asset-presentation.types";
 
 /** Map one durable server asset to finite presentation without predicting a later state. */
 export function __ConversationAssetPresentation(asset: ConversationAsset): ConversationAssetPresentation

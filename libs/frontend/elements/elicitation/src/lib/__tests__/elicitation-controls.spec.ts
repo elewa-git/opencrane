@@ -4,7 +4,7 @@ import { TestBed } from "@angular/core/testing";
 import { BrowserDynamicTestingModule, platformBrowserDynamicTesting } from "@angular/platform-browser-dynamic/testing";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { ElicitationApprovalComponent } from "../elicitation-approval.component.js";
+import { ElicitationApprovalComponent } from "../elicitation-approval.component";
 
 beforeAll(function _InitializeAngularTesting() { TestBed.initTestEnvironment(BrowserDynamicTestingModule, platformBrowserDynamicTesting()); });
 afterAll(function _ResetAngularTesting() { TestBed.resetTestEnvironment(); });

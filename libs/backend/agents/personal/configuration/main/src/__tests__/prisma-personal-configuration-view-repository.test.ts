@@ -1,8 +1,8 @@
 import { AgentConfigPatchKinds } from "@opencrane/contracts";
 import { describe, expect, it, vi } from "vitest";
 
-import { PersonalConfigurationChangeViewStates } from "../query/personal-configuration-view.types.js";
-import { PrismaPersonalConfigurationViewRepository } from "../query/prisma-personal-configuration-view-repository.js";
+import { PersonalConfigurationChangeViewStates } from "../query/personal-configuration-view.types";
+import { PrismaPersonalConfigurationViewRepository } from "../query/prisma-personal-configuration-view-repository";
 
 describe("Prisma personal configuration view repository", function _PrismaPersonalConfigurationViewRepositorySuite()
 {

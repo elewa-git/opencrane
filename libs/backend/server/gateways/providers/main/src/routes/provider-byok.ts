@@ -4,7 +4,7 @@ import { ByokProvider, type ProviderKeyStatus } from "@opencrane/contracts";
 import { _RequireOrgAdmin } from "@opencrane/backend/server/infra/auth";
 import type { PrismaClient, ProviderCredential as PrismaProviderCredential } from "@prisma/client";
 
-import { _log } from "../log.js";
+import { _log } from "../log";
 import { _DeprovisionByokKey, _ProvisionByokKey } from "@opencrane/backend/server/gateways/model-routing";
 
 /** The providers a raw BYOK key may be set for; mirrors the {@link ByokProvider} contract union. */

@@ -1,8 +1,8 @@
 import { PersonaColour, PersonaRevisionState, type Prisma } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
 
-import { PersonaWorkflowColours } from "../persona-workflow-evidence.types.js";
-import { PrismaPersonaWorkflowEvidenceRepository } from "../prisma-persona-workflow-evidence.js";
+import { PersonaWorkflowColours } from "../persona-workflow-evidence.types";
+import { PrismaPersonaWorkflowEvidenceRepository } from "../prisma-persona-workflow-evidence";
 
 describe("PrismaPersonaWorkflowEvidenceRepository", function _PrismaPersonaWorkflowEvidenceRepositorySuite()
 {

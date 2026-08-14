@@ -1,10 +1,10 @@
 import { ___DoWithTrace } from "@opencrane/backend/observability";
-import { __CreateCogneeSession } from "./cognee-http.js";
-import { __ParseScopedFacts, __ParseSearchFacts } from "./cognee-payloads.js";
-import { __AssertMemoryProvenanceComplete } from "./memory-provenance.js";
-import type { CogneeMemoryGatewayHttpOptions } from "./http-cognee-memory-gateway-client.types.js";
-import type { MemoryCorrectionCommand, MemoryForgetCommand, MemoryGatewayClient, MemoryQueryCommand, MemoryQueryResult, PersonalMemoryRecordCommand, PersonalMemoryRecordResult, ScopedMemoryInjectionCommand, ScopedMemoryRecallCommand, ScopedMemoryRecallResult } from "./memory-gateway-client.types.js";
-import { MemoryGatewayUnavailableError } from "./unavailable-memory-gateway-client.js";
+import { __CreateCogneeSession } from "./cognee-http";
+import { __ParseScopedFacts, __ParseSearchFacts } from "./cognee-payloads";
+import { __AssertMemoryProvenanceComplete } from "./memory-provenance";
+import type { CogneeMemoryGatewayHttpOptions } from "./http-cognee-memory-gateway-client.types";
+import type { MemoryCorrectionCommand, MemoryForgetCommand, MemoryGatewayClient, MemoryQueryCommand, MemoryQueryResult, PersonalMemoryRecordCommand, PersonalMemoryRecordResult, ScopedMemoryInjectionCommand, ScopedMemoryRecallCommand, ScopedMemoryRecallResult } from "./memory-gateway-client.types";
+import { MemoryGatewayUnavailableError } from "./unavailable-memory-gateway-client";
 
 /** Cognee search mode returning stored passages rather than a generated completion. */
 const _SEARCH_TYPE = "CHUNKS";

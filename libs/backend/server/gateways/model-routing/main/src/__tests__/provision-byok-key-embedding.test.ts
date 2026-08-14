@@ -5,7 +5,7 @@ import type { Logger } from "pino";
 import type { PrismaClient } from "@prisma/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { _ProvisionByokKey, _AUTO_EMBEDDING_MODEL_NAME, _RequireLiteLlmModelRegistration } from "../core/provision-byok-key.js";
+import { _ProvisionByokKey, _AUTO_EMBEDDING_MODEL_NAME, _RequireLiteLlmModelRegistration } from "../core/provision-byok-key";
 
 /**
  * Covers `_ensureProviderEmbeddingModel` (the embedding-registration step added alongside the

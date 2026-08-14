@@ -3,8 +3,8 @@ import { Writable } from "node:stream";
 import pino from "pino";
 import { describe, expect, it } from "vitest";
 
-import { REDACT_PATHS } from "../redact.js";
-import { _SanitizeLogFields } from "../sanitize.js";
+import { REDACT_PATHS } from "../redact";
+import { _SanitizeLogFields } from "../sanitize";
 
 /** Build a pino logger applying REDACT_PATHS, capturing records into an array. */
 function _redactingLogger(): { logger: pino.Logger; records: Array<Record<string, unknown>> }

@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import type { ObotCustodyPort } from "@opencrane/backend/server/infra/obot-custody";
 
-import { _CreateIntegrationCustodyRouter } from "../integration-custody.router.js";
+import { _CreateIntegrationCustodyRouter } from "../integration-custody.router";
 
 /** Active same-silo integration row returned by the happy-path lookup. */
 const _INTEGRATION_ROW = { id: "int-1", siloId: "silo-1", obotCatalogEntryId: "cat-1", displayName: "GitHub", state: "Active", createdAt: new Date(), updatedAt: new Date() };

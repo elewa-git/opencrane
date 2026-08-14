@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { _DoublyRobustEstimate, _OpeEstimateWithCi, _ReplayEstimate } from "../core/ope.js";
-import type { OpeSample } from "../core/ope.types.js";
+import { _DoublyRobustEstimate, _OpeEstimateWithCi, _ReplayEstimate } from "../core/ope";
+import type { OpeSample } from "../core/ope.types";
 
 /** A deterministic RNG cycling a fixed sequence so the bootstrap is reproducible. */
 function _seqRng(values: readonly number[]): () => number

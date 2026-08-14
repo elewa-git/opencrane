@@ -2,7 +2,7 @@ import { InjectionToken } from "@angular/core";
 
 import type { ConversationEventStream } from "@opencrane/state/conversation/adapter";
 
-import type { ConversationWorkspaceGateway } from "./conversation-workspace.types.js";
+import type { ConversationWorkspaceGateway } from "./conversation-workspace.types";
 
 /**
  * Port for every conversation read and command the workspace makes for the signed-in participant.

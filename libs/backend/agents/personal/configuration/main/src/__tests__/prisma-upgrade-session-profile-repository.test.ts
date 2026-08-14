@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { PrismaUpgradeSessionProfileRepository } from "../upgrade-session/prisma-upgrade-session-profile-repository.js";
+import { PrismaUpgradeSessionProfileRepository } from "../upgrade-session/prisma-upgrade-session-profile-repository";
 
 describe("Prisma upgrade-session profile repository", function _PrismaUpgradeSessionProfileRepositorySuite()
 {

@@ -7,8 +7,8 @@ import { __VerifyArtifactReadLease } from "@opencrane/backend/artifacts/authoriz
 import { ConversationAssetDisposition } from "@opencrane/models/conversation-assets";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { _CreateArtifactServicePromotionPort, _CreateArtifactUploadGateway, _CreateConversationAssetContentBroker, _CreateSkillAuthoringArtifactReader } from "../artifact-upload.factory.js";
-import { _CreateArtifactServiceReadPort } from "../artifact-service-read-port.factory.js";
+import { _CreateArtifactServicePromotionPort, _CreateArtifactUploadGateway, _CreateConversationAssetContentBroker, _CreateSkillAuthoringArtifactReader } from "../artifact-upload.factory";
+import { _CreateArtifactServiceReadPort } from "../artifact-service-read-port.factory";
 
 const _serviceUrl = "http://opencrane-artifact-service.default.svc.cluster.local:8080";
 

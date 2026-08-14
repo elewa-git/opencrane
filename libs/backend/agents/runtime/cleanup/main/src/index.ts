@@ -1,1 +1,1 @@
-export { __CreateKubernetesRuntimeWorkloadCleanupStore } from "./runtime-workload-cleanup-store.js";
+export { __CreateKubernetesRuntimeWorkloadCleanupStore } from "./runtime-workload-cleanup-store";

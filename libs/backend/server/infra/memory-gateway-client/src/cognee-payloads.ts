@@ -1,5 +1,5 @@
-import { MemoryGatewayProtocolError } from "./personal-memory-record.js";
-import type { MemoryFact, MemoryProvenance, ScopedMemoryFact } from "./memory-gateway-client.types.js";
+import { MemoryGatewayProtocolError } from "./personal-memory-record";
+import type { MemoryFact, MemoryProvenance, ScopedMemoryFact } from "./memory-gateway-client.types";
 
 /** Version number written into each stored scoped record, so its provenance can be read back safely. A record with any other version is dropped on decode. */
 const _SCOPED_ENVELOPE_VERSION = 1;

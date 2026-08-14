@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { API_ERROR_LIMITS, ApiValidationIssueLocations, type ApiErrorEnvelope } from "./api-error.types.js";
+import { API_ERROR_LIMITS, ApiValidationIssueLocations, type ApiErrorEnvelope } from "./api-error.types";
 
 /**
  * Runtime validation stays beside the generated public error model so browser transports never

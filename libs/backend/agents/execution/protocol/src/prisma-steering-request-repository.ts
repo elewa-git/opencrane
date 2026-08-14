@@ -1,6 +1,6 @@
 import { AgentRunState, Prisma, RuntimeCommandKind } from "@prisma/client";
 
-import type { SubmitSteeringRequestCommand, SubmitSteeringRequestResult, SteeringRequestTransactionRepository } from "./steering-request.types.js";
+import type { SubmitSteeringRequestCommand, SubmitSteeringRequestResult, SteeringRequestTransactionRepository } from "./steering-request.types";
 
 /**
  * Queues steering in Postgres through the transaction supplied by its unit of work.

@@ -2,7 +2,7 @@ import { RunInputSnapshotAdmissionOutcomes, SessionAssemblyOutcomes, type Sessio
 import { RunAdmissionConcurrencyGate, RunAdmissionConcurrencyOutcomes, RunAdmissionDenialReasons, type RunAdmissionCommand, type RunAdmissionConcurrencyPolicy, type RunAdmissionConcurrencyResult } from "@opencrane/backend/agents/execution/runs";
 import { ManagedRunAdmissionOutcomes, type ManagedRunAdmissionPort, type ManagedRunAdmissionResult, type ManagedRunNowCommand } from "@opencrane/backend/server/agents/agent-services";
 
-import type { ManagedSnapshotAssembler, RunAdmissionCapacityGate } from "./managed-run-admission.types.js";
+import type { ManagedSnapshotAssembler, RunAdmissionCapacityGate } from "./managed-run-admission.types";
 
 /** Fake silo and service ids used only as the key for the process-wide gate, so every personal and managed admission queues behind it. */
 const _GLOBAL_ADMISSION_COORDINATE = { siloId: "__opencrane_process__", agentServiceId: "__opencrane_run_admission__" };

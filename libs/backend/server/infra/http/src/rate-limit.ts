@@ -1,9 +1,9 @@
 import type { RequestHandler } from "express";
 import rateLimit from "express-rate-limit";
 
-import type { RateLimitOptions } from "./rate-limit.types.js";
+import type { RateLimitOptions } from "./rate-limit.types";
 
-export type { RateLimitOptions } from "./rate-limit.types.js";
+export type { RateLimitOptions } from "./rate-limit.types";
 
 /**
  * Per-IP request rate limiter for the OpenCrane API server. Mounted once, early in the

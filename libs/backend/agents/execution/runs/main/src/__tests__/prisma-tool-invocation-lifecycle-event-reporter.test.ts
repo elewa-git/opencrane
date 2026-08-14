@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { ToolInvocationEventTypes } from "@opencrane/backend/server/iam/authorization";
 
-import { PrismaToolInvocationLifecycleEventUnitOfWork } from "../prisma-tool-invocation-lifecycle-event-reporter.js";
+import { PrismaToolInvocationLifecycleEventUnitOfWork } from "../prisma-tool-invocation-lifecycle-event-reporter";
 
 /** Build one transaction double with an exact active conversation run. */
 function _transaction(state: AgentRunState = AgentRunState.Running)

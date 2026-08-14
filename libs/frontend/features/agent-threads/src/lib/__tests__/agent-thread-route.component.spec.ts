@@ -12,8 +12,8 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest
 
 import type { AgentThreadParentRestoreIntent } from "@opencrane/state/conversation/agent-threads";
 
-import { AgentThreadRouteComponent } from "../agent-thread-route.component.js";
-import type { AgentThreadProjectionPurgeIntent } from "../agent-thread-feature.types.js";
+import { AgentThreadRouteComponent } from "../agent-thread-route.component";
+import type { AgentThreadProjectionPurgeIntent } from "../agent-thread-feature.types";
 
 interface AgentThreadRouteTestSubject
 {

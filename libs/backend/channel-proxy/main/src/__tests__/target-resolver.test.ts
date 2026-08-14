@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { __OpenCraneTargetResolver } from "../target-resolver.js";
+import { __OpenCraneTargetResolver } from "../target-resolver";
 
 describe("OpenCrane channel target resolver", () =>
 {

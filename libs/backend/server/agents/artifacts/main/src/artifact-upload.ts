@@ -1,8 +1,8 @@
 import { ___DoWithTrace } from "@opencrane/backend/observability";
 
-import { __FinalizeArtifactRevision } from "./artifact-finalization.js";
-import type { ArtifactAuthorityRepository } from "./artifact-finalization.types.js";
-import type { ArtifactServicePromotionPort, ArtifactUploadCryptoPort, ArtifactUploadLeaseRepository, ArtifactUploadResult, VerifiedArtifactUploadCommand } from "./artifact-upload.types.js";
+import { __FinalizeArtifactRevision } from "./artifact-finalization";
+import type { ArtifactAuthorityRepository } from "./artifact-finalization.types";
+import type { ArtifactServicePromotionPort, ArtifactUploadCryptoPort, ArtifactUploadLeaseRepository, ArtifactUploadResult, VerifiedArtifactUploadCommand } from "./artifact-upload.types";
 
 /**
  * Run one already-authorized upload: reserve, promote, commit.

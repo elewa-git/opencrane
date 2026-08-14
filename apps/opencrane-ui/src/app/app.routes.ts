@@ -1,6 +1,6 @@
 import { Routes } from "@angular/router";
 
-import { ___OperatorAccessGuard } from "./operator-access.guard.js";
+import { ___OperatorAccessGuard } from "./operator-access.guard";
 
 /**
  * Top-level route table; feature pages are lazy-loaded route containers.

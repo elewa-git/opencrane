@@ -4,8 +4,8 @@ import { describe, expect, it, vi } from "vitest";
 
 import { AGENT_CONTROLLER_PROJECTED_TOKEN_AUDIENCE } from "@opencrane/contracts";
 
-import { __CreateAgentControllerRunDispatchRouter } from "../run-dispatch.router.js";
-import type { AgentControllerRunDispatchRouterDependencies } from "../run-dispatch.types.js";
+import { __CreateAgentControllerRunDispatchRouter } from "../run-dispatch.router";
+import type { AgentControllerRunDispatchRouterDependencies } from "../run-dispatch.types";
 
 /** Creates an Express app with one configurable controller-dispatch boundary. */
 function _App(overrides: Partial<AgentControllerRunDispatchRouterDependencies> = {})

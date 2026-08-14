@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { AutoRoutingObjective, ModelRoutingScope, type AutoRoutingConfig, type ModelRoutingDefaultWrite } from "./model-routing.types.js";
+import { AutoRoutingObjective, ModelRoutingScope, type AutoRoutingConfig, type ModelRoutingDefaultWrite } from "./model-routing.types";
 
 /**
  * Public model-routing request validation lives beside the shared wire model so the browser, HTTP

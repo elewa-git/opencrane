@@ -5,8 +5,8 @@ import { ___CreateLogger, type Logger } from "@opencrane/backend/observability";
 import { ___CloneCanonicalJson } from "@opencrane/util";
 import type { JsonValue } from "@opencrane/util";
 
-import { RunAdmissionDenialReasons } from "./run-admission.types.js";
-import type { InitialRunAuthority, RunAdmissionBuild, RunAdmissionBuildResult, RunAdmissionClock, RunAdmissionCommand, RunAdmissionCommit, RunAdmissionPrepare, RunAdmissionRepository, RunAdmissionResult, RunAdmissionTransaction } from "./run-admission.types.js";
+import { RunAdmissionDenialReasons } from "./run-admission.types";
+import type { InitialRunAuthority, RunAdmissionBuild, RunAdmissionBuildResult, RunAdmissionClock, RunAdmissionCommand, RunAdmissionCommit, RunAdmissionPrepare, RunAdmissionRepository, RunAdmissionResult, RunAdmissionTransaction } from "./run-admission.types";
 
 /**
  * Turns an expected refusal into a throw, so Prisma rolls the transaction back.

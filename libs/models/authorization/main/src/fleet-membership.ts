@@ -1,5 +1,5 @@
-import type { FleetMembershipTrustDecision, FleetMembershipTrustExpectation, FleetSignatureVerificationEvidence, SignedFleetMembershipRevision } from "./fleet-membership.types.js";
-import { __AuthorizationScopesEqual } from "./scope-matching.js";
+import type { FleetMembershipTrustDecision, FleetMembershipTrustExpectation, FleetSignatureVerificationEvidence, SignedFleetMembershipRevision } from "./fleet-membership.types";
+import { __AuthorizationScopesEqual } from "./scope-matching";
 
 /**
  * Creates a denied fleet-membership result for one revision.

@@ -3,7 +3,7 @@ import { EventSchemas, EventType } from "@ag-ui/core";
 import { AG_UI_A2UI_ENVELOPE_VERSION, ___ParseAgUiA2uiEnvelope, type AgUiProjectionEvent } from "@opencrane/contracts";
 import { ___ParseAndValidateJson } from "@opencrane/util";
 
-import type { AgUiStreamRecord } from "./ag-ui-stream.types.js";
+import type { AgUiStreamRecord } from "./ag-ui-stream.types";
 
 /**
  * Decodes one complete SSE frame into a record, or returns null to skip it.

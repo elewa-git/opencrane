@@ -1,6 +1,6 @@
 import type { ConversationElicitation } from "@opencrane/contracts";
 
-import { ConversationActivityKinds, type ConversationActivityRow, type ToolFailureActivityAttempt, type ToolFailureActivitySource } from "./conversation-activity.types.js";
+import { ConversationActivityKinds, type ConversationActivityRow, type ToolFailureActivityAttempt, type ToolFailureActivitySource } from "./conversation-activity.types";
 
 /** Map one canonical request reference into the derived Activity index. */
 export function __MapElicitationActivity(elicitation: ConversationElicitation): ConversationActivityRow

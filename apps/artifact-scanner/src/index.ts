@@ -1,12 +1,12 @@
-import "./instrument.js";
+import "./instrument";
 
 import { mkdir } from "node:fs/promises";
 
 import { _CreateArtifactScannerRemote, _CreateClamAvScanner, __RunArtifactScanner } from "@opencrane/backend/artifacts/scanner";
 import { ___BindConsole, ___ShutdownTelemetry } from "@opencrane/backend/observability";
 
-import { _ReadConfig } from "./config.js";
-import { _log as log } from "./log.js";
+import { _ReadConfig } from "./config";
+import { _log as log } from "./log";
 
 /** Compose and run the outbound-only malware scanner. */
 async function _Main(): Promise<void>

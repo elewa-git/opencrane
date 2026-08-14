@@ -1,7 +1,7 @@
 import type { Prisma, PrismaClient } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
 
-import { PrismaShareAuthorizationUnitOfWork } from "../prisma-share-authorization-unit-of-work.js";
+import { PrismaShareAuthorizationUnitOfWork } from "../prisma-share-authorization-unit-of-work";
 
 describe("PrismaShareAuthorizationUnitOfWork", function _suite()
 {

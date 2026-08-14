@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import type { AgentThreadSnapshotDto } from "./opencrane-agent-thread.mapper.types.js";
+import type { AgentThreadSnapshotDto } from "./opencrane-agent-thread.mapper.types";
 
 /** Bounded non-empty server text that is safe to retain as display input. */
 const _Text = z.string().min(1).max(20_000);

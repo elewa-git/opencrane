@@ -6,8 +6,8 @@ import { RunInputSnapshotIdentityKinds } from "@opencrane/contracts";
 import { AgentServiceKinds } from "@opencrane/models/agents";
 import type { JsonValue } from "@opencrane/util";
 
-import type { IdentityEnvelopeInput, IdentityEnvelopeSource, SessionAssemblyCommand, SessionAssemblyLoad } from "./session-assembly.types.js";
-import { PrismaPersonalExecutionIdentityAuthorityRepository } from "./prisma-personal-execution-identity-authority-repository.js";
+import type { IdentityEnvelopeInput, IdentityEnvelopeSource, SessionAssemblyCommand, SessionAssemblyLoad } from "./session-assembly.types";
+import { PrismaPersonalExecutionIdentityAuthorityRepository } from "./prisma-personal-execution-identity-authority-repository";
 
 /**
  * Verifies the one signed personal-scope assertion for a browser session, inside the admission

@@ -12,8 +12,8 @@ import { OpenCranePersonaFirstChatGateway, PERSONA_FIRST_CHAT_GATEWAY, PERSONA_G
 import { OpenCranePersonaGateway } from "@opencrane/state/persona/adapter";
 import { provideWebPlatform } from "@opencrane/platform";
 
-import { APP_ROUTES } from "./app.routes.js";
-import { provideConversationWorkspaceComposition } from "./conversation-workspace.providers.js";
+import { APP_ROUTES } from "./app.routes";
+import { provideConversationWorkspaceComposition } from "./conversation-workspace.providers";
 
 /**
  * Root application configuration for the OpenCrane frontend.

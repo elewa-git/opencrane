@@ -1,8 +1,8 @@
 import { AGENT_RUNTIME_PROTOCOL_V1, RunInputSnapshotIdentityKinds, RuntimeCandidateKinds, type CompiledRunInput, type RunInputSnapshot, type RuntimeCandidate, type RuntimeCommandEnvelope } from "@opencrane/contracts";
 import { describe, expect, it } from "vitest";
 
-import { __AdmitRuntimeCandidate, __AdmitRuntimeCommand } from "../runtime-protocol-authority.js";
-import type { RuntimeAttemptAuthority } from "../runtime-protocol-authority.types.js";
+import { __AdmitRuntimeCandidate, __AdmitRuntimeCommand } from "../runtime-protocol-authority";
+import type { RuntimeAttemptAuthority } from "../runtime-protocol-authority.types";
 
 /** Build the attempt authority these admission tests check against. */
 function _authority(): RuntimeAttemptAuthority

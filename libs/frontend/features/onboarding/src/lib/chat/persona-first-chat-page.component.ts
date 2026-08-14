@@ -8,9 +8,9 @@ import { JourneyShellComponent, JourneyShellLayouts } from "@opencrane/elements/
 import { UserOnboardingRouteStates } from "@opencrane/state/onboarding/projection";
 import { PersonaFirstChatCommandPhases, PersonaFirstChatStore } from "@opencrane/state/onboarding";
 
-import { PersonaFirstChatComponent } from "./persona-first-chat.component.js";
-import { type PersonaFirstChatAnswerIntent, PersonaFirstChatStates, type PersonaFirstChatView } from "./persona-first-chat.types.js";
-import { _PersonaFirstChatView } from "./persona-first-chat.view.js";
+import { PersonaFirstChatComponent } from "./persona-first-chat.component";
+import { type PersonaFirstChatAnswerIntent, PersonaFirstChatStates, type PersonaFirstChatView } from "./persona-first-chat.types";
+import { _PersonaFirstChatView } from "./persona-first-chat.view";
 
 /**
  * The `/onboarding/chat` page. Wires {@link PersonaFirstChatStore} to the presentational chat.

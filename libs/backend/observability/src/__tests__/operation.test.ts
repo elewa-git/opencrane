@@ -4,8 +4,8 @@ import { isTracingSuppressed } from "@opentelemetry/core";
 import { BasicTracerProvider, InMemorySpanExporter, SimpleSpanProcessor } from "@opentelemetry/sdk-trace-base";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { ___GetContext } from "../context.js";
-import { ___DoWithoutTrace, ___DoWithTrace, ___MarkActiveSpanFailed } from "../operation.js";
+import { ___GetContext } from "../context";
+import { ___DoWithoutTrace, ___DoWithTrace, ___MarkActiveSpanFailed } from "../operation";
 
 /** Captures spans emitted by ___DoWithTrace for assertion. */
 const _exporter = new InMemorySpanExporter();

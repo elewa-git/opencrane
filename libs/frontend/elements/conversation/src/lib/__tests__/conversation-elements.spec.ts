@@ -10,12 +10,12 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest
 
 import { AvatarTones } from "@opencrane/elements/ui";
 
-import { ConversationComposerComponent } from "../conversation-composer/conversation-composer.component.js";
-import { ConversationMessageComponent } from "../conversation-message/conversation-message.component.js";
-import { ConversationRichTextComponent } from "../conversation-rich-text/conversation-rich-text.component.js";
-import { ConversationRunActionsComponent } from "../conversation-run-actions/conversation-run-actions.component.js";
-import { ConversationStatusLineComponent } from "../conversation-status-line/conversation-status-line.component.js";
-import { ConversationComposerStates, ConversationMessageTones, ConversationStatusTones, type ConversationMessagePresentation, type ConversationStatusPresentation } from "../conversation.types.js";
+import { ConversationComposerComponent } from "../conversation-composer/conversation-composer.component";
+import { ConversationMessageComponent } from "../conversation-message/conversation-message.component";
+import { ConversationRichTextComponent } from "../conversation-rich-text/conversation-rich-text.component";
+import { ConversationRunActionsComponent } from "../conversation-run-actions/conversation-run-actions.component";
+import { ConversationStatusLineComponent } from "../conversation-status-line/conversation-status-line.component";
+import { ConversationComposerStates, ConversationMessageTones, ConversationStatusTones, type ConversationMessagePresentation, type ConversationStatusPresentation } from "../conversation.types";
 
 /** Production templates resolved by Angular TestBed. */
 const _RESOURCES: Readonly<Record<string, string>> = {

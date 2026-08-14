@@ -8,10 +8,10 @@ import request from "supertest";
 import { AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, AGENT_RUNTIME_PROTOCOL_V1, MANAGED_AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, RuntimeCandidateKinds, type RuntimeCandidate } from "@opencrane/contracts";
 import { ___AuthMiddleware } from "@opencrane/backend/server/infra/auth";
 import { _RateLimit } from "@opencrane/backend/server/infra/http";
-import { _ReadProcessConfig } from "../app/config.js";
+import { _ReadProcessConfig } from "../app/config";
 
 /** Keep identity-route tests independent from mounted ArtifactStore credentials. */
-vi.mock("../infra/artifacts/artifact-upload.factory.js", function _MockArtifactUploadFactory()
+vi.mock("../infra/artifacts/artifact-upload.factory", function _MockArtifactUploadFactory()
 {
 	return {
 		_CreateArtifactPreprocessOutputBroker: function _CreateArtifactPreprocessOutputBroker() { return {}; },
@@ -48,7 +48,7 @@ function _buildAuthApp(): Express
 /** Build the internal runtime candidate route around one mocked TokenReview identity. */
 async function _BuildRuntimeCandidateApp(username: string, audiences: string[] = [AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE]): Promise<Express>
 {
-  const { _RegisterInternalRoutes } = await import("../app/routes.js");
+  const { _RegisterInternalRoutes } = await import("../app/routes");
   // The real Prisma dispatch authority runs inside a transaction and loads the live assignment for
   // the reviewed Pod. Returning no assignment lets an authenticated runtime reach the authority and
   // receive its real fail-closed candidate denial instead of a hardcoded stub reason.
@@ -164,7 +164,7 @@ describe("Control Plane", () =>
 
     it("requires one explicit runtime namespace separate from the server", async function _RuntimeNamespaceSeparation()
     {
-      const { _RegisterInternalRoutes } = await import("../app/routes.js");
+      const { _RegisterInternalRoutes } = await import("../app/routes");
       const app = express();
       vi.stubEnv("AGENT_RUNTIME_PERSONAL_NAMESPACE", "");
       expect(function _MissingRuntimeNamespace() { _RegisterInternalRoutes(app, {} as PrismaClient, {} as AuthenticationV1Api, _ReadProcessConfig().runtime); }).toThrow(/different from POD_NAMESPACE/);
@@ -184,7 +184,7 @@ describe("Control Plane", () =>
 
 		it("mounts the production channel resolver when the complete receiver contract is configured", async function _MountsChannelResolver()
 		{
-			const { _RegisterInternalRoutes } = await import("../app/routes.js");
+			const { _RegisterInternalRoutes } = await import("../app/routes");
 			vi.stubEnv("CHANNEL_PROXY_SERVICE_ACCOUNT_NAME", "opencrane-channel-proxy");
 			vi.stubEnv("CHANNEL_TARGET_TRUSTED_HOST", "acme.example.com");
 			vi.stubEnv("CHANNEL_TARGET_SILO_ID", "silo-1");

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { PrismaArtifactAuthorityRepository } from "../prisma-artifact-authority.js";
-import { PrismaArtifactCatalogueRepository } from "../prisma-artifact-catalogue-repository.js";
+import { PrismaArtifactAuthorityRepository } from "../prisma-artifact-authority";
+import { PrismaArtifactCatalogueRepository } from "../prisma-artifact-catalogue-repository";
 
 /** Stable database-owned time used by transaction-delegate tests. */
 const _DATABASE_NOW = new Date("2026-08-05T08:00:00.000Z");

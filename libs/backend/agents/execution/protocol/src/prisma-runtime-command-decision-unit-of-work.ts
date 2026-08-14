@@ -2,9 +2,9 @@ import { RuntimeCommandKind, type Prisma } from "@prisma/client";
 
 import type { RuntimeElicitationUnitOfWork } from "@opencrane/backend/agents/execution/elicitation";
 
-import { PrismaRuntimeResumeInputRepository } from "./prisma-runtime-resume-input-repository.js";
-import type { RuntimeApprovalExpiry, RuntimeCommandDecisionUnitOfWork } from "./prisma-runtime-dispatch-authority.types.js";
-import type { RuntimeAdmissionRunState } from "./runtime-protocol-authority.types.js";
+import { PrismaRuntimeResumeInputRepository } from "./prisma-runtime-resume-input-repository";
+import type { RuntimeApprovalExpiry, RuntimeCommandDecisionUnitOfWork } from "./prisma-runtime-dispatch-authority.types";
+import type { RuntimeAdmissionRunState } from "./runtime-protocol-authority.types";
 
 /**
  * Decides the next runtime command, and closes overdue approvals, on the caller's transaction.

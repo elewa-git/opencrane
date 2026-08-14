@@ -3,8 +3,8 @@ import { describe, expect, it } from "vitest";
 import { PROMPT_COMPILER_VERSION, RunInputSnapshotIdentityKinds, type CompiledModelRoute, type CompiledToolDefinition, type RunInputSnapshot } from "@opencrane/contracts";
 import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 
-import { __AppendCompiledTool, __CompileRunInput } from "../prompt-compiler.js";
-import type { PromptCompilerRepositories } from "../prompt-compiler.types.js";
+import { __AppendCompiledTool, __CompileRunInput } from "../prompt-compiler";
+import type { PromptCompilerRepositories } from "../prompt-compiler.types";
 
 /** Build one schema-bound snapshot tool definition. */
 function _snapshotTool(name: string)

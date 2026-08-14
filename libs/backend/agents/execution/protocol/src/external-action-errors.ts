@@ -1,4 +1,4 @@
-import type { IntegrationAssignmentUnavailableReason } from "./external-action-executor.types.js";
+import type { IntegrationAssignmentUnavailableReason } from "./external-action-executor.types";
 
 /**
  * Thrown when the integration's live custody no longer allows the assignment frozen in the snapshot.

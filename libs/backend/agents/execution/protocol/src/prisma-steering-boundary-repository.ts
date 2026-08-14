@@ -1,6 +1,6 @@
 import { Prisma, RuntimeSteeringDisposition, type PrismaClient } from "@prisma/client";
 
-import type { SteeringBoundaryClaim, SteeringBoundaryClaimResult, SteeringBoundaryRepository, SteeringDisposition } from "./steering-authority.types.js";
+import type { SteeringBoundaryClaim, SteeringBoundaryClaimResult, SteeringBoundaryRepository, SteeringDisposition } from "./steering-authority.types";
 
 /** Map the Prisma disposition enum to this package's string literal. */
 function _disposition(value: RuntimeSteeringDisposition): SteeringDisposition

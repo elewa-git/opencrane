@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import { AG_UI_A2UI_ENVELOPE_VERSION, AgUiA2uiSurfaceStates } from "@opencrane/contracts";
 import type { JsonValue } from "@opencrane/util";
 
-import { PrismaRuntimeEventReporter } from "../prisma-runtime-event-reporter.js";
+import { PrismaRuntimeEventReporter } from "../prisma-runtime-event-reporter";
 
 /** Build one running conversation transaction for reporter tests. */
 function _Transaction()

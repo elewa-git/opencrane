@@ -1,11 +1,11 @@
 import type { Request } from "express";
 import type { Logger } from "@opencrane/backend/observability";
 
-import type { PersonaAuthorityRepository } from "../approval/persona-authority.types.js";
-import type { PersonaDraftFromInterviewRepository } from "../drafting/persona-draft-authority.types.js";
-import type { PersonaInterviewQuestionReader, PersonaInterviewRepository } from "../interview/persona-interview-authority.types.js";
-import type { PersonaOnboardingRepository } from "../profile/persona-onboarding-authority.types.js";
-import type { PersonaOnboardingStatusRepository } from "../profile/persona-onboarding-status.types.js";
+import type { PersonaAuthorityRepository } from "../approval/persona-authority.types";
+import type { PersonaDraftFromInterviewRepository } from "../drafting/persona-draft-authority.types";
+import type { PersonaInterviewQuestionReader, PersonaInterviewRepository } from "../interview/persona-interview-authority.types";
+import type { PersonaOnboardingRepository } from "../profile/persona-onboarding-authority.types";
+import type { PersonaOnboardingStatusRepository } from "../profile/persona-onboarding-status.types";
 
 /** Authenticated browser identity resolved by the composing server, never from request input. */
 export interface PersonaOnboardingCaller

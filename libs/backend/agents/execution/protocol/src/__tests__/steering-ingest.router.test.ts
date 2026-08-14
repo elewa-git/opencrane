@@ -3,8 +3,8 @@ import request from "supertest";
 import { describe, expect, it, vi } from "vitest";
 import type { Logger } from "@opencrane/backend/observability";
 
-import { __CreateSteeringIngestRouter } from "../steering-ingest.router.js";
-import type { SteeringIngestRouterDependencies } from "../steering-ingest.router.types.js";
+import { __CreateSteeringIngestRouter } from "../steering-ingest.router";
+import type { SteeringIngestRouterDependencies } from "../steering-ingest.router.types";
 
 /** Build a router with an authenticated owner and a recording steering queue. */
 function _dependencies(overrides: Partial<SteeringIngestRouterDependencies> = {}): SteeringIngestRouterDependencies

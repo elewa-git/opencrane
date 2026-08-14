@@ -1,4 +1,4 @@
-import type { OidcAuthConfig } from "./oidc-config.types.js";
+import type { OidcAuthConfig } from "./oidc-config.types";
 
 /**
  * Read the OIDC login configuration out of environment variables and return it as a

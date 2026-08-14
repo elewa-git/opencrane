@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { PROMPT_COMPILER_VERSION, RunInputSnapshotIdentityKinds, type RunInputSnapshot } from "@opencrane/contracts";
 import { ___DigestCanonicalJson } from "@opencrane/util";
 
-import { __CreatePrismaRunInputCompiler } from "../prisma-run-input-compiler.js";
+import { __CreatePrismaRunInputCompiler } from "../prisma-run-input-compiler";
 
 /** Build a snapshot whose frozen memory policy names the exact recall coordinates. */
 function _snapshot(overrides: Partial<RunInputSnapshot> = {}): RunInputSnapshot

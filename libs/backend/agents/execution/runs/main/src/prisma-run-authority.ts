@@ -2,7 +2,7 @@ import { AgentRunState, AgentServiceState as PrismaAgentServiceState, OrgMemberS
 
 import type { AgentRun, AgentRunState as DomainAgentRunState, AgentRunTerminalReason, AgentRunTrigger, AgentServiceState as DomainAgentServiceState } from "@opencrane/models/agents";
 
-import type { AgentRunAuthoritySnapshot, AgentRunRetryTransactionRepository, AtomicRunAttemptResult, AtomicStartNextRunAttemptCommand, StartNextRunAttemptCommand, StartNextRunAttemptResult } from "./run-authority.types.js";
+import type { AgentRunAuthoritySnapshot, AgentRunRetryTransactionRepository, AtomicRunAttemptResult, AtomicStartNextRunAttemptCommand, StartNextRunAttemptCommand, StartNextRunAttemptResult } from "./run-authority.types";
 
 /** Maps a Prisma AgentRun lifecycle identifier to the target contract value. */
 function _runState(value: string): DomainAgentRunState

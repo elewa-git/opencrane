@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, Input, computed, linkedSignal, signal } from "@angular/core";
 import { DynamicComponent, type Types } from "@a2ui/angular/v0_8";
 
-import type { A2uiDateTimeInputType } from "./a2ui-control.types.js";
+import type { A2uiDateTimeInputType } from "./a2ui-control.types";
 
 /**
  * Renders the v0.8 DateTimeInput component as a native date, time or datetime-local input.

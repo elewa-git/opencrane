@@ -1,4 +1,4 @@
-import { PersonalConfigurationMaterializationCodes, type MaterializePersonalConfigurationChangeCommand, type MaterializePersonalConfigurationChangeResult, type PersonalConfigurationChangeMaterializationRepository } from "./personal-configuration-materialization.types.js";
+import { PersonalConfigurationMaterializationCodes, type MaterializePersonalConfigurationChangeCommand, type MaterializePersonalConfigurationChangeResult, type PersonalConfigurationChangeMaterializationRepository } from "./personal-configuration-materialization.types";
 
 /**
  * Applies one accepted proposal, creating a new immutable personal AgentRevision.

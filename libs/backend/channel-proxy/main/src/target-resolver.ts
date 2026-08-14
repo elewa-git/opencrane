@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 
 import { ___ParseAndValidateJson } from "@opencrane/util";
 
-import type { AuthorizedChannelTarget, ChannelTargetResolver, OpenCraneResolverOptions, TargetResolutionRequest } from "./channel-proxy.types.js";
+import type { AuthorizedChannelTarget, ChannelTargetResolver, OpenCraneResolverOptions, TargetResolutionRequest } from "./channel-proxy.types";
 
 /** Default path of the audience-bound channel-proxy workload token. */
 export const __CHANNEL_PROXY_TOKEN_PATH = "/var/run/opencrane/tokens/opencrane.token";

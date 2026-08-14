@@ -1,6 +1,6 @@
 import { AG_UI_A2UI_ENVELOPE_VERSION, AgUiA2uiSurfaceStates, type AgUiA2uiOperation } from "@opencrane/contracts";
 
-import { A2uiComponentNames, type A2uiSurfacePresentation } from "./a2ui.types.js";
+import { A2uiComponentNames, type A2uiSurfacePresentation } from "./a2ui.types";
 
 /** Maximum number of ordered protocol operations admitted in one display envelope. */
 const _MAX_OPERATIONS = 256;

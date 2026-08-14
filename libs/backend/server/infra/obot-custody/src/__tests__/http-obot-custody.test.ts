@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { __CreateHttpObotCustodyAdapter } from "../http-obot-custody.js";
-import { ObotProtocolError, ObotTransportError } from "../obot-http.js";
-import type { ObotRequestMethod, ObotSession } from "../obot-http.types.js";
-import type { ProvisionObotCustodyCommand } from "../obot-custody.types.js";
+import { __CreateHttpObotCustodyAdapter } from "../http-obot-custody";
+import { ObotProtocolError, ObotTransportError } from "../obot-http";
+import type { ObotRequestMethod, ObotSession } from "../obot-http.types";
+import type { ProvisionObotCustodyCommand } from "../obot-custody.types";
 
 /** One recorded management exchange. */
 interface _RecordedCall

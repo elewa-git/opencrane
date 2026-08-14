@@ -4,7 +4,7 @@ import type { PrismaClient } from "@prisma/client";
 import request from "supertest";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { mcpOperatorRouter } from "../routes/mcp-operator.js";
+import { mcpOperatorRouter } from "../routes/mcp-operator";
 
 /**
  * Operator-API coverage (`/api/v1/mcp/*`): the org-admin gate on the governance

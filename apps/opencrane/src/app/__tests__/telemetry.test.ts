@@ -8,7 +8,7 @@ import { describe, expect, it } from "vitest";
 
 import { ___CreateLogger } from "@opencrane/backend/observability";
 
-import { _CreateHttpRequestLogger, _SerializeHttpRequest } from "../telemetry.js";
+import { _CreateHttpRequestLogger, _SerializeHttpRequest } from "../telemetry";
 
 /** Exercise the real Express, pino-http, and shared-pino serialization chain. */
 async function _CapturedHttpRecords(): Promise<Array<Record<string, unknown>>>

@@ -3,10 +3,10 @@ import type { Meta, StoryObj } from "@storybook/angular";
 
 import { AG_UI_A2UI_ENVELOPE_VERSION, AgUiA2uiSurfaceStates, type AgUiA2uiOperation } from "@opencrane/contracts";
 
-import { A2uiCanvasComponent } from "../a2ui-canvas.component.js";
-import { provideOpenCraneA2ui } from "../a2ui.providers.js";
-import { type A2uiSurfacePresentation } from "../a2ui.types.js";
-import { __A2uiTestSanitizer } from "./a2ui-test-sanitizer.js";
+import { A2uiCanvasComponent } from "../a2ui-canvas.component";
+import { provideOpenCraneA2ui } from "../a2ui.providers";
+import { type A2uiSurfacePresentation } from "../a2ui.types";
+import { __A2uiTestSanitizer } from "./a2ui-test-sanitizer";
 
 /** Reviewed interactive form used by every canonical lifecycle visual contract. */
 const _SURFACE_OPERATIONS: readonly AgUiA2uiOperation[] =

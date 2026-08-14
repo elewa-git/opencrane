@@ -2,8 +2,8 @@ import { Injectable, computed, inject, signal } from "@angular/core";
 
 import { ElicitationRequestStates, type ConversationElicitation, type ElicitationResponseValue } from "@opencrane/contracts";
 
-import { ElicitationGatewayError, ElicitationGatewayErrorKinds } from "./elicitation-gateway.errors.js";
-import { ELICITATION_GATEWAY } from "./opencrane-conversation-elicitation.gateway.js";
+import { ElicitationGatewayError, ElicitationGatewayErrorKinds } from "./elicitation-gateway.errors";
+import { ELICITATION_GATEWAY } from "./opencrane-conversation-elicitation.gateway";
 
 /**
  * Holds the one question or approval an agent run is currently waiting on, and the answer the

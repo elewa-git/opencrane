@@ -1,1 +1,1 @@
-export { OpenCraneConversationWorkspaceGateway } from "./lib/opencrane-conversation-workspace.gateway.js";
+export { OpenCraneConversationWorkspaceGateway } from "./lib/opencrane-conversation-workspace.gateway";

@@ -2,8 +2,8 @@ import { AgentRunState, ConversationLifecycle, ConversationMode, OrgMemberStatus
 import { describe, expect, it, vi } from "vitest";
 import { MessageContentBlockKinds } from "@opencrane/models/conversations";
 
-import { PersonalRunIdempotencyOutcomes, type PersonalRunAdmissionCommand } from "../personal-run-admission.types.js";
-import { PrismaPersonalRunAdmissionUnitOfWork } from "../prisma-personal-run-admission-unit-of-work.js";
+import { PersonalRunIdempotencyOutcomes, type PersonalRunAdmissionCommand } from "../personal-run-admission.types";
+import { PrismaPersonalRunAdmissionUnitOfWork } from "../prisma-personal-run-admission-unit-of-work";
 
 /** Builds one trusted personal admission command for persistence-adapter tests. */
 function _Command(): PersonalRunAdmissionCommand

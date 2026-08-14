@@ -3,8 +3,8 @@ import { describe, expect, it } from "vitest";
 
 import { AG_UI_PROJECTION_VERSION, AG_UI_TOOL_FAILURE_EVENT, AG_UI_TOOL_RECOVERY_REQUIRED_EVENT, AgUiToolRecoveryProviderOutcomes, type AgUiProjectionEvent, type AgUiProjectionSourceEvent, type AgUiSseRecord } from "@opencrane/contracts";
 
-import { __ProjectAgUiEvents } from "../ag-ui-event-projector.js";
-import { __EncodeAgUiSseRecord } from "../ag-ui-sse-encoder.js";
+import { __ProjectAgUiEvents } from "../ag-ui-event-projector";
+import { __EncodeAgUiSseRecord } from "../ag-ui-sse-encoder";
 
 /** Construct one server-authorized safe source event for projection tests. */
 function _Source(eventType: AgUiProjectionSourceEvent["eventType"], payload: AgUiProjectionSourceEvent["payload"] = {}): AgUiProjectionSourceEvent

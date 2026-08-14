@@ -1,7 +1,7 @@
 import { AG_UI_CHILD_RUN_ENVELOPE_VERSION, AgUiToolRecoveryProviderOutcomes, RunEventTypes, ___ParseAgUiA2uiEnvelope, type AgUiChildRunEnvelope, type AgUiPublicEventPayload, type SafeToolTechnicalDetails } from "@opencrane/contracts";
 import { AgentThreadDeliveryKinds, AgentThreadEventTypes } from "@opencrane/backend/conversations/agent-threads";
 
-import type { ConversationEventProjectionResult, ConversationProjectionEventRow } from "./conversation-event-projector.types.js";
+import type { ConversationEventProjectionResult, ConversationProjectionEventRow } from "./conversation-event-projector.types";
 
 const _SAFE_FAILURE_CODES = new Set(["AuthenticationError", "ConnectionError", "HTTPError", "ModelLoopError", "OSError", "PermissionError", "RuntimeError", "TimeoutError", "URLError", "ValueError", "approval_arguments_invalid", "approval_cancelled", "approval_defer_failed", "approval_denied", "approval_expired", "approval_unavailable", "external_action_pre_dispatch_unavailable", "external_action_preparation_failed", "external_action_provider_outcome_ambiguous", "external_action_unsupported", "integration_provider_unavailable", "integration_tool_not_allowed", "malformed_tool_call", "memory_provider_unavailable", "memory_scope_unavailable", "model_loop_error", "sandbox_provider_unavailable"]);
 

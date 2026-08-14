@@ -28,14 +28,14 @@ import { _CreateSteeringIngestRouter } from "@opencrane/backend/agents/execution
 import { _ResolveRequestPrincipal } from "@opencrane/backend/server/infra/auth";
 import { _CheckDbHealth, _OpenapiRouter, _RateLimit } from "@opencrane/backend/server/infra/http";
 
-import type { InternalRuntimeConfig } from "./config.types.js";
-import { _log } from "./log.js";
-import { _CreateInternalRuntimeComposition } from "./runtime-composition.js";
-import type { RouteMount, SharesRouteOptions } from "./routes.types.js";
-import { _CreateUserOnboardingComposition } from "./user-onboarding-composition.js";
-import { _ProcessShutdownSignal } from "./process-shutdown.js";
-import { ___CreateDbHealthProbe } from "../infra/db/db.js";
-import { _CreateConversationAssetAuthority } from "../infra/artifacts/artifact-upload.factory.js";
+import type { InternalRuntimeConfig } from "./config.types";
+import { _log } from "./log";
+import { _CreateInternalRuntimeComposition } from "./runtime-composition";
+import type { RouteMount, SharesRouteOptions } from "./routes.types";
+import { _CreateUserOnboardingComposition } from "./user-onboarding-composition";
+import { _ProcessShutdownSignal } from "./process-shutdown";
+import { ___CreateDbHealthProbe } from "../infra/db/db";
+import { _CreateConversationAssetAuthority } from "../infra/artifacts/artifact-upload.factory";
 
 /**
  * Register the authenticated product API from functional route lists.

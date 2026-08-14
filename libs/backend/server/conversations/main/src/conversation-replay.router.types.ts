@@ -1,7 +1,7 @@
 import type { ChannelTargetAuthorityRepository } from "@opencrane/backend/server/agents/channel-targets";
 import type { ConversationProjectionClock, ConversationProjectionLimits } from "@opencrane/backend/conversations/projection";
 
-import type { ConversationReplayUnitOfWork } from "./replay-reader.types.js";
+import type { ConversationReplayUnitOfWork } from "./replay-reader.types";
 
 /** Dependencies owned by the server composition root for internal conversation replay. */
 export interface ConversationReplayRouterDependencies

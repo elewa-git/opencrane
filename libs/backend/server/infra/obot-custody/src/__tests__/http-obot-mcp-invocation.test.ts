@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { __CreateHttpObotMcpInvocationAdapter } from "../http-obot-mcp-invocation.js";
-import { ObotMcpAuthenticationError, ObotMcpAuthorizationError, ObotMcpToolNotAllowedError } from "../obot-mcp-invocation.js";
-import type { ObotMcpToolInvocationCommand } from "../obot-mcp-invocation.types.js";
-import { ObotProtocolError, ObotTransportError } from "../obot-http.js";
-import type { ObotMcpExchangeResponse, ObotRequestMethod, ObotSession } from "../obot-http.types.js";
+import { __CreateHttpObotMcpInvocationAdapter } from "../http-obot-mcp-invocation";
+import { ObotMcpAuthenticationError, ObotMcpAuthorizationError, ObotMcpToolNotAllowedError } from "../obot-mcp-invocation";
+import type { ObotMcpToolInvocationCommand } from "../obot-mcp-invocation.types";
+import { ObotProtocolError, ObotTransportError } from "../obot-http";
+import type { ObotMcpExchangeResponse, ObotRequestMethod, ObotSession } from "../obot-http.types";
 
 /** One MCP exchange recorded by the session double. */
 interface _RecordedMcpExchange

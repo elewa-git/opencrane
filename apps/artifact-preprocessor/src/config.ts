@@ -1,6 +1,6 @@
 import { isAbsolute } from "node:path";
 
-import type { ArtifactPreprocessorProcessConfig } from "./config.types.js";
+import type { ArtifactPreprocessorProcessConfig } from "./config.types";
 
 /** Read one required, trimmed environment value. */
 function _Required(environment: NodeJS.ProcessEnv, name: string): string

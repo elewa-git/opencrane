@@ -2,7 +2,7 @@ import express from "express";
 import request from "supertest";
 import { describe, expect, it } from "vitest";
 
-import { _RateLimit } from "../rate-limit.js";
+import { _RateLimit } from "../rate-limit";
 
 /**
  * Build an app whose every route is covered by a low-cap limiter, plus the two exempt

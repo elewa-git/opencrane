@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import { AgentServiceKinds } from "@opencrane/models/agents";
 import { ___DigestCanonicalJson } from "@opencrane/util";
 
-import { PrismaRevisionBudgetPolicySource, PrismaRevisionToolPolicySource } from "../prisma-revision-tool-policy-source.js";
+import { PrismaRevisionBudgetPolicySource, PrismaRevisionToolPolicySource } from "../prisma-revision-tool-policy-source";
 
 /** The active managed run facts these tests share. */
 const _RUN = { agentServiceId: "service-1", agentRevisionId: "revision-1", agentKind: AgentServiceKinds.Managed, effectiveContractDigest: `sha256:${"a".repeat(64)}`, promptCompilerVersion: "v1", trigger: "managed_invocation", delegatedUserId: null, rootRunId: "run-1", parentRunId: null } as const;

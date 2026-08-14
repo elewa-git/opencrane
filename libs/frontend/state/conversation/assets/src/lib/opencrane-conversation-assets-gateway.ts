@@ -3,8 +3,8 @@ import { Injectable, inject } from "@angular/core";
 import { ControlPlaneApiService } from "@opencrane/core";
 import { ConversationAssetDisposition, ConversationAssetLifecycle, ConversationAssetProvenance } from "@opencrane/models/conversation-assets";
 
-import type { ConversationAsset, ReserveConversationAssetUpload } from "./conversation-assets.types.js";
-import type { ConversationAssetsGateway } from "./conversation-assets-gateway.types.js";
+import type { ConversationAsset, ReserveConversationAssetUpload } from "./conversation-assets.types";
+import type { ConversationAssetsGateway } from "./conversation-assets-gateway.types";
 
 /** Generated-client adapter for safe conversation-file metadata and exact byte uploads. */
 @Injectable()

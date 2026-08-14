@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { _ReadConfig } from "../config.js";
+import { _ReadConfig } from "../config";
 
 /** Build a complete private gateway environment with one intended override. */
 function _Environment(overrides: NodeJS.ProcessEnv = {}): NodeJS.ProcessEnv

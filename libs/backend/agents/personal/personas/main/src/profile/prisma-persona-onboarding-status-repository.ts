@@ -1,12 +1,12 @@
 import { PersonaColour, PersonaInterviewState, PersonaOpennessModifier, PersonaRevisionState, type Prisma } from "@prisma/client";
 
-import { PersonaScoringPersistenceStatuses } from "../scoring/persona-scoring-repository.types.js";
-import { PrismaPersonaScoringRepository } from "../scoring/prisma-persona-scoring-repository.js";
-import { PersonaColourValues, PersonaModifierValues, type PersonaScoreResult } from "../scoring/persona-scorer.types.js";
-import { _ParsePersonaPersistedScoreEvidence } from "../scoring/persona-scorer.validator.js";
-import { _ProjectPersonaOnboardingStatus } from "./persona-onboarding-status-projection.js";
-import { PersonaOnboardingStatusInterviewStates, PersonaOnboardingStatusRevisionStates } from "./persona-onboarding-status-projection.types.js";
-import type { PersonaOnboardingStatus, PersonaOnboardingStatusRepository, PersonaStatusQuestion, PersonaStatusResult } from "./persona-onboarding-status.types.js";
+import { PersonaScoringPersistenceStatuses } from "../scoring/persona-scoring-repository.types";
+import { PrismaPersonaScoringRepository } from "../scoring/prisma-persona-scoring-repository";
+import { PersonaColourValues, PersonaModifierValues, type PersonaScoreResult } from "../scoring/persona-scorer.types";
+import { _ParsePersonaPersistedScoreEvidence } from "../scoring/persona-scorer.validator";
+import { _ProjectPersonaOnboardingStatus } from "./persona-onboarding-status-projection";
+import { PersonaOnboardingStatusInterviewStates, PersonaOnboardingStatusRevisionStates } from "./persona-onboarding-status-projection.types";
+import type { PersonaOnboardingStatus, PersonaOnboardingStatusRepository, PersonaStatusQuestion, PersonaStatusResult } from "./persona-onboarding-status.types";
 
 /** Prisma read adapter for the exact owner's resumable persona state. */
 export class PrismaPersonaOnboardingStatusRepository implements PersonaOnboardingStatusRepository

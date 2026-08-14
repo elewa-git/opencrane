@@ -1,5 +1,5 @@
-import { PersonaInterviewDenialReasons, PersonaLifecycleOutcomes } from "../profile/persona-lifecycle.types.js";
-import type { PersonaScoreResult, PersonaTieKinds } from "../scoring/persona-scorer.types.js";
+import { PersonaInterviewDenialReasons, PersonaLifecycleOutcomes } from "../profile/persona-lifecycle.types";
+import type { PersonaScoreResult, PersonaTieKinds } from "../scoring/persona-scorer.types";
 
 /** Request to start the reviewed onboarding interview for one personal persona profile. */
 export interface StartPersonaInterviewCommand

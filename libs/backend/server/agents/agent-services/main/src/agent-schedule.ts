@@ -1,4 +1,4 @@
-import type { AgentScheduleMutationResult, AgentScheduleRepository, CreateAgentScheduleCommand, UpdateAgentScheduleCommand } from "./agent-schedule.types.js";
+import type { AgentScheduleMutationResult, AgentScheduleRepository, CreateAgentScheduleCommand, UpdateAgentScheduleCommand } from "./agent-schedule.types";
 
 /** Single cron field: `*`, an integer, list, range, or step, in the standard grammar. */
 const _CRON_FIELD = /^(\*|(\d+)(-\d+)?)(\/\d+)?(,(\*|(\d+)(-\d+)?)(\/\d+)?)*$/;

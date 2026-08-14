@@ -2,7 +2,7 @@ import express from "express";
 import request from "supertest";
 import { describe, expect, it, vi } from "vitest";
 
-import { _CheckDbHealth, type DbHealthProbeUnitOfWork } from "../healthz.js";
+import { _CheckDbHealth, type DbHealthProbeUnitOfWork } from "../healthz";
 
 /**
  * Build a minimal Express app mounting the healthz handler over a mocked DB probe.

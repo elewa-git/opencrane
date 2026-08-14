@@ -1,6 +1,6 @@
 import type { JsonValue } from "@opencrane/util";
 
-import type { DurableExternalActionCommand, ExternalActionExecutorDependencies } from "./external-action-executor.types.js";
+import type { DurableExternalActionCommand, ExternalActionExecutorDependencies } from "./external-action-executor.types";
 
 /**
  * Submit one admitted sandbox action through the isolated Job execution port.

@@ -1,6 +1,6 @@
 import type { ObotCustodyPort } from "@opencrane/backend/server/infra/obot-custody";
 
-import type { IntegrationCustodyLogger, IntegrationCustodyRepository, ProvisionIntegrationCustodyCommand, ProvisionIntegrationCustodyResult } from "./integration-custody-provisioning.types.js";
+import type { IntegrationCustodyLogger, IntegrationCustodyRepository, ProvisionIntegrationCustodyCommand, ProvisionIntegrationCustodyResult } from "./integration-custody-provisioning.types";
 
 /**
  * Hand a credential to Obot for safekeeping, then record the handle Obot returns — and undo the

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { __DiffAgentRevisions } from "../agent-revision-diff.js";
-import type { AgentRevision } from "../agent-revision.types.js";
+import { __DiffAgentRevisions } from "../agent-revision-diff";
+import type { AgentRevision } from "../agent-revision.types";
 import { ___DigestCanonicalJson } from "@opencrane/util";
 
 /** Build one reviewed tool definition fixture. */

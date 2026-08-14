@@ -1,6 +1,6 @@
 import type { AgentScheduleOverlapPolicies, ManagedRunAdmissionPort, ManagedRunAdmissionResult } from "@opencrane/backend/server/agents/agent-services";
 
-import type { ScheduleInvalidReasons, ScheduledSlotOutcomes, ScheduleTickStatuses } from "./schedule-tick.enums.js";
+import type { ScheduleInvalidReasons, ScheduledSlotOutcomes, ScheduleTickStatuses } from "./schedule-tick.enums";
 
 /**
  * One recurring schedule, as the scheduler needs to see it.

@@ -1,8 +1,8 @@
 import type { FleetSignatureVerificationEvidence, SignedFleetMembershipRevision } from "@opencrane/models/authorization";
 import { describe, expect, it, vi } from "vitest";
 
-import type { FleetMembershipAuthorityRepository, FleetMembershipEvidenceConfig } from "../membership-authority.types.js";
-import { SignedFleetMembershipAssertionVerifier } from "../signed-membership-assertion-authority.js";
+import type { FleetMembershipAuthorityRepository, FleetMembershipEvidenceConfig } from "../membership-authority.types";
+import { SignedFleetMembershipAssertionVerifier } from "../signed-membership-assertion-authority";
 
 /** Stable signed revision with one organization assertion. */
 const _REVISION: SignedFleetMembershipRevision = {

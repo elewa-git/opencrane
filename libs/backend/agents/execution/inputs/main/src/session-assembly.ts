@@ -5,9 +5,9 @@ import { __AreReviewedIntegrationToolDefinitionsValid, type ReviewedIntegrationT
 import { ___CloneCanonicalJson, ___SortBy } from "@opencrane/util";
 import type { JsonValue } from "@opencrane/util";
 
-import { _IsIdentityFresh } from "./utils/canonical-inputs.js";
-import type { AssembleRunInputSnapshotResult, SessionAssemblyRefusalReason } from "./session-assembly-result.types.js";
-import type { ApprovedPersonaInput, IdentityEnvelopeInput, MemoryScopeInput, SessionAssemblyAuthorities, SessionAssemblyCommand, ConversationContextInput, ToolPolicyInput } from "./session-assembly.types.js";
+import { _IsIdentityFresh } from "./utils/canonical-inputs";
+import type { AssembleRunInputSnapshotResult, SessionAssemblyRefusalReason } from "./session-assembly-result.types";
+import type { ApprovedPersonaInput, IdentityEnvelopeInput, MemoryScopeInput, SessionAssemblyAuthorities, SessionAssemblyCommand, ConversationContextInput, ToolPolicyInput } from "./session-assembly.types";
 
 /** Snapshot format version this assembler stamps on every snapshot it writes. */
 const _SNAPSHOT_VERSION = 1;

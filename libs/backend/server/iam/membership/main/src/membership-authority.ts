@@ -1,6 +1,6 @@
 import { __EvaluateFleetMembershipRevision } from "@opencrane/models/authorization";
 
-import type { FleetMembershipAuthorityRepository, FleetMembershipSignatureVerifier, VerifyFleetMembershipCommand, VerifyFleetMembershipEvidenceResult, VerifyFleetMembershipResult } from "./membership-authority.types.js";
+import type { FleetMembershipAuthorityRepository, FleetMembershipSignatureVerifier, VerifyFleetMembershipCommand, VerifyFleetMembershipEvidenceResult, VerifyFleetMembershipResult } from "./membership-authority.types";
 
 /**
  * Checks one subject's fleet membership and reports how long it may be trusted.

@@ -1,10 +1,10 @@
 import { Injectable, computed, inject, signal } from "@angular/core";
 
-import { AgentThreadGatewayError, AgentThreadGatewayErrorKinds } from "./agent-thread-gateway.errors.js";
-import { __AgentThreadFailureRoute } from "./agent-thread-access-policy.js";
-import { _AgentThreadFollowUpState } from "./agent-thread-follow-up.state.js";
-import { AGENT_THREAD_GATEWAY } from "./agent-thread.gateway.js";
-import { AgentThreadRecoveryStates, AgentThreadRouteStates, type AgentThreadSnapshot } from "./agent-thread.types.js";
+import { AgentThreadGatewayError, AgentThreadGatewayErrorKinds } from "./agent-thread-gateway.errors";
+import { __AgentThreadFailureRoute } from "./agent-thread-access-policy";
+import { _AgentThreadFollowUpState } from "./agent-thread-follow-up.state";
+import { AGENT_THREAD_GATEWAY } from "./agent-thread.gateway";
+import { AgentThreadRecoveryStates, AgentThreadRouteStates, type AgentThreadSnapshot } from "./agent-thread.types";
 
 /** Component-scoped state for one full-page Agent-thread route. */
 @Injectable()

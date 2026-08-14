@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { __ValidateStageArtifactCommand, __ValidateStagedArtifact } from "@opencrane/backend/artifacts/store";
 import type { ArtifactByteStream, ArtifactStore, ArtifactStorePromotion, ArtifactStorePurgeResult, StageArtifactCommand, StagedArtifact } from "@opencrane/backend/artifacts/store";
 import { ___IsSha256ContentAddress } from "@opencrane/models/artifacts";
-import type { FilesystemArtifactStoreOptions } from "./filesystem-artifact-store.types.js";
+import type { FilesystemArtifactStoreOptions } from "./filesystem-artifact-store.types";
 
 /**
  * {@link ArtifactStore} backed by one mounted POSIX volume.

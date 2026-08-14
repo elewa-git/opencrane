@@ -1,4 +1,4 @@
-import type { PersonalMemoryAdmissionRepository, ResolvePersonalMemoryDatasetCommand } from "./personal-memory-dataset.types.js";
+import type { PersonalMemoryAdmissionRepository, ResolvePersonalMemoryDatasetCommand } from "./personal-memory-dataset.types";
 
 /**
  * Returns the ids of the preference facts a user stated about themselves, for one run admission.

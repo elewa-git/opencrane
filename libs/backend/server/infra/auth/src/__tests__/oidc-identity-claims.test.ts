@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { _ResolveIdentityClaims } from "../index.js";
+import { _ResolveIdentityClaims } from "../index";
 
 /** Default claim names with one configured operator + one org-admin group, mirroring the loader. */
 const _CONFIG = {

@@ -1,7 +1,7 @@
 import type { V1Job } from "@kubernetes/client-node";
 
-import { __BuildSkillWorkloadJobSpec, __SkillWorkloadJobName } from "./skill-workload-job.js";
-import type { SkillWorkloadJobAssignment, SkillWorkloadJobProfile } from "./skill-workload-job.types.js";
+import { __BuildSkillWorkloadJobSpec, __SkillWorkloadJobName } from "./skill-workload-job";
+import type { SkillWorkloadJobAssignment, SkillWorkloadJobProfile } from "./skill-workload-job.types";
 
 /**
  * Builds the Job object for a skill-authoring workload. The Pod spec inside it comes from

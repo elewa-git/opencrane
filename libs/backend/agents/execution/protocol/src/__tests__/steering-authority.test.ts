@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { __AdmitModelTerminal, __ClaimSteeringBoundary } from "../steering-authority.js";
-import type { SteeringBoundaryClaim, SteeringBoundaryClaimResult, SteeringBoundaryRepository } from "../steering-authority.types.js";
+import { __AdmitModelTerminal, __ClaimSteeringBoundary } from "../steering-authority";
+import type { SteeringBoundaryClaim, SteeringBoundaryClaimResult, SteeringBoundaryRepository } from "../steering-authority.types";
 
 /** In-memory boundary recorder that keeps its rows across a simulated process death. */
 class _Repository implements SteeringBoundaryRepository

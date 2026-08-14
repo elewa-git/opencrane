@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { _UserOnboardingOpenapiPaths } from "../openapi.js";
-import { UserOnboardingStates } from "../user-onboarding.enums.js";
+import { _UserOnboardingOpenapiPaths } from "../openapi";
+import { UserOnboardingStates } from "../user-onboarding.enums";
 
 describe("user onboarding OpenAPI", function _UserOnboardingOpenapiSuite()
 {

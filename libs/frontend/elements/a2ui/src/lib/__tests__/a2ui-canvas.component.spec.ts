@@ -10,10 +10,10 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 
 import { AG_UI_A2UI_ENVELOPE_VERSION, AgUiA2uiSurfaceStates, type AgUiA2uiOperation } from "@opencrane/contracts";
 
-import { A2uiCanvasComponent } from "../a2ui-canvas.component.js";
-import { provideOpenCraneA2ui } from "../a2ui.providers.js";
-import { type A2uiDisplayedActionIntent, type A2uiSurfacePresentation } from "../a2ui.types.js";
-import { __A2uiTestSanitizer } from "./a2ui-test-sanitizer.js";
+import { A2uiCanvasComponent } from "../a2ui-canvas.component";
+import { provideOpenCraneA2ui } from "../a2ui.providers";
+import { type A2uiDisplayedActionIntent, type A2uiSurfacePresentation } from "../a2ui.types";
+import { __A2uiTestSanitizer } from "./a2ui-test-sanitizer";
 
 /** Real component template compiled by Angular TestBed for DOM and accessibility contracts. */
 const _CANVAS_TEMPLATE = readFileSync(join(process.cwd(), "src/lib/a2ui-canvas.component.html"), "utf8");

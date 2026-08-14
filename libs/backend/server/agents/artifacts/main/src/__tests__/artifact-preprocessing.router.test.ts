@@ -2,8 +2,8 @@ import express from "express";
 import request from "supertest";
 import { describe, expect, it, vi } from "vitest";
 
-import { __CreateArtifactPreprocessorRouter } from "../artifact-preprocessing.router.js";
-import type { ArtifactPreprocessorRouterDependencies } from "../artifact-preprocessing.types.js";
+import { __CreateArtifactPreprocessorRouter } from "../artifact-preprocessing.router";
+import type { ArtifactPreprocessorRouterDependencies } from "../artifact-preprocessing.types";
 
 /** Fixed isolated namespace used by every reviewed test identity. */
 const _NAMESPACE = "opencrane-artifact-preprocessing";

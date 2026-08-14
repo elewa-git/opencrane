@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { _ConversationRouteCommands, _ConversationThreadRouteNavigation } from "../conversation-workspace-route.state.js";
+import { _ConversationRouteCommands, _ConversationThreadRouteNavigation } from "../conversation-workspace-route.state";
 
 describe("Conversation workspace route composition", function _ConversationWorkspaceRouteComposition()
 {

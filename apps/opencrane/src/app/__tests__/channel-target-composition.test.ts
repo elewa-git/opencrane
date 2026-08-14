@@ -1,7 +1,7 @@
 import type { PrismaClient } from "@prisma/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { _StartChannelTargetRouteReconciler } from "../channel-target-composition.js";
+import { _StartChannelTargetRouteReconciler } from "../channel-target-composition";
 
 describe("channel target route reconciliation", function _ChannelTargetRouteReconciliationSuite()
 {

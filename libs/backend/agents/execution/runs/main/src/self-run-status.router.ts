@@ -1,6 +1,6 @@
 import { Router, type Request, type Response } from "express";
 
-import type { SelfRunStatusRouterDependencies } from "./self-run-status.router.types.js";
+import type { SelfRunStatusRouterDependencies } from "./self-run-status.router.types";
 
 /** Create the session-authenticated endpoint for a personal run's current status. */
 export function __CreateSelfRunStatusRouter(dependencies: SelfRunStatusRouterDependencies): Router

@@ -1,4 +1,4 @@
-import type { RunSandboxJobCommand, SandboxJobExecutor, SandboxJobResult } from "./sandbox-execution.types.js";
+import type { RunSandboxJobCommand, SandboxJobExecutor, SandboxJobResult } from "./sandbox-execution.types";
 
 /**
  * Thrown when a tool call was asked for but this deployment has no sandbox transport wired.

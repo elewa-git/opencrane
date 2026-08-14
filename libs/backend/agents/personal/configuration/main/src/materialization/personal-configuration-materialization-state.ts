@@ -1,5 +1,5 @@
-import { PersonalConfigurationMaterializationCodes, type PersonalConfigurationMaterializationPersistenceResult } from "./personal-configuration-materialization.types.js";
-import { PersonalConfigurationMaterializationLifecycleOutcomes, PersonalConfigurationMaterializationLifecycleStates, PersonalConfigurationMaterializationResolutionOutcomes, type PersonalConfigurationMaterializationLifecycleChange, type PersonalConfigurationMaterializationLifecycleResult, type PersonalConfigurationMaterializationResolution } from "./personal-configuration-materialization-state.types.js";
+import { PersonalConfigurationMaterializationCodes, type PersonalConfigurationMaterializationPersistenceResult } from "./personal-configuration-materialization.types";
+import { PersonalConfigurationMaterializationLifecycleOutcomes, PersonalConfigurationMaterializationLifecycleStates, PersonalConfigurationMaterializationResolutionOutcomes, type PersonalConfigurationMaterializationLifecycleChange, type PersonalConfigurationMaterializationLifecycleResult, type PersonalConfigurationMaterializationResolution } from "./personal-configuration-materialization-state.types";
 
 /** Decides from the proposal's state whether to materialise it, or to stop with a result. */
 export function _ResolvePersonalConfigurationMaterializationLifecycle(change: PersonalConfigurationMaterializationLifecycleChange): PersonalConfigurationMaterializationLifecycleResult

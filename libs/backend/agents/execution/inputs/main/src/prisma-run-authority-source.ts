@@ -3,7 +3,7 @@ import { AgentRevisionState, AgentServiceKind, AgentServiceState } from "@prisma
 import type { InitialRunAuthority, RunAdmissionTransaction } from "@opencrane/backend/agents/execution/runs";
 import { AgentServiceKinds } from "@opencrane/models/agents";
 
-import type { RunAuthoritySource, SessionAssemblyCommand, SessionAssemblyLoad } from "./session-assembly.types.js";
+import type { RunAuthoritySource, SessionAssemblyCommand, SessionAssemblyLoad } from "./session-assembly.types";
 
 /**
  * Re-reads the active, published revision this run is allowed to use.

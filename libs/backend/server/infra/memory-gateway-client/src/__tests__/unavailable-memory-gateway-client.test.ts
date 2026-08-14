@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { __AssertMemoryProvenanceComplete, MemoryProvenanceIncompleteError } from "../memory-provenance.js";
-import { __AssertPersonalMemoryRecordResult, MemoryGatewayProtocolError } from "../personal-memory-record.js";
-import type { MemoryProvenance } from "../memory-gateway-client.types.js";
-import { __UnavailableMemoryGatewayClient, MemoryGatewayUnavailableError } from "../unavailable-memory-gateway-client.js";
+import { __AssertMemoryProvenanceComplete, MemoryProvenanceIncompleteError } from "../memory-provenance";
+import { __AssertPersonalMemoryRecordResult, MemoryGatewayProtocolError } from "../personal-memory-record";
+import type { MemoryProvenance } from "../memory-gateway-client.types";
+import { __UnavailableMemoryGatewayClient, MemoryGatewayUnavailableError } from "../unavailable-memory-gateway-client";
 
 /** Builds complete provenance for a central-agent scoped write. */
 function _provenance(overrides: Partial<MemoryProvenance> = {}): MemoryProvenance

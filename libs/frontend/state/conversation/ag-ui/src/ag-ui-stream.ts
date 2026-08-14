@@ -1,13 +1,13 @@
 import { EventType } from "@ag-ui/core";
 import { AG_UI_A2UI_ENVELOPE_VERSION, AG_UI_AGENT_THREAD_PARENT_DELIVERY_EVENT, AG_UI_INTERRUPTS_CLEARED_EVENT, AG_UI_TOOL_FAILURE_EVENT, AG_UI_TOOL_RECOVERY_REQUIRED_EVENT, ___ParseAgUiA2uiEnvelope, type AgUiProjectionEvent } from "@opencrane/contracts";
 
-import { _A2uiSurface } from "./a2ui-surface/a2ui-surface-reducer.js";
-import { _AgentThreadParentDelivery } from "./agent-thread-delivery/agent-thread-delivery-reducer.js";
-import type { AgUiStreamRecord, AgUiStreamState } from "./ag-ui-stream.types.js";
-import { _AppendMessage, _CompleteMessage, _MessageTerminal, _StartMessage } from "./message/message-reducer.js";
-import { _FailRun, _FinishRun, _StartRun } from "./run/run-reducer.js";
-import { AgUiRunStatuses } from "./run/run.types.js";
-import { _AppendToolArguments, _CompleteTool, _ResultTool, _StartTool, _ToolFailure, _ToolRecoveryRequired } from "./tool/tool-reducer.js";
+import { _A2uiSurface } from "./a2ui-surface/a2ui-surface-reducer";
+import { _AgentThreadParentDelivery } from "./agent-thread-delivery/agent-thread-delivery-reducer";
+import type { AgUiStreamRecord, AgUiStreamState } from "./ag-ui-stream.types";
+import { _AppendMessage, _CompleteMessage, _MessageTerminal, _StartMessage } from "./message/message-reducer";
+import { _FailRun, _FinishRun, _StartRun } from "./run/run-reducer";
+import { AgUiRunStatuses } from "./run/run.types";
+import { _AppendToolArguments, _CompleteTool, _ResultTool, _StartTool, _ToolFailure, _ToolRecoveryRequired } from "./tool/tool-reducer";
 
 /**
  * Builds the starting state for a conversation stream: no run, no messages, no cursor.

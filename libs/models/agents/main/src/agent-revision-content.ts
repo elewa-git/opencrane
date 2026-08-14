@@ -1,6 +1,6 @@
 import { ___DigestCanonicalJson, type CanonicalJsonSha256Digest, type JsonValue } from "@opencrane/util";
 
-import type { AgentRevisionContent } from "./agent-revision.types.js";
+import type { AgentRevisionContent } from "./agent-revision.types";
 
 /**
  * Compute the content digest for one numbered agent revision.

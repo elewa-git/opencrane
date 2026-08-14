@@ -2,8 +2,8 @@ import { Prisma, type PrismaClient } from "@prisma/client";
 
 import { PrismaAgentRevisionModelSelectionRepository } from "@opencrane/backend/server/agents/agent-services";
 
-import type { PersonalConfigurationMaterializationTransaction, PersonalConfigurationMaterializationUnitOfWork, PersonalConfigurationMaterializationWork } from "./personal-configuration-materialization-unit-of-work.types.js";
-import { PrismaPersonalConfigurationMaterializationRepository } from "./prisma-personal-configuration-materialization.js";
+import type { PersonalConfigurationMaterializationTransaction, PersonalConfigurationMaterializationUnitOfWork, PersonalConfigurationMaterializationWork } from "./personal-configuration-materialization-unit-of-work.types";
+import { PrismaPersonalConfigurationMaterializationRepository } from "./prisma-personal-configuration-materialization";
 
 /** How many times the whole operation may be attempted when a conflict rolls it back. */
 const _MATERIALIZATION_ATTEMPT_LIMIT = 3;

@@ -3,8 +3,8 @@ import { Prisma, type PrismaClient } from "@prisma/client";
 import { GrantScope } from "@opencrane/contracts";
 import { ___SortBy } from "@opencrane/util";
 
-import type { GroupMutationResponse, GroupResponse } from "./groups.logic.types.js";
-import type { GroupRouteScope, GroupWriteRequest } from "../routes/groups.types.js";
+import type { GroupMutationResponse, GroupResponse } from "./groups.logic.types";
+import type { GroupRouteScope, GroupWriteRequest } from "../routes/groups.types";
 
 type _GroupRow = Prisma.GroupGetPayload<{}>;
 

@@ -3,8 +3,8 @@ import type { Logger } from "pino";
 
 import { CLUSTER_TENANT_CRD_PLURAL, OPENCRANE_API_GROUP, OPENCRANE_API_VERSION, _IsK8sNotFound } from "@opencrane/backend/server/infra/api";
 
-import { _ClusterTenantFromHost } from "./request-silo.js";
-import type { ResolvedPerOrgClient } from "./per-org-client.types.js";
+import { _ClusterTenantFromHost } from "./request-silo";
+import type { ResolvedPerOrgClient } from "./per-org-client.types";
 
 /**
  * Build the Zitadel org-restriction login scope for an org id. Adding

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { _SanitizeHttpTraceUrl } from "../http-trace.js";
+import { _SanitizeHttpTraceUrl } from "../http-trace";
 
 describe("_SanitizeHttpTraceUrl", function _Suite()
 {

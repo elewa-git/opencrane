@@ -4,11 +4,11 @@
  * trusted-proxy handling, and public OpenAPI route. Helpers accept their required contracts so
  * this library does not import an application-owned Prisma package or API specification.
  */
-export * from "./error-handler.js";
-export * from "./healthz.js";
-export type * from "./healthz.types.js";
-export * from "./openapi-route.js";
-export * from "./rate-limit.js";
-export type * from "./rate-limit.types.js";
-export { ___WithValidatedPublicBody } from "./request-validation.js";
-export * from "./transport-security.middleware.js";
+export * from "./error-handler";
+export * from "./healthz";
+export type * from "./healthz.types";
+export * from "./openapi-route";
+export * from "./rate-limit";
+export type * from "./rate-limit.types";
+export { ___WithValidatedPublicBody } from "./request-validation";
+export * from "./transport-security.middleware";

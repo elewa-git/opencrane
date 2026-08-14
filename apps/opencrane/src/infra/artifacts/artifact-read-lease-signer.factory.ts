@@ -1,6 +1,6 @@
 import { __SignArtifactReadLease } from "@opencrane/backend/artifacts/authorization";
 
-import { _ReadArtifactMountedPem } from "./artifact-mounted-key.loader.js";
+import { _ReadArtifactMountedPem } from "./artifact-mounted-key.loader";
 
 /** The claims that go into a short-lived, server-only artifact read lease. */
 type ArtifactReadLeaseClaims = Parameters<typeof __SignArtifactReadLease>[0];

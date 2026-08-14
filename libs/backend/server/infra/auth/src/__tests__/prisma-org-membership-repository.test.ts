@@ -1,7 +1,7 @@
 import type { Prisma } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
 
-import { PrismaOrgMembershipRepository } from "../index.js";
+import { PrismaOrgMembershipRepository } from "../index";
 
 describe("PrismaOrgMembershipRepository", function _Suite()
 {

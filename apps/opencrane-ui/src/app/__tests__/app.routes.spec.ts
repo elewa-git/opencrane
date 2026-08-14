@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { APP_ROUTES } from "../app.routes.js";
+import { APP_ROUTES } from "../app.routes";
 
 describe("OpenCrane app route composition", function _OpenCraneAppRouteComposition()
 {

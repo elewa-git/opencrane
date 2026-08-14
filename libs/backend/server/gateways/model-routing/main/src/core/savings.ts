@@ -1,4 +1,4 @@
-import type { SavingsEstimate, SavingsOptions, SavingsSample } from "./savings.types.js";
+import type { SavingsEstimate, SavingsOptions, SavingsSample } from "./savings.types";
 
 /** Default number of bootstrap resamples — enough to stabilise a 95% CI for typical eval-set sizes. */
 const _DEFAULT_BOOTSTRAP = 1000;

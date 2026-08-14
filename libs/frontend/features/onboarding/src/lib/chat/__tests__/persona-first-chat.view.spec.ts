@@ -3,8 +3,8 @@ import { describe, expect, it } from "vitest";
 import { PersonaArchetypeTones } from "@opencrane/elements/ui";
 import { PersonaFirstChatArchetypes, PersonaFirstChatColours, PersonaFirstChatTranscriptKinds, PersonaFirstChatTranscriptRoles, UserOnboardingRouteStates, type PersonaFirstChatSnapshot } from "@opencrane/state/onboarding/projection";
 
-import { PersonaFirstChatMessageRoles } from "../persona-first-chat.types.js";
-import { _PersonaFirstChatView } from "../persona-first-chat.view.js";
+import { PersonaFirstChatMessageRoles } from "../persona-first-chat.types";
+import { _PersonaFirstChatView } from "../persona-first-chat.view";
 
 /** Build one complete authoritative projection for pure view mapping tests. */
 function _Snapshot(overrides: Partial<PersonaFirstChatSnapshot> = {}): PersonaFirstChatSnapshot

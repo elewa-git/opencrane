@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { __AppendAuditDecision } from "../audit-decision.js";
+import { __AppendAuditDecision } from "../audit-decision";
 
 describe("target audit decision append port", function _suite()
 {

@@ -4,7 +4,7 @@ import type { CompiledRunInput, RunInputSnapshot } from "@opencrane/contracts";
 import type { ExpireElicitationBatchCommand, OpenElicitationCommand, RuntimeElicitationUnitOfWork } from "@opencrane/backend/agents/execution/elicitation";
 import type { JsonValue } from "@opencrane/util";
 
-import type { RuntimeAdmissionRunState } from "./runtime-protocol-authority.types.js";
+import type { RuntimeAdmissionRunState } from "./runtime-protocol-authority.types";
 
 /**
  * Turns an immutable snapshot into the literal input carried on `start_attempt`.

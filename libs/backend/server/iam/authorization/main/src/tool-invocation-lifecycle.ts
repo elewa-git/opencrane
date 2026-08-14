@@ -1,4 +1,4 @@
-import { ExternalActionClaimKinds, ExternalActionRecoveryModes, ToolInvocationLifecycleActions, ToolInvocationLifecycleEvents, ToolInvocationStates, type ToolInvocationLifecycleInput } from "./tool-invocation-lifecycle.types.js";
+import { ExternalActionClaimKinds, ExternalActionRecoveryModes, ToolInvocationLifecycleActions, ToolInvocationLifecycleEvents, ToolInvocationStates, type ToolInvocationLifecycleInput } from "./tool-invocation-lifecycle.types";
 
 /** Handler signature owned by one durable ToolInvocation state. */
 type ToolInvocationStateHandler = (input: ToolInvocationLifecycleInput) => ToolInvocationLifecycleActions;

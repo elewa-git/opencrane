@@ -2,8 +2,8 @@ import { describe, expect, it, vi } from "vitest";
 
 import { _ProvisionByokKey, _RequireLiteLlmModelRegistration } from "@opencrane/backend/server/gateways/model-routing";
 
-import { _BootstrapInitialModel } from "../initial-model-bootstrap.js";
-import type { InitialModelBootstrapDependencies } from "../initial-model-bootstrap.types.js";
+import { _BootstrapInitialModel } from "../initial-model-bootstrap";
+import type { InitialModelBootstrapDependencies } from "../initial-model-bootstrap.types";
 
 vi.mock("@opencrane/backend/server/gateways/model-routing", function _ModelRoutingMock()
 {

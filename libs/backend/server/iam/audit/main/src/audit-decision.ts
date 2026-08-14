@@ -1,6 +1,6 @@
 import { AuditDecisionActorKind, AuditDecisionOutcome, WorkloadKind, type Prisma } from "@prisma/client";
 
-import type { AuditDecisionRecord } from "./audit-decision.types.js";
+import type { AuditDecisionRecord } from "./audit-decision.types";
 
 function _WorkloadKind(value: AuditDecisionRecord["workloadKind"]): WorkloadKind | undefined
 {

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { ElicitationBodyKinds } from "@opencrane/contracts";
 
-import { _ElicitationStateForResponse, _IsElicitationResponseValid } from "../elicitation-response.js";
+import { _ElicitationStateForResponse, _IsElicitationResponseValid } from "../elicitation-response";
 
 describe("elicitation response validation", function _Suite()
 {

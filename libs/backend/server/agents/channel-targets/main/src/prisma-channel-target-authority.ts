@@ -2,7 +2,7 @@ import { ChannelInvocationAction, ConversationLifecycle, ConversationMode, Prism
 
 import { ___DoWithTrace, ___GetActiveSpan } from "@opencrane/backend/observability";
 
-import type { ChannelConversationAuthority, ChannelTargetAuthorityRepository, ChannelTargetAuthorityUnitOfWork, ConsumeChannelInvocationContextCommand, ConsumeChannelInvocationContextResult, IssueChannelInvocationContextCommand, IssueChannelInvocationContextResult, ReconcileChannelRuntimeRoutesCommand } from "./channel-target-resolution.types.js";
+import type { ChannelConversationAuthority, ChannelTargetAuthorityRepository, ChannelTargetAuthorityUnitOfWork, ConsumeChannelInvocationContextCommand, ConsumeChannelInvocationContextResult, IssueChannelInvocationContextCommand, IssueChannelInvocationContextResult, ReconcileChannelRuntimeRoutesCommand } from "./channel-target-resolution.types";
 
 /** Accepts only credential-free HTTP(S) endpoints inside configured runtime DNS suffixes. */
 function _endpointIsAllowed(endpoint: string, allowedSuffixes: readonly string[]): boolean

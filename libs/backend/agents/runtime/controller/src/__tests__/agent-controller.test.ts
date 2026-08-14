@@ -4,11 +4,11 @@ import { ___GetContext, type Logger } from "@opencrane/backend/observability";
 import type { AgentControllerRunAttemptAssignmentCommand, AgentControllerRunAttemptClaim, AgentControllerRunWorkloadRegistrationCommand, AgentControllerRunWorkloadReleaseClaim } from "@opencrane/contracts";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { __RunAgentController } from "../agent-controller.js";
-import { __ValidateAgentControllerRuntimeProfiles } from "../agent-controller-profiles.js";
-import type { AgentControllerAuthority, AgentControllerKubernetesStore, AgentControllerOptions, AgentControllerRuntimeProfiles } from "../agent-controller.types.js";
-import { __ReconcileNextAgentRuntimeAttempt } from "../agent-runtime-attempt-assignment.js";
-import { __ReconcileNextRuntimeRelease } from "../agent-runtime-release.js";
+import { __RunAgentController } from "../agent-controller";
+import { __ValidateAgentControllerRuntimeProfiles } from "../agent-controller-profiles";
+import type { AgentControllerAuthority, AgentControllerKubernetesStore, AgentControllerOptions, AgentControllerRuntimeProfiles } from "../agent-controller.types";
+import { __ReconcileNextAgentRuntimeAttempt } from "../agent-runtime-attempt-assignment";
+import { __ReconcileNextRuntimeRelease } from "../agent-runtime-release";
 
 /** Silent structured logger used by orchestration tests. */
 const _log = { info: function _info() {}, error: function _error() {} } as unknown as Logger;

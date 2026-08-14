@@ -4,11 +4,11 @@ import { expect, userEvent, within } from "storybook/test";
 
 import { ConversationAssetDisposition, ConversationAssetProvenance, ConversationAssetSelectionFailures } from "@opencrane/state/conversation/assets";
 
-import { ConversationAttachmentTrayComponent } from "../attachment-tray/conversation-attachment-tray.component.js";
-import { ConversationAssetCardComponent } from "../asset-card/conversation-asset-card.component.js";
-import { ConversationFilesPanelComponent } from "../files-panel/conversation-files-panel.component.js";
-import { __ConversationAssetSelectionFeedback } from "../conversation-asset-presentation.js";
-import { ConversationAssetPresentationStates, type ConversationAssetPresentation } from "../conversation-asset-presentation.types.js";
+import { ConversationAttachmentTrayComponent } from "../attachment-tray/conversation-attachment-tray.component";
+import { ConversationAssetCardComponent } from "../asset-card/conversation-asset-card.component";
+import { ConversationFilesPanelComponent } from "../files-panel/conversation-files-panel.component";
+import { __ConversationAssetSelectionFeedback } from "../conversation-asset-presentation";
+import { ConversationAssetPresentationStates, type ConversationAssetPresentation } from "../conversation-asset-presentation.types";
 
 /** Build one deterministic browser-safe visual fixture. */
 function _Item(id: string, displayName: string, state: ConversationAssetPresentationStates, overrides: Partial<ConversationAssetPresentation> = {}): ConversationAssetPresentation

@@ -3,15 +3,15 @@ import type { Prisma } from "@prisma/client";
 import type { RunAdmissionRepository, RunAdmissionTransaction } from "@opencrane/backend/agents/execution/runs";
 import { PrismaPersonalMemoryAdmissionRepository } from "@opencrane/backend/agents/personal/memory";
 
-import { ManagedNoPersonalMemoryScopeSource } from "./managed-no-personal-memory-scope-source.js";
-import { PersonalMemoryPreferenceFactSource } from "./personal-memory-preference-fact-source.js";
-import { PersonalMemoryScopeSource } from "./personal-memory-scope-source.js";
-import { PrismaApprovedPersonaSource } from "./prisma-approved-persona-source.js";
-import { PrismaRevisionBudgetPolicySource, PrismaRevisionToolPolicySource } from "./prisma-revision-tool-policy-source.js";
-import { PrismaRunAuthoritySource } from "./prisma-run-authority-source.js";
-import { PrismaConversationContextRepository } from "./prisma-conversation-context-repository.js";
-import { TransactionBoundConversationContextSource } from "./prisma-conversation-context-source.js";
-import type { IdentityEnvelopeSource, SessionAssemblyAuthorities, SkillRevisionEligibilitySource } from "./session-assembly.types.js";
+import { ManagedNoPersonalMemoryScopeSource } from "./managed-no-personal-memory-scope-source";
+import { PersonalMemoryPreferenceFactSource } from "./personal-memory-preference-fact-source";
+import { PersonalMemoryScopeSource } from "./personal-memory-scope-source";
+import { PrismaApprovedPersonaSource } from "./prisma-approved-persona-source";
+import { PrismaRevisionBudgetPolicySource, PrismaRevisionToolPolicySource } from "./prisma-revision-tool-policy-source";
+import { PrismaRunAuthoritySource } from "./prisma-run-authority-source";
+import { PrismaConversationContextRepository } from "./prisma-conversation-context-repository";
+import { TransactionBoundConversationContextSource } from "./prisma-conversation-context-source";
+import type { IdentityEnvelopeSource, SessionAssemblyAuthorities, SkillRevisionEligibilitySource } from "./session-assembly.types";
 
 /**
  * Builds the managed-service set of input sources.

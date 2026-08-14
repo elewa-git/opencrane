@@ -16,7 +16,7 @@
 #   ARROW-FN          standalone arrow-function declaration
 #   MULTILINE-IMPORT  import declaration split across lines
 #   MIDFILE-IMPORT    import below the first non-import statement
-#   REL-IMPORT-EXT    relative import missing the .js extension (NodeNext)
+#   REL-IMPORT-EXT    relative import carrying a .js extension (bundler resolution)
 #   PKG-IMPORT-EXT    package specifier wrongly carrying .js
 #   CONSOLE           raw console.* in shipped code (use @opencrane/backend/observability)
 #   INLINE-CONDITIONAL more than one ternary conditional on one physical source line
@@ -199,16 +199,12 @@ for f in "${CHECKABLE[@]}"; do
 		}
 	' "$f")
 
-	# REL-IMPORT-EXT — NodeNext services require .js. Angular's bundler resolves
-	# extensionless workspace imports, which is the established frontend convention.
-	case "$f" in
-		apps/opencrane-ui/*|libs/frontend/*) : ;;
-		*)
-			while IFS=: read -r ln _; do
-				_report "$f" "$ln" ERROR REL-IMPORT-EXT "relative import must end in .js (NodeNext)"
-			done < <(grep -nE 'from[[:space:]]+"(\.\.?/[^"]*)"' "$f" | grep -vE '\.(js|json)"' || true)
-			;;
-	esac
+	# REL-IMPORT-EXT — the repo type-checks with moduleResolution "bundler" and ships
+	# esbuild bundles, so a relative import names the file on disk, not the compiled
+	# output. Run scripts/relative-import-extensions.mjs to fix a whole branch at once.
+	while IFS=: read -r ln _; do
+		_report "$f" "$ln" ERROR REL-IMPORT-EXT "relative import must not end in .js (bundler resolution)"
+	done < <(grep -nE '(from|import|require|vi\.(mock|doMock))[[:space:]]*\(?[[:space:]]*"\.\.?/[^"]*\.js"' "$f" || true)
 
 	# PKG-IMPORT-EXT — @opencrane barrel specifiers must NOT carry .js. (Deep
 	# subpath imports of third-party packages, e.g. the MCP SDK, genuinely end

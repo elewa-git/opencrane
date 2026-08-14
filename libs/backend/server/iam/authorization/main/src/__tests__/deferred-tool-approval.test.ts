@@ -1,10 +1,10 @@
 import { AgentRunState, ApprovalRequestState, ExternalActionRecoveryMode, OrgMemberStatus, Prisma, ToolInvocationState, WorkloadAssignmentState } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
 
-import { __DecideDeferredToolRequest, __DeferToolRequest, __ExpireDeferredToolApprovalBatch } from "../deferred-tool-approval.js";
-import { __DigestCanonicalJson } from "../canonical-json-digest.js";
-import { __ProjectDeferredToolApproval } from "../deferred-tool-approval-schema.js";
-import { DeferredToolDecisionKinds } from "../deferred-tool-approval-decision.types.js";
+import { __DecideDeferredToolRequest, __DeferToolRequest, __ExpireDeferredToolApprovalBatch } from "../deferred-tool-approval";
+import { __DigestCanonicalJson } from "../canonical-json-digest";
+import { __ProjectDeferredToolApproval } from "../deferred-tool-approval-schema";
+import { DeferredToolDecisionKinds } from "../deferred-tool-approval-decision.types";
 
 /** Build one complete awaiting-approval invocation row. */
 function _invocation(overrides: Readonly<Record<string, unknown>> = {}): Record<string, unknown>

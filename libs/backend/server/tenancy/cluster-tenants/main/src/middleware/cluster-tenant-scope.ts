@@ -1,8 +1,8 @@
 import type { Request, RequestHandler } from "express";
 import type { PrismaClient } from "@prisma/client";
 
-import type { ClusterTenantScopedResource } from "./cluster-tenant-scope.types.js";
-import { _ResolveCallerClusterTenant } from "./resolve-caller-cluster-tenant.js";
+import type { ClusterTenantScopedResource } from "./cluster-tenant-scope.types";
+import { _ResolveCallerClusterTenant } from "./resolve-caller-cluster-tenant";
 // Side-effect import: loads the express-session `SessionData.authUser` augmentation.
 import "@opencrane/backend/server/infra/auth";
 

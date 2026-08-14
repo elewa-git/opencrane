@@ -3,8 +3,8 @@ import type { PrismaClient } from "@prisma/client";
 
 import { _RequireOrgAdmin } from "@opencrane/backend/server/infra/auth";
 
-import { createGroup, deleteGroup, getGroup, listGroups, updateGroup } from "../core/groups.logic.js";
-import type { GroupWriteRequest } from "./groups.types.js";
+import { createGroup, deleteGroup, getGroup, listGroups, updateGroup } from "../core/groups.logic";
+import type { GroupWriteRequest } from "./groups.types";
 
 /**
  * Create, read, update, and delete the silo's groups.

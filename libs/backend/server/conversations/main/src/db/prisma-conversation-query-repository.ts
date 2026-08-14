@@ -4,11 +4,11 @@ import { ConversationLifecycles, ConversationModes, MessageRoles, MessageSources
 import { AgentThreadDeliveryKinds, type AgentThreadParentDelivery } from "@opencrane/backend/conversations/agent-threads";
 import { __EncodeConversationProjectionCursor } from "@opencrane/backend/conversations/projection";
 
-import { AgentThreadRunViewStates, type AgentThreadMessageView, type AgentThreadRunView, type AgentThreadSnapshotView } from "../types/agent-thread-view.types.js";
-import type { ConversationCaller } from "../types/conversation-caller.types.js";
-import { PersonalAgentDirectoryStatuses, type ConversationCreationDirectory } from "../types/conversation-directory.types.js";
-import type { ConversationDetail, ConversationMessageView, ConversationSummary } from "../types/conversation-view.types.js";
-import type { ConversationCommandContext, ConversationQueryRepository } from "./prisma-conversation-query-repository.types.js";
+import { AgentThreadRunViewStates, type AgentThreadMessageView, type AgentThreadRunView, type AgentThreadSnapshotView } from "../types/agent-thread-view.types";
+import type { ConversationCaller } from "../types/conversation-caller.types";
+import { PersonalAgentDirectoryStatuses, type ConversationCreationDirectory } from "../types/conversation-directory.types";
+import type { ConversationDetail, ConversationMessageView, ConversationSummary } from "../types/conversation-view.types";
+import type { ConversationCommandContext, ConversationQueryRepository } from "./prisma-conversation-query-repository.types";
 
 /** Maximum message rows returned by one participant-bound open operation. */
 const _MESSAGE_LIMIT = 100;

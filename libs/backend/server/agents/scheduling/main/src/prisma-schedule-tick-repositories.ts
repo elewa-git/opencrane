@@ -2,8 +2,8 @@ import { AgentRunState, AgentRunTrigger, AgentScheduleOverlapPolicy, AgentServic
 
 import { AgentScheduleOverlapPolicies } from "@opencrane/backend/server/agents/agent-services";
 
-import { ScheduleCursorAdvanceOutcomes } from "./schedule-tick.enums.js";
-import type { ActiveScheduledRunRepository, AdvanceScheduleCursorCommand, AdvanceScheduleCursorResult, EnabledScheduleSnapshot, EnabledScheduleSnapshotRepository, ScheduleCursorRepository } from "./schedule-ticker-unit-of-work.types.js";
+import { ScheduleCursorAdvanceOutcomes } from "./schedule-tick.enums";
+import type { ActiveScheduledRunRepository, AdvanceScheduleCursorCommand, AdvanceScheduleCursorResult, EnabledScheduleSnapshot, EnabledScheduleSnapshotRepository, ScheduleCursorRepository } from "./schedule-ticker-unit-of-work.types";
 
 /** Non-terminal states that count as an in-flight scheduled run for overlap skipping. */
 const _ACTIVE_SCHEDULED_RUN_STATES = [AgentRunState.Accepted, AgentRunState.Queued, AgentRunState.Assigned, AgentRunState.Running, AgentRunState.WaitingForInput, AgentRunState.Cancelling];

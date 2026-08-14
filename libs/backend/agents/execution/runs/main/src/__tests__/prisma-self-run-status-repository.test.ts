@@ -1,7 +1,7 @@
 import type { PrismaClient } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
 
-import { PrismaSelfRunStatusRepository } from "../prisma-self-run-status-repository.js";
+import { PrismaSelfRunStatusRepository } from "../prisma-self-run-status-repository";
 
 /** Creates the selected persisted fields for one owner-visible run. */
 function _runRow()

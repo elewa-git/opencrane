@@ -3,8 +3,8 @@ import { RunInputSnapshotIdentityKinds, type RunInputSnapshot } from "@opencrane
 import { PERSONAL_MEMORY_RECALL_TOOL_REVISION } from "@opencrane/models/agents";
 import type { JsonValue } from "@opencrane/util";
 
-import type { PersonalMemoryPermissionPayload, PersonalMemoryPermissionReceiptCoordinates } from "./personal-memory-permission-payload.types.js";
-import { _ParsePersonalMemoryPermissionPayload } from "./personal-memory-permission-payload.validator.js";
+import type { PersonalMemoryPermissionPayload, PersonalMemoryPermissionReceiptCoordinates } from "./personal-memory-permission-payload.types";
+import { _ParsePersonalMemoryPermissionPayload } from "./personal-memory-permission-payload.validator";
 
 /*
  * This module builds and re-checks the consent record behind one personal-memory recall.

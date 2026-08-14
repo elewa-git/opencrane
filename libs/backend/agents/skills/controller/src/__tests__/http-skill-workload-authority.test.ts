@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { __CreateHttpSkillWorkloadControllerAuthority } from "../http-skill-workload-authority.js";
+import { __CreateHttpSkillWorkloadControllerAuthority } from "../http-skill-workload-authority";
 
 /** Return adapter options whose `fetch` and token reader a test can replace. */
 function _Options(fetch: typeof globalThis.fetch)

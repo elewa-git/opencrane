@@ -1,7 +1,7 @@
 import type { NextFunction, Request, Response } from "express";
 import { describe, expect, it } from "vitest";
 
-import { _RequireOrgAdmin } from "../index.js";
+import { _RequireOrgAdmin } from "../index";
 
 /** Build a mock (req, res, next) trio capturing the status/body and whether next ran. */
 function _mock(session?: { isOrgAdmin: boolean }): { req: Request; res: Response; next: NextFunction; out: { status?: number; body?: unknown; nexted: boolean } }

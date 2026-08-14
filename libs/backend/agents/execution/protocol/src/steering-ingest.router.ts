@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 
 import { Router, type Request, type Response } from "express";
 
-import type { SteeringIngestCaller, SteeringIngestRequestBody, SteeringIngestRouterDependencies } from "./steering-ingest.router.types.js";
+import type { SteeringIngestCaller, SteeringIngestRequestBody, SteeringIngestRouterDependencies } from "./steering-ingest.router.types";
 
 /**
  * Longest steering instruction accepted, so it stays safe to store and to put in a prompt.

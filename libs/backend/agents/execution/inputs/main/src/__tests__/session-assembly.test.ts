@@ -3,10 +3,10 @@ import { AgentServiceKinds } from "@opencrane/models/agents";
 import { MessageContentBlockKinds } from "@opencrane/models/conversations";
 import { RunAdmissionDenialReasons, type UserRunAdmissionCommand } from "@opencrane/backend/agents/execution/runs";
 import { ___DigestCanonicalJson } from "@opencrane/util";
-import type { SessionAssemblyAuthorities } from "../session-assembly.types.js";
+import type { SessionAssemblyAuthorities } from "../session-assembly.types";
 import { describe, expect, it } from "vitest";
 
-import { __AssembleRunInputSnapshot } from "../session-assembly.js";
+import { __AssembleRunInputSnapshot } from "../session-assembly";
 
 /** The fixed command these tests use to check snapshot assembly is deterministic. */
 const _COMMAND: UserRunAdmissionCommand = { runId: "run-1", siloId: "silo-1", agentServiceId: "service-1", conversationId: "conversation-1", identityKind: "user", trigger: "interactive", executionSubjectId: "user-1", requestIdempotencyKey: "request-1", inputMessageId: "message-current", inputMessageBlocks: [{ id: "block-1", kind: MessageContentBlockKinds.Text, value: "Hello" }] };

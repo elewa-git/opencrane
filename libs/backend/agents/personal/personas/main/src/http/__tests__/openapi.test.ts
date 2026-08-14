@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 
-import { PersonaOnboardingApiStates } from "../../profile/persona-lifecycle.types.js";
-import { PersonaColourValues, PersonaModifierValues, PersonaTieKinds } from "../../scoring/persona-scorer.types.js";
-import { _PersonaOnboardingOpenapiPaths } from "../openapi.js";
+import { PersonaOnboardingApiStates } from "../../profile/persona-lifecycle.types";
+import { PersonaColourValues, PersonaModifierValues, PersonaTieKinds } from "../../scoring/persona-scorer.types";
+import { _PersonaOnboardingOpenapiPaths } from "../openapi";
 
 describe("persona onboarding OpenAPI", function _PersonaOnboardingOpenapiSuite()
 {

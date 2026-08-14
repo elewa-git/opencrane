@@ -2,7 +2,7 @@ import { AgentRunState, ChildRunCompletionDeliveryOutcome, Prisma, type PrismaCl
 
 import { ___CreateLogger, type Logger } from "@opencrane/backend/observability";
 
-import type { ChildRunCompletionCommand, ChildRunCompletionRepository, ChildRunCompletionResult } from "./child-run-completion.types.js";
+import type { ChildRunCompletionCommand, ChildRunCompletionRepository, ChildRunCompletionResult } from "./child-run-completion.types";
 
 /** Atomically records one terminal child result in its parent conversation stream. */
 export class PrismaChildRunCompletionRepository implements ChildRunCompletionRepository

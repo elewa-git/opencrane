@@ -3,8 +3,8 @@ import request from "supertest";
 import { describe, expect, it, vi } from "vitest";
 import type { Logger } from "@opencrane/backend/observability";
 
-import { __CreateAgentServicesRouter } from "../agent-revision.router.js";
-import type { AgentServicesRouterDependencies } from "../agent-revision.router.types.js";
+import { __CreateAgentServicesRouter } from "../agent-revision.router";
+import type { AgentServicesRouterDependencies } from "../agent-revision.router.types";
 
 /** Builds router dependencies with a caller and an observable catalogue repository port. */
 function _dependencies(overrides: Partial<AgentServicesRouterDependencies> = {}): AgentServicesRouterDependencies

@@ -1,7 +1,7 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 
-import { _ClaimStandaloneFirstUserOwner, PrismaStandaloneFirstUserAdmissionRepository } from "./prisma-standalone-first-user-admission-repository.js";
-import { type StandaloneFirstUserAdmissionAuditPort, type StandaloneFirstUserAdmissionResult, type StandaloneFirstUserAdmissionUnitOfWork, type StandaloneFirstUserOwnerClaim } from "./standalone-first-user-admission.types.js";
+import { _ClaimStandaloneFirstUserOwner, PrismaStandaloneFirstUserAdmissionRepository } from "./prisma-standalone-first-user-admission-repository";
+import { type StandaloneFirstUserAdmissionAuditPort, type StandaloneFirstUserAdmissionResult, type StandaloneFirstUserAdmissionUnitOfWork, type StandaloneFirstUserOwnerClaim } from "./standalone-first-user-admission.types";
 
 /**
  * Opens the serializable transaction for a first-owner claim and retries a lost race exactly once.

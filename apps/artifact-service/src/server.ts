@@ -8,8 +8,8 @@ import { __PromoteArtifactUpload } from "@opencrane/backend/artifacts/store";
 import type { ArtifactPromotionLeaseVerifier, ArtifactPromotionReceiptSigner, ArtifactStore, BoundedArtifactUploadByteSource, PromoteArtifactUploadResult } from "@opencrane/backend/artifacts/store";
 import { ___DoWithTrace } from "@opencrane/backend/observability";
 
-import type { ArtifactServiceProcessConfig } from "./config.types.js";
-import { _log as log } from "./log.js";
+import type { ArtifactServiceProcessConfig } from "./config.types";
+import { _log as log } from "./log";
 
 /** Prepare the mounted canonical-byte root before admitting health traffic. */
 export async function _PrepareArtifactStore(config: ArtifactServiceProcessConfig): Promise<__FilesystemArtifactStore>

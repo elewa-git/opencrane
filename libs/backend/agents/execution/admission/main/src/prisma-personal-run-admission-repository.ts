@@ -1,7 +1,7 @@
 import { AgentRunState, AgentServiceKind, ConversationLifecycle, ConversationMode, OrgMemberStatus, type Prisma } from "@prisma/client";
 
-import { PersonalRunIdempotencyOutcomes } from "./personal-run-admission.types.js";
-import type { PersonalRunAdmissionCommand, PersonalRunAdmissionReadRepository, PersonalRunIdempotencyResult, PersonalRunConversationAuthority } from "./personal-run-admission.types.js";
+import { PersonalRunIdempotencyOutcomes } from "./personal-run-admission.types";
+import type { PersonalRunAdmissionCommand, PersonalRunAdmissionReadRepository, PersonalRunIdempotencyResult, PersonalRunConversationAuthority } from "./personal-run-admission.types";
 
 /**
  * Reads the idempotency key and the caller's conversation with Prisma, inside one transaction.

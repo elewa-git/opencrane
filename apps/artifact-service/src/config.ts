@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { isAbsolute } from "node:path";
 
-import type { ArtifactServiceProcessConfig } from "./config.types.js";
+import type { ArtifactServiceProcessConfig } from "./config.types";
 
 /** Read configuration, refusing a byte root that is relative or on the pod's own filesystem. */
 export function _ReadConfig(environment: NodeJS.ProcessEnv = process.env): ArtifactServiceProcessConfig

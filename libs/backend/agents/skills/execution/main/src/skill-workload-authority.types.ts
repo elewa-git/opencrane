@@ -1,7 +1,7 @@
-import type { SkillAuthoringCompletionCommand } from "./skill-authoring-completion.types.js";
-import type { SkillAuthoringInputRecord } from "./skill-authoring-input.types.js";
-import type { SkillWorkloadBootstrapIdentity, SkillWorkloadBootstrapRecord } from "./skill-workload-bootstrap.types.js";
-import type { SkillWorkloadAssignmentCommand, SkillWorkloadClaim, SkillWorkloadPodRegistrationCommand, SkillWorkloadReleaseClaim, SkillWorkloadReleaseCommand } from "./skill-workload-claims.types.js";
+import type { SkillAuthoringCompletionCommand } from "./skill-authoring-completion.types";
+import type { SkillAuthoringInputRecord } from "./skill-authoring-input.types";
+import type { SkillWorkloadBootstrapIdentity, SkillWorkloadBootstrapRecord } from "./skill-workload-bootstrap.types";
+import type { SkillWorkloadAssignmentCommand, SkillWorkloadClaim, SkillWorkloadPodRegistrationCommand, SkillWorkloadReleaseClaim, SkillWorkloadReleaseCommand } from "./skill-workload-claims.types";
 
 /** What the agent controller may change about a workload in the database. */
 export interface SkillWorkloadDispatchAuthority

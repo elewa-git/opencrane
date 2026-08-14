@@ -1,7 +1,7 @@
 import type { Prisma, PrismaClient } from "@prisma/client";
 
-import type { ExternalActionExecutionContext, ExternalActionExecutionContextRepository, ExternalActionExecutionContextUnitOfWork } from "./external-action-worker.types.js";
-import { __ProjectRuntimeInputSnapshot } from "./runtime-input-snapshot-projector.js";
+import type { ExternalActionExecutionContext, ExternalActionExecutionContextRepository, ExternalActionExecutionContextUnitOfWork } from "./external-action-worker.types";
+import { __ProjectRuntimeInputSnapshot } from "./runtime-input-snapshot-projector";
 
 /**
  * Loads the immutable snapshot for a run, but only while that attempt is still the current one.

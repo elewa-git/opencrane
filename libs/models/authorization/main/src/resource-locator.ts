@@ -1,4 +1,4 @@
-import type { AuthorizationResourceLocator } from "./resource-locator.types.js";
+import type { AuthorizationResourceLocator } from "./resource-locator.types";
 
 /**
  * Validates that a value is a resource locator naming exactly one resource.

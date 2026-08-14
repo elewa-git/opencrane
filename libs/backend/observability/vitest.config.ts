@@ -1,7 +1,7 @@
 import { createRequire } from "node:module";
 import { defineConfig } from "vitest/config";
 import tsconfigPaths from "vite-tsconfig-paths";
-import { _PackageCacheDir } from "../../../vitest.cache.js";
+import { _PackageCacheDir } from "../../../vitest.cache";
 
 const require = createRequire(import.meta.url);
 

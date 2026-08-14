@@ -1,8 +1,8 @@
 import { GrantScope, McpServerStatus, McpServerTransport, type McpServer, type McpServerCredential } from "@opencrane/contracts";
 import { Prisma, type PrismaClient } from "@prisma/client";
 
-import type { McpServerCredentialInput, McpServerWriteRequest } from "../routes/mcp-servers.types.js";
-import type { McpServerCredentialWrite, McpServerMutationRepository } from "./mcp-server-mutation-repository.types.js";
+import type { McpServerCredentialInput, McpServerWriteRequest } from "../routes/mcp-servers.types";
+import type { McpServerCredentialWrite, McpServerMutationRepository } from "./mcp-server-mutation-repository.types";
 
 type _McpServerRow = Prisma.McpServerGetPayload<{ include: { credentials: true; source: true } }>;
 

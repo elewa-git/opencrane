@@ -5,11 +5,11 @@ import { AgentRunState, AgentRunTerminalReason, AgentServiceKind, AgentServiceSt
 import { AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, MANAGED_AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, RunInputSnapshotIdentityKinds, ___IsAgentRuntimeServiceAccountName, ___IsManagedAgentRuntimeServiceAccountName, type AgentControllerRunAttemptAssignmentCommand, type AgentControllerRunOutboxPruneResult, type AgentControllerRunWorkloadRegistrationCommand, type AgentControllerRunWorkloadReleaseProjection } from "@opencrane/contracts";
 import { ___DoWithTrace } from "@opencrane/backend/observability";
 
-import { __DeliverChildRunCompletionInTransaction } from "./prisma-child-run-completion-repository.js";
-import type { AttemptModelKeyIssuer } from "./attempt-model-key.types.js";
-import { _BuildRunAttemptCredentialMintInputs, _MintRunAttemptCredentials } from "./run-attempt-credential-minting.js";
-import type { ClaimTransactionResult } from "./run-dispatch-persistence.types.js";
-import { RunDispatchResultStatuses, type ClaimNextRunAttemptResult, type ClaimNextRunWorkloadReleaseResult, type CommitRunAttemptAssignmentResult, type RegisterRunWorkloadPodResult, type RunDispatchRepository, type RunDispatchRepositoryConfig, type RunOutboxCandidateRow, type RunWorkloadReleaseCandidateRow } from "./run-dispatch.types.js";
+import { __DeliverChildRunCompletionInTransaction } from "./prisma-child-run-completion-repository";
+import type { AttemptModelKeyIssuer } from "./attempt-model-key.types";
+import { _BuildRunAttemptCredentialMintInputs, _MintRunAttemptCredentials } from "./run-attempt-credential-minting";
+import type { ClaimTransactionResult } from "./run-dispatch-persistence.types";
+import { RunDispatchResultStatuses, type ClaimNextRunAttemptResult, type ClaimNextRunWorkloadReleaseResult, type CommitRunAttemptAssignmentResult, type RegisterRunWorkloadPodResult, type RunDispatchRepository, type RunDispatchRepositoryConfig, type RunOutboxCandidateRow, type RunWorkloadReleaseCandidateRow } from "./run-dispatch.types";
 
 /** Snapshot identity fields required at the dispatch authority boundary. */
 interface SnapshotExecutionIdentity

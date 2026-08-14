@@ -6,8 +6,8 @@ import { ___CloneCanonicalJson, ___DigestCanonicalJson, type JsonValue } from "@
 import { __CompileRunInput } from "@opencrane/backend/agents/execution/inputs";
 import type { PromptCompilerRepositories } from "@opencrane/backend/agents/execution/inputs";
 
-import { ExternalActionRevisionKinds } from "./external-action-executor.types.js";
-import type { RunInputCompiler } from "./prisma-runtime-dispatch-authority.types.js";
+import { ExternalActionRevisionKinds } from "./external-action-executor.types";
+import type { RunInputCompiler } from "./prisma-runtime-dispatch-authority.types";
 
 /** Maps stored message roles to the lowercase roles the compiled input uses. */
 const _MESSAGE_ROLE: Record<string, CompiledMessage["role"]> = { User: "user", Assistant: "assistant", Tool: "tool", System: "system" };

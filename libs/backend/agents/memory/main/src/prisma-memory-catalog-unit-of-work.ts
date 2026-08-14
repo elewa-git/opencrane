@@ -1,9 +1,9 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 
-import { __MemoryCatalogCorrectionConflictError } from "./memory-catalog-errors.js";
-import type { AtomicRecordMemoryFactResult, MemoryCatalogTransaction, MemoryCatalogUnitOfWork, MemoryCatalogWork, RecordMemoryFactCommand } from "./memory-catalog.types.js";
-import { PrismaMemoryCatalogCollisionRepository } from "./prisma-memory-catalog-collision-repository.js";
-import { PrismaMemoryCatalogRepository } from "./prisma-memory-catalog-repository.js";
+import { __MemoryCatalogCorrectionConflictError } from "./memory-catalog-errors";
+import type { AtomicRecordMemoryFactResult, MemoryCatalogTransaction, MemoryCatalogUnitOfWork, MemoryCatalogWork, RecordMemoryFactCommand } from "./memory-catalog.types";
+import { PrismaMemoryCatalogCollisionRepository } from "./prisma-memory-catalog-collision-repository";
+import { PrismaMemoryCatalogRepository } from "./prisma-memory-catalog-repository";
 
 /** How many times the whole catalog write may be attempted after a conflict rolls it back. */
 const _CATALOG_ATTEMPT_LIMIT = 3;

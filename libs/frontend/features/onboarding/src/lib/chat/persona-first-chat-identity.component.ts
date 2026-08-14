@@ -3,7 +3,7 @@ import { ChangeDetectionStrategy, Component, input } from "@angular/core";
 
 import { AvatarCircleComponent, AvatarSizes, AvatarTones, PersonaArchetypeTones, ScopeChipAppearances, ScopeChipComponent, ScopeChipTones } from "@opencrane/elements/ui";
 
-import { PersonaFirstChatArchetypeClasses, type PersonaFirstChatIdentity, type PersonaFirstChatProvenance } from "./persona-first-chat.types.js";
+import { PersonaFirstChatArchetypeClasses, type PersonaFirstChatIdentity, type PersonaFirstChatProvenance } from "./persona-first-chat.types";
 
 /** Map the shared archetype vocabulary to the sole feature-owned provenance class. */
 export function _PersonaFirstChatArchetypeClass(archetype: PersonaArchetypeTones): PersonaFirstChatArchetypeClasses

@@ -1,4 +1,4 @@
-import type { PersonalConfigurationPatch } from "./personal-configuration-patch.types.js";
+import type { PersonalConfigurationPatch } from "./personal-configuration-patch.types";
 
 /** Stable proposal outcomes and denial reasons owned by this package. */
 export enum PersonalConfigurationProposalCodes

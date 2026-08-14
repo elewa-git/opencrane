@@ -6,8 +6,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 
 import { ApiValidationIssueLocations } from "@opencrane/contracts";
-import { _ErrorHandler } from "../error-handler.js";
-import { _RequestValidationProblem } from "../request-validation.js";
+import { _ErrorHandler } from "../error-handler";
+import { _RequestValidationProblem } from "../request-validation";
 
 const log = pino({ level: "silent" });
 

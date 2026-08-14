@@ -2,10 +2,10 @@ import { ExternalActionClaimKind, ExternalActionRecoveryMode, Prisma, ToolInvoca
 
 import type { JsonValue } from "@opencrane/util";
 
-import { __DigestCanonicalJson } from "./canonical-json-digest.js";
-import { __PlanToolInvocationLifecycle } from "./tool-invocation-lifecycle.js";
-import { ExternalActionClaimKinds, ExternalActionRecoveryModes, TOOL_INVOCATION_PREPARATION_POLICY, ToolInvocationLifecycleActions, ToolInvocationLifecycleEvents, ToolInvocationStates } from "./tool-invocation-lifecycle.types.js";
-import { ToolInvocationAdmissionOutcomes, ToolInvocationClaimOutcomes, ToolResultDeliveryOutcomes, type ToolInvocationAdmissionResult, type ToolInvocationClaim, type ToolInvocationClaimResult, type ToolInvocationCompletionResult, type ToolInvocationIntent, type ToolInvocationPreparationPolicy, type ToolInvocationRecord, type ToolInvocationTransactionRepository, type ToolInvocationTransitionResult, type ToolResultDeliveryPayload } from "./tool-invocation.types.js";
+import { __DigestCanonicalJson } from "./canonical-json-digest";
+import { __PlanToolInvocationLifecycle } from "./tool-invocation-lifecycle";
+import { ExternalActionClaimKinds, ExternalActionRecoveryModes, TOOL_INVOCATION_PREPARATION_POLICY, ToolInvocationLifecycleActions, ToolInvocationLifecycleEvents, ToolInvocationStates } from "./tool-invocation-lifecycle.types";
+import { ToolInvocationAdmissionOutcomes, ToolInvocationClaimOutcomes, ToolResultDeliveryOutcomes, type ToolInvocationAdmissionResult, type ToolInvocationClaim, type ToolInvocationClaimResult, type ToolInvocationCompletionResult, type ToolInvocationIntent, type ToolInvocationPreparationPolicy, type ToolInvocationRecord, type ToolInvocationTransactionRepository, type ToolInvocationTransitionResult, type ToolResultDeliveryPayload } from "./tool-invocation.types";
 
 /** Convert Prisma's ToolInvocationState values into this package's own state enum. */
 const _STATE_FROM_PRISMA: Readonly<Record<ToolInvocationState, ToolInvocationStates>> = {

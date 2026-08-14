@@ -4,7 +4,7 @@ import type { PrismaClient } from "@prisma/client";
 import request from "supertest";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { groupsRouter } from "../routes/groups.js";
+import { groupsRouter } from "../routes/groups";
 
 /**
  * End-to-end check that `_RequireOrgAdmin` is actually wired onto the groups API

@@ -2,9 +2,9 @@ import { describe, expect, it } from "vitest";
 
 import { AgentScheduleOverlapPolicies, ManagedRunAdmissionOutcomes, type AgentRevisionLifecycleDenial, type ManagedRunAdmissionResult, type ManagedRunNowCommand } from "@opencrane/backend/server/agents/agent-services";
 
-import { ScheduledSlotOutcomes, ScheduleTickStatuses } from "../schedule-tick.enums.js";
-import { __NextBackoffDelayMs, __RunScheduleTick, __ScheduledRunIdempotencyKey } from "../schedule-tick.js";
-import type { AgentServiceSchedule, ScheduleTickDependencies } from "../schedule-tick.types.js";
+import { ScheduledSlotOutcomes, ScheduleTickStatuses } from "../schedule-tick.enums";
+import { __NextBackoffDelayMs, __RunScheduleTick, __ScheduledRunIdempotencyKey } from "../schedule-tick";
+import type { AgentServiceSchedule, ScheduleTickDependencies } from "../schedule-tick.types";
 
 /** Admission port that dedups by idempotency key exactly like `@@unique([siloId, requestIdempotencyKey])`. */
 class _DedupingAdmission

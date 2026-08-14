@@ -4,8 +4,8 @@ import type { IncomingHttpHeaders, IncomingMessage, Server, ServerResponse } fro
 import { __FixedWindowRateLimiter, __OpenCraneTargetResolver, __RelayEvents } from "@opencrane/backend/channel-proxy";
 import type { ChannelProxyDependencies } from "@opencrane/backend/channel-proxy";
 import { ___DoWithTrace } from "@opencrane/backend/observability";
-import type { ChannelProxyProcessConfig } from "./config.types.js";
-import { _log as log } from "./log.js";
+import type { ChannelProxyProcessConfig } from "./config.types";
+import { _log as log } from "./log";
 
 /** Create the standalone channel trust-boundary HTTP server. */
 export function _CreateServer(config: ChannelProxyProcessConfig): Server

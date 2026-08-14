@@ -1,6 +1,6 @@
-import { AgentThreadAccessStates, AgentThreadDeliveryKinds, AgentThreadRunStates, AgentThreadSummaryStates, AgentThreadSummaryTargetKinds, type AgentThreadOriginPresentation, type AgentThreadParticipantPresentation, type AgentThreadSummaryPresentation, type AgentThreadSummaryTarget } from "./agent-thread.types.js";
-import { _AgentThreadLifecycleStates, type AgentThreadDeliveryDto, type AgentThreadRunDto, type AgentThreadSnapshotDto } from "./opencrane-agent-thread.mapper.types.js";
-import { _AgentThreadLatestMessageText, _AgentThreadTimeLabel } from "./opencrane-agent-thread.timeline.mapper.js";
+import { AgentThreadAccessStates, AgentThreadDeliveryKinds, AgentThreadRunStates, AgentThreadSummaryStates, AgentThreadSummaryTargetKinds, type AgentThreadOriginPresentation, type AgentThreadParticipantPresentation, type AgentThreadSummaryPresentation, type AgentThreadSummaryTarget } from "./agent-thread.types";
+import { _AgentThreadLifecycleStates, type AgentThreadDeliveryDto, type AgentThreadRunDto, type AgentThreadSnapshotDto } from "./opencrane-agent-thread.mapper.types";
+import { _AgentThreadLatestMessageText, _AgentThreadTimeLabel } from "./opencrane-agent-thread.timeline.mapper";
 
 /** Map the immutable parent origin without exposing authority subject identifiers. */
 export function _AgentThreadOrigin(dto: AgentThreadSnapshotDto): AgentThreadOriginPresentation

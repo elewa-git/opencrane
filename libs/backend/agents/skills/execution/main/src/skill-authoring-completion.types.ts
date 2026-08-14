@@ -1,7 +1,7 @@
 import type { Router } from "express";
 
-import type { SkillWorkloadBootstrapIdentity, SkillWorkloadBootstrapLogger, SkillWorkloadBootstrapTokenReviewer } from "./skill-workload-bootstrap.types.js";
-import type { SkillAuthoringCompletionAuthority } from "./skill-workload-authority.types.js";
+import type { SkillWorkloadBootstrapIdentity, SkillWorkloadBootstrapLogger, SkillWorkloadBootstrapTokenReviewer } from "./skill-workload-bootstrap.types";
+import type { SkillAuthoringCompletionAuthority } from "./skill-workload-authority.types";
 
 /** Stable terminal outcomes accepted from an isolated skill-authoring worker. */
 export enum SkillAuthoringCompletionOutcomes

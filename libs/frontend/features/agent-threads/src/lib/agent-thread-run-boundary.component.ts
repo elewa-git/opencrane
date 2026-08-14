@@ -3,7 +3,7 @@ import { ChangeDetectionStrategy, Component, input } from "@angular/core";
 import { ConversationStatusLineComponent } from "@opencrane/elements/conversation";
 import type { AgentThreadRunBoundaryPresentation } from "@opencrane/state/conversation/agent-threads";
 
-import { __AgentThreadRunStatusPresentation } from "./agent-thread.mapper.js";
+import { __AgentThreadRunStatusPresentation } from "./agent-thread.mapper";
 
 /** Visible boundary preserving serial run order inside one child conversation. */
 @Component({ selector: "wo-agent-thread-run-boundary", standalone: true, imports: [ConversationStatusLineComponent], templateUrl: "./agent-thread-run-boundary.component.html", styleUrl: "./agent-thread-run-boundary.component.scss", changeDetection: ChangeDetectionStrategy.OnPush })

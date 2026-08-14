@@ -3,8 +3,8 @@ import request from "supertest";
 import { describe, expect, it, vi, type Mock } from "vitest";
 import type { Logger } from "@opencrane/backend/observability";
 
-import { __CreateSelfRunCancellationRouter } from "../self-run-cancellation.router.js";
-import { SelfRunCancellationOutcomes, type SelfRunCancellationCommand, type SelfRunCancellationResult } from "../self-run-cancellation.types.js";
+import { __CreateSelfRunCancellationRouter } from "../self-run-cancellation.router";
+import { SelfRunCancellationOutcomes, type SelfRunCancellationCommand, type SelfRunCancellationResult } from "../self-run-cancellation.types";
 
 /** Owner-bound cancellation signature used by the route seam. */
 type RequestOwned = (command: SelfRunCancellationCommand) => Promise<SelfRunCancellationResult>;

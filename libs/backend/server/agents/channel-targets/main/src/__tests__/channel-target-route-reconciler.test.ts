@@ -1,8 +1,8 @@
 import type { Logger } from "@opencrane/backend/observability";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { __ReconcileChannelTargetRoutes, __StartChannelTargetRouteReconciler } from "../channel-target-route-reconciler.js";
-import type { ChannelTargetRouteReconcilerDependencies } from "../channel-target-route-reconciler.types.js";
+import { __ReconcileChannelTargetRoutes, __StartChannelTargetRouteReconciler } from "../channel-target-route-reconciler";
+import type { ChannelTargetRouteReconcilerDependencies } from "../channel-target-route-reconciler.types";
 
 /** Build one package-owned route worker around a controlled repository. */
 function _Dependencies(reconcileRuntimeRoutes = vi.fn().mockResolvedValue(1)): ChannelTargetRouteReconcilerDependencies

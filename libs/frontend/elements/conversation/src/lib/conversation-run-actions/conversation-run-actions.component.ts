@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, input, output } from "@angular/core
 import { ButtonModule } from "primeng/button";
 import { InputTextModule } from "primeng/inputtext";
 
-import type { ConversationRunActionsPresentation } from "../conversation.types.js";
+import type { ConversationRunActionsPresentation } from "../conversation.types";
 
 /**
  * Shows what an Agent run is doing and offers the participant the actions currently allowed on it:

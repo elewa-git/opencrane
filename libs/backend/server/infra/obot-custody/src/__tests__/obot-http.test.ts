@@ -3,8 +3,8 @@ import type { Context } from "@opentelemetry/api";
 import { isTracingSuppressed } from "@opentelemetry/core";
 import { beforeAll, describe, expect, it } from "vitest";
 
-import { __CreateObotSession, ObotProtocolError, ObotTransportError } from "../obot-http.js";
-import type { ObotFetch, ObotHttpOptions } from "../obot-http.types.js";
+import { __CreateObotSession, ObotProtocolError, ObotTransportError } from "../obot-http";
+import type { ObotFetch, ObotHttpOptions } from "../obot-http.types";
 
 /** One recorded outbound exchange captured by the fetch seam. */
 interface _RecordedRequest

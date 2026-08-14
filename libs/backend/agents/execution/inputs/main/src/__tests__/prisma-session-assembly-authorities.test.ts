@@ -1,10 +1,10 @@
 import { MemoryFactProvenanceSourceKinds } from "@opencrane/contracts";
 import { describe, expect, it, vi } from "vitest";
 
-import { ManagedNoPersonalMemoryScopeSource } from "../managed-no-personal-memory-scope-source.js";
-import { PersonalMemoryScopeSource } from "../personal-memory-scope-source.js";
-import { __CreatePrismaManagedSessionAssemblyAuthorities, __CreatePrismaPersonalSessionAssemblyAuthorities } from "../prisma-session-assembly-authorities.js";
-import { PrismaSkillRevisionEligibilitySource } from "../prisma-skill-revision-eligibility-source.js";
+import { ManagedNoPersonalMemoryScopeSource } from "../managed-no-personal-memory-scope-source";
+import { PersonalMemoryScopeSource } from "../personal-memory-scope-source";
+import { __CreatePrismaManagedSessionAssemblyAuthorities, __CreatePrismaPersonalSessionAssemblyAuthorities } from "../prisma-session-assembly-authorities";
+import { PrismaSkillRevisionEligibilitySource } from "../prisma-skill-revision-eligibility-source";
 
 describe("Prisma session assembly authority factories", function _DescribePrismaSessionAssemblyAuthorityFactories()
 {

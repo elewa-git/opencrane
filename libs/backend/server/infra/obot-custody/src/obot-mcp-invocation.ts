@@ -1,4 +1,4 @@
-import type { ObotMcpToolInvocationCommand } from "./obot-mcp-invocation.types.js";
+import type { ObotMcpToolInvocationCommand } from "./obot-mcp-invocation.types";
 
 /**
  * Thrown when a run tries to call a tool its agent revision does not allow.

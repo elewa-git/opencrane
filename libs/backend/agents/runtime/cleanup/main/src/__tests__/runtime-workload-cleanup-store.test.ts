@@ -3,8 +3,8 @@ import { describe, expect, it, vi } from "vitest";
 
 import { __AgentRuntimeAttemptResourceName } from "@opencrane/backend/agents/runtime/k8s-launcher";
 
-import { __CreateKubernetesRuntimeWorkloadCleanupStore } from "../runtime-workload-cleanup-store.js";
-import type { KubernetesRuntimeWorkloadCleanupBatchApi, KubernetesRuntimeWorkloadCleanupProjection, KubernetesRuntimeWorkloadCleanupStore } from "../runtime-workload-cleanup-store.types.js";
+import { __CreateKubernetesRuntimeWorkloadCleanupStore } from "../runtime-workload-cleanup-store";
+import type { KubernetesRuntimeWorkloadCleanupBatchApi, KubernetesRuntimeWorkloadCleanupProjection, KubernetesRuntimeWorkloadCleanupStore } from "../runtime-workload-cleanup-store.types";
 
 /** Build the cleanup input these adapter tests share, with optional field overrides. */
 function _Projection(overrides: Partial<KubernetesRuntimeWorkloadCleanupProjection> = {}): KubernetesRuntimeWorkloadCleanupProjection

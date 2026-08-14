@@ -1,6 +1,6 @@
 import type { InitialRunAuthority, RunAdmissionTransaction } from "@opencrane/backend/agents/execution/runs";
 
-import type { SessionAssemblyCommand, SessionAssemblyLoad, ConversationContextInput, ConversationContextRepositoryFactory, ConversationContextSource } from "./session-assembly.types.js";
+import type { SessionAssemblyCommand, SessionAssemblyLoad, ConversationContextInput, ConversationContextRepositoryFactory, ConversationContextSource } from "./session-assembly.types";
 
 /**
  * Runs the conversation read inside the admission transaction session assembly passes in.

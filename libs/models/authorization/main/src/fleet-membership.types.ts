@@ -1,4 +1,4 @@
-import type { AuthorizationScope } from "./authorization-scope.types.js";
+import type { AuthorizationScope } from "./authorization-scope.types";
 
 /** A claim that one subject belongs to one silo and one scope. It only means anything inside a signed {@link SignedFleetMembershipRevision}; on its own it is unverified data. */
 export interface FleetMembershipAssertion

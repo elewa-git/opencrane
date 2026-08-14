@@ -1,12 +1,12 @@
-import "./instrument.js";
+import "./instrument";
 
 import { mkdir } from "node:fs/promises";
 
 import { ___BindConsole, ___ShutdownTelemetry } from "@opencrane/backend/observability";
 import { _CreateArtifactPreprocessorRemote, _CreatePdfTextExtractor, __RunArtifactPreprocessor } from "@opencrane/backend/artifacts/preprocessor";
 
-import { _ReadConfig } from "./config.js";
-import { _log as log } from "./log.js";
+import { _ReadConfig } from "./config";
+import { _log as log } from "./log";
 
 /** Start the outbound-only worker and drain its poll loop and telemetry on shutdown. */
 async function _Main(): Promise<void>

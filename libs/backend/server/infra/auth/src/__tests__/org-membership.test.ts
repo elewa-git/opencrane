@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { _ResolveOrgMembershipFacts } from "../index.js";
+import { _ResolveOrgMembershipFacts } from "../index";
 
 /**
  * Unit coverage for the membership-derived org-admin facts (ORG-ADMIN.5): authority

@@ -5,8 +5,8 @@ import { ActionExecutionState, ActionReplayMode as PrismaActionReplayMode, Prism
 import type { JsonValue } from "@opencrane/util";
 
 import { __AppendAuditDecision } from "@opencrane/backend/server/iam/audit";
-import { __DigestCanonicalJson } from "./canonical-json-digest.js";
-import type { CapabilityActionFailureResult, CapabilityActionIntent, CapabilityActionReceipt, CapabilityActionReceiptRepository, CapabilityActionReservationResult, CapabilityActionSuccessResult, RuntimeBootstrapClaim, RuntimeBootstrapConsumptionResult, RuntimeBootstrapRepository } from "./runtime-proof.types.js";
+import { __DigestCanonicalJson } from "./canonical-json-digest";
+import type { CapabilityActionFailureResult, CapabilityActionIntent, CapabilityActionReceipt, CapabilityActionReceiptRepository, CapabilityActionReservationResult, CapabilityActionSuccessResult, RuntimeBootstrapClaim, RuntimeBootstrapConsumptionResult, RuntimeBootstrapRepository } from "./runtime-proof.types";
 
 /** Maps a completed Prisma receipt onto the receipt contract, which carries no Prisma types. */
 function _receipt<TResult>(row: { jti: string; requestFingerprint: string; replayMode: string; result: Prisma.JsonValue | null }): CapabilityActionReceipt<TResult>

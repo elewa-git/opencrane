@@ -4,10 +4,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ControlPlaneApiService } from "@opencrane/core";
 import { PersonaFirstChatArchetypes, PersonaFirstChatColours, PersonaFirstChatTranscriptKinds, PersonaFirstChatTranscriptRoles, UserOnboardingRouteStates, type PersonaFirstChatSnapshot } from "@opencrane/models/user-onboarding";
 
-import { OpenCranePersonaFirstChatGateway } from "../opencrane-persona-first-chat.gateway.js";
-import { PersonaFirstChatService } from "../persona-first-chat.service.js";
-import { PERSONA_FIRST_CHAT_GATEWAY, PersonaFirstChatConflictError, type PersonaFirstChatGateway } from "../persona-first-chat.types.js";
-import { _ParseUserOnboardingRouteSnapshot } from "../persona-first-chat.validator.js";
+import { OpenCranePersonaFirstChatGateway } from "../opencrane-persona-first-chat.gateway";
+import { PersonaFirstChatService } from "../persona-first-chat.service";
+import { PERSONA_FIRST_CHAT_GATEWAY, PersonaFirstChatConflictError, type PersonaFirstChatGateway } from "../persona-first-chat.types";
+import { _ParseUserOnboardingRouteSnapshot } from "../persona-first-chat.validator";
 
 /** Build one valid started first-chat projection for state, adapter, and service tests. */
 function _Snapshot(overrides: Partial<PersonaFirstChatSnapshot> = {}): PersonaFirstChatSnapshot

@@ -1,9 +1,9 @@
 import type { Request } from "express";
 import type { Logger } from "@opencrane/backend/observability";
 
-import type { PersonalConfigurationChangeDecisionRepository } from "../decision/personal-configuration-decision.types.js";
-import type { PersonalConfigurationChangeMaterializationRepository } from "../materialization/personal-configuration-materialization.types.js";
-import type { PersonalConfigurationChangeViewRepository } from "../query/personal-configuration-view.types.js";
+import type { PersonalConfigurationChangeDecisionRepository } from "../decision/personal-configuration-decision.types";
+import type { PersonalConfigurationChangeMaterializationRepository } from "../materialization/personal-configuration-materialization.types";
+import type { PersonalConfigurationChangeViewRepository } from "../query/personal-configuration-view.types";
 
 /**
  * The `error` values the configuration routes put in a JSON body.

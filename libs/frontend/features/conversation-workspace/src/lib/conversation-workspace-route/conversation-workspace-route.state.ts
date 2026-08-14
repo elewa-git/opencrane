@@ -1,5 +1,5 @@
-import type { ConversationThreadNavigationIntent } from "../conversation-workspace-feature.types.js";
-import type { ConversationThreadRouteNavigation } from "./conversation-workspace-route.state.types.js";
+import type { ConversationThreadNavigationIntent } from "../conversation-workspace-feature.types";
+import type { ConversationThreadRouteNavigation } from "./conversation-workspace-route.state.types";
 
 /**
  * Build the canonical URL segments for one selected normal conversation.

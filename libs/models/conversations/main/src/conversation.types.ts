@@ -1,4 +1,4 @@
-import type { ConversationId } from "./identifiers.types.js";
+import type { ConversationId } from "./identifiers.types";
 
 /**
  * What kind of conversation this is. Fixed when the conversation is created and never changed.

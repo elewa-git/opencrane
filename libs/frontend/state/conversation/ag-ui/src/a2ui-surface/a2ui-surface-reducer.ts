@@ -1,6 +1,6 @@
 import type { AgUiA2uiEnvelope } from "@opencrane/contracts";
 
-import type { AgUiStreamState } from "../ag-ui-stream.types.js";
+import type { AgUiStreamState } from "../ag-ui-stream.types";
 
 /** Most operations kept for one surface; a surface that exceeds this makes the reducer throw. */
 const _MAX_MATERIALIZED_A2UI_OPERATIONS = 256;

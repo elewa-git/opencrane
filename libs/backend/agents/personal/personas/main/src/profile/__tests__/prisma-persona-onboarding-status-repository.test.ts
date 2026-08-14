@@ -1,8 +1,8 @@
 import { PersonaColour, PersonaOpennessModifier, PersonaRevisionState, type Prisma } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
 
-import { PersonaOnboardingApiStates } from "../persona-lifecycle.types.js";
-import { PrismaPersonaOnboardingStatusRepository } from "../prisma-persona-onboarding-status-repository.js";
+import { PersonaOnboardingApiStates } from "../persona-lifecycle.types";
+import { PrismaPersonaOnboardingStatusRepository } from "../prisma-persona-onboarding-status-repository";
 
 /** Build a status-reader Prisma double with an old active revision and a newer retake interview. */
 function _prisma(interviewState: string): Prisma.TransactionClient

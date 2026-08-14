@@ -1,7 +1,7 @@
 import type { NextFunction, Request, RequestHandler, Response } from "express";
 
-import { ___LoadOidcAuthConfig } from "./oidc-config.js";
-import type { OidcAuthConfig } from "./oidc-config.types.js";
+import { ___LoadOidcAuthConfig } from "./oidc-config";
+import type { OidcAuthConfig } from "./oidc-config.types";
 
 /**
  * Build the middleware that decides whether a request may proceed at all.

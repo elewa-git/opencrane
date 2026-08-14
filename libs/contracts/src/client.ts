@@ -1,6 +1,6 @@
 import createFetchClient from "openapi-fetch";
 
-import type { paths } from "./generated/api.js";
+import type { paths } from "./generated/api";
 
 /**
  * Re-export the typed path map so consumers can type-check their own fetch calls.

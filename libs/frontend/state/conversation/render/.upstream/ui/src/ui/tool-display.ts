@@ -6,8 +6,8 @@ import {
   normalizeToolName,
   resolveToolVerbAndDetailForArgs,
   type ToolDisplaySpec as ToolDisplaySpecBase,
-} from "../../../src/agents/tool-display-common.js";
-import type { ToolDetailMode } from "../../../src/agents/tool-display-exec.js";
+} from "../../../src/agents/tool-display-common";
+import type { ToolDetailMode } from "../../../src/agents/tool-display-exec";
 import type { IconName } from "./icons.ts";
 import { normalizeLowercaseStringOrEmpty } from "./string-coerce.ts";
 

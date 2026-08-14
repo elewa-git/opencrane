@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 
-import { ScheduleCursorAdvanceOutcomes } from "../schedule-tick.enums.js";
-import { PrismaScheduleCursorRepository } from "../prisma-schedule-tick-repositories.js";
-import type { AdvanceScheduleCursorCommand } from "../schedule-ticker-unit-of-work.types.js";
+import { ScheduleCursorAdvanceOutcomes } from "../schedule-tick.enums";
+import { PrismaScheduleCursorRepository } from "../prisma-schedule-tick-repositories";
+import type { AdvanceScheduleCursorCommand } from "../schedule-ticker-unit-of-work.types";
 
 /** Fixed cursor command representing a tick that observed one exact schedule version. */
 const _CURSOR_COMMAND: AdvanceScheduleCursorCommand = {

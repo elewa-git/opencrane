@@ -2,7 +2,7 @@ import type * as k8s from "@kubernetes/client-node";
 import pino from "pino";
 import { describe, expect, it, vi } from "vitest";
 
-import { _OrgScope, _ResolvePerOrgClient } from "../index.js";
+import { _OrgScope, _ResolvePerOrgClient } from "../index";
 
 /** Silent structured logger injected into the resolver under test. */
 const _log = pino({ enabled: false });

@@ -1,7 +1,7 @@
 import { z } from "zod";
 
-import { AGENT_RUNTIME_PROTOCOL_V1, RuntimeCandidateKinds, type RuntimeElicitationCandidate } from "./agent-runtime-protocol.types.js";
-import { ElicitationBodyKinds, ElicitationPurposes } from "./conversation-elicitation.types.js";
+import { AGENT_RUNTIME_PROTOCOL_V1, RuntimeCandidateKinds, type RuntimeElicitationCandidate } from "./agent-runtime-protocol.types";
+import { ElicitationBodyKinds, ElicitationPurposes } from "./conversation-elicitation.types";
 
 /**
  * Runtime elicitation validation lives beside the shared model so transports cannot accept a

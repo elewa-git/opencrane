@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 
 import { ArtifactScannerVerdict } from "@opencrane/contracts";
 
-import type { ArtifactMalwareScanner } from "./scanner.types.js";
+import type { ArtifactMalwareScanner } from "./scanner.types";
 
 /** Create a shell-free ClamAV adapter using the image-pinned offline definitions. */
 export function _CreateClamAvScanner(executablePath: string, databasePath: string, version: string): ArtifactMalwareScanner

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { __CreatePersonaDraftFromInterview } from "../persona-draft-from-interview.js";
-import type { PersonaDraftFromInterviewRepository } from "../persona-draft-authority.types.js";
+import { __CreatePersonaDraftFromInterview } from "../persona-draft-from-interview";
+import type { PersonaDraftFromInterviewRepository } from "../persona-draft-authority.types";
 
 /** Build a complete server-owned draft request. */
 function _Command()

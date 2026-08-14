@@ -2,12 +2,12 @@ import { PersonaInterviewState, PersonaQuestionSetState, Prisma } from "@prisma/
 
 import { PersonalConfigurationPersonaRefreshClaimCodes, PrismaPersonalConfigurationPersonaRefreshRepository } from "@opencrane/backend/agents/personal/configuration";
 
-import { PersonaAggregateInterviewStates } from "../profile/persona-aggregate-read-repository.types.js";
-import { PersonaInterviewDenialReasons, PersonaLifecycleOutcomes } from "../profile/persona-lifecycle.types.js";
-import { PrismaPersonaAggregateReadRepository } from "../profile/prisma-persona-aggregate-read-repository.js";
-import { PersonaScoringPersistenceStatuses } from "../scoring/persona-scoring-repository.types.js";
-import { PrismaPersonaScoringRepository } from "../scoring/prisma-persona-scoring-repository.js";
-import type { CompletePersonaInterviewCommand, PersonaInterviewQuestionReader, PersonaInterviewRepository, RecordPersonaInterviewAnswerCommand, ResolvePersonaInterviewTieCommand, StartPersonaInterviewCommand } from "./persona-interview-authority.types.js";
+import { PersonaAggregateInterviewStates } from "../profile/persona-aggregate-read-repository.types";
+import { PersonaInterviewDenialReasons, PersonaLifecycleOutcomes } from "../profile/persona-lifecycle.types";
+import { PrismaPersonaAggregateReadRepository } from "../profile/prisma-persona-aggregate-read-repository";
+import { PersonaScoringPersistenceStatuses } from "../scoring/persona-scoring-repository.types";
+import { PrismaPersonaScoringRepository } from "../scoring/prisma-persona-scoring-repository";
+import type { CompletePersonaInterviewCommand, PersonaInterviewQuestionReader, PersonaInterviewRepository, RecordPersonaInterviewAnswerCommand, ResolvePersonaInterviewTieCommand, StartPersonaInterviewCommand } from "./persona-interview-authority.types";
 
 /** Prisma adapter for the persona interview lifecycle. Answers are only added, never changed. */
 export class PrismaPersonaInterviewRepository implements PersonaInterviewRepository, PersonaInterviewQuestionReader

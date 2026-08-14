@@ -1,5 +1,5 @@
-import type { AgentServiceSchedule, ScheduleTickResult } from "./schedule-tick.types.js";
-import type { ScheduleCursorAdvanceOutcomes } from "./schedule-tick.enums.js";
+import type { AgentServiceSchedule, ScheduleTickResult } from "./schedule-tick.types";
+import type { ScheduleCursorAdvanceOutcomes } from "./schedule-tick.enums";
 
 /**
  * One enabled schedule plus the service facts observed in the same read.

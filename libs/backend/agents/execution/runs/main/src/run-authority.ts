@@ -1,7 +1,7 @@
 import type { AgentRun } from "@opencrane/models/agents";
 import { AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, MANAGED_AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, ___IsAgentRuntimeServiceAccountName, ___IsManagedAgentRuntimeServiceAccountName } from "@opencrane/contracts";
 
-import type { AgentRunAuthorityRepository, RunWorkloadAssignment, RunWorkloadAssignmentDecision, RunWorkloadAssignmentExpectation, StartNextRunAttemptCommand, StartNextRunAttemptResult } from "./run-authority.types.js";
+import type { AgentRunAuthorityRepository, RunWorkloadAssignment, RunWorkloadAssignmentDecision, RunWorkloadAssignmentExpectation, StartNextRunAttemptCommand, StartNextRunAttemptResult } from "./run-authority.types";
 
 /**
  * Returns whether a run has finished in a way a person can ask to run again.

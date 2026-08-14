@@ -1,8 +1,8 @@
 import { ___DoWithTrace } from "@opencrane/backend/observability";
 import { ___ParseAndValidateJson } from "@opencrane/util";
 
-import { _log } from "../log.js";
-import type { AttemptLiteLlmKey, AttemptLiteLlmKeyRequest } from "./attempt-litellm-key.types.js";
+import { _log } from "../log";
+import type { AttemptLiteLlmKey, AttemptLiteLlmKeyRequest } from "./attempt-litellm-key.types";
 
 /**
  * Per-request timeout for the LiteLLM `/key/generate` call. Bounds the mint so an unreachable

@@ -8,16 +8,16 @@ import { ExternalActionRecoveryModes, TOOL_INVOCATION_PREPARATION_POLICY, ToolIn
 import { PERSONAL_MEMORY_RECALL_TOOL_REVISION, RunEventTypes } from "@opencrane/models/agents";
 import type { JsonValue } from "@opencrane/util";
 
-import { _CompileRunInputForContext } from "./compiled-run-input-context.js";
-import { _ApplyRuntimeCandidateSideEffects, _RuntimeCandidateRequiresEventReporter, RuntimeCandidateSideEffectDeniedError } from "./prisma-runtime-candidate-side-effects.js";
-import { PrismaRuntimeCommandDecisionUnitOfWork } from "./prisma-runtime-command-decision-unit-of-work.js";
-import { PrismaRuntimeDispatchStateUnitOfWork } from "./prisma-runtime-dispatch-state-repository.js";
-import { PrismaRuntimeResumeInputUnitOfWork } from "./prisma-runtime-resume-input-repository.js";
-import { __ProjectRuntimeInputSnapshot } from "./runtime-input-snapshot-projector.js";
-import { _ParseRuntimeResumeInput } from "./runtime-resume-input.js";
-import { __AdmitRuntimeCandidate, __AdmitRuntimeCommand } from "./runtime-protocol-authority.js";
-import { RuntimeAdmissionOutcomes, type RuntimeAdmissionRunState, type RuntimeAttemptAuthority, type RuntimeProtocolClock } from "./runtime-protocol-authority.types.js";
-import type { RunInputCompiler, RuntimeApprovalExpiry, RuntimeCandidateDispatchResult, RuntimeDispatchAuthorityConfig, RuntimeElicitationUnitOfWorkFactory, RuntimeEventReporter, RuntimeStreamWorkloadIdentity } from "./prisma-runtime-dispatch-authority.types.js";
+import { _CompileRunInputForContext } from "./compiled-run-input-context";
+import { _ApplyRuntimeCandidateSideEffects, _RuntimeCandidateRequiresEventReporter, RuntimeCandidateSideEffectDeniedError } from "./prisma-runtime-candidate-side-effects";
+import { PrismaRuntimeCommandDecisionUnitOfWork } from "./prisma-runtime-command-decision-unit-of-work";
+import { PrismaRuntimeDispatchStateUnitOfWork } from "./prisma-runtime-dispatch-state-repository";
+import { PrismaRuntimeResumeInputUnitOfWork } from "./prisma-runtime-resume-input-repository";
+import { __ProjectRuntimeInputSnapshot } from "./runtime-input-snapshot-projector";
+import { _ParseRuntimeResumeInput } from "./runtime-resume-input";
+import { __AdmitRuntimeCandidate, __AdmitRuntimeCommand } from "./runtime-protocol-authority";
+import { RuntimeAdmissionOutcomes, type RuntimeAdmissionRunState, type RuntimeAttemptAuthority, type RuntimeProtocolClock } from "./runtime-protocol-authority.types";
+import type { RunInputCompiler, RuntimeApprovalExpiry, RuntimeCandidateDispatchResult, RuntimeDispatchAuthorityConfig, RuntimeElicitationUnitOfWorkFactory, RuntimeEventReporter, RuntimeStreamWorkloadIdentity } from "./prisma-runtime-dispatch-authority.types";
 
 /** Database facts about one connected runtime Pod's run and assignment, read under a row lock. */
 interface RuntimeDispatchContext

@@ -3,7 +3,7 @@ import * as k8s from "@kubernetes/client-node";
 import { AGENT_CONTROLLER_PROJECTED_TOKEN_AUDIENCE, AGENT_CONTROLLER_SERVICE_ACCOUNT_NAME, AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, ARTIFACT_PREPROCESSOR_PROJECTED_TOKEN_AUDIENCE, ARTIFACT_PREPROCESSOR_SERVICE_ACCOUNT_NAME, ARTIFACT_SCANNER_PROJECTED_TOKEN_AUDIENCE, ARTIFACT_SCANNER_SERVICE_ACCOUNT_NAME, MANAGED_AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, ___IsAgentRuntimeServiceAccountName, ___IsManagedAgentRuntimeServiceAccountName } from "@opencrane/contracts";
 import { ___DoWithTrace } from "@opencrane/backend/observability";
 
-import type { ChannelProxyTokenReviewerConfig, FixedServiceAccountTokenReviewer, MemoryGatewayServerIdentityConfig, ProjectedTokenReviewApi, ReviewedFixedServiceAccountIdentity, ReviewedSkillWorkloadIdentity, RuntimeIdentityNamespaceInput, RuntimeIdentityNamespaces, RuntimeTokenReviewer, RuntimeTokenReviewerConfig, RuntimeWorkloadIdentity, SkillWorkloadTokenReviewer } from "./workload-identity.types.js";
+import type { ChannelProxyTokenReviewerConfig, FixedServiceAccountTokenReviewer, MemoryGatewayServerIdentityConfig, ProjectedTokenReviewApi, ReviewedFixedServiceAccountIdentity, ReviewedSkillWorkloadIdentity, RuntimeIdentityNamespaceInput, RuntimeIdentityNamespaces, RuntimeTokenReviewer, RuntimeTokenReviewerConfig, RuntimeWorkloadIdentity, SkillWorkloadTokenReviewer } from "./workload-identity.types";
 
 /** Return whether one value is a bounded Kubernetes namespace DNS label. */
 function _IsNamespace(value: string): boolean

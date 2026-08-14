@@ -2,8 +2,8 @@ import { Router, type Request, type Response } from "express";
 
 import { AGENT_CONTROLLER_PROJECTED_TOKEN_AUDIENCE, AGENT_CONTROLLER_SERVICE_ACCOUNT_NAME, ___IsEmptyAgentControllerCommand, ___ParseAgentControllerRunAttemptAssignmentCommand, ___ParseAgentControllerRunWorkloadRegistrationCommand } from "@opencrane/contracts";
 
-import { RunDispatchResultStatuses } from "./run-dispatch.types.js";
-import type { AgentControllerRunDispatchRouterDependencies, ReviewedAgentControllerIdentity } from "./run-dispatch.types.js";
+import { RunDispatchResultStatuses } from "./run-dispatch.types";
+import type { AgentControllerRunDispatchRouterDependencies, ReviewedAgentControllerIdentity } from "./run-dispatch.types";
 
 /**
  * Build the workload-authenticated internal run-dispatch API for the sole agent controller.

@@ -2,7 +2,7 @@ import { AgentRunState, Prisma, type PrismaClient } from "@prisma/client";
 
 import { ToolInvocationEventTypes, type ToolInvocationLifecycleEvent } from "@opencrane/backend/server/iam/authorization";
 
-import type { ToolInvocationLifecycleEventAppendRepository, ToolInvocationLifecycleEventAppendUnitOfWork, ToolInvocationLifecycleEventUnitOfWork } from "./tool-invocation-lifecycle-event-reporter.types.js";
+import type { ToolInvocationLifecycleEventAppendRepository, ToolInvocationLifecycleEventAppendUnitOfWork, ToolInvocationLifecycleEventUnitOfWork } from "./tool-invocation-lifecycle-event-reporter.types";
 
 /** Process-scoped transaction owner shared by the worker and its invocation unit of work. */
 export class PrismaToolInvocationLifecycleEventUnitOfWork implements ToolInvocationLifecycleEventUnitOfWork

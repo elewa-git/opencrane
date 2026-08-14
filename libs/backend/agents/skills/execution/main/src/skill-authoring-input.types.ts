@@ -1,7 +1,7 @@
 import type { Router } from "express";
 
-import type { SkillWorkloadBootstrapIdentity, SkillWorkloadBootstrapLogger, SkillWorkloadBootstrapTokenReviewer } from "./skill-workload-bootstrap.types.js";
-import type { SkillAuthoringInputAuthority } from "./skill-workload-authority.types.js";
+import type { SkillWorkloadBootstrapIdentity, SkillWorkloadBootstrapLogger, SkillWorkloadBootstrapTokenReviewer } from "./skill-workload-bootstrap.types";
+import type { SkillAuthoringInputAuthority } from "./skill-workload-authority.types";
 
 /** The artifact ids, read only after every workload check has passed. */
 export interface SkillAuthoringInputRecord

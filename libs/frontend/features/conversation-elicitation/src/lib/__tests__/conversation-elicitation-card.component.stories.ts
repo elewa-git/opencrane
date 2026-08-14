@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from "@storybook/angular";
 
 import { CONVERSATION_ELICITATION_VERSION, ElicitationBodyKinds, ElicitationPurposes, ElicitationRequestStates, type ConversationElicitation } from "@opencrane/state/conversation/elicitation";
 
-import { ConversationElicitationCardComponent } from "../conversation-elicitation-card.component.js";
+import { ConversationElicitationCardComponent } from "../conversation-elicitation-card.component";
 
 /** Build one canonical requested card story. */
 function _Request(body: ConversationElicitation["body"], requiresStepUp = false): ConversationElicitation

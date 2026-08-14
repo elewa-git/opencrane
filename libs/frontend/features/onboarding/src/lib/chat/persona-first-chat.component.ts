@@ -5,10 +5,10 @@ import { ProgressSpinnerModule } from "primeng/progressspinner";
 
 import { JourneyShellComponent, JourneyShellLayouts } from "@opencrane/elements/ui";
 
-import { PersonaFirstChatComposerComponent } from "./persona-first-chat-composer.component.js";
-import { PersonaFirstChatIdentityComponent } from "./persona-first-chat-identity.component.js";
-import { PersonaFirstChatTranscriptComponent } from "./persona-first-chat-transcript.component.js";
-import { type PersonaFirstChatAnswerIntent, type PersonaFirstChatIdentity, type PersonaFirstChatProvenance, type PersonaFirstChatQuestion, PersonaFirstChatStates, type PersonaFirstChatTranscriptMessage } from "./persona-first-chat.types.js";
+import { PersonaFirstChatComposerComponent } from "./persona-first-chat-composer.component";
+import { PersonaFirstChatIdentityComponent } from "./persona-first-chat-identity.component";
+import { PersonaFirstChatTranscriptComponent } from "./persona-first-chat-transcript.component";
+import { type PersonaFirstChatAnswerIntent, type PersonaFirstChatIdentity, type PersonaFirstChatProvenance, type PersonaFirstChatQuestion, PersonaFirstChatStates, type PersonaFirstChatTranscriptMessage } from "./persona-first-chat.types";
 
 /** Feature-specific presentational surface for the governed three-question first conversation. */
 @Component({

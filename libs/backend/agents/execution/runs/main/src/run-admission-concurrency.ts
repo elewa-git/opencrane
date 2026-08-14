@@ -1,6 +1,6 @@
-import type { RunAdmissionCommand } from "./run-admission.types.js";
-import { RunAdmissionConcurrencyDenialReasons } from "./run-admission-concurrency.types.js";
-import type { RunAdmissionConcurrencyPolicy, RunAdmissionConcurrencyResult } from "./run-admission-concurrency.types.js";
+import type { RunAdmissionCommand } from "./run-admission.types";
+import { RunAdmissionConcurrencyDenialReasons } from "./run-admission-concurrency.types";
+import type { RunAdmissionConcurrencyPolicy, RunAdmissionConcurrencyResult } from "./run-admission-concurrency.types";
 
 /**
  * Keeps one silo and service from flooding admission, before any database connection is taken.

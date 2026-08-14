@@ -1,7 +1,7 @@
 import { ___DoWithTrace } from "@opencrane/backend/observability";
 
-import { _log } from "../log.js";
-import type { LiteLlmCredentialUpsert } from "./litellm-credential-registration.types.js";
+import { _log } from "../log";
+import type { LiteLlmCredentialUpsert } from "./litellm-credential-registration.types";
 
 /**
  * Per-request timeout for the LiteLLM `/credentials` calls. Bounds the boot-time bootstrap (which

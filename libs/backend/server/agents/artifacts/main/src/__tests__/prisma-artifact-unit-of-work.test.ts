@@ -1,8 +1,8 @@
 import { Prisma } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
 
-import { PrismaArtifactPreprocessUnitOfWork } from "../prisma-artifact-preprocess-unit-of-work.js";
-import { PrismaArtifactPublicationUnitOfWork } from "../prisma-artifact-publication-unit-of-work.js";
+import { PrismaArtifactPreprocessUnitOfWork } from "../prisma-artifact-preprocess-unit-of-work";
+import { PrismaArtifactPublicationUnitOfWork } from "../prisma-artifact-publication-unit-of-work";
 
 /** Builds the minimum transaction delegates needed to construct both scoped artifact repositories. */
 function _Transaction()

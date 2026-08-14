@@ -3,9 +3,9 @@ import { describe, expect, it, vi } from "vitest";
 import { RunAdmissionConcurrencyDenialReasons, RunAdmissionConcurrencyGate, RunAdmissionDenialReasons } from "@opencrane/backend/agents/execution/runs";
 import { MessageContentBlockKinds } from "@opencrane/models/conversations";
 
-import { _CreateRunAdmissionCapacityGate } from "../managed-run-admission.js";
-import { __CreatePersonalRunAdmissionPortWithGate } from "../personal-run-admission.js";
-import { PersonalRunAdmissionOutcomes, PersonalRunIdempotencyOutcomes, type PersonalRunAdmissionCommand, type PersonalRunAdmissionDependencies } from "../personal-run-admission.types.js";
+import { _CreateRunAdmissionCapacityGate } from "../managed-run-admission";
+import { __CreatePersonalRunAdmissionPortWithGate } from "../personal-run-admission";
+import { PersonalRunAdmissionOutcomes, PersonalRunIdempotencyOutcomes, type PersonalRunAdmissionCommand, type PersonalRunAdmissionDependencies } from "../personal-run-admission.types";
 
 /** Builds the server-side command the personal admission port takes. */
 function _Command(): Parameters<ReturnType<typeof __CreatePersonalRunAdmissionPortWithGate>["admitPersonalRun"]>[0]

@@ -2,7 +2,7 @@ import type { PrismaClient } from "@prisma/client";
 import type { Logger } from "pino";
 import { describe, expect, it, vi } from "vitest";
 
-import { _MirrorGroupsOnLogin, _ParseGroupClaims } from "../index.js";
+import { _MirrorGroupsOnLogin, _ParseGroupClaims } from "../index";
 
 /**
  * #126 S4b — mirror a user's `group:<scope>:<name>` project-role claims into the persisted

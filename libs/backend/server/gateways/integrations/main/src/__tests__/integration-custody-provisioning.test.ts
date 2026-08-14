@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { __ProvisionIntegrationCustody } from "../integration-custody-provisioning.js";
+import { __ProvisionIntegrationCustody } from "../integration-custody-provisioning";
 
 describe("integration custody provisioning", function _suite()
 {

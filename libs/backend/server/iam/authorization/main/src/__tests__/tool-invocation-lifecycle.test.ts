@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { __PlanToolInvocationLifecycle } from "../tool-invocation-lifecycle.js";
-import { ExternalActionClaimKinds, ExternalActionRecoveryModes, ToolInvocationLifecycleActions, ToolInvocationLifecycleEvents, ToolInvocationStates, type ToolInvocationLifecycleInput } from "../tool-invocation-lifecycle.types.js";
+import { __PlanToolInvocationLifecycle } from "../tool-invocation-lifecycle";
+import { ExternalActionClaimKinds, ExternalActionRecoveryModes, ToolInvocationLifecycleActions, ToolInvocationLifecycleEvents, ToolInvocationStates, type ToolInvocationLifecycleInput } from "../tool-invocation-lifecycle.types";
 
 /** Build one complete decision input while allowing the focused cell to vary. */
 function _input(overrides: Partial<ToolInvocationLifecycleInput>): ToolInvocationLifecycleInput

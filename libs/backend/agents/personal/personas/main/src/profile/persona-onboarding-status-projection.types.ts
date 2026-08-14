@@ -1,6 +1,6 @@
-import { PersonaOnboardingApiStates } from "./persona-lifecycle.types.js";
-import type { PersonaScoreResult } from "../scoring/persona-scorer.types.js";
-import type { PersonaOnboardingStatus, PersonaStatusQuestion, PersonaStatusResult } from "./persona-onboarding-status.types.js";
+import { PersonaOnboardingApiStates } from "./persona-lifecycle.types";
+import type { PersonaScoreResult } from "../scoring/persona-scorer.types";
+import type { PersonaOnboardingStatus, PersonaStatusQuestion, PersonaStatusResult } from "./persona-onboarding-status.types";
 
 /** Revision states, used only when working out what the owner sees. */
 export enum PersonaOnboardingStatusRevisionStates

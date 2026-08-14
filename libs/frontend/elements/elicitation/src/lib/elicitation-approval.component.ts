@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, input, output } from "@angular/core";
 
-import type { ElicitationApprovalPresentation } from "./elicitation-control.types.js";
+import type { ElicitationApprovalPresentation } from "./elicitation-control.types";
 
 /** Present one disclosed consequential action and emit an explicit allow-or-deny draft. */
 @Component({ selector: "wo-elicitation-approval", standalone: true, templateUrl: "./elicitation-approval.component.html", styleUrl: "./elicitation-control.component.scss", changeDetection: ChangeDetectionStrategy.OnPush })

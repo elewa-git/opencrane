@@ -3,7 +3,7 @@ import type { ManagedExecutionEvidenceAuthority } from "@opencrane/backend/serve
 import type { InitialRunAuthority, RunAdmissionTransaction } from "@opencrane/backend/agents/execution/runs";
 import { ___IsSha256Digest } from "@opencrane/util";
 
-import type { IdentityEnvelopeInput, IdentityEnvelopeSource, SessionAssemblyCommand, SessionAssemblyLoad } from "./session-assembly.types.js";
+import type { IdentityEnvelopeInput, IdentityEnvelopeSource, SessionAssemblyCommand, SessionAssemblyLoad } from "./session-assembly.types";
 
 /**
  * Turns managed-service evidence into the run's identity, ignoring any service identity the caller

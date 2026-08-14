@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { ___IsAgentRuntimeServiceAccountName } from "../index.js";
+import { ___IsAgentRuntimeServiceAccountName } from "../index";
 
 describe("agent runtime identity contract", function ()
 {

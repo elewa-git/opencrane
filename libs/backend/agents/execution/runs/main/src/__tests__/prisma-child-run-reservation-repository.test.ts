@@ -2,9 +2,9 @@ import { AgentRunState, AgentRunTrigger, RunOutboxEventKind, type PrismaClient }
 import { RunInputSnapshotIdentityKinds, type RunInputSnapshot } from "@opencrane/contracts";
 import { describe, expect, it, vi } from "vitest";
 
-import { PrismaChildRunReservationRepository } from "../prisma-child-run-reservation-repository.js";
-import { __DigestRunInputSnapshot } from "../run-input-snapshot-digest.js";
-import type { ChildRunReservationCommand } from "../child-run-reservation.types.js";
+import { PrismaChildRunReservationRepository } from "../prisma-child-run-reservation-repository";
+import { __DigestRunInputSnapshot } from "../run-input-snapshot-digest";
+import type { ChildRunReservationCommand } from "../child-run-reservation.types";
 
 /** Builds a digest-sealed snapshot with the smallest valid runtime input for a reservation test. */
 function _snapshot(runId: string, serviceId: string, revisionId: string, conversationId: string | null = null): RunInputSnapshot

@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { ControlPlaneApiService } from "@opencrane/core";
 
-import { OpenCraneConversationAssetsGateway } from "../opencrane-conversation-assets-gateway.js";
+import { OpenCraneConversationAssetsGateway } from "../opencrane-conversation-assets-gateway";
 
 const _ASSET = { id: "asset-1", conversationId: "conversation-1", messageId: null, provenance: "participant_upload" as const, state: "processing" as const, displayName: "brief.pdf", mediaType: "application/pdf", byteLength: 5, disposition: "preview" as const, failureCode: null, canRemove: false, createdAt: "2026-08-11T10:00:00.000Z" };
 

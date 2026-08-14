@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { __UploadArtifact } from "../artifact-upload.js";
+import { __UploadArtifact } from "../artifact-upload";
 
 const _address = `sha256:${"a".repeat(64)}`;
 const _receiptDigest = `sha256:${"b".repeat(64)}`;

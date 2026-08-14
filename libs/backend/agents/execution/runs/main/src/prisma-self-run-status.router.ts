@@ -4,9 +4,9 @@ import type { Logger } from "pino";
 
 import { _ResolveRequestPrincipal } from "@opencrane/backend/server/infra/auth";
 
-import { PrismaSelfRunStatusRepository } from "./prisma-self-run-status-repository.js";
-import { __CreateSelfRunStatusRouter } from "./self-run-status.router.js";
-import type { SelfRunStatusCaller } from "./self-run-status.router.types.js";
+import { PrismaSelfRunStatusRepository } from "./prisma-self-run-status-repository";
+import { __CreateSelfRunStatusRouter } from "./self-run-status.router";
+import type { SelfRunStatusCaller } from "./self-run-status.router.types";
 
 /** Maps authenticated request facts to the caller contract owned by personal run status. */
 function _resolveCaller(request: Parameters<typeof _ResolveRequestPrincipal>[0]): SelfRunStatusCaller | null

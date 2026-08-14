@@ -1,7 +1,7 @@
 import { Router, type Request } from "express";
 import type { GrantScope, PrismaClient } from "@prisma/client";
 
-import { _log } from "../log.js";
+import { _log } from "../log";
 // Side-effect import: loads the express-session `SessionData.authUser` augmentation.
 import "@opencrane/backend/server/infra/auth";
 

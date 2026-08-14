@@ -4,8 +4,8 @@ import { describe, expect, it, vi } from "vitest";
 
 import { AGENT_CONTROLLER_PROJECTED_TOKEN_AUDIENCE } from "@opencrane/contracts";
 
-import { __CreateSkillWorkloadDispatchRouter } from "../skill-workload-dispatch.router.js";
-import type { SkillWorkloadDispatchRouterDependencies } from "../skill-workload-dispatch.types.js";
+import { __CreateSkillWorkloadDispatchRouter } from "../skill-workload-dispatch.router";
+import type { SkillWorkloadDispatchRouterDependencies } from "../skill-workload-dispatch.types";
 
 /** Build an Express app with one configurable controller-only skill-workload boundary. */
 function _App(overrides: Partial<SkillWorkloadDispatchRouterDependencies> = {})

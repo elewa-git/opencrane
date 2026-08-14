@@ -5,7 +5,7 @@ import { OpenCraneConversationWorkspaceGateway } from "@opencrane/state/conversa
 import { OpenCraneConversationEventStream } from "@opencrane/state/conversation/adapter";
 import { CONVERSATION_ASSETS_GATEWAY, OpenCraneConversationAssetsGateway } from "@opencrane/state/conversation/assets";
 
-import { provideConversationWorkspaceComposition } from "../conversation-workspace.providers.js";
+import { provideConversationWorkspaceComposition } from "../conversation-workspace.providers";
 
 describe("Conversation workspace app providers", function _ConversationWorkspaceAppProviders()
 {

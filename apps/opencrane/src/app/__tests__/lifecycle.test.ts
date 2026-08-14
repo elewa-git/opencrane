@@ -10,7 +10,7 @@ import type { ManagedRunAdmissionPort } from "@opencrane/backend/server/agents/a
 import type { RunCancellationRepository } from "@opencrane/backend/agents/execution/runs";
 import type { ChannelTargetRouteReconciler } from "@opencrane/backend/server/agents/channel-targets";
 
-import type { OpenCraneProcessConfig } from "../config.types.js";
+import type { OpenCraneProcessConfig } from "../config.types";
 
 /** Ordered lifecycle calls shared by hoisted dependency mocks and assertions. */
 const _calls = vi.hoisted(function _Calls() { return [] as string[]; });
@@ -20,22 +20,22 @@ vi.mock("@opencrane/backend/observability", function _Observability()
 	return { ___ShutdownTelemetry: async function _ShutdownTelemetry() { _calls.push("telemetry"); } };
 });
 
-vi.mock("../background-workers.js", function _BackgroundWorkers()
+vi.mock("../background-workers", function _BackgroundWorkers()
 {
 	return { _StartBackgroundWorkers: function _StartBackgroundWorkers() { return { stop: async function _StopWorkers() { _calls.push("workers"); } }; } };
 });
 
-vi.mock("../log.js", function _Log()
+vi.mock("../log", function _Log()
 {
 	return { _log: { info: function _Info() {}, error: function _Error() {} } };
 });
 
-vi.mock("../process-shutdown.js", function _ProcessShutdown()
+vi.mock("../process-shutdown", function _ProcessShutdown()
 {
 	return { _BeginProcessShutdown: function _BeginProcessShutdown() { _calls.push("streams"); } };
 });
 
-import { _StartProcessLifecycle } from "../lifecycle.js";
+import { _StartProcessLifecycle } from "../lifecycle";
 
 /** Signal listeners registered by the current test and removed after it completes. */
 const _registeredListeners: Array<{ readonly signal: NodeJS.Signals; readonly listener: NodeJS.SignalsListener }> = [];

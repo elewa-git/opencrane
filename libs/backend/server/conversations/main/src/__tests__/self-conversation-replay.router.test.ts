@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { Logger } from "@opencrane/backend/observability";
 import { ConversationProjectionReadStatuses } from "@opencrane/backend/conversations/projection";
 
-import { __CreateSelfConversationReplayRouter } from "../self-conversation-replay.router.js";
+import { __CreateSelfConversationReplayRouter } from "../self-conversation-replay.router";
 
 /** Mount the self-only replay router with caller and event-reader seams. */
 function _app(caller: unknown, readAuthorized = vi.fn(async function _read() { return { status: ConversationProjectionReadStatuses.Authorized, rows: [] }; }))

@@ -1,9 +1,9 @@
 import { __BuildSuspendedAgentRuntimeJob, __DeriveAgentRuntimeReleaseDeadlineSeconds } from "@opencrane/backend/agents/runtime/k8s-launcher";
 import { ___DoWithTrace } from "@opencrane/backend/observability";
 
-import { _ResolveAgentControllerRuntimeProfile } from "./agent-controller-profiles.js";
-import { AgentControllerReconcileOutcomes, type AgentControllerOptions, type AgentControllerRuntimeReleaseReconcileResult } from "./agent-controller.types.js";
-import { _AgentRuntimeAttemptKeySecretName } from "./agent-runtime-attempt-key.js";
+import { _ResolveAgentControllerRuntimeProfile } from "./agent-controller-profiles";
+import { AgentControllerReconcileOutcomes, type AgentControllerOptions, type AgentControllerRuntimeReleaseReconcileResult } from "./agent-controller.types";
+import { _AgentRuntimeAttemptKeySecretName } from "./agent-runtime-attempt-key";
 
 /** Return the Pod UID Kubernetes assigned, or throw when it is missing. */
 function _RequirePodUid(uid: string | undefined): string

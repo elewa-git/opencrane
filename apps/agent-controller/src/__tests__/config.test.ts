@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { _ReadConfig } from "../config.js";
+import { _ReadConfig } from "../config";
 
 /** Return one Helm-equivalent immutable profile JSON value. */
 function _ProfilesJson(serverNamespace = "silo-a"): string

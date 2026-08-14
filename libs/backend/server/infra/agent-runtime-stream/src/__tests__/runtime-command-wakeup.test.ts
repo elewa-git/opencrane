@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { RuntimeCommandWakeup } from "../runtime-command-wakeup.js";
+import { RuntimeCommandWakeup } from "../runtime-command-wakeup";
 
 describe("RuntimeCommandWakeup", function _describeRuntimeCommandWakeup()
 {

@@ -1,7 +1,7 @@
 import type { PrismaClient } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
 
-import { PrismaMcpServerMutationUnitOfWork } from "../core/prisma-mcp-server-mutation-unit-of-work.js";
+import { PrismaMcpServerMutationUnitOfWork } from "../core/prisma-mcp-server-mutation-unit-of-work";
 
 /** Builds the narrow aggregate delegate stub used by this adapter test. */
 function _prisma(): PrismaClient

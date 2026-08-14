@@ -7,11 +7,11 @@ import type { PrismaClient, ProviderCredential as PrismaProviderCredential } fro
 import { ___DoWithTrace } from "@opencrane/backend/observability";
 import { ModelRoutingScope } from "@opencrane/contracts";
 import { ___ParseAndValidateJson } from "@opencrane/util";
-import { _DeleteLiteLlmCredential, _UpsertLiteLlmCredential } from "./litellm-credential-registration.js";
-import { _RegisterLiteLlmModel } from "./litellm-model-registration.js";
-import { _BYOK_PROVIDER_CATALOG } from "./byok-default-models.js";
-import type { ByokProviderCatalog } from "./byok-default-models.types.js";
-import type { DeprovisionByokKeyOptions, ProvisionByokKeyOptions, ProvisionByokKeyResult } from "./provision-byok-key.types.js";
+import { _DeleteLiteLlmCredential, _UpsertLiteLlmCredential } from "./litellm-credential-registration";
+import { _RegisterLiteLlmModel } from "./litellm-model-registration";
+import { _BYOK_PROVIDER_CATALOG } from "./byok-default-models";
+import type { ByokProviderCatalog } from "./byok-default-models.types";
+import type { DeprovisionByokKeyOptions, ProvisionByokKeyOptions, ProvisionByokKeyResult } from "./provision-byok-key.types";
 
 /**
  * Setting and removing a silo's BYOK provider key. Both the HTTP route (`providerByokRouter`) and

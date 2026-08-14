@@ -2,9 +2,9 @@ import { Router, type Request, type Response } from "express";
 import type { PrismaClient } from "@prisma/client";
 
 import { _RequireOrgAdmin } from "@opencrane/backend/server/infra/auth";
-import { approveServer, clearCredential, connectOauth, disconnectOauth, getAccessPolicy, getDirectory, installServer, listAllServers, listEntitledCatalog, listInstalled, publishServer, rejectServer, setAccessPolicy, setCredential, setServerEnabled, uninstallServer } from "../core/mcp-operator.logic.js";
-import type { McpOperatorCaller } from "../core/mcp-operator.logic.types.js";
-import type { McpAccessPolicyRequest, McpEnabledRequest, McpInstallRequest } from "./mcp-operator.types.js";
+import { approveServer, clearCredential, connectOauth, disconnectOauth, getAccessPolicy, getDirectory, installServer, listAllServers, listEntitledCatalog, listInstalled, publishServer, rejectServer, setAccessPolicy, setCredential, setServerEnabled, uninstallServer } from "../core/mcp-operator.logic";
+import type { McpOperatorCaller } from "../core/mcp-operator.logic.types";
+import type { McpAccessPolicyRequest, McpEnabledRequest, McpInstallRequest } from "./mcp-operator.types";
 
 /**
  * Operator-API router for the MCP endpoints under `/api/v1/mcp/*` — using servers, and governing them.

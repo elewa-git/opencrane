@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { __CanAppendConversationTimelineEntry, __HasValidConversationAgentBinding, __IsConversationLifecycleTransitionAllowed, __IsMessageTransitionAllowed, ConversationLifecycles, ConversationModes, ConversationTimelineEntryKinds, MessageStates } from "../index.js";
-import type { ConversationTimelineEntry } from "../index.js";
+import { __CanAppendConversationTimelineEntry, __HasValidConversationAgentBinding, __IsConversationLifecycleTransitionAllowed, __IsMessageTransitionAllowed, ConversationLifecycles, ConversationModes, ConversationTimelineEntryKinds, MessageStates } from "../index";
+import type { ConversationTimelineEntry } from "../index";
 
 /** Creates one canonical timeline entry for append-order tests. */
 function _entry(conversationId: string, position: string): ConversationTimelineEntry

@@ -2,7 +2,7 @@ import express from "express";
 import request from "supertest";
 import { describe, expect, it, vi } from "vitest";
 
-import { ___AuthRouter } from "../auth.router.js";
+import { ___AuthRouter } from "../auth.router";
 
 /** Mount auth routes with a server-owned session double. */
 function _App(authService: object, authenticated: boolean)

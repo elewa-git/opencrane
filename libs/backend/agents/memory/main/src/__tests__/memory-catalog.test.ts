@@ -1,9 +1,9 @@
 import { MemoryFactProvenanceSourceKinds } from "@opencrane/contracts";
 import { describe, expect, it, vi } from "vitest";
 
-import { __MemoryCatalogCorrectionConflictError } from "../memory-catalog-errors.js";
-import { __RecordMemoryFact } from "../memory-catalog.js";
-import { MemoryCatalogAtomicStatuses, MemoryFactConsentStates } from "../memory-catalog.types.js";
+import { __MemoryCatalogCorrectionConflictError } from "../memory-catalog-errors";
+import { __RecordMemoryFact } from "../memory-catalog";
+import { MemoryCatalogAtomicStatuses, MemoryFactConsentStates } from "../memory-catalog.types";
 
 /** Builds a unit-of-work fake containing one memory catalog repository. */
 function _UnitOfWork(status: MemoryCatalogAtomicStatuses = MemoryCatalogAtomicStatuses.Recorded)

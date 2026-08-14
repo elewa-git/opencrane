@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { RunInputSnapshotIdentityKinds, type RunInputSnapshot } from "@opencrane/contracts";
 import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 
-import { __DigestRunInputSnapshot } from "../run-input-snapshot-digest.js";
+import { __DigestRunInputSnapshot } from "../run-input-snapshot-digest";
 
 /** Build one complete schema-bound snapshot body without its self-referential digest. */
 function _Snapshot(parametersSchema: JsonValue = { type: "object", additionalProperties: false }): Omit<RunInputSnapshot, "digest">

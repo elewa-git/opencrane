@@ -1,4 +1,4 @@
-import type { JsonValue } from "./json-canonicalization.types.js";
+import type { JsonValue } from "./json-canonicalization.types";
 
 /** Maximum Unicode high-surrogate code unit. */
 const HIGH_SURROGATE_MAX = 0xdbff;

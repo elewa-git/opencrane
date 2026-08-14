@@ -4,7 +4,7 @@ import type { InitialRunAuthority, RunAdmissionTransaction } from "@opencrane/ba
 import { __AreReviewedIntegrationToolDefinitionsValid, type ReviewedIntegrationToolDefinition } from "@opencrane/models/agents";
 import { ___CloneCanonicalJson, type JsonValue } from "@opencrane/util";
 
-import type { BudgetPolicyInput, BudgetPolicySource, SessionAssemblyCommand, SessionAssemblyLoad, ToolPolicyInput, ToolPolicySource } from "./session-assembly.types.js";
+import type { BudgetPolicyInput, BudgetPolicySource, SessionAssemblyCommand, SessionAssemblyLoad, ToolPolicyInput, ToolPolicySource } from "./session-assembly.types";
 
 /**
  * Re-checks a published revision's model route, integrations, skills, and artifacts.

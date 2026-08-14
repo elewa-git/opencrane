@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { _ParseReserveConversationAsset } from "../conversation-asset.validator.js";
+import { _ParseReserveConversationAsset } from "../conversation-asset.validator";
 
 const _VALID_RESERVATION = { idempotencyKey: "upload-1", displayName: "brief.pdf", mediaType: "application/pdf", byteLength: 5, contentAddress: `sha256:${"a".repeat(64)}` } as const;
 

@@ -1,8 +1,8 @@
 import { Button, Card, Image, List, Slider, Text, TextField, type Catalog } from "@a2ui/angular/v0_8";
 
-import { A2uiChoiceComponent } from "./a2ui-choice.component.js";
-import { A2uiDateTimeComponent } from "./a2ui-date-time.component.js";
-import { A2uiComponentNames } from "./a2ui.types.js";
+import { A2uiChoiceComponent } from "./a2ui-choice.component";
+import { A2uiDateTimeComponent } from "./a2ui-date-time.component";
+import { A2uiComponentNames } from "./a2ui.types";
 
 /** Load the upstream text renderer. */
 function _loadText(): typeof Text { return Text; }

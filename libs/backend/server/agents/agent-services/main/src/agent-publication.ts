@@ -1,6 +1,6 @@
 import { __AreReviewedIntegrationToolDefinitionsValid, __DigestAgentRevisionContent, type AgentRevision } from "@opencrane/models/agents";
 
-import type { AgentServicePublicationRepository, PublishAgentRevisionCommand, PublishAgentRevisionFailureReason, PublishAgentRevisionResult } from "./agent-publication.types.js";
+import type { AgentServicePublicationRepository, PublishAgentRevisionCommand, PublishAgentRevisionFailureReason, PublishAgentRevisionResult } from "./agent-publication.types";
 
 /** Returns whether a string carries a non-empty value after trimming. */
 function _isPresent(value: string): boolean

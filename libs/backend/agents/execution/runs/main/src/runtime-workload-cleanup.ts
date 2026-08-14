@@ -1,5 +1,5 @@
-import type { RunWorkloadCleanupClaim } from "./run-cancellation.types.js";
-import type { RuntimeWorkloadCleanupReconcileResult, RuntimeWorkloadCleanupUseCase, RuntimeWorkloadCleanupUseCaseDependencies } from "./runtime-workload-cleanup.types.js";
+import type { RunWorkloadCleanupClaim } from "./run-cancellation.types";
+import type { RuntimeWorkloadCleanupReconcileResult, RuntimeWorkloadCleanupUseCase, RuntimeWorkloadCleanupUseCaseDependencies } from "./runtime-workload-cleanup.types";
 
 /** Turns "the Job is gone" into the confirmation command, carrying the claim generation that fences it. */
 function _AbsenceConfirmation(claim: RunWorkloadCleanupClaim)

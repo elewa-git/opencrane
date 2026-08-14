@@ -1,12 +1,12 @@
-import "./instrument.js";
+import "./instrument";
 
 import * as k8s from "@kubernetes/client-node";
 import { ___BindConsole, ___ShutdownTelemetry } from "@opencrane/backend/observability";
 import { _CreateMemoryGatewayServerTokenReviewer } from "@opencrane/backend/server/infra/workload-identity";
 
-import { _ReadConfig } from "./config.js";
-import { _log } from "./log.js";
-import { _CreateServer } from "./server.js";
+import { _ReadConfig } from "./config";
+import { _log } from "./log";
+import { _CreateServer } from "./server";
 
 /** Start the private memory gateway and drain it before telemetry shuts down. */
 function _Main(): void

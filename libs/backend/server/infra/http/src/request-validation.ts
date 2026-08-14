@@ -3,7 +3,7 @@ import type { RequestHandler } from "express";
 
 import { API_ERROR_LIMITS, ApiValidationIssueLocations, type ApiValidationIssue } from "@opencrane/contracts";
 
-import type { ValidatedPublicBodyHandler } from "./request-validation.types.js";
+import type { ValidatedPublicBodyHandler } from "./request-validation.types";
 
 /**
  * The one validation failure whose details may reach a client.

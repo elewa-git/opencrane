@@ -1,4 +1,4 @@
-import type { ObotCustodyPort, ProvisionObotCustodyCommand, ProvisionedObotCustody } from "./obot-custody.types.js";
+import type { ObotCustodyPort, ProvisionObotCustodyCommand, ProvisionedObotCustody } from "./obot-custody.types";
 
 /** Typed failure emitted when no authenticated Obot management transport is configured. */
 export class ObotCustodyUnavailableError extends Error

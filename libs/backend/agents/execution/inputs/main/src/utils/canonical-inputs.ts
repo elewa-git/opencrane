@@ -1,6 +1,6 @@
 import { ___IsSha256Digest } from "@opencrane/util";
 
-import type { IdentityEnvelopeInput } from "../session-assembly.types.js";
+import type { IdentityEnvelopeInput } from "../session-assembly.types";
 
 /** Returns whether a timestamp is already in the one UTC ISO-8601 form used in digests, e.g. `2026-01-01T00:00:00.000Z`. */
 export function _IsCanonicalUtcInstant(value: string): boolean

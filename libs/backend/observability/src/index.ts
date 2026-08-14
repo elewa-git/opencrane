@@ -10,11 +10,11 @@
  * via the dedicated `@opencrane/backend/observability/telemetry` entry point so it can
  * be imported in isolation before the rest of the application graph.
  */
-export { ___CreateLogger } from "./logger.js";
-export type { Logger } from "./logger.js";
-export { ___RunWithContext, ___GetContext, ___SetContextField, ___ContextMixin } from "./context.js";
-export { ___BindConsole } from "./console-bind.js";
-export { ___RequestContext } from "./express.js";
-export { ___DoWithTrace, ___DoWithoutTrace, ___GetActiveSpan, ___MarkActiveSpanFailed } from "./operation.js";
-export { ___StartTelemetry, ___ShutdownTelemetry } from "./telemetry.js";
-export type { RequestContext, LoggerOptions, TelemetryOptions } from "./observability.types.js";
+export { ___CreateLogger } from "./logger";
+export type { Logger } from "./logger";
+export { ___RunWithContext, ___GetContext, ___SetContextField, ___ContextMixin } from "./context";
+export { ___BindConsole } from "./console-bind";
+export { ___RequestContext } from "./express";
+export { ___DoWithTrace, ___DoWithoutTrace, ___GetActiveSpan, ___MarkActiveSpanFailed } from "./operation";
+export { ___StartTelemetry, ___ShutdownTelemetry } from "./telemetry";
+export type { RequestContext, LoggerOptions, TelemetryOptions } from "./observability.types";

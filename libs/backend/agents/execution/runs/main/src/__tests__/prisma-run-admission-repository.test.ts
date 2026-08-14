@@ -4,8 +4,8 @@ import type { Logger } from "@opencrane/backend/observability";
 import { ___DigestCanonicalJson } from "@opencrane/util";
 import { describe, expect, it, vi } from "vitest";
 
-import { PrismaRunAdmissionRepository } from "../prisma-run-admission-repository.js";
-import { RunAdmissionDenialReasons } from "../run-admission.types.js";
+import { PrismaRunAdmissionRepository } from "../prisma-run-admission-repository";
+import { RunAdmissionDenialReasons } from "../run-admission.types";
 
 /** Build one reviewed tool definition. */
 function _Tool(name = "search")

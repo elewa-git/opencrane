@@ -5,7 +5,7 @@ import type { Logger } from "pino";
 import type { PrismaClient } from "@prisma/client";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
-import { _DeprovisionByokKey, _ProvisionByokKey, _byokSecretName } from "../core/provision-byok-key.js";
+import { _DeprovisionByokKey, _ProvisionByokKey, _byokSecretName } from "../core/provision-byok-key";
 
 /**
  * The shared provisioning core behind both the BYOK route and the boot-time bootstrap. These pin

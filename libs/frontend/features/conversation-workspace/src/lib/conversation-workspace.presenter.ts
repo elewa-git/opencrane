@@ -7,8 +7,8 @@ import { ConversationAssetsStore } from "@opencrane/state/conversation/assets";
 import { ConversationElicitationStore, __MapToolActivity, type ElicitationResponseValue } from "@opencrane/state/conversation/elicitation";
 import { AgUiToolStatuses, ConversationCreationStates, ConversationEventStreamStatuses, ConversationLifecycles, ConversationPersonalAgentStatuses, ConversationRunStates, ConversationWorkspaceRouteStates, ConversationWorkspaceStore } from "@opencrane/state/conversation/workspace";
 
-import { _ConversationMessageViews, _ConversationOnboardingHistoryMessageViews, _ConversationOnboardingHistoryPresentation, _ConversationSummaryPresentation, _LiveMessageViews } from "./conversation-workspace.mapper.js";
-import type { ConversationWorkspaceAvailabilityPresentation } from "./conversation-workspace-feature.types.js";
+import { _ConversationMessageViews, _ConversationOnboardingHistoryMessageViews, _ConversationOnboardingHistoryPresentation, _ConversationSummaryPresentation, _LiveMessageViews } from "./conversation-workspace.mapper";
+import type { ConversationWorkspaceAvailabilityPresentation } from "./conversation-workspace-feature.types";
 
 /** Feature-scoped presenter that derives view state and delegates typed intents to owning stores. */
 export class ConversationWorkspacePresenter

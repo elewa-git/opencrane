@@ -10,9 +10,9 @@ import { ___DoWithTrace } from "@opencrane/backend/observability";
 import { PrismaConversationAssetOutputUnitOfWork, PrismaConversationAssetUnitOfWork, type ConversationAssetContentBroker, type ConversationAssetReadTarget } from "@opencrane/backend/server/conversation-assets";
 import { ___ParseAndValidateJson } from "@opencrane/util";
 
-import { _ReadArtifactMountedPem } from "./artifact-mounted-key.loader.js";
-import { _CreateArtifactReadLeaseSigner } from "./artifact-read-lease-signer.factory.js";
-import { _CreateArtifactServiceReadPort, _InternalArtifactServiceUrl } from "./artifact-service-read-port.factory.js";
+import { _ReadArtifactMountedPem } from "./artifact-mounted-key.loader";
+import { _CreateArtifactReadLeaseSigner } from "./artifact-read-lease-signer.factory";
+import { _CreateArtifactServiceReadPort, _InternalArtifactServiceUrl } from "./artifact-service-read-port.factory";
 
 /** Build the path this app uses to take a proof-authorized command through to the private artifact service. */
 export function _CreateArtifactUploadGateway(prisma: PrismaClient, environment: NodeJS.ProcessEnv = process.env): { upload(command: VerifiedArtifactUploadCommand): Promise<ArtifactUploadResult> }

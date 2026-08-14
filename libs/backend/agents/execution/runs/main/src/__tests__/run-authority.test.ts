@@ -1,8 +1,8 @@
 import type { AgentRevisionId, AgentRun, AgentRunId, AgentServiceState, SiloId } from "@opencrane/models/agents";
 import { describe, expect, it } from "vitest";
 
-import { __StartNextRunAttempt, __ValidateRunWorkloadAssignment } from "../run-authority.js";
-import type { AgentRunAuthorityRepository, AgentRunAuthoritySnapshot, AtomicRunAttemptResult, AtomicStartNextRunAttemptCommand, RunWorkloadAssignment, RunWorkloadAssignmentExpectation } from "../run-authority.types.js";
+import { __StartNextRunAttempt, __ValidateRunWorkloadAssignment } from "../run-authority";
+import type { AgentRunAuthorityRepository, AgentRunAuthoritySnapshot, AtomicRunAttemptResult, AtomicStartNextRunAttemptCommand, RunWorkloadAssignment, RunWorkloadAssignmentExpectation } from "../run-authority.types";
 
 /** Creates one participant-authorized retry command. */
 function _command(): AtomicStartNextRunAttemptCommand

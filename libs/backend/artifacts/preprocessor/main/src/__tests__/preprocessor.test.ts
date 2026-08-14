@@ -5,8 +5,8 @@ import { join } from "node:path";
 import type { ArtifactPreprocessorJobClaim } from "@opencrane/contracts";
 import { describe, expect, it, vi } from "vitest";
 
-import { __ProcessArtifactPreprocessorJob } from "../preprocessor.js";
-import type { ArtifactPreprocessorDependencies, ArtifactPreprocessorRemote, PdfTextExtractor } from "../preprocessor.types.js";
+import { __ProcessArtifactPreprocessorJob } from "../preprocessor";
+import type { ArtifactPreprocessorDependencies, ArtifactPreprocessorRemote, PdfTextExtractor } from "../preprocessor.types";
 
 /** Fixed capability-free claim fixture used by worker orchestration tests. */
 function _Claim(): ArtifactPreprocessorJobClaim

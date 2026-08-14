@@ -1,10 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 import { AG_UI_A2UI_ENVELOPE_VERSION, AgUiA2uiSurfaceStates, AgUiToolRecoveryProviderOutcomes, RunEventTypes } from "@opencrane/contracts";
 
-import { __StreamConversationProjection } from "../conversation-projection-stream.js";
-import { ConversationProjectionOutcomes } from "../conversation-projection-stream.types.js";
-import { ConversationProjectionReadStatuses } from "../conversation-projection-reader.types.js";
-import type { ConversationProjectionEventRow } from "../conversation-event-projector.types.js";
+import { __StreamConversationProjection } from "../conversation-projection-stream";
+import { ConversationProjectionOutcomes } from "../conversation-projection-stream.types";
+import { ConversationProjectionReadStatuses } from "../conversation-projection-reader.types";
+import type { ConversationProjectionEventRow } from "../conversation-event-projector.types";
 
 /** Deterministic clock that advances only when the live reader waits. */
 function _Clock()

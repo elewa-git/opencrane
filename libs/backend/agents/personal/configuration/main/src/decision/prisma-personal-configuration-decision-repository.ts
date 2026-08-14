@@ -2,7 +2,7 @@ import { PersonalConfigurationChangeState, type PrismaClient } from "@prisma/cli
 
 import { ___CreateLogger, type Logger } from "@opencrane/backend/observability";
 
-import { PersonalConfigurationDecisionCodes, type DecidePersonalConfigurationChangeCommand, type PersonalConfigurationChangeDecisionRepository } from "./personal-configuration-decision.types.js";
+import { PersonalConfigurationDecisionCodes, type DecidePersonalConfigurationChangeCommand, type PersonalConfigurationChangeDecisionRepository } from "./personal-configuration-decision.types";
 
 /** Prisma repository for the proposal owner's explicit accept-or-reject decision. */
 export class PrismaPersonalConfigurationDecisionRepository implements PersonalConfigurationChangeDecisionRepository

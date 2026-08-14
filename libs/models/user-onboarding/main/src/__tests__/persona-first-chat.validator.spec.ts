@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { PersonaFirstChatArchetypes, PersonaFirstChatColours, PersonaFirstChatTranscriptKinds, PersonaFirstChatTranscriptRoles, UserOnboardingRouteStates, type PersonaFirstChatSnapshot } from "../persona-first-chat.types.js";
-import { ___ParsePersonaFirstChatSnapshot } from "../persona-first-chat.validator.js";
+import { PersonaFirstChatArchetypes, PersonaFirstChatColours, PersonaFirstChatTranscriptKinds, PersonaFirstChatTranscriptRoles, UserOnboardingRouteStates, type PersonaFirstChatSnapshot } from "../persona-first-chat.types";
+import { ___ParsePersonaFirstChatSnapshot } from "../persona-first-chat.validator";
 
 /** Build one valid started projection for pure model validation tests. */
 function _Snapshot(overrides: Partial<PersonaFirstChatSnapshot> = {}): PersonaFirstChatSnapshot

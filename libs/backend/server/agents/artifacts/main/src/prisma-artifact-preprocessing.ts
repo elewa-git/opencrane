@@ -5,7 +5,7 @@ import { ArtifactKind, ArtifactPreprocessJobState, ArtifactRevisionState, Artifa
 import type { ArtifactPreprocessorClaimCommand, ArtifactPreprocessorFailureCommand } from "@opencrane/contracts";
 import { ___IsSha256ContentAddress } from "@opencrane/models/artifacts";
 
-import type { ArtifactPreprocessClaimProjection, ArtifactPreprocessCompletionRequest, ArtifactPreprocessOutputLeaseProjection, ArtifactPreprocessOutputLeaseRequest, ArtifactPreprocessRepository, ArtifactPreprocessSourceLeaseProjection, ClaimNextArtifactPreprocessJobResult, CompleteArtifactPreprocessJobResult, FailArtifactPreprocessJobResult, IssueArtifactPreprocessOutputLeaseResult } from "./artifact-preprocessing.types.js";
+import type { ArtifactPreprocessClaimProjection, ArtifactPreprocessCompletionRequest, ArtifactPreprocessOutputLeaseProjection, ArtifactPreprocessOutputLeaseRequest, ArtifactPreprocessRepository, ArtifactPreprocessSourceLeaseProjection, ClaimNextArtifactPreprocessJobResult, CompleteArtifactPreprocessJobResult, FailArtifactPreprocessJobResult, IssueArtifactPreprocessOutputLeaseResult } from "./artifact-preprocessing.types";
 
 /** Maximum time one worker attempt may retain source and output authority. */
 const _CLAIM_LIFETIME_MILLISECONDS = 5 * 60_000;

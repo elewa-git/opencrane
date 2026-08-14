@@ -1,8 +1,8 @@
 import { randomBytes } from "node:crypto";
 
-import { __AuthorizeConversationRead } from "./conversation-read-authorization.js";
-import { __DigestChannelInvocationContext } from "./channel-invocation-context-digest.js";
-import type { AuthorizedChannelTargetResult, ChannelOpaqueContextSource, ChannelTargetClock, ChannelTargetResolutionDependencies, ResolveChannelTargetCommand, ResolveChannelTargetResult } from "./channel-target-resolution.types.js";
+import { __AuthorizeConversationRead } from "./conversation-read-authorization";
+import { __DigestChannelInvocationContext } from "./channel-invocation-context-digest";
+import type { AuthorizedChannelTargetResult, ChannelOpaqueContextSource, ChannelTargetClock, ChannelTargetResolutionDependencies, ResolveChannelTargetCommand, ResolveChannelTargetResult } from "./channel-target-resolution.types";
 
 /** Real wall clock for production composition. */
 export class __SystemChannelTargetClock implements ChannelTargetClock

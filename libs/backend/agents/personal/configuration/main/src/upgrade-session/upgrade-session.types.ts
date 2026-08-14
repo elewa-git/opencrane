@@ -1,7 +1,7 @@
 import type { RunInputSnapshot } from "@opencrane/contracts";
 import type { JsonValue } from "@opencrane/util";
 
-import type { PersonalConfigurationPatch } from "../proposal/personal-configuration-patch.types.js";
+import type { PersonalConfigurationPatch } from "../proposal/personal-configuration-patch.types";
 
 /** The fields of one accepted upgrade_session tool call. */
 export interface UpgradeSessionInvocation

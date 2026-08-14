@@ -1,6 +1,6 @@
-import { ObotProtocolError, ObotTransportError } from "./obot-http.js";
-import type { ObotSession } from "./obot-http.types.js";
-import type { ObotCustodyPort, ProvisionObotCustodyCommand, ProvisionedObotCustody } from "./obot-custody.types.js";
+import { ObotProtocolError, ObotTransportError } from "./obot-http";
+import type { ObotSession } from "./obot-http.types";
+import type { ObotCustodyPort, ProvisionObotCustodyCommand, ProvisionedObotCustody } from "./obot-custody.types";
 
 /**
  * Fallback custody lifetime when Obot reports no expiry of its own.

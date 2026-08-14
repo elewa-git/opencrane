@@ -2,11 +2,11 @@ import { Prisma, type PrismaClient } from "@prisma/client";
 
 import { ___DoWithTrace, type Logger } from "@opencrane/backend/observability";
 
-import { __DigestCanonicalJson } from "./canonical-json-digest.js";
-import { __DeferToolRequest } from "./deferred-tool-approval.js";
-import { __ProjectDeferredToolApproval, __ValidateDeferredToolArguments } from "./deferred-tool-approval-schema.js";
-import type { DeferredToolApprovalOpenRepository, DeferredToolApprovalOpenUnitOfWork, DeferToolRequestCommand, DeferToolRequestResult, OpenDeferredToolApprovalCommand } from "./deferred-tool-approval-open.types.js";
-import { __MarkToolInvocationApprovalRejectedInTransaction } from "./prisma-tool-invocation-repository.js";
+import { __DigestCanonicalJson } from "./canonical-json-digest";
+import { __DeferToolRequest } from "./deferred-tool-approval";
+import { __ProjectDeferredToolApproval, __ValidateDeferredToolArguments } from "./deferred-tool-approval-schema";
+import type { DeferredToolApprovalOpenRepository, DeferredToolApprovalOpenUnitOfWork, DeferToolRequestCommand, DeferToolRequestResult, OpenDeferredToolApprovalCommand } from "./deferred-tool-approval-open.types";
+import { __MarkToolInvocationApprovalRejectedInTransaction } from "./prisma-tool-invocation-repository";
 
 /** One transaction-scoped operation over the approval-open repository. */
 type ApprovalOpenTransaction = <TResult>(operation: (repository: DeferredToolApprovalOpenRepository) => Promise<TResult>) => Promise<TResult>;

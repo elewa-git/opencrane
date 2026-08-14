@@ -1,7 +1,7 @@
 import type { ArtifactPreprocessorFailureCommand, ArtifactPreprocessorJobClaim } from "@opencrane/contracts";
 import { ___IsSha256ContentAddress } from "@opencrane/models/artifacts";
 
-import type { ArtifactPreprocessCompletionRequest, ArtifactPreprocessOutputLeaseProjection, ArtifactPreprocessOutputLeaseRequest, ArtifactPreprocessRepository, FailArtifactPreprocessJobResult } from "./artifact-preprocessing.types.js";
+import type { ArtifactPreprocessCompletionRequest, ArtifactPreprocessOutputLeaseProjection, ArtifactPreprocessOutputLeaseRequest, ArtifactPreprocessRepository, FailArtifactPreprocessJobResult } from "./artifact-preprocessing.types";
 
 /**
  * Take the next PDF conversion job and return only what the worker is allowed to know.

@@ -1,4 +1,4 @@
-import type { ApprovedPersonaEvidence, UserOnboardingOwner, UserOnboardingPersonaEvidencePort, UserOnboardingRecord, UserOnboardingRepository, UserOnboardingTransitionResult } from "./user-onboarding.types.js";
+import type { ApprovedPersonaEvidence, UserOnboardingOwner, UserOnboardingPersonaEvidencePort, UserOnboardingRecord, UserOnboardingRepository, UserOnboardingTransitionResult } from "./user-onboarding.types";
 
 /** Dependencies available to one state-owned survey-start transition. */
 export interface UserOnboardingSurveyStartContext

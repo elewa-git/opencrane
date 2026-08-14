@@ -1,7 +1,7 @@
 // Turns untrusted replay cursors and timeline entries into models. It lives beside the model so the cursor-binding and position rules cannot drift apart from the types.
 import { z } from "zod";
 
-import { ConversationTimelineEntryKinds, type ConversationReplayCursor, type ConversationTimelineEntry } from "./timeline.types.js";
+import { ConversationTimelineEntryKinds, type ConversationReplayCursor, type ConversationTimelineEntry } from "./timeline.types";
 
 /** Non-empty OpenCrane-owned identifier accepted at the timeline boundary. */
 const _IdentifierSchema = z.string().trim().min(1);

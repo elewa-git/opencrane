@@ -1,6 +1,6 @@
 import type { PrismaClient } from "@prisma/client";
 
-import { _log } from "../log.js";
+import { _log } from "../log";
 
 /**
  * Resolve the caller's ClusterTenant from their stable IdP subject and authoritative organisation

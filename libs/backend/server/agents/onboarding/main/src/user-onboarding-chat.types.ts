@@ -1,5 +1,5 @@
-import type { UserOnboardingAnswerStatuses, UserOnboardingBootstrapArchetypes, UserOnboardingChatMessageKinds, UserOnboardingChatRoles, UserOnboardingPersonaColours, UserOnboardingStates } from "./user-onboarding.enums.js";
-import type { UserOnboardingOwner, UserOnboardingRecord } from "./user-onboarding.types.js";
+import type { UserOnboardingAnswerStatuses, UserOnboardingBootstrapArchetypes, UserOnboardingChatMessageKinds, UserOnboardingChatRoles, UserOnboardingPersonaColours, UserOnboardingStates } from "./user-onboarding.enums";
+import type { UserOnboardingOwner, UserOnboardingRecord } from "./user-onboarding.types";
 
 /** Exact approved persona facts required to select and label the bootstrap script. */
 export interface ApprovedPersonaBootstrapEvidence

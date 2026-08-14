@@ -2,9 +2,9 @@ import { MemoryOutboxEventKind, Prisma } from "@prisma/client";
 import { MemoryFactProvenanceSourceKinds } from "@opencrane/contracts";
 import { describe, expect, it, vi } from "vitest";
 
-import { __MemoryCatalogCorrectionConflictError } from "../memory-catalog-errors.js";
-import { MemoryCatalogAtomicStatuses, MemoryFactConsentStates } from "../memory-catalog.types.js";
-import { PrismaMemoryCatalogUnitOfWork } from "../prisma-memory-catalog-unit-of-work.js";
+import { __MemoryCatalogCorrectionConflictError } from "../memory-catalog-errors";
+import { MemoryCatalogAtomicStatuses, MemoryFactConsentStates } from "../memory-catalog.types";
+import { PrismaMemoryCatalogUnitOfWork } from "../prisma-memory-catalog-unit-of-work";
 
 /** Builds a transaction facade sufficient for the unit of work to construct its repository. */
 function _Transaction()

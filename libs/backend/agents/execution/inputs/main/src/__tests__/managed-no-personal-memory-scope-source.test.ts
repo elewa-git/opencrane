@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { ManagedNoPersonalMemoryScopeSource } from "../managed-no-personal-memory-scope-source.js";
+import { ManagedNoPersonalMemoryScopeSource } from "../managed-no-personal-memory-scope-source";
 
 describe("ManagedNoPersonalMemoryScopeSource", function _DescribeManagedNoPersonalMemoryScopeSource()
 {

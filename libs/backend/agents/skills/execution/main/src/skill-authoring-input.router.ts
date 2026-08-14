@@ -2,7 +2,7 @@ import { Readable } from "node:stream";
 
 import { Router, type Request, type Response } from "express";
 
-import type { SkillAuthoringInputRouterDependencies } from "./skill-authoring-input.types.js";
+import type { SkillAuthoringInputRouterDependencies } from "./skill-authoring-input.types";
 
 /** Fixed projected-token audience for the isolated authoring worker class. */
 const _AUTHORING_AUDIENCE = "opencrane-skill-authoring";

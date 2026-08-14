@@ -1,8 +1,8 @@
 import { ChangeDetectionStrategy, Component, Input, computed, linkedSignal, signal } from "@angular/core";
 import { DynamicComponent, type Types } from "@a2ui/angular/v0_8";
 
-import { A2uiChoiceKinds, type A2uiChoiceOption, type A2uiChoiceSelections } from "./a2ui-control.types.js";
-import { A2uiComponentNames } from "./a2ui.types.js";
+import { A2uiChoiceKinds, type A2uiChoiceOption, type A2uiChoiceSelections } from "./a2ui-control.types";
+import { A2uiComponentNames } from "./a2ui.types";
 
 /** One option after its label has been resolved, ready to bind to a native control. */
 interface _ResolvedChoiceOption

@@ -1,9 +1,9 @@
 import { AgentRunState, ApprovalRequestState, ElicitationRequestState, ExternalActionClaimKind, ExternalActionRecoveryMode, Prisma, ToolInvocationState, ToolResultDeliveryState } from "@prisma/client";
 
-import { __DigestCanonicalJson } from "./canonical-json-digest.js";
-import type { CancelPendingRunApprovalAuthorityCommand, CancelPendingRunApprovalAuthorityResult, RunApprovalCancellationRepository, RunApprovalCancellationUnitOfWork, RunCancellationToolInvocation } from "./run-approval-cancellation.types.js";
-import { __PlanToolInvocationLifecycle } from "./tool-invocation-lifecycle.js";
-import { ExternalActionClaimKinds, ExternalActionRecoveryModes, TOOL_INVOCATION_PREPARATION_POLICY, ToolInvocationLifecycleActions, ToolInvocationLifecycleEvents, ToolInvocationStates } from "./tool-invocation-lifecycle.types.js";
+import { __DigestCanonicalJson } from "./canonical-json-digest";
+import type { CancelPendingRunApprovalAuthorityCommand, CancelPendingRunApprovalAuthorityResult, RunApprovalCancellationRepository, RunApprovalCancellationUnitOfWork, RunCancellationToolInvocation } from "./run-approval-cancellation.types";
+import { __PlanToolInvocationLifecycle } from "./tool-invocation-lifecycle";
+import { ExternalActionClaimKinds, ExternalActionRecoveryModes, TOOL_INVOCATION_PREPARATION_POLICY, ToolInvocationLifecycleActions, ToolInvocationLifecycleEvents, ToolInvocationStates } from "./tool-invocation-lifecycle.types";
 
 /** Invocation states cancellation may close, because no provider call can be in flight in any of them. */
 const _CANCELLABLE_INVOCATION_STATES: readonly ToolInvocationState[] = [ToolInvocationState.Preparing, ToolInvocationState.AwaitingApproval, ToolInvocationState.Ready, ToolInvocationState.Reconciling, ToolInvocationState.RecoveryRequired];

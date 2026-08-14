@@ -1,4 +1,4 @@
-import { PersonaLifecycleOutcomes } from "./persona-lifecycle.types.js";
+import { PersonaLifecycleOutcomes } from "./persona-lifecycle.types";
 
 /** Reasons onboarding provisioning refuses a request. */
 export enum PersonaOnboardingDenialReasons

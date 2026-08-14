@@ -3,8 +3,8 @@ import { describe, expect, it, vi } from "vitest";
 
 import type { JsonValue } from "@opencrane/util";
 
-import { PrismaRuntimeTerminalReporter } from "../prisma-runtime-terminal-reporter.js";
-import type { RuntimeTerminalReportCommand, RuntimeTerminalEventType } from "../runtime-terminal-reporter.types.js";
+import { PrismaRuntimeTerminalReporter } from "../prisma-runtime-terminal-reporter";
+import type { RuntimeTerminalReportCommand, RuntimeTerminalEventType } from "../runtime-terminal-reporter.types";
 
 /** Builds the minimum direct run row needed by the terminal reporting authority. */
 function _run(overrides: Record<string, unknown> = {})

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { _EstimateSavings } from "../core/savings.js";
-import type { SavingsSample } from "../core/savings.types.js";
+import { _EstimateSavings } from "../core/savings";
+import type { SavingsSample } from "../core/savings.types";
 
 /** A deterministic RNG that cycles through a fixed sequence so the bootstrap is reproducible. */
 function _seqRng(values: readonly number[]): () => number

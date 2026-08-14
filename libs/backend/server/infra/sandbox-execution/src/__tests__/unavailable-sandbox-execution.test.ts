@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { __UnavailableSandboxJobExecutor, SandboxExecutionUnavailableError } from "../unavailable-sandbox-execution.js";
+import { __UnavailableSandboxJobExecutor, SandboxExecutionUnavailableError } from "../unavailable-sandbox-execution";
 
 describe("unavailable sandbox job executor", function _suite()
 {

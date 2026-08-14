@@ -4,8 +4,8 @@ import { McpApprovalStatus, McpConnectionStatus, McpServerType, type CredentialF
 import { Prisma, type PrismaClient } from "@prisma/client";
 
 import { ___SortBy } from "@opencrane/util";
-import type { McpAccessPolicyRequest } from "../routes/mcp-operator.types.js";
-import type { McpOperatorCaller } from "./mcp-operator.logic.types.js";
+import type { McpAccessPolicyRequest } from "../routes/mcp-operator.types";
+import type { McpOperatorCaller } from "./mcp-operator.logic.types";
 
 /** MCP server row joined with the access policy + entitled users used for filtering. */
 type _McpServerWithPolicyRow = Prisma.McpServerGetPayload<{ include: { accessPolicy: { include: { users: true } } } }>;

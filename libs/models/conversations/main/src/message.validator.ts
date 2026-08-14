@@ -1,8 +1,8 @@
 // Turns untrusted values from storage or the API into message models. It lives beside the model so the provenance and completion rules change together with the types.
 import { z } from "zod";
 
-import { __HasValidMessageCompletion } from "./conversation-invariants.js";
-import { MessageContentBlockKinds, MessageRoles, MessageSources, MessageStates, type Message, type MessageContentBlock } from "./message.types.js";
+import { __HasValidMessageCompletion } from "./conversation-invariants";
+import { MessageContentBlockKinds, MessageRoles, MessageSources, MessageStates, type Message, type MessageContentBlock } from "./message.types";
 
 /** Non-empty OpenCrane-owned identifier accepted at the message boundary. */
 const _IdentifierSchema = z.string().trim().min(1);

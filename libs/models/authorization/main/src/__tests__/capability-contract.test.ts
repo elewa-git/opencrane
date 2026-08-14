@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { CapabilityProofBindingExpectation, CapabilityProofClaims, CapabilityProofExpectation } from "../capability-proof.types.js";
-import type { ActionCapability, CanonicalJsonSha256Digest } from "../capability.types.js";
+import type { CapabilityProofBindingExpectation, CapabilityProofClaims, CapabilityProofExpectation } from "../capability-proof.types";
+import type { ActionCapability, CanonicalJsonSha256Digest } from "../capability.types";
 
 /** Valid canonical digest shared by the exact capability fixtures. */
 const DIGEST = `sha256:${"a".repeat(64)}` as CanonicalJsonSha256Digest;

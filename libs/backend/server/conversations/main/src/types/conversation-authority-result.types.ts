@@ -1,7 +1,7 @@
 import type { StartNextRunAttemptResult } from "@opencrane/backend/agents/execution/runs";
 import type { AgentThreadOrigin } from "@opencrane/backend/conversations/agent-threads";
 
-import type { ConversationDetail, ConversationMessageView } from "./conversation-view.types.js";
+import type { ConversationDetail, ConversationMessageView } from "./conversation-view.types";
 
 /**
  * Why a conversation write was refused. These string values ARE the API contract: the router

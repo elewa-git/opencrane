@@ -1,7 +1,7 @@
 import { Injectable, inject, signal } from "@angular/core";
 
-import { CONVERSATION_WORKSPACE_GATEWAY } from "./conversation-workspace.gateway.js";
-import { ConversationOnboardingHistoryStatuses, type ConversationOnboardingHistoryProjection } from "./conversation-workspace.types.js";
+import { CONVERSATION_WORKSPACE_GATEWAY } from "./conversation-workspace.gateway";
+import { ConversationOnboardingHistoryStatuses, type ConversationOnboardingHistoryProjection } from "./conversation-workspace.types";
 
 /** Initial honest state before the optional onboarding history read completes. */
 const _UNAVAILABLE_ONBOARDING_HISTORY: ConversationOnboardingHistoryProjection = { status: ConversationOnboardingHistoryStatuses.Unavailable, history: null };

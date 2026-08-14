@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { __DecodeConversationProjectionCursor, __EncodeConversationProjectionCursor } from "../conversation-projection-cursor.js";
+import { __DecodeConversationProjectionCursor, __EncodeConversationProjectionCursor } from "../conversation-projection-cursor";
 
 describe("conversation timeline cursor", function _Suite()
 {

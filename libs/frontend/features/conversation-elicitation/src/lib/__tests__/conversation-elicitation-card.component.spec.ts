@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { CONVERSATION_ELICITATION_VERSION, ElicitationBodyKinds, ElicitationPurposes, ElicitationRequestStates, type ConversationElicitation } from "@opencrane/state/conversation/elicitation";
 
-import { _CanSubmitElicitation } from "../conversation-elicitation-card.component.js";
+import { _CanSubmitElicitation } from "../conversation-elicitation-card.component";
 
 /** Build one requested interaction with the supplied body. */
 function _Request(body: ConversationElicitation["body"]): ConversationElicitation

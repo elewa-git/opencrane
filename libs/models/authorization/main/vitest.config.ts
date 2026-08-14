@@ -1,5 +1,5 @@
 import { defineConfig } from "vitest/config";
-import { _PackageCacheDir } from "../../../../vitest.cache.js";
+import { _PackageCacheDir } from "../../../../vitest.cache";
 
 /** Vitest configuration for the pure authorization model. */
 export default defineConfig({

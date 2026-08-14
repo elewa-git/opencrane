@@ -1,7 +1,7 @@
 import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 
-import { __AppendAuditDecision } from "./audit-decision.js";
-import type { StandaloneFirstUserAdmissionAuditAppender, StandaloneFirstUserAuditClaim } from "./standalone-first-user-audit.types.js";
+import { __AppendAuditDecision } from "./audit-decision";
+import type { StandaloneFirstUserAdmissionAuditAppender, StandaloneFirstUserAuditClaim } from "./standalone-first-user-audit.types";
 
 /**
  * Builds the audit adapter identity uses when it admits a standalone silo's first owner.

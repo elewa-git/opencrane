@@ -1,6 +1,6 @@
 import { PersonaInterviewState, PersonaRevisionState, type Prisma } from "@prisma/client";
 
-import { PersonaAggregateInterviewStates, type PersonaAggregateReadRepository, type PersonaDraftRevisionReadCommand, type PersonaDraftRevisionRecord, type PersonaInterviewReadCommand, type PersonaInterviewRecord, type PersonaProfileOwnerReadCommand, type PersonaProfileReadCommand, type PersonaProfileRecord } from "./persona-aggregate-read-repository.types.js";
+import { PersonaAggregateInterviewStates, type PersonaAggregateReadRepository, type PersonaDraftRevisionReadCommand, type PersonaDraftRevisionRecord, type PersonaInterviewReadCommand, type PersonaInterviewRecord, type PersonaProfileOwnerReadCommand, type PersonaProfileReadCommand, type PersonaProfileRecord } from "./persona-aggregate-read-repository.types";
 
 /**
  * Reads the profile, interview, and revision rows every persona lifecycle step needs, plus the next

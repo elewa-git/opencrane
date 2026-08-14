@@ -3,7 +3,7 @@ import { IntegrationCustodyState, IntegrationState, type PrismaClient } from "@p
 import { __AreReviewedIntegrationToolDefinitionsValid, type ReviewedIntegrationToolDefinition } from "@opencrane/models/agents";
 import { ___CloneCanonicalJson, type JsonValue } from "@opencrane/util";
 
-import type { IntegrationAuthorityClock, IntegrationAuthorityRepository, ResolveIntegrationAssignmentCommand, ResolveIntegrationAssignmentResult } from "./integration-resolution.types.js";
+import type { IntegrationAuthorityClock, IntegrationAuthorityRepository, ResolveIntegrationAssignmentCommand, ResolveIntegrationAssignmentResult } from "./integration-resolution.types";
 
 /**
  * The real system clock, used in production for custody expiry checks.

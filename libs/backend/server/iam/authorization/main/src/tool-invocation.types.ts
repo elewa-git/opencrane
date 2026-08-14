@@ -1,6 +1,6 @@
 import type { JsonValue } from "@opencrane/util";
 
-import { TOOL_INVOCATION_PREPARATION_POLICY, type ExternalActionClaimKinds, type ExternalActionRecoveryModes, type ToolInvocationStates } from "./tool-invocation-lifecycle.types.js";
+import { TOOL_INVOCATION_PREPARATION_POLICY, type ExternalActionClaimKinds, type ExternalActionRecoveryModes, type ToolInvocationStates } from "./tool-invocation-lifecycle.types";
 
 /** Retry limits for the preparation phase, which runs before any provider is called. */
 export interface ToolInvocationPreparationPolicy

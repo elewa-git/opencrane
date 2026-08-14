@@ -1,4 +1,4 @@
-import type { ConfirmRunWorkloadCleanupResult, RunCancellationRepository, RunWorkloadCleanupProjection } from "./run-cancellation.types.js";
+import type { ConfirmRunWorkloadCleanupResult, RunCancellationRepository, RunWorkloadCleanupProjection } from "./run-cancellation.types";
 
 /** Physical evidence returned by the runtime workload cleanup adapter. */
 export type RuntimeWorkloadCleanupStoreResult =

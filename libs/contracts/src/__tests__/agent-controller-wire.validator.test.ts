@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { describe, expect, it } from "vitest";
 
-import { ___IsAgentControllerIdentifier, ___IsEmptyAgentControllerCommand, _AgentControllerBoundedIdentifierSchema, _AgentControllerMillisecondInstantSchema, _ParseAgentControllerCommand, _ParseAgentControllerModel } from "../agent-controller-wire.validator.js";
+import { ___IsAgentControllerIdentifier, ___IsEmptyAgentControllerCommand, _AgentControllerBoundedIdentifierSchema, _AgentControllerMillisecondInstantSchema, _ParseAgentControllerCommand, _ParseAgentControllerModel } from "../agent-controller-wire.validator";
 
 describe("agent-controller wire grammar", function _DescribeWireGrammar()
 {

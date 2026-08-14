@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { PersonalMemoryScopeSource } from "../personal-memory-scope-source.js";
+import { PersonalMemoryScopeSource } from "../personal-memory-scope-source";
 
 /** Build a dataset repository resolving the one verified personal dataset. */
 function _Datasets(): { findActivePersonalDataset: ReturnType<typeof vi.fn> }

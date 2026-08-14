@@ -1,6 +1,6 @@
 import { IntegrationCustodyState, IntegrationState, Prisma, type PrismaClient } from "@prisma/client";
 
-import type { IntegrationCustodyRepository } from "./integration-custody-provisioning.types.js";
+import type { IntegrationCustodyRepository } from "./integration-custody-provisioning.types";
 
 /**
  * Records an Obot-issued custody handle in Postgres, but only after re-checking that the

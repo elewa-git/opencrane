@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { __AuthorizeConversationRead } from "../conversation-read-authorization.js";
+import { __AuthorizeConversationRead } from "../conversation-read-authorization";
 
 /** Canonical open participant-bound conversation. */
 const _CONVERSATION = { conversationId: "conversation-1", siloId: "silo-1", agentServiceId: "service-1", mode: "agent_session", lifecycle: "open", participantUserIds: ["user-1"] } as const;

@@ -2,9 +2,9 @@ import { describe, expect, it } from "vitest";
 
 import { AgentScheduleOverlapPolicies, ManagedRunAdmissionOutcomes, type ManagedRunAdmissionPort, type ManagedRunAdmissionResult, type ManagedRunNowCommand } from "@opencrane/backend/server/agents/agent-services";
 
-import { ScheduleCursorAdvanceOutcomes } from "../schedule-tick.enums.js";
-import { ScheduleTicker } from "../schedule-ticker.js";
-import type { AdvanceScheduleCursorCommand, EnabledScheduleSnapshot, ScheduleTickerTransaction, ScheduleTickerUnitOfWork, ScheduleTickerWork } from "../schedule-ticker-unit-of-work.types.js";
+import { ScheduleCursorAdvanceOutcomes } from "../schedule-tick.enums";
+import { ScheduleTicker } from "../schedule-ticker";
+import type { AdvanceScheduleCursorCommand, EnabledScheduleSnapshot, ScheduleTickerTransaction, ScheduleTickerUnitOfWork, ScheduleTickerWork } from "../schedule-ticker-unit-of-work.types";
 
 /** Fixed enabled schedule snapshot used to prove version-fenced cursor persistence. */
 const _SNAPSHOT: EnabledScheduleSnapshot = {

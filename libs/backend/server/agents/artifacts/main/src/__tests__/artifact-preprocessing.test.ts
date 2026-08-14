@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { __ClaimArtifactPreprocessJob, __IssueArtifactPreprocessOutputLease } from "../artifact-preprocessing.js";
-import type { ArtifactPreprocessRepository } from "../artifact-preprocessing.types.js";
+import { __ClaimArtifactPreprocessJob, __IssueArtifactPreprocessOutputLease } from "../artifact-preprocessing";
+import type { ArtifactPreprocessRepository } from "../artifact-preprocessing.types";
 
 /** Build a complete repository mock while allowing focused method overrides. */
 function _Repository(overrides: Partial<ArtifactPreprocessRepository> = {}): ArtifactPreprocessRepository

@@ -2,7 +2,7 @@ import { __BuildGovernedSkillWorkloadJob, type SkillWorkloadJobProfile } from "@
 import { __CreateSkillWorkloadBootstrapReference } from "@opencrane/contracts";
 import { ___DoWithTrace } from "@opencrane/backend/observability";
 
-import { SkillWorkloadControllerReconcileOutcomes, type SkillWorkloadControllerOptions, type SkillWorkloadControllerProfiles, type SkillWorkloadControllerReconcileResult, type SkillWorkloadControllerReleaseReconcileResult } from "./skill-workload-controller.types.js";
+import { SkillWorkloadControllerReconcileOutcomes, type SkillWorkloadControllerOptions, type SkillWorkloadControllerProfiles, type SkillWorkloadControllerReconcileResult, type SkillWorkloadControllerReleaseReconcileResult } from "./skill-workload-controller.types";
 
 /** Return the Job UID Kubernetes assigned, and fail if the API did not send one. */
 function _RequireWorkloadUid(uid: string | undefined): string

@@ -1,7 +1,7 @@
 import type { TextMessageStartEvent } from "@ag-ui/core";
 
-import type { AgUiStreamState } from "../ag-ui-stream.types.js";
-import { AgUiMessageStatuses } from "./message.types.js";
+import type { AgUiStreamState } from "../ag-ui-stream.types";
+import { AgUiMessageStatuses } from "./message.types";
 
 /** Create a new streaming message from its start frame. */
 export function _StartMessage(state: AgUiStreamState, messageId: string, role: TextMessageStartEvent["role"]): AgUiStreamState

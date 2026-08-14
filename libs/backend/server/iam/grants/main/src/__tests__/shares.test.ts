@@ -4,7 +4,7 @@ import type { PrismaClient } from "@prisma/client";
 import request from "supertest";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { sharesRouter } from "../routes/shares.js";
+import { sharesRouter } from "../routes/shares";
 
 vi.mock("@opencrane/models/authorization", async () =>
 {
