@@ -8,6 +8,7 @@ ul { display: grid; gap: 0.25rem; margin: 0; padding: 0.75rem; list-style: none;
 nav button { display: flex; width: calc(100% - 1.5rem); align-items: flex-start; justify-content: space-between; gap: 0.75rem; margin: 0.75rem; padding: 0.875rem; border: 1px solid transparent; border-radius: var(--p-border-radius-lg); background: transparent; color: inherit; text-align: start; cursor: pointer; }
 li button { width: 100%; margin: 0; }
 nav button:hover { background: var(--p-surface-100); } .conversation-list__item--selected { border-color: var(--p-primary-200) !important; background: var(--p-primary-50) !important; }
+.conversation-list__item--selected small, .conversation-list__item--selected time { color: var(--oc-ink-muted); }
 nav button span { display: grid; gap: 0.25rem; min-width: 0; } nav button strong, nav button small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } time { flex: none; color: var(--p-text-muted-color); font-size: 0.75rem; }
 .conversation-list__empty { margin: auto; max-width: 15rem; padding: 2rem 1rem; color: var(--p-text-muted-color); text-align: center; }
 @media (max-width: 52rem) { :host { border-inline-end: 0; border-block-end: 1px solid var(--p-surface-200); } nav { max-block-size: 12rem; } }

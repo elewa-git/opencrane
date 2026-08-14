@@ -12,7 +12,7 @@
 				} @else if (store.selected(); as selected) {
 					<header class="conversation-workspace__header"><div><small>{{ selectedSummary()?.modeLabel }}</small><h1>{{ selectedSummary()?.title }}</h1><p>{{ selectedSummary()?.participantLabel }}</p></div><div><p-button label="Archive" icon="pi pi-inbox" severity="secondary" [text]="true" [disabled]="store.conversationCommandBusy()" (onClick)="archiveConversation()" /><p-button label="Close" icon="pi pi-lock" severity="danger" [text]="true" [disabled]="store.conversationCommandBusy() || selected.lifecycle === lifecycles.Closed" (onClick)="store.close()" /></div></header>
 					@if (liveStatus(); as status) { <wo-conversation-status-line [status]="status" /> }
-					<section class="conversation-workspace__transcript" aria-label="Conversation messages" aria-live="polite">
+					<section class="conversation-workspace__transcript" aria-label="Conversation messages" aria-live="polite" tabindex="0">
 						@if (messages().length === 0) { <div class="conversation-workspace__empty"><h2>Start the conversation</h2><p>Messages, tool activity, files, and Agent-created interfaces will appear here.</p></div> }
 						@for (entry of messages(); track entry.message.id) {
 							<div class="conversation-workspace__message" [id]="entry.message.id" tabindex="-1"><wo-conversation-message [message]="entry.message"><wo-conversation-rich-text conversation-message-rich-card [presentation]="entry.richText" /></wo-conversation-message>
