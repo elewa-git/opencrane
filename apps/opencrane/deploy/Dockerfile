@@ -9,16 +9,21 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 COPY package.json package-lock.json tsconfig.json nx.json ./
+# Only the manifests the install itself reads are copied before it. Source used to come first,
+# which meant editing any library invalidated this layer and paid for a full npm ci on every
+# build. `libs` is not an npm workspace (the root "workspaces" field is apps/* and website), so
+# the install never needed it.
+COPY apps/opencrane/package.json apps/opencrane/
+# npm workspaces install: root package.json's "workspaces" field includes apps/* and website
+RUN npm ci
+
 # All workspace libs (shared libs + libs/backend/*/main) come in wholesale so the image never
 # needs editing when a backend package is added; the root .dockerignore keeps
 # node_modules/dist out of the context.
 COPY libs libs
 COPY apps/opencrane/scripts apps/opencrane/scripts
-COPY apps/opencrane/package.json apps/opencrane/tsconfig.json apps/opencrane/prisma.config.ts apps/opencrane/
+COPY apps/opencrane/tsconfig.json apps/opencrane/prisma.config.ts apps/opencrane/
 COPY apps/opencrane/prisma apps/opencrane/prisma
-# npm workspaces install: root package.json's "workspaces" field includes apps/* and website
-RUN npm ci
-
 COPY apps/opencrane/src apps/opencrane/src
 # Generate Prisma client, build dependencies first, then the app
 RUN npm run build -w @opencrane/server

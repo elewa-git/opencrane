@@ -1,62 +1,15 @@
-import { McpAccessPolicy, McpApprovalStatus, McpConnectionStatus, McpCredentialField, McpDirectory, McpEntitledUser, McpInstalledServer, McpServer, McpServerType } from "@opencrane/core";
+import { McpAccessPolicy, McpApprovalStatus, McpConnectionStatus, McpDirectory, McpEntitledUser, McpInstalledServer, McpServer, McpServerType } from "@opencrane/core";
+
+import { McpAccessPolicyWire, McpInstalledWire, McpServerWire } from "./mcp-gateway.types";
 
 /**
- * Wire shapes + mappers for the live OpenCrane MCP gateway.
+ * Mappers for the live OpenCrane MCP gateway.
  *
- * Local projections of the `/api/v1/mcp/...` JSON — WeOwnAI never imports
- * OpenCrane source. Enum-bearing fields arrive as raw strings, so the mappers
- * coerce them through the known enum values (with a safe default) and fill
- * missing collections, so every field on the read models is always set — components never see undefined.
+ * The wire shapes they read live in `mcp-gateway.types.ts`. Enum-bearing fields
+ * arrive as raw strings, so the mappers coerce them through the known enum
+ * values (with a safe default) and fill missing collections, so every field on
+ * the read models is always set — components never see undefined.
  */
-
-/** Wire shape of a catalogue server. */
-export interface McpServerWire
-{
-	/** Stable id / slug. */
-	id: string;
-	/** Display name. */
-	name?: string;
-	/** Short description. */
-	description?: string;
-	/** Publisher label. */
-	publisher?: string;
-	/** Tile glyph. */
-	glyph?: string;
-	/** Connection type (raw string). */
-	type?: string;
-	/** Lifecycle status (raw string). */
-	approvalStatus?: string;
-	/** Credential fields. */
-	credentialSchema?: McpCredentialField[];
-	/** Entitlement summary. */
-	entitlementSummary?: string;
-}
-
-/** Wire shape of an installed-server record. */
-export interface McpInstalledWire
-{
-	/** Catalogue server id. */
-	serverId: string;
-	/** Connection status (raw string). */
-	connectionStatus?: string;
-	/** Relative last-used label. */
-	lastUsed?: string | null;
-	/** Connected OAuth account. */
-	connectedAccount?: string;
-}
-
-/** Wire shape of an access policy. */
-export interface McpAccessPolicyWire
-{
-	/** Server id. */
-	serverId: string;
-	/** Org-wide grant flag. */
-	everyoneInOrg?: boolean;
-	/** Entitled groups. */
-	groups?: string[];
-	/** Entitled users. */
-	users?: McpEntitledUser[];
-}
 
 /** Coerce a raw string into a {@link McpServerType}, defaulting to single-user. */
 function _ToServerType(raw: string | undefined): McpServerType

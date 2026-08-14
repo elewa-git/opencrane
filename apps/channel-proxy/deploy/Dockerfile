@@ -3,9 +3,9 @@ FROM node:22-bookworm-slim AS build
 
 WORKDIR /app
 COPY package.json package-lock.json tsconfig.json nx.json ./
-COPY libs libs
 COPY apps/channel-proxy/package.json apps/channel-proxy/project.json apps/channel-proxy/tsconfig.json apps/channel-proxy/
 RUN npm ci
+COPY libs libs
 
 COPY apps/channel-proxy/src apps/channel-proxy/src
 RUN npx nx run channel-proxy:build

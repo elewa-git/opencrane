@@ -1,6 +1,6 @@
 import { InjectionToken } from "@angular/core";
 
-import { McpAccessPolicy, McpDirectory, McpInstalledServer, McpServer } from "@opencrane/core";
+import { McpAccessPolicy, McpCredentialField, McpDirectory, McpEntitledUser, McpInstalledServer, McpServer } from "@opencrane/core";
 
 /**
  * Abstraction over the OpenCrane MCP catalogue / credential / activation reads
@@ -138,3 +138,58 @@ export interface McpGateway
 
 /** DI token for the active {@link McpGateway} implementation. */
 export const MCP_GATEWAY: InjectionToken<McpGateway> = new InjectionToken<McpGateway>("WO_MCP_GATEWAY");
+
+/*
+ * Wire shapes of the `/api/v1/mcp/...` JSON. These are local projections —
+ * WeOwnAI never imports OpenCrane source. The mappers in `mcp-mapper.util.ts`
+ * turn them into the read models above.
+ */
+
+/** Wire shape of a catalogue server. */
+export interface McpServerWire
+{
+	/** Stable id / slug. */
+	id: string;
+	/** Display name. */
+	name?: string;
+	/** Short description. */
+	description?: string;
+	/** Publisher label. */
+	publisher?: string;
+	/** Tile glyph. */
+	glyph?: string;
+	/** Connection type (raw string). */
+	type?: string;
+	/** Lifecycle status (raw string). */
+	approvalStatus?: string;
+	/** Credential fields. */
+	credentialSchema?: McpCredentialField[];
+	/** Entitlement summary. */
+	entitlementSummary?: string;
+}
+
+/** Wire shape of an installed-server record. */
+export interface McpInstalledWire
+{
+	/** Catalogue server id. */
+	serverId: string;
+	/** Connection status (raw string). */
+	connectionStatus?: string;
+	/** Relative last-used label. */
+	lastUsed?: string | null;
+	/** Connected OAuth account. */
+	connectedAccount?: string;
+}
+
+/** Wire shape of an access policy. */
+export interface McpAccessPolicyWire
+{
+	/** Server id. */
+	serverId: string;
+	/** Org-wide grant flag. */
+	everyoneInOrg?: boolean;
+	/** Entitled groups. */
+	groups?: string[];
+	/** Entitled users. */
+	users?: McpEntitledUser[];
+}

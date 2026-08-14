@@ -3,9 +3,9 @@ FROM node:22-bookworm-slim AS build
 
 WORKDIR /app
 COPY package.json package-lock.json tsconfig.json nx.json ./
-COPY libs libs
 COPY apps/memory-gateway/package.json apps/memory-gateway/project.json apps/memory-gateway/tsconfig.json apps/memory-gateway/
 RUN npm ci
+COPY libs libs
 
 COPY apps/memory-gateway/src apps/memory-gateway/src
 RUN npx nx run memory-gateway:build

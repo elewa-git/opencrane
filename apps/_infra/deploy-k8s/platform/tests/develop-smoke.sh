@@ -24,6 +24,9 @@ SMOKE_AFFECTED_PROJECTS="${SMOKE_AFFECTED_PROJECTS-all}"
 SMOKE_BASE_SHA="${SMOKE_BASE_SHA:-}"
 SMOKE_REGISTRY="${SMOKE_REGISTRY:-ghcr.io/elewa-git}"
 SMOKE_STORAGE_MODE="${SMOKE_STORAGE_MODE:-full}"
+# How many images to build or pull at once. Three keeps the network and disk busy without
+# starving the two cores a hosted runner gives us; raise it on a bigger machine.
+SMOKE_BUILD_CONCURRENCY="${SMOKE_BUILD_CONCURRENCY:-3}"
 KEY_DIR=""
 CSI_DIR=""
 IMAGE_PREPARATION_PID=""
@@ -201,18 +204,56 @@ _prepare_image()
   fi
 }
 
+# Pending image jobs and the file each one's output is collected into.
+_PREPARE_PIDS=()
+_PREPARE_LOGS=()
+
+# Wait for the images started so far, then replay their output one image at a time.
+# Concurrent builds interleave their progress lines, so each job writes to its own
+# file and it is printed whole — the log stays readable when a build fails.
+_await_image_batch()
+{
+  local index status=0
+  for index in "${!_PREPARE_PIDS[@]}"; do
+    if ! wait "${_PREPARE_PIDS[$index]}"; then
+      status=1
+    fi
+    cat "${_PREPARE_LOGS[$index]}"
+    rm -f "${_PREPARE_LOGS[$index]}"
+  done
+  _PREPARE_PIDS=()
+  _PREPARE_LOGS=()
+  return "$status"
+}
+
+# Every image is independent, so prepare several at once. Run one at a time they were by far
+# the longest phase of the smoke. The fan-out stays capped because the runner's Docker daemon
+# is small — all five at once would make them fight for the same two cores.
 _prepare_images()
 {
-  _prepare_image opencrane opencrane/opencrane-server:develop-smoke \
-    opencrane-server apps/opencrane/deploy/Dockerfile
-  _prepare_image opencrane-ui opencrane/opencrane-ui:develop-smoke \
-    opencrane-ui apps/opencrane-ui/deploy/Dockerfile
-  _prepare_image channel-proxy opencrane/channel-proxy:develop-smoke \
-    opencrane-channel-proxy apps/channel-proxy/deploy/Dockerfile
-  _prepare_image memory-gateway opencrane/memory-gateway:develop-smoke \
-    opencrane-memory-gateway apps/memory-gateway/deploy/Dockerfile
-  _prepare_image artifact-service opencrane/artifact-service:develop-smoke \
-    opencrane-artifact-service apps/artifact-service/deploy/Dockerfile
+  local -a specs=(
+    "opencrane opencrane/opencrane-server:develop-smoke opencrane-server apps/opencrane/deploy/Dockerfile"
+    "opencrane-ui opencrane/opencrane-ui:develop-smoke opencrane-ui apps/opencrane-ui/deploy/Dockerfile"
+    "channel-proxy opencrane/channel-proxy:develop-smoke opencrane-channel-proxy apps/channel-proxy/deploy/Dockerfile"
+    "memory-gateway opencrane/memory-gateway:develop-smoke opencrane-memory-gateway apps/memory-gateway/deploy/Dockerfile"
+    "artifact-service opencrane/artifact-service:develop-smoke opencrane-artifact-service apps/artifact-service/deploy/Dockerfile"
+  )
+  local spec log status=0
+
+  for spec in "${specs[@]}"; do
+    log="$(mktemp)"
+    _PREPARE_LOGS+=("$log")
+    # Word splitting is intended: a spec is four fields, none of which contains a space.
+    # shellcheck disable=SC2086
+    ( _prepare_image $spec ) >"$log" 2>&1 &
+    _PREPARE_PIDS+=("$!")
+    if [[ "${#_PREPARE_PIDS[@]}" -ge "$SMOKE_BUILD_CONCURRENCY" ]]; then
+      _await_image_batch || status=1
+    fi
+  done
+
+  _await_image_batch || status=1
+  return "$status"
 }
 
 _create_database_credentials()
@@ -405,8 +446,8 @@ if [[ "$SMOKE_STORAGE_MODE" != "fast" && "$SMOKE_STORAGE_MODE" != "full" ]]; the
 fi
 
 # Image preparation is the longest independent lane. Start it before k3d so cluster creation and
-# external-controller readiness consume the same wall-clock time without fanning out five builds
-# against the runner's small Docker daemon.
+# external-controller readiness consume the same wall-clock time. The lane builds a few images at
+# a time (SMOKE_BUILD_CONCURRENCY) rather than all of them, so it never swamps the small daemon.
 _prepare_images &
 IMAGE_PREPARATION_PID=$!
 
