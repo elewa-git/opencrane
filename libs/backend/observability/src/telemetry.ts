@@ -16,8 +16,8 @@ import { getNodeAutoInstrumentations } from "@opentelemetry/auto-instrumentation
 import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-proto";
 import { NodeSDK } from "@opentelemetry/sdk-node";
 
-import { _SanitizeHttpTraceUrl } from "./http-trace.js";
-import type { TelemetryOptions } from "./observability.types.js";
+import { _SanitizeHttpTraceUrl } from "./http-trace";
+import type { TelemetryOptions } from "./observability.types";
 
 /** The running SDK, kept so {@link ___ShutdownTelemetry} can flush it. Null when disabled. */
 let _sdk: NodeSDK | null = null;

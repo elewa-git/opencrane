@@ -2,7 +2,7 @@ import { AgentRunState, ConversationLifecycle, ConversationMessageState, Convers
 
 import { RunAdmissionDenialReasons, type InitialRunAuthority } from "@opencrane/backend/agents/execution/runs";
 
-import type { ConversationContextInput, ConversationContextRepository, SessionAssemblyCommand, SessionAssemblyLoad } from "./session-assembly.types.js";
+import type { ConversationContextInput, ConversationContextRepository, SessionAssemblyCommand, SessionAssemblyLoad } from "./session-assembly.types";
 
 /**
  * Turns one conversation into an ordered list of message ids, for the snapshot.

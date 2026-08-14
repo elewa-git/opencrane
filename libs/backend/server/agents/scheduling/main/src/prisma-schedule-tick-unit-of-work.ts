@@ -1,7 +1,7 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 
-import type { ScheduleTickerTransaction, ScheduleTickerUnitOfWork, ScheduleTickerWork } from "./schedule-ticker-unit-of-work.types.js";
-import { PrismaActiveScheduledRunRepository, PrismaEnabledScheduleSnapshotRepository, PrismaScheduleCursorRepository } from "./prisma-schedule-tick-repositories.js";
+import type { ScheduleTickerTransaction, ScheduleTickerUnitOfWork, ScheduleTickerWork } from "./schedule-ticker-unit-of-work.types";
+import { PrismaActiveScheduledRunRepository, PrismaEnabledScheduleSnapshotRepository, PrismaScheduleCursorRepository } from "./prisma-schedule-tick-repositories";
 
 /** Prisma implementation of the scheduler-specific opaque unit of work. */
 export class PrismaScheduleTickerUnitOfWork implements ScheduleTickerUnitOfWork

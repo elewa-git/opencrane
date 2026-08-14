@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { isAbsolute } from "node:path";
 
-import type { MountedPublicKeySource } from "./mounted-public-key.types.js";
+import type { MountedPublicKeySource } from "./mounted-public-key.types";
 
 /**
  * Create a reader for one public key that Kubernetes mounts into this container as a file.

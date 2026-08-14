@@ -3,7 +3,7 @@ import { AgentRunState, Prisma } from "@prisma/client";
 import type { ToolInvocationRecoveryEvent, ToolInvocationRecoveryEventSink } from "@opencrane/backend/server/iam/authorization";
 import { RunEventTypes } from "@opencrane/models/agents";
 
-import type { ToolRecoveryEventAppendRepository, ToolRecoveryEventAppendUnitOfWork } from "./tool-recovery-event-reporter.types.js";
+import type { ToolRecoveryEventAppendRepository, ToolRecoveryEventAppendUnitOfWork } from "./tool-recovery-event-reporter.types";
 
 /**
  * Writes the run event that tells a conversation a tool invocation needs recovery.

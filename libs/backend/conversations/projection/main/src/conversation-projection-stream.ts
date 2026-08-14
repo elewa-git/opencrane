@@ -3,13 +3,13 @@ import { ___DoWithTrace, ___GetActiveSpan } from "@opencrane/backend/observabili
 import { AG_UI_INTERRUPTS_CLEARED_EVENT } from "@opencrane/contracts";
 import type { ConversationReplayCursor } from "@opencrane/contracts";
 
-import { __ProjectAgUiEvents } from "./ag-ui-event-projector.js";
-import { __EncodeAgUiSseRecord } from "./ag-ui-sse-encoder.js";
-import { __EncodeConversationProjectionCursor } from "./conversation-projection-cursor.js";
-import { __ProjectConversationEvent } from "./conversation-event-projector.js";
-import type { ConversationProjectionEventRow } from "./conversation-event-projector.types.js";
-import { ConversationProjectionReadStatuses } from "./conversation-projection-reader.types.js";
-import { ConversationProjectionOutcomes, type ConversationProjectionDependencies, type ConversationProjectionSink, type StreamConversationProjectionCommand } from "./conversation-projection-stream.types.js";
+import { __ProjectAgUiEvents } from "./ag-ui-event-projector";
+import { __EncodeAgUiSseRecord } from "./ag-ui-sse-encoder";
+import { __EncodeConversationProjectionCursor } from "./conversation-projection-cursor";
+import { __ProjectConversationEvent } from "./conversation-event-projector";
+import type { ConversationProjectionEventRow } from "./conversation-event-projector.types";
+import { ConversationProjectionReadStatuses } from "./conversation-projection-reader.types";
+import { ConversationProjectionOutcomes, type ConversationProjectionDependencies, type ConversationProjectionSink, type StreamConversationProjectionCommand } from "./conversation-projection-stream.types";
 
 /**
  * Streams an authorised conversation snapshot followed by a bounded live tail.
@@ -147,7 +147,7 @@ function _Validate(dependencies: ConversationProjectionDependencies): void
  *
  * Called by: the OpenCrane server conversation route composition.
  */
-export const CONVERSATION_PROJECTION_CLOCK: import("./conversation-projection-stream.types.js").ConversationProjectionClock = {
+export const CONVERSATION_PROJECTION_CLOCK: import("./conversation-projection-stream.types").ConversationProjectionClock = {
 	now: () => Date.now(),
 	wait: async function _Wait(milliseconds, signal): Promise<void>
 	{
@@ -172,7 +172,7 @@ export const CONVERSATION_PROJECTION_CLOCK: import("./conversation-projection-st
  *
  * Called by: the OpenCrane server conversation route composition.
  */
-export const CONVERSATION_PROJECTION_LIMITS: import("./conversation-projection-stream.types.js").ConversationProjectionLimits = {
+export const CONVERSATION_PROJECTION_LIMITS: import("./conversation-projection-stream.types").ConversationProjectionLimits = {
 	pageSize: 200,
 	pollMilliseconds: 1_000,
 	heartbeatMilliseconds: 15_000,

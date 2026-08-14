@@ -1,8 +1,8 @@
 import { z } from "zod";
 
-import { PersonaColourValues } from "../scoring/persona-scorer.types.js";
+import { PersonaColourValues } from "../scoring/persona-scorer.types";
 
-import type { PersonaDraftDirectives } from "./persona-draft-source-deriver.types.js";
+import type { PersonaDraftDirectives } from "./persona-draft-source-deriver.types";
 
 /** Directive text; must not be blank. */
 const _DirectiveSchema = z.string().refine(function _NonBlank(value) { return value.trim().length > 0; }, "must not be blank");

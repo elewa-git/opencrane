@@ -1,5 +1,5 @@
-import type { UserOnboardingCompletionProvenances, UserOnboardingDenialReasons, UserOnboardingStates, UserOnboardingTransitionStatuses } from "./user-onboarding.enums.js";
-import type { ApprovedPersonaBootstrapEvidence } from "./user-onboarding-chat.types.js";
+import type { UserOnboardingCompletionProvenances, UserOnboardingDenialReasons, UserOnboardingStates, UserOnboardingTransitionStatuses } from "./user-onboarding.enums";
+import type { ApprovedPersonaBootstrapEvidence } from "./user-onboarding-chat.types";
 
 /**
  * The user whose onboarding is being read or changed, taken only from the verified server session.

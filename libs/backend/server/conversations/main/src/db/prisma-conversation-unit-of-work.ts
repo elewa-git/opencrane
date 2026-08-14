@@ -5,18 +5,18 @@ import { Prisma, type PrismaClient } from "@prisma/client";
 import { ___DoWithTrace } from "@opencrane/backend/observability";
 import type { RunRetryAuthority } from "@opencrane/backend/agents/execution/runs";
 
-import type { AgentThreadSnapshotView } from "../types/agent-thread-view.types.js";
-import type { CreateConversationResult, MarkAgentThreadReadResult, MutateConversationResult, RetryConversationRunResult, SubmitConversationMessageResult } from "../types/conversation-authority-result.types.js";
-import type { ConversationCaller } from "../types/conversation-caller.types.js";
-import type { ConversationCreationDirectory } from "../types/conversation-directory.types.js";
-import type { CreateConversationRequest, RetryConversationRunRequest, SubmitConversationMessageRequest } from "../types/conversation-request.types.js";
-import type { ConversationUnitOfWork } from "../types/conversation-unit-of-work.types.js";
-import type { ConversationDetail, ConversationSummary } from "../types/conversation-view.types.js";
-import type { ConversationMessageAdmissionUnitOfWork } from "../conversation-message-admission.types.js";
-import { PrismaConversationMutationRepository } from "./prisma-conversation-mutation-repository.js";
-import type { ConversationMutationRepository } from "./prisma-conversation-mutation-repository.types.js";
-import { PrismaConversationQueryRepository } from "./prisma-conversation-query-repository.js";
-import type { ConversationQueryRepository } from "./prisma-conversation-query-repository.types.js";
+import type { AgentThreadSnapshotView } from "../types/agent-thread-view.types";
+import type { CreateConversationResult, MarkAgentThreadReadResult, MutateConversationResult, RetryConversationRunResult, SubmitConversationMessageResult } from "../types/conversation-authority-result.types";
+import type { ConversationCaller } from "../types/conversation-caller.types";
+import type { ConversationCreationDirectory } from "../types/conversation-directory.types";
+import type { CreateConversationRequest, RetryConversationRunRequest, SubmitConversationMessageRequest } from "../types/conversation-request.types";
+import type { ConversationUnitOfWork } from "../types/conversation-unit-of-work.types";
+import type { ConversationDetail, ConversationSummary } from "../types/conversation-view.types";
+import type { ConversationMessageAdmissionUnitOfWork } from "../conversation-message-admission.types";
+import { PrismaConversationMutationRepository } from "./prisma-conversation-mutation-repository";
+import type { ConversationMutationRepository } from "./prisma-conversation-mutation-repository.types";
+import { PrismaConversationQueryRepository } from "./prisma-conversation-query-repository";
+import type { ConversationQueryRepository } from "./prisma-conversation-query-repository.types";
 
 /**
  * Owns the transactions for everything a signed-in user does with their own conversations.

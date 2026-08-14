@@ -1,4 +1,4 @@
-import { PersonalConfigurationDecisionCodes, type DecidePersonalConfigurationChangeCommand, type DecidePersonalConfigurationChangeResult, type PersonalConfigurationChangeDecisionRepository } from "./personal-configuration-decision.types.js";
+import { PersonalConfigurationDecisionCodes, type DecidePersonalConfigurationChangeCommand, type DecidePersonalConfigurationChangeResult, type PersonalConfigurationChangeDecisionRepository } from "./personal-configuration-decision.types";
 
 /**
  * Records the owner's accept-or-reject decision for one proposal.

@@ -10,11 +10,11 @@ import type { RunCancellationRepository } from "@opencrane/backend/agents/execut
 import type { ChannelTargetRouteReconciler } from "@opencrane/backend/server/agents/channel-targets";
 import { ___ShutdownTelemetry } from "@opencrane/backend/observability";
 
-import { _StartBackgroundWorkers } from "./background-workers.js";
-import type { OpenCraneProcessConfig } from "./config.types.js";
-import type { OpenCraneHttpServers } from "./lifecycle.types.js";
-import { _log } from "./log.js";
-import { _BeginProcessShutdown } from "./process-shutdown.js";
+import { _StartBackgroundWorkers } from "./background-workers";
+import type { OpenCraneProcessConfig } from "./config.types";
+import type { OpenCraneHttpServers } from "./lifecycle.types";
+import { _log } from "./log";
+import { _BeginProcessShutdown } from "./process-shutdown";
 
 /** Close an HTTP server after it has stopped accepting new connections. */
 function _closeServer(server: Server): Promise<void>

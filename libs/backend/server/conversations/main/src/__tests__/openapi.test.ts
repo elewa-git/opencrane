@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { ConversationLifecycles, ConversationModes, MessageContentBlockKinds, MessageRoles, MessageSources, MessageStates } from "@opencrane/models/conversations";
 
-import { _SelfConversationsOpenapiPaths } from "../openapi.js";
+import { _SelfConversationsOpenapiPaths } from "../openapi";
 
 /** Returns the JSON success schema for one participant conversation operation. */
 function _SuccessSchema(path: keyof typeof _SelfConversationsOpenapiPaths, method: "get" | "patch" | "post" | "put", status: 200 | 201): object

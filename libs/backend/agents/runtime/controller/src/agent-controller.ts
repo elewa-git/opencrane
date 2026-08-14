@@ -1,7 +1,7 @@
-import { _AgentControllerProfilesAreBoundToDistinctNamespaces } from "./agent-controller-profiles.js";
-import { AgentControllerReconcileOutcomes, type AgentControllerOptions } from "./agent-controller.types.js";
-import { __ReconcileNextAgentRuntimeAttempt } from "./agent-runtime-attempt-assignment.js";
-import { __ReconcileNextRuntimeRelease } from "./agent-runtime-release.js";
+import { _AgentControllerProfilesAreBoundToDistinctNamespaces } from "./agent-controller-profiles";
+import { AgentControllerReconcileOutcomes, type AgentControllerOptions } from "./agent-controller.types";
+import { __ReconcileNextAgentRuntimeAttempt } from "./agent-runtime-attempt-assignment";
+import { __ReconcileNextRuntimeRelease } from "./agent-runtime-release";
 
 /** Sleep until the next poll, but return as soon as shutdown starts instead of waiting the timer out. */
 async function _Wait(milliseconds: number, signal: AbortSignal): Promise<void>

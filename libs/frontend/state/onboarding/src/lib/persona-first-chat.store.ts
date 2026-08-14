@@ -3,9 +3,9 @@ import { toObservable } from "@angular/core/rxjs-interop";
 import { filter, firstValueFrom } from "rxjs";
 import { UserOnboardingRouteStates, type PersonaFirstChatSnapshot } from "@opencrane/models/user-onboarding";
 
-import { PersonaFirstChatService } from "./persona-first-chat.service.js";
-import { PersonaFirstChatCommandPhases, type PersonaFirstChatPendingAnswer } from "./persona-first-chat.store.types.js";
-import { PersonaFirstChatConflictError } from "./persona-first-chat.types.js";
+import { PersonaFirstChatService } from "./persona-first-chat.service";
+import { PersonaFirstChatCommandPhases, type PersonaFirstChatPendingAnswer } from "./persona-first-chat.store.types";
+import { PersonaFirstChatConflictError } from "./persona-first-chat.types";
 
 /**
  * Holds the first-chat state for one visit to the first-chat route.

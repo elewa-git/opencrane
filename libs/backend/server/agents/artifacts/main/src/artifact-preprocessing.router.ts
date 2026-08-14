@@ -4,8 +4,8 @@ import { Router, type Request, type Response } from "express";
 
 import { ARTIFACT_PREPROCESSOR_PROJECTED_TOKEN_AUDIENCE, ARTIFACT_PREPROCESSOR_SERVICE_ACCOUNT_NAME, type ArtifactPreprocessorClaimCommand, type ArtifactPreprocessorFailureCode, type ArtifactPreprocessorFailureCommand } from "@opencrane/contracts";
 
-import { __ClaimArtifactPreprocessJob, __FailArtifactPreprocessJob } from "./artifact-preprocessing.js";
-import type { ArtifactPreprocessorRouterDependencies, ReviewedArtifactPreprocessorIdentity } from "./artifact-preprocessing.types.js";
+import { __ClaimArtifactPreprocessJob, __FailArtifactPreprocessJob } from "./artifact-preprocessing";
+import type { ArtifactPreprocessorRouterDependencies, ReviewedArtifactPreprocessorIdentity } from "./artifact-preprocessing.types";
 
 /**
  * Build the internal PDF-preprocessing API for the sole dedicated worker.

@@ -1,6 +1,6 @@
 import type { ConversationAssetDisposition } from "@opencrane/models/conversation-assets";
 
-import type { ConversationAssetCaller } from "./conversation-asset.types.js";
+import type { ConversationAssetCaller } from "./conversation-asset.types";
 
 /** Exact published revision selected only after current participant authorization succeeds. */
 export interface ConversationAssetReadTarget

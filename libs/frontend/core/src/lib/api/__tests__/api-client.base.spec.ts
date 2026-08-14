@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { OpenCraneApiClientBase } from "../api-client.base.js";
-import { OpenCraneApiError } from "../api-error.js";
+import { OpenCraneApiClientBase } from "../api-client.base";
+import { OpenCraneApiError } from "../api-error";
 
 /** Concrete client exposing the shared raw-request path for transport tests. */
 class _TestApiClient extends OpenCraneApiClientBase<Record<string, never>>

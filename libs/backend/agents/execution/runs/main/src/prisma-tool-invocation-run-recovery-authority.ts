@@ -2,7 +2,7 @@ import { AgentRunState, Prisma } from "@prisma/client";
 
 import { ToolInvocationRunRecoveryEnterResults, type ToolInvocationRunRecoveryAuthority, type ToolInvocationRunRecoveryCommand, type ToolInvocationRunRecoveryEnterResult } from "@opencrane/backend/server/iam/authorization";
 
-import type { ToolInvocationRunRecoveryRepository, ToolInvocationRunRecoveryUnitOfWork } from "./tool-invocation-run-recovery-authority.types.js";
+import type { ToolInvocationRunRecoveryRepository, ToolInvocationRunRecoveryUnitOfWork } from "./tool-invocation-run-recovery-authority.types";
 
 /**
  * Moves a run in and out of RecoveryRequired on behalf of the authorization package.

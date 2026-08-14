@@ -1,7 +1,7 @@
 import { Prisma } from "@prisma/client";
 
-import type { PersonalConfigurationProposalPersistenceReceipt, PersonalConfigurationProposalRepository } from "./personal-configuration-proposal-repository.types.js";
-import type { ProposePersonalConfigurationChangeCommand } from "./personal-configuration-proposal.types.js";
+import type { PersonalConfigurationProposalPersistenceReceipt, PersonalConfigurationProposalRepository } from "./personal-configuration-proposal-repository.types";
+import type { ProposePersonalConfigurationChangeCommand } from "./personal-configuration-proposal.types";
 
 /** Prisma insert adapter for database-guarded personal configuration proposals. */
 export class PrismaPersonalConfigurationProposalRepository implements PersonalConfigurationProposalRepository

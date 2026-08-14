@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { __EvaluateFleetMembershipRevision } from "../fleet-membership.js";
-import type { FleetMembershipTrustExpectation, FleetSignatureVerificationEvidence, SignedFleetMembershipRevision } from "../fleet-membership.types.js";
+import { __EvaluateFleetMembershipRevision } from "../fleet-membership";
+import type { FleetMembershipTrustExpectation, FleetSignatureVerificationEvidence, SignedFleetMembershipRevision } from "../fleet-membership.types";
 
 /** Baseline signed fleet membership revision used by trust-boundary cases. */
 const REVISION: SignedFleetMembershipRevision = {

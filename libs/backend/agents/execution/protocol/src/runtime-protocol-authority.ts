@@ -1,7 +1,7 @@
 import { AGENT_RUNTIME_PROTOCOL_V1, RuntimeCommandKinds } from "@opencrane/contracts";
 import { AgentRunStates } from "@opencrane/models/agents";
 
-import { RuntimeAdmissionOutcomes, type RuntimeAdmissionRunState, type RuntimeCandidateAdmission, type RuntimeCandidateAdmissionInput, type RuntimeCommandAdmission, type RuntimeCommandAdmissionInput } from "./runtime-protocol-authority.types.js";
+import { RuntimeAdmissionOutcomes, type RuntimeAdmissionRunState, type RuntimeCandidateAdmission, type RuntimeCandidateAdmissionInput, type RuntimeCommandAdmission, type RuntimeCommandAdmissionInput } from "./runtime-protocol-authority.types";
 
 /** Returns whether a runtime identifier is a string with something in it. */
 function _hasIdentifier(value: unknown): value is string

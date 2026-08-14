@@ -1,6 +1,6 @@
 import type { AgentControllerRunAttemptClaimLease, AgentControllerRunAttemptProjection } from "@opencrane/contracts";
 
-import { RunDispatchResultStatuses } from "./run-dispatch.types.js";
+import { RunDispatchResultStatuses } from "./run-dispatch.types";
 
 /** The values needed to mint the model key, returned only once the claim transaction has committed. */
 export interface ClaimedAttemptWithMintInputs

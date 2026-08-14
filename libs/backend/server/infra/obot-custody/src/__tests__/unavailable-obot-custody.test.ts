@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { __UnavailableObotCustodyAdapter, ObotCustodyUnavailableError } from "../unavailable-obot-custody.js";
+import { __UnavailableObotCustodyAdapter, ObotCustodyUnavailableError } from "../unavailable-obot-custody";
 
 describe("unavailable Obot custody adapter", function _suite()
 {

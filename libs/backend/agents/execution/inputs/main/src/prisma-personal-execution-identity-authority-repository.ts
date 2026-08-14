@@ -1,6 +1,6 @@
 import { AuthorizationScopeKind, FleetMembershipScopeKind, type Prisma } from "@prisma/client";
 
-import type { PersonalExecutionGrantFact, PersonalExecutionIdentityAuthorityRepository, PersonalFleetMembershipAssertion } from "./personal-execution-identity-envelope-source.types.js";
+import type { PersonalExecutionGrantFact, PersonalExecutionIdentityAuthorityRepository, PersonalFleetMembershipAssertion } from "./personal-execution-identity-envelope-source.types";
 
 /**
  * Reads personal membership assertions and active capability grants with Prisma.

@@ -3,8 +3,8 @@ import { ButtonModule } from "primeng/button";
 
 import { ConversationAssetDisposition, ConversationAssetProvenance } from "@opencrane/state/conversation/assets";
 
-import { __ConversationAssetByteLabel, __ConversationAssetTypeLabel } from "../conversation-asset-presentation.js";
-import { ConversationAssetActionKinds, ConversationAssetPresentationStates, type ConversationAssetActionIntent, type ConversationAssetPresentation } from "../conversation-asset-presentation.types.js";
+import { __ConversationAssetByteLabel, __ConversationAssetTypeLabel } from "../conversation-asset-presentation";
+import { ConversationAssetActionKinds, ConversationAssetPresentationStates, type ConversationAssetActionIntent, type ConversationAssetPresentation } from "../conversation-asset-presentation.types";
 
 /** Transcript asset card for participant uploads and durable assistant output. */
 @Component({

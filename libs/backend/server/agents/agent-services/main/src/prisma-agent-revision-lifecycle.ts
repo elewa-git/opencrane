@@ -2,10 +2,10 @@ import { AgentServiceKind, AgentServiceState, Prisma, type PrismaClient } from "
 
 import type { AgentService } from "@opencrane/models/agents";
 
-import type { AgentRevisionLifecycleRepository, AgentServiceHistory, AgentServiceLifecycleAction, AppendAgentRevisionResult, ChangeAgentServiceStateCommand, ChangeAgentServiceStateResult, CreateManagedAgentServiceCommand, CreateManagedAgentServiceResult, RestoreAgentRevisionCommand, ReviseAgentRevisionCommand } from "./agent-revision-lifecycle.types.js";
+import type { AgentRevisionLifecycleRepository, AgentServiceHistory, AgentServiceLifecycleAction, AppendAgentRevisionResult, ChangeAgentServiceStateCommand, ChangeAgentServiceStateResult, CreateManagedAgentServiceCommand, CreateManagedAgentServiceResult, RestoreAgentRevisionCommand, ReviseAgentRevisionCommand } from "./agent-revision-lifecycle.types";
 
-import { _mapRevision, _mapRun, _mapService, _serviceState } from "./prisma-agent-mappers.js";
-import { _AGENT_REVISION_INCLUDE, _AgentRevisionContentFromRow, PrismaAgentRevisionWriterRepository } from "./prisma-agent-revision-writer.js";
+import { _mapRevision, _mapRun, _mapService, _serviceState } from "./prisma-agent-mappers";
+import { _AGENT_REVISION_INCLUDE, _AgentRevisionContentFromRow, PrismaAgentRevisionWriterRepository } from "./prisma-agent-revision-writer";
 
 /** Maps a lifecycle action to its target Prisma service state. */
 function _targetServiceState(action: AgentServiceLifecycleAction): AgentServiceState

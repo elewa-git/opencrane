@@ -1,3 +1,3 @@
-export { _RegisterInternalAgentRuntimeStream } from "./agent-runtime-stream.js";
-export { RuntimeCommandWakeup } from "./runtime-command-wakeup.js";
-export type { RuntimeCandidateAdmission, RuntimeCommandStreamAuthority, RuntimeStreamTransportOptions } from "./agent-runtime-stream.types.js";
+export { _RegisterInternalAgentRuntimeStream } from "./agent-runtime-stream";
+export { RuntimeCommandWakeup } from "./runtime-command-wakeup";
+export type { RuntimeCandidateAdmission, RuntimeCommandStreamAuthority, RuntimeStreamTransportOptions } from "./agent-runtime-stream.types";

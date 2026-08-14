@@ -1,7 +1,7 @@
 import { AgentThreadDeliveryKinds } from "@opencrane/contracts";
 
-import { _BoundedIdentifier } from "../bounded-value.validator.js";
-import type { AgUiAgentThreadParentDelivery } from "./agent-thread-delivery.types.js";
+import { _BoundedIdentifier } from "../bounded-value.validator";
+import type { AgUiAgentThreadParentDelivery } from "./agent-thread-delivery.types";
 
 /** Validate exact bounded display fields and reject every unexpected authority or provider field. */
 export function _IsAgentThreadParentDelivery(value: unknown): value is AgUiAgentThreadParentDelivery

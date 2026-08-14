@@ -1,9 +1,9 @@
 import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 import { z } from "zod";
 
-import { _PersonalConfigurationPatchSchema } from "./personal-configuration-patch.validator.js";
-import type { PersonalConfigurationPatch } from "./personal-configuration-patch.types.js";
-import type { ProposePersonalConfigurationChangeCommand } from "./personal-configuration-proposal.types.js";
+import { _PersonalConfigurationPatchSchema } from "./personal-configuration-patch.validator";
+import type { PersonalConfigurationPatch } from "./personal-configuration-patch.types";
+import type { ProposePersonalConfigurationChangeCommand } from "./personal-configuration-proposal.types";
 
 /** Bounded nonblank coordinate accepted without transforming the value before persistence. */
 const _IdentifierSchema = z.string().max(200).refine(function _NonBlank(value) { return value.trim().length > 0; }, "must not be blank");

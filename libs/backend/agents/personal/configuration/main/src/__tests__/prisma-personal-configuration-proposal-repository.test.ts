@@ -2,8 +2,8 @@ import { Prisma } from "@prisma/client";
 import { AgentConfigPatchKinds } from "@opencrane/contracts";
 import { describe, expect, it, vi } from "vitest";
 
-import type { ProposePersonalConfigurationChangeCommand } from "../proposal/personal-configuration-proposal.types.js";
-import { PrismaPersonalConfigurationProposalRepository } from "../proposal/prisma-personal-configuration-proposal-repository.js";
+import type { ProposePersonalConfigurationChangeCommand } from "../proposal/personal-configuration-proposal.types";
+import { PrismaPersonalConfigurationProposalRepository } from "../proposal/prisma-personal-configuration-proposal-repository";
 
 /** Build one transaction double for the single database-owned proposal insert. */
 function _transaction(error: Error | null = null)

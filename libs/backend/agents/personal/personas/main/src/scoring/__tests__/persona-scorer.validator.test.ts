@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { PersonaColourValues, PersonaModifierValues, PersonaTieKinds } from "../persona-scorer.types.js";
-import { _ParsePersonaPersistedScoreEvidence } from "../persona-scorer.validator.js";
+import { PersonaColourValues, PersonaModifierValues, PersonaTieKinds } from "../persona-scorer.types";
+import { _ParsePersonaPersistedScoreEvidence } from "../persona-scorer.validator";
 
 /** Build one valid immutable score-evidence document. */
 function _Evidence()

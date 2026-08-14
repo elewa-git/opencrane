@@ -1,7 +1,7 @@
-import type { AgentRevisionState } from "./agent-revision.types.js";
-import type { AgentRunState } from "./agent-run.types.js";
-import type { AgentServiceState } from "./agent-service.types.js";
-import type { RunEvent } from "./run-event.types.js";
+import type { AgentRevisionState } from "./agent-revision.types";
+import type { AgentRunState } from "./agent-run.types";
+import type { AgentServiceState } from "./agent-service.types";
+import type { RunEvent } from "./run-event.types";
 
 /** Legal next states for each agent-service lifecycle state. */
 const _AGENT_SERVICE_TRANSITIONS: Readonly<Record<AgentServiceState, readonly AgentServiceState[]>> = {

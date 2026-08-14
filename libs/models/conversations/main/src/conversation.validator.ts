@@ -1,7 +1,7 @@
 // Turns untrusted values from storage or the API into conversation models. It lives beside the model so the mode and agent-binding rules cannot drift apart from the types.
 import { z } from "zod";
 
-import { ConversationLifecycles, ConversationModes, type Conversation, type ConversationCreationRequest, type ConversationParticipant } from "./conversation.types.js";
+import { ConversationLifecycles, ConversationModes, type Conversation, type ConversationCreationRequest, type ConversationParticipant } from "./conversation.types";
 
 /** Non-empty OpenCrane-owned identifier accepted at the model boundary. */
 const _IdentifierSchema = z.string().trim().min(1);

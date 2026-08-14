@@ -4,9 +4,9 @@ import type { Logger } from "pino";
 
 import { _ResolveRequestPrincipal } from "@opencrane/backend/server/infra/auth";
 
-import { __CreatePersonalArtifactCatalogueRouter } from "./personal-artifact-catalogue.router.js";
-import type { PersonalArtifactCaller } from "./personal-artifact-catalogue.router.types.js";
-import { _CreateArtifactCatalogueRepository } from "./prisma-artifact-authority.composition.js";
+import { __CreatePersonalArtifactCatalogueRouter } from "./personal-artifact-catalogue.router";
+import type { PersonalArtifactCaller } from "./personal-artifact-catalogue.router.types";
+import { _CreateArtifactCatalogueRepository } from "./prisma-artifact-authority.composition";
 
 /** Maps authenticated request facts to the caller contract owned by the artifact catalogue. */
 function _resolveCaller(request: Parameters<typeof _ResolveRequestPrincipal>[0]): PersonalArtifactCaller | null

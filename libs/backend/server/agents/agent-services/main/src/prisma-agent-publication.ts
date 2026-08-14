@@ -3,9 +3,9 @@ import { AgentRevisionState, AgentServiceState, Prisma, type PrismaClient } from
 import type { AgentRevision, AgentService } from "@opencrane/models/agents";
 
 import { __AppendAuditDecision } from "@opencrane/backend/server/iam/audit";
-import type { AgentServicePublicationRepository, AtomicAgentRevisionPublication, AtomicAgentRevisionPublicationResult } from "./agent-publication.types.js";
-import { _mapRevision, _mapService, _serviceState } from "./prisma-agent-mappers.js";
-import type { AgentPublicationAuditEvidencePort } from "./prisma-agent-publication.types.js";
+import type { AgentServicePublicationRepository, AtomicAgentRevisionPublication, AtomicAgentRevisionPublicationResult } from "./agent-publication.types";
+import { _mapRevision, _mapService, _serviceState } from "./prisma-agent-mappers";
+import type { AgentPublicationAuditEvidencePort } from "./prisma-agent-publication.types";
 
 /**
  * Publishes agent revisions in Postgres, writing the revision, the service's active revision, and the

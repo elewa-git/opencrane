@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { ApiValidationIssueLocations, ___ParseApiErrorEnvelope } from "../index.js";
+import { ApiValidationIssueLocations, ___ParseApiErrorEnvelope } from "../index";
 
 describe("public API error contract", function _Suite()
 {

@@ -1,7 +1,7 @@
 import type { V1Job } from "@kubernetes/client-node";
 import { __DeriveAgentRuntimeReleaseDeadlineSeconds } from "@opencrane/backend/agents/runtime/k8s-launcher";
 
-import type { AgentControllerJobReleasePlan } from "./kubernetes-agent-job-release.types.js";
+import type { AgentControllerJobReleasePlan } from "./kubernetes-agent-job-release.types";
 
 function _CanonicalUtcEpochMilliseconds(value: string): number
 {

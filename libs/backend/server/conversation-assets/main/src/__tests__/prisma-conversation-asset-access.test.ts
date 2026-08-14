@@ -3,8 +3,8 @@ import { describe, expect, it, vi } from "vitest";
 
 import { ConversationAssetDisposition } from "@opencrane/models/conversation-assets";
 
-import { PrismaConversationAssetRepository } from "../prisma-conversation-asset-repository.js";
-import { PrismaConversationAssetUnitOfWork } from "../prisma-conversation-asset-unit-of-work.js";
+import { PrismaConversationAssetRepository } from "../prisma-conversation-asset-repository";
+import { PrismaConversationAssetUnitOfWork } from "../prisma-conversation-asset-unit-of-work";
 
 const _CALLER = { siloId: "silo-1", subjectId: "user-1" } as const;
 const _ADDRESS = `sha256:${"a".repeat(64)}`;

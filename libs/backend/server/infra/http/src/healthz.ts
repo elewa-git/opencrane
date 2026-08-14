@@ -1,8 +1,8 @@
 import type { RequestHandler } from "express";
 
-import type { DbHealthProbeUnitOfWork } from "./healthz.types.js";
+import type { DbHealthProbeUnitOfWork } from "./healthz.types";
 
-export type { DbHealthProbeRepository, DbHealthProbeUnitOfWork } from "./healthz.types.js";
+export type { DbHealthProbeRepository, DbHealthProbeUnitOfWork } from "./healthz.types";
 
 /**
  * Build the `/healthz` handler, which answers by actually querying the database.

@@ -1,6 +1,6 @@
 import type { Prisma, PrismaClient } from "@prisma/client";
 
-import type { EffectiveScopeGrant, ScopeGrantResolver } from "./scope-attachment-authority.types.js";
+import type { EffectiveScopeGrant, ScopeGrantResolver } from "./scope-attachment-authority.types";
 
 /**
  * Not implemented yet — always returns no grants.

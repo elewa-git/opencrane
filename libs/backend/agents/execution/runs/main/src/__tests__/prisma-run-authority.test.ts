@@ -1,9 +1,9 @@
 import { Prisma } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
 
-import { PrismaAgentRunAuthorityRepository } from "../prisma-run-authority.js";
-import { PrismaAgentRunRetryUnitOfWork } from "../prisma-run-retry-unit-of-work.js";
-import type { AtomicStartNextRunAttemptCommand } from "../run-authority.types.js";
+import { PrismaAgentRunAuthorityRepository } from "../prisma-run-authority";
+import { PrismaAgentRunRetryUnitOfWork } from "../prisma-run-retry-unit-of-work";
+import type { AtomicStartNextRunAttemptCommand } from "../run-authority.types";
 
 /** Creates one participant-authorized atomic retry command. */
 function _command(): AtomicStartNextRunAttemptCommand

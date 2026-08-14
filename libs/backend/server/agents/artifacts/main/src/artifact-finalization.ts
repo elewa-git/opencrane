@@ -1,6 +1,6 @@
 import { ___IsSha256ContentAddress } from "@opencrane/models/artifacts";
 
-import type { ArtifactAuthorityRepository, FinalizeArtifactRevisionCommand, FinalizeArtifactRevisionResult } from "./artifact-finalization.types.js";
+import type { ArtifactAuthorityRepository, FinalizeArtifactRevisionCommand, FinalizeArtifactRevisionResult } from "./artifact-finalization.types";
 
 /**
  * Make already-stored bytes visible: write the revision row and its publication event.

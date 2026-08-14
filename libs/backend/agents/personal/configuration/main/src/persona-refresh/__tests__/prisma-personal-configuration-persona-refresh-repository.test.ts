@@ -1,8 +1,8 @@
 import type { Prisma } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
 
-import { PersonalConfigurationPersonaRefreshClaimCodes } from "../personal-configuration-persona-refresh.types.js";
-import { PrismaPersonalConfigurationPersonaRefreshRepository } from "../prisma-personal-configuration-persona-refresh-repository.js";
+import { PersonalConfigurationPersonaRefreshClaimCodes } from "../personal-configuration-persona-refresh.types";
+import { PrismaPersonalConfigurationPersonaRefreshRepository } from "../prisma-personal-configuration-persona-refresh-repository";
 
 /** Builds the smallest transaction fake these repository tests need. */
 function _Transaction(change: { readonly id: string } | null = { id: "change-1" }): Prisma.TransactionClient

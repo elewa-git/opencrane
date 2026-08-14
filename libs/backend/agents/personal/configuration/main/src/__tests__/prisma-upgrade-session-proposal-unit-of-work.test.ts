@@ -4,9 +4,9 @@ import { ___GetContext } from "@opencrane/backend/observability";
 import type { JsonValue } from "@opencrane/util";
 import { describe, expect, it, vi } from "vitest";
 
-import { PersonalConfigurationProposalCodes } from "../proposal/personal-configuration-proposal.types.js";
-import { PrismaUpgradeSessionProposalUnitOfWork } from "../upgrade-session/prisma-upgrade-session-proposal-unit-of-work.js";
-import type { UpgradeSessionInvocation } from "../upgrade-session/upgrade-session.types.js";
+import { PersonalConfigurationProposalCodes } from "../proposal/personal-configuration-proposal.types";
+import { PrismaUpgradeSessionProposalUnitOfWork } from "../upgrade-session/prisma-upgrade-session-proposal-unit-of-work";
+import type { UpgradeSessionInvocation } from "../upgrade-session/upgrade-session.types";
 
 /** Builds one durable admitted invocation, optionally replacing its protected arguments. */
 function _candidate(argumentsValue: JsonValue = { kind: AgentConfigPatchKinds.ModelAlias, modelAlias: "careful-model" }): UpgradeSessionInvocation

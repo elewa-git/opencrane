@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { PrismaSkillWorkloadReleaseRepository } from "../prisma-skill-workload-release-repository.js";
+import { PrismaSkillWorkloadReleaseRepository } from "../prisma-skill-workload-release-repository";
 
 describe("Prisma skill workload release repository", function _DescribeReleaseRepository()
 {

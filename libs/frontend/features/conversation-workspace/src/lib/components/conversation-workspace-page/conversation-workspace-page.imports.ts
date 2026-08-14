@@ -7,9 +7,9 @@ import { ConversationActivityComponent } from "@opencrane/features/conversation-
 import { ConversationAttachmentTrayComponent, ConversationFilesPanelComponent } from "@opencrane/features/conversation-assets";
 import { ConversationElicitationCardComponent } from "@opencrane/features/conversation-elicitation";
 
-import { ConversationCreateComponent } from "../conversation-create/conversation-create.component.js";
-import { ConversationListComponent } from "../conversation-list/conversation-list.component.js";
-import { ConversationOnboardingHistoryComponent } from "../conversation-onboarding-history/conversation-onboarding-history.component.js";
+import { ConversationCreateComponent } from "../conversation-create/conversation-create.component";
+import { ConversationListComponent } from "../conversation-list/conversation-list.component";
+import { ConversationOnboardingHistoryComponent } from "../conversation-onboarding-history/conversation-onboarding-history.component";
 
 /** Declarative Angular imports rendered by the conversation workspace page template. */
 export const CONVERSATION_WORKSPACE_PAGE_IMPORTS: Type<unknown>[] =

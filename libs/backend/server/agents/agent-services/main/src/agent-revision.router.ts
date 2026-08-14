@@ -1,15 +1,15 @@
 import { Router, type Request, type Response } from "express";
 import type { AgentRevisionContent } from "@opencrane/models/agents";
 
-import { __AdmitManagedRunNow, __ChangeAgentServiceState, __CompareAgentRevisions, __CreateManagedAgentService, __ReadAgentServiceHistory, __RestoreAgentRevision, __ReviseAgentRevision } from "./agent-revision-lifecycle.js";
-import { _ParseAgentRevisionContent } from "./agent-revision-content.parser.js";
-import type { AgentRevisionLifecycleDenial, AgentServiceLifecycleAction } from "./agent-revision-lifecycle.types.js";
-import type { AgentServicesRouterDependencies, ManagementCaller } from "./agent-revision.router.types.js";
-import { __PublishAgentRevision } from "./agent-publication.js";
-import type { PublishAgentRevisionFailureReason } from "./agent-publication.types.js";
-import { __CreateAgentSchedule, __UpdateAgentSchedule } from "./agent-schedule.js";
-import type { AgentScheduleDenial, AgentScheduleOverlapPolicy } from "./agent-schedule.types.js";
-import { __ValidateAttachAuthority } from "./scope-attachment-authority.js";
+import { __AdmitManagedRunNow, __ChangeAgentServiceState, __CompareAgentRevisions, __CreateManagedAgentService, __ReadAgentServiceHistory, __RestoreAgentRevision, __ReviseAgentRevision } from "./agent-revision-lifecycle";
+import { _ParseAgentRevisionContent } from "./agent-revision-content.parser";
+import type { AgentRevisionLifecycleDenial, AgentServiceLifecycleAction } from "./agent-revision-lifecycle.types";
+import type { AgentServicesRouterDependencies, ManagementCaller } from "./agent-revision.router.types";
+import { __PublishAgentRevision } from "./agent-publication";
+import type { PublishAgentRevisionFailureReason } from "./agent-publication.types";
+import { __CreateAgentSchedule, __UpdateAgentSchedule } from "./agent-schedule";
+import type { AgentScheduleDenial, AgentScheduleOverlapPolicy } from "./agent-schedule.types";
+import { __ValidateAttachAuthority } from "./scope-attachment-authority";
 
 /** Legal observed states a caller may claim on a lifecycle transition. */
 const _SERVICE_STATES = ["draft", "active", "paused", "retired"] as const;

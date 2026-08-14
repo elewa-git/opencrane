@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { ___GetContext } from "../context.js";
-import { ___RequestContext } from "../express.js";
+import { ___GetContext } from "../context";
+import { ___RequestContext } from "../express";
 
 /** Minimal response double capturing headers set by the middleware. */
 function _fakeRes(): { headers: Record<string, string>; setHeader(name: string, value: string): void }

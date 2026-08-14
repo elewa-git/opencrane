@@ -4,9 +4,9 @@ import { RunEventTypes } from "@opencrane/models/agents";
 import { ___ParseAgUiA2uiEnvelope } from "@opencrane/contracts";
 import type { JsonValue } from "@opencrane/util";
 
-import { PrismaRuntimeTerminalReporter } from "./prisma-runtime-terminal-reporter.js";
-import { _RuntimeEventPayloadIsSafe } from "./runtime-event-payload.js";
-import type { RuntimeEventAppendRepository, RuntimeEventAppendUnitOfWork, RuntimeEventReportCommand, RuntimeEventReporter, RuntimeEventReportResult } from "./runtime-event-reporter.types.js";
+import { PrismaRuntimeTerminalReporter } from "./prisma-runtime-terminal-reporter";
+import { _RuntimeEventPayloadIsSafe } from "./runtime-event-payload";
+import type { RuntimeEventAppendRepository, RuntimeEventAppendUnitOfWork, RuntimeEventReportCommand, RuntimeEventReporter, RuntimeEventReportResult } from "./runtime-event-reporter.types";
 
 /** The event names a workload is allowed to propose. Server-owned lifecycle events are deliberately not in this list. */
 const _RUNTIME_EVENT_TYPES = new Set<string>([RunEventTypes.RunStarted, RunEventTypes.RunResumed, RunEventTypes.MessageStarted, RunEventTypes.MessageDelta, RunEventTypes.MessageCompleted, RunEventTypes.ToolRequested, RunEventTypes.RunUsage, RunEventTypes.RunError, RunEventTypes.A2uiRenderingBegun, RunEventTypes.A2uiSurfaceUpdated, RunEventTypes.A2uiDataModelUpdated, RunEventTypes.RunCompleted, RunEventTypes.RunFailed]);

@@ -1,8 +1,8 @@
-import { AgentThreadRecoveryStates, AgentThreadRunStates, type AgentThreadSnapshot } from "./agent-thread.types.js";
-import { _AgentThreadLifecycleStates, type AgentThreadRunDto, type AgentThreadSnapshotDto } from "./opencrane-agent-thread.mapper.types.js";
-import { _AgentThreadOrigin, _AgentThreadSummary } from "./opencrane-agent-thread.summary.mapper.js";
-import { _AgentThreadTimeline, _AgentThreadVisibleThroughPosition } from "./opencrane-agent-thread.timeline.mapper.js";
-import { __ParseAgentThreadSnapshotDto } from "./opencrane-agent-thread.validator.js";
+import { AgentThreadRecoveryStates, AgentThreadRunStates, type AgentThreadSnapshot } from "./agent-thread.types";
+import { _AgentThreadLifecycleStates, type AgentThreadRunDto, type AgentThreadSnapshotDto } from "./opencrane-agent-thread.mapper.types";
+import { _AgentThreadOrigin, _AgentThreadSummary } from "./opencrane-agent-thread.summary.mapper";
+import { _AgentThreadTimeline, _AgentThreadVisibleThroughPosition } from "./opencrane-agent-thread.timeline.mapper";
+import { __ParseAgentThreadSnapshotDto } from "./opencrane-agent-thread.validator";
 
 /** Map one untrusted wire value into the complete dependency-neutral Agent-thread view model. */
 export function __AgentThreadSnapshot(value: unknown): AgentThreadSnapshot

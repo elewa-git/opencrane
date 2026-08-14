@@ -1,6 +1,6 @@
-import type { PersonaColourValues } from "../scoring/persona-scorer.types.js";
+import type { PersonaColourValues } from "../scoring/persona-scorer.types";
 
-import type { PersonaDraftInsightEvidence } from "./persona-draft-persistence.types.js";
+import type { PersonaDraftInsightEvidence } from "./persona-draft-persistence.types";
 
 /** The directive text parsed out of the stored interpolation map. */
 export interface PersonaDraftDirectives

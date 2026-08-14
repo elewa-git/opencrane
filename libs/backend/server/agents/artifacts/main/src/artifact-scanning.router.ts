@@ -2,7 +2,7 @@ import { Router, type Request, type Response } from "express";
 
 import { ARTIFACT_SCANNER_PROJECTED_TOKEN_AUDIENCE, ARTIFACT_SCANNER_SERVICE_ACCOUNT_NAME, ArtifactScannerVerdict, type ArtifactScannerClaimCommand, type ArtifactScannerFailureCommand, type ArtifactScannerResultCommand } from "@opencrane/contracts";
 
-import type { ArtifactScannerRouterDependencies } from "./artifact-scanning.types.js";
+import type { ArtifactScannerRouterDependencies } from "./artifact-scanning.types";
 
 /** Create the TokenReview-protected scanner job and byte-broker router. */
 export function __CreateArtifactScannerRouter(dependencies: ArtifactScannerRouterDependencies): Router

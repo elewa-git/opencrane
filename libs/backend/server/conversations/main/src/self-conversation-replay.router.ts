@@ -1,8 +1,8 @@
 import { Router, type Request, type Response } from "express";
 import { __DecodeConversationProjectionCursor, __StreamConversationProjection, ConversationProjectionOutcomes } from "@opencrane/backend/conversations/projection";
 
-import { _CreateExpressConversationLiveReplaySink } from "./express-conversation-live-replay-sink.js";
-import type { SelfConversationReplayRouterDependencies } from "./self-conversation-replay.router.types.js";
+import { _CreateExpressConversationLiveReplaySink } from "./express-conversation-live-replay-sink";
+import type { SelfConversationReplayRouterDependencies } from "./self-conversation-replay.router.types";
 
 /**
  * Build the `GET /:conversationId/events` route a signed-in user's browser subscribes to for

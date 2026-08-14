@@ -6,9 +6,9 @@ import { describe, expect, it, vi } from "vitest";
 
 import { AGENT_RUNTIME_PROTOCOL_V1, ElicitationBodyKinds, ElicitationPurposes, RuntimeCandidateKinds, type RuntimeCandidate, type RuntimeCommandEnvelope } from "@opencrane/contracts";
 
-import { _RegisterInternalAgentRuntimeStream } from "../agent-runtime-stream.js";
-import { RuntimeCommandWakeup } from "../runtime-command-wakeup.js";
-import type { RuntimeCommandStreamAuthority } from "../agent-runtime-stream.types.js";
+import { _RegisterInternalAgentRuntimeStream } from "../agent-runtime-stream";
+import { RuntimeCommandWakeup } from "../runtime-command-wakeup";
+import type { RuntimeCommandStreamAuthority } from "../agent-runtime-stream.types";
 
 /** Build a transport app with a deterministic projected-token reviewer. */
 function _CreateApp(admit: RuntimeCommandStreamAuthority["__AdmitCandidate"], commandWakeup?: RuntimeCommandWakeup)

@@ -1,8 +1,8 @@
 import { Injectable, computed, inject, signal } from "@angular/core";
 
-import { CONVERSATION_WORKSPACE_GATEWAY } from "./conversation-workspace.gateway.js";
-import { ConversationWorkspaceGatewayError } from "./conversation-workspace-gateway.errors.js";
-import { ConversationRunStates, type ConversationRun, type SubmitConversationSteeringCommand } from "./conversation-workspace.types.js";
+import { CONVERSATION_WORKSPACE_GATEWAY } from "./conversation-workspace.gateway";
+import { ConversationWorkspaceGatewayError } from "./conversation-workspace-gateway.errors";
+import { ConversationRunStates, type ConversationRun, type SubmitConversationSteeringCommand } from "./conversation-workspace.types";
 
 /**
  * Holds the status of the one agent run the participant is currently looking at, and runs the three

@@ -4,12 +4,12 @@ import type { Logger } from "pino";
 
 import { _ResolveRequestPrincipal } from "@opencrane/backend/server/infra/auth";
 
-import { _PersonalConfigurationMaterializer } from "./materialization/personal-configuration-materializer.js";
-import { PrismaPersonalConfigurationMaterializationUnitOfWork } from "./materialization/prisma-personal-configuration-materialization-unit-of-work.js";
-import { __CreatePersonalConfigurationRouter } from "./http/personal-configuration.router.js";
-import type { PersonalConfigurationCaller } from "./http/personal-configuration.router.types.js";
-import { PrismaPersonalConfigurationDecisionRepository } from "./decision/prisma-personal-configuration-decision-repository.js";
-import { PrismaPersonalConfigurationViewRepository } from "./query/prisma-personal-configuration-view-repository.js";
+import { _PersonalConfigurationMaterializer } from "./materialization/personal-configuration-materializer";
+import { PrismaPersonalConfigurationMaterializationUnitOfWork } from "./materialization/prisma-personal-configuration-materialization-unit-of-work";
+import { __CreatePersonalConfigurationRouter } from "./http/personal-configuration.router";
+import type { PersonalConfigurationCaller } from "./http/personal-configuration.router.types";
+import { PrismaPersonalConfigurationDecisionRepository } from "./decision/prisma-personal-configuration-decision-repository";
+import { PrismaPersonalConfigurationViewRepository } from "./query/prisma-personal-configuration-view-repository";
 
 /** Turns the authenticated request into the caller shape this package uses, or null when there is no session. */
 function _resolveCaller(request: Parameters<typeof _ResolveRequestPrincipal>[0]): PersonalConfigurationCaller | null

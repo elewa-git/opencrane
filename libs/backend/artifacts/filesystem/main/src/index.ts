@@ -1,2 +1,2 @@
-export { __FilesystemArtifactStore } from "./filesystem-artifact-store.js";
-export type { FilesystemArtifactStoreOptions } from "./filesystem-artifact-store.types.js";
+export { __FilesystemArtifactStore } from "./filesystem-artifact-store";
+export type { FilesystemArtifactStoreOptions } from "./filesystem-artifact-store.types";

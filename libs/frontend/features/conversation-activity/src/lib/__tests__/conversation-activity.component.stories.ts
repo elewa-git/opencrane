@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from "@storybook/angular";
 
 import { ConversationActivityKinds, ElicitationRequestStates, type ConversationActivityRow } from "@opencrane/state/conversation/elicitation";
 
-import { ConversationActivityComponent } from "../conversation-activity.component.js";
+import { ConversationActivityComponent } from "../conversation-activity.component";
 
 /** Canonical rows proving requests and visible retry failures together. */
 const _ROWS: readonly ConversationActivityRow[] = [

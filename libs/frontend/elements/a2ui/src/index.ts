@@ -12,6 +12,6 @@
 // @a2ui/web_core 0.10.3 ships and what the `@a2ui/angular/v0_8` import path pins. Upstream marks
 // v0.8 legacy, so check the spec revision before bumping the dependency:
 // https://a2ui.org/specification/v0.8-a2ui/
-export * from "./lib/a2ui-canvas.component.js";
-export * from "./lib/a2ui.providers.js";
-export * from "./lib/a2ui.types.js";
+export * from "./lib/a2ui-canvas.component";
+export * from "./lib/a2ui.providers";
+export * from "./lib/a2ui.types";

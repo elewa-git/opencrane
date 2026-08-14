@@ -2,8 +2,8 @@ import { ConversationAssetScanLifecycleStates } from "@opencrane/backend/server/
 import { ArtifactKind, ArtifactRevisionState, ArtifactUploadLeaseState, ConversationAssetProvenance, ConversationAssetState, ConversationLifecycle, ConversationTimelineEntryKind, WorkloadAssignmentState } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
 
-import { PrismaConversationAssetOutputRepository } from "../prisma-conversation-asset-output-repository.js";
-import { PrismaConversationAssetOutputUnitOfWork } from "../prisma-conversation-asset-output-unit-of-work.js";
+import { PrismaConversationAssetOutputRepository } from "../prisma-conversation-asset-output-repository";
+import { PrismaConversationAssetOutputUnitOfWork } from "../prisma-conversation-asset-output-unit-of-work";
 
 const _IDENTITY = { namespace: "runtime-ns", serviceAccountName: "agent-runtime-default", podUid: "pod-1" } as const;
 const _ADDRESS = `sha256:${"a".repeat(64)}`;

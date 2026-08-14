@@ -3,8 +3,8 @@ import { expect, userEvent, within } from "storybook/test";
 
 import { PersonaArchetypeTones } from "@opencrane/elements/ui";
 
-import { PersonaFirstChatComponent } from "../persona-first-chat.component.js";
-import { type PersonaFirstChatIdentity, PersonaFirstChatMessageRoles, type PersonaFirstChatProvenance, type PersonaFirstChatQuestion, PersonaFirstChatStates, type PersonaFirstChatTranscriptMessage } from "../persona-first-chat.types.js";
+import { PersonaFirstChatComponent } from "../persona-first-chat.component";
+import { type PersonaFirstChatIdentity, PersonaFirstChatMessageRoles, type PersonaFirstChatProvenance, type PersonaFirstChatQuestion, PersonaFirstChatStates, type PersonaFirstChatTranscriptMessage } from "../persona-first-chat.types";
 
 /** Stable personal-agent identity shared by canonical Analyst stories. */
 const _ANALYST_IDENTITY: PersonaFirstChatIdentity =

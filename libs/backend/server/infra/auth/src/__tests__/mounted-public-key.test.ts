@@ -4,7 +4,7 @@ import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { _CreateMountedPublicKeySource } from "../mounted-public-key.js";
+import { _CreateMountedPublicKeySource } from "../mounted-public-key";
 
 describe("_CreateMountedPublicKeySource", function _suite()
 {

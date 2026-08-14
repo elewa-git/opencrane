@@ -1,8 +1,8 @@
 import type { Request } from "express";
 import type { Logger } from "pino";
 
-import type { ConversationCaller } from "./types/conversation-caller.types.js";
-import type { ConversationUnitOfWork } from "./types/conversation-unit-of-work.types.js";
+import type { ConversationCaller } from "./types/conversation-caller.types";
+import type { ConversationUnitOfWork } from "./types/conversation-unit-of-work.types";
 
 /**
  * What `__CreateSelfConversationsRouter` needs. Built by

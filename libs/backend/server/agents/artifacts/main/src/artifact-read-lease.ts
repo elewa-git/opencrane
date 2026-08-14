@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 
 import { __IsSafeArtifactMediaType } from "@opencrane/backend/artifacts/authorization";
 
-import { IssueArtifactReadLeaseOutcomes, type ArtifactReadLeaseRepository, type ArtifactReadLeaseSigner, type IssueArtifactReadLeaseCommand, type IssueArtifactReadLeaseResult, type PublishedArtifactReadTarget } from "./artifact-read-lease.types.js";
+import { IssueArtifactReadLeaseOutcomes, type ArtifactReadLeaseRepository, type ArtifactReadLeaseSigner, type IssueArtifactReadLeaseCommand, type IssueArtifactReadLeaseResult, type PublishedArtifactReadTarget } from "./artifact-read-lease.types";
 
 /** Maximum lifetime for a service-verified internal artifact read lease. */
 const _READ_LEASE_SECONDS = 300;

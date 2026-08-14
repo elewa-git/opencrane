@@ -1,25 +1,25 @@
 // OpenTelemetry must be the first dependency evaluated so it can patch instrumented modules before
 // the remaining import graph runs. Keep this side-effect import first when editing the entrypoint.
-import "./app/instrument.js";
+import "./app/instrument";
 
 import { __CreateManagedRunAdmissionPort, __CreatePersonalRunAdmissionPort, __ReadRunAdmissionConcurrencyPolicy, _CreateRunAdmissionCapacityGate } from "@opencrane/backend/agents/execution/admission";
 import { _CreateManagedExecutionEvidenceAuthority } from "@opencrane/backend/server/agents/agent-services";
 import { _CreateFleetMembershipEvidenceConfig } from "@opencrane/backend/server/iam/membership";
 import { ___BindConsole } from "@opencrane/backend/observability";
 
-import { _ReadProcessConfig } from "./app/config.js";
-import { _ReconcileChannelTargetRoutes, _StartChannelTargetRouteReconciler } from "./app/channel-target-composition.js";
-import { _CreateExternalActionWorker } from "./app/external-action-composition.js";
-import { _CreateInternalApp } from "./app/internal-app.js";
-import { _BootstrapInitialModel } from "./app/initial-model-bootstrap.js";
-import { _CreateKubernetesClients } from "./app/kubernetes-clients.js";
-import { _StartProcessLifecycle } from "./app/lifecycle.js";
-import { _log } from "./app/log.js";
-import { _CreatePublicApp, _CreatePublicAuthentication } from "./app/public-app.js";
-import { _CreateRunCancellationAuthority } from "./app/run-cancellation-composition.js";
-import { _CreateArtifactUploadGateway } from "./infra/artifacts/artifact-upload.factory.js";
-import { ___CreatePrismaClient } from "./infra/db/db.js";
-import { _CreateObotAdapters } from "./infra/obot/obot-adapters.factory.js";
+import { _ReadProcessConfig } from "./app/config";
+import { _ReconcileChannelTargetRoutes, _StartChannelTargetRouteReconciler } from "./app/channel-target-composition";
+import { _CreateExternalActionWorker } from "./app/external-action-composition";
+import { _CreateInternalApp } from "./app/internal-app";
+import { _BootstrapInitialModel } from "./app/initial-model-bootstrap";
+import { _CreateKubernetesClients } from "./app/kubernetes-clients";
+import { _StartProcessLifecycle } from "./app/lifecycle";
+import { _log } from "./app/log";
+import { _CreatePublicApp, _CreatePublicAuthentication } from "./app/public-app";
+import { _CreateRunCancellationAuthority } from "./app/run-cancellation-composition";
+import { _CreateArtifactUploadGateway } from "./infra/artifacts/artifact-upload.factory";
+import { ___CreatePrismaClient } from "./infra/db/db";
+import { _CreateObotAdapters } from "./infra/obot/obot-adapters.factory";
 
 /**
  * Compose the process once, from telemetry through coordinated shutdown.

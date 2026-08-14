@@ -4,7 +4,7 @@ import { Ajv } from "ajv";
 
 import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 
-import type { ReviewedIntegrationToolDefinition } from "./agent-revision.types.js";
+import type { ReviewedIntegrationToolDefinition } from "./agent-revision.types";
 
 /** Shared JSON-Schema compiler used only to establish revision-authoring validity. */
 const _AJV = new Ajv({ allErrors: true, strict: false });

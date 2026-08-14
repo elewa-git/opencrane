@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { PersonaOnboardingApiStates } from "../persona-lifecycle.types.js";
-import { _ProjectPersonaOnboardingStatus } from "../persona-onboarding-status-projection.js";
-import { PersonaOnboardingStatusInterviewStates, PersonaOnboardingStatusRevisionStates } from "../persona-onboarding-status-projection.types.js";
-import { PersonaColourValues, PersonaModifierValues, PersonaTieKinds, type PersonaScoreResult } from "../../scoring/persona-scorer.types.js";
-import type { PersonaOnboardingStatusFacts } from "../persona-onboarding-status-projection.types.js";
+import { PersonaOnboardingApiStates } from "../persona-lifecycle.types";
+import { _ProjectPersonaOnboardingStatus } from "../persona-onboarding-status-projection";
+import { PersonaOnboardingStatusInterviewStates, PersonaOnboardingStatusRevisionStates } from "../persona-onboarding-status-projection.types";
+import { PersonaColourValues, PersonaModifierValues, PersonaTieKinds, type PersonaScoreResult } from "../../scoring/persona-scorer.types";
+import type { PersonaOnboardingStatusFacts } from "../persona-onboarding-status-projection.types";
 
 /** Build baseline owner facts that a status state may project without Prisma access. */
 function _Facts(overrides: Partial<PersonaOnboardingStatusFacts> = {}): PersonaOnboardingStatusFacts

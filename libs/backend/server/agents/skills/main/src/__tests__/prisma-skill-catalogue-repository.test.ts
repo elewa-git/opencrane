@@ -1,8 +1,8 @@
 import { SkillRevisionState, SkillState, type PrismaClient } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
 
-import { PrismaSkillCatalogueRepository } from "../prisma-skill-catalogue-repository.js";
-import { SkillCatalogueRevisionStates, SkillCatalogueStates } from "../skill-catalogue.types.js";
+import { PrismaSkillCatalogueRepository } from "../prisma-skill-catalogue-repository";
+import { SkillCatalogueRevisionStates, SkillCatalogueStates } from "../skill-catalogue.types";
 
 /** Builds one persisted row containing only browser-safe catalogue fields. */
 function _skillRow()

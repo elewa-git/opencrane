@@ -4,8 +4,8 @@ import type { Logger } from "pino";
 import { AgentThreadDeliveryKinds } from "@opencrane/backend/conversations/agent-threads";
 import { ___CreateLogger, ___DoWithTrace } from "@opencrane/backend/observability";
 
-import type { AgentThreadParentDeliveryCommand, AgentThreadParentDeliveryUnitOfWork, AgentThreadRuntimeIdentity, DeliverAgentThreadParentResult } from "../agent-thread-parent-delivery.types.js";
-import { PrismaAgentThreadParentDeliveryRepository } from "./prisma-agent-thread-parent-delivery-repository.js";
+import type { AgentThreadParentDeliveryCommand, AgentThreadParentDeliveryUnitOfWork, AgentThreadRuntimeIdentity, DeliverAgentThreadParentResult } from "../agent-thread-parent-delivery.types";
+import { PrismaAgentThreadParentDeliveryRepository } from "./prisma-agent-thread-parent-delivery-repository";
 
 /**
  * Opens the serializable transaction for a runtime-authored Agent-thread parent delivery.

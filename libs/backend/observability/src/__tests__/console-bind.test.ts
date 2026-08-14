@@ -4,8 +4,8 @@ import pino from "pino";
 import type { Logger } from "pino";
 import { describe, expect, it } from "vitest";
 
-import { ___BindConsole } from "../console-bind.js";
-import { ___ContextMixin, ___RunWithContext } from "../context.js";
+import { ___BindConsole } from "../console-bind";
+import { ___ContextMixin, ___RunWithContext } from "../context";
 
 /** Build a pino logger that records each emitted record into an array. */
 function _memLogger(): { logger: Logger; records: Array<Record<string, unknown>> }

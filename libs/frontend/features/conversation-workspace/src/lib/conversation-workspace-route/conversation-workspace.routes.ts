@@ -7,7 +7,7 @@ export const CONVERSATION_WORKSPACE_ROUTES: Routes =
 		path: ":conversationId",
 		loadComponent: function loadSelectedConversation()
 		{
-			return import("./conversation-workspace-route.component.js").then(function pickConversationWorkspaceRoute(module)
+			return import("./conversation-workspace-route.component").then(function pickConversationWorkspaceRoute(module)
 			{
 				return module.ConversationWorkspaceRouteComponent;
 			});
@@ -18,7 +18,7 @@ export const CONVERSATION_WORKSPACE_ROUTES: Routes =
 		pathMatch: "full",
 		loadComponent: function loadConversationIndex()
 		{
-			return import("./conversation-workspace-route.component.js").then(function pickConversationWorkspaceRoute(module)
+			return import("./conversation-workspace-route.component").then(function pickConversationWorkspaceRoute(module)
 			{
 				return module.ConversationWorkspaceRouteComponent;
 			});

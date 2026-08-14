@@ -1,4 +1,4 @@
-import type { ProposePersonalConfigurationChangeCommand } from "./personal-configuration-proposal.types.js";
+import type { ProposePersonalConfigurationChangeCommand } from "./personal-configuration-proposal.types";
 
 /** Durable identifier returned after the database accepts one proposal insert. */
 export interface PersonalConfigurationProposalPersistenceReceipt

@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { PersonaColourValues } from "../../scoring/persona-scorer.types.js";
+import { PersonaColourValues } from "../../scoring/persona-scorer.types";
 
-import { _DerivePersonaDraftSources } from "../persona-draft-source-deriver.js";
-import type { PersonaDraftSourceDerivationInput } from "../persona-draft-source-deriver.types.js";
+import { _DerivePersonaDraftSources } from "../persona-draft-source-deriver";
+import type { PersonaDraftSourceDerivationInput } from "../persona-draft-source-deriver.types";
 
 /** Complete reviewed source snapshot for pure draft-derivation tests. */
 function _Input(): PersonaDraftSourceDerivationInput<string>

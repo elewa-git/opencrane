@@ -1,4 +1,4 @@
-import { PersonaLifecycleOutcomes } from "../profile/persona-lifecycle.types.js";
+import { PersonaLifecycleOutcomes } from "../profile/persona-lifecycle.types";
 
 /** Reasons creating a persona draft fails. */
 export enum PersonaDraftDenialReasons

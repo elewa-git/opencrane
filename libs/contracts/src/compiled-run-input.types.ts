@@ -1,5 +1,5 @@
 import type { JsonValue } from "@opencrane/util";
-import type { GeneratedOutputCapability } from "./model-routing.types.js";
+import type { GeneratedOutputCapability } from "./model-routing.types";
 
 /**
  * Agent input with every reference already resolved to a literal value, built in the control plane.

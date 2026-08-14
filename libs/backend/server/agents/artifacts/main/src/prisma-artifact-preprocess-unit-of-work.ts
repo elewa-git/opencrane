@@ -1,7 +1,7 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 
-import { PrismaArtifactPreprocessRepository } from "./prisma-artifact-preprocessing.js";
-import type { ArtifactPreprocessUnitOfWork, ArtifactPreprocessWork } from "./artifact-unit-of-work.types.js";
+import { PrismaArtifactPreprocessRepository } from "./prisma-artifact-preprocessing";
+import type { ArtifactPreprocessUnitOfWork, ArtifactPreprocessWork } from "./artifact-unit-of-work.types";
 
 /** Total attempts allowed, not retries on top of the first try: the loop runs attempts 1 to 3, so a collision is retried at most twice. */
 const _PREPROCESS_ATTEMPT_LIMIT = 3;

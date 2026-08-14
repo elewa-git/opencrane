@@ -6,9 +6,9 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest
 
 import { AgUiRunStatuses } from "@opencrane/state/conversation/ag-ui";
 
-import { CONVERSATION_WORKSPACE_GATEWAY } from "../conversation-workspace.gateway.js";
-import { ConversationRunStore } from "../conversation-run.store.js";
-import { ConversationRunStates, type ConversationRun, type ConversationWorkspaceGateway } from "../conversation-workspace.types.js";
+import { CONVERSATION_WORKSPACE_GATEWAY } from "../conversation-workspace.gateway";
+import { ConversationRunStore } from "../conversation-run.store";
+import { ConversationRunStates, type ConversationRun, type ConversationWorkspaceGateway } from "../conversation-workspace.types";
 
 /** Build the smallest gateway double needed by run-state tests. */
 function _Gateway(run: ConversationRun): ConversationWorkspaceGateway

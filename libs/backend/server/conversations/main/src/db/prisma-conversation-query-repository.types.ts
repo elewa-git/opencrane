@@ -1,9 +1,9 @@
 import type { ConversationLifecycles, ConversationModes } from "@opencrane/models/conversations";
 
-import type { AgentThreadSnapshotView } from "../types/agent-thread-view.types.js";
-import type { ConversationCaller } from "../types/conversation-caller.types.js";
-import type { ConversationCreationDirectory } from "../types/conversation-directory.types.js";
-import type { ConversationDetail, ConversationMessageView, ConversationSummary } from "../types/conversation-view.types.js";
+import type { AgentThreadSnapshotView } from "../types/agent-thread-view.types";
+import type { ConversationCaller } from "../types/conversation-caller.types";
+import type { ConversationCreationDirectory } from "../types/conversation-directory.types";
+import type { ConversationDetail, ConversationMessageView, ConversationSummary } from "../types/conversation-view.types";
 
 /**
  * The four stored facts the command decision needs, and nothing else.

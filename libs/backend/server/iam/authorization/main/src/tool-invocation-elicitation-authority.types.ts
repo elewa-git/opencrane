@@ -1,6 +1,6 @@
 import type { JsonValue } from "@opencrane/util";
 
-import type { ToolInvocationClaim, ToolInvocationRecord } from "./tool-invocation.types.js";
+import type { ToolInvocationClaim, ToolInvocationRecord } from "./tool-invocation.types";
 
 /** Exact authenticated approval transition applied inside a caller-held transaction. */
 export interface ApproveElicitedToolInvocationCommand

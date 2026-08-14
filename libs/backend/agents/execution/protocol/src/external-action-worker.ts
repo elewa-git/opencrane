@@ -2,8 +2,8 @@ import { ExternalActionClaimKinds, ToolInvocationClaimOutcomes, ToolInvocationEv
 import { ___DoWithTrace } from "@opencrane/backend/observability";
 import { PERSONAL_MEMORY_RECALL_TOOL_REVISION } from "@opencrane/models/agents";
 
-import { _ExternalActionRecoveryStrategy } from "./external-action-recovery-strategy.js";
-import { ExternalActionProviderOutcomeKinds, type ExternalActionExecutionContext, type ExternalActionProviderOutcome, type ExternalActionWorkerDependencies, type ExternalActionWorkerInvocation, type PreparedExternalActionAdapter } from "./external-action-worker.types.js";
+import { _ExternalActionRecoveryStrategy } from "./external-action-recovery-strategy";
+import { ExternalActionProviderOutcomeKinds, type ExternalActionExecutionContext, type ExternalActionProviderOutcome, type ExternalActionWorkerDependencies, type ExternalActionWorkerInvocation, type PreparedExternalActionAdapter } from "./external-action-worker.types";
 
 /** Failure code saved when preparation fails before any provider is contacted. */
 const _PREPARATION_FAILURE_CODE = "external_action_preparation_failed";

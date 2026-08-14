@@ -1,6 +1,6 @@
 import { SkillModelMode } from "@opencrane/contracts";
 
-import type { ScopeDefaultModel, ScopeDefaults, SkillModelPosture, SkillModelResolution } from "./resolve-skill-model.types.js";
+import type { ScopeDefaultModel, ScopeDefaults, SkillModelPosture, SkillModelResolution } from "./resolve-skill-model.types";
 
 /**
  * Resolve the effective scope default, applying the ClusterTenant-then-Global precedence.

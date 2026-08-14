@@ -3,8 +3,8 @@ import request from "supertest";
 import type { Logger } from "@opencrane/backend/observability";
 import { describe, expect, it, vi } from "vitest";
 
-import { __CreateChannelTargetsRouter } from "../channel-targets.router.js";
-import type { ChannelTargetResolutionDependencies } from "../channel-target-resolution.types.js";
+import { __CreateChannelTargetsRouter } from "../channel-targets.router";
+import type { ChannelTargetResolutionDependencies } from "../channel-target-resolution.types";
 
 /** Builds one event-only resolver with trusted narrow ports. */
 function _App(overrides: { readonly failAuthority?: boolean; readonly log?: Logger } = {})

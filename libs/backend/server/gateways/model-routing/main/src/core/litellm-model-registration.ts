@@ -1,8 +1,8 @@
 import { ___DoWithTrace } from "@opencrane/backend/observability";
 import { ___ParseAndValidateJson } from "@opencrane/util";
 
-import { _log } from "../log.js";
-import type { LiteLlmModelRegistration } from "./litellm-model-registration.types.js";
+import { _log } from "../log";
+import type { LiteLlmModelRegistration } from "./litellm-model-registration.types";
 
 /**
  * Best-effort GLOBAL registration of a model with LiteLLM via `POST /model/new`.

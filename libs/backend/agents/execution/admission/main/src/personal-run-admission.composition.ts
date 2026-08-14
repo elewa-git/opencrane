@@ -7,10 +7,10 @@ import { ___CreateLogger } from "@opencrane/backend/observability";
 import { PrismaRunAdmissionRepository } from "@opencrane/backend/agents/execution/runs";
 import type { FleetMembershipEvidenceConfig } from "@opencrane/backend/server/iam/membership";
 
-import { __CreatePersonalRunAdmissionPortWithGate } from "./personal-run-admission.js";
-import { PrismaPersonalRunAdmissionUnitOfWork } from "./prisma-personal-run-admission-unit-of-work.js";
-import type { PersonalRunAdmissionPort } from "./personal-run-admission.types.js";
-import type { RunAdmissionCapacityGate } from "./managed-run-admission.types.js";
+import { __CreatePersonalRunAdmissionPortWithGate } from "./personal-run-admission";
+import { PrismaPersonalRunAdmissionUnitOfWork } from "./prisma-personal-run-admission-unit-of-work";
+import type { PersonalRunAdmissionPort } from "./personal-run-admission.types";
+import type { RunAdmissionCapacityGate } from "./managed-run-admission.types";
 
 /**
  * Builds the personal browser-run admission port from readers that run inside the admission

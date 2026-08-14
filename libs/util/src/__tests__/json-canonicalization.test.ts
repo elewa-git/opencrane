@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { ___CanonicalizeJson } from "../json-canonicalization.js";
-import type { JsonValue } from "../json-canonicalization.types.js";
+import { ___CanonicalizeJson } from "../json-canonicalization";
+import type { JsonValue } from "../json-canonicalization.types";
 
 describe("RFC 8785 JSON canonicalization", function ()
 {

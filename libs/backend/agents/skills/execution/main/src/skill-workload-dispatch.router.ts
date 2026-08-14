@@ -2,7 +2,7 @@ import { Router, type Request, type Response } from "express";
 
 import { AGENT_CONTROLLER_PROJECTED_TOKEN_AUDIENCE, AGENT_CONTROLLER_SERVICE_ACCOUNT_NAME, ___IsEmptyAgentControllerCommand, ___ParseAgentControllerSkillWorkloadAssignmentCommand, ___ParseAgentControllerSkillWorkloadPodRegistrationCommand, ___ParseAgentControllerSkillWorkloadReleaseCommand } from "@opencrane/contracts";
 
-import type { ReviewedSkillWorkloadControllerIdentity, SkillWorkloadDispatchRouterDependencies } from "./skill-workload-dispatch.types.js";
+import type { ReviewedSkillWorkloadControllerIdentity, SkillWorkloadDispatchRouterDependencies } from "./skill-workload-dispatch.types";
 
 /**
  * Build the internal API the agent controller calls for skill workloads.

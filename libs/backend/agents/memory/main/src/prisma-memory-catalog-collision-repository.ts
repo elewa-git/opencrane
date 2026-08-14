@@ -1,7 +1,7 @@
 import type { Prisma } from "@prisma/client";
 
-import { MemoryCatalogAtomicStatuses, type AtomicRecordMemoryFactResult, type MemoryCatalogCollisionRepository, type RecordMemoryFactCommand } from "./memory-catalog.types.js";
-import { __MatchesExistingMemoryDelivery } from "./prisma-memory-catalog-repository.js";
+import { MemoryCatalogAtomicStatuses, type AtomicRecordMemoryFactResult, type MemoryCatalogCollisionRepository, type RecordMemoryFactCommand } from "./memory-catalog.types";
+import { __MatchesExistingMemoryDelivery } from "./prisma-memory-catalog-repository";
 
 /**
  * Reads already-committed rows to explain why a unique index rejected an insert.

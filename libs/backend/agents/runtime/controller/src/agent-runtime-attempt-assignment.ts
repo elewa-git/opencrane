@@ -1,8 +1,8 @@
 import { __BuildSuspendedAgentRuntimeJob } from "@opencrane/backend/agents/runtime/k8s-launcher";
 
-import { _ResolveAgentControllerRuntimeProfile } from "./agent-controller-profiles.js";
-import { AgentControllerReconcileOutcomes, type AgentControllerOptions, type AgentControllerReconcileResult } from "./agent-controller.types.js";
-import { _AgentRuntimeAttemptKeySecretName, _BuildAgentRuntimeAttemptKeySecret } from "./agent-runtime-attempt-key.js";
+import { _ResolveAgentControllerRuntimeProfile } from "./agent-controller-profiles";
+import { AgentControllerReconcileOutcomes, type AgentControllerOptions, type AgentControllerReconcileResult } from "./agent-controller.types";
+import { _AgentRuntimeAttemptKeySecretName, _BuildAgentRuntimeAttemptKeySecret } from "./agent-runtime-attempt-key";
 
 /** Return the Job UID Kubernetes assigned, or throw when it is missing. */
 function _RequireWorkloadUid(uid: string | undefined): string

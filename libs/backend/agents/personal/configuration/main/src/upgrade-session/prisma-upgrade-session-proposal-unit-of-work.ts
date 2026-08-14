@@ -3,12 +3,12 @@ import { Prisma, type PrismaClient } from "@prisma/client";
 import type { RunInputSnapshot } from "@opencrane/contracts";
 import { ___CreateLogger, ___DoWithTrace, type Logger } from "@opencrane/backend/observability";
 
-import { PrismaPersonalConfigurationProposalRepository } from "../proposal/prisma-personal-configuration-proposal-repository.js";
-import { PersonalConfigurationProposalCodes, type ProposePersonalConfigurationChangeResult } from "../proposal/personal-configuration-proposal.types.js";
-import { PrismaUpgradeSessionProfileRepository } from "./prisma-upgrade-session-profile-repository.js";
-import { _ProposeUpgradeSession, _RequirePersonalUpgradeSessionCandidate, _RequirePersonalUpgradeSessionSnapshot } from "./upgrade-session-proposal.js";
-import type { UpgradeSessionProposalUnitOfWork } from "./upgrade-session-proposal-unit-of-work.types.js";
-import type { PersonalUpgradeSessionCandidate, PersonalUpgradeSessionSnapshot, UpgradeSessionInvocation, UpgradeSessionProposalReceipt } from "./upgrade-session.types.js";
+import { PrismaPersonalConfigurationProposalRepository } from "../proposal/prisma-personal-configuration-proposal-repository";
+import { PersonalConfigurationProposalCodes, type ProposePersonalConfigurationChangeResult } from "../proposal/personal-configuration-proposal.types";
+import { PrismaUpgradeSessionProfileRepository } from "./prisma-upgrade-session-profile-repository";
+import { _ProposeUpgradeSession, _RequirePersonalUpgradeSessionCandidate, _RequirePersonalUpgradeSessionSnapshot } from "./upgrade-session-proposal";
+import type { UpgradeSessionProposalUnitOfWork } from "./upgrade-session-proposal-unit-of-work.types";
+import type { PersonalUpgradeSessionCandidate, PersonalUpgradeSessionSnapshot, UpgradeSessionInvocation, UpgradeSessionProposalReceipt } from "./upgrade-session.types";
 
 /** Prisma transaction owner for one provenance-bound runtime upgrade-session proposal. */
 export class PrismaUpgradeSessionProposalUnitOfWork implements UpgradeSessionProposalUnitOfWork

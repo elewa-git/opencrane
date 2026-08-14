@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { ElicitationBodyKinds } from "@opencrane/contracts";
 
-import { _CreateElicitationInterruptReader } from "../prisma-elicitation-interrupt-reader.js";
+import { _CreateElicitationInterruptReader } from "../prisma-elicitation-interrupt-reader";
 
 /** Build a process-owned Prisma double around one exact transaction. */
 function _Prisma(transaction: object)

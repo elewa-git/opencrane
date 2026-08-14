@@ -1,7 +1,7 @@
 import { AgentRunState, ExternalActionRecoveryMode, RunOutboxEventKind, ToolInvocationState, WorkloadAssignmentState, WorkloadKind, type PrismaClient } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
 
-import { PrismaRunCancellationRepository } from "../prisma-run-cancellation-repository.js";
+import { PrismaRunCancellationRepository } from "../prisma-run-cancellation-repository";
 
 /** Creates one active personal run row. */
 function _Run(overrides: Record<string, unknown> = {})

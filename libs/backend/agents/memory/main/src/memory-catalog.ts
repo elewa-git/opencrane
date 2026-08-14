@@ -1,9 +1,9 @@
 import { ___IsSha256ContentAddress } from "@opencrane/models/artifacts";
 import { MemoryFactProvenanceSourceKinds } from "@opencrane/contracts";
 
-import { __MemoryCatalogCorrectionConflictError } from "./memory-catalog-errors.js";
-import { MemoryCatalogAtomicStatuses } from "./memory-catalog.types.js";
-import type { AtomicRecordMemoryFactResult, MemoryCatalogUnitOfWork, RecordMemoryFactCommand, RecordMemoryFactResult } from "./memory-catalog.types.js";
+import { __MemoryCatalogCorrectionConflictError } from "./memory-catalog-errors";
+import { MemoryCatalogAtomicStatuses } from "./memory-catalog.types";
+import type { AtomicRecordMemoryFactResult, MemoryCatalogUnitOfWork, RecordMemoryFactCommand, RecordMemoryFactResult } from "./memory-catalog.types";
 
 /**
  * Records one memory fact's metadata and provenance in Postgres, after Cognee has stored the

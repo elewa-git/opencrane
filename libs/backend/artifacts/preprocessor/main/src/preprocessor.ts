@@ -5,7 +5,7 @@ import { join } from "node:path";
 import type { ArtifactPreprocessorClaimCommand, ArtifactPreprocessorFailureCode, ArtifactPreprocessorJobClaim } from "@opencrane/contracts";
 import { ___DoWithTrace } from "@opencrane/backend/observability";
 
-import type { ArtifactPreprocessorDependencies } from "./preprocessor.types.js";
+import type { ArtifactPreprocessorDependencies } from "./preprocessor.types";
 
 /**
  * Claim and process PDF preprocessing jobs until the process is asked to stop.

@@ -1,8 +1,8 @@
 import type { Request } from "express";
 import { describe, expect, it } from "vitest";
 
-import { _ResolveRequestPrincipal } from "../request-principal.js";
-import type { AuthUser } from "../session.types.js";
+import { _ResolveRequestPrincipal } from "../request-principal";
+import type { AuthUser } from "../session.types";
 
 /** Builds the minimum request surface consumed by the principal resolver. */
 function _request(authUser: Partial<AuthUser> | undefined, host = "acme.opencrane.test"): Request

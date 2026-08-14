@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { context, SpanStatusCode, trace } from "@opentelemetry/api";
 import { suppressTracing } from "@opentelemetry/core";
 
-import { ___RunWithContext } from "./context.js";
+import { ___RunWithContext } from "./context";
 
 /** Tracer shared by all operations started through this package. */
 const _tracer = trace.getTracer("@opencrane/backend/observability");

@@ -2,9 +2,9 @@ import { WorkloadAssignmentState, WorkloadKind, type PrismaClient } from "@prism
 
 import { AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, MANAGED_AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, type AgentRuntimeProjectedTokenAudience, type ManagedAgentRuntimeProjectedTokenAudience } from "@opencrane/contracts";
 
-import { PrismaRuntimeAuthorityRepository } from "./prisma-runtime-authority.js";
-import type { RuntimeBootstrapClaim, RuntimeBootstrapConsumptionResult } from "./runtime-proof.types.js";
-import type { RuntimeBootstrapExchangeRecord, RuntimeBootstrapExchangeRepository } from "./runtime-bootstrap.types.js";
+import { PrismaRuntimeAuthorityRepository } from "./prisma-runtime-authority";
+import type { RuntimeBootstrapClaim, RuntimeBootstrapConsumptionResult } from "./runtime-proof.types";
+import type { RuntimeBootstrapExchangeRecord, RuntimeBootstrapExchangeRepository } from "./runtime-bootstrap.types";
 
 /** Maps a Prisma workload-kind enum member to the plain bootstrap-kind string the contract exposes, so no Prisma type crosses the boundary. */
 function _toWorkloadKind(kind: WorkloadKind): "job" | "deployment"

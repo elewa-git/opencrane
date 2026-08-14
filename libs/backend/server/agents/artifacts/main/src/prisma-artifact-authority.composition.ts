@@ -1,13 +1,13 @@
 import type { PrismaClient } from "@prisma/client";
 
-import { _ArtifactPreprocessAuthority } from "./artifact-preprocess-authority.js";
-import { _ArtifactUploadAuthority } from "./artifact-authority.js";
-import type { ArtifactReadLeaseRepository } from "./artifact-read-lease.types.js";
-import type { PersonalArtifactCatalogueRepository } from "./artifact-finalization.types.js";
-import type { ArtifactPreprocessRepository } from "./artifact-preprocessing.types.js";
-import { PrismaArtifactCatalogueRepository } from "./prisma-artifact-catalogue-repository.js";
-import { PrismaArtifactPreprocessUnitOfWork } from "./prisma-artifact-preprocess-unit-of-work.js";
-import { PrismaArtifactPublicationUnitOfWork } from "./prisma-artifact-publication-unit-of-work.js";
+import { _ArtifactPreprocessAuthority } from "./artifact-preprocess-authority";
+import { _ArtifactUploadAuthority } from "./artifact-authority";
+import type { ArtifactReadLeaseRepository } from "./artifact-read-lease.types";
+import type { PersonalArtifactCatalogueRepository } from "./artifact-finalization.types";
+import type { ArtifactPreprocessRepository } from "./artifact-preprocessing.types";
+import { PrismaArtifactCatalogueRepository } from "./prisma-artifact-catalogue-repository";
+import { PrismaArtifactPreprocessUnitOfWork } from "./prisma-artifact-preprocess-unit-of-work";
+import { PrismaArtifactPublicationUnitOfWork } from "./prisma-artifact-publication-unit-of-work";
 
 /**
  * Build the upload authority: the lease reservation and the revision commit, each its own transaction.

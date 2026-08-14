@@ -1,6 +1,6 @@
 import type { RevisionScopeAttachment } from "@opencrane/models/agents";
 
-import type { AttachAuthorityResult, EffectiveScopeGrant, ScopeAttachmentIntersection, ScopeGrantResolver } from "./scope-attachment-authority.types.js";
+import type { AttachAuthorityResult, EffectiveScopeGrant, ScopeAttachmentIntersection, ScopeGrantResolver } from "./scope-attachment-authority.types";
 
 /** NUL-delimited canonical key for one scope triple, safe against concatenation aliasing. */
 function _tripleKey(triple: { scope: string; subjectType: string; subjectId: string }): string

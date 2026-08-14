@@ -3,8 +3,8 @@ import type { KeyObject } from "node:crypto";
 
 import type { FleetSignatureVerificationEvidence, SignedFleetMembershipRevision } from "@opencrane/models/authorization";
 
-import { __DigestFleetMembershipSignedPayload } from "./fleet-membership-payload-digest.js";
-import type { FleetMembershipSignatureVerifier } from "./membership-authority.types.js";
+import { __DigestFleetMembershipSignedPayload } from "./fleet-membership-payload-digest";
+import type { FleetMembershipSignatureVerifier } from "./membership-authority.types";
 
 /**
  * Checks Ed25519 signatures on stored membership revisions against a fixed set of issuer keys.

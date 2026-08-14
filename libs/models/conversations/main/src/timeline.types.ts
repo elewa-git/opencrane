@@ -1,4 +1,4 @@
-import type { ConversationId, MessageId } from "./identifiers.types.js";
+import type { ConversationId, MessageId } from "./identifiers.types";
 
 /**
  * What kind of record occupies one timeline position.

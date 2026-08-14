@@ -3,13 +3,13 @@ import { AgentServiceKind, AgentServiceState, ConversationLifecycle, Conversatio
 import type { AgentThreadOrigin } from "@opencrane/backend/conversations/agent-threads";
 import { __DecideConversationCommand, ConversationCommandActions, ConversationCommandDenialReasons, ConversationCommandKinds, ConversationLifecycles, ConversationModes, MessageSources } from "@opencrane/models/conversations";
 
-import { AgentThreadReadDenialReasons, ConversationAuthorityOutcomes, ConversationWriteDenialReasons, type ConversationWriteDenial, type CreateConversationResult, type MarkAgentThreadReadResult, type MutateConversationResult } from "../types/conversation-authority-result.types.js";
-import type { ConversationCaller } from "../types/conversation-caller.types.js";
-import type { CreateConversationRequest, SubmitConversationMessageRequest } from "../types/conversation-request.types.js";
-import type { ConversationDetail } from "../types/conversation-view.types.js";
-import type { ConversationMutationRepository } from "./prisma-conversation-mutation-repository.types.js";
-import type { ConversationAttachmentAdmissionPort } from "../conversation-message-admission.types.js";
-import { PrismaConversationQueryRepository } from "./prisma-conversation-query-repository.js";
+import { AgentThreadReadDenialReasons, ConversationAuthorityOutcomes, ConversationWriteDenialReasons, type ConversationWriteDenial, type CreateConversationResult, type MarkAgentThreadReadResult, type MutateConversationResult } from "../types/conversation-authority-result.types";
+import type { ConversationCaller } from "../types/conversation-caller.types";
+import type { CreateConversationRequest, SubmitConversationMessageRequest } from "../types/conversation-request.types";
+import type { ConversationDetail } from "../types/conversation-view.types";
+import type { ConversationMutationRepository } from "./prisma-conversation-mutation-repository.types";
+import type { ConversationAttachmentAdmissionPort } from "../conversation-message-admission.types";
+import { PrismaConversationQueryRepository } from "./prisma-conversation-query-repository";
 
 /** Exhaustive adapter mapping from model-owned creation modes to Prisma's generated enum. */
 const _PERSISTED_MODE_BY_MODE: Readonly<Record<ConversationModes, ConversationMode>> = {

@@ -2,7 +2,7 @@ import type { Request } from "express";
 
 import type { Logger } from "@opencrane/backend/observability";
 
-import type { SteeringRequestRepository } from "./steering-request.types.js";
+import type { SteeringRequestRepository } from "./steering-request.types";
 
 /**
  * Who is steering, as the server worked it out from the browser session.

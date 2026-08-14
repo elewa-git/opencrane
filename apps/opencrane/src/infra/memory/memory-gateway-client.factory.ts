@@ -1,7 +1,7 @@
 import { __CreateHttpCogneeMemoryGatewayClient } from "@opencrane/backend/server/infra/memory-gateway-client";
 import type { MemoryGatewayClient } from "@opencrane/backend/server/infra/memory-gateway-client";
 
-import type { InternalRuntimeConfig } from "../../app/config.types.js";
+import type { InternalRuntimeConfig } from "../../app/config.types";
 
 /**
  * Compose the one authenticated memory-gateway client for this server process.

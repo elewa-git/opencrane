@@ -1,6 +1,6 @@
 import { AgentScheduleOverlapPolicy as PrismaOverlapPolicy, AgentServiceKind, type PrismaClient } from "@prisma/client";
 
-import { AgentScheduleOverlapPolicies, type AgentScheduleDeletionResult, type AgentScheduleMutationResult, type AgentScheduleOverlapPolicy, type AgentScheduleRepository, type AgentServiceScheduleRecord, type CreateAgentScheduleCommand, type UpdateAgentScheduleCommand } from "./agent-schedule.types.js";
+import { AgentScheduleOverlapPolicies, type AgentScheduleDeletionResult, type AgentScheduleMutationResult, type AgentScheduleOverlapPolicy, type AgentScheduleRepository, type AgentServiceScheduleRecord, type CreateAgentScheduleCommand, type UpdateAgentScheduleCommand } from "./agent-schedule.types";
 
 /** Row shape read back from Postgres for one schedule. */
 interface _ScheduleRow

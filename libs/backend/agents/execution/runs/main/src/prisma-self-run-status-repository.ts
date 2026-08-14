@@ -1,6 +1,6 @@
 import type { PrismaClient } from "@prisma/client";
 
-import type { SelfRunStatus, SelfRunStatusRepository } from "./self-run-status.router.types.js";
+import type { SelfRunStatus, SelfRunStatusRepository } from "./self-run-status.router.types";
 
 /** Prisma read adapter for the product owner's immutable run-status view. */
 export class PrismaSelfRunStatusRepository implements SelfRunStatusRepository

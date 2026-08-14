@@ -3,12 +3,12 @@ import request from "supertest";
 import { describe, expect, it, vi } from "vitest";
 import type { Logger } from "@opencrane/backend/observability";
 
-import { _PersonaOnboardingOpenapiPaths } from "../openapi.js";
-import { __CreatePersonaOnboardingRouter } from "../persona-onboarding.router.js";
-import type { PersonaOnboardingRouterDependencies } from "../persona-onboarding.router.types.js";
-import { PersonaApprovalDenialReasons, PersonaApprovalInterviewStates, PersonaApprovalPersistenceStatuses, PersonaApprovalRevisionStates, type PersonaApprovalSnapshot } from "../../approval/persona-authority.types.js";
-import { PersonaDraftDenialReasons } from "../../drafting/persona-draft-authority.types.js";
-import { PersonaInterviewDenialReasons, PersonaOnboardingApiStates } from "../../profile/persona-lifecycle.types.js";
+import { _PersonaOnboardingOpenapiPaths } from "../openapi";
+import { __CreatePersonaOnboardingRouter } from "../persona-onboarding.router";
+import type { PersonaOnboardingRouterDependencies } from "../persona-onboarding.router.types";
+import { PersonaApprovalDenialReasons, PersonaApprovalInterviewStates, PersonaApprovalPersistenceStatuses, PersonaApprovalRevisionStates, type PersonaApprovalSnapshot } from "../../approval/persona-authority.types";
+import { PersonaDraftDenialReasons } from "../../drafting/persona-draft-authority.types";
+import { PersonaInterviewDenialReasons, PersonaOnboardingApiStates } from "../../profile/persona-lifecycle.types";
 
 /** Fully resolved score used by route fakes. */
 const _SCORE = { orderedAnswerIds: ["answer-1"], orderedChoiceIds: ["q1:a"], colours: { red: 1, yellow: 0, green: 0, blue: 1, total: 2 }, openness: { explorer: 1, guardian: 0, total: 1 }, tieResolutions: [], primary: "red", secondary: "blue", modifier: "explorer", resolutionRequired: null } as const;

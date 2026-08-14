@@ -3,7 +3,7 @@ import { AgentServiceKinds } from "@opencrane/models/agents";
 import type { InitialRunAuthority, RunAdmissionTransaction } from "@opencrane/backend/agents/execution/runs";
 import { describe, expect, it, vi } from "vitest";
 
-import { PrismaApprovedPersonaSource } from "../prisma-approved-persona-source.js";
+import { PrismaApprovedPersonaSource } from "../prisma-approved-persona-source";
 
 /** Creates personal run authority bound to its delegated owner. */
 function _PersonalRun(overrides: Partial<InitialRunAuthority> = {}): InitialRunAuthority

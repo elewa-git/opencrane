@@ -4,11 +4,11 @@ import { ConversationLifecycles, ConversationModes, MessageContentBlockKinds } f
 import { ConversationEventStreamStatuses, type ConversationEventStreamUpdate } from "@opencrane/state/conversation/adapter";
 import { __CreateAgUiStreamState, type AgUiStreamState } from "@opencrane/state/conversation/ag-ui";
 
-import { ConversationWorkspaceGatewayError, ConversationWorkspaceGatewayErrorKinds } from "./conversation-workspace-gateway.errors.js";
-import { CONVERSATION_WORKSPACE_EVENT_STREAM, CONVERSATION_WORKSPACE_GATEWAY } from "./conversation-workspace.gateway.js";
-import { ConversationOnboardingHistoryStore } from "./conversation-onboarding-history.store.js";
-import { ConversationRunStore } from "./conversation-run.store.js";
-import { ConversationCreationStates, ConversationOnboardingHistoryStatuses, ConversationPersonalAgentStatuses, ConversationWorkspaceRouteStates, type ConversationCreationDirectory, type ConversationSummary, type ConversationWorkspaceDetail, type ConversationWorkspaceNavigationIntent, type CreateConversationCommand, type SubmitConversationMessageBlock, type SubmitConversationMessageCommand } from "./conversation-workspace.types.js";
+import { ConversationWorkspaceGatewayError, ConversationWorkspaceGatewayErrorKinds } from "./conversation-workspace-gateway.errors";
+import { CONVERSATION_WORKSPACE_EVENT_STREAM, CONVERSATION_WORKSPACE_GATEWAY } from "./conversation-workspace.gateway";
+import { ConversationOnboardingHistoryStore } from "./conversation-onboarding-history.store";
+import { ConversationRunStore } from "./conversation-run.store";
+import { ConversationCreationStates, ConversationOnboardingHistoryStatuses, ConversationPersonalAgentStatuses, ConversationWorkspaceRouteStates, type ConversationCreationDirectory, type ConversationSummary, type ConversationWorkspaceDetail, type ConversationWorkspaceNavigationIntent, type CreateConversationCommand, type SubmitConversationMessageBlock, type SubmitConversationMessageCommand } from "./conversation-workspace.types";
 
 /** Component-scoped owner for workspace reads, live tailing, drafts, and commands. */
 @Injectable()

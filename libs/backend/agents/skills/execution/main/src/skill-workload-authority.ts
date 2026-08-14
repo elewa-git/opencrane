@@ -1,9 +1,9 @@
-import type { SkillAuthoringCompletionCommand } from "./skill-authoring-completion.types.js";
-import type { SkillAuthoringInputRecord } from "./skill-authoring-input.types.js";
-import type { SkillWorkloadBootstrapIdentity, SkillWorkloadBootstrapRecord } from "./skill-workload-bootstrap.types.js";
-import type { SkillWorkloadAssignmentCommand, SkillWorkloadClaim, SkillWorkloadPodRegistrationCommand, SkillWorkloadReleaseClaim, SkillWorkloadReleaseCommand } from "./skill-workload-claims.types.js";
-import type { SkillWorkloadExecutionAuthority } from "./skill-workload-authority.types.js";
-import { _SkillWorkloadPersistenceConflictError, type SkillWorkloadExecutionUnitOfWork, type SkillWorkloadExecutionWork } from "./skill-workload-unit-of-work.types.js";
+import type { SkillAuthoringCompletionCommand } from "./skill-authoring-completion.types";
+import type { SkillAuthoringInputRecord } from "./skill-authoring-input.types";
+import type { SkillWorkloadBootstrapIdentity, SkillWorkloadBootstrapRecord } from "./skill-workload-bootstrap.types";
+import type { SkillWorkloadAssignmentCommand, SkillWorkloadClaim, SkillWorkloadPodRegistrationCommand, SkillWorkloadReleaseClaim, SkillWorkloadReleaseCommand } from "./skill-workload-claims.types";
+import type { SkillWorkloadExecutionAuthority } from "./skill-workload-authority.types";
+import { _SkillWorkloadPersistenceConflictError, type SkillWorkloadExecutionUnitOfWork, type SkillWorkloadExecutionWork } from "./skill-workload-unit-of-work.types";
 
 /** Runs every skill-execution state change inside one transaction. */
 export class _SkillWorkloadExecutionAuthority implements SkillWorkloadExecutionAuthority

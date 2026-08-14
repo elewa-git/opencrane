@@ -4,10 +4,10 @@ import { describe, expect, it, vi } from "vitest";
 
 import type { Logger } from "@opencrane/backend/observability";
 
-import { __CreateUserOnboardingRouter } from "../user-onboarding.http.js";
-import { UserOnboardingAnswerStatuses, UserOnboardingStates } from "../user-onboarding.enums.js";
-import type { __UserOnboardingChatAuthority } from "../user-onboarding-chat-authority.js";
-import type { __UserOnboardingAuthority } from "../user-onboarding-authority.js";
+import { __CreateUserOnboardingRouter } from "../user-onboarding.http";
+import { UserOnboardingAnswerStatuses, UserOnboardingStates } from "../user-onboarding.enums";
+import type { __UserOnboardingChatAuthority } from "../user-onboarding-chat-authority";
+import type { __UserOnboardingAuthority } from "../user-onboarding-authority";
 
 describe("__CreateUserOnboardingRouter", function _UserOnboardingRouterSuite()
 {

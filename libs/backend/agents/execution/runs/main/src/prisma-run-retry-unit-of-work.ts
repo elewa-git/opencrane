@@ -1,8 +1,8 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 
-import { PrismaAgentRunAuthorityRepository } from "./prisma-run-authority.js";
-import { __StartNextRunAttempt } from "./run-authority.js";
-import type { AgentRunAuthorityRepository, AgentRunAuthoritySnapshot, AgentRunRetryTransactionRepository, AtomicRunAttemptResult, AtomicStartNextRunAttemptCommand, RunRetryAuthority, StartNextRunAttemptCommand, StartNextRunAttemptResult } from "./run-authority.types.js";
+import { PrismaAgentRunAuthorityRepository } from "./prisma-run-authority";
+import { __StartNextRunAttempt } from "./run-authority";
+import type { AgentRunAuthorityRepository, AgentRunAuthoritySnapshot, AgentRunRetryTransactionRepository, AtomicRunAttemptResult, AtomicStartNextRunAttemptCommand, RunRetryAuthority, StartNextRunAttemptCommand, StartNextRunAttemptResult } from "./run-authority.types";
 
 /** Maximum number of complete retry-authority attempts after PostgreSQL reports a safe rollback. */
 const _RUN_RETRY_ATTEMPT_LIMIT = 3;

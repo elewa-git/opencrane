@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { ___ModelRoutingDefaultWriteSchema } from "../index.js";
+import { ___ModelRoutingDefaultWriteSchema } from "../index";
 
 describe("___ModelRoutingDefaultWriteSchema", function _Suite()
 {

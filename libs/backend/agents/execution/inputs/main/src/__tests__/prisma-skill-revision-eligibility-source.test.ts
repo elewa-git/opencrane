@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { PrismaSkillRevisionEligibilitySource } from "../prisma-skill-revision-eligibility-source.js";
+import { PrismaSkillRevisionEligibilitySource } from "../prisma-skill-revision-eligibility-source";
 
 /** Builds a fake admission transaction that returns a fixed result for the locking query. */
 function _Transaction(rows: readonly unknown[])

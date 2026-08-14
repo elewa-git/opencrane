@@ -1,8 +1,8 @@
 import { AutoRoutingObjective, SkillModelMode, type AutoRoutingConfig } from "@opencrane/contracts";
 import { describe, expect, it } from "vitest";
 
-import { _ResolveSkillModel } from "../core/resolve-skill-model.js";
-import type { ScopeDefaults, SkillModelPosture } from "../core/resolve-skill-model.types.js";
+import { _ResolveSkillModel } from "../core/resolve-skill-model";
+import type { ScopeDefaults, SkillModelPosture } from "../core/resolve-skill-model.types";
 
 /** A minimal valid auto-routing config for posture/default inputs. */
 function _autoConfig(): AutoRoutingConfig

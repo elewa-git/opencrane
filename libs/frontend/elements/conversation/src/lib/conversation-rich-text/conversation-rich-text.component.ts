@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, input } from "@angular/core";
 
-import type { ConversationRichTextPresentation } from "../conversation.types.js";
+import type { ConversationRichTextPresentation } from "../conversation.types";
 
 /**
  * Puts one message's rich body into the transcript, and does nothing else to it.

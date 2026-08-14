@@ -7,7 +7,7 @@ import type { ArtifactPreprocessorClaimCommand, ArtifactPreprocessorFailureComma
 import { ___DoWithTrace } from "@opencrane/backend/observability";
 import { ___ParseAndValidateJson } from "@opencrane/util";
 
-import type { ArtifactPreprocessorRemote, ArtifactPreprocessorRemoteConfig } from "./preprocessor.types.js";
+import type { ArtifactPreprocessorRemote, ArtifactPreprocessorRemoteConfig } from "./preprocessor.types";
 
 /** Maximum accepted claim response size from the private authority. */
 const _MAXIMUM_CLAIM_RESPONSE_BYTES = 16_384;

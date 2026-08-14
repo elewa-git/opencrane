@@ -5,9 +5,9 @@ import { ConversationModes, MessageContentBlockKinds, MessageSources } from "@op
 import type { RunRetryAuthority } from "@opencrane/backend/agents/execution/runs";
 import { __DecodeConversationProjectionCursor } from "@opencrane/backend/conversations/projection";
 
-import { PrismaConversationUnitOfWork } from "../db/prisma-conversation-unit-of-work.js";
-import type { ConversationMessageAdmissionUnitOfWork } from "../conversation-message-admission.types.js";
-import type { SubmitConversationMessageRequest } from "../types/conversation-request.types.js";
+import { PrismaConversationUnitOfWork } from "../db/prisma-conversation-unit-of-work";
+import type { ConversationMessageAdmissionUnitOfWork } from "../conversation-message-admission.types";
+import type { SubmitConversationMessageRequest } from "../types/conversation-request.types";
 
 /** Fixed caller and message request reused across authority assertions. */
 const _CALLER = { siloId: "silo-1", subjectId: "user-1" } as const;

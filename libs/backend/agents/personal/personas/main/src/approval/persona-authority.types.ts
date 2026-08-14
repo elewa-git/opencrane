@@ -1,4 +1,4 @@
-import { PersonaLifecycleOutcomes } from "../profile/persona-lifecycle.types.js";
+import { PersonaLifecycleOutcomes } from "../profile/persona-lifecycle.types";
 
 /** The two revision states approval can see in its snapshot. */
 export enum PersonaApprovalRevisionStates

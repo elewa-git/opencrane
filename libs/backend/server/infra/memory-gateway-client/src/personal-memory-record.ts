@@ -1,4 +1,4 @@
-import type { PersonalMemoryRecordResult } from "./memory-gateway-client.types.js";
+import type { PersonalMemoryRecordResult } from "./memory-gateway-client.types";
 
 /**
  * Thrown when the memory gateway's answer cannot be trusted as a valid response.

@@ -1,6 +1,6 @@
 import type { Logger } from "@opencrane/backend/observability";
 
-import type { ChannelTargetAuthorityRepository, ReconcileChannelRuntimeRoutesCommand } from "./channel-target-resolution.types.js";
+import type { ChannelTargetAuthorityRepository, ReconcileChannelRuntimeRoutesCommand } from "./channel-target-resolution.types";
 
 /** Running route-convergence loop that drains before its repository closes. */
 export interface ChannelTargetRouteReconciler

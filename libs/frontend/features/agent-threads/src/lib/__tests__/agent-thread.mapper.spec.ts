@@ -2,7 +2,7 @@ import { AvatarTones } from "@opencrane/elements/ui";
 import { ConversationMessageTones, ConversationStatusTones } from "@opencrane/elements/conversation";
 import { AgentThreadAccessStates, AgentThreadRunStates, AgentThreadSummaryStates, type AgentThreadRunBoundaryPresentation, type AgentThreadSummaryPresentation } from "@opencrane/state/conversation/agent-threads";
 
-import { __AgentThreadMessagePresentation, __AgentThreadRunStatusPresentation, __AgentThreadSummaryStatusPresentation } from "../agent-thread.mapper.js";
+import { __AgentThreadMessagePresentation, __AgentThreadRunStatusPresentation, __AgentThreadSummaryStatusPresentation } from "../agent-thread.mapper";
 
 /** Build one exact parent summary mapper input. */
 function _Summary(state: AgentThreadSummaryStates): AgentThreadSummaryPresentation

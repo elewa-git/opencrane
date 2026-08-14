@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { __UserOnboardingChatAuthority, UserOnboardingChatError } from "../user-onboarding-chat-authority.js";
-import { UserOnboardingAnswerStatuses, UserOnboardingBootstrapArchetypes, UserOnboardingChatFailureReasons, UserOnboardingChatMessageKinds, UserOnboardingPersonaColours, UserOnboardingStates } from "../user-onboarding.enums.js";
-import type { AppendUserOnboardingAnswerCommand, StartUserOnboardingChatCommand, UserOnboardingAnswerPersistenceResult, UserOnboardingBootstrapContentRevision, UserOnboardingBootstrapConversation, UserOnboardingChatRepository } from "../user-onboarding-chat.types.js";
-import type { ApprovedPersonaEvidence, UserOnboardingOwner, UserOnboardingPersonaEvidencePort, UserOnboardingRecord } from "../user-onboarding.types.js";
-import type { __UserOnboardingAuthority } from "../user-onboarding-authority.js";
+import { __UserOnboardingChatAuthority, UserOnboardingChatError } from "../user-onboarding-chat-authority";
+import { UserOnboardingAnswerStatuses, UserOnboardingBootstrapArchetypes, UserOnboardingChatFailureReasons, UserOnboardingChatMessageKinds, UserOnboardingPersonaColours, UserOnboardingStates } from "../user-onboarding.enums";
+import type { AppendUserOnboardingAnswerCommand, StartUserOnboardingChatCommand, UserOnboardingAnswerPersistenceResult, UserOnboardingBootstrapContentRevision, UserOnboardingBootstrapConversation, UserOnboardingChatRepository } from "../user-onboarding-chat.types";
+import type { ApprovedPersonaEvidence, UserOnboardingOwner, UserOnboardingPersonaEvidencePort, UserOnboardingRecord } from "../user-onboarding.types";
+import type { __UserOnboardingAuthority } from "../user-onboarding-authority";
 
 /** Stable owner derived from the test session. */
 const _OWNER: UserOnboardingOwner = { siloId: "silo-a", subjectId: "subject-a" };

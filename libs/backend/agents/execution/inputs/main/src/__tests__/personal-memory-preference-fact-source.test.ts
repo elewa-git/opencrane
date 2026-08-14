@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { PersonalMemoryPreferenceFactSource } from "../personal-memory-preference-fact-source.js";
+import { PersonalMemoryPreferenceFactSource } from "../personal-memory-preference-fact-source";
 
 describe("PersonalMemoryPreferenceFactSource", function _DescribePersonalMemoryPreferenceFactSource()
 {

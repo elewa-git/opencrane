@@ -3,8 +3,8 @@ import { RunAdmissionDenialReasons, type InitialRunAuthority, type RunAdmissionT
 import { describe, expect, it, vi } from "vitest";
 import { AgentServiceKinds } from "@opencrane/models/agents";
 
-import { PrismaConversationContextRepository } from "../prisma-conversation-context-repository.js";
-import { TransactionBoundConversationContextSource } from "../prisma-conversation-context-source.js";
+import { PrismaConversationContextRepository } from "../prisma-conversation-context-repository";
+import { TransactionBoundConversationContextSource } from "../prisma-conversation-context-source";
 
 /** Creates personal run authority bound to the target conversation service. */
 function _Run(): InitialRunAuthority

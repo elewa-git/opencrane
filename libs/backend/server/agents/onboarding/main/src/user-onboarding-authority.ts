@@ -1,8 +1,8 @@
 import { ___DoWithTrace } from "@opencrane/backend/observability";
 
-import { UserOnboardingDenialReasons, UserOnboardingTransitionStatuses } from "./user-onboarding.enums.js";
-import { _UserOnboardingLifecycleState } from "./user-onboarding-lifecycle-state.js";
-import type { ApprovedPersonaEvidence, UserOnboardingOwner, UserOnboardingPersonaEvidencePort, UserOnboardingRecord, UserOnboardingRepository, UserOnboardingTransitionResult } from "./user-onboarding.types.js";
+import { UserOnboardingDenialReasons, UserOnboardingTransitionStatuses } from "./user-onboarding.enums";
+import { _UserOnboardingLifecycleState } from "./user-onboarding-lifecycle-state";
+import type { ApprovedPersonaEvidence, UserOnboardingOwner, UserOnboardingPersonaEvidencePort, UserOnboardingRecord, UserOnboardingRepository, UserOnboardingTransitionResult } from "./user-onboarding.types";
 
 /**
  * Runs the persona-survey half of onboarding: start or resume a survey, then pin the approved persona.

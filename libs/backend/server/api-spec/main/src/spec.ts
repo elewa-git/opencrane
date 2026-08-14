@@ -10,11 +10,11 @@
  * The generated openapi.json is a dist artifact, not source.
  */
 
-import { _AuthStepUpOpenapiPaths } from "./auth-openapi-paths.js";
-import { _DomainOpenapiPaths } from "./domain-openapi-paths.js";
-import { _ErrorEnvelopeSchema, _ValidationIssueSchema } from "./error-schemas.js";
-import { _ModelDefinitionSchema, _ModelDefinitionWriteSchema } from "./model-definition-schemas.js";
-import { _SelfRunCancellationSchema, _SelfRunStatusSchema } from "./run-schemas.js";
+import { _AuthStepUpOpenapiPaths } from "./auth-openapi-paths";
+import { _DomainOpenapiPaths } from "./domain-openapi-paths";
+import { _ErrorEnvelopeSchema, _ValidationIssueSchema } from "./error-schemas";
+import { _ModelDefinitionSchema, _ModelDefinitionWriteSchema } from "./model-definition-schemas";
+import { _SelfRunCancellationSchema, _SelfRunStatusSchema } from "./run-schemas";
 
 // ---------------------------------------------------------------------------
 // Reusable schema components

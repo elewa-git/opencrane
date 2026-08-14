@@ -1,8 +1,8 @@
 import { PersonaQuestionSetState, type Prisma } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
 
-import { PersonaOnboardingDenialReasons } from "../persona-onboarding-authority.types.js";
-import { PrismaPersonaOnboardingRepository } from "../prisma-persona-onboarding-repository.js";
+import { PersonaOnboardingDenialReasons } from "../persona-onboarding-authority.types";
+import { PrismaPersonaOnboardingRepository } from "../prisma-persona-onboarding-repository";
 
 /** Build the narrow transaction-scoped Prisma surface used by onboarding provisioning. */
 function _prisma(questionSetState: PersonaQuestionSetState | null = PersonaQuestionSetState.Reviewed): Prisma.TransactionClient

@@ -3,8 +3,8 @@ import request from "supertest";
 import { describe, expect, it, vi } from "vitest";
 import type { Logger } from "@opencrane/backend/observability";
 
-import { __CreatePersonalArtifactCatalogueRouter } from "../personal-artifact-catalogue.router.js";
-import type { PersonalArtifactCatalogueRouterDependencies } from "../personal-artifact-catalogue.router.types.js";
+import { __CreatePersonalArtifactCatalogueRouter } from "../personal-artifact-catalogue.router";
+import type { PersonalArtifactCatalogueRouterDependencies } from "../personal-artifact-catalogue.router.types";
 
 /** Builds owner-scoped catalogue dependencies for router tests. */
 function _dependencies(overrides: Partial<PersonalArtifactCatalogueRouterDependencies> = {}): PersonalArtifactCatalogueRouterDependencies

@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { ArtifactScannerVerdict } from "@opencrane/contracts";
 
-import { __ProcessArtifactScanJob } from "../index.js";
+import { __ProcessArtifactScanJob } from "../index";
 
 describe("artifact scanner", () =>
 {

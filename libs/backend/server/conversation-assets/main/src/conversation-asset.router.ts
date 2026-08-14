@@ -5,10 +5,10 @@ import { Router, type Request } from "express";
 
 import { ConversationAssetDisposition } from "@opencrane/models/conversation-assets";
 
-import type { ConversationAssetContent } from "./conversation-asset-content.types.js";
-import { ConversationAssetDenialReasons } from "./conversation-asset.types.js";
-import type { ConversationAssetRouterDependencies } from "./conversation-asset.router.types.js";
-import { _ParseReserveConversationAsset } from "./conversation-asset.validator.js";
+import type { ConversationAssetContent } from "./conversation-asset-content.types";
+import { ConversationAssetDenialReasons } from "./conversation-asset.types";
+import type { ConversationAssetRouterDependencies } from "./conversation-asset.router.types";
+import { _ParseReserveConversationAsset } from "./conversation-asset.validator";
 
 /** Create the authenticated browser upload and Files-index router. */
 export function __CreateConversationAssetRouter(dependencies: ConversationAssetRouterDependencies): Router

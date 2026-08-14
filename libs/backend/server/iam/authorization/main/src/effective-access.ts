@@ -1,7 +1,7 @@
 import { __AuthorizationScopesEqual, __DecideAuthorization, __IsAuthorizationResourceLocator, AuthorizationDecisionOutcomes } from "@opencrane/models/authorization";
 import type { AuthorizationGrant, AuthorizationRequest, CapabilityReference } from "@opencrane/models/authorization";
 
-import { AuthorizationMembershipOutcomes, type AuthorizationGrantRepository, type AuthorizationMembershipAuthority, type EffectiveCapabilityEvidence, type ResolveEffectiveAccessCommand, type ResolveEffectiveAccessResult } from "./effective-access.types.js";
+import { AuthorizationMembershipOutcomes, type AuthorizationGrantRepository, type AuthorizationMembershipAuthority, type EffectiveCapabilityEvidence, type ResolveEffectiveAccessCommand, type ResolveEffectiveAccessResult } from "./effective-access.types";
 
 /** Produces a stable lexical key for an immutable capability reference. */
 function _capabilityKey(capability: CapabilityReference): string

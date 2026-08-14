@@ -1,10 +1,10 @@
 import type { Interrupt } from "@ag-ui/core";
 import type { AgUiA2uiEnvelope, AgUiProjectionEvent, AgUiToolRecoveryRequiredEnvelope } from "@opencrane/contracts";
 
-import type { AgUiAgentThreadParentDelivery } from "./agent-thread-delivery/agent-thread-delivery.types.js";
-import type { AgUiMessageView } from "./message/message.types.js";
-import type { AgUiRunFailure, AgUiRunStatuses } from "./run/run.types.js";
-import type { AgUiToolView } from "./tool/tool.types.js";
+import type { AgUiAgentThreadParentDelivery } from "./agent-thread-delivery/agent-thread-delivery.types";
+import type { AgUiMessageView } from "./message/message.types";
+import type { AgUiRunFailure, AgUiRunStatuses } from "./run/run.types";
+import type { AgUiToolView } from "./tool/tool.types";
 
 /**
  * Everything the browser knows about one live conversation, rebuilt from the event stream.

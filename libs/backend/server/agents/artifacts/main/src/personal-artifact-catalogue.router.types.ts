@@ -2,7 +2,7 @@ import type { Request } from "express";
 
 import type { Logger } from "@opencrane/backend/observability";
 
-import type { PersonalArtifactCatalogueRepository } from "./artifact-finalization.types.js";
+import type { PersonalArtifactCatalogueRepository } from "./artifact-finalization.types";
 
 /**
  * Who is asking, as established by the session and the request host.

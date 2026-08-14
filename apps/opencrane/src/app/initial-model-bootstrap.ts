@@ -1,7 +1,7 @@
 import { _ProvisionByokKey, _RequireLiteLlmModelRegistration } from "@opencrane/backend/server/gateways/model-routing";
 
-import type { InitialModelBootstrapDependencies } from "./initial-model-bootstrap.types.js";
-import { _log } from "./log.js";
+import type { InitialModelBootstrapDependencies } from "./initial-model-bootstrap.types";
+import { _log } from "./log";
 
 /**
  * Seed the configured initial provider key through the same custody, LiteLLM registration, and

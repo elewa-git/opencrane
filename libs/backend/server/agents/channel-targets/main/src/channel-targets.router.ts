@@ -4,8 +4,8 @@ import { Router, type Request, type Response } from "express";
 import "@opencrane/backend/server/infra/auth";
 import type { Logger } from "@opencrane/backend/observability";
 
-import type { ChannelResolutionAction, ChannelTargetResolutionDependencies, ResolveChannelTargetCommand } from "./channel-target-resolution.types.js";
-import { __ResolveChannelTarget } from "./channel-target-resolution.js";
+import type { ChannelResolutionAction, ChannelTargetResolutionDependencies, ResolveChannelTargetCommand } from "./channel-target-resolution.types";
+import { __ResolveChannelTarget } from "./channel-target-resolution";
 
 /** Public identity assertions that an internal workload must never submit on behalf of a browser. */
 const _FORBIDDEN_IDENTITY_HEADERS = ["x-opencrane-subject", "x-forwarded-user", "x-auth-request-user", "x-remote-user"];

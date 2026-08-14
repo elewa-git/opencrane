@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, input, output } from "@angular/core";
 
-import type { ElicitationMultipleChoicePresentation } from "./elicitation-control.types.js";
+import type { ElicitationMultipleChoicePresentation } from "./elicitation-control.types";
 
 /** Present a bounded subset selection without owning submission state. */
 @Component({ selector: "wo-elicitation-multiple-choice", standalone: true, templateUrl: "./elicitation-multiple-choice.component.html", styleUrl: "./elicitation-control.component.scss", changeDetection: ChangeDetectionStrategy.OnPush })

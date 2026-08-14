@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { PrismaArtifactPreprocessRepository } from "../prisma-artifact-preprocessing.js";
+import { PrismaArtifactPreprocessRepository } from "../prisma-artifact-preprocessing";
 
 /** Stable database-owned time used by preprocessing delegate tests. */
 const _DATABASE_NOW = new Date("2026-08-05T08:00:00.000Z");

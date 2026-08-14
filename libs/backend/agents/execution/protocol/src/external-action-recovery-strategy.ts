@@ -1,6 +1,6 @@
 import { ExternalActionClaimKinds, ExternalActionRecoveryModes, ToolInvocationStates, type ToolInvocationClaim, type ToolInvocationRecord } from "@opencrane/backend/server/iam/authorization";
 
-import type { ExternalActionProviderOutcome, ExternalActionRecoveryStrategy, PreparedExternalActionAdapter } from "./external-action-worker.types.js";
+import type { ExternalActionProviderOutcome, ExternalActionRecoveryStrategy, PreparedExternalActionAdapter } from "./external-action-worker.types";
 
 /** Return the provider idempotency key saved at admission, throwing when there is none. */
 function _recoveryKey(invocation: ToolInvocationRecord): string

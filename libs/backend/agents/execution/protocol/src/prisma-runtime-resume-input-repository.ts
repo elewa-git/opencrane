@@ -4,7 +4,7 @@ import { __DigestCanonicalJson } from "@opencrane/backend/server/iam/authorizati
 import type { RuntimeElicitationResult, RuntimeToolResult } from "@opencrane/contracts";
 import type { JsonValue } from "@opencrane/util";
 
-import type { RuntimeResumeInputLoad, RuntimeResumeInputRepository, RuntimeResumeInputUnitOfWork } from "./runtime-resume-input.types.js";
+import type { RuntimeResumeInputLoad, RuntimeResumeInputRepository, RuntimeResumeInputUnitOfWork } from "./runtime-resume-input.types";
 
 /**
  * Loads the pending tool results and steering rows a resume command would carry.

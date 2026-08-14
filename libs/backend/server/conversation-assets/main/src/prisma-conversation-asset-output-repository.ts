@@ -6,7 +6,7 @@ import type { ArtifactPromotionReceiptClaims } from "@opencrane/backend/artifact
 import { ConversationAssetScanLifecycleStates } from "@opencrane/backend/server/agents/artifacts";
 import { ___DecideConversationAssetBatch } from "@opencrane/models/conversation-assets";
 import { ConversationSystemEventTypes } from "@opencrane/models/conversations";
-import { ConversationAssetOutputDenialReasons, ConversationAssetOutputPublishOutcomes, ConversationAssetOutputReservationOutcomes, ConversationAssetOutputTargetStatuses, type ConversationAssetOutputRepository, type ConversationAssetOutputReservationResult, type ConversationAssetOutputRuntimeIdentity, type ConversationAssetOutputTarget, type ConversationAssetOutputPublishResult, type ReserveConversationAssetOutput } from "./conversation-asset-output.types.js";
+import { ConversationAssetOutputDenialReasons, ConversationAssetOutputPublishOutcomes, ConversationAssetOutputReservationOutcomes, ConversationAssetOutputTargetStatuses, type ConversationAssetOutputRepository, type ConversationAssetOutputReservationResult, type ConversationAssetOutputRuntimeIdentity, type ConversationAssetOutputTarget, type ConversationAssetOutputPublishResult, type ReserveConversationAssetOutput } from "./conversation-asset-output.types";
 
 /** Persisted runtime-event value owned by the execution authority but referenced through its database contract. */
 const _MESSAGE_STARTED_EVENT_TYPE = "message.started";

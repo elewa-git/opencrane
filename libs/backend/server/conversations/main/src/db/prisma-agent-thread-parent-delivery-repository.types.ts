@@ -1,4 +1,4 @@
-import type { AgentThreadParentDeliveryCommand, AgentThreadRuntimeIdentity, DeliverAgentThreadParentResult } from "../agent-thread-parent-delivery.types.js";
+import type { AgentThreadParentDeliveryCommand, AgentThreadRuntimeIdentity, DeliverAgentThreadParentResult } from "../agent-thread-parent-delivery.types";
 
 /**
  * Persists one child-to-parent delivery against a transaction the unit of work already opened.

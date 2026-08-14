@@ -1,11 +1,11 @@
 import { Router, type Request, type Response } from "express";
 
-import { UserOnboardingAnswerStatuses, UserOnboardingChatFailureReasons, UserOnboardingTransitionStatuses } from "./user-onboarding.enums.js";
-import { UserOnboardingChatError } from "./user-onboarding-chat-authority.js";
-import type { UserOnboardingPersonaWorkflowPort, UserOnboardingRouterDependencies } from "./user-onboarding.http.types.js";
-import { _ParseUserOnboardingAnswerBody } from "./user-onboarding.http.validator.js";
-import type { ApprovedPersonaEvidence, UserOnboardingOwner } from "./user-onboarding.types.js";
-import { __UserOnboardingAuthority } from "./user-onboarding-authority.js";
+import { UserOnboardingAnswerStatuses, UserOnboardingChatFailureReasons, UserOnboardingTransitionStatuses } from "./user-onboarding.enums";
+import { UserOnboardingChatError } from "./user-onboarding-chat-authority";
+import type { UserOnboardingPersonaWorkflowPort, UserOnboardingRouterDependencies } from "./user-onboarding.http.types";
+import { _ParseUserOnboardingAnswerBody } from "./user-onboarding.http.validator";
+import type { ApprovedPersonaEvidence, UserOnboardingOwner } from "./user-onboarding.types";
+import { __UserOnboardingAuthority } from "./user-onboarding-authority";
 
 /**
  * Build the Express router for the signed-in user's own onboarding, mounted at /api/v1/me/onboarding.

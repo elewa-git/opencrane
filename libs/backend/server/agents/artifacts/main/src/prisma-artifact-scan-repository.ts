@@ -6,7 +6,7 @@ import { ___IsSha256ContentAddress } from "@opencrane/models/artifacts";
 
 import { ArtifactScannerVerdict, type ArtifactScannerFailureCommand, type ArtifactScannerJobClaim, type ArtifactScannerResultCommand } from "@opencrane/contracts";
 
-import { ConversationAssetScanLifecycleStates, type ArtifactScanRepository, type ArtifactScanSourceRead, type ConversationAssetScanLifecycleRepository } from "./artifact-scanning.types.js";
+import { ConversationAssetScanLifecycleStates, type ArtifactScanRepository, type ArtifactScanSourceRead, type ConversationAssetScanLifecycleRepository } from "./artifact-scanning.types";
 
 /** Transaction-scoped scan job and quarantine publication repository. */
 export class PrismaArtifactScanRepository implements ArtifactScanRepository

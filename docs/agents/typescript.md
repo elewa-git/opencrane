@@ -7,8 +7,8 @@
 
 Facts that make these rules concrete (verified against the tree, June 2026):
 
-- **npm workspaces with integrated NX, pure ESM.** Every package is `"type": "module"`; `tsconfig.json` is `module: NodeNext`, `target: es2023`, `strict`. Source-only libs use `project.json`; process/browser apps and deployment-only Helm rollups live in `apps/*`. Shared infra/util libs and backend capabilities live under `libs/`, compiled to `dist/` via esbuild where applicable. NX coordinates task dependencies and caching via `nx.json`; see [`app-specific.md`](./app-specific.md) for the live map.
-- **Import extensions follow NodeNext, and this is the most common mistake:** *relative* imports MUST end in `.js` (`import { x } from "./config.js"`), but *package* specifiers MUST NOT (`import { ClusterTenant } from "@opencrane/contracts"` — never `@opencrane/contracts.js`).
+- **npm workspaces with integrated NX, pure ESM.** Every package is `"type": "module"`; `tsconfig.json` is `module: preserve`, `moduleResolution: bundler`, `target: es2023`, `strict`. Source-only libs use `project.json`; process/browser apps and deployment-only Helm rollups live in `apps/*`. Shared infra/util libs and backend capabilities live under `libs/`, compiled to `dist/` via esbuild where applicable. NX coordinates task dependencies and caching via `nx.json`; see [`app-specific.md`](./app-specific.md) for the live map.
+- **Imports never carry an extension.** Write the file that exists on disk: `import { x } from "./config"`, not `./config.js`. Package specifiers are the same (`import { ClusterTenant } from "@opencrane/contracts"` — never `@opencrane/contracts.js`). This works because `tsc` only ever type-checks here (every invocation is `--noEmit`) and every runtime artifact is an `esbuild --bundle` output, so no relative specifier is ever resolved by Node's ESM loader. Keep the extension on non-TypeScript imports such as `.json`. If a branch predates this convention, run `node scripts/relative-import-extensions.mjs` rather than editing the import lines by hand.
 - **`@opencrane/contracts` is the keystone.** All cross-package types, enums, CRD DTOs, and the generated typed API client (`___CreateControlPlaneClient`, plus the `paths` map emitted from the opencrane-server OpenAPI spec) live there and are re-exported from one barrel (`libs/contracts/src/index.ts`). New shared types go in a domain `*.types.ts` there, not duplicated per app.
 - **The underscore naming convention is real and enforced repo-wide** — `___CreateControlPlaneClient`, `___AuthMiddleware`, `_RegisterTenants`, `_NamespaceFor` are all live examples. Match it; the [self-review table](#self-review-before-finishing) checks it.
 - **Frameworks in use** (so the import-order example below reflects reality): opencrane-server is **Express 5** + Prisma + `@kubernetes/client-node`; the operator is `@kubernetes/client-node` + a custom watch loop; browser and external clients use the generated contracts client. Logging is `pino` everywhere.
@@ -446,7 +446,7 @@ export interface ResolveResult
 }
 
 // resolve.ts
-import type { ResolveResult } from "./resolve.types.js";
+import type { ResolveResult } from "./resolve.types";
 
 export function _Resolve(): ResolveResult
 {
@@ -495,11 +495,11 @@ a sibling `*.test.ts` file.
 ```typescript
 // WRONG
 // libs/backend/example/main/src/widget.test.ts
-import { Widget } from "./widget.js";
+import { Widget } from "./widget";
 
 // CORRECT
 // libs/backend/example/main/src/__tests__/widget.test.ts
-import { Widget } from "../widget.js";
+import { Widget } from "../widget";
 ```
 
 ## Custom HTTP Response Headers
@@ -588,12 +588,12 @@ import express from "express";
 import * as k8s from "@kubernetes/client-node";
 import pino from "pino";
 
-// 3. Local packages - Types/Models (package specifier — NO .js)
+// 3. Local packages - Types/Models (package specifier — no extension)
 import type { Tenant, AccessPolicy, OperatorConfig } from "@opencrane/contracts";
 
-// 4. Local file imports (same package — relative, WITH .js)
-import { applyResource, deleteResource } from "./reconciler.js";
-import type { CreateTenantRequest } from "../types.js";
+// 4. Local file imports (same package — relative, no extension)
+import { applyResource, deleteResource } from "./reconciler";
+import type { CreateTenantRequest } from "../types";
 ```
 
 | Priority | Category | Example |
@@ -602,7 +602,7 @@ import type { CreateTenantRequest } from "../types.js";
 | 2 | External - Utils | `date-fns`, `lodash` |
 | 3 | External - Framework | `express`, `@kubernetes/client-node`, `pino`, `@prisma/client` |
 | 4 | Local packages | `@opencrane/contracts`, `@opencrane/backend/observability` |
-| 5 | Local file imports | `./reconciler.js`, `../types.js` |
+| 5 | Local file imports | `./reconciler`, `../types` |
 
 ## Single-Line Imports
 
@@ -617,10 +617,10 @@ import {
 	TenantStatus,
 	AccessPolicySpec,
 	OperatorConfig,
-} from "./types.js";
+} from "./types";
 
 // CORRECT
-import { TenantSpec, TenantStatus, AccessPolicySpec, OperatorConfig } from "./types.js";
+import { TenantSpec, TenantStatus, AccessPolicySpec, OperatorConfig } from "./types";
 ```
 
 ## Barrel Exports

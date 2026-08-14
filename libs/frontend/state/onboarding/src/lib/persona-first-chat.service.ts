@@ -1,7 +1,7 @@
 import { Injectable, inject } from "@angular/core";
 import { UserOnboardingRouteStates, type PersonaFirstChatSnapshot } from "@opencrane/models/user-onboarding";
 
-import { PERSONA_FIRST_CHAT_GATEWAY, type PersonaFirstChatAnswerCommand, type PersonaFirstChatGateway, type UserOnboardingRouteSnapshot } from "./persona-first-chat.types.js";
+import { PERSONA_FIRST_CHAT_GATEWAY, type PersonaFirstChatAnswerCommand, type PersonaFirstChatGateway, type UserOnboardingRouteSnapshot } from "./persona-first-chat.types";
 
 /**
  * The one seam between onboarding stores and the first-chat API, with the checks that must hold

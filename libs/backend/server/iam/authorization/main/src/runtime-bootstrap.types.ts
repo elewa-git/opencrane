@@ -1,7 +1,7 @@
 import type { Es256PublicJwk } from "@opencrane/models/authorization";
 import type { AgentRuntimeProjectedTokenAudience, ManagedAgentRuntimeProjectedTokenAudience } from "@opencrane/contracts";
 
-import type { RuntimeBootstrapRepository } from "./runtime-proof.types.js";
+import type { RuntimeBootstrapRepository } from "./runtime-proof.types";
 
 /** TokenReview-confirmed identity of a runtime workload presenting a projected credential. */
 export interface RuntimeBootstrapReviewedIdentity

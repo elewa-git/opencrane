@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { PrismaSkillAuthoringCompletionRepository } from "../prisma-skill-authoring-completion-repository.js";
-import { SkillAuthoringCompletionOutcomes } from "../skill-authoring-completion.types.js";
-import { _SkillWorkloadPersistenceConflictError } from "../skill-workload-unit-of-work.types.js";
+import { PrismaSkillAuthoringCompletionRepository } from "../prisma-skill-authoring-completion-repository";
+import { SkillAuthoringCompletionOutcomes } from "../skill-authoring-completion.types";
+import { _SkillWorkloadPersistenceConflictError } from "../skill-workload-unit-of-work.types";
 
 /** Authoring worker identity used by the denial tests below. */
 const _IDENTITY = { namespace: "opencrane-skill-authoring", serviceAccountName: "skill-authoring-default", podUid: "pod-uid-1" };

@@ -1,7 +1,7 @@
 import { z } from "zod";
 
-import type { AgentControllerSkillWorkloadAssignmentCommand, AgentControllerSkillWorkloadAssignmentResult, AgentControllerSkillWorkloadClaim, AgentControllerSkillWorkloadPodRegistrationCommand, AgentControllerSkillWorkloadPodRegistrationResult, AgentControllerSkillWorkloadReleaseClaim, AgentControllerSkillWorkloadReleaseCommand, AgentControllerSkillWorkloadReleaseResult } from "./agent-controller-skill-workload.types.js";
-import { _AgentControllerBoundedIdentifierSchema, _AgentControllerMillisecondInstantSchema, _AgentControllerPositiveIntegerSchema, _ParseAgentControllerCommand, _ParseAgentControllerModel } from "./agent-controller-wire.validator.js";
+import type { AgentControllerSkillWorkloadAssignmentCommand, AgentControllerSkillWorkloadAssignmentResult, AgentControllerSkillWorkloadClaim, AgentControllerSkillWorkloadPodRegistrationCommand, AgentControllerSkillWorkloadPodRegistrationResult, AgentControllerSkillWorkloadReleaseClaim, AgentControllerSkillWorkloadReleaseCommand, AgentControllerSkillWorkloadReleaseResult } from "./agent-controller-skill-workload.types";
+import { _AgentControllerBoundedIdentifierSchema, _AgentControllerMillisecondInstantSchema, _AgentControllerPositiveIntegerSchema, _ParseAgentControllerCommand, _ParseAgentControllerModel } from "./agent-controller-wire.validator";
 
 /**
  * Zod validators live beside the governed skill workload wire models so controller and server

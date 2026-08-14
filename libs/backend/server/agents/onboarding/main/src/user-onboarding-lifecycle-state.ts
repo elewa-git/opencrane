@@ -1,6 +1,6 @@
-import { UserOnboardingDenialReasons, UserOnboardingStates, UserOnboardingTransitionStatuses } from "./user-onboarding.enums.js";
-import type { UserOnboardingApprovalReconciliationContext, UserOnboardingLifecycleState, UserOnboardingPersonaApprovalContext, UserOnboardingSurveyStartContext } from "./user-onboarding-lifecycle-state.types.js";
-import type { UserOnboardingRecord, UserOnboardingTransitionResult } from "./user-onboarding.types.js";
+import { UserOnboardingDenialReasons, UserOnboardingStates, UserOnboardingTransitionStatuses } from "./user-onboarding.enums";
+import type { UserOnboardingApprovalReconciliationContext, UserOnboardingLifecycleState, UserOnboardingPersonaApprovalContext, UserOnboardingSurveyStartContext } from "./user-onboarding-lifecycle-state.types";
+import type { UserOnboardingRecord, UserOnboardingTransitionResult } from "./user-onboarding.types";
 
 /**
  * Pick the object that owns the behaviour for the row's current state.

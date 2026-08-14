@@ -5,7 +5,7 @@ import { MessageModule } from "primeng/message";
 
 import { AgentThreadAdmissionStates } from "@opencrane/state/conversation/agent-threads";
 
-import type { AgentThreadAgentOption, AgentThreadMentionTarget } from "./agent-thread-feature.types.js";
+import type { AgentThreadAgentOption, AgentThreadMentionTarget } from "./agent-thread-feature.types";
 
 /** Controlled Agent selector embedded in an ordinary group composer before atomic message submit. */
 @Component({ selector: "wo-agent-thread-mention-control", standalone: true, imports: [AutoCompleteModule, FormsModule, MessageModule], templateUrl: "./agent-thread-mention-control.component.html", styleUrl: "./agent-thread-mention-control.component.scss", changeDetection: ChangeDetectionStrategy.OnPush })

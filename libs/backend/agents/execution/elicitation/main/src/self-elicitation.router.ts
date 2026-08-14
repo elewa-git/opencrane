@@ -2,7 +2,7 @@ import { Router, type Request, type Response } from "express";
 
 import { ElicitationBodyKinds, type ElicitationResponseValue, type SubmitElicitationResponse } from "@opencrane/contracts";
 
-import type { SelfElicitationCaller, SelfElicitationRouterDependencies } from "./self-elicitation.router.types.js";
+import type { SelfElicitationCaller, SelfElicitationRouterDependencies } from "./self-elicitation.router.types";
 
 /** Create the sole browser read-and-response API for every elicitation body. */
 export function __CreateSelfElicitationRouter(dependencies: SelfElicitationRouterDependencies): Router

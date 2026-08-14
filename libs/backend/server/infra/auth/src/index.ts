@@ -26,16 +26,16 @@
  * @see https://github.com/expressjs/session — `express-session` (^1.19.0), whose
  *      `SessionData` interface this package augments.
  */
-import "./session.types.js";
+import "./session.types";
 
-export { ___LoadOidcAuthConfig } from "./oidc-config.js";
-export type { OidcAuthConfig } from "./oidc-config.types.js";
-export { _RequestHost } from "./request-host.js";
-export { _ResolveRequestPrincipal } from "./request-principal.js";
-export type { RequestPrincipal } from "./request-principal.types.js";
-export { _CreateMountedPublicKeySource } from "./mounted-public-key.js";
-export type { MountedPublicKeySource } from "./mounted-public-key.types.js";
-export { _ResolveIdentityClaims, _ReadStringArrayClaim } from "./identity-claims.js";
+export { ___LoadOidcAuthConfig } from "./oidc-config";
+export type { OidcAuthConfig } from "./oidc-config.types";
+export { _RequestHost } from "./request-host";
+export { _ResolveRequestPrincipal } from "./request-principal";
+export type { RequestPrincipal } from "./request-principal.types";
+export { _CreateMountedPublicKeySource } from "./mounted-public-key";
+export type { MountedPublicKeySource } from "./mounted-public-key.types";
+export { _ResolveIdentityClaims, _ReadStringArrayClaim } from "./identity-claims";
 export {
   _buildCurrentUrl,
   _buildPostLogoutRedirectUri,
@@ -44,18 +44,18 @@ export {
   _regenerateSession,
   _sanitizeReturnTo,
   _saveSession,
-} from "./session.js";
-export type { AuthUser } from "./session.types.js";
+} from "./session";
+export type { AuthUser } from "./session.types";
 export {
   _ResolveOrgMembershipFacts,
-} from "./org-membership.js";
-export type { OrgMembershipFacts, OrgMembershipRepository, OrgMembershipRow, OwnedOrg } from "./org-membership.types.js";
-export { OidcAuthServiceBase } from "./oidc-service.js";
-export { PrismaOrgMembershipRepository } from "./prisma-org-membership-repository.js";
-export type { AuthStatus, AuthStatusUser, LoginClient, ManagerAuthMode } from "./oidc-service.types.js";
-export { ___AuthMiddleware } from "./auth-middleware.js";
-export { _RequirePlatformOperator } from "./require-platform-operator.js";
-export { _RequireOrgAdmin } from "./require-org-admin.js";
-export * from "./per-org-client.js";
-export type * from "./per-org-client.types.js";
-export * from "./request-silo.js";
+} from "./org-membership";
+export type { OrgMembershipFacts, OrgMembershipRepository, OrgMembershipRow, OwnedOrg } from "./org-membership.types";
+export { OidcAuthServiceBase } from "./oidc-service";
+export { PrismaOrgMembershipRepository } from "./prisma-org-membership-repository";
+export type { AuthStatus, AuthStatusUser, LoginClient, ManagerAuthMode } from "./oidc-service.types";
+export { ___AuthMiddleware } from "./auth-middleware";
+export { _RequirePlatformOperator } from "./require-platform-operator";
+export { _RequireOrgAdmin } from "./require-org-admin";
+export * from "./per-org-client";
+export type * from "./per-org-client.types";
+export * from "./request-silo";

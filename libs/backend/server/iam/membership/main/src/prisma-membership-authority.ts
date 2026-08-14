@@ -5,7 +5,7 @@ import type { JsonValue } from "@opencrane/util";
 
 import { __AppendAuditDecision } from "@opencrane/backend/server/iam/audit";
 import { __DigestCanonicalJson } from "@opencrane/backend/server/iam/authorization";
-import type { FleetMembershipAcceptance, FleetMembershipAcceptanceResult, FleetMembershipAuthorityRepository } from "./membership-authority.types.js";
+import type { FleetMembershipAcceptance, FleetMembershipAcceptanceResult, FleetMembershipAuthorityRepository } from "./membership-authority.types";
 
 /** Maps one verified assertion row to an independent authorization scope. */
 function _scope(kind: string, organizationId: string, resourceId: string | null): AuthorizationScope

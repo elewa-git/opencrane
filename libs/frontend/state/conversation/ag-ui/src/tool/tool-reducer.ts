@@ -1,7 +1,7 @@
-import type { AgUiStreamState } from "../ag-ui-stream.types.js";
-import { AgUiRunStatuses } from "../run/run.types.js";
-import { AgUiToolStatuses } from "./tool.types.js";
-import { _IsToolFailure, _IsToolRecoveryRequired } from "./tool.validator.js";
+import type { AgUiStreamState } from "../ag-ui-stream.types";
+import { AgUiRunStatuses } from "../run/run.types";
+import { AgUiToolStatuses } from "./tool.types";
+import { _IsToolFailure, _IsToolRecoveryRequired } from "./tool.validator";
 
 /** Create a new requested tool call from its start frame. */
 export function _StartTool(state: AgUiStreamState, toolCallId: string, name: string): AgUiStreamState

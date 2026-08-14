@@ -4,10 +4,10 @@ import { Router, type Request, type Response } from "express";
 import { _RequireOrgAdmin, _ResolveRequestPrincipal } from "@opencrane/backend/server/infra/auth";
 import type { ObotCustodyCredential, ObotCustodyPort } from "@opencrane/backend/server/infra/obot-custody";
 
-import { __ProvisionIntegrationCustody } from "./integration-custody-provisioning.js";
-import { PrismaIntegrationCustodyRepository } from "./prisma-integration-custody-repository.js";
-import type { IntegrationCustodyLogger } from "./integration-custody-provisioning.types.js";
-import type { ProvisionIntegrationCustodyRequestBody } from "./integration-custody.router.types.js";
+import { __ProvisionIntegrationCustody } from "./integration-custody-provisioning";
+import { PrismaIntegrationCustodyRepository } from "./prisma-integration-custody-repository";
+import type { IntegrationCustodyLogger } from "./integration-custody-provisioning.types";
+import type { ProvisionIntegrationCustodyRequestBody } from "./integration-custody.router.types";
 
 /** Longest accepted identifier at this route boundary. */
 const _MAX_IDENTIFIER_LENGTH = 256;

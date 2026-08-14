@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, input } from "@angular/core";
 
-import { PersonaFirstChatMessageRoles, type PersonaFirstChatTranscriptMessage } from "./persona-first-chat.types.js";
+import { PersonaFirstChatMessageRoles, type PersonaFirstChatTranscriptMessage } from "./persona-first-chat.types";
 
 /** Return the stable human-readable speaker label for one finite transcript role. */
 export function _PersonaFirstChatSpeakerLabel(role: PersonaFirstChatMessageRoles, agentName: string): string

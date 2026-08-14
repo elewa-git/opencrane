@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, output } from "@angular/core";
 
-import { AgentThreadRouteNoticeComponent } from "./agent-thread-route-notice.component.js";
+import { AgentThreadRouteNoticeComponent } from "./agent-thread-route-notice.component";
 
 /** Indistinguishable missing, foreign, and never-authorized child-route view. */
 @Component({ selector: "wo-agent-thread-unavailable", standalone: true, imports: [AgentThreadRouteNoticeComponent], templateUrl: "./agent-thread-unavailable.component.html", changeDetection: ChangeDetectionStrategy.OnPush })

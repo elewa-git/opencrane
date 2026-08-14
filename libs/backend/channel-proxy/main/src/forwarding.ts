@@ -1,7 +1,7 @@
 import { ___DoWithTrace } from "@opencrane/backend/observability";
 
-import type { AuthorizedChannelTarget, ChannelProxyDependencies, DelegatedSession } from "./channel-proxy.types.js";
-import { __HasForgedIdentityHeaders, __ValidateOrigin } from "./origin-policy.js";
+import type { AuthorizedChannelTarget, ChannelProxyDependencies, DelegatedSession } from "./channel-proxy.types";
+import { __HasForgedIdentityHeaders, __ValidateOrigin } from "./origin-policy";
 
 /**
  * Relay one browser's event stream from the conversation replay endpoint, resuming at its cursor.

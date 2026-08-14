@@ -5,8 +5,8 @@ import { __DigestCanonicalJson, ExternalActionClaimKinds, ExternalActionRecovery
 import { ElicitationBodyKinds, ElicitationPurposes, RunInputSnapshotIdentityKinds, type RunInputSnapshot } from "@opencrane/contracts";
 import { PERSONAL_MEMORY_RECALL_TOOL_REVISION } from "@opencrane/models/agents";
 
-import { PrismaElicitationUnitOfWork } from "../prisma-elicitation-unit-of-work.js";
-import { PrismaRuntimeElicitationUnitOfWork } from "../prisma-runtime-elicitation-unit-of-work.js";
+import { PrismaElicitationUnitOfWork } from "../prisma-elicitation-unit-of-work";
+import { PrismaRuntimeElicitationUnitOfWork } from "../prisma-runtime-elicitation-unit-of-work";
 
 const NOW = new Date("2026-08-11T10:00:00.000Z");
 

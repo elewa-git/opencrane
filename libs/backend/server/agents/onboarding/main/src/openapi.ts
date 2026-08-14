@@ -1,4 +1,4 @@
-import { UserOnboardingStates } from "./user-onboarding.enums.js";
+import { UserOnboardingStates } from "./user-onboarding.enums";
 
 /** Reusable deterministic guided-chat projection schema. */
 const _ChatProjectionSchema = {

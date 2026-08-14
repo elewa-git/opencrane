@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { RunAdmissionConcurrencyGate } from "../run-admission-concurrency.js";
+import { RunAdmissionConcurrencyGate } from "../run-admission-concurrency";
 
 /** Creates fixed admission coordinates with optional silo and service overrides. */
 function _command(siloId = "silo-1", agentServiceId = "service-1")

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { ___ContextMixin, ___GetContext, ___RunWithContext, ___SetContextField } from "../context.js";
+import { ___ContextMixin, ___GetContext, ___RunWithContext, ___SetContextField } from "../context";
 
 describe("context", function _contextSuite()
 {

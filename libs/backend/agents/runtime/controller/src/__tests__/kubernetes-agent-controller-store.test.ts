@@ -3,8 +3,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { __BuildSuspendedAgentRuntimeJob } from "@opencrane/backend/agents/runtime/k8s-launcher";
 
-import { __CreateKubernetesAgentControllerStore } from "../kubernetes-agent-controller-store.js";
-import type { AgentControllerBatchApi, AgentControllerCoreApi, AgentControllerKubernetesStoreOptions } from "../kubernetes-agent-controller-store.types.js";
+import { __CreateKubernetesAgentControllerStore } from "../kubernetes-agent-controller-store";
+import type { AgentControllerBatchApi, AgentControllerCoreApi, AgentControllerKubernetesStoreOptions } from "../kubernetes-agent-controller-store.types";
 
 /** Wrap the API fakes in the same request timeout and shutdown signal the real process uses. */
 function _StoreOptions(options: Pick<AgentControllerKubernetesStoreOptions, "batchApi" | "coreApi">, shutdownSignal: AbortSignal = new AbortController().signal): AgentControllerKubernetesStoreOptions

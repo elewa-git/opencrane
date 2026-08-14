@@ -1,6 +1,6 @@
 import type { RunInputSnapshot } from "@opencrane/contracts";
 
-import type { ChildRunAdmissionLimits, ChildRunTargetAuthorization, PreparedChildRunAdmission } from "./child-run-admission.types.js";
+import type { ChildRunAdmissionLimits, ChildRunTargetAuthorization, PreparedChildRunAdmission } from "./child-run-admission.types";
 
 /** Request to write one prepared child run, carrying everything needed to re-check the parent under its lock. */
 export interface ChildRunReservationCommand

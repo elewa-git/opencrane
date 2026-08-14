@@ -14,6 +14,6 @@
  * Used by: `apps/opencrane-ui/src/app/app.routes.ts`, which supplies the guarded mount, while the
  * feature route hosts the page and turns its typed intents into canonical URLs.
  */
-export { CONVERSATION_WORKSPACE_ROUTES } from "./lib/conversation-workspace-route/conversation-workspace.routes.js";
-export { ConversationWorkspacePageComponent } from "./lib/components/conversation-workspace-page/conversation-workspace-page.component.js";
-export type { ConversationThreadNavigationIntent } from "./lib/conversation-workspace-feature.types.js";
+export { CONVERSATION_WORKSPACE_ROUTES } from "./lib/conversation-workspace-route/conversation-workspace.routes";
+export { ConversationWorkspacePageComponent } from "./lib/components/conversation-workspace-page/conversation-workspace-page.component";
+export type { ConversationThreadNavigationIntent } from "./lib/conversation-workspace-feature.types";

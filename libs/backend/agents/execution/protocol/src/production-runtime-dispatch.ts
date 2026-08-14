@@ -9,9 +9,9 @@ import { RunInputSnapshotIdentityKinds, type CompiledToolDefinition, type RunInp
 import { PERSONAL_MEMORY_RECALL_TOOL_NAME, PERSONAL_MEMORY_RECALL_TOOL_REVISION } from "@opencrane/models/agents";
 import { ___DigestCanonicalJson } from "@opencrane/util";
 
-import { __CreatePrismaRunInputCompiler } from "./prisma-run-input-compiler.js";
-import { PrismaRuntimeDispatchAuthority } from "./prisma-runtime-dispatch-authority.js";
-import type { RunInputCompiler, RuntimeApprovalExpiry, RuntimeDispatchAuthorityConfig, RuntimeElicitationUnitOfWorkFactory } from "./prisma-runtime-dispatch-authority.types.js";
+import { __CreatePrismaRunInputCompiler } from "./prisma-run-input-compiler";
+import { PrismaRuntimeDispatchAuthority } from "./prisma-runtime-dispatch-authority";
+import type { RunInputCompiler, RuntimeApprovalExpiry, RuntimeDispatchAuthorityConfig, RuntimeElicitationUnitOfWorkFactory } from "./prisma-runtime-dispatch-authority.types";
 
 /** Reviewed arguments for one model-proposed personal-memory recall. */
 const _PERSONAL_MEMORY_RECALL_PARAMETERS_SCHEMA = {

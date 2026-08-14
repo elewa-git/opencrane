@@ -3,8 +3,8 @@ import { Router, type Request, type Response } from "express";
 import { __DigestChannelInvocationContext } from "@opencrane/backend/server/agents/channel-targets";
 import { __DecodeConversationProjectionCursor, __StreamConversationProjection, ConversationProjectionOutcomes } from "@opencrane/backend/conversations/projection";
 
-import { _CreateExpressConversationLiveReplaySink } from "./express-conversation-live-replay-sink.js";
-import type { ConversationReplayRouterDependencies } from "./conversation-replay.router.types.js";
+import { _CreateExpressConversationLiveReplaySink } from "./express-conversation-live-replay-sink";
+import type { ConversationReplayRouterDependencies } from "./conversation-replay.router.types";
 
 /**
  * Build the internal replay route used by callers that hold a single-use context token instead

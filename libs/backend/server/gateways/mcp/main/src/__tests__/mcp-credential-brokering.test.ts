@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { _NormalizeCredentialInput } from "../core/mcp-servers.logic.js";
+import { _NormalizeCredentialInput } from "../core/mcp-servers.logic";
 
 describe("_NormalizeCredentialInput", function _suite()
 {

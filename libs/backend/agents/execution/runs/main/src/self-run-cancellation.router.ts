@@ -1,8 +1,8 @@
 import { Router, type Request, type Response } from "express";
 import { ___DoWithTrace } from "@opencrane/backend/observability";
 
-import { SelfRunCancellationOutcomes, type SelfRunCancellationResult, type SelfRunCancellationRouterDependencies } from "./self-run-cancellation.types.js";
-import { _ParseSelfRunCancellationBody } from "./self-run-cancellation.validator.js";
+import { SelfRunCancellationOutcomes, type SelfRunCancellationResult, type SelfRunCancellationRouterDependencies } from "./self-run-cancellation.types";
+import { _ParseSelfRunCancellationBody } from "./self-run-cancellation.validator";
 
 /** Stable owner-facing error codes for cancellation denials. */
 const _ERROR_BY_OUTCOME: Readonly<Record<Exclude<SelfRunCancellationOutcomes, SelfRunCancellationOutcomes.Cancelling | SelfRunCancellationOutcomes.Cancelled>, string>> = {

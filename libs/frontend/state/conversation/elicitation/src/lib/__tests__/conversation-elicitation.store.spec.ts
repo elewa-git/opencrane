@@ -6,12 +6,12 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest
 
 import { CONVERSATION_ELICITATION_VERSION, ElicitationBodyKinds, ElicitationPurposes, ElicitationRequestStates, type ConversationElicitation, type ElicitationResponseProjection } from "@opencrane/contracts";
 
-import { __MapToolActivity } from "../conversation-activity.mapper.js";
-import { ConversationActivityKinds } from "../conversation-activity.types.js";
-import { ConversationElicitationStore } from "../conversation-elicitation.store.js";
-import { ElicitationGatewayError, ElicitationGatewayErrorKinds } from "../elicitation-gateway.errors.js";
-import type { ConversationElicitationGateway } from "../elicitation-gateway.types.js";
-import { ELICITATION_GATEWAY } from "../opencrane-conversation-elicitation.gateway.js";
+import { __MapToolActivity } from "../conversation-activity.mapper";
+import { ConversationActivityKinds } from "../conversation-activity.types";
+import { ConversationElicitationStore } from "../conversation-elicitation.store";
+import { ElicitationGatewayError, ElicitationGatewayErrorKinds } from "../elicitation-gateway.errors";
+import type { ConversationElicitationGateway } from "../elicitation-gateway.types";
+import { ELICITATION_GATEWAY } from "../opencrane-conversation-elicitation.gateway";
 
 /** Build one valid requested free-text projection. */
 function _Elicitation(): ConversationElicitation

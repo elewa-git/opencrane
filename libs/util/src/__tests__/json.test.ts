@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { ___ParseAndValidateJson } from "../json.js";
+import { ___ParseAndValidateJson } from "../json";
 
 /** Validate one object field while proving the generic return type. */
 function _Count(candidate: unknown, minimum: number): number

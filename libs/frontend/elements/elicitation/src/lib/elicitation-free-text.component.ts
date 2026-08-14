@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, input, output } from "@angular/core";
 
-import type { ElicitationFreeTextPresentation } from "./elicitation-control.types.js";
+import type { ElicitationFreeTextPresentation } from "./elicitation-control.types";
 
 /** Present one bounded text response and emit controlled drafts. */
 @Component({ selector: "wo-elicitation-free-text", standalone: true, templateUrl: "./elicitation-free-text.component.html", styleUrl: "./elicitation-control.component.scss", changeDetection: ChangeDetectionStrategy.OnPush })

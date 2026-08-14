@@ -1,7 +1,7 @@
 import { __CreateHttpObotCustodyAdapter, __CreateHttpObotMcpInvocationAdapter, __CreateObotSession, __UnavailableObotCustodyAdapter, __UnavailableObotMcpInvocationAdapter } from "@opencrane/backend/server/infra/obot-custody";
 
-import type { OpenCraneObotConfig } from "../../app/config.types.js";
-import type { ObotAdapters } from "./obot-adapters.factory.types.js";
+import type { OpenCraneObotConfig } from "../../app/config.types";
+import type { ObotAdapters } from "./obot-adapters.factory.types";
 
 /**
  * Compose the server-owned Obot custody and MCP invocation authorities from process configuration.

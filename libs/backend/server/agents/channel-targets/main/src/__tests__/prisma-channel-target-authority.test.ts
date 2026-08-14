@@ -1,7 +1,7 @@
 import { ChannelInvocationAction, ConversationLifecycle, ConversationMode } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
 
-import { PrismaChannelTargetAuthorityUnitOfWork } from "../prisma-channel-target-authority.js";
+import { PrismaChannelTargetAuthorityUnitOfWork } from "../prisma-channel-target-authority";
 
 /** Captured observability calls for authority-boundary trace assertions. */
 const _trace = vi.hoisted(function _CreateTraceState()

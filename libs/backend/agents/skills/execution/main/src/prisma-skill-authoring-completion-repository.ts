@@ -1,9 +1,9 @@
 import { Prisma, SkillRevisionState, SkillWorkloadKind, SkillWorkloadState } from "@prisma/client";
 
-import { SkillAuthoringCompletionOutcomes, type SkillAuthoringCompletionCommand } from "./skill-authoring-completion.types.js";
-import type { SkillWorkloadBootstrapIdentity } from "./skill-workload-bootstrap.types.js";
-import { _SkillWorkloadTimestampProposal } from "./prisma-skill-workload-timestamps.js";
-import { _SkillWorkloadPersistenceConflictError, type SkillAuthoringCompletionRepository } from "./skill-workload-unit-of-work.types.js";
+import { SkillAuthoringCompletionOutcomes, type SkillAuthoringCompletionCommand } from "./skill-authoring-completion.types";
+import type { SkillWorkloadBootstrapIdentity } from "./skill-workload-bootstrap.types";
+import { _SkillWorkloadTimestampProposal } from "./prisma-skill-workload-timestamps";
+import { _SkillWorkloadPersistenceConflictError, type SkillAuthoringCompletionRepository } from "./skill-workload-unit-of-work.types";
 
 /** Stores an authoring worker's final report and moves the workload to its final state. */
 export class PrismaSkillAuthoringCompletionRepository implements SkillAuthoringCompletionRepository

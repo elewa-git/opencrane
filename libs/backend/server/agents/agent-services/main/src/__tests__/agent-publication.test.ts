@@ -1,8 +1,8 @@
 import { AgentServiceKinds, __DigestAgentRevisionContent, type AgentRevision, type AgentRevisionId, type AgentService, type AgentServiceId } from "@opencrane/models/agents";
 import { describe, expect, it } from "vitest";
 
-import { __PublishAgentRevision } from "../agent-publication.js";
-import type { AgentServicePublicationRepository, AtomicAgentRevisionPublication, AtomicAgentRevisionPublicationResult } from "../agent-publication.types.js";
+import { __PublishAgentRevision } from "../agent-publication";
+import type { AgentServicePublicationRepository, AtomicAgentRevisionPublication, AtomicAgentRevisionPublicationResult } from "../agent-publication.types";
 
 /** Creates a stable personal AgentService fixture. */
 function _service(): AgentService

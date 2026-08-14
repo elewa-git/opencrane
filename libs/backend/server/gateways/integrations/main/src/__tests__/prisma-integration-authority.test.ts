@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { ___DigestCanonicalJson } from "@opencrane/util";
 
-import { PrismaIntegrationAuthorityRepository } from "../prisma-integration-authority.js";
+import { PrismaIntegrationAuthorityRepository } from "../prisma-integration-authority";
 
 /** Build a reviewed integration tool definition. */
 function _Tool()

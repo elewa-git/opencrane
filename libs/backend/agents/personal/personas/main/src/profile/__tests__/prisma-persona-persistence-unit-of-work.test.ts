@@ -2,8 +2,8 @@ import { Prisma, type PrismaClient } from "@prisma/client";
 import type { Logger } from "@opencrane/backend/observability";
 import { describe, expect, it, vi } from "vitest";
 
-import { PersonaApprovalInterviewStates, PersonaApprovalRevisionStates } from "../../approval/persona-authority.types.js";
-import { PrismaPersonaPersistenceUnitOfWork } from "../prisma-persona-persistence-unit-of-work.js";
+import { PersonaApprovalInterviewStates, PersonaApprovalRevisionStates } from "../../approval/persona-authority.types";
+import { PrismaPersonaPersistenceUnitOfWork } from "../prisma-persona-persistence-unit-of-work";
 
 /** Builds a root client whose transaction boundary rejects with the supplied failure. */
 function _Prisma(error: Error): PrismaClient

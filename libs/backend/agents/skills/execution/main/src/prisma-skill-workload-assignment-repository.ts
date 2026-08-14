@@ -2,9 +2,9 @@ import { SkillRevisionState, SkillWorkloadKind, SkillWorkloadState, type Prisma 
 
 import { __CreateSkillWorkloadBootstrapReference, __HashSkillWorkloadBootstrapReference } from "@opencrane/contracts";
 
-import type { SkillWorkloadAssignmentCommand, SkillWorkloadClaim } from "./skill-workload-claims.types.js";
-import { _SkillWorkloadLeaseExpiryProposal, _SkillWorkloadTimestampProposal } from "./prisma-skill-workload-timestamps.js";
-import type { SkillWorkloadAssignmentRepository } from "./skill-workload-unit-of-work.types.js";
+import type { SkillWorkloadAssignmentCommand, SkillWorkloadClaim } from "./skill-workload-claims.types";
+import { _SkillWorkloadLeaseExpiryProposal, _SkillWorkloadTimestampProposal } from "./prisma-skill-workload-timestamps";
+import type { SkillWorkloadAssignmentRepository } from "./skill-workload-unit-of-work.types";
 
 /** Claims workloads and records Job assignments in Postgres, inside one transaction. */
 export class PrismaSkillWorkloadAssignmentRepository implements SkillWorkloadAssignmentRepository

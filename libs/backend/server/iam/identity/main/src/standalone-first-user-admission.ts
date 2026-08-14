@@ -1,4 +1,4 @@
-import { StandaloneFirstUserAdmissionOutcomes, type StandaloneFirstUserAdmissionCommand, type StandaloneFirstUserAdmissionConfig, type StandaloneFirstUserAdmissionRepository, type StandaloneFirstUserAdmissionResult } from "./standalone-first-user-admission.types.js";
+import { StandaloneFirstUserAdmissionOutcomes, type StandaloneFirstUserAdmissionCommand, type StandaloneFirstUserAdmissionConfig, type StandaloneFirstUserAdmissionRepository, type StandaloneFirstUserAdmissionResult } from "./standalone-first-user-admission.types";
 
 /**
  * Decides whether this login may become the standalone silo's first owner, then tries to claim it.

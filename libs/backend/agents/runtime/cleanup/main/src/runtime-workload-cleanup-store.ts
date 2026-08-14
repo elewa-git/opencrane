@@ -3,8 +3,8 @@ import { Observable, type ConfigurationOptions, type ObservableMiddleware, type 
 import { __AgentRuntimeAttemptResourceName } from "@opencrane/backend/agents/runtime/k8s-launcher";
 import { ___DoWithTrace } from "@opencrane/backend/observability";
 
-import { _AssertExactRuntimeWorkloadCleanupJob } from "./runtime-workload-cleanup-projection.js";
-import type { KubernetesRuntimeWorkloadCleanupProjection, KubernetesRuntimeWorkloadCleanupStore, KubernetesRuntimeWorkloadCleanupStoreOptions } from "./runtime-workload-cleanup-store.types.js";
+import { _AssertExactRuntimeWorkloadCleanupJob } from "./runtime-workload-cleanup-projection";
+import type { KubernetesRuntimeWorkloadCleanupProjection, KubernetesRuntimeWorkloadCleanupStore, KubernetesRuntimeWorkloadCleanupStoreOptions } from "./runtime-workload-cleanup-store.types";
 
 /** Build the per-call options that cancel a Kubernetes request on process shutdown or when its deadline passes. */
 function _KubernetesRequestOptions(shutdownSignal: AbortSignal, timeoutMilliseconds: number): ConfigurationOptions

@@ -2,11 +2,11 @@ import { Prisma, type PrismaClient } from "@prisma/client";
 
 import type { ArtifactServicePromotionPort, ArtifactUploadCryptoPort } from "@opencrane/backend/server/agents/artifacts";
 import { ___DoWithTrace } from "@opencrane/backend/observability";
-import { ConversationAssetDenialReasons, type ConversationAssetCaller, type ConversationAssetResult, type ConversationAssetView, type ReserveConversationAssetRequest } from "./conversation-asset.types.js";
-import type { ConversationAssetContent, ConversationAssetContentBroker } from "./conversation-asset-content.types.js";
-import type { ConversationAssetAuthority } from "./conversation-asset.router.types.js";
-import { _ParseReserveConversationAsset } from "./conversation-asset.validator.js";
-import { PrismaConversationAssetRepository } from "./prisma-conversation-asset-repository.js";
+import { ConversationAssetDenialReasons, type ConversationAssetCaller, type ConversationAssetResult, type ConversationAssetView, type ReserveConversationAssetRequest } from "./conversation-asset.types";
+import type { ConversationAssetContent, ConversationAssetContentBroker } from "./conversation-asset-content.types";
+import type { ConversationAssetAuthority } from "./conversation-asset.router.types";
+import { _ParseReserveConversationAsset } from "./conversation-asset.validator";
+import { PrismaConversationAssetRepository } from "./prisma-conversation-asset-repository";
 
 /** Transaction owner around server-brokered participant uploads. */
 export class PrismaConversationAssetUnitOfWork implements ConversationAssetAuthority

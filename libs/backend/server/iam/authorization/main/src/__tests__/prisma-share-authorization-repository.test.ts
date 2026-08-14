@@ -1,8 +1,8 @@
 import { AuthorizationScopeKind, Prisma, type PrismaClient } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
 
-import { PrismaShareAuthorizationRepository } from "../prisma-share-authorization-repository.js";
-import { ShareAuthorizationScopeKinds } from "../share-authorization-repository.types.js";
+import { PrismaShareAuthorizationRepository } from "../prisma-share-authorization-repository";
+import { ShareAuthorizationScopeKinds } from "../share-authorization-repository.types";
 
 /** Creates one selected share row plus persistence-only fields for projection assertions. */
 function _shareRow(scopeKind: AuthorizationScopeKind = AuthorizationScopeKind.Personal)

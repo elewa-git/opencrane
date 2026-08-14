@@ -1,8 +1,8 @@
 import type { V1Container, V1EnvVar, V1Job, V1PodSpec, V1PodTemplateSpec, V1Volume, V1VolumeMount } from "@kubernetes/client-node";
 
-import type { AgentRuntimeJobAssignment, AgentRuntimeJobProfile } from "./agent-runtime-job.types.js";
-import { _AssertAgentRuntimeJobProfile, _AgentRuntimeProjectedTokenAudience } from "./agent-runtime-profile.js";
-import { _AgentRuntimeAttemptResourceName, _AssertAgentRuntimeJobAssignment } from "./agent-runtime-resource-name.js";
+import type { AgentRuntimeJobAssignment, AgentRuntimeJobProfile } from "./agent-runtime-job.types";
+import { _AssertAgentRuntimeJobProfile, _AgentRuntimeProjectedTokenAudience } from "./agent-runtime-profile";
+import { _AgentRuntimeAttemptResourceName, _AssertAgentRuntimeJobAssignment } from "./agent-runtime-resource-name";
 
 /** Component label put on every runtime Job and Pod; the deployment's namespace policy selects on it. */
 const _COMPONENT_LABEL = "agent-runtime";

@@ -2,7 +2,7 @@ import { _CreatePersonaWorkflowEvidenceRepository, PersonaWorkflowColours, type 
 import type { Logger } from "@opencrane/backend/observability";
 import { type UserOnboardingOwner, type UserOnboardingOwnerResolver, type UserOnboardingPersonaEvidencePort, UserOnboardingBootstrapArchetypes, UserOnboardingPersonaColours, __CreateUserOnboardingRouter, __UserOnboardingAuthority, __UserOnboardingChatAuthority, _CreateUserOnboardingRepository, UserOnboardingPersonaWorkflowCoordinator } from "@opencrane/backend/server/agents/onboarding";
 
-import type { UserOnboardingRouteComposition } from "./routes.types.js";
+import type { UserOnboardingRouteComposition } from "./routes.types";
 
 /** The Prisma client type `_CreateUserOnboardingRepository` expects, derived so this file need not import Prisma. */
 type UserOnboardingPrismaClient = Parameters<typeof _CreateUserOnboardingRepository>[0];

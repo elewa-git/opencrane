@@ -4,7 +4,7 @@ import type { PrismaClient } from "@prisma/client";
 import request from "supertest";
 import { describe, expect, it, vi } from "vitest";
 
-import { resourceSharesRouter } from "../routes/resource-shares.js";
+import { resourceSharesRouter } from "../routes/resource-shares";
 
 /** Capture of the last group.create / group.update payload. */
 let _lastWrite: Record<string, unknown> | null = null;

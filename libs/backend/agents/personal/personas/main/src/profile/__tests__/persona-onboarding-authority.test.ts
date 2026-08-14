@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { __EnsurePersonaOnboarding } from "../persona-onboarding-authority.js";
-import type { EnsurePersonaOnboardingCommand, PersonaOnboardingRepository } from "../persona-onboarding-authority.types.js";
+import { __EnsurePersonaOnboarding } from "../persona-onboarding-authority";
+import type { EnsurePersonaOnboardingCommand, PersonaOnboardingRepository } from "../persona-onboarding-authority.types";
 
 /** Builds a complete authenticated owner request for the onboarding provisioner. */
 function _command(): EnsurePersonaOnboardingCommand

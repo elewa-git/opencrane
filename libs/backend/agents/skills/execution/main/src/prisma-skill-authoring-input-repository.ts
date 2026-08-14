@@ -1,8 +1,8 @@
 import { ArtifactRevisionState, ArtifactState, SkillRevisionState, SkillWorkloadKind, SkillWorkloadState, type Prisma } from "@prisma/client";
 
-import type { SkillAuthoringInputRecord } from "./skill-authoring-input.types.js";
-import type { SkillWorkloadBootstrapIdentity } from "./skill-workload-bootstrap.types.js";
-import type { SkillAuthoringInputRepository } from "./skill-workload-unit-of-work.types.js";
+import type { SkillAuthoringInputRecord } from "./skill-authoring-input.types";
+import type { SkillWorkloadBootstrapIdentity } from "./skill-workload-bootstrap.types";
+import type { SkillAuthoringInputRepository } from "./skill-workload-unit-of-work.types";
 
 /** Reads a draft skill's source artifact, and only for the authoring Pod that owns the workload. */
 export class PrismaSkillAuthoringInputRepository implements SkillAuthoringInputRepository

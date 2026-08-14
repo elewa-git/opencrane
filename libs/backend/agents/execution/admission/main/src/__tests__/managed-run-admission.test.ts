@@ -3,8 +3,8 @@ import { describe, expect, it, vi } from "vitest";
 import { RunAdmissionConcurrencyGate } from "@opencrane/backend/agents/execution/runs";
 import type { ManagedRunNowCommand } from "@opencrane/backend/server/agents/agent-services";
 
-import { __ReadRunAdmissionConcurrencyPolicy } from "../managed-run-admission.composition.js";
-import { _CreateManagedRunAdmissionPortWithGate, _CreateRunAdmissionCapacityGate } from "../managed-run-admission.js";
+import { __ReadRunAdmissionConcurrencyPolicy } from "../managed-run-admission.composition";
+import { _CreateManagedRunAdmissionPortWithGate, _CreateRunAdmissionCapacityGate } from "../managed-run-admission";
 
 /** Produces a valid managed admission command, changing only the fields the test is about. */
 function _command(agentServiceId: string, siloId = "silo-a"): ManagedRunNowCommand

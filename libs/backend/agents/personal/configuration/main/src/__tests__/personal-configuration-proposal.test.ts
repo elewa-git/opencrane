@@ -1,9 +1,9 @@
 import { AgentConfigPatchKinds } from "@opencrane/contracts";
 import { describe, expect, it, vi } from "vitest";
 
-import { __ProposePersonalConfigurationChange } from "../proposal/personal-configuration-proposal.js";
-import type { PersonalConfigurationProposalPersistenceReceipt } from "../proposal/personal-configuration-proposal-repository.types.js";
-import { PersonalConfigurationProposalCodes, type ProposePersonalConfigurationChangeCommand } from "../proposal/personal-configuration-proposal.types.js";
+import { __ProposePersonalConfigurationChange } from "../proposal/personal-configuration-proposal";
+import type { PersonalConfigurationProposalPersistenceReceipt } from "../proposal/personal-configuration-proposal-repository.types";
+import { PersonalConfigurationProposalCodes, type ProposePersonalConfigurationChangeCommand } from "../proposal/personal-configuration-proposal.types";
 
 /** Build one valid proposal command with optional overrides. */
 function _Command(overrides: Partial<ProposePersonalConfigurationChangeCommand> = {}): ProposePersonalConfigurationChangeCommand

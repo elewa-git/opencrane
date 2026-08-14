@@ -1,6 +1,6 @@
-import { _ApprovalEvidenceDenial, _ApprovePersonaRevisionState } from "./persona-approval-revision-state.js";
-import { PersonaApprovalDenialReasons, type ApprovePersonaCommand, type ApprovePersonaResult, type PersonaAuthorityRepository } from "./persona-authority.types.js";
-import { PersonaLifecycleOutcomes } from "../profile/persona-lifecycle.types.js";
+import { _ApprovalEvidenceDenial, _ApprovePersonaRevisionState } from "./persona-approval-revision-state";
+import { PersonaApprovalDenialReasons, type ApprovePersonaCommand, type ApprovePersonaResult, type PersonaAuthorityRepository } from "./persona-authority.types";
+import { PersonaLifecycleOutcomes } from "../profile/persona-lifecycle.types";
 
 /**
  * Approves the owner's persona draft and makes it the profile's active persona.

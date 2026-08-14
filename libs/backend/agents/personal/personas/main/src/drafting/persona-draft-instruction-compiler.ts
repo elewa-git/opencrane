@@ -1,4 +1,4 @@
-import { PersonaTemplateVariable, type PersonaTemplateVariables } from "./persona-draft-instruction-compiler.types.js";
+import { PersonaTemplateVariable, type PersonaTemplateVariables } from "./persona-draft-instruction-compiler.types";
 
 /** The placeholders every persona SOUL template must contain, each exactly once. */
 const PERSONA_TEMPLATE_VARIABLES: readonly PersonaTemplateVariable[] = Object.values(PersonaTemplateVariable);

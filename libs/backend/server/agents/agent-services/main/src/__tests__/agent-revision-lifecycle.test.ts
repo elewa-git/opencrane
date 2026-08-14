@@ -1,8 +1,8 @@
 import { AgentServiceKinds, type AgentRevision, type AgentRevisionContent, type AgentService } from "@opencrane/models/agents";
 import { describe, expect, it } from "vitest";
 
-import { __AdmitManagedRunNow, __ChangeAgentServiceState, __CompareAgentRevisions, __CreateManagedAgentService, __ReadAgentServiceHistory, __RestoreAgentRevision, __ReviseAgentRevision } from "../agent-revision-lifecycle.js";
-import { ManagedRunAdmissionOutcomes, type AgentRevisionLifecycleRepository, type AgentServiceHistory, type AppendAgentRevisionResult, type ChangeAgentServiceStateCommand, type ChangeAgentServiceStateResult, type CreateManagedAgentServiceCommand, type CreateManagedAgentServiceResult, type ManagedRunAdmissionPort, type ManagedRunAdmissionResult, type ManagedRunNowCommand, type RestoreAgentRevisionCommand, type ReviseAgentRevisionCommand } from "../agent-revision-lifecycle.types.js";
+import { __AdmitManagedRunNow, __ChangeAgentServiceState, __CompareAgentRevisions, __CreateManagedAgentService, __ReadAgentServiceHistory, __RestoreAgentRevision, __ReviseAgentRevision } from "../agent-revision-lifecycle";
+import { ManagedRunAdmissionOutcomes, type AgentRevisionLifecycleRepository, type AgentServiceHistory, type AppendAgentRevisionResult, type ChangeAgentServiceStateCommand, type ChangeAgentServiceStateResult, type CreateManagedAgentServiceCommand, type CreateManagedAgentServiceResult, type ManagedRunAdmissionPort, type ManagedRunAdmissionResult, type ManagedRunNowCommand, type RestoreAgentRevisionCommand, type ReviseAgentRevisionCommand } from "../agent-revision-lifecycle.types";
 
 /** Exhaustive service-state result for each lifecycle action used by the repository double. */
 const _STATE_BY_ACTION: Readonly<Record<ChangeAgentServiceStateCommand["action"], AgentService["state"]>> = {

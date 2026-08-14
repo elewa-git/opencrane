@@ -4,7 +4,7 @@ import { __ValidateAgentControllerRuntimeProfiles } from "@opencrane/backend/age
 import { __ValidateSkillWorkloadControllerProfiles } from "@opencrane/backend/agents/skills/controller";
 import { ___ParseAndValidateJson } from "@opencrane/util";
 
-import type { AgentControllerProcessConfig } from "./config.types.js";
+import type { AgentControllerProcessConfig } from "./config.types";
 
 /** Read one required, trimmed environment value. */
 function _Required(environment: NodeJS.ProcessEnv, name: string): string

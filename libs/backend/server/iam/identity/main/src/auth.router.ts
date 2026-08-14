@@ -1,7 +1,7 @@
 import { Router } from "express";
 import type { PrismaClient } from "@prisma/client";
 
-import type { OidcAuthService } from "./oidc.service.js";
+import type { OidcAuthService } from "./oidc.service";
 
 /**
  * Build the auth router covering:

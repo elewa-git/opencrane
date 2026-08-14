@@ -2,14 +2,14 @@ import type { PrismaClient } from "@prisma/client";
 import type { AuthenticationV1Api } from "@kubernetes/client-node";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { _CreateInternalRuntimeComposition } from "../runtime-composition.js";
-import type { InternalRuntimeConfig } from "../config.types.js";
+import { _CreateInternalRuntimeComposition } from "../runtime-composition";
+import type { InternalRuntimeConfig } from "../config.types";
 
 /**
  * Replace the artifact-service bridges because this composition test proves only the router-plane
  * decision; broker tests own endpoint and mounted-key validation.
  */
-vi.mock("../../infra/artifacts/artifact-upload.factory.js", function _MockArtifactUploadFactory()
+vi.mock("../../infra/artifacts/artifact-upload.factory", function _MockArtifactUploadFactory()
 {
 	return {
 		_CreateArtifactPreprocessOutputBroker: function _CreateArtifactPreprocessOutputBroker() { return {}; },
@@ -18,14 +18,14 @@ vi.mock("../../infra/artifacts/artifact-upload.factory.js", function _MockArtifa
 	};
 });
 
-vi.mock("../../infra/artifacts/artifact-preprocess-source-broker.factory.js", function _MockArtifactSourceBrokerFactory()
+vi.mock("../../infra/artifacts/artifact-preprocess-source-broker.factory", function _MockArtifactSourceBrokerFactory()
 {
 	return {
 		_CreateArtifactPreprocessSourceBroker: function _CreateArtifactPreprocessSourceBroker() { return {}; },
 	};
 });
 
-vi.mock("../../infra/artifacts/artifact-scan-source-broker.factory.js", function _MockArtifactScanSourceBrokerFactory()
+vi.mock("../../infra/artifacts/artifact-scan-source-broker.factory", function _MockArtifactScanSourceBrokerFactory()
 {
 	return {
 		_CreateArtifactScanSourceBroker: function _CreateArtifactScanSourceBroker() { return {}; },

@@ -1,7 +1,7 @@
 import { z } from "zod";
 
-import { _ReplayPersonaScore } from "./persona-scorer.js";
-import { PersonaColourValues, PersonaModifierValues, type PersonaPersistedScoreEvidence, PersonaTieKinds } from "./persona-scorer.types.js";
+import { _ReplayPersonaScore } from "./persona-scorer";
+import { PersonaColourValues, PersonaModifierValues, type PersonaPersistedScoreEvidence, PersonaTieKinds } from "./persona-scorer.types";
 
 /** Largest number of answers accepted in a stored score document. */
 const _MAXIMUM_EVIDENCE_ITEMS = 64;

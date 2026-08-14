@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, input, output } from "@angular/core";
 
-import type { ElicitationSingleChoicePresentation } from "./elicitation-control.types.js";
+import type { ElicitationSingleChoicePresentation } from "./elicitation-control.types";
 
 /** Present exactly one selection from a bounded server-authored list. */
 @Component({ selector: "wo-elicitation-single-choice", standalone: true, templateUrl: "./elicitation-single-choice.component.html", styleUrl: "./elicitation-control.component.scss", changeDetection: ChangeDetectionStrategy.OnPush })

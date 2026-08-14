@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { __MaterializePersonalConfigurationChange } from "../materialization/personal-configuration-materialization.js";
-import { PersonalConfigurationMaterializationCodes } from "../materialization/personal-configuration-materialization.types.js";
+import { __MaterializePersonalConfigurationChange } from "../materialization/personal-configuration-materialization";
+import { PersonalConfigurationMaterializationCodes } from "../materialization/personal-configuration-materialization.types";
 
 /** Covers the input checks that run before any transaction starts. */
 describe("__MaterializePersonalConfigurationChange", function _describeMaterialization()

@@ -1,8 +1,8 @@
 import type { ArtifactWriteLeaseClaims } from "@opencrane/backend/artifacts/authorization";
 import type { ArtifactPromotionReceiptClaims } from "@opencrane/backend/artifacts/authorization";
 
-import type { ConversationAssetCaller, ConversationAssetResult, ConversationAssetView, ReserveConversationAssetRequest } from "./conversation-asset.types.js";
-import type { ConversationAssetReadTarget } from "./conversation-asset-content.types.js";
+import type { ConversationAssetCaller, ConversationAssetResult, ConversationAssetView, ReserveConversationAssetRequest } from "./conversation-asset.types";
+import type { ConversationAssetReadTarget } from "./conversation-asset-content.types";
 
 /** Internal upload target kept behind the server authority. */
 export interface ConversationAssetUploadTarget { readonly lease: ArtifactWriteLeaseClaims; }

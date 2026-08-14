@@ -3,7 +3,7 @@ import { z } from "zod";
 
 import { AgentThreadDeliveryKinds } from "@opencrane/backend/conversations/agent-threads";
 
-import type { AgentThreadParentDeliveryRouterDependencies, DeliverAgentThreadParentResult } from "./agent-thread-parent-delivery.types.js";
+import type { AgentThreadParentDeliveryRouterDependencies, DeliverAgentThreadParentResult } from "./agent-thread-parent-delivery.types";
 
 const _Body = z.object({ runId: z.string().trim().min(1).max(128), childConversationId: z.string().trim().min(1).max(128), idempotencyKey: z.string().trim().min(1).max(128), kind: z.nativeEnum(AgentThreadDeliveryKinds), label: z.string().trim().min(1).max(160), detail: z.string().trim().min(1).max(4000), assetId: z.string().trim().min(1).max(128).nullable().default(null) }).strict();
 

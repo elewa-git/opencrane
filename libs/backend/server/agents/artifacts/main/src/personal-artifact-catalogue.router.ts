@@ -1,6 +1,6 @@
 import { Router, type Request, type Response } from "express";
 
-import type { PersonalArtifactCatalogueRouterDependencies } from "./personal-artifact-catalogue.router.types.js";
+import type { PersonalArtifactCatalogueRouterDependencies } from "./personal-artifact-catalogue.router.types";
 
 /**
  * Build the one route a signed-in user calls to list their own assets.

@@ -1,7 +1,7 @@
 import type { RuntimeCandidate, RuntimeCommandEnvelope, RuntimeStreamOpen } from "@opencrane/contracts";
 import type { RuntimeTokenReviewer, RuntimeWorkloadIdentity } from "@opencrane/backend/server/infra/workload-identity";
 
-import type { RuntimeCommandWakeup } from "./runtime-command-wakeup.js";
+import type { RuntimeCommandWakeup } from "./runtime-command-wakeup";
 
 /**
  * The port through which this transport asks the server's real decision-maker what to do.

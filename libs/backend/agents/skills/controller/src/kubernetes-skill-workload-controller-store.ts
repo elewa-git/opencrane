@@ -3,7 +3,7 @@ import { isDeepStrictEqual } from "node:util";
 import { Observable, type ConfigurationOptions, type ObservableMiddleware, type RequestContext, type ResponseContext, type V1Job, type V1ObjectMeta, type V1Pod } from "@kubernetes/client-node";
 import { ___DoWithTrace } from "@opencrane/backend/observability";
 
-import type { SkillWorkloadControllerKubernetesStore, SkillWorkloadControllerKubernetesStoreOptions } from "./skill-workload-controller.types.js";
+import type { SkillWorkloadControllerKubernetesStore, SkillWorkloadControllerKubernetesStoreOptions } from "./skill-workload-controller.types";
 
 /** Metadata fields Kubernetes fills in itself. They are ignored when two Jobs are compared. */
 const _SERVER_METADATA_FIELDS = ["creationTimestamp", "generation", "managedFields", "resourceVersion", "selfLink", "uid"] as const;

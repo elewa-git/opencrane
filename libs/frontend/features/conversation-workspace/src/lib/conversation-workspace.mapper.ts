@@ -4,7 +4,7 @@ import { toSanitizedMarkdownHtml, toStreamingMarkdownHtml } from "@opencrane/sta
 import { AgUiMessageStatuses, type AgUiMessageView } from "@opencrane/state/conversation/ag-ui";
 import { ConversationModes, MessageRoles, MessageStates, type ConversationMessage, type ConversationOnboardingHistory, type ConversationSummary } from "@opencrane/state/conversation/workspace";
 
-import type { ConversationMessageView, ConversationOnboardingHistoryPresentation, ConversationPresentationContext, ConversationSummaryPresentation } from "./conversation-workspace-feature.types.js";
+import type { ConversationMessageView, ConversationOnboardingHistoryPresentation, ConversationPresentationContext, ConversationSummaryPresentation } from "./conversation-workspace-feature.types";
 
 /**
  * Builds one rail row from a conversation summary.

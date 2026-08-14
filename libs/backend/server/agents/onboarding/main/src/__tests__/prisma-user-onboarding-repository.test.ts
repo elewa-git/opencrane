@@ -1,9 +1,9 @@
 import { Prisma, type PrismaClient, UserOnboardingBootstrapArchetype, UserOnboardingCompletionProvenance, UserOnboardingState } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
 
-import { PrismaUserOnboardingRepository } from "../prisma-user-onboarding-repository.js";
-import { UserOnboardingAnswerStatuses, UserOnboardingBootstrapArchetypes, UserOnboardingCompletionProvenances, UserOnboardingPersonaColours, UserOnboardingStates } from "../user-onboarding.enums.js";
-import type { AppendUserOnboardingAnswerCommand, StartUserOnboardingChatCommand } from "../user-onboarding-chat.types.js";
+import { PrismaUserOnboardingRepository } from "../prisma-user-onboarding-repository";
+import { UserOnboardingAnswerStatuses, UserOnboardingBootstrapArchetypes, UserOnboardingCompletionProvenances, UserOnboardingPersonaColours, UserOnboardingStates } from "../user-onboarding.enums";
+import type { AppendUserOnboardingAnswerCommand, StartUserOnboardingChatCommand } from "../user-onboarding-chat.types";
 
 /** Stable persisted row returned by the mocked Prisma delegate. */
 const _ROW: Prisma.UserOnboardingGetPayload<Record<string, never>> = {

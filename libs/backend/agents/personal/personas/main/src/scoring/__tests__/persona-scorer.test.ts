@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { _ReplayPersonaScore, _ScorePersona } from "../persona-scorer.js";
-import { PersonaColourValues, PersonaModifierValues, PersonaTieKinds, type PersonaWeightedAnswer } from "../persona-scorer.types.js";
+import { _ReplayPersonaScore, _ScorePersona } from "../persona-scorer";
+import { PersonaColourValues, PersonaModifierValues, PersonaTieKinds, type PersonaWeightedAnswer } from "../persona-scorer.types";
 
 /** Build one reviewed answer weight fixture. */
 function _Answer(questionId: string, weights: Partial<Pick<PersonaWeightedAnswer, "red" | "yellow" | "green" | "blue" | "explorer" | "guardian">>): PersonaWeightedAnswer

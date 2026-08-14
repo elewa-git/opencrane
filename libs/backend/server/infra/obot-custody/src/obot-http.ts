@@ -3,7 +3,7 @@ import { isAbsolute } from "node:path";
 
 import { ___DoWithoutTrace } from "@opencrane/backend/observability";
 
-import type { ObotFetch, ObotHttpOptions, ObotRequestMethod, ObotSession, ObotTransportFailureCode } from "./obot-http.types.js";
+import type { ObotFetch, ObotHttpOptions, ObotRequestMethod, ObotSession, ObotTransportFailureCode } from "./obot-http.types";
 
 /** Maximum body accepted from one Obot management exchange. */
 const _MAX_RESPONSE_BYTES = 256 * 1024;

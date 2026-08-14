@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { _CompilePersonaDraftInstructions } from "../persona-draft-instruction-compiler.js";
-import { PersonaTemplateVariable, type PersonaTemplateVariables } from "../persona-draft-instruction-compiler.types.js";
+import { _CompilePersonaDraftInstructions } from "../persona-draft-instruction-compiler";
+import { PersonaTemplateVariable, type PersonaTemplateVariables } from "../persona-draft-instruction-compiler.types";
 
 /** Complete reviewed interpolation fixture. */
 const _VARIABLES: PersonaTemplateVariables = {

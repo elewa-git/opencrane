@@ -1,4 +1,4 @@
-import type { ConversationModes, ConversationLifecycles } from "./conversation.types.js";
+import type { ConversationModes, ConversationLifecycles } from "./conversation.types";
 
 /**
  * Stable commands interpreted by the immutable conversation-mode strategy registry.

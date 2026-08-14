@@ -1,10 +1,10 @@
 import { OrgMemberStatus, OrgRole, Prisma, type PrismaClient } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
 
-import { _AdmitStandaloneFirstUser } from "../standalone-first-user-admission.js";
-import { _ClaimStandaloneFirstUserOwner, PrismaStandaloneFirstUserAdmissionRepository } from "../prisma-standalone-first-user-admission-repository.js";
-import { PrismaStandaloneFirstUserAdmissionUnitOfWork } from "../prisma-standalone-first-user-admission-unit-of-work.js";
-import { StandaloneFirstUserAdmissionOutcomes, type StandaloneFirstUserAdmissionAuditPort, type StandaloneFirstUserAdmissionCommand, type StandaloneFirstUserAdmissionRepository, type StandaloneFirstUserOwnerClaimRepository } from "../standalone-first-user-admission.types.js";
+import { _AdmitStandaloneFirstUser } from "../standalone-first-user-admission";
+import { _ClaimStandaloneFirstUserOwner, PrismaStandaloneFirstUserAdmissionRepository } from "../prisma-standalone-first-user-admission-repository";
+import { PrismaStandaloneFirstUserAdmissionUnitOfWork } from "../prisma-standalone-first-user-admission-unit-of-work";
+import { StandaloneFirstUserAdmissionOutcomes, type StandaloneFirstUserAdmissionAuditPort, type StandaloneFirstUserAdmissionCommand, type StandaloneFirstUserAdmissionRepository, type StandaloneFirstUserOwnerClaimRepository } from "../standalone-first-user-admission.types";
 
 /** Deployment configuration used by first-owner admission tests. */
 const _config = { clusterTenant: "testv2", email: "jente@elewa.ke", issuer: "https://idp.example" };

@@ -1,6 +1,6 @@
 import type { InitialRunAuthority, RunAdmissionTransaction } from "@opencrane/backend/agents/execution/runs";
 
-import type { IdentityEnvelopeInput, MemoryScopeInput, MemoryScopeSource, SessionAssemblyCommand, SessionAssemblyLoad, ConversationContextInput } from "./session-assembly.types.js";
+import type { IdentityEnvelopeInput, MemoryScopeInput, MemoryScopeSource, SessionAssemblyCommand, SessionAssemblyLoad, ConversationContextInput } from "./session-assembly.types";
 
 /**
  * Gives managed services an empty memory policy, until a managed knowledge scope is authorised

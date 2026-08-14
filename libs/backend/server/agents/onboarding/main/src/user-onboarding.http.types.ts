@@ -2,9 +2,9 @@ import type { Request } from "express";
 
 import type { Logger } from "@opencrane/backend/observability";
 
-import type { ApprovedPersonaEvidence, UserOnboardingOwner } from "./user-onboarding.types.js";
-import type { __UserOnboardingAuthority } from "./user-onboarding-authority.js";
-import type { __UserOnboardingChatAuthority } from "./user-onboarding-chat-authority.js";
+import type { ApprovedPersonaEvidence, UserOnboardingOwner } from "./user-onboarding.types";
+import type { __UserOnboardingAuthority } from "./user-onboarding-authority";
+import type { __UserOnboardingChatAuthority } from "./user-onboarding-chat-authority";
 
 /**
  * Turns one HTTP request into the user whose onboarding it may touch, or null when not signed in.

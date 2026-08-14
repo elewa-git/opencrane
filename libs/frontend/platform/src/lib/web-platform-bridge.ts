@@ -1,7 +1,7 @@
 import { Provider } from "@angular/core";
 
-import { PLATFORM_BRIDGE } from "./platform-bridge.token.js";
-import type { AuthenticationWindowObservation, BoundFolder, PlatformBridge } from "./platform-bridge.types.js";
+import { PLATFORM_BRIDGE } from "./platform-bridge.token";
+import type { AuthenticationWindowObservation, BoundFolder, PlatformBridge } from "./platform-bridge.types";
 
 /** Browser-owned popup observation hidden behind the platform seam. */
 class _WebAuthenticationWindowObservation implements AuthenticationWindowObservation

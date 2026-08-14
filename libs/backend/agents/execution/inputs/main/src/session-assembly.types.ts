@@ -5,7 +5,7 @@ import type { MessageContentBlock, MessageId } from "@opencrane/models/conversat
 import type { ArtifactRevisionId, SkillRevisionId } from "@opencrane/models/artifacts";
 import type { JsonValue } from "@opencrane/util";
 
-import type { SessionAssemblyRefusalReason } from "./session-assembly-result.types.js";
+import type { SessionAssemblyRefusalReason } from "./session-assembly-result.types";
 
 /**
  * The ids, trigger, and identity kind run admission passes in.

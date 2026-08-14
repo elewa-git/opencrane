@@ -1,5 +1,5 @@
-import type { Grant } from "./grant.types.js";
-import { GrantScope } from "./grant.types.js";
+import type { Grant } from "./grant.types";
+import { GrantScope } from "./grant.types";
 
 /**
  * How an MCP server is reached over the wire.

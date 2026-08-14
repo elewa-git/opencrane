@@ -4,8 +4,8 @@ import { AGENT_RUNTIME_PROTOCOL_V1, RuntimeCandidateKinds, ___ParseRuntimeElicit
 import { ___DoWithTrace } from "@opencrane/backend/observability";
 import type { RuntimeWorkloadIdentity } from "@opencrane/backend/server/infra/workload-identity";
 
-import { RuntimeCommandWakeup } from "./runtime-command-wakeup.js";
-import type { RuntimeCandidateAdmission, RuntimeStreamTransportOptions } from "./agent-runtime-stream.types.js";
+import { RuntimeCommandWakeup } from "./runtime-command-wakeup";
+import type { RuntimeCandidateAdmission, RuntimeStreamTransportOptions } from "./agent-runtime-stream.types";
 
 /** Validate a bounded runtime instance identifier without accepting executable syntax. */
 function _IsRuntimeInstanceId(value: unknown): value is string

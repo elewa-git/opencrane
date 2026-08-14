@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { _ParsePersonalMemoryPermissionPayload, PersonalMemoryPermissionPayloadSchema } from "../personal-memory-permission-payload.validator.js";
+import { _ParsePersonalMemoryPermissionPayload, PersonalMemoryPermissionPayloadSchema } from "../personal-memory-permission-payload.validator";
 
 /** Build one exact protected payload accepted at the persistence boundary. */
 function _Payload(): Record<string, unknown>

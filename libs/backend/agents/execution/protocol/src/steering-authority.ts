@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 
-import type { AdmitModelTerminalCommand, AdmitModelTerminalResult, ClaimSteeringBoundaryCommand, ClaimSteeringBoundaryResult, SteeringBoundaryClaim, SteeringBoundaryRepository, SteeringDisposition } from "./steering-authority.types.js";
+import type { AdmitModelTerminalCommand, AdmitModelTerminalResult, ClaimSteeringBoundaryCommand, ClaimSteeringBoundaryResult, SteeringBoundaryClaim, SteeringBoundaryRepository, SteeringDisposition } from "./steering-authority.types";
 
 /** Derive the deterministic boundary id so a reconnecting runtime claims the exact same boundary. */
 function _boundaryId(runId: string, attempt: number, fromInputGeneration: number): string

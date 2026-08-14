@@ -7,7 +7,7 @@ import type { PrismaClient } from "@prisma/client";
 import request from "supertest";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { providerByokRouter } from "../routes/provider-byok.js";
+import { providerByokRouter } from "../routes/provider-byok";
 
 /** In-memory provider_credentials store backing the mock Prisma client. */
 type Row = Record<string, unknown>;

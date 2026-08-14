@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { __DigestChannelInvocationContext } from "../channel-invocation-context-digest.js";
+import { __DigestChannelInvocationContext } from "../channel-invocation-context-digest";
 
 describe("channel invocation context digest", function _Suite()
 {

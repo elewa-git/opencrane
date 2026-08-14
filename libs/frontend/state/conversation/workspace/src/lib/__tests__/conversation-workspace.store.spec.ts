@@ -8,12 +8,12 @@ import { ConversationLifecycles, ConversationModes, MessageContentBlockKinds, Me
 import { ConversationEventStreamStatuses, type ConversationEventStream, type StreamConversationEventsCommand } from "@opencrane/state/conversation/adapter";
 import { __CreateAgUiStreamState } from "@opencrane/state/conversation/ag-ui";
 
-import { ConversationRunStore } from "../conversation-run.store.js";
-import { ConversationOnboardingHistoryStore } from "../conversation-onboarding-history.store.js";
-import { ConversationWorkspaceGatewayError, ConversationWorkspaceGatewayErrorKinds } from "../conversation-workspace-gateway.errors.js";
-import { CONVERSATION_WORKSPACE_EVENT_STREAM, CONVERSATION_WORKSPACE_GATEWAY } from "../conversation-workspace.gateway.js";
-import { ConversationWorkspaceStore } from "../conversation-workspace.store.js";
-import { ConversationOnboardingHistoryStatuses, ConversationPersonalAgentStatuses, ConversationWorkspaceRouteStates, type ConversationOnboardingHistoryProjection, type ConversationRun, type ConversationWorkspaceDetail, type ConversationWorkspaceGateway, type CreateConversationCommand, type RetryConversationRunCommand, type SubmitConversationMessageCommand } from "../conversation-workspace.types.js";
+import { ConversationRunStore } from "../conversation-run.store";
+import { ConversationOnboardingHistoryStore } from "../conversation-onboarding-history.store";
+import { ConversationWorkspaceGatewayError, ConversationWorkspaceGatewayErrorKinds } from "../conversation-workspace-gateway.errors";
+import { CONVERSATION_WORKSPACE_EVENT_STREAM, CONVERSATION_WORKSPACE_GATEWAY } from "../conversation-workspace.gateway";
+import { ConversationWorkspaceStore } from "../conversation-workspace.store";
+import { ConversationOnboardingHistoryStatuses, ConversationPersonalAgentStatuses, ConversationWorkspaceRouteStates, type ConversationOnboardingHistoryProjection, type ConversationRun, type ConversationWorkspaceDetail, type ConversationWorkspaceGateway, type CreateConversationCommand, type RetryConversationRunCommand, type SubmitConversationMessageCommand } from "../conversation-workspace.types";
 
 /** Build one completed read-only onboarding exchange. */
 function _OnboardingHistory(): ConversationOnboardingHistoryProjection

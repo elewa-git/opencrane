@@ -1,7 +1,7 @@
 import type { Request } from "express";
 
-import type { ConversationAssetCaller, ConversationAssetResult, ConversationAssetView, ReserveConversationAssetRequest } from "./conversation-asset.types.js";
-import type { ConversationAssetContentAuthority } from "./conversation-asset-content.types.js";
+import type { ConversationAssetCaller, ConversationAssetResult, ConversationAssetView, ReserveConversationAssetRequest } from "./conversation-asset.types";
+import type { ConversationAssetContentAuthority } from "./conversation-asset-content.types";
 
 /** Public participant asset authority consumed by the router. */
 export interface ConversationAssetAuthority extends ConversationAssetContentAuthority

@@ -5,9 +5,9 @@ import { PersonalRunAdmissionOutcomes, type PersonalRunAdmissionPort } from "@op
 import type { RunAdmissionTransaction } from "@opencrane/backend/agents/execution/runs";
 import { MessageContentBlockKinds, MessageSources } from "@opencrane/models/conversations";
 
-import { PrismaConversationMessageAdmissionUnitOfWork } from "../db/prisma-conversation-message-admission-unit-of-work.js";
-import { PrismaConversationMutationRepository } from "../db/prisma-conversation-mutation-repository.js";
-import type { SubmitConversationMessageRequest } from "../types/conversation-request.types.js";
+import { PrismaConversationMessageAdmissionUnitOfWork } from "../db/prisma-conversation-message-admission-unit-of-work";
+import { PrismaConversationMutationRepository } from "../db/prisma-conversation-mutation-repository";
+import type { SubmitConversationMessageRequest } from "../types/conversation-request.types";
 
 /** Fixed caller and message request reused across mode-strategy assertions. */
 const _CALLER = { siloId: "silo-1", subjectId: "user-1" } as const;

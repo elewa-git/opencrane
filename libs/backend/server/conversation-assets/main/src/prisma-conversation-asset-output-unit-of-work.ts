@@ -3,9 +3,9 @@ import { Prisma, type PrismaClient } from "@prisma/client";
 import type { ArtifactServicePromotionPort, ArtifactUploadCryptoPort } from "@opencrane/backend/server/agents/artifacts";
 import { ___DoWithTrace } from "@opencrane/backend/observability";
 
-import { ConversationAssetOutputDenialReasons, ConversationAssetOutputPublishOutcomes, ConversationAssetOutputReservationOutcomes, ConversationAssetOutputTargetStatuses, type ConversationAssetOutputAuthority, type ConversationAssetOutputPublishResult, type ConversationAssetOutputReservationResult, type ConversationAssetOutputRuntimeIdentity, type ReserveConversationAssetOutput } from "./conversation-asset-output.types.js";
-import { _ParseReserveConversationAssetOutput } from "./conversation-asset-output.validator.js";
-import { PrismaConversationAssetOutputRepository } from "./prisma-conversation-asset-output-repository.js";
+import { ConversationAssetOutputDenialReasons, ConversationAssetOutputPublishOutcomes, ConversationAssetOutputReservationOutcomes, ConversationAssetOutputTargetStatuses, type ConversationAssetOutputAuthority, type ConversationAssetOutputPublishResult, type ConversationAssetOutputReservationResult, type ConversationAssetOutputRuntimeIdentity, type ReserveConversationAssetOutput } from "./conversation-asset-output.types";
+import { _ParseReserveConversationAssetOutput } from "./conversation-asset-output.validator";
+import { PrismaConversationAssetOutputRepository } from "./prisma-conversation-asset-output-repository";
 
 /** Transaction owner and byte broker for generated conversation outputs. */
 export class PrismaConversationAssetOutputUnitOfWork implements ConversationAssetOutputAuthority

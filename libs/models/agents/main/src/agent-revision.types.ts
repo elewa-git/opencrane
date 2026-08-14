@@ -1,7 +1,7 @@
 import type { CanonicalJsonSha256Digest, JsonValue } from "@opencrane/util";
 
-import type { AgentRevisionId, AgentServiceId, PersonaRevisionId, UserId } from "./identifiers.types.js";
-import type { RevisionScopeAttachment } from "./scope-attachment.types.js";
+import type { AgentRevisionId, AgentServiceId, PersonaRevisionId, UserId } from "./identifiers.types";
+import type { RevisionScopeAttachment } from "./scope-attachment.types";
 
 /** Where a revision sits in review. Only `published` may execute; `draft`, `rejected`, and `retired` must never be selected for a run. */
 export type AgentRevisionState = "draft" | "published" | "rejected" | "retired";

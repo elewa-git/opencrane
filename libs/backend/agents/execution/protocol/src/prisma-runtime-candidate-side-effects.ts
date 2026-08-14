@@ -1,7 +1,7 @@
 import type { RuntimeCandidate } from "@opencrane/contracts";
 import { RunEventTypes } from "@opencrane/models/agents";
 
-import type { RuntimeEventReporter } from "./prisma-runtime-dispatch-authority.types.js";
+import type { RuntimeEventReporter } from "./prisma-runtime-dispatch-authority.types";
 
 /** Transaction shape already owned by the injected event-reporting port. */
 type RuntimeCandidateTransaction = Parameters<RuntimeEventReporter["reportInTransaction"]>[0];

@@ -1,5 +1,5 @@
-import type { Grant } from "./grant.types.js";
-import { GrantScope } from "./grant.types.js";
+import type { Grant } from "./grant.types";
+import { GrantScope } from "./grant.types";
 
 /**
  * Shared group contract returned by the opencrane-ui group APIs.

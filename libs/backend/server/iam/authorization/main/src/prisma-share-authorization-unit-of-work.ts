@@ -1,8 +1,8 @@
 import type { PrismaClient } from "@prisma/client";
 
-import { PrismaAuthorizationGrantRepository } from "./prisma-authorization-grants.js";
-import { PrismaShareAuthorizationRepository } from "./prisma-share-authorization-repository.js";
-import type { ShareAuthorizationTransaction, ShareAuthorizationUnitOfWork } from "./share-authorization-unit-of-work.types.js";
+import { PrismaAuthorizationGrantRepository } from "./prisma-authorization-grants";
+import { PrismaShareAuthorizationRepository } from "./prisma-share-authorization-repository";
+import type { ShareAuthorizationTransaction, ShareAuthorizationUnitOfWork } from "./share-authorization-unit-of-work.types";
 
 /**
  * Runs one share procedure with both repositories on the same transaction.

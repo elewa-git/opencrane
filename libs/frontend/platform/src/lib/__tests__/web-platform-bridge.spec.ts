@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { WebPlatformBridge } from "../web-platform-bridge.js";
+import { WebPlatformBridge } from "../web-platform-bridge";
 
 describe("WebPlatformBridge authentication windows", function _AuthenticationWindows()
 {

@@ -2,7 +2,7 @@ import { PersonalConfigurationChangeState, type Prisma } from "@prisma/client";
 
 import { AgentConfigPatchKinds } from "@opencrane/contracts";
 
-import { PersonalConfigurationPersonaRefreshClaimCodes, type AcceptedPersonaRefreshCommand, type PersonalConfigurationPersonaRefreshRepository } from "./personal-configuration-persona-refresh.types.js";
+import { PersonalConfigurationPersonaRefreshClaimCodes, type AcceptedPersonaRefreshCommand, type PersonalConfigurationPersonaRefreshRepository } from "./personal-configuration-persona-refresh.types";
 
 /**
  * The only place a persona refresh reads or writes PersonalConfigurationChange rows.

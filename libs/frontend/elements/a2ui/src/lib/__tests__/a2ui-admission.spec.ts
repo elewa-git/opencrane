@@ -4,10 +4,10 @@ import type { A2UIClientEvent, Types } from "@a2ui/angular/v0_8";
 
 import { AG_UI_A2UI_ENVELOPE_VERSION, AgUiA2uiSurfaceStates, type AgUiA2uiOperation } from "@opencrane/contracts";
 
-import { _ToA2uiDisplayedActionIntent } from "../a2ui-action-intent.js";
-import { _AdmitA2uiSurfacePresentation } from "../a2ui-admission.js";
-import { _OpenCraneA2uiCatalog } from "../a2ui.catalog.js";
-import { A2uiComponentNames, type A2uiSurfacePresentation } from "../a2ui.types.js";
+import { _ToA2uiDisplayedActionIntent } from "../a2ui-action-intent";
+import { _AdmitA2uiSurfacePresentation } from "../a2ui-admission";
+import { _OpenCraneA2uiCatalog } from "../a2ui.catalog";
+import { A2uiComponentNames, type A2uiSurfacePresentation } from "../a2ui.types";
 
 /** Stable text operation used by admission and action-intent tests. */
 const _TEXT_OPERATION: AgUiA2uiOperation =

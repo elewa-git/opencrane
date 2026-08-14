@@ -1,6 +1,6 @@
 import type { Router } from "express";
 
-import type { SkillWorkloadDispatchAuthority } from "./skill-workload-authority.types.js";
+import type { SkillWorkloadDispatchAuthority } from "./skill-workload-authority.types";
 
 /** The identity TokenReview confirmed for the one controller allowed to create skill Jobs. */
 export interface ReviewedSkillWorkloadControllerIdentity

@@ -3,12 +3,12 @@ import { describe, expect, it } from "vitest";
 
 import { AG_UI_A2UI_ENVELOPE_VERSION, AG_UI_AGENT_THREAD_PARENT_DELIVERY_EVENT, AG_UI_INTERRUPTS_CLEARED_EVENT, AG_UI_TOOL_FAILURE_EVENT, AG_UI_TOOL_RECOVERY_REQUIRED_EVENT, AgentThreadDeliveryKinds, AgUiA2uiSurfaceStates, AgUiToolRecoveryProviderOutcomes } from "@opencrane/contracts";
 
-import { __DecodeAgUiSseRecord } from "../ag-ui-sse-decoder.js";
-import { __AgUiResumeCursor, __CreateAgUiStreamState, __ReduceAgUiStream } from "../ag-ui-stream.js";
-import type { AgUiStreamRecord } from "../ag-ui-stream.types.js";
-import { AgUiMessageStatuses } from "../message/message.types.js";
-import { AgUiRunStatuses } from "../run/run.types.js";
-import { AgUiToolStatuses } from "../tool/tool.types.js";
+import { __DecodeAgUiSseRecord } from "../ag-ui-sse-decoder";
+import { __AgUiResumeCursor, __CreateAgUiStreamState, __ReduceAgUiStream } from "../ag-ui-stream";
+import type { AgUiStreamRecord } from "../ag-ui-stream.types";
+import { AgUiMessageStatuses } from "../message/message.types";
+import { AgUiRunStatuses } from "../run/run.types";
+import { AgUiToolStatuses } from "../tool/tool.types";
 
 /** Exact safe progressive-disclosure fixture. */
 function _ToolFailureEnvelope(failureCode = "AuthenticationError", retrying = true)

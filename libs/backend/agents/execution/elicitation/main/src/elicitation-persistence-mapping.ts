@@ -1,7 +1,7 @@
 import { CONVERSATION_ELICITATION_VERSION, type ConversationElicitation, type ElicitationBody } from "@opencrane/contracts";
 
-import type { OpenElicitationCommand } from "./elicitation.types.js";
-import type { ElicitationProjectionRow, ElicitationReplayRow } from "./elicitation-persistence-mapping.types.js";
+import type { OpenElicitationCommand } from "./elicitation.types";
+import type { ElicitationProjectionRow, ElicitationReplayRow } from "./elicitation-persistence-mapping.types";
 
 /*
  * This module sits between two separately owned sets of enum values and belongs to neither.

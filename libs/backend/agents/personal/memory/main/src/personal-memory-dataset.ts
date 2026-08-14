@@ -1,5 +1,5 @@
-import { PersonalMemoryDatasetResolutionDenialReasons, PersonalMemoryDatasetResolutionOutcomes } from "./personal-memory-dataset.types.js";
-import type { PersonalMemoryAdmissionRepository, ResolvePersonalMemoryDatasetCommand, ResolvePersonalMemoryDatasetResult } from "./personal-memory-dataset.types.js";
+import { PersonalMemoryDatasetResolutionDenialReasons, PersonalMemoryDatasetResolutionOutcomes } from "./personal-memory-dataset.types";
+import type { PersonalMemoryAdmissionRepository, ResolvePersonalMemoryDatasetCommand, ResolvePersonalMemoryDatasetResult } from "./personal-memory-dataset.types";
 
 /**
  * Finds a user's personal memory dataset from their verified identity.

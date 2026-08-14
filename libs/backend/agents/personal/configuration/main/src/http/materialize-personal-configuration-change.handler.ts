@@ -1,9 +1,9 @@
 import type { Request, RequestHandler, Response } from "express";
 
-import { PersonalConfigurationDecisionCodes } from "../decision/personal-configuration-decision.types.js";
-import { __MaterializePersonalConfigurationChange } from "../materialization/personal-configuration-materialization.js";
-import { PersonalConfigurationMaterializationCodes } from "../materialization/personal-configuration-materialization.types.js";
-import { PersonalConfigurationHttpErrors, type PersonalConfigurationRouterDependencies } from "./personal-configuration.router.types.js";
+import { PersonalConfigurationDecisionCodes } from "../decision/personal-configuration-decision.types";
+import { __MaterializePersonalConfigurationChange } from "../materialization/personal-configuration-materialization";
+import { PersonalConfigurationMaterializationCodes } from "../materialization/personal-configuration-materialization.types";
+import { PersonalConfigurationHttpErrors, type PersonalConfigurationRouterDependencies } from "./personal-configuration.router.types";
 
 /**
  * Creates the route that applies a proposal the user has already accepted.

@@ -1,6 +1,6 @@
 import { isAbsolute } from "node:path";
 
-import type { ArtifactScannerProcessConfig } from "./config.types.js";
+import type { ArtifactScannerProcessConfig } from "./config.types";
 
 /** Read and fail-closed validate the scanner configuration. */
 export function _ReadConfig(environment: NodeJS.ProcessEnv = process.env): ArtifactScannerProcessConfig

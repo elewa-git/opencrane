@@ -7,8 +7,8 @@ import { PrismaRunAdmissionRepository } from "@opencrane/backend/agents/executio
 import type { RunAdmissionConcurrencyPolicy } from "@opencrane/backend/agents/execution/runs";
 import type { ManagedExecutionEvidenceAuthority, ManagedRunAdmissionPort } from "@opencrane/backend/server/agents/agent-services";
 
-import { _CreateManagedRunAdmissionPortWithGate } from "./managed-run-admission.js";
-import type { ManagedSnapshotAssembler, RunAdmissionCapacityGate } from "./managed-run-admission.types.js";
+import { _CreateManagedRunAdmissionPortWithGate } from "./managed-run-admission";
+import type { ManagedSnapshotAssembler, RunAdmissionCapacityGate } from "./managed-run-admission.types";
 
 /** Conservative server-process limits aligned to the five-connection Prisma budget. */
 const _DEFAULT_POLICY: RunAdmissionConcurrencyPolicy = { maxConcurrentAdmissions: 2, maxQueuedAdmissions: 10 };

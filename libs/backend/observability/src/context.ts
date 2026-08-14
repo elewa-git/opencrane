@@ -8,7 +8,7 @@
  */
 import { AsyncLocalStorage } from "node:async_hooks";
 
-import type { RequestContext } from "./observability.types.js";
+import type { RequestContext } from "./observability.types";
 
 /** Process-wide async store holding the active {@link RequestContext}. */
 const _store = new AsyncLocalStorage<RequestContext>();

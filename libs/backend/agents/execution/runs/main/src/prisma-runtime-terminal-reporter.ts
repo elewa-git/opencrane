@@ -1,8 +1,8 @@
 import { AgentRunState, AgentRunTerminalReason, Prisma, ToolInvocationState, ToolResultDeliveryState } from "@prisma/client";
 
-import { __DeliverChildRunCompletionInTransaction } from "./prisma-child-run-completion-repository.js";
-import { RuntimeRunFailureReasons } from "./runtime-event-reporter.types.js";
-import type { RuntimeTerminalEventType, RuntimeTerminalPendingToolRepository, RuntimeTerminalPendingToolUnitOfWork, RuntimeTerminalReportCommand, RuntimeTerminalReporter, RuntimeTerminalReportResult } from "./runtime-terminal-reporter.types.js";
+import { __DeliverChildRunCompletionInTransaction } from "./prisma-child-run-completion-repository";
+import { RuntimeRunFailureReasons } from "./runtime-event-reporter.types";
+import type { RuntimeTerminalEventType, RuntimeTerminalPendingToolRepository, RuntimeTerminalPendingToolUnitOfWork, RuntimeTerminalReportCommand, RuntimeTerminalReporter, RuntimeTerminalReportResult } from "./runtime-terminal-reporter.types";
 
 /** Prisma authority that turns a fenced runtime result into the sole terminal run outcome. */
 export class PrismaRuntimeTerminalReporter implements RuntimeTerminalReporter

@@ -3,7 +3,7 @@ import type { CompiledBudget, CompiledRunInput, CompiledToolDefinition, RunInput
 import { ___DoWithTrace } from "@opencrane/backend/observability";
 import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 
-import type { PromptCompilerRepositories } from "./prompt-compiler.types.js";
+import type { PromptCompilerRepositories } from "./prompt-compiler.types";
 
 /**
  * Turn an immutable {@link RunInputSnapshot} into the {@link CompiledRunInput} the runtime consumes

@@ -1,4 +1,4 @@
-import type { MemoryGatewayProcessConfig } from "./config.types.js";
+import type { MemoryGatewayProcessConfig } from "./config.types";
 
 /** Read and validate the complete private memory-gateway configuration. */
 export function _ReadConfig(environment: NodeJS.ProcessEnv = process.env): MemoryGatewayProcessConfig

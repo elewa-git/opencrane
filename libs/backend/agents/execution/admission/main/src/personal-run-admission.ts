@@ -3,8 +3,8 @@ import { createHash } from "node:crypto";
 import { RunInputSnapshotAdmissionOutcomes, SessionAssemblyOutcomes, type AssembleRunInputSnapshotResult } from "@opencrane/backend/agents/execution/inputs";
 import { RunAdmissionConcurrencyOutcomes, RunAdmissionDenialReasons } from "@opencrane/backend/agents/execution/runs";
 
-import type { PersonalRunAdmissionDependencies, PersonalRunAdmissionPort, PersonalRunAdmissionResult } from "./personal-run-admission.types.js";
-import { PersonalRunAdmissionDenialReasons, PersonalRunAdmissionOutcomes, PersonalRunIdempotencyOutcomes } from "./personal-run-admission.types.js";
+import type { PersonalRunAdmissionDependencies, PersonalRunAdmissionPort, PersonalRunAdmissionResult } from "./personal-run-admission.types";
+import { PersonalRunAdmissionDenialReasons, PersonalRunAdmissionOutcomes, PersonalRunIdempotencyOutcomes } from "./personal-run-admission.types";
 
 /** Fake service id used as the gate key for the preflight reads, which run before the real service is known. */
 const _PERSONAL_ADMISSION_PREFLIGHT_SERVICE_ID = "__personal_admission_preflight__";

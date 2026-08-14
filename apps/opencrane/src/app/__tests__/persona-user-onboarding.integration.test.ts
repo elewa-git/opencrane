@@ -6,7 +6,7 @@ import type { Logger } from "@opencrane/backend/observability";
 import { __CreatePersonaOnboardingRouter, type PersonaOnboardingRouterDependencies } from "@opencrane/backend/agents/personal/personas";
 import { __CreateUserOnboardingRouter, __UserOnboardingAuthority, UserOnboardingStates, type ApprovedPersonaEvidence, type UserOnboardingOwner, type UserOnboardingRecord } from "@opencrane/backend/server/agents/onboarding";
 
-import { _CreatePersonaOnboardingWorkflow } from "../user-onboarding-composition.js";
+import { _CreatePersonaOnboardingWorkflow } from "../user-onboarding-composition";
 
 /** Stable owner shared by both routers through the app composition vocabulary adapter. */
 const _OWNER: UserOnboardingOwner = { siloId: "silo-1", subjectId: "user-1" };

@@ -1,5 +1,5 @@
-import { AgentThreadGatewayError, AgentThreadGatewayErrorKinds } from "./agent-thread-gateway.errors.js";
-import { AgentThreadRouteStates } from "./agent-thread-state.types.js";
+import { AgentThreadGatewayError, AgentThreadGatewayErrorKinds } from "./agent-thread-gateway.errors";
+import { AgentThreadRouteStates } from "./agent-thread-state.types";
 
 /** Decide whether one gateway failure requires a non-disclosing route-state transition. */
 export function __AgentThreadFailureRoute(error: unknown, hadAuthorizedSnapshot: boolean): AgentThreadRouteStates.AccessChanged | AgentThreadRouteStates.Unavailable | null

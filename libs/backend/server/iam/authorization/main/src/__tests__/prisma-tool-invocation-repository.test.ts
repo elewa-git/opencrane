@@ -1,10 +1,10 @@
 import { AgentRunState, ExternalActionClaimKind, ExternalActionRecoveryMode, ToolInvocationState, type Prisma, type PrismaClient } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
 
-import { ExternalActionClaimKinds, ExternalActionRecoveryModes, ToolInvocationStates } from "../tool-invocation-lifecycle.types.js";
-import { PrismaToolInvocationRepository, __AdmitPreparingToolInvocationInTransaction } from "../prisma-tool-invocation-repository.js";
-import { PrismaToolInvocationUnitOfWork } from "../prisma-tool-invocation-unit-of-work.js";
-import { ToolInvocationEventTypes, ToolInvocationRunRecoveryEnterResults } from "../tool-invocation.types.js";
+import { ExternalActionClaimKinds, ExternalActionRecoveryModes, ToolInvocationStates } from "../tool-invocation-lifecycle.types";
+import { PrismaToolInvocationRepository, __AdmitPreparingToolInvocationInTransaction } from "../prisma-tool-invocation-repository";
+import { PrismaToolInvocationUnitOfWork } from "../prisma-tool-invocation-unit-of-work";
+import { ToolInvocationEventTypes, ToolInvocationRunRecoveryEnterResults } from "../tool-invocation.types";
 
 /** Build one complete persistence row around a focused state override. */
 function _row(overrides: Readonly<Record<string, unknown>> = {}): Record<string, unknown>

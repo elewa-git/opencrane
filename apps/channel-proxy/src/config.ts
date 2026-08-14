@@ -1,4 +1,4 @@
-import type { ChannelProxyProcessConfig } from "./config.types.js";
+import type { ChannelProxyProcessConfig } from "./config.types";
 
 /** Read and validate the complete process configuration. */
 export function _ReadConfig(environment: NodeJS.ProcessEnv = process.env): ChannelProxyProcessConfig

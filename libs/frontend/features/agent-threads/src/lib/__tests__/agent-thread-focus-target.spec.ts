@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { AgentThreadAccessStates, AgentThreadRecoveryStates, AgentThreadRunStates, AgentThreadSummaryStates, AgentThreadSummaryTargetKinds, AgentThreadTimelineEntryKinds, type AgentThreadSnapshot } from "@opencrane/state/conversation/agent-threads";
 
-import { _AgentThreadAuthorizedFocusTarget } from "../agent-thread-focus-target.js";
+import { _AgentThreadAuthorizedFocusTarget } from "../agent-thread-focus-target";
 
 /** Build the smallest authorized snapshot needed to validate route focus targets. */
 function _Snapshot(): AgentThreadSnapshot

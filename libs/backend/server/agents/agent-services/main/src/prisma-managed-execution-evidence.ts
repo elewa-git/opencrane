@@ -8,9 +8,9 @@ import type { AuthorizationScope } from "@opencrane/models/authorization";
 import type { ReviewedIntegrationToolDefinition, RevisionScopeAttachment } from "@opencrane/models/agents";
 import type { JsonValue } from "@opencrane/util";
 
-import { __ResolveEffectiveScopeAttachments } from "./scope-attachment-authority.js";
-import { PrismaScopeGrantResolver } from "./prisma-scope-grant-resolver.js";
-import type { ManagedExecutionEvidenceAuthority, ManagedExecutionEvidenceCommand, ManagedExecutionEvidenceConfig, ManagedExecutionEvidenceResult, ManagedExecutionEvidenceTransaction } from "./managed-execution-evidence.types.js";
+import { __ResolveEffectiveScopeAttachments } from "./scope-attachment-authority";
+import { PrismaScopeGrantResolver } from "./prisma-scope-grant-resolver";
+import type { ManagedExecutionEvidenceAuthority, ManagedExecutionEvidenceCommand, ManagedExecutionEvidenceConfig, ManagedExecutionEvidenceResult, ManagedExecutionEvidenceTransaction } from "./managed-execution-evidence.types";
 
 /**
  * Builds the principal name a managed agent acts as: `agent-service:<id>`.

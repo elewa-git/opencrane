@@ -1,4 +1,4 @@
-import type { AuthorizationScope } from "./authorization-scope.types.js";
+import type { AuthorizationScope } from "./authorization-scope.types";
 
 /**
  * Determines whether a grant's scope is broad enough to cover a requested scope.

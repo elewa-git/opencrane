@@ -1,8 +1,8 @@
 import { createHash } from "node:crypto";
 
-import type { AttemptModelKeyIssuer } from "./attempt-model-key.types.js";
-import type { ClaimedAttemptWithMintInputs, RunAttemptCredentialInput, RunAttemptCredentialMintInputs } from "./run-dispatch-persistence.types.js";
-import { RunDispatchResultStatuses, type ClaimNextRunAttemptResult } from "./run-dispatch.types.js";
+import type { AttemptModelKeyIssuer } from "./attempt-model-key.types";
+import type { ClaimedAttemptWithMintInputs, RunAttemptCredentialInput, RunAttemptCredentialMintInputs } from "./run-dispatch-persistence.types";
+import { RunDispatchResultStatuses, type ClaimNextRunAttemptResult } from "./run-dispatch.types";
 
 /** Derive the model-key request from the immutable snapshot and exact claim generation. */
 export function _BuildRunAttemptCredentialMintInputs(input: RunAttemptCredentialInput): RunAttemptCredentialMintInputs | null

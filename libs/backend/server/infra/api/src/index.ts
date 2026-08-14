@@ -10,5 +10,5 @@
  * @see https://kubernetes.io/docs/concepts/extend-kubernetes/api-extension/custom-resources/
  *      — what the group, version, and plural below identify.
  */
-export * from "./crd-constants.js";
-export * from "./k8s-errors.js";
+export * from "./crd-constants";
+export * from "./k8s-errors";

@@ -1,5 +1,5 @@
-import type { AgUiStreamState } from "../ag-ui-stream.types.js";
-import { _IsAgentThreadParentDelivery } from "./agent-thread-delivery.validator.js";
+import type { AgUiStreamState } from "../ag-ui-stream.types";
+import { _IsAgentThreadParentDelivery } from "./agent-thread-delivery.validator";
 
 /** Adopt one exact display-safe immediate-parent delivery; runtime authority fields are rejected. */
 export function _AgentThreadParentDelivery(state: AgUiStreamState, value: unknown, name: string): AgUiStreamState

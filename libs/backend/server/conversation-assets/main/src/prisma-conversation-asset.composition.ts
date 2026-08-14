@@ -1,6 +1,6 @@
 import type { Prisma } from "@prisma/client";
 
-import { PrismaConversationAttachmentAdmissionRepository } from "./prisma-conversation-attachment-admission.js";
+import { PrismaConversationAttachmentAdmissionRepository } from "./prisma-conversation-attachment-admission";
 
 /** Creates attachment admission on message/run admission's exact transaction. */
 export function _CreateConversationAttachmentAdmission(transaction: { readonly prisma: Prisma.TransactionClient }): PrismaConversationAttachmentAdmissionRepository

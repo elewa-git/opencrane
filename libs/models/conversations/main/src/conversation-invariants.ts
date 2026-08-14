@@ -1,6 +1,6 @@
-import { ConversationLifecycles, ConversationModes } from "./conversation.types.js";
-import { MessageStates, type Message } from "./message.types.js";
-import type { ConversationTimelineEntry } from "./timeline.types.js";
+import { ConversationLifecycles, ConversationModes } from "./conversation.types";
+import { MessageStates, type Message } from "./message.types";
+import type { ConversationTimelineEntry } from "./timeline.types";
 
 /** Legal next lifecycle values for each current conversation lifecycle. */
 const _CONVERSATION_LIFECYCLE_TRANSITIONS: Readonly<Record<ConversationLifecycles, readonly ConversationLifecycles[]>> = {

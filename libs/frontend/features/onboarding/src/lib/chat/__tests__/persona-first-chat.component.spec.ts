@@ -2,10 +2,10 @@ import { describe, expect, it } from "vitest";
 
 import { PersonaArchetypeTones } from "@opencrane/elements/ui";
 
-import { _PersonaFirstChatAnswerIntent } from "../persona-first-chat-composer.component.js";
-import { _PersonaFirstChatArchetypeClass } from "../persona-first-chat-identity.component.js";
-import { _PersonaFirstChatSpeakerLabel } from "../persona-first-chat-transcript.component.js";
-import { PersonaFirstChatArchetypeClasses, PersonaFirstChatMessageRoles, type PersonaFirstChatQuestion, PersonaFirstChatStates } from "../persona-first-chat.types.js";
+import { _PersonaFirstChatAnswerIntent } from "../persona-first-chat-composer.component";
+import { _PersonaFirstChatArchetypeClass } from "../persona-first-chat-identity.component";
+import { _PersonaFirstChatSpeakerLabel } from "../persona-first-chat-transcript.component";
+import { PersonaFirstChatArchetypeClasses, PersonaFirstChatMessageRoles, type PersonaFirstChatQuestion, PersonaFirstChatStates } from "../persona-first-chat.types";
 
 /** All three canonical ordinals used to prove one typed sequential component contract. */
 const _QUESTIONS: readonly PersonaFirstChatQuestion[] =

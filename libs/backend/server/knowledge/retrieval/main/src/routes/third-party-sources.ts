@@ -2,7 +2,7 @@ import { Router } from "express";
 import type { ThirdPartySource, ThirdPartySourceItem } from "@opencrane/contracts";
 import type { PrismaClient } from "@prisma/client";
 
-import type { ThirdPartySourceWriteRequest } from "./third-party-sources.types.js";
+import type { ThirdPartySourceWriteRequest } from "./third-party-sources.types";
 
 /** Convert an optional API timestamp into the database value for a named update field. */
 function _OptionalTimestamp(value: string | null | undefined): Date | null | undefined

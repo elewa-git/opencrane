@@ -14,14 +14,14 @@ import { _CreateArtifactPreprocessAuthority, PrismaArtifactScanUnitOfWork, __Cre
 import { _CreateAgentControllerTokenReviewer, _CreateArtifactPreprocessorTokenReviewer, _CreateArtifactScannerTokenReviewer, _CreateRuntimeTokenReviewer, _CreateSkillWorkloadTokenReviewer, _ValidateIsolatedWorkloadNamespace, _ValidateRuntimeIdentityNamespaces, type RuntimeIdentityNamespaces } from "@opencrane/backend/server/infra/workload-identity";
 import { PrismaConversationAssetOutputRepository, __CreateConversationAssetOutputRouter } from "@opencrane/backend/server/conversation-assets";
 
-import { _CreateArtifactPreprocessSourceBroker } from "../infra/artifacts/artifact-preprocess-source-broker.factory.js";
-import { _CreateArtifactScanSourceBroker } from "../infra/artifacts/artifact-scan-source-broker.factory.js";
-import { _CreateArtifactPreprocessOutputBroker, _CreateConversationAssetOutputAuthority, _CreateSkillAuthoringArtifactReader } from "../infra/artifacts/artifact-upload.factory.js";
-import { _CreateChannelTargetResolver } from "./channel-target-composition.js";
-import type { InternalRuntimeConfig } from "./config.types.js";
-import { _ProcessShutdownSignal } from "./process-shutdown.js";
-import { _log } from "./log.js";
-import type { ControllerRuntimeComposition, InternalRuntimeComposition, OptionalRuntimeComposition, RuntimeProtocolComposition, SkillWorkloadRuntimeComposition } from "./runtime-composition.types.js";
+import { _CreateArtifactPreprocessSourceBroker } from "../infra/artifacts/artifact-preprocess-source-broker.factory";
+import { _CreateArtifactScanSourceBroker } from "../infra/artifacts/artifact-scan-source-broker.factory";
+import { _CreateArtifactPreprocessOutputBroker, _CreateConversationAssetOutputAuthority, _CreateSkillAuthoringArtifactReader } from "../infra/artifacts/artifact-upload.factory";
+import { _CreateChannelTargetResolver } from "./channel-target-composition";
+import type { InternalRuntimeConfig } from "./config.types";
+import { _ProcessShutdownSignal } from "./process-shutdown";
+import { _log } from "./log";
+import type { ControllerRuntimeComposition, InternalRuntimeComposition, OptionalRuntimeComposition, RuntimeProtocolComposition, SkillWorkloadRuntimeComposition } from "./runtime-composition.types";
 
 /**
  * Mint one attempt-scoped LiteLLM virtual key for a claimed run attempt.

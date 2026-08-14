@@ -1,9 +1,9 @@
 import { InjectionToken, type EnvironmentProviders, type Provider } from "@angular/core";
 import { MarkdownRenderer, provideA2UI } from "@a2ui/angular/v0_8";
 
-import { _OpenCraneA2uiCatalog } from "./a2ui.catalog.js";
-import { _OpenCraneA2uiTheme } from "./a2ui.theme.js";
-import type { A2uiMarkdownSanitizer } from "./a2ui.types.js";
+import { _OpenCraneA2uiCatalog } from "./a2ui.catalog";
+import { _OpenCraneA2uiTheme } from "./a2ui.theme";
+import type { A2uiMarkdownSanitizer } from "./a2ui.types";
 
 /**
  * Neutral sanitizer port used for agent-authored A2UI text.

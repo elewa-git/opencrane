@@ -1,6 +1,6 @@
 import { AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, MANAGED_AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, ___IsAgentRuntimeServiceAccountName, ___IsManagedAgentRuntimeServiceAccountName } from "@opencrane/contracts";
 
-import { AgentRuntimeIdentityProfiles, type AgentRuntimeJobProfile } from "./agent-runtime-job.types.js";
+import { AgentRuntimeIdentityProfiles, type AgentRuntimeJobProfile } from "./agent-runtime-job.types";
 
 /** Largest scratch volume a profile may ask for. Nothing important is stored there. */
 const _MAX_SCRATCH_BYTES = 1_073_741_824n;

@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { MessageContentBlockKinds } from "@opencrane/models/conversations";
 
-import { PrismaConversationAttachmentAdmissionRepository } from "../prisma-conversation-attachment-admission.js";
+import { PrismaConversationAttachmentAdmissionRepository } from "../prisma-conversation-attachment-admission";
 
 describe("conversation attachment admission", () =>
 {

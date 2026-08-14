@@ -1,7 +1,7 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 
-import type { PersonalRunAdmissionCommand, PersonalRunAdmissionReadRepository, PersonalRunAdmissionUnitOfWork, PersonalRunIdempotencyResult, PersonalRunConversationAuthority } from "./personal-run-admission.types.js";
-import { PrismaPersonalRunAdmissionRepository } from "./prisma-personal-run-admission-repository.js";
+import type { PersonalRunAdmissionCommand, PersonalRunAdmissionReadRepository, PersonalRunAdmissionUnitOfWork, PersonalRunIdempotencyResult, PersonalRunConversationAuthority } from "./personal-run-admission.types";
+import { PrismaPersonalRunAdmissionRepository } from "./prisma-personal-run-admission-repository";
 
 /**
  * Opens the serializable Prisma transaction that each personal-admission read runs in.

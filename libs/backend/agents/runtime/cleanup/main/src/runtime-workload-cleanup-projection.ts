@@ -2,7 +2,7 @@ import type { V1Job } from "@kubernetes/client-node";
 
 import { RunWorkloadCleanupModes } from "@opencrane/contracts";
 
-import type { KubernetesRuntimeWorkloadCleanupProjection } from "./runtime-workload-cleanup-store.types.js";
+import type { KubernetesRuntimeWorkloadCleanupProjection } from "./runtime-workload-cleanup-store.types";
 
 function _HasAnnotation(annotations: Record<string, string> | undefined, name: string, value: string): boolean
 {

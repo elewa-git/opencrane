@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { AgentServiceKinds, ConversationLifecycles, ConversationModes, MemoryFactProvenanceSourceKinds, RunInputSnapshotIdentityKinds } from "../index.js";
-import type { AgentRun, AgentService, AuthorizationGrant, Conversation, RunEvent, SignedFleetMembershipRevision } from "../index.js";
+import { AgentServiceKinds, ConversationLifecycles, ConversationModes, MemoryFactProvenanceSourceKinds, RunInputSnapshotIdentityKinds } from "../index";
+import type { AgentRun, AgentService, AuthorizationGrant, Conversation, RunEvent, SignedFleetMembershipRevision } from "../index";
 
 describe("canonical model exports", function ()
 {

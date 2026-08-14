@@ -4,9 +4,9 @@ import { z } from "zod";
 
 import { ___ParticipantInputBlocksSchema } from "@opencrane/models/conversations";
 
-import { _ConversationCreationRequestSchema } from "./validators/conversation-creation.validator.js";
-import { AgentThreadReadDenialReasons, ConversationAuthorityOutcomes, ConversationWriteDenialReasons, type ConversationWriteDenial } from "./types/conversation-authority-result.types.js";
-import type { SelfConversationsRouterDependencies } from "./self-conversations.router.types.js";
+import { _ConversationCreationRequestSchema } from "./validators/conversation-creation.validator";
+import { AgentThreadReadDenialReasons, ConversationAuthorityOutcomes, ConversationWriteDenialReasons, type ConversationWriteDenial } from "./types/conversation-authority-result.types";
+import type { SelfConversationsRouterDependencies } from "./self-conversations.router.types";
 
 /** Bounded idempotent participant message body. */
 const _MessageSchema = z.object({

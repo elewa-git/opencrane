@@ -1,10 +1,10 @@
 import { AgentConfigPatchKinds } from "@opencrane/contracts";
 import { describe, expect, it, vi } from "vitest";
 
-import type { PersonalConfigurationProposalPersistenceReceipt } from "../proposal/personal-configuration-proposal-repository.types.js";
-import { PersonalConfigurationProposalCodes } from "../proposal/personal-configuration-proposal.types.js";
-import { _ProposeUpgradeSession } from "../upgrade-session/upgrade-session-proposal.js";
-import type { PersonalUpgradeSessionCandidate, PersonalUpgradeSessionSnapshot } from "../upgrade-session/upgrade-session.types.js";
+import type { PersonalConfigurationProposalPersistenceReceipt } from "../proposal/personal-configuration-proposal-repository.types";
+import { PersonalConfigurationProposalCodes } from "../proposal/personal-configuration-proposal.types";
+import { _ProposeUpgradeSession } from "../upgrade-session/upgrade-session-proposal";
+import type { PersonalUpgradeSessionCandidate, PersonalUpgradeSessionSnapshot } from "../upgrade-session/upgrade-session.types";
 
 /** Builds the validated candidate consumed by transaction-scoped orchestration. */
 function _candidate(): PersonalUpgradeSessionCandidate

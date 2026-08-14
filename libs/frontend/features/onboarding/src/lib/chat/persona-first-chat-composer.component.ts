@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, input, model, output } from "@angul
 import { ButtonModule } from "primeng/button";
 import { TextareaModule } from "primeng/textarea";
 
-import { type PersonaFirstChatAnswerIntent, type PersonaFirstChatQuestion, PersonaFirstChatStates } from "./persona-first-chat.types.js";
+import { type PersonaFirstChatAnswerIntent, type PersonaFirstChatQuestion, PersonaFirstChatStates } from "./persona-first-chat.types";
 
 /** Build a valid controlled answer intent, or null while presentation state forbids submission. */
 export function _PersonaFirstChatAnswerIntent(question: PersonaFirstChatQuestion, state: PersonaFirstChatStates, draftAnswer: string): PersonaFirstChatAnswerIntent | null

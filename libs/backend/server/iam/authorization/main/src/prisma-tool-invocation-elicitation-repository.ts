@@ -1,9 +1,9 @@
 import { AgentRunState, type Prisma } from "@prisma/client";
 
-import { __FindToolInvocationInTransaction, __MarkToolInvocationApprovalRejectedInTransaction, __MarkToolInvocationApprovedInTransaction } from "./prisma-tool-invocation-repository.js";
-import type { ApproveElicitedToolInvocationCommand, RejectElicitedToolInvocationCommand, ToolInvocationElicitationRepository } from "./tool-invocation-elicitation-authority.types.js";
-import { ExternalActionClaimKinds, ToolInvocationStates } from "./tool-invocation-lifecycle.types.js";
-import type { ToolInvocationClaim, ToolInvocationRecord } from "./tool-invocation.types.js";
+import { __FindToolInvocationInTransaction, __MarkToolInvocationApprovalRejectedInTransaction, __MarkToolInvocationApprovedInTransaction } from "./prisma-tool-invocation-repository";
+import type { ApproveElicitedToolInvocationCommand, RejectElicitedToolInvocationCommand, ToolInvocationElicitationRepository } from "./tool-invocation-elicitation-authority.types";
+import { ExternalActionClaimKinds, ToolInvocationStates } from "./tool-invocation-lifecycle.types";
+import type { ToolInvocationClaim, ToolInvocationRecord } from "./tool-invocation.types";
 
 /** Authorization-owned invocation checks and transitions bound to one Prisma transaction. */
 export class PrismaToolInvocationElicitationRepository implements ToolInvocationElicitationRepository

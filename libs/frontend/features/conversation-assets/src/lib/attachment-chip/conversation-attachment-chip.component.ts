@@ -1,8 +1,8 @@
 import { ChangeDetectionStrategy, Component, input, output } from "@angular/core";
 import { ButtonModule } from "primeng/button";
 
-import { __ConversationAssetTypeLabel } from "../conversation-asset-presentation.js";
-import { ConversationAssetActionKinds, ConversationAssetPresentationStates, type ConversationAssetActionIntent, type ConversationAssetPresentation } from "../conversation-asset-presentation.types.js";
+import { __ConversationAssetTypeLabel } from "../conversation-asset-presentation";
+import { ConversationAssetActionKinds, ConversationAssetPresentationStates, type ConversationAssetActionIntent, type ConversationAssetPresentation } from "../conversation-asset-presentation.types";
 
 /** One compact composer attachment state with parent-owned actions. */
 @Component({

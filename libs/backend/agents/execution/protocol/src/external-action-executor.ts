@@ -1,12 +1,12 @@
 import { RunInputSnapshotIdentityKinds, type RunInputSnapshot } from "@opencrane/contracts";
 import type { JsonValue } from "@opencrane/util";
 
-import { ExternalActionRevisionKinds, type DurableExternalActionCommand, type ExternalActionExecutor, type ExternalActionExecutorDependencies } from "./external-action-executor.types.js";
-import { _ExecuteIntegrationExternalAction, UnsupportedExternalActionError } from "./integration-external-action-executor.js";
-import { _ExecuteMemoryExternalAction } from "./memory-external-action-executor.js";
-import { _ExecuteSandboxExternalAction } from "./sandbox-external-action-executor.js";
+import { ExternalActionRevisionKinds, type DurableExternalActionCommand, type ExternalActionExecutor, type ExternalActionExecutorDependencies } from "./external-action-executor.types";
+import { _ExecuteIntegrationExternalAction, UnsupportedExternalActionError } from "./integration-external-action-executor";
+import { _ExecuteMemoryExternalAction } from "./memory-external-action-executor";
+import { _ExecuteSandboxExternalAction } from "./sandbox-external-action-executor";
 
-export { UnsupportedExternalActionError } from "./integration-external-action-executor.js";
+export { UnsupportedExternalActionError } from "./integration-external-action-executor";
 
 /**
  * Return the personal Cognee dataset frozen into an admitted snapshot.

@@ -1,6 +1,6 @@
 import type { Router } from "express";
 
-import type { SkillWorkloadBootstrapAuthority } from "./skill-workload-authority.types.js";
+import type { SkillWorkloadBootstrapAuthority } from "./skill-workload-authority.types";
 
 /** TokenReview-confirmed identity of one governed skill worker Pod. */
 export interface SkillWorkloadBootstrapIdentity

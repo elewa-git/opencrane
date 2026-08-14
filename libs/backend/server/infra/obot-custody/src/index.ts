@@ -12,12 +12,12 @@
  * @see https://modelcontextprotocol.io/specification/2025-06-18 - the MCP revision the invocation
  *   adapter pins; it refuses any other revision rather than adapting to it.
  */
-export { __UnavailableObotCustodyAdapter, ObotCustodyUnavailableError } from "./unavailable-obot-custody.js";
-export type { ObotCustodyCredential, ObotCustodyPort, ProvisionObotCustodyCommand, ProvisionedObotCustody } from "./obot-custody.types.js";
-export { __AssertToolAllowed, ObotMcpAuthenticationError, ObotMcpAuthorizationError, ObotMcpInvocationUnavailableError, ObotMcpToolNotAllowedError } from "./obot-mcp-invocation.js";
-export type { ObotMcpInvocationPort, ObotMcpToolInvocationCommand, ObotMcpToolResult } from "./obot-mcp-invocation.types.js";
-export { __UnavailableObotMcpInvocationAdapter } from "./unavailable-obot-mcp-invocation.js";
-export { __CreateObotSession, ObotProtocolError, ObotTransportError } from "./obot-http.js";
-export type { ObotFetch, ObotHttpOptions, ObotMcpExchangeResponse, ObotRequestMethod, ObotSession, ObotTransportFailureCode } from "./obot-http.types.js";
-export { __CreateHttpObotCustodyAdapter } from "./http-obot-custody.js";
-export { __CreateHttpObotMcpInvocationAdapter } from "./http-obot-mcp-invocation.js";
+export { __UnavailableObotCustodyAdapter, ObotCustodyUnavailableError } from "./unavailable-obot-custody";
+export type { ObotCustodyCredential, ObotCustodyPort, ProvisionObotCustodyCommand, ProvisionedObotCustody } from "./obot-custody.types";
+export { __AssertToolAllowed, ObotMcpAuthenticationError, ObotMcpAuthorizationError, ObotMcpInvocationUnavailableError, ObotMcpToolNotAllowedError } from "./obot-mcp-invocation";
+export type { ObotMcpInvocationPort, ObotMcpToolInvocationCommand, ObotMcpToolResult } from "./obot-mcp-invocation.types";
+export { __UnavailableObotMcpInvocationAdapter } from "./unavailable-obot-mcp-invocation";
+export { __CreateObotSession, ObotProtocolError, ObotTransportError } from "./obot-http";
+export type { ObotFetch, ObotHttpOptions, ObotMcpExchangeResponse, ObotRequestMethod, ObotSession, ObotTransportFailureCode } from "./obot-http.types";
+export { __CreateHttpObotCustodyAdapter } from "./http-obot-custody";
+export { __CreateHttpObotMcpInvocationAdapter } from "./http-obot-mcp-invocation";

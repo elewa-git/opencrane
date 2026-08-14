@@ -1,5 +1,5 @@
-import type { AgentRevision } from "./agent-revision.types.js";
-import type { AgentRevisionDiff, RevisionLineDiff, RevisionScalarChange, RevisionSetChange, RevisionWidening } from "./agent-revision-diff.types.js";
+import type { AgentRevision } from "./agent-revision.types";
+import type { AgentRevisionDiff, RevisionLineDiff, RevisionScalarChange, RevisionSetChange, RevisionWidening } from "./agent-revision-diff.types";
 
 /** Computes a multiset-aware line-level diff for one readable text field. */
 function _lineDiff(field: string, before: string, after: string): RevisionLineDiff | null

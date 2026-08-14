@@ -7,8 +7,8 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import { PersonaFirstChatArchetypes, PersonaFirstChatColours, PersonaFirstChatTranscriptKinds, PersonaFirstChatTranscriptRoles, UserOnboardingRouteStates, type PersonaFirstChatSnapshot } from "@opencrane/state/onboarding/projection";
 import { PersonaFirstChatCommandPhases, PersonaFirstChatStore } from "@opencrane/state/onboarding";
 
-import { PersonaFirstChatPageComponent } from "../persona-first-chat-page.component.js";
-import { PersonaFirstChatStates } from "../persona-first-chat.types.js";
+import { PersonaFirstChatPageComponent } from "../persona-first-chat-page.component";
+import { PersonaFirstChatStates } from "../persona-first-chat.types";
 
 /** Controlled authoritative projection shared by the route-shell store double. */
 let _snapshot: WritableSignal<PersonaFirstChatSnapshot>;

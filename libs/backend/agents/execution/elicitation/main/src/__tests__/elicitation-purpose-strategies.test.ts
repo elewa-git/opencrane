@@ -2,8 +2,8 @@ import { describe, expect, it, vi } from "vitest";
 
 import { ElicitationBodyKinds, ElicitationPurposes } from "@opencrane/contracts";
 
-import { _ElicitationPurposeStrategies } from "../elicitation-purpose-strategies.js";
-import type { ElicitationPurposeStrategyDependencies } from "../elicitation-purpose-strategy.types.js";
+import { _ElicitationPurposeStrategies } from "../elicitation-purpose-strategies";
+import type { ElicitationPurposeStrategyDependencies } from "../elicitation-purpose-strategy.types";
 
 /** Build transaction-bound operation spies for exhaustive dispatch assertions. */
 function _Dependencies(): ElicitationPurposeStrategyDependencies

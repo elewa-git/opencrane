@@ -4,8 +4,8 @@ import { describe, expect, it, vi } from "vitest";
 
 import { ARTIFACT_SCANNER_PROJECTED_TOKEN_AUDIENCE, ARTIFACT_SCANNER_SERVICE_ACCOUNT_NAME, ArtifactScannerVerdict } from "@opencrane/contracts";
 
-import { __CreateArtifactScannerRouter } from "../artifact-scanning.router.js";
-import type { ArtifactScannerRouterDependencies } from "../artifact-scanning.types.js";
+import { __CreateArtifactScannerRouter } from "../artifact-scanning.router";
+import type { ArtifactScannerRouterDependencies } from "../artifact-scanning.types";
 
 /** Fixed isolated scanner namespace used by reviewed test identities. */
 const _NAMESPACE = "opencrane-artifact-scanning";

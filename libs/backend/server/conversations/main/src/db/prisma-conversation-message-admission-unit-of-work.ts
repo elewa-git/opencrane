@@ -9,15 +9,15 @@ import { ___DoWithTrace } from "@opencrane/backend/observability";
 import { __DecideConversationCommand, ConversationCommandActions, ConversationCommandDenialReasons, ConversationCommandKinds, type MessageContentBlock } from "@opencrane/models/conversations";
 import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 
-import { ConversationAuthorityOutcomes, ConversationWriteDenialReasons, type ConversationWriteDenial, type SubmitConversationMessageResult } from "../types/conversation-authority-result.types.js";
-import type { ConversationCaller } from "../types/conversation-caller.types.js";
-import type { SubmitConversationMessageRequest } from "../types/conversation-request.types.js";
-import type { ConversationMessageView } from "../types/conversation-view.types.js";
-import type { ConversationAttachmentAdmissionFactory, ConversationAttachmentAdmissionPort, ConversationMessageAdmissionUnitOfWork, ConversationMessageIdempotencyConflict, ConversationMessageSubmissionPreflight } from "../conversation-message-admission.types.js";
-import { PrismaConversationMutationRepository } from "./prisma-conversation-mutation-repository.js";
-import type { ConversationMutationRepository, ConversationMutationRepositoryFactory } from "./prisma-conversation-mutation-repository.types.js";
-import { PrismaConversationQueryRepository } from "./prisma-conversation-query-repository.js";
-import type { ConversationQueryRepository } from "./prisma-conversation-query-repository.types.js";
+import { ConversationAuthorityOutcomes, ConversationWriteDenialReasons, type ConversationWriteDenial, type SubmitConversationMessageResult } from "../types/conversation-authority-result.types";
+import type { ConversationCaller } from "../types/conversation-caller.types";
+import type { SubmitConversationMessageRequest } from "../types/conversation-request.types";
+import type { ConversationMessageView } from "../types/conversation-view.types";
+import type { ConversationAttachmentAdmissionFactory, ConversationAttachmentAdmissionPort, ConversationMessageAdmissionUnitOfWork, ConversationMessageIdempotencyConflict, ConversationMessageSubmissionPreflight } from "../conversation-message-admission.types";
+import { PrismaConversationMutationRepository } from "./prisma-conversation-mutation-repository";
+import type { ConversationMutationRepository, ConversationMutationRepositoryFactory } from "./prisma-conversation-mutation-repository.types";
+import { PrismaConversationQueryRepository } from "./prisma-conversation-query-repository";
+import type { ConversationQueryRepository } from "./prisma-conversation-query-repository.types";
 
 /** Prisma-backed participant-message admission, retry, and run handoff authority. */
 export class PrismaConversationMessageAdmissionUnitOfWork implements ConversationMessageAdmissionUnitOfWork

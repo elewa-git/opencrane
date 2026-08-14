@@ -1,7 +1,7 @@
 import type { UpgradeSessionProposalRepository } from "@opencrane/backend/agents/personal/configuration";
 import type { PersonalMemoryPermissionAuthority } from "@opencrane/backend/agents/execution/elicitation";
 
-import type { ProductionExternalActionTransports } from "./external-action-executor.types.js";
+import type { ProductionExternalActionTransports } from "./external-action-executor.types";
 
 /** Concrete server-side transports used by current external-action adapters. */
 export interface ProductionExternalActionAdapterDependencies

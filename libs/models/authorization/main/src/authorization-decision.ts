@@ -1,7 +1,7 @@
-import type { CapabilityReference } from "./capability.types.js";
-import { AuthorizationDecisionOutcomes, type AuthorizationDecision, type AuthorizationGrant, type AuthorizationRequest } from "./grant.types.js";
-import { __AuthorizationResourcesEqual } from "./resource-locator.js";
-import { __AuthorizationScopeCovers } from "./scope-matching.js";
+import type { CapabilityReference } from "./capability.types";
+import { AuthorizationDecisionOutcomes, type AuthorizationDecision, type AuthorizationGrant, type AuthorizationRequest } from "./grant.types";
+import { __AuthorizationResourcesEqual } from "./resource-locator";
+import { __AuthorizationScopeCovers } from "./scope-matching";
 
 /**
  * Compares immutable capability references.

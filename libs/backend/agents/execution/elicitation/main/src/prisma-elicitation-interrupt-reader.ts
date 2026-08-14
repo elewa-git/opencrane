@@ -2,8 +2,8 @@ import type { PrismaClient } from "@prisma/client";
 
 import { ElicitationBodyKinds, RunEventTypes, type AgUiProjectionSourceEvent, type ConversationElicitation } from "@opencrane/contracts";
 
-import { PrismaElicitationUnitOfWork } from "./prisma-elicitation-unit-of-work.js";
-import type { ElicitationInterruptReader } from "./elicitation-interrupt.types.js";
+import { PrismaElicitationUnitOfWork } from "./prisma-elicitation-unit-of-work";
+import type { ElicitationInterruptReader } from "./elicitation-interrupt.types";
 
 /** Compose generic request overlays over the elicitation authority. */
 export function _CreateElicitationInterruptReader(prisma: PrismaClient): ElicitationInterruptReader

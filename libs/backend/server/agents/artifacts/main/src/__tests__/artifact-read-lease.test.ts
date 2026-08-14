@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { __IssueArtifactReadLease } from "../artifact-read-lease.js";
-import { IssueArtifactReadLeaseOutcomes, type PublishedArtifactReadTarget } from "../artifact-read-lease.types.js";
+import { __IssueArtifactReadLease } from "../artifact-read-lease";
+import { IssueArtifactReadLeaseOutcomes, type PublishedArtifactReadTarget } from "../artifact-read-lease.types";
 
 /** Build one exact active published revision returned by the server-owned repository. */
 function _Target(overrides: Partial<PublishedArtifactReadTarget> = {}): PublishedArtifactReadTarget

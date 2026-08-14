@@ -1,5 +1,5 @@
-import type { AuthorizationGrantRepository } from "./effective-access.types.js";
-import type { ShareAuthorizationRepository } from "./share-authorization-repository.types.js";
+import type { AuthorizationGrantRepository } from "./effective-access.types";
+import type { ShareAuthorizationRepository } from "./share-authorization-repository.types";
 
 /** Transaction-scoped authorization repositories used by one share procedure. */
 export interface ShareAuthorizationTransaction

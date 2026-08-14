@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { __CreateAgentSchedule, __UpdateAgentSchedule } from "../agent-schedule.js";
-import { AgentScheduleOverlapPolicies, type AgentScheduleMutationResult, type AgentScheduleRepository, type AgentServiceScheduleRecord, type CreateAgentScheduleCommand, type UpdateAgentScheduleCommand } from "../agent-schedule.types.js";
+import { __CreateAgentSchedule, __UpdateAgentSchedule } from "../agent-schedule";
+import { AgentScheduleOverlapPolicies, type AgentScheduleMutationResult, type AgentScheduleRepository, type AgentServiceScheduleRecord, type CreateAgentScheduleCommand, type UpdateAgentScheduleCommand } from "../agent-schedule.types";
 
 /** In-memory schedule repository that records the last create/update it received. */
 class _Repository implements AgentScheduleRepository

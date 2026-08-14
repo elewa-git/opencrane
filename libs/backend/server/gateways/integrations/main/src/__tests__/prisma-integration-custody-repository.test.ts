@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { PrismaIntegrationCustodyRepository } from "../prisma-integration-custody-repository.js";
+import { PrismaIntegrationCustodyRepository } from "../prisma-integration-custody-repository";
 
 describe("Prisma integration custody repository", function _suite()
 {

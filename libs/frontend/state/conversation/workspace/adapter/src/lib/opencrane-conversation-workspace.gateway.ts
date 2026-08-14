@@ -3,7 +3,7 @@ import { Injectable, inject } from "@angular/core";
 import { ControlPlaneApiService } from "@opencrane/core";
 import { ConversationRunStates, ConversationWorkspaceGatewayError, ConversationWorkspaceGatewayErrorKinds, type ConversationCreationDirectory, type ConversationOnboardingHistoryProjection, type ConversationRun, type ConversationSummary, type ConversationWorkspaceDetail, type ConversationWorkspaceGateway, type CreateConversationCommand, type RetryConversationRunCommand, type SubmitConversationMessageCommand, type SubmitConversationSteeringCommand } from "@opencrane/state/conversation/workspace";
 
-import { _ConversationDetail, _ConversationOnboardingHistory, _ConversationRun, _ConversationSummary, _ConversationWorkspaceDirectory } from "./conversation-workspace.dto.js";
+import { _ConversationDetail, _ConversationOnboardingHistory, _ConversationRun, _ConversationSummary, _ConversationWorkspaceDirectory } from "./conversation-workspace.dto";
 
 /**
  * Talks to the signed-in Control Plane API on behalf of the conversation workspace.

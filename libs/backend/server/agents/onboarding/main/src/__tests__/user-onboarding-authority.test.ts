@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { __UserOnboardingAuthority } from "../user-onboarding-authority.js";
-import { UserOnboardingBootstrapArchetypes, UserOnboardingDenialReasons, UserOnboardingPersonaColours, UserOnboardingStates, UserOnboardingTransitionStatuses } from "../user-onboarding.enums.js";
-import { UserOnboardingPersonaWorkflowCoordinator } from "../user-onboarding.http.js";
-import type { ApprovedPersonaEvidence, UserOnboardingOwner, UserOnboardingPersonaEvidencePort, UserOnboardingRecord, UserOnboardingRepository } from "../user-onboarding.types.js";
+import { __UserOnboardingAuthority } from "../user-onboarding-authority";
+import { UserOnboardingBootstrapArchetypes, UserOnboardingDenialReasons, UserOnboardingPersonaColours, UserOnboardingStates, UserOnboardingTransitionStatuses } from "../user-onboarding.enums";
+import { UserOnboardingPersonaWorkflowCoordinator } from "../user-onboarding.http";
+import type { ApprovedPersonaEvidence, UserOnboardingOwner, UserOnboardingPersonaEvidencePort, UserOnboardingRecord, UserOnboardingRepository } from "../user-onboarding.types";
 
 /** Stable authenticated owner used by the authority tests. */
 const _OWNER: UserOnboardingOwner = { siloId: "silo-a", subjectId: "subject-a" };

@@ -1,7 +1,7 @@
 import type { JsonValue } from "@opencrane/util";
 
-import type { DurableExternalActionCommand, ExternalActionExecutorDependencies } from "./external-action-executor.types.js";
-import { PersonalMemorySafeDeliveryRequiredError } from "./external-action-errors.js";
+import type { DurableExternalActionCommand, ExternalActionExecutorDependencies } from "./external-action-executor.types";
+import { PersonalMemorySafeDeliveryRequiredError } from "./external-action-errors";
 
 /**
  * Refuse generic personal-memory delivery until the transient safe path owns recalled content.

@@ -2,7 +2,7 @@ import { AuthorizationScopeKind, MemoryConsentState, MemoryDatasetState, MemoryF
 import { MemoryFactProvenanceSourceKinds } from "@opencrane/contracts";
 import { describe, expect, it, vi } from "vitest";
 
-import { PrismaPersonalMemoryAdmissionRepository } from "../prisma-personal-memory-admission-repository.js";
+import { PrismaPersonalMemoryAdmissionRepository } from "../prisma-personal-memory-admission-repository";
 
 /** Builds the smallest transaction fake with the two tables these reads use. */
 function _Transaction(dataset: { readonly id: string; readonly cogneeDatasetId: string } | null, facts: readonly unknown[] = [])

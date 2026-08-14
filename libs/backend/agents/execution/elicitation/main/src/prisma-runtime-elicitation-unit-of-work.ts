@@ -2,8 +2,8 @@ import type { Prisma } from "@prisma/client";
 
 import type { ConversationElicitation } from "@opencrane/contracts";
 
-import type { ExpireElicitationBatchCommand, ExpireElicitationBatchResult, OpenElicitationCommand, RuntimeElicitationUnitOfWork } from "./elicitation.types.js";
-import { PrismaElicitationRepository } from "./prisma-elicitation-unit-of-work.js";
+import type { ExpireElicitationBatchCommand, ExpireElicitationBatchResult, OpenElicitationCommand, RuntimeElicitationUnitOfWork } from "./elicitation.types";
+import { PrismaElicitationRepository } from "./prisma-elicitation-unit-of-work";
 
 /**
  * Owns elicitation work inside a runtime dispatch transaction that already holds the run lock.

@@ -1,7 +1,7 @@
 import { AgentRunState, ChildRunCompletionDeliveryOutcome, type PrismaClient } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
 
-import { PrismaChildRunCompletionRepository } from "../prisma-child-run-completion-repository.js";
+import { PrismaChildRunCompletionRepository } from "../prisma-child-run-completion-repository";
 
 /** Builds one terminal child that inherits the exact direct-parent lineage. */
 function _child(overrides: Record<string, unknown> = {})

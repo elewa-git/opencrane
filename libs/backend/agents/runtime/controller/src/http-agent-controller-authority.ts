@@ -4,9 +4,9 @@ import { isAbsolute } from "node:path";
 import { ___DoWithTrace } from "@opencrane/backend/observability";
 import { ___IsAgentControllerIdentifier, ___ParseAgentControllerOutboxPrunedCount, ___ParseAgentControllerRunAttemptAssignmentResult, ___ParseAgentControllerRunAttemptClaim, ___ParseAgentControllerRunWorkloadRegistrationResult, ___ParseAgentControllerRunWorkloadReleaseClaim, type AgentControllerRunAttemptAssignmentCommand, type AgentControllerRunAttemptAssignmentResult, type AgentControllerRunAttemptClaim, type AgentControllerRunWorkloadRegistrationCommand, type AgentControllerRunWorkloadRegistrationResult, type AgentControllerRunWorkloadReleaseClaim } from "@opencrane/contracts";
 
-import type { AgentControllerAuthority } from "./agent-controller.types.js";
-import type { AgentControllerFetch, AgentControllerHttpAuthorityOptions, AgentControllerTokenReader } from "./http-agent-controller-authority.types.js";
-import { _ReadAndValidateAgentControllerJson } from "./http-agent-controller-response.js";
+import type { AgentControllerAuthority } from "./agent-controller.types";
+import type { AgentControllerFetch, AgentControllerHttpAuthorityOptions, AgentControllerTokenReader } from "./http-agent-controller-authority.types";
+import { _ReadAndValidateAgentControllerJson } from "./http-agent-controller-response";
 
 const _CLAIM_PATH = "/api/internal/agent-controller/run-attempts:claim";
 const _RELEASE_CLAIM_PATH = "/api/internal/agent-controller/workload-releases:claim";

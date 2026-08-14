@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { __UnavailableObotCustodyAdapter, __UnavailableObotMcpInvocationAdapter, ObotCustodyUnavailableError, ObotMcpInvocationUnavailableError } from "@opencrane/backend/server/infra/obot-custody";
 
-import { _CreateObotAdapters } from "../obot-adapters.factory.js";
+import { _CreateObotAdapters } from "../obot-adapters.factory";
 
 describe("OpenCrane Obot adapter composition", function _ObotAdaptersSuite()
 {

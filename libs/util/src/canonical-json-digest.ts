@@ -1,8 +1,8 @@
 import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex } from "@noble/hashes/utils.js";
 
-import { ___CanonicalizeJson } from "./json-canonicalization.js";
-import type { CanonicalJsonSha256Digest, JsonValue } from "./json-canonicalization.types.js";
+import { ___CanonicalizeJson } from "./json-canonicalization";
+import type { CanonicalJsonSha256Digest, JsonValue } from "./json-canonicalization.types";
 
 /**
  * SHA-256 digest of a value's RFC 8785 canonical JSON, in the `sha256:<hex>` form this repo uses.

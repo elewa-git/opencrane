@@ -1,5 +1,5 @@
-import { ConversationAssetDisposition } from "./conversation-asset.types.js";
-import type { ConversationAssetBatchDecision, ConversationAssetBatchItem } from "./conversation-asset.types.js";
+import { ConversationAssetDisposition } from "./conversation-asset.types";
+import type { ConversationAssetBatchDecision, ConversationAssetBatchItem } from "./conversation-asset.types";
 
 /** Maximum files admitted by one message. */
 export const ___CONVERSATION_ASSET_MAX_FILES = 10;

@@ -3,7 +3,7 @@ import type { BeginRenderingMessage, DataModelUpdate, SurfaceUpdateMessage } fro
 
 import type { RunEventType } from "@opencrane/models/agents";
 import type { ConversationId } from "@opencrane/models/conversations";
-import type { SafeToolTechnicalDetails } from "./conversation-elicitation.types.js";
+import type { SafeToolTechnicalDetails } from "./conversation-elicitation.types";
 
 /**
  * Version tag for OpenCrane's AG-UI event projection.

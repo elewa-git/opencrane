@@ -5,13 +5,13 @@ import { ConversationComposerComponent, ConversationComposerStates } from "@open
 import { CONVERSATION_ELICITATION_VERSION, ElicitationBodyKinds, ElicitationPurposes, ElicitationRequestStates, type ConversationElicitation } from "@opencrane/state/conversation/elicitation";
 import { AgentThreadAccessStates, AgentThreadAdmissionStates, AgentThreadDeliveryKinds, AgentThreadRecoveryStates, AgentThreadRunStates, AgentThreadSummaryStates, AgentThreadSummaryTargetKinds, AgentThreadTimelineEntryKinds, AGENT_THREAD_GATEWAY, type AgentThreadGateway, type AgentThreadSnapshot, type AgentThreadSummaryPresentation } from "@opencrane/state/conversation/agent-threads";
 
-import { AgentThreadAccessChangedComponent } from "../agent-thread-access-changed.component.js";
-import { AgentThreadDeliveryComponent } from "../agent-thread-delivery.component.js";
-import { AgentThreadMentionControlComponent } from "../agent-thread-mention-control.component.js";
-import { AgentThreadPageComponent } from "../agent-thread-page.component.js";
-import { AgentThreadSummaryComponent } from "../agent-thread-summary.component.js";
-import { AgentThreadUnavailableComponent } from "../agent-thread-unavailable.component.js";
-import type { AgentThreadAgentOption } from "../agent-thread-feature.types.js";
+import { AgentThreadAccessChangedComponent } from "../agent-thread-access-changed.component";
+import { AgentThreadDeliveryComponent } from "../agent-thread-delivery.component";
+import { AgentThreadMentionControlComponent } from "../agent-thread-mention-control.component";
+import { AgentThreadPageComponent } from "../agent-thread-page.component";
+import { AgentThreadSummaryComponent } from "../agent-thread-summary.component";
+import { AgentThreadUnavailableComponent } from "../agent-thread-unavailable.component";
+import type { AgentThreadAgentOption } from "../agent-thread-feature.types";
 
 /** Display-safe services offered by the controlled group-composer selector. */
 const _AGENT_OPTIONS: readonly AgentThreadAgentOption[] =

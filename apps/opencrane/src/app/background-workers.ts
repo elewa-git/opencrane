@@ -7,9 +7,9 @@ import { __CreateKubernetesRuntimeWorkloadCleanupStore } from "@opencrane/backen
 import type { ManagedRunAdmissionPort } from "@opencrane/backend/server/agents/agent-services";
 import { _CreateScheduleTicker, PrismaScheduleTickerUnitOfWork } from "@opencrane/backend/server/agents/scheduling";
 
-import type { OpenCraneBackgroundWorkers } from "./background-workers.types.js";
-import type { OpenCraneProcessConfig } from "./config.types.js";
-import { _log } from "./log.js";
+import type { OpenCraneBackgroundWorkers } from "./background-workers.types";
+import type { OpenCraneProcessConfig } from "./config.types";
+import { _log } from "./log";
 
 /** Delay between checks for a runtime attempt whose signed workload lease expired. */
 const _RUNTIME_REPAIR_INTERVAL_MILLISECONDS = 30_000;

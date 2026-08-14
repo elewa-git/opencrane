@@ -1,7 +1,7 @@
 import type * as client from "openid-client";
 
-import type { OwnedOrg } from "./org-membership.types.js";
-import type { AuthUser } from "./session.types.js";
+import type { OwnedOrg } from "./org-membership.types";
+import type { AuthUser } from "./session.types";
 
 /** Auth mode exposed to the UI so it can decide whether login is required. */
 export type ManagerAuthMode = "development" | "oidc";

@@ -4,8 +4,8 @@ import { AgentRunState, AgentThreadDeliveryKind, WorkloadAssignmentState, type P
 
 import { AgentThreadDeliveryKinds, type AgentThreadParentDelivery } from "@opencrane/backend/conversations/agent-threads";
 
-import type { AgentThreadParentDeliveryCommand, AgentThreadRuntimeIdentity, DeliverAgentThreadParentResult } from "../agent-thread-parent-delivery.types.js";
-import type { AgentThreadParentDeliveryRepository } from "./prisma-agent-thread-parent-delivery-repository.types.js";
+import type { AgentThreadParentDeliveryCommand, AgentThreadRuntimeIdentity, DeliverAgentThreadParentResult } from "../agent-thread-parent-delivery.types";
+import type { AgentThreadParentDeliveryRepository } from "./prisma-agent-thread-parent-delivery-repository.types";
 
 /** Maps the internal delivery vocabulary to its stored Prisma values. */
 const _KIND: Readonly<Record<AgentThreadDeliveryKinds, AgentThreadDeliveryKind>> = {

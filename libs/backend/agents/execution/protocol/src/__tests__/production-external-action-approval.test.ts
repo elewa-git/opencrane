@@ -5,7 +5,7 @@ import { ExternalActionRecoveryModes, ToolInvocationStates, __DigestCanonicalJso
 import type { Logger } from "@opencrane/backend/observability";
 import { RunInputSnapshotIdentityKinds, type RunInputSnapshot } from "@opencrane/contracts";
 
-import { __CreateProductionExternalActionApprovalOpener } from "../production-external-action-approval.js";
+import { __CreateProductionExternalActionApprovalOpener } from "../production-external-action-approval";
 
 /** Mock of the authorization module, used to inspect the open command it receives. */
 const _openApproval = vi.hoisted(function _openMock()

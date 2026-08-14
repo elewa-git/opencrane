@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { JsonValue } from "@opencrane/util";
 
-import { __IsDeferredToolApprovalReplacementAllowed, __ProjectDeferredToolApproval, __ValidateDeferredToolArguments } from "../deferred-tool-approval-schema.js";
+import { __IsDeferredToolApprovalReplacementAllowed, __ProjectDeferredToolApproval, __ValidateDeferredToolArguments } from "../deferred-tool-approval-schema";
 
 /** Frozen reviewed schema used to prove secret-safe projection and full replacement validation. */
 const SCHEMA = {

@@ -8,8 +8,8 @@ import { PERSONAL_MEMORY_RECALL_TOOL_REVISION } from "@opencrane/models/agents";
 import { ___DigestCanonicalJson } from "@opencrane/util";
 import { describe, expect, it, vi } from "vitest";
 
-import { ExternalActionProviderOutcomeKinds, type ExternalActionExecutionContext, type ExternalActionWorkerInvocation } from "../external-action-worker.types.js";
-import { ProductionExternalActionAdapterFactory } from "../production-external-action-adapter.js";
+import { ExternalActionProviderOutcomeKinds, type ExternalActionExecutionContext, type ExternalActionWorkerInvocation } from "../external-action-worker.types";
+import { ProductionExternalActionAdapterFactory } from "../production-external-action-adapter";
 
 /** Build one saved invocation, as it exists just before the provider is called. */
 function _invocation(toolRevisionId: string): ExternalActionWorkerInvocation

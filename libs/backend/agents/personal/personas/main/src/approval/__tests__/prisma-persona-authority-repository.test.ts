@@ -1,8 +1,8 @@
 import type { Prisma } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
 
-import { PrismaPersonaAuthorityRepository } from "../prisma-persona-authority-repository.js";
-import { PersonaApprovalInterviewStates, PersonaApprovalPersistenceStatuses, PersonaApprovalRevisionStates } from "../persona-authority.types.js";
+import { PrismaPersonaAuthorityRepository } from "../prisma-persona-authority-repository";
+import { PersonaApprovalInterviewStates, PersonaApprovalPersistenceStatuses, PersonaApprovalRevisionStates } from "../persona-authority.types";
 
 /** Build a narrow fake Prisma client for one persona approval authority test. */
 function _Prisma(overrides: Record<string, unknown> = {}): Prisma.TransactionClient

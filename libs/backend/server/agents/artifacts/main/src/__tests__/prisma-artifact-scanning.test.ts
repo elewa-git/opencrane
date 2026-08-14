@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ArtifactScannerVerdict } from "@opencrane/contracts";
 
-import { PrismaArtifactScanRepository } from "../prisma-artifact-scan-repository.js";
+import { PrismaArtifactScanRepository } from "../prisma-artifact-scan-repository";
 
 /** Database-owned time used by every scanner lifecycle test. */
 const _NOW = new Date("2026-08-11T21:00:00.000Z");

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { __DigestAgentRevisionContent } from "../agent-revision-content.js";
-import type { AgentRevisionContent } from "../agent-revision.types.js";
+import { __DigestAgentRevisionContent } from "../agent-revision-content";
+import type { AgentRevisionContent } from "../agent-revision.types";
 import { ___DigestCanonicalJson } from "@opencrane/util";
 
 /** Build one reviewed tool definition fixture. */

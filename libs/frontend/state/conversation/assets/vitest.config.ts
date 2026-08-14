@@ -1,6 +1,6 @@
 import { defineConfig } from "vitest/config";
 import tsconfigPaths from "vite-tsconfig-paths";
-import { _PackageCacheDir } from "../../../../../vitest.cache.js";
+import { _PackageCacheDir } from "../../../../../vitest.cache";
 
 /** Test configuration for component-scoped conversation asset state. */
 export default defineConfig({

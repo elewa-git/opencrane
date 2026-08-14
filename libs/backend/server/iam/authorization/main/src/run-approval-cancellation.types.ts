@@ -1,4 +1,4 @@
-import type { ExternalActionClaimKinds, ExternalActionRecoveryModes, ToolInvocationStates } from "./tool-invocation-lifecycle.types.js";
+import type { ExternalActionClaimKinds, ExternalActionRecoveryModes, ToolInvocationStates } from "./tool-invocation-lifecycle.types";
 
 /** Exact run-attempt coordinates whose pending approval authority must be cancelled. */
 export interface CancelPendingRunApprovalAuthorityCommand

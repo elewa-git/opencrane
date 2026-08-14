@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { PrismaClient } from "@prisma/client";
 
-import { PrismaSelfRunCancellationRepository } from "../prisma-self-run-cancellation-repository.js";
-import type { RunCancellationRepository } from "../run-cancellation.types.js";
-import { SelfRunCancellationOutcomes } from "../self-run-cancellation.types.js";
+import { PrismaSelfRunCancellationRepository } from "../prisma-self-run-cancellation-repository";
+import type { RunCancellationRepository } from "../run-cancellation.types";
+import { SelfRunCancellationOutcomes } from "../self-run-cancellation.types";
 
 /** Small Prisma and cancellation doubles, used to check that one owner cannot cancel another's run. */
 function _dependencies()

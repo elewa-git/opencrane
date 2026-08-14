@@ -2,9 +2,9 @@ import { Injectable, computed, inject, resource, signal } from "@angular/core";
 
 import { ConversationAssetLifecycle, ConversationAssetProvenance } from "@opencrane/models/conversation-assets";
 
-import { _ConversationAssetContentAddress, _ConversationAssetFileMediaType, _DecideConversationAssetFiles } from "./conversation-asset-file.js";
-import { CONVERSATION_ASSETS_GATEWAY } from "./conversation-assets-gateway.types.js";
-import { ConversationAssetTransferPhases, type ConversationAsset, type ConversationAssetSelectionFailure, type PendingConversationAssetUpload } from "./conversation-assets.types.js";
+import { _ConversationAssetContentAddress, _ConversationAssetFileMediaType, _DecideConversationAssetFiles } from "./conversation-asset-file";
+import { CONVERSATION_ASSETS_GATEWAY } from "./conversation-assets-gateway.types";
+import { ConversationAssetTransferPhases, type ConversationAsset, type ConversationAssetSelectionFailure, type PendingConversationAssetUpload } from "./conversation-assets.types";
 
 /**
  * One file the participant picked, tracked in the browser until the server owns it.

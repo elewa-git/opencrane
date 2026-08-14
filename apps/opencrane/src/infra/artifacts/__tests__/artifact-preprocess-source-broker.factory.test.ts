@@ -7,7 +7,7 @@ import { __VerifyArtifactReadLease } from "@opencrane/backend/artifacts/authoriz
 import type { ArtifactPreprocessSourceLeaseIssuer } from "@opencrane/backend/server/agents/artifacts";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { _CreateArtifactPreprocessSourceBroker } from "../artifact-preprocess-source-broker.factory.js";
+import { _CreateArtifactPreprocessSourceBroker } from "../artifact-preprocess-source-broker.factory";
 
 /** Same-silo artifact-service origin accepted by the broker configuration guard. */
 const _serviceUrl = "http://opencrane-artifact-service.default.svc.cluster.local:8080";

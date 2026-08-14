@@ -3,7 +3,7 @@ import type { Express } from "express";
 import request from "supertest";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { _TransportSecurity } from "../index.js";
+import { _TransportSecurity } from "../index";
 
 /** Build an app behind `trust proxy` so `X-Forwarded-Proto` drives `req.secure`. */
 function _buildApp(): Express

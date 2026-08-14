@@ -2,8 +2,8 @@ import { ChangeDetectionStrategy, Component, computed, input, output } from "@an
 
 import { ConversationAssetProvenance } from "@opencrane/state/conversation/assets";
 
-import { ConversationFileRowComponent } from "../file-row/conversation-file-row.component.js";
-import type { ConversationAssetActionIntent, ConversationAssetPresentation } from "../conversation-asset-presentation.types.js";
+import { ConversationFileRowComponent } from "../file-row/conversation-file-row.component";
+import type { ConversationAssetActionIntent, ConversationAssetPresentation } from "../conversation-asset-presentation.types";
 
 /** Grouped Files index; every row remains a link to its canonical source. */
 @Component({

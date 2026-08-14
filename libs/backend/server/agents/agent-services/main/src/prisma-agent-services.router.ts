@@ -7,15 +7,15 @@ import { _ResolveRequestPrincipal } from "@opencrane/backend/server/infra/auth";
 import type { AuditDecisionRecord } from "@opencrane/backend/server/iam/audit";
 import { __DigestCanonicalJson } from "@opencrane/backend/server/iam/authorization";
 
-import { __CreateAgentServicesRouter } from "./agent-revision.router.js";
-import type { AgentServicePublicationRepository, AtomicAgentRevisionPublication } from "./agent-publication.types.js";
-import type { ManagedRunAdmissionPort } from "./agent-revision-lifecycle.types.js";
-import type { ManagementCaller } from "./agent-revision.router.types.js";
-import { PrismaAgentServicePublicationRepository } from "./prisma-agent-publication.js";
-import type { AgentPublicationAuditEvidencePort } from "./prisma-agent-publication.types.js";
-import { PrismaAgentRevisionLifecycleRepository } from "./prisma-agent-revision-lifecycle.js";
-import { PrismaAgentScheduleRepository } from "./prisma-agent-schedule.js";
-import { PrismaScopeGrantResolver } from "./prisma-scope-grant-resolver.js";
+import { __CreateAgentServicesRouter } from "./agent-revision.router";
+import type { AgentServicePublicationRepository, AtomicAgentRevisionPublication } from "./agent-publication.types";
+import type { ManagedRunAdmissionPort } from "./agent-revision-lifecycle.types";
+import type { ManagementCaller } from "./agent-revision.router.types";
+import { PrismaAgentServicePublicationRepository } from "./prisma-agent-publication";
+import type { AgentPublicationAuditEvidencePort } from "./prisma-agent-publication.types";
+import { PrismaAgentRevisionLifecycleRepository } from "./prisma-agent-revision-lifecycle";
+import { PrismaAgentScheduleRepository } from "./prisma-agent-schedule";
+import { PrismaScopeGrantResolver } from "./prisma-scope-grant-resolver";
 
 /** Stable capability-catalogue reference recorded for a management publish decision. */
 const _MANAGEMENT_CATALOG_ID = "opencrane-agent-management";

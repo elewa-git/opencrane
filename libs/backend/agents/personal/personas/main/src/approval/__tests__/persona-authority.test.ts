@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { __ApprovePersona } from "../persona-authority.js";
-import { PersonaApprovalDenialReasons, PersonaApprovalInterviewStates, PersonaApprovalPersistenceStatuses, PersonaApprovalRevisionStates } from "../persona-authority.types.js";
-import type { PersonaApprovalSnapshot } from "../persona-authority.types.js";
+import { __ApprovePersona } from "../persona-authority";
+import { PersonaApprovalDenialReasons, PersonaApprovalInterviewStates, PersonaApprovalPersistenceStatuses, PersonaApprovalRevisionStates } from "../persona-authority.types";
+import type { PersonaApprovalSnapshot } from "../persona-authority.types";
 
 /** Build one complete approval snapshot and override only the behaviour under test. */
 function _Snapshot(overrides: Partial<PersonaApprovalSnapshot> = {}): PersonaApprovalSnapshot

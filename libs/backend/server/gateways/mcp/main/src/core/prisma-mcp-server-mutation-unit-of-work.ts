@@ -1,7 +1,7 @@
 import type { PrismaClient } from "@prisma/client";
 
-import type { CreateMcpServerWrite, McpServerMutationRepository, McpServerMutationUnitOfWork, McpServerMutationWriteResult, UpdateMcpServerWrite } from "./mcp-server-mutation-repository.types.js";
-import { PrismaMcpServerMutationRepository } from "./prisma-mcp-server-mutation-repository.js";
+import type { CreateMcpServerWrite, McpServerMutationRepository, McpServerMutationUnitOfWork, McpServerMutationWriteResult, UpdateMcpServerWrite } from "./mcp-server-mutation-repository.types";
+import { PrismaMcpServerMutationRepository } from "./prisma-mcp-server-mutation-repository";
 
 /**
  * Opens one Prisma transaction per call and runs the server write, its credential rows, and the

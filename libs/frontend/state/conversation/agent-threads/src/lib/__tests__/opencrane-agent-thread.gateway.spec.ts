@@ -3,9 +3,9 @@ import { describe, expect, it, vi } from "vitest";
 
 import { ControlPlaneApiService } from "@opencrane/core";
 
-import { AgentThreadGatewayErrorKinds } from "../agent-thread-gateway.errors.js";
-import { AgentThreadSummaryStates, AgentThreadSummaryTargetKinds, AgentThreadTimelineEntryKinds } from "../agent-thread.types.js";
-import { OpenCraneAgentThreadGateway } from "../opencrane-agent-thread.gateway.js";
+import { AgentThreadGatewayErrorKinds } from "../agent-thread-gateway.errors";
+import { AgentThreadSummaryStates, AgentThreadSummaryTargetKinds, AgentThreadTimelineEntryKinds } from "../agent-thread.types";
+import { OpenCraneAgentThreadGateway } from "../opencrane-agent-thread.gateway";
 
 /** Generated success fixture containing only truthful canonical fields. */
 const _DTO = {

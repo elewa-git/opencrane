@@ -1,6 +1,6 @@
 import { OrgRole, type Prisma } from "@prisma/client";
 
-import type { OrgMembershipRepository, OrgMembershipRow } from "./org-membership.types.js";
+import type { OrgMembershipRepository, OrgMembershipRow } from "./org-membership.types";
 
 /**
  * Reads organisation memberships out of Postgres with Prisma.

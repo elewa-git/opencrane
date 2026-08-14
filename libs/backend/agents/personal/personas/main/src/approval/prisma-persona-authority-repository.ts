@@ -2,11 +2,11 @@ import { PersonaInterviewState, PersonaRevisionState, Prisma } from "@prisma/cli
 
 import { PrismaPersonalConfigurationPersonaRefreshRepository } from "@opencrane/backend/agents/personal/configuration";
 
-import { PrismaPersonaAggregateReadRepository } from "../profile/prisma-persona-aggregate-read-repository.js";
-import { PersonaScoringPersistenceStatuses } from "../scoring/persona-scoring-repository.types.js";
-import { PrismaPersonaScoringRepository } from "../scoring/prisma-persona-scoring-repository.js";
-import { PersonaColourValues, PersonaModifierValues } from "../scoring/persona-scorer.types.js";
-import { PersonaApprovalInterviewStates, PersonaApprovalPersistenceStatuses, PersonaApprovalRevisionStates, type ApprovePersonaCommand, type AtomicApprovePersonaCommand, type AtomicApprovePersonaResult, type PersonaApprovalSnapshot, type PersonaAuthorityRepository } from "./persona-authority.types.js";
+import { PrismaPersonaAggregateReadRepository } from "../profile/prisma-persona-aggregate-read-repository";
+import { PersonaScoringPersistenceStatuses } from "../scoring/persona-scoring-repository.types";
+import { PrismaPersonaScoringRepository } from "../scoring/prisma-persona-scoring-repository";
+import { PersonaColourValues, PersonaModifierValues } from "../scoring/persona-scorer.types";
+import { PersonaApprovalInterviewStates, PersonaApprovalPersistenceStatuses, PersonaApprovalRevisionStates, type ApprovePersonaCommand, type AtomicApprovePersonaCommand, type AtomicApprovePersonaResult, type PersonaApprovalSnapshot, type PersonaAuthorityRepository } from "./persona-authority.types";
 
 /** Prisma adapter that approves one persona revision and makes it active in a single transaction. */
 export class PrismaPersonaAuthorityRepository implements PersonaAuthorityRepository

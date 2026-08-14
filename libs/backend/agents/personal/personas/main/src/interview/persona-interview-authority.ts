@@ -1,5 +1,5 @@
-import type { CompletePersonaInterviewCommand, CompletePersonaInterviewResult, PersonaInterviewRepository, RecordPersonaInterviewAnswerCommand, RecordPersonaInterviewAnswerResult, ResolvePersonaInterviewTieCommand, ResolvePersonaInterviewTieResult, StartPersonaInterviewCommand, StartPersonaInterviewResult } from "./persona-interview-authority.types.js";
-import { PersonaInterviewDenialReasons, PersonaLifecycleOutcomes } from "../profile/persona-lifecycle.types.js";
+import type { CompletePersonaInterviewCommand, CompletePersonaInterviewResult, PersonaInterviewRepository, RecordPersonaInterviewAnswerCommand, RecordPersonaInterviewAnswerResult, ResolvePersonaInterviewTieCommand, ResolvePersonaInterviewTieResult, StartPersonaInterviewCommand, StartPersonaInterviewResult } from "./persona-interview-authority.types";
+import { PersonaInterviewDenialReasons, PersonaLifecycleOutcomes } from "../profile/persona-lifecycle.types";
 
 /**
  * Starts the owner's persona onboarding interview, or returns the one they already have open.

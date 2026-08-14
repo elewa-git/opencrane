@@ -1,10 +1,10 @@
 import type { RunInputSnapshot } from "@opencrane/contracts";
 
-import { _IsPersonalConfigurationPatch } from "../proposal/personal-configuration-patch.validator.js";
-import { __ProposePersonalConfigurationChange } from "../proposal/personal-configuration-proposal.js";
-import type { PersonalConfigurationProposalRepository } from "../proposal/personal-configuration-proposal-repository.types.js";
-import type { ProposePersonalConfigurationChangeCommand, ProposePersonalConfigurationChangeResult } from "../proposal/personal-configuration-proposal.types.js";
-import type { PersonalUpgradeSessionCandidate, PersonalUpgradeSessionSnapshot, UpgradeSessionInvocation, UpgradeSessionProfileReadCommand, UpgradeSessionProfileRepository } from "./upgrade-session.types.js";
+import { _IsPersonalConfigurationPatch } from "../proposal/personal-configuration-patch.validator";
+import { __ProposePersonalConfigurationChange } from "../proposal/personal-configuration-proposal";
+import type { PersonalConfigurationProposalRepository } from "../proposal/personal-configuration-proposal-repository.types";
+import type { ProposePersonalConfigurationChangeCommand, ProposePersonalConfigurationChangeResult } from "../proposal/personal-configuration-proposal.types";
+import type { PersonalUpgradeSessionCandidate, PersonalUpgradeSessionSnapshot, UpgradeSessionInvocation, UpgradeSessionProfileReadCommand, UpgradeSessionProfileRepository } from "./upgrade-session.types";
 
 /** Reject snapshots that cannot prove a personal conversation before any database access. */
 export function _RequirePersonalUpgradeSessionSnapshot(snapshot: RunInputSnapshot): asserts snapshot is PersonalUpgradeSessionSnapshot

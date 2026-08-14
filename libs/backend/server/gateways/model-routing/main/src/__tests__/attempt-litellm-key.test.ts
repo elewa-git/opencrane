@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { _IssueAttemptLiteLlmKey } from "../core/attempt-litellm-key.js";
+import { _IssueAttemptLiteLlmKey } from "../core/attempt-litellm-key";
 
 /** Preserve and restore the LiteLLM env the issuer reads. */
 const _saved: Record<string, string | undefined> = {};

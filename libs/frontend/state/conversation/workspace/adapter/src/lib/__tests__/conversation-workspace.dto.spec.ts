@@ -2,7 +2,7 @@ import { ConversationLifecycles, ConversationModes, MessageRoles, MessageSources
 import { PersonaFirstChatArchetypes, PersonaFirstChatColours, PersonaFirstChatTranscriptKinds, PersonaFirstChatTranscriptRoles, UserOnboardingRouteStates, type PersonaFirstChatSnapshot } from "@opencrane/models/user-onboarding";
 import { ConversationOnboardingHistoryStatuses, ConversationPersonalAgentStatuses, ConversationRunStates } from "@opencrane/state/conversation/workspace";
 
-import { _ConversationDetail, _ConversationRun, _ConversationWorkspaceDirectory } from "../conversation-workspace.dto.js";
+import { _ConversationDetail, _ConversationRun, _ConversationWorkspaceDirectory } from "../conversation-workspace.dto";
 
 describe("conversation workspace DTO mapping", function _ConversationWorkspaceDto()
 {

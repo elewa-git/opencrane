@@ -4,10 +4,10 @@ import { describe, expect, it, vi } from "vitest";
 import { AgentConfigPatchKinds } from "@opencrane/contracts";
 import type { Logger } from "@opencrane/backend/observability";
 
-import { __CreatePersonalConfigurationRouter } from "../http/personal-configuration.router.js";
-import { PersonalConfigurationMaterializationCodes, type PersonalConfigurationChangeMaterializationRepository } from "../materialization/personal-configuration-materialization.types.js";
-import { PersonalConfigurationDecisionCodes } from "../decision/personal-configuration-decision.types.js";
-import { PersonalConfigurationChangeViewStates, type PersonalConfigurationChangeView } from "../query/personal-configuration-view.types.js";
+import { __CreatePersonalConfigurationRouter } from "../http/personal-configuration.router";
+import { PersonalConfigurationMaterializationCodes, type PersonalConfigurationChangeMaterializationRepository } from "../materialization/personal-configuration-materialization.types";
+import { PersonalConfigurationDecisionCodes } from "../decision/personal-configuration-decision.types";
+import { PersonalConfigurationChangeViewStates, type PersonalConfigurationChangeView } from "../query/personal-configuration-view.types";
 
 /** Builds the router with a fake caller, and returns spies for the three repositories. */
 function _app(caller: unknown, listOwned = vi.fn(async function _list(): Promise<readonly PersonalConfigurationChangeView[]> { return []; }), materializeAtomically: PersonalConfigurationChangeMaterializationRepository["materializeAtomically"] = vi.fn(async function _materialize() { return { status: PersonalConfigurationMaterializationCodes.NotApplicable } as const; }))

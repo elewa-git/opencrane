@@ -4,9 +4,9 @@ import type { IncomingMessage, Server, ServerResponse } from "node:http";
 import { ___DoWithTrace, ___DoWithoutTrace } from "@opencrane/backend/observability";
 import type { FixedServiceAccountTokenReviewer } from "@opencrane/backend/server/infra/workload-identity";
 
-import type { MemoryGatewayProcessConfig } from "./config.types.js";
-import { _log as log } from "./log.js";
-import { _ValidateSearchRequest, MemorySearchContractViolation } from "./search-contract.js";
+import type { MemoryGatewayProcessConfig } from "./config.types";
+import { _log as log } from "./log";
+import { _ValidateSearchRequest, MemorySearchContractViolation } from "./search-contract";
 
 /** Largest JSON body accepted from the OpenCrane server for one memory operation. */
 const _MAX_REQUEST_BYTES = 1024 * 1024;

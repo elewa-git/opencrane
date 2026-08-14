@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { __CreateSkillWorkloadBootstrapReference, __HashSkillWorkloadBootstrapReference, __IsSkillWorkloadBootstrapReference } from "../skill-workload-bootstrap-reference.js";
+import { __CreateSkillWorkloadBootstrapReference, __HashSkillWorkloadBootstrapReference, __IsSkillWorkloadBootstrapReference } from "../skill-workload-bootstrap-reference";
 
 describe("governed skill bootstrap reference contract", function _DescribeSkillBootstrapReference()
 {

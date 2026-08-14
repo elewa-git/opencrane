@@ -1,1 +1,1 @@
-export { ConversationActivityComponent } from "./lib/conversation-activity.component.js";
+export { ConversationActivityComponent } from "./lib/conversation-activity.component";

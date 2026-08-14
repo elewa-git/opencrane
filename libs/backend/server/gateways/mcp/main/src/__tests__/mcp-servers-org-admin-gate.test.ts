@@ -4,7 +4,7 @@ import type { PrismaClient } from "@prisma/client";
 import request from "supertest";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { mcpServersRouter } from "../routes/mcp-servers.js";
+import { mcpServersRouter } from "../routes/mcp-servers";
 
 /**
  * End-to-end check that `_RequireOrgAdmin` is actually wired onto the MCP catalogue

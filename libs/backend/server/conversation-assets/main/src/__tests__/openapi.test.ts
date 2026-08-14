@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { _ConversationAssetsOpenapiPaths } from "../openapi.js";
+import { _ConversationAssetsOpenapiPaths } from "../openapi";
 
 describe("conversation asset OpenAPI", function _Suite()
 {

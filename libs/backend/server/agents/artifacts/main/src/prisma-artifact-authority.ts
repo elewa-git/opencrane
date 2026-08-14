@@ -2,8 +2,8 @@ import { randomUUID } from "node:crypto";
 
 import { ArtifactState, ArtifactUploadLeaseState, type Prisma } from "@prisma/client";
 
-import type { ArtifactAuthorityRepository, AtomicFinalizeArtifactResult, FinalizeArtifactRevisionCommand } from "./artifact-finalization.types.js";
-import type { ArtifactUploadLeaseRepository, VerifiedArtifactUploadCommand } from "./artifact-upload.types.js";
+import type { ArtifactAuthorityRepository, AtomicFinalizeArtifactResult, FinalizeArtifactRevisionCommand } from "./artifact-finalization.types";
+import type { ArtifactUploadLeaseRepository, VerifiedArtifactUploadCommand } from "./artifact-upload.types";
 
 /** First deterministic preprocessing pipeline scheduled for every published PDF source revision. */
 const _PDF_TO_TEXT_PIPELINE_VERSION = "pdf-to-text/v1";

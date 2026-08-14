@@ -4,9 +4,9 @@ import type { Logger } from "pino";
 
 import { _ResolveRequestPrincipal } from "@opencrane/backend/server/infra/auth";
 
-import { PrismaElicitationUnitOfWork } from "./prisma-elicitation-unit-of-work.js";
-import { __CreateSelfElicitationActivityRouter, __CreateSelfElicitationRouter } from "./self-elicitation.router.js";
-import type { SelfElicitationCaller } from "./self-elicitation.router.types.js";
+import { PrismaElicitationUnitOfWork } from "./prisma-elicitation-unit-of-work";
+import { __CreateSelfElicitationActivityRouter, __CreateSelfElicitationRouter } from "./self-elicitation.router";
+import type { SelfElicitationCaller } from "./self-elicitation.router.types";
 
 /** Map trusted browser-session facts into the elicitation caller contract. */
 function _ResolveCaller(request: Parameters<typeof _ResolveRequestPrincipal>[0]): SelfElicitationCaller | null

@@ -17,7 +17,7 @@
  * best-effort registration isolates a 404 to that one model.
  */
 
-import type { ByokProviderCatalog } from "./byok-default-models.types.js";
+import type { ByokProviderCatalog } from "./byok-default-models.types";
 
 /** BYOK provider key → its model catalog. Absent providers set a key but seed no model. */
 export const _BYOK_PROVIDER_CATALOG: Readonly<Record<string, ByokProviderCatalog>> = {

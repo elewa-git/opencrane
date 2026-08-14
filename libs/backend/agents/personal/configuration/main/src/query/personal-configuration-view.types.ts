@@ -1,4 +1,4 @@
-import type { PersonalConfigurationPatch } from "../proposal/personal-configuration-patch.types.js";
+import type { PersonalConfigurationPatch } from "../proposal/personal-configuration-patch.types";
 
 /**
  * The proposal states a user is shown.

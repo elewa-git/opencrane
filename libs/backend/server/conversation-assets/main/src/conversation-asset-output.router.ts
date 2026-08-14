@@ -1,7 +1,7 @@
 import { Router, type Request } from "express";
 
-import { ConversationAssetOutputDenialReasons, ConversationAssetOutputPublishOutcomes, ConversationAssetOutputReservationOutcomes, type ConversationAssetOutputRouterDependencies } from "./conversation-asset-output.types.js";
-import { _ParseReserveConversationAssetOutput } from "./conversation-asset-output.validator.js";
+import { ConversationAssetOutputDenialReasons, ConversationAssetOutputPublishOutcomes, ConversationAssetOutputReservationOutcomes, type ConversationAssetOutputRouterDependencies } from "./conversation-asset-output.types";
+import { _ParseReserveConversationAssetOutput } from "./conversation-asset-output.validator";
 
 /** Create the private TokenReview-authenticated generated-output transport. */
 export function __CreateConversationAssetOutputRouter(dependencies: ConversationAssetOutputRouterDependencies): Router

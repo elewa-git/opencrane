@@ -5,10 +5,10 @@ import { BrowserDynamicTestingModule, platformBrowserDynamicTesting } from "@ang
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { PersonaFirstChatArchetypes, PersonaFirstChatColours, PersonaFirstChatTranscriptKinds, PersonaFirstChatTranscriptRoles, UserOnboardingRouteStates, type PersonaFirstChatSnapshot } from "@opencrane/models/user-onboarding";
 
-import { PersonaFirstChatService } from "../persona-first-chat.service.js";
-import { PersonaFirstChatStore } from "../persona-first-chat.store.js";
-import { PersonaFirstChatCommandPhases } from "../persona-first-chat.store.types.js";
-import { PersonaFirstChatConflictError } from "../persona-first-chat.types.js";
+import { PersonaFirstChatService } from "../persona-first-chat.service";
+import { PersonaFirstChatStore } from "../persona-first-chat.store";
+import { PersonaFirstChatCommandPhases } from "../persona-first-chat.store.types";
+import { PersonaFirstChatConflictError } from "../persona-first-chat.types";
 
 /** Build one valid first-chat projection for component-scoped store tests. */
 function _Snapshot(overrides: Partial<PersonaFirstChatSnapshot> = {}): PersonaFirstChatSnapshot

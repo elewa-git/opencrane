@@ -1,14 +1,14 @@
 import { Router, type Request, type Response } from "express";
 
-import { __ApprovePersona } from "../approval/persona-authority.js";
-import { PersonaApprovalDenialReasons } from "../approval/persona-authority.types.js";
-import { PersonaDraftDenialReasons } from "../drafting/persona-draft-authority.types.js";
-import { __CreatePersonaDraftFromInterview } from "../drafting/persona-draft-from-interview.js";
-import { __CompletePersonaInterview, __RecordPersonaInterviewAnswer, __ResolvePersonaInterviewTie, __StartPersonaInterview } from "../interview/persona-interview-authority.js";
-import { __EnsurePersonaOnboarding } from "../profile/persona-onboarding-authority.js";
-import { PersonaInterviewDenialReasons, PersonaLifecycleOutcomes, PersonaOnboardingApiStates } from "../profile/persona-lifecycle.types.js";
-import { PersonaTieKinds, type PersonaScoreResult } from "../scoring/persona-scorer.types.js";
-import type { PersonaOnboardingCaller, PersonaOnboardingRouterDependencies } from "./persona-onboarding.router.types.js";
+import { __ApprovePersona } from "../approval/persona-authority";
+import { PersonaApprovalDenialReasons } from "../approval/persona-authority.types";
+import { PersonaDraftDenialReasons } from "../drafting/persona-draft-authority.types";
+import { __CreatePersonaDraftFromInterview } from "../drafting/persona-draft-from-interview";
+import { __CompletePersonaInterview, __RecordPersonaInterviewAnswer, __ResolvePersonaInterviewTie, __StartPersonaInterview } from "../interview/persona-interview-authority";
+import { __EnsurePersonaOnboarding } from "../profile/persona-onboarding-authority";
+import { PersonaInterviewDenialReasons, PersonaLifecycleOutcomes, PersonaOnboardingApiStates } from "../profile/persona-lifecycle.types";
+import { PersonaTieKinds, type PersonaScoreResult } from "../scoring/persona-scorer.types";
+import type { PersonaOnboardingCaller, PersonaOnboardingRouterDependencies } from "./persona-onboarding.router.types";
 
 /** The HTTP status for every interview denial reason. */
 const _INTERVIEW_DENIAL_STATUS_BY_REASON: Readonly<Record<PersonaInterviewDenialReasons, number>> = {

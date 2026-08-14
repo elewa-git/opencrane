@@ -1,8 +1,8 @@
 import type { Prisma } from "@prisma/client";
 
-import type { SkillWorkloadBootstrapIdentity, SkillWorkloadBootstrapRecord } from "./skill-workload-bootstrap.types.js";
-import { _SkillWorkloadTimestampProposal } from "./prisma-skill-workload-timestamps.js";
-import type { SkillWorkloadBootstrapRepository } from "./skill-workload-unit-of-work.types.js";
+import type { SkillWorkloadBootstrapIdentity, SkillWorkloadBootstrapRecord } from "./skill-workload-bootstrap.types";
+import { _SkillWorkloadTimestampProposal } from "./prisma-skill-workload-timestamps";
+import type { SkillWorkloadBootstrapRepository } from "./skill-workload-unit-of-work.types";
 
 /** Reads and consumes a worker's bootstrap, only when its Job is unsuspended and its Pod is registered. */
 export class PrismaSkillWorkloadBootstrapRepository implements SkillWorkloadBootstrapRepository

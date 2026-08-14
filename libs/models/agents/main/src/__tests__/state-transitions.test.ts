@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { __CanAppendRunEvent, __IsAgentRevisionTransitionAllowed, __IsAgentRunTransitionAllowed, __IsAgentServiceTransitionAllowed } from "../index.js";
-import type { RunEvent } from "../index.js";
+import { __CanAppendRunEvent, __IsAgentRevisionTransitionAllowed, __IsAgentRunTransitionAllowed, __IsAgentServiceTransitionAllowed } from "../index";
+import type { RunEvent } from "../index";
 
 /** Creates a minimal immutable event for append-order tests. */
 function _Event(runId: string, sequence: number): RunEvent

@@ -5,8 +5,8 @@ import { __DecideAuthorization, AuthorizationDecisionOutcomes, type Authorizatio
 import { __DigestCanonicalJson, PrismaShareAuthorizationUnitOfWork, ShareAuthorizationScopeKinds, type ShareAuthorizationGrant, type ShareAuthorizationRepository } from "@opencrane/backend/server/iam/authorization";
 import { _ResolveRequestPrincipal } from "@opencrane/backend/server/infra/auth";
 import type { JsonValue } from "@opencrane/util";
-import { _log } from "../log.js";
-import type { CreateShareBody, SharePayloadType, ShareRecipientType, ShareScope } from "./shares.types.js";
+import { _log } from "../log";
+import type { CreateShareBody, SharePayloadType, ShareRecipientType, ShareScope } from "./shares.types";
 // Side-effect import: loads the express-session `SessionData.authUser` augmentation.
 import "@opencrane/backend/server/infra/auth";
 

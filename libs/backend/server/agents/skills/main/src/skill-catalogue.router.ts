@@ -1,6 +1,6 @@
 import { Router, type Request, type Response } from "express";
 
-import type { SkillCatalogueRouterDependencies } from "./skill-catalogue.router.types.js";
+import type { SkillCatalogueRouterDependencies } from "./skill-catalogue.router.types";
 
 /**
  * Builds the read-only skill catalogue router: one `GET /` returning the caller's silo's skills.

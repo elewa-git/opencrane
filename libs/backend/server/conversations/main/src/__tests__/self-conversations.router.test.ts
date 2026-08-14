@@ -2,7 +2,7 @@ import express, { type Express } from "express";
 import request from "supertest";
 import { describe, expect, it, vi } from "vitest";
 
-import { __CreateSelfConversationsRouter } from "../self-conversations.router.js";
+import { __CreateSelfConversationsRouter } from "../self-conversations.router";
 
 /** Mounts the router with one authenticated caller unless explicitly disabled. */
 function _App(authority: object, authenticated = true): Express

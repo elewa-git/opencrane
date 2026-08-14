@@ -1,11 +1,11 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 
-import { PrismaSkillAuthoringCompletionRepository } from "./prisma-skill-authoring-completion-repository.js";
-import { PrismaSkillAuthoringInputRepository } from "./prisma-skill-authoring-input-repository.js";
-import { PrismaSkillWorkloadBootstrapRepository } from "./prisma-skill-workload-bootstrap-repository.js";
-import { PrismaSkillWorkloadAssignmentRepository } from "./prisma-skill-workload-assignment-repository.js";
-import { PrismaSkillWorkloadReleaseRepository } from "./prisma-skill-workload-release-repository.js";
-import { _SkillWorkloadPersistenceConflictError, type SkillWorkloadExecutionTransaction, type SkillWorkloadExecutionUnitOfWork, type SkillWorkloadExecutionWork } from "./skill-workload-unit-of-work.types.js";
+import { PrismaSkillAuthoringCompletionRepository } from "./prisma-skill-authoring-completion-repository";
+import { PrismaSkillAuthoringInputRepository } from "./prisma-skill-authoring-input-repository";
+import { PrismaSkillWorkloadBootstrapRepository } from "./prisma-skill-workload-bootstrap-repository";
+import { PrismaSkillWorkloadAssignmentRepository } from "./prisma-skill-workload-assignment-repository";
+import { PrismaSkillWorkloadReleaseRepository } from "./prisma-skill-workload-release-repository";
+import { _SkillWorkloadPersistenceConflictError, type SkillWorkloadExecutionTransaction, type SkillWorkloadExecutionUnitOfWork, type SkillWorkloadExecutionWork } from "./skill-workload-unit-of-work.types";
 
 /** Owns the root PrismaClient and opens every skill-execution transaction. */
 export class PrismaSkillWorkloadUnitOfWork implements SkillWorkloadExecutionUnitOfWork

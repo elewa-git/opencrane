@@ -3,9 +3,9 @@ import { Injectable, inject } from "@angular/core";
 import { ControlPlaneApiService } from "@opencrane/core";
 import { MessageContentBlockKinds } from "@opencrane/models/conversations";
 
-import { AgentThreadGatewayError, AgentThreadGatewayErrorKinds } from "./agent-thread-gateway.errors.js";
-import { __AgentThreadSnapshot } from "./opencrane-agent-thread.mapper.js";
-import type { AgentThreadGateway, AgentThreadSnapshot } from "./agent-thread.types.js";
+import { AgentThreadGatewayError, AgentThreadGatewayErrorKinds } from "./agent-thread-gateway.errors";
+import { __AgentThreadSnapshot } from "./opencrane-agent-thread.mapper";
+import type { AgentThreadGateway, AgentThreadSnapshot } from "./agent-thread.types";
 
 /** Generated-client adapter for exact Agent-thread snapshot reads and serial follow-ups. */
 @Injectable()

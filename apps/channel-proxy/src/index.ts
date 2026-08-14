@@ -1,10 +1,10 @@
-import "./instrument.js";
+import "./instrument";
 
 import { ___BindConsole, ___ShutdownTelemetry } from "@opencrane/backend/observability";
 
-import { _ReadConfig } from "./config.js";
-import { _log as log } from "./log.js";
-import { _CreateServer } from "./server.js";
+import { _ReadConfig } from "./config";
+import { _log as log } from "./log";
+import { _CreateServer } from "./server";
 
 /** Start the channel-proxy process and install bounded shutdown hooks. */
 function _Main(): void

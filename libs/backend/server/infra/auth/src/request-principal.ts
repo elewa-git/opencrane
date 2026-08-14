@@ -1,8 +1,8 @@
 import type { Request } from "express";
 
-import { _RequestHost } from "./request-host.js";
-import type { RequestPrincipal } from "./request-principal.types.js";
-import { _ClusterTenantFromHost } from "./request-silo.js";
+import { _RequestHost } from "./request-host";
+import type { RequestPrincipal } from "./request-principal.types";
+import { _ClusterTenantFromHost } from "./request-silo";
 
 /**
  * Read the logged-in caller out of an Express request: who they are, which silo they are

@@ -4,8 +4,8 @@ import { describe, expect, it, vi } from "vitest";
 
 import { ElicitationBodyKinds } from "@opencrane/contracts";
 
-import { __CreateSelfElicitationActivityRouter, __CreateSelfElicitationRouter } from "../self-elicitation.router.js";
-import type { SelfElicitationRouterDependencies } from "../self-elicitation.router.types.js";
+import { __CreateSelfElicitationActivityRouter, __CreateSelfElicitationRouter } from "../self-elicitation.router";
+import type { SelfElicitationRouterDependencies } from "../self-elicitation.router.types";
 
 /** Build self-only ports with one trusted caller. */
 function _Dependencies(overrides: Partial<SelfElicitationRouterDependencies> = {}): SelfElicitationRouterDependencies

@@ -1,6 +1,6 @@
 import type { _ProvisionByokKey } from "@opencrane/backend/server/gateways/model-routing";
 
-import type { InitialModelBootstrapConfig } from "./config.types.js";
+import type { InitialModelBootstrapConfig } from "./config.types";
 
 /** Dependencies the app composes for initial provider-key registration. */
 export interface InitialModelBootstrapDependencies

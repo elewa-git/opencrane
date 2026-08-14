@@ -4,10 +4,10 @@ import { TestBed } from "@angular/core/testing";
 import { BrowserDynamicTestingModule, platformBrowserDynamicTesting } from "@angular/platform-browser-dynamic/testing";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
-import { AgentThreadStore } from "../agent-thread.store.js";
-import { AgentThreadGatewayError, AgentThreadGatewayErrorKinds } from "../agent-thread-gateway.errors.js";
-import { AGENT_THREAD_GATEWAY } from "../agent-thread.gateway.js";
-import { AgentThreadAccessStates, AgentThreadRecoveryStates, AgentThreadRouteStates, AgentThreadRunStates, AgentThreadSummaryStates, AgentThreadSummaryTargetKinds, AgentThreadTimelineEntryKinds, type AgentThreadGateway, type AgentThreadSnapshot } from "../agent-thread.types.js";
+import { AgentThreadStore } from "../agent-thread.store";
+import { AgentThreadGatewayError, AgentThreadGatewayErrorKinds } from "../agent-thread-gateway.errors";
+import { AGENT_THREAD_GATEWAY } from "../agent-thread.gateway";
+import { AgentThreadAccessStates, AgentThreadRecoveryStates, AgentThreadRouteStates, AgentThreadRunStates, AgentThreadSummaryStates, AgentThreadSummaryTargetKinds, AgentThreadTimelineEntryKinds, type AgentThreadGateway, type AgentThreadSnapshot } from "../agent-thread.types";
 
 /** Build one complete display-safe snapshot for store tests. */
 function _Snapshot(overrides: Partial<AgentThreadSnapshot> = {}): AgentThreadSnapshot

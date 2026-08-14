@@ -1,6 +1,6 @@
-import type { AuthorizationScope } from "./authorization-scope.types.js";
-import type { CapabilityReference } from "./capability.types.js";
-import type { AuthorizationResourceLocator } from "./resource-locator.types.js";
+import type { AuthorizationScope } from "./authorization-scope.types";
+import type { CapabilityReference } from "./capability.types";
+import type { AuthorizationResourceLocator } from "./resource-locator.types";
 
 /** Whether a grant allows or denies. At the winning priority a single deny beats every allow. @see {@link __DecideAuthorization} */
 export type AuthorizationGrantEffect = "allow" | "deny";

@@ -1,4 +1,4 @@
-import type { AgentControllerJobPatchRequest } from "./kubernetes-agent-controller-store.types.js";
+import type { AgentControllerJobPatchRequest } from "./kubernetes-agent-controller-store.types";
 
 /**
  * A compare-and-swap Job release request derived from one still-suspended assignment.

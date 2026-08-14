@@ -4,9 +4,9 @@ import { ArtifactKind, ArtifactRevisionState, ArtifactState, ArtifactUploadLease
 
 import { ___ConversationAssetMediaDisposition, ConversationAssetLifecycle, ConversationAssetProvenance } from "@opencrane/models/conversation-assets";
 
-import type { ConversationAssetRepository, ConversationAssetUploadTarget } from "./conversation-asset.repository.types.js";
-import type { ConversationAssetReadTarget } from "./conversation-asset-content.types.js";
-import type { ConversationAssetCaller, ConversationAssetResult, ConversationAssetView, ReserveConversationAssetRequest } from "./conversation-asset.types.js";
+import type { ConversationAssetRepository, ConversationAssetUploadTarget } from "./conversation-asset.repository.types";
+import type { ConversationAssetReadTarget } from "./conversation-asset-content.types";
+import type { ConversationAssetCaller, ConversationAssetResult, ConversationAssetView, ReserveConversationAssetRequest } from "./conversation-asset.types";
 
 /** Transaction-scoped conversation asset repository. */
 export class PrismaConversationAssetRepository implements ConversationAssetRepository

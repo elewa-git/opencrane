@@ -2,7 +2,7 @@ import type { AssembleRunInputSnapshotResult, SessionAssemblyRefusalReason } fro
 import type { Logger } from "@opencrane/backend/observability";
 import type { RunAdmissionCommit, RunAdmissionConcurrencyDenialReasons, RunAdmissionPrepare } from "@opencrane/backend/agents/execution/runs";
 import type { MessageContentBlock } from "@opencrane/models/conversations";
-import type { RunAdmissionCapacityGate } from "./managed-run-admission.types.js";
+import type { RunAdmissionCapacityGate } from "./managed-run-admission.types";
 
 /** What the server knows about a personal run request once the browser session is authenticated. */
 export interface PersonalRunAdmissionCommand

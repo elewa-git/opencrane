@@ -1,6 +1,6 @@
 import type { paths } from "@opencrane/contracts";
 
-import type { AgentThreadTimelineEntry } from "./agent-thread.types.js";
+import type { AgentThreadTimelineEntry } from "./agent-thread.types";
 
 /** Terminal child-conversation lifecycle value recognized at this generated API boundary. */
 export enum _AgentThreadLifecycleStates

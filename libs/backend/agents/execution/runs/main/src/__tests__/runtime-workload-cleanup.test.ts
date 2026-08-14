@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { __CreateRuntimeWorkloadCleanupUseCase } from "../runtime-workload-cleanup.js";
-import type { RunCancellationRepository, RunWorkloadCleanupClaim } from "../run-cancellation.types.js";
-import type { RuntimeWorkloadCleanupStore } from "../runtime-workload-cleanup.types.js";
+import { __CreateRuntimeWorkloadCleanupUseCase } from "../runtime-workload-cleanup";
+import type { RunCancellationRepository, RunWorkloadCleanupClaim } from "../run-cancellation.types";
+import type { RuntimeWorkloadCleanupStore } from "../runtime-workload-cleanup.types";
 
 /** Canonical assigned cleanup claim used by the use-case tests. */
 function _Claim(overrides: Partial<RunWorkloadCleanupClaim["workload"]> = {}): RunWorkloadCleanupClaim

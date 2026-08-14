@@ -1,4 +1,4 @@
-import type { CronExpression, DueScheduledSlotsOptions, WallClock } from "./cron-schedule.types.js";
+import type { CronExpression, DueScheduledSlotsOptions, WallClock } from "./cron-schedule.types";
 
 /** Millisecond length of one whole minute, the coarsest cron resolution. */
 const _MINUTE_MS = 60_000;

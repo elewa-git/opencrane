@@ -1,7 +1,7 @@
 import { ModelRoutingScope } from "@opencrane/contracts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { _RegisterLiteLlmModel } from "../core/litellm-model-registration.js";
+import { _RegisterLiteLlmModel } from "../core/litellm-model-registration";
 
 /** Environment keys restored after each live-registration boundary test. */
 const _SAVED_ENVIRONMENT: Record<string, string | undefined> = {};

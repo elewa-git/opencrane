@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { __DecideConversationCommand, ConversationCommandActions, ConversationCommandDenialReasons, ConversationCommandKinds, ConversationLifecycles, ConversationModes } from "../index.js";
-import type { ConversationCommand, ConversationCommandContext, ConversationCommandDecision } from "../index.js";
+import { __DecideConversationCommand, ConversationCommandActions, ConversationCommandDenialReasons, ConversationCommandKinds, ConversationLifecycles, ConversationModes } from "../index";
+import type { ConversationCommand, ConversationCommandContext, ConversationCommandDecision } from "../index";
 
 /** Active run used by exact-target steering and elicitation fixtures. */
 const _ACTIVE_RUN_ID = "run-active";

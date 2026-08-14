@@ -3,7 +3,7 @@ import type { InitialRunAuthority, RunAdmissionTransaction } from "@opencrane/ba
 import { describe, expect, it, vi } from "vitest";
 import { AgentServiceKinds } from "@opencrane/models/agents";
 
-import { ManagedExecutionIdentityEnvelopeSource } from "../managed-execution-identity-envelope-source.js";
+import { ManagedExecutionIdentityEnvelopeSource } from "../managed-execution-identity-envelope-source";
 
 /** Creates one managed service authority accepted by the source adapter. */
 function _Run(): InitialRunAuthority

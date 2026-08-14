@@ -7,7 +7,7 @@
  */
 import { randomUUID } from "node:crypto";
 
-import { ___RunWithContext } from "./context.js";
+import { ___RunWithContext } from "./context";
 
 /** Minimal request shape this middleware reads from. */
 interface _MinimalRequest

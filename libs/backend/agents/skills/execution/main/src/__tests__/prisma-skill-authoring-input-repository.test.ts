@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { PrismaSkillAuthoringInputRepository } from "../prisma-skill-authoring-input-repository.js";
+import { PrismaSkillAuthoringInputRepository } from "../prisma-skill-authoring-input-repository";
 
 /** Worker identity that must match both the registered Pod and the consumed bootstrap. */
 const _IDENTITY = { namespace: "opencrane-skill-authoring", serviceAccountName: "skill-authoring-default", podUid: "pod-uid-1" };

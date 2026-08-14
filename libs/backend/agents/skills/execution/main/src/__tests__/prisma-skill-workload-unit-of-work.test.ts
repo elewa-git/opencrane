@@ -1,9 +1,9 @@
 import { Prisma } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
 
-import { PrismaSkillWorkloadUnitOfWork } from "../prisma-skill-workload-unit-of-work.js";
-import { _CreateSkillWorkloadExecutionAuthority } from "../skill-workload-authority.js";
-import { _SkillWorkloadPersistenceConflictError } from "../skill-workload-unit-of-work.types.js";
+import { PrismaSkillWorkloadUnitOfWork } from "../prisma-skill-workload-unit-of-work";
+import { _CreateSkillWorkloadExecutionAuthority } from "../skill-workload-authority";
+import { _SkillWorkloadPersistenceConflictError } from "../skill-workload-unit-of-work.types";
 
 /** Builds a fake PrismaClient that gives each `run` call a fresh transaction. */
 function _Prisma()

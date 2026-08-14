@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { __ResolvePersonalMemoryDataset } from "../personal-memory-dataset.js";
-import { PersonalMemoryDatasetResolutionDenialReasons, PersonalMemoryDatasetResolutionOutcomes } from "../personal-memory-dataset.types.js";
+import { __ResolvePersonalMemoryDataset } from "../personal-memory-dataset";
+import { PersonalMemoryDatasetResolutionDenialReasons, PersonalMemoryDatasetResolutionOutcomes } from "../personal-memory-dataset.types";
 
 /** Builds a repository fake with just the dataset lookup. */
 function _Repository(dataset: { readonly datasetId: string; readonly cogneeDatasetId: string } | null)

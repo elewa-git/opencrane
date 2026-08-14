@@ -1,6 +1,6 @@
 import { ___IsSha256ContentAddress } from "@opencrane/models/artifacts";
 
-import type { ArtifactStorePromotion, StageArtifactCommand, StagedArtifact, VerifiedArtifactWriteLease } from "./artifact-store.types.js";
+import type { ArtifactStorePromotion, StageArtifactCommand, StagedArtifact, VerifiedArtifactWriteLease } from "./artifact-store.types";
 
 /**
  * Whether a verified lease's fields are usable for staging: non-blank ids, the write action, and an

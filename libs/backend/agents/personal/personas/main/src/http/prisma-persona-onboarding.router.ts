@@ -3,9 +3,9 @@ import type { Router } from "express";
 import type { Logger } from "@opencrane/backend/observability";
 
 import { _ResolveRequestPrincipal } from "@opencrane/backend/server/infra/auth";
-import { __CreatePersonaOnboardingRouter } from "./persona-onboarding.router.js";
-import type { PersonaOnboardingCaller, PersonaOnboardingWorkflowPort } from "./persona-onboarding.router.types.js";
-import { PrismaPersonaPersistenceUnitOfWork } from "../profile/prisma-persona-persistence-unit-of-work.js";
+import { __CreatePersonaOnboardingRouter } from "./persona-onboarding.router";
+import type { PersonaOnboardingCaller, PersonaOnboardingWorkflowPort } from "./persona-onboarding.router.types";
+import { PrismaPersonaPersistenceUnitOfWork } from "../profile/prisma-persona-persistence-unit-of-work";
 
 /** Turns the authenticated request principal into the caller shape persona onboarding expects; null when the request is not authenticated. */
 function _resolveCaller(request: Parameters<typeof _ResolveRequestPrincipal>[0]): PersonaOnboardingCaller | null

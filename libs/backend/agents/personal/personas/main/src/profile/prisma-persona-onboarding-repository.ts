@@ -2,9 +2,9 @@ import { randomUUID } from "node:crypto";
 
 import { PersonaQuestionSetState, Prisma } from "@prisma/client";
 
-import { PERSONA_INTERPOLATION_MAP_ID, PERSONA_INTERPOLATION_MAP_VERSION, PERSONA_ONBOARDING_QUESTION_SET_ID, PERSONA_ONBOARDING_QUESTION_SET_VERSION, PERSONA_SCORING_POLICY_ID, PERSONA_SCORING_POLICY_VERSION } from "./persona-onboarding-catalogue.js";
-import { PersonaOnboardingDenialReasons, type EnsurePersonaOnboardingCommand, type EnsurePersonaOnboardingResult, type PersonaOnboardingRepository } from "./persona-onboarding-authority.types.js";
-import { PersonaLifecycleOutcomes } from "./persona-lifecycle.types.js";
+import { PERSONA_INTERPOLATION_MAP_ID, PERSONA_INTERPOLATION_MAP_VERSION, PERSONA_ONBOARDING_QUESTION_SET_ID, PERSONA_ONBOARDING_QUESTION_SET_VERSION, PERSONA_SCORING_POLICY_ID, PERSONA_SCORING_POLICY_VERSION } from "./persona-onboarding-catalogue";
+import { PersonaOnboardingDenialReasons, type EnsurePersonaOnboardingCommand, type EnsurePersonaOnboardingResult, type PersonaOnboardingRepository } from "./persona-onboarding-authority.types";
+import { PersonaLifecycleOutcomes } from "./persona-lifecycle.types";
 
 /** Prisma adapter that checks the seeded question set, scoring policy, and interpolation map exist, then creates the caller's profile. */
 export class PrismaPersonaOnboardingRepository implements PersonaOnboardingRepository

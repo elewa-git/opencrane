@@ -1,7 +1,7 @@
 import type { Request } from "express";
 import type { Logger } from "pino";
 
-import type { ElicitationUnitOfWork } from "./elicitation.types.js";
+import type { ElicitationUnitOfWork } from "./elicitation.types";
 
 /** Browser-session authority admitted to the self-only elicitation API. */
 export interface SelfElicitationCaller

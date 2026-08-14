@@ -4,9 +4,9 @@ import type { Logger } from "pino";
 
 import { _ResolveRequestPrincipal } from "@opencrane/backend/server/infra/auth";
 
-import { PrismaSkillCatalogueRepository } from "./prisma-skill-catalogue-repository.js";
-import { __CreateSkillCatalogueRouter } from "./skill-catalogue.router.js";
-import type { SkillCatalogueCaller } from "./skill-catalogue.router.types.js";
+import { PrismaSkillCatalogueRepository } from "./prisma-skill-catalogue-repository";
+import { __CreateSkillCatalogueRouter } from "./skill-catalogue.router";
+import type { SkillCatalogueCaller } from "./skill-catalogue.router.types";
 
 /** Maps authenticated request facts to the caller contract owned by the skill catalogue. */
 function _resolveCaller(request: Parameters<typeof _ResolveRequestPrincipal>[0]): SkillCatalogueCaller | null

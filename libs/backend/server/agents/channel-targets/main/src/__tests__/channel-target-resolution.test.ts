@@ -2,8 +2,8 @@ import { createHash } from "node:crypto";
 
 import { describe, expect, it, vi } from "vitest";
 
-import type { ChannelTargetResolutionDependencies, IssueChannelInvocationContextCommand } from "../channel-target-resolution.types.js";
-import { __ResolveChannelTarget } from "../channel-target-resolution.js";
+import type { ChannelTargetResolutionDependencies, IssueChannelInvocationContextCommand } from "../channel-target-resolution.types";
+import { __ResolveChannelTarget } from "../channel-target-resolution";
 
 /** Stable test instant. */
 const _NOW = Date.parse("2026-07-18T12:00:00.000Z");

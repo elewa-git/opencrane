@@ -5,7 +5,7 @@ import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { _CreateFleetMembershipEvidenceConfig } from "../fleet-membership-evidence.factory.js";
+import { _CreateFleetMembershipEvidenceConfig } from "../fleet-membership-evidence.factory";
 
 /** Writes one temporary Ed25519 public key accepted by the production verifier. */
 function _PublicKeyPath(): string

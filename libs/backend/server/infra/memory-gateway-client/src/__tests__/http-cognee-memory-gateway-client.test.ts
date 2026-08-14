@@ -3,13 +3,13 @@ import type { Context } from "@opentelemetry/api";
 import { isTracingSuppressed } from "@opentelemetry/core";
 import { beforeAll, describe, expect, it } from "vitest";
 
-import { MemoryGatewayTransportError } from "../cognee-http.js";
-import { __CreateHttpCogneeMemoryGatewayClient } from "../http-cognee-memory-gateway-client.js";
-import type { CogneeFetch } from "../http-cognee-memory-gateway-client.types.js";
-import type { MemoryProvenance } from "../memory-gateway-client.types.js";
-import { MemoryProvenanceIncompleteError } from "../memory-provenance.js";
-import { MemoryGatewayProtocolError } from "../personal-memory-record.js";
-import { MemoryGatewayUnavailableError } from "../unavailable-memory-gateway-client.js";
+import { MemoryGatewayTransportError } from "../cognee-http";
+import { __CreateHttpCogneeMemoryGatewayClient } from "../http-cognee-memory-gateway-client";
+import type { CogneeFetch } from "../http-cognee-memory-gateway-client.types";
+import type { MemoryProvenance } from "../memory-gateway-client.types";
+import { MemoryProvenanceIncompleteError } from "../memory-provenance";
+import { MemoryGatewayProtocolError } from "../personal-memory-record";
+import { MemoryGatewayUnavailableError } from "../unavailable-memory-gateway-client";
 
 /** One recorded outbound exchange captured by the fetch seam. */
 interface _RecordedRequest

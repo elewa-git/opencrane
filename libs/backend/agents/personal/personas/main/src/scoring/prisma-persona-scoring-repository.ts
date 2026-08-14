@@ -1,8 +1,8 @@
 import { PersonaColour, PersonaOpennessModifier, PersonaTieKind, Prisma } from "@prisma/client";
 
-import { _ScorePersona } from "./persona-scorer.js";
-import { PersonaColourValues, PersonaModifierValues, PersonaTieKinds, type PersonaAuthoritativeScoreResult, type PersonaSelectionValue, type PersonaTieChoice, type PersonaWeightedAnswer } from "./persona-scorer.types.js";
-import { PersonaScoringPersistenceStatuses, type PersonaScoringEvidence, type PersonaScoringPersistenceResult, type PersonaScoringRepository, type ResolvePersonaTieCommand, type StoredPersonaScore } from "./persona-scoring-repository.types.js";
+import { _ScorePersona } from "./persona-scorer";
+import { PersonaColourValues, PersonaModifierValues, PersonaTieKinds, type PersonaAuthoritativeScoreResult, type PersonaSelectionValue, type PersonaTieChoice, type PersonaWeightedAnswer } from "./persona-scorer.types";
+import { PersonaScoringPersistenceStatuses, type PersonaScoringEvidence, type PersonaScoringPersistenceResult, type PersonaScoringRepository, type ResolvePersonaTieCommand, type StoredPersonaScore } from "./persona-scoring-repository.types";
 
 /** Prisma adapter that stores persona score counters and the owner's tie choices. */
 export class PrismaPersonaScoringRepository implements PersonaScoringRepository

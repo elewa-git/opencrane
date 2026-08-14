@@ -1,4 +1,4 @@
-import type { ConversationId, MessageId } from "./identifiers.types.js";
+import type { ConversationId, MessageId } from "./identifiers.types";
 
 /**
  * Who a message is shown as being from.

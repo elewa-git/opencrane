@@ -1,8 +1,8 @@
 import type { RevisionScopeAttachment } from "@opencrane/models/agents";
 import { describe, expect, it } from "vitest";
 
-import { __IntersectScopeAttachments, __ResolveEffectiveScopeAttachments, __ValidateAttachAuthority } from "../scope-attachment-authority.js";
-import type { EffectiveScopeGrant, ScopeGrantResolver } from "../scope-attachment-authority.types.js";
+import { __IntersectScopeAttachments, __ResolveEffectiveScopeAttachments, __ValidateAttachAuthority } from "../scope-attachment-authority";
+import type { EffectiveScopeGrant, ScopeGrantResolver } from "../scope-attachment-authority.types";
 
 /** Fake resolver returning a fixed allow-only effective-grant set for any principal. */
 class _FakeResolver implements ScopeGrantResolver

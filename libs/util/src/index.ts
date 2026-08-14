@@ -7,9 +7,9 @@
  * Node-only API.
  * @see https://www.rfc-editor.org/rfc/rfc8785
  */
-export * from "./collections.js";
-export * from "./canonical-json-digest.js";
-export * from "./digest.js";
-export * from "./json.js";
-export * from "./json-canonicalization.js";
-export * from "./json-canonicalization.types.js";
+export * from "./collections";
+export * from "./canonical-json-digest";
+export * from "./digest";
+export * from "./json";
+export * from "./json-canonicalization";
+export * from "./json-canonicalization.types";

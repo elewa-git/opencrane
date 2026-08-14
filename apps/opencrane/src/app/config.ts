@@ -3,7 +3,7 @@ import { isAbsolute } from "node:path";
 import { ByokProvider } from "@opencrane/contracts";
 import { FleetMembershipDeploymentModes } from "@opencrane/backend/server/iam/membership";
 
-import type { ChannelTargetRuntimeConfig, InitialModelBootstrapConfig, OpenCraneObotConfig, OpenCraneProcessConfig } from "./config.types.js";
+import type { ChannelTargetRuntimeConfig, InitialModelBootstrapConfig, OpenCraneObotConfig, OpenCraneProcessConfig } from "./config.types";
 import type { StandaloneFirstUserAdmissionConfig } from "@opencrane/backend/server/iam/identity";
 
 /** Smallest accepted artifact-preprocessor output body. */

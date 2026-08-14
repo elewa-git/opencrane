@@ -2,9 +2,9 @@ import { MemoryDatasetState, MemoryOutboxEventKind, type MemoryConsentState, typ
 
 import { ___CanonicalizeJson } from "@opencrane/util";
 
-import { __IsValidMemoryFactCommand } from "./memory-catalog.js";
-import { MemoryCatalogAtomicStatuses, MemoryFactConsentStates } from "./memory-catalog.types.js";
-import type { AtomicRecordMemoryFactResult, MemoryCatalogRepository, RecordMemoryFactCommand } from "./memory-catalog.types.js";
+import { __IsValidMemoryFactCommand } from "./memory-catalog";
+import { MemoryCatalogAtomicStatuses, MemoryFactConsentStates } from "./memory-catalog.types";
+import type { AtomicRecordMemoryFactResult, MemoryCatalogRepository, RecordMemoryFactCommand } from "./memory-catalog.types";
 
 /**
  * Writes memory-fact catalog rows and their outbox events, inside a transaction it is given.

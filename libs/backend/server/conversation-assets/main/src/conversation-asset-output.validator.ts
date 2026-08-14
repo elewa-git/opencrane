@@ -4,7 +4,7 @@ import { z, type ZodType } from "zod";
 import { ___DecideConversationAssetBatch } from "@opencrane/models/conversation-assets";
 import { ___IsSha256ContentAddress } from "@opencrane/models/artifacts";
 
-import type { ReserveConversationAssetOutput } from "./conversation-asset-output.types.js";
+import type { ReserveConversationAssetOutput } from "./conversation-asset-output.types";
 
 /** Strict runtime reservation schema; semantic media and total-byte policy remains in the authority. */
 const _ReserveConversationAssetOutputSchema: ZodType<ReserveConversationAssetOutput> = z.object({

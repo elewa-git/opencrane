@@ -1,6 +1,6 @@
 import { InjectionToken } from "@angular/core";
 
-import type { ConversationAsset, ReserveConversationAssetUpload } from "./conversation-assets.types.js";
+import type { ConversationAsset, ReserveConversationAssetUpload } from "./conversation-assets.types";
 
 /** Narrow transport port for participant-bound conversation files. */
 export interface ConversationAssetsGateway

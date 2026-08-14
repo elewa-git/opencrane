@@ -1,6 +1,6 @@
 import type { Request, RequestHandler, Response } from "express";
 
-import { PersonalConfigurationHttpErrors, type PersonalConfigurationRouterDependencies } from "./personal-configuration.router.types.js";
+import { PersonalConfigurationHttpErrors, type PersonalConfigurationRouterDependencies } from "./personal-configuration.router.types";
 
 /**
  * Creates the route where a user reads their own recent configuration changes.

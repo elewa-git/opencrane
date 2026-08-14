@@ -1,6 +1,6 @@
 import { AuthorizationScopeKind, Prisma } from "@prisma/client";
 
-import { ShareAuthorizationScopeKinds, type CreateOrFindShareAuthorizationGrantResult, type CreateShareAuthorizationGrant, type ShareAuthorizationGrant, type ShareAuthorizationRepository, type ShareCapabilityCatalogRevision } from "./share-authorization-repository.types.js";
+import { ShareAuthorizationScopeKinds, type CreateOrFindShareAuthorizationGrantResult, type CreateShareAuthorizationGrant, type ShareAuthorizationGrant, type ShareAuthorizationRepository, type ShareCapabilityCatalogRevision } from "./share-authorization-repository.types";
 
 /** Exact persistence fields that the sharing contract may expose. */
 const _SHARE_SELECT = {

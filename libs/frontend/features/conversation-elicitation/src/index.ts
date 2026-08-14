@@ -1,1 +1,1 @@
-export { ConversationElicitationCardComponent } from "./lib/conversation-elicitation-card.component.js";
+export { ConversationElicitationCardComponent } from "./lib/conversation-elicitation-card.component";

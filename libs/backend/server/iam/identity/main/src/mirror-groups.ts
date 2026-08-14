@@ -1,6 +1,6 @@
 import { Prisma, type GrantScope, type PrismaClient } from "@prisma/client";
 
-import type { MirrorGroupsOnLoginOptions } from "./identity-workflows.types.js";
+import type { MirrorGroupsOnLoginOptions } from "./identity-workflows.types";
 
 /**
  * Groups are Zitadel project roles under the convention `group:<scope>:<name>` (#126 S4b,

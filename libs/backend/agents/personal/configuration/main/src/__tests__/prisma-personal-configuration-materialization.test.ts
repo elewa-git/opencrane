@@ -4,8 +4,8 @@ import { describe, expect, it, vi } from "vitest";
 import { __DigestAgentRevisionContent } from "@opencrane/models/agents";
 import { ___DigestCanonicalJson } from "@opencrane/util";
 
-import { _PersonalConfigurationMaterializer } from "../materialization/personal-configuration-materializer.js";
-import { PrismaPersonalConfigurationMaterializationUnitOfWork } from "../materialization/prisma-personal-configuration-materialization-unit-of-work.js";
+import { _PersonalConfigurationMaterializer } from "../materialization/personal-configuration-materializer";
+import { PrismaPersonalConfigurationMaterializationUnitOfWork } from "../materialization/prisma-personal-configuration-materialization-unit-of-work";
 
 /** Builds a tool definition that materialisation must copy to the new revision. */
 function _Tool()

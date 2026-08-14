@@ -1,8 +1,8 @@
 import type { AgentControllerRunAttemptAssignmentCommand, AgentControllerRunWorkloadRegistrationCommand } from "@opencrane/contracts";
 import { describe, expect, it } from "vitest";
 
-import { __CreateHttpAgentControllerAuthority } from "../http-agent-controller-authority.js";
-import type { AgentControllerFetch } from "../http-agent-controller-authority.types.js";
+import { __CreateHttpAgentControllerAuthority } from "../http-agent-controller-authority";
+import type { AgentControllerFetch } from "../http-agent-controller-authority.types";
 
 /** One exact claim response returned by the OpenCrane authority. */
 function _ClaimBody()

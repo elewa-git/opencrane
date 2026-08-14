@@ -1,6 +1,6 @@
 import { ElicitationResultDeliveryState, ToolResultDeliveryState, type Prisma } from "@prisma/client";
 
-import type { RuntimeDispatchStateRepository, RuntimeDispatchStateUnitOfWork, RuntimeDispatchToolInvocation } from "./runtime-dispatch-state.types.js";
+import type { RuntimeDispatchStateRepository, RuntimeDispatchStateUnitOfWork, RuntimeDispatchToolInvocation } from "./runtime-dispatch-state.types";
 
 /**
  * Marks tool-result rows consumed, and loads the fields needed to recognise a repeated candidate.

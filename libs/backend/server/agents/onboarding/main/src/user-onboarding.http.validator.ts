@@ -1,7 +1,7 @@
 // This validator is the owner-answer browser-body trust boundary, so its model and accepted fields evolve together.
 import { z } from "zod";
 
-import type { SubmitUserOnboardingAnswerCommand } from "./user-onboarding-chat.types.js";
+import type { SubmitUserOnboardingAnswerCommand } from "./user-onboarding-chat.types";
 
 /** Strict schema for one bounded answer fenced to the exact projected conversation question. */
 const _UserOnboardingAnswerBodySchema: z.ZodType<SubmitUserOnboardingAnswerCommand> = z.object({

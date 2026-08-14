@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { _OpenCraneA2uiTheme } from "../a2ui.theme.js";
+import { _OpenCraneA2uiTheme } from "../a2ui.theme";
 
 describe("_OpenCraneA2uiTheme", function _OpenCraneA2uiThemeSuite()
 {

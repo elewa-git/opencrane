@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import { AG_UI_A2UI_ENVELOPE_VERSION, AgUiA2uiSurfaceStates, AgUiToolRecoveryProviderOutcomes } from "@opencrane/contracts";
 
-import { __ProjectConversationEvent } from "../conversation-event-projector.js";
-import type { ConversationProjectionEventRow } from "../conversation-event-projector.types.js";
+import { __ProjectConversationEvent } from "../conversation-event-projector";
+import type { ConversationProjectionEventRow } from "../conversation-event-projector.types";
 
 /** Build one canonical A2UI replay row around an overrideable governed envelope. */
 function _A2uiRow(a2ui: Readonly<Record<string, unknown>>, type = "a2ui.surface.updated"): ConversationProjectionEventRow

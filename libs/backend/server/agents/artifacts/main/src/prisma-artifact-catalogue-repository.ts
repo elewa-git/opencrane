@@ -1,7 +1,7 @@
 import { ArtifactIndexState, ArtifactKind, ArtifactRevisionState, ArtifactState, Prisma } from "@prisma/client";
 
-import type { ArtifactReadLeaseRepository, IssueArtifactReadLeaseCommand, PublishedArtifactReadTarget } from "./artifact-read-lease.types.js";
-import type { PersonalArtifactCatalogueRepository, PersonalArtifactEntry } from "./artifact-finalization.types.js";
+import type { ArtifactReadLeaseRepository, IssueArtifactReadLeaseCommand, PublishedArtifactReadTarget } from "./artifact-read-lease.types";
+import type { PersonalArtifactCatalogueRepository, PersonalArtifactEntry } from "./artifact-finalization.types";
 
 /** Read-only Prisma repository for catalogue facts that require no durable transaction. */
 export class PrismaArtifactCatalogueRepository implements ArtifactReadLeaseRepository, PersonalArtifactCatalogueRepository

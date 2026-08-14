@@ -2,8 +2,8 @@ import type { Request, Response } from "express";
 import type { PrismaClient } from "@prisma/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { _ClusterTenantScopeGuard } from "../middleware/cluster-tenant-scope.js";
-import type { ClusterTenantScopedResource } from "../middleware/cluster-tenant-scope.types.js";
+import { _ClusterTenantScopeGuard } from "../middleware/cluster-tenant-scope";
+import type { ClusterTenantScopedResource } from "../middleware/cluster-tenant-scope.types";
 
 /** Minimal OIDC env so the guard runs in real-auth mode (no dev-mode fail-open). */
 function _enableOidc(): void

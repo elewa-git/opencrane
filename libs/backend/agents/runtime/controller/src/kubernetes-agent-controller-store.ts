@@ -1,11 +1,11 @@
 import { Observable, type ConfigurationOptions, type ObservableMiddleware, type RequestContext, type ResponseContext, type V1Job } from "@kubernetes/client-node";
 import { ___DoWithTrace } from "@opencrane/backend/observability";
 
-import type { AgentControllerKubernetesStore } from "./agent-controller.types.js";
-import { _AssertExactAssignedAgentRuntimeJob, _AssertExactSuspendedAgentRuntimeJob } from "./kubernetes-agent-job-adoption.js";
-import { _AssertReleasedAgentRuntimeAssignmentDeadline, _PlanAgentRuntimeJobRelease } from "./kubernetes-agent-job-release.js";
-import type { AgentControllerKubernetesStoreOptions } from "./kubernetes-agent-controller-store.types.js";
-import { _AgentRuntimePodSelector, _AssertExactFirstAgentRuntimePod } from "./kubernetes-runtime-pod.js";
+import type { AgentControllerKubernetesStore } from "./agent-controller.types";
+import { _AssertExactAssignedAgentRuntimeJob, _AssertExactSuspendedAgentRuntimeJob } from "./kubernetes-agent-job-adoption";
+import { _AssertReleasedAgentRuntimeAssignmentDeadline, _PlanAgentRuntimeJobRelease } from "./kubernetes-agent-job-release";
+import type { AgentControllerKubernetesStoreOptions } from "./kubernetes-agent-controller-store.types";
+import { _AgentRuntimePodSelector, _AssertExactFirstAgentRuntimePod } from "./kubernetes-runtime-pod";
 
 function _KubernetesRequestOptions(shutdownSignal: AbortSignal, timeoutMilliseconds: number): ConfigurationOptions
 {

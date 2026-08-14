@@ -1,4 +1,4 @@
-import type { AgentRevisionId, AgentServiceId, SiloId } from "./identifiers.types.js";
+import type { AgentRevisionId, AgentServiceId, SiloId } from "./identifiers.types";
 
 /**
  * Stable product roles assigned to agent services.

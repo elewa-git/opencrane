@@ -1,6 +1,6 @@
 import { AgUiToolRecoveryProviderOutcomes, type AgUiToolFailureEnvelope, type AgUiToolRecoveryRequiredEnvelope } from "@opencrane/contracts";
 
-import { _BoundedIdentifier, _CanonicalInstant } from "../bounded-value.validator.js";
+import { _BoundedIdentifier, _CanonicalInstant } from "../bounded-value.validator";
 
 /** The provider outcomes a recovery event may carry; anything else is rejected. */
 const _TOOL_RECOVERY_PROVIDER_OUTCOMES = new Set<string>(Object.values(AgUiToolRecoveryProviderOutcomes));

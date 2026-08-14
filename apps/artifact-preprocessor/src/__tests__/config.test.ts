@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { _ReadConfig } from "../config.js";
+import { _ReadConfig } from "../config";
 
 /** Verify configuration fails closed around the mounted projected-token and scratch paths. */
 describe("artifact preprocessor configuration", function _suite()

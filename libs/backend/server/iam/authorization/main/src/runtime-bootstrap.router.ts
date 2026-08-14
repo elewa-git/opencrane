@@ -3,9 +3,9 @@ import { Router, type Request, type Response } from "express";
 import { ___IsAgentRuntimeServiceAccountName, ___IsManagedAgentRuntimeServiceAccountName } from "@opencrane/contracts";
 import type { Es256PublicJwk } from "@opencrane/models/authorization";
 
-import { __ConsumeRuntimeBootstrap } from "./runtime-proof.js";
-import type { RuntimeBootstrapClaim, RuntimeBootstrapExpectation } from "./runtime-proof.types.js";
-import type { RuntimeBootstrapExchangeRecord, RuntimeBootstrapReviewedIdentity, RuntimeBootstrapRouterDependencies, RuntimeBootstrapSubmission } from "./runtime-bootstrap.types.js";
+import { __ConsumeRuntimeBootstrap } from "./runtime-proof";
+import type { RuntimeBootstrapClaim, RuntimeBootstrapExpectation } from "./runtime-proof.types";
+import type { RuntimeBootstrapExchangeRecord, RuntimeBootstrapReviewedIdentity, RuntimeBootstrapRouterDependencies, RuntimeBootstrapSubmission } from "./runtime-bootstrap.types";
 
 /**
  * Build the workload-authenticated one-use runtime bootstrap-exchange API.

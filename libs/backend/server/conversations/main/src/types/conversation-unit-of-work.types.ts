@@ -1,9 +1,9 @@
-import type { AgentThreadSnapshotView } from "./agent-thread-view.types.js";
-import type { CreateConversationResult, MarkAgentThreadReadResult, MutateConversationResult, RetryConversationRunResult, SubmitConversationMessageResult } from "./conversation-authority-result.types.js";
-import type { ConversationCaller } from "./conversation-caller.types.js";
-import type { ConversationCreationDirectory } from "./conversation-directory.types.js";
-import type { CreateConversationRequest, RetryConversationRunRequest, SubmitConversationMessageRequest } from "./conversation-request.types.js";
-import type { ConversationDetail, ConversationSummary } from "./conversation-view.types.js";
+import type { AgentThreadSnapshotView } from "./agent-thread-view.types";
+import type { CreateConversationResult, MarkAgentThreadReadResult, MutateConversationResult, RetryConversationRunResult, SubmitConversationMessageResult } from "./conversation-authority-result.types";
+import type { ConversationCaller } from "./conversation-caller.types";
+import type { ConversationCreationDirectory } from "./conversation-directory.types";
+import type { CreateConversationRequest, RetryConversationRunRequest, SubmitConversationMessageRequest } from "./conversation-request.types";
+import type { ConversationDetail, ConversationSummary } from "./conversation-view.types";
 
 /**
  * Everything the conversation HTTP layer is allowed to do, as one port.

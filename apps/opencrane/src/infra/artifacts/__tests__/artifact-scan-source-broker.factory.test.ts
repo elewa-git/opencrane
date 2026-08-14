@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { __VerifyArtifactReadLease, type ArtifactReadLeaseClaims } from "@opencrane/backend/artifacts/authorization";
 
-import { _CreateArtifactScanSourceBroker } from "../artifact-scan-source-broker.factory.js";
+import { _CreateArtifactScanSourceBroker } from "../artifact-scan-source-broker.factory";
 
 /** Same-silo ArtifactStore origin accepted by the broker configuration guard. */
 const _SERVICE_URL = "http://opencrane-artifact-service.default.svc.cluster.local:8080";

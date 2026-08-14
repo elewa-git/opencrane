@@ -1,7 +1,7 @@
 import { Router } from "express";
 import type { PrismaClient } from "@prisma/client";
 
-import { _DeleteAccountBudget, _GetAccountBudgets, _GetGlobalBudget, _PutAccountBudget, _PutGlobalBudget } from "../core/ai-budget.logic.js";
+import { _DeleteAccountBudget, _GetAccountBudgets, _GetGlobalBudget, _PutAccountBudget, _PutGlobalBudget } from "../core/ai-budget.logic";
 
 /**
  * Build the spend-ceiling routes: one platform-wide ceiling, plus per-user overrides.

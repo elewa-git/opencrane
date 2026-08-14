@@ -1,6 +1,6 @@
 import { __BuildSuspendedAgentRuntimeJob } from "@opencrane/backend/agents/runtime/k8s-launcher";
 
-import type { AgentControllerRuntimeProfile, AgentControllerRuntimeProfiles } from "./agent-controller.types.js";
+import type { AgentControllerRuntimeProfile, AgentControllerRuntimeProfiles } from "./agent-controller.types";
 
 /** Return whether a namespace name is a valid DNS label, before it is used to isolate runtime workloads. */
 function _IsNamespace(value: string): boolean

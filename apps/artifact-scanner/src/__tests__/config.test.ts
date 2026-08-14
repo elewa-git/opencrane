@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { _ReadConfig } from "../config.js";
+import { _ReadConfig } from "../config";
 
 describe("artifact scanner config", () =>
 {

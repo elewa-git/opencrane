@@ -1,6 +1,6 @@
-import type { OrgMembershipFacts, OrgMembershipRepository, OwnedOrg } from "./org-membership.types.js";
+import type { OrgMembershipFacts, OrgMembershipRepository, OwnedOrg } from "./org-membership.types";
 
-export type { OrgMembershipFacts, OrgMembershipRepository, OrgMembershipRow, OwnedOrg } from "./org-membership.types.js";
+export type { OrgMembershipFacts, OrgMembershipRepository, OrgMembershipRow, OwnedOrg } from "./org-membership.types";
 
 /** Empty (fail-closed) facts: no admin authority, no org scope. */
 const _EMPTY: OrgMembershipFacts = { isOrgAdmin: false, ownedOrgs: [] };

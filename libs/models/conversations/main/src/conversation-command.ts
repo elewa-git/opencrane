@@ -1,6 +1,6 @@
-import { ConversationCommandActions, ConversationCommandDenialReasons, ConversationCommandKinds, type ConversationCommand, type ConversationCommandContext, type ConversationCommandDecision } from "./conversation-command.types.js";
-import { ConversationLifecycles, ConversationModes } from "./conversation.types.js";
-import { __HasValidConversationAgentBinding } from "./conversation-invariants.js";
+import { ConversationCommandActions, ConversationCommandDenialReasons, ConversationCommandKinds, type ConversationCommand, type ConversationCommandContext, type ConversationCommandDecision } from "./conversation-command.types";
+import { ConversationLifecycles, ConversationModes } from "./conversation.types";
+import { __HasValidConversationAgentBinding } from "./conversation-invariants";
 
 /** Decides one command for one combination of lifecycle and mode — a single cell in the tables below. */
 type _CommandHandler = (context: ConversationCommandContext) => ConversationCommandDecision;

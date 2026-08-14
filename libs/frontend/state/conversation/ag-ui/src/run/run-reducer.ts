@@ -1,8 +1,8 @@
 import { EventType } from "@ag-ui/core";
 import type { AgUiProjectionEvent } from "@opencrane/contracts";
 
-import type { AgUiStreamState } from "../ag-ui-stream.types.js";
-import { AgUiRunStatuses } from "./run.types.js";
+import type { AgUiStreamState } from "../ag-ui-stream.types";
+import { AgUiRunStatuses } from "./run.types";
 
 /** Start a new run, clearing any prior terminal, recovery, and interrupt state. */
 export function _StartRun(state: AgUiStreamState, runId: string): AgUiStreamState

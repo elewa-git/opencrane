@@ -1,6 +1,6 @@
 import { ElicitationPurposes, type ElicitationResponseValue } from "@opencrane/contracts";
 
-import type { ElicitationPurposeRequest, ElicitationPurposeStrategy, ElicitationPurposeStrategyDependencies, ElicitationPurposeStrategyRegistry } from "./elicitation-purpose-strategy.types.js";
+import type { ElicitationPurposeRequest, ElicitationPurposeStrategy, ElicitationPurposeStrategyDependencies, ElicitationPurposeStrategyRegistry } from "./elicitation-purpose-strategy.types";
 
 /** Ordinary runtime-input consequence. */
 class _RuntimeInputPurposeStrategy implements ElicitationPurposeStrategy

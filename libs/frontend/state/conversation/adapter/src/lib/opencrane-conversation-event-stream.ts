@@ -3,8 +3,8 @@ import { Injectable, inject } from "@angular/core";
 import { ControlPlaneApiService } from "@opencrane/core";
 import { __AgUiResumeCursor, __CreateAgUiStreamState, __DecodeAgUiSseRecord, __ReduceAgUiStream, __RevokeAgUiStreamAccess, type AgUiStreamState } from "@opencrane/state/conversation/ag-ui";
 
-import { _ConversationEventHttpError, _ConversationEventProtocolError } from "./conversation-event-stream.errors.js";
-import { ConversationEventStreamStatuses, type ConversationEventStream, type ConversationEventStreamUpdate, type StreamConversationEventsCommand } from "./conversation-event-stream.types.js";
+import { _ConversationEventHttpError, _ConversationEventProtocolError } from "./conversation-event-stream.errors";
+import { ConversationEventStreamStatuses, type ConversationEventStream, type ConversationEventStreamUpdate, type StreamConversationEventsCommand } from "./conversation-event-stream.types";
 
 /** Largest partial frame held while waiting for the rest of it; a bigger one fails the stream. */
 const _MAXIMUM_FRAME_BYTES = 1_048_576;

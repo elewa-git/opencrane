@@ -2,8 +2,8 @@ import { readFile } from "node:fs/promises";
 
 import { ___DoWithoutTrace } from "@opencrane/backend/observability";
 
-import { MemoryGatewayProtocolError } from "./personal-memory-record.js";
-import type { CogneeFetch, CogneeMemoryGatewayHttpOptions, CogneeSession, MemoryGatewayTransportFailureCode } from "./http-cognee-memory-gateway-client.types.js";
+import { MemoryGatewayProtocolError } from "./personal-memory-record";
+import type { CogneeFetch, CogneeMemoryGatewayHttpOptions, CogneeSession, MemoryGatewayTransportFailureCode } from "./http-cognee-memory-gateway-client.types";
 
 /** Maximum body accepted from one Cognee exchange. */
 const _MAX_RESPONSE_BYTES = 256 * 1024;

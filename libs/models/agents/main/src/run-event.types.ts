@@ -1,4 +1,4 @@
-import type { AgentRunId } from "./identifiers.types.js";
+import type { AgentRunId } from "./identifiers.types";
 
 /**
  * Every kind of event one agent run can emit, in the order a reader would meet them.

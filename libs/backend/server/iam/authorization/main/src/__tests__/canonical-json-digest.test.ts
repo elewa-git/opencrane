@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { __DigestCanonicalJson } from "../canonical-json-digest.js";
+import { __DigestCanonicalJson } from "../canonical-json-digest";
 
 describe("backend canonical JSON digest", function _suite()
 {

@@ -9,10 +9,10 @@
 import pino from "pino";
 import type { Logger } from "pino";
 
-import { ___ContextMixin } from "./context.js";
-import { REDACT_PATHS } from "./redact.js";
-import { _SanitizeLogFields } from "./sanitize.js";
-import type { LoggerOptions } from "./observability.types.js";
+import { ___ContextMixin } from "./context";
+import { REDACT_PATHS } from "./redact";
+import { _SanitizeLogFields } from "./sanitize";
+import type { LoggerOptions } from "./observability.types";
 
 /**
  * Create a configured root logger.

@@ -2,7 +2,7 @@ import { AgentRevisionState, AgentServiceKind } from "@prisma/client";
 import type { RunAdmissionTransaction } from "@opencrane/backend/agents/execution/runs";
 import { describe, expect, it, vi } from "vitest";
 
-import { PrismaRunAuthoritySource } from "../prisma-run-authority-source.js";
+import { PrismaRunAuthoritySource } from "../prisma-run-authority-source";
 
 /** Creates the minimum command coordinates needed for a run-authority lookup. */
 function _Command(overrides: Record<string, unknown> = {})

@@ -2,7 +2,7 @@ import type { NextFunction, Request, Response } from "express";
 import type { Logger } from "pino";
 import { ZodError } from "zod";
 
-import { _RequestValidationProblem } from "./request-validation.js";
+import { _RequestValidationProblem } from "./request-validation";
 
 /** Body-parser failure shape emitted by Express when a JSON document cannot be parsed. */
 interface MalformedJsonError extends SyntaxError

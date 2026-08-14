@@ -2,9 +2,9 @@ import { randomUUID } from "node:crypto";
 
 import { PersonaColour, Prisma, type PrismaClient, UserOnboardingBootstrapArchetype, UserOnboardingCompletionProvenance, UserOnboardingState } from "@prisma/client";
 
-import { UserOnboardingAnswerStatuses, UserOnboardingBootstrapArchetypes, UserOnboardingCompletionProvenances, UserOnboardingPersonaColours, UserOnboardingStates } from "./user-onboarding.enums.js";
-import type { AppendUserOnboardingAnswerCommand, StartUserOnboardingChatCommand, UserOnboardingAnswerPersistenceResult, UserOnboardingBootstrapContentRevision, UserOnboardingBootstrapConversation, UserOnboardingChatRepository } from "./user-onboarding-chat.types.js";
-import type { ApprovedPersonaEvidence, UserOnboardingOwner, UserOnboardingRecord, UserOnboardingRepository } from "./user-onboarding.types.js";
+import { UserOnboardingAnswerStatuses, UserOnboardingBootstrapArchetypes, UserOnboardingCompletionProvenances, UserOnboardingPersonaColours, UserOnboardingStates } from "./user-onboarding.enums";
+import type { AppendUserOnboardingAnswerCommand, StartUserOnboardingChatCommand, UserOnboardingAnswerPersistenceResult, UserOnboardingBootstrapContentRevision, UserOnboardingBootstrapConversation, UserOnboardingChatRepository } from "./user-onboarding-chat.types";
+import type { ApprovedPersonaEvidence, UserOnboardingOwner, UserOnboardingRecord, UserOnboardingRepository } from "./user-onboarding.types";
 
 /** Trigger text emitted when a concurrent starter loses after another transaction advanced the parent. */
 const _BOOTSTRAP_CONVERSATION_PENDING_TRIGGER = "bootstrap conversation must bind the exact pending onboarding owner and persona";

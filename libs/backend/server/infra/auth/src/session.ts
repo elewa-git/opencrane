@@ -2,10 +2,10 @@ import { URL } from "node:url";
 
 import type { Request } from "express";
 
-import { _RequestHost } from "./request-host.js";
-import type { AuthUser } from "./session.types.js";
+import { _RequestHost } from "./request-host";
+import type { AuthUser } from "./session.types";
 
-export type { AuthUser } from "./session.types.js";
+export type { AuthUser } from "./session.types";
 
 /**
  * Build the OIDC redirect_uri for THIS request's host (multi-host). Each org/host is served

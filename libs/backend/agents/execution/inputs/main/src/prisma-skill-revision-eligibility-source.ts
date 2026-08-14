@@ -1,7 +1,7 @@
 import { Prisma } from "@prisma/client";
 import type { InitialRunAuthority, RunAdmissionTransaction } from "@opencrane/backend/agents/execution/runs";
 
-import type { SessionAssemblyCommand, SessionAssemblyLoad, SkillRevisionEligibilitySource, ToolPolicyInput } from "./session-assembly.types.js";
+import type { SessionAssemblyCommand, SessionAssemblyLoad, SkillRevisionEligibilitySource, ToolPolicyInput } from "./session-assembly.types";
 
 /**
  * Locks and re-checks every skill assigned to the revision, inside the admission transaction.

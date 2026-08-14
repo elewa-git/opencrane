@@ -1,8 +1,8 @@
 // Control UI chat module implements message extract behavior.
-import { stripInternalRuntimeContext } from "../../../../src/agents/internal-runtime-context.js";
-import { stripInboundMetadata } from "../../../../src/auto-reply/reply/strip-inbound-meta.js";
-import { stripEnvelope } from "../../../../src/shared/chat-envelope.js";
-import { extractAssistantVisibleText as extractSharedAssistantVisibleText } from "../../../../src/shared/chat-message-content.js";
+import { stripInternalRuntimeContext } from "../../../../src/agents/internal-runtime-context";
+import { stripInboundMetadata } from "../../../../src/auto-reply/reply/strip-inbound-meta";
+import { stripEnvelope } from "../../../../src/shared/chat-envelope";
+import { extractAssistantVisibleText as extractSharedAssistantVisibleText } from "../../../../src/shared/chat-message-content";
 import { normalizeLowercaseStringOrEmpty, normalizeStringEntries } from "../string-coerce.ts";
 import { stripThinkingTags } from "../strip-thinking-tags.ts";
 

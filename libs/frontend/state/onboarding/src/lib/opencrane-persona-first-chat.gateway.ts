@@ -3,8 +3,8 @@ import { Injectable, inject } from "@angular/core";
 import { ControlPlaneApiService } from "@opencrane/core";
 import { ___ParsePersonaFirstChatSnapshot, type PersonaFirstChatSnapshot } from "@opencrane/models/user-onboarding";
 
-import { PersonaFirstChatConflictError, type PersonaFirstChatAnswerCommand, type PersonaFirstChatGateway, type UserOnboardingRouteSnapshot } from "./persona-first-chat.types.js";
-import { _ParsePersonaFirstChatConflictSnapshot, _ParseUserOnboardingRouteSnapshot } from "./persona-first-chat.validator.js";
+import { PersonaFirstChatConflictError, type PersonaFirstChatAnswerCommand, type PersonaFirstChatGateway, type UserOnboardingRouteSnapshot } from "./persona-first-chat.types";
+import { _ParsePersonaFirstChatConflictSnapshot, _ParseUserOnboardingRouteSnapshot } from "./persona-first-chat.validator";
 
 /**
  * The real {@link PersonaFirstChatGateway}: it calls the signed-in user's onboarding endpoints and

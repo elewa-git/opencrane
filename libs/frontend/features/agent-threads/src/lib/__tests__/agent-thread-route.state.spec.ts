@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { _AgentThreadHistoryAfterPurge, _PurgedAgentThreadRouteProjection } from "../agent-thread-route.state.js";
+import { _AgentThreadHistoryAfterPurge, _PurgedAgentThreadRouteProjection } from "../agent-thread-route.state";
 
 describe("Agent-thread route projection purge", function _AgentThreadRouteProjectionPurge()
 {

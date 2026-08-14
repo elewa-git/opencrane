@@ -1,5 +1,5 @@
-import { __AssertToolAllowed, ObotMcpInvocationUnavailableError } from "./obot-mcp-invocation.js";
-import type { ObotMcpInvocationPort, ObotMcpToolInvocationCommand, ObotMcpToolResult } from "./obot-mcp-invocation.types.js";
+import { __AssertToolAllowed, ObotMcpInvocationUnavailableError } from "./obot-mcp-invocation";
+import type { ObotMcpInvocationPort, ObotMcpToolInvocationCommand, ObotMcpToolResult } from "./obot-mcp-invocation.types";
 
 /**
  * MCP-invocation adapter used when this process has no Obot MCP transport configured.

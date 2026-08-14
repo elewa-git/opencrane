@@ -2,7 +2,7 @@ import { z } from "zod";
 
 import { ___ParsePersonaFirstChatSnapshot, UserOnboardingRouteStates, type PersonaFirstChatSnapshot } from "@opencrane/models/user-onboarding";
 
-import type { UserOnboardingRouteSnapshot } from "./persona-first-chat.types.js";
+import type { UserOnboardingRouteSnapshot } from "./persona-first-chat.types";
 
 /**
  * Guards the boundary where an onboarding HTTP response becomes something this library will act on.

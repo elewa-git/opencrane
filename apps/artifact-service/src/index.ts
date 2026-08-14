@@ -1,10 +1,10 @@
-import "./instrument.js";
+import "./instrument";
 
 import { ___BindConsole, ___ShutdownTelemetry } from "@opencrane/backend/observability";
 
-import { _ReadConfig } from "./config.js";
-import { _log as log } from "./log.js";
-import { _CreateServer, _PrepareArtifactStore } from "./server.js";
+import { _ReadConfig } from "./config";
+import { _log as log } from "./log";
+import { _CreateServer, _PrepareArtifactStore } from "./server";
 
 /** Start the private artifact-byte process and install bounded shutdown hooks. */
 async function _Main(): Promise<void>

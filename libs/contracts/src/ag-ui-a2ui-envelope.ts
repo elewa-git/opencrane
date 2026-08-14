@@ -1,7 +1,7 @@
 import { Schemas } from "@a2ui/web_core/v0_8";
 import { Ajv } from "ajv";
 
-import { AG_UI_A2UI_ENVELOPE_VERSION, AgUiA2uiSurfaceStates, type AgUiA2uiEnvelope } from "./ag-ui-projection.types.js";
+import { AG_UI_A2UI_ENVELOPE_VERSION, AgUiA2uiSurfaceStates, type AgUiA2uiEnvelope } from "./ag-ui-projection.types";
 
 /** Maximum number of operations one A2UI envelope may carry. */
 const _MAX_A2UI_OPERATIONS = 256;

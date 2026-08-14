@@ -1,8 +1,8 @@
 import { TOOL_INVOCATION_PREPARATION_POLICY } from "@opencrane/backend/server/iam/authorization";
 
-import { ExternalActionWorker } from "./external-action-worker.js";
-import { ProductionExternalActionAdapterFactory } from "./production-external-action-adapter.js";
-import type { ProductionExternalActionWorkerDependencies } from "./production-external-action-worker.types.js";
+import { ExternalActionWorker } from "./external-action-worker";
+import { ProductionExternalActionAdapterFactory } from "./production-external-action-adapter";
+import type { ProductionExternalActionWorkerDependencies } from "./production-external-action-worker.types";
 
 /**
  * Build the worker with its fixed preparation limits: at most three attempts in five minutes.

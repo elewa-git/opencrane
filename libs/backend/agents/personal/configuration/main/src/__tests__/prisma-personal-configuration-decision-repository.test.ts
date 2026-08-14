@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { PersonalConfigurationDecisionCodes } from "../decision/personal-configuration-decision.types.js";
-import { PrismaPersonalConfigurationDecisionRepository } from "../decision/prisma-personal-configuration-decision-repository.js";
+import { PersonalConfigurationDecisionCodes } from "../decision/personal-configuration-decision.types";
+import { PrismaPersonalConfigurationDecisionRepository } from "../decision/prisma-personal-configuration-decision-repository";
 
 describe("Prisma personal configuration decision repository", function _PrismaPersonalConfigurationDecisionRepositorySuite()
 {

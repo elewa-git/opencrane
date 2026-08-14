@@ -1,6 +1,6 @@
 import { OrgMemberStatus, OrgRole, type Prisma } from "@prisma/client";
 
-import { StandaloneFirstUserAdmissionOutcomes, type StandaloneFirstUserAdmissionAuditPort, type StandaloneFirstUserOwnerClaim, type StandaloneFirstUserOwnerClaimRepository, type StandaloneFirstUserStoredMembership } from "./standalone-first-user-admission.types.js";
+import { StandaloneFirstUserAdmissionOutcomes, type StandaloneFirstUserAdmissionAuditPort, type StandaloneFirstUserOwnerClaim, type StandaloneFirstUserOwnerClaimRepository, type StandaloneFirstUserStoredMembership } from "./standalone-first-user-admission.types";
 
 /** Copies the three stored membership fields the decision needs into the port's type. */
 function _storedMembership(row: { subject: string; role: OrgRole; status: OrgMemberStatus }): StandaloneFirstUserStoredMembership

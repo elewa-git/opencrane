@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { __BuildGovernedSkillWorkloadJob } from "../skill-workload-job.js";
+import { __BuildGovernedSkillWorkloadJob } from "../skill-workload-job";
 
 /** Builds one bounded tool-runner profile. */
 function _Profile()

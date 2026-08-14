@@ -1,6 +1,6 @@
 import type { JsonValue } from "@opencrane/util";
 
-import type { RuntimeTerminalReporter } from "./runtime-terminal-reporter.types.js";
+import type { RuntimeTerminalReporter } from "./runtime-terminal-reporter.types";
 
 /** Existing transaction shape owned by the run authority. */
 type RuntimeEventTransaction = Parameters<RuntimeTerminalReporter["reportInTransaction"]>[0];

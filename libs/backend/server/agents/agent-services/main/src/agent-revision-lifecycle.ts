@@ -1,7 +1,7 @@
 import { MANAGED_AGENT_RUNTIME_PROFILE_NAME } from "@opencrane/contracts";
 import { AgentServiceKinds, AgentServiceStates, __AreReviewedIntegrationToolDefinitionsValid, __DiffAgentRevisions, __IsAgentServiceTransitionAllowed, type AgentRevisionContent, type AgentRevisionId, type AgentServiceId, type AgentServiceState } from "@opencrane/models/agents";
 
-import { ManagedRunAdmissionOutcomes, type AgentRevisionLifecycleRepository, type AgentServiceHistory, type AgentServiceLifecycleAction, type ChangeAgentServiceStateCommand, type ChangeAgentServiceStateResult, type CompareAgentRevisionsResult, type CreateManagedAgentServiceCommand, type CreateManagedAgentServiceResult, type AppendAgentRevisionResult, type ManagedRunAdmissionPort, type ManagedRunAdmissionResult, type ManagedRunNowCommand, type RestoreAgentRevisionCommand, type ReviseAgentRevisionCommand } from "./agent-revision-lifecycle.types.js";
+import { ManagedRunAdmissionOutcomes, type AgentRevisionLifecycleRepository, type AgentServiceHistory, type AgentServiceLifecycleAction, type ChangeAgentServiceStateCommand, type ChangeAgentServiceStateResult, type CompareAgentRevisionsResult, type CreateManagedAgentServiceCommand, type CreateManagedAgentServiceResult, type AppendAgentRevisionResult, type ManagedRunAdmissionPort, type ManagedRunAdmissionResult, type ManagedRunNowCommand, type RestoreAgentRevisionCommand, type ReviseAgentRevisionCommand } from "./agent-revision-lifecycle.types";
 
 /** Returns whether a string carries a non-empty value after trimming. */
 function _isPresent(value: string): boolean

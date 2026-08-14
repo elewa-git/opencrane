@@ -1,7 +1,7 @@
 import { ArtifactState, ArtifactUploadLeaseState, ConversationAssetProvenance, ConversationAssetState } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
 
-import { PrismaConversationAssetRepository } from "../prisma-conversation-asset-repository.js";
+import { PrismaConversationAssetRepository } from "../prisma-conversation-asset-repository";
 
 const _CALLER = { siloId: "silo-1", subjectId: "user-1" } as const;
 
