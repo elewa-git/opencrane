@@ -4,8 +4,8 @@
   "include": ["src/**/*.ts"],
   "exclude": ["**/*.spec.ts", "**/*.stories.ts"],
   "references": [
-    { "path": "../adapter" },
     { "path": "../ag-ui" },
+    { "path": "../stream" },
     { "path": "../../../../models/conversations/main" }
   ]
 }

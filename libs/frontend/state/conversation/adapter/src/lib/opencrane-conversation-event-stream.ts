@@ -2,9 +2,9 @@ import { Injectable, inject } from "@angular/core";
 
 import { ControlPlaneApiService } from "@opencrane/core";
 import { __AgUiResumeCursor, __CreateAgUiStreamState, __DecodeAgUiSseRecord, __ReduceAgUiStream, __RevokeAgUiStreamAccess, type AgUiStreamState } from "@opencrane/state/conversation/ag-ui";
+import { ConversationEventStreamStatuses, type ConversationEventStream, type ConversationEventStreamUpdate, type StreamConversationEventsCommand } from "@opencrane/state/conversation/stream";
 
 import { _ConversationEventHttpError, _ConversationEventProtocolError } from "./conversation-event-stream.errors";
-import { ConversationEventStreamStatuses, type ConversationEventStream, type ConversationEventStreamUpdate, type StreamConversationEventsCommand } from "./conversation-event-stream.types";
 
 /** Largest partial frame held while waiting for the rest of it; a bigger one fails the stream. */
 const _MAXIMUM_FRAME_BYTES = 1_048_576;
@@ -32,8 +32,9 @@ interface ConversationEventStreamProgress
  * `@Injectable()` with no `providedIn`: provide it where it is needed rather than app-wide, so one
  * stream instance does not outlive the screen that started it.
  *
- * Called by: no production caller yet; constructed directly in
- * opencrane-conversation-event-stream.spec.ts.
+ * Called by: the web app binds this class to `CONVERSATION_WORKSPACE_EVENT_STREAM` in
+ * `provideConversationWorkspaceComposition`; `ConversationWorkspaceStore` then starts it after a
+ * conversation snapshot loads. The adapter tests also construct it directly.
  *
  * @implements ConversationEventStream
  * @see AG-UI protocol docs — the events on the wire: https://docs.ag-ui.com

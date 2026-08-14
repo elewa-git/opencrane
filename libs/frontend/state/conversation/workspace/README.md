@@ -12,7 +12,7 @@ exchange as a separate read-only projection; that projection never receives a co
 
 ```
  generated API ──► workspace/adapter ──► gateway port ──► workspace stores  ◄── HERE
- live event API ──► conversation/adapter stream port ──┘
+ live event API ──► adapter ──► conversation/stream port ──┘
                                                         │ safe state
                                                         ▼
                                                conversation-workspace feature
@@ -63,5 +63,6 @@ element, backend package, or app. The generated-client implementation lives in [
 
 - Parent index: [`libs/frontend/state/conversation`](../README.md)
 - Transport adapter: [`workspace/adapter`](./adapter/README.md)
-- Shared live stream: [`conversation/adapter`](../adapter/README.md)
+- Shared stream contract: [`conversation/stream`](../stream/README.md)
+- Live HTTP implementation: [`conversation/adapter`](../adapter/README.md)
 - Agent threads: [`conversation/agent-threads`](../agent-threads/README.md)

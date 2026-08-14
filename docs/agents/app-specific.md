@@ -102,7 +102,7 @@ The normal conversation workspace keeps transport, state, and presentation separ
 - [`features/conversation-workspace`](../../libs/frontend/features/conversation-workspace/README.md) owns chat child routes, route coordination, and browser-safe presentation composition;
 - [`state/conversation/workspace`](../../libs/frontend/state/conversation/workspace/README.md) owns snapshot-tail selection, immutable creation choices, controlled drafts, access purge, and separate run command state;
 - [`state/conversation/workspace/adapter`](../../libs/frontend/state/conversation/workspace/adapter/README.md) maps the generated signed-in API into that port; and
-- the workspace reuses [`state/conversation/adapter`](../../libs/frontend/state/conversation/adapter/README.md) for the shared direct, group, and Agent-session event stream instead of creating another stream implementation.
+- [`state/conversation/stream`](../../libs/frontend/state/conversation/stream/README.md) owns the transport-neutral browser stream port; the workspace reuses its [`state/conversation/adapter`](../../libs/frontend/state/conversation/adapter/README.md) implementation for direct, group, and Agent-session conversations instead of creating another stream path.
 
 Legacy frontend packages use `scope:web`; new capability slices use bounded ownership scopes. The
 persona onboarding feature, state port, and adapter use `scope:persona-onboarding` plus role tags

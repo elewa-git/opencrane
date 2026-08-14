@@ -69,8 +69,9 @@ persistence, or Angular dependency.
 
 ## Dependency direction
 
-Tagged `scope:web` and `type:state`: it may import shared contracts, never apps, backend domains, or
-frontend features.
+Tagged `scope:web`, `type:state`, and `frontend-role:core`: it is the dependency-light projection
+foundation used by stream ports and stores. It may import shared contracts and pure utilities,
+never apps, backend domains, adapters, or frontend features.
 
 ## See also
 

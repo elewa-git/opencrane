@@ -7,7 +7,7 @@
 	"tags": [
 		"scope:web",
 		"type:state",
-		"frontend-role:state"
+		"frontend-role:adapter"
 	],
 	"targets": {
 		"lint": {

@@ -42,9 +42,9 @@ and never receives runtime proof, provider bodies, persona content, or secret-be
 
 ## Dependency direction
 
-The package carries `scope:agent-threads` and `frontend-role:state`. It may depend only on frontend
-core, shared contracts or models, and utilities; it must not import a feature, element, backend
-package, app, or concrete adapter.
+The package carries `scope:agent-threads` and `frontend-role:state`. It may depend on frontend core,
+shared contracts and utilities, and the conversation model vocabulary used to build follow-up
+message blocks. It must not import a feature, element, backend package, app, or separate adapter.
 
 ## See also
 

@@ -47,12 +47,15 @@ Agent remains unavailable in this phase because its actions have no server-owned
 ## Dependency direction
 
 The package carries `scope:conversation-workspace` and `frontend-role:feature-shell`. It may compose
-approved elements, conversation features, and conversation state. It must not import an app,
-backend package, or concrete generated-client adapter.
+approved elements, conversation features and state, foundational projection state, shared
+contracts and models, and the platform capability seam used for sign-in recovery. It must not
+import an app, backend package, browser runtime implementation, or concrete generated-client
+adapter.
 
 ## See also
 
 - Parent index: [`libs/frontend/features`](../README.md)
 - State owner: [`state/conversation/workspace`](../../state/conversation/workspace/README.md)
 - Generated-client adapter: [`state/conversation/workspace/adapter`](../../state/conversation/workspace/adapter/README.md)
-- Shared live projection: [`state/conversation/adapter`](../../state/conversation/adapter/README.md)
+- Shared stream contract: [`state/conversation/stream`](../../state/conversation/stream/README.md)
+- Live HTTP implementation: [`state/conversation/adapter`](../../state/conversation/adapter/README.md)

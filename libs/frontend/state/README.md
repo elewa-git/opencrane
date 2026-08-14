@@ -14,7 +14,8 @@ owns the client-side stores and caches that hold fetched data.
 | --- | --- |
 | [`core`](./core/README.md) | Frontend state-layer hub. |
 | [`gateways`](./gateways/README.md) | Gateway dependency-injection composition root. |
-| [`conversation/adapter`](./conversation/adapter/README.md) | Canonical conversation replay reader. |
+| [`conversation/stream`](./conversation/stream/README.md) | Transport-neutral browser stream port and connection states. |
+| [`conversation/adapter`](./conversation/adapter/README.md) | Signed-in HTTP implementation of the conversation stream port. |
 | [`conversation/render`](./conversation/render/README.md) | Vendored render view-models. |
 | [`conversation/ag-ui`](./conversation/ag-ui/README.md) | Safe projected-event browser state. |
 | [`conversation/elicitation`](./conversation/elicitation/README.md) | Recoverable participant-input gateway, store, and Activity mapping. |
@@ -37,7 +38,7 @@ owns the client-side stores and caches that hold fetched data.
       ▼
     core  ── defines ports, holds stores ──  gateways (wires ports → adapters)
       │
-      ├─ conversation/{adapter,ag-ui,cache,render}   assets/adapter   skills/adapter
+      ├─ conversation/{stream,adapter,ag-ui,render}  assets/adapter   skills/adapter
       ├─ mcp/adapter   provider-key/adapter   settings/adapter
       └─ onboarding ── persona/adapter
       ▼ HTTP

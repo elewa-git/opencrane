@@ -11,8 +11,8 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest
 import { CONVERSATION_ELICITATION_VERSION, ElicitationBodyKinds, ElicitationPurposes, ElicitationRequestStates } from "@opencrane/contracts";
 import { ConversationLifecycles, ConversationModes } from "@opencrane/models/conversations";
 import { CONVERSATION_ASSETS_GATEWAY } from "@opencrane/state/conversation/assets";
-import { ConversationEventStreamStatuses, type ConversationEventStream, type StreamConversationEventsCommand } from "@opencrane/state/conversation/adapter";
 import { ConversationElicitationStore, ELICITATION_GATEWAY, ElicitationGatewayError, ElicitationGatewayErrorKinds } from "@opencrane/state/conversation/elicitation";
+import { ConversationEventStreamStatuses, type ConversationEventStream, type StreamConversationEventsCommand } from "@opencrane/state/conversation/stream";
 import { CONVERSATION_WORKSPACE_EVENT_STREAM, CONVERSATION_WORKSPACE_GATEWAY, ConversationOnboardingHistoryStatuses, ConversationRunStore, ConversationWorkspaceStore, type ConversationWorkspaceDetail, type ConversationWorkspaceGateway } from "@opencrane/state/conversation/workspace";
 
 import { ConversationWorkspacePageComponent } from "../components/conversation-workspace-page/conversation-workspace-page.component";

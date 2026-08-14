@@ -1,6 +1,6 @@
 import { InjectionToken } from "@angular/core";
 
-import type { ConversationEventStream } from "@opencrane/state/conversation/adapter";
+import type { ConversationEventStream } from "@opencrane/state/conversation/stream";
 
 import type { ConversationWorkspaceGateway } from "./conversation-workspace.types";
 
@@ -49,9 +49,9 @@ export const CONVERSATION_WORKSPACE_GATEWAY = new InjectionToken<ConversationWor
 /**
  * Port that reads the live event stream for whichever conversation is selected.
  *
- * This token binds the {@link ConversationEventStream} port that `conversation/adapter` already
- * owns; the workspace deliberately does not define a second stream contract, so a change to
- * reconnect or cursor behaviour is made once and every screen gets it.
+ * This token binds the {@link ConversationEventStream} port owned by `conversation/stream`; the
+ * workspace deliberately does not define a second stream contract, so a change to reconnect or
+ * cursor behaviour is made once and every screen gets it.
  *
  * `ConversationWorkspaceStore` opens the bounded snapshot through
  * {@link CONVERSATION_WORKSPACE_GATEWAY} first, then starts this stream for the same conversation
@@ -71,8 +71,8 @@ export const CONVERSATION_WORKSPACE_GATEWAY = new InjectionToken<ConversationWor
  * Called by: `ConversationWorkspaceStore` only, from its `_StartStream` step after a snapshot loads.
  * Bound to the web app's adapter in `provideConversationWorkspaceComposition`.
  *
- * @see ConversationEventStream for the reconnect loop, the throw conditions, and every field of the
- *   command and the progress update.
+ * @see ConversationEventStream for the reconnect lifecycle and every field of the command and the
+ *   progress update.
  * @see OpenCraneConversationEventStream — the implementation the web app provides for this token.
  */
 export const CONVERSATION_WORKSPACE_EVENT_STREAM = new InjectionToken<ConversationEventStream>("CONVERSATION_WORKSPACE_EVENT_STREAM");

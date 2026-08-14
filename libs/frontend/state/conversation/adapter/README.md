@@ -38,25 +38,24 @@ purges the reduced projection.
 
 ## Public surface
 
-- `OpenCraneConversationEventStream` — cookie-session incremental snapshot-to-live adapter.
-- `ConversationEventStream` / `StreamConversationEventsCommand` — narrow consumer port with abort,
-  prior state, bounded retry, and update observation.
-- `ConversationEventStreamStatuses` — connecting, live, reconnecting, aborted, and failed states.
+- `OpenCraneConversationEventStream` — cookie-session incremental snapshot-to-live adapter that
+  implements the separate [`ConversationEventStream`](../stream/README.md) port.
 
 ## Boundary
 
-Consumed directly by a green conversation feature or by a feature-owned provider. It depends on the
-shared `ControlPlaneApiService` only for the session-bound generated API client, and delegates all
-AG-UI record validation/reduction to `conversation/ag-ui`. It deliberately does not list
+Constructed only by app composition and consumed through the separate stream port. It depends on
+the shared `ControlPlaneApiService` only for the session-bound generated API client, and delegates
+all AG-UI record validation/reduction to `conversation/ag-ui`. It deliberately does not list
 conversations, persist messages, interpret approval authority, or expose agent commands.
 
 ## Dependency direction
 
-Tagged `scope:web` (`type:state`): it may depend only on other `scope:web` and `scope:shared`
-packages — here `conversation/ag-ui`, `@opencrane/core`, and Angular — never on apps or server domains.
+Tagged `scope:web`, `type:state`, and `frontend-role:adapter`: it may depend on the frontend core and
+state contracts it adapts — here `conversation/ag-ui`, `@opencrane/core`, and Angular — never on
+apps, feature packages, or server domains.
 
 ## See also
 
 - Parent index: [state](../../README.md)
-- Siblings: [conversation/ag-ui](../ag-ui/README.md) · [conversation/render](../render/README.md)
+- Siblings: [conversation/stream](../stream/README.md) · [conversation/ag-ui](../ag-ui/README.md) · [conversation/render](../render/README.md)
 - Server producer: [conversation projection](../../../../backend/conversations/projection/main/README.md)
