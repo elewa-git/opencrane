@@ -36,6 +36,10 @@ preflight_qualified_release_tag_images()
     log "Local k3d image tags are verified by the blocking Deployment rollouts."
     return 0
   fi
+  if [[ ! "$IMAGE_TAG" =~ ^sha-[0-9a-f]{7,64}$ ]]; then
+    err "Public releases require --image-tag with an immutable sha-* build tag; '$IMAGE_TAG' is not qualified."
+    return 1
+  fi
   if command -v skopeo >/dev/null 2>&1; then
     inspector=skopeo
   elif command -v crane >/dev/null 2>&1; then
@@ -43,8 +47,8 @@ preflight_qualified_release_tag_images()
   elif command -v docker >/dev/null 2>&1; then
     inspector=docker
   else
-    warn "No image inspector (skopeo, crane, or docker) is installed; registry preflight is unavailable."
-    return 0
+    err "Public releases require skopeo, crane, or docker to preflight every tagged image before Helm changes the cluster."
+    return 1
   fi
   while IFS= read -r image; do
     case "$inspector" in

@@ -64,6 +64,27 @@ grep -Fq "inspect docker://ghcr.io/elewa-git/opencrane-server:${CP_TAG}" "$prefl
 ALLOW_TAG_FLOAT=1
 preflight_qualified_release_tag_images
 [[ "$(wc -l <"$preflight_calls_file" | tr -d ' ')" == "4" ]]
+ALLOW_TAG_FLOAT=0
+IMAGE_TAG=latest
+if preflight_qualified_release_tag_images; then
+  echo "a public release without an explicit qualified --image-tag passed preflight" >&2
+  exit 1
+fi
+IMAGE_TAG="sha-f7d6771a4a5a075d424c7678d6165dd71c06b522"
+if (
+  unset -f skopeo
+  command()
+  {
+    if [[ "$1" == '-v' ]]; then
+      return 1
+    fi
+    builtin command "$@"
+  }
+  preflight_qualified_release_tag_images
+); then
+  echo "a public release without a registry inspector passed preflight" >&2
+  exit 1
+fi
 
 grep -Fq 'wait_for_final_deployment_if_present "${RELEASE}-channel-proxy"' "$DEPLOY_CORE"
 grep -Fq 'wait_for_final_deployment_if_present "${RELEASE}-memory-gateway"' "$DEPLOY_CORE"

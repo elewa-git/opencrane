@@ -47,9 +47,12 @@ A silo installs **only** its own namespaced app releases. `--image-tag` selects 
 OpenCrane build for the server, channel proxy, memory gateway, and artifact service; the deploy
 engine applies it after all values overrides and waits for those Deployments in both the main and
 artifact namespaces. The browser UI and Cognee keep their separate digest-pinning rules.
-When a registry inspector is installed, the deploy engine also checks all four tagged image
-references before it changes either Helm release. The local k3d smoke keeps using images imported
-directly into its nodes and proves them through the same blocking Deployment rollout gates.
+Public deployments require an explicit immutable `sha-*` `--image-tag` and a registry inspector
+(`skopeo`, `crane`, or `docker`). The deploy engine checks all four tagged image references before
+it changes either Helm release. This is a release-set check: an advanced values override that
+disables one of these services does not remove its image from qualification. The local k3d smoke
+keeps using images imported directly into its nodes and proves them through the same blocking
+Deployment rollout gates.
 Cluster-wide controllers (ingress,
 CloudNativePG, cert-manager) and serving DNS are external prerequisites a silo never installs.
 "External" here means outside the organisation release: a cluster operator may explicitly install
