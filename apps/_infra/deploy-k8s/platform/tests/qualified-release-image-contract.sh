@@ -8,7 +8,8 @@ FINALIZATION="$ROOT_DIR/apps/_infra/deploy-k8s/platform/database-release-finaliz
 
 source "$POLICY"
 
-CP_TAG="sha-f7d6771a4a5a075d424c7678d6165dd71c06b522"
+IMAGE_TAG="sha-f7d6771a4a5a075d424c7678d6165dd71c06b522"
+CP_TAG="sha-server-override"
 helm_args=(
   --set-string 'memoryGateway.kubernetesApiServerCidrs[0]=10.43.0.1/32'
   --set-string 'memoryGateway.kubernetesApiServerEndpointCidrs[0]=172.18.0.2/32'
@@ -29,11 +30,11 @@ _deployment()
 }
 
 grep -Fq "image: \"ghcr.io/elewa-git/opencrane-server:${CP_TAG}\"" <<<"$(_deployment opencrane-testv4-opencrane-server)"
-grep -Fq "image: \"ghcr.io/elewa-git/opencrane-channel-proxy:${CP_TAG}\"" <<<"$(_deployment opencrane-testv4-channel-proxy)"
-grep -Fq "image: \"ghcr.io/elewa-git/opencrane-memory-gateway:${CP_TAG}\"" <<<"$(_deployment opencrane-testv4-memory-gateway)"
+grep -Fq "image: \"ghcr.io/elewa-git/opencrane-channel-proxy:${IMAGE_TAG}\"" <<<"$(_deployment opencrane-testv4-channel-proxy)"
+grep -Fq "image: \"ghcr.io/elewa-git/opencrane-memory-gateway:${IMAGE_TAG}\"" <<<"$(_deployment opencrane-testv4-memory-gateway)"
 artifact_deployment="$(_deployment opencrane-testv4-artifact-service)"
 grep -Fq 'namespace: opencrane-testv4-artifacts' <<<"$artifact_deployment"
-grep -Fq "image: \"ghcr.io/elewa-git/opencrane-artifact-service:${CP_TAG}\"" <<<"$artifact_deployment"
+grep -Fq "image: \"ghcr.io/elewa-git/opencrane-artifact-service:${IMAGE_TAG}\"" <<<"$artifact_deployment"
 
 grep -Fq 'wait_for_final_deployment_if_present "${RELEASE}-channel-proxy"' "$DEPLOY_CORE"
 grep -Fq 'wait_for_final_deployment_if_present "${RELEASE}-memory-gateway"' "$DEPLOY_CORE"

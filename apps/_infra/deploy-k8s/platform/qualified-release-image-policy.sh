@@ -9,8 +9,8 @@ append_authoritative_qualified_release_image_helm_args()
   for value_path in \
     channelProxy.image.tag \
     memoryGateway.image.tag \
-    artifactService.image.tag \
-    clustertenantManager.image.tag; do
-    helm_args+=(--set-literal "${value_path}=${CP_TAG}")
+    artifactService.image.tag; do
+    helm_args+=(--set-literal "${value_path}=${IMAGE_TAG}")
   done
+  helm_args+=(--set-literal "clustertenantManager.image.tag=${CP_TAG}")
 }
