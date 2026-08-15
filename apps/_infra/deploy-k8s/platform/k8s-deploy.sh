@@ -358,6 +358,7 @@ _resolve_release_images() {
   validate_cognee_helm_passthrough || exit 1
 }
 _resolve_release_images
+preflight_qualified_release_tag_images || exit $?
 
 # --preflight: fail-FAST environment validation, run BEFORE any cluster mutation. Each
 # check appends to PF_FAILS; a non-empty list at the end exits 1 with every remediation,
@@ -430,11 +431,7 @@ _run_preflight() {
   #    sits in ImagePullBackOff. The server and SPA are one browser release, so validate both
   #    resolved images. A missing local inspector warns rather than changing cluster state.
   local _img
-  local _images=(
-    "ghcr.io/elewa-git/opencrane-server:${CP_TAG}"
-    "$CONTROL_PLANE_SPA_IMAGE"
-    "$COGNEE_IMAGE"
-  )
+  local _images=("$CONTROL_PLANE_SPA_IMAGE" "$COGNEE_IMAGE")
   if command -v skopeo >/dev/null 2>&1; then
     for _img in "${_images[@]}"; do
       skopeo inspect "docker://$_img" >/dev/null 2>&1 || PF_FAILS+=("First-party image not pullable: $_img (skopeo inspect failed). Check the registry/tag and your pull credentials.")
