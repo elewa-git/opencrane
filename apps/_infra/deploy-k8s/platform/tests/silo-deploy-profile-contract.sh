@@ -63,6 +63,15 @@ grep -Fq -- 'Do not override clustertenantManager.firstUser through --helm-arg' 
 grep -Fq -- 'clustertenantManager.firstUser.clusterTenant=$prior_first_user_cluster_tenant' "$DEPLOY_CORE"
 grep -Fq -- '"$extra_set_flag" == "--set-string"' "$DEPLOY_CORE"
 grep -Fq -- '"${EXTRA_HELM_ARGS[@]-}"' "$DEPLOY_CORE"
+grep -Fq -- 'SKILL_AUTHORING_NAMESPACE="${RELEASE}-skill-authoring"' "$DEPLOY_CORE"
+grep -Fq -- 'TOOL_RUNNER_NAMESPACE="${RELEASE}-tools"' "$DEPLOY_CORE"
+grep -Fq -- '--set-string "opencrane-skill-authoring.skillAuthoring.namespace=$SKILL_AUTHORING_NAMESPACE"' "$DEPLOY_CORE"
+grep -Fq -- '--set-string "opencrane-tool-runner.toolRunner.namespace=$TOOL_RUNNER_NAMESPACE"' "$DEPLOY_CORE"
+grep -Fq -- 'EXPECTED_RELEASE="opencrane-${CLUSTER_TENANT}"' "$DEPLOY_SCRIPT"
+grep -Fq -- '--release "$RELEASE"' "$DEPLOY_SCRIPT"
+extra_args_line="$(grep -nF '[[ ${#EXTRA_HELM_ARGS[@]} -gt 0 ]]' "$DEPLOY_CORE" | cut -d: -f1)"
+skill_namespace_line="$(grep -nF -- '--set-string "opencrane-skill-authoring.skillAuthoring.namespace=$SKILL_AUTHORING_NAMESPACE"' "$DEPLOY_CORE" | cut -d: -f1)"
+(( skill_namespace_line > extra_args_line ))
 grep -Fq -- '--opencrane-ui-digest) CONTROL_PLANE_SPA_DIGEST="$2"' "$DEPLOY_CORE"
 grep -Fq -- '--cognee-digest) COGNEE_DIGEST="$2"' "$DEPLOY_CORE"
 grep -Fq -- 'clustertenantManager.cognee.image.digest // empty' "$DEPLOY_CORE"
@@ -131,6 +140,45 @@ for _empty_helm_arg in "${empty_helm_args[@]-}"; do
     exit 1
   fi
 done
+
+wrapper_test_dir="$(mktemp -d)"
+trap 'rm -rf "$wrapper_test_dir"' EXIT
+mkdir -p "$wrapper_test_dir/platform" "$wrapper_test_dir/bin"
+cp "$DEPLOY_SCRIPT" "$wrapper_test_dir/deploy.sh"
+cat >"$wrapper_test_dir/platform/k8s-deploy.sh" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "$@" >"$WRAPPER_ARGS_FILE"
+EOF
+cat >"$wrapper_test_dir/bin/kubectl" <<'EOF'
+#!/usr/bin/env bash
+exit 0
+EOF
+chmod +x "$wrapper_test_dir/platform/k8s-deploy.sh" "$wrapper_test_dir/bin/kubectl"
+wrapper_args_file="$wrapper_test_dir/args"
+PATH="$wrapper_test_dir/bin:$PATH" WRAPPER_ARGS_FILE="$wrapper_args_file" \
+  bash "$wrapper_test_dir/deploy.sh" \
+    --base-domain dev.opencrane.ai \
+    --cluster-tenant testv4 \
+    --acme-email operator@example.com \
+    --first-user-email owner@example.com \
+    --oidc-issuer-url https://issuer.example.com/ \
+    --oidc-client-id test-client \
+    --initial-model-provider openai >/dev/null
+wrapper_args="$(tr '\n' ' ' <"$wrapper_args_file")"
+[[ "$wrapper_args" == *"--namespace opencrane-testv4 --release opencrane-testv4"* ]]
+if PATH="$wrapper_test_dir/bin:$PATH" WRAPPER_ARGS_FILE="$wrapper_args_file" \
+  bash "$wrapper_test_dir/deploy.sh" \
+    --base-domain dev.opencrane.ai \
+    --cluster-tenant testv4 \
+    --release shared-release \
+    --acme-email operator@example.com \
+    --first-user-email owner@example.com \
+    --oidc-issuer-url https://issuer.example.com/ \
+    --oidc-client-id test-client \
+    --initial-model-provider openai >/dev/null 2>&1; then
+  echo "silo wrapper accepted a release name outside its ClusterTenant boundary" >&2
+  exit 1
+fi
 
 provider_secret_calls=()
 kubectl()

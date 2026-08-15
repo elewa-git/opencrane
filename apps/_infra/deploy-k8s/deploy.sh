@@ -51,6 +51,7 @@ export OPENCRANE_CHART_DIR="$SCRIPT_DIR"
 
 CLUSTER_TENANT=""
 NAMESPACE=""
+RELEASE=""
 BASE_DOMAIN="${OPENCRANE_BASE_DOMAIN:-}"
 ACME_EMAIL="${OPENCRANE_ACME_EMAIL:-}"
 FIRST_USER_EMAIL="${OPENCRANE_FIRST_USER_EMAIL:-}"
@@ -63,6 +64,7 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --cluster-tenant)  CLUSTER_TENANT="$2"; shift 2 ;;
     --namespace)       NAMESPACE="$2"; shift 2 ;;
+    --release)         RELEASE="$2"; shift 2 ;;
     --base-domain)     BASE_DOMAIN="$2"; PASSTHROUGH+=(--base-domain "$2"); shift 2 ;;
     --acme-email)      ACME_EMAIL="$2"; shift 2 ;;
     --first-user-email) FIRST_USER_EMAIL="$2"; PASSTHROUGH+=(--first-user-email "$2"); shift 2 ;;
@@ -95,6 +97,9 @@ fi
 # OpenCrane, Obot, and LiteLLM logical databases. Default `opencrane-<cluster-tenant>`;
 # --namespace overrides.
 [[ -n "$NAMESPACE" ]] || NAMESPACE="opencrane-${CLUSTER_TENANT}"
+EXPECTED_RELEASE="opencrane-${CLUSTER_TENANT}"
+[[ -n "$RELEASE" ]] || RELEASE="$EXPECTED_RELEASE"
+[[ "$RELEASE" == "$EXPECTED_RELEASE" ]] || { err "--release must be '$EXPECTED_RELEASE' for ClusterTenant '$CLUSTER_TENANT'."; exit 1; }
 
 # Human APIs are fail-closed without OIDC. Require the exact org client rather than deploying an
 # intentionally inaccessible or tokenless development setup.
@@ -106,6 +111,7 @@ fi
 # controllers remain external.
 PROFILE_SET=(
   --namespace "$NAMESPACE"
+  --release "$RELEASE"
   --set "multiInstance.enabled=false"
   # Same-origin org hosting is the chart's only mode.
   --set "ingress.tls.enabled=true"

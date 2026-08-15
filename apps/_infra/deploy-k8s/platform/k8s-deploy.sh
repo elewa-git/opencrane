@@ -705,6 +705,11 @@ _copy_cnpg_uri_secret "$LITELLM_POSTGRES_APP_SECRET" "$LITELLM_DATABASE_SECRET" 
 ARTIFACT_NAMESPACE="${RELEASE}-artifacts"
 ARTIFACT_CATALOG_KEY_SECRET="${RELEASE}-artifact-catalog-keys"
 ARTIFACT_SERVICE_KEY_SECRET="${RELEASE}-artifact-service-keys"
+# Candidate-skill and tenant-tool Jobs need the same release boundary as the
+# application and artifact planes. Static chart defaults would make every silo
+# compete for one cluster-wide namespace and let the first Helm release claim it.
+SKILL_AUTHORING_NAMESPACE="${RELEASE}-skill-authoring"
+TOOL_RUNNER_NAMESPACE="${RELEASE}-tools"
 kubectl create namespace "$ARTIFACT_NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
 _ensure_artifact_keys() {
   local key_dir
@@ -934,6 +939,12 @@ helm_args+=("${INITIAL_MODEL_PROVIDER_HELM_ARGS[@]}")
 helm_args+=("${EXTRA_SET[@]}")
 # Raw helm-arg passthrough for sanctioned one-time fixes (e.g. --take-ownership).
 [[ ${#EXTRA_HELM_ARGS[@]} -gt 0 ]] && helm_args+=("${EXTRA_HELM_ARGS[@]}")
+# Release-local execution planes are an isolation authority, not an operator
+# preference. Append them after every value source so a values file or raw
+# passthrough cannot silently reintroduce cluster-wide namespace ownership.
+helm_args+=(
+  --set-string "opencrane-skill-authoring.skillAuthoring.namespace=$SKILL_AUTHORING_NAMESPACE"
+  --set-string "opencrane-tool-runner.toolRunner.namespace=$TOOL_RUNNER_NAMESPACE")
 # Value-preservation mode. Helm's DEFAULT on upgrade drops any value a prior release set
 # via --set/-f that this invocation does not restate, silently reverting it to the chart
 # default — a footgun that broke a live silo once (a pure `--opencrane-server-tag` bump reverted
