@@ -43,7 +43,11 @@ wires the pieces and the per-silo networking together.
 · [postgres](../../postgres/README.md) · [cognee](../cognee/README.md) · [litellm](../litellm/README.md)
 · [obot](../obot/README.md)
 
-A silo installs **only** its own namespaced app releases. Cluster-wide controllers (ingress,
+A silo installs **only** its own namespaced app releases. `--image-tag` selects one reviewed
+OpenCrane build for the server, channel proxy, memory gateway, and artifact service; the deploy
+engine applies it after all values overrides and waits for those Deployments in both the main and
+artifact namespaces. The browser UI and Cognee keep their separate digest-pinning rules.
+Cluster-wide controllers (ingress,
 CloudNativePG, cert-manager) and serving DNS are external prerequisites a silo never installs.
 "External" here means outside the organisation release: a cluster operator may explicitly install
 the pinned development controller set with `platform/bootstrap-prerequisites.sh`, but `deploy.sh`

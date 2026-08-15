@@ -97,6 +97,7 @@ source "$SCRIPT_DIR/postgres-connection.sh"
 source "$SCRIPT_DIR/registry-pull-secret.sh"
 source "$SCRIPT_DIR/current-chart-sources.sh"
 source "$SCRIPT_DIR/control-plane-image-policy.sh"
+source "$SCRIPT_DIR/qualified-release-image-policy.sh"
 source "$SCRIPT_DIR/cluster-tenant-crd-policy.sh"
 COGNEE_IMAGE_POLICY="$SCRIPT_DIR/../../cognee/deploy/image-policy.sh"
 if [[ ! -f "$COGNEE_IMAGE_POLICY" ]]; then
@@ -899,12 +900,6 @@ helm_args=(upgrade --install "$RELEASE" "$CHART_DIR" --namespace "$NAMESPACE" --
   --set "litellm.existingSecret=opencrane-litellm"
   "${MEMORY_GATEWAY_KUBERNETES_API_ARGS[@]}")
 [[ -n "$REGISTRY_PULL_SECRET" ]] && helm_args+=(--set-string "global.imagePullSecret=$REGISTRY_PULL_SECRET")
-# Per-component tags override the unified --image-tag so a single component can be
-# rolled through Helm (which keeps Helm the sole owner of the image field). Each
-# falls back to IMAGE_TAG when its flag is unset, preserving the all-same default.
-# --set-string: a tag like "1.2.3" or a numeric-looking sha must never be parsed by YAML as a number
-# (same guideline as the OIDC string values below; see the deploy ledger).
-[[ -n "$CP_TAG" ]] && helm_args+=(--set-string "clustertenantManager.image.tag=$CP_TAG")
 if [[ "$ALLOW_TAG_FLOAT" == "1" ]]; then
   helm_args+=(--set-string "controlPlaneSpa.image.digest=" --set-string "controlPlaneSpa.image.tag=$CONTROL_PLANE_SPA_TAG")
 else
@@ -978,8 +973,10 @@ if [[ -n "$DATABASE_FENCE_PRIOR_REPLICAS" ]]; then
     --set-string "migrationFence.fromReleaseVersion=$FROM_RELEASE_VERSION"
     --set-string "migrationFence.toReleaseVersion=$RELEASE_VERSION")
 fi
-# This must remain the final value-setting step. Values files, --set variants, reuse modes, and raw
-# passthrough are intentionally assembled first so none can replace the verified Cognee identity.
+# These must remain the final value-setting steps. Values files, --set variants, reuse modes, and
+# raw passthrough are assembled first so none can split the qualified OpenCrane build or replace the
+# verified Cognee identity.
+append_authoritative_qualified_release_image_helm_args
 append_authoritative_cognee_image_helm_args
 run_opencrane_finalization_stage helm "${helm_args[@]}" || exit $?
 run_opencrane_finalization_stage restart_database_consumers_for_finalization "$NAMESPACE" "$TIMEOUT" \
@@ -998,6 +995,9 @@ run_opencrane_finalization_stage wait_for_final_deployment_if_present "${RELEASE
 run_opencrane_finalization_stage _verify_control_plane_spa_rollout || exit $?
 run_opencrane_finalization_stage wait_for_final_deployment_if_present "${RELEASE}-cognee" || exit $?
 run_opencrane_finalization_stage _verify_cognee_rollout || exit $?
+run_opencrane_finalization_stage wait_for_final_deployment_if_present "${RELEASE}-channel-proxy" || exit $?
+run_opencrane_finalization_stage wait_for_final_deployment_if_present "${RELEASE}-memory-gateway" || exit $?
+run_opencrane_finalization_stage wait_for_final_deployment_if_present "${RELEASE}-artifact-service" "$ARTIFACT_NAMESPACE" || exit $?
 
 run_opencrane_finalization_stage _wait_for_release_certificate || exit $?
 run_opencrane_finalization_stage _post_deploy_verify || exit $?
