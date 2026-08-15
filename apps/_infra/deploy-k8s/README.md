@@ -118,6 +118,8 @@ package imports it.
   same per-silo ownership boundary.
 - `--release` — optional only as a restatement of the silo identity. The wrapper derives and
   enforces `opencrane-<cluster-tenant>` so all Helm-owned namespaces stay inside one release.
+- `crds.install` — resolved authoritatively by the deploy engine: the first silo installs the
+  shared `ClusterTenant` CRD, while later silos consume it without competing for Helm ownership.
 - `--first-user-email` — required standalone-onboarding input. It is matched exactly against an
   IdP-verified email after a browser login on this silo host, then records only that identity's OIDC
   `sub` as the local Owner. It is distinct from `--platform-operator-seed-email` and grants no
