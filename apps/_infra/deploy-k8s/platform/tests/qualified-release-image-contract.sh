@@ -9,7 +9,7 @@ FINALIZATION="$ROOT_DIR/apps/_infra/deploy-k8s/platform/database-release-finaliz
 source "$POLICY"
 
 IMAGE_TAG="sha-f7d6771a4a5a075d424c7678d6165dd71c06b522"
-CP_TAG="sha-server-override"
+CP_TAG="sha-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 helm_args=(
   --set-string 'memoryGateway.kubernetesApiServerCidrs[0]=10.43.0.1/32'
   --set-string 'memoryGateway.kubernetesApiServerEndpointCidrs[0]=172.18.0.2/32'
@@ -71,6 +71,12 @@ if preflight_qualified_release_tag_images; then
   exit 1
 fi
 IMAGE_TAG="sha-f7d6771a4a5a075d424c7678d6165dd71c06b522"
+CP_TAG=production
+if preflight_qualified_release_tag_images; then
+  echo "a public release with a mutable server-only override passed preflight" >&2
+  exit 1
+fi
+CP_TAG="sha-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 if (
   unset -f skopeo
   command()

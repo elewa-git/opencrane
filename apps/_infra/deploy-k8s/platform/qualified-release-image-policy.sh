@@ -40,6 +40,10 @@ preflight_qualified_release_tag_images()
     err "Public releases require --image-tag with an immutable sha-* build tag; '$IMAGE_TAG' is not qualified."
     return 1
   fi
+  if [[ ! "$CP_TAG" =~ ^sha-[0-9a-f]{7,64}$ ]]; then
+    err "A public server image override must use an immutable sha-* build tag; '$CP_TAG' is not qualified."
+    return 1
+  fi
   if command -v skopeo >/dev/null 2>&1; then
     inspector=skopeo
   elif command -v crane >/dev/null 2>&1; then
