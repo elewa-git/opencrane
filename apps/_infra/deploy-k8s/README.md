@@ -111,9 +111,13 @@ package imports it.
 - `agentController.runtimeQuota` — aggregate Job, Pod, CPU, and memory ceilings for the dedicated
   untrusted runtime namespace.
 - `opencrane-skill-authoring.skillAuthoring` — the separate, default-deny candidate-skill namespace
-  and aggregate Job quota; it contains no standing worker.
+  and aggregate Job quota; it contains no standing worker. The deploy engine derives
+  `<release>-skill-authoring`, so different silos never share its Helm-owned namespace.
 - `opencrane-tool-runner.toolRunner` — the separate, default-deny tenant-tool namespace and aggregate
-  Job quota; it contains no standing worker.
+  Job quota; it contains no standing worker. The deploy engine derives `<release>-tools` for the
+  same per-silo ownership boundary.
+- `--release` — optional only as a restatement of the silo identity. The wrapper derives and
+  enforces `opencrane-<cluster-tenant>` so all Helm-owned namespaces stay inside one release.
 - `--first-user-email` — required standalone-onboarding input. It is matched exactly against an
   IdP-verified email after a browser login on this silo host, then records only that identity's OIDC
   `sub` as the local Owner. It is distinct from `--platform-operator-seed-email` and grants no
