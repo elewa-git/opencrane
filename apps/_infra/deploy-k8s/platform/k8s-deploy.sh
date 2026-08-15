@@ -97,6 +97,7 @@ source "$SCRIPT_DIR/postgres-connection.sh"
 source "$SCRIPT_DIR/registry-pull-secret.sh"
 source "$SCRIPT_DIR/current-chart-sources.sh"
 source "$SCRIPT_DIR/control-plane-image-policy.sh"
+source "$SCRIPT_DIR/cluster-tenant-crd-policy.sh"
 COGNEE_IMAGE_POLICY="$SCRIPT_DIR/../../cognee/deploy/image-policy.sh"
 if [[ ! -f "$COGNEE_IMAGE_POLICY" ]]; then
   echo "[k8s-deploy] Cognee image policy is missing at '$COGNEE_IMAGE_POLICY'." >&2
@@ -939,10 +940,14 @@ helm_args+=("${INITIAL_MODEL_PROVIDER_HELM_ARGS[@]}")
 helm_args+=("${EXTRA_SET[@]}")
 # Raw helm-arg passthrough for sanctioned one-time fixes (e.g. --take-ownership).
 [[ ${#EXTRA_HELM_ARGS[@]} -gt 0 ]] && helm_args+=("${EXTRA_HELM_ARGS[@]}")
+CRDS_INSTALL="$(resolve_cluster_tenant_crd_install \
+  "$CHART_DIR" "$RELEASE" "$NAMESPACE" \
+  "${MEMORY_GATEWAY_KUBERNETES_API_ARGS[@]}")" || exit $?
 # Release-local execution planes are an isolation authority, not an operator
 # preference. Append them after every value source so a values file or raw
 # passthrough cannot silently reintroduce cluster-wide namespace ownership.
 helm_args+=(
+  --set "crds.install=$CRDS_INSTALL"
   --set-string "opencrane-skill-authoring.skillAuthoring.namespace=$SKILL_AUTHORING_NAMESPACE"
   --set-string "opencrane-tool-runner.toolRunner.namespace=$TOOL_RUNNER_NAMESPACE")
 # Value-preservation mode. Helm's DEFAULT on upgrade drops any value a prior release set

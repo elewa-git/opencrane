@@ -72,6 +72,10 @@ grep -Fq -- '--release "$RELEASE"' "$DEPLOY_SCRIPT"
 extra_args_line="$(grep -nF '[[ ${#EXTRA_HELM_ARGS[@]} -gt 0 ]]' "$DEPLOY_CORE" | cut -d: -f1)"
 skill_namespace_line="$(grep -nF -- '--set-string "opencrane-skill-authoring.skillAuthoring.namespace=$SKILL_AUTHORING_NAMESPACE"' "$DEPLOY_CORE" | cut -d: -f1)"
 (( skill_namespace_line > extra_args_line ))
+grep -Fq -- 'resolve_cluster_tenant_crd_install' "$DEPLOY_CORE"
+grep -Fq -- '--set "crds.install=$CRDS_INSTALL"' "$DEPLOY_CORE"
+crd_install_line="$(grep -nF -- '--set "crds.install=$CRDS_INSTALL"' "$DEPLOY_CORE" | cut -d: -f1)"
+(( crd_install_line > extra_args_line ))
 grep -Fq -- '--opencrane-ui-digest) CONTROL_PLANE_SPA_DIGEST="$2"' "$DEPLOY_CORE"
 grep -Fq -- '--cognee-digest) COGNEE_DIGEST="$2"' "$DEPLOY_CORE"
 grep -Fq -- 'clustertenantManager.cognee.image.digest // empty' "$DEPLOY_CORE"
