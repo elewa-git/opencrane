@@ -51,6 +51,29 @@ test("tagged component states match their committed screenshots", async ({ conte
 	}
 });
 
+test("intermediate conversation workspace keeps its rail and context inside the viewport", async ({ page }) =>
+{
+	await page.setViewportSize({ width: 1000, height: 900 });
+	await _OpenStableStory(page, "conversations-workspace-shell--long-content");
+
+	const workspace = page.locator(".conversation-workspace");
+	const rail = page.locator("wo-conversation-list");
+	const contextPanel = page.locator("wo-conversation-workspace-context-panel");
+	await expect(workspace).toHaveCount(1);
+	await expect(rail).toHaveCount(1);
+	await expect(contextPanel).toHaveCount(1);
+
+	const workspaceBox = await workspace.boundingBox();
+	const railBox = await rail.boundingBox();
+	const contextPanelBox = await contextPanel.boundingBox();
+	if (workspaceBox === null || railBox === null || contextPanelBox === null) throw new Error("The intermediate workspace layout is not visible.");
+
+	expect(Math.round(workspaceBox.height)).toBe(900);
+	expect(Math.round(railBox.height)).toBe(900);
+	expect(contextPanelBox.x).toBeGreaterThanOrEqual(railBox.width);
+	expect(Math.round(contextPanelBox.y + contextPanelBox.height)).toBeLessThanOrEqual(900);
+});
+
 /**
  * Captures one story in a fresh page so Angular teardown from another story cannot race its root.
  * @param context - Deterministic Chromium context shared by the visual contract.
