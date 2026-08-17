@@ -1,5 +1,5 @@
 import { type Meta, moduleMetadata, type StoryObj } from "@storybook/angular";
-import { expect, waitFor } from "storybook/test";
+import { expect, waitFor, within } from "storybook/test";
 
 import { ConversationLifecycles, ConversationModes, MessageRoles, MessageSources, MessageStates } from "@opencrane/models/conversations";
 import { __CreateAgUiStreamState, type AgUiStreamState } from "@opencrane/state/conversation/ag-ui";
@@ -12,6 +12,15 @@ import { ConversationWorkspacePageComponent } from "../components/conversation-w
 
 /** Privacy-safe directory used by the full workspace stories. */
 const _DIRECTORY: ConversationCreationDirectory = { participants: [{ participantRef: "self", isSelf: true, label: "You" }, { participantRef: "participant-1", isSelf: false, label: "Participant 1" }], personalAgentStatus: ConversationPersonalAgentStatuses.Ready, personalAgent: { personalAgentRef: "agent-1", displayName: "Nova" } };
+
+/** Directory where direct and group chat remain available without a personal Agent. */
+const _UNAVAILABLE_AGENT_DIRECTORY: ConversationCreationDirectory = { participants: _DIRECTORY.participants, personalAgentStatus: ConversationPersonalAgentStatuses.Unavailable, personalAgent: null };
+
+/** Directory where the server refused to choose between multiple personal Agents. */
+const _AMBIGUOUS_AGENT_DIRECTORY: ConversationCreationDirectory = { participants: _DIRECTORY.participants, personalAgentStatus: ConversationPersonalAgentStatuses.Ambiguous, personalAgent: null };
+
+/** Directory projection that cannot admit a new chat because it has no self membership. */
+const _NO_MEMBERSHIP_DIRECTORY: ConversationCreationDirectory = { participants: [], personalAgentStatus: ConversationPersonalAgentStatuses.Unavailable, personalAgent: null };
 
 /** Build one authorized conversation with optional hostile source text. */
 function _Detail(body = "I reviewed the proposal and kept the important constraints."): ConversationWorkspaceDetail
@@ -144,4 +153,27 @@ export const CancelledRun: Story = { tags: ["visual-test"], decorators: [_Provid
 /** Hostile and oversized-looking text passes through the real shared sanitizer and bounded shell. */
 export const HostileLongContent: Story = { tags: ["visual-test"], decorators: [_Providers(new _StoryGateway(_Detail(`# Review\n\n<script>window.secret = true</script>\n\n${"A very long governed answer. ".repeat(80)}`)), new _StoryStream(ConversationEventStreamStatuses.Live, __CreateAgUiStreamState()))] };
 /** Completed onboarding opens selected and read-only inside the normal workspace shell. */
-export const OnboardingHistory: Story = { tags: ["visual-test"], decorators: [_Providers(new _StoryGateway(_Detail(), ConversationRunStates.Completed, _DIRECTORY, _OnboardingHistory()), new _StoryStream(ConversationEventStreamStatuses.Live, __CreateAgUiStreamState()))] };
+export const OnboardingHistory: Story = {
+	tags: ["visual-test"],
+	decorators: [_Providers(new _StoryGateway(_Detail(), ConversationRunStates.Completed, _DIRECTORY, _OnboardingHistory()), new _StoryStream(ConversationEventStreamStatuses.Live, __CreateAgUiStreamState()))],
+	play: async function play({ canvasElement })
+	{
+		const button = await within(canvasElement).findByRole("button", { name: "Start a new chat" });
+		await expect(button).toBeEnabled();
+	}
+};
+/** Completed history keeps direct and group continuation visible when no personal Agent is assigned. */
+export const OnboardingHistoryWithoutAgent: Story = { tags: ["visual-test"], decorators: [_Providers(new _StoryGateway(_Detail(), ConversationRunStates.Completed, _UNAVAILABLE_AGENT_DIRECTORY, _OnboardingHistory()), new _StoryStream(ConversationEventStreamStatuses.Live, __CreateAgUiStreamState()))] };
+/** Completed history explains an ambiguous assignment without inventing an Agent choice. */
+export const OnboardingHistoryWithAmbiguousAgent: Story = { tags: ["visual-test"], decorators: [_Providers(new _StoryGateway(_Detail(), ConversationRunStates.Completed, _AMBIGUOUS_AGENT_DIRECTORY, _OnboardingHistory()), new _StoryStream(ConversationEventStreamStatuses.Live, __CreateAgUiStreamState()))] };
+/** Completed history keeps its transcript readable when workspace membership blocks continuation. */
+export const OnboardingHistoryWithoutMembership: Story = {
+	decorators: [_Providers(new _StoryGateway(_Detail(), ConversationRunStates.Completed, _NO_MEMBERSHIP_DIRECTORY, _OnboardingHistory()), new _StoryStream(ConversationEventStreamStatuses.Live, __CreateAgUiStreamState()))],
+	play: async function play({ canvasElement })
+	{
+		const button = await within(canvasElement).findByRole("button", { name: "Start a new chat" });
+		await expect(button).toBeDisabled();
+	}
+};
+/** Compact completed history retains one read-only tray and one continuation action. */
+export const OnboardingHistoryCompact: Story = { tags: ["visual-test", "visual-test-narrow"], decorators: [_Providers(new _StoryGateway(_Detail(), ConversationRunStates.Completed, _UNAVAILABLE_AGENT_DIRECTORY, _OnboardingHistory()), new _StoryStream(ConversationEventStreamStatuses.Live, __CreateAgUiStreamState()))], parameters: { viewport: { defaultViewport: "mobile1" } } };

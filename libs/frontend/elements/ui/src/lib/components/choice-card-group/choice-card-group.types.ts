@@ -19,3 +19,17 @@ export enum ChoiceCardLayouts
 	/** Responsive two-column arrangement for concise options. */
 	Grid = "grid"
 }
+
+/**
+ * Sets a choice legend's visual priority relative to the page around it.
+ *
+ * {@link ChoiceCardGroupComponent} reads this memory-only value to select a CSS modifier. The value
+ * is not persisted or sent over an API, and typed callers must use one of the two states below.
+ */
+export enum ChoiceCardPromptEmphases
+{
+	/** The page heading remains stronger than this ordinary form legend. */
+	Standard = "standard",
+	/** The current task legend becomes the strongest heading inside its journey. */
+	Primary = "primary"
+}

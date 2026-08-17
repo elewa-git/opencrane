@@ -1,6 +1,6 @@
 import { ConversationLifecycles, ConversationModes, ConversationPersonalAgentStatuses, MessageRoles, MessageSources, MessageStates, type ConversationMessage, type ConversationSummary } from "@opencrane/state/conversation/workspace";
 
-import { _ConversationMessageView, _ConversationSummaryPresentation } from "../conversation-workspace.mapper";
+import { _ConversationMessageView, _ConversationOnboardingContinuationPresentation, _ConversationSummaryPresentation } from "../conversation-workspace.mapper";
 
 /** Build one direct-conversation summary without introducing display names. */
 function _Summary(): ConversationSummary
@@ -30,5 +30,24 @@ describe("Conversation workspace presentation", function _ConversationWorkspaceP
 		expect(view.message.authorName).toBe("Participant 1");
 		expect(view.richText.html).not.toContain("<script");
 		expect(view.richText.html).toContain("Hello");
+	});
+
+	it("keeps history continuation truthful for every personal Agent status", function _HistoryContinuation()
+	{
+		const self = { participantRef: "subject-secret", isSelf: true, label: "You" } as const;
+		const participants = [self, { participantRef: "other-secret", isSelf: false, label: "Participant 1" }] as const;
+		const ready = _ConversationOnboardingContinuationPresentation({ participants: [self], personalAgentStatus: ConversationPersonalAgentStatuses.Ready, personalAgent: { personalAgentRef: "agent-secret", displayName: "Nova" } });
+		const unavailable = _ConversationOnboardingContinuationPresentation({ participants, personalAgentStatus: ConversationPersonalAgentStatuses.Unavailable, personalAgent: null });
+		const ambiguous = _ConversationOnboardingContinuationPresentation({ participants, personalAgentStatus: ConversationPersonalAgentStatuses.Ambiguous, personalAgent: null });
+		const withoutDestination = _ConversationOnboardingContinuationPresentation({ participants: [self], personalAgentStatus: ConversationPersonalAgentStatuses.Unavailable, personalAgent: null });
+		const unknown = _ConversationOnboardingContinuationPresentation(null);
+		const withoutMembership = _ConversationOnboardingContinuationPresentation({ participants: [], personalAgentStatus: ConversationPersonalAgentStatuses.Unavailable, personalAgent: null });
+
+		expect(ready.detail).toContain("continue with your Agent");
+		expect(unavailable.detail).toContain("Direct and group chats are available");
+		expect(ambiguous.detail).toContain("repairs the personal Agent assignment");
+		expect([ready, unavailable, ambiguous].every(presentation => presentation.canStartNewChat)).toBe(true);
+		expect(withoutDestination.detail).toContain("No participant or personal Agent");
+		expect([withoutDestination, unknown, withoutMembership].every(presentation => !presentation.canStartNewChat)).toBe(true);
 	});
 });

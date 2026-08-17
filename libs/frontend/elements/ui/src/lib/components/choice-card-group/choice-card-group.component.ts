@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, input, output } from "@angular/core
 import { FormsModule } from "@angular/forms";
 import { RadioButtonModule } from "primeng/radiobutton";
 
-import { ChoiceCardLayouts, ChoiceCardOption } from "./choice-card-group.types";
+import { ChoiceCardLayouts, ChoiceCardOption, ChoiceCardPromptEmphases } from "./choice-card-group.types";
 
 /** Accessible single-choice control rendered as tactile paper cards. */
 @Component({
@@ -17,6 +17,9 @@ export class ChoiceCardGroupComponent
 {
 	/** Layout enum exposed to the template for typed class selection. */
 	public readonly layouts = ChoiceCardLayouts;
+
+	/** Prompt-emphasis enum exposed to the template for typed class selection. */
+	public readonly promptEmphases = ChoiceCardPromptEmphases;
 
 	/** Stable DOM prefix used to associate the legend, options, and error. */
 	public readonly controlId = input.required<string>();
@@ -38,6 +41,9 @@ export class ChoiceCardGroupComponent
 
 	/** Responsive arrangement for the cards. */
 	public readonly layout = input<ChoiceCardLayouts>(ChoiceCardLayouts.Stack);
+
+	/** Visual priority of this prompt in its surrounding page. */
+	public readonly promptEmphasis = input<ChoiceCardPromptEmphases>(ChoiceCardPromptEmphases.Standard);
 
 	/** Emits the stable identifier selected by the user. */
 	public readonly selectedIdChange = output<string>();

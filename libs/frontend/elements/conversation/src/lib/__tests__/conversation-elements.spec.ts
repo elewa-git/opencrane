@@ -93,6 +93,14 @@ describe("conversation elements", function _ConversationElements()
 		expect(statusComponent.status()).toEqual(status);
 	});
 
+	it("does not render an empty plain body before projected rich content", function _NoEmptyMessageBody()
+	{
+		const template = _RESOURCES["conversation-message.component.html"];
+
+		expect(template).toContain("@if (message().body)");
+		expect(template).not.toContain("<p>{{ message().body }}</p>\n");
+	});
+
 	it("emits the controlled draft only while available", async function _SubmitsAvailableDraft()
 	{
 		const fixture = await _Fixture(ConversationComposerComponent);

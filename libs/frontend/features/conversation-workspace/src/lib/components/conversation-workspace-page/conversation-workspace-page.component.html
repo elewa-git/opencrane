@@ -1,4 +1,4 @@
-<main class="conversation-workspace" [attr.data-route-state]="store.routeState()">
+<main class="conversation-workspace" [class.conversation-workspace--onboarding-history]="workspaceLayout() === workspaceLayouts.OnboardingHistory" [attr.data-route-state]="store.routeState()" [attr.data-workspace-layout]="workspaceLayout()">
 	@switch (store.routeState()) {
 		@case (routeStates.Loading) { <section class="conversation-workspace__route-state" role="status">Loading your workspace…</section> }
 		@case (routeStates.Unavailable) { <section class="conversation-workspace__route-state"><h1>Chats are unavailable</h1><p>OpenCrane could not load this workspace. Try again when the connection is available.</p><p-button label="Try again" icon="pi pi-refresh" (onClick)="store.load()" /></section> }
@@ -6,9 +6,9 @@
 		@case (routeStates.Ready) {
 			<wo-conversation-list [items]="summaries()" [onboardingHistory]="onboardingHistoryPresentation()" [onboardingHistoryStatus]="store.onboardingHistory().status" [onboardingSelected]="store.onboardingHistorySelected()" [selectedId]="store.selected()?.id ?? null" (createRequested)="showCreate()" (onboardingHistorySelected)="openOnboardingHistory()" (selected)="openConversation($event)" />
 			<section class="conversation-workspace__main">
-				@if (availabilityNotice(); as notice) { <div class="conversation-workspace__availability" role="status"><strong>{{ notice.heading }}</strong><span>{{ notice.detail }}</span></div> }
+				@if (workspaceLayout() !== workspaceLayouts.OnboardingHistory) { @if (availabilityNotice(); as notice) { <div class="conversation-workspace__availability" role="status"><strong>{{ notice.heading }}</strong><span>{{ notice.detail }}</span></div> } }
 				@if (store.onboardingHistorySelected() && onboardingHistoryPresentation(); as history) {
-					<wo-conversation-onboarding-history [presentation]="history" [messages]="onboardingHistoryMessages()" (newChatRequested)="showCreate()" />
+					<wo-conversation-onboarding-history [presentation]="history" [messages]="onboardingHistoryMessages()" [continuation]="onboardingContinuation()" (newChatRequested)="showCreate()" />
 				} @else if (store.selected(); as selected) {
 					<header class="conversation-workspace__header"><div><small>{{ selectedSummary()?.modeLabel }}</small><h1>{{ selectedSummary()?.title }}</h1><p>{{ selectedSummary()?.participantLabel }}</p></div><div><p-button label="Archive" icon="pi pi-inbox" severity="secondary" [text]="true" [disabled]="store.conversationCommandBusy()" (onClick)="archiveConversation()" /><p-button label="Close" icon="pi pi-lock" severity="danger" [text]="true" [disabled]="store.conversationCommandBusy() || selected.lifecycle === lifecycles.Closed" (onClick)="store.close()" /></div></header>
 					@if (liveStatus(); as status) { <wo-conversation-status-line [status]="status" /> }

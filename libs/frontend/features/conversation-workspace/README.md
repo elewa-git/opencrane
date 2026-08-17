@@ -11,8 +11,10 @@ models and delegates every command to the existing state stores. Its feature-loc
 owns index/selection URLs, child Agent-thread navigation, and sign-in recovery through the platform seam.
 
 The completed onboarding exchange appears first as a selected read-only history panel. It is not a fourth
-conversation mode and starts no stream or run. Its composer is replaced by an explanation and a **Start a
-new chat** action, which opens the same immutable-mode creation flow used everywhere else.
+conversation mode and starts no stream or run. Its two-column composition omits the Activity and Files rail,
+centres the saved transcript, and replaces the composer with one read-only tray and one **Start a new chat**
+action. That tray also explains when direct and group chat remain available but the directory has no usable
+personal Agent; it never invents Agent setup state in the browser.
 
 ```
  bounded snapshot ──► workspace store ──► feature presenter ──► thin page

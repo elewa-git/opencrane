@@ -34,6 +34,24 @@
 		width: min(100%, var(--oc-journey-wide-width));
 	}
 
+	&--supporting-header &__header {
+		margin-bottom: var(--oc-space-5);
+	}
+
+	&--supporting-header &__brand {
+		margin-bottom: var(--oc-space-5);
+	}
+
+	&--supporting-header &__title {
+		font-size: var(--oc-text-lg);
+		line-height: 1.15;
+	}
+
+	&--supporting-header &__description {
+		margin-top: var(--oc-space-2);
+		line-height: 1.5;
+	}
+
 	&__header {
 		margin-bottom: var(--oc-space-6);
 	}
@@ -109,5 +127,6 @@
 			border-radius: 0;
 			box-shadow: none;
 		}
+
 	}
 }

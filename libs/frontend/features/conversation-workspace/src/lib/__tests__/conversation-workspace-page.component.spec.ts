@@ -100,10 +100,12 @@ beforeAll(async function _InitializeAngularTesting()
 	HTMLElement.prototype.scrollIntoView = vi.fn();
 	const pageTemplate = readFileSync(join(process.cwd(), "src/lib/components/conversation-workspace-page/conversation-workspace-page.component.html"), "utf8");
 	const onboardingTemplate = readFileSync(join(process.cwd(), "src/lib/components/conversation-onboarding-history/conversation-onboarding-history.component.html"), "utf8");
+	const continuationTemplate = readFileSync(join(process.cwd(), "src/lib/components/conversation-onboarding-continuation/conversation-onboarding-continuation.component.html"), "utf8");
 	await resolveComponentResources(async function _ResolveResource(url): Promise<string>
 	{
 		if (url.endsWith("conversation-workspace-page.component.html")) return pageTemplate;
 		if (url.endsWith("conversation-onboarding-history.component.html")) return onboardingTemplate;
+		if (url.endsWith("conversation-onboarding-continuation.component.html")) return continuationTemplate;
 		return "";
 	});
 });
@@ -191,9 +193,21 @@ describe("ConversationWorkspacePageComponent", function _PageSuite()
 	it("keeps the completed onboarding template read-only and accessibly labelled", function _ReadOnlyOnboarding()
 	{
 		const template = readFileSync(join(process.cwd(), "src/lib/components/conversation-onboarding-history/conversation-onboarding-history.component.html"), "utf8");
+		const continuationTemplate = readFileSync(join(process.cwd(), "src/lib/components/conversation-onboarding-continuation/conversation-onboarding-continuation.component.html"), "utf8");
 		expect(template).toContain('aria-labelledby="onboarding-history-title"');
-		expect(template).toContain('role="status"');
-		expect(template).toContain('label="Start a new chat"');
+		expect(template).toContain("wo-conversation-onboarding-continuation");
+		expect(continuationTemplate).toContain('role="status"');
+		expect(continuationTemplate.match(/label="Start a new chat"/gu)).toHaveLength(1);
+		expect(continuationTemplate).toContain("continuation().detail");
 		expect(template).not.toContain("wo-conversation-composer");
+		expect(template).not.toContain("onboarding-history__notice");
+	});
+
+	it("selects the history-specific two-column workspace composition", function _HistoryLayout()
+	{
+		const template = readFileSync(join(process.cwd(), "src/lib/components/conversation-workspace-page/conversation-workspace-page.component.html"), "utf8");
+		expect(template).toContain("conversation-workspace--onboarding-history");
+		expect(template).toContain("data-workspace-layout");
+		expect(template).toContain("workspaceLayouts.OnboardingHistory");
 	});
 });

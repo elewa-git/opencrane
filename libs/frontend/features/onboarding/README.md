@@ -9,7 +9,8 @@ switch selects an interview, resolution, review, or ready component from the aut
 projection. The persona authority supplies the reviewed questions, records each choice, computes any
 tie, creates the immutable draft, and activates only the exact revision the person approves. After
 approval, the first-chat screen renders the separately authoritative, reviewed three-answer
-bootstrap exchange.
+bootstrap exchange. Once the interview starts, its shared journey frame uses supporting heading
+hierarchy so the current reviewed question—not repeated setup copy—leads each step.
 
 ```
  signed-in owner

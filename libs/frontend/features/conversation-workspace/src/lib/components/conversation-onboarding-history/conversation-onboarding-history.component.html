@@ -1,13 +1,17 @@
 <section class="onboarding-history" aria-labelledby="onboarding-history-title">
 	<header>
-		<div><small>Onboarding history · Read-only</small><h1 id="onboarding-history-title">{{ presentation().title }}</h1><p>Completed with {{ presentation().personaName }} at {{ presentation().completedLabel }}.</p></div>
-		<p-button label="Start a new chat" icon="pi pi-plus" (onClick)="newChatRequested.emit()" />
+		<div>
+			<small>Onboarding history · Read-only</small>
+			<div class="onboarding-history__title-row"><h1 id="onboarding-history-title">{{ presentation().title }}</h1><wo-scope-chip label="Completed" [tone]="chipTone" [appearance]="chipAppearance" /></div>
+			<p>Completed with {{ presentation().personaName }} at {{ presentation().completedLabel }}.</p>
+		</div>
 	</header>
-	<div class="onboarding-history__notice" role="status"><strong>This conversation is complete.</strong><span>Your onboarding answers stay here as history. Start a new chat to continue with your Agent or other participants.</span></div>
 	<section class="onboarding-history__transcript" aria-label="Completed onboarding messages">
-		@for (entry of messages(); track entry.message.id) {
-			<div class="onboarding-history__message"><wo-conversation-message [message]="entry.message"><wo-conversation-rich-text conversation-message-rich-card [presentation]="entry.richText" /></wo-conversation-message></div>
-		}
+		<div class="onboarding-history__transcript-measure">
+			@for (entry of messages(); track entry.message.id) {
+				<div class="onboarding-history__message"><wo-conversation-message [message]="entry.message"><wo-conversation-rich-text conversation-message-rich-card [presentation]="entry.richText" /></wo-conversation-message></div>
+			}
+		</div>
 	</section>
-	<footer><p-button label="Start a new chat" icon="pi pi-plus" (onClick)="newChatRequested.emit()" /></footer>
+	<wo-conversation-onboarding-continuation [continuation]="continuation()" (newChatRequested)="newChatRequested.emit()" />
 </section>

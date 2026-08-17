@@ -1,6 +1,7 @@
 <fieldset
 	class="wo-choice"
 	[class.wo-choice--grid]="layout() === layouts.Grid"
+	[class.wo-choice--primary-prompt]="promptEmphasis() === promptEmphases.Primary"
 	[disabled]="disabled()"
 	[attr.aria-invalid]="validationMessage() ? true : null"
 	[attr.aria-describedby]="validationMessage() ? controlId() + '-error' : null"

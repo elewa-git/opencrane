@@ -1,10 +1,11 @@
 import { AvatarTones } from "@opencrane/elements/ui";
 import { ConversationMessageTones, type ConversationMessagePresentation, type ConversationRichTextPresentation } from "@opencrane/elements/conversation";
+import { MessageContentBlockKinds } from "@opencrane/models/conversations";
 import { toSanitizedMarkdownHtml, toStreamingMarkdownHtml } from "@opencrane/state/conversation/render";
 import { AgUiMessageStatuses, type AgUiMessageView } from "@opencrane/state/conversation/ag-ui";
-import { ConversationModes, MessageRoles, MessageStates, type ConversationMessage, type ConversationOnboardingHistory, type ConversationSummary } from "@opencrane/state/conversation/workspace";
+import { ConversationModes, ConversationPersonalAgentStatuses, MessageRoles, MessageStates, type ConversationCreationDirectory, type ConversationMessage, type ConversationOnboardingHistory, type ConversationSummary } from "@opencrane/state/conversation/workspace";
 
-import type { ConversationMessageView, ConversationOnboardingHistoryPresentation, ConversationPresentationContext, ConversationSummaryPresentation } from "./conversation-workspace-feature.types";
+import type { ConversationMessageView, ConversationOnboardingContinuationPresentation, ConversationOnboardingHistoryPresentation, ConversationPresentationContext, ConversationSummaryPresentation } from "./conversation-workspace-feature.types";
 
 /**
  * Builds one rail row from a conversation summary.
@@ -52,6 +53,28 @@ export function _ConversationSummaryPresentation(summary: ConversationSummary, p
 export function _ConversationOnboardingHistoryPresentation(history: ConversationOnboardingHistory): ConversationOnboardingHistoryPresentation
 {
 	return { id: history.id, title: "Welcome conversation", personaName: history.personaDisplayName, completedLabel: _TimeLabel(history.completedAt) };
+}
+
+/**
+ * Maps the current directory onto continuation copy for completed onboarding history.
+ *
+ * The action stays disabled unless the directory proves that an Agent session or a participant
+ * conversation can be populated. `ConversationWorkspacePresenter` calls this mapper for the
+ * read-only tray; tests call it directly to cover each directory state.
+ */
+export function _ConversationOnboardingContinuationPresentation(directory: ConversationCreationDirectory | null): ConversationOnboardingContinuationPresentation
+{
+	const heading = "This conversation is complete and read-only.";
+	if (directory === null) return { heading, detail: "You can still read everything here. New-chat availability could not be confirmed.", canStartNewChat: false };
+	if (!directory.participants.some(participant => participant.isSelf)) return { heading, detail: "You can still read everything here. This account needs workspace membership before a new chat can be started.", canStartNewChat: false };
+	const hasParticipant = directory.participants.some(participant => !participant.isSelf);
+	const hasReadyAgent = directory.personalAgentStatus === ConversationPersonalAgentStatuses.Ready && directory.personalAgent !== null;
+	if (!hasParticipant && !hasReadyAgent) return { heading, detail: "You can still read everything here. No participant or personal Agent is available for a new chat.", canStartNewChat: false };
+	if (directory.personalAgentStatus === ConversationPersonalAgentStatuses.Unavailable) return { heading, detail: "You can still read everything here. Direct and group chats are available; an administrator must finish Agent setup before you can start an Agent session.", canStartNewChat: true };
+	if (directory.personalAgentStatus === ConversationPersonalAgentStatuses.Ambiguous) return { heading, detail: "You can still read everything here. Direct and group chats are available while an administrator repairs the personal Agent assignment.", canStartNewChat: true };
+	if (!hasParticipant) return { heading, detail: "You can still read everything here. Start a new chat to continue with your Agent.", canStartNewChat: true };
+	if (!hasReadyAgent) return { heading, detail: "You can still read everything here. Start a direct or group chat to continue with other participants.", canStartNewChat: true };
+	return { heading, detail: "You can still read everything here. Start a new chat to continue with your Agent or other participants.", canStartNewChat: true };
 }
 
 /**
@@ -106,7 +129,7 @@ export function _ConversationMessageView(message: ConversationMessage, context: 
 {
 	const selfRef = context.directory?.participants.find(participant => participant.isSelf)?.participantRef ?? null;
 	const author = _Author(message, selfRef, context.summary.participantRefs);
-	const copy = message.blocks.map(function _Text(block) { return block.kind === "text" ? block.value : `[${block.kind.replaceAll("_", " ")}]`; }).join("\n\n");
+	const copy = message.blocks.map(function _Text(block) { return block.kind === MessageContentBlockKinds.Text ? block.value : `[${block.kind.replaceAll("_", " ")}]`; }).join("\n\n");
 	const html = message.state === MessageStates.Streaming ? toStreamingMarkdownHtml(copy) : toSanitizedMarkdownHtml(copy);
 	const presentation: ConversationMessagePresentation = { id: message.id, authorName: author.name, authorInitials: author.initials, avatarTone: author.avatarTone, timestampLabel: _TimeLabel(message.createdAt), body: "", tone: author.tone, accessibleStatus: message.state === MessageStates.Completed ? undefined : message.state };
 	const richText: ConversationRichTextPresentation = { messageId: message.id, html, label: `${author.name} message` };

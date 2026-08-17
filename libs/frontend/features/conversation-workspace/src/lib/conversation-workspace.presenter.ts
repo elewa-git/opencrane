@@ -7,8 +7,8 @@ import { ConversationAssetsStore } from "@opencrane/state/conversation/assets";
 import { ConversationElicitationStore, __MapToolActivity, type ElicitationResponseValue } from "@opencrane/state/conversation/elicitation";
 import { AgUiToolStatuses, ConversationCreationStates, ConversationEventStreamStatuses, ConversationLifecycles, ConversationPersonalAgentStatuses, ConversationRunStates, ConversationWorkspaceRouteStates, ConversationWorkspaceStore } from "@opencrane/state/conversation/workspace";
 
-import { _ConversationMessageViews, _ConversationOnboardingHistoryMessageViews, _ConversationOnboardingHistoryPresentation, _ConversationSummaryPresentation, _LiveMessageViews } from "./conversation-workspace.mapper";
-import type { ConversationWorkspaceAvailabilityPresentation } from "./conversation-workspace-feature.types";
+import { _ConversationMessageViews, _ConversationOnboardingContinuationPresentation, _ConversationOnboardingHistoryMessageViews, _ConversationOnboardingHistoryPresentation, _ConversationSummaryPresentation, _LiveMessageViews } from "./conversation-workspace.mapper";
+import { ConversationWorkspaceLayouts, type ConversationOnboardingContinuationPresentation, type ConversationWorkspaceAvailabilityPresentation } from "./conversation-workspace-feature.types";
 
 /** Feature-scoped presenter that derives view state and delegates typed intents to owning stores. */
 export class ConversationWorkspacePresenter
@@ -47,6 +47,12 @@ export class ConversationWorkspacePresenter
 	protected readonly onboardingHistoryMessages = computed(this._OnboardingHistoryMessages.bind(this));
 	/** Explicit availability state derived from the existing privacy-safe directory. */
 	protected readonly availabilityNotice = computed(this._AvailabilityNotice.bind(this));
+	/** Typed page composition derived from the selected authoritative projection. */
+	protected readonly workspaceLayout = computed(this._WorkspaceLayout.bind(this));
+	/** Stable workspace layout vocabulary used by the template. */
+	protected readonly workspaceLayouts = ConversationWorkspaceLayouts;
+	/** Read-only tray copy derived from the same directory used by conversation creation. */
+	protected readonly onboardingContinuation = computed(this._OnboardingContinuation.bind(this));
 	/** Privacy-safe row corresponding to the selected authorized snapshot. */
 	protected readonly selectedSummary = computed(() => this.summaries().find(summary => summary.id === this.store.selected()?.id) ?? null);
 	/** Canonical and live transcript rows mapped through the shared sanitizer. */
@@ -164,6 +170,18 @@ export class ConversationWorkspacePresenter
 	{
 		const history = this.store.onboardingHistory().history;
 		return history === null ? [] : _ConversationOnboardingHistoryMessageViews(history);
+	}
+
+	/** Use the two-column composition only while the completed onboarding projection is selected. */
+	private _WorkspaceLayout(): ConversationWorkspaceLayouts
+	{
+		return this.store.onboardingHistorySelected() ? ConversationWorkspaceLayouts.OnboardingHistory : ConversationWorkspaceLayouts.Standard;
+	}
+
+	/** Explain the read-only boundary and the currently available next conversation modes. */
+	private _OnboardingContinuation(): ConversationOnboardingContinuationPresentation
+	{
+		return _ConversationOnboardingContinuationPresentation(this.store.directory());
 	}
 
 	/** Explain missing workspace or personal-Agent setup without inventing server state. */

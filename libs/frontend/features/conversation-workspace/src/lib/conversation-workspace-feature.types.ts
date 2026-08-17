@@ -1,5 +1,20 @@
 import type { ConversationMessage, ConversationSummary } from "@opencrane/state/conversation/workspace";
 
+/**
+ * Selects which workspace regions are present for the current authoritative projection.
+ *
+ * {@link ConversationWorkspacePresenter} derives this memory-only value and the page template
+ * branches on it. It is not persisted or sent over an API, and typed callers must use one of the
+ * two compositions below.
+ */
+export enum ConversationWorkspaceLayouts
+{
+	/** The page shows an ordinary conversation with its optional Activity and Files rail. */
+	Standard = "standard",
+	/** The page shows completed onboarding with the conversation rail and read-only main panel. */
+	OnboardingHistory = "onboarding_history"
+}
+
 /** Generic privacy-safe list row shown in the workspace rail. */
 export interface ConversationSummaryPresentation
 {
@@ -58,6 +73,17 @@ export interface ConversationOnboardingHistoryPresentation
 	 * the whole exchange and no timestamp per line, so individual messages are labelled without one.
 	 */
 	readonly completedLabel: string;
+}
+
+/** Read-only continuation copy shown where the completed onboarding composer used to be. */
+export interface ConversationOnboardingContinuationPresentation
+{
+	/** Stable terminal-state heading that does not imply the exchange can reopen. */
+	readonly heading: string;
+	/** Plain next-step explanation derived from the current workspace and Agent directory state. */
+	readonly detail: string;
+	/** Whether the existing immutable-mode creation dialog may be opened from this account state. */
+	readonly canStartNewChat: boolean;
 }
 
 /** Full display-safe presentation for one canonical transcript row. */

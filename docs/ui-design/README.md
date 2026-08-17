@@ -51,6 +51,27 @@ screenshots remain the primary issue evidence;
 `conversation-state-supplement.png` is the stable edge-state extract until production Storybook owns
 deterministic component screenshots.
 
+## Onboarding hierarchy and history addendum
+
+The implemented persona interview and completed-history variations refine the accepted visual
+language without replacing the v4 export:
+
+- A started persona interview uses a supporting journey heading and a primary question prompt. The
+  introduction keeps the display heading; recurring questions keep the context visible while the
+  current reviewed fieldset legend leads the page. Desktop keeps the real four-choice question in a
+  responsive grid, while narrow layouts retain the same order in one column.
+- Board `8a` remains the normal completed-history target. The workspace uses only the conversation
+  rail and main panel, centres the transcript at the shared reading width, shows completed and
+  read-only in text, and replaces the composer with one read-only tray and one new-chat action.
+- When the same completed history is selected but the directory reports an unavailable or ambiguous
+  personal Agent, that tray explains that direct and group chats remain available and that an
+  administrator must repair Agent setup. This directory-derived variation does not add a new
+  conversation mode or browser-owned provisioning state.
+
+Storybook owns the concrete Ready, Unavailable, Ambiguous, desktop, and narrow fixtures. Canonical
+HTML checksums and screenshot extracts stay unchanged until a newly accepted design export replaces
+them through the change-control process below.
+
 ## Issue evidence map
 
 The images under [`screenshots/`](./screenshots/) are stable, reviewable extracts from the canonical

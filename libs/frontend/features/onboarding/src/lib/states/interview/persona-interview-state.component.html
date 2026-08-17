@@ -10,12 +10,14 @@
 		<p-button journey-actions label="Start persona sorting" icon="pi pi-arrow-right" iconPos="right" [loading]="busy()" (onClick)="startRequested.emit()" />
 	</wo-journey-shell>
 } @else {
-	<wo-journey-shell title="How should your agent work with you?" description="Choose the preference that feels most natural. Your result will explain what OpenCrane inferred before anything becomes active." [layout]="layouts.Compact" [busy]="busy()">
+	<wo-journey-shell title="How should your agent work with you?" description="Choose the preference that feels most natural. Your result will explain what OpenCrane inferred before anything becomes active." [layout]="layouts.Wide" [headerEmphasis]="headerEmphases.Supporting" [busy]="busy()">
 		<div journey-eyebrow class="wo-onboarding__eyebrow">Persona sorting</div>
 		<wo-journey-progress journey-progress label="Persona sorting progress" [statusLabel]="progressLabel()" [completed]="state.answeredQuestionCount" [total]="state.questionCount" />
 		@if (actionError(); as error) { <p-message journey-status severity="error" [closable]="false">{{ error }}</p-message> }
 		@if (currentQuestion(); as question) {
-			<wo-choice-card-group [controlId]="'persona-question-' + question.id" [legend]="question.prompt" [options]="questionOptions()" [selectedId]="selectedId()" [disabled]="busy()" [validationMessage]="validationMessage()" [layout]="choiceLayouts.Grid" (selectedIdChange)="select($event)" />
+			<section #questionRegion class="wo-onboarding__question" tabindex="-1" [attr.aria-labelledby]="'persona-question-' + question.id + '-legend'">
+				<wo-choice-card-group [controlId]="'persona-question-' + question.id" [legend]="question.prompt" [options]="questionOptions()" [selectedId]="selectedId()" [disabled]="busy()" [validationMessage]="validationMessage()" [layout]="choiceLayouts.Grid" [promptEmphasis]="promptEmphases.Primary" (selectedIdChange)="select($event)" />
+			</section>
 			@if (state.answeredQuestionCount > 0) {
 				<wo-collapsible-section sectionId="saved-persona-answers" title="Saved answers" [defaultOpen]="false">
 					<wo-persona-answer-list [questions]="state.questions" />

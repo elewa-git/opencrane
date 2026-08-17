@@ -26,7 +26,8 @@ contracts.
 
 ## Public surface
 
-- `ConversationMessageComponent` renders one message and a named rich-card slot.
+- `ConversationMessageComponent` renders one message and a named rich-card slot; a rich-only
+  message does not create an empty plain-text bubble before its projected content.
 - `ConversationComposerComponent` displays a host-owned draft and emits edit or submit intents.
 - `ConversationStatusLineComponent` announces one display-safe status.
 - `ConversationRichTextComponent` displays HTML already sanitized by the shared conversation renderer.
