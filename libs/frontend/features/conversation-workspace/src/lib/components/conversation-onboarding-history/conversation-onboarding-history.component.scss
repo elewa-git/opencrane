@@ -4,11 +4,11 @@
 .onboarding-history__title-row { display: flex; align-items: center; gap: var(--oc-space-3); }
 .onboarding-history__title-row h1 { margin: 0; font-size: var(--oc-text-lg); font-weight: 600; }
 .onboarding-history__read-only { display: inline-flex; align-items: center; gap: var(--oc-space-2); color: var(--oc-ink-muted); }
-.onboarding-history__body { overflow: auto; padding: var(--oc-space-4) var(--oc-space-6) var(--oc-space-8); }
+.onboarding-history__body { overflow: auto; padding: var(--oc-space-3) var(--oc-space-5) var(--oc-space-6); }
 .onboarding-history__body > p-message { display: block; width: min(100%, calc(var(--oc-reading-width) + 8rem)); margin: 0 auto var(--oc-space-6); }
-.onboarding-history__transcript { display: grid; align-content: start; gap: var(--oc-space-6); width: min(100%, var(--oc-reading-width)); margin-inline: auto; }
+.onboarding-history__transcript { display: grid; align-content: start; gap: var(--oc-space-3); width: min(100%, var(--oc-reading-width)); margin-inline: auto; }
 .onboarding-history__message { justify-self: start; max-width: 88%; color: var(--oc-ink-strong); font-size: var(--oc-text-lg); }
-.onboarding-history__message--participant { justify-self: end; padding: var(--oc-space-3) var(--oc-space-4); border: 1px solid var(--oc-border-subtle); border-radius: var(--oc-radius-panel) var(--oc-radius-panel) 0 var(--oc-radius-panel); background: var(--oc-neutral-soft); }
+.onboarding-history__message--participant { justify-self: end; padding: var(--oc-space-2) var(--oc-space-3); border: 1px solid var(--oc-border-subtle); border-radius: var(--oc-radius-panel) var(--oc-radius-panel) 0 var(--oc-radius-panel); background: var(--oc-neutral-soft); }
 .onboarding-history__completion { display: grid; grid-template-columns: minmax(var(--oc-space-8), 1fr) auto minmax(var(--oc-space-8), 1fr); align-items: center; gap: var(--oc-space-3); color: var(--oc-ink-muted); font-size: var(--oc-text-sm); font-weight: 400; text-align: center; }
 .onboarding-history__completion span { height: 1px; background: var(--oc-border-default); }
 .onboarding-history__completion strong { font-weight: 400; }

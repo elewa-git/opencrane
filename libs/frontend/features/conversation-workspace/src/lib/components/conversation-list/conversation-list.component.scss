@@ -1,10 +1,10 @@
 :host { display: block; min-width: 0; border-inline-end: 1px solid var(--oc-border-subtle); background: var(--oc-surface-subtle); }
 .conversation-list { display: flex; flex-direction: column; block-size: 100%; min-block-size: 0; }
-.conversation-list__brand { display: flex; min-height: var(--oc-conversation-header-min-height); align-items: center; padding: var(--oc-space-4) var(--oc-space-5); border-block-end: 1px solid var(--oc-border-subtle); }
-:host ::ng-deep .conversation-list__create { justify-content: flex-start; width: 100%; padding: var(--oc-space-4) var(--oc-space-5); color: var(--oc-accent-active); font-size: var(--oc-text-md); }
-nav { overflow: auto; flex: 1; min-height: 0; padding: 0 var(--oc-space-2); }
+.conversation-list__brand { display: flex; min-height: var(--oc-conversation-rail-header-min-height); align-items: center; padding: var(--oc-space-3) var(--oc-space-4); border-block-end: 1px solid var(--oc-border-subtle); }
+:host ::ng-deep .conversation-list__create { justify-content: flex-start; width: 100%; padding: var(--oc-space-3) var(--oc-space-4); color: var(--oc-accent-active); font-size: var(--oc-text-md); }
+nav { overflow: auto; flex: 1; min-height: 0; padding: 0 var(--oc-space-1); }
 nav section { padding-block-end: var(--oc-space-3); }
-nav h1, nav h2 { margin: 0; padding: var(--oc-space-3) var(--oc-space-3) var(--oc-space-2); color: var(--oc-ink-muted); font-family: var(--oc-font-mono); font-size: var(--oc-text-2xs); font-weight: 500; letter-spacing: var(--oc-tracking-label); text-transform: uppercase; }
+nav h1, nav h2 { margin: 0; padding: var(--oc-space-2) var(--oc-space-2) var(--oc-space-1); color: var(--oc-ink-muted); font-family: var(--oc-font-mono); font-size: var(--oc-text-2xs); font-weight: 500; letter-spacing: var(--oc-tracking-label); text-transform: uppercase; }
 ul { display: grid; gap: var(--oc-space-1); margin: 0; padding: 0; list-style: none; }
 .conversation-list__empty { max-width: 15rem; margin: var(--oc-space-4) auto; color: var(--oc-ink-muted); text-align: center; }
 .conversation-list__identity { display: flex; align-items: center; gap: var(--oc-space-3); padding: var(--oc-space-3) var(--oc-space-5); border-block-start: 1px solid var(--oc-border-subtle); background: color-mix(in srgb, var(--oc-surface-subtle) 92%, var(--oc-surface-raised)); }

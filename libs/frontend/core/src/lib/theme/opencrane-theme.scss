@@ -124,7 +124,8 @@
 	--oc-reading-width: 680px;
 	--oc-conversation-session-rail-width: 15rem;
 	--oc-conversation-header-min-height: 5rem;
-	--oc-conversation-session-row-min-height: 48px;
+	--oc-conversation-rail-header-min-height: 64px;
+	--oc-conversation-session-row-min-height: 40px;
 	--oc-conversation-session-icon-size: 24px;
 	--oc-conversation-session-hover: color-mix(in srgb, var(--oc-surface-raised) 72%, transparent);
 	--oc-conversation-session-selected: color-mix(in srgb, var(--oc-border-default) 62%, transparent);
