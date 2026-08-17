@@ -20,7 +20,7 @@ its slot; the shell itself is `workspace`.
 | [`conversation-workspace`](./conversation-workspace/README.md) | Normal direct, group, and Agent-session chat workspace. |
 | [`notifications`](./notifications/README.md) | The notification popover. |
 | [`onboarding`](./onboarding/README.md) | One resumable lifecycle shell with interview, resolution, review, and ready states. |
-| [`settings`](./settings/README.md) | The settings page. |
+| [`settings`](./settings/README.md) | Responsive settings shell, member directory, invitation creation, and acceptance. |
 | [`tools`](./tools/README.md) | Tools and tool-governance routes. |
 | [`workspace`](./workspace/README.md) | The workspace shell. |
 

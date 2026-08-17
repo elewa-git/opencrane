@@ -1,6 +1,22 @@
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { _ReadProcessConfig } from "../config";
+import { _ReadOrganizationMembershipConfig, _ReadProcessConfig } from "../config";
+
+const _temporaryDirectories: string[] = [];
+
+/** Create one valid invitation signing key without depending on a deployed Secret volume. */
+function _createInvitationSigningKey(): string
+{
+	const directory = mkdtempSync(join(tmpdir(), "opencrane-config-"));
+	const path = join(directory, "invitation-signing-key");
+	_temporaryDirectories.push(directory);
+	writeFileSync(path, Buffer.alloc(32, 7).toString("base64url"));
+	return path;
+}
 
 describe("opencrane process config", function _ProcessConfigSuite()
 {
@@ -13,6 +29,7 @@ describe("opencrane process config", function _ProcessConfigSuite()
 	afterEach(function _restoreEnvironment()
 	{
 		vi.unstubAllEnvs();
+		for (const directory of _temporaryDirectories.splice(0)) rmSync(directory, { recursive: true, force: true });
 	});
 
 	it("reads one shared snapshot for listeners and background workers", function _ReadSnapshot()
@@ -84,6 +101,40 @@ describe("opencrane process config", function _ProcessConfigSuite()
 		vi.stubEnv("OPENCRANE_STANDALONE_CLUSTER_TENANT", "testv2");
 		vi.stubEnv("OPENCRANE_MEMBERSHIP_MODE", "fleet");
 		expect(function _readFleetStandaloneFirstUserAdmission() { _ReadProcessConfig(); }).toThrow(/MEMBERSHIP_MODE=standalone/);
+	});
+
+	it("reads Fleet membership with a projected-token path", function _ReadFleetMembership()
+	{
+		vi.stubEnv("OPENCRANE_MEMBERSHIP_MODE", "fleet");
+		vi.stubEnv("OPENCRANE_MEMBERSHIP_BILLING_GATEWAY_URL", "https://fleet.example");
+		vi.stubEnv("OPENCRANE_MEMBERSHIP_BILLING_GATEWAY_SILO_ID", "silo-a");
+		vi.stubEnv("OPENCRANE_MEMBERSHIP_BILLING_GATEWAY_TOKEN_PATH", "/var/run/opencrane/membership-billing/token");
+		expect(_ReadOrganizationMembershipConfig()).toMatchObject({ mode: "fleet", fleet: { baseUrl: "https://fleet.example", credentialSiloId: "silo-a", projectedTokenPath: "/var/run/opencrane/membership-billing/token" } });
+	});
+
+	it("rejects a plaintext Fleet membership receiver before startup", function _RejectPlaintextFleetMembership()
+	{
+		vi.stubEnv("OPENCRANE_MEMBERSHIP_MODE", "fleet");
+		vi.stubEnv("OPENCRANE_MEMBERSHIP_BILLING_GATEWAY_URL", "http://fleet.example");
+		expect(function _ReadPlaintextFleetMembership() { _ReadOrganizationMembershipConfig(); }).toThrow(/HTTPS origin/);
+	});
+
+	it("accepts only a credential-free HTTPS public invitation origin", function _ValidatePublicInvitationOrigin()
+	{
+		vi.stubEnv("OPENCRANE_MEMBERSHIP_MODE", "standalone");
+		vi.stubEnv("OPENCRANE_INVITATION_SIGNING_KEY_PATH", _createInvitationSigningKey());
+
+		vi.stubEnv("OPENCRANE_PUBLIC_BASE_URL", "https://opencrane.example");
+		expect(_ReadOrganizationMembershipConfig()).toMatchObject({ standalone: { publicBaseUrl: "https://opencrane.example" } });
+
+		vi.stubEnv("OPENCRANE_PUBLIC_BASE_URL", "http://localhost:4200");
+		expect(function _ReadPlaintextPublicOrigin() { _ReadOrganizationMembershipConfig(); }).toThrow(/HTTPS origin/);
+
+		vi.stubEnv("OPENCRANE_PUBLIC_BASE_URL", "https://operator:secret@opencrane.example");
+		expect(function _ReadCredentialedPublicOrigin() { _ReadOrganizationMembershipConfig(); }).toThrow(/credential-free HTTPS origin/);
+
+		vi.stubEnv("OPENCRANE_PUBLIC_BASE_URL", "https://opencrane.example/settings");
+		expect(function _ReadPublicOriginWithPath() { _ReadOrganizationMembershipConfig(); }).toThrow(/credential-free HTTPS origin/);
 	});
 
 	it("rejects a partial or unsupported initial model credential", function _RejectInvalidInitialModelBootstrap()

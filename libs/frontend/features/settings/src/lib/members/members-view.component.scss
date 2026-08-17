@@ -1,0 +1,23 @@
+:host { display: block; }
+
+.members-announcement,
+.members-loading,
+.members-state {
+	display: grid;
+	gap: var(--oc-space-3);
+	margin-bottom: var(--oc-space-4);
+}
+
+.members-state {
+	place-items: center;
+	padding: clamp(var(--oc-space-8), 8vw, 72px);
+	border: 1px solid var(--oc-border-default);
+	border-radius: var(--oc-radius-panel);
+	background: var(--oc-surface-raised);
+	text-align: center;
+
+	h2,
+	p { margin: 0; }
+	p { color: var(--oc-ink-muted); }
+	> .pi { font-size: var(--oc-text-4xl); color: var(--oc-accent); }
+}

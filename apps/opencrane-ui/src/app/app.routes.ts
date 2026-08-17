@@ -56,6 +56,31 @@ export const APP_ROUTES: Routes =
 		}
 	},
 	{
+		// Organization settings shell; the feature exposes only backed child routes.
+		path: "settings",
+		canActivate: [___OperatorAccessGuard],
+		loadChildren: function loadSettingsRoutes()
+		{
+			return import("@opencrane/features/settings").then(function pickSettingsRoutes(m)
+			{
+				return m.SETTINGS_ROUTES;
+			});
+		}
+	},
+	{
+		// Invitation acceptance remains an ordinary signed-in API client. The feature removes its token
+		// from browser history before submitting it to organization authority.
+		path: "invite",
+		canActivate: [___OperatorAccessGuard],
+		loadComponent: function loadInvitationAcceptance()
+		{
+			return import("@opencrane/features/settings").then(function pickInvitationAcceptance(m)
+			{
+				return m.OrganizationInviteAcceptanceComponent;
+			});
+		}
+	},
+	{
 		// Canonical first-class Agent-session child conversation route. The parent
 		// workspace from #351 will write exact focus and scroll restoration state.
 		path: "chats/:parentConversationId/threads/:childConversationId",

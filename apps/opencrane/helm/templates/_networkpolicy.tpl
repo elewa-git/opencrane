@@ -192,6 +192,14 @@ spec:
     - ports:
         - protocol: TCP
           port: 443
+    {{- if and (eq .Values.clustertenantManager.membership.mode "fleet") (ne (int .Values.clustertenantManager.membership.fleet.billingGatewayEgressPort) 443) }}
+    # Fleet is the fail-closed membership and paid-seat authority in this mode. The application
+    # refuses non-HTTPS receiver origins. Standard NetworkPolicy cannot select its external FQDN,
+    # so the operator supplies the exact TLS port and may narrow the hostname with Cilium.
+    - ports:
+        - protocol: TCP
+          port: {{ .Values.clustertenantManager.membership.fleet.billingGatewayEgressPort }}
+    {{- end }}
     {{- if .Values.networkPolicy.allowDNS }}
     # GKE Dataplane V2 evaluates egress before the kube-dns ClusterIP maps to a
     # CoreDNS Pod, so a Pod selector would reject DNS queries. Keep this limited

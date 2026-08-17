@@ -89,6 +89,9 @@ CREATE TYPE "OrgRole" AS ENUM ('owner', 'admin', 'member');
 CREATE TYPE "OrgMemberStatus" AS ENUM ('active', 'suspended');
 
 -- CreateEnum
+CREATE TYPE "OrganizationInvitationStatus" AS ENUM ('pending', 'accepted', 'failed');
+
+-- CreateEnum
 CREATE TYPE "ConversationMode" AS ENUM ('agent_session', 'direct', 'group');
 
 -- CreateEnum
@@ -710,12 +713,51 @@ CREATE TABLE "org_memberships" (
     "id" TEXT NOT NULL,
     "cluster_tenant" TEXT NOT NULL,
     "subject" TEXT NOT NULL,
+    "email" TEXT,
+    "display_name" TEXT,
     "role" "OrgRole" NOT NULL,
     "status" "OrgMemberStatus" NOT NULL DEFAULT 'active',
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updated_at" TIMESTAMP(3) NOT NULL,
 
     CONSTRAINT "org_memberships_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "organization_invitations" (
+    "id" TEXT NOT NULL,
+    "silo_id" TEXT NOT NULL,
+    "email" TEXT NOT NULL,
+    "active_email" TEXT,
+    "role" "OrgRole" NOT NULL,
+    "status" "OrganizationInvitationStatus" NOT NULL DEFAULT 'pending',
+    "generation" INTEGER NOT NULL DEFAULT 1,
+    "token_nonce" TEXT NOT NULL,
+    "invited_by_subject" TEXT NOT NULL,
+    "invited_by_display_name" TEXT NOT NULL,
+    "last_resend_idempotency_key" TEXT,
+    "invited_at" TIMESTAMP(3) NOT NULL,
+    "expires_at" TIMESTAMP(3) NOT NULL,
+    "accepted_at" TIMESTAMP(3),
+    "accepted_by_subject" TEXT,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "organization_invitations_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "organization_invitation_requests" (
+    "id" TEXT NOT NULL,
+    "silo_id" TEXT NOT NULL,
+    "actor_subject" TEXT NOT NULL,
+    "idempotency_key" TEXT NOT NULL,
+    "payload_digest" TEXT NOT NULL,
+    "result_invitation_ids" JSONB NOT NULL,
+    "created_count" INTEGER NOT NULL,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "organization_invitation_requests_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -2080,6 +2122,21 @@ CREATE INDEX "org_memberships_cluster_tenant_idx" ON "org_memberships"("cluster_
 CREATE UNIQUE INDEX "org_memberships_cluster_tenant_subject_key" ON "org_memberships"("cluster_tenant", "subject");
 
 -- CreateIndex
+CREATE UNIQUE INDEX "org_memberships_cluster_tenant_email_key" ON "org_memberships"("cluster_tenant", "email");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "organization_invitations_silo_id_active_email_key" ON "organization_invitations"("silo_id", "active_email");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "organization_invitations_silo_id_last_resend_idempotency_key_key" ON "organization_invitations"("silo_id", "last_resend_idempotency_key");
+
+-- CreateIndex
+CREATE INDEX "organization_invitations_silo_id_status_expires_at_idx" ON "organization_invitations"("silo_id", "status", "expires_at");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "organization_invitation_requests_silo_id_actor_subject_idempotency_key_key" ON "organization_invitation_requests"("silo_id", "actor_subject", "idempotency_key");
+
+-- CreateIndex
 CREATE UNIQUE INDEX "groups_name_key" ON "groups"("name");
 
 -- CreateIndex
@@ -3031,6 +3088,26 @@ CREATE UNIQUE INDEX "model_routing_defaults_global_key"
     ON "model_routing_defaults"("scope") WHERE "cluster_tenant" IS NULL;
 CREATE UNIQUE INDEX "org_memberships_one_owner_per_org"
     ON "org_memberships"("cluster_tenant") WHERE "role" = 'owner';
+
+CREATE FUNCTION "protect_org_membership_last_owner"() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+    IF OLD."role" = 'owner' AND OLD."status" = 'active' AND (
+        TG_OP = 'DELETE'
+        OR NEW."role" <> 'owner'
+        OR NEW."status" <> 'active'
+        OR NEW."cluster_tenant" <> OLD."cluster_tenant"
+    ) THEN
+        RAISE EXCEPTION 'the active organization owner cannot be removed, suspended, demoted, or moved'
+            USING ERRCODE = 'OC901';
+    END IF;
+    RETURN CASE WHEN TG_OP = 'DELETE' THEN OLD ELSE NEW END;
+END;
+$$;
+
+CREATE TRIGGER "org_memberships_last_owner_guard"
+    BEFORE UPDATE OF "role", "status", "cluster_tenant" OR DELETE ON "org_memberships"
+    FOR EACH ROW EXECUTE FUNCTION "protect_org_membership_last_owner"();
 
 -- Database-native authority guards omitted by Prisma schema diff.
 

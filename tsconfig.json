@@ -82,6 +82,12 @@
       "@opencrane/backend/server/iam/membership": [
         "./libs/backend/server/iam/membership/main/src/index.ts"
       ],
+      "@opencrane/backend/server/iam/organization-members": [
+        "./libs/backend/server/iam/organization-members/main/src/index.ts"
+      ],
+      "@opencrane/backend/server/infra/organization-membership-gateway": [
+        "./libs/backend/server/infra/organization-membership-gateway/src/index.ts"
+      ],
       "@opencrane/backend/agents/personal/memory": [
         "./libs/backend/agents/personal/memory/main/src/index.ts"
       ],
@@ -244,6 +250,9 @@
       "@opencrane/features/notifications": [
         "./libs/frontend/features/notifications/src/index.ts"
       ],
+      "@opencrane/features/settings": [
+        "./libs/frontend/features/settings/src/index.ts"
+      ],
       "@opencrane/state/core": [
         "./libs/frontend/state/core/src/index.ts"
       ],
@@ -296,6 +305,12 @@
       ],
       "@opencrane/state/persona/adapter": [
         "./libs/frontend/state/persona/adapter/src/index.ts"
+      ],
+      "@opencrane/state/organization/members": [
+        "./libs/frontend/state/organization/members/src/index.ts"
+      ],
+      "@opencrane/state/organization/members/adapter": [
+        "./libs/frontend/state/organization/members/adapter/src/index.ts"
       ]
     }
   },
@@ -321,6 +336,9 @@
     },
     {
       "path": "./libs/frontend/features/onboarding"
+    },
+    {
+      "path": "./libs/frontend/features/settings"
     },
     {
       "path": "./libs/frontend/features/tools"
@@ -360,6 +378,12 @@
     },
     {
       "path": "./libs/frontend/state/persona/adapter"
+    },
+    {
+      "path": "./libs/frontend/state/organization/members"
+    },
+    {
+      "path": "./libs/frontend/state/organization/members/adapter"
     },
     {
       "path": "./libs/frontend/platform"

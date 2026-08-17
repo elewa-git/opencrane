@@ -1,9 +1,11 @@
+import { readFileSync } from "node:fs";
 import { isAbsolute } from "node:path";
 
 import { ByokProvider } from "@opencrane/contracts";
 import { FleetMembershipDeploymentModes } from "@opencrane/backend/server/iam/membership";
+import { OrganizationMembershipDeploymentModes } from "@opencrane/backend/server/iam/organization-members";
 
-import type { ChannelTargetRuntimeConfig, InitialModelBootstrapConfig, OpenCraneObotConfig, OpenCraneProcessConfig } from "./config.types";
+import type { ChannelTargetRuntimeConfig, InitialModelBootstrapConfig, OpenCraneObotConfig, OpenCraneOrganizationMembershipConfig, OpenCraneProcessConfig } from "./config.types";
 import type { StandaloneFirstUserAdmissionConfig } from "@opencrane/backend/server/iam/identity";
 
 /** Smallest accepted artifact-preprocessor output body. */
@@ -42,6 +44,20 @@ function _readRequired(name: string): string
 {
 	const value = process.env[name]?.trim() ?? "";
 	if (value.length === 0) throw new Error(`${name} is required`);
+	return value;
+}
+
+/** Require one credential-free HTTPS origin for a browser-visible or external authority boundary. */
+function _readCredentialFreeHttpsOrigin(name: string): string
+{
+	const value = _readRequired(name);
+	let origin: URL;
+	try { origin = new URL(value); }
+	catch { throw new Error(`${name} must be an absolute HTTPS origin`); }
+	if (origin.protocol !== "https:" || origin.username || origin.password || origin.pathname !== "/" || origin.search || origin.hash)
+	{
+		throw new Error(`${name} must be one credential-free HTTPS origin`);
+	}
 	return value;
 }
 
@@ -112,6 +128,36 @@ function _readStandaloneFirstUserAdmission(): StandaloneFirstUserAdmissionConfig
 		throw new Error("standalone first-user admission requires OIDC_ISSUER_URL");
 	}
 	return { email, clusterTenant, issuer };
+}
+
+/**
+ * Reads the startup-selected owner of organisation membership decisions.
+ *
+ * Standalone mode requires a mounted invitation-signing key, while Fleet mode requires its HTTPS
+ * membership-and-billing gateway and projected-token coordinates. Invalid or incomplete settings
+ * stop startup so a Fleet failure can never fall back to local membership writes.
+ *
+ * Called by: apps/opencrane/src/app/routes.ts while mounting the organisation-member router.
+ * @returns The complete configuration for exactly one deployment mode.
+ * @throws When the mode, origin, mounted path, key, timeout, or required coordinate is invalid.
+ */
+export function _ReadOrganizationMembershipConfig(): OpenCraneOrganizationMembershipConfig
+{
+	const mode = process.env.OPENCRANE_MEMBERSHIP_MODE?.trim();
+	if (mode === OrganizationMembershipDeploymentModes.Standalone)
+	{
+		const signingKeyPath = _readRequiredAbsolutePath("OPENCRANE_INVITATION_SIGNING_KEY_PATH");
+		const publicBaseUrl = _readCredentialFreeHttpsOrigin("OPENCRANE_PUBLIC_BASE_URL");
+		const invitationSigningKey = Buffer.from(readFileSync(signingKeyPath, "utf8").trim(), "base64url");
+		if (invitationSigningKey.byteLength < 32) throw new Error("OPENCRANE_INVITATION_SIGNING_KEY_PATH must contain at least 32 base64url-decoded bytes");
+		return { mode, standalone: { invitationSigningKey, publicBaseUrl, invitationTtlMilliseconds: _readBoundedSeconds("OPENCRANE_INVITATION_TTL_SECONDS", 604_800, 300, 2_592_000) } };
+	}
+	if (mode === OrganizationMembershipDeploymentModes.Fleet)
+	{
+		const baseUrl = _readCredentialFreeHttpsOrigin("OPENCRANE_MEMBERSHIP_BILLING_GATEWAY_URL");
+		return { mode, fleet: { baseUrl, credentialSiloId: _readRequired("OPENCRANE_MEMBERSHIP_BILLING_GATEWAY_SILO_ID"), projectedTokenPath: _readRequiredAbsolutePath("OPENCRANE_MEMBERSHIP_BILLING_GATEWAY_TOKEN_PATH"), timeoutMilliseconds: _readBoundedSeconds("OPENCRANE_MEMBERSHIP_BILLING_GATEWAY_TIMEOUT_SECONDS", 15, 1, 60) } };
+	}
+	throw new Error("OPENCRANE_MEMBERSHIP_MODE must be standalone or fleet");
 }
 
 /** Read the five channel resolver and replay receiver settings; all must be set or none. */

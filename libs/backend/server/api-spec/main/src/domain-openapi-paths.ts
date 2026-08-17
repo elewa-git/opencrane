@@ -15,6 +15,7 @@ import { _ProvidersOpenapiPaths } from "@opencrane/backend/server/gateways/provi
 import { _AuditOpenapiPaths } from "@opencrane/backend/server/iam/audit";
 import { _GrantsOpenapiPaths } from "@opencrane/backend/server/iam/grants";
 import { _GroupsOpenapiPaths } from "@opencrane/backend/server/iam/groups";
+import { _OrganizationMembersOpenapiPaths } from "@opencrane/backend/server/iam/organization-members";
 import { _RetrievalOpenapiPaths } from "@opencrane/backend/server/knowledge/retrieval";
 import { _SpendOpenapiPaths } from "@opencrane/backend/server/reporting/spend";
 
@@ -50,4 +51,5 @@ export const _DomainOpenapiPaths = {
 	..._PersonalConfigurationOpenapiPaths,
 	..._SkillCatalogueOpenapiPaths,
 	..._PersonalArtifactsOpenapiPaths,
+	..._OrganizationMembersOpenapiPaths,
 };

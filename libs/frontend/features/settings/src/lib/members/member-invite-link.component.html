@@ -1,0 +1,8 @@
+<div class="invite-link">
+	<input pInputText [value]="link()" readonly aria-label="Shareable invitation link" />
+	<p-button icon="pi pi-copy" label="Copy" [outlined]="true" (onClick)="copy()" />
+	<span class="sr-only" aria-live="polite">
+		@if (copied()) { Invitation link copied. }
+		@if (copyFailed()) { Copy failed. Select and copy the link manually. }
+	</span>
+</div>

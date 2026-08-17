@@ -1,6 +1,15 @@
-<div class="wo-heading">
-	<h2 class="wo-heading__title">{{ title() }}</h2>
-	@if (subtitle(); as subtitleValue) {
-		<p class="wo-heading__subtitle">{{ subtitleValue }}</p>
-	}
+<div class="wo-heading" [class.wo-heading--page]="level() === levels.Page">
+	<div class="wo-heading__copy">
+		@if (level() === levels.Page) {
+			<h1 class="wo-heading__title">{{ title() }}</h1>
+		} @else {
+			<h2 class="wo-heading__title">{{ title() }}</h2>
+		}
+		@if (subtitle(); as subtitleValue) {
+			<p class="wo-heading__subtitle">{{ subtitleValue }}</p>
+		}
+	</div>
+	<div class="wo-heading__actions">
+		<ng-content select="[heading-actions]" />
+	</div>
 </div>

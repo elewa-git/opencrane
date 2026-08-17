@@ -1,0 +1,11 @@
+{
+  "name": "backend-server-infra-organization-membership-gateway",
+  "$schema": "../../../../../node_modules/nx/schemas/project-schema.json",
+  "projectType": "library",
+  "sourceRoot": "libs/backend/server/infra/organization-membership-gateway/src",
+  "tags": ["type:lib", "layer:infra", "scope:organization-membership-gateway"],
+  "targets": {
+    "lint": { "executor": "nx:run-commands", "options": { "command": "tsc -p tsconfig.json --noEmit", "cwd": "libs/backend/server/infra/organization-membership-gateway" } },
+    "test": { "executor": "nx:run-commands", "options": { "command": "vitest run", "cwd": "libs/backend/server/infra/organization-membership-gateway" } }
+  }
+}

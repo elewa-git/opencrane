@@ -1,0 +1,15 @@
+{
+	"extends": "../../../../tsconfig.frontend.json",
+	"compilerOptions": {
+		"outDir": "../../../../dist/out-tsc",
+		"types": [],
+		"composite": true,
+		"tsBuildInfoFile": "../../../../dist/out-tsc/libs/frontend/features/settings/tsconfig.tsbuildinfo"
+	},
+	"include": ["src/**/*.ts"],
+	"exclude": ["**/*.spec.ts", "**/*.stories.ts"],
+	"references": [
+		{ "path": "../../elements/ui" },
+		{ "path": "../../state/organization/members" }
+	]
+}

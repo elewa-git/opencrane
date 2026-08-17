@@ -51,4 +51,4 @@ packages — here `@opencrane/core` and Angular — never on apps or server doma
 ## See also
 
 - Parent index: [state](../../README.md)
-- Siblings: [mcp/adapter](../../mcp/adapter/README.md) · [settings/adapter](../../settings/adapter/README.md) · [gateways](../../gateways/README.md)
+- Siblings: [mcp/adapter](../../mcp/adapter/README.md) · [organisation members](../../organization/members/README.md) · [gateways](../../gateways/README.md)

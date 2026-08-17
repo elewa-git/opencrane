@@ -53,6 +53,13 @@ grep -Fq '            defaultMode: 0440' <<<"$server_manifest"
 grep -Fq '            - name: OPENCRANE_MEMBERSHIP_MODE' <<<"$server_manifest"
 grep -Fq '              value: "standalone"' <<<"$server_manifest"
 grep -Fq '            - name: OPENCRANE_MEMBERSHIP_MAX_STALENESS_MS' <<<"$server_manifest"
+grep -Fq '            - name: OPENCRANE_INVITATION_SIGNING_KEY_PATH' <<<"$server_manifest"
+grep -Fq '              value: /var/run/opencrane/invitation-signing/key' <<<"$server_manifest"
+grep -Fq '            - name: OPENCRANE_PUBLIC_BASE_URL' <<<"$server_manifest"
+grep -Fq '            - name: invitation-signing-key' <<<"$server_manifest"
+grep -Fq '              mountPath: /var/run/opencrane/invitation-signing' <<<"$server_manifest"
+grep -Fq '        - name: invitation-signing-key' <<<"$server_manifest"
+grep -Fq '            secretName: "opencrane-invitation-signing"' <<<"$server_manifest"
 if grep -Eq 'OPENCRANE_MEMBERSHIP_(ISSUER_ID|KEY_ID|PUBLIC_KEY_FILE)|membership-verification-key|fleet-membership' <<<"$server_manifest"; then
   echo "standalone server renders Fleet membership trust material" >&2
   exit 1
@@ -160,11 +167,22 @@ if grep -Fq 'verbs: ["create"]' <<<"$provider_key_role"; then
   exit 1
 fi
 
+if helm template opencrane-silo "$CHART_DIR" "${MEMORY_GATEWAY_API_ARGS[@]}" \
+  --set clustertenantManager.membership.mode=fleet \
+  --set clustertenantManager.membership.fleet.trustedIssuerId=opencrane-fleet \
+  --set clustertenantManager.membership.fleet.issuerKeyId=fleet-key-1 \
+  --set clustertenantManager.membership.fleet.existingSecret=opencrane-fleet-membership-verification >/dev/null 2>&1; then
+  echo "fleet mode rendered without its membership and billing gateway" >&2
+  exit 1
+fi
+
 fleet_rendered="$(helm template opencrane-silo "$CHART_DIR" "${MEMORY_GATEWAY_API_ARGS[@]}" \
   --set clustertenantManager.membership.mode=fleet \
   --set clustertenantManager.membership.fleet.trustedIssuerId=opencrane-fleet \
   --set clustertenantManager.membership.fleet.issuerKeyId=fleet-key-1 \
-  --set clustertenantManager.membership.fleet.existingSecret=opencrane-fleet-membership-verification)"
+  --set clustertenantManager.membership.fleet.existingSecret=opencrane-fleet-membership-verification \
+  --set-string clustertenantManager.membership.fleet.billingGatewayUrl=https://fleet.example.test \
+  --set-string clustertenantManager.membership.fleet.billingGatewayCredentialSiloId=silo-a)"
 fleet_server_manifest="$(printf '%s\n' "$fleet_rendered" | awk '
   function flush_document() {
     if (is_deployment && is_server) {
@@ -196,5 +214,26 @@ grep -Fq '              value: /var/run/opencrane/membership/public-key.pem' <<<
 grep -Fq '            - name: membership-verification-key' <<<"$fleet_server_manifest"
 grep -Fq '              mountPath: /var/run/opencrane/membership' <<<"$fleet_server_manifest"
 grep -Fq '            secretName: "opencrane-fleet-membership-verification"' <<<"$fleet_server_manifest"
+grep -Fq '            - name: OPENCRANE_MEMBERSHIP_BILLING_GATEWAY_URL' <<<"$fleet_server_manifest"
+grep -Fq '              value: "https://fleet.example.test"' <<<"$fleet_server_manifest"
+grep -Fq '            - name: OPENCRANE_MEMBERSHIP_BILLING_GATEWAY_SILO_ID' <<<"$fleet_server_manifest"
+grep -Fq '              value: "silo-a"' <<<"$fleet_server_manifest"
+grep -Fq '            - name: membership-billing-token' <<<"$fleet_server_manifest"
+grep -Fq '              mountPath: /var/run/opencrane/membership-billing' <<<"$fleet_server_manifest"
+fleet_billing_volume="$(grep -A 8 '        - name: membership-billing-token' <<<"$fleet_server_manifest")"
+grep -Fq '          projected:' <<<"$fleet_billing_volume"
+grep -Fq '            defaultMode: 0440' <<<"$fleet_billing_volume"
+grep -Fq '                  audience: "opencrane-fleet-membership"' <<<"$fleet_billing_volume"
+grep -Fq '                  expirationSeconds: 600' <<<"$fleet_billing_volume"
+if grep -Fq 'opencrane-fleet-membership-billing' <<<"$fleet_server_manifest"; then
+  echo "fleet mode rendered the retired static membership billing Secret" >&2
+  exit 1
+fi
+if grep -Fq '/var/run/opencrane/invitation-signing' <<<"$fleet_server_manifest"; then
+  echo "fleet mode must not mount the standalone invitation signing key" >&2
+  exit 1
+fi
+grep -Fq 'if [[ "$MEMBERSHIP_MODE" == "standalone" ]]; then' "$ROOT_DIR/apps/_infra/deploy-k8s/platform/k8s-deploy.sh"
+grep -Fq 'ensure_invitation_signing_secret "$NAMESPACE" "$INVITATION_SIGNING_SECRET"' "$ROOT_DIR/apps/_infra/deploy-k8s/platform/k8s-deploy.sh"
 
 echo "opencrane-server key permissions contract: PASS"

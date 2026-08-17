@@ -1,0 +1,38 @@
+<main class="invite-acceptance">
+	<section class="invite-acceptance__card" aria-labelledby="invite-acceptance-title">
+		<div class="invite-acceptance__mark"><i class="pi pi-users" aria-hidden="true"></i></div>
+		<h1 id="invite-acceptance-title">Organization invitation</h1>
+		@switch (state()) {
+			@case (states.Idle) { <p>Preparing your invitation…</p> }
+			@case (states.Accepting) {
+				<p-progress-spinner ariaLabel="Accepting organization invitation" strokeWidth="4" />
+				<p>Confirming this invitation for your signed-in account…</p>
+			}
+			@case (states.Success) {
+				<p-message severity="success" text="You joined the organization." />
+				@if (member(); as acceptedMember) { <p>Welcome, {{ acceptedMember.displayName || acceptedMember.email }}.</p> }
+				<div class="invite-acceptance__actions"><a pButton routerLink="/chats">Open workspace</a></div>
+			}
+			@case (states.IdentityMismatch) {
+				<p-message severity="error" text="This invitation belongs to a different email address. Sign in with the invited account and open the original link again." />
+				<a pButton routerLink="/chats" class="p-button-outlined">Back to workspace</a>
+			}
+			@case (states.Expired) {
+				<p-message severity="warn" text="This invitation has expired. Ask an organization administrator to refresh its link." />
+				<a pButton routerLink="/chats" class="p-button-outlined">Back to workspace</a>
+			}
+			@case (states.AlreadyUsed) {
+				<p-message severity="info" text="This invitation was already used." />
+				<a pButton routerLink="/chats">Open workspace</a>
+			}
+			@case (states.Invalid) {
+				<p-message severity="error" text="This invitation link is incomplete or invalid." />
+				<a pButton routerLink="/chats" class="p-button-outlined">Back to workspace</a>
+			}
+			@case (states.Failure) {
+				<p-message severity="error" [text]="error() ?? 'OpenCrane could not confirm this invitation.'" />
+				<p-button label="Retry" icon="pi pi-refresh" (onClick)="retryRequested.emit()" />
+			}
+		}
+	</section>
+</main>

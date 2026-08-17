@@ -193,6 +193,13 @@
         "constructs": []
       },
       {
+        "path": "libs/backend/server/iam/organization-members/main/src/prisma-organization-member-repository.ts",
+        "adapter": "PrismaOrganizationMemberRepository",
+        "contract": "OrganizationMemberTransactionRepository",
+        "contractImportPath": "./organization-member-repository.types",
+        "constructs": []
+      },
+      {
         "path": "libs/backend/server/iam/identity/main/src/prisma-standalone-first-user-admission-repository.ts",
         "adapter": "PrismaStandaloneFirstUserAdmissionRepository",
         "contract": "StandaloneFirstUserOwnerClaimRepository",
@@ -514,6 +521,18 @@
       }
     ],
     "unitsOfWork": [
+      {
+        "path": "libs/backend/server/iam/organization-members/main/src/prisma-organization-member-unit-of-work.ts",
+        "adapter": "PrismaOrganizationMemberUnitOfWork",
+        "contract": "OrganizationMemberRepository",
+        "contractImportPath": "./organization-member-repository.types",
+        "constructs": [
+          {
+            "adapter": "PrismaOrganizationMemberRepository",
+            "importPath": "./prisma-organization-member-repository"
+          }
+        ]
+      },
       {
         "path": "libs/backend/agents/execution/protocol/src/prisma-external-action-context-repository.ts",
         "adapter": "PrismaExternalActionExecutionContextUnitOfWork",
@@ -1049,6 +1068,7 @@
       "apps/opencrane/src/app/lifecycle.ts",
       "apps/opencrane/src/app/background-workers.ts",
       "apps/opencrane/src/app/run-cancellation-composition.ts",
+      "apps/opencrane/src/app/organization-members-composition.ts",
       "libs/backend/agents/personal/configuration/main/src/prisma-personal-configuration.router.ts",
 		"libs/backend/agents/personal/personas/main/src/http/prisma-persona-onboarding.router.ts",
 		"libs/backend/agents/personal/personas/main/src/profile/prisma-persona-workflow-evidence.ts",

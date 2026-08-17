@@ -1,0 +1,45 @@
+.invite-form {
+	display: grid;
+	gap: var(--oc-space-4);
+	margin-bottom: var(--oc-space-6);
+	padding: var(--oc-space-5);
+	border: 1px solid var(--oc-accent);
+	border-radius: var(--oc-radius-panel);
+	background: var(--oc-surface-raised);
+	box-shadow: 0 0 0 5px var(--oc-accent-soft);
+
+	&__header,
+	&__actions {
+		display: flex;
+		align-items: flex-start;
+		justify-content: space-between;
+		gap: var(--oc-space-3);
+	}
+
+	h2,
+	p { margin: 0; }
+	p { margin-top: var(--oc-space-1); color: var(--oc-ink-muted); }
+
+	&__fields {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) 180px;
+		gap: var(--oc-space-2) var(--oc-space-4);
+		align-items: start;
+
+		label { font-weight: 600; }
+		small { color: var(--oc-ink-muted); }
+	}
+
+	&__messages,
+	&__links { display: grid; gap: var(--oc-space-2); }
+	&__actions { justify-content: flex-end; align-items: center; }
+}
+
+:host ::ng-deep .p-autocomplete { width: 100%; }
+
+@media (max-width: 640px) {
+	.invite-form {
+		padding: var(--oc-space-4);
+		&__fields { grid-template-columns: 1fr; }
+	}
+}

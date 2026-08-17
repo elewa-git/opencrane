@@ -15,20 +15,11 @@ import { _DomainOpenapiPaths } from "./domain-openapi-paths";
 import { _ErrorEnvelopeSchema, _ValidationIssueSchema } from "./error-schemas";
 import { _ModelDefinitionSchema, _ModelDefinitionWriteSchema } from "./model-definition-schemas";
 import { _SelfRunCancellationSchema, _SelfRunStatusSchema } from "./run-schemas";
+import { _DomainOpenapiSchemas } from "./domain-openapi-schemas";
 
 // ---------------------------------------------------------------------------
 // Reusable schema components
 // ---------------------------------------------------------------------------
-
-const Pagination = {
-  type: "object" as const,
-  required: ["limit", "hasMore"],
-  properties: {
-    limit: { type: "integer", minimum: 1, maximum: 1000 },
-    nextCursor: { type: "string", description: "Opaque cursor for the next page. Absent when hasMore is false." },
-    hasMore: { type: "boolean" },
-  },
-};
 
 // Common response helpers
 function notFound(description: string)
@@ -514,7 +505,7 @@ export const spec = {
     schemas: {
       Error: _ErrorEnvelopeSchema,
       ValidationIssue: _ValidationIssueSchema,
-      Pagination,
+      ..._DomainOpenapiSchemas,
       McpServer: McpServerSchema,
       McpServerCredential: McpServerCredentialSchema,
       McpCatalogServer: McpCatalogServerSchema,

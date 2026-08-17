@@ -5,8 +5,10 @@
 Let an organisation understand membership, groups, entitlements, resources, and effective access
 without letting the browser become an identity or authorization authority.
 
-Current status: `API partial`, `UI missing`. Group and sharing APIs exist; membership management and
-effective-access explanation do not. Group mutations need role/silo hardening before exposure.
+Current status: `API partial`, `UI partial`. Group and sharing APIs exist, and the member invitation
+journey now runs behind one deployment-neutral contract. The remaining role, suspension, removal,
+and effective-access journeys are still incomplete. Group mutations need role/silo hardening before
+exposure.
 
 ## ORG-01 — See my organisation and role
 
@@ -42,8 +44,38 @@ Acceptance criteria:
 - Every action is subject/issuer-bound and audited.
 - The last Owner cannot be removed without an explicit safe ownership transfer.
 - Invite, pending, active, suspended, removed, expired, and failed states are finite.
+- An invitation starts with a normalized email address but gains authority only when a signed-in
+  person proves the exact verified email and the server binds the invitation to that stable OIDC
+  subject. Email is never used as the durable member identity.
+- Creating or resending an invitation is idempotent, rotates the bearer invitation secret, and
+  invalidates the previous secret. Expired, replayed, wrong-email, wrong-silo, and already-consumed
+  secrets fail closed.
+- A successful invitation returns a server-authored shareable link. The UI may claim that an email
+  was sent only when the selected delivery gateway reports that outcome; link creation by itself is
+  never presented as email delivery.
+- The browser calls the same organisation-member API in every deployment and never chooses the
+  membership authority, silo, subject, payment state, or seat policy.
 
-Status: `API blocked`; there is no public membership-management API.
+Deployment authority:
+
+- In `standalone` mode, OpenCrane owns the invitation record and the local membership transition.
+- In `fleet` mode, OpenCrane delegates directory reads and every invitation mutation to the
+  configured Fleet membership-and-billing gateway. Fleet may enforce paid seats and issue the
+  signed membership revision consumed by the silo.
+- A missing, unavailable, or invalid Fleet gateway never falls back to standalone writes. The
+  management journey becomes dependency-unavailable while existing signed membership checks keep
+  failing closed under their normal expiry and high-water rules.
+
+Target APIs: `GET /api/v1/organization/members`, recipient validation and invitation creation under
+`POST /api/v1/organization/members/invitations`, resend under
+`POST /api/v1/organization/members/invitations/{invitationId}/resend`, and verified-person adoption
+under `POST /api/v1/organization/members/invitations/accept`.
+
+Status: `API ready`, `UI ready` for standalone directory reads, invitation creation, link refresh,
+and verified-email acceptance. The fail-closed Fleet delegation client is ready, but Fleet payment
+refusal remains receiver-gated until Fleet/WeOwnAI implements and qualifies the membership-and-billing
+endpoint. Role changes, suspension, removal, and ownership transfer remain separate incomplete slices.
+Fleet's older subject-based member upsert is not an invitation API and is not used by this journey.
 
 ## ORG-04 — Share an MCP entitlement
 

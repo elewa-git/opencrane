@@ -79,7 +79,7 @@ stream while this app keeps authentication, Prisma and Express ownership.
 its resources to the lifecycle owner.
 
 - `src/app/config.ts` reads one startup snapshot for listener and worker configuration, including
-  the all-or-nothing standalone first-owner contract when a silo deploy supplies it.
+  the all-or-nothing standalone first-owner contract and HTTPS-only Fleet membership receiver.
 - `src/app/initial-model-bootstrap.ts` makes the deployment-supplied provider key available through
   the existing provider-custody and LiteLLM-registration authority before the listeners start.
 - `src/app/kubernetes-clients.ts` constructs the exact Kubernetes clients the process needs.
@@ -184,6 +184,8 @@ are:
 | `AGENT_RUNTIME_MANAGED_NAMESPACE` | Managed runtime Job boundary | required |
 | `AGENT_RUN_ADMISSION_*` | Active and queued personal-and-managed admission limits | bounded defaults |
 | `OPENCRANE_MEMBERSHIP_*` | Explicit issuer model; `fleet` mounts its verifier, `standalone` starts without a Fleet key and denies run admission | required |
+| `OPENCRANE_INVITATION_SIGNING_KEY_PATH`, `OPENCRANE_PUBLIC_BASE_URL`, `OPENCRANE_INVITATION_TTL_SECONDS` | Standalone invitation-link signing, public link origin, and bounded lifetime | required in standalone mode |
+| `OPENCRANE_MEMBERSHIP_BILLING_GATEWAY_*` | Fleet-owned member directory, invitations, paid-seat, and payment decisions through one silo-scoped service credential | required in Fleet mode |
 | `OPENCRANE_SCHEDULER_*` | Optional scheduled-run loop and interval | disabled |
 | `ARTIFACT_SERVICE_URL` and mounted artifact keys | Private byte promotion/read brokers | required when used |
 | `ARTIFACT_PREPROCESSOR_*` | Restricted preprocessing worker and output ceiling | disabled |

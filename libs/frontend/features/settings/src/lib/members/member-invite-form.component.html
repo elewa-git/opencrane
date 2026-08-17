@@ -1,0 +1,37 @@
+<section class="invite-form" aria-labelledby="member-invite-title">
+	<div class="invite-form__header">
+		<div>
+			<h2 id="member-invite-title">Invite people</h2>
+			<p>Enter one or more email addresses. Organization policy is checked before links are created.</p>
+		</div>
+		<p-button icon="pi pi-times" [text]="true" severity="secondary" ariaLabel="Close invitation form" [disabled]="busy()" (onClick)="cancel()" />
+	</div>
+
+	<div class="invite-form__fields">
+		<label for="member-invite-emails">Email addresses</label>
+		<p-autocomplete inputId="member-invite-emails" [ngModel]="emails()" (ngModelChange)="updateEmails($event)" [suggestions]="suggestions" [multiple]="true" [typeahead]="false" [addOnBlur]="true" [addOnTab]="true" separator="," [unique]="false" [disabled]="busy()" placeholder="name@example.com" ariaLabel="Email addresses to invite" />
+		<small>Press Enter, Tab, or comma after each address.</small>
+
+		<label for="member-invite-role">Role</label>
+		<p-select inputId="member-invite-role" [ngModel]="role()" (ngModelChange)="updateRole($event)" [options]="roleOptions" optionLabel="label" optionValue="value" [disabled]="busy()" />
+	</div>
+
+	@if (issues().length > 0) {
+		<div class="invite-form__messages" aria-live="polite">
+			@for (issue of issues(); track issue.email) { <p-message severity="error" [text]="issue.email ? issue.email + ': ' + issue.message : issue.message" /> }
+		</div>
+	}
+	@if (error(); as errorMessage) { <p-message severity="error" [text]="errorMessage" /> }
+	@if (state() === states.Partial) { <p-message severity="warn" text="Some invitations were created. Review the links below and retry only the unresolved recipients." /> }
+	@if (links().length > 0) {
+		<div class="invite-form__links" aria-live="polite">
+			<p-message severity="success" text="Invitation links are ready. Share only the links returned by OpenCrane." />
+			@for (link of links(); track link) { <wo-member-invite-link [link]="link" /> }
+		</div>
+	}
+
+	<div class="invite-form__actions">
+		<p-button label="Cancel" [text]="true" severity="secondary" [disabled]="busy()" (onClick)="cancel()" />
+		<p-button [label]="submitLabel()" icon="pi pi-send" [loading]="busy()" [disabled]="busy()" (onClick)="submit()" />
+	</div>
+</section>

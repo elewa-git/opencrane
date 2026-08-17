@@ -1,0 +1,32 @@
+<section class="member-directory" aria-label="Organization member directory">
+	<div class="member-directory__toolbar">
+		<label class="member-directory__search">
+			<span class="pi pi-search" aria-hidden="true"></span>
+			<span class="sr-only">Search members and invitations</span>
+			<input pInputText type="search" [value]="searchQuery()" placeholder="Search people…" (input)="updateSearch($event)" />
+		</label>
+	</div>
+
+	<p-tabs [value]="tabs.Active">
+		<p-tablist>
+			<p-tab [value]="tabs.Active">Active · {{ activeCount() }}</p-tab>
+			<p-tab [value]="tabs.Pending">Pending · {{ pendingCount() }}</p-tab>
+		</p-tablist>
+		<p-tabpanels>
+			<p-tabpanel [value]="tabs.Active">
+				<p-table [value]="activeTableRows()" [tableStyle]="{ 'min-width': '36rem' }">
+					<ng-template #header><tr><th>Person</th><th>Role</th><th>Status</th><th><span class="sr-only">Actions</span></th></tr></ng-template>
+					<ng-template #body let-row><tr wo-member-directory-row [row]="row" (resendRequested)="resendRequested.emit($event)"></tr></ng-template>
+					<ng-template #emptymessage><tr><td colspan="4" class="member-directory__empty">No active members match this search.</td></tr></ng-template>
+				</p-table>
+			</p-tabpanel>
+			<p-tabpanel [value]="tabs.Pending">
+				<p-table [value]="pendingTableRows()" [tableStyle]="{ 'min-width': '36rem' }">
+					<ng-template #header><tr><th>Person</th><th>Status</th><th>Invitation</th><th><span class="sr-only">Actions</span></th></tr></ng-template>
+					<ng-template #body let-row><tr wo-member-directory-row [row]="row" (resendRequested)="resendRequested.emit($event)"></tr></ng-template>
+					<ng-template #emptymessage><tr><td colspan="4" class="member-directory__empty">No pending invitations match this search.</td></tr></ng-template>
+				</p-table>
+			</p-tabpanel>
+		</p-tabpanels>
+	</p-tabs>
+</section>

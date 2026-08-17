@@ -1,0 +1,16 @@
+<td>
+	<div class="member-identity">
+		<wo-avatar-circle [initials]="row().initials" [tone]="row().kind === rowKinds.Member ? avatarTones.Brand : avatarTones.Neutral" [size]="avatarSizes.Large" />
+		<div class="member-identity__copy">
+			<strong>{{ row().name }} @if (row().isCurrentUser) { <span>· you</span> }</strong>
+			<small>{{ row().email }}</small>
+		</div>
+	</div>
+</td>
+<td><wo-scope-chip [label]="row().roleLabel" [tone]="row().roleTone" [appearance]="chipAppearances.Soft" [density]="chipDensities.Regular" /></td>
+<td><span class="member-detail">{{ row().detail }}</span></td>
+<td class="member-action">
+	@if (row().canResend) {
+		<p-button label="Refresh link" [text]="true" [loading]="row().resending" [disabled]="row().resending" [attr.aria-label]="'Refresh invitation link for ' + row().email" (onClick)="resendRequested.emit(row().id)" />
+	}
+</td>

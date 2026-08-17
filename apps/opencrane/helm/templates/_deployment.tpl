@@ -2,6 +2,8 @@
 {{- $managedPlane := (index .Values "managedAgentRuntimePlane").managedAgentRuntime -}}
 {{- $managedRuntimeNamespace := default (printf "%s-managed-runtime" .Release.Name | trunc 63 | trimSuffix "-") $managedPlane.namespace -}}
 {{- $membership := .Values.clustertenantManager.membership -}}
+{{- $standaloneMembership := $membership.standalone -}}
+{{- $fleetMembership := $membership.fleet -}}
 {{- $initialModel := .Values.clustertenantManager.initialModel -}}
 {{- $firstUser := .Values.clustertenantManager.firstUser -}}
 {{- $controlPlaneHost := .Values.ingress.controlPlaneHost | default (printf "platform.%s" .Values.ingress.domain) -}}
@@ -9,6 +11,27 @@
 {{- $openCraneInternalUrl := .Values.channelProxy.openCraneInternalUrl | default (printf "http://%s-opencrane-server.%s.svc.cluster.local:%v" (include "opencrane.fullname" .) .Release.Namespace .Values.clustertenantManager.service.internalPort) -}}
 {{- if not (or (eq $membership.mode "standalone") (eq $membership.mode "fleet")) -}}
 {{- fail "clustertenantManager.membership.mode must be standalone or fleet" -}}
+{{- end -}}
+{{- if and (eq $membership.mode "standalone") (empty $standaloneMembership.invitationSigningExistingSecret) -}}
+{{- fail "clustertenantManager.membership.standalone.invitationSigningExistingSecret is required in standalone mode" -}}
+{{- end -}}
+{{- if and (eq $membership.mode "standalone") (empty $standaloneMembership.invitationSigningKeyKey) -}}
+{{- fail "clustertenantManager.membership.standalone.invitationSigningKeyKey is required in standalone mode" -}}
+{{- end -}}
+{{- if and (eq $membership.mode "fleet") (empty $fleetMembership.billingGatewayUrl) -}}
+{{- fail "clustertenantManager.membership.fleet.billingGatewayUrl is required in fleet mode" -}}
+{{- end -}}
+{{- if and (eq $membership.mode "fleet") (not (hasPrefix "https://" $fleetMembership.billingGatewayUrl)) -}}
+{{- fail "clustertenantManager.membership.fleet.billingGatewayUrl must use https" -}}
+{{- end -}}
+{{- if and (eq $membership.mode "fleet") (empty $fleetMembership.billingGatewayCredentialSiloId) -}}
+{{- fail "clustertenantManager.membership.fleet.billingGatewayCredentialSiloId is required in fleet mode" -}}
+{{- end -}}
+{{- if and (eq $membership.mode "fleet") (empty $fleetMembership.billingGatewayProjectedTokenAudience) -}}
+{{- fail "clustertenantManager.membership.fleet.billingGatewayProjectedTokenAudience is required in fleet mode" -}}
+{{- end -}}
+{{- if and (eq $membership.mode "fleet") (or (lt (int $fleetMembership.billingGatewayProjectedTokenTtlSeconds) 600) (gt (int $fleetMembership.billingGatewayProjectedTokenTtlSeconds) 3600)) -}}
+{{- fail "clustertenantManager.membership.fleet.billingGatewayProjectedTokenTtlSeconds must be from 600 through 3600" -}}
 {{- end -}}
 {{- if ne (empty $initialModel.provider) (empty $initialModel.existingSecret) -}}
 {{- fail "clustertenantManager.initialModel.provider and existingSecret must be configured together" -}}
@@ -102,6 +125,14 @@ spec:
               value: {{ $membership.mode | quote }}
             - name: OPENCRANE_MEMBERSHIP_MAX_STALENESS_MS
               value: {{ $membership.maximumStalenessMs | quote }}
+            {{- if eq $membership.mode "standalone" }}
+            - name: OPENCRANE_INVITATION_SIGNING_KEY_PATH
+              value: /var/run/opencrane/invitation-signing/key
+            - name: OPENCRANE_PUBLIC_BASE_URL
+              value: {{ $standaloneMembership.publicBaseUrl | default (printf "https://%s" $controlPlaneHost) | quote }}
+            - name: OPENCRANE_INVITATION_TTL_SECONDS
+              value: {{ $standaloneMembership.invitationTtlSeconds | quote }}
+            {{- end }}
             {{- if $firstUser.email }}
             # One-time standalone owner admission stays subject-bound: email merely selects the
             # verified OIDC identity that may claim this release's local owner slot.
@@ -112,11 +143,19 @@ spec:
             {{- end }}
             {{- if eq $membership.mode "fleet" }}
             - name: OPENCRANE_MEMBERSHIP_ISSUER_ID
-              value: {{ required "clustertenantManager.membership.fleet.trustedIssuerId is required in fleet mode" $membership.fleet.trustedIssuerId | quote }}
+              value: {{ required "clustertenantManager.membership.fleet.trustedIssuerId is required in fleet mode" $fleetMembership.trustedIssuerId | quote }}
             - name: OPENCRANE_MEMBERSHIP_KEY_ID
-              value: {{ required "clustertenantManager.membership.fleet.issuerKeyId is required in fleet mode" $membership.fleet.issuerKeyId | quote }}
+              value: {{ required "clustertenantManager.membership.fleet.issuerKeyId is required in fleet mode" $fleetMembership.issuerKeyId | quote }}
             - name: OPENCRANE_MEMBERSHIP_PUBLIC_KEY_FILE
               value: /var/run/opencrane/membership/public-key.pem
+            - name: OPENCRANE_MEMBERSHIP_BILLING_GATEWAY_URL
+              value: {{ $fleetMembership.billingGatewayUrl | quote }}
+            - name: OPENCRANE_MEMBERSHIP_BILLING_GATEWAY_SILO_ID
+              value: {{ $fleetMembership.billingGatewayCredentialSiloId | quote }}
+            - name: OPENCRANE_MEMBERSHIP_BILLING_GATEWAY_TOKEN_PATH
+              value: /var/run/opencrane/membership-billing/token
+            - name: OPENCRANE_MEMBERSHIP_BILLING_GATEWAY_TIMEOUT_SECONDS
+              value: {{ $fleetMembership.billingGatewayTimeoutSeconds | quote }}
             {{- end }}
             # The server binds each runtime identity class to its own Helm-owned restricted namespace.
             - name: AGENT_RUNTIME_PERSONAL_NAMESPACE
@@ -258,9 +297,17 @@ spec:
             - name: artifact-keys
               mountPath: /var/run/opencrane/artifact-keys
               readOnly: true
+            {{- if eq $membership.mode "standalone" }}
+            - name: invitation-signing-key
+              mountPath: /var/run/opencrane/invitation-signing
+              readOnly: true
+            {{- end }}
             {{- if eq $membership.mode "fleet" }}
             - name: membership-verification-key
               mountPath: /var/run/opencrane/membership
+              readOnly: true
+            - name: membership-billing-token
+              mountPath: /var/run/opencrane/membership-billing
               readOnly: true
             {{- end }}
             - name: memory-gateway-token
@@ -298,14 +345,33 @@ spec:
                 path: lease-private.pem
               - key: receipt-public.pem
                 path: receipt-public.pem
+        {{- if eq $membership.mode "standalone" }}
+        - name: invitation-signing-key
+          secret:
+            secretName: {{ $standaloneMembership.invitationSigningExistingSecret | quote }}
+            defaultMode: 0440
+            items:
+              - key: {{ $standaloneMembership.invitationSigningKeyKey | quote }}
+                path: key
+        {{- end }}
         {{- if eq $membership.mode "fleet" }}
         - name: membership-verification-key
           secret:
-            secretName: {{ required "clustertenantManager.membership.fleet.existingSecret is required in fleet mode" $membership.fleet.existingSecret | quote }}
+            secretName: {{ required "clustertenantManager.membership.fleet.existingSecret is required in fleet mode" $fleetMembership.existingSecret | quote }}
             defaultMode: 0440
             items:
-              - key: {{ required "clustertenantManager.membership.fleet.publicKeyKey is required in fleet mode" $membership.fleet.publicKeyKey | quote }}
+              - key: {{ required "clustertenantManager.membership.fleet.publicKeyKey is required in fleet mode" $fleetMembership.publicKeyKey | quote }}
                 path: public-key.pem
+        # Rotating caller identity for Fleet. Fleet must TokenReview this exact audience and bind
+        # the reviewed server ServiceAccount to billingGatewayCredentialSiloId.
+        - name: membership-billing-token
+          projected:
+            defaultMode: 0440
+            sources:
+              - serviceAccountToken:
+                  path: token
+                  audience: {{ $fleetMembership.billingGatewayProjectedTokenAudience | quote }}
+                  expirationSeconds: {{ $fleetMembership.billingGatewayProjectedTokenTtlSeconds }}
         {{- end }}
         # Audience-bound caller credential for the private memory gateway; rotated by the kubelet.
         # The audience must equal MEMORY_GATEWAY_PROJECTED_TOKEN_AUDIENCE in @opencrane/contracts.

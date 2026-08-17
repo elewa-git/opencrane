@@ -41,6 +41,9 @@
       "path": "../../libs/frontend/features/onboarding"
     },
     {
+      "path": "../../libs/frontend/features/settings"
+    },
+    {
       "path": "../../libs/frontend/features/tools"
     },
     {
@@ -60,6 +63,12 @@
     },
     {
       "path": "../../libs/frontend/state/core"
+    },
+    {
+      "path": "../../libs/frontend/state/organization/members"
+    },
+    {
+      "path": "../../libs/frontend/state/organization/members/adapter"
     },
     {
       "path": "../../libs/frontend/core"

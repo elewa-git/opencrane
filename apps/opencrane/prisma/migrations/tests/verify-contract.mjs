@@ -16,6 +16,10 @@ const conversationSchema = readFileSync(join(migrationRoot, "../schema/conversat
 const runtimeSchema = readFileSync(join(migrationRoot, "../schema/runtime.prisma"), "utf8");
 const digest = createHash("sha256").update(sql).digest("hex");
 const targetDigest = createHash("sha256").update(targetBaseline).digest("hex");
+const organizationTransitionRoot = join(migrationRoot, "0.8.0-to-0.9.0");
+const organizationSql = readFileSync(join(organizationTransitionRoot, "migration.sql"), "utf8");
+const organizationManifest = JSON.parse(readFileSync(join(organizationTransitionRoot, "manifest.json"), "utf8"));
+const organizationSqlDigest = createHash("sha256").update(organizationSql).digest("hex");
 
 function requireContract(condition, message)
 {
@@ -47,7 +51,7 @@ assert.notEqual(
 requireContract(manifest.fromSchemaVersion === "0.7.0", "migration source version must remain exact");
 requireContract(manifest.toSchemaVersion === "0.8.0", "migration target version must remain exact");
 requireContract(manifest.sqlSha256 === digest, "migration SQL digest must match its manifest");
-requireContract(manifest.targetBaselineSha256 === targetDigest, "migration target digest must match the clean baseline");
+requireContract(manifest.targetBaselineSha256 === "7ed3f49ec3b96276cfce1c1d41e97588b0970fb28352c7d933269ce201ce32fc", "0.7.0 migration target must remain the immutable 0.8.0 baseline");
 requireContract(
 	manifest.sourceProtectedBaselineSha256 === "25bfc5d31c4966ee697ae5aaa47edc855d25120d0829c241f213353f69e0358d",
 	"migration must bind the default-owner protected source baseline",
@@ -196,3 +200,27 @@ requireContract(seedEnd > seedStart, "target governed persona seeds must have an
 requireContract(sql.includes(targetBaseline.slice(seedStart, seedEnd)), "migration must carry the exact governed target seeds");
 
 console.log("0.7.0-to-0.8.0 migration contract: PASS");
+
+requireContract(organizationManifest.fromSchemaVersion === "0.8.0", "organization-member migration source version must be exact");
+requireContract(organizationManifest.toSchemaVersion === "0.9.0", "organization-member migration target version must be exact");
+requireContract(organizationManifest.sqlSha256 === organizationSqlDigest, "organization-member migration SQL digest must match its manifest");
+requireContract(organizationManifest.targetBaselineSha256 === targetDigest, "organization-member migration target digest must match the clean baseline");
+requireContract(organizationSql.includes("pg_advisory_lock"), "organization-member migration must acquire the session migration lock");
+requireContract(organizationSql.includes("pg_advisory_xact_lock"), "organization-member migration must hold a transaction migration lock");
+requireContract(organizationSql.includes("BEGIN;"), "organization-member migration must run transactionally");
+requireContract(organizationSql.includes("COMMIT;\nSELECT pg_advisory_unlock"), "organization-member migration must commit before releasing the session lock");
+requireContract(organizationSql.includes("migration_already_applied"), "organization-member migration must support exact idempotent retry");
+requireContract(organizationSql.includes("database does not match the expected 0.8.0 source shape"), "organization-member migration must fail closed on source-shape drift");
+for (const source of [targetBaseline, organizationSql])
+{
+	requireContract(source.includes('CREATE TYPE "OrganizationInvitationStatus"'), "organization invitation state must exist in fresh and migrated schemas");
+	requireContract(source.includes('CREATE TABLE "organization_invitations"'), "organization invitation authority must exist in fresh and migrated schemas");
+	requireContract(source.includes('CREATE TABLE "organization_invitation_requests"'), "invitation idempotency authority must exist in fresh and migrated schemas");
+	requireContract(source.includes('organization_invitations_silo_id_active_email_key'), "one pending invitation must own each silo email");
+	requireContract(source.includes('organization_invitation_requests_silo_id_actor_subject_idempotency_key_key'), "create retry coordinates must be unique per silo and actor");
+	requireContract(source.includes('CREATE FUNCTION "protect_org_membership_last_owner"'), "last active owner mutations must be guarded by the database");
+	requireContract(source.includes('CREATE TRIGGER "org_memberships_last_owner_guard"'), "last-owner guard must run on membership changes");
+}
+requireContract(organizationSql.trimEnd().endsWith("\\endif"), "organization-member migration retry branch must remain explicit");
+
+console.log("0.8.0-to-0.9.0 migration contract: PASS");
