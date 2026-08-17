@@ -50,6 +50,8 @@ The package's index file (barrel) re-exports the components directly:
 - `LedgerCardComponent` and `LedgerCardKinds` — one finite semantic card in an agent
   action/observation ledger.
 - `SectionHeadingComponent` — the existing feature-section heading.
+- `OpenCraneBrandComponent` — the shared product mark and wordmark used by journey and navigation
+  frames without introducing a separate image asset.
 - `JourneyShellComponent`, `JourneyShellLayouts`, and `JourneyShellHeaderEmphases` — the
   full-viewport responsive paper frame, with width and heading priority kept as separate states.
 - `ChoiceCardGroupComponent`, `ChoiceCardOption`, `ChoiceCardLayouts`, and

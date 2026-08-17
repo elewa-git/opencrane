@@ -1,17 +1,16 @@
 <section class="onboarding-history" aria-labelledby="onboarding-history-title">
-	<header>
-		<div>
-			<small>Onboarding history · Read-only</small>
-			<div class="onboarding-history__title-row"><h1 id="onboarding-history-title">{{ presentation().title }}</h1><wo-scope-chip label="Completed" [tone]="chipTone" [appearance]="chipAppearance" /></div>
-			<p>Completed with {{ presentation().personaName }} at {{ presentation().completedLabel }}.</p>
-		</div>
+	<header class="onboarding-history__header">
+		<div class="onboarding-history__title-row"><h1 id="onboarding-history-title">{{ presentation().title }}</h1><wo-scope-chip label="Completed" [tone]="chipTone" [appearance]="chipAppearance" /></div>
+		<span class="onboarding-history__read-only"><i class="pi pi-lock" aria-hidden="true"></i> Read-only</span>
 	</header>
-	<section class="onboarding-history__transcript" aria-label="Completed onboarding messages">
-		<div class="onboarding-history__transcript-measure">
-			@for (entry of messages(); track entry.message.id) {
-				<div class="onboarding-history__message"><wo-conversation-message [message]="entry.message"><wo-conversation-rich-text conversation-message-rich-card [presentation]="entry.richText" /></wo-conversation-message></div>
+	<div class="onboarding-history__body">
+		@if (availability(); as notice) { <p-message severity="warn" [text]="notice.heading + ' — ' + notice.detail" /> }
+		<section class="onboarding-history__transcript" aria-label="Completed onboarding conversation">
+			@for (entry of entries(); track entry.id) {
+				<article class="onboarding-history__message" [class.onboarding-history__message--participant]="entry.speaker === speakers.Participant"><wo-conversation-rich-text [presentation]="entry.richText" /></article>
 			}
-		</div>
-	</section>
+			<div class="onboarding-history__completion" role="status"><span aria-hidden="true"></span><strong>Onboarding completed · {{ presentation().completedLabel }}</strong><span aria-hidden="true"></span></div>
+		</section>
+	</div>
 	<wo-conversation-onboarding-continuation [continuation]="continuation()" (newChatRequested)="newChatRequested.emit()" />
 </section>

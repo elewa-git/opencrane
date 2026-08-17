@@ -25,6 +25,9 @@ derives the rows without copying conversation messages.
 
 ## Public surface
 
+`ConversationActivityComponent` renders browser-safe rows and accepts one named header-action slot so
+the owning workspace can supply a close control without moving panel visibility into this component.
+
 - `ConversationActivityComponent` renders ordered safe rows and emits exact canonical coordinates.
 
 ## Boundary

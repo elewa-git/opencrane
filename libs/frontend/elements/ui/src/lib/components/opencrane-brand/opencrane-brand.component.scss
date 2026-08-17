@@ -1,0 +1,38 @@
+:host {
+	display: inline-flex;
+}
+
+.wo-opencrane-brand {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--oc-space-2);
+	color: var(--oc-ink-muted);
+	font-family: var(--oc-font-mono);
+	font-size: var(--oc-text-xs);
+	font-weight: 600;
+	letter-spacing: var(--oc-tracking-label);
+	text-transform: uppercase;
+
+	&__mark {
+		width: var(--oc-space-3);
+		height: var(--oc-space-3);
+		background: var(--oc-accent);
+		clip-path: polygon(50% 0, 100% 100%, 0 100%);
+	}
+
+	&__crane {
+		width: 2.25rem;
+		height: 2.25rem;
+	}
+
+	&--navigation {
+		color: var(--oc-ink-strong);
+		font-family: var(--oc-font-sans);
+		font-size: var(--oc-text-xl);
+		letter-spacing: -0.03em;
+		text-transform: none;
+
+		strong { font-weight: 700; }
+		strong span:last-child { color: var(--oc-accent-active); }
+	}
+}

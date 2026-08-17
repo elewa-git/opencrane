@@ -5,7 +5,7 @@ import { toSanitizedMarkdownHtml, toStreamingMarkdownHtml } from "@opencrane/sta
 import { AgUiMessageStatuses, type AgUiMessageView } from "@opencrane/state/conversation/ag-ui";
 import { ConversationModes, ConversationPersonalAgentStatuses, MessageRoles, MessageStates, type ConversationCreationDirectory, type ConversationMessage, type ConversationOnboardingHistory, type ConversationSummary } from "@opencrane/state/conversation/workspace";
 
-import type { ConversationMessageView, ConversationOnboardingContinuationPresentation, ConversationOnboardingHistoryPresentation, ConversationPresentationContext, ConversationSummaryPresentation } from "./conversation-workspace-feature.types";
+import { ConversationOnboardingDialogueSpeakers, ConversationSessionRailItemKinds, type ConversationMessageView, type ConversationOnboardingContinuationPresentation, type ConversationOnboardingDialogueEntryPresentation, type ConversationOnboardingHistoryPresentation, type ConversationPresentationContext, type ConversationRailIdentityPresentation, type ConversationSessionRailItemPresentation, type ConversationSummaryPresentation } from "./conversation-workspace-feature.types";
 
 /**
  * Builds one rail row from a conversation summary.
@@ -35,12 +35,37 @@ export function _ConversationSummaryPresentation(summary: ConversationSummary, p
 }
 
 /**
+ * Combines completed onboarding and ordinary conversations into one visual session rail.
+ * The onboarding row keeps a `null` conversation coordinate so selection cannot open conversation
+ * commands for the saved Welcome dialogue.
+ */
+export function _ConversationSessionRailItems(summaries: readonly ConversationSummaryPresentation[], onboarding: ConversationOnboardingHistoryPresentation | null): readonly ConversationSessionRailItemPresentation[]
+{
+	const onboardingItems: readonly ConversationSessionRailItemPresentation[] = onboarding === null ? [] : [{ key: `onboarding:${onboarding.id}`, kind: ConversationSessionRailItemKinds.Onboarding, conversationId: null, title: "Welcome", detail: "Private chat · Read-only", updatedLabel: onboarding.completedLabel, archived: false }];
+	const conversationItems = summaries.map(function _Conversation(summary): ConversationSessionRailItemPresentation
+	{
+		return { key: summary.id, kind: ConversationSessionRailItemKinds.Conversation, conversationId: summary.id, title: summary.title, detail: `${summary.modeLabel} · ${summary.participantLabel}`, updatedLabel: summary.updatedLabel, archived: summary.archived };
+	});
+	return [...onboardingItems, ...conversationItems];
+}
+
+/**
+ * Maps the directory's generic self label into the optional rail footer.
+ * Opaque participant references never enter the returned object; a missing self entry removes the
+ * footer instead of guessing an identity.
+ */
+export function _ConversationRailIdentityPresentation(directory: ConversationCreationDirectory | null): ConversationRailIdentityPresentation | null
+{
+	const self = directory?.participants.find(participant => participant.isSelf);
+	if (self === undefined) return null;
+	return { name: self.label, detail: "Private workspace", initials: self.label === "You" ? "Y" : self.label.slice(0, 2).toUpperCase() };
+}
+
+/**
  * Builds the header copy for the completed onboarding exchange.
  *
- * The title is a fixed phrase rather than anything the server sent, because the rail lists this row
- * next to Direct, Group and Agent-session rows and a server-supplied title could read as a fourth
- * mode. The persona name and completion time do come from the server, and the time is put through the
- * same formatter the conversation rows use so both read alike.
+ * The title is a fixed phrase rather than anything the server sent. The completion time passes
+ * through the same formatter the session rail uses so the Welcome row and main panel agree.
  *
  * Called by: `ConversationWorkspacePresenter._OnboardingHistoryPresentation`, which calls this only
  * once it has confirmed the projection carries a transcript.
@@ -52,7 +77,7 @@ export function _ConversationSummaryPresentation(summary: ConversationSummary, p
  */
 export function _ConversationOnboardingHistoryPresentation(history: ConversationOnboardingHistory): ConversationOnboardingHistoryPresentation
 {
-	return { id: history.id, title: "Welcome conversation", personaName: history.personaDisplayName, completedLabel: _TimeLabel(history.completedAt) };
+	return { id: history.id, title: "Welcome to OpenCrane", completedLabel: _TimeLabel(history.completedAt) };
 }
 
 /**
@@ -65,62 +90,42 @@ export function _ConversationOnboardingHistoryPresentation(history: Conversation
 export function _ConversationOnboardingContinuationPresentation(directory: ConversationCreationDirectory | null): ConversationOnboardingContinuationPresentation
 {
 	const heading = "This conversation is complete and read-only.";
-	if (directory === null) return { heading, detail: "You can still read everything here. New-chat availability could not be confirmed.", canStartNewChat: false };
-	if (!directory.participants.some(participant => participant.isSelf)) return { heading, detail: "You can still read everything here. This account needs workspace membership before a new chat can be started.", canStartNewChat: false };
+	const detail = "Your onboarding answers stay here as a private chat.";
+	if (directory === null) return { heading, detail, capabilityNote: "New-session availability could not be confirmed.", canStartNewChat: false };
+	if (!directory.participants.some(participant => participant.isSelf)) return { heading, detail, capabilityNote: "This account needs workspace membership before a new session can be started.", canStartNewChat: false };
 	const hasParticipant = directory.participants.some(participant => !participant.isSelf);
 	const hasReadyAgent = directory.personalAgentStatus === ConversationPersonalAgentStatuses.Ready && directory.personalAgent !== null;
-	if (!hasParticipant && !hasReadyAgent) return { heading, detail: "You can still read everything here. No participant or personal Agent is available for a new chat.", canStartNewChat: false };
-	if (directory.personalAgentStatus === ConversationPersonalAgentStatuses.Unavailable) return { heading, detail: "You can still read everything here. Direct and group chats are available; an administrator must finish Agent setup before you can start an Agent session.", canStartNewChat: true };
-	if (directory.personalAgentStatus === ConversationPersonalAgentStatuses.Ambiguous) return { heading, detail: "You can still read everything here. Direct and group chats are available while an administrator repairs the personal Agent assignment.", canStartNewChat: true };
-	if (!hasParticipant) return { heading, detail: "You can still read everything here. Start a new chat to continue with your Agent.", canStartNewChat: true };
-	if (!hasReadyAgent) return { heading, detail: "You can still read everything here. Start a direct or group chat to continue with other participants.", canStartNewChat: true };
-	return { heading, detail: "You can still read everything here. Start a new chat to continue with your Agent or other participants.", canStartNewChat: true };
+	if (!hasParticipant && !hasReadyAgent) return { heading, detail, capabilityNote: "No participant or personal Agent is available for a new session.", canStartNewChat: false };
+	if (directory.personalAgentStatus === ConversationPersonalAgentStatuses.Unavailable) return { heading, detail, capabilityNote: "Direct and group sessions are available. Agent sessions stay locked until setup is finished.", canStartNewChat: true };
+	if (directory.personalAgentStatus === ConversationPersonalAgentStatuses.Ambiguous) return { heading, detail, capabilityNote: "Direct and group sessions are available while an administrator repairs the personal Agent assignment.", canStartNewChat: true };
+	if (!hasParticipant) return { heading, detail, capabilityNote: "Start a new session to continue with your Agent.", canStartNewChat: true };
+	if (!hasReadyAgent) return { heading, detail, capabilityNote: "Start a direct or group session to continue with other participants.", canStartNewChat: true };
+	return { heading, detail, capabilityNote: "Start a new session with your Agent or other participants.", canStartNewChat: true };
 }
 
 /**
- * Turns the onboarding transcript into the same row shape the conversation transcript uses, so the
- * history panel can reuse the shared message and rich-text elements.
+ * Turns the onboarding transcript into a dedicated guide-or-participant dialogue projection.
  *
- * The output only looks like conversation messages — none of these rows is one. They carry no server
- * message id, no per-line timestamp and no Agent thread, because the onboarding projection records
- * only an order, a speaker and text per line. So a reader must not feed these rows back into anything
- * that expects a real {@link ConversationMessage}: there is nothing on the server to reply to, retry
- * or open.
+ * These rows carry no conversation message id, per-line timestamp, Agent identity, or Agent thread.
+ * The onboarding projection records only an order, a speaker, and text per line, so this mapping must
+ * never grant reply, retry, run, archive, or thread-opening authority.
  *
- * Called by: `ConversationWorkspacePresenter._OnboardingHistoryMessages`, which calls this only once
+ * Called by: `ConversationWorkspacePresenter._OnboardingDialogue`, which calls this only once
  * it has confirmed the projection carries a transcript.
  * @param history - The completed exchange, already in the order the server recorded it.
  * @returns One row per transcript line, in the server's order. Empty only if the server recorded an
  * empty exchange; the caller handles the "no transcript at all" case before reaching here.
- * @see _ConversationMessageViews for the equivalent mapping of real conversation messages.
+ * @see _ConversationMessageViews for the separate mapping of real conversation messages.
  */
-export function _ConversationOnboardingHistoryMessageViews(history: ConversationOnboardingHistory): readonly ConversationMessageView[]
+export function _ConversationOnboardingDialogueEntries(history: ConversationOnboardingHistory): readonly ConversationOnboardingDialogueEntryPresentation[]
 {
-	return history.transcript.map(function _Entry(entry): ConversationMessageView
+	return history.transcript.map(function _Entry(entry): ConversationOnboardingDialogueEntryPresentation
 	{
-		// 1. Pick the display identity from the recorded speaker. The assistant is named after the
-		// persona the user actually onboarded with, so the transcript reads back as the same
-		// conversation they had rather than a generic "Agent".
-		const assistant = entry.role === MessageRoles.Assistant;
-		const author = assistant
-			? { name: history.personaDisplayName, initials: "A", avatarTone: AvatarTones.Brand, tone: ConversationMessageTones.Agent }
-			: { name: "You", initials: "Y", avatarTone: AvatarTones.Brand, tone: ConversationMessageTones.Participant };
-
-		// 2. Build an id from the exchange id and the line's ordinal. The server sends no id per line,
-		// and both the template's `@for` track and the rich-text element's `messageId` need a stable
-		// one that does not change between renders.
 		const id = `onboarding-${history.id}-${entry.ordinal}`;
-
-		// 3. Fill the shared row. `body` stays empty and the text goes through the rich-text slot, which
-		// is how the conversation transcript renders markdown too. Sanitizing rather than
-		// streaming-rendering is correct here because a completed exchange has no partial line left to
-		// arrive. `timestampLabel` is the word "Onboarding" because the server records one completion
-		// time for the whole exchange and none per line; that single time shows in the panel header.
-		return {
-			message: { id, authorName: author.name, authorInitials: author.initials, avatarTone: author.avatarTone, timestampLabel: "Onboarding", body: "", tone: author.tone },
-			richText: { messageId: id, html: toSanitizedMarkdownHtml(entry.text), label: `${author.name} onboarding message` },
-			agentThread: null
-		};
+		const participant = entry.role === MessageRoles.User;
+		const speaker = participant ? ConversationOnboardingDialogueSpeakers.Participant : ConversationOnboardingDialogueSpeakers.Guide;
+		const label = participant ? "Your onboarding message" : "OpenCrane onboarding guide message";
+		return { id, speaker, richText: { messageId: id, html: toSanitizedMarkdownHtml(entry.text), label } };
 	});
 }
 

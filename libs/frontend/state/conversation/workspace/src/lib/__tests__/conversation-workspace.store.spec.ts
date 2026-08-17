@@ -52,6 +52,8 @@ class _FakeGateway implements ConversationWorkspaceGateway
 	public sendError: Error | null = null;
 	/** Optional onboarding history outcome. */
 	public historyResult: ConversationOnboardingHistoryProjection | Promise<ConversationOnboardingHistoryProjection> = _OnboardingHistory();
+	/** Number of run reads admitted by the selected immutable mode. */
+	public runReads = 0;
 
 	/** Return generic privacy-safe choices. */
 	public async directory() { return { participants: [{ participantRef: "self-ref", isSelf: true, label: "You" }, { participantRef: "other-ref", isSelf: false, label: "Participant 1" }], personalAgentStatus: ConversationPersonalAgentStatuses.Ready, personalAgent: { personalAgentRef: "agent-ref", displayName: "Nova" } } as const; }
@@ -74,7 +76,7 @@ class _FakeGateway implements ConversationWorkspaceGateway
 	/** Return a closed snapshot. */
 	public async close() { return { ..._Detail(), lifecycle: ConversationLifecycles.Closed }; }
 	/** Return one run status. */
-	public async run(runId: string): Promise<ConversationRun> { return { runId, attempt: 1, state: "running" as ConversationRun["state"], conversationId: "conversation-1" }; }
+	public async run(runId: string): Promise<ConversationRun> { this.runReads += 1; return { runId, attempt: 1, state: "running" as ConversationRun["state"], conversationId: "conversation-1" }; }
 	/** Accept steering. */
 	public async steer(): Promise<void> { return; }
 	/** Return a cancelled run. */
@@ -90,12 +92,14 @@ class _FakeStream implements ConversationEventStream
 	public starts = 0;
 	/** Connection state emitted by the next selected stream. */
 	public status = ConversationEventStreamStatuses.Live;
+	/** Folded stream state emitted by the next selected stream. */
+	public state = __CreateAgUiStreamState();
 
 	/** Emit one update without retaining the command. */
 	public async stream(command: StreamConversationEventsCommand)
 	{
 		this.starts += 1;
-		const state = __CreateAgUiStreamState();
+		const state = this.state;
 		command.onUpdate?.({ status: this.status, state, reconnectAttempt: this.status === ConversationEventStreamStatuses.Reconnecting ? 1 : 0, lastHeartbeatAt: Date.now() });
 		return state;
 	}
@@ -258,6 +262,33 @@ describe("ConversationWorkspaceStore", function _ConversationWorkspaceStore()
 		expect(store.draft()).toBe("Keep this draft");
 		expect(store.streamStatus()).toBe(ConversationEventStreamStatuses.Reconnecting);
 		expect(store.routeState()).toBe(ConversationWorkspaceRouteStates.Ready);
+	});
+
+	it("ignores stale run coordinates for a direct conversation", async function _IgnoreDirectRun()
+	{
+		const [store, gateway, stream] = _CreateStore();
+		gateway.historyResult = { status: ConversationOnboardingHistoryStatuses.NotRecorded, history: null };
+		gateway.openResult = { ..._Detail(), mode: ConversationModes.Direct };
+		stream.state = { ...__CreateAgUiStreamState(), runId: "stale-run" };
+
+		await store.load();
+		await Promise.resolve();
+
+		expect(gateway.runReads).toBe(0);
+		expect(store.runs.run()).toBeNull();
+	});
+
+	it("admits run coordinates only for an Agent session", async function _AdmitAgentRun()
+	{
+		const [store, gateway, stream] = _CreateStore();
+		gateway.historyResult = { status: ConversationOnboardingHistoryStatuses.NotRecorded, history: null };
+		gateway.openResult = { ..._Detail(), mode: ConversationModes.AgentSession, agentServiceId: "agent-1", participantRefs: ["self-ref"] };
+		stream.state = { ...__CreateAgUiStreamState(), runId: "run-1" };
+
+		await store.load();
+		await vi.waitFor(function _RunLoaded() { expect(gateway.runReads).toBe(1); });
+
+		expect(store.runs.run()?.runId).toBe("run-1");
 	});
 
 	it("reuses the exact message command after an ambiguous response", async function _RetryExactMessage()

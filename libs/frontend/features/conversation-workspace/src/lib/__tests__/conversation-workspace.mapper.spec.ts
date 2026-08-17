@@ -1,6 +1,6 @@
 import { ConversationLifecycles, ConversationModes, ConversationPersonalAgentStatuses, MessageRoles, MessageSources, MessageStates, type ConversationMessage, type ConversationSummary } from "@opencrane/state/conversation/workspace";
 
-import { _ConversationMessageView, _ConversationOnboardingContinuationPresentation, _ConversationSummaryPresentation } from "../conversation-workspace.mapper";
+import { _ConversationMessageView, _ConversationOnboardingContinuationPresentation, _ConversationRailIdentityPresentation, _ConversationSessionRailItems, _ConversationSummaryPresentation } from "../conversation-workspace.mapper";
 
 /** Build one direct-conversation summary without introducing display names. */
 function _Summary(): ConversationSummary
@@ -32,6 +32,23 @@ describe("Conversation workspace presentation", function _ConversationWorkspaceP
 		expect(view.richText.html).toContain("Hello");
 	});
 
+	it("places completed onboarding inside one session rail without a fake conversation id", function _UnifiedRail()
+	{
+		const onboarding = { id: "onboarding-1", title: "Welcome to OpenCrane", completedLabel: "09:15" };
+		const rows = _ConversationSessionRailItems([_ConversationSummaryPresentation(_Summary(), null)], onboarding);
+
+		expect(rows[0]).toMatchObject({ title: "Welcome", detail: "Private chat · Read-only", conversationId: null, archived: false });
+		expect(rows[1]).toMatchObject({ title: "Direct conversation", conversationId: "conversation-1" });
+	});
+
+	it("uses only the generic directory self label in the rail footer", function _SafeRailIdentity()
+	{
+		const identity = _ConversationRailIdentityPresentation({ participants: [{ participantRef: "opaque-secret", isSelf: true, label: "You" }], personalAgentStatus: ConversationPersonalAgentStatuses.Unavailable, personalAgent: null });
+
+		expect(identity).toEqual({ name: "You", detail: "Private workspace", initials: "Y" });
+		expect(JSON.stringify(identity)).not.toContain("opaque-secret");
+	});
+
 	it("keeps history continuation truthful for every personal Agent status", function _HistoryContinuation()
 	{
 		const self = { participantRef: "subject-secret", isSelf: true, label: "You" } as const;
@@ -43,11 +60,11 @@ describe("Conversation workspace presentation", function _ConversationWorkspaceP
 		const unknown = _ConversationOnboardingContinuationPresentation(null);
 		const withoutMembership = _ConversationOnboardingContinuationPresentation({ participants: [], personalAgentStatus: ConversationPersonalAgentStatuses.Unavailable, personalAgent: null });
 
-		expect(ready.detail).toContain("continue with your Agent");
-		expect(unavailable.detail).toContain("Direct and group chats are available");
-		expect(ambiguous.detail).toContain("repairs the personal Agent assignment");
+		expect(ready.capabilityNote).toContain("continue with your Agent");
+		expect(unavailable.capabilityNote).toContain("Direct and group sessions are available");
+		expect(ambiguous.capabilityNote).toContain("repairs the personal Agent assignment");
 		expect([ready, unavailable, ambiguous].every(presentation => presentation.canStartNewChat)).toBe(true);
-		expect(withoutDestination.detail).toContain("No participant or personal Agent");
+		expect(withoutDestination.capabilityNote).toContain("No participant or personal Agent");
 		expect([withoutDestination, unknown, withoutMembership].every(presentation => !presentation.canStartNewChat)).toBe(true);
 	});
 });

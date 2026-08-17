@@ -1,40 +1,39 @@
 import { type Meta, moduleMetadata, type StoryObj } from "@storybook/angular";
 
-import { ConversationOnboardingHistoryStatuses } from "@opencrane/state/conversation/workspace";
-
-import type { ConversationOnboardingHistoryPresentation, ConversationSummaryPresentation } from "../conversation-workspace-feature.types";
+import { ConversationSessionRailItemKinds, type ConversationRailIdentityPresentation, type ConversationSessionRailItemPresentation } from "../conversation-workspace-feature.types";
 import { ConversationListComponent } from "../components/conversation-list/conversation-list.component";
 
 /** Privacy-safe rows used by desktop and compact visual contracts. */
-const _ITEMS: readonly ConversationSummaryPresentation[] =
+const _ITEMS: readonly ConversationSessionRailItemPresentation[] =
 [
-	{ id: "agent-session", title: "Nova", modeLabel: "Agent session", participantLabel: "You and your Agent", updatedLabel: "11:08", archived: false },
-	{ id: "direct", title: "Direct conversation", modeLabel: "Direct", participantLabel: "You and Participant 1", updatedLabel: "10:42", archived: false },
-	{ id: "group", title: "Group conversation", modeLabel: "Group", participantLabel: "4 participants", updatedLabel: "Yesterday", archived: false },
-	{ id: "archived", title: "Project handoff", modeLabel: "Group", participantLabel: "Archived", updatedLabel: "Monday", archived: true }
+	{ key: "onboarding:onboarding-1", kind: ConversationSessionRailItemKinds.Onboarding, conversationId: null, title: "Welcome", detail: "Private chat · Read-only", updatedLabel: "09:15", archived: false },
+	{ key: "agent-session", kind: ConversationSessionRailItemKinds.Conversation, conversationId: "agent-session", title: "Nova", detail: "Agent session · You and your Agent", updatedLabel: "11:08", archived: false },
+	{ key: "direct", kind: ConversationSessionRailItemKinds.Conversation, conversationId: "direct", title: "Direct conversation", detail: "Direct · You and Participant 1", updatedLabel: "10:42", archived: false },
+	{ key: "group", kind: ConversationSessionRailItemKinds.Conversation, conversationId: "group", title: "Group conversation", detail: "Group · 4 participants", updatedLabel: "Yesterday", archived: false },
+	{ key: "archived", kind: ConversationSessionRailItemKinds.Conversation, conversationId: "archived", title: "Project handoff", detail: "Group · 3 participants", updatedLabel: "Monday", archived: true }
 ];
 
-/** Completed onboarding row shown separately from immutable conversation modes. */
-const _ONBOARDING: ConversationOnboardingHistoryPresentation = { id: "onboarding-1", title: "Welcome conversation", personaName: "Nova", completedLabel: "09:15" };
+/** Generic directory-derived self label used by the rail catalogue. */
+const _IDENTITY: ConversationRailIdentityPresentation = { name: "You", detail: "Private workspace", initials: "Y" };
 
-/** Visual-test catalogue for the workspace conversation rail. */
+/** Visual-test catalogue for the workspace session rail. */
 const meta: Meta<ConversationListComponent> =
 {
 	title: "Conversations/Workspace",
 	component: ConversationListComponent,
 	tags: ["autodocs"],
 	decorators: [moduleMetadata({ imports: [ConversationListComponent] })],
-	parameters: { docs: { description: { component: "Privacy-safe direct, group, and Agent-session navigation used by the post-onboarding chat workspace." } } }
+	parameters: { docs: { description: { component: "Private onboarding, direct, group, and Agent-session navigation in one participant-facing My sessions rail." } } }
 };
 
 export default meta;
 type Story = StoryObj<ConversationListComponent>;
 
-/** Desktop rail shows every immutable conversation mode without opaque participant coordinates. */
-export const DesktopModes: Story = { tags: ["visual-test"], args: { items: _ITEMS, onboardingHistory: _ONBOARDING, onboardingHistoryStatus: ConversationOnboardingHistoryStatuses.Ready, selectedId: "agent-session" }, parameters: { viewport: { defaultViewport: "responsive" } } };
+/** Desktop rail shows the completed Welcome session beside ordinary sessions. */
+export const DesktopModes: Story = { tags: ["visual-test"], args: { items: _ITEMS, selectedKey: "agent-session", identity: _IDENTITY }, parameters: { viewport: { defaultViewport: "responsive" } } };
 
-/** Compact rail keeps the same readable selection contract. */
-export const CompactModes: Story = { tags: ["visual-test", "visual-test-narrow"], args: { items: _ITEMS, onboardingHistory: _ONBOARDING, onboardingHistoryStatus: ConversationOnboardingHistoryStatuses.Ready, onboardingSelected: true, selectedId: null }, parameters: { viewport: { defaultViewport: "mobile1" } } };
+/** Compact rail keeps the same unified selection contract. */
+export const CompactModes: Story = { tags: ["visual-test", "visual-test-narrow"], args: { items: _ITEMS, selectedKey: "onboarding:onboarding-1", identity: _IDENTITY }, parameters: { viewport: { defaultViewport: "mobile1" } } };
 
-/** Empty state gives the participant a clear next action. */
-export const Empty: Story = { tags: ["visual-test"], args: { items: [], onboardingHistoryStatus: ConversationOnboardingHistoryStatuses.NotRecorded, selectedId: null } };
+/** Empty state gives the participant a clear next action without mentioning missing onboarding history. */
+export const Empty: Story = { tags: ["visual-test"], args: { items: [], selectedKey: null, identity: _IDENTITY } };

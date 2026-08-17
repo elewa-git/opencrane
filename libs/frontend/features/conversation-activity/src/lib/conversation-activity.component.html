@@ -1,5 +1,5 @@
 <section class="activity" aria-labelledby="conversation-activity-title">
-	<h2 id="conversation-activity-title">Activity</h2>
+	<header><h2 id="conversation-activity-title">Activity</h2><ng-content select="[conversation-activity-header-action]" /></header>
 	@if (rows().length === 0) { <p class="activity__empty">No open requests or tool failures.</p> }
 	<ul>
 		@for (row of rows(); track row.id) {

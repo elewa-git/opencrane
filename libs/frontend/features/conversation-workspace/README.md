@@ -10,11 +10,15 @@ asset, Activity, elicitation, and A2UI elements. A feature presenter derives bro
 models and delegates every command to the existing state stores. Its feature-local route coordinator
 owns index/selection URLs, child Agent-thread navigation, and sign-in recovery through the platform seam.
 
-The completed onboarding exchange appears first as a selected read-only history panel. It is not a fourth
-conversation mode and starts no stream or run. Its two-column composition omits the Activity and Files rail,
-centres the saved transcript, and replaces the composer with one read-only tray and one **Start a new chat**
-action. That tray also explains when direct and group chat remain available but the directory has no usable
-personal Agent; it never invents Agent setup state in the browser.
+The completed onboarding exchange appears as the selected **Welcome** row inside the same **My sessions**
+rail as ordinary conversations. It remains a separate read-only server projection, not a fourth conversation
+mode, and starts no stream or run. Its main panel follows board `8a`: a compact completed/read-only header,
+guide and participant dialogue, a completion divider, and one **Start a new chat** continuation tray. Directory
+warnings explain unavailable Agent setup without inventing provisioning state in the browser.
+
+An ordinary selected conversation may compose one feature-local context panel from the existing Activity and
+Files components. The page owns whether that panel is open and restores keyboard focus to the header trigger
+when it closes. Direct and group conversations can expose Files but never adopt stale Agent-run Activity.
 
 ```
  bounded snapshot ──► workspace store ──► feature presenter ──► thin page
@@ -35,9 +39,11 @@ their capability checks and audit trail. Tool failures stay visible even when a 
   delegates typed user intents to the stores that own them.
 - `ConversationOnboardingHistoryComponent` renders the completed bootstrap transcript without message,
   asset, run, archive, or close controls.
-- The feature-local list and create controls render privacy-safe rows and immutable conversation
-  mode choices. Active chats, archived chats, and onboarding history remain distinct sections, and they
-  never show opaque participant references.
+- `ConversationWorkspaceContextPanelComponent` composes closable Activity and Files presentation without
+  owning state or navigation.
+- The feature-local list and create controls render privacy-safe rows and immutable conversation mode
+  choices. Completed onboarding and active chats share one session list; archived chats remain separate.
+  No row shows opaque participant references.
 
 ## Boundary
 
@@ -49,7 +55,7 @@ Agent remains unavailable in this phase because its actions have no server-owned
 ## Dependency direction
 
 The package carries `scope:conversation-workspace` and `frontend-role:feature-shell`. It may compose
-approved elements, conversation features and state, foundational projection state, shared
+approved elements, conversation features and state, the directory's generic self label, shared
 contracts and models, and the platform capability seam used for sign-in recovery. It must not
 import an app, backend package, browser runtime implementation, or concrete generated-client
 adapter.

@@ -3,7 +3,13 @@ import { ButtonModule } from "primeng/button";
 
 import { ConversationActivityKinds, type ConversationActivityRow, type ConversationActivityTarget } from "@opencrane/state/conversation/elicitation";
 
-/** Derived Activity list with explicit canonical deep-link intents. */
+/**
+ * Derived Activity list with explicit canonical deep-link intents.
+ *
+ * A caller may project one header action, such as the workspace panel's close control. The action
+ * remains caller-owned because this component does not know whether it sits in a persistent page,
+ * drawer, or collapsible panel.
+ */
 @Component({ selector: "wo-conversation-activity", standalone: true, imports: [ButtonModule], templateUrl: "./conversation-activity.component.html", styleUrl: "./conversation-activity.component.scss", changeDetection: ChangeDetectionStrategy.OnPush })
 export class ConversationActivityComponent
 {

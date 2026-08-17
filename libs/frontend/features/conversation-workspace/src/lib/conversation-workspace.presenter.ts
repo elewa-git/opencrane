@@ -5,10 +5,10 @@ import { ConversationComposerStates, ConversationStatusTones, type ConversationR
 import { ConversationAssetActionKinds, __ConversationAssetPresentation, __ConversationAssetSelectionFeedback, __PendingConversationAssetPresentation, type ConversationAssetActionIntent, type ConversationAssetPresentation, type ConversationAssetSelectionFeedback } from "@opencrane/features/conversation-assets";
 import { ConversationAssetsStore } from "@opencrane/state/conversation/assets";
 import { ConversationElicitationStore, __MapToolActivity, type ElicitationResponseValue } from "@opencrane/state/conversation/elicitation";
-import { AgUiToolStatuses, ConversationCreationStates, ConversationEventStreamStatuses, ConversationLifecycles, ConversationPersonalAgentStatuses, ConversationRunStates, ConversationWorkspaceRouteStates, ConversationWorkspaceStore } from "@opencrane/state/conversation/workspace";
+import { AgUiToolStatuses, ConversationCreationStates, ConversationEventStreamStatuses, ConversationLifecycles, ConversationModes, ConversationPersonalAgentStatuses, ConversationRunStates, ConversationWorkspaceRouteStates, ConversationWorkspaceStore } from "@opencrane/state/conversation/workspace";
 
-import { _ConversationMessageViews, _ConversationOnboardingContinuationPresentation, _ConversationOnboardingHistoryMessageViews, _ConversationOnboardingHistoryPresentation, _ConversationSummaryPresentation, _LiveMessageViews } from "./conversation-workspace.mapper";
-import { ConversationWorkspaceLayouts, type ConversationOnboardingContinuationPresentation, type ConversationWorkspaceAvailabilityPresentation } from "./conversation-workspace-feature.types";
+import { _ConversationMessageViews, _ConversationOnboardingContinuationPresentation, _ConversationOnboardingDialogueEntries, _ConversationOnboardingHistoryPresentation, _ConversationRailIdentityPresentation, _ConversationSessionRailItems, _ConversationSummaryPresentation, _LiveMessageViews } from "./conversation-workspace.mapper";
+import type { ConversationOnboardingContinuationPresentation, ConversationWorkspaceAvailabilityPresentation } from "./conversation-workspace-feature.types";
 
 /** Feature-scoped presenter that derives view state and delegates typed intents to owning stores. */
 export class ConversationWorkspacePresenter
@@ -31,6 +31,12 @@ export class ConversationWorkspacePresenter
 	protected readonly toolStatuses = AgUiToolStatuses;
 	/** Privacy-safe list rows. */
 	protected readonly summaries = computed(this._Summaries.bind(this));
+	/** Completed onboarding and ordinary conversations in one visual My sessions list. */
+	protected readonly sessionRailItems = computed(this._SessionRailItems.bind(this));
+	/** Selected browser key for the visually unified session rail. */
+	protected readonly selectedSessionKey = computed(this._SelectedSessionKey.bind(this));
+	/** Browser-safe self label shown at the bottom of the rail when the directory exposes one. */
+	protected readonly railIdentity = computed(this._RailIdentity.bind(this));
 	/**
 	 * Header copy for the onboarding history, or `null` when the server recorded no completed exchange.
 	 *
@@ -38,19 +44,10 @@ export class ConversationWorkspacePresenter
 	 * rail row and the main panel, so this signal doubles as the "is there a transcript" answer.
 	 */
 	protected readonly onboardingHistoryPresentation = computed(this._OnboardingHistoryPresentation.bind(this));
-	/**
-	 * The onboarding transcript as rows the shared message elements can render.
-	 *
-	 * Kept separate from {@link messages} on purpose: these rows never join the live conversation
-	 * stream, and the panel that shows them is rendered instead of the transcript, not alongside it.
-	 */
-	protected readonly onboardingHistoryMessages = computed(this._OnboardingHistoryMessages.bind(this));
+	/** Dedicated onboarding dialogue that never joins the live conversation message stream. */
+	protected readonly onboardingDialogue = computed(this._OnboardingDialogue.bind(this));
 	/** Explicit availability state derived from the existing privacy-safe directory. */
 	protected readonly availabilityNotice = computed(this._AvailabilityNotice.bind(this));
-	/** Typed page composition derived from the selected authoritative projection. */
-	protected readonly workspaceLayout = computed(this._WorkspaceLayout.bind(this));
-	/** Stable workspace layout vocabulary used by the template. */
-	protected readonly workspaceLayouts = ConversationWorkspaceLayouts;
 	/** Read-only tray copy derived from the same directory used by conversation creation. */
 	protected readonly onboardingContinuation = computed(this._OnboardingContinuation.bind(this));
 	/** Privacy-safe row corresponding to the selected authorized snapshot. */
@@ -63,6 +60,10 @@ export class ConversationWorkspacePresenter
 	protected readonly assetFeedback = computed(this._AssetFeedback.bind(this));
 	/** Tool-failure Activity rows retaining failures even while retrying. */
 	protected readonly activityRows = computed(this._ActivityRows.bind(this));
+	/** Whether the selected immutable mode admits Agent-run Activity. */
+	protected readonly agentActivityVisible = computed(this._AgentActivityVisible.bind(this));
+	/** Participant-facing name for the selected context panel. */
+	protected readonly contextPanelLabel = computed(this._ContextPanelLabel.bind(this));
 	/** Ordered live tool projections. */
 	protected readonly tools = computed(() => Object.values(this.store.live().tools));
 	/** Display-only A2UI surfaces from the selected live stream. */
@@ -145,6 +146,26 @@ export class ConversationWorkspacePresenter
 		return this.store.conversations().map(summary => _ConversationSummaryPresentation(summary, agentName));
 	}
 
+	/** Build one visual rail without turning onboarding into a fake Conversation. */
+	private _SessionRailItems()
+	{
+		return _ConversationSessionRailItems(this.summaries(), this.onboardingHistoryPresentation());
+	}
+
+	/** Select the visual key corresponding to the current internal projection. */
+	private _SelectedSessionKey(): string | null
+	{
+		const history = this.onboardingHistoryPresentation();
+		if (this.store.onboardingHistorySelected() && history !== null) return `onboarding:${history.id}`;
+		return this.store.selected()?.id ?? null;
+	}
+
+	/** Map only the directory's existing browser-safe self label. */
+	private _RailIdentity()
+	{
+		return _ConversationRailIdentityPresentation(this.store.directory());
+	}
+
 	/**
 	 * Builds the history header, checking for a transcript before mapping one.
 	 *
@@ -160,22 +181,16 @@ export class ConversationWorkspacePresenter
 	}
 
 	/**
-	 * Builds the history transcript rows, checking for a transcript before mapping one.
+	 * Builds the dedicated onboarding dialogue, checking for a transcript before mapping one.
 	 *
-	 * Returns an empty list rather than `null` so the history panel's `messages` input is always a real
+	 * Returns an empty list rather than `null` so the panel's `entries` input is always a real
 	 * array; the panel is only rendered when {@link onboardingHistoryPresentation} is non-`null`, so an
 	 * empty result never reaches the screen as an empty transcript.
 	 */
-	private _OnboardingHistoryMessages()
+	private _OnboardingDialogue()
 	{
 		const history = this.store.onboardingHistory().history;
-		return history === null ? [] : _ConversationOnboardingHistoryMessageViews(history);
-	}
-
-	/** Use the two-column composition only while the completed onboarding projection is selected. */
-	private _WorkspaceLayout(): ConversationWorkspaceLayouts
-	{
-		return this.store.onboardingHistorySelected() ? ConversationWorkspaceLayouts.OnboardingHistory : ConversationWorkspaceLayouts.Standard;
+		return history === null ? [] : _ConversationOnboardingDialogueEntries(history);
 	}
 
 	/** Explain the read-only boundary and the currently available next conversation modes. */
@@ -225,8 +240,20 @@ export class ConversationWorkspacePresenter
 	{
 		const selected = this.store.selected();
 		const runId = this.store.live().runId;
-		if (selected === null || runId === null) return [];
+		if (selected === null || selected.mode !== ConversationModes.AgentSession || runId === null) return [];
 		return Object.values(this.store.live().tools).flatMap(tool => __MapToolActivity(selected.id, runId, tool));
+	}
+
+	/** Restrict Agent Activity to the immutable Agent-session mode. */
+	private _AgentActivityVisible(): boolean
+	{
+		return this.store.selected()?.mode === ConversationModes.AgentSession;
+	}
+
+	/** Name the context panel after the capabilities its selected mode can expose. */
+	private _ContextPanelLabel(): string
+	{
+		return this._AgentActivityVisible() ? "Activity" : "Files";
 	}
 
 	/** Map admitted AG-UI envelopes to display-only A2UI presentations. */
@@ -255,6 +282,7 @@ export class ConversationWorkspacePresenter
 	/** Map server run state to controlled action visibility. */
 	private _RunActions(): ConversationRunActionsPresentation | null
 	{
+		if (this.store.selected()?.mode !== ConversationModes.AgentSession) return null;
 		const run = this.store.runs.run();
 		if (run === null) return null;
 		const canSteer = this.store.runs.canSteer() || run.state === ConversationRunStates.Queued || run.state === ConversationRunStates.Assigned || run.state === ConversationRunStates.Running;

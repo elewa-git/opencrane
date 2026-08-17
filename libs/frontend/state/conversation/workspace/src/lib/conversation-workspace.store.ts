@@ -299,7 +299,8 @@ export class ConversationWorkspaceStore
 		if (update.state.accessRevoked) { this._PurgeAccess(); return; }
 		const runId = update.state.runId;
 		const selected = this._selected();
-		if (runId !== null && selected !== null) void this.runs.observe(runId, selected.id, update.state.runStatus);
+		if (runId !== null && selected?.mode === ConversationModes.AgentSession) void this.runs.observe(runId, selected.id, update.state.runStatus);
+		else if (selected !== null && selected.mode !== ConversationModes.AgentSession) this.runs.clear();
 	}
 
 	/** Keep the last good snapshot visible after a bounded stream failure. */

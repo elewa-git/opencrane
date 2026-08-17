@@ -1,0 +1,10 @@
+<aside id="conversation-workspace-context-panel" class="context-panel" aria-label="Conversation context">
+	@if (activityVisible()) {
+		<wo-conversation-activity [rows]="activityRows()" (targetRequested)="activityTargetRequested.emit($event)">
+			<p-button conversation-activity-header-action ariaLabel="Close activity pane" icon="pi pi-times" [rounded]="true" [text]="true" size="small" (onClick)="closed.emit()" />
+		</wo-conversation-activity>
+	} @else {
+		<div class="context-panel__close"><p-button ariaLabel="Close files pane" icon="pi pi-times" [rounded]="true" [text]="true" size="small" (onClick)="closed.emit()" /></div>
+	}
+	<wo-conversation-files-panel [items]="assets()" (actionRequested)="assetActionRequested.emit($event)" />
+</aside>

@@ -1,11 +1,13 @@
 import { ChangeDetectionStrategy, Component, input } from "@angular/core";
 
+import { OpenCraneBrandComponent } from "../opencrane-brand/opencrane-brand.component";
 import { JourneyShellHeaderEmphases, JourneyShellLayouts } from "./journey-shell.types";
 
 /** Paper-backed OpenCrane frame for bounded entry and onboarding journeys. */
 @Component({
 	selector: "wo-journey-shell",
 	standalone: true,
+	imports: [OpenCraneBrandComponent],
 	templateUrl: "./journey-shell.component.html",
 	styleUrl: "./journey-shell.component.scss",
 	changeDetection: ChangeDetectionStrategy.OnPush

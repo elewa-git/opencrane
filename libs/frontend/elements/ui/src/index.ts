@@ -7,6 +7,7 @@ export * from "./lib/components/avatar-circle/avatar-circle.types";
 export * from "./lib/components/ledger-card/ledger-card.component";
 export * from "./lib/components/ledger-card/ledger-card.types";
 export * from "./lib/components/section-heading/section-heading.component";
+export * from "./lib/components/opencrane-brand/opencrane-brand.component";
 export * from "./lib/components/journey-shell/journey-shell.component";
 export * from "./lib/components/journey-shell/journey-shell.types";
 export * from "./lib/components/choice-card-group/choice-card-group.component";
