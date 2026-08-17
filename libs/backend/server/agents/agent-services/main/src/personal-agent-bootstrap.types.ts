@@ -1,4 +1,10 @@
-/** Stable outcomes returned by the personal-agent bootstrap boundary. */
+/**
+ * Whether agent-services left a personal Agent ready for onboarding to use.
+ *
+ * The app adapter reads this result inside onboarding's transaction. `Ready` allows onboarding to
+ * complete; `Denied` leaves onboarding incomplete. These string values cross the package boundary
+ * but are not stored. Callers must reject any value outside this closed set.
+ */
 export enum PersonalAgentBootstrapStatuses
 {
 	/** A published personal agent is ready for conversation admission. */
@@ -7,7 +13,13 @@ export enum PersonalAgentBootstrapStatuses
 	Denied = "denied",
 }
 
-/** Stable reasons why initial personal-agent materialization wrote nothing. */
+/**
+ * Why personal-Agent bootstrap refused to leave a service ready.
+ *
+ * The app adapter records this reason when it maps a denied agent-services result to onboarding.
+ * These strings cross the package boundary but are not stored. An unknown reason is a contract
+ * error and must never turn a denied result into readiness.
+ */
 export enum PersonalAgentBootstrapDenialReasons
 {
 	/** One or more required identities or the trusted provision instant is malformed. */

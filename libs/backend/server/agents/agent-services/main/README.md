@@ -52,6 +52,75 @@ as a single compare-and-swap, so two people publishing at once cannot both win �
 conflict, and a crash never leaves a half-published service. Anything missing or stale is refused
 with a plain reason.
 
+### Personal onboarding handoff
+
+Completed onboarding must leave the user able to start an Agent-session conversation. The
+onboarding package owns the surrounding Serializable transaction and the decision about whether the
+questionnaire may become complete. The app binds that transaction to this package's agent half through
+`PrismaPersonalAgentBootstrapRepository`:
+
+1. It re-reads the pinned persona revision and requires it to be approved, subject-owned, and
+   silo-owned. During initial completion that revision must still be active, which rejects a persona
+   refresh racing the conclusion. During repair the pin remains historical evidence while the
+   owner's current approved persona governs creation or revision.
+2. It resolves active personal services for that persona. Exactly one is an idempotent success;
+   more than one is an ambiguity and creates nothing.
+3. If no service exists, it uses the onboarding identifier as the deterministic AgentService
+   identifier. A concurrent retry therefore competes for one database identity instead of creating
+   two agents. A row already using that identifier for another authority fails closed.
+4. If no service exists, `PrismaInitialPersonalAgentPublicationRepository` chooses exactly one silo
+   default model, falling back to exactly one global default only when the silo has none. Multiple
+   defaults at the selected scope are an error; it never picks the first row by accident.
+5. That publisher creates a `Personal` service in `Draft`, writes revision 1 through the shared
+   immutable revision writer, publishes that revision, activates the service, and appends
+   publication audit evidence. The onboarding transaction commits all of this with completion, or
+   none of it.
+
+The initial revision uses the package-owned initial personal-Agent policy and the
+`personal-default` runtime profile. Its skills, integrations, and knowledge-scope attachments are
+empty. Personal memory access is not silently granted during onboarding; it follows the separate
+user-elicitation and consent flow.
+
+#### Why the first revision has three run limits
+
+Every Agent-session message starts a governed run. A broken model response, repeated tool decision,
+stalled provider, or tool that never returns could otherwise hold a worker and continue consuming
+model capacity indefinitely. The initial policy therefore records three independent technical
+ceilings:
+
+| Limit | Initial value | Failure it bounds |
+|---|---:|---|
+| Model turns | 64 | A reasoning, retry, or tool-selection loop that keeps producing another model turn. |
+| Total model tokens | 256,000 | A run whose prompts and responses keep growing even when each individual turn succeeds. |
+| Wall-clock duration | 3,600,000 ms (60 minutes) | Waiting providers, stalled tools, and any run that makes too little progress to hit the other limits. |
+
+The control plane requires, validates, and freezes these values into run input. They do not delete
+the conversation, impose a monthly account budget, or affect direct/group messages that do not
+invoke an agent. Ordinary runs should finish far below every ceiling. Changing the values later
+means writing and publishing another immutable AgentRevision; published history is never edited in
+place.
+
+**Runtime qualification:** storing and freezing a ceiling is not, by itself, proof that every
+runtime adapter stops at it. A release must qualify visible terminal behaviour for the turn, token,
+and elapsed-time boundaries before operators rely on them as end-to-end safety brakes. End-to-end
+enforcement is tracked in [issue #651](https://github.com/elewa-git/opencrane/issues/651).
+
+The repository is transaction-scoped by design:
+
+```text
+onboarding completion unit of work (owns Serializable commit/retry)
+        │ app adapter binds its transaction
+        ▼
+PrismaPersonalAgentBootstrapRepository
+        │ validates persona + service authority
+        ▼
+PrismaInitialPersonalAgentPublicationRepository
+        │ selects the model
+        │ writes service + revision + publication + audit
+        ▼
+ready personal AgentService, or a fail-closed denial
+```
+
 ## Public surface
 
 - `__CreateAgentServicesRouter` — the authoritative management router (catalogue / create / revise /
@@ -108,85 +177,10 @@ capability-bearing revision inside the run-admission transaction.
   `AgentPublicationAuditEvidencePort` — the seam through which publication records audit evidence.
   The shared `AgentRevisionContent` domain value lives in `@opencrane/models/agents`.
 
-### Personal onboarding handoff
-
-Completed onboarding must leave the user able to start an Agent-session conversation. The
-onboarding package owns the surrounding Serializable transaction and the decision about whether the
-questionnaire may become complete. The app binds that transaction to this package's agent half through
-`PrismaPersonalAgentBootstrapRepository`:
-
-1. It re-reads the pinned persona revision and requires it to be approved, subject-owned, and
-   silo-owned. During initial completion that revision must still be active, which rejects a persona
-   refresh racing the conclusion. During repair the pin remains historical evidence while the
-   owner's current approved persona governs creation or revision.
-2. It resolves active personal services for that persona. Exactly one is an idempotent success;
-   more than one is an ambiguity and creates nothing.
-3. If no service exists, it uses the onboarding identifier as the deterministic AgentService
-   identifier. A concurrent retry therefore competes for one database identity instead of creating
-   two agents. A row already using that identifier for another authority fails closed.
-4. If no service exists, `PrismaInitialPersonalAgentPublicationRepository` chooses exactly one silo default
-   model, falling back to exactly one global default only when the silo has none. Multiple defaults
-   at the selected scope are an error; it never picks the first row by accident.
-5. That publisher creates a `Personal` service in `Draft`, writes revision 1 through the shared
-   immutable revision writer, publishes that revision, activates the service, and appends
-   publication audit evidence. The onboarding transaction commits all of this with completion, or
-   none of it.
-
-The initial revision uses the package-owned initial personal-Agent policy and the `personal-default` runtime profile.
-Its skills, integrations, and knowledge-scope attachments are empty. Personal memory access is not
-silently granted during onboarding; it follows the separate user-elicitation and consent flow.
-
-#### Why the first revision has three run limits
-
-Every Agent-session message starts a governed run. A broken model response, repeated tool decision,
-stalled provider, or tool that never returns could otherwise hold a worker and continue consuming
-model capacity indefinitely. The initial policy therefore records three independent technical
-ceilings:
-
-| Limit | Initial value | Failure it bounds |
-|---|---:|---|
-| Model turns | 64 | A reasoning, retry, or tool-selection loop that keeps producing another model turn. |
-| Total model tokens | 256,000 | A run whose prompts and responses keep growing even when each individual turn succeeds. |
-| Wall-clock duration | 3,600,000 ms (60 minutes) | Waiting providers, stalled tools, and any run that makes too little progress to hit the other limits. |
-
-The control plane requires, validates, and freezes these values into run input. They do not delete
-the conversation, impose a monthly account budget, or affect direct/group messages that do not
-invoke an agent. Ordinary runs should finish far below every ceiling. Changing the values later
-means writing and publishing another immutable AgentRevision; published history is never edited in
-place.
-
-**Runtime qualification:** storing and freezing a ceiling is not, by itself, proof that every
-runtime adapter stops at it. A release must qualify visible terminal behaviour for the turn, token,
-and elapsed-time boundaries before operators rely on them as end-to-end safety brakes. End-to-end
-enforcement is tracked in [issue #651](https://github.com/elewa-git/opencrane/issues/651).
-
-The repository is transaction-scoped by design:
-
-```text
-onboarding completion unit of work (owns Serializable commit/retry)
-        │ app adapter binds its transaction
-        ▼
-PrismaPersonalAgentBootstrapRepository
-        │ validates persona + service authority
-        ▼
-PrismaInitialPersonalAgentPublicationRepository
-        │ selects the model
-        │ writes service + revision + publication + audit
-        ▼
-ready personal AgentService, or a stable fail-closed denial
-```
-
-Bootstrap implementation surface:
-
-- `PrismaPersonalAgentBootstrapRepository(transaction)` — the exported app-composition adapter; it
-  cannot open or commit a transaction itself.
-- `PrismaInitialPersonalAgentPublicationRepository(transaction)` — the internal publication strategy used
-  only after bootstrap proves that no personal service exists.
-- `PersonalAgentBootstrapStatuses` — the stable ready/denied vocabulary used by the app adapter.
-
-Inside the package, a typed repository port and detailed denial reasons keep every authority branch
-explicit. The reviewed first-revision policy and runtime-profile constant stay private because
-callers may not override onboarding's initial Agent configuration.
+- `PrismaPersonalAgentBootstrapRepository(transaction)` and `PersonalAgentBootstrapStatuses` — the
+  exported app-composition adapter and its ready/denied result. The package-internal
+  `PrismaInitialPersonalAgentPublicationRepository` is used only after bootstrap proves that no
+  personal service exists.
 
 ## Boundary
 

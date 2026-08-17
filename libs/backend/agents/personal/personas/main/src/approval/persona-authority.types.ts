@@ -78,7 +78,13 @@ export interface SelectApprovedPersonaForPersonalAgentCommand
 	readonly selectedAt: Date;
 }
 
-/** Stable outcomes returned through the cross-domain personal-agent selection port. */
+/**
+ * How persona approval should continue after asking agent-services to select the approved persona.
+ *
+ * The persona approval repository branches on this app-supplied result before it moves the active
+ * profile pointer. These strings cross a package boundary but are not stored. An unknown value is a
+ * contract error and must roll the approval transaction back.
+ */
 export enum PersonaAgentRevisionSelectionStatuses
 {
 	/** The personal agent now selects the approved persona, after a write or an idempotent match. */

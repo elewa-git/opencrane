@@ -41,7 +41,9 @@ export interface MaterializePersonalAgentPersonaSelectionCommand
  *
  * The agent-service package returns these values to onboarding repair and persona approval. They
  * are not persisted. `StaleSource` asks the caller to retry the whole transaction after re-reading;
- * `Unavailable` means authority evidence is missing or ambiguous and must fail closed.
+ * `Unavailable` means authority evidence is missing or ambiguous and must fail closed. These string
+ * values cross the app-composition boundary; an unknown value is a contract error and callers must
+ * reject it.
  */
 export enum AgentRevisionPersonaSelectionMaterializationCodes
 {

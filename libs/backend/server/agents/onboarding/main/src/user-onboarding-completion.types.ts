@@ -1,12 +1,18 @@
 import type { UserOnboardingCompletionProvenances, UserOnboardingStates } from "./user-onboarding.enums";
 import type { UserOnboardingOwner } from "./user-onboarding.types";
 
-/** Stable outcomes returned by onboarding completion and readiness repair. */
+/**
+ * Whether onboarding may admit the owner to the ordinary workspace.
+ *
+ * Onboarding authorities branch on this result after completion or repair. The string values cross
+ * the package's app-composition boundary but are not stored. An unknown value is a contract error
+ * and must deny admission.
+ */
 export enum UserOnboardingReadinessStatuses
 {
 	/** Onboarding is complete and its personal Agent is ready. */
 	Ready = "ready",
-	/** A migrated completed user has no bootstrap evidence to materialise. */
+	/** A migrated completed user has no bootstrap evidence from which to create an Agent. */
 	NotApplicable = "not_applicable",
 	/** The user has not completed the required onboarding flow. */
 	OnboardingRequired = "onboarding_required",
@@ -74,7 +80,13 @@ export interface UserOnboardingPersonalAgentBootstrapCommand
 	readonly provisionedAt: Date;
 }
 
-/** Stable outcomes returned by the app-owned agent-services adapter. */
+/**
+ * Whether the app-owned agent-services adapter proved personal-Agent readiness.
+ *
+ * The onboarding completion authority branches on these strings inside its transaction. They cross
+ * the app-to-package boundary but are not stored. An unknown value is a contract error and must be
+ * handled as denial.
+ */
 export enum UserOnboardingPersonalAgentBootstrapStatuses
 {
 	/** Agent-services proved one runnable personal Agent for this owner. */
