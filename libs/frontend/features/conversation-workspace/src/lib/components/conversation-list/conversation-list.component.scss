@@ -1,4 +1,4 @@
-:host { display: block; min-width: 0; border-inline-end: 1px solid var(--oc-border-subtle); background: var(--oc-surface-subtle); }
+:host { display: block; min-width: 0; block-size: 100%; min-block-size: 0; border-inline-end: 1px solid var(--oc-border-subtle); background: var(--oc-surface-subtle); }
 .conversation-list { display: flex; flex-direction: column; block-size: 100%; min-block-size: 0; }
 .conversation-list__brand { display: flex; min-height: var(--oc-conversation-rail-header-min-height); align-items: center; padding: var(--oc-space-3) var(--oc-space-4); border-block-end: 1px solid var(--oc-border-subtle); }
 :host ::ng-deep .conversation-list__create { justify-content: flex-start; width: 100%; padding: var(--oc-space-3) var(--oc-space-4); color: var(--oc-accent-active); font-size: var(--oc-text-md); }

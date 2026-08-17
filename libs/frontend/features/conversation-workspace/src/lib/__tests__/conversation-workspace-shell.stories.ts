@@ -157,8 +157,36 @@ export const AccessChanged: Story = { tags: ["visual-test"], decorators: [_Provi
 export const FailedRun: Story = { tags: ["visual-test"], decorators: [_Providers(new _StoryGateway(_Detail(), ConversationRunStates.Failed), new _StoryStream(ConversationEventStreamStatuses.Live, { ...__CreateAgUiStreamState(), runId: "run-1" }))] };
 /** Cancelled run is truthful and offers no unsafe retry. */
 export const CancelledRun: Story = { tags: ["visual-test"], decorators: [_Providers(new _StoryGateway(_Detail(), ConversationRunStates.Cancelled), new _StoryStream(ConversationEventStreamStatuses.Live, { ...__CreateAgUiStreamState(), runId: "run-1" }))] };
-/** Product-realistic long text proves bounded wrapping without placing hostile fixtures in design review. */
-export const LongContent: Story = { tags: ["visual-test"], decorators: [_Providers(new _StoryGateway(_Detail(`# Project review\n\n${"The proposal keeps the agreed constraints and records the next decision clearly. ".repeat(32)}`)), new _StoryStream(ConversationEventStreamStatuses.Live, __CreateAgUiStreamState()))] };
+/**
+ * Uses product-realistic long text to prove the transcript owns overflow while the workspace and rail stay at viewport height.
+ * This keeps deliberately awkward test text out of design review.
+ */
+export const LongContent: Story = {
+	tags: ["visual-test"],
+	decorators: [_Providers(new _StoryGateway(_Detail(`# Project review\n\n${"The proposal keeps the agreed constraints and records the next decision clearly. ".repeat(32)}`)), new _StoryStream(ConversationEventStreamStatuses.Live, __CreateAgUiStreamState()))],
+	play: async function play({ canvasElement })
+	{
+		await waitFor(function _AssertScrollOwnership()
+		{
+			// 1. Find the frame, rail, and transcript after the routed workspace finishes loading.
+			const workspace = canvasElement.querySelector<HTMLElement>(".conversation-workspace");
+			const rail = canvasElement.querySelector<HTMLElement>("wo-conversation-list");
+			const transcript = canvasElement.querySelector<HTMLElement>(".conversation-workspace__transcript");
+			expect(workspace).not.toBeNull();
+			expect(rail).not.toBeNull();
+			expect(transcript).not.toBeNull();
+			if (workspace === null || rail === null || transcript === null) throw new Error("The workspace frame is not ready.");
+
+			// 2. Verify that the frame and rail both retain the browser viewport's height.
+			expect(Math.round(workspace.getBoundingClientRect().height)).toBe(window.innerHeight);
+			expect(Math.round(rail.getBoundingClientRect().height)).toBe(window.innerHeight);
+
+			// 3. Verify that the transcript owns long-content scrolling instead of the document.
+			expect(transcript.scrollHeight).toBeGreaterThan(transcript.clientHeight);
+			expect(canvasElement.ownerDocument.documentElement.scrollHeight).toBeLessThanOrEqual(window.innerHeight);
+		});
+	}
+};
 /** Direct conversations ignore stale run coordinates and expose Files without Agent Activity. */
 export const DirectConversation: Story = { tags: ["visual-test"], decorators: [_Providers(new _StoryGateway(_DirectDetail(), ConversationRunStates.Failed), new _StoryStream(ConversationEventStreamStatuses.Live, { ...__CreateAgUiStreamState(), runId: "stale-run" }))] };
 /** Direct-session Files pane closes and restores focus without exposing Agent Activity. */
