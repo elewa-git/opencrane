@@ -1,0 +1,46 @@
+[index]
+root = "."
+
+[[target]]
+name = "typescript-source"
+language = "typescript"
+directories = ["apps", "libs"]
+kind = "source"
+include = ["**/*.ts", "**/*.tsx", "**/*.mts", "**/*.cts"]
+exclude = ["**/.upstream/**", "**/dist/**", "**/generated/**", "**/*.generated.ts"]
+
+[[target]]
+name = "python-source"
+language = "python"
+directories = ["apps/agent-runtime", "apps/skill-authoring", "libs/backend/agents/skills/worker"]
+kind = "source"
+include = ["**/*.py"]
+exclude = ["**/__pycache__/**", "**/.venv/**"]
+
+[[target]]
+name = "repository-docs"
+language = "markdown"
+directories = ["."]
+kind = "docs"
+include = ["**/*.md"]
+exclude = ["**/.upstream/**", "**/node_modules/**", "**/dist/**"]
+
+[llm.embedding]
+model = "minishlab/potion-retrieval-32M"
+
+[llm.distill]
+enabled = false
+
+[watch]
+enabled = true
+debounce_ms = 400
+max_latency_ms = 2500
+periodic_sweep_secs = 300
+pass_cooldown_secs = 60
+overlay_quiet_secs = 300
+
+[version_check]
+enabled = false
+
+[oracle]
+auto_run = false
