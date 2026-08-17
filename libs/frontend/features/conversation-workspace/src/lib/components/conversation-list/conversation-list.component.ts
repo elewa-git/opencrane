@@ -3,7 +3,8 @@ import { ButtonModule } from "primeng/button";
 
 import { AvatarCircleComponent, AvatarSizes, OpenCraneBrandAppearances, OpenCraneBrandComponent } from "@opencrane/elements/ui";
 
-import { ConversationSessionRailItemKinds, type ConversationRailIdentityPresentation, type ConversationSessionRailItemPresentation, type ConversationSessionRailSelectionIntent } from "../../conversation-workspace-feature.types";
+import { type ConversationRailIdentityPresentation, type ConversationSessionRailItemPresentation, type ConversationSessionRailSelectionIntent } from "../../conversation-workspace-feature.types";
+import { ConversationSessionRailRowComponent } from "../conversation-session-rail-row/conversation-session-rail-row.component";
 
 /**
  * Draws the workspace rail as one participant-facing session list.
@@ -14,7 +15,7 @@ import { ConversationSessionRailItemKinds, type ConversationRailIdentityPresenta
  *
  * Called by: `ConversationWorkspacePageComponent`.
  */
-@Component({ selector: "wo-conversation-list", standalone: true, imports: [AvatarCircleComponent, ButtonModule, OpenCraneBrandComponent], templateUrl: "./conversation-list.component.html", styleUrl: "./conversation-list.component.scss", changeDetection: ChangeDetectionStrategy.OnPush })
+@Component({ selector: "wo-conversation-list", standalone: true, imports: [AvatarCircleComponent, ButtonModule, ConversationSessionRailRowComponent, OpenCraneBrandComponent], templateUrl: "./conversation-list.component.html", styleUrl: "./conversation-list.component.scss", changeDetection: ChangeDetectionStrategy.OnPush })
 export class ConversationListComponent
 {
 	/** Completed onboarding and ordinary conversation rows in display order. */
@@ -29,8 +30,6 @@ export class ConversationListComponent
 	public readonly itemSelected = output<ConversationSessionRailSelectionIntent>();
 	/** Shared avatar size used by the self-label footer. */
 	protected readonly identityAvatarSize = AvatarSizes.Medium;
-	/** Stable source kinds used by the template's icon selection. */
-	protected readonly itemKinds = ConversationSessionRailItemKinds;
 	/** Full wordmark treatment used by persistent application navigation. */
 	protected readonly brandAppearance = OpenCraneBrandAppearances.Navigation;
 

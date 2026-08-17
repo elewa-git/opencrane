@@ -15,6 +15,31 @@ export enum ConversationSessionRailItemKinds
 }
 
 /**
+ * Selects the semantic prefix glyph for one session-rail row.
+ *
+ * The state is display-only and never replaces the conversation mode or lifecycle held by the
+ * workspace store. Terminal lifecycle state takes precedence over chat type so the rail can tell a
+ * participant why a session is unavailable without adding a second line of metadata.
+ * These values stay in the browser presentation model; the mapper rejects a mode it cannot assign.
+ *
+ * Called by: the workspace mapper assigns a state and `ConversationSessionRailRowComponent`
+ * renders its icon and accessible name.
+ */
+export enum ConversationSessionRailIconStates
+{
+	/** Completed onboarding is available as a saved, read-only private chat. */
+	Completed = "completed",
+	/** An open Agent session is available. */
+	AgentSession = "agent-session",
+	/** An open direct participant chat is available. */
+	Direct = "direct",
+	/** An open group participant chat is available. */
+	Group = "group",
+	/** A terminal conversation is closed and cannot accept new messages. */
+	Closed = "closed"
+}
+
+/**
  * Selects the side that renders a saved onboarding line.
  *
  * This state aligns guide text and participant bubbles without claiming that the guide is an
@@ -28,7 +53,16 @@ export enum ConversationOnboardingDialogueSpeakers
 	Participant = "participant"
 }
 
-/** Generic privacy-safe list row shown in the workspace rail. */
+/**
+ * Provides one privacy-safe conversation presentation for the workspace header and session rail.
+ *
+ * `ConversationWorkspacePresenter` maps authorized summaries into these values. The selected header
+ * uses the mode and participant labels, while the session-rail mapper uses the title, icon state,
+ * and archive state without exposing opaque participant references.
+ *
+ * Called by: `ConversationWorkspacePresenter._Summaries` and `_ConversationSessionRailItems`.
+ * @see ConversationSessionRailItemPresentation for the smaller rail-only projection.
+ */
 export interface ConversationSummaryPresentation
 {
 	/** Stable conversation coordinate used for selection. */
@@ -39,13 +73,21 @@ export interface ConversationSummaryPresentation
 	readonly modeLabel: string;
 	/** Plain participant-count detail. */
 	readonly participantLabel: string;
-	/** Preformatted update time. */
-	readonly updatedLabel: string;
+	/** Semantic rail state derived from immutable mode and terminal lifecycle. */
+	readonly iconState: ConversationSessionRailIconStates;
 	/** Whether this participant archived the row. */
 	readonly archived: boolean;
 }
 
-/** One visually unified row in the workspace's My sessions rail. */
+/**
+ * Carries the row-only projection for completed onboarding and ordinary conversations.
+ *
+ * The kind and coordinate keep Welcome outside Conversation commands, while the icon and archive
+ * state let the row retain its meaning when selection or list grouping changes.
+ *
+ * Called by: `_ConversationSessionRailItems` builds these values and
+ * `ConversationSessionRailRowComponent` renders them.
+ */
 export interface ConversationSessionRailItemPresentation
 {
 	/** Stable browser key; onboarding keys never become conversation route coordinates. */
@@ -56,10 +98,8 @@ export interface ConversationSessionRailItemPresentation
 	readonly conversationId: string | null;
 	/** Short participant-facing row title. */
 	readonly title: string;
-	/** Secondary read-only, mode, or participant detail. */
-	readonly detail: string;
-	/** Preformatted last-update or completion time. */
-	readonly updatedLabel: string;
+	/** Semantic prefix state that communicates chat type or terminal status. */
+	readonly iconState: ConversationSessionRailIconStates;
 	/** Whether the participant archived this ordinary conversation row. */
 	readonly archived: boolean;
 }

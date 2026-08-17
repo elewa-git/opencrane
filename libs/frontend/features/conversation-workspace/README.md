@@ -42,7 +42,9 @@ their capability checks and audit trail. Tool failures stay visible even when a 
 - `ConversationWorkspaceContextPanelComponent` composes closable Activity and Files presentation without
   owning state or navigation.
 - The feature-local list and create controls render privacy-safe rows and immutable conversation mode
-  choices. Completed onboarding and active chats share one session list; archived chats remain separate.
+  choices. Each session row is one line: its prefix glyph communicates completed onboarding, Agent,
+  direct, group, or closed state while selection changes only the row background. Completed onboarding
+  and active chats share one session list; archived chats retain their semantic glyph in a dimmed group.
   No row shows opaque participant references.
 
 ## Boundary

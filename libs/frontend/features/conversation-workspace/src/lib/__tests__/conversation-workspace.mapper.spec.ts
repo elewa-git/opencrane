@@ -1,14 +1,15 @@
 import { ConversationLifecycles, ConversationModes, ConversationPersonalAgentStatuses, MessageRoles, MessageSources, MessageStates, type ConversationMessage, type ConversationSummary } from "@opencrane/state/conversation/workspace";
 
 import { _ConversationMessageView, _ConversationOnboardingContinuationPresentation, _ConversationRailIdentityPresentation, _ConversationSessionRailItems, _ConversationSummaryPresentation } from "../conversation-workspace.mapper";
+import { ConversationSessionRailIconStates } from "../conversation-workspace-feature.types";
 
-/** Build one direct-conversation summary without introducing display names. */
+/** Builds a direct-conversation summary without introducing display names. */
 function _Summary(): ConversationSummary
 {
 	return { id: "conversation-1", mode: ConversationModes.Direct, lifecycle: ConversationLifecycles.Open, agentServiceId: null, participantRefs: ["subject-secret", "other-secret"], archivedAt: null, updatedAt: "2026-08-12T11:08:00.000Z" };
 }
 
-/** Build one participant message containing unsafe markup. */
+/** Builds a participant message containing unsafe markup. */
 function _Message(): ConversationMessage
 {
 	return { id: "message-1", position: "1", role: MessageRoles.User, state: MessageStates.Completed, source: MessageSources.UserInput, blocks: [{ id: "block-1", kind: "text", value: "Hello <script>alert('secret')</script>" }], runId: null, participantRef: "other-secret", createdAt: "2026-08-12T11:08:00.000Z", agentThread: null };
@@ -37,8 +38,20 @@ describe("Conversation workspace presentation", function _ConversationWorkspaceP
 		const onboarding = { id: "onboarding-1", title: "Welcome to OpenCrane", completedLabel: "09:15" };
 		const rows = _ConversationSessionRailItems([_ConversationSummaryPresentation(_Summary(), null)], onboarding);
 
-		expect(rows[0]).toMatchObject({ title: "Welcome", detail: "Private chat · Read-only", conversationId: null, archived: false });
-		expect(rows[1]).toMatchObject({ title: "Direct conversation", conversationId: "conversation-1" });
+		expect(rows[0]).toMatchObject({ title: "Welcome", iconState: ConversationSessionRailIconStates.Completed, conversationId: null, archived: false });
+		expect(rows[1]).toMatchObject({ title: "Direct conversation", iconState: ConversationSessionRailIconStates.Direct, conversationId: "conversation-1" });
+		expect("detail" in rows[0]!).toBe(false);
+		expect("updatedLabel" in rows[0]!).toBe(false);
+	});
+
+	it("maps every chat type and lets closed status override its type", function _SemanticRailStates()
+	{
+		const direct = _ConversationSummaryPresentation(_Summary(), null);
+		const agent = _ConversationSummaryPresentation({ ..._Summary(), id: "agent", mode: ConversationModes.AgentSession }, "Nova");
+		const group = _ConversationSummaryPresentation({ ..._Summary(), id: "group", mode: ConversationModes.Group }, null);
+		const closed = _ConversationSummaryPresentation({ ..._Summary(), id: "closed", mode: ConversationModes.Group, lifecycle: ConversationLifecycles.Closed }, null);
+
+		expect([direct.iconState, agent.iconState, group.iconState, closed.iconState]).toEqual([ConversationSessionRailIconStates.Direct, ConversationSessionRailIconStates.AgentSession, ConversationSessionRailIconStates.Group, ConversationSessionRailIconStates.Closed]);
 	});
 
 	it("uses only the generic directory self label in the rail footer", function _SafeRailIdentity()

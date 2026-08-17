@@ -124,6 +124,10 @@
 	--oc-reading-width: 680px;
 	--oc-conversation-session-rail-width: 15rem;
 	--oc-conversation-header-min-height: 5rem;
+	--oc-conversation-session-row-min-height: 48px;
+	--oc-conversation-session-icon-size: 24px;
+	--oc-conversation-session-hover: color-mix(in srgb, var(--oc-surface-raised) 72%, transparent);
+	--oc-conversation-session-selected: color-mix(in srgb, var(--oc-border-default) 62%, transparent);
 	--oc-paper-texture-opacity: 0.075;
 	--oc-paper-texture: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140' viewBox='0 0 140 140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.82' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)' opacity='.42'/%3E%3C/svg%3E");
 

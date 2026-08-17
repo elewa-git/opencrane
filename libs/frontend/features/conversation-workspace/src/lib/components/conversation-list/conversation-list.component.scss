@@ -6,15 +6,6 @@ nav { overflow: auto; flex: 1; min-height: 0; padding: 0 var(--oc-space-2); }
 nav section { padding-block-end: var(--oc-space-3); }
 nav h1, nav h2 { margin: 0; padding: var(--oc-space-3) var(--oc-space-3) var(--oc-space-2); color: var(--oc-ink-muted); font-family: var(--oc-font-mono); font-size: var(--oc-text-2xs); font-weight: 500; letter-spacing: var(--oc-tracking-label); text-transform: uppercase; }
 ul { display: grid; gap: var(--oc-space-1); margin: 0; padding: 0; list-style: none; }
-nav button { display: grid; width: 100%; grid-template-columns: auto minmax(0, 1fr) auto; align-items: start; gap: var(--oc-space-2); padding: var(--oc-space-2) var(--oc-space-3); border-radius: var(--oc-radius-card); color: var(--oc-ink-default); text-align: start; }
-nav button:hover { background: color-mix(in srgb, var(--oc-surface-raised) 72%, transparent); }
-nav button i { margin-top: 0.15rem; color: var(--oc-ink-muted); font-size: var(--oc-text-xs); }
-nav button span { display: grid; gap: var(--oc-space-1); min-width: 0; }
-nav button strong, nav button small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-nav button small, time { color: var(--oc-ink-muted); font-size: var(--oc-text-xs); }
-time { flex: none; }
-.conversation-list__item--selected { background: color-mix(in srgb, var(--oc-border-default) 62%, transparent) !important; color: var(--oc-ink-strong) !important; }
-.conversation-list__item--selected i { color: var(--oc-success); }
 .conversation-list__empty { max-width: 15rem; margin: var(--oc-space-4) auto; color: var(--oc-ink-muted); text-align: center; }
 .conversation-list__identity { display: flex; align-items: center; gap: var(--oc-space-3); padding: var(--oc-space-3) var(--oc-space-5); border-block-start: 1px solid var(--oc-border-subtle); background: color-mix(in srgb, var(--oc-surface-subtle) 92%, var(--oc-surface-raised)); }
 .conversation-list__identity span { display: grid; min-width: 0; }

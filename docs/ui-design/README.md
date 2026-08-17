@@ -64,6 +64,10 @@ language without replacing the v4 export:
   **My sessions** heading as ordinary chats; it never exposes a separate onboarding-history section.
   The main panel uses the compact completed/read-only header, guide and participant dialogue,
   completion divider, and one read-only continuation tray shown in the accepted design.
+- Session-rail rows stay on one line. The prefix glyph carries chat type or terminal status: a green
+  check for completed Welcome, Agent, person, and group glyphs for open sessions, and a muted lock for
+  closed sessions. Selection changes the row background without replacing that semantic glyph;
+  archived rows retain it while the whole row is dimmed.
 - When the same Welcome session is selected but the directory reports an unavailable or ambiguous
   personal Agent, a warning and capability note explain that direct and group sessions remain
   available and that an administrator must repair Agent setup. This variation does not add a new

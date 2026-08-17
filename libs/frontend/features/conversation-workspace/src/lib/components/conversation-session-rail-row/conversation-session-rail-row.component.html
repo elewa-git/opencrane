@@ -1,0 +1,13 @@
+<button
+	type="button"
+	class="conversation-session-rail-row"
+	[class.conversation-session-rail-row--selected]="selected()"
+	[class.conversation-session-rail-row--archived]="item().archived"
+	[class.conversation-session-rail-row--closed]="item().iconState === iconStates.Closed"
+	[attr.aria-current]="selected() ? 'page' : null"
+	[attr.aria-label]="accessibleName()"
+	(click)="select()"
+>
+	<span class="conversation-session-rail-row__icon" [class.conversation-session-rail-row__icon--completed]="item().iconState === iconStates.Completed"><i [class]="iconClass()" aria-hidden="true"></i></span>
+	<strong>{{ item().title }}</strong>
+</button>

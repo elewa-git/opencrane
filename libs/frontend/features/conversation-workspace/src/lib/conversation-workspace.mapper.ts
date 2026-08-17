@@ -3,35 +3,37 @@ import { ConversationMessageTones, type ConversationMessagePresentation, type Co
 import { MessageContentBlockKinds } from "@opencrane/models/conversations";
 import { toSanitizedMarkdownHtml, toStreamingMarkdownHtml } from "@opencrane/state/conversation/render";
 import { AgUiMessageStatuses, type AgUiMessageView } from "@opencrane/state/conversation/ag-ui";
-import { ConversationModes, ConversationPersonalAgentStatuses, MessageRoles, MessageStates, type ConversationCreationDirectory, type ConversationMessage, type ConversationOnboardingHistory, type ConversationSummary } from "@opencrane/state/conversation/workspace";
+import { ConversationLifecycles, ConversationModes, ConversationPersonalAgentStatuses, MessageRoles, MessageStates, type ConversationCreationDirectory, type ConversationMessage, type ConversationOnboardingHistory, type ConversationSummary } from "@opencrane/state/conversation/workspace";
 
-import { ConversationOnboardingDialogueSpeakers, ConversationSessionRailItemKinds, type ConversationMessageView, type ConversationOnboardingContinuationPresentation, type ConversationOnboardingDialogueEntryPresentation, type ConversationOnboardingHistoryPresentation, type ConversationPresentationContext, type ConversationRailIdentityPresentation, type ConversationSessionRailItemPresentation, type ConversationSummaryPresentation } from "./conversation-workspace-feature.types";
+import { ConversationOnboardingDialogueSpeakers, ConversationSessionRailIconStates, ConversationSessionRailItemKinds, type ConversationMessageView, type ConversationOnboardingContinuationPresentation, type ConversationOnboardingDialogueEntryPresentation, type ConversationOnboardingHistoryPresentation, type ConversationPresentationContext, type ConversationRailIdentityPresentation, type ConversationSessionRailItemPresentation, type ConversationSummaryPresentation } from "./conversation-workspace-feature.types";
 
 /**
- * Builds one rail row from a conversation summary.
+ * Builds one shared workspace presentation from a conversation summary.
  *
- * Titles and participant labels are generated here rather than taken from the server, so the rail can
- * never print an opaque participant reference at a user. Only the Agent-session row uses a real name,
- * and only the personal Agent's own display name.
+ * Titles and participant labels are generated here rather than taken from the server, so neither the
+ * header nor the rail can print an opaque participant reference. Only the Agent-session title uses a
+ * real name, and only the personal Agent's own display name.
  *
- * The `archived` flag it sets is now load-bearing: archiving keeps the row in the list instead of
- * removing it, and the rail uses this flag to decide whether the row belongs in the Active or the
- * Archived section.
+ * The `archived` flag keeps the conversation in the rail and selects its active or archived section;
+ * the mode and participant labels remain available to the selected conversation header.
  *
  * Called by: `ConversationWorkspacePresenter._Summaries`, once per conversation in the store's list.
  * @param summary - One conversation from the workspace list.
  * @param personalAgentName - The signed-in user's personal Agent display name, or `null` when the
  * directory has no personal Agent. An Agent-session row falls back to the generic "Agent session"
  * title when this is `null`, so the row still reads sensibly during incomplete Agent setup.
- * @returns A row safe to render directly. `updatedLabel` reads "Time unavailable" when the server's
- * `updatedAt` cannot be parsed.
+ * @returns A row safe to render directly.
  */
 export function _ConversationSummaryPresentation(summary: ConversationSummary, personalAgentName: string | null): ConversationSummaryPresentation
 {
-	const updatedLabel = _TimeLabel(summary.updatedAt);
-	if (summary.mode === ConversationModes.AgentSession) return { id: summary.id, title: personalAgentName ?? "Agent session", modeLabel: "Agent session", participantLabel: "You and your Agent", updatedLabel, archived: summary.archivedAt !== null };
-	if (summary.mode === ConversationModes.Direct) return { id: summary.id, title: "Direct conversation", modeLabel: "Direct", participantLabel: "You and Participant 1", updatedLabel, archived: summary.archivedAt !== null };
-	return { id: summary.id, title: "Group conversation", modeLabel: "Group", participantLabel: `${summary.participantRefs.length} participants`, updatedLabel, archived: summary.archivedAt !== null };
+	const iconState = _ConversationSessionRailIconState(summary);
+	switch (summary.mode)
+	{
+		case ConversationModes.AgentSession: return { id: summary.id, title: personalAgentName ?? "Agent session", modeLabel: "Agent session", participantLabel: "You and your Agent", iconState, archived: summary.archivedAt !== null };
+		case ConversationModes.Direct: return { id: summary.id, title: "Direct conversation", modeLabel: "Direct", participantLabel: "You and Participant 1", iconState, archived: summary.archivedAt !== null };
+		case ConversationModes.Group: return { id: summary.id, title: "Group conversation", modeLabel: "Group", participantLabel: `${summary.participantRefs.length} participants`, iconState, archived: summary.archivedAt !== null };
+		default: return _UnsupportedConversationMode(summary.mode);
+	}
 }
 
 /**
@@ -41,12 +43,31 @@ export function _ConversationSummaryPresentation(summary: ConversationSummary, p
  */
 export function _ConversationSessionRailItems(summaries: readonly ConversationSummaryPresentation[], onboarding: ConversationOnboardingHistoryPresentation | null): readonly ConversationSessionRailItemPresentation[]
 {
-	const onboardingItems: readonly ConversationSessionRailItemPresentation[] = onboarding === null ? [] : [{ key: `onboarding:${onboarding.id}`, kind: ConversationSessionRailItemKinds.Onboarding, conversationId: null, title: "Welcome", detail: "Private chat · Read-only", updatedLabel: onboarding.completedLabel, archived: false }];
+	const onboardingItems: readonly ConversationSessionRailItemPresentation[] = onboarding === null ? [] : [{ key: `onboarding:${onboarding.id}`, kind: ConversationSessionRailItemKinds.Onboarding, conversationId: null, title: "Welcome", iconState: ConversationSessionRailIconStates.Completed, archived: false }];
 	const conversationItems = summaries.map(function _Conversation(summary): ConversationSessionRailItemPresentation
 	{
-		return { key: summary.id, kind: ConversationSessionRailItemKinds.Conversation, conversationId: summary.id, title: summary.title, detail: `${summary.modeLabel} · ${summary.participantLabel}`, updatedLabel: summary.updatedLabel, archived: summary.archived };
+		return { key: summary.id, kind: ConversationSessionRailItemKinds.Conversation, conversationId: summary.id, title: summary.title, iconState: summary.iconState, archived: summary.archived };
 	});
 	return [...onboardingItems, ...conversationItems];
+}
+
+/** Selects the rail prefix state while allowing a terminal lifecycle to override chat type. */
+function _ConversationSessionRailIconState(summary: ConversationSummary): ConversationSessionRailIconStates
+{
+	if (summary.lifecycle === ConversationLifecycles.Closed) return ConversationSessionRailIconStates.Closed;
+	switch (summary.mode)
+	{
+		case ConversationModes.AgentSession: return ConversationSessionRailIconStates.AgentSession;
+		case ConversationModes.Direct: return ConversationSessionRailIconStates.Direct;
+		case ConversationModes.Group: return ConversationSessionRailIconStates.Group;
+		default: return _UnsupportedConversationMode(summary.mode);
+	}
+}
+
+/** Refuses to reinterpret a future immutable conversation mode as an existing visual state. */
+function _UnsupportedConversationMode(mode: never): never
+{
+	throw new Error(`Unsupported conversation mode: ${String(mode)}`);
 }
 
 /**
@@ -65,12 +86,12 @@ export function _ConversationRailIdentityPresentation(directory: ConversationCre
  * Builds the header copy for the completed onboarding exchange.
  *
  * The title is a fixed phrase rather than anything the server sent. The completion time passes
- * through the same formatter the session rail uses so the Welcome row and main panel agree.
+ * through the shared time formatter for the onboarding panel's completion divider.
  *
  * Called by: `ConversationWorkspacePresenter._OnboardingHistoryPresentation`, which calls this only
  * once it has confirmed the projection carries a transcript.
  * @param history - The completed exchange, which the caller has already checked is non-`null`.
- * @returns Header copy for the rail row and the history panel. `completedLabel` reads
+ * @returns Header copy for the history panel. `completedLabel` reads
  * "Time unavailable" when the server's `completedAt` cannot be parsed as a date, since
  * {@link _TimeLabel} refuses to guess.
  * @see ConversationOnboardingHistoryPresentation
