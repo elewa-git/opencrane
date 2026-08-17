@@ -45,6 +45,11 @@ interview — see [Create a managed agent](/guide/first-agent).
    and elapsed time. These are technical safety brakes for one agent run, not a monthly spending
    allowance — see [Manage run limits and cost](/guide/budgets#default-limits-for-a-personal-assistant).
 
+The final handoff uses one database transaction. If another request changes the same rows at the
+same time, OpenCrane may retry the entire handoff up to three times. It retries only conflicts where
+the database proves that the earlier attempt rolled back. You either get completed onboarding and a
+ready personal assistant together, or neither change is kept.
+
 ::: info What "approve" actually locks in
 Approval checks that the interview is genuinely complete, that there are between three and five
 insights, and that the selected template still matches what your answers produced. If anything

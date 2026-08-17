@@ -79,6 +79,18 @@ exact three-answer evidence, require personal Agent readiness, and perform the o
 change last. Existing-user migration provenance is never used to fabricate persona or bootstrap
 evidence.
 
+### Why database retries are limited
+
+The completion unit of work may try the whole Serializable transaction at most three times. It
+retries only Prisma `P2002` or `P2034`, which mean that a uniqueness race or transaction conflict
+rolled the attempt back. Every retry opens a new transaction and repeats the authority checks from
+the database.
+
+The limit prevents a busy or misconfigured database from holding one HTTP request forever. Other
+errors fail immediately because the unit of work cannot prove that trying again is safe. A failed
+attempt never leaves onboarding complete without its Agent: the AgentService, revision,
+publication, audit row, and onboarding completion either commit together or all roll back.
+
 ## Boundary
 
 Callers must derive `UserOnboardingOwner` from the verified request principal. Persona survey

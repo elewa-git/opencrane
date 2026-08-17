@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import { PersonaApprovalInterviewStates, PersonaApprovalRevisionStates } from "../../approval/persona-authority.types";
 import { PersonaAgentRevisionSelectionStatuses } from "../../approval/persona-authority.types";
 import { PrismaPersonaPersistenceUnitOfWork } from "../prisma-persona-persistence-unit-of-work";
-import type { PersonaAgentRevisionSelectionFactory } from "../../http/prisma-persona-onboarding.router.types";
+import type { PersonaAgentRevisionSelectionFactory } from "../prisma-persona-persistence-composition.types";
 
 /** Builds a root client whose transaction boundary rejects with the supplied failure. */
 function _Prisma(error: Error): PrismaClient

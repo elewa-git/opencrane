@@ -82,8 +82,10 @@ the initial onboarding survey is still open, the database also requires the appr
 come from its currently pinned interview. Conversely, that pin cannot be replaced after its persona
 became active; either ordering of an approval-versus-sort-again race therefore rejects the stale
 operation. When the interview was started by an accepted refresh proposal, the approval transaction
-must still find and apply that exact proposal; a missing or concurrently changed proposal rejects
-and rolls back the whole approval rather than activating the revision alone.
+must still find and apply that exact proposal. Before the profile pointer or proposal journal moves,
+the same transaction asks the agent-service strategy to publish a persona-only AgentRevision and
+append its audit evidence. An owner without a personal AgentService remains a valid no-op; stale,
+missing, or ambiguous agent authority rejects and rolls back the whole approval.
 
 ## Public surface
 
@@ -98,6 +100,9 @@ and rolls back the whole approval rather than activating the revision alone.
   never compiled instructions. The raw Prisma adapter remains internal.
 - `PersonaOnboardingWorkflowPort` — the narrow app-composed notification boundary that advances the
   distinct durable onboarding authority after an owner starts an interview or approves a persona.
+- `PersonaAgentRevisionSelectionFactory` and `PersonaAgentRevisionSelectionPort` — the narrow
+  app-owned bridge that binds agent-service persona selection to the approval transaction without
+  giving this package AgentService persistence authority.
 - `_PersonaOnboardingOpenapiPaths` — the OpenAPI paths for that owner-only router.
 - `PersonaOnboardingCaller`, `PersonaOnboardingClock`, and
   `PersonaOnboardingRouterDependencies` — the three types needed to compose the router without
@@ -116,7 +121,8 @@ API. The route module composes these owners; it contains no persistence policy.
 
 `PrismaPersonaPersistenceUnitOfWork` is the sole owner of persona transaction creation. For each
 operation it constructs the lifecycle repositories once with the exact callback transaction; the
-repositories cannot retain or receive the root Prisma client. The aggregate read repository in
+app-created persona-selection port receives that same callback transaction. The repositories cannot
+retain or receive the root Prisma client. The aggregate read repository in
 `profile/` owns shared lifecycle evidence reads and next-revision allocation. It takes no row locks,
 so a concurrent writer surfaces as an explicit conflict outcome instead of a blocked lock. Scoring
 owns immutable weighted-vector replay and append-only tie choices. Drafting selects the reviewed

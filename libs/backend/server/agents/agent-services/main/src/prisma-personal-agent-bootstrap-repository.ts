@@ -1,17 +1,10 @@
-import { AgentRevisionState, AgentServiceKind, AgentServiceState, ModelRoutingScope, PersonaRevisionState, type Prisma } from "@prisma/client";
-
-import type { AgentRevisionContent } from "@opencrane/models/agents";
-import { __AppendAuditDecision } from "@opencrane/backend/server/iam/audit";
-import { __DigestCanonicalJson } from "@opencrane/backend/server/iam/authorization";
+import { AgentRevisionState, AgentServiceKind, AgentServiceState, PersonaRevisionState, type Prisma } from "@prisma/client";
 
 import { INITIAL_PERSONAL_AGENT_POLICY } from "./initial-personal-agent-policy";
 import { AgentRevisionPersonaSelectionMaterializationCodes } from "./agent-revision-persona-selection.types";
 import { PersonalAgentBootstrapDenialReasons, PersonalAgentBootstrapStatuses, type DeniedPersonalAgentBootstrapResult, type PersonalAgentBootstrapCommand, type PersonalAgentBootstrapRepository, type PersonalAgentBootstrapResult, type ReadyPersonalAgentBootstrapResult } from "./personal-agent-bootstrap.types";
 import { PrismaAgentRevisionPersonaSelectionRepository } from "./prisma-agent-revision-persona-selection";
-import { PrismaAgentRevisionWriterRepository } from "./prisma-agent-revision-writer";
-
-/** Capability catalogue recorded for the onboarding-owned initial publication. */
-const _PERSONAL_AGENT_BOOTSTRAP_CATALOG_ID = "opencrane-personal-agent-bootstrap";
+import { PrismaInitialPersonalAgentPublicationRepository } from "./prisma-initial-personal-agent-publication";
 
 /** Immutable evidence returned after validating the approved active persona. */
 interface _ApprovedPersona
@@ -133,58 +126,8 @@ export class PrismaPersonalAgentBootstrapRepository implements PersonalAgentBoot
 			return this._EnsureCurrentPersona(command, persona, existing);
 		}
 
-		// 4. Resolve one default model with the silo default taking precedence over the global fallback.
-		const model = await this._ResolveDefaultModel(command.siloId);
-		if (model.status === PersonalAgentBootstrapStatuses.Denied) return model;
-
-		// 5. Create the stable service and first draft through the shared immutable revision writer.
-		const service = await this.transaction.agentService.create({
-			data: {
-				id: command.onboardingId,
-				siloId: command.siloId,
-				kind: AgentServiceKind.Personal,
-				name: persona.displayName,
-				state: AgentServiceState.Draft,
-				workloadProfile: INITIAL_PERSONAL_AGENT_POLICY.workloadProfile,
-				createdAt: command.provisionedAt,
-				updatedAt: command.provisionedAt,
-			},
-		});
-		const content: AgentRevisionContent = {
-			promptPolicyVersion: INITIAL_PERSONAL_AGENT_POLICY.promptPolicyVersion,
-			personaRevisionId: persona.id,
-			modelDefinitionId: model.modelDefinitionId,
-			budget: INITIAL_PERSONAL_AGENT_POLICY.budget,
-			skills: [],
-			integrationAssignments: [],
-			scopeAttachments: [],
-		};
-		const revision = await new PrismaAgentRevisionWriterRepository(this.transaction).createDraft({
-			siloId: command.siloId,
-			agentServiceId: service.id,
-			revision: 1,
-			parentRevisionId: null,
-			sourceRevisionId: null,
-			content,
-			changeMessage: "Created by completed personal onboarding.",
-			authoredBy: command.subjectId,
-			createdAt: command.provisionedAt,
-		});
-
-		// 6. Publish the revision and activate the service before audit evidence is appended in the
-		// same transaction. Any later failure rolls all three writes back together.
-		await this.transaction.agentRevision.update({
-			where: { id: revision.id },
-			data: { state: AgentRevisionState.Published, publishedAt: command.provisionedAt },
-		});
-		await this.transaction.agentService.update({
-			where: { id: service.id },
-			data: { state: AgentServiceState.Active, activeRevisionId: revision.id, updatedAt: command.provisionedAt },
-		});
-
-		// 7. Record why onboarding was allowed to publish this agent before the owner commits readiness.
-		await __AppendAuditDecision(this.transaction, this._BuildAuditDecision(command, persona.id, revision.id, revision.digest));
-		return _Ready({ id: service.id, activeRevisionId: revision.id, workloadProfile: service.workloadProfile, personaRevisionId: persona.id }, true, false);
+		// 4. Delegate initial publication after bootstrap has proved that no service exists.
+		return new PrismaInitialPersonalAgentPublicationRepository(this.transaction).publish(command, persona);
 	}
 
 	/** Reconcile one existing service to the owner's current approved persona without replacing it. */
@@ -264,60 +207,4 @@ export class PrismaPersonalAgentBootstrapRepository implements PersonalAgentBoot
 		});
 	}
 
-	/** Resolves the unique silo default, or the unique global default when the silo has none. */
-	private async _ResolveDefaultModel(siloId: string): Promise<{ readonly status: PersonalAgentBootstrapStatuses.Ready; readonly modelDefinitionId: string } | DeniedPersonalAgentBootstrapResult>
-	{
-		const tenant = await this.transaction.modelDefinition.findMany({
-			where: { scope: ModelRoutingScope.ClusterTenant, clusterTenant: siloId, isDefault: true },
-			select: { id: true },
-			orderBy: { id: "asc" },
-			take: 2,
-		});
-		if (tenant.length > 1) return _Denied(PersonalAgentBootstrapDenialReasons.DefaultModelAmbiguous);
-		if (tenant.length === 1)
-		{
-			const selected = tenant[0];
-			if (selected === undefined) return _Denied(PersonalAgentBootstrapDenialReasons.DefaultModelUnavailable);
-			return { status: PersonalAgentBootstrapStatuses.Ready, modelDefinitionId: selected.id };
-		}
-		const global = await this.transaction.modelDefinition.findMany({
-			where: { scope: ModelRoutingScope.Global, clusterTenant: null, isDefault: true },
-			select: { id: true },
-			orderBy: { id: "asc" },
-			take: 2,
-		});
-		if (global.length > 1) return _Denied(PersonalAgentBootstrapDenialReasons.DefaultModelAmbiguous);
-		if (global.length === 0) return _Denied(PersonalAgentBootstrapDenialReasons.DefaultModelUnavailable);
-		const selected = global[0];
-		if (selected === undefined) return _Denied(PersonalAgentBootstrapDenialReasons.DefaultModelUnavailable);
-		return { status: PersonalAgentBootstrapStatuses.Ready, modelDefinitionId: selected.id };
-	}
-
-	/** Builds append-only publication evidence from the exact bootstrap command and revision digest. */
-	private _BuildAuditDecision(command: PersonalAgentBootstrapCommand, materializedPersonaRevisionId: string, agentRevisionId: string, agentRevisionDigest: string)
-	{
-		const argumentsDigest = __DigestCanonicalJson({ onboardingId: command.onboardingId, onboardingPersonaRevisionId: command.onboardingPersonaRevisionId, materializedPersonaRevisionId, readinessKind: command.readinessKind, provisionedAt: command.provisionedAt.toISOString() });
-		const effectiveAuthorizationDigest = __DigestCanonicalJson({ actor: command.subjectId, siloId: command.siloId, personaRevisionId: materializedPersonaRevisionId, agentRevisionDigest });
-		const decisionDigest = __DigestCanonicalJson({ argumentsDigest, effectiveAuthorizationDigest, action: "publish", resourceId: command.onboardingId });
-		return {
-			decisionDigest,
-			siloId: command.siloId,
-			actorKind: "user" as const,
-			actorId: command.subjectId,
-			resourceKind: "agent-service",
-			resourceId: command.onboardingId,
-			agentServiceId: command.onboardingId,
-			agentRevisionId,
-			action: "publish",
-			catalogId: _PERSONAL_AGENT_BOOTSTRAP_CATALOG_ID,
-			catalogRevision: 1,
-			catalogDigest: __DigestCanonicalJson({ catalog: _PERSONAL_AGENT_BOOTSTRAP_CATALOG_ID, revision: 1 }),
-			argumentsDigest,
-			policyRevisionHash: __DigestCanonicalJson({ policy: "personal-agent-bootstrap", revision: 1 }),
-			effectiveAuthorizationDigest,
-			outcome: "allow" as const,
-			reasonCode: "onboarding_completed",
-			decidedAt: command.provisionedAt,
-		};
-	}
 }

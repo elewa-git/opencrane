@@ -115,19 +115,22 @@ onboarding package owns the surrounding Serializable transaction and the decisio
 questionnaire may become complete. The app binds that transaction to this package's agent half through
 `PrismaPersonalAgentBootstrapRepository`:
 
-1. It re-reads the pinned persona revision and requires it to be approved, subject-owned,
-   silo-owned, and still active.
+1. It re-reads the pinned persona revision and requires it to be approved, subject-owned, and
+   silo-owned. During initial completion that revision must still be active, which rejects a persona
+   refresh racing the conclusion. During repair the pin remains historical evidence while the
+   owner's current approved persona governs creation or revision.
 2. It resolves active personal services for that persona. Exactly one is an idempotent success;
    more than one is an ambiguity and creates nothing.
 3. If no service exists, it uses the onboarding identifier as the deterministic AgentService
    identifier. A concurrent retry therefore competes for one database identity instead of creating
    two agents. A row already using that identifier for another authority fails closed.
-4. It chooses exactly one silo default model, falling back to exactly one global default only when
-   the silo has none. Multiple defaults at the selected scope are an error; it never picks the first
-   row by accident.
-5. It creates a `Personal` service in `Draft`, writes revision 1 through the shared immutable
-   revision writer, publishes that revision, activates the service, and appends publication audit
-   evidence. The onboarding transaction commits all of this with completion, or none of it.
+4. If no service exists, `PrismaInitialPersonalAgentPublicationRepository` chooses exactly one silo default
+   model, falling back to exactly one global default only when the silo has none. Multiple defaults
+   at the selected scope are an error; it never picks the first row by accident.
+5. That publisher creates a `Personal` service in `Draft`, writes revision 1 through the shared
+   immutable revision writer, publishes that revision, activates the service, and appends
+   publication audit evidence. The onboarding transaction commits all of this with completion, or
+   none of it.
 
 The initial revision uses the package-owned initial personal-Agent policy and the `personal-default` runtime profile.
 Its skills, integrations, and knowledge-scope attachments are empty. Personal memory access is not
@@ -164,7 +167,10 @@ onboarding completion unit of work (owns Serializable commit/retry)
         │ app adapter binds its transaction
         ▼
 PrismaPersonalAgentBootstrapRepository
-        │ validates persona + model + service authority
+        │ validates persona + service authority
+        ▼
+PrismaInitialPersonalAgentPublicationRepository
+        │ selects the model
         │ writes service + revision + publication + audit
         ▼
 ready personal AgentService, or a stable fail-closed denial
@@ -174,6 +180,8 @@ Public bootstrap surface:
 
 - `PrismaPersonalAgentBootstrapRepository(transaction)` — the Prisma strategy; it cannot open or
   commit a transaction itself.
+- `PrismaInitialPersonalAgentPublicationRepository(transaction)` — the internal publication strategy used
+  only after bootstrap proves that no personal service exists.
 - `PersonalAgentBootstrapStatuses` — the stable ready/denied vocabulary used by the app adapter.
 
 Inside the package, a typed repository port and detailed denial reasons keep every authority branch

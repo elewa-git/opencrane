@@ -12,10 +12,10 @@ import { _DoPersonaPersistenceWithTrace } from "../persona-persistence-observabi
 import { PersonaInterviewDenialReasons, PersonaLifecycleOutcomes } from "./persona-lifecycle.types";
 import { PersonaOnboardingDenialReasons, type EnsurePersonaOnboardingCommand, type EnsurePersonaOnboardingResult } from "./persona-onboarding-authority.types";
 import type { PersonaOnboardingStatus } from "./persona-onboarding-status.types";
+import type { PersonaAgentRevisionSelectionFactory } from "./prisma-persona-persistence-composition.types";
 import type { PersonaPersistenceUnitOfWork } from "./persona-persistence-unit-of-work.types";
 import { PrismaPersonaOnboardingRepository } from "./prisma-persona-onboarding-repository";
 import { PrismaPersonaOnboardingStatusRepository } from "./prisma-persona-onboarding-status-repository";
-import type { PersonaAgentRevisionSelectionFactory } from "../http/prisma-persona-onboarding.router.types";
 
 /** Runs each persona operation in its own Serializable Prisma transaction. */
 export class PrismaPersonaPersistenceUnitOfWork implements PersonaPersistenceUnitOfWork
@@ -25,10 +25,10 @@ export class PrismaPersonaPersistenceUnitOfWork implements PersonaPersistenceUni
 	/** Logger used when a persistence failure is turned into a denial. */
 	private readonly logger: Logger;
 	/** App-owned factory that binds agent-service selection to each approval transaction. */
-	private readonly agentRevisionSelection: PersonaAgentRevisionSelectionFactory;
+	private readonly agentRevisionSelection: PersonaAgentRevisionSelectionFactory<Prisma.TransactionClient>;
 
 	/** Creates the transaction boundary over the canonical product database. */
-	constructor(prisma: PrismaClient, logger: Logger, agentRevisionSelection: PersonaAgentRevisionSelectionFactory)
+	constructor(prisma: PrismaClient, logger: Logger, agentRevisionSelection: PersonaAgentRevisionSelectionFactory<Prisma.TransactionClient>)
 	{
 		this.prisma = prisma;
 		this.logger = logger;

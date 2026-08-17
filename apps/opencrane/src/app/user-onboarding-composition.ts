@@ -31,10 +31,8 @@ function _CreatePersonalAgentBootstrap(transaction: Prisma.TransactionClient, lo
 			const result = await repository.ensureReady(command);
 			if (result.status === PersonalAgentBootstrapStatuses.Ready)
 			{
-				const fields = { operation: "user_onboarding.personal_agent_ready", siloId: command.siloId, subjectId: command.subjectId, onboardingId: command.onboardingId, agentServiceId: result.agentServiceId, agentRevisionId: result.agentRevisionId, created: result.created, revised: result.revised };
-				if (result.created) logger.info(fields, "Personal Agent created after onboarding");
-				else if (result.revised) logger.info(fields, "Personal Agent reconciled to the current approved persona");
-				else logger.debug(fields, "Personal Agent readiness confirmed");
+				const fields = { operation: "user_onboarding.personal_agent_ready_attempt", siloId: command.siloId, subjectId: command.subjectId, onboardingId: command.onboardingId, agentServiceId: result.agentServiceId, agentRevisionId: result.agentRevisionId, created: result.created, revised: result.revised };
+				logger.debug(fields, "Personal Agent readiness prepared inside the open transaction attempt");
 				return { status: UserOnboardingPersonalAgentBootstrapStatuses.Ready, agentServiceId: result.agentServiceId };
 			}
 			logger.warn({ operation: "user_onboarding.personal_agent_denied", siloId: command.siloId, subjectId: command.subjectId, onboardingId: command.onboardingId, reason: result.reason }, "Personal Agent readiness denied");

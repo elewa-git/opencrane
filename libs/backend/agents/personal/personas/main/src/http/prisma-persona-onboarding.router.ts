@@ -1,11 +1,11 @@
-import type { PrismaClient } from "@prisma/client";
+import type { Prisma, PrismaClient } from "@prisma/client";
 import type { Router } from "express";
 import type { Logger } from "@opencrane/backend/observability";
 
 import { _ResolveRequestPrincipal } from "@opencrane/backend/server/infra/auth";
 import { __CreatePersonaOnboardingRouter } from "./persona-onboarding.router";
 import type { PersonaOnboardingCaller, PersonaOnboardingWorkflowPort } from "./persona-onboarding.router.types";
-import type { PersonaAgentRevisionSelectionFactory } from "./prisma-persona-onboarding.router.types";
+import type { PersonaAgentRevisionSelectionFactory } from "../profile/prisma-persona-persistence-composition.types";
 import { PrismaPersonaPersistenceUnitOfWork } from "../profile/prisma-persona-persistence-unit-of-work";
 
 /** Turns the authenticated request principal into the caller shape persona onboarding expects; null when the request is not authenticated. */
@@ -31,7 +31,7 @@ function _resolveCaller(request: Parameters<typeof _ResolveRequestPrincipal>[0])
  * @returns An Express router to mount below /me/persona.
  * @see PersonaPersistenceUnitOfWork
  */
-export function _CreatePersonaOnboardingRouter(prisma: PrismaClient, logger: Logger, workflow: PersonaOnboardingWorkflowPort, agentRevisionSelection: PersonaAgentRevisionSelectionFactory): Router
+export function _CreatePersonaOnboardingRouter(prisma: PrismaClient, logger: Logger, workflow: PersonaOnboardingWorkflowPort, agentRevisionSelection: PersonaAgentRevisionSelectionFactory<Prisma.TransactionClient>): Router
 {
 	const persistence = new PrismaPersonaPersistenceUnitOfWork(prisma, logger, agentRevisionSelection);
 	return __CreatePersonaOnboardingRouter({
