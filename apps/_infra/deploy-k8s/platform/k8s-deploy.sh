@@ -99,6 +99,7 @@ source "$SCRIPT_DIR/current-chart-sources.sh"
 source "$SCRIPT_DIR/control-plane-image-policy.sh"
 source "$SCRIPT_DIR/qualified-release-image-policy.sh"
 source "$SCRIPT_DIR/cluster-tenant-crd-policy.sh"
+source "$SCRIPT_DIR/dns-authority.sh"
 COGNEE_IMAGE_POLICY="$SCRIPT_DIR/../../cognee/deploy/image-policy.sh"
 if [[ ! -f "$COGNEE_IMAGE_POLICY" ]]; then
   echo "[k8s-deploy] Cognee image policy is missing at '$COGNEE_IMAGE_POLICY'." >&2
@@ -453,11 +454,11 @@ _run_preflight() {
   #    required. Its SOA lookup must nevertheless reach an authoritative serving zone.
   if [[ -n "$BASE_DOMAIN" ]]; then
     if command -v dig >/dev/null 2>&1; then
-      [[ -n "$(dig +noall +authority SOA "$BASE_DOMAIN" 2>/dev/null)" ]] || PF_FAILS+=("No authoritative DNS service resolves for '$BASE_DOMAIN'. Delegate its zone or create the base-domain record under an existing served parent zone.")
+      dns_authority_resolves "$BASE_DOMAIN" dig || PF_FAILS+=("No authoritative DNS service resolves for '$BASE_DOMAIN'. Delegate its zone or create the base-domain record under an existing served parent zone.")
     elif command -v host >/dev/null 2>&1; then
-      host -t SOA "$BASE_DOMAIN" >/dev/null 2>&1 || PF_FAILS+=("No authoritative DNS service resolves for '$BASE_DOMAIN'. Delegate its zone or create the base-domain record under an existing served parent zone.")
+      dns_authority_resolves "$BASE_DOMAIN" host || PF_FAILS+=("No authoritative DNS service resolves for '$BASE_DOMAIN'. Delegate its zone or create the base-domain record under an existing served parent zone.")
     else
-      warn "Preflight: no dig/host — skipping the NS-delegation check for '$BASE_DOMAIN'."
+      warn "Preflight: no dig/host — skipping the DNS-authority check for '$BASE_DOMAIN'."
     fi
   fi
 
