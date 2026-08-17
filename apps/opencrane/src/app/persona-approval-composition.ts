@@ -41,7 +41,7 @@ class _PersonaAgentRevisionSelectionAdapter implements PersonaAgentRevisionSelec
 }
 
 /** Builds the app-owned cross-domain bridge for each persona approval transaction. */
-export function _CreatePersonaAgentRevisionSelectionFactory(): PersonaAgentRevisionSelectionFactory
+export function _CreatePersonaAgentRevisionSelectionFactory(): PersonaAgentRevisionSelectionFactory<Prisma.TransactionClient>
 {
 	return {
 		create(transaction: Prisma.TransactionClient): PersonaAgentRevisionSelectionPort
