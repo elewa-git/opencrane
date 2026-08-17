@@ -123,9 +123,10 @@ restart_database_consumers_for_finalization()
 wait_for_final_deployment_if_present()
 {
   local deployment="$1"
+  local namespace="${2:-$NAMESPACE}"
   local command_status
   local deployment_resource
-  if deployment_resource="$(kubectl get "deployment/$deployment" -n "$NAMESPACE" --ignore-not-found -o name)"; then
+  if deployment_resource="$(kubectl get "deployment/$deployment" -n "$namespace" --ignore-not-found -o name)"; then
     command_status=0
   else
     command_status=$?
@@ -137,7 +138,7 @@ wait_for_final_deployment_if_present()
   if [[ -z "$deployment_resource" ]]; then
     return 0
   fi
-  if kubectl rollout status "deployment/$deployment" -n "$NAMESPACE" --timeout="${TIMEOUT}s"; then
+  if kubectl rollout status "deployment/$deployment" -n "$namespace" --timeout="${TIMEOUT}s"; then
     command_status=0
   else
     command_status=$?

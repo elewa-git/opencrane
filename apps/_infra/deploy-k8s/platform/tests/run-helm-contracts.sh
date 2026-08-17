@@ -18,7 +18,9 @@ for contract in \
   server-network-policy-contract.sh \
   platform-network-policy-contract.sh \
   post-deploy-health-contract.sh \
+  qualified-release-image-contract.sh \
   control-plane-image-policy-contract.sh \
+  cluster-tenant-crd-policy-contract.sh \
   silo-deploy-profile-contract.sh \
   silo-teardown-contract.sh \
   skill-workload-contract.sh; do

@@ -8,10 +8,10 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../../.." && pwd)"
 CLUSTER_NAME="${CLUSTER_NAME:-opencrane-develop-smoke}"
 NAMESPACE="${NAMESPACE:-opencrane-develop-smoke}"
-RELEASE_NAME="${RELEASE_NAME:-opencrane}"
+CLUSTER_TENANT="${CLUSTER_TENANT:-smoke}"
+RELEASE_NAME="${RELEASE_NAME:-opencrane-${CLUSTER_TENANT}}"
 ARTIFACT_NAMESPACE="${RELEASE_NAME}-artifacts"
 BASE_DOMAIN="${BASE_DOMAIN:-develop-smoke.opencrane.test}"
-CLUSTER_TENANT="${CLUSTER_TENANT:-smoke}"
 CONTROL_PLANE_HOST="${CLUSTER_TENANT}.${BASE_DOMAIN}"
 SMOKE_ACME_EMAIL="${SMOKE_ACME_EMAIL:-develop-smoke@opencrane.test}"
 SMOKE_FIRST_USER_EMAIL="${SMOKE_FIRST_USER_EMAIL:-owner@develop-smoke.opencrane.test}"
@@ -502,7 +502,7 @@ export TIMEOUT_SECONDS
 echo "[develop-smoke] Waiting for every enabled workload and certificate"
 kubectl wait --for=condition=available deployment --all -n "$NAMESPACE" --timeout="${TIMEOUT_SECONDS}s"
 kubectl wait --for=condition=available deployment --all -n "$ARTIFACT_NAMESPACE" --timeout="${TIMEOUT_SECONDS}s"
-kubectl wait --for=condition=Ready certificate/opencrane-clustertenant-tls \
+kubectl wait --for=condition=Ready "certificate/${RELEASE_NAME}-clustertenant-tls" \
   -n "$NAMESPACE" --timeout="${TIMEOUT_SECONDS}s"
 
 _assert_database_isolation

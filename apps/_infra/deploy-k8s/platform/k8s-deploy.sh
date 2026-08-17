@@ -97,6 +97,8 @@ source "$SCRIPT_DIR/postgres-connection.sh"
 source "$SCRIPT_DIR/registry-pull-secret.sh"
 source "$SCRIPT_DIR/current-chart-sources.sh"
 source "$SCRIPT_DIR/control-plane-image-policy.sh"
+source "$SCRIPT_DIR/qualified-release-image-policy.sh"
+source "$SCRIPT_DIR/cluster-tenant-crd-policy.sh"
 COGNEE_IMAGE_POLICY="$SCRIPT_DIR/../../cognee/deploy/image-policy.sh"
 if [[ ! -f "$COGNEE_IMAGE_POLICY" ]]; then
   echo "[k8s-deploy] Cognee image policy is missing at '$COGNEE_IMAGE_POLICY'." >&2
@@ -356,6 +358,7 @@ _resolve_release_images() {
   validate_cognee_helm_passthrough || exit 1
 }
 _resolve_release_images
+preflight_qualified_release_tag_images || exit $?
 
 # --preflight: fail-FAST environment validation, run BEFORE any cluster mutation. Each
 # check appends to PF_FAILS; a non-empty list at the end exits 1 with every remediation,
@@ -428,11 +431,7 @@ _run_preflight() {
   #    sits in ImagePullBackOff. The server and SPA are one browser release, so validate both
   #    resolved images. A missing local inspector warns rather than changing cluster state.
   local _img
-  local _images=(
-    "ghcr.io/elewa-git/opencrane-server:${CP_TAG}"
-    "$CONTROL_PLANE_SPA_IMAGE"
-    "$COGNEE_IMAGE"
-  )
+  local _images=("$CONTROL_PLANE_SPA_IMAGE" "$COGNEE_IMAGE")
   if command -v skopeo >/dev/null 2>&1; then
     for _img in "${_images[@]}"; do
       skopeo inspect "docker://$_img" >/dev/null 2>&1 || PF_FAILS+=("First-party image not pullable: $_img (skopeo inspect failed). Check the registry/tag and your pull credentials.")
@@ -705,6 +704,11 @@ _copy_cnpg_uri_secret "$LITELLM_POSTGRES_APP_SECRET" "$LITELLM_DATABASE_SECRET" 
 ARTIFACT_NAMESPACE="${RELEASE}-artifacts"
 ARTIFACT_CATALOG_KEY_SECRET="${RELEASE}-artifact-catalog-keys"
 ARTIFACT_SERVICE_KEY_SECRET="${RELEASE}-artifact-service-keys"
+# Candidate-skill and tenant-tool Jobs need the same release boundary as the
+# application and artifact planes. Static chart defaults would make every silo
+# compete for one cluster-wide namespace and let the first Helm release claim it.
+SKILL_AUTHORING_NAMESPACE="${RELEASE}-skill-authoring"
+TOOL_RUNNER_NAMESPACE="${RELEASE}-tools"
 kubectl create namespace "$ARTIFACT_NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
 _ensure_artifact_keys() {
   local key_dir
@@ -893,12 +897,6 @@ helm_args=(upgrade --install "$RELEASE" "$CHART_DIR" --namespace "$NAMESPACE" --
   --set "litellm.existingSecret=opencrane-litellm"
   "${MEMORY_GATEWAY_KUBERNETES_API_ARGS[@]}")
 [[ -n "$REGISTRY_PULL_SECRET" ]] && helm_args+=(--set-string "global.imagePullSecret=$REGISTRY_PULL_SECRET")
-# Per-component tags override the unified --image-tag so a single component can be
-# rolled through Helm (which keeps Helm the sole owner of the image field). Each
-# falls back to IMAGE_TAG when its flag is unset, preserving the all-same default.
-# --set-string: a tag like "1.2.3" or a numeric-looking sha must never be parsed by YAML as a number
-# (same guideline as the OIDC string values below; see the deploy ledger).
-[[ -n "$CP_TAG" ]] && helm_args+=(--set-string "clustertenantManager.image.tag=$CP_TAG")
 if [[ "$ALLOW_TAG_FLOAT" == "1" ]]; then
   helm_args+=(--set-string "controlPlaneSpa.image.digest=" --set-string "controlPlaneSpa.image.tag=$CONTROL_PLANE_SPA_TAG")
 else
@@ -934,6 +932,16 @@ helm_args+=("${INITIAL_MODEL_PROVIDER_HELM_ARGS[@]}")
 helm_args+=("${EXTRA_SET[@]}")
 # Raw helm-arg passthrough for sanctioned one-time fixes (e.g. --take-ownership).
 [[ ${#EXTRA_HELM_ARGS[@]} -gt 0 ]] && helm_args+=("${EXTRA_HELM_ARGS[@]}")
+CRDS_INSTALL="$(resolve_cluster_tenant_crd_install \
+  "$CHART_DIR" "$RELEASE" "$NAMESPACE" \
+  "${MEMORY_GATEWAY_KUBERNETES_API_ARGS[@]}")" || exit $?
+# Release-local execution planes are an isolation authority, not an operator
+# preference. Append them after every value source so a values file or raw
+# passthrough cannot silently reintroduce cluster-wide namespace ownership.
+helm_args+=(
+  --set "crds.install=$CRDS_INSTALL"
+  --set-string "opencrane-skill-authoring.skillAuthoring.namespace=$SKILL_AUTHORING_NAMESPACE"
+  --set-string "opencrane-tool-runner.toolRunner.namespace=$TOOL_RUNNER_NAMESPACE")
 # Value-preservation mode. Helm's DEFAULT on upgrade drops any value a prior release set
 # via --set/-f that this invocation does not restate, silently reverting it to the chart
 # default — a footgun that broke a live silo once (a pure `--opencrane-server-tag` bump reverted
@@ -962,8 +970,10 @@ if [[ -n "$DATABASE_FENCE_PRIOR_REPLICAS" ]]; then
     --set-string "migrationFence.fromReleaseVersion=$FROM_RELEASE_VERSION"
     --set-string "migrationFence.toReleaseVersion=$RELEASE_VERSION")
 fi
-# This must remain the final value-setting step. Values files, --set variants, reuse modes, and raw
-# passthrough are intentionally assembled first so none can replace the verified Cognee identity.
+# These must remain the final value-setting steps. Values files, --set variants, reuse modes, and
+# raw passthrough are assembled first so none can split the qualified OpenCrane build or replace the
+# verified Cognee identity.
+append_authoritative_qualified_release_image_helm_args
 append_authoritative_cognee_image_helm_args
 run_opencrane_finalization_stage helm "${helm_args[@]}" || exit $?
 run_opencrane_finalization_stage restart_database_consumers_for_finalization "$NAMESPACE" "$TIMEOUT" \
@@ -982,6 +992,9 @@ run_opencrane_finalization_stage wait_for_final_deployment_if_present "${RELEASE
 run_opencrane_finalization_stage _verify_control_plane_spa_rollout || exit $?
 run_opencrane_finalization_stage wait_for_final_deployment_if_present "${RELEASE}-cognee" || exit $?
 run_opencrane_finalization_stage _verify_cognee_rollout || exit $?
+run_opencrane_finalization_stage wait_for_final_deployment_if_present "${RELEASE}-channel-proxy" || exit $?
+run_opencrane_finalization_stage wait_for_final_deployment_if_present "${RELEASE}-memory-gateway" || exit $?
+run_opencrane_finalization_stage wait_for_final_deployment_if_present "${RELEASE}-artifact-service" "$ARTIFACT_NAMESPACE" || exit $?
 
 run_opencrane_finalization_stage _wait_for_release_certificate || exit $?
 run_opencrane_finalization_stage _post_deploy_verify || exit $?

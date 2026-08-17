@@ -43,7 +43,17 @@ wires the pieces and the per-silo networking together.
 · [postgres](../../postgres/README.md) · [cognee](../cognee/README.md) · [litellm](../litellm/README.md)
 · [obot](../obot/README.md)
 
-A silo installs **only** its own namespaced app releases. Cluster-wide controllers (ingress,
+A silo installs **only** its own namespaced app releases. `--image-tag` selects one reviewed
+OpenCrane build for the server, channel proxy, memory gateway, and artifact service; the deploy
+engine applies it after all values overrides and waits for those Deployments in both the main and
+artifact namespaces. The browser UI and Cognee keep their separate digest-pinning rules.
+Public deployments require an explicit immutable `sha-*` `--image-tag` and a registry inspector
+(`skopeo`, `crane`, or `docker`). The deploy engine checks all four tagged image references before
+it changes either Helm release. This is a release-set check: an advanced values override that
+disables one of these services does not remove its image from qualification. The local k3d smoke
+keeps using images imported directly into its nodes and proves them through the same blocking
+Deployment rollout gates.
+Cluster-wide controllers (ingress,
 CloudNativePG, cert-manager) and serving DNS are external prerequisites a silo never installs.
 "External" here means outside the organisation release: a cluster operator may explicitly install
 the pinned development controller set with `platform/bootstrap-prerequisites.sh`, but `deploy.sh`
@@ -111,9 +121,15 @@ package imports it.
 - `agentController.runtimeQuota` — aggregate Job, Pod, CPU, and memory ceilings for the dedicated
   untrusted runtime namespace.
 - `opencrane-skill-authoring.skillAuthoring` — the separate, default-deny candidate-skill namespace
-  and aggregate Job quota; it contains no standing worker.
+  and aggregate Job quota; it contains no standing worker. The deploy engine derives
+  `<release>-skill-authoring`, so different silos never share its Helm-owned namespace.
 - `opencrane-tool-runner.toolRunner` — the separate, default-deny tenant-tool namespace and aggregate
-  Job quota; it contains no standing worker.
+  Job quota; it contains no standing worker. The deploy engine derives `<release>-tools` for the
+  same per-silo ownership boundary.
+- `--release` — optional only as a restatement of the silo identity. The wrapper derives and
+  enforces `opencrane-<cluster-tenant>` so all Helm-owned namespaces stay inside one release.
+- `crds.install` — resolved authoritatively by the deploy engine: the first silo installs the
+  shared `ClusterTenant` CRD, while later silos consume it without competing for Helm ownership.
 - `--first-user-email` — required standalone-onboarding input. It is matched exactly against an
   IdP-verified email after a browser login on this silo host, then records only that identity's OIDC
   `sub` as the local Owner. It is distinct from `--platform-operator-seed-email` and grants no
