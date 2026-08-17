@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { Logger } from "@opencrane/backend/observability";
 
 import { __CreatePersonaOnboardingRouter, type PersonaOnboardingRouterDependencies } from "@opencrane/backend/agents/personal/personas";
-import { __CreateUserOnboardingRouter, __UserOnboardingAuthority, UserOnboardingStates, type ApprovedPersonaEvidence, type UserOnboardingOwner, type UserOnboardingRecord } from "@opencrane/backend/server/agents/onboarding";
+import { __CreateUserOnboardingRouter, __UserOnboardingAuthority, UserOnboardingReadinessStatuses, UserOnboardingStates, type ApprovedPersonaEvidence, type UserOnboardingOwner, type UserOnboardingRecord } from "@opencrane/backend/server/agents/onboarding";
 
 import { _CreatePersonaOnboardingWorkflow } from "../user-onboarding-composition";
 
@@ -68,7 +68,8 @@ describe("persona and durable onboarding app composition", function _PersonaUser
 			},
 			async readApprovedBootstrapEvidence(): Promise<null> { return null; },
 		};
-		const authority = new __UserOnboardingAuthority(onboardingRepository, personaEvidence, 1);
+		const completion = { complete: vi.fn().mockResolvedValue({ status: UserOnboardingReadinessStatuses.Ready, agentServiceId: "agent-1" }), ensureReady: vi.fn().mockResolvedValue({ status: UserOnboardingReadinessStatuses.Ready, agentServiceId: "agent-1" }) };
+		const authority = new __UserOnboardingAuthority(onboardingRepository, personaEvidence, 1, completion);
 		const workflow = _CreatePersonaOnboardingWorkflow(authority);
 		const approveAndActivateAtomically = vi.fn();
 		approveAndActivateAtomically.mockImplementation(async function _Approve()

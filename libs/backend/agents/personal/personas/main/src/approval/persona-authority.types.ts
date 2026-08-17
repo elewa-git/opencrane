@@ -65,6 +65,45 @@ export interface AtomicApprovePersonaCommand extends ApprovePersonaCommand
 	readonly expectedInsightCount: number;
 }
 
+/** Request to update an existing personal agent after a refresh persona is approved. */
+export interface SelectApprovedPersonaForPersonalAgentCommand
+{
+	/** Silo that owns the persona profile and personal agent. */
+	readonly siloId: string;
+	/** Subject that owns the approved persona profile. */
+	readonly userId: string;
+	/** Approved persona revision that future runs must select. */
+	readonly personaRevisionId: string;
+	/** Trusted approval instant used for the new immutable AgentRevision. */
+	readonly selectedAt: Date;
+}
+
+/** Stable outcomes returned through the cross-domain personal-agent selection port. */
+export enum PersonaAgentRevisionSelectionStatuses
+{
+	/** The personal agent now selects the approved persona, after a write or an idempotent match. */
+	Selected = "selected",
+	/** This owner has no personal agent yet, so approval has no agent revision to update. */
+	NotApplicable = "not_applicable",
+	/** Agent-service authority was stale, missing, or ambiguous, so approval must roll back. */
+	Conflict = "conflict",
+}
+
+/** Result of selecting an approved persona for an existing personal agent. */
+export type SelectApprovedPersonaForPersonalAgentResult = { readonly status: PersonaAgentRevisionSelectionStatuses };
+
+/**
+ * Narrow transaction-scoped port from persona approval to agent-service revision selection.
+ *
+ * The personas package owns neither AgentService discovery nor AgentRevision writes. The app adapts
+ * the agent-service strategy to this port on the same Prisma transaction used by approval.
+ */
+export interface PersonaAgentRevisionSelectionPort
+{
+	/** Selects the approved persona, no-ops when the owner has no personal agent, or reports conflict. */
+	select(command: SelectApprovedPersonaForPersonalAgentCommand): Promise<SelectApprovedPersonaForPersonalAgentResult>;
+}
+
 /** What the approval transaction reports back. */
 export enum PersonaApprovalPersistenceStatuses
 {
@@ -156,14 +195,6 @@ export interface PersonaAuthorityRepository
 	 */
 	approveAndActivateAtomically(command: AtomicApprovePersonaCommand): Promise<AtomicApprovePersonaResult>;
 }
-export interface PersonaAuthorityRepository
-{
-	/** Loads one consistent snapshot of profile, revision, interview, template, and insights. */
-	getApprovalSnapshot(command: ApprovePersonaCommand): Promise<PersonaApprovalSnapshot | null>;
-	/** Approves and activates, but only while every precondition from the snapshot still holds. */
-	approveAndActivateAtomically(command: AtomicApprovePersonaCommand): Promise<AtomicApprovePersonaResult>;
-}
-
 /** Stable result of persona approval. */
 export type ApprovePersonaResult =
 	| { readonly outcome: PersonaLifecycleOutcomes.Approved }

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { __UserOnboardingChatAuthority, UserOnboardingChatError } from "../user-onboarding-chat-authority";
 import { UserOnboardingAnswerStatuses, UserOnboardingBootstrapArchetypes, UserOnboardingChatFailureReasons, UserOnboardingChatMessageKinds, UserOnboardingPersonaColours, UserOnboardingStates } from "../user-onboarding.enums";
+import { UserOnboardingReadinessStatuses, type UserOnboardingCompletionUnitOfWork } from "../user-onboarding-completion.types";
 import type { AppendUserOnboardingAnswerCommand, StartUserOnboardingChatCommand, UserOnboardingAnswerPersistenceResult, UserOnboardingBootstrapContentRevision, UserOnboardingBootstrapConversation, UserOnboardingChatRepository } from "../user-onboarding-chat.types";
 import type { ApprovedPersonaEvidence, UserOnboardingOwner, UserOnboardingPersonaEvidencePort, UserOnboardingRecord } from "../user-onboarding.types";
 import type { __UserOnboardingAuthority } from "../user-onboarding-authority";
@@ -58,13 +59,6 @@ class _FakeChatRepository implements UserOnboardingChatRepository
 		return { status: UserOnboardingAnswerStatuses.Recorded };
 	}
 
-	/** Complete only the exact active conversation. */
-	async conclude(owner: UserOnboardingOwner, conversationId: string, completedAt: Date): Promise<boolean>
-	{
-		if (this.conversation === null || this.conversation.id !== conversationId || this.conversation.answers.length !== 3 || owner.subjectId !== _OWNER.subjectId) return false;
-		this.workflow.value = { ...this.workflow.value, state: UserOnboardingStates.Completed, completionProvenance: "bootstrap_concluded" as never, completedAt };
-		return true;
-	}
 }
 
 /** Persona evidence port exposing only one approved active Commander revision. */
@@ -87,7 +81,15 @@ function _Authority()
 {
 	const workflow = { value: _Workflow() };
 	const onboarding = { readOrCreate: async function _ReadOrCreate() { return workflow.value; } } as unknown as __UserOnboardingAuthority;
-	return { authority: new __UserOnboardingChatAuthority(onboarding, new _FakeChatRepository(workflow), _PERSONA), workflow };
+	const completion: UserOnboardingCompletionUnitOfWork = {
+		async complete()
+		{
+			workflow.value = { ...workflow.value, state: UserOnboardingStates.Completed, completionProvenance: "bootstrap_concluded" as never, completedAt: new Date() };
+			return { status: UserOnboardingReadinessStatuses.Ready, agentServiceId: "agent-a" };
+		},
+		async ensureReady() { return { status: UserOnboardingReadinessStatuses.Ready, agentServiceId: "agent-a" }; },
+	};
+	return { authority: new __UserOnboardingChatAuthority(onboarding, new _FakeChatRepository(workflow), _PERSONA, completion), workflow };
 }
 
 /** Build one owner answer fenced to the server-issued conversation question. */

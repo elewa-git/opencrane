@@ -1,6 +1,9 @@
+import type { Prisma } from "@prisma/client";
+
 import { _CreatePersonaWorkflowEvidenceRepository, PersonaWorkflowColours, type PersonaOnboardingCaller, type PersonaOnboardingWorkflowPort, type PersonaWorkflowEvidenceRepository } from "@opencrane/backend/agents/personal/personas";
+import { PersonalAgentBootstrapStatuses, PrismaPersonalAgentBootstrapRepository } from "@opencrane/backend/server/agents/agent-services";
 import type { Logger } from "@opencrane/backend/observability";
-import { type UserOnboardingOwner, type UserOnboardingOwnerResolver, type UserOnboardingPersonaEvidencePort, UserOnboardingBootstrapArchetypes, UserOnboardingPersonaColours, __CreateUserOnboardingRouter, __UserOnboardingAuthority, __UserOnboardingChatAuthority, _CreateUserOnboardingRepository, UserOnboardingPersonaWorkflowCoordinator } from "@opencrane/backend/server/agents/onboarding";
+import { type UserOnboardingOwner, type UserOnboardingOwnerResolver, type UserOnboardingPersonaEvidencePort, type UserOnboardingPersonalAgentBootstrapPort, UserOnboardingBootstrapArchetypes, UserOnboardingPersonalAgentBootstrapStatuses, UserOnboardingPersonaColours, __CreateUserOnboardingRouter, __UserOnboardingAuthority, __UserOnboardingChatAuthority, _CreateUserOnboardingRepository, PrismaUserOnboardingCompletionUnitOfWork, UserOnboardingPersonaWorkflowCoordinator } from "@opencrane/backend/server/agents/onboarding";
 
 import type { UserOnboardingRouteComposition } from "./routes.types";
 
@@ -12,9 +15,32 @@ export function _CreateUserOnboardingComposition(prisma: UserOnboardingPrismaCli
 {
 	const repository = _CreateUserOnboardingRepository(prisma);
 	const personaEvidence = _CreateUserOnboardingPersonaEvidence(_CreatePersonaWorkflowEvidenceRepository(prisma));
-	const authority = new __UserOnboardingAuthority(repository, personaEvidence, 1);
-	const chatAuthority = new __UserOnboardingChatAuthority(authority, repository, personaEvidence);
+	const completion = new PrismaUserOnboardingCompletionUnitOfWork(prisma, function _PersonalAgent(transaction) { return _CreatePersonalAgentBootstrap(transaction, logger); });
+	const authority = new __UserOnboardingAuthority(repository, personaEvidence, 1, completion);
+	const chatAuthority = new __UserOnboardingChatAuthority(authority, repository, personaEvidence, completion);
 	return { router: __CreateUserOnboardingRouter({ authority, chatAuthority, resolveOwner, logger }), personaWorkflow: _CreatePersonaOnboardingWorkflow(authority) };
+}
+
+/** Adapt agent-services' richer result to onboarding's narrow cross-domain readiness port. */
+function _CreatePersonalAgentBootstrap(transaction: Prisma.TransactionClient, logger: Logger): UserOnboardingPersonalAgentBootstrapPort
+{
+	const repository = new PrismaPersonalAgentBootstrapRepository(transaction);
+	return {
+		async ensureReady(command)
+		{
+			const result = await repository.ensureReady(command);
+			if (result.status === PersonalAgentBootstrapStatuses.Ready)
+			{
+				const fields = { operation: "user_onboarding.personal_agent_ready", siloId: command.siloId, subjectId: command.subjectId, onboardingId: command.onboardingId, agentServiceId: result.agentServiceId, agentRevisionId: result.agentRevisionId, created: result.created, revised: result.revised };
+				if (result.created) logger.info(fields, "Personal Agent created after onboarding");
+				else if (result.revised) logger.info(fields, "Personal Agent reconciled to the current approved persona");
+				else logger.debug(fields, "Personal Agent readiness confirmed");
+				return { status: UserOnboardingPersonalAgentBootstrapStatuses.Ready, agentServiceId: result.agentServiceId };
+			}
+			logger.warn({ operation: "user_onboarding.personal_agent_denied", siloId: command.siloId, subjectId: command.subjectId, onboardingId: command.onboardingId, reason: result.reason }, "Personal Agent readiness denied");
+			return { status: UserOnboardingPersonalAgentBootstrapStatuses.Denied };
+		},
+	};
 }
 
 /** Compose the app-owned adapter that translates names between the persona and durable onboarding authorities. */

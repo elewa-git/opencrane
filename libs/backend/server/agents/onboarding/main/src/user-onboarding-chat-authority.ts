@@ -6,6 +6,7 @@ import { UserOnboardingAnswerStatuses, UserOnboardingChatFailureReasons, UserOnb
 import type { ApprovedPersonaBootstrapEvidence, SubmitUserOnboardingAnswerCommand, UserOnboardingAnswerResult, UserOnboardingBootstrapContentRevision, UserOnboardingBootstrapConversation, UserOnboardingChatProjection, UserOnboardingChatRepository, UserOnboardingChatTranscriptItem } from "./user-onboarding-chat.types";
 import type { UserOnboardingOwner, UserOnboardingPersonaEvidencePort, UserOnboardingRecord } from "./user-onboarding.types";
 import type { __UserOnboardingAuthority } from "./user-onboarding-authority";
+import { UserOnboardingReadinessStatuses, type UserOnboardingCompletionUnitOfWork } from "./user-onboarding-completion.types";
 
 /**
  * Thrown for a refusal the router is expected to translate, not to log as a fault.
@@ -40,13 +41,16 @@ export class __UserOnboardingChatAuthority
 	private readonly repository: UserOnboardingChatRepository;
 	/** Persona-owned safe display evidence port. */
 	private readonly personaEvidence: UserOnboardingPersonaEvidencePort;
+	/** Atomic personal-Agent provisioning and onboarding completion boundary. */
+	private readonly completion: UserOnboardingCompletionUnitOfWork;
 
 	/** Compose guided chat without a general runtime or browser-selected identifiers. */
-	constructor(onboarding: __UserOnboardingAuthority, repository: UserOnboardingChatRepository, personaEvidence: UserOnboardingPersonaEvidencePort)
+	constructor(onboarding: __UserOnboardingAuthority, repository: UserOnboardingChatRepository, personaEvidence: UserOnboardingPersonaEvidencePort, completion: UserOnboardingCompletionUnitOfWork)
 	{
 		this.onboarding = onboarding;
 		this.repository = repository;
 		this.personaEvidence = personaEvidence;
+		this.completion = completion;
 	}
 
 	/** Read the deterministic owner projection without starting or advancing the chat. */
@@ -114,7 +118,7 @@ export class __UserOnboardingChatAuthority
 		const self = this;
 		return ___DoWithTrace("user_onboarding.chat.conclude", _TraceOwner(owner), async function _Conclude()
 		{
-			// 1. Treat an already-completed workflow as an idempotent resume.
+			// 1. Readiness validation and idempotent repair are part of every completed resume.
 			const workflow = await self.onboarding.readOrCreate(owner);
 			if (workflow.state === UserOnboardingStates.Completed) return self._project(owner, workflow);
 
@@ -122,10 +126,10 @@ export class __UserOnboardingChatAuthority
 			const conversation = await self.repository.readConversation(owner);
 			if (workflow.state !== UserOnboardingStates.BootstrapChatInProgress || conversation === null || workflow.bootstrapConversationId !== conversation.id || conversation.content.questions.length !== 3 || conversation.answers.length !== 3) throw new UserOnboardingChatError(UserOnboardingChatFailureReasons.NotConcludable);
 
-			// 3. Complete parent onboarding after validating its pinned immutable conversation.
-			const completed = await self.repository.conclude(owner, conversation.id, new Date());
+			// 3. Provision the personal Agent and complete onboarding in one Serializable transaction.
+			const completed = await self.completion.complete(owner, conversation.id, new Date());
 			const after = await self.onboarding.readOrCreate(owner);
-			if (!completed && after.state !== UserOnboardingStates.Completed) throw new UserOnboardingChatError(UserOnboardingChatFailureReasons.StateConflict);
+			if (completed.status !== UserOnboardingReadinessStatuses.Ready || after.state !== UserOnboardingStates.Completed) throw new UserOnboardingChatError(UserOnboardingChatFailureReasons.EvidenceUnavailable);
 			return self._project(owner, after);
 		});
 	}

@@ -6,7 +6,7 @@ import { PrismaPersonaAggregateReadRepository } from "../profile/prisma-persona-
 import { PersonaScoringPersistenceStatuses } from "../scoring/persona-scoring-repository.types";
 import { PrismaPersonaScoringRepository } from "../scoring/prisma-persona-scoring-repository";
 import { PersonaColourValues, PersonaModifierValues } from "../scoring/persona-scorer.types";
-import { PersonaApprovalInterviewStates, PersonaApprovalPersistenceStatuses, PersonaApprovalRevisionStates, type ApprovePersonaCommand, type AtomicApprovePersonaCommand, type AtomicApprovePersonaResult, type PersonaApprovalSnapshot, type PersonaAuthorityRepository } from "./persona-authority.types";
+import { PersonaAgentRevisionSelectionStatuses, PersonaApprovalInterviewStates, PersonaApprovalPersistenceStatuses, PersonaApprovalRevisionStates, type ApprovePersonaCommand, type AtomicApprovePersonaCommand, type AtomicApprovePersonaResult, type PersonaAgentRevisionSelectionPort, type PersonaApprovalSnapshot, type PersonaAuthorityRepository } from "./persona-authority.types";
 
 /** Prisma adapter that approves one persona revision and makes it active in a single transaction. */
 export class PrismaPersonaAuthorityRepository implements PersonaAuthorityRepository
@@ -19,14 +19,17 @@ export class PrismaPersonaAuthorityRepository implements PersonaAuthorityReposit
 	private readonly reads: PrismaPersonaAggregateReadRepository;
 	/** Score repository used to recompute the score, on the same transaction. */
 	private readonly scoring: PrismaPersonaScoringRepository;
+	/** App-composed agent-service strategy bound to this same transaction. */
+	private readonly agentRevisionSelection: PersonaAgentRevisionSelectionPort;
 
 	/** Create the authority over one caller-owned transaction. */
-	constructor(transaction: Prisma.TransactionClient)
+	constructor(transaction: Prisma.TransactionClient, agentRevisionSelection: PersonaAgentRevisionSelectionPort)
 	{
 		this.transaction = transaction;
 		this.refreshes = new PrismaPersonalConfigurationPersonaRefreshRepository(this.transaction);
 		this.reads = new PrismaPersonaAggregateReadRepository(this.transaction);
 		this.scoring = new PrismaPersonaScoringRepository(this.transaction);
+		this.agentRevisionSelection = agentRevisionSelection;
 	}
 
 	/** Reads everything approval must check before the owner can activate a draft. */
@@ -106,10 +109,16 @@ export class PrismaPersonaAuthorityRepository implements PersonaAuthorityReposit
 		// 4. Flip the state to Approved. The persona_revisions_closed_lifecycle trigger rechecks the interview, template, and insight rules on this update.
 		const approvedRevision = await this.transaction.personaRevision.updateMany({ where: { id: command.personaRevisionId, personaProfileId: command.personaProfileId, state: PersonaRevisionState.Draft }, data: { state: PersonaRevisionState.Approved, approvedBy: command.userId, approvedAt: new Date(command.approvedAt) } });
 		if (approvedRevision.count !== 1) return { status: PersonaApprovalPersistenceStatuses.Conflict };
-		// 5. Point the profile at the newly approved revision. The enforce_active_persona_revision trigger rejects a target that is not an approved revision of this profile.
+		// 5. Refresh approvals update the existing personal agent before any later approval write.
+		if (interview.refreshConfigurationChangeId !== null)
+		{
+			const selected = await this.agentRevisionSelection.select({ siloId: profile.siloId, userId: command.userId, personaRevisionId: command.personaRevisionId, selectedAt: new Date(command.approvedAt) });
+			if (selected.status === PersonaAgentRevisionSelectionStatuses.Conflict) throw new PersonaApprovalTransactionConflict();
+		}
+		// 6. Point the profile at the newly approved revision. The enforce_active_persona_revision trigger rejects a target that is not an approved revision of this profile.
 		const activatedProfile = await this.transaction.personaProfile.updateMany({ where: { id: command.personaProfileId, userId: command.userId }, data: { activeRevisionId: command.personaRevisionId } });
 		if (activatedProfile.count !== 1) throw new PersonaApprovalTransactionConflict();
-		// 6. Apply only the refresh proposal that the completed interview carries; unrelated accepted proposals remain pending.
+		// 7. Apply only the refresh proposal that the completed interview carries; unrelated accepted proposals remain pending.
 		if (interview.refreshConfigurationChangeId === null) return { status: PersonaApprovalPersistenceStatuses.Approved };
 		const applied = await this.refreshes.applyApprovedPersonaRefresh({ configurationChangeId: interview.refreshConfigurationChangeId, siloId: profile.siloId, userId: command.userId, personaProfileId: command.personaProfileId, personaRevisionId: command.personaRevisionId });
 		if (!applied) throw new PersonaApprovalTransactionConflict();
