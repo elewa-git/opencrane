@@ -1,7 +1,6 @@
 import { ___DoWithTrace } from "@opencrane/backend/observability";
 
 import { UserOnboardingDenialReasons, UserOnboardingStates, UserOnboardingTransitionStatuses } from "./user-onboarding.enums";
-import { UserOnboardingReadinessError } from "./user-onboarding-completion";
 import { UserOnboardingReadinessStatuses, type UserOnboardingCompletionUnitOfWork } from "./user-onboarding-completion.types";
 import { _UserOnboardingLifecycleState } from "./user-onboarding-lifecycle-state";
 import type { ApprovedPersonaEvidence, UserOnboardingOwner, UserOnboardingPersonaEvidencePort, UserOnboardingRecord, UserOnboardingRepository, UserOnboardingTransitionResult } from "./user-onboarding.types";
@@ -55,7 +54,7 @@ export class __UserOnboardingAuthority
 			if (reconciled.state !== UserOnboardingStates.Completed) return reconciled;
 			const readiness = await self.completion.ensureReady(owner);
 			if (readiness.status === UserOnboardingReadinessStatuses.Ready || readiness.status === UserOnboardingReadinessStatuses.NotApplicable) return reconciled;
-			throw new UserOnboardingReadinessError(readiness);
+			throw new Error(`user onboarding readiness denied: ${readiness.status}`);
 		});
 	}
 

@@ -7,7 +7,7 @@ export { ManagedRunAdmissionOutcomes } from "./agent-revision-lifecycle.types";
 export type { AgentRevisionLifecycleDenial, AgentRevisionLifecycleRepository, AgentServiceHistory, AgentServiceLifecycleAction, AppendAgentRevisionResult, ChangeAgentServiceStateCommand, ChangeAgentServiceStateResult, CompareAgentRevisionsResult, CreateManagedAgentServiceCommand, CreateManagedAgentServiceResult, ManagedRunAdmissionPort, ManagedRunAdmissionResult, ManagedRunNowCommand, ManagedRunTrigger, RestoreAgentRevisionCommand, ReviseAgentRevisionCommand } from "./agent-revision-lifecycle.types";
 export { PrismaAgentRevisionModelSelectionRepository } from "./prisma-agent-revision-model-selection";
 export { AgentRevisionModelSelectionMaterializationCodes, type AgentRevisionModelSelectionRepository, type MaterializeAgentRevisionModelSelectionCommand, type MaterializeAgentRevisionModelSelectionResult } from "./agent-revision-model-selection.types";
-export { AgentRevisionPersonaSelectionTransactionConflict, PrismaAgentRevisionPersonaSelectionRepository } from "./prisma-agent-revision-persona-selection";
+export { PrismaAgentRevisionPersonaSelectionRepository } from "./prisma-agent-revision-persona-selection";
 export { AgentRevisionPersonaSelectionMaterializationCodes, type AgentRevisionPersonaSelectionRepository, type MaterializeAgentRevisionPersonaSelectionCommand, type MaterializeAgentRevisionPersonaSelectionResult, type MaterializePersonalAgentPersonaSelectionCommand, type MaterializePersonalAgentPersonaSelectionResult } from "./agent-revision-persona-selection.types";
 export { PrismaPersonalAgentBootstrapRepository } from "./prisma-personal-agent-bootstrap-repository";
 export { PersonalAgentBootstrapStatuses } from "./personal-agent-bootstrap.types";

@@ -176,10 +176,10 @@ PrismaInitialPersonalAgentPublicationRepository
 ready personal AgentService, or a stable fail-closed denial
 ```
 
-Public bootstrap surface:
+Bootstrap implementation surface:
 
-- `PrismaPersonalAgentBootstrapRepository(transaction)` — the Prisma strategy; it cannot open or
-  commit a transaction itself.
+- `PrismaPersonalAgentBootstrapRepository(transaction)` — the exported app-composition adapter; it
+  cannot open or commit a transaction itself.
 - `PrismaInitialPersonalAgentPublicationRepository(transaction)` — the internal publication strategy used
   only after bootstrap proves that no personal service exists.
 - `PersonalAgentBootstrapStatuses` — the stable ready/denied vocabulary used by the app adapter.

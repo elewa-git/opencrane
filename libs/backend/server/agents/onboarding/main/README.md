@@ -21,8 +21,9 @@ The package owns the survey hand-off and first guided exchange end to end:
    and question coordinate, identical retries resume, and stale devices or conflicting key reuse fail.
 7. In one Serializable transaction, create or resolve the first runnable personal Agent from the
    pinned approved persona, then mark onboarding complete only after the Agent is ready.
-8. Repair older `bootstrap_concluded` rows idempotently on the next onboarding read, using the
-   onboarding identifier as the personal Agent's deterministic identity.
+8. Repair older `bootstrap_concluded` rows idempotently on the next onboarding read. Repair keeps an
+   existing owned personal service when present; creation uses the onboarding identifier as the
+   deterministic identity only when no service exists.
 
 ```text
  authenticated session       persona evidence authority

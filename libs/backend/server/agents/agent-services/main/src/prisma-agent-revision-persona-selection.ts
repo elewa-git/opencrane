@@ -85,7 +85,7 @@ export class PrismaAgentRevisionPersonaSelectionRepository implements AgentRevis
 			where: { id: service.id, siloId: command.siloId, kind: AgentServiceKind.Personal, state: AgentServiceState.Active, activeRevisionId: source.id },
 			data: { activeRevisionId: draft.id, updatedAt: command.materializedAt },
 		});
-		if (activated.count !== 1) throw new AgentRevisionPersonaSelectionTransactionConflict();
+		if (activated.count !== 1) throw new Error("personal Agent revision selection lost its active-revision comparison");
 		await __AppendAuditDecision(this.transaction, this._BuildAuditDecision(command, source.id, draft.id, draft.digest));
 		return { status: AgentRevisionPersonaSelectionMaterializationCodes.Materialized, agentRevisionId: draft.id, sourceRevisionId: source.id };
 	}
@@ -154,11 +154,6 @@ export class PrismaAgentRevisionPersonaSelectionRepository implements AgentRevis
 			decidedAt: command.materializedAt,
 		};
 	}
-}
-
-/** Signals a compare-and-set loss after a revision write so the caller rolls everything back. */
-export class AgentRevisionPersonaSelectionTransactionConflict extends Error
-{
 }
 
 /** Returns an unavailable result bound to the source the caller supplied. */

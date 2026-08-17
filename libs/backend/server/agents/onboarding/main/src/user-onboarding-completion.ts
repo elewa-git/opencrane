@@ -4,20 +4,6 @@ import { UserOnboardingCompletionProvenances, UserOnboardingStates } from "./use
 import { UserOnboardingPersonalAgentBootstrapStatuses, UserOnboardingReadinessStatuses, type UserOnboardingCompletionEvidence, type UserOnboardingCompletionRepository, type UserOnboardingPersonalAgentBootstrapPort, type UserOnboardingReadinessResult } from "./user-onboarding-completion.types";
 import type { UserOnboardingOwner } from "./user-onboarding.types";
 
-/** Signals that completed onboarding could not prove or repair its required personal Agent. */
-export class UserOnboardingReadinessError extends Error
-{
-	/** Stable bounded result that caused the refusal. */
-	readonly result: UserOnboardingReadinessResult;
-
-	/** Create an error without persona, model, or persistence details. */
-	constructor(result: UserOnboardingReadinessResult)
-	{
-		super(`user onboarding readiness denied: ${result.status}`);
-		this.result = result;
-	}
-}
-
 /** Executes onboarding's completion decision over repositories bound to one transaction. */
 export class __UserOnboardingCompletion
 {

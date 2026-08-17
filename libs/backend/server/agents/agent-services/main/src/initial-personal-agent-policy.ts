@@ -1,7 +1,7 @@
 import { PROMPT_COMPILER_VERSION } from "@opencrane/contracts";
 
 /** Runtime profile resolved by the personal-agent controller for every initial personal service. */
-export const PERSONAL_AGENT_RUNTIME_PROFILE_NAME = "personal-default";
+const _PERSONAL_AGENT_RUNTIME_PROFILE_NAME = "personal-default";
 
 /**
  * Reviewed product policy applied to the first immutable personal-agent revision.
@@ -13,7 +13,7 @@ export const PERSONAL_AGENT_RUNTIME_PROFILE_NAME = "personal-default";
  */
 export const INITIAL_PERSONAL_AGENT_POLICY = Object.freeze({
 	promptPolicyVersion: PROMPT_COMPILER_VERSION,
-	workloadProfile: PERSONAL_AGENT_RUNTIME_PROFILE_NAME,
+	workloadProfile: _PERSONAL_AGENT_RUNTIME_PROFILE_NAME,
 	budget: Object.freeze({
 		maxTurns: 64,
 		maxTokens: 256_000,
