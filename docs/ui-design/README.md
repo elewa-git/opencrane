@@ -17,7 +17,7 @@ qualification remain separate exit gates in [`plan.md`](../../plan.md).
 
 ## Conversation workspace scope
 
-- Boards `8a` through `8j` define the workspace shell, onboarding history, streaming and reconnect,
+- Boards `8a` through `8j` define the workspace shell, completed Welcome session, streaming and reconnect,
   attachments, durable assets, tool activity, elicitation, A2UI, Files, and Activity.
 - Boards `9a` and `9b` define the proposed A2UI component catalogue and progressive render.
 - Boards `10a` through `10g` define group `@agent` admission, the complete parent-summary state
@@ -50,6 +50,37 @@ The component-manager gate passed against the live catalogue on 2026-08-10. The 
 screenshots remain the primary issue evidence;
 `conversation-state-supplement.png` is the stable edge-state extract until production Storybook owns
 deterministic component screenshots.
+
+## Onboarding hierarchy and session addendum
+
+The implemented persona interview and completed-history variations refine the accepted visual
+language without replacing the v4 export:
+
+- A started persona interview uses a supporting journey heading and a primary question prompt. The
+  introduction keeps the display heading; recurring questions keep the context visible while the
+  current reviewed fieldset legend leads the page. Desktop keeps the real four-choice question in a
+  responsive grid, while narrow layouts retain the same order in one column.
+- Board `8a` remains the completed-onboarding target. The rail shows **Welcome** under the same
+  **My sessions** heading as ordinary chats; it never exposes a separate onboarding-history section.
+  The main panel uses the compact completed/read-only header, guide and participant dialogue,
+  completion divider, and one read-only continuation tray shown in the accepted design.
+- Session-rail rows stay on one line. The prefix glyph carries chat type or terminal status: a green
+  check for completed Welcome, Agent, person, and group glyphs for open sessions, and a muted lock for
+  closed sessions. Selection changes the row background without replacing that semantic glyph;
+  archived rows retain it while the whole row is dimmed.
+- When the same Welcome session is selected but the directory reports an unavailable or ambiguous
+  personal Agent, a warning and capability note explain that direct and group sessions remain
+  available and that an administrator must repair Agent setup. This variation does not add a new
+  conversation mode or browser-owned provisioning state.
+- Activity and Files remain ordinary-conversation context. Their feature-local panel can be closed
+  and reopened from the conversation header; onboarding never renders it. Agent-run Activity and run
+  actions are admitted only for the immutable Agent-session mode.
+- Hostile renderer fixtures stay in security assertions. Visual-review stories use realistic safe
+  long content, so escaped script text cannot be mistaken for product copy.
+
+Storybook owns the concrete Ready, Unavailable, Ambiguous, desktop, and narrow fixtures. Canonical
+HTML checksums and screenshot extracts stay unchanged until a newly accepted design export replaces
+them through the change-control process below.
 
 ## Issue evidence map
 

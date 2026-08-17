@@ -40,6 +40,12 @@
 	--oc-info: #2a5c9a;
 	--oc-info-soft: #e8eef7;
 	--oc-neutral-soft: #eef1f2;
+	--oc-brand-crane-deep: #1e5c7a;
+	--oc-brand-crane-light: #56c6d6;
+	--oc-brand-crane-front: #2e9db8;
+	--oc-brand-crane-body: #277f9b;
+	--oc-brand-crane-fold: #3aa8c2;
+	--oc-brand-crane-beak: #f2811f;
 
 	/* Archetype and knowledge-scope colours */
 	--oc-archetype-commander: #b73f43;
@@ -76,6 +82,7 @@
 	--oc-text-sm: 12.5px;
 	--oc-text-md: 14.5px;
 	--oc-text-lg: 17px;
+	--oc-text-xl: 20px;
 	--oc-text-2xl: 26px;
 	--oc-text-4xl: 38px;
 	--oc-tracking-label: 0.07em;
@@ -115,6 +122,13 @@
 	--oc-journey-compact-width: 620px;
 	--oc-journey-wide-width: 960px;
 	--oc-reading-width: 680px;
+	--oc-conversation-session-rail-width: 15rem;
+	--oc-conversation-header-min-height: 5rem;
+	--oc-conversation-rail-header-min-height: 64px;
+	--oc-conversation-session-row-min-height: 40px;
+	--oc-conversation-session-icon-size: 24px;
+	--oc-conversation-session-hover: color-mix(in srgb, var(--oc-surface-raised) 72%, transparent);
+	--oc-conversation-session-selected: color-mix(in srgb, var(--oc-border-default) 62%, transparent);
 	--oc-paper-texture-opacity: 0.075;
 	--oc-paper-texture: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140' viewBox='0 0 140 140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.82' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)' opacity='.42'/%3E%3C/svg%3E");
 

@@ -1,0 +1,5 @@
+:host { display: block; min-width: 0; min-height: 0; }
+.context-panel { overflow: auto; display: grid; align-content: start; gap: var(--oc-space-4); min-height: 100%; padding: var(--oc-space-4); border-inline-start: 1px solid var(--oc-border-subtle); background: var(--oc-surface-subtle); }
+.context-panel__close { display: flex; justify-content: flex-end; margin-bottom: calc(-1 * var(--oc-space-6)); position: relative; z-index: 1; }
+@media (max-width: 70rem) { .context-panel { grid-template-columns: repeat(2, minmax(0, 1fr)); border-block-start: 1px solid var(--oc-border-subtle); border-inline-start: 0; } }
+@media (max-width: 52rem) { .context-panel { grid-template-columns: 1fr; } }

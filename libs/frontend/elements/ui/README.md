@@ -50,10 +50,13 @@ The package's index file (barrel) re-exports the components directly:
 - `LedgerCardComponent` and `LedgerCardKinds` — one finite semantic card in an agent
   action/observation ledger.
 - `SectionHeadingComponent` — the existing feature-section heading.
-- `JourneyShellComponent` and `JourneyShellLayouts` — the full-viewport responsive paper frame
-  shared by bounded sign-in and onboarding journeys.
-- `ChoiceCardGroupComponent`, `ChoiceCardOption`, and `ChoiceCardLayouts` — an accessible
-  single-choice fieldset rendered as selectable paper cards.
+- `OpenCraneBrandComponent` — the shared product mark and wordmark used by journey and navigation
+  frames without introducing a separate image asset.
+- `JourneyShellComponent`, `JourneyShellLayouts`, and `JourneyShellHeaderEmphases` — the
+  full-viewport responsive paper frame, with width and heading priority kept as separate states.
+- `ChoiceCardGroupComponent`, `ChoiceCardOption`, `ChoiceCardLayouts`, and
+  `ChoiceCardPromptEmphases` — an accessible single-choice fieldset whose current-task prompt can
+  lead a recurring journey without changing native radio semantics.
 - `JourneyProgressComponent` — an accessible finite progress summary for resumable interviews and
   other bounded journeys.
 - `PersonaSummaryComponent`, `PersonaArchetypeScore`, and `PersonaArchetypeTones` — a typed,

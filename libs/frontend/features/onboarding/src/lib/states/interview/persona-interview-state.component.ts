@@ -1,8 +1,8 @@
-import { ChangeDetectionStrategy, Component, Signal, computed, input, linkedSignal, output } from "@angular/core";
+import { ChangeDetectionStrategy, Component, ElementRef, Signal, ViewChild, afterRenderEffect, computed, input, linkedSignal, output } from "@angular/core";
 import { ButtonModule } from "primeng/button";
 import { MessageModule } from "primeng/message";
 
-import { ChoiceCardGroupComponent, ChoiceCardLayouts, ChoiceCardOption, CollapsibleSectionComponent, JourneyProgressComponent, JourneyShellComponent, JourneyShellLayouts } from "@opencrane/elements/ui";
+import { ChoiceCardGroupComponent, ChoiceCardLayouts, ChoiceCardOption, ChoiceCardPromptEmphases, CollapsibleSectionComponent, JourneyProgressComponent, JourneyShellComponent, JourneyShellHeaderEmphases, JourneyShellLayouts } from "@opencrane/elements/ui";
 import { PersonaOnboardingStates, PersonaQuestion } from "@opencrane/state/onboarding";
 
 import { _FindCurrentQuestion, _ProgressLabel, _QuestionOptions } from "../../onboarding-view.util";
@@ -20,6 +20,15 @@ import { PersonaAnswerListComponent } from "../answers/persona-answer-list.compo
 })
 export class PersonaInterviewStateComponent
 {
+	/** Programmatically focused region for a newly adopted authoritative question. */
+	@ViewChild("questionRegion") private _questionRegion?: ElementRef<HTMLElement>;
+
+	/** Last rendered question coordinate used to distinguish initial display from advancement. */
+	private _renderedQuestionId: string | null = null;
+
+	/** Moves focus after the parent adopts a different server-confirmed question. */
+	private readonly _questionFocusEffect = afterRenderEffect(this._FocusAdvancedQuestion.bind(this));
+
 	/** Authoritative interview projection selected by the parent state switch. */
 	public readonly snapshot = input.required<PersonaOnboardingStateSnapshot<PersonaOnboardingStates.Interview>>();
 
@@ -40,6 +49,12 @@ export class PersonaInterviewStateComponent
 
 	/** Shared choice layout enum exposed to the template. */
 	public readonly choiceLayouts = ChoiceCardLayouts;
+
+	/** Shared journey hierarchy enum exposed to the template. */
+	public readonly headerEmphases = JourneyShellHeaderEmphases;
+
+	/** Shared choice-prompt hierarchy enum exposed to the template. */
+	public readonly promptEmphases = ChoiceCardPromptEmphases;
 
 	/** Next unanswered question from the server-returned frozen question set. */
 	public readonly currentQuestion: Signal<PersonaQuestion | null> = computed(this._currentQuestion.bind(this));
@@ -99,5 +114,27 @@ export class PersonaInterviewStateComponent
 	private _progressLabel(): string
 	{
 		return _ProgressLabel(this.snapshot());
+	}
+
+	/** Focus the changed question without stealing focus when the interview first appears. */
+	private _FocusAdvancedQuestion(): void
+	{
+		const questionId = this.currentQuestion()?.id ?? null;
+		// 1. Clear the coordinate when no question exists, so a later question starts without stolen focus.
+		if (questionId === null)
+		{
+			this._renderedQuestionId = null;
+			return;
+		}
+		// 2. Record the initial question while preserving the user's current focus.
+		if (this._renderedQuestionId === null)
+		{
+			this._renderedQuestionId = questionId;
+			return;
+		}
+		// 3. Focus the changed question so keyboard and screen-reader users arrive at the adopted task.
+		if (this._renderedQuestionId === questionId) return;
+		this._renderedQuestionId = questionId;
+		this._questionRegion?.nativeElement.focus();
 	}
 }

@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from "@storybook/angular";
 import { expect, userEvent, within } from "storybook/test";
 
 import { ChoiceCardGroupComponent } from "../choice-card-group.component";
-import { ChoiceCardLayouts, ChoiceCardOption } from "../choice-card-group.types";
+import { ChoiceCardLayouts, ChoiceCardOption, ChoiceCardPromptEmphases } from "../choice-card-group.types";
 
 /** Stable persona-question options shared by the catalogue stories. */
 const _PERSONA_OPTIONS: readonly ChoiceCardOption[] =
@@ -42,6 +42,14 @@ export default meta;
 
 /** Local Storybook story type for the choice-card catalogue. */
 type Story = StoryObj<ChoiceCardGroupComponent>;
+
+/** Current journey question receives the primary prompt treatment without changing radio semantics. */
+export const PrimaryPrompt: Story =
+{
+	tags: ["visual-test"],
+	parameters: { docs: { description: { story: "The current reviewed question leads a recurring journey step while the fieldset retains its native legend and radio relationships." } } },
+	args: { promptEmphasis: ChoiceCardPromptEmphases.Primary }
+};
 
 /** Required question before the user has selected an answer. */
 export const Unselected: Story =

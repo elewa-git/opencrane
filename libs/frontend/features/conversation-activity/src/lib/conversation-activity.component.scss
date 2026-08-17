@@ -1,5 +1,6 @@
 :host { display: block; }
 .activity { display: grid; gap: var(--oc-space-3); }
+.activity header { display: flex; align-items: center; justify-content: space-between; gap: var(--oc-space-3); }
 .activity h2 { margin: 0; font-size: var(--oc-text-lg); }
 .activity ul { display: grid; gap: var(--oc-space-2); margin: 0; padding: 0; list-style: none; }
 .activity li { display: grid; gap: var(--oc-space-2); padding: var(--oc-space-3); border: 1px solid var(--oc-border-subtle); border-radius: var(--oc-radius-card); background: var(--oc-surface-raised); }

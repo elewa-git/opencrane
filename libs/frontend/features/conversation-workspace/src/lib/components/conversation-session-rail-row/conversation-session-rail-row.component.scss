@@ -1,0 +1,11 @@
+:host { display: block; min-width: 0; }
+.conversation-session-rail-row { display: grid; width: 100%; min-height: var(--oc-conversation-session-row-min-height); grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: var(--oc-space-2); padding: var(--oc-space-1) var(--oc-space-2); border: 0; border-radius: var(--oc-radius-card); background: transparent; color: var(--oc-ink-default); font: inherit; text-align: start; cursor: pointer; }
+.conversation-session-rail-row:hover { background: var(--oc-conversation-session-hover); }
+.conversation-session-rail-row:focus-visible { outline: var(--oc-focus-width) solid var(--oc-focus-ring); outline-offset: var(--oc-focus-offset); }
+.conversation-session-rail-row--selected { background: var(--oc-conversation-session-selected); color: var(--oc-ink-strong); }
+.conversation-session-rail-row--archived { color: var(--oc-ink-muted); }
+.conversation-session-rail-row--closed { color: var(--oc-ink-muted); }
+.conversation-session-rail-row__icon { display: grid; width: var(--oc-conversation-session-icon-size); height: var(--oc-conversation-session-icon-size); place-items: center; border-radius: var(--oc-radius-round); color: var(--oc-ink-muted); }
+.conversation-session-rail-row__icon i { font-size: var(--oc-text-xs); }
+.conversation-session-rail-row__icon--completed { background: var(--oc-success-soft); color: var(--oc-success); }
+strong { overflow: hidden; min-width: 0; text-overflow: ellipsis; white-space: nowrap; }

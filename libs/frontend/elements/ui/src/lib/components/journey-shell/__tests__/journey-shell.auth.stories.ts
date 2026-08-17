@@ -5,7 +5,7 @@ import { MessageModule } from "primeng/message";
 import { ProgressSpinnerModule } from "primeng/progressspinner";
 
 import { JourneyShellComponent } from "../journey-shell.component";
-import { JourneyShellLayouts } from "../journey-shell.types";
+import { JourneyShellHeaderEmphases, JourneyShellLayouts } from "../journey-shell.types";
 
 /** Storybook metadata for OIDC entry and recovery states. */
 const meta: Meta<JourneyShellComponent> =
@@ -30,6 +30,17 @@ export default meta;
 
 /** Local Storybook story type for authentication journeys. */
 type Story = StoryObj<JourneyShellComponent>;
+
+/** Recurring task context stays visible while its projected question receives primary attention. */
+export const SupportingTaskHeading: Story =
+{
+	tags: ["visual-test"],
+	parameters: { docs: { description: { story: "A recurring questionnaire step keeps the journey context compact so the projected task can lead the page." } } },
+	render: function render()
+	{
+		return { props: { headerEmphases: JourneyShellHeaderEmphases, layouts: JourneyShellLayouts }, template: `<wo-journey-shell title="How should your agent work with you?" description="Choose the preference that feels most natural." [layout]="layouts.Wide" [headerEmphasis]="headerEmphases.Supporting"><h2>How proactively should your assistant surface ideas?</h2></wo-journey-shell>` };
+	}
+};
 
 /** OIDC-only sign-in state with one primary identity-provider action. */
 export const SsoSignIn: Story =

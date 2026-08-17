@@ -1,15 +1,13 @@
 <main
 	class="wo-journey"
 	[class.wo-journey--wide]="layout() === layouts.Wide"
+	[class.wo-journey--supporting-header]="headerEmphasis() === headerEmphases.Supporting"
 	[attr.aria-busy]="busy()"
 >
 	<div class="wo-journey__paper" aria-hidden="true"></div>
 	<section class="wo-journey__panel">
 		<header class="wo-journey__header">
-			<div class="wo-journey__brand" aria-label="OpenCrane">
-				<span class="wo-journey__mark" aria-hidden="true"></span>
-				<span>OpenCrane</span>
-			</div>
+			<wo-opencrane-brand class="wo-journey__brand" />
 			<ng-content select="[journey-eyebrow]" />
 			<h1 class="wo-journey__title">{{ title() }}</h1>
 			@if (description(); as descriptionValue) {

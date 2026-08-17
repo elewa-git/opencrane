@@ -1,5 +1,5 @@
 import { type Meta, moduleMetadata, type StoryObj } from "@storybook/angular";
-import { expect, waitFor } from "storybook/test";
+import { expect, userEvent, waitFor, within } from "storybook/test";
 
 import { ConversationLifecycles, ConversationModes, MessageRoles, MessageSources, MessageStates } from "@opencrane/models/conversations";
 import { __CreateAgUiStreamState, type AgUiStreamState } from "@opencrane/state/conversation/ag-ui";
@@ -13,16 +13,32 @@ import { ConversationWorkspacePageComponent } from "../components/conversation-w
 /** Privacy-safe directory used by the full workspace stories. */
 const _DIRECTORY: ConversationCreationDirectory = { participants: [{ participantRef: "self", isSelf: true, label: "You" }, { participantRef: "participant-1", isSelf: false, label: "Participant 1" }], personalAgentStatus: ConversationPersonalAgentStatuses.Ready, personalAgent: { personalAgentRef: "agent-1", displayName: "Nova" } };
 
+/** Directory where direct and group chat remain available without a personal Agent. */
+const _UNAVAILABLE_AGENT_DIRECTORY: ConversationCreationDirectory = { participants: _DIRECTORY.participants, personalAgentStatus: ConversationPersonalAgentStatuses.Unavailable, personalAgent: null };
+
+/** Directory where the server refused to choose between multiple personal Agents. */
+const _AMBIGUOUS_AGENT_DIRECTORY: ConversationCreationDirectory = { participants: _DIRECTORY.participants, personalAgentStatus: ConversationPersonalAgentStatuses.Ambiguous, personalAgent: null };
+
+/** Directory projection that cannot admit a new chat because it has no self membership. */
+const _NO_MEMBERSHIP_DIRECTORY: ConversationCreationDirectory = { participants: [], personalAgentStatus: ConversationPersonalAgentStatuses.Unavailable, personalAgent: null };
+
 /** Build one authorized conversation with optional hostile source text. */
 function _Detail(body = "I reviewed the proposal and kept the important constraints."): ConversationWorkspaceDetail
 {
 	return { id: "conversation-1", mode: ConversationModes.AgentSession, lifecycle: ConversationLifecycles.Open, agentServiceId: "agent-1", participantRefs: ["self"], archivedAt: null, updatedAt: "2026-08-12T19:30:00.000Z", visibleFromPosition: "1", accessEndedPosition: null, messages: [{ id: "message-1", position: "1", role: MessageRoles.Assistant, state: MessageStates.Completed, source: MessageSources.ModelOutput, blocks: [{ id: "block-1", kind: "text", value: body }], runId: "run-1", participantRef: null, createdAt: "2026-08-12T19:30:00.000Z", agentThread: null }] };
 }
 
+/** Build one direct conversation carrying a stale run coordinate only in the stream fixture. */
+function _DirectDetail(): ConversationWorkspaceDetail
+{
+	const detail = _Detail("Can we review the handoff together?");
+	return { ...detail, mode: ConversationModes.Direct, agentServiceId: null, participantRefs: ["self", "participant-1"], messages: [{ ...detail.messages[0]!, role: MessageRoles.User, source: MessageSources.UserInput, runId: null, participantRef: "participant-1" }] };
+}
+
 /** Build one completed onboarding projection with no conversation mode or run. */
 function _OnboardingHistory(): ConversationOnboardingHistoryProjection
 {
-	return { status: ConversationOnboardingHistoryStatuses.Ready, history: { id: "onboarding-1", personaDisplayName: "Nova", startedAt: "2026-08-12T18:00:00.000Z", completedAt: "2026-08-12T18:05:00.000Z", transcript: [{ ordinal: 1, role: MessageRoles.Assistant, text: "Welcome. I would like to learn how we should work together." }, { ordinal: 2, role: MessageRoles.User, text: "Keep decisions clear and show me when something needs approval." }] } };
+	return { status: ConversationOnboardingHistoryStatuses.Ready, history: { id: "onboarding-1", personaDisplayName: "Nova", startedAt: "2026-08-12T18:00:00.000Z", completedAt: "2026-08-12T18:05:00.000Z", transcript: [{ ordinal: 1, role: MessageRoles.Assistant, text: "What are you working on right now?" }, { ordinal: 2, role: MessageRoles.User, text: "I'm building OpenCrane, you basically! Right now I'm on a test drive." }, { ordinal: 3, role: MessageRoles.Assistant, text: "Good answer. What is the one thing that wastes your time most?" }, { ordinal: 4, role: MessageRoles.User, text: "Chasing status updates across tools." }, { ordinal: 5, role: MessageRoles.Assistant, text: "Noted — I'll watch for those and surface them before you have to ask. That completes your onboarding." }] } };
 }
 
 /** Test-only participant API used by one deterministic shell story. */
@@ -49,7 +65,7 @@ class _StoryGateway implements ConversationWorkspaceGateway
 	/** Return the story directory. */
 	public async directory() { return this._directory; }
 	/** Return one row so the real page follows its snapshot-first flow. */
-	public async list() { return [_Detail()]; }
+	public async list() { if (this._onboardingHistory.history !== null) return []; return this._detail instanceof Error ? [_Detail()] : [this._detail]; }
 	/** Return the configured separate onboarding history projection. */
 	public async onboardingHistory() { return this._onboardingHistory; }
 	/** Return or reject the configured authorized snapshot. */
@@ -141,7 +157,58 @@ export const AccessChanged: Story = { tags: ["visual-test"], decorators: [_Provi
 export const FailedRun: Story = { tags: ["visual-test"], decorators: [_Providers(new _StoryGateway(_Detail(), ConversationRunStates.Failed), new _StoryStream(ConversationEventStreamStatuses.Live, { ...__CreateAgUiStreamState(), runId: "run-1" }))] };
 /** Cancelled run is truthful and offers no unsafe retry. */
 export const CancelledRun: Story = { tags: ["visual-test"], decorators: [_Providers(new _StoryGateway(_Detail(), ConversationRunStates.Cancelled), new _StoryStream(ConversationEventStreamStatuses.Live, { ...__CreateAgUiStreamState(), runId: "run-1" }))] };
-/** Hostile and oversized-looking text passes through the real shared sanitizer and bounded shell. */
-export const HostileLongContent: Story = { tags: ["visual-test"], decorators: [_Providers(new _StoryGateway(_Detail(`# Review\n\n<script>window.secret = true</script>\n\n${"A very long governed answer. ".repeat(80)}`)), new _StoryStream(ConversationEventStreamStatuses.Live, __CreateAgUiStreamState()))] };
+/** Product-realistic long text proves bounded wrapping without placing hostile fixtures in design review. */
+export const LongContent: Story = { tags: ["visual-test"], decorators: [_Providers(new _StoryGateway(_Detail(`# Project review\n\n${"The proposal keeps the agreed constraints and records the next decision clearly. ".repeat(32)}`)), new _StoryStream(ConversationEventStreamStatuses.Live, __CreateAgUiStreamState()))] };
+/** Direct conversations ignore stale run coordinates and expose Files without Agent Activity. */
+export const DirectConversation: Story = { tags: ["visual-test"], decorators: [_Providers(new _StoryGateway(_DirectDetail(), ConversationRunStates.Failed), new _StoryStream(ConversationEventStreamStatuses.Live, { ...__CreateAgUiStreamState(), runId: "stale-run" }))] };
+/** Direct-session Files pane closes and restores focus without exposing Agent Activity. */
+export const FilesClosed: Story = {
+	tags: ["visual-test"],
+	decorators: [_Providers(new _StoryGateway(_DirectDetail(), ConversationRunStates.Failed), new _StoryStream(ConversationEventStreamStatuses.Live, { ...__CreateAgUiStreamState(), runId: "stale-run" }))],
+	play: async function play({ canvasElement })
+	{
+		const canvas = within(canvasElement);
+		await userEvent.click(await canvas.findByRole("button", { name: "Close files pane" }));
+		await expect(canvas.queryByLabelText("Conversation context")).not.toBeInTheDocument();
+		const trigger = canvas.getByRole("button", { name: "Files" });
+		await expect(trigger).toHaveAttribute("aria-expanded", "false");
+		await waitFor(async function _WaitForRestoredFocus() { await expect(trigger).toHaveFocus(); });
+	}
+};
+/** The selected Agent session remains usable after the participant closes its Activity pane. */
+export const ActivityClosed: Story = {
+	tags: ["visual-test"],
+	decorators: [_Providers(new _StoryGateway(_Detail()), new _StoryStream(ConversationEventStreamStatuses.Live, __CreateAgUiStreamState()))],
+	play: async function play({ canvasElement })
+	{
+		const canvas = within(canvasElement);
+		await userEvent.click(await canvas.findByRole("button", { name: "Close activity pane" }));
+		await expect(canvas.queryByLabelText("Conversation context")).not.toBeInTheDocument();
+		await expect(canvas.getByRole("button", { name: "Activity" })).toHaveAttribute("aria-expanded", "false");
+	}
+};
 /** Completed onboarding opens selected and read-only inside the normal workspace shell. */
-export const OnboardingHistory: Story = { tags: ["visual-test"], decorators: [_Providers(new _StoryGateway(_Detail(), ConversationRunStates.Completed, _DIRECTORY, _OnboardingHistory()), new _StoryStream(ConversationEventStreamStatuses.Live, __CreateAgUiStreamState()))] };
+export const WelcomeSession: Story = {
+	tags: ["visual-test"],
+	decorators: [_Providers(new _StoryGateway(_Detail(), ConversationRunStates.Completed, _DIRECTORY, _OnboardingHistory()), new _StoryStream(ConversationEventStreamStatuses.Live, __CreateAgUiStreamState()))],
+	play: async function play({ canvasElement })
+	{
+		const button = await within(canvasElement).findByRole("button", { name: "Start a new chat" });
+		await expect(button).toBeEnabled();
+	}
+};
+/** The Welcome session keeps direct and group continuation visible without a personal Agent. */
+export const WelcomeSessionWithoutAgent: Story = { tags: ["visual-test"], decorators: [_Providers(new _StoryGateway(_Detail(), ConversationRunStates.Completed, _UNAVAILABLE_AGENT_DIRECTORY, _OnboardingHistory()), new _StoryStream(ConversationEventStreamStatuses.Live, __CreateAgUiStreamState()))] };
+/** The Welcome session explains an ambiguous assignment without inventing an Agent choice. */
+export const WelcomeSessionWithAmbiguousAgent: Story = { tags: ["visual-test"], decorators: [_Providers(new _StoryGateway(_Detail(), ConversationRunStates.Completed, _AMBIGUOUS_AGENT_DIRECTORY, _OnboardingHistory()), new _StoryStream(ConversationEventStreamStatuses.Live, __CreateAgUiStreamState()))] };
+/** The Welcome session keeps its transcript readable when workspace membership blocks continuation. */
+export const WelcomeSessionWithoutMembership: Story = {
+	decorators: [_Providers(new _StoryGateway(_Detail(), ConversationRunStates.Completed, _NO_MEMBERSHIP_DIRECTORY, _OnboardingHistory()), new _StoryStream(ConversationEventStreamStatuses.Live, __CreateAgUiStreamState()))],
+	play: async function play({ canvasElement })
+	{
+		const button = await within(canvasElement).findByRole("button", { name: "Start a new chat" });
+		await expect(button).toBeDisabled();
+	}
+};
+/** Compact completed history retains one read-only tray and one continuation action. */
+export const WelcomeSessionCompact: Story = { tags: ["visual-test", "visual-test-narrow"], decorators: [_Providers(new _StoryGateway(_Detail(), ConversationRunStates.Completed, _UNAVAILABLE_AGENT_DIRECTORY, _OnboardingHistory()), new _StoryStream(ConversationEventStreamStatuses.Live, __CreateAgUiStreamState()))], parameters: { viewport: { defaultViewport: "mobile1" } } };

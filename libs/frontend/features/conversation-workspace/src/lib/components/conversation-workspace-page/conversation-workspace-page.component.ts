@@ -3,7 +3,7 @@ import { ConversationAssetsStore } from "@opencrane/state/conversation/assets";
 import { ConversationElicitationStore, type ConversationActivityTarget } from "@opencrane/state/conversation/elicitation";
 import { ConversationOnboardingHistoryStore, ConversationRunStore, ConversationWorkspaceRouteStates, ConversationWorkspaceStore } from "@opencrane/state/conversation/workspace";
 
-import type { ConversationThreadNavigationIntent } from "../../conversation-workspace-feature.types";
+import { ConversationSessionRailItemKinds, type ConversationSessionRailSelectionIntent, type ConversationThreadNavigationIntent } from "../../conversation-workspace-feature.types";
 import { ConversationWorkspacePresenter } from "../../conversation-workspace.presenter";
 import { CONVERSATION_WORKSPACE_PAGE_IMPORTS } from "./conversation-workspace-page.imports";
 
@@ -12,10 +12,10 @@ import { CONVERSATION_WORKSPACE_PAGE_IMPORTS } from "./conversation-workspace-pa
  * concrete gateways used by its component-scoped stores.
  *
  * The main area shows one of three things, and the template picks between them in that order: the
- * completed onboarding history, the selected conversation, or an empty-state prompt. History wins when
- * it is selected because it replaces the transcript rather than sitting beside it — which is also why
- * the Activity and Files rail is rendered only while a conversation is selected, there being no assets
- * or tool activity behind a finished onboarding exchange.
+	 * completed onboarding dialogue, the selected conversation, or an empty-state prompt. The visually
+	 * unified session rail does not change those separate server-backed sources. The page also owns the
+	 * transient context-panel visibility because closing Activity or Files is a local layout preference,
+	 * not durable conversation state.
  *
  * Every store it needs is listed in `providers`, so each one is created per page instance and destroyed
  * with it. That includes the onboarding history store: its transcript and selection belong to this
@@ -50,6 +50,11 @@ export class ConversationWorkspacePageComponent extends ConversationWorkspacePre
 	private readonly _elicitationFocusEffect = afterRenderEffect(this._RestoreElicitationFocus.bind(this));
 	/** Polite result of following an Activity deep link. */
 	protected readonly activityAnnouncement = signal("");
+	/** Whether the selected ordinary conversation's Activity and Files context is visible. */
+	protected readonly contextPanelOpen = signal(true);
+	/** Header trigger that receives focus after the context panel closes. */
+	@ViewChild("contextPanelToggle")
+	private _contextPanelToggle: ElementRef<HTMLButtonElement> | undefined;
 
 	/** Move focus when Angular creates the access-change explanation. */
 	@ViewChild("accessChangedHeading")
@@ -63,6 +68,18 @@ export class ConversationWorkspacePageComponent extends ConversationWorkspacePre
 	{
 		await this.open(conversationId);
 		if (this.store.selected()?.id === conversationId) this.conversationSelected.emit(conversationId);
+	}
+
+	/** Delegate one visually unified rail selection to its real server-backed source. */
+	protected async selectSession(intent: ConversationSessionRailSelectionIntent): Promise<void>
+	{
+		switch (intent.kind)
+		{
+			case ConversationSessionRailItemKinds.Onboarding: this.openOnboardingHistory(); return;
+			case ConversationSessionRailItemKinds.Conversation:
+				if (intent.conversationId !== null) await this.openConversation(intent.conversationId);
+				return;
+		}
 	}
 
 	/** Ask the app to select an authoritative newly created conversation. */
@@ -86,6 +103,17 @@ export class ConversationWorkspacePageComponent extends ConversationWorkspacePre
 	{
 		this.store.openOnboardingHistory();
 		if (this.store.onboardingHistorySelected()) this.workspaceIndexSelected.emit();
+	}
+
+	/** Reopen the selected conversation's context without changing its durable selection. */
+	protected openContextPanel(): void { this.contextPanelOpen.set(true); }
+
+	/** Close the context panel and return keyboard focus to its persistent header trigger. */
+	protected closeContextPanel(): void
+	{
+		this.contextPanelOpen.set(false);
+		const trigger = this._contextPanelToggle;
+		if (trigger !== undefined) globalThis.queueMicrotask(function _RestoreContextToggleFocus() { trigger.nativeElement.focus(); });
 	}
 
 	/** Ask the app to replace an archived selection with the next authorized row. */

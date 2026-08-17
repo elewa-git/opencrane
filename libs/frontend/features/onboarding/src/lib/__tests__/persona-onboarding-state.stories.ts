@@ -10,8 +10,8 @@ import { PersonaResolutionStateComponent } from "../states/resolution/persona-re
 import { PersonaResultEvidenceComponent } from "../states/result/persona-result-evidence.component";
 import { PersonaReviewStateComponent } from "../states/review/persona-review-state.component";
 
-/** Frozen reviewed question used by the feature-state catalogue. */
-const _QUESTION = { id: "q1", category: "pace", prompt: "When the decision is consequential and the available evidence is incomplete, how should your agent help you move forward?", ordinal: 1, choices: [{ id: "recommend", label: "Lead with the strongest recommendation, then explain the uncertainty and the best alternative.", ordinal: 1 }, { id: "context", label: "Build the context first and wait for me to choose the direction.", ordinal: 2 }], selectedChoiceId: null } as const;
+/** Frozen reviewed q7 question used by the feature-state catalogue. */
+const _QUESTION = { id: "q7", category: "initiative", prompt: "How proactively should your assistant surface ideas and recommendations?", ordinal: 7, choices: [{ id: "recommend", label: "Bring me a concrete recommendation without waiting to be asked.", ordinal: 1 }, { id: "options", label: "Suggest options when relevant and wait for my decision.", ordinal: 2 }, { id: "check", label: "Check whether I want suggestions before expanding the topic.", ordinal: 3 }, { id: "surprise", label: "Surprise me with ideas I had not thought of, but let me choose.", ordinal: 4 }], selectedChoiceId: null } as const;
 
 /** Build the complete reviewed ten-question set with an exact selected-answer prefix. */
 function _Questions(answeredQuestionCount: number): readonly PersonaQuestion[]
@@ -23,7 +23,7 @@ function _Questions(answeredQuestionCount: number): readonly PersonaQuestion[]
 			..._QUESTION,
 			id: `q${ordinal}`,
 			ordinal,
-			prompt: ordinal === 5 ? _QUESTION.prompt : `Reviewed collaboration preference ${ordinal}`,
+			prompt: ordinal === 7 ? _QUESTION.prompt : `Reviewed collaboration preference ${ordinal}`,
 			selectedChoiceId: ordinal <= answeredQuestionCount ? "recommend" : null
 		};
 	});
@@ -41,10 +41,10 @@ function _Snapshot(overrides: Partial<PersonaOnboardingSnapshot> = {}): PersonaO
 	return {
 		state: PersonaOnboardingStates.Interview,
 		interviewId: "interview-1",
-		answeredQuestionCount: 4,
+		answeredQuestionCount: 6,
 		questionCount: 10,
 		personaRevisionId: null,
-		questions: _Questions(4),
+		questions: _Questions(6),
 		resolution: null,
 		result: null,
 		...overrides
@@ -106,9 +106,38 @@ export const Interview: Story = {
 	play: async function play({ canvasElement })
 	{
 		const canvas = within(canvasElement);
-		const choice = canvas.getByRole("radio", { name: /Lead with the strongest recommendation/ });
+		const choice = canvas.getByRole("radio", { name: /Bring me a concrete recommendation/ });
 		await userEvent.click(choice);
 		await expect(choice).toBeChecked();
+	}
+};
+
+/** The real four-choice initiative question reflows into one column on the supported narrow screen. */
+export const InterviewNarrow: Story = {
+	tags: ["visual-test", "visual-test-narrow"],
+	parameters: { ..._StoryDescription("A narrow-screen owner sees the same reviewed q7 options without horizontal scrolling.", "The interview component reflows the shared choice cards while preserving their source order.", "It does not shorten or replace reviewed answer copy to fit the viewport."), viewport: { defaultViewport: "mobile1" } },
+	render: function render()
+	{
+		return { props: { snapshot: _Snapshot(), busy: false, actionError: null }, template: `<wo-persona-interview-state [snapshot]="snapshot" [busy]="busy" [actionError]="actionError" />` };
+	}
+};
+
+/** Authoritative question advancement moves keyboard focus to the newly rendered task. */
+export const InterviewQuestionAdvanceFocus: Story = {
+	parameters: _StoryDescription("A saved answer advances the owner to the next reviewed question and announces that task through focus.", "The interview component reacts only when its authoritative snapshot adopts a different question coordinate.", "It does not advance the coordinate from local selection or button interaction."),
+	render: function render()
+	{
+		return {
+			props: { snapshot: _Snapshot(), advancedSnapshot: _Snapshot({ answeredQuestionCount: 7, questions: _Questions(7) }), busy: false, actionError: null },
+			template: `<wo-persona-interview-state [snapshot]="snapshot" [busy]="busy" [actionError]="actionError" /><button type="button" (click)="snapshot = advancedSnapshot">Adopt next question</button>`
+		};
+	},
+	play: async function play({ canvasElement })
+	{
+		const canvas = within(canvasElement);
+		await userEvent.click(canvas.getByRole("button", { name: "Adopt next question" }));
+		const nextQuestion = canvas.getByRole("region", { name: "Reviewed collaboration preference 8" });
+		await waitFor(async function _QuestionFocused() { await expect(nextQuestion).toHaveFocus(); });
 	}
 };
 
@@ -133,7 +162,7 @@ export const InterviewBusy: Story = {
 	play: async function play({ canvasElement })
 	{
 		const canvas = within(canvasElement);
-		await expect(canvas.getByRole("radio", { name: /Lead with the strongest recommendation/ })).toBeDisabled();
+		await expect(canvas.getByRole("radio", { name: /Bring me a concrete recommendation/ })).toBeDisabled();
 		await expect(canvas.getByRole("button", { name: /Save and continue/ })).toBeDisabled();
 	}
 };

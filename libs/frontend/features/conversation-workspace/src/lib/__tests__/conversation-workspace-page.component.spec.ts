@@ -100,10 +100,12 @@ beforeAll(async function _InitializeAngularTesting()
 	HTMLElement.prototype.scrollIntoView = vi.fn();
 	const pageTemplate = readFileSync(join(process.cwd(), "src/lib/components/conversation-workspace-page/conversation-workspace-page.component.html"), "utf8");
 	const onboardingTemplate = readFileSync(join(process.cwd(), "src/lib/components/conversation-onboarding-history/conversation-onboarding-history.component.html"), "utf8");
+	const continuationTemplate = readFileSync(join(process.cwd(), "src/lib/components/conversation-onboarding-continuation/conversation-onboarding-continuation.component.html"), "utf8");
 	await resolveComponentResources(async function _ResolveResource(url): Promise<string>
 	{
 		if (url.endsWith("conversation-workspace-page.component.html")) return pageTemplate;
 		if (url.endsWith("conversation-onboarding-history.component.html")) return onboardingTemplate;
+		if (url.endsWith("conversation-onboarding-continuation.component.html")) return continuationTemplate;
 		return "";
 	});
 });
@@ -191,9 +193,48 @@ describe("ConversationWorkspacePageComponent", function _PageSuite()
 	it("keeps the completed onboarding template read-only and accessibly labelled", function _ReadOnlyOnboarding()
 	{
 		const template = readFileSync(join(process.cwd(), "src/lib/components/conversation-onboarding-history/conversation-onboarding-history.component.html"), "utf8");
+		const continuationTemplate = readFileSync(join(process.cwd(), "src/lib/components/conversation-onboarding-continuation/conversation-onboarding-continuation.component.html"), "utf8");
 		expect(template).toContain('aria-labelledby="onboarding-history-title"');
-		expect(template).toContain('role="status"');
-		expect(template).toContain('label="Start a new chat"');
+		expect(template).toContain("onboarding-history__completion");
+		expect(template).toContain("wo-conversation-onboarding-continuation");
+		expect(template).not.toContain("wo-conversation-message");
+		expect(continuationTemplate).toContain('role="status"');
+		expect(continuationTemplate.match(/label="Start a new chat"/gu)).toHaveLength(1);
+		expect(continuationTemplate).toContain("continuation().detail");
+		expect(continuationTemplate).toContain("continuation().capabilityNote");
 		expect(template).not.toContain("wo-conversation-composer");
+		expect(template).not.toContain("Onboarding history");
+	});
+
+	it("keeps onboarding in the unified rail without rendering conversation context", function _UnifiedOnboardingLayout()
+	{
+		const template = readFileSync(join(process.cwd(), "src/lib/components/conversation-workspace-page/conversation-workspace-page.component.html"), "utf8");
+		expect(template).toContain("sessionRailItems()");
+		expect(template).toContain("selectedSessionKey()");
+		expect(template).toContain("store.selected() !== null && contextPanelOpen()");
+		expect(template).not.toContain("conversation-workspace--onboarding-history");
+		expect(template).not.toContain("Onboarding history");
+	});
+
+	it("closes and reopens the context panel while returning focus to its header trigger", async function _ContextPanelFocus()
+	{
+		TestBed.overrideComponent(ConversationWorkspacePageComponent, { set: { templateUrl: undefined, template: "<button #contextPanelToggle id=\"context-toggle\" [attr.aria-expanded]=\"contextPanelOpen()\" (click)=\"openContextPanel()\">Activity</button>@if (contextPanelOpen()) { <button id=\"context-close\" (click)=\"closeContextPanel()\">Close activity pane</button> }", styleUrl: undefined, styleUrls: [], styles: [] } });
+		_Configure({ read: vi.fn(), respond: vi.fn(), listActivity: vi.fn().mockResolvedValue([]) });
+		const fixture = TestBed.createComponent(ConversationWorkspacePageComponent);
+		fixture.detectChanges();
+
+		fixture.nativeElement.querySelector("#context-close").click();
+		fixture.detectChanges();
+		await fixture.whenStable();
+
+		const trigger = fixture.nativeElement.querySelector("#context-toggle") as HTMLButtonElement;
+		expect(fixture.nativeElement.querySelector("#context-close")).toBeNull();
+		expect(trigger.getAttribute("aria-expanded")).toBe("false");
+		expect(globalThis.document.activeElement).toBe(trigger);
+
+		trigger.click();
+		fixture.detectChanges();
+		expect(trigger.getAttribute("aria-expanded")).toBe("true");
+		expect(fixture.nativeElement.querySelector("#context-close")).not.toBeNull();
 	});
 });
