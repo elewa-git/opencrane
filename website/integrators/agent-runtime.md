@@ -4,7 +4,8 @@ OpenCrane executes each accepted **AgentRun attempt** in a fresh, bounded Kubern
 The control plane remains authoritative for identity, inputs, events, approvals and outcomes.
 
 > See also: [Agent delegation](/guide/child-runs) (governed child-run limits),
-> [MCP gateway](/integrators/mcp-gateway) (tool custody), and
+> [MCP gateway](/integrators/mcp-gateway) (tool custody),
+> [Memory write, manage and read](/integrators/retrieval-memory) (memory and return boundaries), and
 > [Identity and runtime authentication](/security/identity) (workload proof).
 
 ## One runtime, two admission authorities
