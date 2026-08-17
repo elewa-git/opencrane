@@ -5,10 +5,10 @@
 Bring a person from an anonymous browser to a truthful, authority-bound starting point. Identity,
 organisation, and role come from the server session; the browser never chooses its own silo.
 
-Current status: `API partial` and `UI implemented` through the guided first conversation.
-Server-tracked survey routing, persona orchestration, the pinned onboarding-only exchange, and its
-server-validated conclusion are implemented. The main-app API fence and personal workspace/runtime
-provisioning remain `API blocked`.
+Current status: `API implemented` and `UI implemented` through the guided first conversation and
+personal-Agent handoff. Server-tracked survey routing, persona orchestration, the pinned
+onboarding-only exchange, its server-validated conclusion, and retry-safe first personal-Agent
+materialisation are implemented. The main-app API fence remains a separate security gate.
 
 ## Product workflow — server-tracked onboarding
 
@@ -156,9 +156,9 @@ Acceptance criteria:
 - The current `Welcome → Workspace → Personalize → Tour → Finish` local-only loop is not retained as
   product authority.
 
-Status: `API partial`. The `UserOnboarding` record, public route-state projection, and exact
-persona-survey orchestration exist. The bootstrap-chat authority, main-app API fence, and personal
-workspace/AgentService provisioning remain blocked.
+Status: `API implemented` through workspace readiness. The `UserOnboarding` record, public
+route-state projection, exact persona-survey orchestration, bootstrap-chat authority, and atomic
+personal AgentService/revision handoff exist. The independent main-app API fence remains pending.
 
 > See also: [persona sorting quiz](../design/persona-sorting-quiz.md),
 > [persona user stories](persona.md)
@@ -219,11 +219,12 @@ Acceptance criteria:
   alone cannot mark onboarding complete.
 - A failed or interrupted chat remains resumable and never sends the user back to the survey.
 
-Status: `API partial`, `UI implemented`. The server selects one of four reviewed `bootstrap.md`
+Status: `API implemented`, `UI implemented`. The server selects one of four reviewed `bootstrap.md`
 sources from the exact approved persona, pins its revision and digest, resumes one onboarding-owned
-conversation, records three append-only idempotent answers, and validates conclusion. This bounded
-exchange deliberately does not provision ordinary personal workspace, AgentService, membership,
-model runtime, or live-stream authority; those remain blocked.
+conversation, records three append-only idempotent answers, and validates conclusion. Conclusion
+now opens one Serializable transaction that creates or resolves the personal AgentService, writes
+and publishes revision 1, activates it, appends audit evidence, and only then marks onboarding
+complete. Existing `bootstrap_concluded` users are repaired idempotently on their next read.
 
 ## IDO-09 — Enter the main application only after conclusion
 
@@ -245,6 +246,6 @@ Acceptance criteria:
   completed.
 
 Status: `API partial`, `UI implemented`. The bootstrap authority atomically records
-`bootstrap_concluded` only after the exact pinned three-answer exchange is valid, and later route
-reads resume the completed state. The independent main-app API fence is still blocked, so this does
-not yet satisfy the complete access-control story.
+`bootstrap_concluded` only after the exact pinned three-answer exchange is valid and its personal
+Agent is ready, and later route reads validate or repair that readiness. The independent main-app
+API fence remains pending, so this does not yet satisfy the complete access-control story.

@@ -40,6 +40,10 @@ interview — see [Create a managed agent](/guide/first-agent).
    invented outside your answers.
 5. **Approve it.** Approving activates that exact draft as your one active persona. Until you do,
    your personal assistant has no persona to run with and cannot take its first run.
+6. **Start chatting.** OpenCrane creates the personal assistant's first runnable revision from the
+   approved persona. That revision includes the default per-run limits for model turns, total tokens
+   and elapsed time. These are technical safety brakes for one agent run, not a monthly spending
+   allowance — see [Manage run limits and cost](/guide/budgets#default-limits-for-a-personal-assistant).
 
 ::: info What "approve" actually locks in
 Approval checks that the interview is genuinely complete, that there are between three and five
