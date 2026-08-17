@@ -1,47 +1,55 @@
 # Connect organisational knowledge
 
-Give agents something worth remembering. OpenCrane keeps a durable memory store (backed by
-Cognee) behind its own access control, so what an agent can recall always matches what its owner
-is allowed to see — never a raw, ungoverned document dump.
+OpenCrane has the authority and schema foundations for governed semantic memory, but the live
+product does not yet ingest knowledge into Cognee or return Cognee recall results to an agent. The
+current administrator API manages a third-party source inventory; it is not a memory-ingestion API.
 
-::: tip Personal memory vs shared knowledge
-Your [personal assistant](/guide/persona) recalls from **your own** personal dataset — no one
-else's assistant can read it, and it can't read anyone else's. A managed agent recalls only from
-the **shared** organisation, department or project knowledge it was explicitly configured with.
-Neither kind can wander into the other's memory.
+::: tip Current boundary
+Personal dataset identity is bound to the verified silo, organisation and subject at admission.
+That binding is live, but fact retrieval is not. Managed agents currently receive a memory policy
+with scope `none`; organisation, department and project recall remain target capabilities.
 :::
 
-## Register sources and datasets
+## Manage the source inventory
 
-Register the organisation's supported sources through the current API. The current UI does not
-expose knowledge management. Place content in datasets whose scope matches the intended
-audience: personal, project, department or organisation.
+The authenticated `/api/v1/third-party-sources` API can list, create, update and delete source
+records and their discovered-item metadata. Supported inventory kinds include MCP registries,
+Anthropic Skills, Git repositories and manual uploads. The current UI does not expose this
+administration surface.
 
-## Grant access
+An inventory record describes where knowledge may come from and its observed status. Creating one
+does not ingest its content into Cognee, create a semantic-memory dataset, or make it available in a
+run.
 
-Grant both the acting subject and the agent service the required dataset capability. OpenCrane
-resolves those grants before admission and freezes the selected memory policy in the
-`RunInputSnapshot`.
+## Memory foundations
+
+OpenCrane's memory catalogue models dataset identity, lifecycle, consent, sensitivity, provenance
+and fact digests without duplicating fact text. A personal run can freeze the gateway-native dataset
+coordinates selected from verified identity. The repository also contains an authenticated memory
+gateway client and content-free catalogue commands, but neither the recall client nor a memory
+writer is composed into the production server path.
 
 ## During a run
 
-The runtime cannot select an arbitrary dataset. Memory actions pass through OpenCrane, which
-derives personal dataset identity from the verified silo, organisation and subject, then
-records provenance for durable facts.
+The runtime cannot select an arbitrary personal dataset. A personal agent may propose the
+approval-required `memory_recall` action. OpenCrane verifies the exact participant permission and
+one-use receipt, then stops with `safe_delivery_required` before calling Cognee. No recalled fact
+content reaches the model. Managed agents receive no memory-recall scope, and memory writes remain
+fail closed.
 
-::: info
-Reads are live: run admission freezes gateway-selected fact references (id and content digest only)
-into the `RunInputSnapshot`, and prompt compilation inlines each statement only after verifying it
-against the frozen digest. Mid-run memory actions can use the durable server-worker result channel;
-every write remains fail closed until its durable recovery lifecycle exists.
+::: info Current memory-recall status
+Run admission freezes only verified dataset coordinates, not a query, fact references or fact text.
+These coordinates constrain a future read; they do not mean a read happened.
 :::
 
 ::: warning
-Do not use dataset names as the security boundary. Membership and grants decide access; a
-caller-provided dataset parameter cannot widen it.
+Do not treat a healthy source-inventory record, a frozen dataset coordinate or an approved
+permission request as proof that content was ingested or recalled.
 :::
 
 ## Going deeper
 
-See [Retrieval and memory](/integrators/retrieval-memory) for fact provenance, personal
-dataset binding and failure behaviour.
+See [Memory write, manage and read](/integrators/retrieval-memory) for the current and target
+memory loop, provenance, return boundaries and failure behaviour. See
+[Long-term memory, Cognee and dreaming](/integrators/long-term-memory-cognee) for personal versus
+organisation datasets, RBAC and governed consolidation.
