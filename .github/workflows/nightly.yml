@@ -118,6 +118,7 @@ jobs:
           npm run --if-present test:agent-domain-boundary
           scripts/agent-style-check.sh --diff "${{ steps.fresh.outputs.base }}"
           npm run --if-present test:agent-style
+          npm run --if-present test:agent-context
           npm run --if-present check:module-growth -- --diff "${{ steps.fresh.outputs.base }}"
           npm run --if-present test:module-growth
           npm run --if-present check:release-versioning -- --base "${{ steps.fresh.outputs.base }}"

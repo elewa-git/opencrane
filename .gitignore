@@ -36,6 +36,9 @@ __pycache__/
 pr-stack-integrity-evidence.json
 .nx/
 
+# Rag-rat keeps its shared index outside the checkout; Git must also ignore local overrides and logs.
+.rag-rat/
+
 # Terraform runtime state and downloaded providers. Provider selections stay tracked in
 # apps/_infra/deploy-k8s/platform/terraform/.terraform.lock.hcl.
 .terraform/

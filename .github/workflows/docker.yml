@@ -214,6 +214,9 @@ jobs:
       - name: Prove the inline-conditional classifier
         run: npm run test:agent-style
 
+      - name: Prove the agent-context integration contract
+        run: npm run test:agent-context
+
       - name: Enforce language-neutral production module growth
         run: npm run check:module-growth -- --diff "$GUARD_BASE"
 

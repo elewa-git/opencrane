@@ -170,6 +170,11 @@ npm run build
 npm run test
 ```
 
+Developers and coding agents can add source-anchored semantic repository context to a clone with
+`npm run agent-context:setup`. The index is advisory and complements Nx; it does not replace Nx
+project boundaries, affected calculation, builds, or tests. See the
+[repository-context guide](docs/agents/repository-context.md) for the supported platforms and loop.
+
 ### Deploy an organisation
 
 The deployment entrypoint installs one isolated organisation boundary. Before running it, create the
