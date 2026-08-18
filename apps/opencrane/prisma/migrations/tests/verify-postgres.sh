@@ -14,7 +14,9 @@ PROTECTED_DIGEST="25bfc5d31c4966ee697ae5aaa47edc855d25120d0829c241f213353f69e035
 FRESH_PROTECTED_DIGEST="12505f3c15114bd2a407d0d4d2ef2befc3c8ec87acaa9787503cfbe4eba0032c"
 LEGACY_MIGRATION_SQL_DIGEST="$(node -e 'process.stdout.write(require(process.argv[1]).sqlSha256)' "$LEGACY_TRANSITION_ROOT/manifest.json")"
 CURRENT_MIGRATION_SQL_DIGEST="$(node -e 'process.stdout.write(require(process.argv[1]).sqlSha256)' "$CURRENT_TRANSITION_ROOT/manifest.json")"
-DATABASE_TRANSITION="$(node "$ROOT/scripts/release-versioning/database-transition.mjs" "$ROOT" 0.9.0 0.8.1)"
+# The transition resolver requires the current root version, so this test must not pin an earlier release.
+CURRENT_RELEASE_VERSION="$(node -e 'process.stdout.write(require(process.argv[1]).version)' "$ROOT/package.json")"
+DATABASE_TRANSITION="$(node "$ROOT/scripts/release-versioning/database-transition.mjs" "$ROOT" "$CURRENT_RELEASE_VERSION" 0.8.1)"
 
 cleanup()
 {

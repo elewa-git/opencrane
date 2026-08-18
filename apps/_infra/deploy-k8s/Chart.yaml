@@ -17,7 +17,7 @@ keywords:
 maintainers:
   - name: OpenCrane
 dependencies:
-  # Shared named-template library (labels, fullname, RBAC rule sets, env helpers).
+  # The platform dependency supplies shared templates for labels, names, RBAC rules, and environment variables.
   - name: k8s-platform
     version: 0.9.1
     repository: "file://platform"
