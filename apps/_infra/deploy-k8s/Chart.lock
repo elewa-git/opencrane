@@ -7,25 +7,25 @@ dependencies:
   version: 0.9.1
 - name: opencrane-ui
   repository: file://../../opencrane-ui/helm
-  version: 0.9.0
+  version: 0.9.1
 - name: opencrane-channel-proxy
   repository: file://../../channel-proxy/helm
   version: 0.8.0
 - name: opencrane-memory-gateway
   repository: file://../../memory-gateway/helm
-  version: 0.9.0
+  version: 0.9.1
 - name: opencrane-artifact-service
   repository: file://../../artifact-service/helm
   version: 0.8.0
 - name: opencrane-artifact-preprocessor
   repository: file://../../artifact-preprocessor/helm
-  version: 0.9.0
+  version: 0.9.1
 - name: opencrane-artifact-scanner
   repository: file://../../artifact-scanner/helm
-  version: 0.9.0
+  version: 0.9.1
 - name: opencrane-agent-controller
   repository: file://../../agent-controller/helm
-  version: 0.9.0
+  version: 0.9.1
 - name: opencrane-managed-agent-runtime
   repository: file://../../managed-agent-runtime/helm
   version: 0.8.0
@@ -44,5 +44,5 @@ dependencies:
 - name: opencrane-obot
   repository: file://../obot/helm
   version: 0.8.0
-digest: sha256:88c9f626cd663c4d541f5d3caf14cfdf4ac0d39958b66de07f536779cb34eeb6
-generated: "2026-08-18T17:08:45.084846+03:00"
+digest: sha256:429740b1d2ccb3230522ea40cfbf4ed34f5d53ed504d122b0ce65b4106fc0550
+generated: "2026-08-18T18:05:48.069298+03:00"
