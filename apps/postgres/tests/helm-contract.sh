@@ -128,7 +128,50 @@ grep -q 'name: CURRENT_SCHEMA_VERSION' "$OUTPUT"
 grep -q 'name: TARGET_BASELINE_SHA256' "$OUTPUT"
 grep -q 'name: CURRENT_PROTECTED_BASELINE_SHA256' "$OUTPUT"
 grep -q 'SELECT "baseline_sha256" FROM "opencrane_bootstrap"."target_baseline"' "$OUTPUT"
+grep -Fq "<<'SQL'" "$OUTPUT"
+if grep -Fq -- '-c "SELECT count(*) = 1 FROM opencrane_migrations.schema_history' "$OUTPUT"; then
+  echo "postgres privilege proof must let psql substitute bound history values" >&2
+  exit 1
+fi
 grep -q 'is not an exact fresh or migrated' "$OUTPUT"
+
+PRIVILEGE_SCRIPT_FILE="$(mktemp)"
+PSQL_STUB_DIR="$(mktemp -d)"
+trap 'rm -f "$OUTPUT" "$PRIVILEGE_SCRIPT_FILE"; rm -rf "$PSQL_STUB_DIR"' EXIT
+node - "$OUTPUT" >"$PRIVILEGE_SCRIPT_FILE" <<'NODE'
+const { readFileSync } = require("node:fs");
+const { parseAllDocuments } = require("yaml");
+const documents = parseAllDocuments(readFileSync(process.argv[2], "utf8")).map((document) => document.toJSON());
+const job = documents.find((document) => document?.kind === "Job"
+  && document.metadata?.name === "opencrane-postgres-database-privileges");
+const container = job.spec.template.spec.containers.find((candidate) => candidate.name === "opencrane-privileges");
+process.stdout.write(container.args[0]);
+NODE
+printf '%s\n' '#!/bin/sh' \
+  'input="$(cat)"' \
+  'case "$*" in' \
+  '  *opencrane_bootstrap*) printf "%s\n" "$SELECTED_SOURCE_PROTECTED_BASELINE_SHA256" ;;' \
+  '  *to_regclass*) printf "%s\n" t ;;' \
+  '  *)' \
+  '    if printf "%s\n" "$input" | grep -q schema_history; then' \
+  '      if printf "%s\n" "$input" | grep -Eq "^[[:space:]]*SQL$"; then exit 70; fi' \
+  '      printf "%s\n" t' \
+  '    fi' \
+  '    ;;' \
+  'esac' >"$PSQL_STUB_DIR/psql"
+chmod +x "$PSQL_STUB_DIR/psql"
+PATH="$PSQL_STUB_DIR:$PATH" \
+PGDATABASE=opencrane \
+PGUSER=opencrane \
+CURRENT_SCHEMA_VERSION=0.8.0 \
+TARGET_BASELINE_SHA256=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb \
+CURRENT_PROTECTED_BASELINE_SHA256=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \
+PREVIOUS_MIGRATION_AVAILABLE=true \
+PREVIOUS_MIGRATION_ID=0.7.0-to-0.8.0 \
+PREVIOUS_MIGRATION_SQL_SHA256=dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd \
+PREVIOUS_SCHEMA_VERSION=0.7.0 \
+SELECTED_SOURCE_PROTECTED_BASELINE_SHA256=eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee \
+/bin/sh "$PRIVILEGE_SCRIPT_FILE"
 
 if grep -qE '^kind: (ServiceAccount|Role|RoleBinding|ClusterRole|ClusterRoleBinding)$' "$OUTPUT"; then
   echo "postgres chart must not duplicate the deterministic CloudNativePG runtime identity" >&2
@@ -136,7 +179,7 @@ if grep -qE '^kind: (ServiceAccount|Role|RoleBinding|ClusterRole|ClusterRoleBind
 fi
 
 MIGRATION_OUTPUT="$(mktemp)"
-trap 'rm -f "$OUTPUT" "$MIGRATION_OUTPUT"' EXIT
+trap 'rm -f "$OUTPUT" "$MIGRATION_OUTPUT" "$PRIVILEGE_SCRIPT_FILE"; rm -rf "$PSQL_STUB_DIR"' EXIT
 helm template opencrane-postgres "$CHART" --namespace opencrane \
   "${COMMON_VALUES[@]}" "${MIGRATION_VALUES[@]}" >"$MIGRATION_OUTPUT"
 MIGRATION_JOB="$(awk 'BEGIN { RS="---" } /kind: Job/ && /name: opencrane-postgres-database-migration/ { print }' "$MIGRATION_OUTPUT")"
