@@ -11,8 +11,8 @@
   "projects": {
     "@opencrane/website": {
       "root": "website",
-      "adaptedVersion": "0.8.1",
-      "packageVersion": "0.8.1"
+      "adaptedVersion": "0.9.0",
+      "packageVersion": "0.9.0"
     },
     "agent-controller": {
       "root": "apps/agent-controller",
