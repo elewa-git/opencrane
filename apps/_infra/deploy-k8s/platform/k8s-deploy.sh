@@ -952,8 +952,7 @@ fi
 if [[ -n "$FIRST_USER_EMAIL" ]]; then
   helm_args+=(--set-string "clustertenantManager.firstUser.email=$FIRST_USER_EMAIL")
 fi
-build_initial_model_provider_helm_args "$INITIAL_MODEL_PROVIDER"
-helm_args+=("${INITIAL_MODEL_PROVIDER_HELM_ARGS[@]}")
+append_initial_model_provider_helm_args "$INITIAL_MODEL_PROVIDER"
 [[ -n "$VALUES_FILE" ]] && helm_args+=(--values "$VALUES_FILE")
 helm_args+=("${EXTRA_SET[@]}")
 # Raw helm-arg passthrough for sanctioned one-time fixes (e.g. --take-ownership).

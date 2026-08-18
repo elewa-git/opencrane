@@ -51,14 +51,14 @@ publish_initial_model_provider_secret()
     --dry-run=client -o yaml | kubectl apply -f -
 }
 
-build_initial_model_provider_helm_args()
+# Appends directly so an omitted provider never requires expanding an unset array under Bash 3.2 with `set -u`.
+append_initial_model_provider_helm_args()
 {
   local provider="$1"
-  INITIAL_MODEL_PROVIDER_HELM_ARGS=()
   if [[ -z "$provider" ]]; then
     return 0
   fi
-  INITIAL_MODEL_PROVIDER_HELM_ARGS=(
+  helm_args+=(
     --set-string "clustertenantManager.initialModel.provider=$provider"
     --set-string "clustertenantManager.initialModel.existingSecret=byok-provider-key-${provider}"
   )
