@@ -29,7 +29,9 @@ owns the client-side stores and caches that hold fetched data.
 | [`onboarding/projection`](./onboarding/projection/README.md) | Narrow frontend first-chat projection vocabulary. |
 | [`persona`](./persona/README.md) | Personal-persona browser adapters. |
 | [`provider-key/adapter`](./provider-key/adapter/README.md) | Live BYOK provider-key gateway. |
-| [`settings/adapter`](./settings/adapter/README.md) | Live settings gateway. |
+| [`organization`](./organization/README.md) | Organisation-level state and adapter map. |
+| [`organization/members`](./organization/members/README.md) | Member-directory and invitation gateway port and stores. |
+| [`organization/members/adapter`](./organization/members/adapter/README.md) | Live generated-client organisation-member adapter. |
 | [`skills/adapter`](./skills/adapter/README.md) | Live governed-skill catalogue gateway. |
 
 ```
@@ -39,7 +41,7 @@ owns the client-side stores and caches that hold fetched data.
     core  ── defines ports, holds stores ──  gateways (wires ports → adapters)
       │
       ├─ conversation/{stream,adapter,ag-ui,render}  assets/adapter   skills/adapter
-      ├─ mcp/adapter   provider-key/adapter   settings/adapter
+      ├─ mcp/adapter   provider-key/adapter   organization/members/adapter
       └─ onboarding ── persona/adapter
       ▼ HTTP
    backend API

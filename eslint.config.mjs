@@ -160,6 +160,7 @@ export default [
             { sourceTag: "scope:obot-custody", onlyDependOnLibsWithTags: ["scope:obot-custody", "scope:shared"] },
             { sourceTag: "scope:sandbox-execution", onlyDependOnLibsWithTags: ["scope:sandbox-execution", "scope:shared"] },
             { sourceTag: "scope:memory-gateway-client", onlyDependOnLibsWithTags: ["scope:memory-gateway-client", "scope:shared"] },
+            { sourceTag: "scope:organization-membership-gateway", onlyDependOnLibsWithTags: ["scope:organization-membership-gateway", "scope:shared"] },
             { sourceTag: "scope:memory-gateway", onlyDependOnLibsWithTags: ["scope:memory-gateway", "scope:shared", "scope:workload-identity"] },
             { sourceTag: "scope:model-routing", onlyDependOnLibsWithTags: ["scope:auth", "scope:cluster-tenants", "scope:http", "scope:model-routing", "scope:shared"] },
 			{ sourceTag: "scope:personal-personas", onlyDependOnLibsWithTags: ["scope:auth", "scope:personal-configuration", "scope:personal-personas", "scope:shared"] },
@@ -178,7 +179,7 @@ export default [
 			{ sourceTag: "scope:agent-threads", onlyDependOnLibsWithTags: ["scope:agent-threads", "scope:conversation-assets", "scope:conversation-elicitation", "scope:conversations", "scope:shared", "scope:web"] },
 			{ sourceTag: "scope:conversation-workspace", onlyDependOnLibsWithTags: ["scope:agent-threads", "scope:conversation-assets", "scope:conversation-elicitation", "scope:conversation-workspace", "scope:conversations", "scope:shared", "scope:user-onboarding", "scope:web"] },
 			{ sourceTag: "scope:web", onlyDependOnLibsWithTags: ["scope:web", "scope:shared"] },
-			{ sourceTag: "scope:opencrane-ui", onlyDependOnLibsWithTags: ["scope:agent-threads", "scope:conversation-assets", "scope:conversation-workspace", "scope:persona-onboarding", "scope:shared", "scope:web"] },
+			{ sourceTag: "scope:opencrane-ui", onlyDependOnLibsWithTags: ["scope:agent-threads", "scope:conversation-assets", "scope:conversation-workspace", "scope:organization-members", "scope:persona-onboarding", "scope:shared", "scope:web"] },
             {
               sourceTag: "scope:opencrane",
               onlyDependOnLibsWithTags: [
@@ -208,7 +209,9 @@ export default [
                 "scope:memory-gateway-client",
                 "scope:model-routing",
                 "scope:membership",
-                "scope:obot-custody",
+				"scope:obot-custody",
+                "scope:organization-members",
+                "scope:organization-membership-gateway",
                 "scope:personal-configuration",
                 "scope:personal-personas",
                 "scope:providers",

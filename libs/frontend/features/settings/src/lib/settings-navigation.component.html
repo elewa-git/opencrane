@@ -1,0 +1,11 @@
+<nav class="settings-navigation" aria-label="Settings">
+	<a routerLink="/chats" class="settings-navigation__back" (click)="navigated.emit()">
+		<i class="pi pi-arrow-left" aria-hidden="true"></i>
+		<span>Back to workspace</span>
+	</a>
+	<p class="settings-navigation__label">Workspace</p>
+	<a routerLink="/settings/members" routerLinkActive="settings-navigation__link--active" class="settings-navigation__link" (click)="navigated.emit()">
+		<i class="pi pi-users" aria-hidden="true"></i>
+		<span>Members</span>
+	</a>
+</nav>

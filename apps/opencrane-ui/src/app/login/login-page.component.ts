@@ -1,20 +1,22 @@
 import { ChangeDetectionStrategy, Component, computed, effect, inject } from "@angular/core";
-import { Router } from "@angular/router";
+import { ActivatedRoute, Router } from "@angular/router";
 import { Button } from "primeng/button";
 import { Card } from "primeng/card";
 
 import { ControlPlaneApiService } from "@opencrane/core";
 import { SessionStore } from "@opencrane/state/core";
 
+import { _SafeLoginReturnTo } from "./login-return-to";
+
 /**
  * Public sign-in landing for the operator app.
  *
  * Rendered when the session is anonymous; clicking "Log in" hands off to the
- * opencrane-ui OIDC flow with `returnTo=/`, so the user lands back on the
- * workspace root and the access guard re-runs against a fresh session. While
- * `/auth/me` is still loading the page renders nothing — once it resolves,
- * an already-authenticated session is bounced straight to `/` rather than
- * forcing a second click on a CTA the user has already satisfied.
+ * opencrane-ui OIDC flow with the guarded same-origin `returnTo` path, so the
+ * user lands back on the route that required authentication and the access
+ * guard re-runs against a fresh session. While `/auth/me` is still loading the
+ * page renders nothing. Once it resolves, an already-authenticated session is
+ * continued to that same path without forcing a second login click.
  */
 @Component({
 	selector: "wo-login-page",
@@ -35,6 +37,12 @@ export class LoginPageComponent
 	/** Typed opencrane-ui client (used to launch the OIDC sign-in flow). */
 	private readonly _api = inject(ControlPlaneApiService);
 
+	/** Public login route containing the guarded same-origin continuation URL. */
+	private readonly _route = inject(ActivatedRoute);
+
+	/** Validated same-origin path used by both automatic and explicit login continuation. */
+	private readonly _returnTo = _SafeLoginReturnTo(this._route.snapshot.queryParamMap.get("returnTo"));
+
 	/** Whether the landing card should be shown — once `/auth/me` is no longer
 	 * loading and the session is anonymous. Reading `isLoading` (rather than
 	 * `hasValue`) means an errored `/auth/me` (backend unreachable) still
@@ -48,6 +56,7 @@ export class LoginPageComponent
 	{
 		const session = this._session;
 		const router = this._router;
+		const returnTo = this._returnTo;
 
 		// An already-signed-in visitor (refresh, bookmark, manual nav) should not
 		// see the login card — bounce them to `/` so the access guard decides
@@ -60,14 +69,14 @@ export class LoginPageComponent
 			}
 			if (session.authenticated())
 			{
-				void router.navigateByUrl("/");
+				void router.navigateByUrl(returnTo);
 			}
 		});
 	}
 
-	/** Launches the OIDC sign-in flow, returning to the workspace root. */
+	/** Launches the OIDC flow with the validated same-origin route that first required authentication. */
 	public signIn(): void
 	{
-		this._api.signIn("/");
+		this._api.signIn(this._returnTo);
 	}
 }

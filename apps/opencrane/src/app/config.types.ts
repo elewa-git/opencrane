@@ -1,4 +1,15 @@
 import type { StandaloneFirstUserAdmissionConfig } from "@opencrane/backend/server/iam/identity";
+import { OrganizationMembershipDeploymentModes, type StandaloneOrganizationMembershipConfig } from "@opencrane/backend/server/iam/organization-members";
+import type { FleetOrganizationMembershipHttpClientConfig } from "@opencrane/backend/server/infra/organization-membership-gateway";
+
+/**
+ * Selects the sole authority for organisation directory, invitation, seat, and payment decisions.
+ * The application composes one branch at startup, so request data cannot switch modes or trigger a
+ * Fleet-to-standalone fallback.
+ */
+export type OpenCraneOrganizationMembershipConfig =
+	| { readonly mode: OrganizationMembershipDeploymentModes.Standalone; readonly standalone: StandaloneOrganizationMembershipConfig }
+	| { readonly mode: OrganizationMembershipDeploymentModes.Fleet; readonly fleet: FleetOrganizationMembershipHttpClientConfig };
 
 /** The channel resolver and replay receiver settings fixed by the deployment. */
 export interface ChannelTargetRuntimeConfig

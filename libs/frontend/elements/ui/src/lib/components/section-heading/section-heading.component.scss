@@ -1,9 +1,18 @@
 .wo-heading {
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: var(--oc-space-4);
 	margin-bottom: 24px;
 
+	&__copy {
+		min-width: 0;
+	}
+
 	&__title {
-		font-size: 20px;
-		font-weight: 400;
+		font-size: var(--oc-text-xl);
+		font-weight: 500;
+		letter-spacing: var(--oc-tracking-title);
 		margin: 0;
 	}
 
@@ -11,5 +20,28 @@
 		font-size: 13px;
 		color: var(--oc-ink-muted);
 		margin: 4px 0 0;
+	}
+
+	&__actions {
+		display: flex;
+		align-items: center;
+		gap: var(--oc-space-2);
+		flex-shrink: 0;
+	}
+
+	&--page &__title {
+		font-size: var(--oc-text-2xl);
+		font-weight: 600;
+	}
+}
+
+@media (max-width: 640px) {
+	.wo-heading {
+		align-items: stretch;
+		flex-direction: column;
+
+		&__actions {
+			justify-content: flex-start;
+		}
 	}
 }

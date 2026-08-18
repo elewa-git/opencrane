@@ -483,12 +483,30 @@ clustertenantManager:
   membership:
     mode: standalone
     maximumStalenessMs: 300000
+    # -- Standalone invitation authority owns durable invitation rows and signs shareable links
+    # with a purpose-specific key. The app-owned deploy script creates this Secret once and keeps
+    # it stable across upgrades; other installation paths must provision it before Helm runs.
+    standalone:
+      invitationSigningExistingSecret: opencrane-invitation-signing
+      invitationSigningKeyKey: key
+      # -- An empty value derives https://<control-plane-host> from the ingress contract.
+      publicBaseUrl: ""
+      invitationTtlSeconds: 604800
     # -- Required only when `mode: fleet`; this public key is the independent Fleet trust root.
     fleet:
       trustedIssuerId: ""
       issuerKeyId: ""
       existingSecret: ""
       publicKeyKey: public-key.pem
+      # -- Fleet takes over directory, invitation, paid-seat, and payment decisions through this
+      # authenticated gateway. Fleet TokenReviews the audience-bound server identity and binds the
+      # reviewed ServiceAccount to exactly this silo before trusting forwarded OIDC caller fields.
+      billingGatewayUrl: ""
+      billingGatewayCredentialSiloId: ""
+      billingGatewayProjectedTokenAudience: opencrane-fleet-membership
+      billingGatewayProjectedTokenTtlSeconds: 600
+      billingGatewayTimeoutSeconds: 15
+      billingGatewayEgressPort: 443
   service:
     # -- Public API port (ingress-facing): /api/v1/*, /auth. Session-authed.
     port: 8080

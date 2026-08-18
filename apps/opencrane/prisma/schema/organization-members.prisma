@@ -1,0 +1,118 @@
+/// Role a subject holds within one organisation. Owner and Admin confer organisation-admin authority.
+enum OrgRole {
+  /// The single active root administrator for an organisation.
+  Owner  @map("owner")
+  /// A delegated administrator who can manage ordinary members and invitations.
+  Admin  @map("admin")
+  /// An ordinary organisation participant.
+  Member @map("member")
+}
+
+/// Whether a durable organisation membership currently grants access.
+enum OrgMemberStatus {
+  /// The subject may use the organisation under their assigned role.
+  Active    @map("active")
+  /// Access is disabled while the membership record remains durable.
+  Suspended @map("suspended")
+}
+
+/// Binds a stable OIDC subject to one organisation and stores its current role and lifecycle.
+model OrgMembership {
+  /// Surrogate key.
+  id            String          @id @default(cuid())
+  /// Organisation selected from the trusted silo host.
+  clusterTenant String          @map("cluster_tenant")
+  /// IdP-verified subject holding the membership.
+  subject       String
+  /// Normalized verified email captured during invitation acceptance.
+  email         String?
+  /// Peer-visible OIDC name captured with the membership.
+  displayName   String?         @map("display_name")
+  /// Role held within the organisation.
+  role          OrgRole
+  /// Current access lifecycle.
+  status        OrgMemberStatus @default(Active) @map("status")
+  /// Creation timestamp.
+  createdAt     DateTime        @default(now()) @map("created_at")
+  /// Last update timestamp.
+  updatedAt     DateTime        @updatedAt @map("updated_at")
+
+  @@unique([clusterTenant, subject])
+  @@unique([clusterTenant, email])
+  @@index([subject])
+  @@index([clusterTenant])
+  @@map("org_memberships")
+}
+
+/// Stored invitation states. Expiry is projected from `expiresAt` so a clock change never needs a write.
+enum OrganizationInvitationStatus {
+  Pending  @map("pending")
+  Accepted @map("accepted")
+  Failed   @map("failed")
+}
+
+/// One email-address invitation issued by standalone organisation authority.
+model OrganizationInvitation {
+  /// Opaque invitation identity embedded in the authenticated token.
+  id                       String                       @id
+  /// Silo selected from the trusted request host.
+  siloId                   String                       @map("silo_id")
+  /// Normalized recipient email.
+  email                    String
+  /// Non-null only while this email has a pending invitation in this silo.
+  activeEmail              String?                      @map("active_email")
+  /// Role granted after acceptance; Owner is rejected by the domain service.
+  role                     OrgRole
+  /// Persisted lifecycle excluding clock-derived expiry.
+  status                   OrganizationInvitationStatus @default(Pending)
+  /// Current link generation; resends increase it atomically.
+  generation               Int                          @default(1)
+  /// Random value authenticated into the current link.
+  tokenNonce               String                       @map("token_nonce")
+  /// Subject that issued the invitation.
+  invitedBySubject         String                       @map("invited_by_subject")
+  /// Peer-visible name retained for directory history.
+  invitedByDisplayName     String                       @map("invited_by_display_name")
+  /// Retry coordinate that won the latest resend.
+  lastResendIdempotencyKey String?                      @map("last_resend_idempotency_key")
+  /// Issue time of the current generation.
+  invitedAt                DateTime                     @map("invited_at")
+  /// Expiry of the current generation.
+  expiresAt                DateTime                     @map("expires_at")
+  /// Acceptance time when consumed.
+  acceptedAt               DateTime?                    @map("accepted_at")
+  /// Verified OIDC subject that consumed the invitation.
+  acceptedBySubject        String?                      @map("accepted_by_subject")
+  /// Creation timestamp for audit correlation.
+  createdAt                DateTime                     @default(now()) @map("created_at")
+  /// Last mutation timestamp.
+  updatedAt                DateTime                     @updatedAt @map("updated_at")
+
+  @@unique([siloId, activeEmail])
+  @@unique([siloId, lastResendIdempotencyKey])
+  @@index([siloId, status, expiresAt])
+  @@map("organization_invitations")
+}
+
+/// Idempotency record for one standalone create-invitations batch.
+model OrganizationInvitationRequest {
+  /// Surrogate identity retained for audit correlation.
+  id                    String   @id @default(cuid())
+  /// Silo selected from the trusted request host.
+  siloId                String   @map("silo_id")
+  /// Verified subject that submitted the command.
+  actorSubject          String   @map("actor_subject")
+  /// Opaque retry key supplied through the standard HTTP header.
+  idempotencyKey        String   @map("idempotency_key")
+  /// Digest of normalized recipients and role; mismatched replay is rejected.
+  payloadDigest         String   @map("payload_digest")
+  /// Ordered invitation identifiers returned by the winning command.
+  resultInvitationIds   Json     @map("result_invitation_ids")
+  /// Number of rows created by the winning command.
+  createdCount          Int      @map("created_count")
+  /// Creation timestamp.
+  createdAt             DateTime @default(now()) @map("created_at")
+
+  @@unique([siloId, actorSubject, idempotencyKey])
+  @@map("organization_invitation_requests")
+}

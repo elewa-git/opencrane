@@ -16,6 +16,7 @@ remaining grouped with the server code that composes them.
 | [`workload-identity`](./workload-identity/README.md) | Kubernetes TokenReview and bounded workload identities. |
 | [`http`](./http/README.md) | Express transport plumbing. |
 | [`memory-gateway-client`](./memory-gateway-client/README.md) | Authenticated memory reads with fail-closed writes. |
+| [`organization-membership-gateway`](./organization-membership-gateway/README.md) | Projected-token-authenticated HTTPS transport to Fleet membership and billing. |
 | [`obot-custody`](./obot-custody/README.md) | Fail-closed Obot custody and MCP invocation ports. |
 | [`sandbox-execution`](./sandbox-execution/README.md) | Fail-closed sandboxed tool-execution port. |
 

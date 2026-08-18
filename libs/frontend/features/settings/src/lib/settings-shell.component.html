@@ -1,0 +1,12 @@
+<div class="settings-shell">
+	<aside class="settings-shell__rail"><wo-settings-navigation /></aside>
+	<header class="settings-shell__mobile-header">
+		<p-button icon="pi pi-bars" [text]="true" severity="secondary" ariaLabel="Open settings navigation" (onClick)="navigationOpen.set(true)" />
+		<strong>Settings</strong>
+	</header>
+	<main class="settings-shell__content"><router-outlet /></main>
+</div>
+
+<p-drawer header="Settings" position="left" [visible]="navigationOpen()" (visibleChange)="navigationOpen.set($event)">
+	<wo-settings-navigation (navigated)="navigationOpen.set(false)" />
+</p-drawer>

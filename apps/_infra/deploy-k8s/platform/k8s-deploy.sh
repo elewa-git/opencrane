@@ -107,6 +107,7 @@ if [[ ! -f "$COGNEE_IMAGE_POLICY" ]]; then
 fi
 source "$COGNEE_IMAGE_POLICY"
 source "$SCRIPT_DIR/initial-model-provider.sh"
+source "$SCRIPT_DIR/invitation-signing-secret.sh"
 source "$SCRIPT_DIR/database-convergence-classifier.sh"
 source "$SCRIPT_DIR/database-convergence-policy.sh"
 source "$SCRIPT_DIR/database-migration-recovery.sh"
@@ -161,6 +162,9 @@ REGISTRY_PULL_CONFIG_FILE=""
 BASE_DOMAIN="${OPENCRANE_BASE_DOMAIN:-}"
 STORAGE_CLASS=""        # empty → cluster default StorageClass
 ARTIFACT_STORAGE_CLASS="" # resolved class for the durable, expandable ArtifactStore PVC
+INVITATION_SIGNING_SECRET="${OPENCRANE_INVITATION_SIGNING_SECRET:-opencrane-invitation-signing}"
+MEMBERSHIP_MODE="${OPENCRANE_MEMBERSHIP_MODE:-standalone}"
+[[ "$MEMBERSHIP_MODE" == "standalone" || "$MEMBERSHIP_MODE" == "fleet" ]] || { echo "OPENCRANE_MEMBERSHIP_MODE must be standalone or fleet." >&2; exit 2; }
 VALUES_FILE=""
 REUSE_VALUES=""      # explicit "--reuse-values": inherit last release's values verbatim; add only overrides
 RESET_VALUES=""      # explicit "--reset-values": DROP prior values, start from chart defaults + this run's --set
@@ -618,13 +622,20 @@ fi
 DATABASE_PREVIOUS_MIGRATION_AVAILABLE="false"
 DATABASE_PREVIOUS_MIGRATION_ID=""
 DATABASE_PREVIOUS_SCHEMA_VERSION=""
-DATABASE_PREVIOUS_PROTECTED_BASELINE_SHA256=""
+DATABASE_PREVIOUS_TARGET_BASELINE_SHA256=""
+DATABASE_PREVIOUS_PROTECTED_BASELINE_SHA256S_JSON="[]"
+DATABASE_PREVIOUS_FRESH_PROTECTED_BASELINE_SHA256=""
+DATABASE_SOURCE_HISTORY_LINEAGES_JSON="[]"
 DATABASE_PREVIOUS_MIGRATION_SQL_SHA256=""
+DATABASE_SELECTED_PROTECTED_BASELINE_SHA256=""
 if [[ "$DATABASE_CONVERGENCE_MIGRATION" != "null" ]]; then
   DATABASE_PREVIOUS_MIGRATION_AVAILABLE="true"
   DATABASE_PREVIOUS_MIGRATION_ID="$(jq -r '.id' <<<"$DATABASE_CONVERGENCE_MIGRATION")"
   DATABASE_PREVIOUS_SCHEMA_VERSION="$(jq -r '.fromSchemaVersion' <<<"$DATABASE_CONVERGENCE_MIGRATION")"
-  DATABASE_PREVIOUS_PROTECTED_BASELINE_SHA256="$(jq -r '.sourceProtectedBaselineSha256' <<<"$DATABASE_CONVERGENCE_MIGRATION")"
+  DATABASE_PREVIOUS_TARGET_BASELINE_SHA256="$(jq -r '.sourceTargetBaselineSha256' <<<"$DATABASE_CONVERGENCE_MIGRATION")"
+  DATABASE_PREVIOUS_PROTECTED_BASELINE_SHA256S_JSON="$(jq -c '.sourceProtectedBaselineSha256s' <<<"$DATABASE_CONVERGENCE_MIGRATION")"
+  DATABASE_PREVIOUS_FRESH_PROTECTED_BASELINE_SHA256="$(jq -r '.freshSourceProtectedBaselineSha256' <<<"$DATABASE_CONVERGENCE_MIGRATION")"
+  DATABASE_SOURCE_HISTORY_LINEAGES_JSON="$(jq -c '.sourceHistoryLineages' <<<"$DATABASE_CONVERGENCE_MIGRATION")"
   DATABASE_PREVIOUS_MIGRATION_SQL_SHA256="$(jq -r '.sqlSha256' <<<"$DATABASE_CONVERGENCE_MIGRATION")"
 fi
 
@@ -745,6 +756,9 @@ _ensure_artifact_keys() {
     --dry-run=client -o yaml | kubectl apply -f -
 }
 _ensure_artifact_keys
+if [[ "$MEMBERSHIP_MODE" == "standalone" ]]; then
+  ensure_invitation_signing_secret "$NAMESPACE" "$INVITATION_SIGNING_SECRET"
+fi
 
 kubectl create secret generic opencrane-litellm -n "$NAMESPACE" \
   --from-literal=LITELLM_MASTER_KEY="$LITELLM_MASTER_KEY" \
@@ -895,8 +909,12 @@ helm_args=(upgrade --install "$RELEASE" "$CHART_DIR" --namespace "$NAMESPACE" --
   --set-string "artifactService.namespace=$ARTIFACT_NAMESPACE"
   --set-string "artifactService.keys.catalogExistingSecret=$ARTIFACT_CATALOG_KEY_SECRET"
   --set-string "artifactService.keys.serviceExistingSecret=$ARTIFACT_SERVICE_KEY_SECRET"
+  --set-string "clustertenantManager.membership.mode=$MEMBERSHIP_MODE"
   --set "litellm.existingSecret=opencrane-litellm"
   "${MEMORY_GATEWAY_KUBERNETES_API_ARGS[@]}")
+if [[ "$MEMBERSHIP_MODE" == "standalone" ]]; then
+  helm_args+=(--set-string "clustertenantManager.membership.standalone.invitationSigningExistingSecret=$INVITATION_SIGNING_SECRET")
+fi
 [[ -n "$REGISTRY_PULL_SECRET" ]] && helm_args+=(--set-string "global.imagePullSecret=$REGISTRY_PULL_SECRET")
 if [[ "$ALLOW_TAG_FLOAT" == "1" ]]; then
   helm_args+=(--set-string "controlPlaneSpa.image.digest=" --set-string "controlPlaneSpa.image.tag=$CONTROL_PLANE_SPA_TAG")

@@ -1,0 +1,42 @@
+.settings-navigation {
+	display: flex;
+	flex-direction: column;
+	gap: var(--oc-space-1);
+	padding: var(--oc-space-4);
+
+	&__back,
+	&__link {
+		display: flex;
+		align-items: center;
+		gap: var(--oc-space-2);
+		min-height: 42px;
+		padding: 0 var(--oc-space-3);
+		border-radius: var(--oc-radius-card);
+		color: var(--oc-ink-default);
+		text-decoration: none;
+	}
+
+	&__back {
+		margin-bottom: var(--oc-space-6);
+	}
+
+	&__link:hover,
+	&__link--active {
+		background: var(--oc-neutral-soft);
+		color: var(--oc-ink-strong);
+	}
+
+	&__link--active {
+		box-shadow: inset 3px 0 0 var(--oc-accent);
+		font-weight: 600;
+	}
+
+	&__label {
+		margin: 0 var(--oc-space-3) var(--oc-space-2);
+		font-size: var(--oc-text-xs);
+		font-weight: 600;
+		letter-spacing: var(--oc-tracking-label);
+		text-transform: uppercase;
+		color: var(--oc-ink-muted);
+	}
+}

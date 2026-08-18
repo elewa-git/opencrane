@@ -1,0 +1,47 @@
+:host {
+	display: block;
+	min-height: 100dvh;
+	background: var(--oc-surface-canvas);
+}
+
+.invite-acceptance {
+	display: grid;
+	min-height: 100dvh;
+	place-items: center;
+	padding: var(--oc-space-4);
+
+	&__card {
+		display: grid;
+		width: min(100%, 520px);
+		gap: var(--oc-space-4);
+		justify-items: center;
+		padding: clamp(var(--oc-space-6), 6vw, 48px);
+		border: 1px solid var(--oc-border-default);
+		border-radius: var(--oc-radius-panel);
+		background: var(--oc-surface-raised);
+		box-shadow: var(--oc-shadow-paper);
+		text-align: center;
+
+		h1,
+		p { margin: 0; }
+		p { color: var(--oc-ink-muted); }
+	}
+
+	&__mark {
+		display: grid;
+		width: 52px;
+		height: 52px;
+		place-items: center;
+		border-radius: var(--oc-radius-round);
+		background: var(--oc-accent-soft);
+		color: var(--oc-accent-active);
+		font-size: var(--oc-text-xl);
+	}
+
+	&__actions {
+		display: flex;
+		gap: var(--oc-space-2);
+		flex-wrap: wrap;
+		justify-content: center;
+	}
+}

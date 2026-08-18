@@ -1,0 +1,26 @@
+.invite-link {
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: var(--oc-space-3);
+
+	input {
+		min-width: 0;
+		flex: 1;
+	}
+}
+
+.sr-only {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	overflow: hidden;
+	clip: rect(0, 0, 0, 0);
+}
+
+@media (max-width: 640px) {
+	.invite-link {
+		align-items: stretch;
+		flex-direction: column;
+	}
+}

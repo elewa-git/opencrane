@@ -1,0 +1,35 @@
+<wo-section-heading title="Members" [subtitle]="view().activeCount + ' people · ' + view().pendingCount + ' invites pending'" [level]="headingLevels.Page">
+	<p-button heading-actions label="Invite people" icon="pi pi-user-plus" (onClick)="openInvite()" />
+</wo-section-heading>
+
+@if (inviteOpen()) {
+	<wo-member-invite-form [state]="view().inviteState" [issues]="view().inviteIssues" [error]="view().inviteError" [links]="view().inviteLinks" (cancelled)="closeInvite()" (submitted)="inviteSubmitted.emit($event)" />
+}
+
+<div class="members-announcement" aria-live="polite">
+	@if (view().resentInviteLink; as resentInviteLink) {
+		<p-message severity="success" text="The server-authored invitation link was refreshed. Copy and share this replacement link." />
+		<wo-member-invite-link [link]="resentInviteLink" />
+	}
+	@if (view().resendError) { <p-message severity="error" [text]="view().resendError ?? ''" /> }
+</div>
+
+@switch (view().directoryState) {
+	@case (directoryStates.Loading) {
+		<section class="members-loading" aria-label="Loading members"><p-skeleton height="3.5rem" /><p-skeleton height="3.5rem" /><p-skeleton height="3.5rem" /></section>
+	}
+	@case (directoryStates.Forbidden) {
+		<p-message severity="error" text="You do not have permission to view organization members." />
+	}
+	@case (directoryStates.Unavailable) {
+		<section class="members-state"><p-message severity="error" text="Organization members are unavailable right now." /><p-button label="Retry" icon="pi pi-refresh" (onClick)="refreshRequested.emit()" /></section>
+	}
+	@case (directoryStates.Empty) {
+		<section class="members-state"><i class="pi pi-users" aria-hidden="true"></i><h2>No members yet</h2><p>Invite the first people to this organization.</p><p-button label="Invite people" icon="pi pi-user-plus" (onClick)="openInvite()" /></section>
+	}
+	@default {
+		@if (view().directoryState === directoryStates.Refreshing) { <p-message severity="info" text="Refreshing members…" /> }
+		@if (view().directoryState === directoryStates.RetainedRefreshError) { <p-message severity="warn" [text]="view().refreshError ?? 'The directory may be out of date.'" /> }
+		<wo-member-directory [activeCount]="view().activeCount" [pendingCount]="view().pendingCount" [activeRows]="view().activeRows" [pendingRows]="view().pendingRows" [searchQuery]="view().searchQuery" (searchChanged)="searchChanged.emit($event)" (resendRequested)="resendRequested.emit($event)" />
+	}
+}

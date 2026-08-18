@@ -2,5 +2,5 @@ apiVersion: v2
 name: opencrane-artifact-scanner
 description: App-owned named-template library for the isolated malware-scanning worker.
 type: library
-version: 0.8.0
-appVersion: "0.8.0"
+version: 0.9.0
+appVersion: "0.9.0"

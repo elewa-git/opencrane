@@ -1,14 +1,23 @@
 .wo-chip {
 	display: inline-flex;
 	align-items: center;
-	padding: var(--oc-chip-padding-block) var(--oc-chip-padding-inline);
 	border-radius: var(--oc-radius-chip);
-	font-size: var(--oc-text-2xs);
 	font-weight: 500;
 	letter-spacing: var(--oc-tracking-label);
 	color: var(--oc-chip-foreground);
 	background: var(--oc-chip-background);
 	white-space: nowrap;
+
+	&--compact {
+		padding: var(--oc-chip-padding-block) var(--oc-chip-padding-inline);
+		font-size: var(--oc-text-2xs);
+	}
+
+	&--regular {
+		padding: var(--oc-space-1) var(--oc-space-2);
+		font-size: var(--oc-text-xs);
+		letter-spacing: 0;
+	}
 
 	&--outlined {
 		border: 1px solid var(--oc-chip-foreground);

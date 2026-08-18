@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/angular";
 
 import { ScopeChipComponent } from "../scope-chip.component";
-import { ScopeChipAppearances, ScopeChipTones } from "../scope-chip.types";
+import { ScopeChipAppearances, ScopeChipDensities, ScopeChipTones } from "../scope-chip.types";
 
 /** Storybook catalogue metadata for finite chip states. */
 const meta: Meta<ScopeChipComponent> =
@@ -67,6 +67,20 @@ export const Appearances: Story =
 					<wo-scope-chip label="personal" [tone]="tones.Personal" [appearance]="appearances.Soft" />
 				</div>
 			`
+		};
+	}
+};
+
+/** Compact metadata and readable row treatments preserve one semantic meaning. */
+export const Densities: Story =
+{
+	parameters: { docs: { description: { story: "Both approved densities for pending status. Density changes spacing and type size only; the owning feature still supplies the status meaning." } } },
+	tags: ["visual-test"],
+	render: function render()
+	{
+		return {
+			props: { tones: ScopeChipTones, appearances: ScopeChipAppearances, densities: ScopeChipDensities },
+			template: `<div style="display:flex;align-items:center;gap:var(--oc-space-3);padding:var(--oc-space-6)"><wo-scope-chip label="pending" [tone]="tones.Warning" [appearance]="appearances.Soft" [density]="densities.Compact" /><wo-scope-chip label="pending" [tone]="tones.Warning" [appearance]="appearances.Soft" [density]="densities.Regular" /></div>`
 		};
 	}
 };

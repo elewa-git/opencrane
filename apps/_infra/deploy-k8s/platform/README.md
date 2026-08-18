@@ -10,6 +10,7 @@ local source consumer.
 |---|---|
 | `Chart.yaml`, `templates/` | Helm library chart providing labels, names, RBAC, endpoint, database, identity, and observability helpers to the parent release. It renders no workload by itself. |
 | `k8s-deploy.sh` | Provider-neutral install and upgrade engine used by the release wrapper. It requires exact repository and source release versions, classifies live database evidence, and runs the state-appropriate PostgreSQL and application transitions. One reviewed image tag is authoritative for the server, channel proxy, memory gateway, and artifact service, and the engine waits for those Deployments across the release's main and artifact namespaces. A supported browser release supplies an exact Open Container Initiative (OCI) image digest for the single-page application (SPA); the engine renders that digest, waits for its Deployment, reports desired and observed image evidence, and rejects a stale or unavailable SPA before it reports success. It republishes each database consumer's URI and waits for the exact server, LiteLLM, and Obot workloads to restart, because Kubernetes environment variables do not reload Secret changes. Its optional `--verify` check reports pod readiness, DNS resolution, and public server/database health without changing deployment success. |
+| `invitation-signing-secret.sh` | Creates the standalone invitation signing key once, validates its stored shape, and preserves it across upgrades so pending links are not rotated by a routine rollout. |
 | `qualified-release-image-policy.sh` | Appends the reviewed first-party tag after operator-supplied Helm values so one release cannot mix server, channel proxy, memory gateway, and artifact service builds. Public deployments require an explicit immutable `sha-*` tag and an installed registry inspector; before Helm changes the cluster, the policy checks the complete four-image release set even when an advanced values override disables one service. Local k3d imports remain verified by their blocking rollout gates. |
 | `control-plane-image-policy.sh` | Small, dependency-free browser-image policy. Public browser releases require an exact OCI digest. The only tag exception is a locally imported image on a k3d context under a reserved `.test` conformance domain, so it cannot be used for a public hostname. |
 | `cluster-tenant-crd-policy.sh` | Classifies the shared `ClusterTenant` CRD as absent, current-release-owned, compatible shared, or incompatible before Helm decides whether to render it. |
@@ -84,6 +85,20 @@ A fresh OIDC deployment must provide its confidential-client secret through
 contains both the client and session keys. The engine retains the existing Secret in that case, so
 ordinary image or configuration rollouts do not rotate login sessions or require an IdP secret to
 be supplied again. A missing or incomplete existing Secret still fails closed.
+
+## Member invitation authority
+
+`OPENCRANE_MEMBERSHIP_MODE` selects `standalone` by default or `fleet` for a Fleet-owned silo. The
+standalone profile creates `opencrane-invitation-signing` once and retains its base64url key on
+later upgrades. The server mounts that Secret only in standalone mode, so ordinary releases do not
+invalidate pending invitation links. Installers that bypass the app-owned deploy script must provide
+the Secret named by `clustertenantManager.membership.standalone.invitationSigningExistingSecret`.
+
+Fleet mode does not mount the standalone key. It requires an HTTPS membership-and-billing gateway
+origin and the exact silo identity Fleet binds to the OpenCrane server's audience-bound projected
+ServiceAccount token, in addition to Fleet's independent membership-revision verification key. The
+browser still calls the same silo API; a missing or unavailable Fleet gateway fails closed and never
+enables local writes. The receiver and payment-provider integration remain Fleet/WeOwnAI-owned.
 
 The engine always enables LiteLLM's database-backed model store for a managed silo. It supplies
 the release-local LiteLLM database and stable encryption salt, then OpenCrane registers provider

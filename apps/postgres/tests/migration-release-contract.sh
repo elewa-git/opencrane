@@ -9,11 +9,24 @@ fresh="$(node "$RESOLVER" "$ROOT_DIR" "$CURRENT_VERSION" fresh)"
 current="$(node "$RESOLVER" "$ROOT_DIR" "$CURRENT_VERSION" "$CURRENT_VERSION")"
 previous="$(jq -r '.previousRepositoryVersion' "$ROOT_DIR/releases/$CURRENT_VERSION.json")"
 migration="$(node "$RESOLVER" "$ROOT_DIR" "$CURRENT_VERSION" "$previous")"
+previous_schema="$(jq -r '.database.schemaVersion' "$ROOT_DIR/releases/$previous.json")"
+target_schema="$(jq -r '.database.schemaVersion' "$ROOT_DIR/releases/$CURRENT_VERSION.json")"
+expected_migration_id="${previous_schema}-to-${target_schema}"
 
 [[ "$(jq -r '.kind' <<<"$fresh")" == "fresh" ]]
 [[ "$(jq -r '.kind' <<<"$current")" == "current" ]]
-[[ "$(jq -r '.kind' <<<"$migration")" == "current" ]]
-[[ "$(jq -r '.migration' <<<"$migration")" == "null" ]]
+[[ "$(jq -r '.kind' <<<"$migration")" == "migration" ]]
+[[ "$(jq -r '.migration.id' <<<"$migration")" == "$expected_migration_id" ]]
+[[ "$(jq -r '.migration.fromSchemaVersion' <<<"$migration")" == "$previous_schema" ]]
+[[ "$(jq -r '.migration.toSchemaVersion' <<<"$migration")" == "$target_schema" ]]
+jq -e '
+  .migration.sourceProtectedBaselineSha256s as $origins
+  | .migration.sourceHistoryLineages as $lineages
+  | ($origins | type == "array" and length > 0)
+    and ($lineages | type == "array" and length == ($origins | length))
+    and ([range(0; $origins | length) as $index
+      | $lineages[$index].sourceProtectedBaselineSha256 == $origins[$index]] | all)
+' <<<"$migration" >/dev/null
 
 if node "$RESOLVER" "$ROOT_DIR" "$CURRENT_VERSION" 0.7 >/dev/null 2>&1; then
   echo "release resolver accepted an inexact source version" >&2

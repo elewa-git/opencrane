@@ -1384,6 +1384,91 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/organization/members": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read the current organization member and invitation directory */
+        get: operations["getOrganizationMemberDirectory"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/organization/members/invitations/validate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Validate organization invitation recipients */
+        post: operations["validateOrganizationInvitations"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/organization/members/invitations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create an idempotent organization invitation batch */
+        post: operations["createOrganizationInvitations"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/organization/members/invitations/{invitationId}/resend": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Rotate an organization invitation link idempotently */
+        post: operations["resendOrganizationInvitation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/organization/members/invitations/accept": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Accept an invitation using the signed-in verified email */
+        post: operations["acceptOrganizationInvitation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/me": {
         parameters: {
             query?: never;
@@ -1528,6 +1613,63 @@ export interface components {
             /** @description Opaque cursor for the next page. Absent when hasMore is false. */
             nextCursor?: string;
             hasMore: boolean;
+        };
+        OrganizationMember: {
+            membershipId: string;
+            displayName: string;
+            /** Format: email */
+            email: string;
+            /** @enum {string} */
+            role: "owner" | "admin" | "member";
+            /** @enum {string} */
+            status: "active" | "suspended";
+            /** Format: date-time */
+            joinedAt: string;
+            isCurrentUser: boolean;
+        };
+        OrganizationInvitation: {
+            invitationId: string;
+            /** Format: email */
+            email: string;
+            /** @enum {string} */
+            role: "admin" | "member";
+            /** @enum {string} */
+            status: "pending" | "accepted" | "expired" | "failed";
+            /** Format: date-time */
+            expiresAt: string;
+            /** Format: date-time */
+            invitedAt: string;
+            invitedByDisplayName: string;
+            /** Format: uri */
+            inviteLink?: string;
+        };
+        OrganizationMemberDirectory: {
+            members: components["schemas"]["OrganizationMember"][];
+            invitations: components["schemas"]["OrganizationInvitation"][];
+            activeCount: number;
+            pendingCount: number;
+        };
+        OrganizationInviteValidationResult: {
+            recipients: {
+                email: string;
+                normalizedEmail: string;
+                valid: boolean;
+                /** @enum {string} */
+                reason?: "invalid_email" | "already_member" | "already_invited" | "external_domain";
+            }[];
+        };
+        CreateOrganizationInvitationsResult: {
+            invitations: components["schemas"]["OrganizationInvitation"][];
+            createdCount: number;
+            inviteLinks: string[];
+        };
+        ResendOrganizationInvitationResult: {
+            invitation: components["schemas"]["OrganizationInvitation"];
+            /** Format: uri */
+            inviteLink: string;
+        };
+        AcceptOrganizationInvitationResult: {
+            member: components["schemas"]["OrganizationMember"];
         };
         McpServer: {
             id?: string;
@@ -7844,6 +7986,339 @@ export interface operations {
                 };
             };
             /** @description Personal asset metadata could not be read. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getOrganizationMemberDirectory: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Authoritative directory. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrganizationMemberDirectory"];
+                };
+            };
+            /** @description Organization membership authority refused or could not complete the request. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Organization membership authority refused or could not complete the request. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    validateOrganizationInvitations: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    emails: string[];
+                };
+            };
+        };
+        responses: {
+            /** @description Recipient validation. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrganizationInviteValidationResult"];
+                };
+            };
+            /** @description Organization membership authority refused or could not complete the request. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Organization membership authority refused or could not complete the request. */
+            402: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Organization membership authority refused or could not complete the request. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Organization membership authority refused or could not complete the request. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    createOrganizationInvitations: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    emails: string[];
+                    /** @enum {string} */
+                    role: "admin" | "member";
+                };
+            };
+        };
+        responses: {
+            /** @description Recovered idempotent result. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreateOrganizationInvitationsResult"];
+                };
+            };
+            /** @description Created invitation result. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreateOrganizationInvitationsResult"];
+                };
+            };
+            /** @description Organization membership authority refused or could not complete the request. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Organization membership authority refused or could not complete the request. */
+            402: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Organization membership authority refused or could not complete the request. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Organization membership authority refused or could not complete the request. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Organization membership authority refused or could not complete the request. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    resendOrganizationInvitation: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                invitationId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Rotated or recovered invitation. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResendOrganizationInvitationResult"];
+                };
+            };
+            /** @description Organization membership authority refused or could not complete the request. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Organization membership authority refused or could not complete the request. */
+            402: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Organization membership authority refused or could not complete the request. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Organization membership authority refused or could not complete the request. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Organization membership authority refused or could not complete the request. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    acceptOrganizationInvitation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    token: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Created membership. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AcceptOrganizationInvitationResult"];
+                };
+            };
+            /** @description Organization membership authority refused or could not complete the request. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Organization membership authority refused or could not complete the request. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Organization membership authority refused or could not complete the request. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Organization membership authority refused or could not complete the request. */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Organization membership authority refused or could not complete the request. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Organization membership authority refused or could not complete the request. */
             503: {
                 headers: {
                     [name: string]: unknown;

@@ -89,7 +89,7 @@ spec:
             - name: EXPECTED_SQL_SHA256
               value: {{ .Values.convergence.previousMigration.sqlSha256 | quote }}
             - name: SOURCE_PROTECTED_BASELINE_SHA256
-              value: {{ .Values.convergence.previousMigration.sourceProtectedBaselineSha256 | quote }}
+              value: {{ .Values.convergence.previousMigration.selectedSourceProtectedBaselineSha256 | quote }}
             - name: TMPDIR
               value: /scratch
           volumeMounts:

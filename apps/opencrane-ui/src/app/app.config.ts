@@ -10,6 +10,8 @@ import { PLATFORM_SURFACE } from "@opencrane/state/core";
 import { provideControlPlaneGateways } from "@opencrane/state/gateways";
 import { OpenCranePersonaFirstChatGateway, PERSONA_FIRST_CHAT_GATEWAY, PERSONA_GATEWAY } from "@opencrane/state/onboarding";
 import { OpenCranePersonaGateway } from "@opencrane/state/persona/adapter";
+import { ORGANIZATION_MEMBERS_GATEWAY } from "@opencrane/state/organization/members";
+import { OpenCraneOrganizationMembersGateway } from "@opencrane/state/organization/members/adapter";
 import { provideWebPlatform } from "@opencrane/platform";
 
 import { APP_ROUTES } from "./app.routes";
@@ -43,6 +45,7 @@ export const appConfig: ApplicationConfig =
 		{ provide: PERSONA_GATEWAY, useClass: OpenCranePersonaGateway },
 		{ provide: PERSONA_FIRST_CHAT_GATEWAY, useClass: OpenCranePersonaFirstChatGateway },
 		{ provide: AGENT_THREAD_GATEWAY, useClass: OpenCraneAgentThreadGateway },
+		{ provide: ORGANIZATION_MEMBERS_GATEWAY, useClass: OpenCraneOrganizationMembersGateway },
 		// Chat gateways, the shared event stream, and A2UI are bound here rather than inside the
 		// workspace feature — the app is the only layer allowed to name a concrete adapter. They sit at
 		// the root because the chat routes are lazily loaded and must find these bindings already in

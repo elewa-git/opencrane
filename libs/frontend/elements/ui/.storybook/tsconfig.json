@@ -29,6 +29,7 @@
 	"../../conversation/src/**/__tests__/*.stories.ts",
 	"../../../features/agent-threads/src/**/__tests__/*.stories.ts",
 	"../../../features/conversation-workspace/src/**/__tests__/*.stories.ts",
+	"../../../features/settings/src/**/__tests__/*.stories.ts",
     "preview.ts"
   ]
 }

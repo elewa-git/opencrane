@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, input } from "@angular/core";
 
-import { ScopeChipAppearances, ScopeChipTones } from "./scope-chip.types";
+import { ScopeChipAppearances, ScopeChipDensities, ScopeChipTones } from "./scope-chip.types";
 
 /** Small mono bordered chip tinted with a scope/status colour. */
 @Component({
@@ -18,6 +18,9 @@ export class ScopeChipComponent
 	/** Appearance enum exposed to the template for typed class selection. */
 	public readonly appearances = ScopeChipAppearances;
 
+	/** Density enum exposed to the template for typed class selection. */
+	public readonly densities = ScopeChipDensities;
+
 	/** Chip text. */
 	public readonly label = input.required<string>();
 
@@ -26,4 +29,7 @@ export class ScopeChipComponent
 
 	/** Typed boundary/fill treatment. */
 	public readonly appearance = input<ScopeChipAppearances>(ScopeChipAppearances.Outlined);
+
+	/** Finite spacing and type treatment. */
+	public readonly density = input<ScopeChipDensities>(ScopeChipDensities.Compact);
 }

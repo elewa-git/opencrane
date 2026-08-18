@@ -41,15 +41,16 @@ network or persistence transition.
 
 The package's index file (barrel) re-exports the components directly:
 
-- `ScopeChipComponent`, `ScopeChipTones`, and `ScopeChipAppearances` — a label whose colour and fill
-  come only from approved semantic states.
+- `ScopeChipComponent`, `ScopeChipTones`, `ScopeChipAppearances`, and `ScopeChipDensities` — a label
+  whose colour, fill, and compact or regular spacing come only from approved finite states.
 - `CollapsibleSectionComponent` and `CollapsibleSectionVariants` — an accessible expandable region
   with linked trigger and panel semantics.
 - `AvatarCircleComponent`, `AvatarTones`, and `AvatarSizes` — a finite initials-avatar contract
   without arbitrary colour or pixel inputs.
 - `LedgerCardComponent` and `LedgerCardKinds` — one finite semantic card in an agent
   action/observation ledger.
-- `SectionHeadingComponent` — the existing feature-section heading.
+- `SectionHeadingComponent` and `SectionHeadingLevels` — a section or page heading with a dedicated
+  action slot, keeping hierarchy and responsive action placement consistent.
 - `OpenCraneBrandComponent` — the shared product mark and wordmark used by journey and navigation
   frames without introducing a separate image asset.
 - `JourneyShellComponent`, `JourneyShellLayouts`, and `JourneyShellHeaderEmphases` — the

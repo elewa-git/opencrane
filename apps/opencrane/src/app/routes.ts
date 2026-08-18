@@ -33,6 +33,8 @@ import { _log } from "./log";
 import { _CreateInternalRuntimeComposition } from "./runtime-composition";
 import type { RouteMount, SharesRouteOptions } from "./routes.types";
 import { _CreateUserOnboardingComposition } from "./user-onboarding-composition";
+import { _CreateOrganizationMembersComposition } from "./organization-members-composition";
+import { _ReadOrganizationMembershipConfig } from "./config";
 import { _ProcessShutdownSignal } from "./process-shutdown";
 import { ___CreateDbHealthProbe } from "../infra/db/db";
 import { _CreateConversationAssetAuthority } from "../infra/artifacts/artifact-upload.factory";
@@ -59,6 +61,7 @@ export function _RegisterRoutes(app: Express, prisma: PrismaClient, coreApi: k8s
 	const identityAndAccessRoutes: readonly RouteMount[] = [
 		{ method: "use", path: "/api/v1/audit", handler: auditRouter(prisma) },
 		{ method: "use", path: "/api/v1/groups", handler: groupsRouter(prisma) },
+		{ method: "use", path: "/api/v1/organization/members", handler: _CreateOrganizationMembersComposition(prisma, _ReadOrganizationMembershipConfig()) },
 		{ method: "use", path: "/api/v1/shares", handler: _CreateRateLimitedSharesRouter(prisma) },
 		{ method: "use", path: "/api/v1/resource-shares", handler: resourceSharesRouter(prisma) },
 	];

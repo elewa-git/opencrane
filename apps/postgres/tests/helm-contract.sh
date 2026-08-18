@@ -10,7 +10,7 @@ DATABASES_JSON='[{"name":"opencrane","owner":"opencrane","credentialsSecret":"po
 BASE_VALUES=(--set-json "databases=$DATABASES_JSON" --set-string databaseAdmin.name=opencrane_database_admin --set-string databaseAdmin.credentialsSecret=postgres-admin-bootstrap --set-string bootstrap.targetBaseline.sha256=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa --set-string bootstrap.initdb.postInitApplicationSQLRefs.configMapRefs[0].name=opencrane-database-baseline-deadbeef --set-string bootstrap.initdb.postInitApplicationSQLRefs.configMapRefs[0].key=target-baseline.sql --set-string convergence.targetSchemaVersion=0.8.0 --set-string convergence.targetBaselineSha256=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb --set-string convergence.currentProtectedBaselineSha256=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa)
 API_VALUES=(--set-string networkPolicy.kubernetesApiServerCidrs[0]=10.43.0.1/32 --set-string networkPolicy.kubernetesApiServerEndpointCidrs[0]=172.18.0.2/32 --set networkPolicy.kubernetesApiServerEndpointPort=6443)
 COMMON_VALUES=("${BASE_VALUES[@]}" "${API_VALUES[@]}")
-MIGRATION_VALUES=(--set migration.enabled=true --set convergence.previousMigration.available=true --set-string convergence.previousMigration.id=0.7.0-to-0.8.0 --set-string convergence.previousMigration.fromSchemaVersion=0.7.0 --set-string convergence.previousMigration.sourceProtectedBaselineSha256=cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc --set-string convergence.previousMigration.sqlSha256=dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd --set-string migration.configMap.name=opencrane-database-migration-0-7-0-to-0-8-0-deadbeef --set-string migration.configMap.key=migration.sql)
+MIGRATION_VALUES=(--set migration.enabled=true --set convergence.previousMigration.available=true --set-string convergence.previousMigration.id=0.7.0-to-0.8.0 --set-string convergence.previousMigration.fromSchemaVersion=0.7.0 --set-string convergence.previousMigration.sourceTargetBaselineSha256=cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc --set-json 'convergence.previousMigration.sourceProtectedBaselineSha256s=["cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc","eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"]' --set-string convergence.previousMigration.selectedSourceProtectedBaselineSha256=eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee --set-string convergence.previousMigration.sqlSha256=dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd --set-string migration.configMap.name=opencrane-database-migration-0-7-0-to-0-8-0-deadbeef --set-string migration.configMap.key=migration.sql)
 GKE_AUTOPILOT_VALUES="$ROOT_DIR/apps/_infra/deploy-k8s/platform/values/postgres-gke-autopilot.yaml"
 
 helm lint "$CHART" "${COMMON_VALUES[@]}" >/dev/null
@@ -153,6 +153,8 @@ grep -q 'runAsNonRoot: true' <<<"$MIGRATION_JOB"
 grep -q 'emptyDir:' <<<"$MIGRATION_JOB"
 grep -q 'sha256sum /migration/migration.sql' <<<"$MIGRATION_JOB"
 grep -q 'migration_sql_sha256=' <<<"$MIGRATION_JOB"
+grep -q 'name: SOURCE_PROTECTED_BASELINE_SHA256' <<<"$MIGRATION_JOB"
+grep -q 'value: "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"' <<<"$MIGRATION_JOB"
 grep -q 'ghcr.io/cloudnative-pg/postgresql@sha256:b1deeed2aa998b2f381e39c5cadb9ec06127708c8bd62965743af19abf21628f' <<<"$MIGRATION_JOB"
 grep -q 'ingress: \[\]' <<<"$MIGRATION_POLICY"
 grep -q 'cnpg.io/cluster: opencrane-postgres' <<<"$MIGRATION_POLICY"
@@ -166,6 +168,24 @@ test "$(grep -c '^kind: ServiceAccount$' "$MIGRATION_OUTPUT")" -eq 1
 grep -q 'app.kubernetes.io/component: postgres-database-migration' <<<"$INSTANCE_POLICY$(cat "$MIGRATION_OUTPUT")"
 grep -q 'helm.sh/hook-weight: "-10"' "$MIGRATION_OUTPUT"
 grep -q 'sql_sha256' "$MIGRATION_OUTPUT"
+grep -q 'name: SELECTED_SOURCE_PROTECTED_BASELINE_SHA256' "$MIGRATION_OUTPUT"
+
+if helm template unadmitted-selected-origin "$CHART" "${COMMON_VALUES[@]}" "${MIGRATION_VALUES[@]}" \
+  --set-string convergence.previousMigration.selectedSourceProtectedBaselineSha256=ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff \
+  >/dev/null 2>&1; then
+  echo "postgres chart accepted a selected origin outside the admitted set" >&2
+  exit 1
+fi
+
+helm template current-with-migration-evidence "$CHART" "${COMMON_VALUES[@]}" \
+  --set convergence.previousMigration.available=true \
+  --set-string convergence.previousMigration.id=0.7.0-to-0.8.0 \
+  --set-string convergence.previousMigration.fromSchemaVersion=0.7.0 \
+  --set-string convergence.previousMigration.sourceTargetBaselineSha256=cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc \
+  --set-json 'convergence.previousMigration.sourceProtectedBaselineSha256s=["cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc","eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"]' \
+  --set-string convergence.previousMigration.selectedSourceProtectedBaselineSha256=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \
+  --set-string convergence.previousMigration.sqlSha256=dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd \
+  >/dev/null
 
 if helm template invalid-migration-image "$CHART" "${COMMON_VALUES[@]}" "${MIGRATION_VALUES[@]}" \
   --set-string migration.image=ghcr.io/cloudnative-pg/postgresql:17.5 >/dev/null 2>&1; then

@@ -2,5 +2,5 @@ apiVersion: v2
 name: opencrane-server
 description: App-owned named-template library for the OpenCrane server workload boundary.
 type: library
-version: 0.8.0
-appVersion: "0.8.0"
+version: 0.9.0
+appVersion: "0.9.0"

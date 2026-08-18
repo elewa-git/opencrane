@@ -24,7 +24,7 @@ export enum ScopeChipTones
 /**
  * The two chip styles: outlined, or softly filled.
  *
- * Both take their colour from {@link SemanticTones}; this only chooses whether the colour appears as
+ * Both take their colour from {@link ScopeChipTones}; this only chooses whether the colour appears as
  * a border or as a background.
  */
 export enum ScopeChipAppearances
@@ -33,4 +33,18 @@ export enum ScopeChipAppearances
 	Outlined = "outlined",
 	/** Soft semantic fill with no strong border. */
 	Soft = "soft"
+}
+
+/**
+ * The spacing and type scale a chip uses without changing its semantic meaning.
+ *
+ * Density is an in-memory presentation choice. Consumers may use `Regular` in readable directory
+ * rows and keep `Compact` for dense metadata; neither state carries status or access authority.
+ */
+export enum ScopeChipDensities
+{
+	/** Keeps the original small label treatment for dense metadata. */
+	Compact = "compact",
+	/** Adds room and a larger type size for status labels in ordinary rows. */
+	Regular = "regular"
 }

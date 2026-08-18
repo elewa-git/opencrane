@@ -49,6 +49,18 @@ export const OpenCranePreset = definePreset(Aura,
 	},
 	components:
 	{
+		tabs:
+		{
+			tab:
+			{
+				activeBorderColor: "var(--oc-accent-active)",
+				activeColor: "var(--oc-accent-active)"
+			},
+			activeBar:
+			{
+				background: "var(--oc-accent-active)"
+			}
+		},
 		button:
 		{
 			root:

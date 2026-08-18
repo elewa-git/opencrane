@@ -14,6 +14,16 @@ port; the gateway remains the sole Cognee caller. Contract coverage lives in
 `apps/_infra/deploy-k8s/platform/tests/server-key-permissions-contract.sh` and
 `server-network-policy-contract.sh`.
 
+## Fleet membership caller wiring
+
+Fleet mode projects a rotating ServiceAccount token at
+`/var/run/opencrane/membership-billing/token`. Its audience and TTL come from
+`clustertenantManager.membership.fleet.billingGatewayProjectedTokenAudience` and
+`billingGatewayProjectedTokenTtlSeconds`. The server accepts only a credential-free HTTPS receiver
+origin, refuses redirects, and re-reads the projected token for every exchange. Fleet must
+TokenReview that audience and bind the reviewed server ServiceAccount to the configured silo before
+trusting forwarded OIDC caller fields. No static Fleet billing credential Secret is mounted.
+
 ## Obot server transport
 
 The Deployment renders the server→Obot coordinates only when
