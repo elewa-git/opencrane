@@ -22,8 +22,8 @@ interface _McpToolRow
  * Joins each install record to its catalogue detail, renders the connection
  * state (the one terracotta CTA is the "needs credential" row), and opens the
  * {@link ConnectDrawerComponent} for the secure connect/credential flow. All
- * writes go through the injected gateway; activation in the agent runtime
- * ("Claw") is automatic once connected.
+ * writes go through the injected gateway; activation in the OpenCrane agent
+ * runtime is automatic once connected.
  */
 @Component({
 	selector: "wo-my-tools",

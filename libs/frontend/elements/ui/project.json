@@ -41,7 +41,8 @@
 				"{workspaceRoot}/libs/frontend/elements/conversation/src/**/*",
 				"{workspaceRoot}/libs/frontend/features/agent-threads/src/**/*",
 				"{workspaceRoot}/libs/frontend/features/conversation-workspace/src/**/*",
-				"{workspaceRoot}/libs/frontend/features/settings/src/**/*"
+				"{workspaceRoot}/libs/frontend/features/settings/src/**/*",
+				"{workspaceRoot}/libs/frontend/features/tools/src/**/*"
 			],
 			"options": {
 				"browserTarget": "frontend-elements-ui:build-storybook",
@@ -78,7 +79,8 @@
 				"{workspaceRoot}/libs/frontend/elements/conversation/src/**/*",
 				"{workspaceRoot}/libs/frontend/features/agent-threads/src/**/*",
 				"{workspaceRoot}/libs/frontend/features/conversation-workspace/src/**/*",
-				"{workspaceRoot}/libs/frontend/features/settings/src/**/*"
+				"{workspaceRoot}/libs/frontend/features/settings/src/**/*",
+				"{workspaceRoot}/libs/frontend/features/tools/src/**/*"
 			],
 			"outputs": [
 				"{options.outputDir}"

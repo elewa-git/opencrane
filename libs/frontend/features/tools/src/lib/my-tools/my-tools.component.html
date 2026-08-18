@@ -2,7 +2,7 @@
 	<div class="wo-tools-page__inner">
 		<wo-section-heading
 			title="My tools"
-			subtitle="Servers you've installed. Connected servers are active in your agent runtime (Claw) and ready to use in chat."
+			subtitle="Servers you've installed. Connected servers are active in the OpenCrane agent runtime and ready to use in chat."
 		/>
 
 		@if (rows().length > 0) {
@@ -64,7 +64,7 @@
 
 			@if (firstNeedsCredential(); as pending) {
 				<div class="wo-callout wo-mytools__prompt">
-					<b>{{ pending.name }}</b> needs a credential before your agent can use it. Until then its tools are installed but inactive in Claw.
+					<b>{{ pending.name }}</b> needs a credential before your agent can use it. Until then its tools are installed but inactive in the OpenCrane agent runtime.
 					<button type="button" class="wo-tools__act" (click)="openConnect(pending)">{{ connectLabel(pending) }}</button>
 				</div>
 			}

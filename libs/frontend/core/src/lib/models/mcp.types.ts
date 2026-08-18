@@ -43,7 +43,7 @@ export enum McpApprovalStatus
 /**
  * Per-user connection state of a server the user has installed.
  *
- * Activation in the user's agent runtime ("Claw") is automatic once connected;
+ * Activation in the OpenCrane agent runtime is automatic once connected;
  * `Activating` and `ActivationFailed` surface that backend step.
  */
 export enum McpConnectionStatus

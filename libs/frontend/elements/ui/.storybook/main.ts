@@ -20,6 +20,7 @@ const config: StorybookConfig =
 		,"../../../features/agent-threads/src/**/__tests__/*.stories.@(js|jsx|mjs|ts|tsx)"
 		,"../../../features/conversation-workspace/src/**/__tests__/*.stories.@(js|jsx|mjs|ts|tsx)"
 		,"../../../features/settings/src/**/__tests__/*.stories.@(js|jsx|mjs|ts|tsx)"
+		,"../../../features/tools/src/**/__tests__/*.stories.@(js|jsx|mjs|ts|tsx)"
 	],
 	addons:
 	[
