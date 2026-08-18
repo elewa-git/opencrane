@@ -1,19 +1,26 @@
 @if (showShell()) {
 	<main class="wo-login">
 		<p-card styleClass="wo-login__card">
-			<p class="wo-login__eyebrow">OpenCrane Operator</p>
-			<h1 class="wo-login__brand">Sign in to your workspace.</h1>
-			<p class="wo-login__sub">
-				Your sovereign AI workspace — isolated, governed, and fully under your control.
-			</p>
-			<div class="wo-login__paths">
-				<p-button
-					label="Log in"
-					styleClass="wo-login__btn"
-					size="large"
-					(onClick)="signIn()"
-				/>
-			</div>
+			@if (registrationRequested) {
+				<p class="wo-login__eyebrow">OpenCrane invitation</p>
+				<h1 class="wo-login__brand">Create your account to accept this invitation.</h1>
+				<p class="wo-login__sub">
+					Create an account to continue. If you already have an account, log in instead.
+				</p>
+				<div class="wo-login__paths">
+					<p-button label="Create account" styleClass="wo-login__btn" size="large" (onClick)="signUp()" />
+					<p-button label="Log in" styleClass="wo-login__btn" size="large" severity="secondary" [outlined]="true" (onClick)="signIn()" />
+				</div>
+			} @else {
+				<p class="wo-login__eyebrow">OpenCrane Operator</p>
+				<h1 class="wo-login__brand">Sign in to your workspace.</h1>
+				<p class="wo-login__sub">
+					Your sovereign AI workspace — isolated, governed, and fully under your control.
+				</p>
+				<div class="wo-login__paths">
+					<p-button label="Log in" styleClass="wo-login__btn" size="large" (onClick)="signIn()" />
+				</div>
+			}
 		</p-card>
 	</main>
 }

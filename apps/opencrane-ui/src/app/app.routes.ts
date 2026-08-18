@@ -68,9 +68,11 @@ export const APP_ROUTES: Routes =
 		}
 	},
 	{
-		// Invitation acceptance remains an ordinary signed-in API client. The feature removes its token
-		// from browser history before submitting it to organization authority.
+		// Invitation acceptance requires an identity, but anonymous invitees must first be offered the
+		// provider's registration flow. The feature removes its token from browser history before
+		// submitting it to organization authority.
 		path: "invite",
+		data: { registrationOnAnonymous: true },
 		canActivate: [___OperatorAccessGuard],
 		loadComponent: function loadInvitationAcceptance()
 		{

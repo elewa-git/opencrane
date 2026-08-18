@@ -172,9 +172,13 @@ Acceptance criteria:
 
 - The backend explicitly accepts, validates, and forwards the intended registration prompt, or the
   UI removes the separate registration claim.
-- Unsupported provider registration is explained before redirect.
+- The selected ZITADEL deployment has self-registration enabled; a deployment that cannot honor
+  `prompt=create` does not qualify this flow.
+- Unsupported prompt values are rejected before redirect.
 
-Status: `API partial`. The frontend currently sends `prompt=create`, but the backend ignores it.
+Status: `API implemented`. Anonymous invitation routes offer account creation, the backend admits
+only `prompt=create`, and the per-organisation OIDC client forwards it without dropping the
+organisation restriction. Existing users retain an explicit ordinary login action.
 
 ## IDO-07 — Complete the onboarding survey
 

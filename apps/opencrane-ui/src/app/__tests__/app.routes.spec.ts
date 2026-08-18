@@ -13,13 +13,15 @@ describe("OpenCrane app route composition", function _OpenCraneAppRouteCompositi
 		expect(workspaceMount?.loadComponent).toBeUndefined();
 	});
 
-	it("guards settings and token acceptance as ordinary signed-in routes", function _SettingsRoutes()
+	it("guards settings and requests registration only for anonymous token acceptance", function _SettingsRoutes()
 	{
 		const settings = APP_ROUTES.find(function _Settings(route) { return route.path === "settings"; });
 		const invite = APP_ROUTES.find(function _Invite(route) { return route.path === "invite"; });
 		expect(settings?.canActivate?.length).toBe(1);
 		expect(settings?.loadChildren).toBeTypeOf("function");
+		expect(settings?.data?.["registrationOnAnonymous"]).toBeUndefined();
 		expect(invite?.canActivate?.length).toBe(1);
 		expect(invite?.loadComponent).toBeTypeOf("function");
+		expect(invite?.data?.["registrationOnAnonymous"]).toBe(true);
 	});
 });

@@ -143,6 +143,18 @@ describe("OidcAuthService.buildLoginUrl — per-org client resolution (S3b)", fu
     expect((req.session as { oidcFlow?: { clientId?: string } }).oidcFlow?.clientId).toBe("client-acme");
   });
 
+  it("keeps the per-org restriction when registration is requested", async function _PerOrgRegistration()
+  {
+    const api = _apiWithCr("acme", { clientId: "client-acme", orgId: "org-acme" });
+    const service = ___CreateOidcAuthService(pino({ enabled: false }), _prismaStub(), api);
+    const req = _reqOnHost("acme.dev.opencrane.ai");
+
+    await service.buildLoginUrl(req, "/invite?token=opaque", { prompt: "create" });
+
+    expect(_lastAuthParams.prompt).toBe("create");
+    expect(_lastAuthParams.scope).toBe("openid email profile urn:zitadel:iam:org:id:org-acme");
+  });
+
   it("uses the masters client (no org scope) for the platform host", async function _platform()
   {
     const api = _apiWithCr("acme", null); // no CR for "platform" → 404 + empty list

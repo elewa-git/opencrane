@@ -17,6 +17,10 @@ import { _SafeLoginReturnTo } from "./login-return-to";
  * guard re-runs against a fresh session. While `/auth/me` is still loading the
  * page renders nothing. Once it resolves, an already-authenticated session is
  * continued to that same path without forcing a second login click.
+ * Anonymous invitation routes add the OIDC `prompt=create` value, which makes
+ * this page offer provider-hosted registration while retaining an explicit login path.
+ *
+ * @see https://zitadel.com/docs/apis/openidoauth/endpoints for ZITADEL's `prompt=create` extension.
  */
 @Component({
 	selector: "wo-login-page",
@@ -43,14 +47,24 @@ export class LoginPageComponent
 	/** Validated same-origin path used by both automatic and explicit login continuation. */
 	private readonly _returnTo = _SafeLoginReturnTo(this._route.snapshot.queryParamMap.get("returnTo"));
 
+	/**
+	 * Tells the template whether to present account creation before ordinary login.
+	 *
+	 * The value is true only for ZITADEL's exact `prompt=create` extension. The guarded invitation
+	 * route supplies it; arbitrary prompt spellings leave the ordinary login page unchanged.
+	 *
+	 * Called by: the invite-state branch in `login-page.component.html`.
+	 */
+	public readonly registrationRequested = this._route.snapshot.queryParamMap.get("prompt") === "create";
+
 	/** Whether the landing card should be shown — once `/auth/me` is no longer
 	 * loading and the session is anonymous. Reading `isLoading` (rather than
 	 * `hasValue`) means an errored `/auth/me` (backend unreachable) still
 	 * surfaces the login affordance instead of staring at a blank page. */
-	public readonly showShell = computed((): boolean =>
+	public readonly showShell = computed(function _showShell(this: LoginPageComponent): boolean
 	{
 		return !this._session.me.isLoading() && !this._session.authenticated();
-	});
+	}.bind(this));
 
 	public constructor()
 	{
@@ -74,9 +88,27 @@ export class LoginPageComponent
 		});
 	}
 
-	/** Launches the OIDC flow with the validated same-origin route that first required authentication. */
+	/**
+	 * Sends an existing user through ordinary OIDC login with the validated continuation path.
+	 *
+	 * Called by: the `Log in` actions in `login-page.component.html`.
+	 */
 	public signIn(): void
 	{
 		this._api.signIn(this._returnTo);
+	}
+
+	/**
+	 * Sends a new invitee to provider-hosted registration with the validated invitation path.
+	 *
+	 * The shared API client performs the browser redirect and does nothing during server-side
+	 * rendering. The guarded acceptance store, rather than this login page, owns token consumption.
+	 *
+	 * Called by: the `Create account` action in `login-page.component.html`.
+	 * @see OrganizationInviteAcceptanceStore
+	 */
+	public signUp(): void
+	{
+		this._api.signUp(this._returnTo);
 	}
 }

@@ -37,3 +37,34 @@ describe("OIDC reauthentication route", function _Suite()
 		expect(buildLoginUrl).not.toHaveBeenCalled();
 	});
 });
+
+describe("OIDC login route", function _LoginSuite()
+{
+	it("passes prompt=create to provider-hosted registration", async function _RegistrationPrompt()
+	{
+		const buildLoginUrl = vi.fn().mockResolvedValue("https://identity.example.test/authorize");
+		const service = { isEnabled: function _Enabled() { return true; }, buildLoginUrl, getStatus: vi.fn(), completeLogin: vi.fn(), logout: vi.fn() };
+		const response = await request(_App(service, false)).get("/api/v1/auth/login?prompt=create&returnTo=%2Finvite%3Ftoken%3Dopaque");
+		expect(response.status).toBe(302);
+		expect(buildLoginUrl).toHaveBeenCalledWith(expect.anything(), "/invite?token=opaque", { prompt: "create" });
+	});
+
+	it("keeps ordinary login free of a provider prompt", async function _OrdinaryLogin()
+	{
+		const buildLoginUrl = vi.fn().mockResolvedValue("https://identity.example.test/authorize");
+		const service = { isEnabled: function _Enabled() { return true; }, buildLoginUrl, getStatus: vi.fn(), completeLogin: vi.fn(), logout: vi.fn() };
+		const response = await request(_App(service, false)).get("/api/v1/auth/login?returnTo=%2Fonboarding");
+		expect(response.status).toBe(302);
+		expect(buildLoginUrl).toHaveBeenCalledWith(expect.anything(), "/onboarding", undefined);
+	});
+
+	it.each(["login", "CREATE", "create&prompt=create"])("rejects the unsupported prompt %s", async function _RejectsPrompt(prompt)
+	{
+		const buildLoginUrl = vi.fn();
+		const service = { isEnabled: function _Enabled() { return true; }, buildLoginUrl, getStatus: vi.fn(), completeLogin: vi.fn(), logout: vi.fn() };
+		const response = await request(_App(service, false)).get(`/api/v1/auth/login?prompt=${prompt}`);
+		expect(response.status).toBe(400);
+		expect(response.body).toEqual({ error: "Unsupported login prompt.", code: "UNSUPPORTED_LOGIN_PROMPT" });
+		expect(buildLoginUrl).not.toHaveBeenCalled();
+	});
+});
