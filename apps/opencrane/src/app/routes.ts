@@ -34,8 +34,6 @@ import { _CreateInternalRuntimeComposition } from "./runtime-composition";
 import { _CreatePersonaAgentRevisionSelectionFactory } from "./persona-approval-composition";
 import type { RouteMount, SharesRouteOptions } from "./routes.types";
 import { _CreateUserOnboardingComposition } from "./user-onboarding-composition";
-import { _CreateOrganizationMembersComposition } from "./organization-members-composition";
-import { _ReadOrganizationMembershipConfig } from "./config";
 import { _ProcessShutdownSignal } from "./process-shutdown";
 import { ___CreateDbHealthProbe } from "../infra/db/db";
 import { _CreateConversationAssetAuthority } from "../infra/artifacts/artifact-upload.factory";
@@ -54,15 +52,16 @@ import { _CreateConversationAssetAuthority } from "../infra/artifacts/artifact-u
  * @param serverNamespace - Namespace in which provider Secrets are managed.
  * @param obotCustody - Composed Obot custody authority (fail-closed adapter when Obot is off).
  * @param artifactScannerEnabled - Whether upload admission has a live scanner consumer.
+ * @param organizationMembersRouter - Startup-selected standalone or Fleet member authority.
  * @returns The configured public listener.
  */
-export function _RegisterRoutes(app: Express, prisma: PrismaClient, coreApi: k8s.CoreV1Api, runAdmission: ManagedRunAdmissionPort, personalRunAdmission: PersonalRunAdmissionPort, runCancellation: RunCancellationRepository, serverNamespace: string, obotCustody: ObotCustodyPort, artifactScannerEnabled: boolean): Express
+export function _RegisterRoutes(app: Express, prisma: PrismaClient, coreApi: k8s.CoreV1Api, runAdmission: ManagedRunAdmissionPort, personalRunAdmission: PersonalRunAdmissionPort, runCancellation: RunCancellationRepository, serverNamespace: string, obotCustody: ObotCustodyPort, artifactScannerEnabled: boolean, organizationMembersRouter: Router): Express
 {
 	const onboarding = _CreateUserOnboardingComposition(prisma, _log, _ResolveUserOnboardingOwner);
 	const identityAndAccessRoutes: readonly RouteMount[] = [
 		{ method: "use", path: "/api/v1/audit", handler: auditRouter(prisma) },
 		{ method: "use", path: "/api/v1/groups", handler: groupsRouter(prisma) },
-		{ method: "use", path: "/api/v1/organization/members", handler: _CreateOrganizationMembersComposition(prisma, _ReadOrganizationMembershipConfig()) },
+		{ method: "use", path: "/api/v1/organization/members", handler: organizationMembersRouter },
 		{ method: "use", path: "/api/v1/shares", handler: _CreateRateLimitedSharesRouter(prisma) },
 		{ method: "use", path: "/api/v1/resource-shares", handler: resourceSharesRouter(prisma) },
 	];

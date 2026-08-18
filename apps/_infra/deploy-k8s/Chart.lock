@@ -1,10 +1,10 @@
 dependencies:
 - name: k8s-platform
   repository: file://platform
-  version: 0.9.1
+  version: 0.9.2
 - name: opencrane-server
   repository: file://../../opencrane/helm
-  version: 0.9.1
+  version: 0.9.2
 - name: opencrane-ui
   repository: file://../../opencrane-ui/helm
   version: 0.9.1
@@ -44,5 +44,5 @@ dependencies:
 - name: opencrane-obot
   repository: file://../obot/helm
   version: 0.8.0
-digest: sha256:429740b1d2ccb3230522ea40cfbf4ed34f5d53ed504d122b0ce65b4106fc0550
-generated: "2026-08-18T18:05:48.069298+03:00"
+digest: sha256:f7da495f0dfbe7e4f5c82900bdfc2a4855c2690fe3b120dae448cab1a58d30a8
+generated: "2026-08-18T21:36:52.609992+03:00"

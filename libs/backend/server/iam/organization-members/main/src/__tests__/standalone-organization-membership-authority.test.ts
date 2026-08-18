@@ -20,6 +20,7 @@ function _Invitation(expiresAt = new Date(Date.now() + 60_000))
 function _Repository(overrides: Partial<OrganizationMemberRepository> = {}): OrganizationMemberRepository
 {
 	return {
+		hasActiveMembership: vi.fn().mockResolvedValue(true),
 		directory: vi.fn().mockResolvedValue({ members: [], invitations: [], activeCount: 0, pendingCount: 0 }),
 		validate: vi.fn().mockResolvedValue([]),
 		create: vi.fn().mockResolvedValue({ invitations: [_Invitation()], createdCount: 1 }),

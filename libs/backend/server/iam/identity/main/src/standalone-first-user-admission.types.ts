@@ -45,16 +45,18 @@ export interface StandaloneFirstUserOwnerClaim
 }
 
 /**
- * How a first-owner claim ended. Only `Admitted` and `AlreadyOwner` let the caller proceed.
+ * How a first-owner claim ended. `Admitted` and `AlreadyOwner` grant owner authority;
+ * `AlreadyClaimed` may preserve authentication without elevation.
  *
  * A standalone silo has exactly one owner slot and every login tries to fill it, so two logins can
  * race for the same empty slot: both see it empty, both insert, and the unique constraint lets only
  * one through. The loser retries and comes back with `AlreadyOwner` when it is the same subject, or
  * `AlreadyClaimed` when someone else got there first. `AlreadyClaimed` also covers a subject whose
  * membership exists but is not an active Owner, so a demoted or suspended user cannot promote itself
- * back. `NotEligible` is different in kind: the login did not match the configured host, issuer, or
- * verified email, so it was never a candidate. Both refusals make the login fail visibly in the
- * browser instead of dropping the user into a silo they do not own.
+ * back. After the owner slot is filled, `AlreadyClaimed` also tells the login seam that bootstrap is
+ * complete: the caller may authenticate without gaining owner authority, while current membership
+ * still gates product routes. `NotEligible` is different in kind: the login did not match the
+ * configured host, issuer, or verified email while the owner slot was empty, so it remains fatal.
  *
  * @see StandaloneFirstUserAdmissionResult
  */
@@ -66,7 +68,7 @@ export enum StandaloneFirstUserAdmissionOutcomes
   AlreadyOwner = "already_owner",
   /** Trusted callback facts do not satisfy this silo's configured bootstrap contract. */
   NotEligible = "not_eligible",
-  /** A different or non-active owner membership already occupies the one-owner slot. */
+  /** Bootstrap is complete or this subject cannot be re-promoted; authentication gains no owner authority. */
   AlreadyClaimed = "already_claimed",
 }
 

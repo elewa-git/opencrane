@@ -1,6 +1,6 @@
 import type { Request } from "express";
 import type * as k8s from "@kubernetes/client-node";
-import type { PrismaClient } from "@prisma/client";
+import { OrgMemberStatus, OrgRole, type PrismaClient } from "@prisma/client";
 import pino from "pino";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -77,7 +77,7 @@ function _prismaStub(): PrismaClient
 }
 
 /** Prisma stub that persists the exact one-time owner claim made by a standalone callback. */
-function _standaloneAdmissionPrisma(): { prisma: PrismaClient; created: Array<{ clusterTenant: string; subject: string }> }
+function _standaloneAdmissionPrisma(existingOwner: { subject: string; role: OrgRole; status: OrgMemberStatus } | null = null): { prisma: PrismaClient; created: Array<{ clusterTenant: string; subject: string }> }
 {
   const created: Array<{ clusterTenant: string; subject: string }> = [];
   const prisma = {
@@ -86,7 +86,7 @@ function _standaloneAdmissionPrisma(): { prisma: PrismaClient; created: Array<{ 
     orgMembership: {
       findMany: vi.fn().mockResolvedValue([]),
       findUnique: vi.fn().mockResolvedValue(null),
-      findFirst: vi.fn().mockResolvedValue(null),
+      findFirst: vi.fn().mockResolvedValue(existingOwner),
       create: vi.fn(async function _create(args: { data: { clusterTenant: string; subject: string } })
       {
         created.push({ clusterTenant: args.data.clusterTenant, subject: args.data.subject });
@@ -234,7 +234,21 @@ describe("OidcAuthService.completeLogin — token exchange uses the per-org clie
     expect((req.session as { authUser?: { isOrgAdmin?: boolean } }).authUser?.isOrgAdmin).toBe(true);
   });
 
-  it("destroys the regenerated session when configured first-owner admission is denied", async function _destroysDeniedAdmissionSession()
+  it("preserves an unprivileged session after another subject has claimed the owner slot", async function _AllowsInvitedIdentity()
+  {
+    const { prisma } = _standaloneAdmissionPrisma({ subject: "existing-owner", role: OrgRole.Owner, status: OrgMemberStatus.Active });
+    const service = ___CreateOidcAuthService(pino({ enabled: false }), prisma, null, { clusterTenant: "acme", email: "u@acme.io", issuer: "https://idp.test" }, _standaloneFirstUserAudit());
+    const req = _callbackReq("client-acme");
+    const destroy = vi.fn(function _destroy(callback: (error?: Error) => void) { callback(); });
+    (req.session as unknown as { destroy: typeof destroy }).destroy = destroy;
+
+    await expect(service.completeLogin(req)).resolves.toBe("/");
+
+    expect(destroy).not.toHaveBeenCalled();
+    expect((req.session as { authUser?: { isOrgAdmin?: boolean } }).authUser?.isOrgAdmin).not.toBe(true);
+  });
+
+  it("destroys the regenerated session when an empty owner slot rejects an ineligible login", async function _DestroysDeniedAdmissionSession()
   {
     const { prisma } = _standaloneAdmissionPrisma();
     const service = ___CreateOidcAuthService(pino({ enabled: false }), prisma, null, { clusterTenant: "acme", email: "different@acme.io", issuer: "https://idp.test" }, _standaloneFirstUserAudit());
@@ -246,4 +260,18 @@ describe("OidcAuthService.completeLogin — token exchange uses the per-org clie
 
     expect(destroy).toHaveBeenCalledTimes(1);
   });
+
+	 it("destroys the regenerated session when owner admission infrastructure fails", async function _DestroysFailedAdmissionSession()
+	 {
+		 const { prisma } = _standaloneAdmissionPrisma();
+		 prisma.$transaction = vi.fn().mockRejectedValue(new Error("database unavailable"));
+		 const service = ___CreateOidcAuthService(pino({ enabled: false }), prisma, null, { clusterTenant: "acme", email: "u@acme.io", issuer: "https://idp.test" }, _standaloneFirstUserAudit());
+		 const req = _callbackReq("client-acme");
+		 const destroy = vi.fn(function _destroy(callback: (error?: Error) => void) { callback(); });
+		 (req.session as unknown as { destroy: typeof destroy }).destroy = destroy;
+
+		 await expect(service.completeLogin(req)).rejects.toThrow("database unavailable");
+
+		 expect(destroy).toHaveBeenCalledTimes(1);
+	 });
 });

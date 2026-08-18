@@ -10,6 +10,7 @@ export { OrganizationInvitationStatuses, OrganizationInviteRecipientReasons } fr
 export type { AcceptOrganizationInvitationCommand, AcceptOrganizationInvitationResult, CreateOrganizationInvitationsCommand, CreateOrganizationInvitationsResult, OrganizationInvitation, OrganizationInviteRecipientValidation, OrganizationInviteValidationResult, ResendOrganizationInvitationCommand, ResendOrganizationInvitationResult, ValidateOrganizationInvitationsCommand } from "./invitations.types";
 export { _OrganizationMembersOpenapiPaths, _OrganizationMembersOpenapiSchemas } from "./openapi";
 export { OrganizationMembershipError, OrganizationMembershipErrorKinds } from "./organization-members.errors";
+export { _CreateOrganizationProductAccessMiddleware } from "./product-access.middleware";
 export { _CreateOrganizationMembersRouter } from "./organization-members.router";
 export { PrismaOrganizationMemberUnitOfWork } from "./prisma-organization-member-unit-of-work";
 export { StandaloneOrganizationMembershipAuthority } from "./standalone-organization-membership-authority";

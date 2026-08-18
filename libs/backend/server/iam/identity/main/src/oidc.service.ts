@@ -95,8 +95,9 @@ export class OidcAuthService extends OidcAuthServiceBase
    * single owner slot from the verified login facts.
    *
    * The group copy is best-effort: a failure is logged and nothing else. The owner claim is not — a
-   * refusal throws, and {@link isPostLoginFailureFatal} makes the browser see a failed login rather
-   * than landing the user in a silo they do not own. The stored owner is keyed on the OIDC subject.
+   * refusal throws while the owner slot is empty. Once another subject has claimed the slot,
+   * authentication continues without owner elevation so an invitee can reach the separately guarded
+   * invitation-acceptance route. The stored owner is keyed on the OIDC subject.
    */
   protected override async onLoginEstablished(req: Request, authUser: AuthUser): Promise<void>
   {
@@ -129,6 +130,10 @@ export class OidcAuthService extends OidcAuthServiceBase
       email: authUser.email,
       emailVerified: authUser.emailVerified,
     });
+    if (admission.outcome === StandaloneFirstUserAdmissionOutcomes.AlreadyClaimed)
+    {
+      return;
+    }
     if (admission.outcome !== StandaloneFirstUserAdmissionOutcomes.Admitted && admission.outcome !== StandaloneFirstUserAdmissionOutcomes.AlreadyOwner)
     {
       throw new Error(`standalone first-user admission denied: ${admission.outcome}`);

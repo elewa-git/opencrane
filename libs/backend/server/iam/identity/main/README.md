@@ -51,8 +51,10 @@ and audit see the same membership.
 
 Invariant: every identity fact it emits is IdP-verified, not self-asserted — a caller can never
 obtain another user's tenant or claim admin rights they were not granted. Group mirroring is
-best-effort; a configured first-owner claim is visible and fails closed rather than redirecting to a
-misleading no-tenant state.
+best-effort. A configured first-owner claim fails closed when the slot is still empty but the
+identity is ineligible, or when persistence or auditing fails. Once another Owner has claimed the
+slot, an ordinary verified identity keeps its session so the separately guarded signed-invitation
+acceptance route can establish membership; it gains no Owner or administrator fact from login.
 
 ## Public surface
 

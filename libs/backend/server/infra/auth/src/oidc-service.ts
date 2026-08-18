@@ -481,7 +481,7 @@ export abstract class OidcAuthServiceBase
    *
    * Overridden by: `OidcAuthService.onLoginEstablished` in
    * libs/backend/server/iam/identity/main/src/oidc.service.ts, which mirrors group names
-   * (best effort) and then claims the standalone first-owner slot (fatal on failure).
+   * (best effort), then evaluates first-owner admission; an `AlreadyClaimed` result returns normally so an authenticated invitee can reach guarded invitation acceptance.
    *
    * @param _req      - The completed callback request (unused by the base).
    * @param _authUser - The identity just stored in the session (unused by the base).

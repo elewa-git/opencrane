@@ -112,10 +112,13 @@ Acceptance criteria:
 
 - Admission requires the configured host tenant, issuer, stable subject, and verified bootstrap
   email.
-- The UI handles `admitted`, `already_owner`, `not_eligible`, and `already_claimed` without implying
-  that email itself is the durable identity.
+- `admitted` and `already_owner` establish Owner authority. `already_claimed` keeps a verified
+  non-owner session solely so a signed invitation can be accepted behind the active-membership gate;
+  `not_eligible` while the slot is empty remains a failed login.
 - Membership creation and its audit record appear as one completed outcome.
-- Non-eligible and already-claimed outcomes direct the user to an explicit recovery path.
+- Before invitation acceptance, every other standalone product route requires an exact active
+  subject-and-silo membership and fails closed for missing, suspended, cross-silo, or unavailable
+  membership.
 
 API: part of the OIDC callback handshake; no browser-supplied owner-claim payload.
 

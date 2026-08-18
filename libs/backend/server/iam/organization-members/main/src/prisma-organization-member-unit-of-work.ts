@@ -17,6 +17,12 @@ export class PrismaOrganizationMemberUnitOfWork implements OrganizationMemberRep
 	constructor(prisma: PrismaClient) { this.prisma = prisma; }
 
 	/** @inheritdoc */
+	async hasActiveMembership(caller: Pick<OrganizationMembershipCaller, "siloId" | "subjectId">): Promise<boolean>
+	{
+		return this._withRepository(function _HasActiveMembership(repository) { return repository.hasActiveMembership(caller); });
+	}
+
+	/** @inheritdoc */
 	async directory(caller: OrganizationMembershipCaller): Promise<OrganizationMemberDirectoryRecords>
 	{
 		return this._withRepository(function _Directory(repository) { return repository.directory(caller); });

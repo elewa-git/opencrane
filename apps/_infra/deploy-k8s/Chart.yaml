@@ -8,8 +8,8 @@ description: >-
   `crds.install` defaults true, while a release that uses a separately managed shared CRD
   bundle sets it false. Still depends on the cert-manager issuer.
 type: application
-version: 0.9.1
-appVersion: "0.9.1"
+version: 0.9.2
+appVersion: "0.9.2"
 keywords:
   - governed-agents
   - cluster-tenant
@@ -19,12 +19,12 @@ maintainers:
 dependencies:
   # Shared named-template library (labels, fullname, RBAC rule sets, env helpers).
   - name: k8s-platform
-    version: 0.9.1
+    version: 0.9.2
     repository: "file://platform"
   # App-owned workload units export named templates; this umbrella only includes them
   # with the unchanged parent release context.
   - name: opencrane-server
-    version: 0.9.1
+    version: 0.9.2
     repository: "file://../../opencrane/helm"
   - name: opencrane-ui
     version: 0.9.1

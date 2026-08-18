@@ -36,9 +36,17 @@ Invariant: a local mutation rechecks active Owner or Admin state, every create a
 stable idempotency outcome, and token possession never replaces verified-email matching. The database
 also refuses any mutation that would remove, suspend, demote, or move the active owner.
 
+Standalone product routes require an active membership after authentication. The exact signed
+invitation-acceptance POST is the only pre-membership exception: it still binds the verified email,
+stable subject, and trusted-host silo before creating the active row. Missing, suspended,
+cross-silo, or unavailable membership fails closed. Fleet mode retains its existing remote-authority
+path and does not install this local database gate.
+
 ## Public surface
 
 - `_CreateOrganizationMembersRouter` serves the five authenticated directory and invitation routes.
+- `_CreateOrganizationProductAccessMiddleware` admits active standalone members and the exact
+  pre-membership invitation-acceptance POST.
 - `StandaloneOrganizationMembershipAuthority` owns local validation, tokens, and projections.
 - `FleetOrganizationMembershipAuthority` delegates the same API to Fleet and fails closed while the
   server-infrastructure adapter owns HTTP and projected-token mechanics.

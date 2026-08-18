@@ -13,6 +13,13 @@ follows [Keep a Changelog](https://keepachangelog.com/); the project uses
 
 ## [Unreleased]
 
+### Fixed
+
+- **Invited users can now complete standalone registration after the first Owner has claimed the
+  silo.** A verified invited identity keeps its OIDC session long enough to accept its signed link,
+  while every other product route remains unavailable until that exact subject has an active
+  membership in the host-selected silo.
+
 ### Added
 
 - **Operators can now identify an exact compatible release composition and perform fail-closed
