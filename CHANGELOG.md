@@ -201,8 +201,11 @@ follows [Keep a Changelog](https://keepachangelog.com/); the project uses
   migration, and rejects altered, undeclared, skipped, or multi-hop sources. For this specifically
   approved repair, operators may explicitly skip unavailable physical-backup creation with
   `--allow-unbacked-database-migration`; source classification, the write fence, transactional
-  migration, convergence and privilege checks, and post-failure recovery remain mandatory. The
-  path is contract-tested; live-cluster qualification remains pending.
+  migration, convergence and privilege checks, and post-failure recovery remain mandatory. A
+  database whose migration already completed can now finish convergence and privilege
+  reconciliation because the proof query binds its validated history values through psql's script
+  input instead of treating them as literal placeholders, allowing the fence to clear. The path is
+  contract-tested; live-cluster redeployment qualification remains pending.
 
 - **BYOK model calls no longer return 401 when the operator fetches the tenant model list.**
   The `/api/internal/*` routes (`/tenant-models`, `/bundles`, `/contract`,

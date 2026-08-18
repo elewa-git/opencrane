@@ -59,14 +59,17 @@ spec:
                 history_exists="$(psql --no-psqlrc -v ON_ERROR_STOP=1 -d "$PGDATABASE" -tA \
                   -c "SELECT to_regclass('opencrane_migrations.schema_history') IS NOT NULL")"
                 if [ "$history_exists" = "t" ]; then
+                  # Sends the query over stdin because psql does not substitute -v variables in a -c string.
                   exact_history="$(psql --no-psqlrc -v ON_ERROR_STOP=1 -d "$PGDATABASE" -tA \
                     -v current_schema_version="$CURRENT_SCHEMA_VERSION" \
                     -v target_baseline_sha256="$TARGET_BASELINE_SHA256" \
                     -v previous_migration_id="$PREVIOUS_MIGRATION_ID" \
                     -v previous_migration_sql_sha256="$PREVIOUS_MIGRATION_SQL_SHA256" \
                     -v previous_schema_version="$PREVIOUS_SCHEMA_VERSION" \
-                    -v selected_source_protected_baseline_sha256="$SELECTED_SOURCE_PROTECTED_BASELINE_SHA256" \
-                    -c "SELECT count(*) = 1 FROM opencrane_migrations.schema_history WHERE schema_version = :'current_schema_version' AND source_schema_version = :'previous_schema_version' AND source_baseline_sha256 = :'selected_source_protected_baseline_sha256' AND target_baseline_sha256 = :'target_baseline_sha256' AND migration_id = :'previous_migration_id' AND sql_sha256 = :'previous_migration_sql_sha256'")"
+                    -v selected_source_protected_baseline_sha256="$SELECTED_SOURCE_PROTECTED_BASELINE_SHA256" <<'SQL'
+              SELECT count(*) = 1 FROM opencrane_migrations.schema_history WHERE schema_version = :'current_schema_version' AND source_schema_version = :'previous_schema_version' AND source_baseline_sha256 = :'selected_source_protected_baseline_sha256' AND target_baseline_sha256 = :'target_baseline_sha256' AND migration_id = :'previous_migration_id' AND sql_sha256 = :'previous_migration_sql_sha256';
+              SQL
+              )"
                   [ "$exact_history" = "t" ] && convergence=current
                 fi
               fi

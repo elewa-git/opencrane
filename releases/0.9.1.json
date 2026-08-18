@@ -111,7 +111,7 @@
     "postgres": {
       "root": "apps/postgres",
       "adaptedVersion": "0.9.1",
-      "chartVersion": "0.9.0",
+      "chartVersion": "0.9.1",
       "externalAppVersion": "17"
     },
     "skill-authoring": {
