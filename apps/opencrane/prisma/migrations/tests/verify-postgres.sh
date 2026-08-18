@@ -10,7 +10,7 @@ CURRENT_TRANSITION_ROOT="$ROOT/apps/opencrane/prisma/migrations/0.8.0-to-0.9.0"
 CURRENT_BASELINE="$ROOT/apps/opencrane/prisma/bootstrap/target-baseline.sql"
 CLASSIFIER="$ROOT/apps/_infra/deploy-k8s/platform/database-convergence-classifier.sh"
 WORK_DIR="$(mktemp -d)"
-MIGRATION_RELEASE_ROOT="$WORK_DIR/migration-release"
+MIGRATION_RELEASE_ROOT="$ROOT"
 CONTAINER="opencrane-migration-$$-$RANDOM"
 
 cleanup()
@@ -25,10 +25,13 @@ FRESH_PROTECTED_DIGEST="12505f3c15114bd2a407d0d4d2ef2befc3c8ec87acaa9787503cfbe4
 LEGACY_MIGRATION_SQL_DIGEST="$(node -e 'process.stdout.write(require(process.argv[1]).sqlSha256)' "$LEGACY_TRANSITION_ROOT/manifest.json")"
 CURRENT_MIGRATION_SQL_DIGEST="$(node -e 'process.stdout.write(require(process.argv[1]).sqlSha256)' "$CURRENT_TRANSITION_ROOT/manifest.json")"
 
-# Read transition evidence from the release tag so later working-tree changes cannot alter this migration test.
-mkdir -p "$MIGRATION_RELEASE_ROOT"
-git archive "$MIGRATION_RELEASE_VERSION" package.json releases apps/opencrane/prisma/migrations apps/opencrane/prisma/bootstrap/target-baseline.sql \
-	| tar -x -C "$MIGRATION_RELEASE_ROOT"
+# The current release qualifies its exact source tree before the tag exists; later releases read the frozen tag.
+if [[ "$(jq -r '.version' "$ROOT/package.json")" != "$MIGRATION_RELEASE_VERSION" ]]; then
+	MIGRATION_RELEASE_ROOT="$WORK_DIR/migration-release"
+	mkdir -p "$MIGRATION_RELEASE_ROOT"
+	git archive "$MIGRATION_RELEASE_VERSION" package.json releases apps/opencrane/prisma/migrations apps/opencrane/prisma/bootstrap/target-baseline.sql \
+		| tar -x -C "$MIGRATION_RELEASE_ROOT"
+fi
 DATABASE_TRANSITION="$(node "$ROOT/scripts/release-versioning/database-transition.mjs" "$MIGRATION_RELEASE_ROOT" "$MIGRATION_RELEASE_VERSION" 0.8.1)"
 
 git cat-file -e "$SOURCE_REF:apps/opencrane/prisma/bootstrap/target-baseline.sql"
