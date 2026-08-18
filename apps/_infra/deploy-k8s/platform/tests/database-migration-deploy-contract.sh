@@ -19,6 +19,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../../.." && pwd)"
 DEPLOY_SCRIPT="$ROOT_DIR/apps/_infra/deploy-k8s/platform/k8s-deploy.sh"
 ORCHESTRATOR="$ROOT_DIR/apps/_infra/deploy-k8s/platform/database-migration-orchestrator.sh"
 RECOVERY="$ROOT_DIR/apps/_infra/deploy-k8s/platform/database-migration-recovery.sh"
+INVITATION_HELPER="$ROOT_DIR/apps/_infra/deploy-k8s/platform/invitation-signing-secret.sh"
 FINALIZATION="$ROOT_DIR/apps/_infra/deploy-k8s/platform/database-release-finalization.sh"
 POLICY="$ROOT_DIR/apps/_infra/deploy-k8s/platform/database-convergence-policy.sh"
 BACKUP_SCRIPT="$ROOT_DIR/apps/postgres/scripts/create-pre-migration-backup.sh"
@@ -27,11 +28,13 @@ export LIVE_ORIGIN
 
 bash -n "$DEPLOY_SCRIPT"
 bash -n "$RECOVERY"
+bash -n "$INVITATION_HELPER"
 bash -n "$ORCHESTRATOR"
 bash -n "$FINALIZATION"
 bash -n "$POLICY"
 bash -n "$BACKUP_SCRIPT"
 source "$POLICY"
+source "$INVITATION_HELPER"
 grep -q -- '--release-version' "$DEPLOY_SCRIPT"
 grep -q -- '--from-release-version' "$DEPLOY_SCRIPT"
 grep -q 'DATABASE_RELEASE_TRANSITION=.*DATABASE_TRANSITION_RESOLVER' "$DEPLOY_SCRIPT"
@@ -39,6 +42,12 @@ grep -q 'automatic database migration permits only an adjacent minor transition'
   "$ROOT_DIR/scripts/release-versioning/database-validation.mjs"
 grep -q 'run_database_release_transition' "$DEPLOY_SCRIPT"
 grep -q 'fence_existing_opencrane_server' "$RECOVERY"
+grep -q 'DATABASE_CARRY_FORWARD_RELEASE=' "$DEPLOY_SCRIPT"
+grep -q 'valid only for an approved carry-forward repair' "$ORCHESTRATOR"
+! grep -q 'OPENCRANE_ALLOW_UNBACKED_DATABASE_MIGRATION' "$DEPLOY_SCRIPT"
+invitation_secret_line="$(grep -n 'ensure_invitation_signing_secret "$NAMESPACE" "$INVITATION_SIGNING_SECRET"' "$DEPLOY_SCRIPT" | cut -d: -f1)"
+database_transition_line="$(grep -n '^run_database_release_transition$' "$DEPLOY_SCRIPT" | cut -d: -f1)"
+(( invitation_secret_line < database_transition_line ))
 grep -q 'source "$SCRIPT_DIR/database-convergence-classifier.sh"' "$DEPLOY_SCRIPT"
 grep -q 'TIMEOUT_SECONDS must be an integer from 1 through 3600' "$DEPLOY_SCRIPT"
 grep -q 'migrationFence.active=true' "$RECOVERY"
@@ -249,6 +258,8 @@ export SUCCESS_CALLS
   FROM_RELEASE_VERSION=0.7.0
   RELEASE_VERSION=0.8.0
   TIMEOUT=37
+  MEMBERSHIP_MODE=standalone
+  INVITATION_SIGNING_SECRET=opencrane-invitation-signing
   DATABASE_FENCED_RELEASE_REVISION=""
   BOUNDARY_PHASE=fence
   helm()
@@ -261,7 +272,10 @@ export SUCCESS_CALLS
     elif [[ "$1 $2" == "get values" ]]; then
       printf '%s\n' helm-get-values >>"$SUCCESS_CALLS"
       printf '%s\n' '{"clustertenantManager":{"replicas":2}}'
-    elif [[ "$1" == "upgrade" && "$*" == *"migrationFence.active=true"* ]]; then
+    elif [[ "$1" == "upgrade" && "$*" == *"migrationFence.active=true"* \
+      && "$*" == *"clustertenantManager.membership.mode=standalone"* \
+      && "$*" == *"clustertenantManager.membership.standalone.invitationSigningExistingSecret=opencrane-invitation-signing"* \
+      && "$*" == *"clustertenantManager.membership.standalone.invitationSigningKeyKey=key"* ]]; then
       printf '%s\n' helm-fence >>"$SUCCESS_CALLS"
     elif [[ "$1" == "upgrade" && "$*" == *"migrationFence.active=false"* ]]; then
       printf '%s\n' helm-unfence >>"$SUCCESS_CALLS"
@@ -514,6 +528,52 @@ printf '%s\n' \
   'backup /backup-owner.sh opencrane opencrane-postgres 37' \
   "install true true $LIVE_ORIGIN" >"$TEST_DIR/expected-migration-order"
 cmp "$TEST_DIR/expected-migration-order" "$TEST_DIR/migration-order"
+
+(
+  source "$ORCHESTRATOR"
+  ALLOW_UNBACKED_DATABASE_MIGRATION=1
+  DATABASE_TRANSITION_KIND=migration
+  DATABASE_CARRY_FORWARD_RELEASE=""
+  err() { :; }
+  if validate_unbacked_database_migration_override; then
+    printf '%s\n' 'ordinary migration accepted the unbacked override' >&2
+    exit 1
+  fi
+  DATABASE_CARRY_FORWARD_RELEASE=0.9.0
+  validate_unbacked_database_migration_override
+  DATABASE_TRANSITION_KIND=current
+  if validate_unbacked_database_migration_override; then
+    printf '%s\n' 'current transition accepted the unbacked override' >&2
+    exit 1
+  fi
+)
+
+UNBACKED_CALLS="$TEST_DIR/unbacked-migration.calls"
+export UNBACKED_CALLS
+(
+  source "$RECOVERY"
+  source "$ORCHESTRATOR"
+  DATABASE_TRANSITION_KIND=migration
+  POSTGRES_CLUSTER_EXISTS=1
+  ALLOW_UNBACKED_DATABASE_MIGRATION=1
+  classify_live_database_convergence() { printf 'source|%s\n' "$LIVE_ORIGIN"; }
+  publish_database_migration_config_map() { printf '%s\n' publish >>"$UNBACKED_CALLS"; }
+  capture_pre_fence_main_release_revision() { DATABASE_PRE_FENCE_RELEASE_REVISION=12; printf '%s\n' capture >>"$UNBACKED_CALLS"; }
+  fence_existing_opencrane_server() { printf '%s\n' fence >>"$UNBACKED_CALLS"; }
+  install_postgres_release() { printf 'install %s %s\n' "$1" "$2" >>"$UNBACKED_CALLS"; }
+  bash() { printf '%s\n' unexpected-backup >>"$UNBACKED_CALLS"; return 1; }
+  log() { printf 'log %s\n' "$*" >>"$UNBACKED_CALLS"; }
+  err() { :; }
+  run_database_release_transition
+)
+printf '%s\n' \
+  publish \
+  capture \
+  fence \
+  'log WARNING: operator explicitly allowed this database migration without recovery-backup evidence.' \
+  'install true true' >"$TEST_DIR/unbacked-migration.expected"
+cmp "$TEST_DIR/unbacked-migration.expected" "$UNBACKED_CALLS"
+! grep -q unexpected-backup "$UNBACKED_CALLS"
 
 # Missing-Cluster recovery fails before a fence unless the PostgreSQL render contains an explicit
 # physical recovery source. Once admitted, it fences before restoring, classifies the live restored

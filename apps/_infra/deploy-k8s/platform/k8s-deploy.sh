@@ -33,6 +33,7 @@
 #                            --obot-postgres-credentials-secret NAME [--obot-postgres-owner OWNER]
 #                            --litellm-postgres-credentials-secret NAME [--litellm-postgres-owner OWNER]
 #                            --postgres-admin-credentials-secret NAME [--postgres-admin-name NAME]
+#                            [--allow-unbacked-database-migration]
 #                            [--postgres-values FILE]
 #                            [--values FILE] [--set k=v ...] [--helm-arg ARG ...]
 #                            [--reuse-values | --reset-values]
@@ -213,6 +214,7 @@ LITELLM_POSTGRES_OWNER="${OPENCRANE_LITELLM_POSTGRES_OWNER:-litellm}"
 POSTGRES_ADMIN_CREDENTIALS_SECRET="${OPENCRANE_POSTGRES_ADMIN_CREDENTIALS_SECRET:-}"
 POSTGRES_ADMIN_NAME="${OPENCRANE_POSTGRES_ADMIN_NAME:-opencrane_database_admin}"
 POSTGRES_MIGRATION_IMAGE="${OPENCRANE_POSTGRES_MIGRATION_IMAGE:-ghcr.io/cloudnative-pg/postgresql@sha256:b1deeed2aa998b2f381e39c5cadb9ec06127708c8bd62965743af19abf21628f}"
+ALLOW_UNBACKED_DATABASE_MIGRATION="0"
 # --preflight runs a fail-FAST environment check BEFORE any cluster mutation and exits 0/1
 # without installing. It catches the failures that otherwise surface as a half-installed,
 # crash-looping cluster: no default StorageClass (every PVC pends), a CNI that silently
@@ -282,6 +284,7 @@ while [[ $# -gt 0 ]]; do
     --postgres-admin-credentials-secret) POSTGRES_ADMIN_CREDENTIALS_SECRET="$2"; shift 2 ;;
     --postgres-admin-name) POSTGRES_ADMIN_NAME="$2"; shift 2 ;;
     --postgres-migration-image) POSTGRES_MIGRATION_IMAGE="$2"; shift 2 ;;
+    --allow-unbacked-database-migration) ALLOW_UNBACKED_DATABASE_MIGRATION="1"; shift ;;
     --postgres-values) POSTGRES_VALUES_FILE="$2"; shift 2 ;;
     --release-version) RELEASE_VERSION="$2"; shift 2 ;;
     --from-release-version) FROM_RELEASE_VERSION="$2"; shift 2 ;;
@@ -306,11 +309,16 @@ if [[ -z "$RELEASE_VERSION" || -z "$FROM_RELEASE_VERSION" ]]; then
 fi
 DATABASE_RELEASE_TRANSITION="$(node "$DATABASE_TRANSITION_RESOLVER" "$REPOSITORY_ROOT" "$RELEASE_VERSION" "$FROM_RELEASE_VERSION")"
 DATABASE_TRANSITION_KIND="$(jq -r '.kind' <<<"$DATABASE_RELEASE_TRANSITION")"
+DATABASE_CARRY_FORWARD_RELEASE="$(jq -r '.migration.carriedForwardThroughReleaseVersion // empty' \
+  <<<"$DATABASE_RELEASE_TRANSITION")"
+validate_unbacked_database_migration_override
 DATABASE_TARGET_SCHEMA_VERSION="$(jq -r '.targetSchemaVersion' <<<"$DATABASE_RELEASE_TRANSITION")"
 DATABASE_TARGET_BASELINE_SHA256="$(jq -r '.targetBaselineSha256' <<<"$DATABASE_RELEASE_TRANSITION")"
 DATABASE_CONVERGENCE_MIGRATION="$(jq '.migration' <<<"$DATABASE_RELEASE_TRANSITION")"
+# A repair retry can name the current release while its database still needs the carried migration evidence.
 if [[ "$DATABASE_CONVERGENCE_MIGRATION" == "null" ]]; then
-  previous_release_version="$(jq -r '.previousRepositoryVersion // empty' "$REPOSITORY_ROOT/releases/$RELEASE_VERSION.json")"
+  previous_release_version="$(jq -r '.database.carriedForwardFromRepositoryVersion // .previousRepositoryVersion // empty' \
+    "$REPOSITORY_ROOT/releases/$RELEASE_VERSION.json")"
   if [[ -n "$previous_release_version" ]]; then
     DATABASE_CONVERGENCE_MIGRATION="$(node "$DATABASE_TRANSITION_RESOLVER" "$REPOSITORY_ROOT" "$RELEASE_VERSION" "$previous_release_version" | jq '.migration')"
   fi
@@ -668,6 +676,10 @@ _copy_cnpg_uri_secret() {
 
 DATABASE_FENCE_PRIOR_REPLICAS=""
 DATABASE_FENCED_RELEASE_REVISION=""
+# Creates the standalone signing Secret before the migration fence renders the membership settings.
+if [[ "$MEMBERSHIP_MODE" == "standalone" ]]; then
+  ensure_invitation_signing_secret "$NAMESPACE" "$INVITATION_SIGNING_SECRET"
+fi
 run_database_release_transition
 POSTGRES_APP_SECRET="${POSTGRES_RELEASE}-opencrane-app"
 OBOT_POSTGRES_APP_SECRET="${POSTGRES_RELEASE}-obot-app"
@@ -756,9 +768,6 @@ _ensure_artifact_keys() {
     --dry-run=client -o yaml | kubectl apply -f -
 }
 _ensure_artifact_keys
-if [[ "$MEMBERSHIP_MODE" == "standalone" ]]; then
-  ensure_invitation_signing_secret "$NAMESPACE" "$INVITATION_SIGNING_SECRET"
-fi
 
 kubectl create secret generic opencrane-litellm -n "$NAMESPACE" \
   --from-literal=LITELLM_MASTER_KEY="$LITELLM_MASTER_KEY" \
@@ -893,6 +902,7 @@ log "Installing the OpenCrane Helm release '$RELEASE'…"
 # should always reclaim them. Idempotent: a no-op when there is no conflicting manager,
 # and it only forces fields the chart actually applies (foreign managers of OTHER fields
 # are untouched). Without it a single stray imperative patch wedges every future upgrade.
+build_membership_helm_args
 helm_args=(upgrade --install "$RELEASE" "$CHART_DIR" --namespace "$NAMESPACE" --create-namespace
   --force-conflicts
   --set-string "networkPolicy.postgresPoolerName=$POSTGRES_POOLER_HOST"
@@ -909,12 +919,9 @@ helm_args=(upgrade --install "$RELEASE" "$CHART_DIR" --namespace "$NAMESPACE" --
   --set-string "artifactService.namespace=$ARTIFACT_NAMESPACE"
   --set-string "artifactService.keys.catalogExistingSecret=$ARTIFACT_CATALOG_KEY_SECRET"
   --set-string "artifactService.keys.serviceExistingSecret=$ARTIFACT_SERVICE_KEY_SECRET"
-  --set-string "clustertenantManager.membership.mode=$MEMBERSHIP_MODE"
   --set "litellm.existingSecret=opencrane-litellm"
+  "${MEMBERSHIP_HELM_ARGS[@]}"
   "${MEMORY_GATEWAY_KUBERNETES_API_ARGS[@]}")
-if [[ "$MEMBERSHIP_MODE" == "standalone" ]]; then
-  helm_args+=(--set-string "clustertenantManager.membership.standalone.invitationSigningExistingSecret=$INVITATION_SIGNING_SECRET")
-fi
 [[ -n "$REGISTRY_PULL_SECRET" ]] && helm_args+=(--set-string "global.imagePullSecret=$REGISTRY_PULL_SECRET")
 if [[ "$ALLOW_TAG_FLOAT" == "1" ]]; then
   helm_args+=(--set-string "controlPlaneSpa.image.digest=" --set-string "controlPlaneSpa.image.tag=$CONTROL_PLANE_SPA_TAG")

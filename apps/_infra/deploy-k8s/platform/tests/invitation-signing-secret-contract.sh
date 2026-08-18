@@ -78,10 +78,25 @@ assert_rejected_without_replacement()
   [[ ! -s "$MOCK_KUBECTL_LOG" ]]
 }
 
+assert_membership_helm_args()
+{
+  MEMBERSHIP_MODE=standalone
+  INVITATION_SIGNING_SECRET=custom-invitation-signing
+  build_membership_helm_args
+  [[ " ${MEMBERSHIP_HELM_ARGS[*]} " == *" clustertenantManager.membership.mode=standalone "* ]]
+  [[ " ${MEMBERSHIP_HELM_ARGS[*]} " == *" clustertenantManager.membership.standalone.invitationSigningExistingSecret=custom-invitation-signing "* ]]
+  [[ " ${MEMBERSHIP_HELM_ARGS[*]} " == *" clustertenantManager.membership.standalone.invitationSigningKeyKey=key "* ]]
+  MEMBERSHIP_MODE=fleet
+  build_membership_helm_args
+  [[ " ${MEMBERSHIP_HELM_ARGS[*]} " == *" clustertenantManager.membership.mode=fleet "* ]]
+  [[ " ${MEMBERSHIP_HELM_ARGS[*]} " != *" invitationSigningExistingSecret="* ]]
+}
+
 assert_created_only_when_absent
 assert_retained_when_valid
 assert_rejected_without_replacement "missing"
 assert_rejected_without_replacement "empty"
 assert_rejected_without_replacement "malformed"
+assert_membership_helm_args
 
 echo "invitation signing Secret contract passed"

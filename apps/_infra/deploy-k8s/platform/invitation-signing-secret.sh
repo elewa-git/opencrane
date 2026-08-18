@@ -1,5 +1,19 @@
 #!/usr/bin/env bash
 
+# Reuses the same membership values for the migration fence and the final Helm install.
+build_membership_helm_args()
+{
+  local membership_mode="${MEMBERSHIP_MODE:-standalone}"
+  local invitation_signing_secret="${INVITATION_SIGNING_SECRET:-opencrane-invitation-signing}"
+  MEMBERSHIP_HELM_ARGS=(--set-string "clustertenantManager.membership.mode=$membership_mode")
+  if [[ "$membership_mode" == "standalone" ]]; then
+    MEMBERSHIP_HELM_ARGS+=(
+      --set-string "clustertenantManager.membership.standalone.invitationSigningExistingSecret=$invitation_signing_secret"
+      --set-string "clustertenantManager.membership.standalone.invitationSigningKeyKey=key"
+    )
+  fi
+}
+
 # Preserves the standalone invitation-link signing key so upgrades do not invalidate outstanding links.
 ensure_invitation_signing_secret()
 {
