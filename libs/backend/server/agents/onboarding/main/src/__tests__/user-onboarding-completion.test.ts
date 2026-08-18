@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { __UserOnboardingCompletion } from "../user-onboarding-completion";
+import { __UserOnboardingCompletion, UserOnboardingCompletionConflict } from "../user-onboarding-completion";
 import { UserOnboardingCompletionProvenances, UserOnboardingStates } from "../user-onboarding.enums";
 import { UserOnboardingPersonalAgentBootstrapStatuses, UserOnboardingReadinessStatuses, type UserOnboardingCompletionEvidence, type UserOnboardingCompletionRepository, type UserOnboardingPersonalAgentBootstrapPort, type UserOnboardingPersonalAgentBootstrapResult } from "../user-onboarding-completion.types";
 import type { UserOnboardingOwner } from "../user-onboarding.types";
@@ -62,6 +62,17 @@ describe("__UserOnboardingCompletion", function _UserOnboardingCompletionSuite()
 
 		await expect(new __UserOnboardingCompletion(onboarding.repository, personalAgent.repository).complete(_OWNER, "conversation-1", new Date())).resolves.toEqual({ status: UserOnboardingReadinessStatuses.AuthorityUnavailable, agentServiceId: null });
 		expect(onboarding.markCompleted).not.toHaveBeenCalled();
+	});
+
+	it("rejects the transaction when its final completion compare-and-swap loses", async function _RejectsCompletionConflict()
+	{
+		const onboarding = _Repository(_Evidence());
+		onboarding.markCompleted.mockResolvedValue(false);
+		const personalAgent = _PersonalAgent();
+
+		await expect(new __UserOnboardingCompletion(onboarding.repository, personalAgent.repository).complete(_OWNER, "conversation-1", new Date())).rejects.toBeInstanceOf(UserOnboardingCompletionConflict);
+		expect(personalAgent.ensureReady).toHaveBeenCalledOnce();
+		expect(onboarding.markCompleted).toHaveBeenCalledOnce();
 	});
 
 	it.each([

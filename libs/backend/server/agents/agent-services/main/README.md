@@ -68,9 +68,10 @@ questionnaire may become complete. The app binds that transaction to this packag
 3. If no service exists, it uses the onboarding identifier as the deterministic AgentService
    identifier. A concurrent retry therefore competes for one database identity instead of creating
    two agents. A row already using that identifier for another authority fails closed.
-4. If no service exists, `PrismaInitialPersonalAgentPublicationRepository` chooses exactly one silo
-   default model, falling back to exactly one global default only when the silo has none. Multiple
-   defaults at the selected scope are an error; it never picks the first row by accident.
+4. If no service exists, the app adapts model-routing's transaction-scoped configured-default
+   resolver into `InitialPersonalAgentDefaultModelResolver`. Agent-services consumes only its stable
+   definition identifier or fail-closed denial state; it never reads routing defaults or recreates
+   their precedence policy.
 5. That publisher creates a `Personal` service in `Draft`, writes revision 1 through the shared
    immutable revision writer, publishes that revision, activates the service, and appends
    publication audit evidence. The onboarding transaction commits all of this with completion, or
@@ -115,7 +116,7 @@ PrismaPersonalAgentBootstrapRepository
         │ validates persona + service authority
         ▼
 PrismaInitialPersonalAgentPublicationRepository
-        │ selects the model
+        │ consumes model-routing's resolved definition id
         │ writes service + revision + publication + audit
         ▼
 ready personal AgentService, or a fail-closed denial
@@ -143,8 +144,7 @@ ready personal AgentService, or a fail-closed denial
 - `AgentRevisionModelSelectionMaterializationCodes` — the documented cross-package result vocabulary
   for that model-selection seam. It preserves its serialized outcomes while preventing personal
   configuration from inventing or drifting from agent-services' source-fence results.
-- `AgentRevisionPersonaSelectionRepository` and
-  `PrismaAgentRevisionPersonaSelectionRepository` — the transaction-scoped strategy for persona
+- `PrismaAgentRevisionPersonaSelectionRepository` — the transaction-scoped strategy for persona
   approval and onboarding repair. It proves one stable personal service and its latest published
   source, copies every executable field while replacing only `personaRevisionId`, publishes the
   next revision, moves the active pointer, and appends audit evidence before the caller commits.
@@ -177,10 +177,14 @@ capability-bearing revision inside the run-admission transaction.
   `AgentPublicationAuditEvidencePort` — the seam through which publication records audit evidence.
   The shared `AgentRevisionContent` domain value lives in `@opencrane/models/agents`.
 
-- `PrismaPersonalAgentBootstrapRepository(transaction)` and `PersonalAgentBootstrapStatuses` — the
+- `PrismaPersonalAgentBootstrapRepository(transaction, defaultModelResolver)` and
+  `PersonalAgentBootstrapStatuses` — the
   exported app-composition adapter and its ready/denied result. The package-internal
   `PrismaInitialPersonalAgentPublicationRepository` is used only after bootstrap proves that no
   personal service exists.
+- `InitialPersonalAgentDefaultModelResolver` and
+  `InitialPersonalAgentDefaultModelResolutionStatuses` — the narrow app-provided port and closed
+  result vocabulary consumed before initial publication writes anything.
 
 ## Boundary
 
@@ -190,9 +194,11 @@ publication-audit wiring. A cross-domain unit of work may bind the model- or per
 transaction, but personal configuration cannot reproduce its revision projection, Prisma mapping,
 or lifecycle. Persona selection never creates an AgentService: no existing personal service is a
 documented no-op, while more than one matching service fails closed. The app may likewise construct the personal bootstrap repository with onboarding's
-open transaction, but onboarding cannot reproduce AgentService persistence, default-model resolution, revision
+open transaction, but onboarding cannot reproduce AgentService persistence, revision
 digests, publication, activation, or publication audit evidence. The bootstrap repository cannot
-complete onboarding or commit the transaction. This package does not run agents or resolve
+complete onboarding or commit the transaction. Model-routing owns configured-default precedence and
+accessible-definition resolution; the app only translates its result vocabulary into this package's
+narrow port. This package does not run agents or resolve
 skills/integrations itself. It fails closed:
 any doubt is a `denied` outcome, never a silent partial publish.
 

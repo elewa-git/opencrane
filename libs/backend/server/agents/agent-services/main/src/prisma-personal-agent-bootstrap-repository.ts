@@ -1,6 +1,7 @@
 import { AgentRevisionState, AgentServiceKind, AgentServiceState, PersonaRevisionState, type Prisma } from "@prisma/client";
 
 import { INITIAL_PERSONAL_AGENT_POLICY } from "./initial-personal-agent-policy";
+import type { InitialPersonalAgentDefaultModelResolver } from "./initial-personal-agent-publication.types";
 import { AgentRevisionPersonaSelectionMaterializationCodes } from "./agent-revision-persona-selection.types";
 import { PersonalAgentBootstrapDenialReasons, PersonalAgentBootstrapStatuses, type DeniedPersonalAgentBootstrapResult, type PersonalAgentBootstrapCommand, type PersonalAgentBootstrapRepository, type PersonalAgentBootstrapResult, type ReadyPersonalAgentBootstrapResult } from "./personal-agent-bootstrap.types";
 import { PrismaAgentRevisionPersonaSelectionRepository } from "./prisma-agent-revision-persona-selection";
@@ -69,22 +70,36 @@ function _ValidCommand(command: PersonalAgentBootstrapCommand): boolean
  * Resolves or creates an onboarding subject's first personal AgentService.
  *
  * The surrounding onboarding unit of work owns the Serializable transaction and constructs this
- * repository with its transaction client. This repository never commits. It owns all agent-service
- * persistence decisions: approved active persona validation, default-model precedence, deterministic
- * service identity, immutable revision mapping, publication, activation, and the audit row.
+ * repository with its transaction client. This repository never commits. It validates the approved
+ * active persona, consumes model-routing's configured default result, and owns deterministic service
+ * identity, immutable revision mapping, publication, activation, and the audit row.
  */
 export class PrismaPersonalAgentBootstrapRepository implements PersonalAgentBootstrapRepository
 {
 	/** Transaction-scoped ORM client supplied by the onboarding completion unit of work. */
 	private readonly transaction: Prisma.TransactionClient;
+	/** App-provided adapter to model-routing's transaction-scoped default resolver. */
+	private readonly defaultModelResolver: InitialPersonalAgentDefaultModelResolver;
 
 	/** Creates the personal-agent strategy inside an existing Serializable transaction. */
-	constructor(transaction: Prisma.TransactionClient)
+	constructor(transaction: Prisma.TransactionClient, defaultModelResolver: InitialPersonalAgentDefaultModelResolver)
 	{
 		this.transaction = transaction;
+		this.defaultModelResolver = defaultModelResolver;
 	}
 
-	/** Validates authority and leaves exactly one published personal agent ready in this transaction. */
+	/**
+	 * Validates onboarding authority and leaves one published personal Agent ready in the open transaction.
+	 *
+	 * Called by: the agent-services adapter in `apps/opencrane/src/app/user-onboarding-composition.ts`.
+	 * The surrounding onboarding unit of work owns commit and rollback, so completion cannot commit
+	 * unless this method returns readiness and the onboarding compare-and-swap also succeeds.
+	 *
+	 * @returns `Ready` with the active service and revision, including whether this attempt created
+	 * or revised them; returns `Denied` when persona, service, or default-model evidence fails closed.
+	 * @throws When Prisma, revision publication, active-pointer comparison, or audit persistence
+	 * fails; the onboarding unit of work rolls back the attempt.
+	 */
 	async ensureReady(command: PersonalAgentBootstrapCommand): Promise<PersonalAgentBootstrapResult>
 	{
 		if (!_ValidCommand(command)) return _Denied(PersonalAgentBootstrapDenialReasons.InvalidCommand);
@@ -127,7 +142,7 @@ export class PrismaPersonalAgentBootstrapRepository implements PersonalAgentBoot
 		}
 
 		// 4. Delegate initial publication after bootstrap has proved that no service exists.
-		return new PrismaInitialPersonalAgentPublicationRepository(this.transaction).publish(command, persona);
+		return new PrismaInitialPersonalAgentPublicationRepository(this.transaction, this.defaultModelResolver).publish(command, persona);
 	}
 
 	/** Reconcile one existing service to the owner's current approved persona without replacing it. */

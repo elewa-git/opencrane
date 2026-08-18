@@ -83,9 +83,9 @@ evidence.
 ### Why database retries are limited
 
 The completion unit of work may try the whole Serializable transaction at most three times. It
-retries only Prisma `P2002` or `P2034`, which mean that a uniqueness race or transaction conflict
-rolled the attempt back. Every retry opens a new transaction and repeats the authority checks from
-the database.
+retries Prisma `P2002` or `P2034`, or a lost final onboarding compare-and-swap. Each outcome means
+the failed transaction was rolled back. Every retry opens a new transaction and repeats the
+authority checks from the database.
 
 The limit prevents a busy or misconfigured database from holding one HTTP request forever. Other
 errors fail immediately because the unit of work cannot prove that trying again is safe. A failed

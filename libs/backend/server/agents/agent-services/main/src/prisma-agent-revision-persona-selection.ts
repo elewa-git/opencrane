@@ -31,7 +31,20 @@ export class PrismaAgentRevisionPersonaSelectionRepository implements AgentRevis
 		this.transaction = transaction;
 	}
 
-	/** Revalidates, copies, publishes, and activates one persona-selected revision. */
+	/**
+	 * Revalidates a known personal service and appends a revision that selects the approved persona.
+	 *
+	 * Called by: {@link materializeForOwner} after owner lookup and
+	 * `PrismaPersonalAgentBootstrapRepository` during completed-onboarding repair. The caller owns
+	 * the transaction, so a stale active pointer or audit failure rejects the attempt before any of
+	 * this method's writes can commit.
+	 *
+	 * @returns `Materialized` after staging the published successor and audit, `AlreadyCurrent` when
+	 * the source already selects the target, `StaleSource` when the lineage moved, or `Unavailable`
+	 * when the persona, service, ownership, or publication evidence fails closed.
+	 * @throws When the active-pointer comparison loses after the draft write, or Prisma or audit
+	 * persistence fails; the caller must roll back the transaction.
+	 */
 	async materialize(command: MaterializeAgentRevisionPersonaSelectionCommand): Promise<MaterializeAgentRevisionPersonaSelectionResult>
 	{
 		if (!_ValidExactCommand(command)) return _Unavailable(command.expectedSourceRevisionId);
@@ -90,7 +103,18 @@ export class PrismaAgentRevisionPersonaSelectionRepository implements AgentRevis
 		return { status: AgentRevisionPersonaSelectionMaterializationCodes.Materialized, agentRevisionId: draft.id, sourceRevisionId: source.id };
 	}
 
-	/** Finds at most one personal service through the owner's approved persona history. */
+	/**
+	 * Finds the owner's personal service before applying an approved persona selection.
+	 *
+	 * Called by: `_PersonaAgentRevisionSelectionAdapter` in the OpenCrane persona-approval
+	 * composition. Its transaction also owns the persona approval, so a conflict or thrown write
+	 * leaves both authorities uncommitted.
+	 *
+	 * @returns `NotApplicable` when the owner has no personal service, `Unavailable` when lookup is
+	 * invalid or ambiguous, or the complete result from {@link materialize} for one service.
+	 * @throws When delegated publication or audit persistence fails; the caller must roll back the
+	 * transaction.
+	 */
 	async materializeForOwner(command: MaterializePersonalAgentPersonaSelectionCommand): Promise<MaterializePersonalAgentPersonaSelectionResult>
 	{
 		if (!_ValidOwnerCommand(command)) return _Unavailable("");

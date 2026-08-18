@@ -2,6 +2,7 @@ import type { Prisma } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
 
 import { INITIAL_PERSONAL_AGENT_POLICY } from "../initial-personal-agent-policy";
+import { InitialPersonalAgentDefaultModelResolutionStatuses, type InitialPersonalAgentDefaultModelResolver } from "../initial-personal-agent-publication.types";
 import { PersonalAgentBootstrapDenialReasons, PersonalAgentBootstrapStatuses, type PersonalAgentBootstrapCommand } from "../personal-agent-bootstrap.types";
 import { PrismaPersonalAgentBootstrapRepository } from "../prisma-personal-agent-bootstrap-repository";
 
@@ -44,7 +45,6 @@ function _Transaction()
 			update: vi.fn().mockResolvedValue({}),
 			updateMany: vi.fn().mockResolvedValue({ count: 1 }),
 		},
-		modelDefinition: { findMany: vi.fn().mockResolvedValueOnce([{ id: "tenant-default" }]) },
 		agentRevision: {
 			findFirst: vi.fn(),
 			create: vi.fn().mockResolvedValue({ id: "revision-a", digest: `sha256:${"a".repeat(64)}` }),
@@ -54,10 +54,18 @@ function _Transaction()
 	};
 }
 
+/** Resolves the configured default for tests that reach initial publication. */
+const _DEFAULT_MODEL_RESOLVER: InitialPersonalAgentDefaultModelResolver = {
+	async resolve()
+	{
+		return { status: InitialPersonalAgentDefaultModelResolutionStatuses.Resolved, modelDefinitionId: "configured-default" };
+	},
+};
+
 /** Constructs the repository without widening production code to a test-only client shape. */
 function _Repository(transaction: ReturnType<typeof _Transaction>): PrismaPersonalAgentBootstrapRepository
 {
-	return new PrismaPersonalAgentBootstrapRepository(transaction as unknown as Prisma.TransactionClient);
+	return new PrismaPersonalAgentBootstrapRepository(transaction as unknown as Prisma.TransactionClient, _DEFAULT_MODEL_RESOLVER);
 }
 
 describe("Prisma personal-agent bootstrap repository", function _Suite()

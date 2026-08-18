@@ -1,11 +1,11 @@
-import { AgentRevisionState, AgentServiceKind, AgentServiceState, ModelRoutingScope, type Prisma } from "@prisma/client";
+import { AgentRevisionState, AgentServiceKind, AgentServiceState, type Prisma } from "@prisma/client";
 
 import type { AgentRevisionContent } from "@opencrane/models/agents";
 import { __AppendAuditDecision } from "@opencrane/backend/server/iam/audit";
 import { __DigestCanonicalJson } from "@opencrane/backend/server/iam/authorization";
 
 import { INITIAL_PERSONAL_AGENT_POLICY } from "./initial-personal-agent-policy";
-import type { InitialPersonalAgentPublicationPersona, InitialPersonalAgentPublicationRepository } from "./initial-personal-agent-publication.types";
+import { InitialPersonalAgentDefaultModelResolutionStatuses, type InitialPersonalAgentDefaultModelResolver, type InitialPersonalAgentPublicationPersona, type InitialPersonalAgentPublicationRepository } from "./initial-personal-agent-publication.types";
 import { PersonalAgentBootstrapDenialReasons, PersonalAgentBootstrapStatuses, type DeniedPersonalAgentBootstrapResult, type PersonalAgentBootstrapCommand, type PersonalAgentBootstrapResult } from "./personal-agent-bootstrap.types";
 import { PrismaAgentRevisionWriterRepository } from "./prisma-agent-revision-writer";
 
@@ -23,19 +23,34 @@ export class PrismaInitialPersonalAgentPublicationRepository implements InitialP
 {
 	/** Transaction-scoped ORM client supplied by the onboarding completion unit of work. */
 	private readonly transaction: Prisma.TransactionClient;
+	/** App-provided adapter to model-routing's default-model authority in the same transaction. */
+	private readonly defaultModelResolver: InitialPersonalAgentDefaultModelResolver;
 
 	/** Creates the publication strategy inside the caller's Serializable transaction. */
-	constructor(transaction: Prisma.TransactionClient)
+	constructor(transaction: Prisma.TransactionClient, defaultModelResolver: InitialPersonalAgentDefaultModelResolver)
 	{
 		this.transaction = transaction;
+		this.defaultModelResolver = defaultModelResolver;
 	}
 
-	/** Creates, publishes, activates, and audits the initial personal Agent. */
+	/**
+	 * Creates, publishes, activates, and audits the first personal Agent in the caller's transaction.
+	 *
+	 * Called by: `PrismaPersonalAgentBootstrapRepository` after it proves that no matching service
+	 * exists. Default-model denial returns before the first service write; successful writes remain
+	 * uncommitted until onboarding completion wins its compare-and-swap.
+	 *
+	 * @returns `Ready` after staging the active service, published revision, and audit; returns
+	 * `Denied` when model-routing has no unambiguous accessible default.
+	 * @throws When Prisma or audit persistence fails; the onboarding unit of work rolls back the
+	 * transaction.
+	 */
 	async publish(command: PersonalAgentBootstrapCommand, persona: InitialPersonalAgentPublicationPersona): Promise<PersonalAgentBootstrapResult>
 	{
 		// 1. Resolve one default model so the first revision never stores an arbitrary route.
-		const model = await this._ResolveDefaultModel(command.siloId);
-		if (model.status === PersonalAgentBootstrapStatuses.Denied) return model;
+		const model = await this.defaultModelResolver.resolve(command.siloId);
+		if (model.status === InitialPersonalAgentDefaultModelResolutionStatuses.Unavailable) return _Denied(PersonalAgentBootstrapDenialReasons.DefaultModelUnavailable);
+		if (model.status === InitialPersonalAgentDefaultModelResolutionStatuses.Ambiguous) return _Denied(PersonalAgentBootstrapDenialReasons.DefaultModelAmbiguous);
 
 		// 2. Create the stable service and its first draft through the shared revision writer.
 		const service = await this.transaction.agentService.create({
@@ -82,35 +97,6 @@ export class PrismaInitialPersonalAgentPublicationRepository implements InitialP
 		});
 		await __AppendAuditDecision(this.transaction, this._BuildAuditDecision(command, persona.id, revision.id, revision.digest));
 		return { status: PersonalAgentBootstrapStatuses.Ready, agentServiceId: service.id, agentRevisionId: revision.id, created: true, revised: false };
-	}
-
-	/** Resolves the unique silo default, or the unique global default when the silo has none. */
-	private async _ResolveDefaultModel(siloId: string): Promise<{ readonly status: PersonalAgentBootstrapStatuses.Ready; readonly modelDefinitionId: string } | DeniedPersonalAgentBootstrapResult>
-	{
-		const tenant = await this.transaction.modelDefinition.findMany({
-			where: { scope: ModelRoutingScope.ClusterTenant, clusterTenant: siloId, isDefault: true },
-			select: { id: true },
-			orderBy: { id: "asc" },
-			take: 2,
-		});
-		if (tenant.length > 1) return _Denied(PersonalAgentBootstrapDenialReasons.DefaultModelAmbiguous);
-		if (tenant.length === 1)
-		{
-			const selected = tenant[0];
-			if (selected === undefined) return _Denied(PersonalAgentBootstrapDenialReasons.DefaultModelUnavailable);
-			return { status: PersonalAgentBootstrapStatuses.Ready, modelDefinitionId: selected.id };
-		}
-		const global = await this.transaction.modelDefinition.findMany({
-			where: { scope: ModelRoutingScope.Global, clusterTenant: null, isDefault: true },
-			select: { id: true },
-			orderBy: { id: "asc" },
-			take: 2,
-		});
-		if (global.length > 1) return _Denied(PersonalAgentBootstrapDenialReasons.DefaultModelAmbiguous);
-		if (global.length === 0) return _Denied(PersonalAgentBootstrapDenialReasons.DefaultModelUnavailable);
-		const selected = global[0];
-		if (selected === undefined) return _Denied(PersonalAgentBootstrapDenialReasons.DefaultModelUnavailable);
-		return { status: PersonalAgentBootstrapStatuses.Ready, modelDefinitionId: selected.id };
 	}
 
 	/** Builds append-only publication evidence from the bootstrap command and revision digest. */

@@ -151,8 +151,10 @@ function _RevisionCreateData(command: CreateAgentRevisionWithinTransactionComman
  * It takes a transaction rather than a client, so the calling repository keeps ownership of the
  * commit and can roll this write back with its own.
  *
- * Called by: `prisma-agent-revision-lifecycle.ts` (create, revise, restore) and
- * `prisma-agent-revision-model-selection.ts` (model swap).
+ * Called by: `prisma-agent-revision-lifecycle.ts` (create, revise, restore),
+ * `prisma-agent-revision-model-selection.ts` (model swap),
+ * `prisma-agent-revision-persona-selection.ts` (persona swap), and
+ * `prisma-initial-personal-agent-publication.ts` (onboarding publication).
  */
 export class PrismaAgentRevisionWriterRepository implements AgentRevisionWriterRepository
 {

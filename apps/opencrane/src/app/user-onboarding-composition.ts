@@ -1,7 +1,8 @@
 import type { Prisma } from "@prisma/client";
 
 import { _CreatePersonaWorkflowEvidenceRepository, PersonaWorkflowColours, type PersonaOnboardingCaller, type PersonaOnboardingWorkflowPort, type PersonaWorkflowEvidenceRepository } from "@opencrane/backend/agents/personal/personas";
-import { PersonalAgentBootstrapStatuses, PrismaPersonalAgentBootstrapRepository } from "@opencrane/backend/server/agents/agent-services";
+import { InitialPersonalAgentDefaultModelResolutionStatuses, PersonalAgentBootstrapStatuses, PrismaPersonalAgentBootstrapRepository, type InitialPersonalAgentDefaultModelResolver } from "@opencrane/backend/server/agents/agent-services";
+import { DefaultModelDefinitionResolutionStatuses, PrismaDefaultModelDefinitionResolverRepository } from "@opencrane/backend/server/gateways/model-routing";
 import type { Logger } from "@opencrane/backend/observability";
 import { type UserOnboardingOwner, type UserOnboardingOwnerResolver, type UserOnboardingPersonaEvidencePort, type UserOnboardingPersonalAgentBootstrapPort, UserOnboardingBootstrapArchetypes, UserOnboardingPersonalAgentBootstrapStatuses, UserOnboardingPersonaColours, __CreateUserOnboardingRouter, __UserOnboardingAuthority, __UserOnboardingChatAuthority, _CreateUserOnboardingRepository, PrismaUserOnboardingCompletionUnitOfWork, UserOnboardingPersonaWorkflowCoordinator } from "@opencrane/backend/server/agents/onboarding";
 
@@ -24,7 +25,8 @@ export function _CreateUserOnboardingComposition(prisma: UserOnboardingPrismaCli
 /** Adapt agent-services' richer result to onboarding's narrow cross-domain readiness port. */
 function _CreatePersonalAgentBootstrap(transaction: Prisma.TransactionClient, logger: Logger): UserOnboardingPersonalAgentBootstrapPort
 {
-	const repository = new PrismaPersonalAgentBootstrapRepository(transaction);
+	const defaultModelResolver = _CreateInitialPersonalAgentDefaultModelResolver(transaction);
+	const repository = new PrismaPersonalAgentBootstrapRepository(transaction, defaultModelResolver);
 	return {
 		async ensureReady(command)
 		{
@@ -37,6 +39,27 @@ function _CreatePersonalAgentBootstrap(transaction: Prisma.TransactionClient, lo
 			}
 			logger.warn({ operation: "user_onboarding.personal_agent_denied", siloId: command.siloId, subjectId: command.subjectId, onboardingId: command.onboardingId, reason: result.reason }, "Personal Agent readiness denied");
 			return { status: UserOnboardingPersonalAgentBootstrapStatuses.Denied };
+		},
+	};
+}
+
+/** Adapt model-routing's result vocabulary into agent-services' narrow initial-publication port. */
+function _CreateInitialPersonalAgentDefaultModelResolver(transaction: Prisma.TransactionClient): InitialPersonalAgentDefaultModelResolver
+{
+	const resolver = new PrismaDefaultModelDefinitionResolverRepository(transaction);
+	return {
+		async resolve(siloId)
+		{
+			const result = await resolver.resolve(siloId);
+			if (result.status === DefaultModelDefinitionResolutionStatuses.Resolved)
+			{
+				return { status: InitialPersonalAgentDefaultModelResolutionStatuses.Resolved, modelDefinitionId: result.modelDefinitionId };
+			}
+			if (result.status === DefaultModelDefinitionResolutionStatuses.Ambiguous)
+			{
+				return { status: InitialPersonalAgentDefaultModelResolutionStatuses.Ambiguous };
+			}
+			return { status: InitialPersonalAgentDefaultModelResolutionStatuses.Unavailable };
 		},
 	};
 }

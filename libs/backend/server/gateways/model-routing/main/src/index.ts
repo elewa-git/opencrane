@@ -5,6 +5,8 @@ export * from "./core/attempt-litellm-key";
 export type * from "./core/attempt-litellm-key.types";
 export * from "./core/byok-default-models";
 export type * from "./core/byok-default-models.types";
+export { PrismaDefaultModelDefinitionResolverRepository } from "./core/prisma-default-model-definition-resolver";
+export { DefaultModelDefinitionResolutionStatuses } from "./core/default-model-definition-resolver.types";
 export * from "./core/litellm-credential-registration";
 export * from "./core/litellm-credential-registration.types";
 export * from "./core/litellm-model-registration";

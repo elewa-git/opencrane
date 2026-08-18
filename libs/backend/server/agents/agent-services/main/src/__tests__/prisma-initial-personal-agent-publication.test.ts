@@ -2,6 +2,7 @@ import type { Prisma } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
 
 import { INITIAL_PERSONAL_AGENT_POLICY } from "../initial-personal-agent-policy";
+import { InitialPersonalAgentDefaultModelResolutionStatuses, type InitialPersonalAgentDefaultModelResolver } from "../initial-personal-agent-publication.types";
 import { PersonalAgentBootstrapDenialReasons, PersonalAgentBootstrapStatuses, type PersonalAgentBootstrapCommand } from "../personal-agent-bootstrap.types";
 import { PrismaInitialPersonalAgentPublicationRepository } from "../prisma-initial-personal-agent-publication";
 
@@ -26,7 +27,6 @@ function _Transaction()
 			create: vi.fn().mockResolvedValue({ id: _COMMAND.onboardingId, workloadProfile: INITIAL_PERSONAL_AGENT_POLICY.workloadProfile }),
 			update: vi.fn().mockResolvedValue({}),
 		},
-		modelDefinition: { findMany: vi.fn().mockResolvedValueOnce([{ id: "tenant-default" }]) },
 		agentRevision: {
 			create: vi.fn().mockResolvedValue({ id: "revision-a", digest: `sha256:${"a".repeat(64)}` }),
 			update: vi.fn().mockResolvedValue({}),
@@ -35,10 +35,23 @@ function _Transaction()
 	};
 }
 
-/** Constructs the publisher without widening production code to a test-only client shape. */
-function _Publisher(transaction: ReturnType<typeof _Transaction>): PrismaInitialPersonalAgentPublicationRepository
+/** Creates the app-owned model-routing adapter consumed by initial publication. */
+function _DefaultModelResolver(status: InitialPersonalAgentDefaultModelResolutionStatuses = InitialPersonalAgentDefaultModelResolutionStatuses.Resolved): InitialPersonalAgentDefaultModelResolver
 {
-	return new PrismaInitialPersonalAgentPublicationRepository(transaction as unknown as Prisma.TransactionClient);
+	return {
+		async resolve()
+		{
+			if (status === InitialPersonalAgentDefaultModelResolutionStatuses.Resolved) return { status, modelDefinitionId: "configured-default" };
+			if (status === InitialPersonalAgentDefaultModelResolutionStatuses.Ambiguous) return { status };
+			return { status: InitialPersonalAgentDefaultModelResolutionStatuses.Unavailable };
+		},
+	};
+}
+
+/** Constructs the publisher without widening production code to a test-only client shape. */
+function _Publisher(transaction: ReturnType<typeof _Transaction>, resolver: InitialPersonalAgentDefaultModelResolver = _DefaultModelResolver()): PrismaInitialPersonalAgentPublicationRepository
+{
+	return new PrismaInitialPersonalAgentPublicationRepository(transaction as unknown as Prisma.TransactionClient, resolver);
 }
 
 describe("Prisma initial personal-Agent publication", function _Suite()
@@ -50,7 +63,7 @@ describe("Prisma initial personal-Agent publication", function _Suite()
 		await expect(_Publisher(transaction).publish(_COMMAND, _PERSONA)).resolves.toEqual({ status: PersonalAgentBootstrapStatuses.Ready, agentServiceId: _COMMAND.onboardingId, agentRevisionId: "revision-a", created: true, revised: false });
 		expect(transaction.agentService.create).toHaveBeenCalledWith({ data: expect.objectContaining({ id: _COMMAND.onboardingId, siloId: _COMMAND.siloId, kind: "Personal", state: "Draft", name: "The Commander", workloadProfile: "personal-default" }) });
 		expect(transaction.agentRevision.create).toHaveBeenCalledWith({
-			data: expect.objectContaining({ revision: 1, promptPolicyVersion: INITIAL_PERSONAL_AGENT_POLICY.promptPolicyVersion, personaRevisionId: _COMMAND.onboardingPersonaRevisionId, budget: { maxTurns: 64, maxTokens: 256_000, maxDurationMs: 3_600_000 }, modelDefinition: { connect: { id: "tenant-default" } } }),
+			data: expect.objectContaining({ revision: 1, promptPolicyVersion: INITIAL_PERSONAL_AGENT_POLICY.promptPolicyVersion, personaRevisionId: _COMMAND.onboardingPersonaRevisionId, budget: { maxTurns: 64, maxTokens: 256_000, maxDurationMs: 3_600_000 }, modelDefinition: { connect: { id: "configured-default" } } }),
 			include: expect.any(Object),
 		});
 		expect(transaction.agentRevision.update).toHaveBeenCalledWith({ where: { id: "revision-a" }, data: { state: "Published", publishedAt: _COMMAND.provisionedAt } });
@@ -58,40 +71,24 @@ describe("Prisma initial personal-Agent publication", function _Suite()
 		expect(transaction.auditDecision.create).toHaveBeenCalledOnce();
 	});
 
-	it("prefers one tenant default without consulting the global fallback", async function _TenantDefaultWins()
+	it("fails closed without writes when model-routing reports no accessible definition", async function _UnavailableDefault()
 	{
 		const transaction = _Transaction();
 
-		await _Publisher(transaction).publish(_COMMAND, _PERSONA);
-		expect(transaction.modelDefinition.findMany).toHaveBeenCalledOnce();
-		expect(transaction.modelDefinition.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { scope: "ClusterTenant", clusterTenant: _COMMAND.siloId, isDefault: true } }));
-	});
-
-	it("uses one global default when the silo has no default", async function _GlobalFallback()
-	{
-		const transaction = _Transaction();
-		transaction.modelDefinition.findMany.mockReset().mockResolvedValueOnce([]).mockResolvedValueOnce([{ id: "global-default" }]);
-
-		await expect(_Publisher(transaction).publish(_COMMAND, _PERSONA)).resolves.toMatchObject({ status: PersonalAgentBootstrapStatuses.Ready });
-		expect(transaction.agentRevision.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ modelDefinition: { connect: { id: "global-default" } } }) }));
-	});
-
-	it("fails closed when the selected model scope is ambiguous", async function _AmbiguousDefault()
-	{
-		const transaction = _Transaction();
-		transaction.modelDefinition.findMany.mockReset().mockResolvedValueOnce([{ id: "model-a" }, { id: "model-b" }]);
-
-		await expect(_Publisher(transaction).publish(_COMMAND, _PERSONA)).resolves.toEqual({ status: PersonalAgentBootstrapStatuses.Denied, reason: PersonalAgentBootstrapDenialReasons.DefaultModelAmbiguous });
+		await expect(_Publisher(transaction, _DefaultModelResolver(InitialPersonalAgentDefaultModelResolutionStatuses.Unavailable)).publish(_COMMAND, _PERSONA)).resolves.toEqual({ status: PersonalAgentBootstrapStatuses.Denied, reason: PersonalAgentBootstrapDenialReasons.DefaultModelUnavailable });
 		expect(transaction.agentService.create).not.toHaveBeenCalled();
+		expect(transaction.agentRevision.create).not.toHaveBeenCalled();
+		expect(transaction.auditDecision.create).not.toHaveBeenCalled();
 	});
 
-	it("fails closed when neither model scope has a default", async function _MissingDefault()
+	it("fails closed without writes when model-routing reports ambiguous authority", async function _AmbiguousDefault()
 	{
 		const transaction = _Transaction();
-		transaction.modelDefinition.findMany.mockReset().mockResolvedValueOnce([]).mockResolvedValueOnce([]);
 
-		await expect(_Publisher(transaction).publish(_COMMAND, _PERSONA)).resolves.toEqual({ status: PersonalAgentBootstrapStatuses.Denied, reason: PersonalAgentBootstrapDenialReasons.DefaultModelUnavailable });
+		await expect(_Publisher(transaction, _DefaultModelResolver(InitialPersonalAgentDefaultModelResolutionStatuses.Ambiguous)).publish(_COMMAND, _PERSONA)).resolves.toEqual({ status: PersonalAgentBootstrapStatuses.Denied, reason: PersonalAgentBootstrapDenialReasons.DefaultModelAmbiguous });
 		expect(transaction.agentService.create).not.toHaveBeenCalled();
+		expect(transaction.agentRevision.create).not.toHaveBeenCalled();
+		expect(transaction.auditDecision.create).not.toHaveBeenCalled();
 	});
 
 	it("propagates audit failure so the caller can roll back every write", async function _AuditFailure()

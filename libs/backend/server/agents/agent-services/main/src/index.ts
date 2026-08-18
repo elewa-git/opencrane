@@ -8,8 +8,10 @@ export type { AgentRevisionLifecycleDenial, AgentRevisionLifecycleRepository, Ag
 export { PrismaAgentRevisionModelSelectionRepository } from "./prisma-agent-revision-model-selection";
 export { AgentRevisionModelSelectionMaterializationCodes, type AgentRevisionModelSelectionRepository, type MaterializeAgentRevisionModelSelectionCommand, type MaterializeAgentRevisionModelSelectionResult } from "./agent-revision-model-selection.types";
 export { PrismaAgentRevisionPersonaSelectionRepository } from "./prisma-agent-revision-persona-selection";
-export { AgentRevisionPersonaSelectionMaterializationCodes, type AgentRevisionPersonaSelectionRepository, type MaterializeAgentRevisionPersonaSelectionCommand, type MaterializeAgentRevisionPersonaSelectionResult, type MaterializePersonalAgentPersonaSelectionCommand, type MaterializePersonalAgentPersonaSelectionResult } from "./agent-revision-persona-selection.types";
+export { AgentRevisionPersonaSelectionMaterializationCodes } from "./agent-revision-persona-selection.types";
 export { PrismaPersonalAgentBootstrapRepository } from "./prisma-personal-agent-bootstrap-repository";
+export { InitialPersonalAgentDefaultModelResolutionStatuses } from "./initial-personal-agent-publication.types";
+export type { InitialPersonalAgentDefaultModelResolver } from "./initial-personal-agent-publication.types";
 export { PersonalAgentBootstrapStatuses } from "./personal-agent-bootstrap.types";
 export { PrismaAgentRevisionLifecycleRepository } from "./prisma-agent-revision-lifecycle";
 export { __CreateAgentServicesRouter } from "./agent-revision.router";

@@ -385,6 +385,13 @@
         "constructs": []
       },
       {
+        "path": "libs/backend/server/gateways/model-routing/main/src/core/prisma-default-model-definition-resolver.ts",
+        "adapter": "PrismaDefaultModelDefinitionResolverRepository",
+        "contract": "DefaultModelDefinitionResolver",
+        "contractImportPath": "./default-model-definition-resolver.types",
+        "constructs": []
+      },
+      {
         "path": "libs/backend/server/agents/scheduling/main/src/prisma-schedule-tick-repositories.ts",
         "adapter": "PrismaEnabledScheduleSnapshotRepository",
         "contract": "EnabledScheduleSnapshotRepository",
@@ -1157,7 +1164,7 @@
       "operations": [
         "delegate"
       ],
-      "reason": "The existing provider-custody core must atomically reconcile its Global ProviderCredential and ModelDefinition projections while boot-time LiteLLM registration is made fail-closed; split this legacy mixed adapter into declared repositories with its next provider-custody authority change.",
+      "reason": "The existing provider-custody core reconciles its Global ProviderCredential, ModelDefinition, and first ModelRoutingDefault projections while boot-time LiteLLM registration is made fail-closed; split this legacy mixed adapter into declared repositories with its next provider-custody authority change.",
       "expiresOn": "2026-09-30"
     },
     {

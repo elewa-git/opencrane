@@ -4,6 +4,24 @@ import { UserOnboardingCompletionProvenances, UserOnboardingStates } from "./use
 import { UserOnboardingPersonalAgentBootstrapStatuses, UserOnboardingReadinessStatuses, type UserOnboardingCompletionEvidence, type UserOnboardingCompletionRepository, type UserOnboardingPersonalAgentBootstrapPort, type UserOnboardingReadinessResult } from "./user-onboarding-completion.types";
 import type { UserOnboardingOwner } from "./user-onboarding.types";
 
+/**
+ * Forces Prisma to roll back a completion attempt whose final compare-and-swap lost.
+ *
+ * Called by: `PrismaUserOnboardingCompletionUnitOfWork`, which retries only after the transaction
+ * callback rejects and Prisma has discarded the attempt's personal Agent writes.
+ *
+ * @see PrismaUserOnboardingCompletionUnitOfWork
+ */
+export class UserOnboardingCompletionConflict extends Error
+{
+	/** Identify the rollback signal without carrying onboarding evidence. */
+	constructor()
+	{
+		super("user onboarding completion compare-and-swap lost");
+		this.name = "UserOnboardingCompletionConflict";
+	}
+}
+
 /** Executes onboarding's completion decision over repositories bound to one transaction. */
 export class __UserOnboardingCompletion
 {
@@ -32,7 +50,7 @@ export class __UserOnboardingCompletion
 
 			const ready = await self._ensurePersonalAgent(evidence, completedAt, "completion");
 			if (ready.status !== UserOnboardingReadinessStatuses.Ready) return ready;
-			if (!await self.repository.markCompleted(owner, conversationId, completedAt)) return _Result(UserOnboardingReadinessStatuses.AuthorityUnavailable);
+			if (!await self.repository.markCompleted(owner, conversationId, completedAt)) throw new UserOnboardingCompletionConflict();
 			return ready;
 		});
 	}

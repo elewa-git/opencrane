@@ -1,7 +1,7 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 
-import { __UserOnboardingCompletion } from "./user-onboarding-completion";
-import type { UserOnboardingCompletionUnitOfWork, UserOnboardingPersonalAgentBootstrapPort, UserOnboardingReadinessResult } from "./user-onboarding-completion.types";
+import { __UserOnboardingCompletion, UserOnboardingCompletionConflict } from "./user-onboarding-completion";
+import { UserOnboardingReadinessStatuses, type UserOnboardingCompletionUnitOfWork, type UserOnboardingPersonalAgentBootstrapPort, type UserOnboardingReadinessResult } from "./user-onboarding-completion.types";
 import { PrismaUserOnboardingCompletionRepository } from "./prisma-user-onboarding-completion-repository";
 import type { UserOnboardingOwner } from "./user-onboarding.types";
 
@@ -54,7 +54,8 @@ export class PrismaUserOnboardingCompletionUnitOfWork implements UserOnboardingC
 			}
 			catch (error)
 			{
-				if (_Retryable(error) && attempt < _COMPLETION_ATTEMPT_LIMIT) continue;
+				if ((_Retryable(error) || error instanceof UserOnboardingCompletionConflict) && attempt < _COMPLETION_ATTEMPT_LIMIT) continue;
+				if (error instanceof UserOnboardingCompletionConflict) return { status: UserOnboardingReadinessStatuses.AuthorityUnavailable, agentServiceId: null };
 				throw error;
 			}
 		}

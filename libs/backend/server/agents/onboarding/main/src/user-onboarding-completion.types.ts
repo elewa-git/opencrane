@@ -64,7 +64,7 @@ export interface UserOnboardingReadinessResult
 }
 
 /** Cross-domain command onboarding gives to the agent-services adapter inside its transaction. */
-export interface UserOnboardingPersonalAgentBootstrapCommand
+interface UserOnboardingPersonalAgentBootstrapCommand
 {
 	/** Stable onboarding identifier reused as the deterministic personal Agent identity. */
 	readonly onboardingId: string;

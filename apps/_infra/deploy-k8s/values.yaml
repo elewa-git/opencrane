@@ -616,7 +616,8 @@ clustertenantManager:
       provider: "openai_compatible"
       # -- "auto-embedding" is this platform's stable embedding-selection alias, the embedding-side
       #    mirror of the chat "auto" above. Registered by the BYOK bootstrap flow
-      #    (_AUTO_EMBEDDING_MODEL_NAME in provision-byok-key.ts / _ensureProviderEmbeddingModel),
+      #    (`_AUTO_EMBEDDING_MODEL_NAME` and `_EnsureProviderEmbeddingModels` in
+      #    provider-embedding-models.ts),
       #    pointing at the configured provider's real embedding model — NOT a tenant-selectable
       #    ModelDefinition. This exact string MUST match that constant; re-pointing the backing
       #    embedding model needs no edit here.
