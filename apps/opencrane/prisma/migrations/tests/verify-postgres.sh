@@ -25,7 +25,7 @@ FRESH_PROTECTED_DIGEST="12505f3c15114bd2a407d0d4d2ef2befc3c8ec87acaa9787503cfbe4
 LEGACY_MIGRATION_SQL_DIGEST="$(node -e 'process.stdout.write(require(process.argv[1]).sqlSha256)' "$LEGACY_TRANSITION_ROOT/manifest.json")"
 CURRENT_MIGRATION_SQL_DIGEST="$(node -e 'process.stdout.write(require(process.argv[1]).sqlSha256)' "$CURRENT_TRANSITION_ROOT/manifest.json")"
 
-# The current release qualifies its exact source tree before the tag exists; later releases read the frozen tag.
+# This test reads the current release from its working tree before the tag exists and reads older releases from their tags.
 if [[ "$(jq -r '.version' "$ROOT/package.json")" != "$MIGRATION_RELEASE_VERSION" ]]; then
 	MIGRATION_RELEASE_ROOT="$WORK_DIR/migration-release"
 	mkdir -p "$MIGRATION_RELEASE_ROOT"
