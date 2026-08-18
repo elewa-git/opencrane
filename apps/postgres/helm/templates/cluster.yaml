@@ -23,8 +23,31 @@
 {{- end -}}
 {{- end -}}
 {{- if .Values.convergence.previousMigration.available -}}
-{{- if or (not (regexMatch "^[0-9]+\\.[0-9]+\\.[0-9]+-to-[0-9]+\\.[0-9]+\\.[0-9]+$" .Values.convergence.previousMigration.id)) (not (regexMatch "^[0-9]+\\.[0-9]+\\.[0-9]+$" .Values.convergence.previousMigration.fromSchemaVersion)) (not (regexMatch "^[0-9a-f]{64}$" .Values.convergence.previousMigration.sourceProtectedBaselineSha256)) (not (regexMatch "^[0-9a-f]{64}$" .Values.convergence.previousMigration.sqlSha256)) -}}
-{{- fail "convergence.previousMigration must bind an exact migration id, source schema version, protected origin digest, and SQL digest" -}}
+{{- if or (not (regexMatch "^[0-9]+\\.[0-9]+\\.[0-9]+-to-[0-9]+\\.[0-9]+\\.[0-9]+$" .Values.convergence.previousMigration.id)) (not (regexMatch "^[0-9]+\\.[0-9]+\\.[0-9]+$" .Values.convergence.previousMigration.fromSchemaVersion)) (not (regexMatch "^[0-9a-f]{64}$" .Values.convergence.previousMigration.sourceTargetBaselineSha256)) (not (regexMatch "^[0-9a-f]{64}$" .Values.convergence.previousMigration.sqlSha256)) -}}
+{{- fail "convergence.previousMigration must bind an exact migration id, source schema version, source target digest, and SQL digest" -}}
+{{- end -}}
+{{- if eq (len .Values.convergence.previousMigration.sourceProtectedBaselineSha256s) 0 -}}
+{{- fail "convergence.previousMigration.sourceProtectedBaselineSha256s must admit at least one protected origin" -}}
+{{- end -}}
+{{- $protectedOrigins := dict -}}
+{{- range $digest := .Values.convergence.previousMigration.sourceProtectedBaselineSha256s -}}
+{{- if not (regexMatch "^[0-9a-f]{64}$" $digest) -}}
+{{- fail "every admitted protected origin must be a full lowercase SHA-256" -}}
+{{- end -}}
+{{- if hasKey $protectedOrigins $digest -}}
+{{- fail "admitted protected origins must be unique" -}}
+{{- end -}}
+{{- $_ := set $protectedOrigins $digest true -}}
+{{- end -}}
+{{- if .Values.migration.enabled -}}
+{{- if not (hasKey $protectedOrigins .Values.convergence.previousMigration.selectedSourceProtectedBaselineSha256) -}}
+{{- fail "the migration Job requires the classifier-selected admitted protected origin" -}}
+{{- end -}}
+{{- else if .Values.privileges.enabled -}}
+{{- $selectedOrigin := .Values.convergence.previousMigration.selectedSourceProtectedBaselineSha256 -}}
+{{- if not (or (eq $selectedOrigin .Values.convergence.currentProtectedBaselineSha256) (hasKey $protectedOrigins $selectedOrigin)) -}}
+{{- fail "the privilege Job requires the classifier-selected current or admitted protected origin" -}}
+{{- end -}}
 {{- end -}}
 {{- end -}}
 {{- if .Values.migration.enabled -}}

@@ -179,10 +179,13 @@ SQL publication, migration ordering, and recovery.
 The chart requires exactly one target baseline for `initdb` and renders no SQL reference on
 `recovery`. Both paths require the full expected digest. A hook reads the protected marker restored
 inside the application database and accepts only a fresh current origin or the exact latest migration
-history row, including its reviewed SQL digest. A caller therefore cannot relabel an incompatible or
-partially migrated backup as current. Existing databases advance only through the exact reviewed
-adjacent migration bound by the immutable repository release manifest. The chart owns the bounded
-migration Job; the server never migrates on startup.
+history row, including its reviewed SQL digest. A migration manifest may admit several protected
+origins when earlier adjacent upgrades preserve their original bootstrap marker. The deploy classifier
+must prove that every history row forms one ordered chain, select the live marker from that admitted
+set, and pass that digest to both migration and privilege Jobs. A caller therefore cannot relabel an
+incompatible or partially migrated backup as current. Existing databases advance only through the
+exact reviewed adjacent migration bound by the immutable repository release manifest. The chart owns
+the bounded migration Job; the server never migrates on startup.
 
 The deploy entrypoint requires `--release-version` and `--from-release-version`. Use `fresh` only for
 an empty initdb install; use the exact current version to restore or reconcile a current database, and

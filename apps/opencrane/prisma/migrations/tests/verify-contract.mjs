@@ -205,6 +205,21 @@ requireContract(organizationManifest.fromSchemaVersion === "0.8.0", "organizatio
 requireContract(organizationManifest.toSchemaVersion === "0.9.0", "organization-member migration target version must be exact");
 requireContract(organizationManifest.sqlSha256 === organizationSqlDigest, "organization-member migration SQL digest must match its manifest");
 requireContract(organizationManifest.targetBaselineSha256 === targetDigest, "organization-member migration target digest must match the clean baseline");
+requireContract(
+	JSON.stringify(organizationManifest.sourceProtectedBaselineSha256s) === JSON.stringify([
+		"7ed3f49ec3b96276cfce1c1d41e97588b0970fb28352c7d933269ce201ce32fc",
+		"25bfc5d31c4966ee697ae5aaa47edc855d25120d0829c241f213353f69e0358d",
+	]),
+	"organization-member migration must admit fresh 0.8 and inherited 0.7 protected origins",
+);
+requireContract(
+	organizationManifest.freshSourceProtectedBaselineSha256 === "7ed3f49ec3b96276cfce1c1d41e97588b0970fb28352c7d933269ce201ce32fc",
+	"organization-member migration must identify the fresh 0.8 protected origin",
+);
+for (const admittedOrigin of organizationManifest.sourceProtectedBaselineSha256s)
+{
+	requireContract(organizationSql.includes(admittedOrigin), `organization-member migration must admit protected origin ${admittedOrigin}`);
+}
 requireContract(organizationSql.includes("pg_advisory_lock"), "organization-member migration must acquire the session migration lock");
 requireContract(organizationSql.includes("pg_advisory_xact_lock"), "organization-member migration must hold a transaction migration lock");
 requireContract(organizationSql.includes("BEGIN;"), "organization-member migration must run transactionally");

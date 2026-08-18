@@ -6,7 +6,11 @@ import { OrganizationMembersGatewayError, OrganizationMembersGatewayErrorKinds, 
 
 import { _MapOrganizationInviteAcceptance, _MapOrganizationInviteCreate, _MapOrganizationInviteResend, _MapOrganizationInviteValidation, _MapOrganizationMemberDirectory } from "./organization-members-wire.mapper";
 
-/** Signed-in generated-client adapter for every organization-members endpoint. */
+/**
+ * Adapts the generated organization-members endpoints to the browser port used by Settings.
+ * The app composition root binds this adapter so stores receive allowlisted failure categories
+ * without choosing the server-side membership authority.
+ */
 @Injectable()
 export class OpenCraneOrganizationMembersGateway implements OrganizationMembersGateway
 {
@@ -64,6 +68,7 @@ function _GatewayError(value: unknown, status: number): OrganizationMembersGatew
 		identity_mismatch: OrganizationMembersGatewayErrorKinds.IdentityMismatch,
 		expired: OrganizationMembersGatewayErrorKinds.Expired,
 		already_used: OrganizationMembersGatewayErrorKinds.AlreadyUsed,
+		invalid: OrganizationMembersGatewayErrorKinds.Invalid,
 		conflict: OrganizationMembersGatewayErrorKinds.Conflict
 	};
 	const kind = codeKinds[code] ?? _StatusKind(status);

@@ -23,7 +23,7 @@ export class OrganizationInviteAcceptanceStore
 	private readonly _state = signal(OrganizationInviteAcceptanceStates.Idle);
 	/** Resulting member after authority confirms acceptance. */
 	private readonly _member = signal<OrganizationMember | null>(null);
-	/** Browser-safe retry copy. */
+	/** Browser-safe failure message shown without server response prose. */
 	private readonly _error = signal<string | null>(null);
 	/** Token retained only across an ambiguous failure for an explicit retry. */
 	private _retryToken: string | null = null;
@@ -85,6 +85,7 @@ export class OrganizationInviteAcceptanceStore
 			if (error.kind === OrganizationMembersGatewayErrorKinds.IdentityMismatch) this._state.set(OrganizationInviteAcceptanceStates.IdentityMismatch);
 			else if (error.kind === OrganizationMembersGatewayErrorKinds.Expired) this._state.set(OrganizationInviteAcceptanceStates.Expired);
 			else if (error.kind === OrganizationMembersGatewayErrorKinds.AlreadyUsed) this._state.set(OrganizationInviteAcceptanceStates.AlreadyUsed);
+			else if (error.kind === OrganizationMembersGatewayErrorKinds.Invalid) this._state.set(OrganizationInviteAcceptanceStates.Invalid);
 			else
 			{
 				this._state.set(OrganizationInviteAcceptanceStates.Failure);

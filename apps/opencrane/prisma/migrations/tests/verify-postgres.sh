@@ -4,12 +4,16 @@ set -euo pipefail
 ROOT="$(git rev-parse --show-toplevel)"
 SOURCE_REF="${OPENCRANE_MIGRATION_SOURCE_REF:-0.7.0}"
 POSTGRES_IMAGE="${OPENCRANE_MIGRATION_POSTGRES_IMAGE:-postgres:17.5}"
-TRANSITION_ROOT="$ROOT/apps/opencrane/prisma/migrations/0.7.0-to-0.8.0"
+LEGACY_TRANSITION_ROOT="$ROOT/apps/opencrane/prisma/migrations/0.7.0-to-0.8.0"
+CURRENT_TRANSITION_ROOT="$ROOT/apps/opencrane/prisma/migrations/0.8.0-to-0.9.0"
 CURRENT_BASELINE="$ROOT/apps/opencrane/prisma/bootstrap/target-baseline.sql"
+CLASSIFIER="$ROOT/apps/_infra/deploy-k8s/platform/database-convergence-classifier.sh"
 WORK_DIR="$(mktemp -d)"
 CONTAINER="opencrane-migration-$$-$RANDOM"
 PROTECTED_DIGEST="25bfc5d31c4966ee697ae5aaa47edc855d25120d0829c241f213353f69e0358d"
-MIGRATION_SQL_DIGEST="$(node -e 'process.stdout.write(require(process.argv[1]).sqlSha256)' "$TRANSITION_ROOT/manifest.json")"
+LEGACY_MIGRATION_SQL_DIGEST="$(node -e 'process.stdout.write(require(process.argv[1]).sqlSha256)' "$LEGACY_TRANSITION_ROOT/manifest.json")"
+CURRENT_MIGRATION_SQL_DIGEST="$(node -e 'process.stdout.write(require(process.argv[1]).sqlSha256)' "$CURRENT_TRANSITION_ROOT/manifest.json")"
+DATABASE_TRANSITION="$(node "$ROOT/scripts/release-versioning/database-transition.mjs" "$ROOT" 0.9.0 0.8.1)"
 
 cleanup()
 {
@@ -36,6 +40,73 @@ psql_command()
 	local database="$1"
 	shift
 	docker exec --interactive "$CONTAINER" psql --username postgres --dbname "$database" -v ON_ERROR_STOP=1 "$@"
+}
+
+source "$CLASSIFIER"
+NAMESPACE=opencrane-migration-test
+POSTGRES_RELEASE=opencrane-migration-test-postgres
+TIMEOUT=30
+POSTGRES_BASELINE_SHA256="$(jq -r '.targetBaselineSha256' <<<"$DATABASE_TRANSITION")"
+DATABASE_PREVIOUS_TARGET_BASELINE_SHA256="$(jq -r '.migration.sourceTargetBaselineSha256' <<<"$DATABASE_TRANSITION")"
+DATABASE_PREVIOUS_PROTECTED_BASELINE_SHA256S_JSON="$(jq -c '.migration.sourceProtectedBaselineSha256s' <<<"$DATABASE_TRANSITION")"
+DATABASE_PREVIOUS_FRESH_PROTECTED_BASELINE_SHA256="$(jq -r '.migration.freshSourceProtectedBaselineSha256' <<<"$DATABASE_TRANSITION")"
+DATABASE_SOURCE_HISTORY_LINEAGES_JSON="$(jq -c '.migration.sourceHistoryLineages' <<<"$DATABASE_TRANSITION")"
+DATABASE_PREVIOUS_MIGRATION_ID="$(jq -r '.migration.id' <<<"$DATABASE_TRANSITION")"
+DATABASE_PREVIOUS_SCHEMA_VERSION="$(jq -r '.migration.fromSchemaVersion' <<<"$DATABASE_TRANSITION")"
+DATABASE_TARGET_SCHEMA_VERSION="$(jq -r '.migration.toSchemaVersion' <<<"$DATABASE_TRANSITION")"
+DATABASE_TARGET_BASELINE_SHA256="$(jq -r '.targetBaselineSha256' <<<"$DATABASE_TRANSITION")"
+DATABASE_PREVIOUS_MIGRATION_SQL_SHA256="$(jq -r '.migration.sqlSha256' <<<"$DATABASE_TRANSITION")"
+CLASSIFIER_DATABASE=""
+
+kubectl()
+{
+	local argument
+	local database_argument=false
+	local -a psql_arguments=(--username postgres)
+	if [[ " $* " == *" get pods "* ]]; then
+		printf '%s\n' '{"items":[{"metadata":{"name":"opencrane-migration-test-postgres-1"},"status":{"phase":"Running","conditions":[{"type":"Ready","status":"True"}]}}]}'
+		return
+	fi
+	if [[ " $* " != *" exec "* ]]; then
+		return 1
+	fi
+	while (( $# > 0 )) && [[ "$1" != "psql" ]]; do
+		shift
+	done
+	(( $# > 0 )) || return 1
+	shift
+	for argument in "$@"; do
+		if [[ "$database_argument" == "true" ]]; then
+			psql_arguments+=("$CLASSIFIER_DATABASE")
+			database_argument=false
+		elif [[ "$argument" == "--dbname" ]]; then
+			psql_arguments+=("$argument")
+			database_argument=true
+		else
+			psql_arguments+=("$argument")
+		fi
+	done
+	docker exec --interactive "$CONTAINER" psql "${psql_arguments[@]}"
+}
+
+assert_classifier_state()
+{
+	local database="$1"
+	local expected="$2"
+	local actual
+	CLASSIFIER_DATABASE="$database"
+	actual="$(classify_live_database_convergence)"
+	if [[ "$actual" != "$expected" ]]; then
+		printf "classifier returned '%s' for '%s'; expected '%s'\n" "$actual" "$database" "$expected" >&2
+		exit 1
+	fi
+}
+
+clone_database()
+{
+	local source_database="$1"
+	local target_database="$2"
+	psql_command postgres --command "CREATE DATABASE \"$target_database\" TEMPLATE \"$source_database\";" >/dev/null
 }
 
 create_source_database()
@@ -74,11 +145,61 @@ INSERT INTO "runtime_external_action_retries" (
 ) VALUES ('legacy-run', 1, 'legacy-candidate', clock_timestamp() + interval '5 minutes', clock_timestamp());
 SET session_replication_role = origin;
 SQL
-psql_command migrated --set "source_baseline_sha256=$PROTECTED_DIGEST" --set "migration_sql_sha256=$MIGRATION_SQL_DIGEST" \
-	--file - <"$TRANSITION_ROOT/migration.sql" >/dev/null
-psql_command migrated --set "source_baseline_sha256=$PROTECTED_DIGEST" --set "migration_sql_sha256=$MIGRATION_SQL_DIGEST" \
-	--file - <"$TRANSITION_ROOT/migration.sql" >"$WORK_DIR/retry-output.log"
+psql_command migrated --set "source_baseline_sha256=$PROTECTED_DIGEST" --set "migration_sql_sha256=$LEGACY_MIGRATION_SQL_DIGEST" \
+	--file - <"$LEGACY_TRANSITION_ROOT/migration.sql" >/dev/null
+psql_command migrated --set "source_baseline_sha256=$PROTECTED_DIGEST" --set "migration_sql_sha256=$LEGACY_MIGRATION_SQL_DIGEST" \
+	--file - <"$LEGACY_TRANSITION_ROOT/migration.sql" >"$WORK_DIR/retry-output.log"
 grep -q 'already applied with exact history' "$WORK_DIR/retry-output.log"
+assert_classifier_state migrated "source|$PROTECTED_DIGEST"
+clone_database migrated fresh_source
+psql_command fresh_source <<SQL >/dev/null
+DROP SCHEMA "opencrane_migrations" CASCADE;
+UPDATE "opencrane_bootstrap"."target_baseline"
+SET "baseline_sha256" = '$DATABASE_PREVIOUS_FRESH_PROTECTED_BASELINE_SHA256'
+WHERE "singleton" = TRUE;
+SQL
+assert_classifier_state fresh_source "source|$DATABASE_PREVIOUS_FRESH_PROTECTED_BASELINE_SHA256"
+psql_command migrated --set "source_baseline_sha256=$PROTECTED_DIGEST" --set "migration_sql_sha256=$CURRENT_MIGRATION_SQL_DIGEST" \
+	--file - <"$CURRENT_TRANSITION_ROOT/migration.sql" >/dev/null
+psql_command migrated --set "source_baseline_sha256=$PROTECTED_DIGEST" --set "migration_sql_sha256=$CURRENT_MIGRATION_SQL_DIGEST" \
+	--file - <"$CURRENT_TRANSITION_ROOT/migration.sql" >/dev/null
+assert_classifier_state migrated "completed|$PROTECTED_DIGEST"
+
+clone_database migrated corrupt_migration_id
+psql_command corrupt_migration_id --command \
+	"UPDATE \"opencrane_migrations\".\"schema_history\" SET \"migration_id\" = 'corrupt-legacy-id' WHERE \"schema_version\" = '0.8.0';" >/dev/null
+assert_classifier_state corrupt_migration_id "incompatible|$PROTECTED_DIGEST"
+
+clone_database migrated corrupt_sql_digest
+psql_command corrupt_sql_digest --command \
+	"UPDATE \"opencrane_migrations\".\"schema_history\" SET \"sql_sha256\" = repeat('a', 64) WHERE \"schema_version\" = '0.8.0';" >/dev/null
+assert_classifier_state corrupt_sql_digest "incompatible|$PROTECTED_DIGEST"
+
+clone_database migrated corrupt_source_digest
+psql_command corrupt_source_digest --command \
+	"UPDATE \"opencrane_migrations\".\"schema_history\" SET \"source_baseline_sha256\" = '$DATABASE_PREVIOUS_FRESH_PROTECTED_BASELINE_SHA256' WHERE \"schema_version\" = '0.8.0';" >/dev/null
+assert_classifier_state corrupt_source_digest "incompatible|$PROTECTED_DIGEST"
+
+clone_database migrated corrupt_source_version
+psql_command corrupt_source_version --command \
+	"UPDATE \"opencrane_migrations\".\"schema_history\" SET \"source_schema_version\" = '0.6.0' WHERE \"schema_version\" = '0.8.0';" >/dev/null
+assert_classifier_state corrupt_source_version "incompatible|$PROTECTED_DIGEST"
+
+clone_database migrated corrupt_history_order
+psql_command corrupt_history_order --command \
+	"UPDATE \"opencrane_migrations\".\"schema_history\" SET \"applied_at\" = clock_timestamp() + interval '1 day' WHERE \"schema_version\" = '0.8.0';" >/dev/null
+assert_classifier_state corrupt_history_order "incompatible|$PROTECTED_DIGEST"
+
+clone_database migrated extra_history_row
+psql_command extra_history_row <<SQL >/dev/null
+INSERT INTO "opencrane_migrations"."schema_history" (
+    "schema_version", "source_schema_version", "source_baseline_sha256",
+    "target_baseline_sha256", "sql_sha256", "migration_id"
+) VALUES (
+    '9.9.0', '9.8.0', '$PROTECTED_DIGEST', repeat('b', 64), repeat('c', 64), 'unadmitted-extra-transition'
+);
+SQL
+assert_classifier_state extra_history_row "incompatible|$PROTECTED_DIGEST"
 
 psql_command postgres --command 'CREATE DATABASE fresh;' >/dev/null
 psql_command fresh <"$CURRENT_BASELINE" >/dev/null
@@ -105,6 +226,15 @@ psql_command migrated --tuples-only --no-align --command \
 psql_command migrated --tuples-only --no-align --command \
 	'SELECT count(*) FROM "opencrane_migrations"."schema_history" WHERE "schema_version" = '\''0.8.0'\'' AND "source_schema_version" = '\''0.7.0'\'';' \
 	| grep -qx '1'
+psql_command migrated --tuples-only --no-align --command \
+	'SELECT count(*) FROM "opencrane_migrations"."schema_history" WHERE "schema_version" = '\''0.9.0'\'' AND "source_schema_version" = '\''0.8.0'\'' AND "source_baseline_sha256" = '\''25bfc5d31c4966ee697ae5aaa47edc855d25120d0829c241f213353f69e0358d'\'';' \
+	| grep -qx '1'
+psql_command migrated --tuples-only --no-align --command \
+	'SELECT count(*) FROM "opencrane_migrations"."schema_history";' \
+	| grep -qx '2'
+psql_command migrated --tuples-only --no-align --command \
+	'SELECT count(*) FROM "organization_invitations";' \
+	| grep -qx '0'
 psql_command migrated --tuples-only --no-align --command \
 	"SELECT count(*) FROM \"channel_runtime_routes\" WHERE \"id\" IN ('legacy-event-route-a', 'legacy-event-route-b') AND \"receiver_id\" = 'legacy-route-v0:' || \"id\" AND \"is_current\" = FALSE AND \"legacy_expires_at\" IS NOT NULL AND \"revoked_at\" IS NOT NULL;" \
 	| grep -qx '2'
@@ -135,8 +265,8 @@ create_source_database populated
 psql_command populated --command \
 	'INSERT INTO "persona_profiles" ("id", "silo_id", "user_id", "updated_at") VALUES ('\''profile-legacy'\'', '\''silo-legacy'\'', '\''user-legacy'\'', clock_timestamp());' \
 	>/dev/null
-if psql_command populated --set VERBOSITY=verbose --set "source_baseline_sha256=$PROTECTED_DIGEST" --set "migration_sql_sha256=$MIGRATION_SQL_DIGEST" \
-	--file - <"$TRANSITION_ROOT/migration.sql" >"$WORK_DIR/populated-output.log" 2>&1; then
+if psql_command populated --set VERBOSITY=verbose --set "source_baseline_sha256=$PROTECTED_DIGEST" --set "migration_sql_sha256=$LEGACY_MIGRATION_SQL_DIGEST" \
+	--file - <"$LEGACY_TRANSITION_ROOT/migration.sql" >"$WORK_DIR/populated-output.log" 2>&1; then
 	echo "populated 0.7 persona fixture unexpectedly migrated" >&2
 	exit 1
 fi
@@ -158,8 +288,8 @@ INSERT INTO "conversation_threads" ("id", "silo_id", "agent_service_id", "update
 VALUES ('conversation-legacy', 'silo-legacy', 'agent-service-legacy', clock_timestamp());
 SET session_replication_role = origin;
 SQL
-if psql_command populated_conversation --set VERBOSITY=verbose --set "source_baseline_sha256=$PROTECTED_DIGEST" --set "migration_sql_sha256=$MIGRATION_SQL_DIGEST" \
-	--file - <"$TRANSITION_ROOT/migration.sql" >"$WORK_DIR/populated-conversation-output.log" 2>&1; then
+if psql_command populated_conversation --set VERBOSITY=verbose --set "source_baseline_sha256=$PROTECTED_DIGEST" --set "migration_sql_sha256=$LEGACY_MIGRATION_SQL_DIGEST" \
+	--file - <"$LEGACY_TRANSITION_ROOT/migration.sql" >"$WORK_DIR/populated-conversation-output.log" 2>&1; then
 	echo "populated 0.7 Conversation fixture unexpectedly migrated" >&2
 	exit 1
 fi
@@ -184,8 +314,8 @@ INSERT INTO "channel_invocation_contexts" (
 );
 SET session_replication_role = origin;
 SQL
-if psql_command populated_invocation_context --set VERBOSITY=verbose --set "source_baseline_sha256=$PROTECTED_DIGEST" --set "migration_sql_sha256=$MIGRATION_SQL_DIGEST" \
-	--file - <"$TRANSITION_ROOT/migration.sql" >"$WORK_DIR/populated-context-output.log" 2>&1; then
+if psql_command populated_invocation_context --set VERBOSITY=verbose --set "source_baseline_sha256=$PROTECTED_DIGEST" --set "migration_sql_sha256=$LEGACY_MIGRATION_SQL_DIGEST" \
+	--file - <"$LEGACY_TRANSITION_ROOT/migration.sql" >"$WORK_DIR/populated-context-output.log" 2>&1; then
 	echo "populated 0.7 invocation context fixture unexpectedly migrated" >&2
 	exit 1
 fi
@@ -213,8 +343,8 @@ INSERT INTO "approval_requests" (
 );
 SET session_replication_role = origin;
 SQL
-if psql_command populated_approval --set VERBOSITY=verbose --set "source_baseline_sha256=$PROTECTED_DIGEST" --set "migration_sql_sha256=$MIGRATION_SQL_DIGEST" \
-	--file - <"$TRANSITION_ROOT/migration.sql" >"$WORK_DIR/populated-approval-output.log" 2>&1; then
+if psql_command populated_approval --set VERBOSITY=verbose --set "source_baseline_sha256=$PROTECTED_DIGEST" --set "migration_sql_sha256=$LEGACY_MIGRATION_SQL_DIGEST" \
+	--file - <"$LEGACY_TRANSITION_ROOT/migration.sql" >"$WORK_DIR/populated-approval-output.log" 2>&1; then
 	echo "populated 0.7 approval fixture unexpectedly migrated" >&2
 	exit 1
 fi
@@ -231,8 +361,8 @@ INSERT INTO "agent_revision_integration_assignments" (
 ) VALUES ('legacy-revision', 'legacy-integration', 'legacy-silo', 'legacy-custody', ARRAY['calendar.read']);
 SET session_replication_role = origin;
 SQL
-if psql_command populated_integration_assignment --set VERBOSITY=verbose --set "source_baseline_sha256=$PROTECTED_DIGEST" --set "migration_sql_sha256=$MIGRATION_SQL_DIGEST" \
-	--file - <"$TRANSITION_ROOT/migration.sql" >"$WORK_DIR/populated-integration-output.log" 2>&1; then
+if psql_command populated_integration_assignment --set VERBOSITY=verbose --set "source_baseline_sha256=$PROTECTED_DIGEST" --set "migration_sql_sha256=$LEGACY_MIGRATION_SQL_DIGEST" \
+	--file - <"$LEGACY_TRANSITION_ROOT/migration.sql" >"$WORK_DIR/populated-integration-output.log" 2>&1; then
 	echo "populated 0.7 integration assignment fixture unexpectedly migrated" >&2
 	exit 1
 fi
@@ -241,4 +371,4 @@ psql_command populated_integration_assignment --tuples-only --no-align --command
 	'SELECT count(*) FROM "agent_revision_integration_assignments" WHERE "agent_revision_id" = '\''legacy-revision'\'';' \
 	| grep -qx '1'
 
-echo "0.7.0-to-0.8.0 PostgreSQL migration: PASS"
+echo "0.7.0-to-0.8.0-to-0.9.0 PostgreSQL migration convergence: PASS"

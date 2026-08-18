@@ -22,6 +22,8 @@ RECOVERY="$ROOT_DIR/apps/_infra/deploy-k8s/platform/database-migration-recovery.
 FINALIZATION="$ROOT_DIR/apps/_infra/deploy-k8s/platform/database-release-finalization.sh"
 POLICY="$ROOT_DIR/apps/_infra/deploy-k8s/platform/database-convergence-policy.sh"
 BACKUP_SCRIPT="$ROOT_DIR/apps/postgres/scripts/create-pre-migration-backup.sh"
+LIVE_ORIGIN=eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
+export LIVE_ORIGIN
 
 bash -n "$DEPLOY_SCRIPT"
 bash -n "$RECOVERY"
@@ -88,7 +90,9 @@ export TEST_POSTGRES_ARGS
   DATABASE_PREVIOUS_MIGRATION_AVAILABLE=true
   DATABASE_PREVIOUS_MIGRATION_ID=0.7.0-to-0.8.0
   DATABASE_PREVIOUS_SCHEMA_VERSION=0.7.0
-  DATABASE_PREVIOUS_PROTECTED_BASELINE_SHA256=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+  DATABASE_PREVIOUS_TARGET_BASELINE_SHA256=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+  DATABASE_PREVIOUS_PROTECTED_BASELINE_SHA256S_JSON='["aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"]'
+  DATABASE_SELECTED_PROTECTED_BASELINE_SHA256=eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
   DATABASE_PREVIOUS_MIGRATION_SQL_SHA256=cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
   POSTGRES_MIGRATION_IMAGE=postgres@example.invalid
   DATABASE_MIGRATION_CONFIG_MAP=migration
@@ -106,6 +110,9 @@ grep -Fxq -- 'migration.timeoutSeconds=37' "$TEST_POSTGRES_ARGS"
 grep -Fxq -- 'migration.jobDeadlineGraceSeconds=30' "$TEST_POSTGRES_ARGS"
 grep -Fxq -- 'privileges.timeoutSeconds=37' "$TEST_POSTGRES_ARGS"
 grep -Fxq -- 'privileges.jobDeadlineGraceSeconds=30' "$TEST_POSTGRES_ARGS"
+grep -Fxq -- 'convergence.previousMigration.sourceTargetBaselineSha256=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' "$TEST_POSTGRES_ARGS"
+grep -Fxq -- 'convergence.previousMigration.sourceProtectedBaselineSha256s=["aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"]' "$TEST_POSTGRES_ARGS"
+grep -Fxq -- 'convergence.previousMigration.selectedSourceProtectedBaselineSha256=eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee' "$TEST_POSTGRES_ARGS"
 
 if rg -q 'DATABASE_MIGRATION_CONFIG_MAP="\$\(bash' "$DEPLOY_SCRIPT"; then
   echo "deploy entrypoint still publishes migration SQL before live-state classification" >&2
@@ -130,6 +137,28 @@ rm -f "$TEST_CURRENT_SENTINEL"
   run_database_release_transition
 )
 grep -q '^current$' "$TEST_CURRENT_SENTINEL"
+
+# A same-release reconciliation still classifies a database with migration history so the
+# privilege Job receives the protected origin selected from that completed chain.
+TEST_CURRENT_HISTORY_SENTINEL="$(mktemp)"
+export TEST_CURRENT_HISTORY_SENTINEL
+rm -f "$TEST_CURRENT_HISTORY_SENTINEL"
+(
+  source "$RECOVERY"
+  source "$ORCHESTRATOR"
+  POSTGRES_CLUSTER_EXISTS=1
+  DATABASE_TRANSITION_KIND=current
+  DATABASE_PREVIOUS_MIGRATION_AVAILABLE=true
+  classify_live_database_convergence() { printf 'completed|%s\n' "$LIVE_ORIGIN"; }
+  install_postgres_release()
+  {
+    printf '%s %s %s\n' "$1" "$2" "$DATABASE_SELECTED_PROTECTED_BASELINE_SHA256" \
+      >"$TEST_CURRENT_HISTORY_SENTINEL"
+  }
+  err() { :; }
+  run_database_release_transition
+)
+grep -Fxq "false true $LIVE_ORIGIN" "$TEST_CURRENT_HISTORY_SENTINEL"
 
 if (
   source "$RECOVERY"
@@ -201,7 +230,7 @@ if (
 fi
 
 TEST_DIR="$(mktemp -d)"
-trap 'rm -rf "$TEST_DIR"; rm -f "$TEST_CURRENT_SENTINEL" "$TEST_POSTGRES_ARGS"' EXIT
+trap 'rm -rf "$TEST_DIR"; rm -f "$TEST_CURRENT_SENTINEL" "$TEST_CURRENT_HISTORY_SENTINEL" "$TEST_POSTGRES_ARGS"' EXIT
 export TEST_DIR
 mkdir -p "$TEST_DIR/bin"
 
@@ -343,7 +372,7 @@ for state in current completed; do
     source "$ORCHESTRATOR"
     POSTGRES_CLUSTER_EXISTS=1
     DATABASE_TRANSITION_KIND=migration
-    classify_live_database_convergence() { printf '%s\n' "$state"; }
+    classify_live_database_convergence() { printf '%s|%s\n' "$state" "$LIVE_ORIGIN"; }
     adopt_matching_existing_database_fence() { :; }
     install_postgres_release() { printf 'install %s %s\n' "$1" "$2" >>"$STATE_CALLS"; }
     publish_database_migration_config_map() { printf '%s\n' publish >>"$STATE_CALLS"; }
@@ -370,7 +399,7 @@ export REENTRY_CALLS
   RELEASE_VERSION=0.8.0
   POSTGRES_CLUSTER_EXISTS=1
   DATABASE_TRANSITION_KIND=migration
-  classify_live_database_convergence() { printf '%s\n' completed; }
+  classify_live_database_convergence() { printf 'completed|%s\n' "$LIVE_ORIGIN"; }
   helm()
   {
     if [[ "$1" == "status" ]]; then printf '%s\n' '{"version":13}'; return 0; fi
@@ -406,7 +435,7 @@ for state in incompatible ambiguous; do
     if [[ "$state" == "ambiguous" ]]; then
       classify_live_database_convergence() { printf 'source\ncurrent\n'; }
     else
-      classify_live_database_convergence() { printf '%s\n' "$state"; }
+      classify_live_database_convergence() { printf '%s|%s\n' "$state" "$LIVE_ORIGIN"; }
     fi
     publish_database_migration_config_map() { printf '%s\n' publish >>"$STATE_CALLS"; }
     capture_pre_fence_main_release_revision() { printf '%s\n' capture >>"$STATE_CALLS"; }
@@ -456,7 +485,7 @@ export STATE_CALLS
   POSTGRES_RELEASE=opencrane-postgres
   POSTGRES_MIGRATION_BACKUP=/backup-owner.sh
   TIMEOUT=37
-  classify_live_database_convergence() { printf '%s\n' source; }
+  classify_live_database_convergence() { printf 'source|%s\n' "$LIVE_ORIGIN"; }
   publish_database_migration_config_map() { printf '%s\n' publish >>"$TEST_DIR/migration-order"; }
   capture_pre_fence_main_release_revision()
   {
@@ -466,7 +495,11 @@ export STATE_CALLS
   log() { :; }
   err() { :; }
   fence_existing_opencrane_server() { printf '%s\n' fence >>"$TEST_DIR/migration-order"; }
-  install_postgres_release() { printf 'install %s %s\n' "$1" "$2" >>"$TEST_DIR/migration-order"; }
+  install_postgres_release()
+  {
+    printf 'install %s %s %s\n' "$1" "$2" "$DATABASE_SELECTED_PROTECTED_BASELINE_SHA256" \
+      >>"$TEST_DIR/migration-order"
+  }
   bash()
   {
     printf 'backup %s %s %s %s\n' "$1" "$2" "$3" "$4" >>"$TEST_DIR/migration-order"
@@ -479,7 +512,7 @@ printf '%s\n' \
   capture \
   fence \
   'backup /backup-owner.sh opencrane opencrane-postgres 37' \
-  'install true true' >"$TEST_DIR/expected-migration-order"
+  "install true true $LIVE_ORIGIN" >"$TEST_DIR/expected-migration-order"
 cmp "$TEST_DIR/expected-migration-order" "$TEST_DIR/migration-order"
 
 # Missing-Cluster recovery fails before a fence unless the PostgreSQL render contains an explicit
@@ -518,7 +551,7 @@ set -e
   capture_pre_fence_main_release_revision() { DATABASE_PRE_FENCE_RELEASE_REVISION=12; printf '%s\n' capture >>"$TEST_DIR/missing-order"; }
   fence_existing_opencrane_server() { printf '%s\n' fence >>"$TEST_DIR/missing-order"; }
   install_postgres_release() { printf 'install %s %s\n' "$1" "$2" >>"$TEST_DIR/missing-order"; }
-  classify_live_database_convergence() { printf '%s\n' classify >>"$TEST_DIR/missing-order"; printf '%s\n' source; }
+  classify_live_database_convergence() { printf '%s\n' classify >>"$TEST_DIR/missing-order"; printf 'source|%s\n' "$LIVE_ORIGIN"; }
   publish_database_migration_config_map() { printf '%s\n' publish >>"$TEST_DIR/missing-order"; }
   bash()
   {
@@ -556,7 +589,7 @@ for state in current completed incompatible source; do
     TIMEOUT=37
     DATABASE_PRE_FENCE_RELEASE_REVISION=12
     database_migration_job_is_terminal_or_absent() { return 0; }
-    classify_live_database_convergence() { printf '%s\n' "$state"; }
+    classify_live_database_convergence() { printf '%s|%s\n' "$state" "$LIVE_ORIGIN"; }
     helm() { printf 'helm %s\n' "$*" >>"$RECOVERY_CALLS"; }
     log() { :; }
     err() { :; }
@@ -613,7 +646,7 @@ for job_state in active unknown; do
         printf '%s\n' '{"kind":"Job","status":{"active":0,"conditions":[]}}'
       fi
     }
-    classify_live_database_convergence() { printf '%s\n' source >>"$RECOVERY_CALLS"; }
+    classify_live_database_convergence() { printf 'source|%s\n' "$LIVE_ORIGIN" >>"$RECOVERY_CALLS"; }
     helm() { printf 'helm %s\n' "$*" >>"$RECOVERY_CALLS"; }
     log() { :; }
     err() { :; }
@@ -635,7 +668,7 @@ set +e
   TIMEOUT=37
   DATABASE_PRE_FENCE_RELEASE_REVISION=12
   database_migration_job_is_terminal_or_absent() { return 0; }
-  classify_live_database_convergence() { printf '%s\n' source; }
+  classify_live_database_convergence() { printf 'source|%s\n' "$LIVE_ORIGIN"; }
   helm() { return 47; }
   log() { :; }
   err() { :; }

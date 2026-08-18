@@ -26,7 +26,9 @@ build_postgres_release_args()
     --set "convergence.previousMigration.available=$DATABASE_PREVIOUS_MIGRATION_AVAILABLE"
     --set-string "convergence.previousMigration.id=$DATABASE_PREVIOUS_MIGRATION_ID"
     --set-string "convergence.previousMigration.fromSchemaVersion=$DATABASE_PREVIOUS_SCHEMA_VERSION"
-    --set-string "convergence.previousMigration.sourceProtectedBaselineSha256=$DATABASE_PREVIOUS_PROTECTED_BASELINE_SHA256"
+    --set-string "convergence.previousMigration.sourceTargetBaselineSha256=${DATABASE_PREVIOUS_TARGET_BASELINE_SHA256:-}"
+    --set-json "convergence.previousMigration.sourceProtectedBaselineSha256s=${DATABASE_PREVIOUS_PROTECTED_BASELINE_SHA256S_JSON:-[]}"
+    --set-string "convergence.previousMigration.selectedSourceProtectedBaselineSha256=${DATABASE_SELECTED_PROTECTED_BASELINE_SHA256:-}"
     --set-string "convergence.previousMigration.sqlSha256=$DATABASE_PREVIOUS_MIGRATION_SQL_SHA256"
     --set "migration.enabled=$migration_enabled"
     --set "privileges.enabled=$privileges_enabled"
@@ -159,11 +161,17 @@ classify_database_convergence_state()
     err "Unable to read unambiguous live database convergence evidence."
     return "$classification_status"
   fi
-  if ! database_convergence_state_is_valid "$classification_output"; then
+  if [[ ! "$classification_output" =~ ^(current|completed|source)\|([0-9a-f]{64})$ \
+    && ! "$classification_output" =~ ^incompatible\|([0-9a-f]{64})?$ ]]; then
     err "Database convergence classifier returned an invalid or ambiguous state."
     return 1
   fi
-  DATABASE_LIVE_CONVERGENCE_STATE="$classification_output"
+  DATABASE_LIVE_CONVERGENCE_STATE="${classification_output%%|*}"
+  DATABASE_SELECTED_PROTECTED_BASELINE_SHA256="${classification_output#*|}"
+  if ! database_convergence_state_is_valid "$DATABASE_LIVE_CONVERGENCE_STATE"; then
+    err "Database convergence classifier returned an invalid or ambiguous state."
+    return 1
+  fi
 }
 
 publish_database_migration_config_map()
@@ -260,6 +268,22 @@ run_database_release_transition()
   fi
 
   if [[ "$DATABASE_TRANSITION_KIND" != "migration" ]]; then
+    if [[ "${DATABASE_PREVIOUS_MIGRATION_AVAILABLE:-false}" == "true" ]]; then
+      if [[ "$POSTGRES_CLUSTER_EXISTS" == "0" ]]; then
+        install_postgres_release false false || return $?
+        POSTGRES_CLUSTER_EXISTS="1"
+      fi
+      classify_database_convergence_state || return $?
+      case "$DATABASE_LIVE_CONVERGENCE_STATE" in
+        current|completed) ;;
+        *)
+          err "Database evidence does not match the requested current release."
+          return 1
+          ;;
+      esac
+    else
+      DATABASE_SELECTED_PROTECTED_BASELINE_SHA256="${POSTGRES_BASELINE_SHA256:-}"
+    fi
     install_postgres_release false true
     return
   fi

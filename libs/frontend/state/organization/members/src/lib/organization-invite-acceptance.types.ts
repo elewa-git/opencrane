@@ -4,8 +4,8 @@ import type { OrganizationMember } from "./organization-member-directory.types";
  * Tells the guarded invitation route what happened while the signed-in user consumed its token.
  *
  * The acceptance store holds this state in memory after the route removes the token-bearing URL from
- * browser history. Identity mismatch, expiry, and prior use are terminal and clear the token; `Failure`
- * keeps it only for an explicit retry because the server outcome remains unknown.
+ * browser history. Identity mismatch, expiry, prior use, and invalid input are terminal and clear the
+ * token; `Failure` keeps it only for an explicit retry because the server outcome remains unknown.
  */
 export enum OrganizationInviteAcceptanceStates
 {
@@ -27,7 +27,10 @@ export enum OrganizationInviteAcceptanceStates
 	Failure = "failure"
 }
 
-/** Result of accepting an invitation as the signed-in identity. */
+/**
+ * Returns the server-authored member after the signed-in identity consumes an invitation.
+ * The acceptance store publishes this projection only after membership authority confirms success.
+ */
 export interface AcceptOrganizationInvitationResult
 {
 	/** Membership authority created or recovered for this acceptance. */

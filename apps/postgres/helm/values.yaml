@@ -135,7 +135,9 @@ convergence:
     available: false
     id: ""
     fromSchemaVersion: ""
-    sourceProtectedBaselineSha256: ""
+    sourceTargetBaselineSha256: ""
+    sourceProtectedBaselineSha256s: []
+    selectedSourceProtectedBaselineSha256: ""
     sqlSha256: ""
 
 # Existing databases are mutated only by this bounded, app-owner Job. The SQL ConfigMap is

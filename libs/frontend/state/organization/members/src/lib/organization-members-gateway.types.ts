@@ -46,6 +46,8 @@ export enum OrganizationMembersGatewayErrorKinds
 	Expired = "expired",
 	/** The invitation token was already consumed. */
 	AlreadyUsed = "already_used",
+	/** The request body or invitation token is malformed or unknown. */
+	Invalid = "invalid",
 	/** The response did not match a safe browser category. */
 	Unknown = "unknown"
 }

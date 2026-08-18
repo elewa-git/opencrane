@@ -16,7 +16,10 @@ NAMESPACE=opencrane-test
 POSTGRES_RELEASE=opencrane-test-postgres
 TIMEOUT=23
 POSTGRES_BASELINE_SHA256=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-DATABASE_PREVIOUS_PROTECTED_BASELINE_SHA256=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+DATABASE_PREVIOUS_TARGET_BASELINE_SHA256=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+DATABASE_PREVIOUS_FRESH_PROTECTED_BASELINE_SHA256=eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
+DATABASE_PREVIOUS_PROTECTED_BASELINE_SHA256S_JSON='["eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee","ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"]'
+DATABASE_SOURCE_HISTORY_LINEAGES_JSON='[{"sourceProtectedBaselineSha256":"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee","history":[]},{"sourceProtectedBaselineSha256":"ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff","history":[{"schemaVersion":"0.8.0","sourceSchemaVersion":"0.7.0","sourceProtectedBaselineSha256":"ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff","targetBaselineSha256":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","migrationId":"0.7.0-to-0.8.0","sqlSha256":"9999999999999999999999999999999999999999999999999999999999999999"}]}]'
 DATABASE_PREVIOUS_MIGRATION_ID=0.7.0-to-0.8.0
 DATABASE_PREVIOUS_SCHEMA_VERSION=0.7.0
 DATABASE_TARGET_SCHEMA_VERSION=0.8.0
@@ -65,32 +68,43 @@ assert_state()
   local expected="$1"
   local actual
   MOCK_PRIMARY_INVENTORY=ready
-  MOCK_CONVERGENCE_OUTPUT="$expected"
+  MOCK_CONVERGENCE_OUTPUT="$expected|eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
   actual="$(classify_live_database_convergence)"
-  [[ "$actual" == "$expected" ]]
+  [[ "$actual" == "$MOCK_CONVERGENCE_OUTPUT" ]]
 }
 
-# The classifier's result alphabet is exhaustive. The incompatible case models a readable origin
-# or tuple mismatch; the second incompatible case models an exact row plus an extra history row.
+# The classifier returns its exhaustive state plus the protected origin selected from live evidence.
 assert_state current
 assert_state completed
 assert_state source
 assert_state incompatible
 MOCK_PRIMARY_INVENTORY=ready
-MOCK_CONVERGENCE_OUTPUT=incompatible
-[[ "$(classify_live_database_convergence)" == "incompatible" ]]
+MOCK_CONVERGENCE_OUTPUT='incompatible|'
+[[ "$(classify_live_database_convergence)" == 'incompatible|' ]]
 
-# The one captured psql program owns the actual evidence mapping. Exact completion requires both
-# one total history row and one exact tuple; an extra row therefore cannot classify as completed.
+# The classifier sends one read-only SQL program so every state uses the same database snapshot.
+# It admits history only when one ordered lineage reaches the expected source or target and the
+# latest transition is exact.
 grep -Fq 'BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY;' "$SQL_CAPTURE"
 grep -Fq "SET LOCAL statement_timeout = :'statement_timeout_ms';" "$SQL_CAPTURE"
 grep -Fq "SET LOCAL idle_in_transaction_session_timeout = :'statement_timeout_ms';" "$SQL_CAPTURE"
 grep -Fq '\if :history_exists' "$SQL_CAPTURE"
-grep -Fq "AND :'history_total'::bigint = 1" "$SQL_CAPTURE"
+grep -Fq 'WITH RECURSIVE history AS MATERIALIZED' "$SQL_CAPTURE"
+grep -Fq '(SELECT count(*) FROM completed_chain) = (SELECT count(*) FROM history)' "$SQL_CAPTURE"
+grep -Fq 'predecessor."applied_at" > child."applied_at"' "$SQL_CAPTURE"
+grep -Fq "AND :'source_history_matches'::boolean" "$SQL_CAPTURE"
+grep -Fq "AND :'completed_history_matches'::boolean" "$SQL_CAPTURE"
+grep -Fq "AND :'admitted_source_history_matches'::boolean" "$SQL_CAPTURE"
+grep -Fq "live.\"migration_id\" = expected.value->>'migrationId'" "$SQL_CAPTURE"
 grep -Fq "AND :'exact_history_total'::bigint = 1" "$SQL_CAPTURE"
 grep -Fq "AND :'recorded_origin' = :'current_protected_baseline_sha256'" "$SQL_CAPTURE"
-grep -Fq "AND :'recorded_origin' = :'previous_protected_baseline_sha256'" "$SQL_CAPTURE"
+grep -Fq "AND :'recorded_origin' = :'previous_fresh_protected_baseline_sha256'" "$SQL_CAPTURE"
+grep -Fq "AND :'admitted_source_protected_baseline_sha256s_json'::jsonb ? :'recorded_origin'" "$SQL_CAPTURE"
 grep -Fq "ELSE 'incompatible'" "$SQL_CAPTURE"
+if grep -Fq "AND :'history_total'::bigint = 1" "$SQL_CAPTURE"; then
+  printf 'classifier still assumes one total migration-history row\n' >&2
+  exit 1
+fi
 [[ "$(grep -c '^BEGIN TRANSACTION ' "$SQL_CAPTURE")" == "1" ]]
 [[ "$(grep -c '^COMMIT;$' "$SQL_CAPTURE")" == "1" ]]
 if grep -Eiq '^[[:space:]]*(INSERT|UPDATE|DELETE|CREATE|ALTER|DROP|TRUNCATE|GRANT|REVOKE|MERGE|CALL|DO|COPY)[[:space:]]' "$SQL_CAPTURE"; then
@@ -132,7 +146,9 @@ assert_failure()
 # nonzero public-function result with a diagnostic and no accidental state token on stdout.
 declare -f ready_primary_json kubectl >"$TEST_DIR/environment.sh"
 export NAMESPACE POSTGRES_RELEASE TIMEOUT POSTGRES_BASELINE_SHA256
-export DATABASE_PREVIOUS_PROTECTED_BASELINE_SHA256 DATABASE_PREVIOUS_MIGRATION_ID
+export DATABASE_PREVIOUS_TARGET_BASELINE_SHA256 DATABASE_PREVIOUS_PROTECTED_BASELINE_SHA256S_JSON
+export DATABASE_PREVIOUS_FRESH_PROTECTED_BASELINE_SHA256 DATABASE_SOURCE_HISTORY_LINEAGES_JSON
+export DATABASE_PREVIOUS_MIGRATION_ID
 export DATABASE_PREVIOUS_SCHEMA_VERSION DATABASE_TARGET_SCHEMA_VERSION
 export DATABASE_TARGET_BASELINE_SHA256 DATABASE_PREVIOUS_MIGRATION_SQL_SHA256
 export TEST_DIR SQL_CAPTURE KUBECTL_CALLS
@@ -143,7 +159,11 @@ assert_failure 'an unready primary' MOCK_PRIMARY_INVENTORY=unready
 assert_failure 'a kubectl inventory failure' MOCK_GET_FAILURE=true
 assert_failure 'a kubectl exec or psql failure' MOCK_PSQL_FAILURE=true
 assert_failure 'malformed psql output' MOCK_CONVERGENCE_OUTPUT=ambiguous
-assert_failure 'ambiguous equal current and previous origins' \
-  DATABASE_PREVIOUS_PROTECTED_BASELINE_SHA256="$POSTGRES_BASELINE_SHA256"
+assert_failure 'ambiguous equal current and previous target baselines' \
+  DATABASE_PREVIOUS_TARGET_BASELINE_SHA256="$POSTGRES_BASELINE_SHA256"
+assert_failure 'an admitted-origin list missing the fresh protected source baseline' \
+  DATABASE_PREVIOUS_PROTECTED_BASELINE_SHA256S_JSON='["bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"]'
+assert_failure 'duplicate admitted protected origins' \
+  DATABASE_PREVIOUS_PROTECTED_BASELINE_SHA256S_JSON='["eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee","eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"]'
 
 echo "database convergence classifier contract: PASS"

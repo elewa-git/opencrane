@@ -260,6 +260,17 @@ follows [Keep a Changelog](https://keepachangelog.com/); the project uses
   surface is gone. Historical SessionScope rows remain only as migration input for the green
   platform cutover.
 
+## [0.9.0] - 2026-08-18
+
+### Added
+
+- **Organisation admins can now invite members from Settings on a standalone silo without Fleet or
+  a payment service.** They can view the member directory, create or refresh expiring shareable
+  links, and admit a signed-in recipient only after an exact verified-email match; rotated, expired,
+  replayed, wrong-email, and wrong-silo links fail closed. Fleet-backed deployments can instead
+  delegate the same journey to a configured membership-and-billing gateway, whose failure never
+  falls back to local writes; Fleet's receiver-side billing remains unshipped.
+
 ## [0.6.1] — 2026-06-29
 
 Post-split operability fixes: fleet manager exposed, multi-silo RBAC coexistence, and chart
@@ -957,7 +968,8 @@ First tagged release — a working multi-tenant OpenClaw platform you can deploy
 - Initial scaffold of the multi-tenant OpenClaw platform (operator, control-plane, Angular app,
   launch script). Folded into the 0.2.0 tag.
 
-[Unreleased]: https://github.com/elewa-git/opencrane/compare/0.6.1...HEAD
+[Unreleased]: https://github.com/elewa-git/opencrane/compare/0.9.0...HEAD
+[0.9.0]: https://github.com/elewa-git/opencrane/compare/0.8.1...0.9.0
 [0.6.1]: https://github.com/elewa-git/opencrane/compare/0.6.0...0.6.1
 [0.6.0]: https://github.com/elewa-git/opencrane/compare/0.5.3...0.6.0
 [0.5.3]: https://github.com/elewa-git/opencrane/compare/0.5.2...0.5.3

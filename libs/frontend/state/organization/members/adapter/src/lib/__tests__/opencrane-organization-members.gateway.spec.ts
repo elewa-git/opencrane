@@ -26,7 +26,7 @@ function _Gateway(post: ReturnType<typeof vi.fn>): OpenCraneOrganizationMembersG
 
 describe("OpenCrane organization-members gateway", function _OrganizationMembersGatewaySuite()
 {
-	it("maps stable payment, already-used, and unknown errors without reading their prose", async function _ErrorCodeMapping()
+	it("maps stable payment, invitation, and unknown errors without reading their prose", async function _ErrorCodeMapping()
 	{
 		const payment = _Gateway(vi.fn().mockResolvedValue({ error: { code: "payment_required", error: "host prose" }, response: { status: 402 } }));
 		await expect(payment.accept("opaque-token")).rejects.toMatchObject({ kind: OrganizationMembersGatewayErrorKinds.PaymentRequired });
@@ -34,6 +34,10 @@ describe("OpenCrane organization-members gateway", function _OrganizationMembers
 
 		const alreadyUsed = _Gateway(vi.fn().mockResolvedValue({ error: { code: "already_used", error: "server prose" }, response: { status: 409 } }));
 		await expect(alreadyUsed.accept("opaque-token")).rejects.toMatchObject({ kind: OrganizationMembersGatewayErrorKinds.AlreadyUsed });
+		TestBed.resetTestingModule();
+
+		const invalid = _Gateway(vi.fn().mockResolvedValue({ error: { code: "invalid", error: "request body is invalid" }, response: { status: 400 } }));
+		await expect(invalid.accept("bad-token")).rejects.toMatchObject({ kind: OrganizationMembersGatewayErrorKinds.Invalid });
 		TestBed.resetTestingModule();
 
 		const unknown = _Gateway(vi.fn().mockResolvedValue({ error: { code: "future_code", error: "future prose" }, response: { status: 418 } }));

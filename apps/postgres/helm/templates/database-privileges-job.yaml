@@ -55,7 +55,7 @@ spec:
                   -c "SELECT to_regclass('opencrane_migrations.schema_history') IS NOT NULL")"
                 [ "$history_exists" = "f" ] && convergence=current
               elif [ "$PREVIOUS_MIGRATION_AVAILABLE" = "true" ] \
-                && [ "$recorded_origin" = "$PREVIOUS_PROTECTED_BASELINE_SHA256" ]; then
+                && [ "$recorded_origin" = "$SELECTED_SOURCE_PROTECTED_BASELINE_SHA256" ]; then
                 history_exists="$(psql --no-psqlrc -v ON_ERROR_STOP=1 -d "$PGDATABASE" -tA \
                   -c "SELECT to_regclass('opencrane_migrations.schema_history') IS NOT NULL")"
                 if [ "$history_exists" = "t" ]; then
@@ -65,8 +65,8 @@ spec:
                     -v previous_migration_id="$PREVIOUS_MIGRATION_ID" \
                     -v previous_migration_sql_sha256="$PREVIOUS_MIGRATION_SQL_SHA256" \
                     -v previous_schema_version="$PREVIOUS_SCHEMA_VERSION" \
-                    -v previous_protected_baseline_sha256="$PREVIOUS_PROTECTED_BASELINE_SHA256" \
-                    -c "SELECT count(*) = 1 FROM opencrane_migrations.schema_history WHERE schema_version = :'current_schema_version' AND source_schema_version = :'previous_schema_version' AND source_baseline_sha256 = :'previous_protected_baseline_sha256' AND target_baseline_sha256 = :'target_baseline_sha256' AND migration_id = :'previous_migration_id' AND sql_sha256 = :'previous_migration_sql_sha256'")"
+                    -v selected_source_protected_baseline_sha256="$SELECTED_SOURCE_PROTECTED_BASELINE_SHA256" \
+                    -c "SELECT count(*) = 1 FROM opencrane_migrations.schema_history WHERE schema_version = :'current_schema_version' AND source_schema_version = :'previous_schema_version' AND source_baseline_sha256 = :'selected_source_protected_baseline_sha256' AND target_baseline_sha256 = :'target_baseline_sha256' AND migration_id = :'previous_migration_id' AND sql_sha256 = :'previous_migration_sql_sha256'")"
                   [ "$exact_history" = "t" ] && convergence=current
                 fi
               fi
@@ -120,8 +120,8 @@ spec:
               value: {{ $.Values.convergence.previousMigration.sqlSha256 | quote }}
             - name: PREVIOUS_SCHEMA_VERSION
               value: {{ $.Values.convergence.previousMigration.fromSchemaVersion | quote }}
-            - name: PREVIOUS_PROTECTED_BASELINE_SHA256
-              value: {{ $.Values.convergence.previousMigration.sourceProtectedBaselineSha256 | quote }}
+            - name: SELECTED_SOURCE_PROTECTED_BASELINE_SHA256
+              value: {{ $.Values.convergence.previousMigration.selectedSourceProtectedBaselineSha256 | quote }}
             {{- end }}
         {{- end }}
 {{- end }}

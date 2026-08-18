@@ -3,6 +3,9 @@ import { join, relative } from "node:path";
 import { createReleaseManifestValidator } from "./manifest-validation.mjs";
 import { compareSemver, isAdjacentMinor, readJson, sha256 } from "./version-utils.mjs";
 
+/** Accepts only SHA-256 identities that can become deployment convergence evidence. */
+const protectedBaselineDigestPattern = /^[a-f0-9]{64}$/u;
+
 function _ReadMigrationManifest(path, description, errors)
 {
 	try
@@ -16,7 +19,83 @@ function _ReadMigrationManifest(path, description, errors)
 	}
 }
 
-/** Validate database baseline and migration evidence for one release manifest pair. */
+/**
+ * Normalizes historical singular manifests while preserving protected-origin order.
+ * The resolver pairs each origin with the same-index `sourceHistoryLineages` entry, so consumers must
+ * reorder both arrays together; after release tagging, the manifest and this pairing are immutable.
+ */
+function _SourceProtectedBaselineDigests(migrationManifest)
+{
+	if (Array.isArray(migrationManifest.sourceProtectedBaselineSha256s))
+		return migrationManifest.sourceProtectedBaselineSha256s;
+	if (typeof migrationManifest.sourceProtectedBaselineSha256 === "string")
+		return [migrationManifest.sourceProtectedBaselineSha256];
+	return [];
+}
+
+/** Uses the sole admitted origin when a historical manifest predates an explicit fresh-origin field. */
+function _FreshSourceProtectedBaselineDigest(migrationManifest)
+{
+	if (Array.isArray(migrationManifest.sourceProtectedBaselineSha256s))
+		return migrationManifest.freshSourceProtectedBaselineSha256;
+	return migrationManifest.sourceProtectedBaselineSha256;
+}
+
+/**
+ * Rebuilds each admitted origin's earlier migration rows from the release ledger.
+ * An origin stops accumulating history when an older transition no longer admits it, which lets the
+ * deploy classifier reject a live history that did not follow every recorded transition.
+ */
+function _SourceHistoryLineages(repositoryRoot, sourceRelease, sourceProtectedBaselineSha256s)
+{
+	const lineages = sourceProtectedBaselineSha256s.map((sourceProtectedBaselineSha256) => ({
+		sourceProtectedBaselineSha256,
+		history: [],
+	}));
+	const activeOrigins = new Set(sourceProtectedBaselineSha256s);
+	let cursor = sourceRelease;
+	while (cursor?.previousRepositoryVersion)
+	{
+		const predecessor = readJson(join(repositoryRoot, "releases", `${cursor.previousRepositoryVersion}.json`));
+		if (predecessor.database.schemaVersion !== cursor.database.schemaVersion)
+		{
+			const migrationId = `${predecessor.database.schemaVersion}-to-${cursor.database.schemaVersion}`;
+			const migrationManifest = readJson(join(
+				repositoryRoot,
+				"apps/opencrane/prisma/migrations",
+				migrationId,
+				"manifest.json",
+			));
+			const transitionOrigins = new Set(_SourceProtectedBaselineDigests(migrationManifest));
+			for (const lineage of lineages)
+			{
+				const origin = lineage.sourceProtectedBaselineSha256;
+				if (!activeOrigins.has(origin)) continue;
+				if (!transitionOrigins.has(origin))
+				{
+					activeOrigins.delete(origin);
+					continue;
+				}
+				lineage.history.unshift({
+					schemaVersion: cursor.database.schemaVersion,
+					sourceSchemaVersion: predecessor.database.schemaVersion,
+					sourceProtectedBaselineSha256: origin,
+					targetBaselineSha256: cursor.database.baselineSha256,
+					migrationId,
+					sqlSha256: migrationManifest.sqlSha256,
+				});
+			}
+		}
+		cursor = predecessor;
+	}
+	return lineages;
+}
+
+/**
+ * Checks a release pair's database baseline and migration evidence before the release can be used.
+ * It appends violations to `errors` so workspace validation can report the whole release failure.
+ * Called by: `validateWorkspace` and {@link resolveDatabaseTransition}.
+ */
 export function validateDatabase(repositoryRoot, manifest, previousManifest, changedFiles, errors)
 {
 	const database = manifest.database;
@@ -75,11 +154,26 @@ export function validateDatabase(repositoryRoot, manifest, previousManifest, cha
 		errors.push("database migration source baseline digest differs from the previous release manifest");
 	if (migrationManifest.targetBaselineSha256 !== database.baselineSha256)
 		errors.push("database migration target baseline digest differs from the current release manifest");
-	if (!/^[a-f0-9]{64}$/u.test(migrationManifest.sourceProtectedBaselineSha256 ?? ""))
-		errors.push("database migration must bind the exact protected source baseline digest");
+	const sourceProtectedBaselineSha256s = _SourceProtectedBaselineDigests(migrationManifest);
+	if (sourceProtectedBaselineSha256s.length === 0
+		|| sourceProtectedBaselineSha256s.some((digest) => !protectedBaselineDigestPattern.test(digest))
+		|| new Set(sourceProtectedBaselineSha256s).size !== sourceProtectedBaselineSha256s.length)
+	{
+		errors.push("database migration must bind a non-empty unique set of protected source baseline digests");
+	}
+	else if (!protectedBaselineDigestPattern.test(_FreshSourceProtectedBaselineDigest(migrationManifest) ?? "")
+		|| !sourceProtectedBaselineSha256s.includes(_FreshSourceProtectedBaselineDigest(migrationManifest)))
+	{
+		errors.push("database migration must identify its fresh protected source baseline inside the admitted set");
+	}
 }
 
-/** Resolve the one validated database transition consumed by the deploy owner. */
+/**
+ * Validates the requested release pair and describes the database state that deployment must reach.
+ * The result binds migration SQL, every admitted protected origin, and each origin's prior history.
+ * Called by: `database-transition.mjs`, which supplies this evidence to the deployment script.
+ * @throws {Error} When either manifest or its database transition is invalid.
+ */
 export function resolveDatabaseTransition(repositoryRoot, releaseVersion, fromReleaseVersion)
 {
 	const rootVersion = readJson(join(repositoryRoot, "package.json")).version;
@@ -119,13 +213,17 @@ export function resolveDatabaseTransition(repositoryRoot, releaseVersion, fromRe
 		const id = `${source.database.schemaVersion}-to-${target.database.schemaVersion}`;
 		const migrationRoot = join(repositoryRoot, "apps/opencrane/prisma/migrations", id);
 		const migrationManifest = readJson(join(migrationRoot, "manifest.json"));
+		const sourceProtectedBaselineSha256s = _SourceProtectedBaselineDigests(migrationManifest);
 		migration = {
 			id,
 			fromSchemaVersion: source.database.schemaVersion,
 			toSchemaVersion: target.database.schemaVersion,
 			sqlFile: join(migrationRoot, "migration.sql"),
 			sqlSha256: migrationManifest.sqlSha256,
-			sourceProtectedBaselineSha256: migrationManifest.sourceProtectedBaselineSha256,
+			sourceTargetBaselineSha256: migrationManifest.sourceTargetBaselineSha256,
+			sourceProtectedBaselineSha256s,
+			freshSourceProtectedBaselineSha256: _FreshSourceProtectedBaselineDigest(migrationManifest),
+			sourceHistoryLineages: _SourceHistoryLineages(repositoryRoot, source, sourceProtectedBaselineSha256s),
 		};
 	}
 	return {

@@ -93,6 +93,7 @@ function _WriteDatabaseMigration(root, from, to)
 	mkdirSync(migrationRoot, { recursive: true });
 	const sqlPath = join(migrationRoot, "migration.sql");
 	writeFileSync(sqlPath, "BEGIN;\nSELECT 1;\nCOMMIT;\n");
+	const sourceBaselineSha256 = sha256(join(root, "apps/opencrane/prisma/bootstrap/target-baseline.sql"));
 	_WriteJson(join(migrationRoot, "manifest.json"), {
 		fromSchemaVersion: from,
 		toSchemaVersion: to,
@@ -100,8 +101,8 @@ function _WriteDatabaseMigration(root, from, to)
 		owner: "apps/opencrane",
 		rollback: "backup-restore-or-forward-repair",
 		executionMode: "automatic",
-		sourceTargetBaselineSha256: sha256(join(root, "apps/opencrane/prisma/bootstrap/target-baseline.sql")),
-		targetBaselineSha256: sha256(join(root, "apps/opencrane/prisma/bootstrap/target-baseline.sql")),
+		sourceTargetBaselineSha256: sourceBaselineSha256,
+		targetBaselineSha256: sourceBaselineSha256,
 		sourceProtectedBaselineSha256: "a".repeat(64),
 	});
 }
@@ -637,4 +638,91 @@ test("accepts a digest-bound migration from the previous schema version", async 
 		["apps/opencrane/prisma/bootstrap/target-baseline.sql"],
 		fixture.graph,
 	), []);
+});
+
+test("normalizes a historical singular protected source digest for deployment", () =>
+{
+	const fixture = _Fixture({
+		repositoryVersion: "0.8.0",
+		previousRepositoryVersion: "0.7.0",
+		previousSchemaVersion: "0.7.0",
+		adaptedVersion: "0.8.0",
+	});
+	_WriteDatabaseMigration(fixture.root, "0.7.0", "0.8.0");
+	const transition = resolveDatabaseTransition(fixture.root, "0.8.0", "0.7.0");
+	assert.notEqual(transition.migration.freshSourceProtectedBaselineSha256, transition.migration.sourceTargetBaselineSha256);
+	assert.deepEqual(transition.migration.sourceProtectedBaselineSha256s, ["a".repeat(64)]);
+	assert.equal(transition.migration.freshSourceProtectedBaselineSha256, "a".repeat(64));
+});
+
+test("accepts several unique protected source origins and preserves their order", async () =>
+{
+	const fixture = _Fixture({
+		repositoryVersion: "0.8.0",
+		previousRepositoryVersion: "0.7.0",
+		previousSchemaVersion: "0.7.0",
+		adaptedVersion: "0.8.0",
+	});
+	_WriteDatabaseMigration(fixture.root, "0.7.0", "0.8.0");
+	const manifestPath = join(fixture.root, "apps/opencrane/prisma/migrations/0.7.0-to-0.8.0/manifest.json");
+	const migrationManifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+	const inheritedOrigin = "b".repeat(64);
+	delete migrationManifest.sourceProtectedBaselineSha256;
+	migrationManifest.sourceProtectedBaselineSha256s = [inheritedOrigin, migrationManifest.sourceTargetBaselineSha256];
+	migrationManifest.freshSourceProtectedBaselineSha256 = migrationManifest.sourceTargetBaselineSha256;
+	_WriteJson(manifestPath, migrationManifest);
+	assert.deepEqual(await validateWorkspace(fixture.root, [], fixture.graph), []);
+	const transition = resolveDatabaseTransition(fixture.root, "0.8.0", "0.7.0");
+	assert.deepEqual(transition.migration.sourceProtectedBaselineSha256s, [inheritedOrigin, migrationManifest.sourceTargetBaselineSha256]);
+	assert.equal(transition.migration.freshSourceProtectedBaselineSha256, migrationManifest.sourceTargetBaselineSha256);
+});
+
+test("derives the exact admitted history prefix for an inherited protected origin", () =>
+{
+	const fixture = _Fixture({
+		repositoryVersion: "0.9.0",
+		previousRepositoryVersion: "0.8.0",
+		previousSchemaVersion: "0.8.0",
+		adaptedVersion: "0.9.0",
+	});
+	const sourceReleasePath = join(fixture.root, "releases/0.8.0.json");
+	const sourceRelease = JSON.parse(readFileSync(sourceReleasePath, "utf8"));
+	sourceRelease.previousRepositoryVersion = "0.7.0";
+	sourceRelease.adoptionBaseline = false;
+	_WriteJson(sourceReleasePath, sourceRelease);
+	_WriteJson(join(fixture.root, "releases/0.7.0.json"), {
+		...sourceRelease,
+		repositoryVersion: "0.7.0",
+		previousRepositoryVersion: null,
+		adoptionBaseline: true,
+		database: { ...sourceRelease.database, schemaVersion: "0.7.0" },
+	});
+	_WriteDatabaseMigration(fixture.root, "0.7.0", "0.8.0");
+	const inheritedOrigin = "b".repeat(64);
+	const olderManifestPath = join(fixture.root, "apps/opencrane/prisma/migrations/0.7.0-to-0.8.0/manifest.json");
+	const olderManifest = JSON.parse(readFileSync(olderManifestPath, "utf8"));
+	olderManifest.sourceProtectedBaselineSha256 = inheritedOrigin;
+	_WriteJson(olderManifestPath, olderManifest);
+	_WriteDatabaseMigration(fixture.root, "0.8.0", "0.9.0");
+	const currentManifestPath = join(fixture.root, "apps/opencrane/prisma/migrations/0.8.0-to-0.9.0/manifest.json");
+	const currentManifest = JSON.parse(readFileSync(currentManifestPath, "utf8"));
+	delete currentManifest.sourceProtectedBaselineSha256;
+	currentManifest.sourceProtectedBaselineSha256s = [currentManifest.sourceTargetBaselineSha256, inheritedOrigin];
+	currentManifest.freshSourceProtectedBaselineSha256 = currentManifest.sourceTargetBaselineSha256;
+	_WriteJson(currentManifestPath, currentManifest);
+	const transition = resolveDatabaseTransition(fixture.root, "0.9.0", "0.8.0");
+	assert.deepEqual(transition.migration.sourceHistoryLineages, [
+		{ sourceProtectedBaselineSha256: currentManifest.sourceTargetBaselineSha256, history: [] },
+		{
+			sourceProtectedBaselineSha256: inheritedOrigin,
+			history: [{
+				schemaVersion: "0.8.0",
+				sourceSchemaVersion: "0.7.0",
+				sourceProtectedBaselineSha256: inheritedOrigin,
+				targetBaselineSha256: sourceRelease.database.baselineSha256,
+				migrationId: "0.7.0-to-0.8.0",
+				sqlSha256: olderManifest.sqlSha256,
+			}],
+		},
+	]);
 });
