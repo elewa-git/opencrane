@@ -195,6 +195,15 @@ follows [Keep a Changelog](https://keepachangelog.com/); the project uses
 
 ### Fixed
 
+- **Operators now have a bounded recovery path for standalone invitation upgrades that stalled
+  before the `0.9.0` database migration.** The `0.9.1` repair creates the invitation-signing Secret
+  before the server write fence, carries forward only the exact digest-bound `0.8.1` to `0.9.0`
+  migration, and rejects altered, undeclared, skipped, or multi-hop sources. For this specifically
+  approved repair, operators may explicitly skip unavailable physical-backup creation with
+  `--allow-unbacked-database-migration`; source classification, the write fence, transactional
+  migration, convergence and privilege checks, and post-failure recovery remain mandatory. The
+  path is contract-tested; live-cluster qualification remains pending.
+
 - **BYOK model calls no longer return 401 when the operator fetches the tenant model list.**
   The `/api/internal/*` routes (`/tenant-models`, `/bundles`, `/contract`,
   `/awareness/participation`) are now mounted before the browser-session auth middleware, so the

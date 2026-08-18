@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { join, relative } from "node:path";
 import { createReleaseManifestValidator } from "./manifest-validation.mjs";
-import { compareSemver, isAdjacentMinor, readJson, sha256 } from "./version-utils.mjs";
+import { compareSemver, isAdjacentMinor, isAdjacentPatch, readJson, sha256 } from "./version-utils.mjs";
 
 /** Accepts only SHA-256 identities that can become deployment convergence evidence. */
 const protectedBaselineDigestPattern = /^[a-f0-9]{64}$/u;
@@ -39,6 +39,47 @@ function _FreshSourceProtectedBaselineDigest(migrationManifest)
 	if (Array.isArray(migrationManifest.sourceProtectedBaselineSha256s))
 		return migrationManifest.freshSourceProtectedBaselineSha256;
 	return migrationManifest.sourceProtectedBaselineSha256;
+}
+
+function _DatabaseIdentity(database)
+{
+	return [database.schemaVersion, database.baselinePath, database.baselineSha256].join("|");
+}
+
+/**
+ * Restricts a carry-forward to the approved next-patch repair of its predecessor's migration.
+ * The repair must preserve that predecessor's database identity and original adjacent-minor source.
+ */
+function _ValidateCarriedForwardTransition(repositoryRoot, manifest, previousManifest, errors)
+{
+	const carriedFrom = manifest.database.carriedForwardFromRepositoryVersion;
+	if (!carriedFrom) return;
+	if (manifest.manualTransition?.approved !== true
+		|| typeof manifest.manualTransition.reason !== "string"
+		|| manifest.manualTransition.reason.trim() === "")
+		errors.push("database carry-forward requires an explicitly approved manual patch transition");
+	if (!previousManifest)
+	{
+		errors.push("database carry-forward requires the immediate predecessor release manifest");
+		return;
+	}
+	if (!isAdjacentPatch(previousManifest.repositoryVersion, manifest.repositoryVersion))
+		errors.push("database carry-forward is allowed only on the immediate next patch release");
+	if (previousManifest.previousRepositoryVersion !== carriedFrom)
+		errors.push("database carry-forward source must be the predecessor release's exact source");
+	if (_DatabaseIdentity(manifest.database) !== _DatabaseIdentity(previousManifest.database))
+		errors.push("database carry-forward must preserve the predecessor database identity exactly");
+	const sourcePath = join(repositoryRoot, "releases", `${carriedFrom}.json`);
+	if (!existsSync(sourcePath))
+	{
+		errors.push(`database carry-forward source release manifest is missing: ${sourcePath}`);
+		return;
+	}
+	const source = readJson(sourcePath);
+	if (!isAdjacentMinor(carriedFrom, previousManifest.repositoryVersion))
+		errors.push("database carry-forward may retain only an adjacent-minor predecessor migration");
+	if (source.database.schemaVersion === previousManifest.database.schemaVersion)
+		errors.push("database carry-forward source must own a real predecessor schema transition");
 }
 
 /**
@@ -93,12 +134,14 @@ function _SourceHistoryLineages(repositoryRoot, sourceRelease, sourceProtectedBa
 
 /**
  * Checks a release pair's database baseline and migration evidence before the release can be used.
- * It appends violations to `errors` so workspace validation can report the whole release failure.
+ * It admits a carry-forward only when an approved patch preserves its predecessor's database
+ * identity; every violation is appended to `errors` so validation reports the whole release failure.
  * Called by: `validateWorkspace` and {@link resolveDatabaseTransition}.
  */
 export function validateDatabase(repositoryRoot, manifest, previousManifest, changedFiles, errors)
 {
 	const database = manifest.database;
+	_ValidateCarriedForwardTransition(repositoryRoot, manifest, previousManifest, errors);
 	const baselinePath = join(repositoryRoot, database.baselinePath);
 	if (!existsSync(baselinePath)) return errors.push(`database baseline '${database.baselinePath}' does not exist`);
 	if (sha256(baselinePath) !== database.baselineSha256) errors.push("database baseline digest differs from the release manifest");
@@ -176,7 +219,9 @@ export function validateDatabase(repositoryRoot, manifest, previousManifest, cha
 
 /**
  * Validates the requested release pair and describes the database state that deployment must reach.
- * The result binds migration SQL, every admitted protected origin, and each origin's prior history.
+ * An approved next-patch repair may reuse its predecessor's migration from that migration's original
+ * source; every other non-adjacent source is rejected. The result binds migration SQL, every admitted
+ * protected origin, and each origin's prior history.
  * Called by: `database-transition.mjs`, which supplies this evidence to the deployment script.
  * @throws {Error} When either manifest or its database transition is invalid.
  */
@@ -192,6 +237,7 @@ export function resolveDatabaseTransition(repositoryRoot, releaseVersion, fromRe
 		errors.push(`release version '${releaseVersion}' must equal root and manifest version '${rootVersion}'`);
 	let kind = fromReleaseVersion === "fresh" ? "fresh" : "current";
 	let source = null;
+	let migrationOwner = target;
 	if (fromReleaseVersion !== "fresh" && fromReleaseVersion !== releaseVersion)
 	{
 		const sourcePath = join(repositoryRoot, "releases", `${fromReleaseVersion}.json`);
@@ -204,14 +250,41 @@ export function resolveDatabaseTransition(repositoryRoot, releaseVersion, fromRe
 				errors.push(`source release manifest does not bind '${fromReleaseVersion}'`);
 		}
 		if (target.previousRepositoryVersion !== fromReleaseVersion)
-			errors.push(`automatic database migration requires exact previous release '${target.previousRepositoryVersion}'`);
-		if (target.database.schemaVersion !== source.database.schemaVersion && !isAdjacentMinor(fromReleaseVersion, releaseVersion))
-			errors.push(`automatic database migration permits only an adjacent minor transition: '${fromReleaseVersion}' -> '${releaseVersion}'`);
-		if (target.database.schemaVersion !== source.database.schemaVersion) kind = "migration";
+		{
+			const predecessorPath = join(repositoryRoot, "releases", `${target.previousRepositoryVersion}.json`);
+			const predecessor = existsSync(predecessorPath) ? readJson(predecessorPath) : null;
+			if (target.database.carriedForwardFromRepositoryVersion === fromReleaseVersion
+				&& predecessor?.previousRepositoryVersion === fromReleaseVersion)
+			{
+				migrationOwner = predecessor;
+			}
+			else errors.push(`automatic database migration requires exact previous release '${target.previousRepositoryVersion}'`);
+		}
+		if (source)
+		{
+			if (migrationOwner.database.schemaVersion !== source.database.schemaVersion
+				&& !isAdjacentMinor(fromReleaseVersion, migrationOwner.repositoryVersion))
+				errors.push(`automatic database migration permits only an adjacent minor transition: '${fromReleaseVersion}' -> '${releaseVersion}'`);
+			if (migrationOwner.database.schemaVersion !== source.database.schemaVersion) kind = "migration";
+		}
 	}
 	// A release transition alone does not change the bootstrap SQL. Compare its digest to the
 	// source manifest; only the workspace validator receives an actual changed-file list.
-	validateDatabase(repositoryRoot, target, source, [], errors);
+	if (migrationOwner === target)
+	{
+		let validationPrevious = source;
+		if (!validationPrevious && target.database.carriedForwardFromRepositoryVersion)
+		{
+			const previousPath = join(repositoryRoot, "releases", `${target.previousRepositoryVersion}.json`);
+			validationPrevious = existsSync(previousPath) ? readJson(previousPath) : null;
+		}
+		validateDatabase(repositoryRoot, target, validationPrevious, [], errors);
+	}
+	else
+	{
+		validateDatabase(repositoryRoot, target, migrationOwner, [], errors);
+		validateDatabase(repositoryRoot, migrationOwner, source, [], errors);
+	}
 	if (errors.length > 0) throw new Error(errors.join("; "));
 	let migration = null;
 	if (kind === "migration")
@@ -230,6 +303,7 @@ export function resolveDatabaseTransition(repositoryRoot, releaseVersion, fromRe
 			sourceProtectedBaselineSha256s,
 			freshSourceProtectedBaselineSha256: _FreshSourceProtectedBaselineDigest(migrationManifest),
 			sourceHistoryLineages: _SourceHistoryLineages(repositoryRoot, source, sourceProtectedBaselineSha256s),
+			carriedForwardThroughReleaseVersion: migrationOwner === target ? null : migrationOwner.repositoryVersion,
 		};
 	}
 	return {

@@ -63,6 +63,7 @@ fence_existing_opencrane_server()
   local live_replicas
   local active_pod_count
   local nonterminal_job_count
+  build_membership_helm_args
   server_deployment="${RELEASE}-opencrane-server"
   if ! helm status "$RELEASE" -n "$NAMESPACE" >/dev/null 2>&1; then
     if ! server_deployment_inventory="$(kubectl get deployment "$server_deployment" -n "$NAMESPACE" --ignore-not-found -o name)"; then
@@ -117,6 +118,7 @@ fence_existing_opencrane_server()
     --set migrationFence.previousReplicas="$DATABASE_FENCE_PRIOR_REPLICAS" \
     --set-string migrationFence.fromReleaseVersion="$FROM_RELEASE_VERSION" \
     --set-string migrationFence.toReleaseVersion="$RELEASE_VERSION" \
+    "${MEMBERSHIP_HELM_ARGS[@]}" \
     --wait \
     --timeout "${TIMEOUT}s"; then
     command_status=0

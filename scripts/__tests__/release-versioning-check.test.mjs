@@ -9,7 +9,7 @@ import {
 	validateWorkspace,
 } from "../release-versioning/core.mjs";
 import { resolveDatabaseTransition } from "../release-versioning/database-validation.mjs";
-import { isAdjacentMinor, parseSemver, sha256 } from "../release-versioning/version-utils.mjs";
+import { isAdjacentMinor, isAdjacentPatch, parseSemver, sha256 } from "../release-versioning/version-utils.mjs";
 
 function _WriteJson(path, value)
 {
@@ -107,6 +107,37 @@ function _WriteDatabaseMigration(root, from, to)
 	});
 }
 
+function _CarryForwardFixture()
+{
+	const fixture = _Fixture({
+		repositoryVersion: "0.9.1",
+		previousRepositoryVersion: "0.9.0",
+		previousSchemaVersion: "0.9.0",
+		schemaVersion: "0.9.0",
+		adaptedVersion: "0.9.1",
+		previousChartVersion: "0.9.0",
+		manualTransition: { approved: true, reason: "Carry the failed predecessor migration through its repair patch" },
+	});
+	const targetPath = join(fixture.root, "releases/0.9.1.json");
+	const target = JSON.parse(readFileSync(targetPath, "utf8"));
+	target.database.carriedForwardFromRepositoryVersion = "0.8.1";
+	_WriteJson(targetPath, target);
+	const ownerPath = join(fixture.root, "releases/0.9.0.json");
+	const owner = JSON.parse(readFileSync(ownerPath, "utf8"));
+	owner.previousRepositoryVersion = "0.8.1";
+	owner.adoptionBaseline = false;
+	_WriteJson(ownerPath, owner);
+	_WriteJson(join(fixture.root, "releases/0.8.1.json"), {
+		...owner,
+		repositoryVersion: "0.8.1",
+		previousRepositoryVersion: null,
+		adoptionBaseline: true,
+		database: { ...owner.database, schemaVersion: "0.8.0" },
+	});
+	_WriteDatabaseMigration(fixture.root, "0.8.0", "0.9.0");
+	return fixture;
+}
+
 test("accepts only strict semantic versions", () =>
 {
 	assert.deepEqual(parseSemver("0.7.0"), [0, 7, 0]);
@@ -118,6 +149,13 @@ test("automatic transitions are adjacent minor trains only", () =>
 	assert.equal(isAdjacentMinor("0.7.3", "0.8.0"), true);
 	assert.equal(isAdjacentMinor("0.7.0", "0.7.1"), false);
 	assert.equal(isAdjacentMinor("0.7.0", "1.0.0"), false);
+});
+
+test("patch adjacency stays inside one minor train", () =>
+{
+	assert.equal(isAdjacentPatch("0.9.0", "0.9.1"), true);
+	assert.equal(isAdjacentPatch("0.8.1", "0.9.0"), false);
+	assert.equal(isAdjacentPatch("0.9.0", "0.9.2"), false);
 });
 
 test("rejects an invalid Git base instead of suppressing changed files", () =>
@@ -419,6 +457,47 @@ test("resolves an approved patch release with unchanged database state as curren
 	assert.equal(transition.kind, "current");
 	assert.equal(transition.targetSchemaVersion, "0.7.0");
 	assert.equal(transition.migration, null);
+});
+
+test("carries one failed predecessor migration through its immediate repair patch", () =>
+{
+	const fixture = _CarryForwardFixture();
+	const transition = resolveDatabaseTransition(fixture.root, "0.9.1", "0.8.1");
+	assert.equal(transition.kind, "migration");
+	assert.equal(transition.targetSchemaVersion, "0.9.0");
+	assert.equal(transition.migration.id, "0.8.0-to-0.9.0");
+	assert.equal(transition.migration.carriedForwardThroughReleaseVersion, "0.9.0");
+	assert.equal(resolveDatabaseTransition(fixture.root, "0.9.1", "0.9.0").kind, "current");
+	assert.equal(resolveDatabaseTransition(fixture.root, "0.9.1", "0.9.1").kind, "current");
+});
+
+test("rejects undeclared and altered database carry-forward transitions", () =>
+{
+	const undeclared = _CarryForwardFixture();
+	const undeclaredPath = join(undeclared.root, "releases/0.9.1.json");
+	const undeclaredTarget = JSON.parse(readFileSync(undeclaredPath, "utf8"));
+	delete undeclaredTarget.database.carriedForwardFromRepositoryVersion;
+	_WriteJson(undeclaredPath, undeclaredTarget);
+	assert.throws(
+		() => resolveDatabaseTransition(undeclared.root, "0.9.1", "0.8.1"),
+		/exact previous release/u,
+	);
+
+	const altered = _CarryForwardFixture();
+	const alteredPath = join(altered.root, "releases/0.9.1.json");
+	const alteredTarget = JSON.parse(readFileSync(alteredPath, "utf8"));
+	alteredTarget.database.schemaVersion = "0.9.1";
+	_WriteJson(alteredPath, alteredTarget);
+	assert.throws(
+		() => resolveDatabaseTransition(altered.root, "0.9.1", "0.8.1"),
+		/preserve the predecessor database identity/u,
+	);
+
+	const wrongSource = _CarryForwardFixture();
+	assert.throws(
+		() => resolveDatabaseTransition(wrongSource.root, "0.9.1", "0.7.0"),
+		/source release manifest is missing|exact previous release/u,
+	);
 });
 
 test("rejects a manual transition without a non-empty review reason", async () =>

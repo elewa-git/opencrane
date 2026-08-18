@@ -201,11 +201,17 @@ the server is changed. Only an exact source state proceeds:
    the exact current application Helm revision;
 2. scales the old server to zero through its Helm release and persists a visible migration fence;
 3. requires a chart-owned plugin-backed `ScheduledBackup`, creates an immediate CNPG `Backup`, and
-   waits for `status.phase=completed`;
+   waits for `status.phase=completed`, unless the reviewed invocation explicitly passes
+   `--allow-unbacked-database-migration`;
 4. runs the digest-pinned, zero-RBAC app-owner Job with deadline, no retry, read-only root, scratch,
    and egress limited to DNS plus the exact CNPG pods on TCP 5432; and
 5. runs schema convergence before database privilege reconciliation, then restores the previous
    replica count only after the whole migration succeeds.
+
+The CLI-only unbacked override applies only to approved carry-forward repairs and skips only step 3. Source
+classification, fencing, immutable SQL publication, the migration Job, convergence, privilege
+reconciliation, and recovery remain mandatory. Use it only for a specifically approved repair; never
+make it a persistent deployment default.
 
 After any post-fence failure, the deploy owner checks that the migration Job is absent or terminal and
 reclassifies the database. It restores the exact captured Helm revision only if the database is still

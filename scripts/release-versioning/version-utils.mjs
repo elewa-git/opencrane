@@ -37,6 +37,22 @@ export function isAdjacentMinor(previous, current)
 	return previousMajor === currentMajor && currentMinor === previousMinor + 1 && currentPatch === 0;
 }
 
+/**
+ * Reports whether `current` is the immediate next patch in `previous`'s minor train.
+ * Called by: `_ValidateCarriedForwardTransition`, which admits one repair release.
+ * @param {string} previous The predecessor semantic version.
+ * @param {string} current The candidate repair semantic version.
+ * @returns {boolean} True when only the patch increases by one.
+ * @throws {Error} When either value is not a strict semantic version.
+ */
+export function isAdjacentPatch(previous, current)
+{
+	const [previousMajor, previousMinor, previousPatch] = parseSemver(previous);
+	const [currentMajor, currentMinor, currentPatch] = parseSemver(current);
+	return previousMajor === currentMajor && previousMinor === currentMinor
+		&& currentPatch === previousPatch + 1;
+}
+
 /** Calculate the exact bytes digest recorded in a release manifest. */
 export function sha256(path)
 {

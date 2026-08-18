@@ -71,7 +71,14 @@ fenced revision, never the now-incompatible running source application.
 
 An automatic source migration additionally requires the PostgreSQL chart's plugin-backed `ScheduledBackup`.
 The engine creates a dedicated on-demand `Backup` and waits for completed controller evidence; a
-flag, annotation, or operator acknowledgement is not recovery evidence. It preserves an existing
+flag, annotation, or operator acknowledgement is not recovery evidence. An operator may explicitly
+run an approved carry-forward repair with `--allow-unbacked-database-migration` while no provider is available;
+this skips only backup creation and leaves the write fence, exact source classifier, transactional
+migration Job, convergence proof, and failure recovery active. The deployer rejects that override for
+fresh, current, and ordinary migration transitions. A completed carry-forward re-entry accepts the
+flag but performs no backup or migration, so the override is inert. The override is CLI-only so it
+cannot persist as an environment default.
+It preserves an existing
 Cluster's original initdb ConfigMap and protected origin digest while publishing the current baseline
 separately for convergence proof. The Helm-owned `migrationFence` records source/target versions and
 the previous replica count. It stays active whenever failure evidence does not safely permit the

@@ -13,6 +13,12 @@ automatic migration boundary. Patch and major transitions require a reviewed `ma
 the new manifest; the generic deploy resolver does not execute them. A version-specific reviewed
 operator procedure must own those manual data and chart changes.
 
+An immediate repair patch may declare `database.carriedForwardFromRepositoryVersion` to finish the
+exact adjacent-minor migration owned by its predecessor when that predecessor never reached the
+database. The repair patch must keep the predecessor's database identity unchanged, name the
+predecessor's exact source release, and include an approved `manualTransition`. The resolver rejects
+undeclared, altered, non-adjacent, and multi-hop carry-forward paths.
+
 When a project changes production source or deployment configuration, update the owning Nx
 application and every application that depends on that project to the current root version in
 `metadata.release.adaptedVersion`, and mirror that value into any app `package.json`. A changed

@@ -3,6 +3,15 @@
 # manifest-bound globals plus log/err functions. This module may fence the application Helm release
 # and reconcile the app-owned PostgreSQL chart; it never selects a migration or edits database bytes.
 
+# Accepts the CLI override only after the release resolver has admitted an approved carry-forward repair.
+validate_unbacked_database_migration_override()
+{
+  if [[ "${ALLOW_UNBACKED_DATABASE_MIGRATION:-0}" != "1" ]]; then return 0; fi
+  if [[ "$DATABASE_TRANSITION_KIND" == "migration" && -n "$DATABASE_CARRY_FORWARD_RELEASE" ]]; then return 0; fi
+  err "--allow-unbacked-database-migration is valid only for an approved carry-forward repair."
+  return 2
+}
+
 build_postgres_release_args()
 {
   local migration_enabled="$1"
@@ -372,20 +381,24 @@ run_database_release_transition()
         ;;
     esac
   fi
-  if backup_evidence="$(bash "$POSTGRES_MIGRATION_BACKUP" \
-    "$NAMESPACE" "$POSTGRES_RELEASE" "$TIMEOUT")"; then
-    backup_status=0
+  if [[ "${ALLOW_UNBACKED_DATABASE_MIGRATION:-0}" == "1" ]]; then
+    log "WARNING: operator explicitly allowed this database migration without recovery-backup evidence."
   else
-    backup_status=$?
-  fi
-  if (( backup_status != 0 )); then
-    if recover_failed_database_transition "$backup_status"; then
+    if backup_evidence="$(bash "$POSTGRES_MIGRATION_BACKUP" \
+      "$NAMESPACE" "$POSTGRES_RELEASE" "$TIMEOUT")"; then
       backup_status=0
     else
       backup_status=$?
     fi
-    return "$backup_status"
+    if (( backup_status != 0 )); then
+      if recover_failed_database_transition "$backup_status"; then
+        backup_status=0
+      else
+        backup_status=$?
+      fi
+      return "$backup_status"
+    fi
+    log "CNPG recovery evidence completed before migration: $backup_evidence"
   fi
-  log "CNPG recovery evidence completed before migration: $backup_evidence"
   run_guarded_post_fence_stage install_postgres_release true true
 }

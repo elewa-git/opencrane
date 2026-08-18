@@ -8,8 +8,10 @@ CURRENT_VERSION="$(jq -r '.version' "$ROOT_DIR/package.json")"
 fresh="$(node "$RESOLVER" "$ROOT_DIR" "$CURRENT_VERSION" fresh)"
 current="$(node "$RESOLVER" "$ROOT_DIR" "$CURRENT_VERSION" "$CURRENT_VERSION")"
 previous="$(jq -r '.previousRepositoryVersion' "$ROOT_DIR/releases/$CURRENT_VERSION.json")"
-migration="$(node "$RESOLVER" "$ROOT_DIR" "$CURRENT_VERSION" "$previous")"
-previous_schema="$(jq -r '.database.schemaVersion' "$ROOT_DIR/releases/$previous.json")"
+migration_source="$(jq -r '.database.carriedForwardFromRepositoryVersion // .previousRepositoryVersion' \
+  "$ROOT_DIR/releases/$CURRENT_VERSION.json")"
+migration="$(node "$RESOLVER" "$ROOT_DIR" "$CURRENT_VERSION" "$migration_source")"
+previous_schema="$(jq -r '.database.schemaVersion' "$ROOT_DIR/releases/$migration_source.json")"
 target_schema="$(jq -r '.database.schemaVersion' "$ROOT_DIR/releases/$CURRENT_VERSION.json")"
 expected_migration_id="${previous_schema}-to-${target_schema}"
 
@@ -19,6 +21,11 @@ expected_migration_id="${previous_schema}-to-${target_schema}"
 [[ "$(jq -r '.migration.id' <<<"$migration")" == "$expected_migration_id" ]]
 [[ "$(jq -r '.migration.fromSchemaVersion' <<<"$migration")" == "$previous_schema" ]]
 [[ "$(jq -r '.migration.toSchemaVersion' <<<"$migration")" == "$target_schema" ]]
+if [[ "$migration_source" != "$previous" ]]; then
+  predecessor="$(node "$RESOLVER" "$ROOT_DIR" "$CURRENT_VERSION" "$previous")"
+  [[ "$(jq -r '.kind' <<<"$predecessor")" == "current" ]]
+  [[ "$(jq -r '.migration.carriedForwardThroughReleaseVersion' <<<"$migration")" == "$previous" ]]
+fi
 jq -e '
   .migration.sourceProtectedBaselineSha256s as $origins
   | .migration.sourceHistoryLineages as $lineages
