@@ -204,8 +204,10 @@ follows [Keep a Changelog](https://keepachangelog.com/); the project uses
   migration, convergence and privilege checks, and post-failure recovery remain mandatory. A
   database whose migration already completed can now finish convergence and privilege
   reconciliation because the proof query binds its validated history values through psql's script
-  input instead of treating them as literal placeholders, allowing the fence to clear. The path is
-  contract-tested; live-cluster redeployment qualification remains pending.
+  input instead of treating them as literal placeholders, allowing the fence to clear. Deployments
+  that omit `--initial-model-provider` can also complete Helm argument construction under strict
+  shell checks instead of aborting on an unset optional argument array. The path is contract-tested;
+  live-cluster redeployment qualification remains pending.
 
 - **BYOK model calls no longer return 401 when the operator fetches the tenant model list.**
   The `/api/internal/*` routes (`/tenant-models`, `/bundles`, `/contract`,

@@ -17,7 +17,7 @@ grep -Fq -- 'Fresh silo deploys require `--opencrane-ui-digest` and `--cognee-di
 grep -Fq -- 'OPENCRANE_INITIAL_MODEL_API_KEY' "$DEPLOY_SCRIPT"
 grep -Fq -- 'validate_initial_model_provider' "$MODEL_HELPER"
 grep -Fq -- 'publish_initial_model_provider_secret' "$MODEL_HELPER"
-grep -Fq -- 'build_initial_model_provider_helm_args' "$MODEL_HELPER"
+grep -Fq -- 'append_initial_model_provider_helm_args' "$MODEL_HELPER"
 grep -Fq -- '--from-file=apiKey=<(printf' "$MODEL_HELPER"
 if grep -Fq -- '--from-literal=apiKey="$api_key"' "$MODEL_HELPER"; then
   echo "initial model provider key is exposed through kubectl command arguments" >&2

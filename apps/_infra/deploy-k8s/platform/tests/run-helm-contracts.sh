@@ -9,6 +9,7 @@ for contract in \
   current-chart-sources-contract.sh \
   provision-contract.sh \
   kubernetes-api-helm-args-contract.sh \
+  initial-model-provider-helm-args-contract.sh \
   pooler-deploy-contract.sh \
   database-migration-deploy-contract.sh \
   database-convergence-classifier-contract.sh \
