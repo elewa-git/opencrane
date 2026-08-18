@@ -4,7 +4,7 @@ dependencies:
   version: 0.9.1
 - name: opencrane-server
   repository: file://../../opencrane/helm
-  version: 0.9.0
+  version: 0.9.1
 - name: opencrane-ui
   repository: file://../../opencrane-ui/helm
   version: 0.9.0
@@ -44,5 +44,5 @@ dependencies:
 - name: opencrane-obot
   repository: file://../obot/helm
   version: 0.8.0
-digest: sha256:ee0a08363e0700f4f99d99c6a5f2bffcc6de43c6bfcdc7c7305a1c86f90571cb
-generated: "2026-08-18T15:35:27.79349+03:00"
+digest: sha256:88c9f626cd663c4d541f5d3caf14cfdf4ac0d39958b66de07f536779cb34eeb6
+generated: "2026-08-18T17:49:06.809629+03:00"

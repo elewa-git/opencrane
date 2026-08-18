@@ -97,10 +97,10 @@
     },
     "opencrane": {
       "root": "apps/opencrane",
-      "adaptedVersion": "0.9.0",
-      "packageVersion": "0.9.0",
-      "chartVersion": "0.9.0",
-      "chartAppVersion": "0.9.0"
+      "adaptedVersion": "0.9.1",
+      "packageVersion": "0.9.1",
+      "chartVersion": "0.9.1",
+      "chartAppVersion": "0.9.1"
     },
     "opencrane-ui": {
       "root": "apps/opencrane-ui",

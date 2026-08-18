@@ -21,7 +21,9 @@
     },
     "dependency-status": {
       "executor": "nx:run-commands",
-      "options": { "command": "helm dependency list apps/_infra/deploy-k8s" }
+      "options": {
+        "command": "bash apps/_infra/deploy-k8s/platform/tests/dependency-status-current-sources.sh"
+      }
     }
   }
 }
