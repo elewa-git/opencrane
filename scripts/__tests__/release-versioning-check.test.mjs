@@ -667,14 +667,34 @@ test("accepts several unique protected source origins and preserves their order"
 	const manifestPath = join(fixture.root, "apps/opencrane/prisma/migrations/0.7.0-to-0.8.0/manifest.json");
 	const migrationManifest = JSON.parse(readFileSync(manifestPath, "utf8"));
 	const inheritedOrigin = "b".repeat(64);
+	const freshOrigin = "c".repeat(64);
 	delete migrationManifest.sourceProtectedBaselineSha256;
-	migrationManifest.sourceProtectedBaselineSha256s = [inheritedOrigin, migrationManifest.sourceTargetBaselineSha256];
-	migrationManifest.freshSourceProtectedBaselineSha256 = migrationManifest.sourceTargetBaselineSha256;
+	migrationManifest.sourceProtectedBaselineSha256s = [inheritedOrigin, freshOrigin];
+	migrationManifest.freshSourceProtectedBaselineSha256 = freshOrigin;
 	_WriteJson(manifestPath, migrationManifest);
 	assert.deepEqual(await validateWorkspace(fixture.root, [], fixture.graph), []);
 	const transition = resolveDatabaseTransition(fixture.root, "0.8.0", "0.7.0");
-	assert.deepEqual(transition.migration.sourceProtectedBaselineSha256s, [inheritedOrigin, migrationManifest.sourceTargetBaselineSha256]);
-	assert.equal(transition.migration.freshSourceProtectedBaselineSha256, migrationManifest.sourceTargetBaselineSha256);
+	assert.deepEqual(transition.migration.sourceProtectedBaselineSha256s, [inheritedOrigin, freshOrigin]);
+	assert.equal(transition.migration.freshSourceProtectedBaselineSha256, freshOrigin);
+});
+
+test("rejects a raw source baseline mislabeled as the fresh protected origin", async () =>
+{
+	const fixture = _Fixture({
+		repositoryVersion: "0.8.0",
+		previousRepositoryVersion: "0.7.0",
+		previousSchemaVersion: "0.7.0",
+		adaptedVersion: "0.8.0",
+	});
+	_WriteDatabaseMigration(fixture.root, "0.7.0", "0.8.0");
+	const manifestPath = join(fixture.root, "apps/opencrane/prisma/migrations/0.7.0-to-0.8.0/manifest.json");
+	const migrationManifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+	delete migrationManifest.sourceProtectedBaselineSha256;
+	migrationManifest.sourceProtectedBaselineSha256s = [migrationManifest.sourceTargetBaselineSha256];
+	migrationManifest.freshSourceProtectedBaselineSha256 = migrationManifest.sourceTargetBaselineSha256;
+	_WriteJson(manifestPath, migrationManifest);
+	const errors = await validateWorkspace(fixture.root, [], fixture.graph);
+	assert.ok(errors.some((error) => error.includes("bootstrap envelope")));
 });
 
 test("derives the exact admitted history prefix for an inherited protected origin", () =>
@@ -706,13 +726,14 @@ test("derives the exact admitted history prefix for an inherited protected origi
 	_WriteDatabaseMigration(fixture.root, "0.8.0", "0.9.0");
 	const currentManifestPath = join(fixture.root, "apps/opencrane/prisma/migrations/0.8.0-to-0.9.0/manifest.json");
 	const currentManifest = JSON.parse(readFileSync(currentManifestPath, "utf8"));
+	const freshOrigin = "c".repeat(64);
 	delete currentManifest.sourceProtectedBaselineSha256;
-	currentManifest.sourceProtectedBaselineSha256s = [currentManifest.sourceTargetBaselineSha256, inheritedOrigin];
-	currentManifest.freshSourceProtectedBaselineSha256 = currentManifest.sourceTargetBaselineSha256;
+	currentManifest.sourceProtectedBaselineSha256s = [freshOrigin, inheritedOrigin];
+	currentManifest.freshSourceProtectedBaselineSha256 = freshOrigin;
 	_WriteJson(currentManifestPath, currentManifest);
 	const transition = resolveDatabaseTransition(fixture.root, "0.9.0", "0.8.0");
 	assert.deepEqual(transition.migration.sourceHistoryLineages, [
-		{ sourceProtectedBaselineSha256: currentManifest.sourceTargetBaselineSha256, history: [] },
+		{ sourceProtectedBaselineSha256: freshOrigin, history: [] },
 		{
 			sourceProtectedBaselineSha256: inheritedOrigin,
 			history: [{

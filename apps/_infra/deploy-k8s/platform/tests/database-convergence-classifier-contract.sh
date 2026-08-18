@@ -99,6 +99,7 @@ grep -Fq "live.\"migration_id\" = expected.value->>'migrationId'" "$SQL_CAPTURE"
 grep -Fq "AND :'exact_history_total'::bigint = 1" "$SQL_CAPTURE"
 grep -Fq "AND :'recorded_origin' = :'current_protected_baseline_sha256'" "$SQL_CAPTURE"
 grep -Fq "AND :'recorded_origin' = :'previous_fresh_protected_baseline_sha256'" "$SQL_CAPTURE"
+[[ "$(grep -c "AND :'recorded_origin' = :'previous_fresh_protected_baseline_sha256'" "$SQL_CAPTURE")" == "2" ]]
 grep -Fq "AND :'admitted_source_protected_baseline_sha256s_json'::jsonb ? :'recorded_origin'" "$SQL_CAPTURE"
 grep -Fq "ELSE 'incompatible'" "$SQL_CAPTURE"
 if grep -Fq "AND :'history_total'::bigint = 1" "$SQL_CAPTURE"; then

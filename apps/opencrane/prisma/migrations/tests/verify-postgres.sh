@@ -11,6 +11,7 @@ CLASSIFIER="$ROOT/apps/_infra/deploy-k8s/platform/database-convergence-classifie
 WORK_DIR="$(mktemp -d)"
 CONTAINER="opencrane-migration-$$-$RANDOM"
 PROTECTED_DIGEST="25bfc5d31c4966ee697ae5aaa47edc855d25120d0829c241f213353f69e0358d"
+FRESH_PROTECTED_DIGEST="12505f3c15114bd2a407d0d4d2ef2befc3c8ec87acaa9787503cfbe4eba0032c"
 LEGACY_MIGRATION_SQL_DIGEST="$(node -e 'process.stdout.write(require(process.argv[1]).sqlSha256)' "$LEGACY_TRANSITION_ROOT/manifest.json")"
 CURRENT_MIGRATION_SQL_DIGEST="$(node -e 'process.stdout.write(require(process.argv[1]).sqlSha256)' "$CURRENT_TRANSITION_ROOT/manifest.json")"
 DATABASE_TRANSITION="$(node "$ROOT/scripts/release-versioning/database-transition.mjs" "$ROOT" 0.9.0 0.8.1)"
@@ -50,6 +51,7 @@ POSTGRES_BASELINE_SHA256="$(jq -r '.targetBaselineSha256' <<<"$DATABASE_TRANSITI
 DATABASE_PREVIOUS_TARGET_BASELINE_SHA256="$(jq -r '.migration.sourceTargetBaselineSha256' <<<"$DATABASE_TRANSITION")"
 DATABASE_PREVIOUS_PROTECTED_BASELINE_SHA256S_JSON="$(jq -c '.migration.sourceProtectedBaselineSha256s' <<<"$DATABASE_TRANSITION")"
 DATABASE_PREVIOUS_FRESH_PROTECTED_BASELINE_SHA256="$(jq -r '.migration.freshSourceProtectedBaselineSha256' <<<"$DATABASE_TRANSITION")"
+[[ "$DATABASE_PREVIOUS_FRESH_PROTECTED_BASELINE_SHA256" == "$FRESH_PROTECTED_DIGEST" ]]
 DATABASE_SOURCE_HISTORY_LINEAGES_JSON="$(jq -c '.migration.sourceHistoryLineages' <<<"$DATABASE_TRANSITION")"
 DATABASE_PREVIOUS_MIGRATION_ID="$(jq -r '.migration.id' <<<"$DATABASE_TRANSITION")"
 DATABASE_PREVIOUS_SCHEMA_VERSION="$(jq -r '.migration.fromSchemaVersion' <<<"$DATABASE_TRANSITION")"
@@ -159,6 +161,12 @@ SET "baseline_sha256" = '$DATABASE_PREVIOUS_FRESH_PROTECTED_BASELINE_SHA256'
 WHERE "singleton" = TRUE;
 SQL
 assert_classifier_state fresh_source "source|$DATABASE_PREVIOUS_FRESH_PROTECTED_BASELINE_SHA256"
+psql_command fresh_source --set "source_baseline_sha256=$FRESH_PROTECTED_DIGEST" --set "migration_sql_sha256=$CURRENT_MIGRATION_SQL_DIGEST" \
+	--file - <"$CURRENT_TRANSITION_ROOT/migration.sql" >/dev/null
+assert_classifier_state fresh_source "completed|$FRESH_PROTECTED_DIGEST"
+psql_command fresh_source --tuples-only --no-align --command \
+	'SELECT count(*) FROM "opencrane_migrations"."schema_history" WHERE "schema_version" = '\''0.9.0'\'' AND "source_schema_version" = '\''0.8.0'\'' AND "source_baseline_sha256" = '\''12505f3c15114bd2a407d0d4d2ef2befc3c8ec87acaa9787503cfbe4eba0032c'\'';' \
+	| grep -qx '1'
 psql_command migrated --set "source_baseline_sha256=$PROTECTED_DIGEST" --set "migration_sql_sha256=$CURRENT_MIGRATION_SQL_DIGEST" \
 	--file - <"$CURRENT_TRANSITION_ROOT/migration.sql" >/dev/null
 psql_command migrated --set "source_baseline_sha256=$PROTECTED_DIGEST" --set "migration_sql_sha256=$CURRENT_MIGRATION_SQL_DIGEST" \

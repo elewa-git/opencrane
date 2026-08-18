@@ -211,7 +211,7 @@ SELECT
     )
     AND (
       ((SELECT count(*) FROM history) = 1
-        AND :'recorded_origin' = :'previous_target_baseline_sha256')
+        AND :'recorded_origin' = :'previous_fresh_protected_baseline_sha256')
       OR EXISTS (
         SELECT 1 FROM completed_chain
         WHERE "schema_version" = :'previous_schema_version'

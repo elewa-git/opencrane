@@ -166,6 +166,12 @@ export function validateDatabase(repositoryRoot, manifest, previousManifest, cha
 	{
 		errors.push("database migration must identify its fresh protected source baseline inside the admitted set");
 	}
+	// Fresh installs hash the bootstrap SQL together with the database owner. The raw baseline digest
+	// therefore cannot prove the protected origin read from a live database.
+	else if (_FreshSourceProtectedBaselineDigest(migrationManifest) === migrationManifest.sourceTargetBaselineSha256)
+	{
+		errors.push("database migration fresh protected source digest must identify the bootstrap envelope, not the raw source baseline");
+	}
 }
 
 /**

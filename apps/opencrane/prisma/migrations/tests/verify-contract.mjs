@@ -207,13 +207,13 @@ requireContract(organizationManifest.sqlSha256 === organizationSqlDigest, "organ
 requireContract(organizationManifest.targetBaselineSha256 === targetDigest, "organization-member migration target digest must match the clean baseline");
 requireContract(
 	JSON.stringify(organizationManifest.sourceProtectedBaselineSha256s) === JSON.stringify([
-		"7ed3f49ec3b96276cfce1c1d41e97588b0970fb28352c7d933269ce201ce32fc",
+		"12505f3c15114bd2a407d0d4d2ef2befc3c8ec87acaa9787503cfbe4eba0032c",
 		"25bfc5d31c4966ee697ae5aaa47edc855d25120d0829c241f213353f69e0358d",
 	]),
 	"organization-member migration must admit fresh 0.8 and inherited 0.7 protected origins",
 );
 requireContract(
-	organizationManifest.freshSourceProtectedBaselineSha256 === "7ed3f49ec3b96276cfce1c1d41e97588b0970fb28352c7d933269ce201ce32fc",
+	organizationManifest.freshSourceProtectedBaselineSha256 === "12505f3c15114bd2a407d0d4d2ef2befc3c8ec87acaa9787503cfbe4eba0032c",
 	"organization-member migration must identify the fresh 0.8 protected origin",
 );
 for (const admittedOrigin of organizationManifest.sourceProtectedBaselineSha256s)
