@@ -17,16 +17,20 @@ expected_migration_id="${previous_schema}-to-${target_schema}"
 
 [[ "$(jq -r '.kind' <<<"$fresh")" == "fresh" ]]
 [[ "$(jq -r '.kind' <<<"$current")" == "current" ]]
-[[ "$(jq -r '.kind' <<<"$migration")" == "migration" ]]
-[[ "$(jq -r '.migration.id' <<<"$migration")" == "$expected_migration_id" ]]
-[[ "$(jq -r '.migration.fromSchemaVersion' <<<"$migration")" == "$previous_schema" ]]
-[[ "$(jq -r '.migration.toSchemaVersion' <<<"$migration")" == "$target_schema" ]]
-if [[ "$migration_source" != "$previous" ]]; then
-  predecessor="$(node "$RESOLVER" "$ROOT_DIR" "$CURRENT_VERSION" "$previous")"
-  [[ "$(jq -r '.kind' <<<"$predecessor")" == "current" ]]
-  [[ "$(jq -r '.migration.carriedForwardThroughReleaseVersion' <<<"$migration")" == "$previous" ]]
-fi
-jq -e '
+# A release that keeps the schema needs no migration, so the resolver reports the database as current.
+if [[ "$previous_schema" == "$target_schema" ]]; then
+	[[ "$(jq -r '.kind' <<<"$migration")" == "current" ]]
+else
+	[[ "$(jq -r '.kind' <<<"$migration")" == "migration" ]]
+	[[ "$(jq -r '.migration.id' <<<"$migration")" == "$expected_migration_id" ]]
+	[[ "$(jq -r '.migration.fromSchemaVersion' <<<"$migration")" == "$previous_schema" ]]
+	[[ "$(jq -r '.migration.toSchemaVersion' <<<"$migration")" == "$target_schema" ]]
+	if [[ "$migration_source" != "$previous" ]]; then
+		predecessor="$(node "$RESOLVER" "$ROOT_DIR" "$CURRENT_VERSION" "$previous")"
+		[[ "$(jq -r '.kind' <<<"$predecessor")" == "current" ]]
+		[[ "$(jq -r '.migration.carriedForwardThroughReleaseVersion' <<<"$migration")" == "$previous" ]]
+	fi
+	jq -e '
   .migration.sourceProtectedBaselineSha256s as $origins
   | .migration.sourceHistoryLineages as $lineages
   | ($origins | type == "array" and length > 0)
@@ -34,6 +38,7 @@ jq -e '
     and ([range(0; $origins | length) as $index
       | $lineages[$index].sourceProtectedBaselineSha256 == $origins[$index]] | all)
 ' <<<"$migration" >/dev/null
+fi
 
 if node "$RESOLVER" "$ROOT_DIR" "$CURRENT_VERSION" 0.7 >/dev/null 2>&1; then
   echo "release resolver accepted an inexact source version" >&2
