@@ -18,11 +18,15 @@ main pipeline is where the time goes:
 
 ```mermaid
 flowchart LR
-    P[prepare\ncalculate affected work\n~1-2 min] --> T[test\nbuild, test, lint,\npolicy guards\n~3-12 min]
+    P[prepare\ncalculate affected work\n~1-2 min] --> T[test\nbuild, test, lint,\npolicy guards\n~3-10 min]
+    P --> DB[database\nSQL authority suites,\nmigration proofs\n~2-4 min]
+    P --> A[api_contract\nOpenAPI + client sync\nonly when affected]
     P --> S[storybook_visual\ncomponent contracts\nskips fast when\nnothing affected]
     P --> K[develop_smoke\nk3d current-silo smoke\n~6-15 min]
     P --> I[image_smoke\nper-image boot checks\n~1-2 min each]
     T --> B[build-and-push\npublish affected images\npush events only]
+    DB --> B
+    A --> B
     S --> B
     K --> B
     I --> B
@@ -35,7 +39,9 @@ What each job owns:
 | Job | Purpose | Typical duration |
 | --- | --- | --- |
 | `prepare` | Computes the Nx affected graph, the deployable matrix, the guard comparison base, and whether the k3d smoke can be skipped. | 1–2 min |
-| `test` | Builds, tests, and lints affected projects, and runs every policy guard: workload ownership, agent-domain boundary, mechanical style, module growth, release versioning, database migration contracts, Prisma boundaries, config-docs coverage, dependency boundaries. | 3–12 min |
+| `test` | Builds, tests, and lints affected projects, and runs every policy guard: workload ownership, agent-domain boundary, mechanical style, module growth, release versioning, Prisma boundaries, config-docs coverage, dependency boundaries. | 3–10 min |
+| `database` | Everything PostgreSQL-bound, beside `test` instead of inside it: the migration contracts and convergence proofs, the generated client, the target baseline, and the SQL authority suites. | 2–4 min |
+| `api_contract` | Rebuilds the server and proves the OpenAPI reference and generated client are in sync. Runs only when the API contract changed. | skipped, or ~3–5 min |
 | `storybook_visual` | Storybook build/behaviour/visual contracts for affected frontend projects, on cached Chromium. Runs beside `test`, not after it. | seconds when nothing affected; ~5 min otherwise |
 | `develop_smoke` | Boots a disposable k3d cluster, deploys the full current silo through the real deploy scripts, and proves database isolation, TLS ingress, and workload health. The long pole of the pipeline. | 6–15 min |
 | `image_smoke` | Boots individual images that declare an `image-smoke` target and checks they come up. | 1–2 min per image |
@@ -54,7 +60,7 @@ these caches, from cheapest to most impactful:
 | --- | --- | --- | --- |
 | npm download cache | `actions/setup-node` | lockfile hash | all jobs |
 | `node_modules` | `actions/cache` | lockfile hash | all jobs (skips `npm ci` entirely on a hit) |
-| Nx computation cache | `actions/cache` (`.nx/cache`) | lockfile hash + commit, with prefix restore | `test`, `storybook_visual` |
+| Nx computation cache | `actions/cache` (`.nx/cache`) | lockfile hash + commit, with prefix restore | `test`, `api_contract`, `storybook_visual` |
 | Playwright Chromium | `actions/cache` (`~/.cache/ms-playwright`) | lockfile hash | `storybook_visual` |
 | Docker image layers | **registry** (`ghcr.io/<owner>/opencrane-buildcache:<project>`) | buildx layer graph | `develop_smoke`, `build-and-push`, `publish-develop-smoke-images` |
 | npm inside Dockerfiles | BuildKit cache mount (`/root/.npm`) | shared between build and runtime stages within one build | all Node images |

@@ -254,12 +254,6 @@ jobs:
       - name: Prove the release-versioning classifier
         run: npm run test:release-versioning
 
-      - name: Enforce version-to-version database migration contracts
-        run: npm run check:database-migrations
-
-      - name: Prove previous-to-current database convergence and rollback
-        run: npm run test:database-migrations
-
       - name: Prove the PR-stack integrity classifier
         run: npm run test:pr-stack-integrity
 
@@ -275,22 +269,6 @@ jobs:
       - name: Prove the Prisma-boundary classifier
         run: npm run test:prisma-boundaries
 
-      # The topology gate must inspect the checked-in app owners, before any
-      # generator can introduce transient files beneath an app root.
-      - name: Generate the database client
-        run: npm run db:generate -w @opencrane/server
-
-      - name: Verify the reviewed target authority baseline is intact
-        run: npm run test:authority-baseline -w @opencrane/server
-
-      - name: Apply the fresh target database baseline
-        run: psql "$DATABASE_URL" -X --set=ON_ERROR_STOP=1 --file=apps/opencrane/prisma/bootstrap/target-baseline.sql
-
-      # Every suite validates the shared target baseline. A baseline-only change belongs to the
-      # opencrane app and therefore cannot make the library-owned SQL suites "affected" in Nx.
-      - name: Run every PostgreSQL authority suite
-        run: npx nx run-many -t test:sql --parallel=1
-
       - name: Restore the Nx computation cache
         uses: actions/cache@v4
         with:
@@ -305,8 +283,114 @@ jobs:
       - name: Enforce monorepo dependency boundaries
         run: npm run lint:boundaries
 
-      - name: Verify API reference and generated client when affected
-        if: needs.prepare.outputs.api_contract_changed == 'true'
+  # The PostgreSQL-bound proofs run beside the main test job instead of serially inside it:
+  # database generation, the target baseline, the SQL authority suites, and the migration
+  # convergence proofs together took minutes off the test job's critical path.
+  database:
+    name: Database authority and migration proofs
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: prepare
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: opencrane
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_USER: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d opencrane"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/opencrane
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Restore node_modules
+        id: node-modules
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: node-modules-${{ runner.os }}-node24-${{ hashFiles('package-lock.json') }}
+
+      - name: Install dependencies
+        if: steps.node-modules.outputs.cache-hit != 'true'
+        run: npm ci
+
+      # The runner image ships the PostgreSQL client; install it only if that ever changes.
+      - name: Install the PostgreSQL client
+        run: |
+          if ! command -v psql >/dev/null; then
+            sudo apt-get update && sudo apt-get install --yes --no-install-recommends postgresql-client
+          fi
+
+      - name: Enforce version-to-version database migration contracts
+        run: npm run check:database-migrations
+
+      - name: Prove previous-to-current database convergence and rollback
+        run: npm run test:database-migrations
+
+      - name: Generate the database client
+        run: npm run db:generate -w @opencrane/server
+
+      - name: Verify the reviewed target authority baseline is intact
+        run: npm run test:authority-baseline -w @opencrane/server
+
+      - name: Apply the fresh target database baseline
+        run: psql "$DATABASE_URL" -X --set=ON_ERROR_STOP=1 --file=apps/opencrane/prisma/bootstrap/target-baseline.sql
+
+      # Every suite validates the shared target baseline. A baseline-only change belongs to the
+      # opencrane app and therefore cannot make the library-owned SQL suites "affected" in Nx.
+      - name: Run every PostgreSQL authority suite
+        run: npx nx run-many -t test:sql --parallel=1
+
+  # The API contract check builds the full server, so when the contract changed it added
+  # minutes to the test job. It only needs the prepare outputs and runs beside it instead.
+  api_contract:
+    name: API reference and generated client
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: prepare
+    if: needs.prepare.outputs.api_contract_changed == 'true'
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Restore node_modules
+        id: node-modules
+        uses: actions/cache@v4
+        with:
+          path: node_modules
+          key: node-modules-${{ runner.os }}-node24-${{ hashFiles('package-lock.json') }}
+
+      - name: Install dependencies
+        if: steps.node-modules.outputs.cache-hit != 'true'
+        run: npm ci
+
+      - name: Restore the Nx computation cache
+        uses: actions/cache@v4
+        with:
+          path: .nx/cache
+          key: nx-${{ runner.os }}-${{ hashFiles('package-lock.json') }}-${{ github.sha }}
+          restore-keys: |
+            nx-${{ runner.os }}-${{ hashFiles('package-lock.json') }}-
+
+      - name: Verify API reference and generated client
         run: |
           npx nx run opencrane:build
           npm run sync-openapi -w @opencrane/website
@@ -518,12 +602,14 @@ jobs:
     name: Build and publish affected images
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    needs: [prepare, test, storybook_visual, develop_smoke, image_smoke]
+    needs: [prepare, test, database, api_contract, storybook_visual, develop_smoke, image_smoke]
     if: >-
       ${{
         always() &&
         needs.prepare.outputs.has_deployables == 'true' &&
         needs.test.result == 'success' &&
+        needs.database.result == 'success' &&
+        (needs.api_contract.result == 'success' || needs.api_contract.result == 'skipped') &&
         needs.storybook_visual.result == 'success' &&
         (needs.develop_smoke.result == 'success' || needs.develop_smoke.result == 'skipped') &&
         (needs.image_smoke.result == 'success' || needs.image_smoke.result == 'skipped')
@@ -578,13 +664,15 @@ jobs:
     name: Publish develop smoke image (${{ matrix.project }})
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    needs: [prepare, test, storybook_visual, develop_smoke, image_smoke, build-and-push]
+    needs: [prepare, test, database, api_contract, storybook_visual, develop_smoke, image_smoke, build-and-push]
     if: >-
       ${{
         always() &&
         github.event_name == 'push' &&
         github.ref == 'refs/heads/develop' &&
         needs.test.result == 'success' &&
+        needs.database.result == 'success' &&
+        (needs.api_contract.result == 'success' || needs.api_contract.result == 'skipped') &&
         needs.storybook_visual.result == 'success' &&
         needs.develop_smoke.result == 'success' &&
         (needs.image_smoke.result == 'success' || needs.image_smoke.result == 'skipped') &&

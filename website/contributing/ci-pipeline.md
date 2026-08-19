@@ -30,11 +30,13 @@ pull request / push to develop, main
    comparison base, and whether the k3d smoke can be skipped
         │
         ├──→ test                 build, test, lint, every policy guard
+        ├──→ database             SQL authority suites, migration proofs
+        ├──→ api_contract         OpenAPI + generated client (when affected)
         ├──→ storybook_visual     component contracts, cached Chromium
         ├──→ develop_smoke        k3d silo smoke — the long pole
         └──→ image_smoke          per-image boot checks
         │
-        ▼   (all four must pass)
+        ▼   (all must pass)
    build-and-push
    publishes sha-<commit> images on push events;
    on pull requests it builds without pushing, as a proof
@@ -50,7 +52,9 @@ pull request / push to develop, main
 | Job | Purpose | Typical duration |
 | --- | --- | --- |
 | `prepare` | Computes the Nx affected graph, the deployable matrix, the guard comparison base, and whether the k3d smoke can be skipped. | 1–2 min |
-| `test` | Builds, tests and lints affected projects, and runs every policy guard: workload ownership, agent-domain boundary, mechanical style, module growth, release versioning, database migration contracts, Prisma boundaries, config-docs coverage, dependency boundaries. | 3–12 min |
+| `test` | Builds, tests and lints affected projects, and runs every policy guard: workload ownership, agent-domain boundary, mechanical style, module growth, release versioning, Prisma boundaries, config-docs coverage, dependency boundaries. | 3–10 min |
+| `database` | Everything PostgreSQL-bound, beside `test` instead of inside it: the migration contracts and convergence proofs, the generated client, the target baseline, and the SQL authority suites. | 2–4 min |
+| `api_contract` | Rebuilds the server and proves the OpenAPI reference and generated client are in sync. Runs only when the API contract changed. | skipped, or ~3–5 min |
 | `storybook_visual` | Storybook build/behaviour/visual contracts for affected frontend projects, on cached Chromium. Runs beside `test`, not after it. | seconds when nothing affected; ~5 min otherwise |
 | `develop_smoke` | Boots a disposable k3d cluster, deploys the full current silo through the real deploy scripts, and proves database isolation, TLS ingress and workload health. | 6–15 min |
 | `image_smoke` | Boots individual images that declare an `image-smoke` target and checks they come up. | 1–2 min per image |
@@ -69,7 +73,7 @@ Every job runs on a fresh runner, so anything not cached is paid on every run.
 | --- | --- | --- | --- |
 | npm download cache | `actions/setup-node` | lockfile hash | all jobs |
 | `node_modules` | `actions/cache` | lockfile hash | all jobs (skips `npm ci` entirely on a hit) |
-| Nx computation cache | `actions/cache` (`.nx/cache`) | lockfile hash + commit, with prefix restore | `test`, `storybook_visual` |
+| Nx computation cache | `actions/cache` (`.nx/cache`) | lockfile hash + commit, with prefix restore | `test`, `api_contract`, `storybook_visual` |
 | Playwright Chromium | `actions/cache` (`~/.cache/ms-playwright`) | lockfile hash | `storybook_visual` |
 | Docker image layers | registry (`ghcr.io/<owner>/opencrane-buildcache:<project>`) | buildx layer graph | `develop_smoke`, `build-and-push`, `publish-develop-smoke-images` |
 | npm inside Dockerfiles | BuildKit cache mount (`/root/.npm`) | shared between build and runtime stages within one build | all Node images |
