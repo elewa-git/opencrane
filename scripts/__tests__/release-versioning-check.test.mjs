@@ -6,6 +6,7 @@ import { join } from "node:path";
 import test from "node:test";
 import {
 	releaseStampComparable,
+	__SelectDirectReleaseComparisonBase,
 	validateWorkspace,
 } from "../release-versioning/core.mjs";
 import { resolveDatabaseTransition } from "../release-versioning/database-validation.mjs";
@@ -167,6 +168,18 @@ test("rejects an invalid Git base instead of suppressing changed files", () =>
 	);
 	assert.notEqual(result.status, 0);
 	assert.match(`${result.stdout}${result.stderr}`, /definitely-not-a-ref/u);
+});
+
+test("scopes current release ownership to its declared predecessor", () =>
+{
+	assert.equal(__SelectDirectReleaseComparisonBase("0.9.0", "0.9.1"), "0.9.1");
+	assert.equal(__SelectDirectReleaseComparisonBase("0.9.1", null), "0.9.1");
+});
+
+test("keeps the CLI's direct release diff scoped to the declared predecessor", () =>
+{
+	const source = readFileSync(join(import.meta.dirname, "../release-versioning-check.mjs"), "utf8");
+	assert.match(source, /_ChangedFiles\(\[__SelectDirectReleaseComparisonBase\(base, versionBase\)\]\)/u);
 });
 
 test("accepts a complete mirrored release fixture", async () =>

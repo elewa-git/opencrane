@@ -11,6 +11,22 @@ import { validateDatabase } from "./database-validation.mjs";
 import { createReleaseManifestValidator } from "./manifest-validation.mjs";
 import { compareSemver, isAdjacentMinor, parseSemver, readJson, sha256 } from "./version-utils.mjs";
 
+/**
+ * Selects the revision that owns the candidate release's direct changes.
+ *
+ * CI can validate cumulatively from an older successful base, but the declared predecessor
+ * keeps that base's already-released changes out of the candidate's direct diff.
+ * Called by: `release-versioning-check.mjs` before it validates the workspace.
+ * @param {string} base The last successful workflow revision used for cumulative validation.
+ * @param {string | null} versionBase The candidate manifest's declared predecessor.
+ * @returns {string} The predecessor when present, otherwise the cumulative base for adoption.
+ * @see validateWorkspace
+ */
+export function __SelectDirectReleaseComparisonBase(base, versionBase)
+{
+	return versionBase ?? base;
+}
+
 const _IGNORED_TOUCH = [
 	/(?:^|\/)README\.md$/u,
 	/(?:^|\/)helm\/migrations\//u,

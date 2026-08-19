@@ -2,7 +2,7 @@
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { releaseStampComparable, validateWorkspace } from "./release-versioning/core.mjs";
+import { __SelectDirectReleaseComparisonBase, releaseStampComparable, validateWorkspace } from "./release-versioning/core.mjs";
 
 const _GIT_TEXT_MAX_BUFFER = 16 * 1024 * 1024;
 
@@ -93,7 +93,7 @@ const releaseManifest = JSON.parse(readFileSync(join(repositoryRoot, "releases",
 const versionBase = releaseManifest.previousRepositoryVersion;
 if (versionBase) _GitFiles(["rev-parse", "--verify", `${versionBase}^{commit}`]);
 const releaseTag = _ExistingReleaseTag(rootVersion);
-const directChangedFiles = _ChangedFiles([base]);
+const directChangedFiles = _ChangedFiles([__SelectDirectReleaseComparisonBase(base, versionBase)]);
 const changedFiles = _ChangedFiles([...new Set([base, versionBase, releaseTag].filter(Boolean))]);
 const newFiles = changedFiles.filter((file) => _BaseText(base, file) === null);
 const errors = await validateWorkspace(
