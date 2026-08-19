@@ -22,6 +22,21 @@ function _UniqueConflict(): Prisma.PrismaClientKnownRequestError
 
 describe("PrismaOrganizationMemberRepository concurrency", function _Suite()
 {
+	it.each([
+		[OrgMemberStatus.Active, true],
+		[OrgMemberStatus.Suspended, false],
+		[null, false],
+	] as const)("binds product access to the exact subject and silo for membership state %s", async function _CurrentMembership(status, expected)
+	{
+		const findUnique = vi.fn().mockResolvedValue(status === null ? null : { status });
+		const transaction = { orgMembership: { findUnique } };
+		const prisma = { $transaction: vi.fn(async function _Transaction(callback) { return callback(transaction); }) } as unknown as PrismaClient;
+
+		await expect(new PrismaOrganizationMemberUnitOfWork(prisma).hasActiveMembership({ siloId: "acme", subjectId: "member-1" })).resolves.toBe(expected);
+
+		expect(findUnique).toHaveBeenCalledWith({ where: { clusterTenant_subject: { clusterTenant: "acme", subject: "member-1" } }, select: { status: true } });
+	});
+
 	it("recovers the exact stored result after a same-key create race", async function _SameKey()
 	{
 		const recoveryTransaction = {

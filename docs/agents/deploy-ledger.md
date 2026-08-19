@@ -218,3 +218,26 @@ Full run reports belong in the corresponding pull request or issue.
 - findings: data: testv3 records protected baseline `22cd09a95a1b8dc2ac2fff0b91053dfe8cc7fdc7021f8dc922350d35254f7d6f`, has no `opencrane_migrations.schema_history`, and already has the 0.8-only `public.user_onboardings` table; the declared 0.7-to-0.8 path requires source digest `25bfc5d31c4966ee697ae5aaa47edc855d25120d0829c241f213353f69e0358d` and would fail `OC705` after fencing the server.
 - friction: the deploy preflight does not prove database transition compatibility before its mutation phase, and the migration sequence has no automatic release-fence restoration on failure.
 - lesson: add a reviewed, app-owned adoption transition for the exact pre-ledger `22cd09a9` testv3 baseline (or an approved rebuild path) and prove migration compatibility before fencing; testv3 remained unchanged at Helm revision 1 on `sha-2004e2a` and healthy.
+
+## 2026-08-18 · dev · testv4 invited-user callback repair · 864d4117fde5dcb6a1fc5519e227992a0a2db462 · PARTIAL
+
+- findings: codebase: PR #667 preserves an authenticated invited user when standalone first-owner
+  admission reports `already_claimed`, while a product-access gate permits only the invitation
+  acceptance command before exact active membership exists. CI runs `32177999107` and `32180088603`
+  qualified and published `ghcr.io/elewa-git/opencrane-server:sha-864d4117fde5dcb6a1fc5519e227992a0a2db462`;
+  the live container uses index digest `sha256:66323d934238ae58de8a106fd405e3c2c549e489450c0d74dffd5f0241a4c48d`.
+  The app-owned deployer applied OpenCrane revision 15 and PostgreSQL revision 20 as chart 0.9.1.
+  Every pod is Running or Succeeded, public `/healthz` returns `{"status":"ok","db":true}`, and
+  `/api/v1/auth/login` redirects to Zitadel client `384935596856002567` with the testv4 callback.
+  data: the exact `0.8.0-to-0.9.0` history row remains present, three invitations remain pending,
+  one onboarding is completed, and no personal Agent or agent-session conversation exists yet.
+- friction: the first 0.9.2 attempt reached failed PostgreSQL revision 19 because an unchanged-schema
+  transition dropped the carried-forward migration proof required by the privileges hook. Jente
+  explicitly selected a test-only 0.9.1 overwrite; the replacement release reused the approved
+  migration identity, and the privileges Job then completed without database fabrication.
+- lesson: a same-schema patch must retain enough reviewed lineage for privilege reconciliation, and
+  an image publication report must distinguish the OCI index digest from its Linux child manifest.
+- open: Jente must reopen a current `/invite?token=...` link after the rollout cleared the in-memory
+  OIDC session, complete the Zitadel return, and let `/api/v1/organization/members/invitations/accept`
+  create the active membership. That authenticated request is also the remaining live proof for the
+  personal-Agent repair trigger; do not infer it from health or database readiness alone.

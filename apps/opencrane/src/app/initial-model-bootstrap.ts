@@ -1,4 +1,4 @@
-import { _ProvisionByokKey, _RequireLiteLlmModelRegistration } from "@opencrane/backend/server/gateways/model-routing";
+import { _ProvisionByokKey, _RequireLiteLlmModelName } from "@opencrane/backend/server/gateways/model-routing";
 
 import type { InitialModelBootstrapDependencies } from "./initial-model-bootstrap.types";
 import { _log } from "./log";
@@ -33,6 +33,6 @@ export async function _BootstrapInitialModel(dependencies: InitialModelBootstrap
 	{
 		throw new Error(`Initial model provider '${config.provider}' was persisted but LiteLLM did not accept its credential`);
 	}
-	await _RequireLiteLlmModelRegistration("auto");
+	await _RequireLiteLlmModelName("auto");
 	_log.info({ provider: config.provider }, "initial model provider credential seeded through LiteLLM");
 }

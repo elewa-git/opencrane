@@ -4,14 +4,17 @@ import type { PrismaClient } from "@prisma/client";
 import type { OidcAuthService } from "./oidc.service";
 
 /**
- * Build the auth router covering:
- *  - Session introspection (GET /me)
- *  - OIDC browser flow (GET /login, GET /callback, POST /logout)
+ * Builds the public session and OIDC router mounted before product authentication.
  *
- * All routes in this router are mounted before `___AuthMiddleware` and are
- * therefore public — authentication is enforced per-handler where required.
+ * Ordinary login omits the provider prompt. Account creation admits ZITADEL's `create` extension;
+ * every other prompt is rejected before the browser is redirected to the provider. Handlers that
+ * require an existing session, such as reauthentication, enforce it themselves.
  *
- * @param authService  - OIDC auth service instance.
+ * Called by: `_CreatePublicApp` when it mounts `/api/v1/auth` before `___AuthMiddleware`.
+ * @param authService - OIDC discovery, browser-flow, and session service.
+ * @param _prisma - Product database client accepted by the existing composition; no handler currently reads it.
+ * @returns The Express router for session introspection, login, callback, reauthentication, and logout.
+ * @see https://zitadel.com/docs/apis/openidoauth/endpoints for ZITADEL's `prompt=create` extension.
  */
 export function ___AuthRouter(authService: OidcAuthService, _prisma: PrismaClient): Router
 {
@@ -38,7 +41,7 @@ export function ___AuthRouter(authService: OidcAuthService, _prisma: PrismaClien
   // OIDC browser flow
   // --------------------------------------------------------------------------
 
-  /** Start the browser-based OIDC login flow. */
+  /** Starts ordinary login or provider registration after validating the requested prompt. */
   router.get("/login", async function _login(req, res, next)
   {
     try
@@ -50,9 +53,16 @@ export function ___AuthRouter(authService: OidcAuthService, _prisma: PrismaClien
       }
 
       const returnTo = typeof req.query.returnTo === "string" ? req.query.returnTo : "/";
+      // Expose the registration mode OpenCrane renders without forwarding arbitrary provider prompts.
+      if (req.query.prompt !== undefined && req.query.prompt !== "create")
+      {
+        res.status(400).json({ error: "Unsupported login prompt.", code: "UNSUPPORTED_LOGIN_PROMPT" });
+        return;
+      }
+      const options: { prompt: string } | undefined = req.query.prompt === "create" ? { prompt: "create" } : undefined;
 
       // 1. Discover the provider and store the PKCE replay-protection values.
-      const loginUrl = await authService.buildLoginUrl(req, returnTo);
+      const loginUrl = await authService.buildLoginUrl(req, returnTo, options);
 
       // 2. Redirect the browser to the external identity provider.
       res.redirect(302, loginUrl);

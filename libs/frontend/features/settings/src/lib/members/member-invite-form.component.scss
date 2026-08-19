@@ -21,10 +21,9 @@
 	p { margin-top: var(--oc-space-1); color: var(--oc-ink-muted); }
 
 	&__fields {
-		display: grid;
-		grid-template-columns: minmax(0, 1fr) 180px;
-		gap: var(--oc-space-2) var(--oc-space-4);
-		align-items: start;
+		display: flex;
+		flex-direction: column;
+		gap: var(--oc-space-2);
 
 		label { font-weight: 600; }
 		small { color: var(--oc-ink-muted); }
@@ -35,11 +34,9 @@
 	&__actions { justify-content: flex-end; align-items: center; }
 }
 
-:host ::ng-deep .p-autocomplete { width: 100%; }
+:host ::ng-deep .p-autocomplete,
+:host ::ng-deep .p-select { width: 100%; }
 
 @media (max-width: 640px) {
-	.invite-form {
-		padding: var(--oc-space-4);
-		&__fields { grid-template-columns: 1fr; }
-	}
+	.invite-form { padding: var(--oc-space-4); }
 }

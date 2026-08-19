@@ -1,11 +1,12 @@
 import type { Request } from "express";
 import type { PrismaClient } from "@prisma/client";
 
-import { FleetOrganizationMembershipAuthority, HmacOrganizationInvitationTokenAuthority, OrganizationMembershipDeploymentModes, PrismaOrganizationMemberUnitOfWork, StandaloneOrganizationMembershipAuthority, _CreateOrganizationMembersRouter, type OrganizationMembershipCaller } from "@opencrane/backend/server/iam/organization-members";
+import { FleetOrganizationMembershipAuthority, HmacOrganizationInvitationTokenAuthority, OrganizationMembershipDeploymentModes, PrismaOrganizationMemberUnitOfWork, StandaloneOrganizationMembershipAuthority, _CreateOrganizationMembersRouter, _CreateOrganizationProductAccessMiddleware, type OrganizationMembershipCaller } from "@opencrane/backend/server/iam/organization-members";
 import { _ResolveRequestPrincipal } from "@opencrane/backend/server/infra/auth";
 import { FleetOrganizationMembershipHttpClient } from "@opencrane/backend/server/infra/organization-membership-gateway";
 
 import type { OpenCraneOrganizationMembershipConfig } from "./config.types";
+import type { OrganizationMembersComposition } from "./organization-members-composition.types";
 
 /** Resolves organisation-member identity from the verified session and trusted request host. */
 function _resolveCaller(request: Request): OrganizationMembershipCaller | null
@@ -25,19 +26,22 @@ function _resolveCaller(request: Request): OrganizationMembershipCaller | null
  * standalone branch receives no Fleet client. Browser requests reach only the returned router and
  * therefore cannot select either branch.
  *
- * Called by: apps/opencrane/src/app/routes.ts.
+ * Called by: apps/opencrane/src/app/public-app.ts.
  * @param prisma - Silo database client used only by standalone mode.
  * @param config - Startup-frozen deployment configuration.
- * @returns Authenticated organisation-member router.
+ * @returns Authenticated member routes plus the optional standalone product-access gate.
  */
-export function _CreateOrganizationMembersComposition(prisma: PrismaClient, config: OpenCraneOrganizationMembershipConfig)
+export function _CreateOrganizationMembersComposition(prisma: PrismaClient, config: OpenCraneOrganizationMembershipConfig): OrganizationMembersComposition
 {
 	if (config.mode === OrganizationMembershipDeploymentModes.Fleet)
 	{
 		const transport = new FleetOrganizationMembershipHttpClient(config.fleet);
-		return _CreateOrganizationMembersRouter(new FleetOrganizationMembershipAuthority(transport, config.fleet.credentialSiloId), _resolveCaller);
+		return { router: _CreateOrganizationMembersRouter(new FleetOrganizationMembershipAuthority(transport, config.fleet.credentialSiloId), _resolveCaller), productAccess: null };
 	}
 	const repository = new PrismaOrganizationMemberUnitOfWork(prisma);
 	const tokens = new HmacOrganizationInvitationTokenAuthority(config.standalone.invitationSigningKey);
-	return _CreateOrganizationMembersRouter(new StandaloneOrganizationMembershipAuthority(repository, tokens, config.standalone), _resolveCaller);
+	return {
+		router: _CreateOrganizationMembersRouter(new StandaloneOrganizationMembershipAuthority(repository, tokens, config.standalone), _resolveCaller),
+		productAccess: _CreateOrganizationProductAccessMiddleware(repository, _resolveCaller),
+	};
 }

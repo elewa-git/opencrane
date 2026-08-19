@@ -13,6 +13,8 @@ import { ___AuthMiddleware } from "@opencrane/backend/server/infra/auth";
 import { _ErrorHandler, _RateLimit, _TransportSecurity } from "@opencrane/backend/server/infra/http";
 
 import { _log } from "./log";
+import { _ReadOrganizationMembershipConfig } from "./config";
+import { _CreateOrganizationMembersComposition } from "./organization-members-composition";
 import type { PublicAuthenticationComposition } from "./public-app.types";
 import { _RegisterRoutes } from "./routes";
 import { _CreateHttpRequestLogger } from "./telemetry";
@@ -67,9 +69,11 @@ export function _CreatePublicApp(prisma: PrismaClient, coreApi: k8s.CoreV1Api, r
 	app.use(...authentication.sessionMiddleware);
 	app.use("/api/v1/auth", ___AuthRouter(authentication.authService, prisma));
 	app.use(___AuthMiddleware());
+	const organizationMembers = _CreateOrganizationMembersComposition(prisma, _ReadOrganizationMembershipConfig());
+	if (organizationMembers.productAccess !== null) app.use(organizationMembers.productAccess);
 
 	// 4. Mount authenticated product routes, then terminate failures through one structured handler.
-	_RegisterRoutes(app, prisma, coreApi, runAdmission, personalRunAdmission, runCancellation, serverNamespace, obotCustody, artifactScannerEnabled);
+	_RegisterRoutes(app, prisma, coreApi, runAdmission, personalRunAdmission, runCancellation, serverNamespace, obotCustody, artifactScannerEnabled, organizationMembers.router);
 	app.use(_ErrorHandler(_log));
 	return app;
 }

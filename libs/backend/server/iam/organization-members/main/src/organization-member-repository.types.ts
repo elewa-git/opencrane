@@ -111,6 +111,8 @@ export interface AcceptStandaloneInvitationCommand
 /** Standalone persistence authority for local membership and invitations. */
 export interface OrganizationMemberRepository
 {
+	/** Checks current active membership for the exact subject and host-selected silo. */
+	hasActiveMembership(caller: Pick<OrganizationMembershipCaller, "siloId" | "subjectId">): Promise<boolean>;
 	/** Reads the directory after proving the caller is an active administrator. */
 	directory(caller: OrganizationMembershipCaller): Promise<OrganizationMemberDirectoryRecords>;
 	/** Validates recipients after proving the caller is an active administrator. */

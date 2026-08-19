@@ -11,7 +11,7 @@
 			@case (states.Success) {
 				<p-message severity="success" text="You joined the organization." />
 				@if (member(); as acceptedMember) { <p>Welcome, {{ acceptedMember.displayName || acceptedMember.email }}.</p> }
-				<div class="invite-acceptance__actions"><a pButton routerLink="/chats">Open workspace</a></div>
+				<div class="invite-acceptance__actions"><a pButton routerLink="/onboarding">Continue setup</a></div>
 			}
 			@case (states.IdentityMismatch) {
 				<p-message severity="error" text="This invitation belongs to a different email address. Sign in with the invited account and open the original link again." />
@@ -23,7 +23,7 @@
 			}
 			@case (states.AlreadyUsed) {
 				<p-message severity="info" text="This invitation was already used." />
-				<a pButton routerLink="/chats">Open workspace</a>
+				<a pButton routerLink="/onboarding">Continue setup</a>
 			}
 			@case (states.Invalid) {
 				<p-message severity="error" text="This invitation link is incomplete or invalid." />

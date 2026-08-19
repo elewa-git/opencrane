@@ -10,7 +10,7 @@
  * The generated openapi.json is a dist artifact, not source.
  */
 
-import { _AuthStepUpOpenapiPaths } from "./auth-openapi-paths";
+import { _AuthOpenapiPaths } from "./auth-openapi-paths";
 import { _DomainOpenapiPaths } from "./domain-openapi-paths";
 import { _ErrorEnvelopeSchema, _ValidationIssueSchema } from "./error-schemas";
 import { _ModelDefinitionSchema, _ModelDefinitionWriteSchema } from "./model-definition-schemas";
@@ -729,23 +729,7 @@ export const spec = {
       },
     },
 
-    "/auth/login": {
-      get: {
-        operationId: "startOidcLogin",
-        summary: "Redirect the browser to the configured OIDC identity provider to start login",
-        description: "Browser redirect — not intended for programmatic use. Returns 503 when OIDC is not configured.",
-        tags: ["Auth"],
-        security: [],
-        parameters: [
-          { name: "returnTo", in: "query", schema: { type: "string" }, description: "Path to redirect back to after a successful login." },
-        ],
-        responses: {
-          302: { description: "Redirect to identity provider." },
-          503: { description: "OIDC not configured.", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
-        },
-      },
-    },
-    ..._AuthStepUpOpenapiPaths,
+    ..._AuthOpenapiPaths,
     "/auth/callback": {
       get: {
         operationId: "completeOidcLogin",

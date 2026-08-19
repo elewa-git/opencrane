@@ -19,9 +19,9 @@ import { DefaultModelDefinitionResolutionStatuses } from "../core/default-model-
 type Row = Record<string, unknown>;
 
 const _NS = "opencrane-acme";
-const _log = { info() { /* noop */ }, warn() { /* noop */ } } as unknown as Logger;
+const _log = { debug() {}, info() {}, warn() {} } as unknown as Logger;
 
-function _mockPrisma(creds: Map<string, Row>, models: Map<string, Row>, routingDefaults: Map<string, Row> = new Map()): PrismaClient
+function _mockPrisma(creds: Map<string, Row>, models: Map<string, Row>, routingDefaults: Map<string, Row> = new Map(), referencedModelIds: Set<string> = new Set()): PrismaClient
 {
   let credSeq = 0;
   let modelSeq = 0;
@@ -37,6 +37,9 @@ function _mockPrisma(creds: Map<string, Row>, models: Map<string, Row>, routingD
       findMany: async function _mm(args: { where: Record<string, unknown>; take?: number }) { return Array.from(models.values()).filter(function _m(r) { return (args.where.publicModelName === undefined || r.publicModelName === args.where.publicModelName) && (args.where.isDefault === undefined || r.isDefault === args.where.isDefault); }).slice(0, args.take); },
       create: async function _mc(args: { data: Row }) { const id = `model-${++modelSeq}`; const row = { id, isDefault: false, providerCredentialId: null, ...args.data }; models.set(id, row); return row; },
       update: async function _mu(args: { where: { id: string }; data: Row }) { const row = { ...(models.get(args.where.id) as Row), ...args.data }; models.set(args.where.id, row); return row; },
+    },
+    agentRevision: {
+      findFirst: async function _af(args: { where: { modelDefinitionId: string } }) { return referencedModelIds.has(args.where.modelDefinitionId) ? { id: "revision-1" } : null; },
     },
     modelRoutingDefault: {
       findFirst: async function _rf() { return Array.from(routingDefaults.values())[0] ?? null; },
@@ -144,7 +147,7 @@ describe("_ProvisionByokKey / _DeprovisionByokKey", function _suite()
     expect(Buffer.from(secrets.get(_byokSecretName("openai"))!.data!.apiKey, "base64").toString("utf8")).toBe("sk-readded");
   });
 
-  it("strict bootstrap replaces persisted placeholder model ids with live LiteLLM deployment ids", async function _reconcileLiveIds()
+  it("strict bootstrap preserves persisted live model ids and creates no duplicate deployments", async function _PreservesLiveIds()
   {
     const creds = new Map<string, Row>();
     const models = new Map<string, Row>();
@@ -153,22 +156,129 @@ describe("_ProvisionByokKey / _DeprovisionByokKey", function _suite()
     const coreApi = _mockCoreApi(secrets);
 
     await _ProvisionByokKey({ prisma, coreApi, operatorNamespace: _NS, provider: "openai", apiKey: "sk-first", log: _log });
-    expect(Array.from(models.values()).every(function _placeholder(row) { return (row.litellmModelId as string).startsWith("placeholder:"); })).toBe(true);
+    for (const model of models.values())
+    {
+      model.litellmModelId = `live-${model.publicModelName as string}`;
+    }
+    const originalIds = Array.from(models.values()).map(function _Id(row) { return row.litellmModelId; });
 
+    process.env.LITELLM_ENDPOINT = "http://litellm:4000";
+    process.env.LITELLM_MASTER_KEY = "sk-master";
+    const fetchMock = vi.fn().mockImplementation(async function _fetch(url: string)
+    {
+      if (url.endsWith("/credentials")) return new Response("{}", { status: 200 });
+      if (url.endsWith("/model/info")) return new Response(JSON.stringify({ data: [
+        { model_name: "openai/gpt-5.5", model_info: { id: "live-openai/gpt-5.5" } },
+        { model_name: "openai/gpt-5.4", model_info: { id: "live-openai/gpt-5.4" } },
+        { model_name: "openai/gpt-5.4-nano", model_info: { id: "live-openai/gpt-5.4-nano" } },
+        { model_name: "auto", model_info: { id: "live-auto" } },
+        { model_name: "openai/text-embedding-3-large" },
+        { model_name: "auto-embedding" },
+      ] }), { status: 200 });
+      return new Response("not found", { status: 404 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await _ProvisionByokKey({ prisma, coreApi, operatorNamespace: _NS, provider: "openai", apiKey: "sk-second", log: _log, requireLiveModels: true });
+    expect(Array.from(models.values()).map(function _Id(row) { return row.litellmModelId; })).toEqual(originalIds);
+    expect(fetchMock.mock.calls.filter(function _CreatesDeployment(call) { return (call[0] as string).endsWith("/model/new"); })).toHaveLength(0);
+    vi.unstubAllGlobals();
+    delete process.env.LITELLM_ENDPOINT;
+    delete process.env.LITELLM_MASTER_KEY;
+  });
+
+  it("strict bootstrap repairs unreferenced placeholder definitions after LiteLLM recovers", async function _RepairsPlaceholders()
+  {
+    const models = new Map<string, Row>();
+    const prisma = _mockPrisma(new Map(), models);
+    const coreApi = _mockCoreApi(new Map());
+    await _ProvisionByokKey({ prisma, coreApi, operatorNamespace: _NS, provider: "openai", apiKey: "sk-first", log: _log });
     process.env.LITELLM_ENDPOINT = "http://litellm:4000";
     process.env.LITELLM_MASTER_KEY = "sk-master";
     vi.stubGlobal("fetch", vi.fn().mockImplementation(async function _fetch(url: string)
     {
       if (url.endsWith("/credentials")) return new Response("{}", { status: 200 });
       if (url.endsWith("/model/new")) return new Response(JSON.stringify({ model_id: `live-${Math.random()}` }), { status: 200 });
-      if (url.endsWith("/model/info")) return new Response(JSON.stringify({ data: [{ model_name: "auto" }] }), { status: 200 });
+      if (url.endsWith("/model/info")) return new Response(JSON.stringify({ data: [
+        { model_name: "openai/text-embedding-3-large" },
+        { model_name: "auto-embedding" },
+        { model_name: "auto" },
+      ] }), { status: 200 });
       return new Response("not found", { status: 404 });
     }));
+    try
+    {
+      await _ProvisionByokKey({ prisma, coreApi, operatorNamespace: _NS, provider: "openai", apiKey: "sk-second", log: _log, requireLiveModels: true });
+      expect(Array.from(models.values()).every(function _IsLive(row) { return (row.litellmModelId as string).startsWith("live-"); })).toBe(true);
+    }
+    finally
+    {
+      vi.unstubAllGlobals();
+      delete process.env.LITELLM_ENDPOINT;
+      delete process.env.LITELLM_MASTER_KEY;
+    }
+  });
 
-    await _ProvisionByokKey({ prisma, coreApi, operatorNamespace: _NS, provider: "openai", apiKey: "sk-second", log: _log, requireLiveModels: true });
-    expect(Array.from(models.values()).every(function _live(row) { return (row.litellmModelId as string).startsWith("live-"); })).toBe(true);
-    vi.unstubAllGlobals();
-    delete process.env.LITELLM_ENDPOINT;
-    delete process.env.LITELLM_MASTER_KEY;
+  it("strict bootstrap rejects a mismatched stored deployment without registering or mutating", async function _RejectsMismatchedDeployment()
+  {
+    const models = new Map<string, Row>();
+    const prisma = _mockPrisma(new Map(), models);
+    const coreApi = _mockCoreApi(new Map());
+    await _ProvisionByokKey({ prisma, coreApi, operatorNamespace: _NS, provider: "openai", apiKey: "sk-first", log: _log });
+    for (const model of models.values()) model.litellmModelId = `live-${model.publicModelName as string}`;
+    const originalIds = Array.from(models.values()).map(function _Id(row) { return row.litellmModelId; });
+    process.env.LITELLM_ENDPOINT = "http://litellm:4000";
+    process.env.LITELLM_MASTER_KEY = "sk-master";
+    const fetchMock = vi.fn().mockImplementation(async function _fetch(url: string)
+    {
+      if (url.endsWith("/credentials")) return new Response("{}", { status: 200 });
+      if (url.endsWith("/model/info")) return new Response(JSON.stringify({ data: [
+        { model_name: "openai/gpt-5.5", model_info: { id: "different-deployment" } },
+      ] }), { status: 200 });
+      return new Response("not found", { status: 404 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    try
+    {
+      await expect(_ProvisionByokKey({ prisma, coreApi, operatorNamespace: _NS, provider: "openai", apiKey: "sk-second", log: _log, requireLiveModels: true })).rejects.toThrow(/has not registered required deployment/);
+      expect(fetchMock.mock.calls.filter(function _CreatesDeployment(call) { return (call[0] as string).endsWith("/model/new"); })).toHaveLength(0);
+      expect(Array.from(models.values()).map(function _Id(row) { return row.litellmModelId; })).toEqual(originalIds);
+    }
+    finally
+    {
+      vi.unstubAllGlobals();
+      delete process.env.LITELLM_ENDPOINT;
+      delete process.env.LITELLM_MASTER_KEY;
+    }
+  });
+
+  it("strict bootstrap rejects provider-credential mismatch before model registration or mutation", async function _RejectsCredentialMismatch()
+  {
+    const models = new Map<string, Row>();
+    const prisma = _mockPrisma(new Map(), models);
+    const coreApi = _mockCoreApi(new Map());
+    await _ProvisionByokKey({ prisma, coreApi, operatorNamespace: _NS, provider: "openai", apiKey: "sk-first", log: _log });
+    for (const model of models.values()) model.providerCredentialId = "cred-old";
+    const originalModels = Array.from(models.values()).map(function _Copy(row) { return { ...row }; });
+    process.env.LITELLM_ENDPOINT = "http://litellm:4000";
+    process.env.LITELLM_MASTER_KEY = "sk-master";
+    const fetchMock = vi.fn().mockImplementation(async function _fetch(url: string)
+    {
+      if (url.endsWith("/credentials")) return new Response("{}", { status: 200 });
+      return new Response("not found", { status: 404 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    try
+    {
+      await expect(_ProvisionByokKey({ prisma, coreApi, operatorNamespace: _NS, provider: "openai", apiKey: "sk-second", log: _log, requireLiveModels: true })).rejects.toThrow(/bound to a different provider credential/);
+      expect(fetchMock.mock.calls.filter(function _CreatesDeployment(call) { return (call[0] as string).endsWith("/model/new"); })).toHaveLength(0);
+      expect(Array.from(models.values())).toEqual(originalModels);
+    }
+    finally
+    {
+      vi.unstubAllGlobals();
+      delete process.env.LITELLM_ENDPOINT;
+      delete process.env.LITELLM_MASTER_KEY;
+    }
   });
 });

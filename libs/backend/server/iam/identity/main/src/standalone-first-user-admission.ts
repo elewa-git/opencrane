@@ -13,8 +13,9 @@ import { StandaloneFirstUserAdmissionOutcomes, type StandaloneFirstUserAdmission
  * @param config - Configured silo, verified email, and issuer for this deployment.
  * @param repository - Owner-slot store that makes the claim atomic.
  * @param command - Host-derived silo plus the verified issuer, subject, and email claims.
- * @returns `Admitted` or `AlreadyOwner` when the caller owns the silo; `NotEligible` or
- *          `AlreadyClaimed` when it must not proceed.
+ * @returns `Admitted` or `AlreadyOwner` when the caller owns the silo; `AlreadyClaimed` when
+ *          bootstrap is complete without elevating this caller; `NotEligible` when an empty silo
+ *          cannot be claimed from these identity facts.
  */
 export async function _AdmitStandaloneFirstUser(config: StandaloneFirstUserAdmissionConfig, repository: StandaloneFirstUserAdmissionRepository, command: StandaloneFirstUserAdmissionCommand): Promise<StandaloneFirstUserAdmissionResult>
 {

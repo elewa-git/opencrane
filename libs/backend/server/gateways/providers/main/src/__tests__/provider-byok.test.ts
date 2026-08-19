@@ -16,13 +16,14 @@ type Row = Record<string, unknown>;
 const _NS = "opencrane-acme";
 
 /**
- * Build a Prisma stub over an in-memory map keyed by credential id, covering the calls the BYOK
- * router makes: findMany (with a provider `in` filter), findFirst, create, update, deleteMany.
+ * Builds a Prisma stub for the credential, model, and routing-default calls made while a BYOK key
+ * is provisioned.
  */
 function _mockPrisma(store: Map<string, Row>, models: Map<string, Row> = new Map()): PrismaClient
 {
   let seq = 0;
   let modelSeq = 0;
+  let routingDefault: Row | null = null;
   const match = (r: Row, where?: { scope?: string; clusterTenant?: string | null; provider?: string }): boolean =>
     !where || ((where.scope === undefined || r.scope === where.scope)
       && (where.clusterTenant === undefined || r.clusterTenant === where.clusterTenant)
@@ -34,6 +35,11 @@ function _mockPrisma(store: Map<string, Row>, models: Map<string, Row> = new Map
       && (where.isDefault === undefined || r.isDefault === where.isDefault));
   return {
     modelDefinition: {
+      findMany: async function _mFindMany(args: { where: Record<string, unknown>; take?: number })
+      {
+        const matches = Array.from(models.values()).filter(function _m(r) { return matchModel(r, args.where); });
+        return args.take === undefined ? matches : matches.slice(0, args.take);
+      },
       findFirst: async function _mFindFirst(args: { where: Record<string, unknown> })
       {
         return Array.from(models.values()).find(function _m(r) { return matchModel(r, args.where); }) ?? null;
@@ -50,6 +56,17 @@ function _mockPrisma(store: Map<string, Row>, models: Map<string, Row> = new Map
         const row = { ...(models.get(args.where.id) as Row), ...args.data };
         models.set(args.where.id, row);
         return row;
+      },
+    },
+    modelRoutingDefault: {
+      findFirst: async function _rFindFirst()
+      {
+        return routingDefault;
+      },
+      create: async function _rCreate(args: { data: Row })
+      {
+        routingDefault = { id: "routing-default-1", ...args.data };
+        return routingDefault;
       },
     },
     providerCredential: {

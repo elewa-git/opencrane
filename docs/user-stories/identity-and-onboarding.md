@@ -112,10 +112,13 @@ Acceptance criteria:
 
 - Admission requires the configured host tenant, issuer, stable subject, and verified bootstrap
   email.
-- The UI handles `admitted`, `already_owner`, `not_eligible`, and `already_claimed` without implying
-  that email itself is the durable identity.
+- `admitted` and `already_owner` establish Owner authority. `already_claimed` keeps a verified
+  non-owner session solely so a signed invitation can be accepted behind the active-membership gate;
+  `not_eligible` while the slot is empty remains a failed login.
 - Membership creation and its audit record appear as one completed outcome.
-- Non-eligible and already-claimed outcomes direct the user to an explicit recovery path.
+- Before invitation acceptance, every other standalone product route requires an exact active
+  subject-and-silo membership and fails closed for missing, suspended, cross-silo, or unavailable
+  membership.
 
 API: part of the OIDC callback handshake; no browser-supplied owner-claim payload.
 
@@ -172,9 +175,13 @@ Acceptance criteria:
 
 - The backend explicitly accepts, validates, and forwards the intended registration prompt, or the
   UI removes the separate registration claim.
-- Unsupported provider registration is explained before redirect.
+- The selected ZITADEL deployment has self-registration enabled; a deployment that cannot honor
+  `prompt=create` does not qualify this flow.
+- Unsupported prompt values are rejected before redirect.
 
-Status: `API partial`. The frontend currently sends `prompt=create`, but the backend ignores it.
+Status: `API implemented`. Anonymous invitation routes offer account creation, the backend admits
+only `prompt=create`, and the per-organisation OIDC client forwards it without dropping the
+organisation restriction. Existing users retain an explicit ordinary login action.
 
 ## IDO-07 — Complete the onboarding survey
 

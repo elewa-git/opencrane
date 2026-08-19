@@ -52,3 +52,13 @@ describe("OpenCraneApiClientBase.request", function _Suite()
 		expect((failure as Error).message).not.toContain("upstream secret");
 	});
 });
+
+describe("OpenCraneApiClientBase registration URL", function _RegistrationUrlSuite()
+{
+	it("adds the provider registration prompt and preserves the invitation return path", function _RegistrationUrl()
+	{
+		const client = new _TestApiClient();
+
+		expect(client.signUpUrl("/invite?token=opaque-signed-token")).toBe("https://control.example.test/api/v1/auth/login?prompt=create&returnTo=%2Finvite%3Ftoken%3Dopaque-signed-token");
+	});
+});

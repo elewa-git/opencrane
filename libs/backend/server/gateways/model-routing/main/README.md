@@ -53,6 +53,8 @@ traffic. The BYOK (bring-your-own-key) model catalogue (`_BYOK_PROVIDER_CATALOG`
   `ModelDefinition` identifier.
 - `_ProvisionByokKey`, `_DeprovisionByokKey`, `_RegisterLiteLlmModel`, `_UpsertLiteLlmCredential`,
   `_DeleteLiteLlmCredential` — the LiteLLM provisioning helpers reused by the provider gateway.
+  `_RequireLiteLlmModelName` and `_RequireLiteLlmModelDeployment` qualify live startup inventory
+  without rewriting immutable model-definition evidence.
 - `_EstimateSavings`, `_ReplayEstimate`, `_DoublyRobustEstimate`, `_OpeEstimateWithCi` — the pure
   shadow-router estimators. `_BYOK_PROVIDER_CATALOG` — the per-provider default model catalogue.
 - `_IssueAttemptLiteLlmKey` — mint one short-lived, alias- and budget-bound LiteLLM virtual key for a

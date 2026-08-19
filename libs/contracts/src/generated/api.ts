@@ -8390,6 +8390,8 @@ export interface operations {
             query?: {
                 /** @description Path to redirect back to after a successful login. */
                 returnTo?: string;
+                /** @description Use create to open the identity provider's registration flow. Other values are rejected. */
+                prompt?: "create";
             };
             header?: never;
             path?: never;
@@ -8403,6 +8405,15 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Unsupported login prompt. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
             };
             /** @description OIDC not configured. */
             503: {

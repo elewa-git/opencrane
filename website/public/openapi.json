@@ -13925,11 +13925,32 @@
               "type": "string"
             },
             "description": "Path to redirect back to after a successful login."
+          },
+          {
+            "name": "prompt",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "create"
+              ]
+            },
+            "description": "Use create to open the identity provider's registration flow. Other values are rejected."
           }
         ],
         "responses": {
           "302": {
             "description": "Redirect to identity provider."
+          },
+          "400": {
+            "description": "Unsupported login prompt.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
           },
           "503": {
             "description": "OIDC not configured.",

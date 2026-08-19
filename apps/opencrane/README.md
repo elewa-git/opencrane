@@ -198,6 +198,12 @@ are:
 The app builds into `dist/apps/opencrane`, uses `deploy/Dockerfile`, and ships through its app-owned
 Helm library chart, which [`deploy-k8s`](../_infra/deploy-k8s/README.md) composes into a release.
 
+In standalone mode, successful OIDC authentication does not itself grant product access. Existing
+active members proceed normally. A verified identity without membership can call only the signed
+invitation-acceptance endpoint; once that transaction creates its active silo membership, the next
+request proceeds without another login. Fleet mode keeps membership decisions on its configured
+remote authority path.
+
 ## See also
 
 - Parent index: [apps](../README.md)

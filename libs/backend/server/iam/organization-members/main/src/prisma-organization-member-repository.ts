@@ -97,6 +97,16 @@ export class PrismaOrganizationMemberRepository implements OrganizationMemberTra
 	}
 
 	/** @inheritdoc */
+	async hasActiveMembership(caller: Pick<OrganizationMembershipCaller, "siloId" | "subjectId">): Promise<boolean>
+	{
+		const membership = await this.prisma.orgMembership.findUnique({
+			where: { clusterTenant_subject: { clusterTenant: caller.siloId, subject: caller.subjectId } },
+			select: { status: true },
+		});
+		return membership?.status === OrgMemberStatus.Active;
+	}
+
+	/** @inheritdoc */
 	async directory(caller: OrganizationMembershipCaller): Promise<OrganizationMemberDirectoryRecords>
 	{
 		await this._requireActiveAdmin(caller);

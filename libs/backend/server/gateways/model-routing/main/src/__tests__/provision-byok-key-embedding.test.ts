@@ -5,7 +5,10 @@ import type { Logger } from "pino";
 import type { PrismaClient } from "@prisma/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { _ProvisionByokKey, _AUTO_EMBEDDING_MODEL_NAME, _RequireLiteLlmModelRegistration } from "../core/provision-byok-key";
+import { _BYOK_PROVIDER_CATALOG } from "../core/byok-default-models";
+import { _RequireLiteLlmModelName } from "../core/litellm-model-inventory";
+import { _EnsureProviderEmbeddingModels } from "../core/provider-embedding-models";
+import { _ProvisionByokKey, _AUTO_EMBEDDING_MODEL_NAME } from "../core/provision-byok-key";
 
 /**
  * Covers `_EnsureProviderEmbeddingModels` (the embedding-registration step added alongside the
@@ -198,7 +201,7 @@ describe("_ProvisionByokKey — embedding model registration", function _suite()
 
     await _ProvisionByokKey({ prisma: _mockPrisma(), coreApi: _mockCoreApi(), operatorNamespace: "default", provider: "openai", apiKey: "sk-test", log });
 
-    expect(warn).toHaveBeenCalledWith({ operation: "litellm.embedding.inventory", status: 503 }, "embedding model inventory read failed; registration will be reconciled");
+    expect(warn).toHaveBeenCalledWith({ operation: "litellm.embedding.inventory", err: expect.any(Error) }, "embedding model inventory read failed; registration will be reconciled");
   });
 
   it("does not register any embedding model for a provider with none catalogued (anthropic)", async function _noneCatalogued()
@@ -231,15 +234,24 @@ describe("_ProvisionByokKey — embedding model registration", function _suite()
 
     await expect(
       _ProvisionByokKey({ prisma: _mockPrisma(), coreApi: _mockCoreApi(), operatorNamespace: "default", provider: "openai", apiKey: "sk-test", log: _log }),
-    ).resolves.toBeDefined();
+		).resolves.toBeDefined();
+	});
+
+	it("strict embedding qualification propagates inventory failure without registering duplicates", async function _StrictInventoryFailure()
+	{
+		const fetchMock = vi.fn().mockResolvedValue(new Response("unavailable", { status: 503 }));
+		vi.stubGlobal("fetch", fetchMock);
+
+		await expect(_EnsureProviderEmbeddingModels(_BYOK_PROVIDER_CATALOG["openai"], "byok-openai", _log, true)).rejects.toThrow(/inventory returned HTTP 503/);
+		expect(fetchMock.mock.calls.filter(function _CreatesDeployment(call) { return (call[0] as string).endsWith("/model/new"); })).toHaveLength(0);
 	});
 
 	it("requires a live default model when deployment bootstrap asks for it", async function _requireLiveModel()
 	{
 		vi.stubGlobal("fetch", _routedFetch([{ model_name: "auto" }]));
-		await expect(_RequireLiteLlmModelRegistration("auto")).resolves.toBeUndefined();
+		await expect(_RequireLiteLlmModelName("auto")).resolves.toBeUndefined();
 
 		vi.stubGlobal("fetch", _routedFetch([]));
-		await expect(_RequireLiteLlmModelRegistration("auto")).rejects.toThrow(/has not registered required model/);
+		await expect(_RequireLiteLlmModelName("auto")).rejects.toThrow(/has not registered required model/);
 	});
 });
