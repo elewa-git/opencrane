@@ -112,7 +112,7 @@ apply` against a live cluster:
 ```mermaid
 flowchart TD
     A[apps/_infra/deploy-k8s/deploy.sh\nsilo profile: flags, presets] --> B[platform/k8s-deploy.sh\nthe install engine]
-    B --> C[current-chart-sources.sh\nhelm dependency build\nfrom Chart.lock]
+    B --> C[current-chart-sources.sh\npackages the in-repo\nsubchart sources]
     B --> D[database-migration-orchestrator.sh\nCNPG cluster, databases,\nmigration + privileges Jobs]
     B --> E[umbrella helm upgrade\nall app subcharts]
     E --> F[database-release-finalization.sh\ncredential-checksum roll,\nrollout waits, cert wait]
@@ -140,10 +140,12 @@ flowchart TD
 
 - **CI green first.** Confirm the `docker.yml` run for the exact SHA is green before deploying;
   the deploy scripts pull published images and never build them.
-- **`helm dependency build`, never `dependency update`, on the deploy path.** The engine resolves
-  subcharts from `Chart.lock` for reproducibility. `dependency update` re-resolves and can drift.
-  (Regenerating the lock/archives after a chart stamp is the one place `dependency update` is
-  correct — review the diff.)
+- **Subchart packaging is derived, never committed.** Every umbrella dependency is an in-repo
+  `file://` chart, so the checked-out commit is the version authority: the deploy fixture runs
+  `helm dependency update --skip-refresh` and packages the current sources. There is no
+  `Chart.lock` or vendored archive to regenerate, and a chart version bump needs no umbrella
+  edit. (The bootstrap prerequisites are the opposite case: external charts stay pinned by
+  version and digest.)
 - **A green `helm template`/CI render does not prove a live `helm upgrade` works.** Stateful
   services need their PVC semantics, reconcile-retry, and Secret-change pod-roll trigger checked
   before deploying — see the live-upgrade checklist in the deploy ledger.
@@ -177,8 +179,8 @@ summary.
   `appVersion` where a chart exists. Version-only mirror edits are "stamp-only" and do not count
   as changes themselves.
 - A **changed chart** bumps its chart version to the root version and adds exactly one
-  `helm/migrations/<from>-to-<to>.json` transition; the umbrella's `Chart.lock` and packaged
-  archives are then regenerated and reviewed.
+  `helm/migrations/<from>-to-<to>.json` transition. The umbrella needs no edit: it declares its
+  in-repo dependencies with open constraints and packages them fresh at render time.
 - A **database schema change** updates the clean target baseline and adds one adjacent, reviewed
   SQL transition under `apps/opencrane/prisma/migrations/<from>-to-<to>/`, bound by digest.
 - Adjacent minor trains (`0.8.x → 0.9.0`) are the only automatic transition. Patch, skipped-minor,

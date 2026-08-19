@@ -35,7 +35,7 @@ helm()
 prepare_current_chart_sources
 prepared_chart="$(current_chart_sources_dir)"
 [[ "$prepared_chart" != "$AMBIENT_DIR" ]]
-grep -Fq 'dependency build --skip-refresh' "$CALLS"
+grep -Fq 'dependency update --skip-refresh' "$CALLS"
 [[ -L "$prepared_chart/../../opencrane" ]]
 cleanup_current_chart_sources
 [[ -f "$AMBIENT_FIXTURE/must-survive" ]]

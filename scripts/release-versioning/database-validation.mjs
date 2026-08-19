@@ -225,6 +225,61 @@ export function validateDatabase(repositoryRoot, manifest, previousManifest, cha
  * Called by: `database-transition.mjs`, which supplies this evidence to the deployment script.
  * @throws {Error} When either manifest or its database transition is invalid.
  */
+/**
+ * Finds the migration that last produced this release's database schema version.
+ *
+ * A same-schema patch train resolves to `current` with no migration of its own, but a live database
+ * that reached this schema through a real migration still records that transition, and privilege
+ * reconciliation compares the database against exactly that record. Walking the release chain
+ * recovers the evidence the database already carries; it never proposes a new migration, so the
+ * transition stays `current`.
+ *
+ * Called by: `scripts/release-versioning/schema-lineage.mjs`, which the deploy engine invokes when a
+ * transition carries no migration.
+ * @param repositoryRoot - Repository root holding `releases/` and the migration manifests.
+ * @param releaseVersion - The release being deployed.
+ * @returns The owning migration's evidence, or null when this schema was never migrated into.
+ * @see resolveDatabaseTransition
+ */
+export function resolveSchemaLineage(repositoryRoot, releaseVersion)
+{
+	const targetPath = join(repositoryRoot, "releases", `${releaseVersion}.json`);
+	if (!existsSync(targetPath)) throw new Error(`release manifest is missing: ${targetPath}`);
+	const target = readJson(targetPath);
+	const schemaVersion = target.database.schemaVersion;
+	let cursor = target;
+	while (cursor?.previousRepositoryVersion)
+	{
+		const predecessorPath = join(repositoryRoot, "releases", `${cursor.previousRepositoryVersion}.json`);
+		if (!existsSync(predecessorPath))
+			throw new Error(`release manifest is missing: ${predecessorPath}`);
+		const predecessor = readJson(predecessorPath);
+		if (cursor.database.schemaVersion === schemaVersion && predecessor.database.schemaVersion !== schemaVersion)
+		{
+			const id = `${predecessor.database.schemaVersion}-to-${schemaVersion}`;
+			const migrationRoot = join(repositoryRoot, "apps/opencrane/prisma/migrations", id);
+			const migrationManifest = readJson(join(migrationRoot, "manifest.json"));
+			const sourceProtectedBaselineSha256s = _SourceProtectedBaselineDigests(migrationManifest);
+			return {
+				id,
+				fromSchemaVersion: predecessor.database.schemaVersion,
+				toSchemaVersion: schemaVersion,
+				sqlFile: join(migrationRoot, "migration.sql"),
+				sqlSha256: migrationManifest.sqlSha256,
+				sourceTargetBaselineSha256: migrationManifest.sourceTargetBaselineSha256,
+				sourceProtectedBaselineSha256s,
+				freshSourceProtectedBaselineSha256: _FreshSourceProtectedBaselineDigest(migrationManifest),
+				sourceHistoryLineages: _SourceHistoryLineages(repositoryRoot, predecessor, sourceProtectedBaselineSha256s),
+				// Reporting history, not authorizing a carry-forward override.
+				carriedForwardThroughReleaseVersion: null,
+				ownedByReleaseVersion: cursor.repositoryVersion,
+			};
+		}
+		cursor = predecessor;
+	}
+	return null;
+}
+
 export function resolveDatabaseTransition(repositoryRoot, releaseVersion, fromReleaseVersion)
 {
 	const rootVersion = readJson(join(repositoryRoot, "package.json")).version;
