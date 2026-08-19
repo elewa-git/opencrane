@@ -7,6 +7,8 @@ DEPLOY_CORE="$ROOT_DIR/apps/_infra/deploy-k8s/platform/k8s-deploy.sh"
 FINALIZATION="$ROOT_DIR/apps/_infra/deploy-k8s/platform/database-release-finalization.sh"
 
 source "$POLICY"
+source "$ROOT_DIR/apps/_infra/deploy-k8s/platform/current-chart-sources.sh"
+ensure_umbrella_chart_dependencies
 
 IMAGE_TAG="sha-f7d6771a4a5a075d424c7678d6165dd71c06b522"
 CP_TAG="sha-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"

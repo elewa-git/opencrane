@@ -13,6 +13,17 @@ current_chart_sources_root()
   cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd
 }
 
+# Packages the umbrella's subcharts into the checkout itself, for the few contracts that render
+# the repository chart directory rather than the disposable fixture. `charts/` and `Chart.lock`
+# are derived artifacts (both gitignored), so writing them here is the intended model rather
+# than churn. Repeat calls are cheap: Helm reuses archives whose version already matches.
+ensure_umbrella_chart_dependencies()
+{
+  local umbrella
+  umbrella="$(current_chart_sources_root)/apps/_infra/deploy-k8s"
+  helm dependency update --skip-refresh "$umbrella" >/dev/null
+}
+
 prepare_current_chart_sources()
 {
   if [[ -n "$_CURRENT_CHART_SOURCES_FIXTURE" ]]; then

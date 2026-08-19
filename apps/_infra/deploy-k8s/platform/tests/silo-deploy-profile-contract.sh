@@ -7,6 +7,9 @@ DEVELOP_SMOKE="$ROOT_DIR/apps/_infra/deploy-k8s/platform/tests/develop-smoke.sh"
 MODEL_HELPER="$ROOT_DIR/apps/_infra/deploy-k8s/platform/initial-model-provider.sh"
 COGNEE_POLICY="$ROOT_DIR/apps/_infra/cognee/deploy/image-policy.sh"
 
+source "$ROOT_DIR/apps/_infra/deploy-k8s/platform/current-chart-sources.sh"
+ensure_umbrella_chart_dependencies
+
 grep -Fq -- '--acme-email' "$DEPLOY_SCRIPT"
 grep -Fq -- '--first-user-email' "$DEPLOY_SCRIPT"
 grep -Fq -- '--initial-model-provider' "$DEPLOY_SCRIPT"
