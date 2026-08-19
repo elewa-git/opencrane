@@ -193,7 +193,16 @@ function _ValidateProject(
 	validateHelmTransition(migration, relative(repositoryRoot, migration), previousVersion, project.chartVersion, errors);
 }
 
-/** Validate the current release composition against the Nx graph and optional direct-touch diff. */
+/**
+ * Validates the candidate's release composition against the workspace and Nx graph.
+ *
+ * The tagged-version guard reads `suppliedDirectChangedFiles`, not `changedFiles`: the latter also
+ * carries history already on the candidate's base for cumulative validation. A tagged version is
+ * immutable against this candidate's changes, so inherited history must not make it fail.
+ *
+ * Called by: `scripts/release-versioning-check.mjs`.
+ * @returns Every release-composition error the caller must resolve before accepting the candidate.
+ */
 export async function validateWorkspace(
 	repositoryRoot,
 	changedFiles = [],
