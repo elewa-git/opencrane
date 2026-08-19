@@ -17,53 +17,57 @@ keywords:
 maintainers:
   - name: OpenCrane
 dependencies:
+  # Every dependency is an in-repo file:// chart, so the checked-out commit is the only
+  # version authority. The open constraint always accepts the chart each app currently
+  # declares; helm dependency update packages the sources fresh at render time, and no
+  # lock file or vendored archive needs a matching bump.
   # Shared named-template library (labels, fullname, RBAC rule sets, env helpers).
   - name: k8s-platform
-    version: 0.9.2
+    version: ">=0.0.0-0"
     repository: "file://platform"
   # App-owned workload units export named templates; this umbrella only includes them
   # with the unchanged parent release context.
   - name: opencrane-server
-    version: 0.9.2
+    version: ">=0.0.0-0"
     repository: "file://../../opencrane/helm"
   - name: opencrane-ui
-    version: 0.9.2
+    version: ">=0.0.0-0"
     repository: "file://../../opencrane-ui/helm"
   - name: opencrane-channel-proxy
-    version: 0.9.2
+    version: ">=0.0.0-0"
     repository: "file://../../channel-proxy/helm"
   - name: opencrane-memory-gateway
-    version: 0.9.2
+    version: ">=0.0.0-0"
     repository: "file://../../memory-gateway/helm"
   - name: opencrane-artifact-service
-    version: 0.8.0
+    version: ">=0.0.0-0"
     repository: "file://../../artifact-service/helm"
   - name: opencrane-artifact-preprocessor
-    version: 0.9.2
+    version: ">=0.0.0-0"
     repository: "file://../../artifact-preprocessor/helm"
   - name: opencrane-artifact-scanner
-    version: 0.9.2
+    version: ">=0.0.0-0"
     repository: "file://../../artifact-scanner/helm"
   - name: opencrane-agent-controller
-    version: 0.9.2
+    version: ">=0.0.0-0"
     repository: "file://../../agent-controller/helm"
   - name: opencrane-managed-agent-runtime
     alias: managedAgentRuntimePlane
-    version: 0.8.0
+    version: ">=0.0.0-0"
     repository: "file://../../managed-agent-runtime/helm"
     condition: agentController.enabled
   - name: opencrane-skill-authoring
-    version: 0.8.0
+    version: ">=0.0.0-0"
     repository: "file://../../skill-authoring/helm"
   - name: opencrane-tool-runner
-    version: 0.8.0
+    version: ">=0.0.0-0"
     repository: "file://../../tool-runner/helm"
   - name: opencrane-cognee
-    version: 0.8.1
+    version: ">=0.0.0-0"
     repository: "file://../cognee/helm"
   - name: opencrane-litellm
-    version: 0.8.0
+    version: ">=0.0.0-0"
     repository: "file://../litellm/helm"
   - name: opencrane-obot
-    version: 0.8.0
+    version: ">=0.0.0-0"
     repository: "file://../obot/helm"

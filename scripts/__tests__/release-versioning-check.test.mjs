@@ -365,7 +365,7 @@ test("rejects stale chart application metadata for a directly adapted app", asyn
 	assert.ok(errors.some((error) => error.includes("directly adapted but chart appVersion")));
 });
 
-test("rejects a checked-in dependency archive that differs from chart source", async () =>
+test("requires the umbrella to declare every chart-bearing application", async () =>
 {
 	const root = mkdtempSync(join(tmpdir(), "opencrane-release-packaging-"));
 	mkdirSync(join(root, "apps/example/helm/templates"), { recursive: true });
@@ -380,7 +380,7 @@ test("rejects a checked-in dependency archive that differs from chart source", a
 	writeFileSync(join(root, "apps/example/helm/Chart.yaml"), "apiVersion: v2\nname: example\ntype: application\nversion: 0.7.0\nappVersion: \"0.7.0\"\n");
 	writeFileSync(join(root, "apps/example/helm/values.yaml"), "replicas: 1\n");
 	writeFileSync(join(root, "apps/example/helm/templates/configmap.yaml"), "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: example\n");
-	writeFileSync(join(root, "apps/_infra/deploy-k8s/Chart.yaml"), [
+	const declaredUmbrella = [
 		"apiVersion: v2",
 		"name: umbrella",
 		"type: application",
@@ -388,15 +388,11 @@ test("rejects a checked-in dependency archive that differs from chart source", a
 		"appVersion: \"0.7.0\"",
 		"dependencies:",
 		"  - name: example",
-		"    version: 0.7.0",
+		"    version: \">=0.0.0-0\"",
 		"    repository: file://../../example/helm",
 		"",
-	].join("\n"));
-	const dependencyResult = spawnSync("helm", ["dependency", "update", "apps/_infra/deploy-k8s"], {
-		cwd: root,
-		encoding: "utf8",
-	});
-	assert.equal(dependencyResult.status, 0, dependencyResult.stderr);
+	].join("\n");
+	writeFileSync(join(root, "apps/_infra/deploy-k8s/Chart.yaml"), declaredUmbrella);
 	const baselinePath = join(root, "apps/opencrane/prisma/bootstrap/target-baseline.sql");
 	writeFileSync(baselinePath, "SELECT 1;\n");
 	_WriteJson(join(root, "releases/0.7.0.json"), {
@@ -413,15 +409,18 @@ test("rejects a checked-in dependency archive that differs from chart source", a
 			example: { root: "apps/example", adaptedVersion: "0.7.0", chartVersion: "0.7.0" },
 		},
 	});
-	writeFileSync(join(root, "apps/example/helm/values.yaml"), "replicas: 2\n");
 	const graph = {
 		nodes: {
 			"deploy-k8s": { data: { projectType: "application", root: "apps/_infra/deploy-k8s", metadata: { release: { adaptedVersion: "0.7.0" } } } },
 			example: { data: { projectType: "application", root: "apps/example", metadata: { release: { adaptedVersion: "0.7.0" } } } },
 		},
 	};
-	const errors = await validateWorkspace(root, [], graph);
-	assert.ok(errors.some((error) => error.includes("differs from source")));
+	// A declared dependency needs no lock file or vendored archive: the in-repo sources are the
+	// version authority and packaging is derived at render time.
+	assert.deepEqual(await validateWorkspace(root, [], graph), []);
+	writeFileSync(join(root, "apps/_infra/deploy-k8s/Chart.yaml"), declaredUmbrella.replace(/dependencies:[\s\S]*$/u, ""));
+	const missing = await validateWorkspace(root, [], graph);
+	assert.ok(missing.some((error) => error.includes("does not declare dependency example")));
 });
 
 test("rejects baseline changes inside an already adopted train", async () =>

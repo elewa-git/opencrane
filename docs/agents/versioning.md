@@ -66,9 +66,12 @@ introduced chart has no predecessor and therefore no transition. A migration con
 shape once and emits only the current shape; do not retain compatibility aliases in templates or
 values.
 
-The umbrella chart pins each local dependency to its owning chart version. Regenerate and review
-`Chart.lock` and packaged dependencies after a chart stamp changes. PostgreSQL's chart version tracks
-the OpenCrane wrapper; its `appVersion` remains the pinned PostgreSQL engine major.
+The umbrella chart declares each local dependency with an open version constraint: every
+dependency is an in-repo `file://` chart, so the checked-out commit is the version authority and
+`helm dependency update` packages the sources fresh at render time. There is no `Chart.lock` or
+vendored archive to keep in step — a chart stamp needs no umbrella edit at all. The release gate
+still fails when a chart-bearing application is not declared in the umbrella. PostgreSQL's chart
+version tracks the OpenCrane wrapper; its `appVersion` remains the pinned PostgreSQL engine major.
 
 ## Database migrations
 
