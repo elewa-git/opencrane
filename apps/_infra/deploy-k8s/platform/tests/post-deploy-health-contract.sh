@@ -45,6 +45,20 @@ if awk '/livenessProbe:/,/readinessProbe:/' <<<"$server_deployment" | grep -Fq '
 fi
 grep -Fq 'readinessProbe:' <<<"$server_deployment"
 grep -Fq 'path: /healthz' <<<"$server_deployment"
+grep -Fq 'name: CHANNEL_PROXY_URL' <<<"$server_deployment"
+grep -Fq 'value: "http://opencrane-silo-channel-proxy.default.svc.cluster.local:8080"' <<<"$server_deployment"
+
+server_network_policy="$(helm template opencrane-silo "$CHART_FIXTURE" \
+  --set-string 'memoryGateway.kubernetesApiServerCidrs[0]=10.43.0.1/32' \
+  --set-string 'memoryGateway.kubernetesApiServerEndpointCidrs[0]=172.18.0.2/32' \
+  --show-only templates/app-rollups.yaml | awk 'BEGIN { RS="---" } /kind: NetworkPolicy/ && /name: opencrane-silo-opencrane-server/ { print }')"
+channel_health_egress="$(awk '
+  /# Release-local live conversation-event delivery/ { capture = 1 }
+  capture { print }
+  capture && /port: 8080/ { exit }
+' <<<"$server_network_policy")"
+grep -Fq 'app.kubernetes.io/component: channel-proxy' <<<"$channel_health_egress"
+grep -Fq 'port: 8080' <<<"$channel_health_egress"
 
 spa_deployment="$(helm template opencrane-silo "$CHART_FIXTURE" \
   --set-string 'memoryGateway.kubernetesApiServerCidrs[0]=10.43.0.1/32' \

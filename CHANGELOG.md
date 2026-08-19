@@ -22,6 +22,13 @@ follows [Keep a Changelog](https://keepachangelog.com/); the project uses
 
 ### Added
 
+- **Users and operators can now see the availability of every user-visible service through
+  unauthenticated `GET /healthz`.** The fixed, public-safe report classifies the API, database,
+  models, memory, files, channels, and integrations as `available`, `unavailable`, or `disabled`
+  without exposing topology or failure details. Any configured-service outage reports `degraded`,
+  but remains `ready: true` with HTTP 200 while the database is available; database loss or an
+  unreadable report fails closed as `ready: false` with HTTP 503.
+
 - **Operators can now identify an exact compatible release composition and perform fail-closed
   adjacent-minor database upgrades.** Immutable release manifests bind the repository train to its
   application, Helm chart, and database revisions; the deploy path accepts only the declared

@@ -5,7 +5,7 @@ import type { Express } from "express";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import request from "supertest";
 
-import { AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, AGENT_RUNTIME_PROTOCOL_V1, MANAGED_AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, RuntimeCandidateKinds, type RuntimeCandidate } from "@opencrane/contracts";
+import { AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, AGENT_RUNTIME_PROTOCOL_V1, MANAGED_AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, PublicHealthServiceNames, PublicHealthServiceStatuses, PublicHealthStatuses, RuntimeCandidateKinds, type RuntimeCandidate } from "@opencrane/contracts";
 import { ___AuthMiddleware } from "@opencrane/backend/server/infra/auth";
 import { _RateLimit } from "@opencrane/backend/server/infra/http";
 import { _ReadProcessConfig } from "../app/config";
@@ -34,7 +34,19 @@ function _buildAuthApp(): Express
 
   app.get("/healthz", function _healthz(req, res)
   {
-    res.json({ status: "ok", db: true });
+    res.json({
+      status: PublicHealthStatuses.Ok,
+      ready: true,
+      services: {
+        [PublicHealthServiceNames.Api]: PublicHealthServiceStatuses.Available,
+        [PublicHealthServiceNames.Database]: PublicHealthServiceStatuses.Available,
+        [PublicHealthServiceNames.Models]: PublicHealthServiceStatuses.Available,
+        [PublicHealthServiceNames.Memory]: PublicHealthServiceStatuses.Available,
+        [PublicHealthServiceNames.Files]: PublicHealthServiceStatuses.Available,
+		[PublicHealthServiceNames.Channels]: PublicHealthServiceStatuses.Available,
+        [PublicHealthServiceNames.Integrations]: PublicHealthServiceStatuses.Disabled,
+      },
+    });
   });
 
   app.get("/api/test", function _test(req, res)
@@ -130,7 +142,11 @@ describe("Control Plane", () =>
 
       const res = await request(app).get("/healthz");
       expect(res.status).toBe(200);
-      expect(res.body.status).toBe("ok");
+      expect(res.body).toEqual(expect.objectContaining({
+        status: PublicHealthStatuses.Ok,
+        ready: true,
+      }));
+      expect(Object.keys(res.body.services).sort()).toEqual(["api", "channels", "database", "files", "integrations", "memory", "models"]);
     });
 
     it("accepts only the bounded runtime-profile ServiceAccount naming contract", async function _RuntimeServiceAccountIdentity()

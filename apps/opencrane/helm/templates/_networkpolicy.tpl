@@ -232,6 +232,17 @@ spec:
         - protocol: TCP
           port: {{ .Values.mcpGateway.service.port }}
     {{- end }}
+    {{- if .Values.channelProxy.enabled }}
+    # Release-local live conversation-event delivery lets the server check the channel proxy.
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- include "opencrane.selectorLabels" . | nindent 14 }}
+              app.kubernetes.io/component: channel-proxy
+      ports:
+        - protocol: TCP
+          port: {{ .Values.channelProxy.service.port }}
+    {{- end }}
     {{- if .Values.observability.otel.enabled }}
     # Release-local operator-supplied OTEL collector for trace export.
     - to:
