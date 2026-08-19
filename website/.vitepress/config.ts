@@ -51,6 +51,7 @@ export default defineConfig({
           { text: 'API overview', link: '/reference/api-overview' },
         ],
       },
+      { text: 'Contributing', link: '/contributing/overview' },
       { text: 'GitHub', link: REPO },
     ],
 
@@ -133,6 +134,17 @@ export default defineConfig({
         items: [
           { text: 'Architecture', link: '/advanced/architecture' },
           { text: 'Running multiple instances', link: '/advanced/multi-instance' },
+        ],
+      },
+      {
+        text: 'Contributing',
+        collapsed: true,
+        items: [
+          { text: 'Overview', link: '/contributing/overview' },
+          { text: 'The CI pipeline', link: '/contributing/ci-pipeline' },
+          { text: 'Deploying', link: '/contributing/deploying' },
+          { text: 'Versions and migrations', link: '/contributing/versions-and-migrations' },
+          { text: 'Letting an AI agent manage your deployment', link: '/contributing/ai-managed-deployment' },
         ],
       },
     ],

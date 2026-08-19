@@ -5,11 +5,12 @@
 ## Version authorities
 
 The root [`package.json`](../../package.json) version names the current repository train. Every Nx
-application records `metadata.release.adaptedVersion`: the exact repository version in which that
-application's production or deployment contract was last adapted, either directly or through a
-changed project in its Nx dependency graph. Unchanged applications
-retain their older value. Existing app `package.json` versions and app-owned Helm chart versions are
-checked mirrors, never competing authorities.
+application records `metadata.release.adaptedVersion`: the exact repository version in which files
+under that application's own root last changed. An application whose own files did not change keeps
+its latest released value, even when a shared library, the root dependency set, or the lockfile
+moved underneath it — published images are pinned by commit SHA, so those shared changes reach the
+application without a per-application stamp. Existing app `package.json` versions and app-owned
+Helm chart versions are checked mirrors, never competing authorities.
 
 The initial `adoptionBaseline` is the explicit exception: it stamps the observed fleet composition
 at the train where this ledger was introduced, because older per-app adaptation history was not
@@ -18,10 +19,10 @@ immutable. Once a repository-version tag exists, production or deployment compos
 change under that same version.
 
 [`releases/`](../../releases/README.md) is the immutable composition history. Each root version maps
-the app, chart, and database schema versions known to work together. Use the Nx project graph to
-start from directly changed project roots and stamp the applications that own those roots or depend
-on them. Do not equate Nx's broader `affected` result with adaptation: named inputs such as shared
-configuration can mark an app affected without changing its production or deployment contract.
+the app, chart, and database schema versions known to work together. Stamp exactly the applications
+that own a changed file under their project root. Do not equate Nx's `affected` result with
+adaptation: a dependency-graph or shared-configuration change can mark an app affected without
+requiring a new stamp.
 
 This follows Nx's independent-release principle—projects retain their own last meaningful version—
 without enabling `nx release` as a second version authority. Nx
@@ -46,13 +47,13 @@ manifest contract; do not introduce parallel version files.
   predecessor database identity and may carry only that predecessor's exact source. This reuses the
   already reviewed SQL identity; it does not create a skipped-version migration or permit multi-hop
   carry-forward.
-- A directly changed application, and an application depending on a changed project, is stamped to
-  the current full root version. This is a compatibility stamp, not a claim that every application
-  releases in lockstep.
-- A semantic root dependency or lockfile change stamps every application because the shared runtime
-  boundary cannot be mapped safely to a smaller owner set. Root/version-only mirror edits do not.
+- A directly changed application is stamped to the current full root version. This is a
+  compatibility stamp, not a claim that every application releases in lockstep.
+- Shared library, root dependency, and lockfile changes stamp nothing on their own: the affected
+  applications keep their latest released version and receive the shared change through their
+  SHA-pinned images.
 - Never rewrite an older release manifest. Create the next manifest by carrying unchanged component
-  versions forward and updating only directly or dependency-adapted owners.
+  versions forward and updating only directly changed owners.
 
 ## Helm migrations
 

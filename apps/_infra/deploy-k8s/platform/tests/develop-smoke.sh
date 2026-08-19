@@ -153,11 +153,19 @@ _build_image()
   local image="$2"
   local dockerfile="$3"
   local cache_arguments=()
-  if [[ -n "${ACTIONS_RUNTIME_TOKEN:-}" \
-    && ( -n "${ACTIONS_RESULTS_URL:-}" || -n "${ACTIONS_CACHE_URL:-}" ) ]]; then
-    cache_arguments=(
-      --cache-from "type=gha,scope=${project},timeout=2m"
-    )
+  # CI shares registry layer caches per deployable with the publish jobs (see BUILD_CACHE_IMAGE
+  # in docker.yml). SMOKE_BUILD_CACHE is the trusted cache that integration pushes maintain;
+  # SMOKE_BUILD_CACHE_UNTRUSTED adds the pull-request cache as a second read source; and
+  # SMOKE_BUILD_CACHE_EXPORT names where this run may write its layers, so the next push builds
+  # warm. Local runs leave all three unset and build without a remote cache.
+  if [[ -n "${SMOKE_BUILD_CACHE:-}" ]]; then
+    cache_arguments+=(--cache-from "type=registry,ref=${SMOKE_BUILD_CACHE}:${project}")
+  fi
+  if [[ -n "${SMOKE_BUILD_CACHE_UNTRUSTED:-}" ]]; then
+    cache_arguments+=(--cache-from "type=registry,ref=${SMOKE_BUILD_CACHE_UNTRUSTED}:${project}")
+  fi
+  if [[ -n "${SMOKE_BUILD_CACHE_EXPORT:-}" ]]; then
+    cache_arguments+=(--cache-to "type=registry,ref=${SMOKE_BUILD_CACHE_EXPORT}:${project},mode=max")
   fi
   echo "[develop-smoke] Building $image"
   _retry 3 docker buildx build --load --file "$ROOT_DIR/$dockerfile" --tag "$image" \
@@ -377,6 +385,12 @@ EOF
   _wait_for_job "$job_name"
 }
 
+# Proves the public health report is complete and every service the smoke can provision is
+# healthy. Model routing is the one exception: CI holds no provider credentials, so LiteLLM
+# serves an empty estate and the models probe reports unavailable. Seeding a placeholder key
+# instead made the server fetch a BYOK Secret through the API server and exit fatally when that
+# call failed, so the report is asserted as-is and models is allowed to be unavailable. Reporting
+# an unconfigured estate as disabled rather than unavailable is tracked separately.
 _assert_ingress_health()
 {
   local health_url="https://${CONTROL_PLANE_HOST}:8443/healthz"
@@ -385,10 +399,12 @@ _assert_ingress_health()
   until response="$(curl --connect-timeout 2 --max-time 5 --fail --silent --show-error --insecure \
     --resolve "${CONTROL_PLANE_HOST}:8443:127.0.0.1" "$health_url" 2>/dev/null)" \
     && jq -e '
-      .status == "ok"
-      and .ready == true
+      .ready == true
       and (.services | keys == ["api", "channels", "database", "files", "integrations", "memory", "models"])
-      and ([.services[]] | all(. == "available" or . == "disabled"))
+      and ([.services | to_entries[] | select(.key != "models") | .value]
+        | all(. == "available" or . == "disabled"))
+      and (.services.models == "available" or .services.models == "unavailable")
+      and (.status == "ok" or (.status == "degraded" and .services.models != "available"))
     ' >/dev/null <<<"$response"; do
     if [[ $(date +%s) -ge "$deadline" ]]; then
       echo "[develop-smoke] Timed out waiting for the complete public health report at $health_url; last response: $response" >&2
@@ -481,10 +497,6 @@ export OPENCRANE_OIDC_SESSION_SECRET="$(_random_secret)"
 # production deploy path still requires a UI digest; this explicit escape keeps the smoke honest.
 export OPENCRANE_ALLOW_TAG_FLOAT=1
 export TIMEOUT_SECONDS
-# The public health report only turns "models" available once LiteLLM lists a routable model.
-# Seeding the initial provider with a placeholder key is safe here: registration writes the
-# LiteLLM model row without calling the provider, and the health probe lists the estate.
-export OPENCRANE_INITIAL_MODEL_API_KEY="sk-develop-smoke-placeholder"
 # Exercise the production wrapper's required contact and first-owner inputs. The disposable `.test`
 # host cannot complete public ACME, so the final --set flags deliberately restore its local issuer.
 "$ROOT_DIR/apps/_infra/deploy-k8s/deploy.sh" \
@@ -496,7 +508,6 @@ export OPENCRANE_INITIAL_MODEL_API_KEY="sk-develop-smoke-placeholder"
   --release "$RELEASE_NAME" \
   --release-version "$(jq -r '.version' "$ROOT_DIR/package.json")" \
   --from-release-version fresh \
-  --initial-model-provider openai \
   --image-tag develop-smoke \
   --cognee-tag develop-smoke \
   --storage-class "$SMOKE_STORAGE_CLASS" \

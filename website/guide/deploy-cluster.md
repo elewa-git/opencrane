@@ -55,3 +55,7 @@ Keep provider-specific identity and storage configuration outside the runtime au
 ## Next
 
 → [Set up your domain](/guide/dns) → [Set up your personal assistant](/guide/persona)
+
+Changing OpenCrane itself rather than installing it? See
+[Contributing → Deploying](/contributing/deploying) for the CI-to-cluster pipeline this script
+sits behind.

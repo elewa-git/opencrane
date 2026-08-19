@@ -5,7 +5,9 @@ WORKDIR /app
 COPY package.json package-lock.json tsconfig.json nx.json ./
 COPY libs libs
 COPY apps/artifact-service/package.json apps/artifact-service/project.json apps/artifact-service/tsconfig.json apps/artifact-service/
-RUN npm ci
+# The cache mount keeps npm's download cache out of the image layers and shares it
+# between stages, so the runtime-stage install reuses the packages this stage fetched.
+RUN --mount=type=cache,target=/root/.npm npm ci
 
 COPY apps/artifact-service/src apps/artifact-service/src
 RUN npx nx run artifact-service:build
@@ -16,7 +18,7 @@ WORKDIR /app
 ENV NODE_ENV=production
 COPY package.json package-lock.json ./
 COPY apps/artifact-service/package.json apps/artifact-service/
-RUN npm ci --omit=dev --workspace=apps/artifact-service
+RUN --mount=type=cache,target=/root/.npm npm ci --omit=dev --workspace=apps/artifact-service
 
 COPY --from=build /app/dist/apps/artifact-service dist/apps/artifact-service
 

@@ -5,8 +5,9 @@ umbrella chart composes the trusted services and separate, restricted Job namesp
 
 > See also: [Deployment configuration](/operators/deployment-configuration) (public Helm inputs),
 > [Organisation boundary](/operators/organisation-boundary) (what one silo serves),
-> [Networking and isolation](/operators/networking) (allowed traffic), and
-> [Runbook](/operators/runbook) (health and recovery).
+> [Networking and isolation](/operators/networking) (allowed traffic),
+> [Runbook](/operators/runbook) (health and recovery), and
+> [Deploying](/contributing/deploying) (the script chain and CI gates behind a release).
 
 ## Deployment shape
 

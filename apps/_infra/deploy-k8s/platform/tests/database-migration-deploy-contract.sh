@@ -319,9 +319,13 @@ export SUCCESS_CALLS
       deployment_name="${2#deployment/}"
       printf 'inventory %s\n' "$deployment_name" >>"$SUCCESS_CALLS"
       printf 'deployment.apps/%s\n' "$deployment_name"
-    elif [[ "$1 $2" == "rollout restart" ]]; then
-      deployment_name="${3#deployment/}"
-      printf 'restart %s\n' "$deployment_name" >>"$SUCCESS_CALLS"
+    elif [[ "$1 $2" == "patch deployment/"* ]]; then
+      deployment_name="${2#deployment/}"
+      if [[ "$*" != *'opencrane.ai/database-connection-checksum'* || "$*" != *'checksum-value'* ]]; then
+        printf 'unexpected finalization patch payload: %s\n' "$*" >&2
+        return 1
+      fi
+      printf 'patch %s\n' "$deployment_name" >>"$SUCCESS_CALLS"
     elif [[ "$1 $2" == "rollout status" ]]; then
       deployment_name="${3#deployment/}"
       printf 'rollout %s\n' "$deployment_name" >>"$SUCCESS_CALLS"
@@ -342,8 +346,8 @@ export SUCCESS_CALLS
   BOUNDARY_PHASE=finalization
   run_opencrane_finalization_stage helm upgrade opencrane /chart \
     --set clustertenantManager.replicas=2 --set migrationFence.active=false
-  run_opencrane_finalization_stage restart_database_consumers_for_finalization opencrane 37 \
-    opencrane-opencrane-server opencrane-litellm
+  run_opencrane_finalization_stage roll_database_consumers_for_finalization opencrane 37 \
+    checksum-value opencrane-opencrane-server opencrane-litellm
   run_opencrane_finalization_stage wait_for_final_deployment_if_present opencrane-clustertenant-manager
   run_opencrane_finalization_stage _wait_for_release_certificate
   run_opencrane_finalization_stage _post_deploy_verify
@@ -362,9 +366,9 @@ printf '%s\n' \
   helm-capture-fenced \
   helm-unfence \
   'inventory opencrane-opencrane-server' \
-  'restart opencrane-opencrane-server' \
+  'patch opencrane-opencrane-server' \
   'inventory opencrane-litellm' \
-  'restart opencrane-litellm' \
+  'patch opencrane-litellm' \
   'inventory opencrane-opencrane-server' \
   'rollout opencrane-opencrane-server' \
   'inventory opencrane-litellm' \
@@ -844,7 +848,7 @@ set +e
   kubectl() { return 29; }
   helm() { printf 'helm %s\n' "$*" >>"$FINAL_CALLS"; }
   err() { :; }
-  run_opencrane_finalization_stage restart_database_consumers_for_finalization opencrane 37 opencrane-server
+  run_opencrane_finalization_stage roll_database_consumers_for_finalization opencrane 37 checksum-value opencrane-server
 )
 final_inventory_status=$?
 set -e
