@@ -196,9 +196,25 @@ export const Resolution: Story = {
 	play: async function play({ canvasElement })
 	{
 		const canvas = within(canvasElement);
-		const choice = canvas.getByRole("radio", { name: "Blue" });
+		const choice = canvas.getByRole("radio", { name: /Analyst \(Blue\).*Methodical, evidence-led/ });
 		await userEvent.click(choice);
 		await expect(choice).toBeChecked();
+	}
+};
+
+/** Explorer and Guardian tie explains the novelty-versus-proven-method choice. */
+export const ModifierResolution: Story = {
+	parameters: _StoryDescription("A tied approach preference explains both Explorer and Guardian before asking the owner to choose.", "The resolution component retains the exact modifier values while showing their reviewed meanings.", "It never invents a balanced option or changes the server-returned order."),
+	render: function render()
+	{
+		return { props: { snapshot: _Snapshot({ state: PersonaOnboardingStates.Resolution, answeredQuestionCount: 10, questions: _Questions(10), resolution: { kind: PersonaResolutionKinds.Modifier, candidates: [PersonaModifiers.Explorer, PersonaModifiers.Guardian] } }), busy: false, actionError: null }, template: `<wo-persona-resolution-state [snapshot]="snapshot" [busy]="busy" [actionError]="actionError" />` };
+	},
+	play: async function play({ canvasElement })
+	{
+		const canvas = within(canvasElement);
+		await expect(canvas.getByText("Your approach preferences are tied")).toBeVisible();
+		await expect(canvas.getByRole("radio", { name: /Explorer.*novel approaches/ })).toBeInTheDocument();
+		await expect(canvas.getByRole("radio", { name: /Guardian.*proven approaches/ })).toBeInTheDocument();
 	}
 };
 

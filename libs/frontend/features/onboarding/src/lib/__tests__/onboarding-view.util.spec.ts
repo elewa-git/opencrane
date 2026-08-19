@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { PersonaArchetypeTones } from "@opencrane/elements/ui";
 import { PersonaColours, PersonaModifiers, PersonaOnboardingSnapshot, PersonaOnboardingStates, PersonaResolutionKinds, PersonaResult } from "@opencrane/state/onboarding";
 
-import { _FindCurrentQuestion, _PersonaScores, _ProgressLabel, _ResolutionOptions, _SelectedChoiceLabel } from "../onboarding-view.util";
+import { _FindCurrentQuestion, _PersonaScores, _ProgressLabel, _ResolutionCopy, _ResolutionOptions, _SelectedChoiceLabel } from "../onboarding-view.util";
 
 /** Build one resumable survey snapshot for presentation mapping tests. */
 function _Snapshot(): PersonaOnboardingSnapshot
@@ -35,10 +35,23 @@ describe("onboarding view mappings", function _OnboardingViewSuite()
 
 	it("offers only server-returned tie candidates", function _TieCandidates()
 	{
-		expect(_ResolutionOptions({ kind: PersonaResolutionKinds.Primary, candidates: [PersonaColours.Red, PersonaColours.Blue] })).toEqual([
-			{ id: "red", label: "Red" },
-			{ id: "blue", label: "Blue" }
+		expect(_ResolutionOptions({ kind: PersonaResolutionKinds.Primary, candidates: [PersonaColours.Red, PersonaColours.Yellow, PersonaColours.Green, PersonaColours.Blue] })).toEqual([
+			{ id: "red", label: "Commander (Red)", description: "Direct, decisive, and focused on moving work forward." },
+			{ id: "yellow", label: "Catalyst (Yellow)", description: "Energetic, collaborative, and comfortable exploring new paths." },
+			{ id: "green", label: "Anchor (Green)", description: "Calm, supportive, and attentive to shared understanding." },
+			{ id: "blue", label: "Analyst (Blue)", description: "Methodical, evidence-led, and explicit about uncertainty." }
 		]);
+		expect(_ResolutionOptions({ kind: PersonaResolutionKinds.Modifier, candidates: [PersonaModifiers.Explorer, PersonaModifiers.Guardian] })).toEqual([
+			{ id: "explorer", label: "Explorer", description: "Prefers novel approaches and creative alternatives." },
+			{ id: "guardian", label: "Guardian", description: "Prefers proven approaches and bounded risk." }
+		]);
+	});
+
+	it("explains the different decisions without calling every tie a leading style", function _TieKindCopy()
+	{
+		expect(_ResolutionCopy(PersonaResolutionKinds.Primary)).toMatchObject({ title: "Your primary styles are tied", legend: "Choose the primary collaboration style" });
+		expect(_ResolutionCopy(PersonaResolutionKinds.Secondary)).toMatchObject({ title: "Your secondary styles are tied", legend: "Choose the secondary influence" });
+		expect(_ResolutionCopy(PersonaResolutionKinds.Modifier)).toMatchObject({ title: "Your approach preferences are tied", legend: "Choose how your agent should approach new ideas" });
 	});
 
 	it("rounds only the displayed score vector", function _Scores()
