@@ -1,9 +1,10 @@
 @let state = snapshot();
 @if (state.resolution; as resolution) {
-	<wo-journey-shell title="Two working styles fit equally well" description="OpenCrane does not choose a default for a tied score. Select the style that should lead your persona." [layout]="layouts.Compact" [busy]="busy()">
+	@let copy = resolutionCopy(resolution.kind);
+	<wo-journey-shell [title]="copy.title" [description]="copy.description" [layout]="layouts.Compact" [busy]="busy()">
 		<p-message journey-status severity="info" [closable]="false">No persona draft exists yet. Your explicit choice becomes part of the review evidence.</p-message>
 		@if (actionError(); as error) { <p-message journey-status severity="error" [closable]="false">{{ error }}</p-message> }
-		<wo-choice-card-group [controlId]="'persona-resolution-' + resolution.kind" legend="Choose the leading working style" [options]="resolutionOptions()" [selectedId]="selectedId()" [disabled]="busy()" [validationMessage]="validationMessage()" [layout]="choiceLayouts.Stack" (selectedIdChange)="select($event)" />
+		<wo-choice-card-group [controlId]="'persona-resolution-' + resolution.kind" [legend]="copy.legend" [options]="resolutionOptions()" [selectedId]="selectedId()" [disabled]="busy()" [validationMessage]="validationMessage()" [layout]="choiceLayouts.Stack" (selectedIdChange)="select($event)" />
 		<p-button journey-actions label="Save choice and continue" icon="pi pi-arrow-right" iconPos="right" [loading]="busy()" (onClick)="submitResolution()" />
 	</wo-journey-shell>
 } @else {

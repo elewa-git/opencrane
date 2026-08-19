@@ -4,9 +4,10 @@ import { MessageModule } from "primeng/message";
 
 import { ChoiceCardGroupComponent, ChoiceCardLayouts, ChoiceCardOption, JourneyShellComponent, JourneyShellLayouts } from "@opencrane/elements/ui";
 import { PersonaOnboardingStates } from "@opencrane/state/onboarding";
+import type { PersonaResolutionKinds } from "@opencrane/state/onboarding";
 
-import { _ResolutionOptions } from "../../onboarding-view.util";
-import type { PersonaOnboardingStateSnapshot, PersonaResolutionIntent } from "../../persona-onboarding-state.types";
+import { _ResolutionCopy, _ResolutionOptions } from "../../onboarding-view.util";
+import type { PersonaOnboardingStateSnapshot, PersonaResolutionCopy, PersonaResolutionIntent } from "../../persona-onboarding-state.types";
 
 /** Presentational owner for the explicit tie-resolution lifecycle state. */
 @Component({
@@ -48,6 +49,18 @@ export class PersonaResolutionStateComponent
 
 	/** Shared choice-card inputs limited to the current server-returned tie candidates. */
 	public readonly resolutionOptions: Signal<readonly ChoiceCardOption[]> = computed(this._resolutionOptions.bind(this));
+
+	/**
+	 * Exposes {@link _ResolutionCopy} to the Angular template for the server-returned tie kind.
+	 *
+	 * Called by: `persona-resolution-state.component.html`.
+	 * @param kind The tied persona dimension from the current resolution state.
+	 * @returns Copy that tells the owner which decision this tie requires.
+	 */
+	public resolutionCopy(kind: PersonaResolutionKinds): PersonaResolutionCopy
+	{
+		return _ResolutionCopy(kind);
+	}
 
 	/** Update the transient controlled choice without treating it as resolved evidence. */
 	public select(selectedValue: string): void

@@ -1,5 +1,7 @@
 import { ChoiceCardOption, PersonaArchetypeScore, PersonaArchetypeTones } from "@opencrane/elements/ui";
-import { PersonaColours, PersonaOnboardingSnapshot, PersonaQuestion, PersonaResolution, PersonaResult } from "@opencrane/state/onboarding";
+import { PersonaColours, PersonaModifiers, PersonaOnboardingSnapshot, PersonaQuestion, PersonaResolution, PersonaResolutionKinds, PersonaResult } from "@opencrane/state/onboarding";
+
+import type { PersonaResolutionCopy } from "./persona-onboarding-state.types";
 
 /** Find the next unanswered reviewed question without reinterpreting saved progress. */
 export function _FindCurrentQuestion(snapshot: PersonaOnboardingSnapshot): PersonaQuestion | null
@@ -26,8 +28,52 @@ export function _ResolutionOptions(resolution: PersonaResolution | null): readon
 	if (resolution === null) return [];
 	return resolution.candidates.map(function _Candidate(candidate)
 	{
-		return { id: candidate, label: _PersonaValueLabel(candidate) };
+		return _ResolutionOption(candidate);
 	});
+}
+
+/**
+ * Maps each server resolution kind to copy that describes the decision it controls.
+ * The explicit branches keep secondary and modifier ties from inheriting the former leading-style wording.
+ *
+ * Called by: {@link PersonaResolutionStateComponent.resolutionCopy}.
+ * @param kind The tied persona dimension returned by the server.
+ * @returns The heading, explanation, and fieldset legend for that decision.
+ */
+export function _ResolutionCopy(kind: PersonaResolutionKinds): PersonaResolutionCopy
+{
+	switch (kind)
+	{
+		case PersonaResolutionKinds.Primary: return {
+			title: "Your primary styles are tied",
+			description: "These styles scored equally as the strongest influence. Choose how your agent should lead its collaboration.",
+			legend: "Choose the primary collaboration style"
+		};
+		case PersonaResolutionKinds.Secondary: return {
+			title: "Your secondary styles are tied",
+			description: "These styles scored equally as the supporting influence. Choose how your agent should complement its primary style.",
+			legend: "Choose the secondary influence"
+		};
+		case PersonaResolutionKinds.Modifier: return {
+			title: "Your approach preferences are tied",
+			description: "Your answers equally support exploring new approaches and relying on proven methods. Choose which approach your agent should prefer.",
+			legend: "Choose how your agent should approach new ideas"
+		};
+	}
+}
+
+/** Explain one server-returned tie candidate without changing its persisted value. */
+function _ResolutionOption(candidate: PersonaColours | PersonaModifiers): ChoiceCardOption
+{
+	switch (candidate)
+	{
+		case PersonaColours.Red:
+		case PersonaColours.Yellow:
+		case PersonaColours.Green:
+		case PersonaColours.Blue: return { id: candidate, label: `${_PersonaArchetypeLabel(candidate)} (${_PersonaValueLabel(candidate)})`, description: _PersonaDescription(candidate) };
+		case PersonaModifiers.Explorer: return { id: candidate, label: "Explorer", description: "Prefers novel approaches and creative alternatives." };
+		case PersonaModifiers.Guardian: return { id: candidate, label: "Guardian", description: "Prefers proven approaches and bounded risk." };
+	}
 }
 
 /** Build a truthful visible progress label from server-confirmed counts. */
@@ -62,6 +108,18 @@ export function _PersonaDescription(colour: PersonaColours): string
 	}
 }
 
+/** Name the collaboration archetype represented by one server-owned colour. */
+function _PersonaArchetypeLabel(colour: PersonaColours): string
+{
+	switch (colour)
+	{
+		case PersonaColours.Red: return "Commander";
+		case PersonaColours.Yellow: return "Catalyst";
+		case PersonaColours.Green: return "Anchor";
+		case PersonaColours.Blue: return "Analyst";
+	}
+}
+
 /** Human-readable name for a server-owned colour, modifier, or tie candidate. */
 export function _PersonaValueLabel(value: string): string
 {
@@ -73,10 +131,10 @@ export function _PersonaValueLabel(value: string): string
 export function _PersonaScores(result: PersonaResult): readonly PersonaArchetypeScore[]
 {
 	return [
-		{ id: PersonaColours.Red, label: "Commander", percentage: _Percentage(result.colourScores.red, result.colourScores.total), tone: PersonaArchetypeTones.Commander },
-		{ id: PersonaColours.Yellow, label: "Catalyst", percentage: _Percentage(result.colourScores.yellow, result.colourScores.total), tone: PersonaArchetypeTones.Catalyst },
-		{ id: PersonaColours.Green, label: "Anchor", percentage: _Percentage(result.colourScores.green, result.colourScores.total), tone: PersonaArchetypeTones.Anchor },
-		{ id: PersonaColours.Blue, label: "Analyst", percentage: _Percentage(result.colourScores.blue, result.colourScores.total), tone: PersonaArchetypeTones.Analyst }
+		{ id: PersonaColours.Red, label: _PersonaArchetypeLabel(PersonaColours.Red), percentage: _Percentage(result.colourScores.red, result.colourScores.total), tone: PersonaArchetypeTones.Commander },
+		{ id: PersonaColours.Yellow, label: _PersonaArchetypeLabel(PersonaColours.Yellow), percentage: _Percentage(result.colourScores.yellow, result.colourScores.total), tone: PersonaArchetypeTones.Catalyst },
+		{ id: PersonaColours.Green, label: _PersonaArchetypeLabel(PersonaColours.Green), percentage: _Percentage(result.colourScores.green, result.colourScores.total), tone: PersonaArchetypeTones.Anchor },
+		{ id: PersonaColours.Blue, label: _PersonaArchetypeLabel(PersonaColours.Blue), percentage: _Percentage(result.colourScores.blue, result.colourScores.total), tone: PersonaArchetypeTones.Analyst }
 	];
 }
 

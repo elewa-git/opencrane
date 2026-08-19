@@ -23,6 +23,20 @@ export interface PersonaResolutionIntent
 	readonly selectedValue: string;
 }
 
+/**
+ * Carries the heading, explanation, and accessible prompt contributed by a tie-resolution kind.
+ * The view mapper constructs this contract and the resolution template consumes it without reinterpreting primary, secondary, or modifier semantics.
+ */
+export interface PersonaResolutionCopy
+{
+	/** Identifies the part of the persona whose scores are tied. */
+	readonly title: string;
+	/** Explains what the owner's choice will affect. */
+	readonly description: string;
+	/** Asks for the owner's decision in the choice fieldset. */
+	readonly legend: string;
+}
+
 /** Immutable review material captured by the owner's approval confirmation. */
 export interface PersonaApprovalIntent
 {
