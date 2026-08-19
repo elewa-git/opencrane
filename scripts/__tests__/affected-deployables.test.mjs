@@ -182,8 +182,9 @@ test("overlaps image preparation and imports one complete direct k3d batch", fun
 	assert.match(smoke, /cert-manager jetstack\/cert-manager[\s\S]*?&[\s\S]*?CERT_MANAGER_INSTALL_PID=\$![\s\S]*?cnpg cnpg\/cloudnative-pg/u);
 	assert.match(smoke, /if ! wait "\$CERT_MANAGER_INSTALL_PID"/u);
 	assert.match(smoke, /docker buildx build --load/u);
-	assert.match(smoke, /--cache-from "type=gha,scope=\$\{project\},timeout=2m"/u);
-	assert.doesNotMatch(smoke, /--cache-to/u);
+	assert.match(smoke, /--cache-from "type=registry,ref=\$\{SMOKE_BUILD_CACHE\}:\$\{project\}"/u);
+	assert.match(smoke, /--cache-from "type=registry,ref=\$\{SMOKE_BUILD_CACHE_UNTRUSTED\}:\$\{project\}"/u);
+	assert.match(smoke, /--cache-to "type=registry,ref=\$\{SMOKE_BUILD_CACHE_EXPORT\}:\$\{project\},mode=max"/u);
 	const imports = smoke.match(/k3d image import/g) ?? [];
 	assert.equal(imports.length, 1);
 	assert.match(smoke, /k3d image import "\$\{SMOKE_IMAGES\[@\]\}" --cluster "\$CLUSTER_NAME" --mode direct/u);
@@ -212,7 +213,7 @@ test("keeps heavyweight remote qualification ahead of image publication", functi
 	assert.match(workflow, /run: \.\/apps\/_infra\/deploy-k8s\/platform\/tests\/develop-smoke\.sh/u);
 	assert.match(workflow, /inputs\.heavy_qualification == 'k3d'/u);
 	assert.match(workflow, /inputs\.heavy_qualification == 'all'/u);
-	assert.match(workflow, /needs: \[prepare, test, develop_smoke, image_smoke\]/u);
+	assert.match(workflow, /needs: \[prepare, test, storybook_visual, develop_smoke, image_smoke\]/u);
 	assert.match(developSmokeJob[0], /needs: prepare/u);
 	assert.match(developSmokeJob[0], /needs\.prepare\.outputs\.develop_smoke_can_skip != 'true'/u);
 	assert.match(workflow, /continue-on-error: true[\s\S]*?run: node scripts\/develop-smoke-baseline\.mjs/u);
@@ -230,13 +231,17 @@ test("keeps heavyweight remote qualification ahead of image publication", functi
 	assert.match(developSmokeJob[0], /SMOKE_AFFECTED_PROJECTS: \$\{\{ needs\.prepare\.outputs\.develop_smoke_projects \}\}/u);
 	assert.match(developSmokeJob[0], /SMOKE_BASE_SHA: \$\{\{ needs\.prepare\.outputs\.nx_base \}\}/u);
 	assert.match(developSmokeJob[0], /SMOKE_STORAGE_MODE: \$\{\{ needs\.prepare\.outputs\.develop_smoke_storage_mode \}\}/u);
-	assert.match(developSmokeJob[0], /uses: crazy-max\/ghaction-github-runtime@04d248b84655b509d8c44dc1d6f990c879747487/u);
+	assert.match(developSmokeJob[0], /SMOKE_BUILD_CACHE: \$\{\{ env\.REGISTRY \}\}\/\$\{\{ github\.repository_owner \}\}\/\$\{\{ env\.BUILD_CACHE_IMAGE \}\}/u);
+	assert.match(developSmokeJob[0], /SMOKE_BUILD_CACHE_EXPORT: /u);
 	assert.match(imageSmokeJob[0], /matrix: \$\{\{ fromJSON\(needs\.prepare\.outputs\.image_smokes\) \}\}/u);
 	assert.match(
 		imageSmokeJob[0],
 		/IMAGE_SMOKE_PROJECT: \$\{\{ matrix\.project \}\}[\s\S]*?npx nx run "\$IMAGE_SMOKE_PROJECT:image-smoke"/u,
 	);
-	assert.match(workflow, /cache-from: type=gha,scope=\$\{\{ matrix\.project \}\}/u);
+	assert.match(
+		workflow,
+		/type=registry,ref=\$\{\{ env\.REGISTRY \}\}\/\$\{\{ github\.repository_owner \}\}\/\$\{\{ env\.BUILD_CACHE_IMAGE \}\}:\$\{\{ matrix\.project \}\}/u,
+	);
 	assert.match(workflow, /type=raw,value=sha-\$\{\{ github\.sha \}\}/u);
 	assert.match(publishSmokeImagesJob[0], /github\.ref == 'refs\/heads\/develop'/u);
 	assert.match(publishSmokeImagesJob[0], /matrix: \$\{\{ fromJSON\(needs\.prepare\.outputs\.develop_smoke_images\) \}\}/u);
