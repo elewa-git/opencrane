@@ -19,7 +19,9 @@ COPY package.json package-lock.json tsconfig.json tsconfig.frontend.json nx.json
 COPY libs libs
 COPY apps/opencrane-ui apps/opencrane-ui
 # npm workspaces install: root package.json's "workspaces" field includes apps/* and website
-RUN npm ci
+# The cache mount keeps npm's download cache out of the image layers and shares it
+# between stages, so the runtime-stage install reuses the packages this stage fetched.
+RUN --mount=type=cache,target=/root/.npm npm ci
 
 RUN npx nx build opencrane-ui
 

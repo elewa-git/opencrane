@@ -45,6 +45,10 @@ permissions:
 
 env:
   REGISTRY: ghcr.io
+  # Image layer cache lives in one registry repository with one tag per deployable. The registry
+  # backend replaced the GitHub Actions cache backend because the 10GB Actions cache quota evicted
+  # the large layer blobs on almost every run, so every build started cold.
+  BUILD_CACHE_IMAGE: opencrane-buildcache
 
 jobs:
   prepare:
@@ -325,7 +329,10 @@ jobs:
     needs: prepare
     permissions:
       contents: read
-      packages: read
+      # Write lets the smoke publish its layer cache so the next run builds warm. GitHub
+      # downgrades the token to read-only for pull requests from forks, and the smoke then
+      # skips the cache export (see SMOKE_BUILD_CACHE_PUSH below).
+      packages: write
     # Every accepted develop commit proves the current deployment path. A pull request skips the
     # live cluster only when its exact base SHA already completed the same k3d job successfully.
     # Missing or malformed proof output deliberately compares unequal to true and runs k3d.
@@ -384,11 +391,6 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
 
-      # Docker's GHA cache backend requires these runtime variables for an inline buildx command.
-      # Pin the helper by commit so the remote action cannot move underneath qualification.
-      - name: Expose the GitHub Actions cache runtime
-        uses: crazy-max/ghaction-github-runtime@04d248b84655b509d8c44dc1d6f990c879747487
-
       - name: Run the current-silo smoke
         run: ./apps/_infra/deploy-k8s/platform/tests/develop-smoke.sh
         env:
@@ -398,6 +400,9 @@ jobs:
           SMOKE_BASE_SHA: ${{ needs.prepare.outputs.nx_base }}
           SMOKE_REGISTRY: ${{ env.REGISTRY }}/${{ github.repository_owner }}
           SMOKE_STORAGE_MODE: ${{ needs.prepare.outputs.develop_smoke_storage_mode }}
+          SMOKE_BUILD_CACHE: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.BUILD_CACHE_IMAGE }}
+          # Fork pull requests get a read-only token, so they consume the cache without exporting.
+          SMOKE_BUILD_CACHE_PUSH: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && '1' || '0' }}
 
   image_smoke:
     name: Image smoke (${{ matrix.project }})
@@ -453,8 +458,9 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      # Validation-only runs also log in: pulling the registry layer cache needs an
+      # authenticated token even when nothing is pushed.
       - name: Log in to GitHub Container Registry
-        if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.publish_deployables != 'none')
         uses: docker/login-action@v4
         with:
           registry: ${{ env.REGISTRY }}
@@ -481,8 +487,9 @@ jobs:
           push: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.publish_deployables != 'none') }}
           tags: ${{ steps.metadata.outputs.tags }}
           labels: ${{ steps.metadata.outputs.labels }}
-          cache-from: type=gha,scope=${{ matrix.project }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.project }}
+          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.BUILD_CACHE_IMAGE }}:${{ matrix.project }}
+          # Fork pull requests get a read-only token, so they consume the cache without exporting.
+          cache-to: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && format('type=registry,ref={0}/{1}/{2}:{3},mode=max', env.REGISTRY, github.repository_owner, env.BUILD_CACHE_IMAGE, matrix.project) || '' }}
 
   publish-develop-smoke-images:
     name: Publish develop smoke image (${{ matrix.project }})
@@ -551,5 +558,5 @@ jobs:
           file: ${{ matrix.dockerfile }}
           push: true
           tags: ${{ steps.image-set.outputs.current_ref }}
-          cache-from: type=gha,scope=${{ matrix.project }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.project }}
+          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.BUILD_CACHE_IMAGE }}:${{ matrix.project }}
+          cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.BUILD_CACHE_IMAGE }}:${{ matrix.project }},mode=max

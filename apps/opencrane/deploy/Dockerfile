@@ -17,7 +17,9 @@ COPY apps/opencrane/scripts apps/opencrane/scripts
 COPY apps/opencrane/package.json apps/opencrane/tsconfig.json apps/opencrane/prisma.config.ts apps/opencrane/
 COPY apps/opencrane/prisma apps/opencrane/prisma
 # npm workspaces install: root package.json's "workspaces" field includes apps/* and website
-RUN npm ci
+# The cache mount keeps npm's download cache out of the image layers and shares it
+# between stages, so the runtime-stage install reuses the packages this stage fetched.
+RUN --mount=type=cache,target=/root/.npm npm ci
 
 COPY apps/opencrane/src apps/opencrane/src
 # Generate Prisma client, build dependencies first, then the app
@@ -39,7 +41,7 @@ COPY package.json package-lock.json ./
 # database baseline are build/provisioning inputs; server startup never mutates schema.
 COPY apps/opencrane/package.json apps/opencrane/
 # Install only the app workspace's runtime dependencies
-RUN npm ci --omit=dev --workspace=apps/opencrane
+RUN --mount=type=cache,target=/root/.npm npm ci --omit=dev --workspace=apps/opencrane
 # Shared conversation contracts keep these packages external in the compiled server bundle.
 # Resolve their public runtime entrypoints now so a production image cannot build without them.
 RUN node --input-type=module --eval \

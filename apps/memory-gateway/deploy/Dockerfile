@@ -5,7 +5,9 @@ WORKDIR /app
 COPY package.json package-lock.json tsconfig.json nx.json ./
 COPY libs libs
 COPY apps/memory-gateway/package.json apps/memory-gateway/project.json apps/memory-gateway/tsconfig.json apps/memory-gateway/
-RUN npm ci
+# The cache mount keeps npm's download cache out of the image layers and shares it
+# between stages, so the runtime-stage install reuses the packages this stage fetched.
+RUN --mount=type=cache,target=/root/.npm npm ci
 
 COPY apps/memory-gateway/src apps/memory-gateway/src
 RUN npx nx run memory-gateway:build
@@ -16,7 +18,7 @@ WORKDIR /app
 ENV NODE_ENV=production
 COPY package.json package-lock.json ./
 COPY apps/memory-gateway/package.json apps/memory-gateway/
-RUN npm ci --omit=dev --workspace=apps/memory-gateway
+RUN --mount=type=cache,target=/root/.npm npm ci --omit=dev --workspace=apps/memory-gateway
 # Shared conversation contracts keep these packages external in the compiled gateway bundle.
 # Resolve their public runtime entrypoints now so a production image cannot build without them.
 RUN node --input-type=module --eval \

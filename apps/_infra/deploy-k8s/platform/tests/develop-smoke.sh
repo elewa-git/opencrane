@@ -153,11 +153,15 @@ _build_image()
   local image="$2"
   local dockerfile="$3"
   local cache_arguments=()
-  if [[ -n "${ACTIONS_RUNTIME_TOKEN:-}" \
-    && ( -n "${ACTIONS_RESULTS_URL:-}" || -n "${ACTIONS_CACHE_URL:-}" ) ]]; then
-    cache_arguments=(
-      --cache-from "type=gha,scope=${project},timeout=2m"
-    )
+  # CI shares one registry layer cache per deployable with the publish jobs (see
+  # BUILD_CACHE_IMAGE in docker.yml). The smoke also exports its layers when the token can
+  # write, so the next pull-request push builds warm instead of cold. Local runs leave
+  # SMOKE_BUILD_CACHE unset and build without a remote cache.
+  if [[ -n "${SMOKE_BUILD_CACHE:-}" ]]; then
+    cache_arguments+=(--cache-from "type=registry,ref=${SMOKE_BUILD_CACHE}:${project}")
+    if [[ "${SMOKE_BUILD_CACHE_PUSH:-0}" == "1" ]]; then
+      cache_arguments+=(--cache-to "type=registry,ref=${SMOKE_BUILD_CACHE}:${project},mode=max")
+    fi
   fi
   echo "[develop-smoke] Building $image"
   _retry 3 docker buildx build --load --file "$ROOT_DIR/$dockerfile" --tag "$image" \
