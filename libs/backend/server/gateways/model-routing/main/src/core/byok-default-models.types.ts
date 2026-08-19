@@ -31,7 +31,7 @@ export interface ByokProviderCatalog
   models: readonly ByokModelClass[];
   /**
    * The provider's embedding model, when it has one. Registered straight with LiteLLM by
-   * `_ensureProviderEmbeddingModel` in `provision-byok-key.ts`, and deliberately NOT listed in
+   * `_EnsureProviderEmbeddingModels` in `provider-embedding-models.ts`, and deliberately NOT listed in
    * `models[]`.
    *
    * Here is why that matters. Every `models[]` class becomes a Global `ModelDefinition` row, and

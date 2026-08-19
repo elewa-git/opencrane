@@ -19,7 +19,11 @@ The package owns the survey hand-off and first guided exchange end to end:
 5. Select and pin one reviewed Commander, Catalyst, Anchor, or Analyst script revision.
 6. Append exactly three bounded answers in order; each request echoes the server-issued conversation
    and question coordinate, identical retries resume, and stale devices or conflicting key reuse fail.
-7. Conclude server-side only after all three answers and atomically complete onboarding.
+7. In one Serializable transaction, create or resolve the first runnable personal Agent from the
+   pinned approved persona, then mark onboarding complete only after the Agent is ready.
+8. Repair older `bootstrap_concluded` rows idempotently on the next onboarding read. Repair keeps an
+   existing owned personal service when present; creation uses the onboarding identifier as the
+   deterministic identity only when no service exists.
 
 ```text
  authenticated session       persona evidence authority
@@ -29,9 +33,12 @@ The package owns the survey hand-off and first guided exchange end to end:
        ┌────────────────────────────┐
        │ user onboarding  ◄── HERE  │  durable route state + exact references
        └────────────────────────────┘
-                       │ persona + script pinned
+                       │ persona + script + answers pinned
                        ▼
              deterministic 3-answer chat
+                       │ Serializable handoff
+                       ▼
+          active personal Agent + revision 1
 ```
 
 **In this flow:** [persona evidence](../../../../agents/personal/personas/main/README.md)
@@ -50,8 +57,13 @@ single onboarding-first lock order and requires approval to match the current pi
 
 - `__UserOnboardingAuthority` reads/creates route state and admits interview-start and approved-persona transitions.
 - `__UserOnboardingChatAuthority` selects reviewed content, renders the deterministic transcript,
-  appends answers only against exact projected coordinates, and admits server conclusion.
+  appends answers only against exact projected coordinates, and delegates server conclusion to the
+  atomic completion boundary.
 - `_CreateUserOnboardingRepository` composes the Prisma persistence adapter at the server edge.
+- `PrismaUserOnboardingCompletionUnitOfWork` opens a fresh Serializable transaction for completion
+  and repair, and `UserOnboardingPersonalAgentBootstrapPort` is the narrow capability the app must
+  bind to the same transaction client.
+- `UserOnboardingReadinessStatuses` is the stable result vocabulary returned across that boundary.
 - `__CreateUserOnboardingRouter` exposes route state plus the four owner-only chat endpoints, while
   `UserOnboardingPersonaWorkflowCoordinator` translates accepted persona events into workflow transitions.
 - `UserOnboardingRouterDependencies`, `UserOnboardingOwnerResolver`, and
@@ -63,16 +75,38 @@ single onboarding-first lock order and requires approval to match the current pi
 - Owner, approved-persona evidence, and transition types define the exported authority contracts;
   immutable script, transcript, answer, projection, and repository shapes remain package-internal.
 
+Inside the unit of work, package-private completion and Prisma repository strategies validate the
+exact three-answer evidence, require personal Agent readiness, and perform the onboarding state
+change last. Existing-user migration provenance is never used to fabricate persona or bootstrap
+evidence.
+
+### Why database retries are limited
+
+The completion unit of work may try the whole Serializable transaction at most three times. It
+retries Prisma `P2002` or `P2034`, or a lost final onboarding compare-and-swap. Each outcome means
+the failed transaction was rolled back. Every retry opens a new transaction and repeats the
+authority checks from the database.
+
+The limit prevents a busy or misconfigured database from holding one HTTP request forever. Other
+errors fail immediately because the unit of work cannot prove that trying again is safe. A failed
+attempt never leaves onboarding complete without its Agent: the AgentService, revision,
+publication, audit row, and onboarding completion either commit together or all roll back.
+
 ## Boundary
 
 Callers must derive `UserOnboardingOwner` from the verified request principal. Persona survey
 questions, scores, drafts, compiled instructions, and approval remain owned by the persona package.
 Bootstrap answers remain ordinary evidence: they grant no memory retention or action authority.
+The app may construct the exported agent-services bootstrap repository inside onboarding's
+transaction, but onboarding cannot reproduce model selection, AgentService/revision persistence,
+publication, or audit.
 
 ## Dependency direction
 
-The project uses `scope:user-onboarding`. It may depend on its own scope and `scope:shared`; the app
-may compose it, but this package never imports app code or frontend state.
+The project uses `scope:user-onboarding`. Its completion unit of work depends only on the narrow
+personal-bootstrap capability port owned by this package. The app constructs the agent-services
+adapter with the current transaction client and composes the public HTTP boundary. This package
+never imports agent-services, app code, or frontend state.
 
 ## Data & persistence
 
@@ -81,10 +115,11 @@ conversation, append-only answers, and their enums in
 `apps/opencrane/prisma/schema/user-onboarding.prisma`. PostgreSQL is authoritative; browser storage
 is not. The immutable conversation carries provenance only; `UserOnboarding.state` and
 `UserOnboarding.completedAt` are the sole completion authority, admitted only when its pinned
-conversation has exactly three answers. The reviewed clean-database baseline contains the same
-schema plus lifecycle triggers and is the deployment setup boundary. Initial workflow provisioning
-supplies its opaque identifier explicitly on the native upsert path instead of relying on an
-ORM-side default for a database column with no SQL default.
+conversation has exactly three answers **and** the same transaction has left its personal Agent
+ready. The reviewed clean-database baseline contains the same schema plus lifecycle triggers and is
+the deployment setup boundary. Initial workflow provisioning supplies its opaque identifier
+explicitly on the native upsert path instead of relying on an ORM-side default for a database column
+with no SQL default.
 
 ## See also
 

@@ -33,7 +33,10 @@ It also holds per-tenant model allowlists and the maths for evaluating candidate
 
 Invariant: `_ResolveSkillModel` is a *pure* function over already-fetched rows — it performs no I/O
 and never calls LiteLLM; an empty ClusterTenant default never shadows a usable Global one, and when
-nothing resolves it returns `null` so the pod falls back to its own configured default. The
+nothing resolves it returns `null` so the pod falls back to its own configured default.
+`PrismaDefaultModelDefinitionResolverRepository` applies the same default precedence inside a
+caller's transaction, then resolves the selected public name to exactly one tenant-accessible model
+definition. Missing, foreign-only, or ambiguous definitions fail closed. The
 off-policy-evaluation (OPE) and savings helpers are likewise pure estimators used to decide, in
 shadow mode, whether a cheaper candidate model would hold quality before it ever routes live
 traffic. The BYOK (bring-your-own-key) model catalogue (`_BYOK_PROVIDER_CATALOG`) is data, tuned as providers ship models.
@@ -44,6 +47,10 @@ traffic. The BYOK (bring-your-own-key) model catalogue (`_BYOK_PROVIDER_CATALOG`
   `/api/v1/model-routing/defaults`; writes run the tenant-scope guard before the shared Zod request
   boundary and return field paths for authorized validation failures.
 - `_ResolveSkillModel` — resolve a skill's effective model by the locked precedence chain.
+- `DefaultModelDefinitionResolutionStatuses` and
+  `PrismaDefaultModelDefinitionResolverRepository` — the closed result vocabulary and Postgres
+  adapter that turn the configured effective default into one stable, tenant-accessible
+  `ModelDefinition` identifier.
 - `_ProvisionByokKey`, `_DeprovisionByokKey`, `_RegisterLiteLlmModel`, `_UpsertLiteLlmCredential`,
   `_DeleteLiteLlmCredential` — the LiteLLM provisioning helpers reused by the provider gateway.
 - `_EstimateSavings`, `_ReplayEstimate`, `_DoublyRobustEstimate`, `_OpeEstimateWithCi` — the pure
@@ -54,9 +61,10 @@ traffic. The BYOK (bring-your-own-key) model catalogue (`_BYOK_PROVIDER_CATALOG`
 
 ## Boundary
 
-The application layer mounts the routers and supplies a `PrismaClient`; the provider gateway imports
-the provisioning helpers. This package sets and resolves routing policy — it does not itself execute
-model calls or hold provider secrets (LiteLLM and the provider gateway do).
+The application layer mounts the routers, supplies a `PrismaClient`, and may construct the default
+model repository with an already-open transaction. The provider gateway imports the provisioning
+helpers. This package sets and resolves routing policy — it does not commit another domain's
+transaction, execute model calls, or hold provider secrets (LiteLLM and the provider gateway do).
 
 ## Dependency direction
 

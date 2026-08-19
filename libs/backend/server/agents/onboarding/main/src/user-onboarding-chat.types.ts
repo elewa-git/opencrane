@@ -236,7 +236,7 @@ export interface UserOnboardingAnswerPersistenceResult
  * The script rows are immutable and reviewed ahead of time, and the browser never chooses one - the
  * script is selected from the approved persona's colour. The conversation then freezes the persona
  * name, archetype, script revision and its digest, so a later script edit can never rewrite a
- * conversation a user already saw. `startConversation` and `conclude` return a boolean instead of
+ * conversation a user already saw. `startConversation` returns a boolean instead of
  * throwing: `false` means the row was not in the state the call required because another request
  * got there first, and the caller re-reads rather than failing.
  *
@@ -256,8 +256,6 @@ export interface UserOnboardingChatRepository
 	startConversation(command: StartUserOnboardingChatCommand): Promise<boolean>;
 	/** Append only the next question answer with conversation-local idempotency. */
 	appendAnswer(command: AppendUserOnboardingAnswerCommand): Promise<UserOnboardingAnswerPersistenceResult>;
-	/** Complete onboarding only for the exact pinned three-answer conversation. */
-	conclude(owner: UserOnboardingOwner, conversationId: string, completedAt: Date): Promise<boolean>;
 }
 
 /** Public answer call result used by the HTTP boundary. */

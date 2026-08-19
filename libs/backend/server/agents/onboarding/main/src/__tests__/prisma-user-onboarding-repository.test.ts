@@ -238,17 +238,4 @@ describe("PrismaUserOnboardingRepository", function _PrismaUserOnboardingReposit
 		await expect(repository.appendAnswer(_AppendCommand())).resolves.toEqual({ status: UserOnboardingAnswerStatuses.Resumed });
 	});
 
-	it("concludes only the parent authority and returns compare-and-set conflicts", async function _ConcludesExactly()
-	{
-		const completedAt = new Date("2026-08-08T10:20:00.000Z");
-		const update = vi.fn().mockResolvedValueOnce({}).mockRejectedValueOnce(new Prisma.PrismaClientKnownRequestError("stale conversation", { code: "P2025", clientVersion: "test" }));
-		const repository = _ChatRepository({ userOnboarding: { update } });
-
-		await expect(repository.conclude({ siloId: "silo-a", subjectId: "subject-a" }, "conversation-a", completedAt)).resolves.toBe(true);
-		expect(update).toHaveBeenNthCalledWith(1, {
-			where: { siloId_userId: { siloId: "silo-a", userId: "subject-a" }, state: UserOnboardingState.BootstrapChatInProgress, bootstrapConversationId: "conversation-a" },
-			data: { state: UserOnboardingState.Completed, completionProvenance: UserOnboardingCompletionProvenance.BootstrapConcluded, completedAt },
-		});
-		await expect(repository.conclude({ siloId: "silo-a", subjectId: "subject-a" }, "conversation-a", completedAt)).resolves.toBe(false);
-	});
 });

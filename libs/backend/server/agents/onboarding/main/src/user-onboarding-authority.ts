@@ -1,6 +1,7 @@
 import { ___DoWithTrace } from "@opencrane/backend/observability";
 
-import { UserOnboardingDenialReasons, UserOnboardingTransitionStatuses } from "./user-onboarding.enums";
+import { UserOnboardingDenialReasons, UserOnboardingStates, UserOnboardingTransitionStatuses } from "./user-onboarding.enums";
+import { UserOnboardingReadinessStatuses, type UserOnboardingCompletionUnitOfWork } from "./user-onboarding-completion.types";
 import { _UserOnboardingLifecycleState } from "./user-onboarding-lifecycle-state";
 import type { ApprovedPersonaEvidence, UserOnboardingOwner, UserOnboardingPersonaEvidencePort, UserOnboardingRecord, UserOnboardingRepository, UserOnboardingTransitionResult } from "./user-onboarding.types";
 
@@ -29,14 +30,17 @@ export class __UserOnboardingAuthority
 
 	/** Workflow version pinned only when a new owner record is created. */
 	private readonly currentWorkflowVersion: number;
+	/** Completion and completed-user repair transaction. */
+	private readonly completion: UserOnboardingCompletionUnitOfWork;
 
 	/** Compose onboarding from owner-bound persistence and persona evidence ports. */
-	constructor(repository: UserOnboardingRepository, personaEvidence: UserOnboardingPersonaEvidencePort, currentWorkflowVersion: number)
+	constructor(repository: UserOnboardingRepository, personaEvidence: UserOnboardingPersonaEvidencePort, currentWorkflowVersion: number, completion: UserOnboardingCompletionUnitOfWork)
 	{
 		if (!Number.isSafeInteger(currentWorkflowVersion) || currentWorkflowVersion < 1) throw new Error("currentWorkflowVersion must be a positive safe integer");
 		this.repository = repository;
 		this.personaEvidence = personaEvidence;
 		this.currentWorkflowVersion = currentWorkflowVersion;
+		this.completion = completion;
 	}
 
 	/** Read the session owner's authoritative route state, creating survey-pending when absent. */
@@ -46,7 +50,11 @@ export class __UserOnboardingAuthority
 		return ___DoWithTrace("user_onboarding.read_or_create", _TraceOwner(owner), async function _ReadOrCreate()
 		{
 			const onboarding = await self.repository.ensure(owner, self.currentWorkflowVersion);
-			return self._reconcileApprovedPersona(owner, onboarding);
+			const reconciled = await self._reconcileApprovedPersona(owner, onboarding);
+			if (reconciled.state !== UserOnboardingStates.Completed) return reconciled;
+			const readiness = await self.completion.ensureReady(owner);
+			if (readiness.status === UserOnboardingReadinessStatuses.Ready || readiness.status === UserOnboardingReadinessStatuses.NotApplicable) return reconciled;
+			throw new Error(`user onboarding readiness denied: ${readiness.status}`);
 		});
 	}
 

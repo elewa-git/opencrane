@@ -31,6 +31,7 @@ import { _CheckDbHealth, _OpenapiRouter, _RateLimit } from "@opencrane/backend/s
 import type { InternalRuntimeConfig } from "./config.types";
 import { _log } from "./log";
 import { _CreateInternalRuntimeComposition } from "./runtime-composition";
+import { _CreatePersonaAgentRevisionSelectionFactory } from "./persona-approval-composition";
 import type { RouteMount, SharesRouteOptions } from "./routes.types";
 import { _CreateUserOnboardingComposition } from "./user-onboarding-composition";
 import { _CreateOrganizationMembersComposition } from "./organization-members-composition";
@@ -72,7 +73,7 @@ export function _RegisterRoutes(app: Express, prisma: PrismaClient, coreApi: k8s
 	const personalWorkspaceRoutes: readonly RouteMount[] = [
 		{ method: "use", path: "/api/v1/me/onboarding", handler: onboarding.router },
 		{ method: "use", path: "/api/v1/me/assets", handler: _CreatePersonalArtifactCatalogueRouter(prisma, _log) },
-		{ method: "use", path: "/api/v1/me/persona", handler: _CreatePersonaOnboardingRouter(prisma, _log, onboarding.personaWorkflow) },
+		{ method: "use", path: "/api/v1/me/persona", handler: _CreatePersonaOnboardingRouter(prisma, _log, onboarding.personaWorkflow, _CreatePersonaAgentRevisionSelectionFactory()) },
 		{ method: "use", path: "/api/v1/me/runs", handler: _CreateSteeringIngestRouter(prisma, _log) },
 		{ method: "use", path: "/api/v1/me/runs", handler: _CreateSelfRunStatusRouter(prisma, _log) },
 		{ method: "use", path: "/api/v1/me/runs", handler: _CreateSelfRunCancellationRouter(prisma, runCancellation, _log) },

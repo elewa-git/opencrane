@@ -2,10 +2,12 @@ import { Buffer } from "node:buffer";
 
 import * as k8s from "@kubernetes/client-node";
 import type { Logger } from "pino";
-import type { PrismaClient } from "@prisma/client";
+import type { Prisma, PrismaClient } from "@prisma/client";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { _DeprovisionByokKey, _ProvisionByokKey, _byokSecretName } from "../core/provision-byok-key";
+import { PrismaDefaultModelDefinitionResolverRepository } from "../core/prisma-default-model-definition-resolver";
+import { DefaultModelDefinitionResolutionStatuses } from "../core/default-model-definition-resolver.types";
 
 /**
  * The shared provisioning core behind both the BYOK route and the boot-time bootstrap. These pin
@@ -19,7 +21,7 @@ type Row = Record<string, unknown>;
 const _NS = "opencrane-acme";
 const _log = { info() { /* noop */ }, warn() { /* noop */ } } as unknown as Logger;
 
-function _mockPrisma(creds: Map<string, Row>, models: Map<string, Row>): PrismaClient
+function _mockPrisma(creds: Map<string, Row>, models: Map<string, Row>, routingDefaults: Map<string, Row> = new Map()): PrismaClient
 {
   let credSeq = 0;
   let modelSeq = 0;
@@ -32,8 +34,14 @@ function _mockPrisma(creds: Map<string, Row>, models: Map<string, Row>): PrismaC
     },
     modelDefinition: {
       findFirst: async function _mf(args: { where: Record<string, unknown> }) { return Array.from(models.values()).find(function _m(r) { return (args.where.publicModelName === undefined || r.publicModelName === args.where.publicModelName) && (args.where.isDefault === undefined || r.isDefault === args.where.isDefault); }) ?? null; },
+      findMany: async function _mm(args: { where: Record<string, unknown>; take?: number }) { return Array.from(models.values()).filter(function _m(r) { return (args.where.publicModelName === undefined || r.publicModelName === args.where.publicModelName) && (args.where.isDefault === undefined || r.isDefault === args.where.isDefault); }).slice(0, args.take); },
       create: async function _mc(args: { data: Row }) { const id = `model-${++modelSeq}`; const row = { id, isDefault: false, providerCredentialId: null, ...args.data }; models.set(id, row); return row; },
       update: async function _mu(args: { where: { id: string }; data: Row }) { const row = { ...(models.get(args.where.id) as Row), ...args.data }; models.set(args.where.id, row); return row; },
+    },
+    modelRoutingDefault: {
+      findFirst: async function _rf() { return Array.from(routingDefaults.values())[0] ?? null; },
+      findMany: async function _rm() { return Array.from(routingDefaults.values()); },
+      create: async function _rc(args: { data: Row }) { const row = { id: "routing-global", ...args.data }; routingDefaults.set("routing-global", row); return row; },
     },
   } as unknown as PrismaClient;
 }
@@ -59,9 +67,11 @@ describe("_ProvisionByokKey / _DeprovisionByokKey", function _suite()
   {
     const creds = new Map<string, Row>();
     const models = new Map<string, Row>();
+    const routingDefaults = new Map<string, Row>();
     const secrets = new Map<string, k8s.V1Secret>();
 
-    const result = await _ProvisionByokKey({ prisma: _mockPrisma(creds, models), coreApi: _mockCoreApi(secrets), operatorNamespace: _NS, provider: "openai", apiKey: "sk-test-123", log: _log });
+    const prisma = _mockPrisma(creds, models, routingDefaults);
+    const result = await _ProvisionByokKey({ prisma, coreApi: _mockCoreApi(secrets), operatorNamespace: _NS, provider: "openai", apiKey: "sk-test-123", log: _log });
 
     // LiteLLM unconfigured in the test → Secret-only.
     expect(result.litellmRegistered).toBe(false);
@@ -79,6 +89,44 @@ describe("_ProvisionByokKey / _DeprovisionByokKey", function _suite()
     const flagship = seeded.find(function f(m) { return m.publicModelName === "openai/gpt-5.5"; });
     expect(flagship).toMatchObject({ isDefault: true });
     expect(seeded.filter(function d(m) { return m.isDefault; })).toHaveLength(1);
+    expect(Array.from(routingDefaults.values())).toEqual([expect.objectContaining({ scope: "Global", clusterTenant: null, defaultModel: "openai/gpt-5.5" })]);
+    await expect(new PrismaDefaultModelDefinitionResolverRepository(prisma as unknown as Prisma.TransactionClient).resolve("silo-a")).resolves.toEqual({ status: DefaultModelDefinitionResolutionStatuses.Resolved, modelDefinitionId: flagship?.id });
+  });
+
+  it("preserves an operator-configured Global routing default", async function _PreservesRoutingDefault()
+  {
+    const routingDefaults = new Map<string, Row>([["routing-global", { id: "routing-global", scope: "Global", clusterTenant: null, defaultModel: "operator/model" }]]);
+
+    await _ProvisionByokKey({ prisma: _mockPrisma(new Map(), new Map(), routingDefaults), coreApi: _mockCoreApi(new Map()), operatorNamespace: _NS, provider: "openai", apiKey: "sk-test-123", log: _log });
+
+    expect(Array.from(routingDefaults.values())).toEqual([{ id: "routing-global", scope: "Global", clusterTenant: null, defaultModel: "operator/model" }]);
+  });
+
+  it("rejects an ambiguous legacy catalogue default before publishing routing authority", async function _RejectsAmbiguousCatalogueDefault()
+  {
+    const models = new Map<string, Row>([
+      ["legacy-a", { id: "legacy-a", scope: "Global", clusterTenant: null, publicModelName: "legacy/a", isDefault: true }],
+      ["legacy-b", { id: "legacy-b", scope: "Global", clusterTenant: null, publicModelName: "legacy/b", isDefault: true }],
+    ]);
+    process.env.LITELLM_ENDPOINT = "http://litellm:4000";
+    process.env.LITELLM_MASTER_KEY = "sk-master";
+    vi.stubGlobal("fetch", vi.fn().mockImplementation(async function _fetch(url: string)
+    {
+      if (url.endsWith("/credentials")) return new Response("{}", { status: 200 });
+      if (url.endsWith("/model/new")) return new Response(JSON.stringify({ model_id: `live-${Math.random()}` }), { status: 200 });
+      if (url.endsWith("/model/info")) return new Response(JSON.stringify({ data: [] }), { status: 200 });
+      return new Response("not found", { status: 404 });
+    }));
+    try
+    {
+      await expect(_ProvisionByokKey({ prisma: _mockPrisma(new Map(), models), coreApi: _mockCoreApi(new Map()), operatorNamespace: _NS, provider: "openai", apiKey: "sk-test-123", log: _log, requireLiveModels: true })).rejects.toThrow(/more than one default/);
+    }
+    finally
+    {
+      vi.unstubAllGlobals();
+      delete process.env.LITELLM_ENDPOINT;
+      delete process.env.LITELLM_MASTER_KEY;
+    }
   });
 
   it("deprovisions: clears the fixed Secret, removes the credential row, and can be re-provisioned", async function _deprovision()

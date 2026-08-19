@@ -1,11 +1,11 @@
-# @opencrane/backend/server/agents/agent-services — managed-agent definition plane + management API
+# @opencrane/backend/server/agents/agent-services — agent definition plane + management API
 
 > [backend](../../../../README.md) › [server](../../../README.md) › [agents](../../README.md) › agent-services
 
 ## What it owns
 
-This package is part of the **managed-agent plane** — the side of OpenCrane that turns a saved
-agent definition into something the runtime can execute. An *agent service* is the stable identity
+This package owns the **agent definition plane** — the side of OpenCrane that turns a saved
+managed or personal agent definition into something the runtime can execute. An *agent service* is the stable identity
 of one agent (its name and lifecycle); an *agent revision* is one immutable, versioned snapshot of
 how that agent behaves (its prompt policy, registered model definition, budget, and the skills and
 integrations it may use). A service always points at exactly one *active* revision.
@@ -52,6 +52,76 @@ as a single compare-and-swap, so two people publishing at once cannot both win �
 conflict, and a crash never leaves a half-published service. Anything missing or stale is refused
 with a plain reason.
 
+### Personal onboarding handoff
+
+Completed onboarding must leave the user able to start an Agent-session conversation. The
+onboarding package owns the surrounding Serializable transaction and the decision about whether the
+questionnaire may become complete. The app binds that transaction to this package's agent half through
+`PrismaPersonalAgentBootstrapRepository`:
+
+1. It re-reads the pinned persona revision and requires it to be approved, subject-owned, and
+   silo-owned. During initial completion that revision must still be active, which rejects a persona
+   refresh racing the conclusion. During repair the pin remains historical evidence while the
+   owner's current approved persona governs creation or revision.
+2. It resolves active personal services for that persona. Exactly one is an idempotent success;
+   more than one is an ambiguity and creates nothing.
+3. If no service exists, it uses the onboarding identifier as the deterministic AgentService
+   identifier. A concurrent retry therefore competes for one database identity instead of creating
+   two agents. A row already using that identifier for another authority fails closed.
+4. If no service exists, the app adapts model-routing's transaction-scoped configured-default
+   resolver into `InitialPersonalAgentDefaultModelResolver`. Agent-services consumes only its stable
+   definition identifier or fail-closed denial state; it never reads routing defaults or recreates
+   their precedence policy.
+5. That publisher creates a `Personal` service in `Draft`, writes revision 1 through the shared
+   immutable revision writer, publishes that revision, activates the service, and appends
+   publication audit evidence. The onboarding transaction commits all of this with completion, or
+   none of it.
+
+The initial revision uses the package-owned initial personal-Agent policy and the
+`personal-default` runtime profile. Its skills, integrations, and knowledge-scope attachments are
+empty. Personal memory access is not silently granted during onboarding; it follows the separate
+user-elicitation and consent flow.
+
+#### Why the first revision has three run limits
+
+Every Agent-session message starts a governed run. A broken model response, repeated tool decision,
+stalled provider, or tool that never returns could otherwise hold a worker and continue consuming
+model capacity indefinitely. The initial policy therefore records three independent technical
+ceilings:
+
+| Limit | Initial value | Failure it bounds |
+|---|---:|---|
+| Model turns | 64 | A reasoning, retry, or tool-selection loop that keeps producing another model turn. |
+| Total model tokens | 256,000 | A run whose prompts and responses keep growing even when each individual turn succeeds. |
+| Wall-clock duration | 3,600,000 ms (60 minutes) | Waiting providers, stalled tools, and any run that makes too little progress to hit the other limits. |
+
+The control plane requires, validates, and freezes these values into run input. They do not delete
+the conversation, impose a monthly account budget, or affect direct/group messages that do not
+invoke an agent. Ordinary runs should finish far below every ceiling. Changing the values later
+means writing and publishing another immutable AgentRevision; published history is never edited in
+place.
+
+**Runtime qualification:** storing and freezing a ceiling is not, by itself, proof that every
+runtime adapter stops at it. A release must qualify visible terminal behaviour for the turn, token,
+and elapsed-time boundaries before operators rely on them as end-to-end safety brakes. End-to-end
+enforcement is tracked in [issue #651](https://github.com/elewa-git/opencrane/issues/651).
+
+The repository is transaction-scoped by design:
+
+```text
+onboarding completion unit of work (owns Serializable commit/retry)
+        │ app adapter binds its transaction
+        ▼
+PrismaPersonalAgentBootstrapRepository
+        │ validates persona + service authority
+        ▼
+PrismaInitialPersonalAgentPublicationRepository
+        │ consumes model-routing's resolved definition id
+        │ writes service + revision + publication + audit
+        ▼
+ready personal AgentService, or a fail-closed denial
+```
+
 ## Public surface
 
 - `__CreateAgentServicesRouter` — the authoritative management router (catalogue / create / revise /
@@ -74,6 +144,13 @@ with a plain reason.
 - `AgentRevisionModelSelectionMaterializationCodes` — the documented cross-package result vocabulary
   for that model-selection seam. It preserves its serialized outcomes while preventing personal
   configuration from inventing or drifting from agent-services' source-fence results.
+- `PrismaAgentRevisionPersonaSelectionRepository` — the transaction-scoped strategy for persona
+  approval and onboarding repair. It proves one stable personal service and its latest published
+  source, copies every executable field while replacing only `personaRevisionId`, publishes the
+  next revision, moves the active pointer, and appends audit evidence before the caller commits.
+- `AgentRevisionPersonaSelectionMaterializationCodes` — distinguishes a new revision, an
+  idempotent already-current revision, a stale source, unavailable authority, and the valid case
+  where persona approval finds no personal agent to update.
 - `__PublishAgentRevision` + `PrismaAgentServicePublicationRepository` — the reused compare-and-swap
 publish path and its Postgres adapter. Retiring a service clears its active-revision pointer in the
 same database update, so no retired service can still look runnable.
@@ -100,13 +177,29 @@ capability-bearing revision inside the run-admission transaction.
   `AgentPublicationAuditEvidencePort` — the seam through which publication records audit evidence.
   The shared `AgentRevisionContent` domain value lives in `@opencrane/models/agents`.
 
+- `PrismaPersonalAgentBootstrapRepository(transaction, defaultModelResolver)` and
+  `PersonalAgentBootstrapStatuses` — the
+  exported app-composition adapter and its ready/denied result. The package-internal
+  `PrismaInitialPersonalAgentPublicationRepository` is used only after bootstrap proves that no
+  personal service exists.
+- `InitialPersonalAgentDefaultModelResolver` and
+  `InitialPersonalAgentDefaultModelResolutionStatuses` — the narrow app-provided port and closed
+  result vocabulary consumed before initial publication writes anything.
+
 ## Boundary
 
 The application mounts the exported Prisma composition and supplies the cross-domain run-admission
 port. This package owns its router, caller mapping, database adapters, revision persistence, and
-publication-audit wiring. A cross-domain unit of work may bind the model-selection repository to its
+publication-audit wiring. A cross-domain unit of work may bind the model- or persona-selection repository to its
 transaction, but personal configuration cannot reproduce its revision projection, Prisma mapping,
-or lifecycle. This package does not run agents or resolve skills/integrations itself. It fails closed:
+or lifecycle. Persona selection never creates an AgentService: no existing personal service is a
+documented no-op, while more than one matching service fails closed. The app may likewise construct the personal bootstrap repository with onboarding's
+open transaction, but onboarding cannot reproduce AgentService persistence, revision
+digests, publication, activation, or publication audit evidence. The bootstrap repository cannot
+complete onboarding or commit the transaction. Model-routing owns configured-default precedence and
+accessible-definition resolution; the app only translates its result vocabulary into this package's
+narrow port. This package does not run agents or resolve
+skills/integrations itself. It fails closed:
 any doubt is a `denied` outcome, never a silent partial publish.
 
 ## Dependency direction

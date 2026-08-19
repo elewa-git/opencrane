@@ -91,6 +91,9 @@ its resources to the lifecycle owner.
   sharing authority is mounted behind the shared per-IP limiter before identity or database work.
 - `src/app/runtime-composition.ts` binds controller, skill-workload, runtime, and optional-worker
   authorities by caller plane without choosing transport paths.
+- `src/app/persona-approval-composition.ts` adapts agent-service persona selection to the persona
+  approval port on one Serializable transaction. It maps agent outcomes but owns no persona or
+  AgentRevision persistence.
 - `src/infra/artifacts/*` is one app-only artifact-broker composition slice. It binds the server's
   mounted lease keys, exact same-silo `artifact-service` route, and durable artifact authority into
   source, read, upload, and output brokers; those pieces are inseparable from this process's private

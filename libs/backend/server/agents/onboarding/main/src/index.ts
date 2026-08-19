@@ -1,5 +1,7 @@
 export { __UserOnboardingAuthority } from "./user-onboarding-authority";
 export { _CreateUserOnboardingRepository } from "./prisma-user-onboarding-repository";
+export { PrismaUserOnboardingCompletionUnitOfWork } from "./prisma-user-onboarding-completion-unit-of-work";
+export { UserOnboardingPersonalAgentBootstrapStatuses, UserOnboardingReadinessStatuses, type UserOnboardingCompletionUnitOfWork, type UserOnboardingPersonalAgentBootstrapPort } from "./user-onboarding-completion.types";
 export { UserOnboardingBootstrapArchetypes, UserOnboardingCompletionProvenances, UserOnboardingDenialReasons, UserOnboardingPersonaColours, UserOnboardingStates, UserOnboardingTransitionStatuses } from "./user-onboarding.enums";
 export type { ApprovedPersonaEvidence, UserOnboardingOwner, UserOnboardingPersonaEvidencePort, UserOnboardingRecord, UserOnboardingTransitionDenial, UserOnboardingTransitionResult, UserOnboardingTransitionSuccess } from "./user-onboarding.types";
 export { __UserOnboardingChatAuthority } from "./user-onboarding-chat-authority";

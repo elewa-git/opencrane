@@ -8,7 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { _ProvisionByokKey, _AUTO_EMBEDDING_MODEL_NAME, _RequireLiteLlmModelRegistration } from "../core/provision-byok-key";
 
 /**
- * Covers `_ensureProviderEmbeddingModel` (the embedding-registration step added alongside the
+ * Covers `_EnsureProviderEmbeddingModels` (the embedding-registration step added alongside the
  * Cognee LiteLLM wiring) — exercised through the public `_ProvisionByokKey` entry point, the same
  * way `provision-byok-key.test.ts` covers the chat-model seeding step. Unlike that suite, THIS one
  * sets `LITELLM_ENDPOINT`/`LITELLM_MASTER_KEY` so the live registration path actually runs and the
@@ -23,6 +23,7 @@ function _mockPrisma(): PrismaClient
 {
   const creds = new Map<string, Row>();
   const models = new Map<string, Row>();
+  const routingDefaults = new Map<string, Row>();
   let credSeq = 0;
   let modelSeq = 0;
   return {
@@ -33,8 +34,14 @@ function _mockPrisma(): PrismaClient
     },
     modelDefinition: {
       findFirst: async function _mf(args: { where: Record<string, unknown> }) { return Array.from(models.values()).find(function _m(r) { return (args.where.publicModelName === undefined || r.publicModelName === args.where.publicModelName) && (args.where.isDefault === undefined || r.isDefault === args.where.isDefault); }) ?? null; },
+      findMany: async function _mm(args: { where: Record<string, unknown>; take?: number }) { return Array.from(models.values()).filter(function _m(r) { return (args.where.publicModelName === undefined || r.publicModelName === args.where.publicModelName) && (args.where.isDefault === undefined || r.isDefault === args.where.isDefault); }).slice(0, args.take); },
       create: async function _mc(args: { data: Row }) { const id = `model-${++modelSeq}`; const row = { id, isDefault: false, providerCredentialId: null, ...args.data }; models.set(id, row); return row; },
       update: async function _mu(args: { where: { id: string }; data: Row }) { const row = { ...(models.get(args.where.id) as Row), ...args.data }; models.set(args.where.id, row); return row; },
+    },
+    modelRoutingDefault: {
+      findFirst: async function _rf() { return Array.from(routingDefaults.values())[0] ?? null; },
+      findMany: async function _rm() { return Array.from(routingDefaults.values()); },
+      create: async function _rc(args: { data: Row }) { const row = { id: "routing-global", ...args.data }; routingDefaults.set("routing-global", row); return row; },
     },
   } as unknown as PrismaClient;
 }
@@ -175,6 +182,23 @@ describe("_ProvisionByokKey — embedding model registration", function _suite()
     // Real slug already present ⇒ skipped; alias absent ⇒ registered.
     expect(registerCalls.find(function _s(c) { return _bodyOf(c)["model_name"] === "openai/text-embedding-3-large"; })).toBeUndefined();
     expect(registerCalls.find(function _a(c) { return _bodyOf(c)["model_name"] === _AUTO_EMBEDDING_MODEL_NAME; })).toBeDefined();
+  });
+
+  it("logs a structured warning before reconciling registrations after an inventory read failure", async function _WarnsOnInventoryFailure()
+  {
+    const fetchMock = _routedFetch([]).mockImplementation(async function _Fetch(url: string)
+    {
+      if (url.includes("/model/info")) return new Response("unavailable", { status: 503 });
+      if (url.includes("/model/new")) return new Response(JSON.stringify({ model_id: "registered" }), { status: 200 });
+      return new Response(JSON.stringify({}), { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const warn = vi.fn();
+    const log = { info: vi.fn(), warn, debug: vi.fn() } as unknown as Logger;
+
+    await _ProvisionByokKey({ prisma: _mockPrisma(), coreApi: _mockCoreApi(), operatorNamespace: "default", provider: "openai", apiKey: "sk-test", log });
+
+    expect(warn).toHaveBeenCalledWith({ operation: "litellm.embedding.inventory", status: 503 }, "embedding model inventory read failed; registration will be reconciled");
   });
 
   it("does not register any embedding model for a provider with none catalogued (anthropic)", async function _noneCatalogued()

@@ -179,11 +179,51 @@
         ]
       },
       {
+        "path": "libs/backend/server/agents/agent-services/main/src/prisma-agent-revision-persona-selection.ts",
+        "adapter": "PrismaAgentRevisionPersonaSelectionRepository",
+        "contract": "AgentRevisionPersonaSelectionRepository",
+        "contractImportPath": "./agent-revision-persona-selection.types",
+        "constructs": [
+          {
+            "adapter": "PrismaAgentRevisionWriterRepository",
+            "importPath": "./prisma-agent-revision-writer"
+          }
+        ]
+      },
+      {
         "path": "libs/backend/server/agents/agent-services/main/src/prisma-agent-revision-writer.ts",
         "adapter": "PrismaAgentRevisionWriterRepository",
         "contract": "AgentRevisionWriterRepository",
         "contractImportPath": "./prisma-agent-revision-writer.types",
         "constructs": []
+      },
+      {
+        "path": "libs/backend/server/agents/agent-services/main/src/prisma-initial-personal-agent-publication.ts",
+        "adapter": "PrismaInitialPersonalAgentPublicationRepository",
+        "contract": "InitialPersonalAgentPublicationRepository",
+        "contractImportPath": "./initial-personal-agent-publication.types",
+        "constructs": [
+          {
+            "adapter": "PrismaAgentRevisionWriterRepository",
+            "importPath": "./prisma-agent-revision-writer"
+          }
+        ]
+      },
+      {
+        "path": "libs/backend/server/agents/agent-services/main/src/prisma-personal-agent-bootstrap-repository.ts",
+        "adapter": "PrismaPersonalAgentBootstrapRepository",
+        "contract": "PersonalAgentBootstrapRepository",
+        "contractImportPath": "./personal-agent-bootstrap.types",
+        "constructs": [
+          {
+            "adapter": "PrismaAgentRevisionPersonaSelectionRepository",
+            "importPath": "./prisma-agent-revision-persona-selection"
+          },
+          {
+            "adapter": "PrismaInitialPersonalAgentPublicationRepository",
+            "importPath": "./prisma-initial-personal-agent-publication"
+          }
+        ]
       },
       {
         "path": "libs/backend/server/infra/auth/src/prisma-org-membership-repository.ts",
@@ -335,6 +375,20 @@
         "adapter": "PrismaUserOnboardingRepository",
         "contract": "UserOnboardingRepository",
         "contractImportPath": "./user-onboarding.types",
+        "constructs": []
+      },
+      {
+        "path": "libs/backend/server/agents/onboarding/main/src/prisma-user-onboarding-completion-repository.ts",
+        "adapter": "PrismaUserOnboardingCompletionRepository",
+        "contract": "UserOnboardingCompletionRepository",
+        "contractImportPath": "./user-onboarding-completion.types",
+        "constructs": []
+      },
+      {
+        "path": "libs/backend/server/gateways/model-routing/main/src/core/prisma-default-model-definition-resolver.ts",
+        "adapter": "PrismaDefaultModelDefinitionResolverRepository",
+        "contract": "DefaultModelDefinitionResolver",
+        "contractImportPath": "./default-model-definition-resolver.types",
         "constructs": []
       },
       {
@@ -582,6 +636,18 @@
           {
             "adapter": "PrismaStandaloneFirstUserAdmissionRepository",
             "importPath": "./prisma-standalone-first-user-admission-repository"
+          }
+        ]
+      },
+      {
+        "path": "libs/backend/server/agents/onboarding/main/src/prisma-user-onboarding-completion-unit-of-work.ts",
+        "adapter": "PrismaUserOnboardingCompletionUnitOfWork",
+        "contract": "UserOnboardingCompletionUnitOfWork",
+        "contractImportPath": "./user-onboarding-completion.types",
+        "constructs": [
+          {
+            "adapter": "PrismaUserOnboardingCompletionRepository",
+            "importPath": "./prisma-user-onboarding-completion-repository"
           }
         ]
       },
@@ -1069,6 +1135,8 @@
       "apps/opencrane/src/app/background-workers.ts",
       "apps/opencrane/src/app/run-cancellation-composition.ts",
       "apps/opencrane/src/app/organization-members-composition.ts",
+      "apps/opencrane/src/app/user-onboarding-composition.ts",
+      "apps/opencrane/src/app/persona-approval-composition.ts",
       "libs/backend/agents/personal/configuration/main/src/prisma-personal-configuration.router.ts",
 		"libs/backend/agents/personal/personas/main/src/http/prisma-persona-onboarding.router.ts",
 		"libs/backend/agents/personal/personas/main/src/profile/prisma-persona-workflow-evidence.ts",
@@ -1096,7 +1164,7 @@
       "operations": [
         "delegate"
       ],
-      "reason": "The existing provider-custody core must atomically reconcile its Global ProviderCredential and ModelDefinition projections while boot-time LiteLLM registration is made fail-closed; split this legacy mixed adapter into declared repositories with its next provider-custody authority change.",
+      "reason": "The existing provider-custody core reconciles its Global ProviderCredential, ModelDefinition, and first ModelRoutingDefault projections while boot-time LiteLLM registration is made fail-closed; split this legacy mixed adapter into declared repositories with its next provider-custody authority change.",
       "expiresOn": "2026-09-30"
     },
     {

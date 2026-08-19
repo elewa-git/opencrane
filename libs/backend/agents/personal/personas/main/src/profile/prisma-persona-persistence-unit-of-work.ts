@@ -12,6 +12,7 @@ import { _DoPersonaPersistenceWithTrace } from "../persona-persistence-observabi
 import { PersonaInterviewDenialReasons, PersonaLifecycleOutcomes } from "./persona-lifecycle.types";
 import { PersonaOnboardingDenialReasons, type EnsurePersonaOnboardingCommand, type EnsurePersonaOnboardingResult } from "./persona-onboarding-authority.types";
 import type { PersonaOnboardingStatus } from "./persona-onboarding-status.types";
+import type { PersonaAgentRevisionSelectionFactory } from "./prisma-persona-persistence-composition.types";
 import type { PersonaPersistenceUnitOfWork } from "./persona-persistence-unit-of-work.types";
 import { PrismaPersonaOnboardingRepository } from "./prisma-persona-onboarding-repository";
 import { PrismaPersonaOnboardingStatusRepository } from "./prisma-persona-onboarding-status-repository";
@@ -23,12 +24,15 @@ export class PrismaPersonaPersistenceUnitOfWork implements PersonaPersistenceUni
 	private readonly prisma: PrismaClient;
 	/** Logger used when a persistence failure is turned into a denial. */
 	private readonly logger: Logger;
+	/** App-owned factory that binds agent-service selection to each approval transaction. */
+	private readonly agentRevisionSelection: PersonaAgentRevisionSelectionFactory<Prisma.TransactionClient>;
 
 	/** Creates the transaction boundary over the canonical product database. */
-	constructor(prisma: PrismaClient, logger: Logger)
+	constructor(prisma: PrismaClient, logger: Logger, agentRevisionSelection: PersonaAgentRevisionSelectionFactory<Prisma.TransactionClient>)
 	{
 		this.prisma = prisma;
 		this.logger = logger;
+		this.agentRevisionSelection = agentRevisionSelection;
 	}
 
 	/** Verify the reviewed baseline source and create the authenticated owner's profile exactly once. */
@@ -176,9 +180,10 @@ export class PrismaPersonaPersistenceUnitOfWork implements PersonaPersistenceUni
 	/** Runs one approval operation in a Serializable transaction, giving the callback only its repository. */
 	private async _runApproval<Result>(work: (repository: PrismaPersonaAuthorityRepository) => Promise<Result>): Promise<Result>
 	{
+		const selectionFactory = this.agentRevisionSelection;
 		return this.prisma.$transaction(async function _RunApprovalTransaction(transaction): Promise<Result>
 		{
-			return work(new PrismaPersonaAuthorityRepository(transaction));
+			return work(new PrismaPersonaAuthorityRepository(transaction, selectionFactory.create(transaction)));
 		}, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 	}
 

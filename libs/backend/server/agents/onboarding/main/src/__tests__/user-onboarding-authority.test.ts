@@ -1,12 +1,19 @@
 import { describe, expect, it } from "vitest";
 
 import { __UserOnboardingAuthority } from "../user-onboarding-authority";
+import { UserOnboardingReadinessStatuses, type UserOnboardingCompletionUnitOfWork } from "../user-onboarding-completion.types";
 import { UserOnboardingBootstrapArchetypes, UserOnboardingDenialReasons, UserOnboardingPersonaColours, UserOnboardingStates, UserOnboardingTransitionStatuses } from "../user-onboarding.enums";
 import { UserOnboardingPersonaWorkflowCoordinator } from "../user-onboarding.http";
 import type { ApprovedPersonaEvidence, UserOnboardingOwner, UserOnboardingPersonaEvidencePort, UserOnboardingRecord, UserOnboardingRepository } from "../user-onboarding.types";
 
 /** Stable authenticated owner used by the authority tests. */
 const _OWNER: UserOnboardingOwner = { siloId: "silo-a", subjectId: "subject-a" };
+
+/** Successful readiness boundary used outside the dedicated completion tests. */
+const _COMPLETION: UserOnboardingCompletionUnitOfWork = {
+	async complete() { return { status: UserOnboardingReadinessStatuses.Ready, agentServiceId: "agent-a" }; },
+	async ensureReady() { return { status: UserOnboardingReadinessStatuses.Ready, agentServiceId: "agent-a" }; },
+};
 
 /** In-memory onboarding repository that preserves the production transition guards. */
 class _FakeUserOnboardingRepository implements UserOnboardingRepository
@@ -113,7 +120,7 @@ class _FakePersonaEvidence implements UserOnboardingPersonaEvidencePort
 function _Authority(repository: UserOnboardingRepository, approvedRevisionId: string | null = "revision-a"): __UserOnboardingAuthority
 {
 	const revisions: Readonly<Record<string, string>> = approvedRevisionId === null ? {} : { "interview-a": approvedRevisionId };
-	return new __UserOnboardingAuthority(repository, new _FakePersonaEvidence(["interview-a"], revisions), 3);
+	return new __UserOnboardingAuthority(repository, new _FakePersonaEvidence(["interview-a"], revisions), 3, _COMPLETION);
 }
 
 /** Build a deterministic survey-pending workflow projection. */
@@ -172,7 +179,7 @@ describe("__UserOnboardingAuthority", function _UserOnboardingAuthoritySuite()
 		const inProgress = { ..._Record(_OWNER, 3), state: UserOnboardingStates.SurveyInProgress, personaInterviewId: "interview-a", surveyStartedAt: new Date("2026-08-08T10:01:00.000Z") };
 		const repository = new _FakeUserOnboardingRepository(inProgress);
 		const evidence = new _FakePersonaEvidence(["interview-a", "interview-b"], { "interview-a": "revision-a" });
-		const coordinator = new UserOnboardingPersonaWorkflowCoordinator(new __UserOnboardingAuthority(repository, evidence, 3));
+		const coordinator = new UserOnboardingPersonaWorkflowCoordinator(new __UserOnboardingAuthority(repository, evidence, 3, _COMPLETION));
 
 		await coordinator.surveyStarted(_OWNER, "interview-b");
 
@@ -192,7 +199,7 @@ describe("__UserOnboardingAuthority", function _UserOnboardingAuthoritySuite()
 	{
 		const repository = new _FakeUserOnboardingRepository();
 		const evidence = new _FakePersonaEvidence(["interview-a", "interview-b"], { "interview-b": "revision-b" });
-		const authority = new __UserOnboardingAuthority(repository, evidence, 3);
+		const authority = new __UserOnboardingAuthority(repository, evidence, 3, _COMPLETION);
 		await authority.startSurvey(_OWNER, "interview-a");
 
 		const replaced = await authority.startSurvey(_OWNER, "interview-b");
@@ -207,7 +214,7 @@ describe("__UserOnboardingAuthority", function _UserOnboardingAuthoritySuite()
 		const durable = { ..._Record(_OWNER, 3), state, personaInterviewId: "interview-a", personaRevisionId: "revision-a", surveyStartedAt: new Date("2026-08-08T10:01:00.000Z") };
 		const repository = new _FakeUserOnboardingRepository(durable);
 		const evidence = new _FakePersonaEvidence(["interview-a", "interview-b"], { "interview-a": "revision-a", "interview-b": "revision-b" });
-		const authority = new __UserOnboardingAuthority(repository, evidence, 3);
+		const authority = new __UserOnboardingAuthority(repository, evidence, 3, _COMPLETION);
 
 		const sortedAgain = await authority.startSurvey(_OWNER, "interview-b");
 		const refreshed = await authority.recordApprovedPersona(_OWNER, { interviewId: "interview-b", personaRevisionId: "revision-b" });

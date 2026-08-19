@@ -1,8 +1,8 @@
 import type { Prisma } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
 
-import { PrismaPersonaAuthorityRepository } from "../prisma-persona-authority-repository";
-import { PersonaApprovalInterviewStates, PersonaApprovalPersistenceStatuses, PersonaApprovalRevisionStates } from "../persona-authority.types";
+import { PersonaApprovalTransactionConflict, PrismaPersonaAuthorityRepository } from "../prisma-persona-authority-repository";
+import { PersonaAgentRevisionSelectionStatuses, PersonaApprovalInterviewStates, PersonaApprovalPersistenceStatuses, PersonaApprovalRevisionStates, type PersonaAgentRevisionSelectionPort } from "../persona-authority.types";
 
 /** Build a narrow fake Prisma client for one persona approval authority test. */
 function _Prisma(overrides: Record<string, unknown> = {}): Prisma.TransactionClient
@@ -22,9 +22,15 @@ function _Prisma(overrides: Record<string, unknown> = {}): Prisma.TransactionCli
 }
 
 /** Construct the authority with the real aggregate read adapter over the narrow fake transaction. */
-function _Repository(prisma: Prisma.TransactionClient): PrismaPersonaAuthorityRepository
+function _Repository(prisma: Prisma.TransactionClient, selection: PersonaAgentRevisionSelectionPort = _Selection()): PrismaPersonaAuthorityRepository
 {
-	return new PrismaPersonaAuthorityRepository(prisma);
+	return new PrismaPersonaAuthorityRepository(prisma, selection);
+}
+
+/** Builds the cross-domain selection port used by approval tests. */
+function _Selection(select = vi.fn().mockResolvedValue({ status: PersonaAgentRevisionSelectionStatuses.Selected })): PersonaAgentRevisionSelectionPort
+{
+	return { select };
 }
 
 /** Build the still-draft revision evidence returned by the aggregate read adapter. */
@@ -77,15 +83,47 @@ describe("PrismaPersonaAuthorityRepository", function _describePrismaPersonaAuth
 	it("applies only the accepted refresh proposal bound to the approved revision interview", async function _appliesBoundRefresh()
 	{
 		const applyChange = vi.fn().mockResolvedValue({ count: 1 });
+		const select = vi.fn().mockResolvedValue({ status: PersonaAgentRevisionSelectionStatuses.Selected });
+		const updateProfile = vi.fn().mockResolvedValue({ count: 1 });
 		const prisma = _Prisma({
 			personaRevision: _DraftRevision(),
+			personaProfile: { findFirst: vi.fn().mockResolvedValue({ siloId: "silo-1", activeRevisionId: "persona-old" }), updateMany: updateProfile },
 			personaInterview: { findUnique: vi.fn().mockResolvedValue({ refreshConfigurationChangeId: "change-1" }) },
 			personalConfigurationChange: { updateMany: applyChange },
 		});
-		const repository = _Repository(prisma);
+		const repository = _Repository(prisma, _Selection(select));
 
 		await expect(repository.approveAndActivateAtomically({ personaProfileId: "profile-1", personaRevisionId: "revision-1", userId: "user-1", approvedAt: "2026-07-23T12:00:00.000Z", expectedRevisionState: PersonaApprovalRevisionStates.Draft, expectedInterviewState: PersonaApprovalInterviewStates.Completed, expectedInsightCount: 3 })).resolves.toEqual({ status: PersonaApprovalPersistenceStatuses.Approved });
+		expect(select).toHaveBeenCalledWith({ siloId: "silo-1", userId: "user-1", personaRevisionId: "revision-1", selectedAt: new Date("2026-07-23T12:00:00.000Z") });
+		expect(select).toHaveBeenCalledBefore(updateProfile);
+		expect(updateProfile).toHaveBeenCalledBefore(applyChange);
 		expect(applyChange).toHaveBeenCalledWith({ where: expect.objectContaining({ id: "change-1", siloId: "silo-1", userId: "user-1", personaProfileId: "profile-1" }), data: { state: "Applied", appliedPersonaRevisionId: "revision-1" } });
+	});
+
+	it("does not invoke agent revision selection for initial persona approval", async function _KeepsInitialApprovalIndependent()
+	{
+		const select = vi.fn();
+		const repository = _Repository(_Prisma({ personaRevision: _DraftRevision() }), _Selection(select));
+
+		await expect(repository.approveAndActivateAtomically({ personaProfileId: "profile-1", personaRevisionId: "revision-1", userId: "user-1", approvedAt: "2026-07-23T12:00:00.000Z", expectedRevisionState: PersonaApprovalRevisionStates.Draft, expectedInterviewState: PersonaApprovalInterviewStates.Completed, expectedInsightCount: 3 })).resolves.toEqual({ status: PersonaApprovalPersistenceStatuses.Approved });
+		expect(select).not.toHaveBeenCalled();
+	});
+
+	it("rolls refresh approval back when agent-service selection fails closed", async function _RejectsAgentSelectionConflict()
+	{
+		const updateProfile = vi.fn();
+		const applyChange = vi.fn();
+		const prisma = _Prisma({
+			personaRevision: _DraftRevision(),
+			personaProfile: { findFirst: vi.fn().mockResolvedValue({ siloId: "silo-1", activeRevisionId: "persona-old" }), updateMany: updateProfile },
+			personaInterview: { findUnique: vi.fn().mockResolvedValue({ refreshConfigurationChangeId: "change-1" }) },
+			personalConfigurationChange: { updateMany: applyChange },
+		});
+		const repository = _Repository(prisma, _Selection(vi.fn().mockResolvedValue({ status: PersonaAgentRevisionSelectionStatuses.Conflict })));
+
+		await expect(repository.approveAndActivateAtomically({ personaProfileId: "profile-1", personaRevisionId: "revision-1", userId: "user-1", approvedAt: "2026-07-23T12:00:00.000Z", expectedRevisionState: PersonaApprovalRevisionStates.Draft, expectedInterviewState: PersonaApprovalInterviewStates.Completed, expectedInsightCount: 3 })).rejects.toBeInstanceOf(PersonaApprovalTransactionConflict);
+		expect(updateProfile).not.toHaveBeenCalled();
+		expect(applyChange).not.toHaveBeenCalled();
 	});
 
 	it("does not approve when the draft evidence changed after its preflight snapshot", async function _rejectsChangedEvidence()

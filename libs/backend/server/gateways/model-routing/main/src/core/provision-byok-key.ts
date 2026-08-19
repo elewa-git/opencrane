@@ -2,7 +2,7 @@ import { Buffer } from "node:buffer";
 
 import * as k8s from "@kubernetes/client-node";
 import type { Logger } from "pino";
-import type { PrismaClient, ProviderCredential as PrismaProviderCredential } from "@prisma/client";
+import { Prisma, type PrismaClient, type ProviderCredential as PrismaProviderCredential } from "@prisma/client";
 
 import { ___DoWithTrace } from "@opencrane/backend/observability";
 import { ModelRoutingScope } from "@opencrane/contracts";
@@ -11,7 +11,10 @@ import { _DeleteLiteLlmCredential, _UpsertLiteLlmCredential } from "./litellm-cr
 import { _RegisterLiteLlmModel } from "./litellm-model-registration";
 import { _BYOK_PROVIDER_CATALOG } from "./byok-default-models";
 import type { ByokProviderCatalog } from "./byok-default-models.types";
+import { _EnsureProviderEmbeddingModels, _RegisteredModelNames } from "./provider-embedding-models";
 import type { DeprovisionByokKeyOptions, ProvisionByokKeyOptions, ProvisionByokKeyResult } from "./provision-byok-key.types";
+
+export { _AUTO_EMBEDDING_MODEL_NAME } from "./provider-embedding-models";
 
 /**
  * Setting and removing a silo's BYOK provider key. Both the HTTP route (`providerByokRouter`) and
@@ -24,19 +27,6 @@ import type { DeprovisionByokKeyOptions, ProvisionByokKeyOptions, ProvisionByokK
  * `clusterTenant: null`) — the ClusterTenant-scoped variant is written through
  * `providerCredentialsRouter`, not here.
  */
-
-/**
- * Public model name of the stable EMBEDDING selection — the embedding-side mirror of
- * {@link _AUTO_MODEL_NAME}. Backed by the configured provider's catalogued embedding model
- * (see `_ensureProviderEmbeddingModel`); an internal consumer (Cognee) references this stable
- * alias instead of a provider-specific slug, so the operator can re-point the backing embedding
- * model without a consumer/values edit.
- *
- * MUST equal `apps/_infra/deploy-k8s/values.yaml`'s
- * `clustertenantManager.cognee.embedding.model` (the two agree by convention — the chart cannot
- * import this constant), exactly like the `cognee-litellm-key` Secret-name agreement.
- */
-export const _AUTO_EMBEDDING_MODEL_NAME = "auto-embedding";
 
 /**
  * Public model name of the stable "auto" selection. Backed by the cheapest catalogued model today
@@ -199,7 +189,7 @@ export async function _ProvisionByokKey(opts: ProvisionByokKeyOptions): Promise<
   //    deliberately OUTSIDE step 4's ModelDefinition path (see ByokProviderCatalog.embeddingModel).
   try
   {
-    await _ensureProviderEmbeddingModel(catalog, litellmCredentialName, log, requireLiveModels);
+    await _EnsureProviderEmbeddingModels(catalog, litellmCredentialName, log, requireLiveModels);
   }
   catch (err)
   {
@@ -401,14 +391,18 @@ async function _ensureProviderModels(prisma: PrismaClient, catalog: ByokProvider
     }
   }
 
-  // 2. Preserve the first selected default; a newly provisioned provider never steals it.
+  // 2. Preserve the first selected default and publish its public name through the routing
+  // authority that onboarding and later run admission consume.
   if (defaultModelId)
   {
-    const hasDefault = await prisma.modelDefinition.findFirst({ where: { scope: "Global", clusterTenant: null, isDefault: true } });
-    if (!hasDefault)
+    const selectedDefaults = await prisma.modelDefinition.findMany({ where: { scope: "Global", clusterTenant: null, isDefault: true }, orderBy: { id: "asc" }, take: 2 });
+    if (selectedDefaults.length > 1) throw new Error("Global model catalogue contains more than one default");
+    let selectedDefault = selectedDefaults[0] ?? null;
+    if (!selectedDefault)
     {
-      await _updateModelDefinition(prisma, defaultModelId, { isDefault: true });
+      selectedDefault = await _updateModelDefinition(prisma, defaultModelId, { isDefault: true });
     }
+    await _ensureGlobalRoutingDefault(prisma, selectedDefault.publicModelName);
   }
 
   // 3. Reconcile the stable auto alias to the cheapest provider class without changing caller input.
@@ -431,127 +425,29 @@ async function _ensureProviderModels(prisma: PrismaClient, catalog: ByokProvider
   }
 }
 
+/**
+ * Seeds the first Global routing default without replacing an operator's configured row.
+ *
+ * The partial database index admits one row whose tenant is null. A concurrent provider setup may
+ * still win between the read and create, so this helper accepts only a confirmed `P2002` winner.
+ */
+async function _ensureGlobalRoutingDefault(prisma: PrismaClient, publicModelName: string): Promise<void>
+{
+  const where = { scope: "Global" as const, clusterTenant: null };
+  if (await prisma.modelRoutingDefault.findFirst({ where })) return;
+  try
+  {
+    await prisma.modelRoutingDefault.create({ data: { ...where, defaultModel: publicModelName } });
+  }
+  catch (error)
+  {
+    if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== "P2002") throw error;
+    if (!await prisma.modelRoutingDefault.findFirst({ where })) throw error;
+  }
+}
+
 /** Apply a narrow ModelDefinition reconciliation patch through the existing Prisma authority. */
 async function _updateModelDefinition(prisma: PrismaClient, id: string, data: { providerCredentialId?: string; litellmModelId?: string; isDefault?: boolean })
 {
   return prisma.modelDefinition.update({ where: { id }, data });
-}
-
-/**
- * Best-effort, idempotent registration of a provider's embedding model directly with LiteLLM —
- * deliberately WITHOUT a `ModelDefinition` row (see `ByokProviderCatalog.embeddingModel`'s doc:
- * every Global `ModelDefinition` is exposed to EVERY tenant as a selectable chat model, so an
- * embedding deployment must never become one). No-op when the provider has no catalogued
- * embedding model, or when LiteLLM is unconfigured (dev/tests — mirrors `_RegisterLiteLlmModel`'s
- * own guard).
- *
- * Idempotency is checked directly against LiteLLM (`GET /model/info`) rather than a local
- * bookkeeping row, since intentionally skipping `ModelDefinition` here means there is no row to
- * check against; a read failure falls through to attempting registration anyway (LiteLLM's own
- * `/model/new` on an existing `model_name` is itself safe to repeat).
- *
- * @param catalog               - The provider's catalog, or undefined (provider not catalogued).
- * @param litellmCredentialName - The LiteLLM credential name (null ⇒ Secret-only baseline).
- * @param log                   - Scoped logger for the registration outcome.
- */
-async function _ensureProviderEmbeddingModel(catalog: ByokProviderCatalog | undefined, litellmCredentialName: string | null, log: Logger, requireLiveModels: boolean): Promise<void>
-{
-  if (!catalog?.embeddingModel)
-  {
-    return;
-  }
-
-  const endpoint = process.env.LITELLM_ENDPOINT?.trim() ?? "";
-  const masterKey = process.env.LITELLM_MASTER_KEY?.trim() ?? "";
-  if (!endpoint || !masterKey)
-  {
-    return;
-  }
-
-  const slug = catalog.embeddingModel.slug;
-
-  // Register TWO embedding deployments, both GLOBAL, both explicitly `mode: "embedding"` so
-  // LiteLLM's `/embeddings` route resolves them, and both WITHOUT a ModelDefinition row (see
-  // ByokProviderCatalog.embeddingModel — an embedding deployment must never surface as a
-  // tenant-selectable chat model):
-  //   1. the provider's real embedding model under its own slug; and
-  //   2. the stable `auto-embedding` alias (_AUTO_EMBEDDING_MODEL_NAME) pointing at that same
-  //      upstream — the embedding-side mirror of the chat `auto` selection. Cognee references
-  //      the alias, so its backing model can be re-pointed here without a Cognee/values edit.
-  // First-wins across providers: the alias resolves to whichever provider's embedding model is
-  // registered first, and the /model/info check below skips it thereafter — two different-provider
-  // embedding models must never both answer to `auto-embedding` (incompatible vector spaces).
-  const deployments = [
-    { publicModelName: slug, upstreamModel: slug },
-    { publicModelName: _AUTO_EMBEDDING_MODEL_NAME, upstreamModel: slug },
-  ];
-
-  // Best-effort idempotency: read the already-registered model names ONCE. Any failure here
-  // (network, non-2xx, bad JSON) yields an empty set, so registration is simply attempted —
-  // LiteLLM's own `/model/new` on an existing `model_name` is itself safe to repeat.
-  const registered = await _litellmRegisteredModelNames(endpoint, masterKey);
-
-  for (const deployment of deployments)
-  {
-    if (registered.has(deployment.publicModelName) && !requireLiveModels)
-    {
-      log.debug({ publicModelName: deployment.publicModelName }, "embedding model already registered with litellm");
-      continue;
-    }
-
-    await _RegisterLiteLlmModel({
-      publicModelName: deployment.publicModelName,
-      upstreamModel: deployment.upstreamModel,
-      scope: ModelRoutingScope.Global,
-      clusterTenant: null,
-      apiBase: null,
-      apiKeyEnvRef: null,
-      litellmCredentialName,
-      mode: "embedding",
-      requireLiveRegistration: requireLiveModels,
-    });
-    log.info({ publicModelName: deployment.publicModelName, upstreamModel: deployment.upstreamModel }, "embedding model registered with litellm");
-  }
-}
-
-/**
- * Best-effort read of the set of `model_name`s LiteLLM already has registered (`GET /model/info`).
- * Returns an empty set on any failure (unconfigured, unreachable, non-2xx, bad JSON) so callers
- * fall through to attempting registration rather than being blocked by a transient read.
- */
-async function _litellmRegisteredModelNames(endpoint: string, masterKey: string): Promise<Set<string>>
-{
-  try
-  {
-    const response = await fetch(`${endpoint}/model/info`, {
-      headers: { Authorization: `Bearer ${masterKey}` },
-    });
-    if (!response.ok)
-    {
-      return new Set();
-    }
-    return ___ParseAndValidateJson(await response.text(), "LiteLLM model inventory response", _RegisteredModelNames);
-  }
-  catch
-  {
-    return new Set();
-  }
-}
-
-/** Validate and collect the registered model names returned by LiteLLM. */
-function _RegisteredModelNames(value: unknown): Set<string>
-{
-  if (typeof value !== "object" || value === null || Array.isArray(value)) throw new Error("LiteLLM model inventory must be an object");
-  const data = (value as Record<string, unknown>)["data"];
-  if (data === undefined) return new Set();
-  if (!Array.isArray(data)) throw new Error("LiteLLM model inventory data must be an array");
-  const names = data.map(function _Name(entry): string
-  {
-    if (typeof entry !== "object" || entry === null || Array.isArray(entry)) throw new Error("LiteLLM model inventory entry must be an object");
-    const modelName = (entry as Record<string, unknown>)["model_name"];
-    if (modelName === undefined) return "";
-    if (typeof modelName !== "string") throw new Error("LiteLLM model inventory name must be a string");
-    return modelName;
-  });
-  return new Set(names.filter(Boolean));
 }

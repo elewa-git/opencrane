@@ -184,23 +184,6 @@ export class PrismaUserOnboardingRepository implements UserOnboardingRepository,
 		}
 	}
 
-	/** Complete the parent onboarding authority after its exact three-answer conversation is valid. */
-	async conclude(owner: UserOnboardingOwner, conversationId: string, completedAt: Date): Promise<boolean>
-	{
-		try
-		{
-			await this.prisma.userOnboarding.update({
-				where: { siloId_userId: { siloId: owner.siloId, userId: owner.subjectId }, state: UserOnboardingState.BootstrapChatInProgress, bootstrapConversationId: conversationId },
-				data: { state: UserOnboardingState.Completed, completionProvenance: UserOnboardingCompletionProvenance.BootstrapConcluded, completedAt },
-			});
-			return true;
-		}
-		catch (err)
-		{
-			if (_ExpectedConflict(err)) return false;
-			throw err;
-		}
-	}
 }
 
 /** Build the exact compound owner key used for every persistence lookup. */
