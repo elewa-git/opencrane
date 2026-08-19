@@ -44,7 +44,9 @@ prepare_current_chart_sources()
 
     # Keep the dependency layout identical to Chart.yaml while linking every
     # app-owned source directory. New local dependencies then need no fixture
-    # maintenance and Helm still verifies the committed Chart.lock digest.
+    # maintenance. Every dependency is an in-repo file:// chart, so the checked-out
+    # commit is the reproducibility authority and the update packages the current
+    # sources fresh — no lock file or vendored archive to keep in step.
     for app_dir in "$root/apps"/*; do
       [[ "$(basename "$app_dir")" == "_infra" ]] && continue
       ln -s "$app_dir" "$fixture_apps/$(basename "$app_dir")"
@@ -54,7 +56,7 @@ prepare_current_chart_sources()
       ln -s "$infra_dir" "$fixture_apps/_infra/$(basename "$infra_dir")"
     done
 
-    helm dependency build --skip-refresh "$_CURRENT_CHART_SOURCES_DIR" >/dev/null
+    helm dependency update --skip-refresh "$_CURRENT_CHART_SOURCES_DIR" >/dev/null
   ); then
     cleanup_current_chart_sources
     return 1

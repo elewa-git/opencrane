@@ -1,8 +1,5 @@
-import { execFileSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, readFileSync } from "node:fs";
 import { join, relative } from "node:path";
-import { gunzipSync } from "node:zlib";
 
 /** Read an optional app package version mirror. */
 export function packageVersion(repositoryRoot, projectRoot)
@@ -49,71 +46,6 @@ function _DependencyVersions(path)
 	return versions;
 }
 
-function _PackagedChartFiles(path)
-{
-	const archive = gunzipSync(readFileSync(path));
-	const files = new Map();
-	let offset = 0;
-	while (offset + 512 <= archive.length)
-	{
-		const header = archive.subarray(offset, offset + 512);
-		if (header.every((byte) => byte === 0)) break;
-		const name = header.subarray(0, 100).toString("utf8").replace(/\0.*$/u, "");
-		const prefix = header.subarray(345, 500).toString("utf8").replace(/\0.*$/u, "");
-		const fullName = prefix ? `${prefix}/${name}` : name;
-		const sizeText = header.subarray(124, 136).toString("utf8").replace(/\0.*$/u, "").trim();
-		const size = Number.parseInt(sizeText || "0", 8);
-		if (!Number.isFinite(size)) throw new Error(`invalid tar entry size in '${path}'`);
-		const type = header.subarray(156, 157).toString("utf8");
-		const relativeName = fullName.split("/").slice(1).join("/");
-		if ((type === "" || type === "0") && relativeName)
-			files.set(relativeName, archive.subarray(offset + 512, offset + 512 + size));
-		offset += 512 + Math.ceil(size / 512) * 512;
-	}
-	return files;
-}
-
-function _ValidatePackagedChart(sourceRoot, packagePath, chartName, chartVersion, errors)
-{
-	if (!existsSync(packagePath)) return;
-	const temporaryRoot = mkdtempSync(join(tmpdir(), "opencrane-chart-package-"));
-	try
-	{
-		execFileSync("helm", ["package", sourceRoot, "--destination", temporaryRoot], { stdio: "ignore" });
-		const generatedPath = join(temporaryRoot, `${chartName}-${chartVersion}.tgz`);
-		if (!existsSync(generatedPath))
-		{
-			errors.push(`Helm packaged '${chartName}' under an unexpected name or version`);
-			return;
-		}
-		const expected = _PackagedChartFiles(generatedPath);
-		const actual = _PackagedChartFiles(packagePath);
-		const expectedNames = [...expected.keys()].sort();
-		const actualNames = [...actual.keys()].sort();
-		if (JSON.stringify(expectedNames) !== JSON.stringify(actualNames))
-		{
-			errors.push(`packaged dependency ${chartName}-${chartVersion}.tgz file list differs from its chart source`);
-			return;
-		}
-		for (const name of expectedNames)
-		{
-			if (!expected.get(name).equals(actual.get(name)))
-			{
-				errors.push(`packaged dependency ${chartName}-${chartVersion}.tgz differs from source at '${name}'`);
-				return;
-			}
-		}
-	}
-	catch (error)
-	{
-		errors.push(`could not verify packaged dependency ${chartName}-${chartVersion}.tgz: ${error.message}`);
-	}
-	finally
-	{
-		rmSync(temporaryRoot, { recursive: true, force: true });
-	}
-}
-
 /** Validate one declared chart transition. Only executable kinds may be admitted. */
 export function validateHelmTransition(path, displayPath, fromVersion, toVersion, errors)
 {
@@ -133,24 +65,31 @@ export function validateHelmTransition(path, displayPath, fromVersion, toVersion
 	errors.push(`Helm transition '${displayPath}' must be a reviewed noop; executable value migrations require an implemented deploy consumer`);
 }
 
-/** Verify umbrella pins, packages, and platform transition against app chart sources. */
+/**
+ * Verify the umbrella declares every chart-bearing app and the platform transition exists.
+ *
+ * Versions are deliberately not compared: every dependency is an in-repo file:// chart, so
+ * the checked-out commit already fixes the exact sources, the umbrella declares open
+ * constraints, and packaging is derived at render time. Only membership can drift — an app
+ * chart that falls out of the umbrella would silently stop deploying.
+ */
 export function validateUmbrella(repositoryRoot, manifest, previousManifest, errors)
 {
 	const umbrellaRoot = manifest.projects["deploy-k8s"]?.root;
 	if (!umbrellaRoot) return;
-	const expected = new Map();
+	const expected = new Set();
 	for (const project of Object.values(manifest.projects))
 	{
 		if (!project.chartVersion || project.root === umbrellaRoot || project.root === "apps/postgres") continue;
 		const chart = chartValues(repositoryRoot, project);
-		if (chart?.name) expected.set(chart.name, { root: join(repositoryRoot, project.root, "helm"), version: project.chartVersion });
+		if (chart?.name) expected.add(chart.name);
 	}
 	const platformChart = chartValues(repositoryRoot, { root: `${umbrellaRoot}/platform` });
 	if (platformChart?.name)
 	{
 		if (platformChart.version !== manifest.projects["deploy-k8s"].chartVersion)
 			errors.push(`k8s-platform chart version '${platformChart.version}' must track its deploy-k8s owner`);
-		expected.set(platformChart.name, { root: join(repositoryRoot, umbrellaRoot, "platform"), version: platformChart.version });
+		expected.add(platformChart.name);
 		const previousVersion = previousManifest?.projects?.["deploy-k8s"]?.chartVersion;
 		if (previousVersion && previousVersion !== platformChart.version)
 		{
@@ -160,14 +99,8 @@ export function validateUmbrella(repositoryRoot, manifest, previousManifest, err
 		}
 	}
 	const chartDependencies = _DependencyVersions(join(repositoryRoot, umbrellaRoot, "Chart.yaml"));
-	const lockDependencies = _DependencyVersions(join(repositoryRoot, umbrellaRoot, "Chart.lock"));
-	for (const [name, expectedChart] of expected)
+	for (const name of expected)
 	{
-		const { root, version } = expectedChart;
-		if (chartDependencies.get(name) !== version) errors.push(`umbrella dependency ${name} does not pin chart version ${version}`);
-		if (lockDependencies.get(name) !== version) errors.push(`Chart.lock dependency ${name} does not pin chart version ${version}`);
-		const packagePath = join(repositoryRoot, umbrellaRoot, "charts", `${name}-${version}.tgz`);
-		if (!existsSync(packagePath)) errors.push(`packaged dependency ${name}-${version}.tgz is missing`);
-		else _ValidatePackagedChart(root, packagePath, name, version, errors);
+		if (!chartDependencies.has(name)) errors.push(`umbrella Chart.yaml does not declare dependency ${name}`);
 	}
 }

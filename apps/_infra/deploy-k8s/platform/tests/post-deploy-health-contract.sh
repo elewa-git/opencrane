@@ -4,20 +4,14 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../../.." && pwd)"
 DEPLOY_SCRIPT="$ROOT_DIR/apps/_infra/deploy-k8s/platform/k8s-deploy.sh"
 VERIFY_SCRIPT="$ROOT_DIR/apps/_infra/deploy-k8s/platform/post-deploy-verify.sh"
-CHART_DIR="$ROOT_DIR/apps/_infra/deploy-k8s"
-CHART_FIXTURE="$(mktemp -d)"
-trap 'rm -rf "$CHART_FIXTURE"' EXIT
-
 grep -Fq 'source "$POST_DEPLOY_VERIFY"' "$DEPLOY_SCRIPT"
 source "$VERIFY_SCRIPT"
 
-# Render against the current app-owned server chart, not the potentially stale committed archive.
-cp -R "$CHART_DIR/." "$CHART_FIXTURE"
-helm package "$ROOT_DIR/apps/opencrane/helm" --destination "$CHART_FIXTURE/charts" >/dev/null
-rm -f "$CHART_FIXTURE/charts/opencrane-ui-"*.tgz
-helm package "$ROOT_DIR/apps/opencrane-ui/helm" --destination "$CHART_FIXTURE/charts" >/dev/null
-helm package "$ROOT_DIR/apps/channel-proxy/helm" --destination "$CHART_FIXTURE/charts" >/dev/null
-helm package "$ROOT_DIR/apps/memory-gateway/helm" --destination "$CHART_FIXTURE/charts" >/dev/null
+# The shared fixture packages every current app-owned chart source, the same way deploy.sh does.
+source "$ROOT_DIR/apps/_infra/deploy-k8s/platform/current-chart-sources.sh"
+prepare_current_chart_sources
+trap 'cleanup_current_chart_sources' EXIT
+CHART_FIXTURE="$(current_chart_sources_dir)"
 rendered_ingress="$(helm template opencrane-silo "$CHART_FIXTURE" \
   --set-string 'memoryGateway.kubernetesApiServerCidrs[0]=10.43.0.1/32' \
   --set-string 'memoryGateway.kubernetesApiServerEndpointCidrs[0]=172.18.0.2/32' \

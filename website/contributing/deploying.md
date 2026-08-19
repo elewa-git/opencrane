@@ -22,7 +22,7 @@ platform/k8s-deploy.sh
   the install engine
         │
         ├──→ current-chart-sources.sh
-        │      helm dependency build from Chart.lock
+        │      packages the in-repo subchart sources
         │
         ├──→ database-migration-orchestrator.sh
         │      CNPG cluster, databases, migration + privileges Jobs
@@ -66,11 +66,11 @@ Confirm the `docker.yml` run for the exact SHA is green before deploying. The de
 published images and never build them — see [The CI pipeline](/contributing/ci-pipeline).
 :::
 
-::: warning `helm dependency build`, never `dependency update`, on the deploy path
-The engine resolves subcharts from `Chart.lock` for reproducibility. `dependency update`
-re-resolves and can drift. (Regenerating the lock and archives after a chart version stamp is the
-one place `dependency update` is correct — review the diff. See
-[Versions and migrations](/contributing/versions-and-migrations).)
+::: tip Subchart packaging is derived, never committed
+Every umbrella dependency is an in-repo `file://` chart, so the checked-out commit is the version
+authority: the deploy fixture packages the current sources with `helm dependency update
+--skip-refresh`. There is no `Chart.lock` or vendored archive to keep in step, and a chart
+version bump needs no umbrella edit. External bootstrap charts stay pinned by version and digest.
 :::
 
 ::: warning A green render does not prove a live upgrade works

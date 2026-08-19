@@ -5,8 +5,8 @@ Helm charts and a shared database schema. This page covers how a change stamps i
 how chart and database migrations are recorded, and how CI enforces all of it.
 
 > See also: [The CI pipeline](/contributing/ci-pipeline) (where `check:release-versioning` runs),
-> [Deploying](/contributing/deploying) (why `helm dependency build`, never `dependency update`,
-> matters here), and the full policy in
+> [Deploying](/contributing/deploying) (how the umbrella derives its subchart packaging), and the
+> full policy in
 > [`docs/agents/versioning.md`](https://github.com/elewa-git/opencrane/blob/main/docs/agents/versioning.md).
 
 ## The repository train and the release manifest
@@ -48,10 +48,11 @@ Version-only mirror edits are "stamp-only" and do not count as changes themselve
 ## Chart migrations
 
 A changed chart bumps its chart version to the root version and adds exactly one
-`helm/migrations/<from>-to-<to>.json` transition. The umbrella's `Chart.lock` and packaged
-archives are then regenerated and reviewed (with `helm dependency build`, never
-`dependency update` — see [Deploying](/contributing/deploying)). A newly introduced chart has no
-predecessor and therefore no transition.
+`helm/migrations/<from>-to-<to>.json` transition. The umbrella needs no edit: it declares its
+in-repo dependencies with open constraints and packages them fresh at render time (see
+[Deploying](/contributing/deploying)). A newly introduced chart has no predecessor and therefore
+no transition, but it must be declared as an umbrella dependency — the release gate fails when a
+chart-bearing application is missing there.
 
 ## Database migrations
 
