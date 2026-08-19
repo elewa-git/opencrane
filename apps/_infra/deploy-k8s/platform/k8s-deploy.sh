@@ -135,6 +135,7 @@ fi
 POSTGRES_BASELINE_PUBLISHER="$SCRIPT_DIR/../../../postgres/scripts/publish-initdb-baseline-config-map.sh"
 POSTGRES_MIGRATION_PUBLISHER="$SCRIPT_DIR/../../../postgres/scripts/publish-database-migration-config-map.sh"
 DATABASE_TRANSITION_RESOLVER="$SCRIPT_DIR/../../../../scripts/release-versioning/database-transition.mjs"
+DATABASE_SCHEMA_LINEAGE_RESOLVER="$SCRIPT_DIR/../../../../scripts/release-versioning/schema-lineage.mjs"
 POSTGRES_MIGRATION_BACKUP="$SCRIPT_DIR/../../../postgres/scripts/create-pre-migration-backup.sh"
 POSTGRES_BASELINE_FILE="$SCRIPT_DIR/../../../opencrane/prisma/bootstrap/target-baseline.sql"
 REPOSITORY_ROOT="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
@@ -315,13 +316,13 @@ validate_unbacked_database_migration_override
 DATABASE_TARGET_SCHEMA_VERSION="$(jq -r '.targetSchemaVersion' <<<"$DATABASE_RELEASE_TRANSITION")"
 DATABASE_TARGET_BASELINE_SHA256="$(jq -r '.targetBaselineSha256' <<<"$DATABASE_RELEASE_TRANSITION")"
 DATABASE_CONVERGENCE_MIGRATION="$(jq '.migration' <<<"$DATABASE_RELEASE_TRANSITION")"
-# A repair retry can name the current release while its database still needs the carried migration evidence.
-if [[ "$DATABASE_CONVERGENCE_MIGRATION" == "null" ]]; then
-  previous_release_version="$(jq -r '.database.carriedForwardFromRepositoryVersion // .previousRepositoryVersion // empty' \
-    "$REPOSITORY_ROOT/releases/$RELEASE_VERSION.json")"
-  if [[ -n "$previous_release_version" ]]; then
-    DATABASE_CONVERGENCE_MIGRATION="$(node "$DATABASE_TRANSITION_RESOLVER" "$REPOSITORY_ROOT" "$RELEASE_VERSION" "$previous_release_version" | jq '.migration')"
-  fi
+# A release that changes no schema still meets databases that reached this schema through a real
+# migration, and privilege reconciliation compares them against exactly that recorded transition.
+# Walk the release chain for the migration that produced this schema. The previous form re-resolved
+# the transition against this release's own previous version — another same-schema hop that always
+# returned null again — so every same-schema patch failed the convergence gate on a migrated silo.
+if [[ "$DATABASE_TRANSITION_KIND" == "current" && "$DATABASE_CONVERGENCE_MIGRATION" == "null" ]]; then
+  DATABASE_CONVERGENCE_MIGRATION="$(node "$DATABASE_SCHEMA_LINEAGE_RESOLVER" "$REPOSITORY_ROOT" "$RELEASE_VERSION")" || exit $?
 fi
 kubectl cluster-info >/dev/null 2>&1 || { err "kubectl can't reach a cluster. Point your context at the target cluster first."; exit 1; }
 KUBERNETES_CONTEXT="$(kubectl config current-context 2>/dev/null || true)"

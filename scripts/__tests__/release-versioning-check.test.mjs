@@ -9,7 +9,7 @@ import {
 	__SelectDirectReleaseComparisonBase,
 	validateWorkspace,
 } from "../release-versioning/core.mjs";
-import { resolveDatabaseTransition } from "../release-versioning/database-validation.mjs";
+import { resolveDatabaseTransition, resolveSchemaLineage } from "../release-versioning/database-validation.mjs";
 import { isAdjacentMinor, isAdjacentPatch, parseSemver, sha256 } from "../release-versioning/version-utils.mjs";
 
 function _WriteJson(path, value)
@@ -494,6 +494,30 @@ test("carries one failed predecessor migration through its immediate repair patc
 	assert.equal(transition.migration.carriedForwardThroughReleaseVersion, "0.9.0");
 	assert.equal(resolveDatabaseTransition(fixture.root, "0.9.1", "0.9.0").kind, "current");
 	assert.equal(resolveDatabaseTransition(fixture.root, "0.9.1", "0.9.1").kind, "current");
+});
+
+test("recovers the migration that produced the schema for a same-schema release", () =>
+{
+	const fixture = _CarryForwardFixture();
+	// 0.9.1 changes no schema of its own, but a live database that reached 0.9.0 through the real
+	// 0.8.0-to-0.9.0 migration still records it, and privilege reconciliation compares against it.
+	assert.equal(resolveDatabaseTransition(fixture.root, "0.9.1", "0.9.0").migration, null);
+	const lineage = resolveSchemaLineage(fixture.root, "0.9.1");
+	assert.equal(lineage.id, "0.8.0-to-0.9.0");
+	assert.equal(lineage.fromSchemaVersion, "0.8.0");
+	assert.equal(lineage.toSchemaVersion, "0.9.0");
+	assert.equal(lineage.ownedByReleaseVersion, "0.9.0");
+	// Reporting history must not authorise a carry-forward override.
+	assert.equal(lineage.carriedForwardThroughReleaseVersion, null);
+	assert.ok(lineage.sqlSha256);
+	assert.ok(Array.isArray(lineage.sourceProtectedBaselineSha256s));
+	assert.ok(lineage.sourceProtectedBaselineSha256s.length > 0);
+});
+
+test("reports no lineage for a schema that was never migrated into", () =>
+{
+	const fixture = _Fixture();
+	assert.equal(resolveSchemaLineage(fixture.root, "0.7.0"), null);
 });
 
 test("rejects undeclared and altered database carry-forward transitions", () =>
