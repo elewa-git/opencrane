@@ -33,10 +33,11 @@ export interface ProvisionByokKeyOptions
    * or down, the key is still set and the failure is only a log line, so an operator setting a key
    * from the UI is not blocked by a flaky LiteLLM.
    *
-   * Set true (apps/opencrane/src/app/initial-model-bootstrap.ts): every model and embedding
-   * registration must return a real LiteLLM deployment id, and the first failure throws out of
-   * `_ProvisionByokKey`. A fresh install would otherwise come up with placeholder deployment ids
-   * that never route, and only fail on real traffic.
+   * Set true (apps/opencrane/src/app/initial-model-bootstrap.ts): referenced and non-placeholder
+   * definitions must retain their exact stored deployment id in the live inventory. Unreferenced
+   * placeholders may be registered and updated before a revision freezes them. New model and
+   * embedding registrations must return a live id, and the first failure throws out of
+   * `_ProvisionByokKey` instead of deferring discovery until traffic arrives.
    *
    * Either way the Secret and the `ProviderCredential` row are already written by the time a throw
    * can happen — this switch changes when you find out, not what was stored.

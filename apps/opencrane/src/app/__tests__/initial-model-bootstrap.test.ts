@@ -1,18 +1,18 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { _ProvisionByokKey, _RequireLiteLlmModelRegistration } from "@opencrane/backend/server/gateways/model-routing";
+import { _ProvisionByokKey, _RequireLiteLlmModelName } from "@opencrane/backend/server/gateways/model-routing";
 
 import { _BootstrapInitialModel } from "../initial-model-bootstrap";
 import type { InitialModelBootstrapDependencies } from "../initial-model-bootstrap.types";
 
 vi.mock("@opencrane/backend/server/gateways/model-routing", function _ModelRoutingMock()
 {
-	return { _ProvisionByokKey: vi.fn(), _RequireLiteLlmModelRegistration: vi.fn() };
+	return { _ProvisionByokKey: vi.fn(), _RequireLiteLlmModelName: vi.fn() };
 });
 
 /** Mock provider provisioning dependency with its real public signature. */
 const _provisionByokKey = vi.mocked(_ProvisionByokKey);
-const _requireLiteLlmModelRegistration = vi.mocked(_RequireLiteLlmModelRegistration);
+const _requireLiteLlmModelName = vi.mocked(_RequireLiteLlmModelName);
 
 /** Build only the dependencies the composition seam forwards to provider-key custody. */
 function _Dependencies(config: InitialModelBootstrapDependencies["config"]): InitialModelBootstrapDependencies
@@ -36,10 +36,10 @@ describe("initial model bootstrap", function _InitialModelBootstrapSuite()
 	it("uses the provider custody authority and refuses readiness when LiteLLM rejects the key", async function _RequireLiteLlmRegistration()
 	{
 		_provisionByokKey.mockResolvedValueOnce({ litellmRegistered: true, row: {} as never });
-		_requireLiteLlmModelRegistration.mockResolvedValueOnce();
+		_requireLiteLlmModelName.mockResolvedValueOnce();
 		await expect(_BootstrapInitialModel(_Dependencies({ provider: "openai", apiKey: "sk-test" }))).resolves.toBeUndefined();
 		expect(_provisionByokKey).toHaveBeenCalledWith(expect.objectContaining({ operatorNamespace: "opencrane-testv2", provider: "openai", apiKey: "sk-test", requireLiveModels: true }));
-		expect(_requireLiteLlmModelRegistration).toHaveBeenCalledWith("auto");
+		expect(_requireLiteLlmModelName).toHaveBeenCalledWith("auto");
 
 		_provisionByokKey.mockResolvedValueOnce({ litellmRegistered: false, row: {} as never });
 		await expect(_BootstrapInitialModel(_Dependencies({ provider: "openai", apiKey: "sk-test" }))).rejects.toThrow(/LiteLLM did not accept/);
@@ -48,7 +48,7 @@ describe("initial model bootstrap", function _InitialModelBootstrapSuite()
 	it("refuses readiness when the accepted provider key has no live auto model", async function _RequireLiveModel()
 	{
 		_provisionByokKey.mockResolvedValueOnce({ litellmRegistered: true, row: {} as never });
-		_requireLiteLlmModelRegistration.mockRejectedValueOnce(new Error("LiteLLM has not registered required model 'auto'"));
+		_requireLiteLlmModelName.mockRejectedValueOnce(new Error("LiteLLM has not registered required model 'auto'"));
 		await expect(_BootstrapInitialModel(_Dependencies({ provider: "openai", apiKey: "sk-test" }))).rejects.toThrow(/required model 'auto'/);
 	});
 });

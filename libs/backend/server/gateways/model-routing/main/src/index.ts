@@ -9,6 +9,7 @@ export { PrismaDefaultModelDefinitionResolverRepository } from "./core/prisma-de
 export { DefaultModelDefinitionResolutionStatuses } from "./core/default-model-definition-resolver.types";
 export * from "./core/litellm-credential-registration";
 export * from "./core/litellm-credential-registration.types";
+export * from "./core/litellm-model-inventory";
 export * from "./core/litellm-model-registration";
 export * from "./core/litellm-model-registration.types";
 export * from "./core/ope";
