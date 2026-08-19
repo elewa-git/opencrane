@@ -153,15 +153,19 @@ _build_image()
   local image="$2"
   local dockerfile="$3"
   local cache_arguments=()
-  # CI shares one registry layer cache per deployable with the publish jobs (see
-  # BUILD_CACHE_IMAGE in docker.yml). The smoke also exports its layers when the token can
-  # write, so the next pull-request push builds warm instead of cold. Local runs leave
-  # SMOKE_BUILD_CACHE unset and build without a remote cache.
+  # CI shares registry layer caches per deployable with the publish jobs (see BUILD_CACHE_IMAGE
+  # in docker.yml). SMOKE_BUILD_CACHE is the trusted cache that integration pushes maintain;
+  # SMOKE_BUILD_CACHE_UNTRUSTED adds the pull-request cache as a second read source; and
+  # SMOKE_BUILD_CACHE_EXPORT names where this run may write its layers, so the next push builds
+  # warm. Local runs leave all three unset and build without a remote cache.
   if [[ -n "${SMOKE_BUILD_CACHE:-}" ]]; then
     cache_arguments+=(--cache-from "type=registry,ref=${SMOKE_BUILD_CACHE}:${project}")
-    if [[ "${SMOKE_BUILD_CACHE_PUSH:-0}" == "1" ]]; then
-      cache_arguments+=(--cache-to "type=registry,ref=${SMOKE_BUILD_CACHE}:${project},mode=max")
-    fi
+  fi
+  if [[ -n "${SMOKE_BUILD_CACHE_UNTRUSTED:-}" ]]; then
+    cache_arguments+=(--cache-from "type=registry,ref=${SMOKE_BUILD_CACHE_UNTRUSTED}:${project}")
+  fi
+  if [[ -n "${SMOKE_BUILD_CACHE_EXPORT:-}" ]]; then
+    cache_arguments+=(--cache-to "type=registry,ref=${SMOKE_BUILD_CACHE_EXPORT}:${project},mode=max")
   fi
   echo "[develop-smoke] Building $image"
   _retry 3 docker buildx build --load --file "$ROOT_DIR/$dockerfile" --tag "$image" \

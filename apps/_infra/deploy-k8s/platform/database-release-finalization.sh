@@ -76,7 +76,7 @@ compute_database_connection_checksum()
   shift
   kubectl get secret "$@" -n "$namespace" \
     -o jsonpath='{range .items[*]}{.metadata.name}{":"}{.data}{"\n"}{end}' \
-    | sha256sum | cut -d' ' -f1
+    | LC_ALL=C sort | sha256sum | cut -d' ' -f1
 }
 
 # Stamps the connection-Secret checksum onto each consumer Deployment's pod template. An
