@@ -236,6 +236,40 @@ for database in migrated fresh; do
 done
 diff --unified "$WORK_DIR/fresh-schema.sql" "$WORK_DIR/migrated-schema.sql"
 
+# A release that changes no schema still ships to silos in both shapes: bootstrapped fresh at the current
+# baseline, and migrated into that schema by an earlier release. The deploy engine hands the classifier the
+# owning release's evidence from the lineage resolver instead of a migration it must run, so every shape a
+# silo can be in has to stay deployable rather than read as incompatible.
+CURRENT_RELEASE_VERSION="$(jq -r '.version' "$ROOT/package.json")"
+CURRENT_RELEASE_MANIFEST="$ROOT/releases/$CURRENT_RELEASE_VERSION.json"
+SCHEMA_LINEAGE="$(node "$ROOT/scripts/release-versioning/schema-lineage.mjs" "$ROOT" "$CURRENT_RELEASE_VERSION")"
+POSTGRES_BASELINE_SHA256="$(jq -r '.database.baselineSha256' "$CURRENT_RELEASE_MANIFEST")"
+DATABASE_TARGET_BASELINE_SHA256="$POSTGRES_BASELINE_SHA256"
+DATABASE_TARGET_SCHEMA_VERSION="$(jq -r '.database.schemaVersion' "$CURRENT_RELEASE_MANIFEST")"
+DATABASE_PREVIOUS_MIGRATION_ID="$(jq -r '.id' <<<"$SCHEMA_LINEAGE")"
+DATABASE_PREVIOUS_SCHEMA_VERSION="$(jq -r '.fromSchemaVersion' <<<"$SCHEMA_LINEAGE")"
+DATABASE_PREVIOUS_TARGET_BASELINE_SHA256="$(jq -r '.sourceTargetBaselineSha256' <<<"$SCHEMA_LINEAGE")"
+DATABASE_PREVIOUS_PROTECTED_BASELINE_SHA256S_JSON="$(jq -c '.sourceProtectedBaselineSha256s' <<<"$SCHEMA_LINEAGE")"
+DATABASE_PREVIOUS_FRESH_PROTECTED_BASELINE_SHA256="$(jq -r '.freshSourceProtectedBaselineSha256' <<<"$SCHEMA_LINEAGE")"
+DATABASE_SOURCE_HISTORY_LINEAGES_JSON="$(jq -c '.sourceHistoryLineages' <<<"$SCHEMA_LINEAGE")"
+DATABASE_PREVIOUS_MIGRATION_SQL_SHA256="$(jq -r '.sqlSha256' <<<"$SCHEMA_LINEAGE")"
+[[ "$DATABASE_TARGET_SCHEMA_VERSION" == "$(jq -r '.toSchemaVersion' <<<"$SCHEMA_LINEAGE")" ]]
+
+# A fresh bootstrap records where the database was born and writes no migration history. The postgres
+# chart's bootstrap Job owns this row in a real silo.
+psql_command fresh <<SQL >/dev/null
+CREATE SCHEMA "opencrane_bootstrap";
+CREATE TABLE "opencrane_bootstrap"."target_baseline" (
+    "singleton" BOOLEAN PRIMARY KEY DEFAULT TRUE CHECK ("singleton"),
+    "baseline_sha256" TEXT NOT NULL CHECK ("baseline_sha256" ~ '^[0-9a-f]{64}$')
+);
+INSERT INTO "opencrane_bootstrap"."target_baseline" ("singleton", "baseline_sha256")
+VALUES (TRUE, '$POSTGRES_BASELINE_SHA256');
+SQL
+assert_classifier_state fresh "current|$POSTGRES_BASELINE_SHA256"
+assert_classifier_state fresh_source "completed|$FRESH_PROTECTED_DIGEST"
+assert_classifier_state migrated "completed|$PROTECTED_DIGEST"
+
 psql_command migrated --tuples-only --no-align --command \
 	'SELECT count(*) FROM "persona_questions" WHERE "question_set_id" = '\''personal-agent-onboarding'\'' AND "question_set_version" = 1;' \
 	| grep -qx '10'
