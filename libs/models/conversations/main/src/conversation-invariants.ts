@@ -87,8 +87,20 @@ export function __CanAppendConversationTimelineEntry(previous: ConversationTimel
 	return previous.conversationId === next.conversationId && BigInt(next.position) === BigInt(previous.position) + 1n;
 }
 
-/** Determine whether `completedAt` matches the message's state: present for a terminal state, absent otherwise. Neither half may be true on its own. */
-export function __HasValidMessageCompletion(message: Message): boolean
+/**
+ * Checks whether a message projection pairs its assembly state with a completion timestamp.
+ *
+ * This accepts any projection containing `state` and `completedAt`, so the stored-message schema and
+ * frontend response boundary can enforce the same rule without supplying unrelated message fields.
+ * `Completed`, `Failed`, and `Cancelled` require a timestamp; `Pending` and `Streaming` require null.
+ *
+ * Called by: {@link ___MessageSchema} and the conversation-workspace response schema used by
+ * `_ParseConversationDetail`.
+ * @param message - A message projection containing the state and completion timestamp to compare.
+ * @returns True when the timestamp is present exactly for a terminal state; false for either mismatch.
+ * @see MessageStates for the states this invariant distinguishes.
+ */
+export function __HasValidMessageCompletion(message: Pick<Message, "state" | "completedAt">): boolean
 {
 	const terminalStates: readonly MessageStates[] = [MessageStates.Completed, MessageStates.Failed, MessageStates.Cancelled];
 	return terminalStates.includes(message.state) === (message.completedAt !== null);

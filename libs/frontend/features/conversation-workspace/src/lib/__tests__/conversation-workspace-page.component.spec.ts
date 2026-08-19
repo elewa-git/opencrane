@@ -73,7 +73,7 @@ class _EventStream implements ConversationEventStream
 /** Build one authorized empty conversation for route-state tests. */
 function _Conversation(): ConversationWorkspaceDetail
 {
-	return { id: "conversation-1", mode: ConversationModes.Group, lifecycle: ConversationLifecycles.Open, agentServiceId: null, participantRefs: ["participant-1"], archivedAt: null, updatedAt: "2026-08-12T08:00:00.000Z", visibleFromPosition: "1", accessEndedPosition: null, messages: [] };
+	return { id: "conversation-1", mode: ConversationModes.Group, lifecycle: ConversationLifecycles.Open, agentServiceId: null, participantRefs: ["participant-1"], archivedAt: null, readThroughPosition: "0", updatedAt: "2026-08-12T08:00:00.000Z", visibleFromPosition: "1", accessEndedPosition: null, messages: [] };
 }
 
 /** Build one requested free-text projection used by recovery tests. */

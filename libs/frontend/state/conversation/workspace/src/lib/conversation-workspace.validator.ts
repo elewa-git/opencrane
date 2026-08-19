@@ -21,7 +21,7 @@
 // the matching schema admits it.
 import { z } from "zod";
 
-import { ConversationLifecycles, ConversationModes, MessageRoles, MessageSources, MessageStates } from "@opencrane/models/conversations";
+import { __HasValidMessageCompletion, ConversationLifecycles, ConversationModes, MessageRoles, MessageSources, MessageStates } from "@opencrane/models/conversations";
 
 import { ConversationPersonalAgentStatuses, ConversationRunStates, type ConversationCreationDirectory, type ConversationMessage, type ConversationRun, type ConversationSummary, type ConversationWorkspaceDetail } from "./conversation-workspace.types";
 
@@ -80,6 +80,7 @@ const _Summary = z.object({
 	agentServiceId: _NullableRequiredString,
 	participantRefs: z.array(_RequiredString),
 	archivedAt: z.string().datetime().nullable(),
+	readThroughPosition: _Position,
 	updatedAt: z.string().datetime()
 }).strict();
 
@@ -93,6 +94,10 @@ const _Summary = z.object({
  *
  * `agentThread` is present when an `@agent` mention in this message started a child Agent session; it
  * is null on every other message.
+ *
+ * `completedAt` follows the same state invariant as a stored message: terminal states require a
+ * timestamp and unfinished states require null. The adapter's `rejects message completion times that
+ * contradict message state` case pins both mismatch directions at this response boundary.
  */
 const _Message = z.object({
 	id: _RequiredString,
@@ -104,8 +109,13 @@ const _Message = z.object({
 	runId: _NullableRequiredString,
 	participantRef: _NullableRequiredString,
 	createdAt: z.string().datetime(),
+	completedAt: z.string().datetime().nullable(),
 	agentThread: z.object({ childConversationId: _RequiredString, parentMessageId: _RequiredString }).strict().nullable()
-}).strict();
+}).strict().superRefine(function _ValidateMessageCompletion(message, context)
+{
+	if (__HasValidMessageCompletion(message)) return;
+	context.addIssue({ code: z.ZodIssueCode.custom, path: ["completedAt"], message: "must be present exactly when message state is terminal" });
+});
 
 /**
  * Shape of the snapshot for the one open conversation: a summary plus the two access positions and the
@@ -176,8 +186,8 @@ export function _ParseConversationWorkspaceDirectory(value: unknown): Conversati
  * Checks one conversation row for the left rail.
  *
  * Admits the conversation's id, its fixed mode, its open or closed lifecycle, the opaque participant
- * references, and the archive and update timestamps. Rejects an unknown mode or lifecycle, a timestamp
- * that is not ISO-8601, and any extra field.
+ * and Agent references, the participant's read-through position, and the archive and update timestamps.
+ * Rejects an unknown mode or lifecycle, an invalid position or timestamp, and any extra field.
  *
  * A rejection fails the whole list, not one row: the adapter maps this over every entry the API
  * returned, so one bad row means the participant sees the recoverable error instead of a list that is
