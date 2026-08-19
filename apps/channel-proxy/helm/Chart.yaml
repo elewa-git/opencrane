@@ -3,4 +3,4 @@ name: opencrane-channel-proxy
 description: App-owned named-template library for the channel trust boundary.
 type: library
 version: 0.8.0
-appVersion: "0.8.0"
+appVersion: "0.9.2"

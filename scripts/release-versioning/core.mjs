@@ -94,47 +94,28 @@ function _ValidateTransition(manifest, errors)
 	}
 }
 
-function _AdaptedApplications(graph, changedFiles, stampOnlyFiles)
+/**
+ * Selects the applications whose own files changed in this release.
+ *
+ * Only these applications must advance to the root version. An application that changed only
+ * through a shared library, the root dependency set, or the lockfile keeps its last released
+ * version: images are pinned by commit SHA at publication, so restating the root version on
+ * every untouched application recorded no extra information and failed CI on every shared
+ * change until each manifest entry was bumped by hand.
+ */
+function _DirectlyChangedApplications(graph, changedFiles, stampOnlyFiles)
 {
 	const projectRoots = Object.entries(graph.nodes)
 		.map(([name, node]) => [name, node.data.root])
 		.sort((left, right) => right[1].length - left[1].length);
 	const touchedProjects = new Set();
-	const rootRuntimeChanged = changedFiles.some((file) =>
-		(file === "package.json" || file === "package-lock.json") && !stampOnlyFiles.has(file));
-	if (rootRuntimeChanged)
-	{
-		for (const [name, node] of Object.entries(graph.nodes))
-			if (node.data.projectType === "application") touchedProjects.add(name);
-	}
 	for (const file of changedFiles)
 	{
 		if (stampOnlyFiles.has(file) || _IGNORED_TOUCH.some((pattern) => pattern.test(file))) continue;
 		const owner = projectRoots.find(([, root]) => file === root || file.startsWith(`${root}/`));
 		if (owner) touchedProjects.add(owner[0]);
 	}
-	const dependants = new Map();
-	for (const [consumer, dependencies] of Object.entries(graph.dependencies ?? {}))
-	{
-		for (const dependency of dependencies)
-		{
-			const current = dependants.get(dependency.target) ?? [];
-			current.push(consumer);
-			dependants.set(dependency.target, current);
-		}
-	}
-	const affected = new Set(touchedProjects);
-	const queue = [...touchedProjects];
-	while (queue.length > 0)
-	{
-		for (const dependant of dependants.get(queue.shift()) ?? [])
-		{
-			if (affected.has(dependant)) continue;
-			affected.add(dependant);
-			queue.push(dependant);
-		}
-	}
-	return new Set([...affected].filter((name) => graph.nodes[name]?.data.projectType === "application"));
+	return new Set([...touchedProjects].filter((name) => graph.nodes[name]?.data.projectType === "application"));
 }
 
 function _ValidateProject(
@@ -175,7 +156,7 @@ function _ValidateProject(
 	if (previousProject && compareSemver(project.adaptedVersion, previousProject.adaptedVersion) < 0)
 		errors.push(`${name} adapted version regresses from '${previousProject.adaptedVersion}' to '${project.adaptedVersion}'`);
 	if (directlyTouched && project.adaptedVersion !== rootVersion)
-		errors.push(`${name} is adapted by a direct or dependency change but remains at '${project.adaptedVersion}' instead of root '${rootVersion}'`);
+		errors.push(`${name} changed directly but remains at '${project.adaptedVersion}' instead of root '${rootVersion}'`);
 	if (previousProject && !directlyTouched && project.adaptedVersion !== previousProject.adaptedVersion)
 		errors.push(`${name} was not adapted but its version changed from '${previousProject.adaptedVersion}' to '${project.adaptedVersion}'`);
 	const chartTouched = changedFiles.some((file) => file.startsWith(`${project.root}/helm/`)
@@ -281,7 +262,7 @@ export async function validateWorkspace(
 		if (previousManifest) errors.push(...validateReleaseManifest(previousManifest, "previous release manifest"));
 	}
 	const graph = suppliedGraph ?? await createProjectGraphAsync();
-	const adaptedApplications = _AdaptedApplications(graph, changedFiles, stampOnlyFiles);
+	const adaptedApplications = _DirectlyChangedApplications(graph, changedFiles, stampOnlyFiles);
 	const applicationNames = Object.entries(graph.nodes)
 		.filter(([, node]) => node.data.projectType === "application")
 		.map(([name]) => name)

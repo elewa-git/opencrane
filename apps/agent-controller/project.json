@@ -2,7 +2,7 @@
   "name": "agent-controller",
   "$schema": "../../node_modules/nx/schemas/project-schema.json",
   "projectType": "application",
-  "metadata": { "release": { "adaptedVersion": "0.9.2" } },
+  "metadata": { "release": { "adaptedVersion": "0.9.1" } },
   "sourceRoot": "apps/agent-controller/src",
   "tags": ["type:app", "layer:entrypoint", "scope:agent-controller"],
   "targets": {

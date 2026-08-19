@@ -203,17 +203,17 @@ test("rejects a directly adapted project that retains an older stamp", async () 
 {
 	const fixture = _Fixture({ adaptedVersion: "0.6.2" });
 	const errors = await validateWorkspace(fixture.root, ["apps/example/src/index.ts"], fixture.graph);
-	assert.ok(errors.some((error) => error.includes("direct or dependency change")));
+	assert.ok(errors.some((error) => error.includes("changed directly")));
 });
 
 test("counts test changes as direct application adaptations", async () =>
 {
 	const fixture = _Fixture({ adaptedVersion: "0.6.2" });
 	const errors = await validateWorkspace(fixture.root, ["apps/example/src/example.test.ts"], fixture.graph);
-	assert.ok(errors.some((error) => error.includes("direct or dependency change")));
+	assert.ok(errors.some((error) => error.includes("changed directly")));
 });
 
-test("uses the Nx dependency graph to stamp apps adapted through a changed library", async () =>
+test("keeps an application's stamp when only a depended-on library changed", async () =>
 {
 	const fixture = _Fixture({ adaptedVersion: "0.6.2" });
 	fixture.graph.nodes.contracts = {
@@ -223,8 +223,7 @@ test("uses the Nx dependency graph to stamp apps adapted through a changed libra
 		example: [{ source: "example", target: "contracts", type: "static" }],
 		contracts: [],
 	};
-	const errors = await validateWorkspace(fixture.root, ["libs/contracts/src/index.ts"], fixture.graph);
-	assert.ok(errors.some((error) => error.includes("direct or dependency change")));
+	assert.deepEqual(await validateWorkspace(fixture.root, ["libs/contracts/src/index.ts"], fixture.graph), []);
 });
 
 test("rejects advancing an unaffected application's last-adapted version", async () =>
@@ -261,7 +260,7 @@ test("counts package and project configuration as direct adaptations", async () 
 	for (const file of ["apps/example/package.json", "apps/example/project.json"])
 	{
 		const errors = await validateWorkspace(fixture.root, [file], fixture.graph);
-		assert.ok(errors.some((error) => error.includes("direct or dependency change")));
+		assert.ok(errors.some((error) => error.includes("changed directly")));
 	}
 });
 
@@ -272,11 +271,10 @@ test("permits package and project stamp-only mirrors", async () =>
 	assert.deepEqual(await validateWorkspace(fixture.root, files, fixture.graph, files), []);
 });
 
-test("treats a semantic root dependency change as an adaptation of every application", async () =>
+test("keeps every application's stamp when only the root dependency set changed", async () =>
 {
 	const fixture = _Fixture({ adaptedVersion: "0.6.2" });
-	const errors = await validateWorkspace(fixture.root, ["package.json"], fixture.graph);
-	assert.ok(errors.some((error) => error.includes("direct or dependency change")));
+	assert.deepEqual(await validateWorkspace(fixture.root, ["package.json"], fixture.graph), []);
 });
 
 test("permits root package and lockfile version-only mirrors", async () =>
