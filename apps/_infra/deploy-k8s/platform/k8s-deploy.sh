@@ -1001,7 +1001,15 @@ fi
 append_authoritative_qualified_release_image_helm_args
 append_authoritative_cognee_image_helm_args
 run_opencrane_finalization_stage helm "${helm_args[@]}" || exit $?
-run_opencrane_finalization_stage restart_database_consumers_for_finalization "$NAMESPACE" "$TIMEOUT" \
+# The database consumers load their connection Secrets at startup, and Helm does not roll pods
+# when only a Secret published outside the chart changed. Stamping the Secret checksum onto the
+# pod templates rolls the consumers exactly when the credentials changed, instead of restarting
+# pods the upgrade above just started.
+DATABASE_CONNECTION_CHECKSUM="$(compute_database_connection_checksum "$NAMESPACE" \
+  "$POSTGRES_APP_SECRET" "$OBOT_POSTGRES_APP_SECRET" "$LITELLM_POSTGRES_APP_SECRET" \
+  "$POSTGRES_ADMIN_APP_SECRET")" || exit $?
+run_opencrane_finalization_stage roll_database_consumers_for_finalization "$NAMESPACE" "$TIMEOUT" \
+  "$DATABASE_CONNECTION_CHECKSUM" \
   "${RELEASE}-opencrane-server" "${RELEASE}-litellm" "${RELEASE}-mcp-gateway" || exit $?
 
 # 4. Wait for the core workloads. The database schema was created by CNPG initdb or converged by
