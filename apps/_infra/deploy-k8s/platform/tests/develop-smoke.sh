@@ -481,6 +481,10 @@ export OPENCRANE_OIDC_SESSION_SECRET="$(_random_secret)"
 # production deploy path still requires a UI digest; this explicit escape keeps the smoke honest.
 export OPENCRANE_ALLOW_TAG_FLOAT=1
 export TIMEOUT_SECONDS
+# The public health report only turns "models" available once LiteLLM lists a routable model.
+# Seeding the initial provider with a placeholder key is safe here: registration writes the
+# LiteLLM model row without calling the provider, and the health probe lists the estate.
+export OPENCRANE_INITIAL_MODEL_API_KEY="sk-develop-smoke-placeholder"
 # Exercise the production wrapper's required contact and first-owner inputs. The disposable `.test`
 # host cannot complete public ACME, so the final --set flags deliberately restore its local issuer.
 "$ROOT_DIR/apps/_infra/deploy-k8s/deploy.sh" \
@@ -492,6 +496,7 @@ export TIMEOUT_SECONDS
   --release "$RELEASE_NAME" \
   --release-version "$(jq -r '.version' "$ROOT_DIR/package.json")" \
   --from-release-version fresh \
+  --initial-model-provider openai \
   --image-tag develop-smoke \
   --cognee-tag develop-smoke \
   --storage-class "$SMOKE_STORAGE_CLASS" \
