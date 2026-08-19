@@ -144,6 +144,16 @@ spec:
       ports:
         - protocol: TCP
           port: {{ .Values.channelProxy.service.port }}
+    # The public health report probes channel readiness from the server, so the server's
+    # matching egress rule needs this ingress counterpart before any packet is admitted.
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- include "opencrane.selectorLabels" . | nindent 14 }}
+              app.kubernetes.io/component: opencrane-server
+      ports:
+        - protocol: TCP
+          port: {{ .Values.channelProxy.service.port }}
   egress:
     # OpenCrane is the only application authority the channel boundary may resolve through.
     - to:

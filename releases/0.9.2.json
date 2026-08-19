@@ -52,10 +52,10 @@
     },
     "channel-proxy": {
       "root": "apps/channel-proxy",
-      "adaptedVersion": "0.8.0",
-      "packageVersion": "0.8.0",
-      "chartVersion": "0.8.0",
-      "chartAppVersion": "0.8.0"
+      "adaptedVersion": "0.9.2",
+      "packageVersion": "0.9.2",
+      "chartVersion": "0.9.2",
+      "chartAppVersion": "0.9.2"
     },
     "cognee": {
       "root": "apps/_infra/cognee",
