@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/angular";
-import { expect, fn, userEvent, within } from "storybook/test";
+import { expect, userEvent, within } from "storybook/test";
 
 import { McpConnectionStatus } from "@opencrane/core";
 import { MCP_CATALOGUE, MCP_INSTALLED } from "@opencrane/core/testing";
@@ -12,9 +12,6 @@ const _POSTGRES = MCP_CATALOGUE.find(function find(server) { return server.id ==
 const _STRIPE_INSTALLED = MCP_INSTALLED.find(function find(record) { return record.serverId === "stripe" })!;
 const _GITHUB_INSTALLED = MCP_INSTALLED.find(function find(record) { return record.serverId === "github" })!;
 const _POSTGRES_INSTALLED = MCP_INSTALLED.find(function find(record) { return record.serverId === "postgres-prod" })!;
-const _CONNECT_REQUESTED = fn();
-const _DISCONNECT_REQUESTED = fn();
-const _CLOSED = fn();
 
 const meta: Meta<ConnectDrawerComponent> = {
 	title: "Tools/Connect drawer",
@@ -58,35 +55,38 @@ export const StoredCredential: Story = {
 /** A disconnected OAuth server offers the provider consent action. */
 export const DisconnectedOauth: Story = {
 	tags: ["visual-test"],
-	args: { server: _GITHUB, installed: { ..._GITHUB_INSTALLED, connectionStatus: McpConnectionStatus.NeedsCredential }, connectRequested: _CONNECT_REQUESTED },
+	args: { server: _GITHUB, installed: { ..._GITHUB_INSTALLED, connectionStatus: McpConnectionStatus.NeedsCredential } },
+	render: function render(args) { return { props: { ...args, connectCount: 0 }, template: `<wo-connect-drawer [server]="server" [installed]="installed" (connectRequested)="connectCount = connectCount + 1" /><output data-testid="connect-count" [attr.data-count]="connectCount"></output>` }; },
 	play: async function play({ canvasElement })
 	{
 		const canvas = within(canvasElement);
 		await userEvent.click(canvas.getByRole("button", { name: /Connect with OAuth/iu }));
-		await expect(_CONNECT_REQUESTED).toHaveBeenCalled();
+		await expect(canvas.getByTestId("connect-count")).toHaveAttribute("data-count", "1");
 	}
 };
 
 /** A connected OAuth server shows the account identity and disconnect action. */
 export const ConnectedOauth: Story = {
 	tags: ["visual-test"],
-	args: { server: _GITHUB, installed: _GITHUB_INSTALLED, disconnectRequested: _DISCONNECT_REQUESTED },
+	args: { server: _GITHUB, installed: _GITHUB_INSTALLED },
+	render: function render(args) { return { props: { ...args, disconnectCount: 0 }, template: `<wo-connect-drawer [server]="server" [installed]="installed" (disconnectRequested)="disconnectCount = disconnectCount + 1" /><output data-testid="disconnect-count" [attr.data-count]="disconnectCount"></output>` }; },
 	play: async function play({ canvasElement })
 	{
 		const canvas = within(canvasElement);
 		await userEvent.click(canvas.getByRole("button", { name: "Disconnect" }));
-		await expect(_DISCONNECT_REQUESTED).toHaveBeenCalled();
+		await expect(canvas.getByTestId("disconnect-count")).toHaveAttribute("data-count", "1");
 	}
 };
 
 /** An administrator-managed server explains why no participant credential is required. */
 export const SharedKey: Story = {
 	tags: ["visual-test"],
-	args: { server: _POSTGRES, installed: _POSTGRES_INSTALLED, closed: _CLOSED },
+	args: { server: _POSTGRES, installed: _POSTGRES_INSTALLED },
+	render: function render(args) { return { props: { ...args, closeCount: 0 }, template: `<wo-connect-drawer [server]="server" [installed]="installed" (closed)="closeCount = closeCount + 1" /><output data-testid="close-count" [attr.data-count]="closeCount"></output>` }; },
 	play: async function play({ canvasElement })
 	{
 		const canvas = within(canvasElement);
 		await userEvent.click(canvas.getByRole("button", { name: "Close" }));
-		await expect(_CLOSED).toHaveBeenCalled();
+		await expect(canvas.getByTestId("close-count")).toHaveAttribute("data-count", "1");
 	}
 };

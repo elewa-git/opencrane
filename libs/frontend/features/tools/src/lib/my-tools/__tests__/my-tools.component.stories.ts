@@ -38,7 +38,7 @@ const meta: Meta<MyToolsComponent> = {
 	title: "Tools/My tools",
 	component: MyToolsComponent,
 	tags: ["autodocs"],
-	decorators: [applicationConfig({ providers: [provideRouter([]), { provide: MCP_GATEWAY, useFactory: _CreateMyToolsGateway }] })],
+	decorators: [applicationConfig({ providers: [provideRouter([{ path: "**", children: [] }]), { provide: MCP_GATEWAY, useFactory: _CreateMyToolsGateway }] })],
 	parameters: {
 		docs: {
 			description: {

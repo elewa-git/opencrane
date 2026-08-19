@@ -10,7 +10,7 @@
 				<i class="pi pi-search"></i>
 				<input class="wo-text-input" type="text" placeholder="Search tools…" [value]="search()" (input)="onSearch($event)" />
 			</div>
-			<select class="wo-select" (change)="onTypeFilter($event)">
+			<select class="wo-select" aria-label="Filter tools by type" (change)="onTypeFilter($event)">
 				<option value="all">All types</option>
 				<option [value]="serverType.RemoteOauth">OAuth</option>
 				<option [value]="serverType.SingleUser">API token</option>

@@ -81,6 +81,10 @@
 	color: var(--oc-ink-muted);
 	line-height: 1.5;
 
+	a {
+		color: var(--oc-accent-active);
+	}
+
 	&--info {
 		border-left-color: var(--oc-info);
 		background: var(--oc-info-soft);

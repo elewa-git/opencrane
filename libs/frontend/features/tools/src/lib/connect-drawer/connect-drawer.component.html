@@ -4,6 +4,7 @@
 	position="right"
 	[modal]="true"
 	[header]="title()"
+	ariaCloseLabel="Close connection drawer"
 	[style]="{ width: '420px' }"
 	styleClass="wo-connect-drawer"
 >
@@ -31,6 +32,7 @@
 								[class.wo-mono]="field.sensitive"
 								[type]="field.sensitive ? 'password' : 'text'"
 								[attr.autocomplete]="field.sensitive ? 'new-password' : 'off'"
+								[attr.aria-label]="field.label"
 								[placeholder]="field.placeholder ?? ''"
 								[value]="formValues()[field.key]"
 								(input)="onFieldInput(field.key, $event)"
