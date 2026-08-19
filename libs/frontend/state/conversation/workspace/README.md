@@ -33,6 +33,9 @@ The package also owns the Zod response validators used by its transport adapter.
   does not define a second stream contract.
 - `ConversationWorkspaceStore` owns ordinary list, selection, snapshot-tail state, immutable creation mode,
   drafts, and conversation commands.
+- Conversation summaries retain the server's decimal `readThroughPosition`, and messages retain
+  `completedAt`; strict validation accepts both response fields without giving browser state authority
+  to advance the participant coordinate or complete a message.
 - `ConversationOnboardingHistoryStore` keeps the optional transcript read and selection independent from
   ordinary snapshot, stream, draft, and run state.
 - `ConversationRunStore` owns run status and exact-attempt run commands.

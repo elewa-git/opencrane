@@ -177,6 +177,8 @@ export interface ConversationSummary
 	readonly participantRefs: readonly string[];
 	/** Per-participant archive time. */
 	readonly archivedAt: string | null;
+	/** Latest timeline position the participant has read, kept as a decimal string. */
+	readonly readThroughPosition: string;
 	/** Latest browser-safe update time. */
 	readonly updatedAt: string;
 }
@@ -202,6 +204,8 @@ export interface ConversationMessage
 	readonly participantRef: string | null;
 	/** Server timestamp used only for a display label. */
 	readonly createdAt: string;
+	/** Server completion time for `Completed`, `Failed`, or `Cancelled`; null for `Pending` or `Streaming`. */
+	readonly completedAt: string | null;
 	/** Child Agent-session origin created by an @agent message. */
 	readonly agentThread: { readonly childConversationId: string; readonly parentMessageId: string } | null;
 }

@@ -24,7 +24,7 @@ function _OnboardingHistory(): ConversationOnboardingHistoryProjection
 /** Build one complete authorized conversation snapshot. */
 function _Detail(id = "conversation-1"): ConversationWorkspaceDetail
 {
-	return { id, mode: ConversationModes.Group, lifecycle: ConversationLifecycles.Open, agentServiceId: null, participantRefs: ["self-ref", "other-ref"], archivedAt: null, updatedAt: "2026-08-12T09:00:00.000Z", visibleFromPosition: "1", accessEndedPosition: null, messages: [] };
+	return { id, mode: ConversationModes.Group, lifecycle: ConversationLifecycles.Open, agentServiceId: null, participantRefs: ["self-ref", "other-ref"], archivedAt: null, readThroughPosition: "0", updatedAt: "2026-08-12T09:00:00.000Z", visibleFromPosition: "1", accessEndedPosition: null, messages: [] };
 }
 
 /** Controllable promise used to prove stale load completions cannot mutate current state. */

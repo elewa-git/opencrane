@@ -6,13 +6,13 @@ import { ConversationSessionRailIconStates } from "../conversation-workspace-fea
 /** Builds a direct-conversation summary without introducing display names. */
 function _Summary(): ConversationSummary
 {
-	return { id: "conversation-1", mode: ConversationModes.Direct, lifecycle: ConversationLifecycles.Open, agentServiceId: null, participantRefs: ["subject-secret", "other-secret"], archivedAt: null, updatedAt: "2026-08-12T11:08:00.000Z" };
+	return { id: "conversation-1", mode: ConversationModes.Direct, lifecycle: ConversationLifecycles.Open, agentServiceId: null, participantRefs: ["subject-secret", "other-secret"], archivedAt: null, readThroughPosition: "0", updatedAt: "2026-08-12T11:08:00.000Z" };
 }
 
 /** Builds a participant message containing unsafe markup. */
 function _Message(): ConversationMessage
 {
-	return { id: "message-1", position: "1", role: MessageRoles.User, state: MessageStates.Completed, source: MessageSources.UserInput, blocks: [{ id: "block-1", kind: "text", value: "Hello <script>alert('secret')</script>" }], runId: null, participantRef: "other-secret", createdAt: "2026-08-12T11:08:00.000Z", agentThread: null };
+	return { id: "message-1", position: "1", role: MessageRoles.User, state: MessageStates.Completed, source: MessageSources.UserInput, blocks: [{ id: "block-1", kind: "text", value: "Hello <script>alert('secret')</script>" }], runId: null, participantRef: "other-secret", createdAt: "2026-08-12T11:08:00.000Z", completedAt: "2026-08-12T11:08:01.000Z", agentThread: null };
 }
 
 describe("Conversation workspace presentation", function _ConversationWorkspacePresentation()
