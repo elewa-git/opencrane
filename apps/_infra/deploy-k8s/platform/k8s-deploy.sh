@@ -978,11 +978,15 @@ helm_args+=(
 #   --reuse-values  → inherit last release verbatim (do NOT refresh chart defaults)
 #   --reset-values  → intentionally DROP prior overrides (start from chart defaults + this run)
 # A fresh install has nothing to reuse, so none of these apply.
+RELEASE_PREEXISTED=0
+if helm status "$RELEASE" -n "$NAMESPACE" >/dev/null 2>&1; then
+  RELEASE_PREEXISTED=1
+fi
 if [[ -n "$REUSE_VALUES" ]]; then
   helm_args+=(--reuse-values)
 elif [[ -n "$RESET_VALUES" ]]; then
   helm_args+=(--reset-values)
-elif helm status "$RELEASE" -n "$NAMESPACE" >/dev/null 2>&1; then
+elif [[ "$RELEASE_PREEXISTED" == "1" ]]; then
   log "Existing release '$RELEASE' — using --reset-then-reuse-values so prior overrides are not silently dropped (pass --reset-values to start from chart defaults instead)."
   helm_args+=(--reset-then-reuse-values)
 fi
@@ -1004,13 +1008,17 @@ run_opencrane_finalization_stage helm "${helm_args[@]}" || exit $?
 # The database consumers load their connection Secrets at startup, and Helm does not roll pods
 # when only a Secret published outside the chart changed. Stamping the Secret checksum onto the
 # pod templates rolls the consumers exactly when the credentials changed, instead of restarting
-# pods the upgrade above just started.
-DATABASE_CONNECTION_CHECKSUM="$(compute_database_connection_checksum "$NAMESPACE" \
-  "$POSTGRES_APP_SECRET" "$OBOT_POSTGRES_APP_SECRET" "$LITELLM_POSTGRES_APP_SECRET" \
-  "$POSTGRES_ADMIN_APP_SECRET")" || exit $?
-run_opencrane_finalization_stage roll_database_consumers_for_finalization "$NAMESPACE" "$TIMEOUT" \
-  "$DATABASE_CONNECTION_CHECKSUM" \
-  "${RELEASE}-opencrane-server" "${RELEASE}-litellm" "${RELEASE}-mcp-gateway" || exit $?
+# pods the upgrade above just started. A fresh install skips the roll entirely: its pods were
+# born after this run published the Secrets, so there is nothing to propagate, and stamping
+# mid-first-rollout forced a second boot of the heaviest workloads.
+if [[ "$RELEASE_PREEXISTED" == "1" ]]; then
+  DATABASE_CONNECTION_CHECKSUM="$(compute_database_connection_checksum "$NAMESPACE" \
+    "$POSTGRES_APP_SECRET" "$OBOT_POSTGRES_APP_SECRET" "$LITELLM_POSTGRES_APP_SECRET" \
+    "$POSTGRES_ADMIN_APP_SECRET")" || exit $?
+  run_opencrane_finalization_stage roll_database_consumers_for_finalization "$NAMESPACE" "$TIMEOUT" \
+    "$DATABASE_CONNECTION_CHECKSUM" \
+    "${RELEASE}-opencrane-server" "${RELEASE}-litellm" "${RELEASE}-mcp-gateway" || exit $?
+fi
 
 # 4. Wait for the core workloads. The database schema was created by CNPG initdb or converged by
 # the bounded deployment-owned migration Job; application startup never mutates it.

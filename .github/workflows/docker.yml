@@ -554,7 +554,9 @@ jobs:
         run: ./apps/_infra/deploy-k8s/platform/tests/develop-smoke.sh
         env:
           KEEP_CLUSTER: "0"
-          TIMEOUT_SECONDS: "300"
+          # 600 gives the loaded two-CPU runner headroom: the server pod's boot grew with the
+          # public health report and initial model seeding, and a healthy wait returns early.
+          TIMEOUT_SECONDS: "600"
           SMOKE_AFFECTED_PROJECTS: ${{ needs.prepare.outputs.develop_smoke_projects }}
           SMOKE_BASE_SHA: ${{ needs.prepare.outputs.nx_base }}
           SMOKE_REGISTRY: ${{ env.REGISTRY }}/${{ github.repository_owner }}
