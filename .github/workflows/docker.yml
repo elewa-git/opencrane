@@ -288,6 +288,15 @@ jobs:
             echo "required=false" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Restore Playwright browser cache
+        if: steps.storybook-regression.outputs.required == 'true'
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            playwright-${{ runner.os }}-
+
       - name: Install Chromium for affected Storybook regressions
         if: steps.storybook-regression.outputs.required == 'true'
         run: npx playwright install --with-deps chromium
