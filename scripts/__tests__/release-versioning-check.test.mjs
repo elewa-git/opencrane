@@ -305,6 +305,21 @@ test("rejects release composition changes after the repository version is tagged
 	assert.ok(errors.some((error) => error.includes("already bound by tag 'v0.7.0'")));
 });
 
+test("ignores tagged composition changes that predate the candidate diff", async () =>
+{
+	const fixture = _Fixture();
+	const errors = await validateWorkspace(
+		fixture.root,
+		["apps/example/src/index.ts"],
+		fixture.graph,
+		[],
+		[],
+		"v0.7.0",
+		[],
+	);
+	assert.ok(!errors.some((error) => error.includes("already bound by tag 'v0.7.0'")));
+});
+
 test("rejects mutation of the current release manifest after its version is tagged", async () =>
 {
 	const fixture = _Fixture();

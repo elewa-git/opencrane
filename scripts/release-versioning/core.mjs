@@ -217,7 +217,7 @@ export async function validateWorkspace(
 	const directChangedFiles = new Set(suppliedDirectChangedFiles);
 	if (releasedVersionTag)
 	{
-		const compositionChanged = changedFiles.some((file) =>
+		const compositionChanged = [...directChangedFiles].some((file) =>
 			!_IGNORED_TOUCH.some((pattern) => pattern.test(file))
 			&& (file === "package.json" || file === "package-lock.json" || file === "nx.json"
 				|| file.startsWith("apps/") || file.startsWith("libs/") || file.startsWith("website/")
