@@ -80,7 +80,10 @@ blockers through reviewed PRs, requires both fresh-install and exact predecessor
 the same SHA, then locks inputs and delegates the only cluster-writing step to `deploy`. It freezes the
 functional changelog before qualification; a final tag and ledger closure follow live proof. Any repair
 invalidates earlier evidence and restarts candidate assembly. Deployment and tagging are separately
-authorized: a deploy request never silently creates a release tag.
+authorized: a deploy request never silently creates a release tag. The `/release-manager` workflow
+enforces this order: admit and freeze, converge and validate, freeze the changelog and prove both
+installation paths, delegate an authorized deployment, close an authorized tag, then record the ledger
+and plan result.
 
 **Built-in platform agent types** (available via the Agent tool, not repo-defined): `Explore`
 (read-only broad search — locating code across many files), `Plan` (design an implementation plan),
