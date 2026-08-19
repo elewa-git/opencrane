@@ -212,6 +212,12 @@ describe("PrismaChildRunReservationRepository", function _describeReservationRep
 
 		expect(result).toEqual({ outcome: "idempotent", snapshot: childSnapshot });
 		expect(transaction.$queryRaw).toHaveBeenCalledTimes(1);
+		// The advisory-lock key is a text parameter, and PostgreSQL rejects a NUL byte in text with
+		// SQLSTATE 22021, failing the whole reservation.
+		for (const [statement] of transaction.$queryRaw.mock.calls)
+		{
+			expect((statement as { values: unknown[] }).values.filter(function _IsText(value): value is string { return typeof value === "string"; }).join("")).not.toContain(String.fromCharCode(0));
+		}
 		expect(transaction.agentRun.create).not.toHaveBeenCalled();
 		expect(transaction.runInputSnapshot.create).not.toHaveBeenCalled();
 		expect(transaction.childRunReservation.create).not.toHaveBeenCalled();

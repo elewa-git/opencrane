@@ -57,6 +57,12 @@ describe("PrismaRunAdmissionRepository", function _describeAdmissionRepository()
 
 		await expect(repository.admit(_command(), async function _build() { return { outcome: "ready", value: { authority: _authority(), snapshot: _snapshot() } } as const; })).resolves.toEqual({ outcome: "accepted", snapshot: _snapshot() });
 		expect(transaction.$queryRaw).toHaveBeenCalledTimes(2);
+		// PostgreSQL rejects a NUL byte in text with SQLSTATE 22021 and fails the whole statement, so
+		// an advisory-lock key carrying one made every admission return 503 against a real database.
+		for (const [statement] of transaction.$queryRaw.mock.calls)
+		{
+			expect((statement as { values: unknown[] }).values.filter(function _IsText(value): value is string { return typeof value === "string"; }).join("")).not.toContain(String.fromCharCode(0));
+		}
 		expect(transaction.agentRun.create).toHaveBeenCalledWith({ data: expect.objectContaining({ inputSnapshotDigest: `sha256:${"c".repeat(64)}`, acceptedAt: new Date("2026-07-20T00:00:00.000Z") }) });
 		expect(transaction.runInputSnapshot.create).toHaveBeenCalledWith({ data: expect.objectContaining({ runId: "run-1", digest: `sha256:${"c".repeat(64)}`, messageIds: ["message-1"] }) });
 		expect(transaction.outboxEvent.createMany).toHaveBeenCalledWith({ data: [expect.objectContaining({ sequence: 1, kind: "RunAccepted", idempotencyKey: "run-1:accepted" }), expect.objectContaining({ sequence: 2, kind: "RunAttemptRequested", idempotencyKey: "run-1:attempt:1" })] });
