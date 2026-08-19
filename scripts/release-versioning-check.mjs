@@ -93,7 +93,7 @@ const releaseManifest = JSON.parse(readFileSync(join(repositoryRoot, "releases",
 const versionBase = releaseManifest.previousRepositoryVersion;
 if (versionBase) _GitFiles(["rev-parse", "--verify", `${versionBase}^{commit}`]);
 const releaseTag = _ExistingReleaseTag(rootVersion);
-const directChangedFiles = _ChangedFiles([base, releaseTag].filter(Boolean));
+const directChangedFiles = _ChangedFiles([base]);
 const changedFiles = _ChangedFiles([...new Set([base, versionBase, releaseTag].filter(Boolean))]);
 const newFiles = changedFiles.filter((file) => _BaseText(base, file) === null);
 const errors = await validateWorkspace(
