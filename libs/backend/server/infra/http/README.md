@@ -31,8 +31,9 @@ It owns: a **global error handler** that turns thrown errors into consistent HTT
 Zod-backed **public request-body wrapper** that hands parsed models to authorized route handlers and
 returns bounded, form-mappable field issues; a sanitized malformed-JSON response that never logs the
 raw caller body; a sanitized payload-too-large response that honours each route's byte ceiling
-without logging retained caller bytes; a `/healthz` **liveness/readiness probe** that checks the database is reachable (a
-probe is the small endpoint the cluster polls to know the process is alive); a **per-IP rate limiter** (caps how many
+without logging retained caller bytes; a `/healthz` **readiness and service-status endpoint** that
+returns the shared public capability map while keeping API readiness tied to the database (a probe
+is the small endpoint the cluster polls to know the process is alive); a **per-IP rate limiter** (caps how many
 requests one client address may make); **transport-security** middleware (security response headers);
 a **trusted-proxy** parser (works out the real client IP when the server runs behind a load balancer,
 so the rate limiter and logs see the true address); and a **public OpenAPI route** that serves the
@@ -47,7 +48,8 @@ one probe — regardless of which route handles the request.
 - `error-handler` — the global Express error-to-response handler.
 - `___WithValidatedPublicBody` — validates an authorized public JSON body and forwards a parsed
   model, or emits bounded `{ location, path, message }` issues.
-- `healthz` (+ `healthz.types`) — the `/healthz` database liveness/readiness probe.
+- `healthz` (+ `healthz.types`) — projects an application-owned public service report onto
+  `/healthz`, returning 503 only when its explicit core-readiness flag is false.
 - `rate-limit` (+ `rate-limit.types`) — the per-IP fixed-window rate limiter.
 - `transport-security.middleware` — security response headers.
 - `trusted-proxies` (+ `trusted-proxies.types`) — real-client-IP resolution behind proxies.

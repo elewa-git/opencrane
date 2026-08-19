@@ -26,7 +26,7 @@ import type { PersonalRunAdmissionPort } from "@opencrane/backend/agents/executi
 import { _CreateSkillCatalogueRouter } from "@opencrane/backend/server/agents/skills";
 import { _CreateSteeringIngestRouter } from "@opencrane/backend/agents/execution/protocol";
 import { _ResolveRequestPrincipal } from "@opencrane/backend/server/infra/auth";
-import { _CheckDbHealth, _OpenapiRouter, _RateLimit } from "@opencrane/backend/server/infra/http";
+import { _OpenapiRouter, _RateLimit } from "@opencrane/backend/server/infra/http";
 
 import type { InternalRuntimeConfig } from "./config.types";
 import { _log } from "./log";
@@ -35,7 +35,6 @@ import { _CreatePersonaAgentRevisionSelectionFactory } from "./persona-approval-
 import type { RouteMount, SharesRouteOptions } from "./routes.types";
 import { _CreateUserOnboardingComposition } from "./user-onboarding-composition";
 import { _ProcessShutdownSignal } from "./process-shutdown";
-import { ___CreateDbHealthProbe } from "../infra/db/db";
 import { _CreateConversationAssetAuthority } from "../infra/artifacts/artifact-upload.factory";
 
 /**
@@ -99,13 +98,10 @@ export function _RegisterRoutes(app: Express, prisma: PrismaClient, coreApi: k8s
 		{ method: "use", path: "/api/v1/ai-budget", handler: aiBudgetRouter(prisma) },
 		{ method: "use", path: "/api/v1/token-usage", handler: tokenUsageRouter(prisma) },
 	];
-	// Every mount above needs the browser session that `___AuthMiddleware` demands. `/healthz` below is
-	// the one route here that does not: that middleware lets `/healthz` and `/api/v1/auth` through so a
-	// probe works before login, so keep anything that reads product data out of this list.
-	// @see ___AuthMiddleware in libs/backend/server/infra/auth/src/auth-middleware.ts.
+	// The public health route is mounted before authentication by public-app.ts. Everything here
+	// either requires the browser session or publishes the static API description.
 	const infrastructureRoutes: readonly RouteMount[] = [
 		{ method: "use", path: "/api/v1/openapi.json", handler: _OpenapiRouter(spec) },
-		{ method: "get", path: "/healthz", handler: _CheckDbHealth(___CreateDbHealthProbe(prisma)) },
 	];
 	_MountRouteAreas(app, [
 		identityAndAccessRoutes,

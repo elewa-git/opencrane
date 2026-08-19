@@ -1,36 +1,55 @@
 import type { RequestHandler } from "express";
+import { PublicHealthServiceNames, PublicHealthServiceStatuses, PublicHealthStatuses, type PublicHealthReport } from "@opencrane/contracts";
 
-import type { DbHealthProbeUnitOfWork } from "./healthz.types";
+import type { PublicHealthReportReader, PublicHealthRouteLogger } from "./healthz.types";
 
-export type { DbHealthProbeRepository, DbHealthProbeUnitOfWork } from "./healthz.types";
+export type { DbHealthProbeRepository, DbHealthProbeUnitOfWork, PublicHealthReportReader, PublicHealthRouteLogger } from "./healthz.types";
 
 /**
- * Build the `/healthz` handler, which answers by actually querying the database.
+ * Build the public `/healthz` handler from the application-owned service report.
  *
- * A cheap 200 would let a pod look healthy while its database was gone, so the handler awaits a real
- * query: 200 `{ status: "ok", db: true }` when it succeeds, 503 `{ status: "degraded", db: false }`
- * when it rejects. The error itself is swallowed on purpose — `/healthz` is unauthenticated, so it
- * must not describe the failure; look in the logs instead. The same handler serves the fleet
- * registry database and each silo's per-ClusterTenant database. Note that rate-limit.ts exempts
- * `/healthz`, so probes are never throttled.
+ * The completed report includes only fixed capability names and categorical states. The aggregate
+ * sets `ready: false` when its database check fails, while optional service failures remain visible
+ * as `degraded` with HTTP 200. If the reader itself rejects, the handler returns a fixed 503 report
+ * and keeps the private error out of this unauthenticated response.
  *
- * Called by: apps/opencrane/src/app/routes.ts, mounted as `GET /healthz`.
+ * Called by: apps/opencrane/src/app/public-app.ts, mounted as `GET /healthz` before authentication.
  *
- * @param db - Database check supplied by the composing process, which owns the Prisma client.
+ * @param reader - Application-owned aggregate health reader.
+ * @param logger - Structured private logger for an unexpected aggregate-reader failure.
  * @returns Express handler for `/healthz`. It never throws and never calls `next` with an error.
  */
-export function _CheckDbHealth(db: DbHealthProbeUnitOfWork): RequestHandler
+export function _CheckHealth(reader: PublicHealthReportReader, logger: PublicHealthRouteLogger): RequestHandler
 {
-  return async function _checkDbHealth(_req, res)
-  {
-    try
-    {
-      await db.check();
-      res.status(200).json({ status: "ok", db: true });
-    }
-    catch
-    {
-      res.status(503).json({ status: "degraded", db: false });
-    }
-  };
+	return async function _checkHealth(_req, res)
+	{
+		try
+		{
+			const report = await reader.read();
+			res.status(report.ready ? 200 : 503).json(report);
+		}
+		catch (err)
+		{
+			logger.error({ err }, "public health report failed");
+			res.status(503).json(_UnavailableReport());
+		}
+	};
+}
+
+/** Builds the public-safe 503 report used when the application health reader itself fails. */
+function _UnavailableReport(): PublicHealthReport
+{
+	return {
+		status: PublicHealthStatuses.Degraded,
+		ready: false,
+		services: {
+			[PublicHealthServiceNames.Api]: PublicHealthServiceStatuses.Available,
+			[PublicHealthServiceNames.Database]: PublicHealthServiceStatuses.Unavailable,
+			[PublicHealthServiceNames.Models]: PublicHealthServiceStatuses.Unavailable,
+			[PublicHealthServiceNames.Memory]: PublicHealthServiceStatuses.Unavailable,
+			[PublicHealthServiceNames.Files]: PublicHealthServiceStatuses.Unavailable,
+			[PublicHealthServiceNames.Channels]: PublicHealthServiceStatuses.Unavailable,
+			[PublicHealthServiceNames.Integrations]: PublicHealthServiceStatuses.Unavailable,
+		},
+	};
 }

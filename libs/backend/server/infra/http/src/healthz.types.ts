@@ -1,34 +1,54 @@
+import type { PublicHealthReport } from "@opencrane/contracts";
+
 /**
  * A database check that runs inside a transaction the caller has already opened.
  *
- * This library never imports the generated Prisma package, so the composing application supplies the
- * check. This interface and {@link DbHealthProbeUnitOfWork} below have identical members on purpose:
- * this one is implemented by the class that queries INSIDE a transaction, while the other OPENS the
- * transaction and calls it. Both are live in apps/opencrane/src/infra/db/db.ts, so pick by which
- * side you are writing.
+ * The HTTP library does not import Prisma, so the application supplies this repository port. The
+ * Prisma boundary policy names its adapter so readiness uses request-bearing typed I/O rather than
+ * treating a previously opened database connection as proof of current availability.
  *
- * Called by: apps/opencrane/src/infra/db/db.ts, where `_PrismaDbHealthProbeRepository` implements it
- * and runs a single indexed `findFirst`.
+ * Called by: apps/opencrane/src/infra/db/db.ts, where `_PrismaDbHealthProbeRepository` implements it.
  */
 export interface DbHealthProbeRepository
 {
-  /** Performs typed database I/O or rejects when the database is unavailable. */
-  check: () => Promise<void>;
+	/** Performs typed database I/O or rejects when the database is unavailable. */
+	check: () => Promise<void>;
 }
 
 /**
- * Opens one transaction per health check and runs the check inside it.
+ * Opens a fresh transaction and runs typed database I/O for each database health check.
  *
- * This is the port `_CheckDbHealth` takes: the `/healthz` handler needs a single call it can await,
- * and the composing app decides how the transaction is opened. Same members as
- * {@link DbHealthProbeRepository} above — the difference is who owns the transaction.
- *
- * Called by: healthz.ts (`_CheckDbHealth`); implemented and composed in
- * apps/opencrane/src/infra/db/db.ts (`_PrismaDbHealthProbeUnitOfWork`, returned by
- * `___CreateDbHealthProbe`).
+ * Called by: `___CreatePublicHealthReportReader`, which uses this result as the API readiness gate.
  */
 export interface DbHealthProbeUnitOfWork
 {
-  /** Performs typed database I/O or rejects when the database is unavailable. */
-  check: () => Promise<void>;
+	/** Performs typed database I/O or rejects when the database is unavailable. */
+	check: () => Promise<void>;
+}
+
+/**
+ * Reads the public-safe status of every user-visible OpenCrane service.
+ *
+ * The application owns probing and caching because it owns the external clients. The HTTP library
+ * only needs the completed report and must never learn provider URLs, credentials, or topology.
+ *
+ * Called by: healthz.ts (`_CheckHealth`); implemented by the OpenCrane application health
+ * composition under `apps/opencrane/src/infra/health`.
+ */
+export interface PublicHealthReportReader
+{
+	/** Returns a complete fixed service map; an unexpected rejection becomes the handler's fixed 503 fallback. */
+	read: () => Promise<PublicHealthReport>;
+}
+
+/**
+ * Structured logger for an unexpected aggregate health-reader failure.
+ *
+ * Called by: healthz.ts. Dependency-specific failures are logged by the application reader; this
+ * port records only a reader defect that forces the fixed 503 fallback response.
+ */
+export interface PublicHealthRouteLogger
+{
+	/** Records the private error without adding it to the unauthenticated HTTP response. */
+	readonly error: (fields: { readonly err: unknown }, message: string) => void;
 }

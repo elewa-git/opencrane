@@ -122,7 +122,10 @@ transport, and external-service seams belong under
 [`libs/backend/server/infra`](../../libs/backend/server/infra/README.md). Libraries never import this app.
 
 The public and workload-facing APIs share a process but not an exposure boundary. Public ingress
-routes `/api` and the database-aware `/healthz` endpoint only to `:8080`. The `:8081` Service is restricted by Kubernetes NetworkPolicy, and endpoints
+routes `/api` and the public-safe `/healthz` service report only to `:8080`. That report names the
+API, database, models, memory, files, channels, and optional integrations without exposing internal hosts or
+failure details. Database loss returns 503; another service can report degradation while the API
+remains ready to serve unaffected data. The `:8081` Service is restricted by Kubernetes NetworkPolicy, and endpoints
 that grant workload authority additionally review the caller's projected Kubernetes identity and
 bind it to durable assignment evidence.
 
@@ -181,6 +184,7 @@ are:
 | `OIDC_*` | Organisation sign-in, callbacks, and server-side session protection | required |
 | `OPENCRANE_STANDALONE_FIRST_USER_*` | Optional one-time standalone Owner admission: a configured verified email may claim the host-selected silo under its stable OIDC subject | disabled |
 | `OPENCRANE_INITIAL_MODEL_*` | Optional first provider key; the server persists its custody reference and requires LiteLLM registration before readiness | disabled |
+| `LITELLM_ENDPOINT`, `LITELLM_MASTER_KEY`, `MEMORY_GATEWAY_URL`, `ARTIFACT_SERVICE_URL`, `CHANNEL_PROXY_URL` | Existing private service targets used by the bounded public health report without returning their values | required when the capability is enabled |
 | `OBOT_GATEWAY_URL`, `OBOT_SERVICE_TOKEN_PATH`, `OBOT_TIMEOUT_SECONDS` | Release-local credential custody and server-side external tool execution | disabled together |
 | `POD_NAMESPACE` | Trusted namespace of this server and controller identity | `default` |
 | `AGENT_RUNTIME_PERSONAL_NAMESPACE` | Personal runtime Job boundary | required |

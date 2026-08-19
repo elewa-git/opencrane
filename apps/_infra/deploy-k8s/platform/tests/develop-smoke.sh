@@ -384,9 +384,14 @@ _assert_ingress_health()
   local response=""
   until response="$(curl --connect-timeout 2 --max-time 5 --fail --silent --show-error --insecure \
     --resolve "${CONTROL_PLANE_HOST}:8443:127.0.0.1" "$health_url" 2>/dev/null)" \
-    && [[ "$response" == '{"status":"ok","db":true}' ]]; do
+    && jq -e '
+      .status == "ok"
+      and .ready == true
+      and (.services | keys == ["api", "channels", "database", "files", "integrations", "memory", "models"])
+      and ([.services[]] | all(. == "available" or . == "disabled"))
+    ' >/dev/null <<<"$response"; do
     if [[ $(date +%s) -ge "$deadline" ]]; then
-      echo "[develop-smoke] Timed out waiting for database-backed health at $health_url; last response: $response" >&2
+      echo "[develop-smoke] Timed out waiting for the complete public health report at $health_url; last response: $response" >&2
       return 1
     fi
     sleep 2

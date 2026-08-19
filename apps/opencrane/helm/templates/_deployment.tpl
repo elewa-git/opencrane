@@ -108,6 +108,8 @@ spec:
               value: {{ printf "%s/api/internal/conversation-replay" (trimSuffix "/" $openCraneInternalUrl) | quote }}
             - name: CHANNEL_INVOCATION_CONTEXT_TTL_SECONDS
               value: {{ .Values.channelProxy.invocationContextTtlSeconds | quote }}
+            - name: CHANNEL_PROXY_URL
+              value: {{ printf "http://%s-channel-proxy.%s.svc.cluster.local:%v" (include "opencrane.fullname" .) .Release.Namespace .Values.channelProxy.service.port | quote }}
             {{- end }}
             - name: AGENT_CONTROLLER_CLAIM_LEASE_SECONDS
               value: {{ .Values.agentController.claimLeaseSeconds | quote }}
@@ -319,8 +321,8 @@ spec:
               readOnly: true
             {{- end }}
           livenessProbe:
-            # A running server can repair a transient database connection; the
-            # database-backed health route remains the readiness/public gate.
+            # A running server can repair a transient dependency connection; the
+            # aggregated health route keeps database readiness as the public gate.
             # Liveness therefore proves only that the control-plane listener is
             # alive, rather than restarting it for an upstream dependency.
             tcpSocket:

@@ -141,7 +141,7 @@ _post_deploy_verify() {
     done
   fi
 
-  # /healthz is public by design and fails when the server cannot reach its durable database.
+  # Check /healthz before login; it returns non-2xx when the public API is not ready.
   if command -v curl >/dev/null 2>&1; then
     local health_url
     for host in $(_control_plane_hosts); do

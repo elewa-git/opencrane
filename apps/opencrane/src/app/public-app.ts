@@ -10,7 +10,7 @@ import { __CreateStandaloneFirstUserAdmissionAuditAppender } from "@opencrane/ba
 import { ___AuthRouter, ___CreateOidcAuthService, type StandaloneFirstUserAdmissionAuditPort, type StandaloneFirstUserAdmissionConfig } from "@opencrane/backend/server/iam/identity";
 import { ___RequestContext } from "@opencrane/backend/observability";
 import { ___AuthMiddleware } from "@opencrane/backend/server/infra/auth";
-import { _ErrorHandler, _RateLimit, _TransportSecurity } from "@opencrane/backend/server/infra/http";
+import { _CheckHealth, _ErrorHandler, _RateLimit, _TransportSecurity, type PublicHealthReportReader } from "@opencrane/backend/server/infra/http";
 
 import { _log } from "./log";
 import { _ReadOrganizationMembershipConfig } from "./config";
@@ -49,9 +49,10 @@ export function _CreatePublicAuthentication(prisma: PrismaClient, customApi: k8s
  * @param obotCustody - Composed Obot custody authority; fail-closed when the transport is disabled.
  * @param authentication - One browser-session composition shared with the internal resolver.
  * @param artifactScannerEnabled - Whether newly quarantined conversation files can be consumed.
+ * @param health - Cached public service report reader with no topology or error details.
  * @returns The public Express listener before the lifecycle starts it.
  */
-export function _CreatePublicApp(prisma: PrismaClient, coreApi: k8s.CoreV1Api, runAdmission: ManagedRunAdmissionPort, personalRunAdmission: PersonalRunAdmissionPort, runCancellation: RunCancellationRepository, serverNamespace: string, obotCustody: ObotCustodyPort, authentication: PublicAuthenticationComposition, artifactScannerEnabled: boolean): Express
+export function _CreatePublicApp(prisma: PrismaClient, coreApi: k8s.CoreV1Api, runAdmission: ManagedRunAdmissionPort, personalRunAdmission: PersonalRunAdmissionPort, runCancellation: RunCancellationRepository, serverNamespace: string, obotCustody: ObotCustodyPort, authentication: PublicAuthenticationComposition, artifactScannerEnabled: boolean, health: PublicHealthReportReader): Express
 {
 	const app = express();
 
@@ -65,14 +66,18 @@ export function _CreatePublicApp(prisma: PrismaClient, coreApi: k8s.CoreV1Api, r
 	app.use(___RequestContext());
 	app.use(_CreateHttpRequestLogger(_log));
 
-	// 3. Mount session establishment before the product-authentication boundary.
+	// 3. Publish the fixed service map before session work so health remains available during an
+	//    identity-provider outage without exposing any authenticated product state.
+	app.get("/healthz", _CheckHealth(health, _log));
+
+	// 4. Mount session establishment before the product-authentication boundary.
 	app.use(...authentication.sessionMiddleware);
 	app.use("/api/v1/auth", ___AuthRouter(authentication.authService, prisma));
 	app.use(___AuthMiddleware());
 	const organizationMembers = _CreateOrganizationMembersComposition(prisma, _ReadOrganizationMembershipConfig());
 	if (organizationMembers.productAccess !== null) app.use(organizationMembers.productAccess);
 
-	// 4. Mount authenticated product routes, then terminate failures through one structured handler.
+	// 5. Mount authenticated product routes, then terminate failures through one structured handler.
 	_RegisterRoutes(app, prisma, coreApi, runAdmission, personalRunAdmission, runCancellation, serverNamespace, obotCustody, artifactScannerEnabled, organizationMembers.router);
 	app.use(_ErrorHandler(_log));
 	return app;

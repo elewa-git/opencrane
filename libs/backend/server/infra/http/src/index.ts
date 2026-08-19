@@ -1,6 +1,6 @@
 /**
  * `@opencrane/backend/server/infra/http` — Express and HTTP plumbing owned by the OpenCrane server:
- * the global error handler, `/healthz` database probe, per-IP rate limiter, transport security,
+ * the global error handler, `/healthz` public service report, per-IP rate limiter, transport security,
  * trusted-proxy handling, and public OpenAPI route. Helpers accept their required contracts so
  * this library does not import an application-owned Prisma package or API specification.
  */

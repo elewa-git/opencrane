@@ -65,6 +65,9 @@ runtime from silently interpreting a frozen snapshot with different assembly rul
   to map authorized request failures back to frontend fields without trusting arbitrary responses.
 - `___ModelRoutingDefaultWriteSchema` — the model-adjacent Zod schema shared by the public routing
   defaults boundary; it enforces known fields while deliberately preserving auto-config extensions.
+- `PublicHealthReport` and its fixed service/status enums — the public-safe `/healthz` response
+  shared by the server and future status consumers. It reports only
+  recognisable capability names and categorical availability, never internal topology or errors.
 - `AG_UI_PROJECTION_VERSION`, `AG_UI_A2UI_ENVELOPE_VERSION`, `AgUiProjectionSourceEvent`,
   `AgUiProjectionEvent`, and `AgUiSseRecord` — the stable AG-UI wire vocabulary shared by server and
   browser. Projection and SSE encoding policy live in the separate backend
