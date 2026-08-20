@@ -31,6 +31,7 @@
     },
     "test": {
       "dependsOn": [
+        { "projects": ["opencrane"], "target": "db:generate" },
         "^build"
       ],
       "inputs": [
@@ -41,6 +42,7 @@
     },
     "lint": {
       "dependsOn": [
+        { "projects": ["opencrane"], "target": "db:generate" },
         "^build"
       ],
       "inputs": [
