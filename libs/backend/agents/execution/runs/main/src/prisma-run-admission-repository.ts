@@ -59,6 +59,8 @@ class _PreparedAdmissionDenied<TDenial> extends Error
  * client they are given and must not open a transaction of their own, which would commit separately and
  * break the all-or-nothing guarantee above. The single read outside the transaction is the duplicate
  * recovery in the catch block, which uses the root client because the transaction is already gone.
+ * The advisory-lock query casts its result because Prisma cannot deserialize PostgreSQL's void return
+ * type from a raw query.
  *
  * Called by: `__AssembleRunInputSnapshot` (execution/inputs/main/src/session-assembly.ts), wired in by
  * `prisma-session-assembly-authorities.ts`.
@@ -117,7 +119,7 @@ export class PrismaRunAdmissionRepository implements RunAdmissionRepository
 			return await this.prisma.$transaction(async function _admit(transaction: Prisma.TransactionClient): Promise<RunAdmissionResult<TDenial>>
 			{
 				// 1. Serialize the user-visible key before loading inputs so a duplicate never recompiles at a later instant.
-				await transaction.$queryRaw(Prisma.sql`SELECT pg_advisory_xact_lock(hashtextextended(${__AdmissionLockKey(command.siloId, command.requestIdempotencyKey)}, 0))`);
+				await transaction.$queryRaw(Prisma.sql`SELECT pg_advisory_xact_lock(hashtextextended(${__AdmissionLockKey(command.siloId, command.requestIdempotencyKey)}, 0))::text AS "lock"`);
 				const existing = await transaction.agentRun.findUnique({ where: { siloId_requestIdempotencyKey: { siloId: command.siloId, requestIdempotencyKey: command.requestIdempotencyKey } } });
 				if (existing !== null)
 				{

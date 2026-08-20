@@ -1,4 +1,5 @@
 import { type Meta, moduleMetadata, type StoryObj } from "@storybook/angular";
+import { Router } from "@angular/router";
 import { expect, userEvent, waitFor, within } from "storybook/test";
 
 import { ConversationLifecycles, ConversationModes, MessageRoles, MessageSources, MessageStates } from "@opencrane/models/conversations";
@@ -7,8 +8,9 @@ import { CONVERSATION_ASSETS_GATEWAY } from "@opencrane/state/conversation/asset
 import { ELICITATION_GATEWAY } from "@opencrane/state/conversation/elicitation";
 import { ConversationEventStreamStatuses, type ConversationEventStream, type StreamConversationEventsCommand } from "@opencrane/state/conversation/stream";
 import { CONVERSATION_WORKSPACE_EVENT_STREAM, CONVERSATION_WORKSPACE_GATEWAY, ConversationOnboardingHistoryStatuses, ConversationPersonalAgentStatuses, ConversationRunStates, type ConversationCreationDirectory, type ConversationOnboardingHistoryProjection, type ConversationRun, type ConversationWorkspaceDetail, type ConversationWorkspaceGateway } from "@opencrane/state/conversation/workspace";
+import { PLATFORM_BRIDGE } from "@opencrane/platform";
 
-import { ConversationWorkspacePageComponent } from "../components/conversation-workspace-page/conversation-workspace-page.component";
+import { ConversationWorkspaceRouteComponent } from "../conversation-workspace-route/conversation-workspace-route.component";
 
 /** Privacy-safe directory used by the full workspace stories. */
 const _DIRECTORY: ConversationCreationDirectory = { participants: [{ participantRef: "self", isSelf: true, label: "You" }, { participantRef: "participant-1", isSelf: false, label: "Participant 1" }], personalAgentStatus: ConversationPersonalAgentStatuses.Ready, personalAgent: { personalAgentRef: "agent-1", displayName: "Nova" } };
@@ -33,6 +35,12 @@ function _DirectDetail(): ConversationWorkspaceDetail
 {
 	const detail = _Detail("Can we review the handoff together?");
 	return { ...detail, mode: ConversationModes.Direct, agentServiceId: null, participantRefs: ["self", "participant-1"], messages: [{ ...detail.messages[0]!, role: MessageRoles.User, source: MessageSources.UserInput, runId: null, participantRef: "participant-1" }] };
+}
+
+/** Build one second direct conversation used to hold a stale route while the participant selects it. */
+function _SecondDirectDetail(): ConversationWorkspaceDetail
+{
+	return { ..._DirectDetail(), id: "conversation-2", updatedAt: "2026-08-12T19:31:00.000Z" };
 }
 
 /** Build one completed onboarding projection with no conversation mode or run. */
@@ -69,7 +77,7 @@ class _StoryGateway implements ConversationWorkspaceGateway
 	/** Return the configured separate onboarding history projection. */
 	public async onboardingHistory() { return this._onboardingHistory; }
 	/** Return or reject the configured authorized snapshot. */
-	public async open(): Promise<ConversationWorkspaceDetail> { if (this._detail instanceof Error) throw this._detail; return this._detail; }
+	public async open(_conversationId: string): Promise<ConversationWorkspaceDetail> { if (this._detail instanceof Error) throw this._detail; return this._detail; }
 	/** Return the configured snapshot for unused create interactions. */
 	public async create(): Promise<ConversationWorkspaceDetail> { return _Detail(); }
 	/** Accept no story message command. */
@@ -86,6 +94,23 @@ class _StoryGateway implements ConversationWorkspaceGateway
 	public async cancel(): Promise<ConversationRun> { return { ...this._run, state: ConversationRunStates.Cancelled }; }
 	/** Return a fresh story retry. */
 	public async retry(): Promise<ConversationRun> { return { ...this._run, attempt: this._run.attempt + 1, state: ConversationRunStates.Accepted }; }
+}
+
+/** Participant API that exposes two rows so the routed story can exercise selection handoff. */
+class _StoryNavigationGateway extends _StoryGateway
+{
+	/** Stores two authorized snapshots selected by their canonical route coordinate. */
+	private readonly _details = [_Detail(), _SecondDirectDetail()];
+
+	/** Return both rows in stable order. */
+	public override async list() { return this._details; }
+	/** Return the snapshot named by the requested route coordinate. */
+	public override async open(conversationId: string): Promise<ConversationWorkspaceDetail>
+	{
+		const detail = this._details.find(candidate => candidate.id === conversationId);
+		if (detail === undefined) throw new Error("Conversation not found.");
+		return detail;
+	}
 }
 
 /** Test-only live stream that emits one exact browser phase and state. */
@@ -115,18 +140,22 @@ class _StoryStream implements ConversationEventStream
 const _ASSETS = { list: async function _List() { return []; }, read: async function _Read() { throw new Error("No asset selected."); }, reserve: async function _Reserve() { throw new Error("Story command unavailable."); }, upload: async function _Upload() { throw new Error("Story command unavailable."); }, remove: async function _Remove() { throw new Error("Story command unavailable."); } };
 /** Test-only elicitation API; these shell states contain no open question. */
 const _ELICITATION = { read: async function _Read() { throw new Error("No question selected."); }, respond: async function _Respond() { throw new Error("Story command unavailable."); }, listActivity: async function _List() { return []; } };
+/** Test-only router that keeps the old input in place while the page finishes a rail selection. */
+const _ROUTER = { navigate: async function _Navigate() { return true; } };
+/** Supplies the test runtime API; routed workspace stories never open native capabilities. */
+const _PLATFORM = { isDesktop: false, bindFolder: async function _BindFolder() { throw new Error("Story command unavailable."); }, openAuthenticationWindow: function _OpenAuthenticationWindow() { return null; } };
 
 /** Supply explicit test-only ports around the real production shell. */
 function _Providers(gateway: ConversationWorkspaceGateway, stream: ConversationEventStream)
 {
-	return moduleMetadata({ providers: [{ provide: CONVERSATION_WORKSPACE_GATEWAY, useValue: gateway }, { provide: CONVERSATION_WORKSPACE_EVENT_STREAM, useValue: stream }, { provide: CONVERSATION_ASSETS_GATEWAY, useValue: _ASSETS }, { provide: ELICITATION_GATEWAY, useValue: _ELICITATION }] });
+	return moduleMetadata({ providers: [{ provide: CONVERSATION_WORKSPACE_GATEWAY, useValue: gateway }, { provide: CONVERSATION_WORKSPACE_EVENT_STREAM, useValue: stream }, { provide: CONVERSATION_ASSETS_GATEWAY, useValue: _ASSETS }, { provide: ELICITATION_GATEWAY, useValue: _ELICITATION }, { provide: Router, useValue: _ROUTER }, { provide: PLATFORM_BRIDGE, useValue: _PLATFORM }] });
 }
 
 /** Shared full-shell catalogue metadata. */
-const meta: Meta<ConversationWorkspacePageComponent> = { title: "Conversations/Workspace shell", component: ConversationWorkspacePageComponent, tags: ["autodocs"], parameters: { layout: "fullscreen" } };
+const meta: Meta<ConversationWorkspaceRouteComponent> = { title: "Conversations/Workspace shell", component: ConversationWorkspaceRouteComponent, tags: ["autodocs"], parameters: { layout: "fullscreen" } };
 
 export default meta;
-type Story = StoryObj<ConversationWorkspacePageComponent>;
+type Story = StoryObj<ConversationWorkspaceRouteComponent>;
 
 /** Complete desktop shell using the real page and component-scoped stores. */
 export const Desktop: Story =
@@ -144,6 +173,29 @@ export const Desktop: Story =
 		}, { timeout: 5000 });
 		attachInput.focus();
 		await expect(attachInput).toHaveFocus();
+	}
+};
+
+/** A stale route coordinate cannot reopen the old row while a new rail selection completes. */
+export const NavigationSelection: Story =
+{
+	args: { conversationId: "conversation-1" },
+	decorators: [_Providers(new _StoryNavigationGateway(_Detail()), new _StoryStream(ConversationEventStreamStatuses.Live, __CreateAgUiStreamState()))],
+	play: async function play({ canvasElement })
+	{
+		const rows = await waitFor(function _FindSessionRows()
+		{
+			const candidates = canvasElement.querySelectorAll<HTMLButtonElement>("wo-conversation-session-rail-row button");
+			expect(candidates).toHaveLength(2);
+			return candidates;
+		});
+		await userEvent.click(rows[1]!);
+		await waitFor(function _WaitForSelection()
+		{
+			const selectedRows = canvasElement.querySelectorAll('[aria-current="page"]');
+			expect(selectedRows).toHaveLength(1);
+			expect(selectedRows[0]).toBe(rows[1]);
+		});
 	}
 };
 

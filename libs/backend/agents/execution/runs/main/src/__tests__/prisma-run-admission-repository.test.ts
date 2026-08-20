@@ -57,6 +57,7 @@ describe("PrismaRunAdmissionRepository", function _describeAdmissionRepository()
 
 		await expect(repository.admit(_command(), async function _build() { return { outcome: "ready", value: { authority: _authority(), snapshot: _snapshot() } } as const; })).resolves.toEqual({ outcome: "accepted", snapshot: _snapshot() });
 		expect(transaction.$queryRaw).toHaveBeenCalledTimes(2);
+		expect((transaction.$queryRaw.mock.calls[0]?.[0] as { sql: string }).sql).toContain('::text AS "lock"');
 		// PostgreSQL rejects a NUL byte in text with SQLSTATE 22021 and fails the whole statement, so
 		// an advisory-lock key carrying one made every admission return 503 against a real database.
 		for (const [statement] of transaction.$queryRaw.mock.calls)

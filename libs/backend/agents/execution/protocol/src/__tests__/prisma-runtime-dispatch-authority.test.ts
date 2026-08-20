@@ -299,6 +299,7 @@ describe("PrismaRuntimeDispatchAuthority", function _describeDispatchAuthority()
 		await context.authority.__NextCommand(_identity, _open, 0);
 		const queries = context.queryRaw.mock.calls.map(function _sql(call) { return ((call[0] as { strings?: readonly string[] }).strings ?? []).join(" "); });
 		expect(queries[0]).toContain("pg_advisory_xact_lock");
+		expect(queries[0]).toContain('::text AS "lock"');
 		expect(queries[1]).toContain('FROM "agent_runs"');
 	});
 

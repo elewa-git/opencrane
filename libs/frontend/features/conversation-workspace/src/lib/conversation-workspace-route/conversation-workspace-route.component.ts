@@ -8,7 +8,7 @@ import { ConversationWorkspacePageComponent } from "../components/conversation-w
 import { _ConversationRouteCommands, _ConversationThreadRouteNavigation } from "./conversation-workspace-route.state";
 
 /** Feature-local coordinator for canonical chat URLs and breadcrumb child navigation. */
-@Component({ selector: "wo-conversation-workspace-route", standalone: true, imports: [ConversationWorkspacePageComponent], templateUrl: "./conversation-workspace-route.component.html", changeDetection: ChangeDetectionStrategy.OnPush })
+@Component({ selector: "wo-conversation-workspace-route", standalone: true, imports: [ConversationWorkspacePageComponent], templateUrl: "./conversation-workspace-route.component.html", styleUrl: "./conversation-workspace-route.component.scss", changeDetection: ChangeDetectionStrategy.OnPush })
 export class ConversationWorkspaceRouteComponent
 {
 	/** Optional canonical conversation route coordinate. */
