@@ -241,3 +241,36 @@ Full run reports belong in the corresponding pull request or issue.
   OIDC session, complete the Zitadel return, and let `/api/v1/organization/members/invitations/accept`
   create the active membership. That authenticated request is also the remaining live proof for the
   personal-Agent repair trigger; do not infer it from health or database readiness alone.
+
+## 2026-08-19 · dev · testv4 invitation onboarding and model-bootstrap recovery · 698920585b4cf0b2f82601e9be33ed9b53a5e18e · COMPLETE
+
+- findings: codebase: PR #667 sends successful and already-consumed invitation handoffs to
+  `/onboarding`, where the persisted onboarding position decides whether work remains. The deployed
+  SPA remains pinned to index digest `sha256:5ef3937156ed5f3daa0c159961db0fb1a70ea8dac1f0e32bf7398e1d915238da`.
+  The server now qualifies referenced model definitions against their exact stored LiteLLM
+  deployment ids instead of registering a replacement during restart. Workflow run `32231232713`
+  published `opencrane-server:sha-698920585b4cf0b2f82601e9be33ed9b53a5e18e` with index digest
+  `sha256:e1dcd865e9abfde3be30e53e433bad829c063d8f34ee5e294d15d3cc25caaad9` and Linux AMD64 manifest
+  `sha256:4ea888275bfb943791950dd482966092ced5b20e6518813d11de4a737a430ac4`.
+- findings: infra: the app-owned deployer applied OpenCrane revision 17 and PostgreSQL revision 22.
+  Every deployment is Ready, every pod is Running or Succeeded, the server pod has zero restarts,
+  public `/healthz` returns `{"status":"ok","db":true}`, and the login endpoint redirects to the
+  configured Zitadel client and testv4 callback. The startup log records the provider credential and
+  initial model as seeded through LiteLLM without the former immutable-model error.
+- findings: data: invitation `76ce3a21-11f2-4e26-b818-f386c5f40066` is accepted by subject
+  `386847210815408150`, and the corresponding `jente@italanta.net` membership is active. That subject's
+  onboarding is already completed, its personal Agent `20365d69-146b-489b-a279-8258d255525c` is active
+  on published revision 1, and three open agent-session conversations exist. The referenced
+  `openai/gpt-5.5` definition retained LiteLLM id `03f6b209-d3be-4798-8eb1-570296c3415e` with two
+  immutable AgentRevision references.
+- friction: OpenCrane revision 16 exposed a pre-existing restart path that tried to replace the
+  LiteLLM id on a referenced model definition and correctly failed the database immutability trigger.
+  Rollback was unsafe because the preceding server image contained the same path, so recovery used a
+  reviewed fix-forward without weakening the trigger or fabricating database state. The movable
+  test-only `0.9.1` tag also had to remain absent while release CI validated the exact commit, then was
+  restored after publication. Preflight repeated the known single-tenant warning that this cluster's
+  CNI does not enforce NetworkPolicy.
+- lesson: invitation acceptance should hand control to onboarding position rather than assume chats,
+  while a completed onboarding must still resolve to chats. Restart reconciliation must qualify the
+  immutable external deployment recorded by a published AgentRevision, never create a replacement
+  and try to rewrite that record.
