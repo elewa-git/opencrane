@@ -2,7 +2,7 @@ import { type Meta, moduleMetadata, type StoryObj } from "@storybook/angular";
 import { expect, userEvent, waitFor, within } from "storybook/test";
 
 import { ConversationLifecycles, ConversationModes, MessageRoles, MessageSources, MessageStates } from "@opencrane/models/conversations";
-import { __CreateAgUiStreamState, type AgUiStreamState } from "@opencrane/state/conversation/ag-ui";
+import { AgUiMessageStatuses, __CreateAgUiStreamState, type AgUiStreamState } from "@opencrane/state/conversation/ag-ui";
 import { CONVERSATION_ASSETS_GATEWAY } from "@opencrane/state/conversation/assets";
 import { ELICITATION_GATEWAY } from "@opencrane/state/conversation/elicitation";
 import { ConversationEventStreamStatuses, type ConversationEventStream, type StreamConversationEventsCommand } from "@opencrane/state/conversation/stream";
@@ -187,8 +187,16 @@ export const LongContent: Story = {
 		});
 	}
 };
-/** Direct conversations ignore stale run coordinates and expose Files without Agent Activity. */
-export const DirectConversation: Story = { tags: ["visual-test"], decorators: [_Providers(new _StoryGateway(_DirectDetail(), ConversationRunStates.Failed), new _StoryStream(ConversationEventStreamStatuses.Live, { ...__CreateAgUiStreamState(), runId: "stale-run" }))] };
+/** Long content at the observed intermediate width keeps the full shell inside the viewport. */
+export const IntermediateLongContent: Story = { ...LongContent };
+/** Long content at the observed wide width keeps the full shell inside the viewport. */
+export const WideLongContent: Story = { ...LongContent };
+/** Direct conversations display a participant's live message without adopting stale Agent-run state. */
+export const DirectConversation: Story = {
+	tags: ["visual-test"],
+	decorators: [_Providers(new _StoryGateway(_DirectDetail(), ConversationRunStates.Failed), new _StoryStream(ConversationEventStreamStatuses.Live, { ...__CreateAgUiStreamState(), runId: "stale-run", messages: { "message-live": { id: "message-live", role: "user", text: "I can see this without reloading.", status: AgUiMessageStatuses.Completed } } }))],
+	play: async function play({ canvasElement }) { await expect(await within(canvasElement).findByText("I can see this without reloading.")).toBeVisible(); }
+};
 /** Direct-session Files pane closes and restores focus without exposing Agent Activity. */
 export const FilesClosed: Story = {
 	tags: ["visual-test"],
