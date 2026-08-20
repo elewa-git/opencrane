@@ -53,6 +53,43 @@ platform/k8s-deploy.sh
   unchanged checksum is a no-op; a changed one triggers exactly one rollout. This replaced an
   unconditional `rollout restart` that double-started the heaviest workloads on every deploy.
 
+## Deploying only the workloads
+
+A normal deploy always reconciles the PostgreSQL release and runs its privileges Job, even when the
+run changes nothing but a container image. That is the slowest stage and the one that can fail
+closed, so a run that only moves workload images can skip it with `--workloads-only`:
+
+```bash
+apps/_infra/deploy-k8s/deploy.sh --cluster-tenant testv4 --base-domain dev.opencrane.ai \
+  --acme-email you@example.com --first-user-email you@example.com \
+  --oidc-issuer-url https://issuer.example/ --oidc-client-id 123 \
+  --release-version 0.9.2 --from-release-version 0.9.2 \
+  --workloads-only --opencrane-ui-digest sha256:NEW_SPA_DIGEST
+```
+
+The flag is gated on live evidence, never on trust. All five must hold, or the run refuses and tells
+you to deploy in full:
+
+| Check | Why |
+| --- | --- |
+| The silo already has a PostgreSQL cluster | There is nothing to compare a fresh install against |
+| The resolved transition is `current` | A migration must never be skipped |
+| The live PostgreSQL release is `deployed` | Skipping over a failed release would report success |
+| Its chart version is already the one this run installs | A chart bump carries template and privilege changes |
+| The convergence classifier reports `current` or `completed` | The schema must already be in place |
+
+A classifier that cannot be read counts as a refusal — silence is not evidence.
+
+::: warning Never use it to make a failing deploy pass
+This path is an optimisation, not a repair. If a deploy is failing in the database stage, that stage
+is telling you something true; skipping it leaves privileges unreconciled while the deploy reports
+success. Fix the cause and deploy in full.
+:::
+
+The umbrella upgrade still renders every subchart, because the silo is one Helm release and Helm has
+no per-subchart upgrade. That render is fast and idempotent, and only workloads whose image or config
+actually changed will roll — so a SPA-only deploy restarts the SPA and nothing else.
+
 ## Bootstrap prerequisites
 
 Before any silo installs, the cluster needs a default StorageClass, a `NetworkPolicy`-enforcing

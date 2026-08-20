@@ -27,7 +27,7 @@
 #                            [--platform-operator-groups CSV]
 #                            [--first-user-email EMAIL]
 #                            [--initial-model-provider PROVIDER]
-#                            [--preflight] [--multi-ct] [--verify] [--verify-insecure]
+#                            [--preflight] [--workloads-only] [--multi-ct] [--verify] [--verify-insecure]
 #                            --postgres-credentials-secret NAME
 #                            [--postgres-owner OWNER]
 #                            --obot-postgres-credentials-secret NAME [--obot-postgres-owner OWNER]
@@ -101,6 +101,7 @@ source "$SCRIPT_DIR/postgres-connection.sh"
 source "$SCRIPT_DIR/registry-pull-secret.sh"
 source "$SCRIPT_DIR/current-chart-sources.sh"
 source "$SCRIPT_DIR/control-plane-image-policy.sh"
+source "$SCRIPT_DIR/workloads-only-policy.sh"
 source "$SCRIPT_DIR/qualified-release-image-policy.sh"
 source "$SCRIPT_DIR/cluster-tenant-crd-policy.sh"
 source "$SCRIPT_DIR/dns-authority.sh"
@@ -227,6 +228,8 @@ ALLOW_UNBACKED_DATABASE_MIGRATION="0"
 # a base domain whose NS delegation does not resolve. Also via
 # OPENCRANE_PREFLIGHT=1. It is advisory unless run — the install itself does not auto-run it.
 PREFLIGHT="${OPENCRANE_PREFLIGHT:-0}"
+# Skips the database stage for a run that only moves workload images. Gated on live evidence.
+WORKLOADS_ONLY="${OPENCRANE_WORKLOADS_ONLY:-0}"
 
 # --multi-ct is the EXPLICIT multi-ClusterTenant predicate: this install hosts many orgs
 # (ClusterTenants) or many isolated instances in one cluster, so cross-tenant isolation is
@@ -277,6 +280,7 @@ while [[ $# -gt 0 ]]; do
     --first-user-email)             FIRST_USER_EMAIL="$2"; shift 2 ;;
     --initial-model-provider)       INITIAL_MODEL_PROVIDER="$2"; shift 2 ;;
     --preflight)        PREFLIGHT="1"; shift ;;
+    --workloads-only)   WORKLOADS_ONLY="1"; shift ;;
     --multi-ct)         MULTI_CT="1"; shift ;;
     --verify)           VERIFY="1"; shift ;;
     --verify-insecure)  VERIFY_INSECURE="1"; shift ;;
@@ -682,7 +686,27 @@ DATABASE_FENCED_RELEASE_REVISION=""
 if [[ "$MEMBERSHIP_MODE" == "standalone" ]]; then
   ensure_invitation_signing_secret "$NAMESPACE" "$INVITATION_SIGNING_SECRET"
 fi
-run_database_release_transition
+# A run that only moves workload images can skip the whole database stage — the PostgreSQL upgrade
+# and its privileges Job — but only when the live data plane already matches this release. Every fact
+# below is read-only, and the policy refuses unless all of them agree, because a wrongly skipped
+# stage leaves privileges unreconciled in a way the deploy would report as success.
+if [[ "$WORKLOADS_ONLY" == "1" ]]; then
+  workloads_only_status="$(helm status "$POSTGRES_RELEASE" -n "$NAMESPACE" -o json 2>/dev/null | jq -r '.info.status // empty')"
+  workloads_only_live_chart="$(helm get metadata "$POSTGRES_RELEASE" -n "$NAMESPACE" -o json 2>/dev/null | jq -r '.version // empty')"
+  workloads_only_intended_chart="$(awk '$1 == "version:" { print $2; exit }' "$POSTGRES_CHART_DIR/Chart.yaml")"
+  # A classifier that cannot read the database returns nothing, which the policy treats as a refusal.
+  workloads_only_convergence="$(classify_live_database_convergence 2>/dev/null || true)"
+  assert_workloads_only_preconditions \
+    "$POSTGRES_CLUSTER_EXISTS" \
+    "$DATABASE_TRANSITION_KIND" \
+    "${workloads_only_status:-unknown}" \
+    "$workloads_only_live_chart" \
+    "$workloads_only_intended_chart" \
+    "$workloads_only_convergence" || exit 1
+  log "Skipping the database stage: the live database already matches release $RELEASE_VERSION and PostgreSQL chart $workloads_only_live_chart is unchanged. Only workloads change."
+else
+  run_database_release_transition
+fi
 POSTGRES_APP_SECRET="${POSTGRES_RELEASE}-opencrane-app"
 OBOT_POSTGRES_APP_SECRET="${POSTGRES_RELEASE}-obot-app"
 LITELLM_POSTGRES_APP_SECRET="${POSTGRES_RELEASE}-litellm-app"

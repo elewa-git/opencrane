@@ -139,6 +139,17 @@ flowchart TD
   Every run logs the image it resolved for each component. Read those lines before assuming an
   upgrade shipped new code — a silo that deploys cleanly at a new chart version while still running
   the old server build looks healthy and behaves like the old release.
+- **A run that only changes workload images can skip the database stage.** `--workloads-only` skips
+  the PostgreSQL upgrade and its privileges Job — the slowest part of a deploy, and the part that can
+  fail closed. It is gated on live evidence, not on trust: the silo must already have a PostgreSQL
+  cluster, the resolved transition must be `current` (no schema work), the live PostgreSQL release
+  must be `deployed`, its chart version must already be the one this run installs, and the
+  convergence classifier must report `current` or `completed` for the live database. Any other
+  answer — including a classifier that cannot be read — refuses the run and names the full deploy as
+  the way forward. Use it for a frontend or server image bump; never to make a failing deploy pass.
+  The umbrella upgrade still renders every subchart, because the silo is one Helm release and Helm
+  has no per-subchart upgrade; that render is fast and idempotent, and only workloads whose image or
+  config actually changed roll.
 - Cluster-wide prerequisites (ingress-nginx, cert-manager, CloudNativePG) are installed once per
   cluster by `bootstrap-prerequisites.sh` and are never part of a silo release.
 - The PostgreSQL transition is resolved and schema-validated *before* the cluster is touched;
