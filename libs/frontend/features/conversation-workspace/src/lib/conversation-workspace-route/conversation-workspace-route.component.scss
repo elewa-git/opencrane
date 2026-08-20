@@ -1,0 +1,6 @@
+:host {
+	overflow: hidden;
+	display: block;
+	// Follow the visible viewport when mobile browser controls expand or collapse.
+	block-size: 100dvh;
+}

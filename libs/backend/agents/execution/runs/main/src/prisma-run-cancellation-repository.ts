@@ -19,7 +19,11 @@ interface CleanupCandidateRow
 	readonly agentServiceId: string;
 }
 
-/** Prisma-backed authority for fencing a run before its physical Job is removed. */
+/**
+ * Fences a run in Postgres before its physical Job is removed.
+ * Its advisory-lock queries cast their results because Prisma cannot deserialize PostgreSQL's void
+ * return type from a raw query.
+ */
 export class PrismaRunCancellationRepository implements RunCancellationRepository
 {
 	/** Canonical OpenCrane product-authority database client. */
@@ -46,7 +50,7 @@ export class PrismaRunCancellationRepository implements RunCancellationRepositor
 			const discovered = await transaction.agentRun.findUnique({ where: { id: command.runId } });
 			if (discovered === null) return { status: "not_found" };
 			await transaction.$queryRaw(Prisma.sql`SELECT "id" FROM "agent_services" WHERE "id" = ${discovered.agentServiceId} FOR UPDATE`);
-			await transaction.$queryRaw(Prisma.sql`SELECT pg_advisory_xact_lock(hashtextextended(${discovered.id}, 0))`);
+			await transaction.$queryRaw(Prisma.sql`SELECT pg_advisory_xact_lock(hashtextextended(${discovered.id}, 0))::text AS "lock"`);
 			await transaction.$queryRaw(Prisma.sql`SELECT "id" FROM "agent_runs" WHERE "id" = ${discovered.id} FOR UPDATE`);
 			await transaction.$queryRaw(Prisma.sql`SELECT "run_id" FROM "workload_assignments" WHERE "run_id" = ${discovered.id} AND "attempt" = ${command.expectedAttempt} FOR UPDATE`);
 			await transaction.$queryRaw(Prisma.sql`SELECT "id" FROM "workload_bootstraps" WHERE "run_id" = ${discovered.id} AND "attempt" = ${command.expectedAttempt} FOR UPDATE`);
@@ -118,7 +122,7 @@ export class PrismaRunCancellationRepository implements RunCancellationRepositor
 			const candidate = candidates[0];
 			if (!candidate) return { status: "none" };
 			await transaction.$queryRaw(Prisma.sql`SELECT "id" FROM "agent_services" WHERE "id" = ${candidate.agentServiceId} FOR UPDATE`);
-			await transaction.$queryRaw(Prisma.sql`SELECT pg_advisory_xact_lock(hashtextextended(${candidate.runId}, 0))`);
+			await transaction.$queryRaw(Prisma.sql`SELECT pg_advisory_xact_lock(hashtextextended(${candidate.runId}, 0))::text AS "lock"`);
 			await transaction.$queryRaw(Prisma.sql`SELECT "id" FROM "agent_runs" WHERE "id" = ${candidate.runId} FOR UPDATE`);
 			await transaction.$queryRaw(Prisma.sql`SELECT "id" FROM "run_outbox_events" WHERE "id" = ${candidate.eventId} FOR UPDATE`);
 			const event = await transaction.outboxEvent.findUnique({ where: { id: candidate.eventId } });
@@ -146,7 +150,7 @@ export class PrismaRunCancellationRepository implements RunCancellationRepositor
 			const discoveredRun = await transaction.agentRun.findUnique({ where: { id: discoveredEvent.runId } });
 			if (!discoveredRun) return { status: "conflict", reason: "authority_conflict" };
 			await transaction.$queryRaw(Prisma.sql`SELECT "id" FROM "agent_services" WHERE "id" = ${discoveredRun.agentServiceId} FOR UPDATE`);
-			await transaction.$queryRaw(Prisma.sql`SELECT pg_advisory_xact_lock(hashtextextended(${discoveredRun.id}, 0))`);
+			await transaction.$queryRaw(Prisma.sql`SELECT pg_advisory_xact_lock(hashtextextended(${discoveredRun.id}, 0))::text AS "lock"`);
 			await transaction.$queryRaw(Prisma.sql`SELECT "id" FROM "agent_runs" WHERE "id" = ${discoveredRun.id} FOR UPDATE`);
 			await transaction.$queryRaw(Prisma.sql`SELECT "id" FROM "run_outbox_events" WHERE "id" = ${eventId} FOR UPDATE`);
 			const event = await transaction.outboxEvent.findUnique({ where: { id: eventId } });
@@ -184,7 +188,7 @@ export class PrismaRunCancellationRepository implements RunCancellationRepositor
 		{
 			const event = await transaction.outboxEvent.findUnique({ where: { id: eventId } });
 			if (!event || event.runId !== claim.workload.runId || event.attempt !== claim.workload.attempt) return "conflict";
-			await transaction.$queryRaw(Prisma.sql`SELECT pg_advisory_xact_lock(hashtextextended(${event.runId}, 0))`);
+			await transaction.$queryRaw(Prisma.sql`SELECT pg_advisory_xact_lock(hashtextextended(${event.runId}, 0))::text AS "lock"`);
 			await transaction.$queryRaw(Prisma.sql`SELECT "id" FROM "run_outbox_events" WHERE "id" = ${eventId} FOR UPDATE`);
 			const locked = await transaction.outboxEvent.findUnique({ where: { id: eventId } });
 			const now = (await transaction.$queryRaw<Array<{ now: Date }>>(Prisma.sql`SELECT clock_timestamp()::timestamp(3) AS "now"`))[0]?.now;
@@ -205,7 +209,7 @@ export class PrismaRunCancellationRepository implements RunCancellationRepositor
 			const candidate = rows[0];
 			if (!candidate) return { status: "none" };
 			await transaction.$queryRaw(Prisma.sql`SELECT "id" FROM "agent_services" WHERE "id" = ${candidate.agentServiceId} FOR UPDATE`);
-			await transaction.$queryRaw(Prisma.sql`SELECT pg_advisory_xact_lock(hashtextextended(${candidate.runId}, 0))`);
+			await transaction.$queryRaw(Prisma.sql`SELECT pg_advisory_xact_lock(hashtextextended(${candidate.runId}, 0))::text AS "lock"`);
 			await transaction.$queryRaw(Prisma.sql`SELECT "id" FROM "agent_runs" WHERE "id" = ${candidate.runId} FOR UPDATE`);
 			const run = await transaction.agentRun.findUnique({ where: { id: candidate.runId } });
 			const assignment = run === null ? null : await transaction.workloadAssignment.findUnique({ where: { runId_attempt: { runId: run.id, attempt: run.attempt } } });

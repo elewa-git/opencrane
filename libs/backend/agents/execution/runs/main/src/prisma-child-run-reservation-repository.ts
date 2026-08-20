@@ -10,7 +10,11 @@ import { _InitialRunOutboxData, _RunInputSnapshot, _RunInputSnapshotData } from 
 import { __DigestRunInputSnapshot } from "./run-input-snapshot-digest";
 import type { ChildRunReservationBuild, ChildRunReservationCommand, ChildRunReservationRepository, ChildRunReservationResult } from "./child-run-reservation.types";
 
-/** Atomically persists one child admission while its direct parent is locked. */
+/**
+ * Atomically persists one child admission while its direct parent is locked.
+ * Its advisory-lock query casts the result because Prisma cannot deserialize PostgreSQL's void return
+ * type from a raw query.
+ */
 export class PrismaChildRunReservationRepository implements ChildRunReservationRepository
 {
 	/** Canonical product-authority database client. */
@@ -34,7 +38,7 @@ export class PrismaChildRunReservationRepository implements ChildRunReservationR
 			return await this.prisma.$transaction(async function _reserve(transaction): Promise<ChildRunReservationResult>
 			{
 				// 1. Serialize one inherited-silo key before observing or creating a child.
-				await transaction.$queryRaw(Prisma.sql`SELECT pg_advisory_xact_lock(hashtextextended(${__AdmissionLockKey(command.prepared.siloId, command.requestIdempotencyKey)}, 0))`);
+				await transaction.$queryRaw(Prisma.sql`SELECT pg_advisory_xact_lock(hashtextextended(${__AdmissionLockKey(command.prepared.siloId, command.requestIdempotencyKey)}, 0))::text AS "lock"`);
 				const existing = await transaction.agentRun.findUnique({ where: { siloId_requestIdempotencyKey: { siloId: command.prepared.siloId, requestIdempotencyKey: command.requestIdempotencyKey } } });
 				if (existing !== null)
 				{

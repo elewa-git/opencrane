@@ -127,6 +127,7 @@ describe("PrismaRunDispatchRepository", function _DescribeDispatchRepository()
 		});
 		expect(_SqlText(queryRaw.mock.calls[1]?.[0])).toContain("agent_services");
 		expect(_SqlText(queryRaw.mock.calls[2]?.[0])).toContain("pg_advisory_xact_lock");
+		expect(_SqlText(queryRaw.mock.calls[2]?.[0])).toContain('::text AS "lock"');
 		expect(_SqlText(queryRaw.mock.calls[3]?.[0])).toContain("agent_runs");
 		expect(_SqlText(queryRaw.mock.calls[4]?.[0])).toContain("run_outbox_events");
 		expect(transaction.outboxEvent.updateMany).toHaveBeenCalledWith({ where: expect.objectContaining({ id: "event-1", deliveryCount: 0 }), data: { claimedAt: new Date("2026-07-20T00:00:00.000Z"), deliveryCount: 1 } });
@@ -386,6 +387,7 @@ describe("PrismaRunDispatchRepository", function _DescribeDispatchRepository()
 		expect(selectionSql).not.toContain('bootstrap."expires_at" > clock_timestamp()');
 		expect(_SqlText(queryRaw.mock.calls[1]?.[0])).toContain("agent_services");
 		expect(_SqlText(queryRaw.mock.calls[2]?.[0])).toContain("pg_advisory_xact_lock");
+		expect(_SqlText(queryRaw.mock.calls[2]?.[0])).toContain('::text AS "lock"');
 		expect(_SqlText(queryRaw.mock.calls[3]?.[0])).toContain("agent_runs");
 		expect(_SqlText(queryRaw.mock.calls[4]?.[0])).toContain("workload_assignments");
 		expect(_SqlText(queryRaw.mock.calls[5]?.[0])).toContain("workload_bootstraps");

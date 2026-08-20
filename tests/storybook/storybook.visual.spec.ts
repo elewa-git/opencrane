@@ -58,6 +58,8 @@ test("intermediate conversation workspace keeps its rail and context inside the 
 		await page.setViewportSize(viewport);
 		await _OpenStableStory(page, "conversations-workspace-shell--long-content");
 
+		const routeHost = page.locator("wo-conversation-workspace-route");
+		const pageHost = page.locator("wo-conversation-workspace-page");
 		const workspace = page.locator(".conversation-workspace");
 		const rail = page.locator("wo-conversation-list");
 		const contextPanel = page.locator("wo-conversation-workspace-context-panel");
@@ -65,6 +67,8 @@ test("intermediate conversation workspace keeps its rail and context inside the 
 		const transcript = page.locator(".conversation-workspace__transcript");
 		const composer = page.locator(".conversation-workspace__composer");
 		const railFooter = page.locator(".conversation-list__identity");
+		await expect(routeHost).toHaveCount(1);
+		await expect(pageHost).toHaveCount(1);
 		await expect(workspace).toHaveCount(1);
 		await expect(rail).toHaveCount(1);
 		await expect(contextPanel).toHaveCount(1);
@@ -73,14 +77,18 @@ test("intermediate conversation workspace keeps its rail and context inside the 
 		await expect(composer).toHaveCount(1);
 		await expect(railFooter).toHaveCount(1);
 
+		const routeHostBox = await routeHost.boundingBox();
+		const pageHostBox = await pageHost.boundingBox();
 		const workspaceBox = await workspace.boundingBox();
 		const railBox = await rail.boundingBox();
 		const contextPanelBox = await contextPanel.boundingBox();
 		const headerBox = await header.boundingBox();
 		const composerBox = await composer.boundingBox();
 		const railFooterBox = await railFooter.boundingBox();
-		if (workspaceBox === null || railBox === null || contextPanelBox === null || headerBox === null || composerBox === null || railFooterBox === null) throw new Error("The workspace layout is not visible.");
+		if (routeHostBox === null || pageHostBox === null || workspaceBox === null || railBox === null || contextPanelBox === null || headerBox === null || composerBox === null || railFooterBox === null) throw new Error("The routed workspace layout is not visible.");
 
+		expect(Math.round(routeHostBox.height)).toBe(viewport.height);
+		expect(Math.round(pageHostBox.height)).toBe(viewport.height);
 		expect(Math.round(workspaceBox.height)).toBe(viewport.height);
 		expect(Math.round(railBox.height)).toBe(viewport.height);
 		expect(contextPanelBox.x).toBeGreaterThanOrEqual(railBox.width);

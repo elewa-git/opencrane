@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, ElementRef, ViewChild, afterRenderEffect, effect, input, output, signal } from "@angular/core";
+import { ChangeDetectionStrategy, Component, ElementRef, ViewChild, afterRenderEffect, effect, input, output, signal, untracked } from "@angular/core";
 import { ConversationAssetsStore } from "@opencrane/state/conversation/assets";
 import { ConversationElicitationStore, type ConversationActivityTarget } from "@opencrane/state/conversation/elicitation";
 import { ConversationOnboardingHistoryStore, ConversationRunStore, ConversationWorkspaceRouteStates, ConversationWorkspaceStore } from "@opencrane/state/conversation/workspace";
@@ -152,12 +152,19 @@ export class ConversationWorkspacePageComponent extends ConversationWorkspacePre
 	/** Reconcile the request after the app's verified sign-in window closes. */
 	public async recoverAfterStepUp(): Promise<void> { await this.elicitationStore.recoverAfterStepUp(); }
 
-	/** Adopt only a route coordinate that differs from the selected authorized snapshot. */
+	/**
+	 * Adopts a route coordinate after the workspace becomes ready.
+	 *
+	 * The route input and readiness stay reactive, but the current selection is read without tracking it.
+	 * Otherwise a rail selection would retrigger this effect while the old route coordinate is still in
+	 * place and reopen the conversation the participant just left.
+	 */
 	private _OpenRouteSelection(): void
 	{
 		const conversationId = this.conversationId();
 		if (this.store.routeState() !== this.routeStates.Ready) return;
-		if (conversationId !== null && this.store.selected()?.id !== conversationId) void this.open(conversationId);
+		const selectedConversationId = untracked(this.store.selected)?.id;
+		if (conversationId !== null && selectedConversationId !== conversationId) void this.open(conversationId);
 	}
 
 	/** Focus the original ask after recovery adopted its current server projection. */

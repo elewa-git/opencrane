@@ -32,6 +32,8 @@ interface SnapshotExecutionIdentity
  * Claims use database time plus a monotonically increasing delivery generation, so a controller
  * whose lease expired cannot publish an assignment after a newer replica reclaimed the event. Every
  * commit locks service, run, and outbox authority before creating the immutable PendingPod binding.
+ * The advisory-lock queries cast their results because Prisma cannot deserialize PostgreSQL's void
+ * return type from a raw query.
  */
 export class PrismaRunDispatchRepository implements RunDispatchRepository
 {
@@ -79,7 +81,7 @@ export class PrismaRunDispatchRepository implements RunDispatchRepository
 			await transaction.$queryRaw(Prisma.sql`SELECT "id" FROM "agent_services" WHERE "id" = ${candidate.agentServiceId} FOR UPDATE`);
 			// ConversationRunEvent appends take this advisory lock before the run row. Preserve the
 			// global service -> run-advisory -> run -> outbox order before terminal event creation.
-			await transaction.$queryRaw(Prisma.sql`SELECT pg_advisory_xact_lock(hashtextextended(${candidate.runId}, 0))`);
+			await transaction.$queryRaw(Prisma.sql`SELECT pg_advisory_xact_lock(hashtextextended(${candidate.runId}, 0))::text AS "lock"`);
 			await transaction.$queryRaw(Prisma.sql`SELECT "id" FROM "agent_runs" WHERE "id" = ${candidate.runId} FOR UPDATE`);
 			await transaction.$queryRaw(Prisma.sql`SELECT "id" FROM "run_outbox_events" WHERE "id" = ${candidate.eventId} FOR UPDATE`);
 
@@ -334,7 +336,7 @@ export class PrismaRunDispatchRepository implements RunDispatchRepository
 
 				// 2. Lock service, run, assignment, bootstrap, then outbox in the shared authority order.
 				await transaction.$queryRaw(Prisma.sql`SELECT "id" FROM "agent_services" WHERE "id" = ${candidate.agentServiceId} FOR UPDATE`);
-				await transaction.$queryRaw(Prisma.sql`SELECT pg_advisory_xact_lock(hashtextextended(${candidate.runId}, 0))`);
+				await transaction.$queryRaw(Prisma.sql`SELECT pg_advisory_xact_lock(hashtextextended(${candidate.runId}, 0))::text AS "lock"`);
 				await transaction.$queryRaw(Prisma.sql`SELECT "id" FROM "agent_runs" WHERE "id" = ${candidate.runId} FOR UPDATE`);
 				await transaction.$queryRaw(Prisma.sql`SELECT "run_id" FROM "workload_assignments" WHERE "run_id" = ${candidate.runId} AND "attempt" = ${candidate.attempt} FOR UPDATE`);
 				await transaction.$queryRaw(Prisma.sql`SELECT "id" FROM "workload_bootstraps" WHERE "id" = ${candidate.bootstrapReference} FOR UPDATE`);

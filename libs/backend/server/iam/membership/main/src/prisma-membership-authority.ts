@@ -114,9 +114,11 @@ function _ownsTransaction(prisma: PrismaClient | Prisma.TransactionClient): pris
 /** Advances the membership high-watermark and audit inside the caller's already selected transaction. */
 async function _acceptRevision(transaction: Prisma.TransactionClient, acceptance: FleetMembershipAcceptance): Promise<FleetMembershipAcceptanceResult>
 {
-	// 1. Serialize even the first acceptance for an issuer/silo pair, where no row exists to lock.
-	const lockKey = `${acceptance.issuerId}\u0000${acceptance.siloId}`;
-	await transaction.$queryRaw(Prisma.sql`SELECT pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))`);
+	// 1. Serialize even the first acceptance for an issuer/silo pair, where no row exists to lock. The
+	// length prefix keeps pairs distinct without a NUL byte, which PostgreSQL text rejects. Cast the
+	// lock result because Prisma cannot deserialize PostgreSQL's void return type from a raw query.
+	const lockKey = `${acceptance.issuerId.length}:${acceptance.issuerId}${acceptance.siloId}`;
+	await transaction.$queryRaw(Prisma.sql`SELECT pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))::text AS "lock"`);
 	const current = await transaction.highestAcceptedFleetMembership.findUnique({ where: { issuerId_siloId: { issuerId: acceptance.issuerId, siloId: acceptance.siloId } }, include: { verified: true } });
 	if (current !== null && (current.revision > acceptance.revision || (current.revision === acceptance.revision && current.verified.payloadDigest !== acceptance.payloadDigest)))
 	{
