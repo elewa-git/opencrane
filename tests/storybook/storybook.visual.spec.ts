@@ -206,7 +206,8 @@ async function _OpenStableStory(page: Page, storyId: string): Promise<void>
 	// 2. Suppress residual transitions because the design system includes intentional paper motion.
 	await page.addStyleTag({ content: STABLE_SCREENSHOT_CSS });
 
-	// 3. Wait for local font files and the Angular render to settle before comparing pixels.
+	// 3. Wait for local fonts and Angular to settle. Workspace stories also wait for their route to leave loading,
+	// because CI captured their loading screen before the selected conversation rendered.
 	await page.evaluate(async () => document.fonts.ready);
 	await expect(page.locator("#storybook-root")).not.toBeEmpty({ timeout: 15_000 });
 	if (storyId.startsWith("conversations-workspace-shell--")) await expect(page.locator(".conversation-workspace:not([data-route-state=\"loading\"])")).toHaveCount(1, { timeout: 15_000 });
