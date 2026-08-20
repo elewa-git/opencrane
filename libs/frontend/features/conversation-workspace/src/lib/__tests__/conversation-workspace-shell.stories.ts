@@ -195,7 +195,7 @@ export const WideLongContent: Story = { ...LongContent };
 export const DirectConversation: Story = {
 	tags: ["visual-test"],
 	decorators: [_Providers(new _StoryGateway(_DirectDetail(), ConversationRunStates.Failed), new _StoryStream(ConversationEventStreamStatuses.Live, { ...__CreateAgUiStreamState(), runId: "stale-run", messages: { "message-live": { id: "message-live", role: "user", text: "I can see this without reloading.", status: AgUiMessageStatuses.Completed } } }))],
-	play: async function play({ canvasElement }) { await expect(within(canvasElement).getByText("I can see this without reloading.")).toBeVisible(); }
+	play: async function play({ canvasElement }) { await expect(await within(canvasElement).findByText("I can see this without reloading.")).toBeVisible(); }
 };
 /** Direct-session Files pane closes and restores focus without exposing Agent Activity. */
 export const FilesClosed: Story = {
