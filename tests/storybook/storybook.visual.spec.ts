@@ -53,25 +53,54 @@ test("tagged component states match their committed screenshots", async ({ conte
 
 test("intermediate conversation workspace keeps its rail and context inside the viewport", async ({ page }) =>
 {
-	await page.setViewportSize({ width: 1000, height: 900 });
-	await _OpenStableStory(page, "conversations-workspace-shell--long-content");
+	for (const viewport of [{ width: 1073, height: 900 }, { width: 1768, height: 900 }])
+	{
+		await page.setViewportSize(viewport);
+		await _OpenStableStory(page, "conversations-workspace-shell--long-content");
 
-	const workspace = page.locator(".conversation-workspace");
-	const rail = page.locator("wo-conversation-list");
-	const contextPanel = page.locator("wo-conversation-workspace-context-panel");
-	await expect(workspace).toHaveCount(1);
-	await expect(rail).toHaveCount(1);
-	await expect(contextPanel).toHaveCount(1);
+		const workspace = page.locator(".conversation-workspace");
+		const rail = page.locator("wo-conversation-list");
+		const contextPanel = page.locator("wo-conversation-workspace-context-panel");
+		const header = page.locator(".conversation-workspace__header");
+		const transcript = page.locator(".conversation-workspace__transcript");
+		const composer = page.locator(".conversation-workspace__composer");
+		const railFooter = page.locator(".conversation-list__identity");
+		await expect(workspace).toHaveCount(1);
+		await expect(rail).toHaveCount(1);
+		await expect(contextPanel).toHaveCount(1);
+		await expect(header).toHaveCount(1);
+		await expect(transcript).toHaveCount(1);
+		await expect(composer).toHaveCount(1);
+		await expect(railFooter).toHaveCount(1);
 
-	const workspaceBox = await workspace.boundingBox();
-	const railBox = await rail.boundingBox();
-	const contextPanelBox = await contextPanel.boundingBox();
-	if (workspaceBox === null || railBox === null || contextPanelBox === null) throw new Error("The intermediate workspace layout is not visible.");
+		const workspaceBox = await workspace.boundingBox();
+		const railBox = await rail.boundingBox();
+		const contextPanelBox = await contextPanel.boundingBox();
+		const headerBox = await header.boundingBox();
+		const composerBox = await composer.boundingBox();
+		const railFooterBox = await railFooter.boundingBox();
+		if (workspaceBox === null || railBox === null || contextPanelBox === null || headerBox === null || composerBox === null || railFooterBox === null) throw new Error("The workspace layout is not visible.");
 
-	expect(Math.round(workspaceBox.height)).toBe(900);
-	expect(Math.round(railBox.height)).toBe(900);
-	expect(contextPanelBox.x).toBeGreaterThanOrEqual(railBox.width);
-	expect(Math.round(contextPanelBox.y + contextPanelBox.height)).toBeLessThanOrEqual(900);
+		expect(Math.round(workspaceBox.height)).toBe(viewport.height);
+		expect(Math.round(railBox.height)).toBe(viewport.height);
+		expect(contextPanelBox.x).toBeGreaterThanOrEqual(railBox.width);
+		expect(Math.round(contextPanelBox.y + contextPanelBox.height)).toBeLessThanOrEqual(viewport.height);
+		expect(Math.round(headerBox.y)).toBe(0);
+		expect(Math.round(composerBox.y + composerBox.height)).toBe(viewport.height);
+		expect(Math.round(railFooterBox.y + railFooterBox.height)).toBe(viewport.height);
+		expect(await transcript.evaluate(function _OwnsScroll(element) { return element.scrollHeight > element.clientHeight; })).toBe(true);
+		expect(await page.locator("html").evaluate(function _DoesNotScroll(element) { return element.scrollHeight <= element.clientHeight; })).toBe(true);
+	}
+});
+
+test("conversation workspace visual contracts cover the observed widths", async ({ page }) =>
+{
+	for (const contract of [{ storyId: "conversations-workspace-shell--intermediate-long-content", width: 1073 }, { storyId: "conversations-workspace-shell--wide-long-content", width: 1768 }])
+	{
+		await page.setViewportSize({ width: contract.width, height: 900 });
+		await _OpenStableStory(page, contract.storyId);
+		await expect(page.locator("#storybook-root")).toHaveScreenshot(`${contract.storyId}.png`, { maxDiffPixelRatio: STORY_MAX_DIFF_PIXEL_RATIO });
+	}
 });
 
 /**

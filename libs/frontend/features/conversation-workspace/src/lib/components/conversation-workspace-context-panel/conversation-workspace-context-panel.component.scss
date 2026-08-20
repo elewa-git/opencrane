@@ -2,4 +2,4 @@
 .context-panel { overflow: auto; display: grid; align-content: start; gap: var(--oc-space-4); min-height: 100%; padding: var(--oc-space-4); border-inline-start: 1px solid var(--oc-border-subtle); background: var(--oc-surface-subtle); }
 .context-panel__close { display: flex; justify-content: flex-end; margin-bottom: calc(-1 * var(--oc-space-6)); position: relative; z-index: 1; }
 @media (max-width: 70rem) { :host { overflow: hidden; block-size: 100%; } .context-panel { overflow: auto; grid-template-columns: repeat(2, minmax(0, 1fr)); block-size: 100%; min-block-size: 0; border-block-start: 1px solid var(--oc-border-subtle); border-inline-start: 0; } }
-@media (max-width: 52rem) { :host { overflow: visible; block-size: auto; } .context-panel { grid-template-columns: 1fr; block-size: auto; } }
+@media (max-width: 52rem) { :host { overflow: hidden; block-size: 100%; } .context-panel { grid-template-columns: 1fr; block-size: 100%; } }
