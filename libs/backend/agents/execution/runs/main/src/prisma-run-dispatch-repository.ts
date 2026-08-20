@@ -29,11 +29,9 @@ interface SnapshotExecutionIdentity
 /**
  * Prisma-backed authority for handing one accepted run to the Kubernetes controller.
  *
- * Claims use database time plus a monotonically increasing delivery generation, so a controller
- * whose lease expired cannot publish an assignment after a newer replica reclaimed the event. Every
- * commit locks service, run, and outbox authority before creating the immutable PendingPod binding.
- * The advisory-lock queries cast their results because Prisma cannot deserialize PostgreSQL's void
- * return type from a raw query.
+ * Claims use database time plus a monotonic delivery generation, so a controller with an expired lease
+ * cannot publish after a newer replica reclaims the event. Every commit locks service, run, and outbox
+ * before PendingPod creation; text casts replace void lock results so Prisma can deserialize the queries.
  */
 export class PrismaRunDispatchRepository implements RunDispatchRepository
 {

@@ -515,9 +515,8 @@ async function _loadContext(transaction: Prisma.TransactionClient, config: Runti
 	const discovered = await transaction.workloadAssignment.findUnique({ where: { namespace_podUid: { namespace: identity.namespace, podUid: identity.podUid } } });
 	if (discovered === null) return null;
 	// Cancellation and terminal reports also take the advisory lock before the row locks. Taking them
-	// in this order lets only one writer at a time work on a run, and no two writers can end up each
-	// holding one lock and waiting for the other. Cast the lock result because Prisma cannot deserialize
-	// PostgreSQL's void return type from a raw query.
+	// in this order lets only one writer work on a run without deadlocking. The text cast lets Prisma
+	// deserialize PostgreSQL's void lock result from this raw query.
 	await transaction.$queryRaw(Prisma.sql`SELECT pg_advisory_xact_lock(hashtextextended(${discovered.runId}, 0))::text AS "lock"`);
 	await transaction.$queryRaw(Prisma.sql`SELECT "id" FROM "agent_runs" WHERE "id" = ${discovered.runId} FOR UPDATE`);
 	await transaction.$queryRaw(Prisma.sql`SELECT "run_id" FROM "workload_assignments" WHERE "namespace" = ${identity.namespace} AND "pod_uid" = ${identity.podUid} FOR UPDATE`);
