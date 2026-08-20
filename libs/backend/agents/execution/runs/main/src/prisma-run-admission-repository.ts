@@ -5,6 +5,7 @@ import { ___CreateLogger, type Logger } from "@opencrane/backend/observability";
 import { ___CloneCanonicalJson } from "@opencrane/util";
 import type { JsonValue } from "@opencrane/util";
 
+import { __AdmissionLockKey } from "./admission-lock-key";
 import { RunAdmissionDenialReasons } from "./run-admission.types";
 import type { InitialRunAuthority, RunAdmissionBuild, RunAdmissionBuildResult, RunAdmissionClock, RunAdmissionCommand, RunAdmissionCommit, RunAdmissionPrepare, RunAdmissionRepository, RunAdmissionResult, RunAdmissionTransaction } from "./run-admission.types";
 
@@ -116,7 +117,7 @@ export class PrismaRunAdmissionRepository implements RunAdmissionRepository
 			return await this.prisma.$transaction(async function _admit(transaction: Prisma.TransactionClient): Promise<RunAdmissionResult<TDenial>>
 			{
 				// 1. Serialize the user-visible key before loading inputs so a duplicate never recompiles at a later instant.
-				await transaction.$queryRaw(Prisma.sql`SELECT pg_advisory_xact_lock(hashtextextended(${`${command.siloId}\u0000${command.requestIdempotencyKey}`}, 0))`);
+				await transaction.$queryRaw(Prisma.sql`SELECT pg_advisory_xact_lock(hashtextextended(${__AdmissionLockKey(command.siloId, command.requestIdempotencyKey)}, 0))`);
 				const existing = await transaction.agentRun.findUnique({ where: { siloId_requestIdempotencyKey: { siloId: command.siloId, requestIdempotencyKey: command.requestIdempotencyKey } } });
 				if (existing !== null)
 				{

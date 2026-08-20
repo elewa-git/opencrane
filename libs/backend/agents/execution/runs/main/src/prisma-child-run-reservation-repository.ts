@@ -3,6 +3,7 @@ import { AgentRunState, AgentRunTrigger, Prisma, type AgentRun as PrismaAgentRun
 import type { RunInputSnapshot } from "@opencrane/contracts";
 import { ___CreateLogger, type Logger } from "@opencrane/backend/observability";
 
+import { __AdmissionLockKey } from "./admission-lock-key";
 import { __PrepareChildRunAdmission } from "./child-run-admission";
 import type { ChildRunParentAuthority, PrepareChildRunAdmissionCommand, PreparedChildRunAdmission } from "./child-run-admission.types";
 import { _InitialRunOutboxData, _RunInputSnapshot, _RunInputSnapshotData } from "./prisma-run-admission-repository";
@@ -33,7 +34,7 @@ export class PrismaChildRunReservationRepository implements ChildRunReservationR
 			return await this.prisma.$transaction(async function _reserve(transaction): Promise<ChildRunReservationResult>
 			{
 				// 1. Serialize one inherited-silo key before observing or creating a child.
-				await transaction.$queryRaw(Prisma.sql`SELECT pg_advisory_xact_lock(hashtextextended(${`${command.prepared.siloId}\u0000${command.requestIdempotencyKey}`}, 0))`);
+				await transaction.$queryRaw(Prisma.sql`SELECT pg_advisory_xact_lock(hashtextextended(${__AdmissionLockKey(command.prepared.siloId, command.requestIdempotencyKey)}, 0))`);
 				const existing = await transaction.agentRun.findUnique({ where: { siloId_requestIdempotencyKey: { siloId: command.prepared.siloId, requestIdempotencyKey: command.requestIdempotencyKey } } });
 				if (existing !== null)
 				{
