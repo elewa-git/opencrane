@@ -53,13 +53,13 @@ export interface AgUiStreamState
 }
 
 /**
- * One SSE frame after decoding, ready to reduce.
+ * One structured socket projection frame after decoding, ready to reduce.
  *
  * `id` is the server's cursor. When it is present the record is durable and advances the resume
  * position; when it is absent the record is a temporary overlay that must not move the cursor —
  * that is how a reconnect avoids replaying overlay state.
  *
- * @see __DecodeAgUiSseRecord
+ * @see __DecodeAgUiSocketRecord
  * @see __ReduceAgUiStream
  */
 export interface AgUiStreamRecord

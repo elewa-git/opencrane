@@ -9,8 +9,7 @@ import type { ConversationProjectionSink } from "@opencrane/backend/conversation
  * nginx-style proxy forwards each frame instead of holding them until the response ends —
  * without that last header a live stream arrives in one lump at the end.
  *
- * Called by: `__CreateSelfConversationReplayRouter` (self-conversation-replay.router.ts) and
- * `__CreateConversationReplayRouter` (conversation-replay.router.ts).
+ * Called by: `__CreateConversationReplayRouter` (conversation-replay.router.ts).
  *
  * @param response - The response to stream into. Not touched until `open` is called.
  * @returns The sink the streaming loop writes through.

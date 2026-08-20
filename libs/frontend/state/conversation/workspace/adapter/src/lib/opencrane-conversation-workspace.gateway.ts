@@ -1,6 +1,7 @@
 import { Injectable, inject } from "@angular/core";
 
 import { ControlPlaneApiService } from "@opencrane/core";
+import { ConversationSocketMessageError, OpenCraneConversationEventStream } from "@opencrane/state/conversation/adapter";
 import { ConversationRunStates, ConversationWorkspaceGatewayError, ConversationWorkspaceGatewayErrorKinds, type ConversationCreationDirectory, type ConversationOnboardingHistoryProjection, type ConversationRun, type ConversationSummary, type ConversationWorkspaceDetail, type ConversationWorkspaceGateway, type CreateConversationCommand, type RetryConversationRunCommand, type SubmitConversationMessageCommand, type SubmitConversationSteeringCommand } from "@opencrane/state/conversation/workspace";
 
 import { _ConversationDetail, _ConversationOnboardingHistory, _ConversationRun, _ConversationSummary, _ConversationWorkspaceDirectory } from "./conversation-workspace.dto";
@@ -31,6 +32,8 @@ export class OpenCraneConversationWorkspaceGateway implements ConversationWorksp
 {
 	/** Generated client whose requests carry the browser session cookie; it supplies the caller's identity. */
 	private readonly _api = inject(ControlPlaneApiService);
+	/** Shared selected-conversation socket used for participant message commands. */
+	private readonly _socket = inject(OpenCraneConversationEventStream);
 
 	/** @inheritdoc */
 	public async directory(): Promise<ConversationCreationDirectory>
@@ -100,8 +103,14 @@ export class OpenCraneConversationWorkspaceGateway implements ConversationWorksp
 	public async send(command: SubmitConversationMessageCommand): Promise<void>
 	{
 		const blocks = command.blocks.map(function _Block(block) { return { ...block }; });
-		const result = await this._api.client.POST("/me/conversations/{conversationId}/messages", { params: { path: { conversationId: command.conversationId } }, body: { idempotencyKey: command.idempotencyKey, blocks } });
-		if (result.error !== undefined || result.data === undefined) throw _Failure(result.response?.status);
+		try { await this._socket.submit({ conversationId: command.conversationId, idempotencyKey: command.idempotencyKey, blocks }); }
+		catch (error)
+		{
+			if (!(error instanceof ConversationSocketMessageError)) throw _InvalidResponse();
+			if (error.accessChanged) throw new ConversationWorkspaceGatewayError(ConversationWorkspaceGatewayErrorKinds.AccessChanged, "This conversation is no longer available.");
+			if (error.closed) throw new ConversationWorkspaceGatewayError(ConversationWorkspaceGatewayErrorKinds.Conflict, "This conversation is closed and cannot accept messages.");
+			throw new ConversationWorkspaceGatewayError(ConversationWorkspaceGatewayErrorKinds.Recoverable, error.message);
+		}
 	}
 
 	/** @inheritdoc */

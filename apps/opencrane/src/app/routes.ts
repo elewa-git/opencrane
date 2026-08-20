@@ -14,12 +14,12 @@ import { resourceSharesRouter, sharesRouter } from "@opencrane/backend/server/ia
 import { thirdPartySourcesRouter } from "@opencrane/backend/server/knowledge/retrieval";
 import { spec } from "@opencrane/backend/server/api-spec";
 import { _CreateAgentServicesRouter, type ManagedRunAdmissionPort } from "@opencrane/backend/server/agents/agent-services";
-import { _CreateElicitationInterruptReader, _CreateSelfElicitationActivityRouter, _CreateSelfElicitationRouter } from "@opencrane/backend/agents/execution/elicitation";
+import { _CreateSelfElicitationActivityRouter, _CreateSelfElicitationRouter } from "@opencrane/backend/agents/execution/elicitation";
 import { _CreatePersonaOnboardingRouter } from "@opencrane/backend/agents/personal/personas";
 import { type UserOnboardingOwnerResolver } from "@opencrane/backend/server/agents/onboarding";
 import { _CreatePersonalArtifactCatalogueRouter } from "@opencrane/backend/server/agents/artifacts";
 import { _CreatePersonalConfigurationRouter } from "@opencrane/backend/agents/personal/configuration";
-import { _CreateSelfConversationReplayRouter, _CreateSelfConversationsRouter } from "@opencrane/backend/server/conversations";
+import { _CreateSelfConversationsRouter } from "@opencrane/backend/server/conversations";
 import { _CreateConversationAttachmentAdmission, __CreateConversationAssetRouter } from "@opencrane/backend/server/conversation-assets";
 import { _CreateSelfRunCancellationRouter, _CreateSelfRunStatusRouter, type RunCancellationRepository } from "@opencrane/backend/agents/execution/runs";
 import type { PersonalRunAdmissionPort } from "@opencrane/backend/agents/execution/admission";
@@ -34,7 +34,6 @@ import { _CreateInternalRuntimeComposition } from "./runtime-composition";
 import { _CreatePersonaAgentRevisionSelectionFactory } from "./persona-approval-composition";
 import type { RouteMount, SharesRouteOptions } from "./routes.types";
 import { _CreateUserOnboardingComposition } from "./user-onboarding-composition";
-import { _ProcessShutdownSignal } from "./process-shutdown";
 import { _CreateConversationAssetAuthority } from "../infra/artifacts/artifact-upload.factory";
 
 /**
@@ -79,7 +78,6 @@ export function _RegisterRoutes(app: Express, prisma: PrismaClient, coreApi: k8s
 		{ method: "use", path: "/api/v1/me/conversations", handler: _CreateSelfConversationsRouter(prisma, personalRunAdmission, _CreateConversationAttachmentAdmission, _log) },
 		{ method: "use", path: "/api/v1/me/conversations", handler: __CreateConversationAssetRouter({ resolveCaller: _ResolveConversationAssetCaller, authority: _CreateConversationAssetAuthority(prisma, process.env, artifactScannerEnabled), logger: _log }) },
 		{ method: "use", path: "/api/v1/me/conversations", handler: _CreateSelfElicitationRouter(prisma, _log) },
-		{ method: "use", path: "/api/v1/me/conversations", handler: _CreateSelfConversationReplayRouter(prisma, _log, { interrupts: _CreateElicitationInterruptReader(prisma), shutdownSignal: _ProcessShutdownSignal }) },
 		{ method: "use", path: "/api/v1/me/activity", handler: _CreateSelfElicitationActivityRouter(prisma, _log) },
 	];
 	const gatewayRoutes: readonly RouteMount[] = [

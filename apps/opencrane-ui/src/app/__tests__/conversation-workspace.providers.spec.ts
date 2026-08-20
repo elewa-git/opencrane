@@ -12,8 +12,9 @@ describe("Conversation workspace app providers", function _ConversationWorkspace
 	it("binds typed workspace, stream, and asset ports to concrete web adapters", function _TypedBindings()
 	{
 		expect(provideConversationWorkspaceComposition()).toEqual(expect.arrayContaining([
+			OpenCraneConversationEventStream,
 			{ provide: CONVERSATION_WORKSPACE_GATEWAY, useClass: OpenCraneConversationWorkspaceGateway },
-			{ provide: CONVERSATION_WORKSPACE_EVENT_STREAM, useClass: OpenCraneConversationEventStream },
+			{ provide: CONVERSATION_WORKSPACE_EVENT_STREAM, useExisting: OpenCraneConversationEventStream },
 			{ provide: CONVERSATION_ASSETS_GATEWAY, useClass: OpenCraneConversationAssetsGateway }
 		]));
 	});

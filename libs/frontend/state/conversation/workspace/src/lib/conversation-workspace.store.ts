@@ -137,7 +137,9 @@ export class ConversationWorkspaceStore
 		this._streamStatus.set(ConversationEventStreamStatuses.Connecting);
 		try
 		{
-			const detail = await this._gateway.open(conversationId);
+			const summary = this._conversations().find(candidate => candidate.id === conversationId);
+			if (summary === undefined) throw new ConversationWorkspaceGatewayError(ConversationWorkspaceGatewayErrorKinds.AccessChanged, "This conversation is no longer available.");
+			const detail: ConversationWorkspaceDetail = { ...summary, visibleFromPosition: "0", accessEndedPosition: null, messages: [] };
 			if (generation !== this._generation) return;
 			this._selected.set(detail);
 			this._draft.set("");
@@ -230,19 +232,30 @@ export class ConversationWorkspaceStore
 		{
 			await this._gateway.send(command);
 			if (generation !== this._generation) return false;
-			const reconciled = await this._gateway.open(selected.id);
-			if (generation !== this._generation) return false;
-			this._selected.set(reconciled);
 			this._draft.set("");
 			this._pendingMessage = null;
 			return true;
 		}
 		catch (error)
 		{
-			if (generation === this._generation) this._HandleFailure(error, true);
+			if (generation === this._generation)
+			{
+				if (error instanceof ConversationWorkspaceGatewayError && error.kind === ConversationWorkspaceGatewayErrorKinds.Conflict) this._CloseSelectedConversation(selected.id);
+				this._HandleFailure(error, true);
+			}
 			return false;
 		}
 		finally { if (generation === this._generation) this._sending.set(false); }
+	}
+
+	/** Adopt a server-proven permanent close before the user can submit another message. */
+	private _CloseSelectedConversation(conversationId: string): void
+	{
+		const selected = this._selected();
+		if (selected === null || selected.id !== conversationId) return;
+		this._selected.set({ ...selected, lifecycle: ConversationLifecycles.Closed });
+		this._conversations.update(current => current.map(candidate => candidate.id === conversationId ? { ...candidate, lifecycle: ConversationLifecycles.Closed } : candidate));
+		this._pendingMessage = null;
 	}
 
 	/** Archive the selected row for this participant and return to the remaining list. */

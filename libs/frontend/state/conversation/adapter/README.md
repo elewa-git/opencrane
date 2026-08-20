@@ -6,15 +6,16 @@
 
 Part of the OpenCrane **frontend state layer** (the code between the browser UI and the backend).
 This package streams a signed-in participant's already-authorised, display-safe conversation
-projection from the canonical event API. It does not open an agent-runtime connection, mint a pod
-credential, or submit a chat command: those concerns belong to the owned execution boundary, not
-the browser.
+projection from the canonical socket. It does not open an agent-runtime connection, mint a pod
+credential, or expose execution authority to the browser.
 
-Opening a conversation sends a cookie-session request to
-`GET /api/v1/me/conversations/:conversationId/events`. The server derives the caller and silo from the
-session, applies participant membership, and returns bounded snapshot-then-live AG-UI server-sent
-events (SSE). The adapter consumes the response `ReadableStream` incrementally and validates every
-complete record with the shared AG-UI state package before publishing browser view state.
+Opening a conversation creates a same-origin WebSocket at
+`/api/v1/me/conversations/:conversationId/socket`. The browser sends its existing cookie session
+during the upgrade; the server restores that session, derives the caller and silo, and rechecks
+participant membership before accepting the connection. The socket returns structured snapshot and
+live AG-UI frames, then carries participant message commands and their idempotent acknowledgements.
+The adapter validates every complete projection frame with the shared AG-UI state package before
+publishing browser view state.
 The backend [conversation projection package](../../../../backend/conversations/projection/main/README.md)
 produces this one stream for direct, group and agent-session conversations.
 
@@ -23,36 +24,34 @@ produces this one stream for direct, group and agent-session conversations.
         │ opens one authorised stream
         ▼
  OpenCraneConversationEventStream  ◄── HERE
-        │ GET /me/conversations/:conversationId/events
+        │ wss://.../me/conversations/:conversationId/socket
         ▼
- conversation/ag-ui ......... validates + reduces safe SSE records
+ conversation/ag-ui ......... validates + reduces safe socket frames
 ```
 
 **In this flow:** [conversation/ag-ui](../ag-ui/README.md) · the green conversation feature.
 
-The generated client keeps `credentials: include`, so the existing browser session authenticates
-every reconnect. Bounded responses resume with the exact opaque cursor in both `cursor` and
-`Last-Event-ID`; cursorless open-interrupt overlays never change it. Heartbeats and reconnect phases
-are observable, caller abort is immediate, malformed frames fail closed, and access revocation
-purges the reduced projection.
+The browser sends its cookie session automatically for this same-origin upgrade. Bounded socket
+connections resume with the exact opaque cursor in the URL; cursorless open-interrupt overlays never
+change it. Heartbeats and reconnect phases are observable, caller abort is immediate, malformed
+frames fail closed, and access revocation purges the reduced projection.
 
 ## Public surface
 
-- `OpenCraneConversationEventStream` — cookie-session incremental snapshot-to-live adapter that
-  implements the separate [`ConversationEventStream`](../stream/README.md) port.
+- `OpenCraneConversationEventStream` — cookie-session socket adapter that implements the separate
+  [`ConversationEventStream`](../stream/README.md) port and submits participant messages.
 
 ## Boundary
 
-Constructed only by app composition and consumed through the separate stream port. It depends on
-the shared `ControlPlaneApiService` only for the session-bound generated API client, and delegates
-all AG-UI record validation/reduction to `conversation/ag-ui`. It deliberately does not list
-conversations, persist messages, interpret approval authority, or expose agent commands.
+Constructed only by app composition and consumed through the separate stream port. It delegates all
+AG-UI record validation/reduction to `conversation/ag-ui`. It deliberately does not list
+conversations, persist messages itself, interpret approval authority, or expose agent commands.
 
 ## Dependency direction
 
-Tagged `scope:web`, `type:state`, and `frontend-role:adapter`: it may depend on the frontend core and
-state contracts it adapts — here `conversation/ag-ui`, `@opencrane/core`, and Angular — never on
-apps, feature packages, or server domains.
+Tagged `scope:web`, `type:state`, and `frontend-role:adapter`: it may depend on the frontend state
+contracts it adapts — here `conversation/ag-ui` and Angular — never on apps, feature packages, or
+server domains.
 
 ## See also
 

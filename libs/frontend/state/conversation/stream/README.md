@@ -31,7 +31,7 @@ contains no HTTP client and grants no conversation or run authority.
 ## Boundary
 
 Conversation state and features consume this port. The app binds it to a concrete adapter. This
-package never opens a request, decodes Server-Sent Events (SSE), stores data, or starts an Agent run.
+package never opens a transport, decodes concrete wire frames, stores data, or starts an Agent run.
 
 ## Dependency direction
 

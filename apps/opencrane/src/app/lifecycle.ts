@@ -8,6 +8,7 @@ import type { ExternalActionWorker } from "@opencrane/backend/agents/execution/p
 import type { ManagedRunAdmissionPort } from "@opencrane/backend/server/agents/agent-services";
 import type { RunCancellationRepository } from "@opencrane/backend/agents/execution/runs";
 import type { ChannelTargetRouteReconciler } from "@opencrane/backend/server/agents/channel-targets";
+import type { SelfConversationSocketServer } from "@opencrane/backend/server/conversations";
 import { ___ShutdownTelemetry } from "@opencrane/backend/observability";
 
 import { _StartBackgroundWorkers } from "./background-workers";
@@ -26,13 +27,14 @@ function _closeServer(server: Server): Promise<void>
 }
 
 /** Bind the public and workload-facing apps to distinct sockets. */
-function _startHttpServers(publicApp: Express, internalApp: Express, config: OpenCraneProcessConfig): OpenCraneHttpServers
+function _startHttpServers(publicApp: Express, internalApp: Express, config: OpenCraneProcessConfig, conversationSockets: SelfConversationSocketServer): OpenCraneHttpServers
 {
 	_log.info({ port: config.publicPort }, "starting opencrane control plane");
 	const publicServer = publicApp.listen(config.publicPort, function _onPublicListen()
 	{
 		_log.info({ port: config.publicPort }, "control plane listening");
 	});
+	conversationSockets.attach(publicServer);
 	const internalServer = internalApp.listen(config.internalPort, function _onInternalListen()
 	{
 		_log.info({ internalPort: config.internalPort }, "control plane internal API listening");
@@ -46,10 +48,10 @@ function _startHttpServers(publicApp: Express, internalApp: Express, config: Ope
  * Workload routes stay on a separate socket throughout the lifecycle; shutdown stops producers
  * before closing listeners and database state, then flushes telemetry as the final I/O boundary.
  */
-export function _StartProcessLifecycle(publicApp: Express, internalApp: Express, prisma: PrismaClient, batchApi: k8s.BatchV1Api, managedRunAdmission: ManagedRunAdmissionPort, runCancellation: RunCancellationRepository, config: OpenCraneProcessConfig, channelTargetRoutes: ChannelTargetRouteReconciler, unbindConsole: () => void, externalActions: ExternalActionWorker, stopObot: () => void): void
+export function _StartProcessLifecycle(publicApp: Express, internalApp: Express, prisma: PrismaClient, batchApi: k8s.BatchV1Api, managedRunAdmission: ManagedRunAdmissionPort, runCancellation: RunCancellationRepository, config: OpenCraneProcessConfig, channelTargetRoutes: ChannelTargetRouteReconciler, conversationSockets: SelfConversationSocketServer, unbindConsole: () => void, externalActions: ExternalActionWorker, stopObot: () => void): void
 {
 	// 1. Bind both HTTP listeners before starting the loops that serve or repair their work.
-	const servers = _startHttpServers(publicApp, internalApp, config);
+	const servers = _startHttpServers(publicApp, internalApp, config, conversationSockets);
 
 	// 2. Start process-owned workers only after their public and internal listeners exist.
 	const backgroundWorkers = _StartBackgroundWorkers(prisma, batchApi, managedRunAdmission, runCancellation, config, externalActions);
@@ -69,6 +71,7 @@ export function _StartProcessLifecycle(publicApp: Express, internalApp: Express,
 			// 1. End long-lived streams and abort active Obot transport before the ten-second hard-exit
 			// fence, so provider work can commit an ambiguous outcome before its worker drains.
 			_BeginProcessShutdown();
+			conversationSockets.close();
 			stopObot();
 			// 2. Stop producers and drain active cleanup before its Kubernetes and Prisma ports close.
 			await Promise.all([backgroundWorkers.stop(), channelTargetRoutes.stop()]);

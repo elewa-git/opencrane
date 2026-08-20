@@ -38,8 +38,8 @@ function _Deferred<T>(): { readonly promise: Promise<T>; readonly resolve: (valu
 /** Mutable gateway fake exposing exact store commands. */
 class _FakeGateway implements ConversationWorkspaceGateway
 {
-	/** Next open outcome. */
-	public openResult: ConversationWorkspaceDetail | Error | null = null;
+	/** Current conversation summaries returned to the selected workspace. */
+	public listResult: readonly ConversationWorkspaceDetail[] = [_Detail()];
 	/** Controlled archive completion for mutation race tests. */
 	public archiveResult: Promise<ConversationWorkspaceDetail> | null = null;
 	/** Controlled create completion for mutation race tests. */
@@ -57,12 +57,12 @@ class _FakeGateway implements ConversationWorkspaceGateway
 
 	/** Return generic privacy-safe choices. */
 	public async directory() { return { participants: [{ participantRef: "self-ref", isSelf: true, label: "You" }, { participantRef: "other-ref", isSelf: false, label: "Participant 1" }], personalAgentStatus: ConversationPersonalAgentStatuses.Ready, personalAgent: { personalAgentRef: "agent-ref", displayName: "Nova" } } as const; }
-	/** Return one current row. */
-	public async list() { return [_Detail()]; }
+	/** Return the configured current rows. */
+	public async list() { return this.listResult; }
 	/** Return the configured separate onboarding history projection. */
 	public async onboardingHistory() { return await this.historyResult; }
-	/** Resolve the configured open outcome. */
-	public async open(conversationId: string): Promise<ConversationWorkspaceDetail> { if (this.openResult instanceof Error) throw this.openResult; return this.openResult ?? _Detail(conversationId); }
+	/** Return a detail for the compatibility read port, which this socket-only store does not call. */
+	public async open(conversationId: string): Promise<ConversationWorkspaceDetail> { return _Detail(conversationId); }
 	/** Record and return one created snapshot. */
 	public async create(command: CreateConversationCommand): Promise<ConversationWorkspaceDetail> { this.created.push(command); return this.createResult ?? { ..._Detail("created-1"), mode: command.mode }; }
 	/** Record one exact message command before returning its controlled outcome. */
@@ -130,7 +130,7 @@ afterEach(function _ResetTestBed() { TestBed.resetTestingModule(); });
 
 describe("ConversationWorkspaceStore", function _ConversationWorkspaceStore()
 {
-	it("loads the directory and first snapshot before starting the live tail", async function _SnapshotTail()
+	it("loads the directory and leaves onboarding history selected until a conversation is chosen", async function _OnboardingTail()
 	{
 		const [store, _gateway, stream] = _CreateStore();
 		await store.load();
@@ -211,6 +211,7 @@ describe("ConversationWorkspaceStore", function _ConversationWorkspaceStore()
 	it("does not navigate to a created conversation after the participant selects another row", async function _StaleCreate()
 	{
 		const [store, gateway] = _CreateStore();
+		gateway.listResult = [_Detail(), _Detail("conversation-2")];
 		await store.load();
 		store.selectCreationMode(ConversationModes.Direct);
 		store.toggleParticipant("other-ref");
@@ -229,6 +230,7 @@ describe("ConversationWorkspaceStore", function _ConversationWorkspaceStore()
 	{
 		const [store, gateway] = _CreateStore();
 		gateway.historyResult = { status: ConversationOnboardingHistoryStatuses.NotRecorded, history: null };
+		gateway.listResult = [_Detail(), _Detail("conversation-2")];
 		await store.load();
 		const deferred = _Deferred<ConversationWorkspaceDetail>();
 		gateway.archiveResult = deferred.promise;
@@ -268,7 +270,7 @@ describe("ConversationWorkspaceStore", function _ConversationWorkspaceStore()
 	{
 		const [store, gateway, stream] = _CreateStore();
 		gateway.historyResult = { status: ConversationOnboardingHistoryStatuses.NotRecorded, history: null };
-		gateway.openResult = { ..._Detail(), mode: ConversationModes.Direct };
+		gateway.listResult = [{ ..._Detail(), mode: ConversationModes.Direct }];
 		stream.state = { ...__CreateAgUiStreamState(), runId: "stale-run" };
 
 		await store.load();
@@ -282,7 +284,7 @@ describe("ConversationWorkspaceStore", function _ConversationWorkspaceStore()
 	{
 		const [store, gateway, stream] = _CreateStore();
 		gateway.historyResult = { status: ConversationOnboardingHistoryStatuses.NotRecorded, history: null };
-		gateway.openResult = { ..._Detail(), mode: ConversationModes.AgentSession, agentServiceId: "agent-1", participantRefs: ["self-ref"] };
+		gateway.listResult = [{ ..._Detail(), mode: ConversationModes.AgentSession, agentServiceId: "agent-1", participantRefs: ["self-ref"] }];
 		stream.state = { ...__CreateAgUiStreamState(), runId: "run-1" };
 
 		await store.load();
@@ -319,13 +321,26 @@ describe("ConversationWorkspaceStore", function _ConversationWorkspaceStore()
 		expect(gateway.sent[0]?.blocks).toEqual([{ id: "command-key", kind: MessageContentBlockKinds.Artifact, value: "asset-1" }]);
 	});
 
-	it("purges a previously visible snapshot and draft on proven access loss", async function _AccessLoss()
+	it("disables the composer after the socket proves a selected conversation closed", async function _ClosedConversation()
 	{
 		const [store, gateway] = _CreateStore();
 		gateway.historyResult = { status: ConversationOnboardingHistoryStatuses.NotRecorded, history: null };
 		await store.load();
+		store.updateDraft("Send once");
+		gateway.sendError = new ConversationWorkspaceGatewayError(ConversationWorkspaceGatewayErrorKinds.Conflict, "This conversation is closed and cannot accept messages.");
+
+		expect(await store.send()).toBe(false);
+		expect(store.selected()?.lifecycle).toBe(ConversationLifecycles.Closed);
+		expect(store.canSend()).toBe(false);
+	});
+
+	it("purges a selected conversation and draft when its socket proves access loss", async function _AccessLoss()
+	{
+		const [store, gateway, stream] = _CreateStore();
+		gateway.historyResult = { status: ConversationOnboardingHistoryStatuses.NotRecorded, history: null };
+		await store.load();
 		store.updateDraft("Private draft");
-		gateway.openResult = new ConversationWorkspaceGatewayError(ConversationWorkspaceGatewayErrorKinds.AccessChanged, "This conversation is no longer available.");
+		stream.state = { ...__CreateAgUiStreamState(), accessRevoked: true };
 		await store.open("conversation-1");
 		expect(store.routeState()).toBe(ConversationWorkspaceRouteStates.AccessChanged);
 		expect(store.selected()).toBeNull();

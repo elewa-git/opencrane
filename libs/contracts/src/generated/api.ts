@@ -1007,26 +1007,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/me/conversations/{conversationId}/events": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Replay the signed-in participant's canonical conversation events
-         * @description The server derives the participant and silo from the browser session. It streams display-safe canonical events only when that participant belongs to the selected conversation.
-         */
-        get: operations["replayMyConversationEvents"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/me/conversations/directory": {
         parameters: {
             query?: never;
@@ -6265,62 +6245,6 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
-            };
-        };
-    };
-    replayMyConversationEvents: {
-        parameters: {
-            query?: {
-                /** @description Opaque canonical event cursor. The Last-Event-ID header is an equivalent resume mechanism. */
-                cursor?: string;
-            };
-            header?: {
-                /** @description Opaque canonical event cursor. It must match cursor when both are supplied. */
-                "Last-Event-ID"?: string;
-            };
-            path: {
-                /** @description Opaque conversation identifier. */
-                conversationId: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description A bounded text/event-stream replay. An empty stream does not disclose whether the conversation exists or belongs to another participant. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "text/event-stream": string;
-                };
-            };
-            /** @description The conversation identifier or replay cursor is malformed. */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description No authenticated browser session owns the request. */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description Canonical history could not be read. */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
             };
         };
     };

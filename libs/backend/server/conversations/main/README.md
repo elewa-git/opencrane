@@ -69,10 +69,13 @@ redaction, Agent User Interface (AG-UI) mapping, cursors and live streaming for 
 Safe technical failure classifications remain visible there, including when a later attempt retries
 the tool, while credentials and provider details are never exposed.
 
-The server rechecks organisation membership and participant bounds on every page. Its Express
-adapter supplies backpressure and request cancellation to projection. The two stream routes differ
-only in how they establish authority: one consumes a single-use channel context; the other derives
-the participant from the signed-in browser session.
+The server rechecks organisation membership and participant bounds on every page. The public
+browser transport is one same-origin WebSocket: it restores the signed-in cookie session during the
+upgrade, rejects a mismatched origin, replays the canonical timeline as structured frames, and
+accepts only idempotent participant-message commands. Projection pauses when a peer is congested
+and rechecks access before every replay page, so revocation closes the socket instead of becoming an
+empty successful stream. The separate internal replay route remains a one-use channel-context
+transport for workloads; it is not a browser fallback.
 
 ## Public surface
 
@@ -83,9 +86,10 @@ the participant from the signed-in browser session.
 - `_CreateConversationReplayRepository` composes replay over one `RepeatableRead` transaction so
   access-ending races cannot expose later events.
 - `__CreateConversationReplayRouter` mounts internal context-authorized AG-UI snapshot-to-live replay.
-- `_CreateSelfConversationReplayRouter` mounts the participant-authenticated live replay route.
-- `_SelfConversationsOpenapiPaths` and `_SelfConversationReplayOpenapiPaths` contribute those APIs
-  to the server-owned OpenAPI document.
+- `_CreatePrismaSelfConversationSocketServer` composes the signed-in participant WebSocket from the
+  same message authority and replay repository as the REST conversation metadata API.
+- `_SelfConversationsOpenapiPaths` contributes the remaining REST metadata and lifecycle APIs to the
+  server-owned OpenAPI document.
 
 ## Boundary
 
