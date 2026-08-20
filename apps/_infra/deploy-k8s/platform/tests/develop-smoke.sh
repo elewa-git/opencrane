@@ -529,4 +529,45 @@ kubectl wait --for=condition=Ready "certificate/${RELEASE_NAME}-clustertenant-tl
 _assert_database_isolation
 _assert_ingress_health
 
+# A fresh install always runs the database stage, so nothing here would exercise --workloads-only.
+# Deploy a second time at the same version with the flag: the PostgreSQL release must come out at the
+# same revision (the stage really was skipped) while the umbrella still advances (workloads really
+# were applied). Without this, the flag's only proof would be that its policy unit-refuses.
+echo "[develop-smoke] Proving the workloads-only path leaves the database stage untouched"
+WORKLOADS_ONLY_LOG="$(mktemp)"
+postgres_revision_before="$(helm get metadata "${RELEASE_NAME}-postgres" -n "$NAMESPACE" -o json | jq -r '.revision')"
+umbrella_revision_before="$(helm get metadata "$RELEASE_NAME" -n "$NAMESPACE" -o json | jq -r '.revision')"
+# No --values or --postgres-values on this run: the engine refuses a values file once a standalone
+# first owner exists, and reset-then-reuse already carries the first run's values forward.
+"$ROOT_DIR/apps/_infra/deploy-k8s/deploy.sh" \
+  --base-domain "$BASE_DOMAIN" \
+  --cluster-tenant "$CLUSTER_TENANT" \
+  --acme-email "$SMOKE_ACME_EMAIL" \
+  --first-user-email "$SMOKE_FIRST_USER_EMAIL" \
+  --namespace "$NAMESPACE" \
+  --release "$RELEASE_NAME" \
+  --release-version "$(jq -r '.version' "$ROOT_DIR/package.json")" \
+  --from-release-version "$(jq -r '.version' "$ROOT_DIR/package.json")" \
+  --image-tag develop-smoke \
+  --cognee-tag develop-smoke \
+  --workloads-only \
+  --postgres-credentials-secret "$POSTGRES_CREDENTIALS_SECRET" \
+  --obot-postgres-credentials-secret "$OBOT_POSTGRES_CREDENTIALS_SECRET" \
+  --litellm-postgres-credentials-secret "$LITELLM_POSTGRES_CREDENTIALS_SECRET" \
+  --postgres-admin-credentials-secret "$POSTGRES_ADMIN_CREDENTIALS_SECRET" \
+  2>&1 | tee "$WORKLOADS_ONLY_LOG"
+grep -q "Skipping the database stage" "$WORKLOADS_ONLY_LOG"
+postgres_revision_after="$(helm get metadata "${RELEASE_NAME}-postgres" -n "$NAMESPACE" -o json | jq -r '.revision')"
+umbrella_revision_after="$(helm get metadata "$RELEASE_NAME" -n "$NAMESPACE" -o json | jq -r '.revision')"
+if [[ "$postgres_revision_after" != "$postgres_revision_before" ]]; then
+  echo "[develop-smoke] --workloads-only changed the PostgreSQL release from revision $postgres_revision_before to $postgres_revision_after" >&2
+  exit 1
+fi
+if (( umbrella_revision_after <= umbrella_revision_before )); then
+  echo "[develop-smoke] --workloads-only did not apply the umbrella release (revision stayed $umbrella_revision_before)" >&2
+  exit 1
+fi
+rm -f "$WORKLOADS_ONLY_LOG"
+_assert_ingress_health
+
 echo "[develop-smoke] PASS: current silo, database isolation, TLS ingress, all enabled workloads, and $SMOKE_STORAGE_MODE storage qualification are healthy"

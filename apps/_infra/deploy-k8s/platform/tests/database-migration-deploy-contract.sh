@@ -46,8 +46,12 @@ grep -q 'DATABASE_CARRY_FORWARD_RELEASE=' "$DEPLOY_SCRIPT"
 grep -q 'valid only for an approved carry-forward repair' "$ORCHESTRATOR"
 ! grep -q 'OPENCRANE_ALLOW_UNBACKED_DATABASE_MIGRATION' "$DEPLOY_SCRIPT"
 invitation_secret_line="$(grep -n 'ensure_invitation_signing_secret "$NAMESPACE" "$INVITATION_SIGNING_SECRET"' "$DEPLOY_SCRIPT" | cut -d: -f1)"
-database_transition_line="$(grep -n '^run_database_release_transition$' "$DEPLOY_SCRIPT" | cut -d: -f1)"
+database_transition_line="$(grep -n '^[[:space:]]*run_database_release_transition$' "$DEPLOY_SCRIPT" | cut -d: -f1)"
 (( invitation_secret_line < database_transition_line ))
+# The database stage may be skipped only through the evidence-gated workloads-only policy. A skip
+# that reached Helm without it would leave privileges unreconciled and still report success.
+grep -q 'assert_workloads_only_preconditions' "$DEPLOY_SCRIPT"
+grep -q 'if \[\[ "$WORKLOADS_ONLY" == "1" \]\]; then' "$DEPLOY_SCRIPT"
 grep -q 'source "$SCRIPT_DIR/database-convergence-classifier.sh"' "$DEPLOY_SCRIPT"
 grep -q 'TIMEOUT_SECONDS must be an integer from 1 through 3600' "$DEPLOY_SCRIPT"
 grep -q 'migrationFence.active=true' "$RECOVERY"
