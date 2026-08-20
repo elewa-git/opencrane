@@ -73,8 +73,11 @@
 # provider-custody Secret; the server then registers it with LiteLLM's encrypted credentials API
 # and seeds the provider model catalogue before it becomes ready. Never pass the API key as a flag.
 #
-# --image-tag pins the OpenCrane server image. The SPA and Cognee require exact OCI digests from the
-# reviewed build output. Their tag flags are available only with OPENCRANE_ALLOW_TAG_FLOAT=1 for a
+# --image-tag pins the OpenCrane server image along with every other tag-built component, on a fresh
+# install and on an upgrade alike; --opencrane-server-tag moves the server on its own. An upgrade that
+# passes neither keeps the tag the prior release recorded. The SPA and Cognee require exact OCI digests
+# from the reviewed build output, and an upgrade that omits a digest keeps the recorded one, so bumping
+# them is always explicit. Their tag flags are available only with OPENCRANE_ALLOW_TAG_FLOAT=1 for a
 # disposable local install. Always bump component images this way —
 # never `kubectl set image` / `kubectl patch` a managed deployment. An imperative
 # patch creates a `kubectl-*` field manager that owns the image field on the live
@@ -148,6 +151,7 @@ fi
 NAMESPACE="opencrane-system"
 RELEASE="opencrane"
 IMAGE_TAG="latest"
+IMAGE_TAG_SUPPLIED=0    # 1 → this run stated a tag, so it moves the server past any prior pin
 CONTROL_PLANE_TAG=""    # empty → falls back to IMAGE_TAG
 CONTROL_PLANE_SPA_TAG="${OPENCRANE_UI_TAG:-}" # empty → falls back to IMAGE_TAG
 CONTROL_PLANE_SPA_DIGEST="${OPENCRANE_UI_DIGEST:-}"
@@ -254,7 +258,7 @@ while [[ $# -gt 0 ]]; do
     --base-domain)   BASE_DOMAIN="$2"; shift 2 ;;
     --namespace)     NAMESPACE="$2"; shift 2 ;;
     --release)       RELEASE="$2"; shift 2 ;;
-    --image-tag)        IMAGE_TAG="$2"; shift 2 ;;
+    --image-tag)        IMAGE_TAG="$2"; IMAGE_TAG_SUPPLIED=1; shift 2 ;;
     --opencrane-server-tag) CONTROL_PLANE_TAG="$2"; shift 2 ;;
     --opencrane-ui-tag) CONTROL_PLANE_SPA_TAG="$2"; shift 2 ;;
     --opencrane-ui-digest) CONTROL_PLANE_SPA_DIGEST="$2"; shift 2 ;;
@@ -353,10 +357,7 @@ _resolve_release_images() {
     prior_server_tag="$(jq -r '.clustertenantManager.image.tag // empty' <<<"$prior_values")"
     prior_spa_digest="$(jq -r '.controlPlaneSpa.image.digest // empty' <<<"$prior_values")"
     prior_cognee_digest="$(jq -r '.clustertenantManager.cognee.image.digest // empty' <<<"$prior_values")"
-    if [[ -n "$prior_server_tag" && -z "$CONTROL_PLANE_TAG" ]]; then
-      warn "Prior release pins the OpenCrane server to '$prior_server_tag'; reusing it. Pass OPENCRANE_ALLOW_TAG_FLOAT=1 to choose a chart default deliberately."
-      CONTROL_PLANE_TAG="$prior_server_tag"
-    fi
+    select_control_plane_tag "$prior_server_tag"
     if [[ -n "$prior_spa_digest" && -z "$CONTROL_PLANE_SPA_DIGEST" ]]; then
       warn "Prior release pins the OpenCrane SPA to '$prior_spa_digest'; reusing it."
       CONTROL_PLANE_SPA_DIGEST="$prior_spa_digest"
@@ -891,7 +892,7 @@ _guard_standalone_first_user_issuer
 ensure_registry_pull_secret "$NAMESPACE" "$REGISTRY_PULL_SECRET" "$REGISTRY_PULL_CONFIG_FILE"
 
 # 3. The OpenCrane chart.
-log "Using current app-owned chart sources from the committed dependency lock…"
+log "Using the app-owned chart sources packaged from this checkout…"
 
 log "Installing the OpenCrane Helm release '$RELEASE'…"
 # --force-conflicts: Helm 4 applies server-side, so any out-of-band actor that has

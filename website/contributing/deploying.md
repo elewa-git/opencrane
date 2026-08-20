@@ -84,6 +84,23 @@ Public releases require `sha-*` build tags or digests; the qualified-release-ima
 `latest` and similar tags. Tag floating exists only for the disposable local k3d smoke.
 :::
 
+::: warning An upgrade keeps every image you do not name
+Helm's reset-then-reuse cannot preserve an omitted override in a visible argument, so the engine
+reads the previous release's values and inherits whatever image it finds there. A version bump on
+its own therefore changes no image at all: the silo reports the new chart version and keeps running
+the old build. To move an image, name it.
+
+| To move | Pass |
+| --- | --- |
+| Server, channel proxy, memory gateway, artifact service | `--image-tag sha-<sha>` |
+| Server only | `--opencrane-server-tag sha-<sha>` |
+| Browser SPA | `--opencrane-ui-digest sha256:<digest>` |
+| Cognee | `--cognee-digest sha256:<digest>` |
+
+Every run logs the image it resolved per component, and says so explicitly when it inherits a pin
+or moves off one. Read those lines before concluding that an upgrade shipped new code.
+:::
+
 - **The tenant's openclaw version pin lives in `values.yaml`, not in code defaults.**
 - **Watch the queue, not only the jobs.** The organisation has a fixed number of concurrent
   runners; a workflow storm (or a hung job) can queue runs for 30+ minutes. If a run seems stuck

@@ -124,6 +124,21 @@ flowchart TD
   databases. Required flags: `--base-domain`, `--cluster-tenant`, `--acme-email`,
   `--first-user-email`; fresh installs also need `--opencrane-ui-digest` and `--cognee-digest`
   (immutable digests, never tags).
+- **An upgrade keeps every image the prior release recorded unless this run names it.** Helm's
+  reset-then-reuse cannot preserve an omitted override in a visible argument, so the engine reads
+  the previous release's values and inherits whatever it finds. That means a version bump alone
+  changes no image at all. To move images, name them:
+
+  | To move | Pass |
+  | --- | --- |
+  | Server, channel proxy, memory gateway, artifact service | `--image-tag sha-<sha>` |
+  | Server only | `--opencrane-server-tag sha-<sha>` |
+  | Browser SPA | `--opencrane-ui-digest sha256:<digest>` |
+  | Cognee | `--cognee-digest sha256:<digest>` |
+
+  Every run logs the image it resolved for each component. Read those lines before assuming an
+  upgrade shipped new code — a silo that deploys cleanly at a new chart version while still running
+  the old server build looks healthy and behaves like the old release.
 - Cluster-wide prerequisites (ingress-nginx, cert-manager, CloudNativePG) are installed once per
   cluster by `bootstrap-prerequisites.sh` and are never part of a silo release.
 - The PostgreSQL transition is resolved and schema-validated *before* the cluster is touched;

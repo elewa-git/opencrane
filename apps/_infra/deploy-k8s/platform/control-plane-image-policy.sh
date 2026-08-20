@@ -6,6 +6,31 @@
 # run may use an imported tag under `.test`. k8s-deploy.sh supplies the already-read
 # context, looks up prior releases, and runs Helm.
 
+# Decides whether a release that already pins the server image keeps that pin. Helm's
+# reset-then-reuse does not preserve an omitted component override in a visible argument, so a run
+# that states no tag inherits the prior one rather than falling back to the chart default. A run that
+# passes --image-tag has stated its choice, so the server moves with every other component image —
+# otherwise an operator bumping the release would silently leave the server behind.
+# --opencrane-server-tag is a deliberate per-component override and always wins over both.
+#
+# Called by: k8s-deploy.sh (_resolve_release_images), before resolve_control_plane_image_reference.
+select_control_plane_tag()
+{
+  local prior_server_tag="$1"
+
+  if [[ -n "$CONTROL_PLANE_TAG" || -z "$prior_server_tag" ]]; then
+    return 0
+  fi
+  if [[ "$IMAGE_TAG_SUPPLIED" == "1" ]]; then
+    if [[ "$prior_server_tag" != "$IMAGE_TAG" ]]; then
+      log "Moving the OpenCrane server off its prior pin '$prior_server_tag' to the requested --image-tag '$IMAGE_TAG'."
+    fi
+    return 0
+  fi
+  warn "Prior release pins the OpenCrane server to '$prior_server_tag'; reusing it. Pass --image-tag or --opencrane-server-tag to move it."
+  CONTROL_PLANE_TAG="$prior_server_tag"
+}
+
 resolve_control_plane_image_reference()
 {
   local requested_spa_tag="$CONTROL_PLANE_SPA_TAG"
