@@ -5,17 +5,30 @@
 ## What it owns
 
 This Phase-0 package defines the engine-neutral contract for resumable control-plane tasks. A future
-product transaction will admit a task here; a later engine adapter will run it and provide
-checkpoints, events, child tasks, and cancellation. Future server composition will hold the separate
-worker-runtime port.
+product transaction will admit a task here; an engine adapter will run it and provide checkpoints,
+events, child tasks, and cancellation. Future server composition will hold the separate worker-runtime
+port. The currently shipped adapter is Absurd, a PostgreSQL-backed engine; domains still use this
+contract rather than Absurd directly.
 
 ```text
- product transaction ──► [ contract ◄── HERE ] ──► engine adapter
-                              │
-                              └──► worker task context
+ product write + durable task
+       │  caller-owned Prisma transaction + stable idempotency key
+       ▼
+ ┌─────────────────────────────┐
+ │ workflows contract ◄── HERE │  domain code sees no engine
+ └──────────────┬──────────────┘
+                │  opaque transaction
+                ▼
+   Absurd adapter ──► absurd.spawn_task ──► Absurd tables in silo PostgreSQL
+          └──────────── product write + task share one commit decision
+                                                           │ committed task
+                                                           ▼
+       server worker ──► queue ──► registered handler
+                                    └── checkpoint / event / child / sleep; state, retry + cancellation persist
 ```
 
-**In this flow:** the engine adapter.
+**In this flow:** the [Absurd adapter](../infra_absurd/README.md), the [workflow index](../README.md),
+and the server worker lifecycle (not yet composed by an OpenCrane application).
 
 It guarantees that every task admission carries the caller's opaque transaction context. It does
 not own a database client, an engine schema, recurring schedules, product cron rules, or a worker
