@@ -51,8 +51,18 @@ docker run --detach --name "$CONTAINER" \
 
 wait_for_postgres()
 {
+	postgres_accepts_queries()
+	{
+		docker exec "$CONTAINER" psql --username postgres --dbname postgres \
+			--tuples-only --no-align --command 'SELECT 1' 2>/dev/null | grep -qx '1'
+	}
 	for _ in {1..60}; do
-		if docker exec "$CONTAINER" pg_isready --username postgres >/dev/null 2>&1; then return; fi
+		# After `docker restart`, pg_isready can succeed even though the next SQL connection reports shutdown.
+		# Require two SQL queries one second apart before the migration suite continues.
+		if postgres_accepts_queries; then
+			sleep 1
+			if postgres_accepts_queries; then return; fi
+		fi
 		sleep 1
 	done
 	docker logs "$CONTAINER" >&2
