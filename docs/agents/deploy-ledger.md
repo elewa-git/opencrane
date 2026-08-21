@@ -20,7 +20,9 @@ Full run reports belong in the corresponding pull request or issue.
 
 ## Standing lessons
 
-- Resolve chart dependencies from `Chart.lock` with `helm dep build`.
+- Package every in-repo `file://` chart from the checked-out commit with the app-owned current-source
+  helper. It runs `helm dependency update --skip-refresh`; `Chart.lock` and `charts/` are ignored
+  derived artifacts and must not become a second version authority.
 - Put repeatable environment configuration in a checked-in values profile.
 - A passing render does not prove an in-place upgrade will accept immutable-field changes; inspect
   the live object and release manifest before applying.
@@ -241,3 +243,15 @@ Full run reports belong in the corresponding pull request or issue.
   OIDC session, complete the Zitadel return, and let `/api/v1/organization/members/invitations/accept`
   create the active membership. That authenticated request is also the remaining live proof for the
   personal-Agent repair trigger; do not infer it from health or database readiness alone.
+
+## 2026-08-21 · dev · testlynn durable-execution preflight · 2339c9460f6bd775466de4a18d66f0e0381fe748 · FAILED
+
+- findings: config: the deploy agent followed the removed checked-in `Chart.lock` model and stopped
+  before invoking the app-owned deploy script. Testlynn remained healthy and unchanged at OpenCrane
+  revision 4 and PostgreSQL revision 6; no backup, migration fence, or rollback began.
+- friction: agent and package documentation still required `helm dependency build` even though the
+  repository now ignores those derived files and packages every in-repo `file://` chart through the
+  current-source helper.
+- lesson: treat the checked-out commit as chart authority and run the app-owned current-source
+  packaging helper before deployment; never promote ignored `Chart.lock` or `charts/` output into a
+  second release contract.
