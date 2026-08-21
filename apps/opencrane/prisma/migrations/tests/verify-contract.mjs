@@ -314,6 +314,18 @@ requireContract(groupHierarchySql.includes("v1 signed fleet membership cannot be
 requireContract(groupHierarchySql.includes("everyoneInOrg MCP policy has no deterministic"), "ambiguous everyoneInOrg MCP policy must fail closed");
 requireContract(groupHierarchySql.includes("every Artifact owner must resolve to exactly one Principal"), "artifact ownership projection must fail closed on ambiguous legacy identity");
 requireContract(groupHierarchySql.includes('UPDATE "artifacts" artifact\nSET "owner_principal_id" = reference."principal_id"'), "artifact ownership must migrate to stable local Principal ids");
+requireContract(
+	groupHierarchySql.includes('ALTER TABLE "artifacts" DISABLE TRIGGER "artifacts_closed_lifecycle";')
+		&& groupHierarchySql.indexOf('ALTER TABLE "artifacts" DISABLE TRIGGER "artifacts_closed_lifecycle";')
+		< groupHierarchySql.indexOf('UPDATE "artifacts" artifact\nSET "owner_principal_id" = reference."principal_id"'),
+	"artifact ownership projection must suspend the predecessor immutability trigger",
+);
+requireContract(
+	groupHierarchySql.includes('ALTER TABLE "artifacts" ENABLE TRIGGER "artifacts_closed_lifecycle";')
+		&& groupHierarchySql.indexOf('UPDATE "artifacts" artifact\nSET "owner_principal_id" = reference."principal_id"')
+		< groupHierarchySql.indexOf('ALTER TABLE "artifacts" ENABLE TRIGGER "artifacts_closed_lifecycle";'),
+	"artifact ownership projection must restore the predecessor immutability trigger",
+);
 requireContract(groupHierarchySql.includes("every MCP install user must resolve to exactly one Principal"), "MCP install projection must fail closed on ambiguous legacy identity");
 requireContract(groupHierarchySql.includes('UPDATE "mcp_server_installs" install\nSET "user_id" = reference."principal_id"'), "MCP installs must project legacy identities to stable local Principal ids");
 requireContract(groupHierarchySql.includes('RENAME COLUMN "user_id" TO "principal_id"'), "MCP install authority must use explicit Principal naming");

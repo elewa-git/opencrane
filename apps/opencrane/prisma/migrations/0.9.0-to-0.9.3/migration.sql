@@ -3456,10 +3456,13 @@ BEGIN
 END;
 $$;
 
+-- The reviewed cutover projects legacy owner references while the application lifecycle keeps owners immutable.
+ALTER TABLE "artifacts" DISABLE TRIGGER "artifacts_closed_lifecycle";
 UPDATE "artifacts" artifact
 SET "owner_principal_id" = reference."principal_id"
 FROM "_iam_principal_reference" reference
 WHERE reference."reference" = artifact."owner_principal_id";
+ALTER TABLE "artifacts" ENABLE TRIGGER "artifacts_closed_lifecycle";
 
 UPDATE "mcp_server_installs" install
 SET "user_id" = reference."principal_id"
