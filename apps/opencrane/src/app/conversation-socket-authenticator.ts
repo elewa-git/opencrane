@@ -64,7 +64,8 @@ export function __IsSameOriginConversationSocketRequest(request: IncomingMessage
 	const host = typeof forwardedHost === "string" ? forwardedHost.split(",")[0]?.trim() : request.headers.host;
 	const forwardedProtocol = request.headers["x-forwarded-proto"];
 	const forwarded = typeof forwardedProtocol === "string" ? forwardedProtocol.split(",")[0]?.trim() : undefined;
-	const protocol = forwarded ?? (request.socket.encrypted === true ? "https" : "http");
+	const isEncrypted = "encrypted" in request.socket && request.socket.encrypted === true;
+	const protocol = forwarded ?? (isEncrypted ? "https" : "http");
 	if (typeof origin !== "string" || host === undefined || (protocol !== "http" && protocol !== "https")) return false;
 	try { return new URL(origin).origin === `${protocol}://${host}`; }
 	catch { return false; }
