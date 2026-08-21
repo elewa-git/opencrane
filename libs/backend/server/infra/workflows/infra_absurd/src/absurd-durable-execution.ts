@@ -1,4 +1,5 @@
 import { Absurd, type TaskContext } from "absurd-sdk";
+import { Pool } from "pg";
 
 import { DurableExecutionError, DurableTaskNotRegisteredError } from "@opencrane/backend/server/infra/workflows/contract";
 import type { DurableEventReceipt, DurableExecution, DurableExecutionTransaction, DurableTaskDefinition, DurableTaskEvent, DurableTaskReceipt, DurableTaskSpawn, DurableWorkerRuntime, DurableWorkers, DurableWorkerStart } from "@opencrane/backend/server/infra/workflows/contract";
@@ -27,6 +28,16 @@ function _RequiredString(name: string, value: string): string
 	if (value.trim().length === 0)
 	{
 		throw new DurableExecutionError(`${name} must be a non-empty string.`);
+	}
+	return value;
+}
+
+/** Require composition to reserve a bounded shared connection pool for every queue. */
+function _DatabasePoolSize(value: number): number
+{
+	if (!Number.isSafeInteger(value) || value < 1)
+	{
+		throw new DurableExecutionError("databasePoolSize must be a positive integer.");
 	}
 	return value;
 }
@@ -68,11 +79,17 @@ export class AbsurdDurableExecution implements DurableExecution, DurableWorkerRu
 	private readonly workers = new Map<string, DurableWorkers>();
 	/** Connection and task-queue configuration supplied by application composition. */
 	private readonly options: AbsurdDurableExecutionOptions;
+	/** One bounded database pool shared by all Absurd queues in this process. */
+	private readonly databasePool: Pool;
+	/** Whether this adapter created and therefore closes the shared pool. */
+	private readonly ownsDatabasePool: boolean;
 
 	/** Creates an adapter without opening workers before registration is complete. */
 	constructor(options: AbsurdDurableExecutionOptions)
 	{
-		this.options = { ...options, databaseUrl: _RequiredString("databaseUrl", options.databaseUrl) };
+		this.options = { ...options, databaseUrl: _RequiredString("databaseUrl", options.databaseUrl), databasePoolSize: _DatabasePoolSize(options.databasePoolSize) };
+		this.ownsDatabasePool = options.databasePool === undefined;
+		this.databasePool = options.databasePool ?? new Pool({ connectionString: this.options.databaseUrl, max: this.options.databasePoolSize });
 	}
 
 	/** Resolve a task through the immutable authority that workflow composition also gives the kit. */
@@ -90,7 +107,7 @@ export class AbsurdDurableExecution implements DurableExecution, DurableWorkerRu
 		{
 			return existing;
 		}
-		const engine = new Absurd({ db: this.options.databaseUrl, queueName });
+		const engine = new Absurd({ db: this.databasePool, queueName });
 		this.engines.set(queueName, engine);
 		return engine;
 	}
@@ -227,6 +244,13 @@ export class AbsurdDurableExecution implements DurableExecution, DurableWorkerRu
 		this.workerGroups.delete(workerName);
 		this.workers.delete(workerName);
 		await Promise.all(workers.map(async (worker) => await worker.close()));
+	}
+
+	/** Drain every worker group and release the shared SDK connection pool. */
+	async close(): Promise<void>
+	{
+		await Promise.all([...this.workerGroups.keys()].map(async (workerName) => await this.drainWorkers(workerName)));
+		if (this.ownsDatabasePool) await this.databasePool.end();
 	}
 }
 

@@ -57,6 +57,10 @@ batch in one transaction, and leaves a short Job-deadline grace period for the f
 diagnostic. A persistent failure still blocks the Helm hook.
 
 The durable-task foundation requires PostgreSQL's `pg_cron` extension in the `opencrane` database.
+The repository builds a candidate PostgreSQL operand from the exact CloudNativePG 17.5 image and adds
+only the checksum-pinned PGDG `postgresql-17-cron` package. The image smoke proves the extension
+control file and shared library exist before publication. Deployment must then select that candidate
+by its immutable digest; building the image alone does not change the running database operand.
 This chart pins `shared_preload_libraries=pg_cron` and `cron.database_name=opencrane`. On an existing
 database upgrade, the deployment engine fences the server, reconciles that CNPG configuration, then
 proves the ready primary exposes the extension package and database setting before it publishes the

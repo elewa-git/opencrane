@@ -15,15 +15,15 @@
   "projects": {
     "@opencrane/website": {
       "root": "website",
-      "adaptedVersion": "0.9.2",
-      "packageVersion": "0.9.2"
+      "adaptedVersion": "0.9.3",
+      "packageVersion": "0.9.3"
     },
     "agent-controller": {
       "root": "apps/agent-controller",
-      "adaptedVersion": "0.9.1",
-      "packageVersion": "0.9.1",
+      "adaptedVersion": "0.9.2",
+      "packageVersion": "0.9.2",
       "chartVersion": "0.9.2",
-      "chartAppVersion": "0.9.1"
+      "chartAppVersion": "0.9.2"
     },
     "agent-runtime": {
       "root": "apps/agent-runtime",
@@ -31,31 +31,31 @@
     },
     "artifact-preprocessor": {
       "root": "apps/artifact-preprocessor",
-      "adaptedVersion": "0.9.1",
-      "packageVersion": "0.9.1",
+      "adaptedVersion": "0.9.2",
+      "packageVersion": "0.9.2",
       "chartVersion": "0.9.2",
-      "chartAppVersion": "0.9.1"
+      "chartAppVersion": "0.9.2"
     },
     "artifact-scanner": {
       "root": "apps/artifact-scanner",
-      "adaptedVersion": "0.9.1",
-      "packageVersion": "0.9.1",
+      "adaptedVersion": "0.9.2",
+      "packageVersion": "0.9.2",
       "chartVersion": "0.9.2",
-      "chartAppVersion": "0.9.1"
+      "chartAppVersion": "0.9.2"
     },
     "artifact-service": {
       "root": "apps/artifact-service",
-      "adaptedVersion": "0.9.2",
-      "packageVersion": "0.9.2",
+      "adaptedVersion": "0.9.3",
+      "packageVersion": "0.9.3",
       "chartVersion": "0.8.0",
-      "chartAppVersion": "0.9.2"
+      "chartAppVersion": "0.9.3"
     },
     "channel-proxy": {
       "root": "apps/channel-proxy",
-      "adaptedVersion": "0.9.2",
-      "packageVersion": "0.9.2",
-      "chartVersion": "0.9.2",
-      "chartAppVersion": "0.9.2"
+      "adaptedVersion": "0.9.3",
+      "packageVersion": "0.9.3",
+      "chartVersion": "0.9.3",
+      "chartAppVersion": "0.9.3"
     },
     "cognee": {
       "root": "apps/_infra/cognee",
@@ -83,10 +83,10 @@
     },
     "memory-gateway": {
       "root": "apps/memory-gateway",
-      "adaptedVersion": "0.9.2",
-      "packageVersion": "0.9.2",
+      "adaptedVersion": "0.9.3",
+      "packageVersion": "0.9.3",
       "chartVersion": "0.9.2",
-      "chartAppVersion": "0.9.2"
+      "chartAppVersion": "0.9.3"
     },
     "obot": {
       "root": "apps/_infra/obot",
@@ -103,9 +103,9 @@
     },
     "opencrane-ui": {
       "root": "apps/opencrane-ui",
-      "adaptedVersion": "0.9.2",
+      "adaptedVersion": "0.9.3",
       "chartVersion": "0.9.2",
-      "chartAppVersion": "0.9.2"
+      "chartAppVersion": "0.9.3"
     },
     "postgres": {
       "root": "apps/postgres",

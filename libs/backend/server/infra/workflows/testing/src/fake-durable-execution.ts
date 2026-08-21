@@ -89,6 +89,9 @@ export class __FakeDurableExecution implements DurableExecution, DurableWorkerRu
 		return workers;
 	}
 
+	/** Release no resources because the deterministic fake owns no external process state. */
+	async close(): Promise<void> {}
+
 	/** Dispatch each pending task in admission order for a fake worker lifecycle. */
 	async _DrainPendingTasks(): Promise<void>
 	{

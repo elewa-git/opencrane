@@ -576,6 +576,13 @@
     ],
     "unitsOfWork": [
       {
+        "path": "libs/backend/server/infra/workflows/infra_absurd/src/qualification/prisma-durable-qualification-unit-of-work.ts",
+        "adapter": "PrismaDurableQualificationUnitOfWork",
+        "contract": "DurableQualificationUnitOfWork",
+        "contractImportPath": "./durable-qualification-unit-of-work.types",
+        "constructs": []
+      },
+      {
         "path": "libs/backend/server/iam/organization-members/main/src/prisma-organization-member-unit-of-work.ts",
         "adapter": "PrismaOrganizationMemberUnitOfWork",
         "contract": "OrganizationMemberRepository",

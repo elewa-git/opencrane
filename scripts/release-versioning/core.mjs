@@ -196,6 +196,8 @@ function _ValidateProject(
  * The tagged-version guard reads `suppliedDirectChangedFiles`, not `changedFiles`: the latter also
  * carries history already on the candidate's base for cumulative validation. A tagged version is
  * immutable against this candidate's changes, so inherited history must not make it fail.
+ * `suppliedRestoredHistoricalManifestFiles` admits only a file that the caller proved byte-equal to
+ * its own immutable tag, allowing a branch to repair later drift without authorizing new history.
  *
  * Called by: `scripts/release-versioning-check.mjs`.
  * @returns Every release-composition error the caller must resolve before accepting the candidate.
@@ -208,6 +210,7 @@ export async function validateWorkspace(
 	suppliedNewFiles = [],
 	releasedVersionTag = null,
 	suppliedDirectChangedFiles = changedFiles,
+	suppliedRestoredHistoricalManifestFiles = [],
 )
 {
 	const rootVersion = readJson(join(repositoryRoot, "package.json")).version;
@@ -221,6 +224,7 @@ export async function validateWorkspace(
 	const stampOnlyFiles = new Set(suppliedStampOnlyFiles);
 	const newFiles = new Set(suppliedNewFiles);
 	const directChangedFiles = new Set(suppliedDirectChangedFiles);
+	const restoredHistoricalManifestFiles = new Set(suppliedRestoredHistoricalManifestFiles);
 	if (releasedVersionTag)
 	{
 		const compositionChanged = [...directChangedFiles].some((file) =>
@@ -236,6 +240,7 @@ export async function validateWorkspace(
 		const changedManifestVersion = /^releases\/(?<version>\d+\.\d+\.\d+)\.json$/u.exec(file)?.groups?.version;
 		if (!changedManifestVersion || changedManifestVersion === rootVersion) continue;
 		if (!directChangedFiles.has(file)) continue;
+		if (restoredHistoricalManifestFiles.has(file)) continue;
 		if (!newFiles.has(file))
 		{
 			errors.push(`release manifest '${changedManifestVersion}' is immutable; create '${rootVersion}' instead`);

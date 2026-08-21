@@ -30,6 +30,8 @@ on:
           - none
           - bootstrap
           - artifact
+          - postgres
+          - qualification
           - server
           - ui
 

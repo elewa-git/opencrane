@@ -573,6 +573,27 @@ test("rejects rewriting an older release manifest", async () =>
 	assert.ok(errors.some((error) => error.includes("is immutable")));
 });
 
+test("accepts restoring a historical manifest to its exact tagged bytes", async () =>
+{
+	const fixture = _Fixture({
+		repositoryVersion: "0.8.0",
+		previousRepositoryVersion: "0.7.0",
+		adaptedVersion: "0.8.0",
+	});
+	_WriteDatabaseMigration(fixture.root, "0.7.0", "0.8.0");
+	const file = "releases/0.7.0.json";
+	assert.deepEqual(await validateWorkspace(
+		fixture.root,
+		[file],
+		fixture.graph,
+		[],
+		[],
+		null,
+		[file],
+		[file],
+	), []);
+});
+
 test("allows a newly introduced historical adoption manifest", async () =>
 {
 	const fixture = _Fixture({

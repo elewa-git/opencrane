@@ -147,6 +147,8 @@ export interface DurableWorkerRuntime
 {
 	/** Start one process-local worker group that dispatches registered tasks. */
 	startWorkers(worker: DurableWorkerStart): Promise<DurableWorkers>;
+	/** Drain every worker group and release engine-owned process resources. */
+	close(): Promise<void>;
 }
 
 /** Context that an engine supplies while it runs a registered task handler. */
