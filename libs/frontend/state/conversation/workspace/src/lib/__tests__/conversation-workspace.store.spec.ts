@@ -332,6 +332,26 @@ describe("ConversationWorkspaceStore", function _ConversationWorkspaceStore()
 		expect(store.draft()).toBe("");
 	});
 
+	it("uses the changed attachment selection after manual reconnect replaces an interrupted send", async function _ManualReconnectChangedAttachment()
+	{
+		const [store, gateway, stream] = _CreateStore();
+		gateway.historyResult = { status: ConversationOnboardingHistoryStatuses.NotRecorded, history: null };
+		await store.load();
+		const pendingSend = _Deferred<void>();
+		gateway.sendResult = pendingSend.promise;
+		const sent = store.send(["asset-a"]);
+		const stale = stream.commands[0]!;
+
+		stale.onUpdate?.({ status: ConversationEventStreamStatuses.Reconnecting, state: __CreateAgUiStreamState(), reconnectAttempt: 1, lastHeartbeatAt: null });
+		stream.status = ConversationEventStreamStatuses.Live;
+		store.reconnect();
+		pendingSend.resolve();
+		expect(await sent).toBe(false);
+
+		expect(await store.send(["asset-b"])).toBe(true);
+		expect(gateway.sent[1]?.blocks).toEqual([{ id: "command-key", kind: MessageContentBlockKinds.Artifact, value: "asset-b" }]);
+	});
+
 	it("ignores stale run coordinates for a direct conversation", async function _IgnoreDirectRun()
 	{
 		const [store, gateway, stream] = _CreateStore();
