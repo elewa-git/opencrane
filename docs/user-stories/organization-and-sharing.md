@@ -87,10 +87,10 @@ Acceptance criteria:
 
 - Resource types are `file`, `chat`, and `dataset`.
 - The UI distinguishes owner authority, the exact recipient Principal, existing share, revoked, and inaccessible.
-- Creating a share proves the caller's current resource grant and creates one exact generic recipient grant.
+- Creation remains absent until each resource lifecycle exposes authoritative ownership.
 - Revocation names the share and recipient Principal exactly and soft-revokes its linked grant.
 
-APIs: `GET/POST /api/v1/resource-shares`, `DELETE .../{shareId}/recipients/{principalId}`.
+APIs: `GET /api/v1/resource-shares`, `DELETE .../{shareId}/recipients/{principalId}`.
 
 ## ORG-05 — Explain effective access
 

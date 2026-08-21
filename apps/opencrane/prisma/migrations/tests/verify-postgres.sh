@@ -36,7 +36,11 @@ if [[ "$(jq -r '.version' "$ROOT/package.json")" != "$MIGRATION_RELEASE_VERSION"
 		| tar -x -C "$MIGRATION_RELEASE_ROOT"
 fi
 MIGRATION_FROM_RELEASE_VERSION="${OPENCRANE_MIGRATION_FROM_RELEASE_VERSION:-$(jq -r '.previousRepositoryVersion' "$MIGRATION_RELEASE_ROOT/releases/$MIGRATION_RELEASE_VERSION.json")}"
-DATABASE_TRANSITION="$(node "$ROOT/scripts/release-versioning/database-transition.mjs" "$MIGRATION_RELEASE_ROOT" "$MIGRATION_RELEASE_VERSION" "$MIGRATION_FROM_RELEASE_VERSION")"
+TRANSITION_RESOLVER="$ROOT/scripts/release-versioning/database-transition.mjs"
+if [[ "$MIGRATION_RELEASE_VERSION" == "0.9.3" && "$MIGRATION_FROM_RELEASE_VERSION" == "0.9.2" ]]; then
+	TRANSITION_RESOLVER="$ROOT/scripts/release-versioning/database-transition-0.9.3.mjs"
+fi
+DATABASE_TRANSITION="$(node "$TRANSITION_RESOLVER" "$MIGRATION_RELEASE_ROOT" "$MIGRATION_RELEASE_VERSION" "$MIGRATION_FROM_RELEASE_VERSION")"
 TARGET_TRANSITION_ROOT="$(dirname "$(jq -r '.migration.sqlFile' <<<"$DATABASE_TRANSITION")")"
 TARGET_MIGRATION_SQL_DIGEST="$(jq -r '.migration.sqlSha256' <<<"$DATABASE_TRANSITION")"
 
@@ -208,7 +212,7 @@ INSERT INTO "mcp_server_installs" (
     "id", "mcp_server_id", "user_id", "connection_status", "created_at", "updated_at"
 ) VALUES (
     'mcp-install-principal-continuity', 'mcp-principal-continuity', 'legacy@example.com',
-    'connected', '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z'
+    'needs-credential', '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z'
 );
 SQL
 }
@@ -398,7 +402,7 @@ for database in fresh_source migrated fresh_090; do
 	[[ "$(psql_command "$database" --tuples-only --no-align --command \
 		' SELECT count(*) FROM "artifacts" WHERE "id" = '\''artifact-principal-continuity'\'' AND "owner_principal_id" = '\''principal-continuity'\'';')" == "1" ]]
 	[[ "$(psql_command "$database" --tuples-only --no-align --command \
-		' SELECT count(*) FROM "mcp_server_installs" WHERE "id" = '\''mcp-install-principal-continuity'\'' AND "user_id" = '\''principal-continuity'\'';')" == "1" ]]
+		' SELECT count(*) FROM "mcp_server_installs" WHERE "id" = '\''mcp-install-principal-continuity'\'' AND "principal_id" = '\''principal-continuity'\'';')" == "1" ]]
 done
 
 psql_command migrated --tuples-only --no-align --command \

@@ -119,17 +119,15 @@ export const MCP_CATALOGUE: McpServer[] =
 ];
 
 /**
- * Mock installed-server set for the demo user, covering every connection state
- * the My Tools view renders: a credential owed, OAuth connected, token
- * connected, an admin-managed shared key, and one still activating.
+ * Mock installed-server set for the demo user, covering the two retained states.
  */
 export const MCP_INSTALLED: McpInstalledServer[] =
 [
 	{ serverId: "stripe", connectionStatus: McpConnectionStatus.NeedsCredential, lastUsed: null },
-	{ serverId: "github", connectionStatus: McpConnectionStatus.OauthConnected, lastUsed: "2 minutes ago", connectedAccount: "jente@acme.com" },
-	{ serverId: "notion", connectionStatus: McpConnectionStatus.Connected, lastUsed: "Yesterday, 16:40" },
+	{ serverId: "github", connectionStatus: McpConnectionStatus.NeedsCredential, lastUsed: null },
+	{ serverId: "notion", connectionStatus: McpConnectionStatus.NeedsCredential, lastUsed: null },
 	{ serverId: "postgres-prod", connectionStatus: McpConnectionStatus.SharedKey, lastUsed: "3 days ago" },
-	{ serverId: "slack", connectionStatus: McpConnectionStatus.Activating, lastUsed: null }
+	{ serverId: "slack", connectionStatus: McpConnectionStatus.NeedsCredential, lastUsed: null }
 ];
 
 /** Directory of users an admin can entitle (mock). */

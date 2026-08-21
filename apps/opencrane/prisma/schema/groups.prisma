@@ -34,6 +34,7 @@ model Principal {
   memoryDatasets              MemoryDataset[]                   @relation("MemoryDatasetBoundaryPrincipal")
   agentRevisionBoundaries     AgentRevisionBoundaryAttachment[]
   managedAgentService         AgentService?                      @relation("ManagedAgentServicePrincipal")
+  mcpServerInstalls           McpServerInstall[]
 
   @@unique([id, siloId])
   @@unique([siloId, issuer, subject])

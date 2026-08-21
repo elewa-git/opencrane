@@ -10,7 +10,11 @@ current="$(node "$RESOLVER" "$ROOT_DIR" "$CURRENT_VERSION" "$CURRENT_VERSION")"
 previous="$(jq -r '.previousRepositoryVersion' "$ROOT_DIR/releases/$CURRENT_VERSION.json")"
 migration_source="$(jq -r '.database.carriedForwardFromRepositoryVersion // .previousRepositoryVersion' \
   "$ROOT_DIR/releases/$CURRENT_VERSION.json")"
-migration="$(node "$RESOLVER" "$ROOT_DIR" "$CURRENT_VERSION" "$migration_source")"
+MIGRATION_RESOLVER="$RESOLVER"
+if [[ "$CURRENT_VERSION" == "0.9.3" && "$migration_source" == "0.9.2" ]]; then
+	MIGRATION_RESOLVER="$ROOT_DIR/scripts/release-versioning/database-transition-0.9.3.mjs"
+fi
+migration="$(node "$MIGRATION_RESOLVER" "$ROOT_DIR" "$CURRENT_VERSION" "$migration_source")"
 previous_schema="$(jq -r '.database.schemaVersion' "$ROOT_DIR/releases/$migration_source.json")"
 target_schema="$(jq -r '.database.schemaVersion' "$ROOT_DIR/releases/$CURRENT_VERSION.json")"
 expected_migration_id="${previous_schema}-to-${target_schema}"

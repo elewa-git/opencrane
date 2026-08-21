@@ -28,6 +28,8 @@ PATCH_TRANSITION_RESOLVER="$ROOT_DIR/scripts/release-versioning/database-transit
 BACKUP_SCRIPT="$ROOT_DIR/apps/postgres/scripts/create-pre-migration-backup.sh"
 LIVE_ORIGIN=eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
 export LIVE_ORIGIN
+DATABASE_MIGRATION_SILO_ID=acme
+OIDC_ISSUER_URL=https://identity.example.test
 
 bash -n "$DEPLOY_SCRIPT"
 bash -n "$RECOVERY"

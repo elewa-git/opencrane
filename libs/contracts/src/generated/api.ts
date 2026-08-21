@@ -49,47 +49,8 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        /** Uninstall a server for the calling user (clears the stored credential) */
+        /** Uninstall a server for the calling user */
         delete: operations["uninstallMcpServer"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/mcp/installed/{serverId}/credential": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        /**
-         * Author a per-user credential (write-only) and mark the install connected
-         * @description The submitted values are write-only: stored server-side as an opaque custody handle and NEVER returned by any response.
-         */
-        put: operations["setMcpCredential"];
-        post?: never;
-        /** Clear a per-user credential, returning the install to needs-credential */
-        delete: operations["clearMcpCredential"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/mcp/installed/{serverId}/oauth": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Mark a remote-OAuth install connected after a successful handshake */
-        post: operations["connectMcpOauth"];
-        /** Disconnect a remote-OAuth install, returning it to needs-credential */
-        delete: operations["disconnectMcpOauth"];
         options?: never;
         head?: never;
         patch?: never;
@@ -225,8 +186,7 @@ export interface paths {
         /** List the file/chat/dataset shares owned by or granted to the caller */
         get: operations["listResourceShares"];
         put?: never;
-        /** Share a file/chat/dataset with a local Principal */
-        post: operations["shareResource"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1585,10 +1545,9 @@ export interface components {
         McpInstalled: {
             serverId: string;
             /** @enum {string} */
-            connectionStatus?: "needs-credential" | "activating" | "connected" | "oauth-connected" | "shared-key" | "activation-failed";
+            connectionStatus?: "needs-credential" | "shared-key";
             /** Format: date-time */
             lastUsed?: string | null;
-            connectedAccount?: string;
         };
         EntitledUser: {
             /** @description Stable local Principal identifier. */
@@ -2158,139 +2117,6 @@ export interface operations {
             };
         };
     };
-    setMcpCredential: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                serverId: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": {
-                    /** @description Field values keyed by CredentialField.key. Write-only — never echoed back. */
-                    values: {
-                        [key: string]: string;
-                    };
-                };
-            };
-        };
-        responses: {
-            /** @description Credential connected. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["McpInstalled"];
-                };
-            };
-            /** @description MCP install not found. */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-        };
-    };
-    clearMcpCredential: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                serverId: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Credential cleared. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["McpInstalled"];
-                };
-            };
-            /** @description MCP install not found. */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-        };
-    };
-    connectMcpOauth: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                serverId: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OAuth connected. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["McpInstalled"];
-                };
-            };
-            /** @description MCP install not found. */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-        };
-    };
-    disconnectMcpOauth: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                serverId: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OAuth disconnected. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["McpInstalled"];
-                };
-            };
-            /** @description MCP install not found. */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-        };
-    };
     listMcpGovernanceServers: {
         parameters: {
             query?: never;
@@ -2642,72 +2468,6 @@ export interface operations {
             };
             /** @description Authentication required. */
             401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-        };
-    };
-    shareResource: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": {
-                    /** @enum {string} */
-                    resourceType: "file" | "chat" | "dataset";
-                    resourceId: string;
-                    /** @description Stable local Principal identifier. */
-                    recipientPrincipalId: string;
-                };
-            };
-        };
-        responses: {
-            /** @description Recipient added (or already present). */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ResourceShare"];
-                };
-            };
-            /** @description Resource share created. */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ResourceShare"];
-                };
-            };
-            /** @description Invalid resource share request. */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description Authentication required. */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description You can only share a resource you have access to. */
-            403: {
                 headers: {
                     [name: string]: unknown;
                 };

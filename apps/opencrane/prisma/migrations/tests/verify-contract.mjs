@@ -315,11 +315,14 @@ requireContract(groupHierarchySql.includes("everyoneInOrg MCP policy has no dete
 requireContract(groupHierarchySql.includes("every Artifact owner must resolve to exactly one Principal"), "artifact ownership projection must fail closed on ambiguous legacy identity");
 requireContract(groupHierarchySql.includes('UPDATE "artifacts" artifact\nSET "owner_principal_id" = reference."principal_id"'), "artifact ownership must migrate to stable local Principal ids");
 requireContract(groupHierarchySql.includes("every MCP install user must resolve to exactly one Principal"), "MCP install projection must fail closed on ambiguous legacy identity");
-requireContract(groupHierarchySql.includes('UPDATE "mcp_server_installs" install\nSET "user_id" = reference."principal_id"'), "MCP installs must migrate to stable local Principal ids");
+requireContract(groupHierarchySql.includes('UPDATE "mcp_server_installs" install\nSET "user_id" = reference."principal_id"'), "MCP installs must project legacy identities to stable local Principal ids");
+requireContract(groupHierarchySql.includes('RENAME COLUMN "user_id" TO "principal_id"'), "MCP install authority must use explicit Principal naming");
+requireContract(groupHierarchySql.includes('mcp_server_installs_principal_id_fkey'), "MCP installs must bind their local Principal through a restrictive foreign key");
 for (const retired of [
 	'agent_revision_scope_attachments',
 	'mcp_server_access_policies',
 	'mcp_server_access_users',
+	'mcp_server_credentials',
 ])
 {
 	requireContract(groupHierarchySql.includes(`DROP TABLE "${retired}"`), `IAM cutover must drop retired ${retired}`);

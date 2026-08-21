@@ -1,4 +1,10 @@
-/** Stable kinds of identities that can receive an authorization grant. */
+/**
+ * Identifies who receives an authorization grant.
+ *
+ * Repository adapters map these string values to persisted subject columns, and the decision logic
+ * branches on them when it expands direct Group memberships. Renaming a value therefore requires a
+ * data and contract migration; an unknown value must be rejected at the persistence boundary.
+ */
 export enum AuthorizationSubjectKinds
 {
 	/** A group receives authority for principals with a direct stored membership. */
@@ -7,7 +13,13 @@ export enum AuthorizationSubjectKinds
 	Principal = "principal",
 }
 
-/** Stable kinds of product boundaries that a grant can cover. */
+/**
+ * Identifies the product boundary that an authorization grant protects.
+ *
+ * Repository adapters persist these strings and authorization decisions branch on them. Group
+ * boundaries may use stored ancestry; Personal boundaries never do. Renaming a value requires a
+ * data and contract migration, and an unknown stored value must be rejected.
+ */
 export enum AuthorizationBoundaryKinds
 {
 	/** A group boundary identifies one stored node in the silo's group hierarchy. */
@@ -16,7 +28,13 @@ export enum AuthorizationBoundaryKinds
 	Personal = "personal",
 }
 
-/** Stable ways a grant can cover a stored authorization boundary. */
+/**
+ * Determines how far a grant reaches from its stored authorization boundary.
+ *
+ * The value is persisted with each grant and read by boundary matching. `Descendants` is valid only
+ * for a Group; the decision function denies a Personal grant carrying it. Renaming either string
+ * requires a data migration.
+ */
 export enum AuthorizationBoundaryCoverages
 {
 	/** The grant covers the named boundary and no other boundary. */

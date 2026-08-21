@@ -1,15 +1,30 @@
+/// Identifies whether a persisted grant belongs to a Group or directly to a Principal.
+/// Authorization resolves Group subjects through stored direct memberships; changing these mapped
+/// values requires a data migration because AuthorizationGrant rows store them.
 enum AuthorizationSubjectKind {
+  /// The grant applies when the caller has a direct stored membership in the subject Group.
   Group     @map("group")
+  /// The grant applies directly to the named person or service Principal.
   Principal @map("principal")
 }
 
+/// Identifies the persisted product boundary that a grant protects.
+/// Authorization loads Group ancestry from product storage, while Personal boundaries never use
+/// hierarchy. Changing these mapped values requires a data migration.
 enum AuthorizationBoundaryKind {
+  /// The grant protects one stored Group node, subject to its AuthorizationBoundaryCoverage.
   Group    @map("group")
+  /// The grant protects resources owned by one Principal and cannot cover descendants.
   Personal @map("personal")
 }
 
+/// Controls whether a persisted grant stops at its boundary or follows stored Group descendants.
+/// Authorization rejects Descendants on a Personal boundary. Changing these mapped values requires
+/// a data migration because callers branch on the stored value.
 enum AuthorizationBoundaryCoverage {
+  /// The grant covers the named Group or Personal boundary and nothing below it.
   Exact       @map("exact")
+  /// The grant covers the named Group and Groups whose stored ancestor path contains it.
   Descendants @map("descendants")
 }
 
@@ -80,7 +95,7 @@ model AuthorizationGrant {
   boundaryGroupId        String?                       @map("boundary_group_id")
   boundaryPrincipalId    String?                       @map("boundary_principal_id")
   boundaryCoverage       AuthorizationBoundaryCoverage @map("boundary_coverage")
-  /// Names the bounded editor that owns reconciliation of this row. Null means no editor owns it.
+  /// Names the product editor that owns reconciliation of this row. Null means no editor owns it.
   managerId              String?                       @map("manager_id")
   catalogId              String                        @map("catalog_id")
   catalogRevision        Int                           @map("catalog_revision")

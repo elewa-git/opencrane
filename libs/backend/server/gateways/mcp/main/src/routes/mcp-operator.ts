@@ -2,15 +2,15 @@ import { Router, type Request, type Response } from "express";
 
 import type { AuthenticatedPrincipalDirectory } from "@opencrane/backend/server/iam/identity";
 import { _RequireOrgAdmin, _ResolveRequestPrincipal } from "@opencrane/backend/server/infra/auth";
-import { approveServer, clearCredential, connectOauth, disconnectOauth, getAccessPolicy, getDirectory, installServer, listAllServers, listEntitledCatalog, listInstalled, publishServer, rejectServer, setAccessPolicy, setCredential, setServerEnabled, uninstallServer } from "../core/mcp-operator.logic";
+import { approveServer, getAccessPolicy, getDirectory, installServer, listAllServers, listEntitledCatalog, listInstalled, publishServer, rejectServer, setAccessPolicy, setServerEnabled, uninstallServer } from "../core/mcp-operator.logic";
 import type { McpOperatorCaller } from "../core/mcp-operator.logic.types";
 import type { McpOperatorUnitOfWork } from "../core/mcp-operator-repository.types";
-import { ___McpAccessPolicySchema, ___McpCredentialSchema, ___McpEnabledSchema, ___McpInstallSchema } from "./mcp-operator.validator";
+import { ___McpAccessPolicySchema, ___McpEnabledSchema, ___McpInstallSchema } from "./mcp-operator.validator";
 
 /**
  * Operator-API router for the MCP endpoints under `/api/v1/mcp/*` — using servers, and governing them.
  *
- * Layers the entitlement-scoped catalogue, per-user installs / credential connect,
+ * Layers the entitlement-scoped catalogue, per-user installs,
  * and org-admin governance + access-policy endpoints over one authenticated authority. Two
  * authorization rules apply:
  *
@@ -19,8 +19,7 @@ import { ___McpAccessPolicySchema, ___McpCredentialSchema, ___McpEnabledSchema, 
  * - **Admin** (`/servers/*`, `/directory`) — gated by `_RequireOrgAdmin` and bound to the
  *   authenticated silo and local Principal projection.
  *
- * Secrets: no response on any route returns credential material — a connected
- * install reports only its connection status (the secret is brokered by the gateway plane).
+ * Credential and OAuth activation are absent until verified Obot custody is composed.
  *
  * @param prisma - Prisma client used for persistence.
  * @returns Configured Express router.
@@ -71,61 +70,19 @@ export function mcpOperatorRouter(unitOfWork: McpOperatorUnitOfWork, principalDi
     res.status(201).json(installed);
   });
 
-  /** Uninstall a server for the calling user; clears any stored credential. */
+  /** Uninstall a server for the calling user. */
   router.delete("/installed/:serverId", async function _uninstall(req: Request<{ serverId: string }>, res)
   {
     const caller = await _ResolveCaller(principalDirectory, req);
     if (!_SendUnauthorizedWhenMissing(res, caller)) return;
     const removed = await uninstallServer(unitOfWork, caller.principalId, req.params.serverId);
-    if (!removed)
+    if (removed === "not_found")
     {
       res.status(404).json({ error: "MCP install not found", code: "MCP_INSTALL_NOT_FOUND" });
       return;
     }
 
     res.status(204).end();
-  });
-
-  /** Author a per-user credential (WRITE-ONLY) and mark the install connected. */
-  router.put("/installed/:serverId/credential", async function _setCredential(req: Request<{ serverId: string }>, res)
-  {
-    const caller = await _ResolveCaller(principalDirectory, req);
-    if (!_SendUnauthorizedWhenMissing(res, caller)) return;
-    const parsed = ___McpCredentialSchema.safeParse(req.body);
-    if (!parsed.success)
-    {
-      res.status(400).json({ error: "values must contain at least one non-empty credential", code: "VALIDATION_ERROR" });
-      return;
-    }
-    const installed = await setCredential(unitOfWork, caller.principalId, req.params.serverId, parsed.data);
-    _sendInstallOrNotFound(res, installed);
-  });
-
-  /** Clear a per-user credential, returning the install to needs-credential. */
-  router.delete("/installed/:serverId/credential", async function _clearCredential(req: Request<{ serverId: string }>, res)
-  {
-    const caller = await _ResolveCaller(principalDirectory, req);
-    if (!_SendUnauthorizedWhenMissing(res, caller)) return;
-    const installed = await clearCredential(unitOfWork, caller.principalId, req.params.serverId);
-    _sendInstallOrNotFound(res, installed);
-  });
-
-  /** Mark a remote-OAuth install connected after a successful handshake. */
-  router.post("/installed/:serverId/oauth", async function _connectOauth(req: Request<{ serverId: string }>, res)
-  {
-    const caller = await _ResolveCaller(principalDirectory, req);
-    if (!_SendUnauthorizedWhenMissing(res, caller)) return;
-    const installed = await connectOauth(unitOfWork, caller.principalId, req.params.serverId);
-    _sendInstallOrNotFound(res, installed);
-  });
-
-  /** Disconnect a remote-OAuth install, returning it to needs-credential. */
-  router.delete("/installed/:serverId/oauth", async function _disconnectOauth(req: Request<{ serverId: string }>, res)
-  {
-    const caller = await _ResolveCaller(principalDirectory, req);
-    if (!_SendUnauthorizedWhenMissing(res, caller)) return;
-    const installed = await disconnectOauth(unitOfWork, caller.principalId, req.params.serverId);
-    _sendInstallOrNotFound(res, installed);
   });
 
   // -------------------------------------------------------------------------
@@ -264,23 +221,6 @@ function _SendUnauthorizedWhenMissing(res: Response, caller: McpOperatorCaller |
   if (caller) return true;
   res.status(401).json({ error: "Authentication required.", code: "UNAUTHORIZED" });
   return false;
-}
-
-/**
- * Send an install response or a 404 when the install / server was absent.
- *
- * @param res - Express response.
- * @param installed - Install payload, or null when not found.
- */
-function _sendInstallOrNotFound(res: Response, installed: object | null): void
-{
-  if (!installed)
-  {
-    res.status(404).json({ error: "MCP install not found", code: "MCP_INSTALL_NOT_FOUND" });
-    return;
-  }
-
-  res.json(installed);
 }
 
 /**

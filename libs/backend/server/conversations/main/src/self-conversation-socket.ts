@@ -101,7 +101,7 @@ async function _UpgradeConversation(socketServer: WebSocketServer, dependencies:
 }
 
 /** Run the projection tail and receive idempotent participant messages on one authenticated socket. */
-async function _ServeConversationSocket(socket: WebSocket, dependencies: SelfConversationSocketDependencies, caller: { readonly siloId: string; readonly subjectId: string }, conversationId: string, cursor: ReturnType<typeof __DecodeConversationProjectionCursor>): Promise<void>
+async function _ServeConversationSocket(socket: WebSocket, dependencies: SelfConversationSocketDependencies, caller: ConversationCaller, conversationId: string, cursor: ReturnType<typeof __DecodeConversationProjectionCursor>): Promise<void>
 {
 	const abort = new AbortController();
 	function _Abort(): void { abort.abort(); }
@@ -134,7 +134,7 @@ async function _ServeConversationSocket(socket: WebSocket, dependencies: SelfCon
 }
 
 /** Submit a parsed participant command and answer only its caller with a correlation id. */
-async function _SubmitMessage(socket: WebSocket, dependencies: SelfConversationSocketDependencies, caller: { readonly siloId: string; readonly subjectId: string }, conversationId: string, raw: string): Promise<void>
+async function _SubmitMessage(socket: WebSocket, dependencies: SelfConversationSocketDependencies, caller: ConversationCaller, conversationId: string, raw: string): Promise<void>
 {
 	const command = _CommandSchema.safeParse(_Json(raw));
 	if (!command.success) { _Send(socket, { type: "conversation.message.rejected", requestId: _RequestId(raw), error: "invalid_conversation_message" }); return; }

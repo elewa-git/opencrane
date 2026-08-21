@@ -32,7 +32,8 @@ function _CreateStandaloneFirstUserAudit(config: StandaloneFirstUserAdmissionCon
 export function _CreatePublicAuthentication(prisma: PrismaClient, customApi: k8s.CustomObjectsApi, standaloneFirstUserAdmission: StandaloneFirstUserAdmissionConfig | null): PublicAuthenticationComposition
 {
 	const authService = ___CreateOidcAuthService(_log, prisma, customApi, standaloneFirstUserAdmission, _CreateStandaloneFirstUserAudit(standaloneFirstUserAdmission));
-	return { authService, sessionMiddleware: authService.createSessionMiddleware() };
+	const admission = new PrismaAuthenticatedPrincipalAdmissionUnitOfWork(prisma, _log);
+	return { authService, sessionMiddleware: authService.createSessionMiddleware(), authMiddleware: ___AuthMiddleware(admission) };
 }
 
 /**
@@ -73,7 +74,7 @@ export function _CreatePublicApp(prisma: PrismaClient, coreApi: k8s.CoreV1Api, r
 	// 4. Mount session establishment before the product-authentication boundary.
 	app.use(...authentication.sessionMiddleware);
 	app.use("/api/v1/auth", ___AuthRouter(authentication.authService, prisma));
-	app.use(___AuthMiddleware(new PrismaAuthenticatedPrincipalAdmissionUnitOfWork(prisma, _log)));
+	app.use(authentication.authMiddleware);
 	const organizationMembers = _CreateOrganizationMembersComposition(prisma, _ReadOrganizationMembershipConfig());
 	if (organizationMembers.productAccess !== null) app.use(organizationMembers.productAccess);
 

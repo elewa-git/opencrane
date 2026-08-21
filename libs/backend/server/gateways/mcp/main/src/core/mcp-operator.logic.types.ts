@@ -19,13 +19,6 @@ export interface McpInstallCommand
   serverId: string;
 }
 
-/** Validated write-only credential payload accepted by the custody transition. */
-export interface McpCredentialCommand
-{
-  /** Non-empty credential fields; values must never be logged, returned, or stored in product Postgres. */
-  values: Record<string, string>;
-}
-
 /** Validated command that changes whether one server is published. */
 export interface McpEnabledCommand
 {

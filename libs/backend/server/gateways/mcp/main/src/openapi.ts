@@ -72,62 +72,11 @@ export const _McpOpenapiPaths = {
   "/mcp/installed/{serverId}": {
     delete: {
       operationId: "uninstallMcpServer",
-      summary: "Uninstall a server for the calling user (clears the stored credential)",
+      summary: "Uninstall a server for the calling user",
       tags: ["MCP Operator"],
       parameters: [{ name: "serverId", in: "path", required: true, schema: { type: "string" } }],
       responses: {
         204: { description: "Server uninstalled." },
-        404: notFound("MCP install not found."),
-      },
-    },
-  },
-
-  "/mcp/installed/{serverId}/credential": {
-    put: {
-      operationId: "setMcpCredential",
-      summary: "Author a per-user credential (write-only) and mark the install connected",
-      description: "The submitted values are write-only: stored server-side as an opaque custody handle and NEVER returned by any response.",
-      tags: ["MCP Operator"],
-      parameters: [{ name: "serverId", in: "path", required: true, schema: { type: "string" } }],
-      requestBody: {
-        required: true,
-        content: { "application/json": { schema: { type: "object", required: ["values"], properties: { values: { type: "object", additionalProperties: { type: "string" }, description: "Field values keyed by CredentialField.key. Write-only — never echoed back." } } } } },
-      },
-      responses: {
-        200: ok("Credential connected.", { $ref: "#/components/schemas/McpInstalled" }),
-        404: notFound("MCP install not found."),
-      },
-    },
-    delete: {
-      operationId: "clearMcpCredential",
-      summary: "Clear a per-user credential, returning the install to needs-credential",
-      tags: ["MCP Operator"],
-      parameters: [{ name: "serverId", in: "path", required: true, schema: { type: "string" } }],
-      responses: {
-        200: ok("Credential cleared.", { $ref: "#/components/schemas/McpInstalled" }),
-        404: notFound("MCP install not found."),
-      },
-    },
-  },
-
-  "/mcp/installed/{serverId}/oauth": {
-    post: {
-      operationId: "connectMcpOauth",
-      summary: "Mark a remote-OAuth install connected after a successful handshake",
-      tags: ["MCP Operator"],
-      parameters: [{ name: "serverId", in: "path", required: true, schema: { type: "string" } }],
-      responses: {
-        200: ok("OAuth connected.", { $ref: "#/components/schemas/McpInstalled" }),
-        404: notFound("MCP install not found."),
-      },
-    },
-    delete: {
-      operationId: "disconnectMcpOauth",
-      summary: "Disconnect a remote-OAuth install, returning it to needs-credential",
-      tags: ["MCP Operator"],
-      parameters: [{ name: "serverId", in: "path", required: true, schema: { type: "string" } }],
-      responses: {
-        200: ok("OAuth disconnected.", { $ref: "#/components/schemas/McpInstalled" }),
         404: notFound("MCP install not found."),
       },
     },

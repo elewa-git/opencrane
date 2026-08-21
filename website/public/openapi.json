@@ -493,11 +493,7 @@
             "type": "string",
             "enum": [
               "needs-credential",
-              "activating",
-              "connected",
-              "oauth-connected",
-              "shared-key",
-              "activation-failed"
+              "shared-key"
             ]
           },
           "lastUsed": {
@@ -506,9 +502,6 @@
               "null"
             ],
             "format": "date-time"
-          },
-          "connectedAccount": {
-            "type": "string"
           }
         }
       },
@@ -1927,7 +1920,7 @@
     "/mcp/installed/{serverId}": {
       "delete": {
         "operationId": "uninstallMcpServer",
-        "summary": "Uninstall a server for the calling user (clears the stored credential)",
+        "summary": "Uninstall a server for the calling user",
         "tags": [
           "MCP Operator"
         ],
@@ -1944,189 +1937,6 @@
         "responses": {
           "204": {
             "description": "Server uninstalled."
-          },
-          "404": {
-            "description": "MCP install not found.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/mcp/installed/{serverId}/credential": {
-      "put": {
-        "operationId": "setMcpCredential",
-        "summary": "Author a per-user credential (write-only) and mark the install connected",
-        "description": "The submitted values are write-only: stored server-side as an opaque custody handle and NEVER returned by any response.",
-        "tags": [
-          "MCP Operator"
-        ],
-        "parameters": [
-          {
-            "name": "serverId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "required": [
-                  "values"
-                ],
-                "properties": {
-                  "values": {
-                    "type": "object",
-                    "additionalProperties": {
-                      "type": "string"
-                    },
-                    "description": "Field values keyed by CredentialField.key. Write-only — never echoed back."
-                  }
-                }
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Credential connected.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/McpInstalled"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "MCP install not found.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        }
-      },
-      "delete": {
-        "operationId": "clearMcpCredential",
-        "summary": "Clear a per-user credential, returning the install to needs-credential",
-        "tags": [
-          "MCP Operator"
-        ],
-        "parameters": [
-          {
-            "name": "serverId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Credential cleared.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/McpInstalled"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "MCP install not found.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/mcp/installed/{serverId}/oauth": {
-      "post": {
-        "operationId": "connectMcpOauth",
-        "summary": "Mark a remote-OAuth install connected after a successful handshake",
-        "tags": [
-          "MCP Operator"
-        ],
-        "parameters": [
-          {
-            "name": "serverId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OAuth connected.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/McpInstalled"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "MCP install not found.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        }
-      },
-      "delete": {
-        "operationId": "disconnectMcpOauth",
-        "summary": "Disconnect a remote-OAuth install, returning it to needs-credential",
-        "tags": [
-          "MCP Operator"
-        ],
-        "parameters": [
-          {
-            "name": "serverId",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OAuth disconnected.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/McpInstalled"
-                }
-              }
-            }
           },
           "404": {
             "description": "MCP install not found.",
@@ -2601,97 +2411,6 @@
           },
           "401": {
             "description": "Authentication required.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        }
-      },
-      "post": {
-        "operationId": "shareResource",
-        "summary": "Share a file/chat/dataset with a local Principal",
-        "tags": [
-          "Shares"
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "required": [
-                  "resourceType",
-                  "resourceId",
-                  "recipientPrincipalId"
-                ],
-                "properties": {
-                  "resourceType": {
-                    "type": "string",
-                    "enum": [
-                      "file",
-                      "chat",
-                      "dataset"
-                    ]
-                  },
-                  "resourceId": {
-                    "type": "string"
-                  },
-                  "recipientPrincipalId": {
-                    "type": "string",
-                    "description": "Stable local Principal identifier."
-                  }
-                }
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Recipient added (or already present).",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ResourceShare"
-                }
-              }
-            }
-          },
-          "201": {
-            "description": "Resource share created.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ResourceShare"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Invalid resource share request.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Authentication required.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "You can only share a resource you have access to.",
             "content": {
               "application/json": {
                 "schema": {

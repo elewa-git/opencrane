@@ -20,7 +20,6 @@ export interface McpOperatorInstallRecord
 	readonly mcpServerId: string;
 	readonly connectionStatus: string;
 	readonly lastUsedAt: Date | null;
-	readonly connectedAccount: string | null;
 }
 
 /** Stable group display projection. */
@@ -37,8 +36,6 @@ export interface McpOperatorRepository
 	listInstalls(principalId: string): Promise<readonly McpOperatorInstallRecord[]>;
 	upsertInstall(serverId: string, principalId: string, connectionStatus: string): Promise<McpOperatorInstallRecord>;
 	deleteInstall(serverId: string, principalId: string): Promise<boolean>;
-	findInstall(serverId: string, principalId: string): Promise<McpOperatorInstallRecord | null>;
-	updateInstall(serverId: string, principalId: string, connectionStatus: string, credentialRef: string | null): Promise<McpOperatorInstallRecord>;
 	setApprovalStatus(siloId: string, serverId: string, approvalStatus: string): Promise<McpOperatorServerRecord | null>;
 	listGroups(siloId: string, groupIds?: readonly string[]): Promise<readonly McpOperatorGroupRecord[]>;
 	listPrincipals(siloId: string, principalIds?: readonly string[]): Promise<readonly McpOperatorPrincipalRecord[]>;

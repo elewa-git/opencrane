@@ -1,6 +1,6 @@
 import type { PrismaClient } from "@prisma/client";
 
-import { PrismaAuthorizationGrantRepository, PrismaCapabilityCatalogRepository, PrismaShareAuthorizationRepository } from "@opencrane/backend/server/iam/authorization";
+import { PrismaShareAuthorizationRepository } from "@opencrane/backend/server/iam/authorization";
 import { PrismaResourceShareRepository } from "./prisma-resource-share-repository";
 import type { ResourceShareTransaction, ResourceShareUnitOfWork } from "./resource-share-unit-of-work.types";
 
@@ -19,8 +19,6 @@ export class PrismaResourceShareUnitOfWork implements ResourceShareUnitOfWork
 		return this._prisma.$transaction(async function _resourceShareTransaction(transaction): Promise<Result>
 		{
 			return procedure({
-				authorization: new PrismaAuthorizationGrantRepository(transaction),
-				capabilityCatalog: new PrismaCapabilityCatalogRepository(transaction),
 				authorizationShares: new PrismaShareAuthorizationRepository(transaction),
 				resourceShares: new PrismaResourceShareRepository(transaction),
 			});

@@ -215,26 +215,19 @@ describe("mcp-operator router", function _suite()
     });
   });
 
-  describe("install → credential → connected lifecycle", function _lifecycle()
+  describe("install lifecycle", function _lifecycle()
   {
     /**
-     * Stateful single-install store backing the connect mutations, so a request can
-     * observe the connection-status transition a real DB would persist.
+     * Stateful single-install store backing install requests.
      */
     function _statefulPrisma(serverType: string): { prisma: PrismaClient; store: { install: Record<string, unknown> | null } }
     {
       const store: { install: Record<string, unknown> | null } = { install: null };
       const overrides: Record<string, (...args: unknown[]) => unknown> = {
         "mcpServer.findFirst": function _serverFind() { return Promise.resolve({ id: "srv-1", name: "Server", description: "", publisher: null, glyph: null, serverType, approvalStatus: "Published", credentialSchema: [], entitlementSummary: null }); },
-        "mcpServerInstall.findUnique": function _installFind() { return Promise.resolve(store.install); },
         "mcpServerInstall.upsert": function _upsert(arg: unknown) {
           const create = (arg as { create: Record<string, unknown> }).create;
-          store.install ??= { mcpServerId: create.mcpServerId, userId: create.userId, connectionStatus: create.connectionStatus ?? "NeedsCredential", credentialRef: null, connectedAccount: null, lastUsedAt: null };
-          return Promise.resolve(store.install);
-        },
-        "mcpServerInstall.update": function _update(arg: unknown) {
-          const data = (arg as { data: Record<string, unknown> }).data;
-          store.install = { ...(store.install ?? {}), ...data };
+          store.install ??= { mcpServerId: create.mcpServerId, principalId: create.principalId, connectionStatus: create.connectionStatus ?? "NeedsCredential", lastUsedAt: null };
           return Promise.resolve(store.install);
         },
         "auditEntry.create": function _audit() { return Promise.resolve({}); },
@@ -261,39 +254,6 @@ describe("mcp-operator router", function _suite()
       expect(res.body.connectionStatus).toBe("shared-key");
     });
 
-    it("transitions to connected when a credential is authored", async function _connect()
-    {
-      const { prisma, store } = _statefulPrisma("SingleUser");
-      store.install = { mcpServerId: "srv-1", userId: "user-1", connectionStatus: "NeedsCredential", credentialRef: null, connectedAccount: null, lastUsedAt: null };
-      const res = await request(_buildApp(prisma, { sub: "user-1" }))
-        .put("/api/v1/mcp/installed/srv-1/credential").send({ values: { apiKey: "SUPER-SECRET-123" } });
-
-      expect(res.status).toBe(200);
-      expect(res.body.connectionStatus).toBe("connected");
-    });
-
-    it("returns 404 when authoring a credential for an uninstalled server", async function _noInstall()
-    {
-      const { prisma } = _statefulPrisma("SingleUser");
-      const res = await request(_buildApp(prisma, { sub: "user-1" }))
-        .put("/api/v1/mcp/installed/srv-1/credential").send({ values: { apiKey: "x" } });
-
-      expect(res.status).toBe(404);
-    });
-
-    it("rejects missing, empty, and unknown credential fields before persistence", async function _rejectMalformedCredential()
-    {
-      const { prisma, store } = _statefulPrisma("SingleUser");
-      const app = _buildApp(prisma, { sub: "user-1" });
-
-      for (const body of [{}, { values: {} }, { values: { apiKey: "" } }, { values: { apiKey: "x" }, extra: true }])
-      {
-        const res = await request(app).put("/api/v1/mcp/installed/srv-1/credential").send(body);
-        expect(res.status).toBe(400);
-        expect(res.body).toMatchObject({ code: "VALIDATION_ERROR" });
-      }
-      expect(store.install).toBeNull();
-    });
   });
 
   describe("user-scoping — a caller only sees / acts on their own installs", function _scoping()
@@ -303,7 +263,7 @@ describe("mcp-operator router", function _suite()
       const { prisma, spies } = _mockPrisma({ "mcpServerInstall.findMany": function _f() { return Promise.resolve([]); } });
       await request(_buildApp(prisma, { sub: "caller-9" })).get("/api/v1/mcp/installed");
 
-      expect(spies["mcpServerInstall.findMany"]).toHaveBeenCalledWith(expect.objectContaining({ where: { userId: "principal-1" } }));
+      expect(spies["mcpServerInstall.findMany"]).toHaveBeenCalledWith(expect.objectContaining({ where: { principalId: "principal-1" } }));
     });
 
     it("scopes DELETE /installed/:serverId to the calling user's id", async function _deleteScoped()
@@ -315,30 +275,8 @@ describe("mcp-operator router", function _suite()
       const res = await request(_buildApp(prisma, { sub: "caller-9" })).delete("/api/v1/mcp/installed/srv-1");
 
       expect(res.status).toBe(204);
-      expect(spies["mcpServerInstall.deleteMany"]).toHaveBeenCalledWith({ where: { mcpServerId: "srv-1", userId: "principal-1" } });
+      expect(spies["mcpServerInstall.deleteMany"]).toHaveBeenCalledWith({ where: { mcpServerId: "srv-1", principalId: "principal-1" } });
     });
-  });
 
-  describe("credential custody — no response serialises secret material", function _custody()
-  {
-    it("never echoes the submitted credential values or the credentialRef", async function _writeOnly()
-    {
-      const store: { install: Record<string, unknown> | null } = { install: { mcpServerId: "srv-1", userId: "user-1", connectionStatus: "NeedsCredential", credentialRef: null, connectedAccount: null, lastUsedAt: null } };
-      const { prisma } = _mockPrisma({
-        "mcpServerInstall.findUnique": function _f() { return Promise.resolve(store.install); },
-        "mcpServerInstall.update": function _u(arg: unknown) { store.install = { ...(store.install ?? {}), ...(arg as { data: Record<string, unknown> }).data }; return Promise.resolve(store.install); },
-        "auditEntry.create": function _a() { return Promise.resolve({}); },
-      });
-      const res = await request(_buildApp(prisma, { sub: "user-1" }))
-        .put("/api/v1/mcp/installed/srv-1/credential").send({ values: { apiKey: "SUPER-SECRET-123", token: "t0ps3cret" } });
-
-      expect(res.status).toBe(200);
-      const serialised = JSON.stringify(res.body);
-      expect(serialised).not.toContain("SUPER-SECRET-123");
-      expect(serialised).not.toContain("t0ps3cret");
-      expect(serialised).not.toContain("credentialRef");
-      expect(serialised).not.toContain("cred_");
-      expect(Object.keys(res.body).sort()).toEqual(["connectionStatus", "lastUsed", "serverId"]);
-    });
   });
 });

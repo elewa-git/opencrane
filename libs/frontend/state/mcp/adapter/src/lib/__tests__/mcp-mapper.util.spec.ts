@@ -33,12 +33,11 @@ describe("mcp-mapper.util", () =>
 		expect(installed.lastUsed).toBeNull();
 	});
 
-	it("preserves a known connection status", () =>
+	it("preserves the shared-key connection status", () =>
 	{
-		const installed = _MapInstalled({ serverId: "github", connectionStatus: "oauth-connected", connectedAccount: "x@y.com" });
+		const installed = _MapInstalled({ serverId: "postgres", connectionStatus: "shared-key" });
 
-		expect(installed.connectionStatus).toBe(McpConnectionStatus.OauthConnected);
-		expect(installed.connectedAccount).toBe("x@y.com");
+		expect(installed.connectionStatus).toBe(McpConnectionStatus.SharedKey);
 	});
 
 	it("fills missing collections on a policy and a directory", () =>

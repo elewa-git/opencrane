@@ -28,28 +28,18 @@ export class PrismaMcpOperatorRepository implements McpOperatorRepository
 
 	async listInstalls(principalId: string): Promise<readonly McpOperatorInstallRecord[]>
 	{
-		return this._transaction.mcpServerInstall.findMany({ where: { userId: principalId }, orderBy: { createdAt: "asc" }, select: { mcpServerId: true, connectionStatus: true, lastUsedAt: true, connectedAccount: true } });
+		return this._transaction.mcpServerInstall.findMany({ where: { principalId }, orderBy: { createdAt: "asc" }, select: { mcpServerId: true, connectionStatus: true, lastUsedAt: true } });
 	}
 
 	async upsertInstall(serverId: string, principalId: string, connectionStatus: string): Promise<McpOperatorInstallRecord>
 	{
-		return this._transaction.mcpServerInstall.upsert({ where: { mcpServerId_userId: { mcpServerId: serverId, userId: principalId } }, create: { mcpServerId: serverId, userId: principalId, connectionStatus: connectionStatus as Prisma.McpServerInstallCreateInput["connectionStatus"] }, update: {}, select: { mcpServerId: true, connectionStatus: true, lastUsedAt: true, connectedAccount: true } });
+		return this._transaction.mcpServerInstall.upsert({ where: { mcpServerId_principalId: { mcpServerId: serverId, principalId } }, create: { mcpServerId: serverId, principalId, connectionStatus: connectionStatus as Prisma.McpServerInstallCreateInput["connectionStatus"] }, update: {}, select: { mcpServerId: true, connectionStatus: true, lastUsedAt: true } });
 	}
 
 	async deleteInstall(serverId: string, principalId: string): Promise<boolean>
 	{
-		const result = await this._transaction.mcpServerInstall.deleteMany({ where: { mcpServerId: serverId, userId: principalId } });
+		const result = await this._transaction.mcpServerInstall.deleteMany({ where: { mcpServerId: serverId, principalId } });
 		return result.count > 0;
-	}
-
-	async findInstall(serverId: string, principalId: string): Promise<McpOperatorInstallRecord | null>
-	{
-		return this._transaction.mcpServerInstall.findUnique({ where: { mcpServerId_userId: { mcpServerId: serverId, userId: principalId } }, select: { mcpServerId: true, connectionStatus: true, lastUsedAt: true, connectedAccount: true } });
-	}
-
-	async updateInstall(serverId: string, principalId: string, connectionStatus: string, credentialRef: string | null): Promise<McpOperatorInstallRecord>
-	{
-		return this._transaction.mcpServerInstall.update({ where: { mcpServerId_userId: { mcpServerId: serverId, userId: principalId } }, data: { connectionStatus: connectionStatus as Prisma.McpServerInstallUpdateInput["connectionStatus"], credentialRef }, select: { mcpServerId: true, connectionStatus: true, lastUsedAt: true, connectedAccount: true } });
 	}
 
 	async setApprovalStatus(siloId: string, serverId: string, approvalStatus: string): Promise<McpOperatorServerRecord | null>

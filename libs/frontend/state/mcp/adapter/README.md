@@ -12,7 +12,7 @@ port by calling the backend.
 
 The adapter, `OpenCraneMcpGateway`, issues requests to `/api/v1/mcp/*` through the shared Control Plane
 API client and maps the responses onto UI read models. It covers the user flow (list entitled
-catalogue, install/uninstall, set/remove credential, connect/disconnect OAuth) and the admin
+catalogue and install/uninstall) and the admin
 governance flow (list all servers, approve/publish/reject, enable/disable, read/update access policy,
 list the directory).
 
@@ -28,13 +28,12 @@ list the directory).
 
 **In this flow:** [core](../../core/README.md) · [gateways](../../gateways/README.md) · [features/tools](../../../features/tools/README.md)
 
-Invariant: **credentials are write-only.** `setCredential` is the only path a secret enters, and no
-read method ever returns credential material. The agent runtime receives neither a provider URL nor
-a token. Uninstalling a server also clears its stored credential.
+Invariant: credential and OAuth activation are absent until a verified custody boundary is composed.
+No method accepts or returns credential material, provider URLs, or tokens.
 
 ## Public surface
 
-- `McpGateway`, `MCP_GATEWAY` — the MCP catalogue/credential/activation port + DI token.
+- `McpGateway`, `MCP_GATEWAY` — the MCP catalogue and install port + DI token.
 - `OpenCraneMcpGateway` — the live implementation over `/api/v1/mcp/*`, bound in `state/gateways`.
 - `mcp-mapper.util` — pure wire-shape → read-model mappers.
 

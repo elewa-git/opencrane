@@ -351,13 +351,6 @@ export interface components {
             /** @enum {string} */
             transport?: "streamable-http" | "sse" | "websocket";
             grants?: Record<string, never>[];
-            credentials?: components["schemas"]["McpServerCredential"][];
-        };
-        McpServerCredential: {
-            /** @description Stable credential identifier. */
-            id?: string;
-            /** @description Operator-facing label. */
-            displayName?: string;
         };
         /** @description A catalogue server as exposed by the operator API (distinct from the registry McpServer). Every field beyond id is optional so the same shape serves the entitled user catalogue and the admin governance view. */
         McpCatalogServer: {
@@ -394,18 +387,16 @@ export interface components {
             /** @description Optional helper hint. */
             hint?: string;
         };
-        /** @description A server installed by the calling user. Never carries credential material — only the connection status and a non-secret account label. */
+        /** @description A server installed by the calling user, with its connection state. */
         McpInstalled: {
             serverId: string;
             /** @enum {string} */
-            connectionStatus?: "needs-credential" | "activating" | "connected" | "oauth-connected" | "shared-key" | "activation-failed";
+            connectionStatus?: "needs-credential" | "shared-key";
             /**
              * Format: date-time
              * @description ISO-8601 timestamp of last use, or null when never used.
              */
             lastUsed?: string | null;
-            /** @description Non-secret display label of the connected account. */
-            connectedAccount?: string;
         };
         McpAccessPolicy: {
             serverId: string;

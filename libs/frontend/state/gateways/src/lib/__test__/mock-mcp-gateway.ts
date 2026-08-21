@@ -32,10 +32,6 @@ export class MockMcpGateway implements McpGateway
 	}
 
 	public uninstall(serverId: string): Promise<void> { this._installed.delete(serverId); return Promise.resolve(); }
-	public setCredential(serverId: string, _v: Record<string, string>): Promise<McpInstalledServer> { return Promise.resolve(this._transition(serverId, McpConnectionStatus.Connected)); }
-	public removeCredential(serverId: string): Promise<McpInstalledServer> { return Promise.resolve(this._transition(serverId, McpConnectionStatus.NeedsCredential)); }
-	public connectOauth(serverId: string): Promise<McpInstalledServer> { return Promise.resolve(this._transition(serverId, McpConnectionStatus.OauthConnected, "test@example.com")); }
-	public disconnect(serverId: string): Promise<McpInstalledServer> { return Promise.resolve(this._transition(serverId, McpConnectionStatus.NeedsCredential, null)); }
 	public listCatalogue(): Promise<McpServer[]> { return Promise.resolve(Array.from(this._catalogue.values(), function c(s: McpServer): McpServer { return { ...s }; })); }
 	public approve(id: string): Promise<McpServer> { return Promise.resolve(this._setStatus(id, McpApprovalStatus.Approved)); }
 	public publish(id: string): Promise<McpServer> { return Promise.resolve(this._setStatus(id, McpApprovalStatus.Published)); }
@@ -56,14 +52,6 @@ export class MockMcpGateway implements McpGateway
 	}
 
 	public getDirectory(): Promise<McpDirectory> { return Promise.resolve({ users: [...MCP_DIRECTORY.users], groups: [...MCP_DIRECTORY.groups] }); }
-
-	private _transition(serverId: string, status: McpConnectionStatus, account?: string | null): McpInstalledServer
-	{
-		const cur = this._installed.get(serverId) ?? { serverId, connectionStatus: status, lastUsed: null };
-		const next: McpInstalledServer = { ...cur, connectionStatus: status, connectedAccount: account === undefined ? cur.connectedAccount : (account ?? undefined) };
-		this._installed.set(serverId, next);
-		return { ...next };
-	}
 
 	private _setStatus(serverId: string, status: McpApprovalStatus): McpServer
 	{

@@ -2,7 +2,7 @@
 	<div class="wo-tools-page__inner">
 		<wo-section-heading
 			title="My tools"
-			subtitle="Servers you've installed. Connected servers are active in your agent runtime (Claw) and ready to use in chat."
+			subtitle="Servers you've installed. Shared-key servers are ready to use; personal credential activation is not available yet."
 		/>
 
 		@if (rows().length > 0) {
@@ -35,39 +35,11 @@
 								</span>
 							</td>
 							<td class="wo-mytools__muted">{{ row.installed.lastUsed ?? "—" }}</td>
-							<td class="wo-mytools__actions">
-								@switch (row.installed.connectionStatus) {
-									@case (status.NeedsCredential) {
-										<button type="button" class="wo-tools__act" (click)="openConnect(row.server)">{{ connectLabel(row.server) }}</button>
-										<button type="button" class="wo-tools__act wo-tools__act--muted" (click)="uninstall(row.server)">Uninstall</button>
-									}
-									@case (status.ActivationFailed) {
-										<button type="button" class="wo-tools__act" (click)="openConnect(row.server)">Retry</button>
-										<button type="button" class="wo-tools__act wo-tools__act--muted" (click)="uninstall(row.server)">Uninstall</button>
-									}
-									@case (status.SharedKey) {
-										<button type="button" class="wo-tools__act wo-tools__act--muted" (click)="uninstall(row.server)">Uninstall</button>
-									}
-									@case (status.Activating) {
-										<button type="button" class="wo-tools__act wo-tools__act--muted" (click)="uninstall(row.server)">Cancel</button>
-									}
-									@default {
-										<button type="button" class="wo-tools__act" (click)="openConnect(row.server)">Manage</button>
-										<button type="button" class="wo-tools__act wo-tools__act--muted" (click)="uninstall(row.server)">Uninstall</button>
-									}
-								}
-							</td>
+							<td class="wo-mytools__actions"><button type="button" class="wo-tools__act wo-tools__act--muted" (click)="uninstall(row.server)">Uninstall</button></td>
 						</tr>
 					}
 				</tbody>
 			</table>
-
-			@if (firstNeedsCredential(); as pending) {
-				<div class="wo-callout wo-mytools__prompt">
-					<b>{{ pending.name }}</b> needs a credential before your agent can use it. Until then its tools are installed but inactive in Claw.
-					<button type="button" class="wo-tools__act" (click)="openConnect(pending)">{{ connectLabel(pending) }}</button>
-				</div>
-			}
 		} @else {
 			<p class="wo-mytools__empty">You haven't installed any tools yet.</p>
 		}
@@ -78,13 +50,3 @@
 		</a>
 	</div>
 </div>
-
-<wo-connect-drawer
-	[server]="connectTarget()"
-	[installed]="connectInstalled()"
-	(closed)="closeConnect()"
-	(saveRequested)="onSave($event)"
-	(removeRequested)="onRemove()"
-	(connectRequested)="onConnectOauth()"
-	(disconnectRequested)="onDisconnect()"
-/>

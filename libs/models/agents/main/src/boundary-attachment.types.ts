@@ -1,4 +1,10 @@
-/** Stable boundary kinds stored on an agent revision. */
+/**
+ * Identifies the knowledge boundary stored on an immutable agent revision.
+ *
+ * Revision parsers, Prisma mappers, and runtime evidence branch on these strings. Group boundaries
+ * may include descendants; Personal boundaries must remain exact. Renaming a value requires a
+ * migration of stored revision attachments and their serialized revision content.
+ */
 export enum RevisionBoundaryKinds
 {
 	/** A stored group provides the revision's knowledge boundary. */
@@ -7,7 +13,13 @@ export enum RevisionBoundaryKinds
 	Personal = "personal",
 }
 
-/** Stable coverage rules stored on an agent revision boundary attachment. */
+/**
+ * Determines how far a revision attachment reaches from its stored knowledge boundary.
+ *
+ * The revision writer persists this value and authorization intersects it with the caller's
+ * effective grants. `Descendants` applies only to a Group; parsers reject it for Personal
+ * attachments. Renaming either string requires a stored-revision migration.
+ */
 export enum RevisionBoundaryCoverages
 {
 	/** The attachment covers the named boundary alone. */

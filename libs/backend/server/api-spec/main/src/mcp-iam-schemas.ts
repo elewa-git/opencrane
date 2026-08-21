@@ -19,7 +19,7 @@ export const _McpIamOpenapiSchemas = {
 	McpInstalled: {
 		type: "object",
 		required: ["serverId"],
-		properties: { serverId: { type: "string" }, connectionStatus: { type: "string", enum: ["needs-credential", "activating", "connected", "oauth-connected", "shared-key", "activation-failed"] }, lastUsed: { type: ["string", "null"], format: "date-time" }, connectedAccount: { type: "string" } },
+		properties: { serverId: { type: "string" }, connectionStatus: { type: "string", enum: ["needs-credential", "shared-key"] }, lastUsed: { type: ["string", "null"], format: "date-time" } },
 	},
 	EntitledUser: {
 		type: "object",

@@ -1,14 +1,3 @@
-/** Untrusted request body accepted by the resource-sharing route. */
-export interface ResourceShareRequestBody
-{
-  /** Requested resource family before validation. */
-  resourceType?: string;
-  /** Requested resource identifier before validation. */
-  resourceId?: string;
-  /** Stable local Principal identifier that should receive access. */
-  recipientPrincipalId?: string;
-}
-
 /** Resource-share projection returned by the API. */
 export interface ResourceShareResponse
 {

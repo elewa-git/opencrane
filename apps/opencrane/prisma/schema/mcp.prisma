@@ -27,15 +27,14 @@ enum McpApprovalStatus {
   Disabled      @map("disabled")
 }
 
-// Per-user install connection state surfaced by the operator API. `credentialRef`
-// custody is never serialised — this enum reports state, never secret material.
+// Records whether an MCP install awaits external credential activation or is usable through an
+// administrator-managed shared key. The operator API returns these persisted values but exposes no
+// credential or OAuth activation command; changing either mapped value requires a data migration.
 enum McpConnectionStatus {
+  // The install remains unusable until a custody flow outside the current API activates it.
   NeedsCredential  @map("needs-credential")
-  Activating       @map("activating")
-  Connected        @map("connected")
-  OauthConnected   @map("oauth-connected")
+  // The install is usable through an administrator-managed key and needs no caller credential.
   SharedKey        @map("shared-key")
-  ActivationFailed @map("activation-failed")
 }
 
 model McpServer {
@@ -58,7 +57,6 @@ model McpServer {
   lastSyncedAt       DateTime?             @map("last_synced_at")
   createdAt          DateTime              @default(now()) @map("created_at")
   updatedAt          DateTime              @updatedAt @map("updated_at")
-  credentials        McpServerCredential[]
   installs           McpServerInstall[]
   source             ThirdPartySource?     @relation(fields: [sourceId], references: [id], onDelete: SetNull)
 
@@ -67,34 +65,19 @@ model McpServer {
   @@map("mcp_servers")
 }
 
-// Per-user installation of an MCP server (operator API). Holds the caller's
-// connection state and a write-only `credentialRef` custody handle (the actual
-// secret lives in the gateway plane / Obot, never here and never serialised).
+// Per-principal installation of an MCP server (operator API).
 model McpServerInstall {
   id               String              @id @default(cuid())
   mcpServerId      String              @map("mcp_server_id")
-  userId           String              @map("user_id")
+  principalId      String              @map("principal_id")
   connectionStatus McpConnectionStatus @default(NeedsCredential) @map("connection_status")
-  credentialRef    String?             @map("credential_ref")
-  connectedAccount String?             @map("connected_account")
   lastUsedAt       DateTime?           @map("last_used_at")
   createdAt        DateTime            @default(now()) @map("created_at")
   updatedAt        DateTime            @updatedAt @map("updated_at")
-  mcpServer        McpServer           @relation(fields: [mcpServerId], references: [id], onDelete: Cascade)
+  mcpServer        McpServer           @relation(fields: [mcpServerId], references: [id], onDelete: Restrict)
+  principal        Principal           @relation(fields: [principalId], references: [id], onDelete: Restrict)
 
-  @@unique([mcpServerId, userId])
-  @@index([userId])
+  @@unique([mcpServerId, principalId])
+  @@index([principalId])
   @@map("mcp_server_installs")
-}
-
-model McpServerCredential {
-  id          String    @id @default(cuid())
-  mcpServerId String    @map("mcp_server_id")
-  displayName String    @map("display_name")
-  createdAt   DateTime  @default(now()) @map("created_at")
-  updatedAt   DateTime  @updatedAt @map("updated_at")
-  mcpServer   McpServer @relation(fields: [mcpServerId], references: [id], onDelete: Cascade)
-
-  @@index([mcpServerId])
-  @@map("mcp_server_credentials")
 }

@@ -1,6 +1,6 @@
 import type { Prisma } from "@prisma/client";
 
-import type { CreateResourceShareRecipientRecord, CreateResourceShareRecord, ResourceShareRecipientRecord, ResourceShareRepository } from "./resource-share-repository.types";
+import type { ResourceShareRecipientRecord, ResourceShareRepository } from "./resource-share-repository.types";
 import { ResourceShareKinds, type ResourceShareRecord } from "./resource-share.types";
 
 /** Prisma projection used for the public resource-share record. */
@@ -47,32 +47,6 @@ export class PrismaResourceShareRepository implements ResourceShareRepository
 	/** Creates the adapter over the transaction supplied by the unit of work. */
 	constructor(transaction: Prisma.TransactionClient) { this._transaction = transaction; }
 
-	/** Confirms that one principal belongs to the exact silo. */
-	async principalExists(siloId: string, principalId: string): Promise<boolean>
-	{
-		const principal = await this._transaction.principal.findUnique({ where: { id_siloId: { id: principalId, siloId } }, select: { id: true } });
-		return principal !== null;
-	}
-
-	/** Finds one share through its unique silo and resource coordinates. */
-	async findByResource(siloId: string, resourceKind: ResourceShareKinds, resourceId: string): Promise<ResourceShareRecord | null>
-	{
-		const row = await this._transaction.resourceShare.findUnique({ where: { siloId_resourceKind_resourceId: { siloId, resourceKind, resourceId } }, select: _RESOURCE_SHARE_SELECT });
-		return row === null ? null : _record(row);
-	}
-
-	/** Creates the share parent or returns the row already stored at these coordinates. */
-	async createOrFind(input: CreateResourceShareRecord): Promise<ResourceShareRecord>
-	{
-		const row = await this._transaction.resourceShare.upsert({
-			where: { siloId_resourceKind_resourceId: { siloId: input.siloId, resourceKind: input.resourceKind, resourceId: input.resourceId } },
-			create: { siloId: input.siloId, resourceKind: input.resourceKind, resourceId: input.resourceId, ownerPrincipalId: input.ownerPrincipalId },
-			update: {},
-			select: _RESOURCE_SHARE_SELECT,
-		});
-		return _record(row);
-	}
-
 	/** Finds one recipient together with its resource owner and linked grant. */
 	async findRecipient(siloId: string, shareId: string, recipientPrincipalId: string): Promise<ResourceShareRecipientRecord | null>
 	{
@@ -84,28 +58,11 @@ export class PrismaResourceShareRepository implements ResourceShareRepository
 		return { shareId: row.share.id, siloId: row.share.siloId, ownerPrincipalId: row.share.ownerPrincipalId, recipientPrincipalId: row.principalId, grantId: row.grantId };
 	}
 
-	/** Inserts the explicit recipient relation while tolerating an identical retry. */
-	async createRecipient(input: CreateResourceShareRecipientRecord): Promise<boolean>
-	{
-		const result = await this._transaction.resourceShareRecipient.createMany({
-			data: [{ siloId: input.siloId, resourceShareId: input.shareId, principalId: input.recipientPrincipalId, grantedByPrincipalId: input.grantedByPrincipalId, grantId: input.grantId }],
-			skipDuplicates: true,
-		});
-		return result.count === 1;
-	}
-
 	/** Removes one recipient relation at the exact silo and share coordinates. */
 	async revokeRecipient(siloId: string, shareId: string, recipientPrincipalId: string): Promise<boolean>
 	{
 		const result = await this._transaction.resourceShareRecipient.deleteMany({ where: { siloId, resourceShareId: shareId, principalId: recipientPrincipalId } });
 		return result.count === 1;
-	}
-
-	/** Loads one complete current share projection. */
-	async findById(siloId: string, shareId: string): Promise<ResourceShareRecord | null>
-	{
-		const row = await this._transaction.resourceShare.findUnique({ where: { id_siloId: { id: shareId, siloId } }, select: _RESOURCE_SHARE_SELECT });
-		return row === null ? null : _record(row);
 	}
 
 	/** Lists shares owned by or granted to the authenticated principal. */

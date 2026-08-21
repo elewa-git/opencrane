@@ -1,7 +1,7 @@
 import { ServerResponse, type IncomingMessage } from "node:http";
 
 import type { RequestHandler } from "express";
-import type { Request } from "express";
+import type { Request, Response } from "express";
 
 import { _ResolveRequestPrincipal } from "@opencrane/backend/server/infra/auth";
 import type { SelfConversationSocketAuthenticator } from "@opencrane/backend/server/conversations";
@@ -19,10 +19,11 @@ import type { SelfConversationSocketAuthenticator } from "@opencrane/backend/ser
  *
  * @param sessionMiddleware - The public app's session middleware. Its first handler restores the
  *   signed-in browser session onto the upgrade request.
+ * @param authMiddleware - The same product authentication boundary used by public HTTP routes.
  * @returns An authenticator that supplies trusted silo and subject coordinates, or `null` for a
  *   rejected upgrade.
  */
-export function _CreateConversationSocketAuthenticator(sessionMiddleware: readonly RequestHandler[]): SelfConversationSocketAuthenticator
+export function _CreateConversationSocketAuthenticator(sessionMiddleware: readonly RequestHandler[], authMiddleware: RequestHandler): SelfConversationSocketAuthenticator
 {
 	const session = sessionMiddleware[0];
 	if (session === undefined) throw new Error("conversation socket authentication requires session middleware");
@@ -31,8 +32,10 @@ export function _CreateConversationSocketAuthenticator(sessionMiddleware: readon
 		{
 			if (!__IsSameOriginConversationSocketRequest(request)) return null;
 			await _RunSession(session, request);
-			const principal = _ResolveRequestPrincipal(_AsExpressRequest(request));
-			return principal === null ? null : { siloId: principal.siloId, subjectId: principal.subjectId };
+			const expressRequest = _AsExpressRequest(request);
+			if (!await _RunAuthentication(authMiddleware, expressRequest)) return null;
+			const principal = _ResolveRequestPrincipal(expressRequest);
+			return principal === null ? null : { siloId: principal.siloId, issuer: principal.externalIssuer, subjectId: principal.externalSubject };
 		}
 	};
 }
@@ -41,6 +44,7 @@ export function _CreateConversationSocketAuthenticator(sessionMiddleware: readon
 function _AsExpressRequest(request: IncomingMessage): Request
 {
 	return Object.assign(Object.create(request), {
+		path: new URL(request.url ?? "/", "http://localhost").pathname,
 		get(name: string): string | undefined { return name.toLowerCase() === "host" ? request.headers.host : undefined; }
 	}) as Request;
 }
@@ -78,5 +82,18 @@ function _RunSession(session: RequestHandler, request: IncomingMessage): Promise
 	{
 		const response = new ServerResponse(request);
 		session(request as never, response as never, function _Next(error?: unknown) { if (error === undefined) resolve(); else reject(error); });
+	});
+}
+
+/** Run product authentication and report whether it admitted the upgrade request. */
+function _RunAuthentication(authenticate: RequestHandler, request: Request): Promise<boolean>
+{
+	return new Promise<boolean>(function _Run(resolve, reject)
+	{
+		const response = {
+			status(): Response { return response as unknown as Response; },
+			json(): Response { resolve(false); return response as unknown as Response; },
+		} as unknown as Response;
+		authenticate(request, response, function _Next(error?: unknown) { if (error === undefined) resolve(true); else reject(error); });
 	});
 }

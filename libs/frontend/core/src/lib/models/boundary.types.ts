@@ -1,9 +1,13 @@
-/** Resource boundary kinds rendered across context, skills, datasets, and ledger evidence. */
+/**
+ * Selects how the UI labels and colours a resource boundary across context, skills, datasets, and
+ * ledger evidence. Context panels and ledger cards branch on this closed set, so a new kind needs
+ * an explicit label and colour before those components can render it.
+ */
 export enum ResourceBoundaryKind
 {
 	/** A stored IAM group; its name and parent hierarchy come from group data. */
 	Group = "group",
-	/** The exact boundary owned by one principal. */
+	/** Resources belong to one principal and never inherit a Group parent. */
 	Personal = "personal"
 }
 

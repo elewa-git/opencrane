@@ -5,8 +5,8 @@
 Let users discover entitled tools and let administrators govern them, while keeping credentials in
 an external custody boundary and distinguishing metadata configuration from executable readiness.
 
-Current status: `API partial`, `UI early`, `Needs decision` around the retained legacy registry. The
-present credential and OAuth routes must not be designed as verified connection success.
+Current status: `API partial`, `UI early`. Credential and OAuth activation are absent until a verified
+custody exchange and callback boundary are composed.
 
 ## TOL-01 — Browse my entitled tool catalogue
 
@@ -29,9 +29,8 @@ tool set only while I choose to use it.
 Acceptance criteria:
 
 - Installation revalidates published state and entitlement by ID.
-- Initial connection state is truthful: `needs-credential`, `shared-key`, or another server-derived
-  state.
-- Uninstall explains whether credentials, OAuth grants, or pending actions are affected.
+- Initial connection state is truthful: `needs-credential` or `shared-key`.
+- Uninstall removes only the local install because no credential or OAuth custody is accepted here.
 
 APIs: `GET/POST /api/v1/mcp/installed`, `DELETE /api/v1/mcp/installed/{serverId}`.
 
@@ -50,9 +49,7 @@ Acceptance criteria:
   disconnect states are finite.
 - A random reference without custody verification is never labelled connected.
 
-APIs: `PUT/DELETE /api/v1/mcp/installed/{serverId}/credential`.
-
-Status: `API blocked` for a truthful handshake; submitted values are currently discarded.
+Status: `API absent`; no endpoint accepts credential material until the custody handshake is implemented.
 
 ## TOL-04 — Connect with OAuth
 
@@ -66,9 +63,7 @@ Acceptance criteria:
 - The callback is bound to the user, silo, installation, provider and one-time state.
 - No OAuth token or refresh token is returned through ordinary product reads.
 
-APIs currently named `POST/DELETE /api/v1/mcp/installed/{serverId}/oauth`.
-
-Status: `API blocked`; POST currently performs no provider OAuth exchange.
+Status: `API absent`; no OAuth route exists until the full redirect and callback lifecycle is implemented.
 
 ## TOL-05 — Govern catalogue publication
 

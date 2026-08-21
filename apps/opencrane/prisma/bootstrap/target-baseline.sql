@@ -155,7 +155,7 @@ CREATE TYPE "McpServerType" AS ENUM ('single-user', 'multi-user', 'remote-oauth'
 CREATE TYPE "McpApprovalStatus" AS ENUM ('pending-review', 'approved', 'published', 'disabled');
 
 -- CreateEnum
-CREATE TYPE "McpConnectionStatus" AS ENUM ('needs-credential', 'activating', 'connected', 'oauth-connected', 'shared-key', 'activation-failed');
+CREATE TYPE "McpConnectionStatus" AS ENUM ('needs-credential', 'shared-key');
 
 -- CreateEnum
 CREATE TYPE "MemoryDatasetState" AS ENUM ('active', 'retired');
@@ -983,26 +983,13 @@ CREATE TABLE "mcp_servers" (
 CREATE TABLE "mcp_server_installs" (
     "id" TEXT NOT NULL,
     "mcp_server_id" TEXT NOT NULL,
-    "user_id" TEXT NOT NULL,
+    "principal_id" TEXT NOT NULL,
     "connection_status" "McpConnectionStatus" NOT NULL DEFAULT 'needs-credential',
-    "credential_ref" TEXT,
-    "connected_account" TEXT,
     "last_used_at" TIMESTAMP(3),
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updated_at" TIMESTAMP(3) NOT NULL,
 
     CONSTRAINT "mcp_server_installs_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "mcp_server_credentials" (
-    "id" TEXT NOT NULL,
-    "mcp_server_id" TEXT NOT NULL,
-    "display_name" TEXT NOT NULL,
-    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updated_at" TIMESTAMP(3) NOT NULL,
-
-    CONSTRAINT "mcp_server_credentials_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -2244,13 +2231,10 @@ CREATE UNIQUE INDEX "mcp_servers_silo_id_name_key" ON "mcp_servers"("silo_id", "
 CREATE INDEX "mcp_servers_approval_status_idx" ON "mcp_servers"("approval_status");
 
 -- CreateIndex
-CREATE INDEX "mcp_server_installs_user_id_idx" ON "mcp_server_installs"("user_id");
+CREATE INDEX "mcp_server_installs_principal_id_idx" ON "mcp_server_installs"("principal_id");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "mcp_server_installs_mcp_server_id_user_id_key" ON "mcp_server_installs"("mcp_server_id", "user_id");
-
--- CreateIndex
-CREATE INDEX "mcp_server_credentials_mcp_server_id_idx" ON "mcp_server_credentials"("mcp_server_id");
+CREATE UNIQUE INDEX "mcp_server_installs_mcp_server_id_principal_id_key" ON "mcp_server_installs"("mcp_server_id", "principal_id");
 
 -- CreateIndex
 CREATE INDEX "verified_fleet_membership_revisions_silo_id_expires_at_idx" ON "verified_fleet_membership_revisions"("silo_id", "expires_at");
@@ -2882,10 +2866,10 @@ ALTER TABLE "integration_custody_references" ADD CONSTRAINT "integration_custody
 ALTER TABLE "mcp_servers" ADD CONSTRAINT "mcp_servers_source_id_fkey" FOREIGN KEY ("source_id") REFERENCES "third_party_sources"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "mcp_server_installs" ADD CONSTRAINT "mcp_server_installs_mcp_server_id_fkey" FOREIGN KEY ("mcp_server_id") REFERENCES "mcp_servers"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "mcp_server_installs" ADD CONSTRAINT "mcp_server_installs_mcp_server_id_fkey" FOREIGN KEY ("mcp_server_id") REFERENCES "mcp_servers"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "mcp_server_credentials" ADD CONSTRAINT "mcp_server_credentials_mcp_server_id_fkey" FOREIGN KEY ("mcp_server_id") REFERENCES "mcp_servers"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "mcp_server_installs" ADD CONSTRAINT "mcp_server_installs_principal_id_fkey" FOREIGN KEY ("principal_id") REFERENCES "principals"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "verified_fleet_membership_assertions" ADD CONSTRAINT "verified_fleet_membership_assertions_revision_id_silo_id_fkey" FOREIGN KEY ("revision_id", "silo_id") REFERENCES "verified_fleet_membership_revisions"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;

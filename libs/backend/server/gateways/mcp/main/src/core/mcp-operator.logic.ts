@@ -1,10 +1,8 @@
-import { randomBytes } from "node:crypto";
-
 import { McpApprovalStatus, McpConnectionStatus, McpServerType, type CredentialField, type Directory, type EntitledUser, type McpAccessPolicy, type McpCatalogServer, type McpInstalled } from "@opencrane/contracts";
 import { __ResolvePrincipalAuthorization } from "@opencrane/backend/server/iam/authorization";
 import { AuthorizationBoundaryCoverages, AuthorizationBoundaryKinds, AuthorizationDecisionOutcomes, AuthorizationSubjectKinds, type AuthorizationBoundary, type CapabilityReference } from "@opencrane/models/authorization";
 import { ___SortBy } from "@opencrane/util";
-import type { McpAccessPolicyCommand, McpCredentialCommand, McpOperatorCaller } from "./mcp-operator.logic.types";
+import type { McpAccessPolicyCommand, McpOperatorCaller } from "./mcp-operator.logic.types";
 import type { McpOperatorInstallRecord, McpOperatorPrincipalRecord, McpOperatorServerRecord, McpOperatorTransaction, McpOperatorUnitOfWork } from "./mcp-operator-repository.types";
 
 const _CATALOG_ID = "opencrane-core";
@@ -15,7 +13,7 @@ const _RESOURCE_KIND = "mcp-server";
 
 const _TYPE = { SingleUser: McpServerType.SingleUser, MultiUser: McpServerType.MultiUser, RemoteOauth: McpServerType.RemoteOauth } as const;
 const _APPROVAL = { PendingReview: McpApprovalStatus.PendingReview, Approved: McpApprovalStatus.Approved, Published: McpApprovalStatus.Published, Disabled: McpApprovalStatus.Disabled } as const;
-const _CONNECTION = { NeedsCredential: McpConnectionStatus.NeedsCredential, Activating: McpConnectionStatus.Activating, Connected: McpConnectionStatus.Connected, OauthConnected: McpConnectionStatus.OauthConnected, SharedKey: McpConnectionStatus.SharedKey, ActivationFailed: McpConnectionStatus.ActivationFailed } as const;
+const _CONNECTION = { NeedsCredential: McpConnectionStatus.NeedsCredential, SharedKey: McpConnectionStatus.SharedKey } as const;
 const _AVATAR_COLORS = ["#1F3B6E", "#2E7D32", "#6A1B9A", "#C62828", "#00838F", "#EF6C00", "#4527A0", "#283593"];
 
 /** Lists published MCP servers authorized by generic principal/group grants. */
@@ -62,40 +60,15 @@ export function installServer(unitOfWork: McpOperatorUnitOfWork, caller: McpOper
 	});
 }
 
-/** Removes one principal's install and audits the deletion atomically. */
-export function uninstallServer(unitOfWork: McpOperatorUnitOfWork, principalId: string, serverId: string): Promise<boolean>
+/** Removes one principal's install. */
+export function uninstallServer(unitOfWork: McpOperatorUnitOfWork, principalId: string, serverId: string): Promise<"removed" | "not_found">
 {
 	return unitOfWork.execute(async function _Delete(transaction)
 	{
 		const removed = await transaction.mcp.deleteInstall(serverId, principalId);
 		if (removed) await transaction.mcp.appendAudit("Deleted", `McpServerInstall/${serverId}:${principalId}`, `MCP server ${serverId} uninstalled for ${principalId}`);
-		return removed;
+		return removed ? "removed" : "not_found";
 	});
-}
-
-/** Stores only an opaque credential handle and never the submitted secret. */
-export function setCredential(unitOfWork: McpOperatorUnitOfWork, principalId: string, serverId: string, command: McpCredentialCommand): Promise<McpInstalled | null>
-{
-	if (Object.keys(command.values).length === 0 || Object.values(command.values).some(value => !value)) return Promise.resolve(null);
-	return _Transition(unitOfWork, principalId, serverId, "Connected", `cred_${randomBytes(18).toString("hex")}`, `MCP credential connected for ${principalId} on server ${serverId}`);
-}
-
-/** Clears a principal credential handle. */
-export function clearCredential(unitOfWork: McpOperatorUnitOfWork, principalId: string, serverId: string): Promise<McpInstalled | null>
-{
-	return _Transition(unitOfWork, principalId, serverId, "NeedsCredential", null, `MCP credential cleared for ${principalId} on server ${serverId}`);
-}
-
-/** Stores an opaque OAuth custody handle. */
-export function connectOauth(unitOfWork: McpOperatorUnitOfWork, principalId: string, serverId: string): Promise<McpInstalled | null>
-{
-	return _Transition(unitOfWork, principalId, serverId, "OauthConnected", `oauth_${randomBytes(18).toString("hex")}`, `MCP OAuth connected for ${principalId} on server ${serverId}`);
-}
-
-/** Clears an OAuth custody handle. */
-export function disconnectOauth(unitOfWork: McpOperatorUnitOfWork, principalId: string, serverId: string): Promise<McpInstalled | null>
-{
-	return _Transition(unitOfWork, principalId, serverId, "NeedsCredential", null, `MCP OAuth disconnected for ${principalId} on server ${serverId}`);
 }
 
 /** Approves a server in the authenticated silo. */
@@ -194,17 +167,6 @@ async function _Allowed(transaction: McpOperatorTransaction, caller: McpOperator
 	return false;
 }
 
-function _Transition(unitOfWork: McpOperatorUnitOfWork, principalId: string, serverId: string, status: string, credentialRef: string | null, message: string): Promise<McpInstalled | null>
-{
-	return unitOfWork.execute(async function _Update(transaction)
-	{
-		if (!(await transaction.mcp.findInstall(serverId, principalId))) return null;
-		const install = await transaction.mcp.updateInstall(serverId, principalId, status, credentialRef);
-		await transaction.mcp.appendAudit("Updated", `McpServerInstall/${serverId}:${principalId}`, message);
-		return _MapInstall(install);
-	});
-}
-
 function _Approval(unitOfWork: McpOperatorUnitOfWork, caller: McpOperatorCaller, serverId: string, status: string, verb: string): Promise<McpCatalogServer | null>
 {
 	return unitOfWork.execute(async function _Update(transaction)
@@ -223,7 +185,7 @@ function _MapServer(server: McpOperatorServerRecord): McpCatalogServer
 
 function _MapInstall(install: McpOperatorInstallRecord): McpInstalled
 {
-	return { serverId: install.mcpServerId, connectionStatus: _CONNECTION[install.connectionStatus as keyof typeof _CONNECTION], lastUsed: install.lastUsedAt?.toISOString() ?? null, connectedAccount: install.connectedAccount ?? undefined };
+	return { serverId: install.mcpServerId, connectionStatus: _CONNECTION[install.connectionStatus as keyof typeof _CONNECTION], lastUsed: install.lastUsedAt?.toISOString() ?? null };
 }
 
 function _MapPrincipal(principal: McpOperatorPrincipalRecord): EntitledUser

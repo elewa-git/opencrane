@@ -43,40 +43,6 @@ describe("MockMcpGateway", () =>
 		expect(record.connectionStatus).toBe(McpConnectionStatus.SharedKey);
 	});
 
-	it("connects a single-user server once a credential is set, then disconnects", async () =>
-	{
-		const gateway = new MockMcpGateway();
-
-		const connected = await gateway.setCredential("stripe", { apiToken: "sk_live_test" });
-		expect(connected.connectionStatus).toBe(McpConnectionStatus.Connected);
-
-		const removed = await gateway.removeCredential("stripe");
-		expect(removed.connectionStatus).toBe(McpConnectionStatus.NeedsCredential);
-	});
-
-	it("never returns credential material from any read", async () =>
-	{
-		const gateway = new MockMcpGateway();
-		await gateway.setCredential("stripe", { apiToken: "sk_live_secret_value" });
-
-		const installed = await gateway.listInstalled();
-		const serialized = JSON.stringify(installed);
-		expect(serialized).not.toContain("sk_live_secret_value");
-	});
-
-	it("connects and disconnects an OAuth server with an account label", async () =>
-	{
-		const gateway = new MockMcpGateway();
-
-		const connected = await gateway.connectOauth("github");
-		expect(connected.connectionStatus).toBe(McpConnectionStatus.OauthConnected);
-		expect(connected.connectedAccount).toBeTruthy();
-
-		const disconnected = await gateway.disconnect("github");
-		expect(disconnected.connectionStatus).toBe(McpConnectionStatus.NeedsCredential);
-		expect(disconnected.connectedAccount).toBeUndefined();
-	});
-
 	it("uninstalls a server so it drops off the installed list", async () =>
 	{
 		const gateway = new MockMcpGateway();

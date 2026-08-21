@@ -37,7 +37,7 @@ SELECT (
         WHERE "schema_version" = '0.9.3'
           AND "source_schema_version" = '0.9.0'
           AND "source_baseline_sha256" = :'source_baseline_sha256'
-          AND "target_baseline_sha256" = 'a5e5f5e19a917d40ba113b2c7c26e63aaa58e9864456c340129fac9a2f05cb65'
+          AND "target_baseline_sha256" = '7eeaf6dc6bad9885a9855c51ef129f94f37048ba8afc3adc2cf76a24a3099fb1'
           AND "sql_sha256" = :'migration_sql_sha256'
           AND "migration_id" = '0.9.0-to-0.9.3'
     )
@@ -3466,6 +3466,23 @@ SET "user_id" = reference."principal_id"
 FROM "_iam_principal_reference" reference
 WHERE reference."reference" = install."user_id";
 
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM "mcp_server_installs" WHERE "credential_ref" IS NOT NULL OR "connection_status" IN ('connected', 'oauth-connected', 'activating', 'activation-failed')) THEN
+        RAISE EXCEPTION 'MCP install custody state must be reconciled before the IAM cutover' USING ERRCODE = 'OC900';
+    END IF;
+END;
+$$;
+ALTER TABLE "mcp_server_installs" RENAME COLUMN "user_id" TO "principal_id";
+ALTER TABLE "mcp_server_installs" DROP COLUMN "credential_ref";
+ALTER TABLE "mcp_server_installs" DROP COLUMN "connected_account";
+ALTER TABLE "mcp_server_installs" ALTER COLUMN "connection_status" DROP DEFAULT;
+ALTER TYPE "McpConnectionStatus" RENAME TO "McpConnectionStatus_legacy";
+CREATE TYPE "McpConnectionStatus" AS ENUM ('needs-credential', 'shared-key');
+ALTER TABLE "mcp_server_installs" ALTER COLUMN "connection_status" TYPE "McpConnectionStatus" USING "connection_status"::TEXT::"McpConnectionStatus";
+ALTER TABLE "mcp_server_installs" ALTER COLUMN "connection_status" SET DEFAULT 'needs-credential';
+DROP TYPE "McpConnectionStatus_legacy";
+
 CREATE TEMPORARY TABLE "_iam_group_reference" (
     "reference" TEXT NOT NULL,
     "group_id" TEXT NOT NULL,
@@ -3958,9 +3975,12 @@ ALTER TABLE "verified_fleet_membership_assertions" DROP COLUMN "scope_resource_i
 DROP TABLE "agent_revision_scope_attachments";
 DROP TABLE "mcp_server_access_users";
 DROP TABLE "mcp_server_access_policies";
+DROP TABLE "mcp_server_credentials";
 
 DROP INDEX "groups_name_key";
 DROP INDEX "mcp_servers_name_key";
+DROP INDEX "mcp_server_installs_user_id_idx";
+DROP INDEX "mcp_server_installs_mcp_server_id_user_id_key";
 
 CREATE INDEX "agent_revision_boundary_attachments_agent_revision_id_bound_idx" ON "agent_revision_boundary_attachments"("agent_revision_id", "boundary_kind", "boundary_group_id", "boundary_principal_id", "boundary_coverage");
 CREATE INDEX "agent_revision_boundary_attachments_silo_id_boundary_kind_idx" ON "agent_revision_boundary_attachments"("silo_id", "boundary_kind");
@@ -3970,6 +3990,8 @@ CREATE UNIQUE INDEX "groups_id_silo_id_key" ON "groups"("id", "silo_id");
 CREATE UNIQUE INDEX "groups_silo_id_name_key" ON "groups"("silo_id", "name");
 CREATE INDEX "group_memberships_silo_id_principal_id_idx" ON "group_memberships"("silo_id", "principal_id");
 CREATE UNIQUE INDEX "mcp_servers_silo_id_name_key" ON "mcp_servers"("silo_id", "name");
+CREATE INDEX "mcp_server_installs_principal_id_idx" ON "mcp_server_installs"("principal_id");
+CREATE UNIQUE INDEX "mcp_server_installs_mcp_server_id_principal_id_key" ON "mcp_server_installs"("mcp_server_id", "principal_id");
 CREATE INDEX "verified_fleet_membership_assertions_silo_id_subject_id_idx" ON "verified_fleet_membership_assertions"("silo_id", "subject_id");
 CREATE UNIQUE INDEX "resource_shares_id_silo_id_key" ON "resource_shares"("id", "silo_id");
 CREATE UNIQUE INDEX "resource_shares_silo_id_resource_kind_resource_id_key" ON "resource_shares"("silo_id", "resource_kind", "resource_id");
@@ -3981,6 +4003,9 @@ ALTER TABLE "agent_revision_boundary_attachments" ADD CONSTRAINT "agent_revision
     (("boundary_kind" = 'group' AND "boundary_group_id" IS NOT NULL AND "boundary_principal_id" IS NULL) OR
      ("boundary_kind" = 'personal' AND "boundary_group_id" IS NULL AND "boundary_principal_id" IS NOT NULL AND "boundary_coverage" = 'exact'))
 );
+ALTER TABLE "mcp_server_installs" DROP CONSTRAINT "mcp_server_installs_mcp_server_id_fkey";
+ALTER TABLE "mcp_server_installs" ADD CONSTRAINT "mcp_server_installs_mcp_server_id_fkey" FOREIGN KEY ("mcp_server_id") REFERENCES "mcp_servers"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "mcp_server_installs" ADD CONSTRAINT "mcp_server_installs_principal_id_fkey" FOREIGN KEY ("principal_id") REFERENCES "principals"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 ALTER TABLE "groups" ADD CONSTRAINT "groups_identity_check" CHECK (
     btrim("silo_id") <> '' AND btrim("name") <> '' AND ("parent_id" IS NULL OR btrim("parent_id") <> '')
 );
@@ -4199,7 +4224,7 @@ INSERT INTO "opencrane_migrations"."schema_history" (
     "target_baseline_sha256", "sql_sha256", "migration_id"
 ) VALUES (
     '0.9.3', '0.9.0', :'source_baseline_sha256',
-    'a5e5f5e19a917d40ba113b2c7c26e63aaa58e9864456c340129fac9a2f05cb65',
+    '7eeaf6dc6bad9885a9855c51ef129f94f37048ba8afc3adc2cf76a24a3099fb1',
     :'migration_sql_sha256', '0.9.0-to-0.9.3'
 );
 

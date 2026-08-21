@@ -1,6 +1,12 @@
 import type { Request } from "express";
 
-/** Resource families accepted by direct resource sharing. */
+/**
+ * Identifies the persisted resource family of a migrated direct share.
+ *
+ * The read and revocation API returns these values but exposes no share-creation command. Repository
+ * mapping rejects an unknown stored value, so adding or renaming one requires matching storage and
+ * API changes.
+ */
 export enum ResourceShareKinds
 {
 	/** Shares one governed artifact or file record. */
@@ -11,18 +17,18 @@ export enum ResourceShareKinds
 	Dataset = "dataset",
 }
 
-/** Outcomes returned by resource-share commands without exposing persistence failures. */
+/**
+ * Reports whether a resource-share revocation changed authority.
+ *
+ * The route maps `Revoked` to 204. `NotFound` also covers a missing share, missing recipient, or a
+ * caller who is not its owner, so the API returns 404 without disclosing which check failed. These
+ * values are returned in memory and are not persisted.
+ */
 export enum ResourceShareOutcomes
 {
-	/** The command completed and changed durable sharing state. */
-	Created = "created",
-	/** The requested sharing relation already existed. */
-	Existing = "existing",
-	/** The command completed and revoked durable sharing state. */
+	/** The recipient relation and its linked grant were revoked in one transaction. */
 	Revoked = "revoked",
-	/** The caller did not hold authority to perform the command. */
-	Forbidden = "forbidden",
-	/** A required principal, capability, share, or recipient did not exist. */
+	/** No matching recipient was visible to the caller, including when the caller does not own the share. */
 	NotFound = "not_found",
 }
 
@@ -54,28 +60,6 @@ export interface ResourceShareRecord
 	/** Principals with explicit live recipient relations. */
 	readonly recipientPrincipalIds: readonly string[];
 }
-
-/** Command that creates one explicit resource recipient. */
-export interface CreateResourceShareCommand
-{
-	/** Authenticated principal and silo derived outside the request body. */
-	readonly caller: ResourceShareCaller;
-	/** Governed resource family. */
-	readonly resourceKind: ResourceShareKinds;
-	/** Exact governed resource identifier. */
-	readonly resourceId: string;
-	/** Existing same-silo principal that should receive access. */
-	readonly recipientPrincipalId: string;
-	/** Trusted wall-clock time used by generic grant evaluation. */
-	readonly nowEpochMs: number;
-}
-
-/** Result of creating or resolving one explicit resource recipient. */
-export type CreateResourceShareResult =
-	| { readonly outcome: ResourceShareOutcomes.Created; readonly share: ResourceShareRecord }
-	| { readonly outcome: ResourceShareOutcomes.Existing; readonly share: ResourceShareRecord }
-	| { readonly outcome: ResourceShareOutcomes.Forbidden }
-	| { readonly outcome: ResourceShareOutcomes.NotFound };
 
 /** Command that revokes one explicit resource recipient. */
 export interface RevokeResourceShareCommand

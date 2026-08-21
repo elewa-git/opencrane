@@ -50,26 +50,19 @@ export enum McpApprovalStatus
 }
 
 /**
- * Whether one user's install of a server is usable yet, and how it was connected.
+ * Reports whether an installed MCP server still needs external activation or is usable through an
+ * administrator-managed shared key.
  *
- * It reports only whether a credential is held and by what route — never the credential itself.
- * `Activating` and `ActivationFailed` are both transient-looking but only the first will change
- * on its own; a UI must offer a retry for the second.
+ * The operator API returns these values from persisted install rows. OpenCrane currently has no
+ * credential or OAuth activation command, so `NeedsCredential` cannot advance through this API.
+ * Renaming either value requires matching database and API changes.
  */
 export enum McpConnectionStatus
 {
-  /** Installed but no credential authored yet. */
+  /** The server is installed but remains unusable until an external custody flow activates it. */
   NeedsCredential = "needs-credential",
-  /** Credential submitted; the gateway is establishing the connection. */
-  Activating = "activating",
-  /** Connected via a per-user credential. */
-  Connected = "connected",
-  /** Connected via a remote OAuth handshake. */
-  OauthConnected = "oauth-connected",
-  /** Connected via the org-wide shared key (multi-user servers). */
+  /** The server is usable through an administrator-managed key; the caller supplies no credential. */
   SharedKey = "shared-key",
-  /** The gateway failed to establish the connection. */
-  ActivationFailed = "activation-failed",
 }
 
 /**
@@ -119,8 +112,7 @@ export interface McpCatalogServer
 }
 
 /**
- * A server installed by the calling user, with its connection state. Never carries
- * credential material — `connectedAccount` is a non-secret display label only.
+ * A server installed by the calling user, with its connection state.
  */
 export interface McpInstalled
 {
@@ -130,8 +122,6 @@ export interface McpInstalled
   connectionStatus?: McpConnectionStatus;
   /** ISO-8601 timestamp of last use, or null when never used. */
   lastUsed?: string | null;
-  /** Non-secret display label of the connected account (e.g. an email). */
-  connectedAccount?: string;
 }
 
 /**

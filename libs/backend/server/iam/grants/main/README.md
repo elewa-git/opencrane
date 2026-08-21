@@ -9,16 +9,16 @@ answers **who is making this request, and are they allowed to do this?** Grants 
 sharing process that lets a user delegate direct read access to another local Principal.
 
 A **share** pairs an explicit `ResourceShareRecipient` relation with one generic `AuthorizationGrant`:
-"this Principal may read this exact resource at its owner's Personal boundary". People create shares
-through `/api/v1/resource-shares`. The service evaluates the owner's current grant before writing,
-so possession of a resource identifier or old share row never grants delegation authority.
+"this Principal may read this exact resource at its owner's Personal boundary". The retained API lists
+migrated shares and revokes recipients. Creation is absent until resource owners expose an authoritative
+lifecycle boundary.
 
 ```
- user shares a file/chat/dataset       POST /api/v1/resource-shares
+ user inspects or revokes a migrated share
         │  verified OIDC identity becomes one local Principal
         ▼
  ┌───────────────────────────────┐
- │   grants   ◄── HERE            │  re-checks authority, writes relation + grant
+ │   grants   ◄── HERE            │  lists relations and revokes relation + grant
  └───────────────────────────────┘
         │  one transaction commits both records or neither
         ▼
@@ -27,14 +27,14 @@ so possession of a resource identifier or old share row never grants delegation 
 
 **In this flow:** [authorization](../../authorization/main/README.md) · [groups](../../groups/main/README.md)
 
-Invariant: share creation and revocation update the explicit recipient and its exact linked grant in
-one transaction. The route receives a local Principal resolved from the verified OIDC issuer and
+Invariant: revocation updates the explicit recipient and its exact linked grant in one transaction.
+The route receives a local Principal resolved from the verified OIDC issuer and
 subject; it never queries Prisma or accepts caller identity from the request body. Revocation soft-
 revokes the grant for audit and recovery while removing the live recipient relation.
 
 ## Public surface
 
-- `ResourceShareService` — the atomic create, list, and revoke authority.
+- `ResourceShareService` — the atomic list and revoke authority.
 - `ResourceShareUnitOfWork` and `ResourceShareRepository` — the transaction and persistence ports.
 - `PrismaResourceShareUnitOfWork` — the application-composed PostgreSQL transaction adapter.
 - `resourceSharesRouter` and its transport types — the `/api/v1/resource-shares` HTTP adapter.

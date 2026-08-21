@@ -2,8 +2,8 @@ import { Injectable, inject } from "@angular/core";
 
 import { ControlPlaneApiService, McpAccessPolicy, McpDirectory, McpInstalledServer, McpServer } from "@opencrane/core";
 
-import { McpGateway } from "./mcp-gateway.types";
-import { McpAccessPolicyWire, McpInstalledWire, McpServerWire, _MapAccessPolicy, _MapDirectory, _MapInstalled, _MapServer } from "./mcp-mapper.util";
+import type { McpAccessPolicyWire, McpGateway, McpInstalledWire, McpServerWire } from "./mcp-gateway.types";
+import { _MapAccessPolicy, _MapDirectory, _MapInstalled, _MapServer } from "./mcp-mapper.util";
 
 /**
  * Live {@link McpGateway} backed by the OpenCrane opencrane-ui MCP API.
@@ -18,9 +18,8 @@ import { McpAccessPolicyWire, McpInstalledWire, McpServerWire, _MapAccessPolicy,
  * projected wire types until the endpoints are synced into the generated client.
  * Bound in `live` mode by `provideControlPlaneGateways`.
  *
- * **Security:** {@link setCredential} is the only secret-bearing call and is
- * write-only — the values are POSTed and never read back. No read method returns
- * credential material. Neither the agent runtime nor the browser receives a provider URL or secret.
+ * Credential-bearing operations are intentionally absent until a verified
+ * custody boundary is composed.
  */
 @Injectable()
 export class OpenCraneMcpGateway implements McpGateway
@@ -52,30 +51,6 @@ export class OpenCraneMcpGateway implements McpGateway
 	public async uninstall(serverId: string): Promise<void>
 	{
 		await this._api.request<void>("DELETE", `/mcp/installed/${encodeURIComponent(serverId)}`);
-	}
-
-	/** @inheritdoc */
-	public async setCredential(serverId: string, values: Record<string, string>): Promise<McpInstalledServer>
-	{
-		return _MapInstalled(await this._api.request<McpInstalledWire>("PUT", `/mcp/installed/${encodeURIComponent(serverId)}/credential`, { body: { values } }));
-	}
-
-	/** @inheritdoc */
-	public async removeCredential(serverId: string): Promise<McpInstalledServer>
-	{
-		return _MapInstalled(await this._api.request<McpInstalledWire>("DELETE", `/mcp/installed/${encodeURIComponent(serverId)}/credential`));
-	}
-
-	/** @inheritdoc */
-	public async connectOauth(serverId: string): Promise<McpInstalledServer>
-	{
-		return _MapInstalled(await this._api.request<McpInstalledWire>("POST", `/mcp/installed/${encodeURIComponent(serverId)}/oauth`));
-	}
-
-	/** @inheritdoc */
-	public async disconnect(serverId: string): Promise<McpInstalledServer>
-	{
-		return _MapInstalled(await this._api.request<McpInstalledWire>("DELETE", `/mcp/installed/${encodeURIComponent(serverId)}/oauth`));
 	}
 
 	// --- Admin ---
