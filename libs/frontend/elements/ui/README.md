@@ -89,8 +89,8 @@ package.
 
 Stories tagged `visual-test-narrow` are captured at the supported 390-pixel viewport instead of the
 default desktop viewport, so responsive contracts remain explicit and reproducible.
-Stories tagged `visual-test-full-viewport` must render exactly one journey canvas whose height is at
-least the selected browser viewport, so short routes cannot expose the body below their surface.
+Stories tagged `visual-test-full-viewport` must render one journey canvas or routed workspace shell
+at the selected browser viewport height, so short routes cannot expose the body below their surface.
 
 ## See also
 

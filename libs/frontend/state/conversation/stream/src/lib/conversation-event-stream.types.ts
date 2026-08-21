@@ -67,6 +67,17 @@ export interface StreamConversationEventsCommand
 	readonly reconnectDelayMilliseconds?: number;
 }
 
+/** Carries one participant message through the transport already selected for its conversation. */
+export interface SubmitConversationEventStreamMessageCommand
+{
+	/** Conversation selected by the active event stream. */
+	readonly conversationId: string;
+	/** Retry key the server uses to deduplicate uncertain submissions. */
+	readonly idempotencyKey: string;
+	/** Display-safe participant blocks retained unchanged for an exact retry. */
+	readonly blocks: readonly { readonly id: string; readonly kind: string; readonly value: string }[];
+}
+
 /**
  * Reads one signed-in participant's conversation updates without prescribing a transport.
  *
@@ -91,4 +102,12 @@ export interface ConversationEventStream
 	 * @throws Error when the implementation cannot continue without the caller changing something.
 	 */
 	stream(command: StreamConversationEventsCommand): Promise<AgUiStreamState>;
+	/**
+	 * Submits a participant message through the selected conversation's live transport.
+	 *
+	 * @param command - The selected conversation and retry-stable participant blocks.
+	 * @returns A promise fulfilled only after the server acknowledges admission or replay.
+	 * @throws ConversationEventStreamMessageError when the stream cannot safely submit the command.
+	 */
+	submit(command: SubmitConversationEventStreamMessageCommand): Promise<void>;
 }

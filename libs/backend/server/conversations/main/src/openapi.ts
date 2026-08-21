@@ -4,41 +4,6 @@ import { ConversationAuthorityOutcomes } from "./types/conversation-authority-re
 import { PersonalAgentDirectoryStatuses } from "./types/conversation-directory.types";
 
 /**
- * OpenAPI description of the live replay route, owned by this package rather than by the
- * central spec file, so the route and its documentation move together.
- *
- * Merged into the full document by `_DomainOpenapiPaths`
- * (libs/backend/server/api-spec/main/src/domain-openapi-paths.ts) and served at
- * `/api/v1/openapi.json`. The paths are relative to that `/api/v1` prefix and must match what
- * `__CreateSelfConversationReplayRouter` actually mounts — a mismatch here ships a wrong
- * generated client, since the same document generates the frontend SDK.
- *
- * @see https://html.spec.whatwg.org/multipage/server-sent-events.html — the 200 response is a
- * `text/event-stream`, which is why `Last-Event-ID` appears as a documented request header.
- */
-export const _SelfConversationReplayOpenapiPaths = {
-	"/me/conversations/{conversationId}/events": {
-		get: {
-			operationId: "replayMyConversationEvents",
-			summary: "Replay the signed-in participant's canonical conversation events",
-			description: "The server derives the participant and silo from the browser session. It streams display-safe canonical events only when that participant belongs to the selected conversation.",
-			tags: ["Conversations"],
-			parameters: [
-				{ name: "conversationId", in: "path", required: true, schema: { type: "string" }, description: "Opaque conversation identifier." },
-				{ name: "cursor", in: "query", required: false, schema: { type: "string" }, description: "Opaque canonical event cursor. The Last-Event-ID header is an equivalent resume mechanism." },
-				{ name: "Last-Event-ID", in: "header", required: false, schema: { type: "string" }, description: "Opaque canonical event cursor. It must match cursor when both are supplied." },
-			],
-			responses: {
-				200: { description: "A bounded text/event-stream replay. An empty stream does not disclose whether the conversation exists or belongs to another participant.", content: { "text/event-stream": { schema: { type: "string" } } } },
-				400: { description: "The conversation identifier or replay cursor is malformed.", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
-				401: { description: "No authenticated browser session owns the request.", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
-				503: { description: "Canonical history could not be read.", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
-			},
-		},
-	},
-};
-
-/**
  * Shared participant conversation summary schema kept local to the owning OpenAPI fragment.
  *
  * `participantRefs` holds opaque OrgMembership row identifiers, not login subjects: the query
@@ -187,7 +152,6 @@ const _AgentThreadSnapshotSchema = {
  * and 200 for an identical retry — two different bodies, distinguished by the `outcome` field.
  * The run-retry route repeats that pair, and `_runRetryDenialStatus` maps its denials.
  *
- * @see {@link _SelfConversationReplayOpenapiPaths} for the live stream on the same path prefix.
  */
 export const _SelfConversationsOpenapiPaths = {
 	// The directory is what a client must call before it can create anything: creation now accepts

@@ -1,51 +1,61 @@
-import { Injectable, inject } from "@angular/core";
+import { Injectable } from "@angular/core";
 
-import { ControlPlaneApiService } from "@opencrane/core";
-import { __AgUiResumeCursor, __CreateAgUiStreamState, __DecodeAgUiSseRecord, __ReduceAgUiStream, __RevokeAgUiStreamAccess, type AgUiStreamState } from "@opencrane/state/conversation/ag-ui";
-import { ConversationEventStreamStatuses, type ConversationEventStream, type ConversationEventStreamUpdate, type StreamConversationEventsCommand } from "@opencrane/state/conversation/stream";
+import { __AgUiResumeCursor, __CreateAgUiStreamState, __DecodeAgUiSocketRecord, __ReduceAgUiStream, __RevokeAgUiStreamAccess, type AgUiStreamState } from "@opencrane/state/conversation/ag-ui";
+import { ConversationEventStreamMessageError, ConversationEventStreamStatuses, type ConversationEventStream, type ConversationEventStreamUpdate, type StreamConversationEventsCommand, type SubmitConversationEventStreamMessageCommand } from "@opencrane/state/conversation/stream";
 
-import { _ConversationEventHttpError, _ConversationEventProtocolError } from "./conversation-event-stream.errors";
+/** Maximum time the browser waits for the socket authority to acknowledge a submitted message. */
+const _MESSAGE_ACKNOWLEDGEMENT_TIMEOUT_MILLISECONDS = 30_000;
 
-/** Largest partial frame held while waiting for the rest of it; a bigger one fails the stream. */
-const _MAXIMUM_FRAME_BYTES = 1_048_576;
-
-/** Scratch state the reconnect loop updates while one response is being read. */
-interface ConversationEventStreamProgress
+/** A request waiting for its matching socket acknowledgement. */
+interface PendingMessage
 {
-	/** The state so far, including the last cursor accepted. */
+	/** Exact socket whose acknowledgement alone may settle this command. */
+	readonly socket: WebSocket;
+	/** Resolves only after the server confirms admission or an idempotent replay. */
+	readonly resolve: () => void;
+	/** Rejects when the server refuses, disconnects, or does not answer in time. */
+	readonly reject: (error: Error) => void;
+	/** Cancels the acknowledgement deadline once the request has settled. */
+	readonly timeout: ReturnType<typeof setTimeout>;
+}
+
+/** Mutable progress carried through one socket connection and its reconnect handoff. */
+interface ConversationSocketProgress
+{
+	/** Last projection state accepted from the authenticated socket. */
 	state: AgUiStreamState;
-	/** Latest heartbeat time accepted from the transport. */
+	/** Most recent heartbeat received from the socket, or null before the first one. */
 	lastHeartbeatAt: number | null;
-	/** Whether this response delivered at least one event; if so the reconnect counter resets. */
+	/** Whether this connection delivered a projection event before it closed. */
 	receivedEvent: boolean;
 }
 
 /**
- * Reads a conversation's event stream from the Control Plane API over the browser's cookie session.
+ * Reads conversation projections and submits messages over the authenticated browser WebSocket.
  *
- * The live implementation of {@link ConversationEventStream}. It GETs
- * `/me/conversations/{conversationId}/events` as a byte stream, splits it into SSE frames, decodes
- * each with `__DecodeAgUiSseRecord` and folds it in with `__ReduceAgUiStream`. Authorization is the
- * session cookie the generated client already carries, so the endpoint only ever returns the
- * signed-in user's own conversation — there is no user id to pass.
+ * The socket carries the historical replay, live AG-UI events, and participant commands. The
+ * browser sends the normal same-origin session cookie during its upgrade; it never supplies a
+ * subject, silo, or access token. A reconnect puts the opaque projection cursor in the socket URL,
+ * so the authority resumes after the last accepted event instead of loading messages through HTTP.
  *
- * `@Injectable()` with no `providedIn`: provide it where it is needed rather than app-wide, so one
- * stream instance does not outlive the screen that started it.
+ * The workspace composition provides one instance for the selected conversation. `stream` returns
+ * the last accepted projection when its signal aborts and rejects after its reconnect allowance is
+ * exhausted; `submit` resolves only after the socket acknowledges the idempotency key.
  *
- * Called by: the web app binds this class to `CONVERSATION_WORKSPACE_EVENT_STREAM` in
- * `provideConversationWorkspaceComposition`; `ConversationWorkspaceStore` then starts it after a
- * conversation snapshot loads. The adapter tests also construct it directly.
- *
- * @implements ConversationEventStream
- * @see AG-UI protocol docs — the events on the wire: https://docs.ag-ui.com
+ * Called by: `ConversationWorkspaceStore` through `CONVERSATION_WORKSPACE_EVENT_STREAM`; the
+ * workspace gateway uses {@link submit} for ordinary participant messages.
  */
 @Injectable()
 export class OpenCraneConversationEventStream implements ConversationEventStream
 {
-	/** Control Plane client; its cookie session is what authorizes the request. */
-	private readonly _api = inject(ControlPlaneApiService);
+	/** Socket currently owned by the selected conversation. */
+	private _socket: WebSocket | null = null;
+	/** Conversation that owns `_socket`, preventing a late command from reaching a new selection. */
+	private _conversationId: string | null = null;
+	/** In-flight message commands keyed by their browser-generated acknowledgement coordinate. */
+	private readonly _pendingMessages = new Map<string, PendingMessage>();
 
-	/** @inheritdoc */
+	/** Stream this conversation's history and live projection until the caller aborts it. */
 	public async stream(command: StreamConversationEventsCommand): Promise<AgUiStreamState>
 	{
 		_ValidateCommand(command);
@@ -56,15 +66,13 @@ export class OpenCraneConversationEventStream implements ConversationEventStream
 
 		while (!command.signal.aborted)
 		{
-			const progress: ConversationEventStreamProgress = { state, lastHeartbeatAt, receivedEvent: false };
+			const progress: ConversationSocketProgress = { state, lastHeartbeatAt, receivedEvent: false };
 			try
 			{
-				const body = await this._open(command, state);
-				_Emit(command, { status: ConversationEventStreamStatuses.Live, state, reconnectAttempt, lastHeartbeatAt });
-				await _ConsumeResponse(body, progress, command, reconnectAttempt);
+				await this._connect(command, progress, reconnectAttempt);
 				state = progress.state;
 				lastHeartbeatAt = progress.lastHeartbeatAt;
-				if (state.accessRevoked) throw new Error("conversation event access was revoked");
+				if (state.accessRevoked) throw new Error("conversation socket access was revoked");
 				if (progress.receivedEvent) reconnectAttempt = 0;
 			}
 			catch (error)
@@ -72,18 +80,10 @@ export class OpenCraneConversationEventStream implements ConversationEventStream
 				state = progress.state;
 				lastHeartbeatAt = progress.lastHeartbeatAt;
 				if (command.signal.aborted) break;
-				if (error instanceof _ConversationEventHttpError && error.status === 404)
-				{
-					state = __RevokeAgUiStreamAccess();
-					_Fail(command, state, reconnectAttempt, lastHeartbeatAt, error);
-				}
-				if (state.accessRevoked || error instanceof _ConversationEventProtocolError || (error instanceof _ConversationEventHttpError && !_IsRetryableHttpStatus(error.status))) _Fail(command, state, reconnectAttempt, lastHeartbeatAt, error);
+				if (state.accessRevoked) _Fail(command, __RevokeAgUiStreamAccess(), reconnectAttempt, lastHeartbeatAt, error);
 				if (progress.receivedEvent) reconnectAttempt = 0;
 				reconnectAttempt += 1;
-				if (reconnectAttempt > (command.maximumReconnectAttempts ?? 3))
-				{
-					_Fail(command, state, reconnectAttempt, lastHeartbeatAt, error);
-				}
+				if (reconnectAttempt > (command.maximumReconnectAttempts ?? 3)) _Fail(command, state, reconnectAttempt, lastHeartbeatAt, error);
 			}
 
 			if (!command.signal.aborted)
@@ -97,111 +97,143 @@ export class OpenCraneConversationEventStream implements ConversationEventStream
 		return state;
 	}
 
-	/** Open one streaming response, sending the resume cursor as both a query param and Last-Event-ID. */
-	private async _open(command: StreamConversationEventsCommand, state: AgUiStreamState): Promise<ReadableStream<Uint8Array>>
+	/** Submit a message through the currently live socket and wait for its matching acknowledgement. */
+	public submit(command: SubmitConversationEventStreamMessageCommand): Promise<void>
 	{
-		const cursor = __AgUiResumeCursor(state);
-		const { data, error, response } = await this._api.client.GET("/me/conversations/{conversationId}/events", {
-			params: {
-				path: { conversationId: command.conversationId },
-				...(cursor === undefined ? {} : { query: { cursor }, header: { "Last-Event-ID": cursor } })
-			},
-			parseAs: "stream",
-			signal: command.signal
+		const socket = this._socket;
+		if (socket === null || this._conversationId !== command.conversationId || socket.readyState !== WebSocket.OPEN) return Promise.reject(new ConversationEventStreamMessageError());
+		const requestId = globalThis.crypto.randomUUID();
+		return new Promise<void>((resolve, reject) =>
+		{
+			const timeout = setTimeout(() => this._rejectMessage(requestId), _MESSAGE_ACKNOWLEDGEMENT_TIMEOUT_MILLISECONDS);
+			this._pendingMessages.set(requestId, { socket, resolve, reject, timeout });
+			try { socket.send(JSON.stringify({ type: "conversation.message.submit", requestId, idempotencyKey: command.idempotencyKey, blocks: command.blocks })); }
+			catch { this._rejectMessage(requestId); }
 		});
-		if (error !== undefined || !response.ok) throw new _ConversationEventHttpError(response.status);
-		if (data === undefined || data === null) throw new _ConversationEventProtocolError("canonical conversation event response has no stream body");
-		return data;
 	}
-}
 
-/** Read the response body chunk by chunk, decoding each complete SSE frame as it arrives. */
-async function _ConsumeResponse(body: ReadableStream<Uint8Array>, progress: ConversationEventStreamProgress, command: StreamConversationEventsCommand, reconnectAttempt: number): Promise<void>
-{
-	const reader = body.getReader();
-	const decoder = new TextDecoder();
-	let buffer = "";
-	try
+	/** Open one socket and resolve when it closes, leaving reconnection to `stream`. */
+	private _connect(command: StreamConversationEventsCommand, progress: ConversationSocketProgress, reconnectAttempt: number): Promise<void>
 	{
-		while (!command.signal.aborted)
+		const cursor = __AgUiResumeCursor(progress.state);
+		const socket = new WebSocket(_SocketUrl(command.conversationId, cursor));
+		this._release(this._socket, new ConversationEventStreamMessageError());
+		this._socket = socket;
+		this._conversationId = command.conversationId;
+		return new Promise<void>((resolve, reject) =>
 		{
-			const chunk = await reader.read();
-			if (chunk.done) break;
-			buffer += decoder.decode(chunk.value, { stream: true });
-			if (buffer.length > _MAXIMUM_FRAME_BYTES) throw new _ConversationEventProtocolError("canonical conversation event frame exceeded its bound");
-			buffer = _ConsumeFrames(buffer, progress, command, reconnectAttempt);
-		}
-		buffer += decoder.decode();
-		buffer = _ConsumeFrames(buffer, progress, command, reconnectAttempt);
-		if (!command.signal.aborted && buffer.trim().length > 0) throw new _ConversationEventProtocolError("canonical conversation event stream ended with an incomplete frame");
+			let opened = false;
+			function _Finish(): void { command.signal.removeEventListener("abort", _Abort); }
+			function _Abort(): void { socket.close(1000, "selection_changed"); }
+			command.signal.addEventListener("abort", _Abort, { once: true });
+			socket.addEventListener("open", () =>
+			{
+				opened = true;
+				_Emit(command, { status: ConversationEventStreamStatuses.Live, state: progress.state, reconnectAttempt, lastHeartbeatAt: progress.lastHeartbeatAt });
+			});
+			socket.addEventListener("message", event =>
+			{
+				if (typeof event.data !== "string") { socket.close(1003, "text_frames_required"); return; }
+				if (_HandleMessageAcknowledgement(event.data, this._pendingMessages)) return;
+				try
+				{
+					const frame = _Json(event.data);
+					if (_IsHeartbeat(frame)) { progress.lastHeartbeatAt = Date.now(); _Emit(command, { status: ConversationEventStreamStatuses.Live, state: progress.state, reconnectAttempt, lastHeartbeatAt: progress.lastHeartbeatAt }); return; }
+					const record = __DecodeAgUiSocketRecord(frame);
+					if (record === null) throw new Error("invalid conversation socket event");
+					progress.state = __ReduceAgUiStream(progress.state, record);
+					progress.receivedEvent = true;
+					_Emit(command, { status: ConversationEventStreamStatuses.Live, state: progress.state, reconnectAttempt, lastHeartbeatAt: progress.lastHeartbeatAt });
+				}
+				catch (error) { socket.close(1002, "invalid_event"); reject(error); }
+			});
+			socket.addEventListener("close", event =>
+			{
+				_Finish();
+				this._release(socket, new ConversationEventStreamMessageError());
+				if (command.signal.aborted) { resolve(); return; }
+				if (event.code === 1008) { progress.state = __RevokeAgUiStreamAccess(); reject(new Error("conversation socket access was revoked")); return; }
+				if (!opened) { reject(new Error("conversation socket could not connect")); return; }
+				resolve();
+			});
+			socket.addEventListener("error", () => { if (!opened) reject(new Error("conversation socket could not connect")); });
+		});
 	}
-	finally
+
+	/** Reject every command owned by a socket that just closed or was replaced. */
+	private _release(socket: WebSocket | null, error: Error): void
 	{
-		await reader.cancel().catch(function _IgnoreClosedReader(): void { /* The response may already be closed. */ });
-		_releaseReader(reader);
+		if (socket === null) return;
+		for (const [requestId, pending] of this._pendingMessages)
+		{
+			if (pending.socket !== socket) continue;
+			clearTimeout(pending.timeout);
+			pending.reject(error);
+			this._pendingMessages.delete(requestId);
+		}
+		if (this._socket === socket) { this._socket = null; this._conversationId = null; }
 	}
-}
 
-/** Release the reader after cancelling it, dropping anything still buffered. */
-function _releaseReader(reader: ReadableStreamDefaultReader<Uint8Array>): void { reader.releaseLock(); }
-
-/** Take every complete frame out of the buffer, accepting either LF or CRLF line endings. */
-function _ConsumeFrames(buffer: string, progress: ConversationEventStreamProgress, command: StreamConversationEventsCommand, reconnectAttempt: number): string
-{
-	let remaining = buffer;
-	while (true)
+	/** Reject one unacknowledged command after a socket failure or acknowledgement timeout. */
+	private _rejectMessage(requestId: string): void
 	{
-		const boundary = /\r?\n\r?\n/u.exec(remaining);
-		if (boundary === null || boundary.index === undefined) break;
-		const frame = remaining.slice(0, boundary.index);
-		remaining = remaining.slice(boundary.index + boundary[0].length);
-		if (_IsHeartbeat(frame))
-		{
-			progress.lastHeartbeatAt = Date.now();
-			_Emit(command, { status: ConversationEventStreamStatuses.Live, state: progress.state, reconnectAttempt, lastHeartbeatAt: progress.lastHeartbeatAt });
-			continue;
-		}
-		const record = __DecodeAgUiSseRecord(frame);
-		if (record === null) throw new _ConversationEventProtocolError("invalid canonical conversation event record");
-		try
-		{
-			progress.state = __ReduceAgUiStream(progress.state, record);
-		}
-		catch (error)
-		{
-			throw new _ConversationEventProtocolError("canonical conversation event sequence is invalid", { cause: error });
-		}
-		progress.receivedEvent = true;
-		_Emit(command, { status: ConversationEventStreamStatuses.Live, state: progress.state, reconnectAttempt, lastHeartbeatAt: progress.lastHeartbeatAt });
+		const pending = this._pendingMessages.get(requestId);
+		if (pending === undefined) return;
+		clearTimeout(pending.timeout);
+		this._pendingMessages.delete(requestId);
+		pending.reject(new ConversationEventStreamMessageError());
 	}
-	return remaining;
 }
 
-/** Whether a frame is a keep-alive: an SSE comment frame with no fields. */
-function _IsHeartbeat(frame: string): boolean
+/** Build the same-origin socket address so the browser supplies its existing session cookie. */
+function _SocketUrl(conversationId: string, cursor: string | undefined): string
 {
-	const lines = frame.replaceAll("\r\n", "\n").split("\n").filter(line => line.length > 0);
-	return lines.length > 0 && lines.every(line => line.startsWith(":"));
+	const origin = globalThis.location.origin.replace(/^http/u, "ws");
+	const url = new URL(`/api/v1/me/conversations/${encodeURIComponent(conversationId)}/socket`, origin);
+	if (cursor !== undefined) url.searchParams.set("cursor", cursor);
+	return url.toString();
 }
 
-/** Call the caller's `onUpdate`, if it supplied one. */
-function _Emit(command: StreamConversationEventsCommand, update: ConversationEventStreamUpdate): void
+/** Resolve a matching command acknowledgement and keep projection frames on their separate path. */
+function _HandleMessageAcknowledgement(raw: string, pendingMessages: ReadonlyMap<string, PendingMessage>): boolean
 {
-	command.onUpdate?.(update);
+	let message: unknown;
+	try { message = JSON.parse(raw) as unknown; }
+	catch { return false; }
+	if (typeof message !== "object" || message === null) return false;
+	const value = message as Record<string, unknown>;
+	const requestId = value["requestId"];
+	if (typeof requestId !== "string") return false;
+	const pending = pendingMessages.get(requestId);
+	if (pending === undefined) return true;
+	clearTimeout(pending.timeout);
+	(pendingMessages as Map<string, PendingMessage>).delete(requestId);
+	if (value["type"] === "conversation.message.accepted") pending.resolve();
+	else pending.reject(new ConversationEventStreamMessageError(typeof value["error"] === "string" ? value["error"] : undefined));
+	return true;
 }
 
-/** Wait before the next reconnect, returning at once if the caller aborts in the meantime. */
+/** Recognize the server's transport heartbeat without feeding it to the AG-UI decoder. */
+function _IsHeartbeat(value: unknown): boolean { return typeof value === "object" && value !== null && (value as Record<string, unknown>)["type"] === "conversation.heartbeat"; }
+
+/** Parse one text WebSocket frame without allowing a malformed payload to escape the transport. */
+function _Json(value: string): unknown { try { return JSON.parse(value) as unknown; } catch { return null; } }
+
+/** Emit one state change when the caller opted into stream progress. */
+function _Emit(command: StreamConversationEventsCommand, update: ConversationEventStreamUpdate): void { command.onUpdate?.(update); }
+
+/** Wait before reconnecting, but return immediately if the screen selection changed. */
 async function _Wait(milliseconds: number, signal: AbortSignal): Promise<void>
 {
 	if (signal.aborted || milliseconds === 0) return;
 	await new Promise<void>(function _Until(resolve)
 	{
 		const timeout = setTimeout(resolve, milliseconds);
-		signal.addEventListener("abort", function _Abort(): void { clearTimeout(timeout); resolve(); }, { once: true });
+		signal.addEventListener("abort", function _Abort() { clearTimeout(timeout); resolve(); }, { once: true });
 	});
 }
 
-/** Check the caller's command before any request is made; throws on an unusable value. */
+/** Reject invalid socket stream options before opening a network connection. */
 function _ValidateCommand(command: StreamConversationEventsCommand): void
 {
 	if (command.conversationId.trim().length === 0) throw new Error("conversation id is required");
@@ -209,22 +241,10 @@ function _ValidateCommand(command: StreamConversationEventsCommand): void
 	if (command.reconnectDelayMilliseconds !== undefined && (!Number.isSafeInteger(command.reconnectDelayMilliseconds) || command.reconnectDelayMilliseconds < 0 || command.reconnectDelayMilliseconds > 30_000)) throw new Error("reconnect delay must be between zero and thirty seconds");
 }
 
-/** Turn any thrown value into a message that is safe to show the user. */
-function _ErrorMessage(error: unknown): string
-{
-	return error instanceof Error ? error.message : "canonical conversation event stream failed";
-}
-
-/** End the stream by throwing, after emitting a Failed update carrying the last good state. */
+/** Stop the stream with the last accepted state and browser-safe fixed copy. */
 function _Fail(command: StreamConversationEventsCommand, state: AgUiStreamState, reconnectAttempt: number, lastHeartbeatAt: number | null, error: unknown): never
 {
-	const message = _ErrorMessage(error);
+	const message = error instanceof Error ? error.message : "conversation socket failed";
 	_Emit(command, { status: ConversationEventStreamStatuses.Failed, state, reconnectAttempt, lastHeartbeatAt, error: message });
 	throw new Error(message, { cause: error });
-}
-
-/** Whether this HTTP status is worth reconnecting on, without the caller changing anything. */
-function _IsRetryableHttpStatus(status: number): boolean
-{
-	return status === 408 || status === 429 || status >= 500;
 }

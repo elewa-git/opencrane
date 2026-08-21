@@ -3,6 +3,9 @@
 import "./app/instrument";
 
 import { __CreateManagedRunAdmissionPort, __CreatePersonalRunAdmissionPort, __ReadRunAdmissionConcurrencyPolicy, _CreateRunAdmissionCapacityGate } from "@opencrane/backend/agents/execution/admission";
+import { _CreateElicitationInterruptReader } from "@opencrane/backend/agents/execution/elicitation";
+import { _CreatePrismaSelfConversationSocketServer } from "@opencrane/backend/server/conversations";
+import { _CreateConversationAttachmentAdmission } from "@opencrane/backend/server/conversation-assets";
 import { _CreateManagedExecutionEvidenceAuthority } from "@opencrane/backend/server/agents/agent-services";
 import { _CreateFleetMembershipEvidenceConfig } from "@opencrane/backend/server/iam/membership";
 import { ___BindConsole } from "@opencrane/backend/observability";
@@ -17,6 +20,8 @@ import { _StartProcessLifecycle } from "./app/lifecycle";
 import { _log } from "./app/log";
 import { _CreatePublicApp, _CreatePublicAuthentication } from "./app/public-app";
 import { _CreateRunCancellationAuthority } from "./app/run-cancellation-composition";
+import { _CreateConversationSocketAuthenticator } from "./app/conversation-socket-authenticator";
+import { _ProcessShutdownSignal } from "./app/process-shutdown";
 import { _CreateArtifactUploadGateway } from "./infra/artifacts/artifact-upload.factory";
 import { ___CreatePrismaClient } from "./infra/db/db";
 import { ___CreatePublicHealthReportReader } from "./infra/health/public-health";
@@ -59,9 +64,10 @@ async function _Main(): Promise<void>
 	const publicApp = _CreatePublicApp(prisma, kubernetes.coreApi, managedRunAdmission, personalRunAdmission, runCancellation, config.runtime.serverNamespace, obot.custody, authentication, config.runtime.artifactScannerEnabled, publicHealth);
 	publicApp.locals.artifactUploadGateway = _CreateArtifactUploadGateway(prisma);
 	const internalApp = _CreateInternalApp(prisma, kubernetes.authApi, config.runtime, authentication.sessionMiddleware);
+	const conversationSockets = _CreatePrismaSelfConversationSocketServer(prisma, personalRunAdmission, _CreateConversationAttachmentAdmission, _log, _CreateConversationSocketAuthenticator(authentication.sessionMiddleware), { interrupts: _CreateElicitationInterruptReader(prisma), shutdownSignal: _ProcessShutdownSignal });
 
 	// 6. Start listeners and workers under one drain order so shared dependencies close exactly once.
-	_StartProcessLifecycle(publicApp, internalApp, prisma, kubernetes.batchApi, managedRunAdmission, runCancellation, config, channelTargetRoutes, unbindConsole, externalActions, obot.stop);
+	_StartProcessLifecycle(publicApp, internalApp, prisma, kubernetes.batchApi, managedRunAdmission, runCancellation, config, channelTargetRoutes, conversationSockets, unbindConsole, externalActions, obot.stop);
 }
 
 void _Main().catch(function _fatalStartupError(err: unknown)

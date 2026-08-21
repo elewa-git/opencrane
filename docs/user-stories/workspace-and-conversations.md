@@ -6,9 +6,9 @@ Provide the workspace where participants start, resume, and understand agent ses
 and group chats. The conversation and its ordered timeline are server-authoritative and recoverable;
 the browser is a client, not the conversation ledger.
 
-Current status: `API ready` for participant-scoped list, create, open, message, archive, close, and
-bounded snapshot-to-live event streaming. The ordinary workspace user interface and its reconnect
-restoration remain unfinished; child agent sessions and attachments are later slices.
+Current status: `API ready` for participant-scoped list, create, archive, close, and socket-based
+message submission plus bounded snapshot-to-live projection. The ordinary workspace user interface
+restores its projection through that socket; child agent sessions and attachments are later slices.
 
 ## Onboarding-chat boundary
 
@@ -64,8 +64,10 @@ Acceptance criteria:
 - Attachments are included only after an authoritative upload/attachment contract exists.
 - The browser never supplies silo, membership, persona, memory dataset, or tool authority.
 
-API: `POST /api/v1/me/conversations/{conversationId}/messages`. This participant-owned message API
-is the only public way to start an interactive run; there is no public `POST /api/v1/me/runs`.
+API: `WSS /api/v1/me/conversations/{conversationId}/socket`. The participant sends a structured
+`conversation.message.submit` frame with an idempotency key and receives an accepted or rejected
+frame. The browser has no HTTP fallback for ordinary workspace message submission, and there is no
+public `POST /api/v1/me/runs`.
 
 ## CON-04 — Replay the canonical transcript
 
@@ -74,16 +76,16 @@ that** I can recover the display after refresh or reconnect.
 
 Acceptance criteria:
 
-- The client accepts SSE events in server order and persists only a resumable opaque cursor.
-- Query cursor and `Last-Event-ID` conflicts are handled explicitly.
+- The client accepts structured socket events in server order and persists only a resumable opaque cursor.
+- The socket cursor is explicitly bound to its conversation; a cursor from another conversation is rejected.
 - Missing, foreign, wrongly nested, and never-authorized conversations return one non-disclosing
   unavailable response rather than an existence-bearing stream.
 - Rendering supports typical, long, tool-related, approval-related, terminal, and malformed-safe
   display states.
 
-API: `GET /api/v1/me/conversations/{conversationId}/events`. Its opaque cursor binds the immutable
-conversation ID and canonical decimal timeline position; a cursor from another conversation is
-refused without a compatibility alias or existence disclosure.
+API: `WSS /api/v1/me/conversations/{conversationId}/socket?cursor={opaqueCursor}`. Its opaque
+cursor binds the immutable conversation ID and canonical decimal timeline position; a cursor from
+another conversation is refused without a compatibility alias or existence disclosure.
 
 ## CON-05 — Follow new events live
 
@@ -96,10 +98,10 @@ Acceptance criteria:
 - Reconnect does not duplicate or reorder events.
 - The interface distinguishes connected, reconnecting, caught up, and terminal states.
 
-Status: `API ready; UI restoration unfinished`. Each server-sent events (SSE) response drains a
-finite durable snapshot, recovery-polls a bounded live tail, emits heartbeats, and ends after five
-minutes so the client can reconnect from its exact last subframe cursor. The ordinary workspace UI
-does not yet restore and present its connected, reconnecting, caught-up, and terminal states.
+Status: `API ready; UI restoration ready`. Each socket drains a finite durable snapshot,
+recovery-polls a bounded live tail, emits JSON heartbeats, and ends after five minutes so the client
+can reconnect from its exact last subframe cursor. The workspace presents connected, reconnecting,
+caught-up, and terminal states.
 
 ## CON-06 — Act on agent-rendered UI safely
 

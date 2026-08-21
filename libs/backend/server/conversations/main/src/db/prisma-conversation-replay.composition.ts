@@ -10,9 +10,8 @@ import type { ConversationReplayUnitOfWork } from "../replay-reader.types";
  * on the transaction and query classes behind it — the streaming code sees only
  * {@link ConversationReplayUnitOfWork}.
  *
- * Called by: `_CreateSelfConversationReplayRouter`
- * (prisma-self-conversation-replay.router.ts) and
- * apps/opencrane/src/app/runtime-composition.ts.
+ * Called by: `_CreatePrismaSelfConversationSocketServer`
+ * (prisma-self-conversations.router.ts) and apps/opencrane/src/app/runtime-composition.ts.
  *
  * @param prisma - Client used to open one short transaction per page read.
  * @returns The replay reader, ready to pass as a router's `repository`.

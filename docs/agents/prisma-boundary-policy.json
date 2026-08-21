@@ -1298,7 +1298,6 @@
 		"libs/backend/server/agents/artifacts/main/src/prisma-artifact-authority.composition.ts",
 		"libs/backend/server/conversation-assets/main/src/prisma-conversation-asset.composition.ts",
 		"libs/backend/server/conversations/main/src/db/prisma-conversation-replay.composition.ts",
-		"libs/backend/server/conversations/main/src/db/prisma-self-conversation-replay.router.ts",
 		"libs/backend/server/conversations/main/src/db/prisma-self-conversations.router.ts",
 		"libs/backend/agents/execution/elicitation/main/src/prisma-self-elicitation.router.ts",
 		"libs/backend/agents/execution/elicitation/main/src/prisma-elicitation-interrupt-reader.ts",
