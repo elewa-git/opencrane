@@ -24,6 +24,9 @@ const _AMBIGUOUS_AGENT_DIRECTORY: ConversationCreationDirectory = { participants
 /** Directory projection that cannot admit a new chat because it has no self membership. */
 const _NO_MEMBERSHIP_DIRECTORY: ConversationCreationDirectory = { participants: [], personalAgentStatus: ConversationPersonalAgentStatuses.Unavailable, personalAgent: null };
 
+/** Product-realistic text that must exercise transcript scrolling inside the viewport shell. */
+const _LONG_CONTENT = `# Project review\n\n${"The proposal keeps the agreed constraints and records the next decision clearly. ".repeat(32)}`;
+
 /** Build one authorized conversation with optional hostile source text. */
 function _Detail(body = "I reviewed the proposal and kept the important constraints."): ConversationWorkspaceDetail
 {
@@ -35,6 +38,12 @@ function _DirectDetail(): ConversationWorkspaceDetail
 {
 	const detail = _Detail("Can we review the handoff together?");
 	return { ...detail, mode: ConversationModes.Direct, agentServiceId: null, participantRefs: ["self", "participant-1"], messages: [{ ...detail.messages[0]!, role: MessageRoles.User, source: MessageSources.UserInput, runId: null, participantRef: "participant-1" }] };
+}
+
+/** Supplies the long transcript through the live projection that the workspace renders after its snapshot. */
+function _LongContentStream(): AgUiStreamState
+{
+	return { ...__CreateAgUiStreamState(), messages: { "message-1": { id: "message-1", role: MessageRoles.Assistant, text: _LONG_CONTENT, status: AgUiMessageStatuses.Completed } } };
 }
 
 /** Build one second direct conversation used to hold a stale route while the participant selects it. */
@@ -155,7 +164,7 @@ function _Providers(gateway: ConversationWorkspaceGateway, stream: ConversationE
 }
 
 /** Shared full-shell catalogue metadata. */
-const meta: Meta<ConversationWorkspaceRouteComponent> = { title: "Conversations/Workspace shell", component: ConversationWorkspaceRouteComponent, tags: ["autodocs"], parameters: { layout: "fullscreen" } };
+const meta: Meta<ConversationWorkspaceRouteComponent> = { title: "Conversations/Workspace shell", component: ConversationWorkspaceRouteComponent, tags: ["autodocs", "visual-test-full-viewport"], parameters: { layout: "fullscreen" } };
 
 export default meta;
 type Story = StoryObj<ConversationWorkspaceRouteComponent>;
@@ -218,7 +227,7 @@ export const CancelledRun: Story = { tags: ["visual-test"], decorators: [_Provid
  */
 export const LongContent: Story = {
 	tags: ["visual-test"],
-	decorators: [_Providers(new _StoryGateway(_Detail(`# Project review\n\n${"The proposal keeps the agreed constraints and records the next decision clearly. ".repeat(32)}`)), new _StoryStream(ConversationEventStreamStatuses.Live, __CreateAgUiStreamState()))],
+	decorators: [_Providers(new _StoryGateway(_Detail(_LONG_CONTENT)), new _StoryStream(ConversationEventStreamStatuses.Live, _LongContentStream()))],
 	play: async function play({ canvasElement })
 	{
 		await waitFor(function _AssertScrollOwnership()
@@ -243,9 +252,9 @@ export const LongContent: Story = {
 	}
 };
 /** Long content at the observed intermediate width keeps the full shell inside the viewport. */
-export const IntermediateLongContent: Story = { ...LongContent };
+export const IntermediateLongContent: Story = { ...LongContent, tags: ["visual-test"] };
 /** Long content at the observed wide width keeps the full shell inside the viewport. */
-export const WideLongContent: Story = { ...LongContent };
+export const WideLongContent: Story = { ...LongContent, tags: ["visual-test"] };
 /** Direct conversations display a participant's live message without adopting stale Agent-run state. */
 export const DirectConversation: Story = {
 	tags: ["visual-test"],

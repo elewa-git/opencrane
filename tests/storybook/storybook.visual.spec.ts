@@ -8,7 +8,7 @@ const VISUAL_TEST_TAG = "visual-test";
 /** Opt-in tag that captures a visual contract at the supported narrow viewport. */
 const VISUAL_NARROW_TAG = "visual-test-narrow";
 
-/** Opt-in tag that requires the shared journey canvas to cover the browser viewport. */
+/** Opt-in tag that requires a rendered journey or workspace shell to cover the browser viewport. */
 const VISUAL_FULL_VIEWPORT_TAG = "visual-test-full-viewport";
 
 /** Supported narrow browser viewport used for responsive state contracts. */
@@ -131,7 +131,7 @@ async function _CaptureStory(context: BrowserContext, story: StorybookIndexEntry
 
 		// 2. Wait for the shared stable-render prerequisites before any pixel comparison.
 		await _OpenStableStory(page, story.id);
-		if (story.tags?.includes(VISUAL_FULL_VIEWPORT_TAG)) await _AssertFullViewportJourney(page);
+		if (story.tags?.includes(VISUAL_FULL_VIEWPORT_TAG)) await _AssertFullViewportStory(page);
 		// 3. Capture the complete feature composition against this platform's reviewed baseline.
 		await expect.soft(page.locator("#storybook-root")).toHaveScreenshot(`${story.id}.png`,
 		{
@@ -147,14 +147,28 @@ async function _CaptureStory(context: BrowserContext, story: StorybookIndexEntry
 	}
 }
 
-/** Prove a short journey owns at least the full visible viewport without fixing its content height. */
-async function _AssertFullViewportJourney(page: Page): Promise<void>
+/** Proves each tagged fullscreen contract retains its application-equivalent viewport owner. */
+async function _AssertFullViewportStory(page: Page): Promise<void>
 {
 	const journey = page.locator(".wo-journey");
-	await expect(journey).toHaveCount(1);
-	const journeyHeight = await journey.evaluate(function _JourneyHeight(element) { return element.getBoundingClientRect().height; });
 	const viewportHeight = await page.evaluate(function _ViewportHeight() { return window.innerHeight; });
-	expect(journeyHeight, "Journey canvas must cover the full browser viewport").toBeGreaterThanOrEqual(viewportHeight);
+
+	if (await journey.count() === 1)
+	{
+		const journeyHeight = await journey.evaluate(function _JourneyHeight(element) { return element.getBoundingClientRect().height; });
+		expect(journeyHeight, "Journey canvas must cover the full browser viewport").toBeGreaterThanOrEqual(viewportHeight);
+		return;
+	}
+
+	const route = page.locator("wo-conversation-workspace-route");
+	const workspace = page.locator(".conversation-workspace");
+	await expect(route).toHaveCount(1);
+	await expect(workspace).toHaveCount(1);
+	for (const element of [route, workspace])
+	{
+		const height = await element.evaluate(function _Height(candidate) { return candidate.getBoundingClientRect().height; });
+		expect(Math.round(height), "Workspace shell must cover the full browser viewport").toBe(viewportHeight);
+	}
 }
 
 /**
