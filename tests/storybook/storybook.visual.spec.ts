@@ -24,6 +24,8 @@ const STORY_MAX_DIFF_PIXEL_RATIO = 0.005;
 const STORY_VIEWPORTS: ReadonlyMap<string, { readonly width: number; readonly height: number }> = new Map([
 	["features-persona-onboarding-states--introduction", { width: 1705, height: 813 }],
 	["onboarding-persona-first-chat--narrow-long-content", { width: 390, height: 844 }],
+	["conversations-workspace-shell--intermediate-long-content", { width: 1073, height: 900 }],
+	["conversations-workspace-shell--wide-long-content", { width: 1768, height: 900 }],
 ]);
 
 /** Tight absolute budget for a deliberately isolated control screenshot. */
