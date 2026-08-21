@@ -11,6 +11,7 @@ BASE_VALUES=(--set-json "databases=$DATABASES_JSON" --set-string databaseAdmin.n
 API_VALUES=(--set-string networkPolicy.kubernetesApiServerCidrs[0]=10.43.0.1/32 --set-string networkPolicy.kubernetesApiServerEndpointCidrs[0]=172.18.0.2/32 --set networkPolicy.kubernetesApiServerEndpointPort=6443)
 COMMON_VALUES=("${BASE_VALUES[@]}" "${API_VALUES[@]}")
 MIGRATION_VALUES=(--set migration.enabled=true --set convergence.previousMigration.available=true --set-string convergence.previousMigration.id=0.7.0-to-0.8.0 --set-string convergence.previousMigration.fromSchemaVersion=0.7.0 --set-string convergence.previousMigration.sourceTargetBaselineSha256=cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc --set-json 'convergence.previousMigration.sourceProtectedBaselineSha256s=["cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc","eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"]' --set-string convergence.previousMigration.selectedSourceProtectedBaselineSha256=eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee --set-string convergence.previousMigration.sqlSha256=dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd --set-string migration.configMap.name=opencrane-database-migration-0-7-0-to-0-8-0-deadbeef --set-string migration.configMap.key=migration.sql)
+PRIVILEGED_MIGRATION_VALUES=(--set superuserAccess.enabled=true --set migration.privilegedExtension.enabled=true --set-string migration.privilegedExtension.name=pg_cron)
 GKE_AUTOPILOT_VALUES="$ROOT_DIR/apps/_infra/deploy-k8s/platform/values/postgres-gke-autopilot.yaml"
 
 helm lint "$CHART" "${COMMON_VALUES[@]}" >/dev/null
@@ -71,6 +72,8 @@ grep -q 'poolMode: "session"' "$OUTPUT"
 grep -q 'max_client_conn: "50"' "$OUTPUT"
 grep -q 'max_db_connections: "10"' "$OUTPUT"
 grep -q 'max_connections: "80"' "$OUTPUT"
+grep -q 'shared_preload_libraries: "pg_cron"' "$OUTPUT"
+grep -q 'cron.database_name: "opencrane"' "$OUTPUT"
 test "$(grep -c '^kind: Database$' "$OUTPUT")" -eq 2
 test "$(grep -c 'helm.sh/resource-policy: keep' "$OUTPUT")" -eq 3
 grep -q '^kind: Job$' "$OUTPUT"
@@ -212,6 +215,42 @@ grep -q 'app.kubernetes.io/component: postgres-database-migration' <<<"$INSTANCE
 grep -q 'helm.sh/hook-weight: "-10"' "$MIGRATION_OUTPUT"
 grep -q 'sql_sha256' "$MIGRATION_OUTPUT"
 grep -q 'name: SELECTED_SOURCE_PROTECTED_BASELINE_SHA256' "$MIGRATION_OUTPUT"
+if grep -q 'name: POSTGRES_SUPERUSER_PASSWORD' <<<"$MIGRATION_JOB"; then
+  echo "ordinary database migrations must not receive a CNPG superuser credential" >&2
+  exit 1
+fi
+
+PRIVILEGED_MIGRATION_OUTPUT="$(helm template opencrane-postgres "$CHART" --namespace opencrane \
+  "${COMMON_VALUES[@]}" "${MIGRATION_VALUES[@]}" "${PRIVILEGED_MIGRATION_VALUES[@]}")"
+PRIVILEGED_MIGRATION_JOB="$(awk 'BEGIN { RS="---" } /kind: Job/ && /name: opencrane-postgres-database-migration/ { print }' <<<"$PRIVILEGED_MIGRATION_OUTPUT")"
+grep -q 'enableSuperuserAccess: true' <<<"$PRIVILEGED_MIGRATION_OUTPUT"
+grep -q 'CREATE EXTENSION IF NOT EXISTS pg_cron' <<<"$PRIVILEGED_MIGRATION_JOB"
+grep -q 'GRANT USAGE ON SCHEMA cron TO :"application_owner"' <<<"$PRIVILEGED_MIGRATION_JOB"
+grep -q 'name: POSTGRES_APPLICATION_OWNER' <<<"$PRIVILEGED_MIGRATION_JOB"
+grep -q 'name: "opencrane-postgres-superuser"' <<<"$PRIVILEGED_MIGRATION_JOB"
+
+REVOKED_PRIVILEGED_VALUES=(--set superuserAccess.enabled=false --set migration.privilegedExtension.enabled=false --set-string migration.privilegedExtension.name=pg_cron)
+REVOKED_PRIVILEGED_OUTPUT="$(helm template opencrane-postgres "$CHART" --namespace opencrane \
+  "${COMMON_VALUES[@]}" "${REVOKED_PRIVILEGED_VALUES[@]}")"
+grep -q 'enableSuperuserAccess: false' <<<"$REVOKED_PRIVILEGED_OUTPUT"
+if grep -q 'POSTGRES_SUPERUSER_PASSWORD' <<<"$REVOKED_PRIVILEGED_OUTPUT"; then
+  echo "postgres chart retained the superuser credential after the privileged migration step" >&2
+  exit 1
+fi
+
+if helm template privileged-extension-without-access "$CHART" --namespace opencrane \
+  "${COMMON_VALUES[@]}" "${MIGRATION_VALUES[@]}" \
+  --set migration.privilegedExtension.enabled=true --set-string migration.privilegedExtension.name=pg_cron >/dev/null 2>&1; then
+  echo "postgres chart accepted a privileged extension migration without temporary superuser access" >&2
+  exit 1
+fi
+if helm template unreviewed-privileged-extension "$CHART" --namespace opencrane \
+  "${COMMON_VALUES[@]}" "${MIGRATION_VALUES[@]}" \
+  --set superuserAccess.enabled=true --set migration.privilegedExtension.enabled=true \
+  --set-string migration.privilegedExtension.name=pg_stat_statements >/dev/null 2>&1; then
+  echo "postgres chart accepted an unreviewed privileged extension migration" >&2
+  exit 1
+fi
 
 if helm template unadmitted-selected-origin "$CHART" "${COMMON_VALUES[@]}" "${MIGRATION_VALUES[@]}" \
   --set-string convergence.previousMigration.selectedSourceProtectedBaselineSha256=ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff \

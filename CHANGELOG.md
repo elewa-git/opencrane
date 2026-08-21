@@ -22,6 +22,17 @@ follows [Keep a Changelog](https://keepachangelog.com/); the project uses
 
 ### Added
 
+- **Platform developers can now add durable, transactionally admitted work without coupling product
+  logic to a scheduler engine.** The engine-neutral workflow contract and scheduling kit preserve
+  idempotency, cancellation, and respawn evidence, while the Absurd adapter admits a task and its
+  first attempt through one parameterized, policy-bound database procedure call in the caller's
+  existing transaction.
+
+- **Operators can now upgrade an existing database to the durable-task foundation without leaving a
+  superuser credential available.** The fenced, backup-gated migration proves the primary can run
+  `pg_cron`, uses the generated credential solely to install that reviewed prerequisite, then proves
+  both CNPG superuser access and its Secret are gone before application work resumes.
+
 - **Users and operators can now see the availability of every user-visible service through
   unauthenticated `GET /healthz`.** The fixed, public-safe report classifies the API, database,
   models, memory, files, channels, and integrations as `available`, `unavailable`, or `disabled`

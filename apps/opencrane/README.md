@@ -107,8 +107,11 @@ its resources to the lifecycle owner.
 - `src/app/lifecycle.ts` starts both listeners, aborts active Obot exchanges before draining workers,
   drains requests, disconnects Prisma, and flushes telemetry.
 - `prisma/schema/*.prisma` defines the product's durable domain models.
-- `prisma/bootstrap/target-baseline.sql` defines a clean OpenCrane database. Its focused source
-  verifiers prove the seeded persona and onboarding-bootstrap content against the reviewed files in
+- `prisma/bootstrap/target-baseline.sql` defines a clean OpenCrane database. The baseline publisher
+  installs the pinned `pg_cron` prerequisite before it switches to the application owner, then this
+  file installs the pinned Absurd durable-task schema. The server does not compose a worker until a
+  later product slice registers a reviewed task. Its focused source verifiers prove the seeded
+  persona and onboarding-bootstrap content against the reviewed files in
   `docs/design/persona-archetypes/`.
 - `prisma/migrations/<from>-to-<to>/` owns reviewed, adjacent schema upgrades for existing databases.
   The PostgreSQL deployment Job runs them before an incompatible server rollout; server startup

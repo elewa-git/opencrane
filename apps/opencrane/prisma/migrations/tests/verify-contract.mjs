@@ -20,6 +20,10 @@ const organizationTransitionRoot = join(migrationRoot, "0.8.0-to-0.9.0");
 const organizationSql = readFileSync(join(organizationTransitionRoot, "migration.sql"), "utf8");
 const organizationManifest = JSON.parse(readFileSync(join(organizationTransitionRoot, "manifest.json"), "utf8"));
 const organizationSqlDigest = createHash("sha256").update(organizationSql).digest("hex");
+const absurdTransitionRoot = join(migrationRoot, "0.9.0-to-0.9.3");
+const absurdSql = readFileSync(join(absurdTransitionRoot, "migration.sql"), "utf8");
+const absurdManifest = JSON.parse(readFileSync(join(absurdTransitionRoot, "manifest.json"), "utf8"));
+const absurdSqlDigest = createHash("sha256").update(absurdSql).digest("hex");
 
 function requireContract(condition, message)
 {
@@ -204,7 +208,7 @@ console.log("0.7.0-to-0.8.0 migration contract: PASS");
 requireContract(organizationManifest.fromSchemaVersion === "0.8.0", "organization-member migration source version must be exact");
 requireContract(organizationManifest.toSchemaVersion === "0.9.0", "organization-member migration target version must be exact");
 requireContract(organizationManifest.sqlSha256 === organizationSqlDigest, "organization-member migration SQL digest must match its manifest");
-requireContract(organizationManifest.targetBaselineSha256 === targetDigest, "organization-member migration target digest must match the clean baseline");
+requireContract(organizationManifest.targetBaselineSha256 === "5e16b35aedce54bf6ff7bd79bca04f92f6b6aee6315dec5c4b4797604342ab5f", "organization-member migration target digest must remain the immutable 0.9.0 baseline");
 requireContract(
 	JSON.stringify(organizationManifest.sourceProtectedBaselineSha256s) === JSON.stringify([
 		"12505f3c15114bd2a407d0d4d2ef2befc3c8ec87acaa9787503cfbe4eba0032c",
@@ -239,3 +243,21 @@ for (const source of [targetBaseline, organizationSql])
 requireContract(organizationSql.trimEnd().endsWith("\\endif"), "organization-member migration retry branch must remain explicit");
 
 console.log("0.8.0-to-0.9.0 migration contract: PASS");
+
+requireContract(absurdManifest.fromSchemaVersion === "0.9.0", "Absurd migration source version must be exact");
+requireContract(absurdManifest.toSchemaVersion === "0.9.3", "Absurd migration target version must be exact");
+requireContract(absurdManifest.sqlSha256 === absurdSqlDigest, "Absurd migration SQL digest must match its manifest");
+requireContract(absurdManifest.sourceTargetBaselineSha256 === organizationManifest.targetBaselineSha256, "Absurd migration must name the immutable 0.9.0 source baseline");
+requireContract(absurdManifest.targetBaselineSha256 === targetDigest, "Absurd migration target digest must match the clean baseline");
+requireContract(absurdManifest.sourceProtectedBaselineSha256 === "bd2dfd915b66514d4c7ad95328adb4629567634a47f1a1e37aee69f23d9a98ee", "Absurd migration must bind the protected 0.9.0 origin");
+requireContract(absurdManifest.privilegedExtension === "pg_cron", "Absurd migration must bind its reviewed privileged pg_cron prerequisite");
+requireContract(absurdSql.includes("pg_advisory_lock"), "Absurd migration must acquire the session migration lock");
+requireContract(absurdSql.includes("pg_advisory_xact_lock"), "Absurd migration must hold a transaction migration lock");
+requireContract(absurdSql.includes("pg_cron extension is missing after the privileged migration prerequisite"), "Absurd migration must require its privileged pg_cron prerequisite");
+requireContract(absurdSql.includes("application owner lacks pg_cron schema access after the privileged migration prerequisite"), "Absurd migration must require application-owner cron access");
+requireContract(absurdSql.includes("create schema if not exists absurd"), "Absurd migration must install the reviewed Absurd schema");
+requireContract(absurdSql.includes("target_baseline_sha256"), "Absurd migration history must bind the clean target digest");
+requireContract(absurdSql.includes("COMMIT;\nSELECT pg_advisory_unlock"), "Absurd migration must commit before releasing the session lock");
+requireContract(absurdSql.trimEnd().endsWith("\\endif"), "Absurd migration retry branch must remain explicit");
+
+console.log("0.9.0-to-0.9.3 migration contract: PASS");

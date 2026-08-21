@@ -113,6 +113,8 @@ source "$COGNEE_IMAGE_POLICY"
 source "$SCRIPT_DIR/initial-model-provider.sh"
 source "$SCRIPT_DIR/invitation-signing-secret.sh"
 source "$SCRIPT_DIR/database-convergence-classifier.sh"
+source "$SCRIPT_DIR/database-pg-cron-preflight.sh"
+source "$SCRIPT_DIR/database-superuser-access.sh"
 source "$SCRIPT_DIR/database-convergence-policy.sh"
 source "$SCRIPT_DIR/database-migration-recovery.sh"
 source "$SCRIPT_DIR/database-migration-orchestrator.sh"
@@ -638,6 +640,7 @@ DATABASE_PREVIOUS_FRESH_PROTECTED_BASELINE_SHA256=""
 DATABASE_SOURCE_HISTORY_LINEAGES_JSON="[]"
 DATABASE_PREVIOUS_MIGRATION_SQL_SHA256=""
 DATABASE_SELECTED_PROTECTED_BASELINE_SHA256=""
+DATABASE_PRIVILEGED_EXTENSION=""
 if [[ "$DATABASE_CONVERGENCE_MIGRATION" != "null" ]]; then
   DATABASE_PREVIOUS_MIGRATION_AVAILABLE="true"
   DATABASE_PREVIOUS_MIGRATION_ID="$(jq -r '.id' <<<"$DATABASE_CONVERGENCE_MIGRATION")"
@@ -656,6 +659,11 @@ if [[ "$DATABASE_TRANSITION_KIND" == "migration" ]]; then
     exit 1
   fi
   DATABASE_MIGRATION_SQL_FILE="$(jq -r '.migration.sqlFile' <<<"$DATABASE_RELEASE_TRANSITION")"
+  DATABASE_PRIVILEGED_EXTENSION="$(jq -r '.migration.privilegedExtension // empty' <<<"$DATABASE_RELEASE_TRANSITION")"
+  if [[ -n "$DATABASE_PRIVILEGED_EXTENSION" && "$DATABASE_PRIVILEGED_EXTENSION" != "pg_cron" ]]; then
+    err "Database transition declared an unreviewed privileged extension."
+    exit 1
+  fi
 fi
 
 _load_kubernetes_api_helm_args networkPolicy "PostgreSQL pooler"

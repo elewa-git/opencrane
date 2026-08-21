@@ -6,7 +6,7 @@ description: >-
   installable resources of its own. The deployment engine, cluster provisioning, Terraform, value
   profiles, and conformance tests live alongside it under the same deployment owner.
 type: library
-version: 0.9.2
-appVersion: "0.9.2"
+version: 0.9.3
+appVersion: "0.9.3"
 maintainers:
   - name: OpenCrane

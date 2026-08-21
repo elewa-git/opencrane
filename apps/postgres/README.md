@@ -56,6 +56,16 @@ It retries transient CNPG rollout disconnects within a fixed shell budget, appli
 batch in one transaction, and leaves a short Job-deadline grace period for the final PostgreSQL
 diagnostic. A persistent failure still blocks the Helm hook.
 
+The durable-task foundation requires PostgreSQL's `pg_cron` extension in the `opencrane` database.
+This chart pins `shared_preload_libraries=pg_cron` and `cron.database_name=opencrane`. On an existing
+database upgrade, the deployment engine fences the server, reconciles that CNPG configuration, then
+proves the ready primary exposes the extension package and database setting before it publishes the
+digest-bound migration. Only that fenced migration may briefly enable CNPG's generated `postgres`
+credential to run the fixed `CREATE EXTENSION IF NOT EXISTS pg_cron` statement. The engine immediately
+disables that access, proves both its Cluster setting and generated Secret are absent, then proves the
+installed extension before it reconciles application privileges. A fresh install receives the extension
+through the same reviewed baseline.
+
 The pooler is deliberately part of the data boundary rather than an optional optimisation. Its default
 budget permits at most ten server connections per logical database (thirty across the deployed
 databases) while PostgreSQL permits eighty. The OpenCrane server's one replica is further capped at

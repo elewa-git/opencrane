@@ -1,6 +1,6 @@
 {
   "name": "opencrane-platform",
-  "version": "0.9.2",
+  "version": "0.9.3",
   "private": true,
   "license": "AGPL-3.0-or-later",
   "type": "module",
@@ -22,6 +22,8 @@
     "test:agent-style": "node --test scripts/__tests__/inline-conditional-check.test.mjs",
     "check:prisma-boundaries": "node scripts/prisma-boundary-check.mjs",
     "test:prisma-boundaries": "node --test scripts/__tests__/prisma-boundary-check.test.mjs",
+    "check:durable-boundary": "node scripts/durable-boundary-check.mjs",
+    "test:durable-boundary": "node --test scripts/__tests__/durable-boundary-check.test.mjs",
     "test:affected-deployables": "node --test scripts/__tests__/affected-deployables.test.mjs",
     "test:config-docs-coverage": "node --test scripts/__tests__/config-docs-coverage.test.mjs",
     "check:pr-stack-integrity": "node scripts/pr-stack-integrity.mjs",

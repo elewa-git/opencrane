@@ -29,6 +29,8 @@ build_postgres_release_args()
     --set-string "bootstrap.targetBaseline.sha256=$POSTGRES_BOOTSTRAP_BASELINE_SHA256"
     --set-string "bootstrap.initdb.postInitApplicationSQLRefs.configMapRefs[0].name=$POSTGRES_BOOTSTRAP_BASELINE_CONFIG_MAP"
     --set-string "bootstrap.initdb.postInitApplicationSQLRefs.configMapRefs[0].key=$POSTGRES_BOOTSTRAP_BASELINE_CONFIG_MAP_KEY"
+
+    --set "superuserAccess.enabled=${POSTGRES_SUPERUSER_ACCESS_ENABLED:-false}"
     --set-string "convergence.targetSchemaVersion=$DATABASE_TARGET_SCHEMA_VERSION"
     --set-string "convergence.targetBaselineSha256=$DATABASE_TARGET_BASELINE_SHA256"
     --set-string "convergence.currentProtectedBaselineSha256=$POSTGRES_BASELINE_SHA256"
@@ -40,6 +42,8 @@ build_postgres_release_args()
     --set-string "convergence.previousMigration.selectedSourceProtectedBaselineSha256=${DATABASE_SELECTED_PROTECTED_BASELINE_SHA256:-}"
     --set-string "convergence.previousMigration.sqlSha256=$DATABASE_PREVIOUS_MIGRATION_SQL_SHA256"
     --set "migration.enabled=$migration_enabled"
+    --set "migration.privilegedExtension.enabled=${DATABASE_PRIVILEGED_EXTENSION_ENABLED:-false}"
+    --set-string "migration.privilegedExtension.name=${DATABASE_PRIVILEGED_EXTENSION:-}"
     --set "privileges.enabled=$privileges_enabled"
     --set-json "pooler.clientPodSelectors=$pooler_client_selectors_json"
     --wait
@@ -63,6 +67,24 @@ build_postgres_release_args()
   if helm status "$POSTGRES_RELEASE" -n "$NAMESPACE" >/dev/null 2>&1; then
     POSTGRES_ARGS+=(--reset-then-reuse-values)
   fi
+}
+
+# Revokes the migration-scoped superuser credential and proves no credential remains.
+revoke_temporary_database_superuser_access()
+{
+  if [[ "${DATABASE_TEMPORARY_SUPERUSER_ACCESS:-false}" != "true" ]]; then
+    return 0
+  fi
+  POSTGRES_SUPERUSER_ACCESS_ENABLED=false
+  DATABASE_PRIVILEGED_EXTENSION_ENABLED=false
+  if ! install_postgres_release false false; then
+    err "Unable to disable temporary CNPG superuser access after the privileged migration step."
+    return 1
+  fi
+  if ! verify_database_superuser_access_disabled; then
+    return 1
+  fi
+  DATABASE_TEMPORARY_SUPERUSER_ACCESS=false
 }
 
 postgres_release_render_has_recovery()
@@ -328,7 +350,7 @@ run_database_release_transition()
         return 1
         ;;
       migrate_source)
-        publish_database_migration_config_map || return $?
+        :
         ;;
       *)
         err "Database convergence policy returned an unknown live-transition outcome."
@@ -339,10 +361,17 @@ run_database_release_transition()
 
   capture_pre_fence_main_release_revision || return $?
   run_guarded_post_fence_stage fence_existing_opencrane_server || return $?
+  if [[ "$POSTGRES_CLUSTER_EXISTS" == "1" ]]; then
+    # Applies pg_cron preload settings while the server is fenced, so the preflight proves the server can load the extension before its privileged migration creates it.
+    run_guarded_post_fence_stage install_postgres_release false false || return $?
+    run_guarded_post_fence_stage verify_database_pg_cron_server_preflight || return $?
+    run_guarded_post_fence_stage publish_database_migration_config_map || return $?
+  fi
   if [[ "$POSTGRES_CLUSTER_EXISTS" == "0" ]]; then
     log "Restoring the previous-version database before its bounded migration…"
     run_guarded_post_fence_stage install_postgres_release false false || return $?
     POSTGRES_CLUSTER_EXISTS="1"
+    run_guarded_post_fence_stage verify_database_pg_cron_server_preflight || return $?
     if classify_database_convergence_state; then
       classification_status=0
     else
@@ -399,6 +428,19 @@ run_database_release_transition()
       return "$backup_status"
     fi
     log "CNPG recovery evidence completed before migration: $backup_evidence"
+  fi
+  if [[ "${DATABASE_PRIVILEGED_EXTENSION:-}" == "pg_cron" ]]; then
+    POSTGRES_SUPERUSER_ACCESS_ENABLED=true
+    DATABASE_PRIVILEGED_EXTENSION_ENABLED=true
+    DATABASE_TEMPORARY_SUPERUSER_ACCESS=true
+    run_guarded_post_fence_stage install_postgres_release true false || return $?
+    if ! revoke_temporary_database_superuser_access; then
+      recover_failed_database_transition 1
+      return 1
+    fi
+    run_guarded_post_fence_stage verify_database_pg_cron_preflight || return $?
+    run_guarded_post_fence_stage install_postgres_release false true
+    return
   fi
   run_guarded_post_fence_stage install_postgres_release true true
 }

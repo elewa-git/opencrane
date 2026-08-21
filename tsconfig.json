@@ -202,6 +202,21 @@
       "@opencrane/backend/server/infra/memory-gateway-client": [
         "./libs/backend/server/infra/memory-gateway-client/src/index.ts"
       ],
+      "@opencrane/backend/server/infra/workflows/contract": [
+        "./libs/backend/server/infra/workflows/contract/src/index.ts"
+      ],
+      "@opencrane/backend/server/infra/workflows/infra_absurd": [
+        "./libs/backend/server/infra/workflows/infra_absurd/src/index.ts"
+      ],
+      "@opencrane/backend/server/infra/workflows/kit": [
+        "./libs/backend/server/infra/workflows/kit/src/index.ts"
+      ],
+      "@opencrane/backend/server/infra/workflows/scheduler": [
+        "./libs/backend/server/infra/workflows/scheduler/src/index.ts"
+      ],
+      "@opencrane/backend/server/infra/workflows/testing": [
+        "./libs/backend/server/infra/workflows/testing/src/index.ts"
+      ],
       "@opencrane/backend/observability/telemetry": [
         "./libs/backend/observability/src/telemetry.ts"
       ],

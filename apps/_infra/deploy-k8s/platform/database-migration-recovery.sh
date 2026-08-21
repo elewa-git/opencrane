@@ -287,6 +287,12 @@ recover_failed_database_transition()
   local classification_status
   local convergence_outcome
   local policy_status
+  if [[ "${DATABASE_TEMPORARY_SUPERUSER_ACCESS:-false}" == "true" ]]; then
+    if ! revoke_temporary_database_superuser_access; then
+      err "Temporary CNPG superuser access could not be revoked; the server fence remains active."
+      return "$original_status"
+    fi
+  fi
   if database_migration_job_is_terminal_or_absent; then
     job_status=0
   else

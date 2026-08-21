@@ -33,9 +33,11 @@ function _sha256_file()
   fi
 }
 
-# Hash the application-owner transition and canonical target SQL. The envelope version ensures a
-# future change to the protected origin contract receives a new content-addressed identity.
-printf '%s\n' '-- OpenCrane initdb baseline envelope v1.' >"$baseline_identity_input"
+# Hash the privileged pg_cron setup, application-owner transition, and target SQL. The envelope
+# version changes whenever the protected origin contract changes.
+printf '%s\n' '-- OpenCrane initdb baseline envelope v2.' >"$baseline_identity_input"
+printf '%s\n' 'CREATE EXTENSION IF NOT EXISTS pg_cron;' >>"$baseline_identity_input"
+printf 'GRANT USAGE ON SCHEMA "cron" TO "%s";\n' "$quoted_owner" >>"$baseline_identity_input"
 printf 'SET ROLE "%s";\n\n' "$quoted_owner" >>"$baseline_identity_input"
 cat "$baseline_file" >>"$baseline_identity_input"
 

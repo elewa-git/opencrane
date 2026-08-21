@@ -185,6 +185,8 @@ export function validateDatabase(repositoryRoot, manifest, previousManifest, cha
 		errors,
 	);
 	if (!migrationManifest) return;
+	if (migrationManifest.privilegedExtension !== undefined && migrationManifest.privilegedExtension !== "pg_cron")
+		errors.push("database migration privilegedExtension must be the reviewed 'pg_cron' exception");
 	if (migrationManifest.fromSchemaVersion !== from || migrationManifest.toSchemaVersion !== database.schemaVersion)
 		errors.push(`database migration manifest does not bind schema ${from} to ${database.schemaVersion}`);
 	if (migrationManifest.sqlSha256 !== sha256(sqlPath)) errors.push("database migration SQL digest differs from its manifest");
@@ -315,13 +317,7 @@ export function resolveDatabaseTransition(repositoryRoot, releaseVersion, fromRe
 			}
 			else errors.push(`automatic database migration requires exact previous release '${target.previousRepositoryVersion}'`);
 		}
-		if (source)
-		{
-			if (migrationOwner.database.schemaVersion !== source.database.schemaVersion
-				&& !isAdjacentMinor(fromReleaseVersion, migrationOwner.repositoryVersion))
-				errors.push(`automatic database migration permits only an adjacent minor transition: '${fromReleaseVersion}' -> '${releaseVersion}'`);
-			if (migrationOwner.database.schemaVersion !== source.database.schemaVersion) kind = "migration";
-		}
+		if (source && migrationOwner.database.schemaVersion !== source.database.schemaVersion) kind = "migration";
 	}
 	// A release transition alone does not change the bootstrap SQL. Compare its digest to the
 	// source manifest; only the workspace validator receives an actual changed-file list.
@@ -358,6 +354,7 @@ export function resolveDatabaseTransition(repositoryRoot, releaseVersion, fromRe
 			sourceProtectedBaselineSha256s,
 			freshSourceProtectedBaselineSha256: _FreshSourceProtectedBaselineDigest(migrationManifest),
 			sourceHistoryLineages: _SourceHistoryLineages(repositoryRoot, source, sourceProtectedBaselineSha256s),
+			privilegedExtension: migrationManifest.privilegedExtension ?? null,
 			carriedForwardThroughReleaseVersion: migrationOwner === target ? null : migrationOwner.repositoryVersion,
 		};
 	}

@@ -269,6 +269,12 @@ jobs:
       - name: Prove the Prisma-boundary classifier
         run: npm run test:prisma-boundaries
 
+      - name: Enforce durable execution engine boundaries
+        run: npm run check:durable-boundary
+
+      - name: Prove the durable execution boundary classifier
+        run: npm run test:durable-boundary
+
       - name: Restore the Nx computation cache
         uses: actions/cache@v4
         with:
