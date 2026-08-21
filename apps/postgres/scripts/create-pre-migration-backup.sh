@@ -1,16 +1,21 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if [[ "$#" -ne 3 ]]; then
-	echo "usage: $0 <namespace> <postgres-release> <timeout-seconds>" >&2
+if [[ "$#" -lt 3 || "$#" -gt 4 ]]; then
+	echo "usage: $0 <namespace> <postgres-release> <timeout-seconds> [--preflight]" >&2
 	exit 64
 fi
 
 namespace="$1"
 postgres_release="$2"
 timeout_seconds="$3"
+mode="${4:-create}"
 if [[ ! "$timeout_seconds" =~ ^[1-9][0-9]{0,3}$ ]] || (( timeout_seconds > 3600 )); then
 	echo "timeout-seconds must be an integer from 1 through 3600" >&2
+	exit 64
+fi
+if [[ "$mode" != "create" && "$mode" != "--preflight" ]]; then
+	echo "the optional mode must be --preflight" >&2
 	exit 64
 fi
 scheduled_backup_json="$(kubectl get scheduledbackup "$postgres_release" --namespace "$namespace" -o json)" || {
@@ -22,6 +27,13 @@ if [[ "$(jq -r '.spec.method // empty' <<<"$scheduled_backup_json")" != "plugin"
 	|| -z "$(jq -r '.spec.pluginConfiguration.name // empty' <<<"$scheduled_backup_json")" ]]; then
 	echo "automatic database mutation requires an enabled plugin-backed CNPG ScheduledBackup" >&2
 	exit 1
+fi
+# The pre-fence caller checks capability without creating a Backup. A create invocation fetches the
+# ScheduledBackup again after fencing so a provider change still stops the migration.
+# @see https://cloudnative-pg.io/docs/1.27/backup/
+if [[ "$mode" == "--preflight" ]]; then
+	printf '%s\n' "$postgres_release"
+	exit 0
 fi
 
 backup_suffix="-pre-migration-$(date -u +%Y%m%d%H%M%S)-$$"

@@ -281,3 +281,18 @@ Full run reports belong in the corresponding pull request or issue.
   CloudNativePG API field carried it, so a syntactically valid render reached the live admission webhook.
 - lesson: render additional preload libraries through `.spec.postgresql.shared_preload_libraries` and
   keep ordinary PostgreSQL settings, such as `cron.database_name`, in the parameter map.
+
+## 2026-08-21 · dev · testlynn durable-execution backup gate · ba9d49bf2eab20763c3e5e30319d6d595212e0b6 · FAILED
+
+- findings: infra: the PostgreSQL 17.5 operand reconciliation completed and its replacement primary
+  became ready with `pg_cron` preloaded. The migration then stopped because testlynn has no chart-owned
+  plugin-backed `ScheduledBackup`; the application rollback restored revision 8 before any backup or
+  database migration ran. The cluster has neither the Barman Cloud plugin API nor a
+  `VolumeSnapshotClass`. The current chart supports only plugin-backed backup, so no
+  repository-supported recovery provider is currently available.
+- friction: the deployer discovered the missing backup provider only after it fenced the application
+  and reconciled the PostgreSQL operand, even though the `ScheduledBackup` prerequisite was read-only
+  and could have been checked before either action.
+- lesson: preflight live-Cluster backup capability before the application fence, then recheck it when
+  creating the immediate recovery backup. Never translate approval for the schema transition into an
+  unbacked-migration override.

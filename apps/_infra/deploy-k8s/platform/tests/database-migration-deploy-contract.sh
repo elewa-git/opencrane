@@ -518,8 +518,9 @@ export STATE_CALLS
   [[ ! -s "$STATE_CALLS" ]]
 )
 
-# Exercise the successful live-source branch through its public orchestration function. This proves
-# classification -> revision capture -> fence -> pg_cron-ready server -> SQL publication -> backup -> migration.
+# Exercise the successful live-source branch through its public orchestration function. The expected
+# call log proves that backup preflight precedes revision capture and fencing, while Backup creation
+# remains after server and SQL preparation but before migration.
 (
   source "$RECOVERY"
   source "$ORCHESTRATOR"
@@ -546,12 +547,17 @@ export STATE_CALLS
   }
   bash()
   {
+    if [[ "${5:-}" == "--preflight" ]]; then
+      printf 'backup-preflight %s %s %s %s %s\n' "$1" "$2" "$3" "$4" "$5" >>"$TEST_DIR/migration-order"
+      return
+    fi
     printf 'backup %s %s %s %s\n' "$1" "$2" "$3" "$4" >>"$TEST_DIR/migration-order"
     printf '%s\n' verified-backup
   }
   run_database_release_transition
 )
 printf '%s\n' \
+  'backup-preflight /backup-owner.sh opencrane opencrane-postgres 37 --preflight' \
   capture \
   fence \
   "install false false $LIVE_ORIGIN" \
@@ -936,6 +942,9 @@ esac
 EOF
 chmod +x "$TEST_DIR/bin/kubectl"
 
+PATH="$TEST_DIR/bin:$PATH" bash "$BACKUP_SCRIPT" opencrane opencrane-postgres 2 --preflight >"$TEST_DIR/preflight-evidence"
+grep -Fxq 'opencrane-postgres' "$TEST_DIR/preflight-evidence"
+[[ ! -e "$TEST_DIR/created-backup.json" ]]
 PATH="$TEST_DIR/bin:$PATH" bash "$BACKUP_SCRIPT" opencrane opencrane-postgres 2 >"$TEST_DIR/evidence"
 grep -q 'opencrane-postgres-pre-migration-' "$TEST_DIR/evidence"
 [[ "$(jq -r '.metadata.labels["opencrane.ai/purpose"]' "$TEST_DIR/created-backup.json")" == "pre-database-migration" ]]
@@ -987,6 +996,10 @@ export PRIVILEGED_CALLS
   bash()
   {
     if [[ "$1" == "$POSTGRES_MIGRATION_BACKUP" ]]; then
+      if [[ "${5:-}" == "--preflight" ]]; then
+        printf '%s\n' backup-preflight >>"$PRIVILEGED_CALLS"
+        return
+      fi
       printf '%s\n' backup-evidence
       return
     fi
@@ -997,6 +1010,7 @@ export PRIVILEGED_CALLS
   run_database_release_transition
 )
 printf '%s\n' \
+  backup-preflight \
   capture \
   fence \
   'install false false super=false extension=false temporary=false' \

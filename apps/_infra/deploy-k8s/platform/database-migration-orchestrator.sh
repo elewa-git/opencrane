@@ -360,6 +360,15 @@ run_database_release_transition()
     esac
   fi
 
+  # Check the read-only backup prerequisite before fencing. The same script checks it again when it
+  # creates recovery evidence, so losing the provider after this point still stops the migration.
+  if [[ "$POSTGRES_CLUSTER_EXISTS" == "1" && "${ALLOW_UNBACKED_DATABASE_MIGRATION:-0}" != "1" ]]; then
+    if ! bash "$POSTGRES_MIGRATION_BACKUP" \
+      "$NAMESPACE" "$POSTGRES_RELEASE" "$TIMEOUT" --preflight >/dev/null; then
+      err "Database backup capability is not ready; refusing to fence the server."
+      return 1
+    fi
+  fi
   capture_pre_fence_main_release_revision || return $?
   run_guarded_post_fence_stage fence_existing_opencrane_server || return $?
   if [[ "$POSTGRES_CLUSTER_EXISTS" == "1" ]]; then
