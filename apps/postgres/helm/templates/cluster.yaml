@@ -190,9 +190,10 @@ spec:
   imageName: {{ .Values.image | quote }}
   enableSuperuserAccess: {{ .Values.superuserAccess.enabled }}
   postgresql:
+    shared_preload_libraries:
+      - pg_cron
     parameters:
       max_connections: {{ .Values.postgresql.maxConnections | quote }}
-      shared_preload_libraries: "pg_cron"
       cron.database_name: "opencrane"
   inheritedMetadata:
     labels:

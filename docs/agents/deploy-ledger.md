@@ -269,3 +269,15 @@ Full run reports belong in the corresponding pull request or issue.
 - lesson: bind CNPG operand images with a PostgreSQL-version-prefixed tag whose major matches the
   chart's `externalAppVersion`, plus an immutable digest. Reject tag-only, digest-only, unversioned-tag,
   and wrong-major references before publication.
+
+## 2026-08-21 · dev · testlynn durable-execution PostgreSQL configuration · 25ff6a318b58fd3a8d11168f34e42784bf74ecf6 · FAILED
+
+- findings: chart: CloudNativePG accepted the version-prefixed, digest-bound PostgreSQL operand, then
+  rejected `shared_preload_libraries` under `.spec.postgresql.parameters`. [CloudNativePG 1.27](https://cloudnative-pg.io/docs/1.27/postgresql_conf/)
+  treats it as a fixed parameter in that map and accepts additional libraries through
+  `.spec.postgresql.shared_preload_libraries`. The app-owned deployer fenced the server at OpenCrane
+  revision 7, stopped before backup or database mutation, and restored revision 6 content.
+- friction: the Helm render test asserted the PostgreSQL setting but did not assert which
+  CloudNativePG API field carried it, so a syntactically valid render reached the live admission webhook.
+- lesson: render additional preload libraries through `.spec.postgresql.shared_preload_libraries` and
+  keep ordinary PostgreSQL settings, such as `cron.database_name`, in the parameter map.

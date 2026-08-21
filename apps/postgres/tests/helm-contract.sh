@@ -73,7 +73,11 @@ grep -q 'poolMode: "session"' "$OUTPUT"
 grep -q 'max_client_conn: "50"' "$OUTPUT"
 grep -q 'max_db_connections: "10"' "$OUTPUT"
 grep -q 'max_connections: "80"' "$OUTPUT"
-grep -q 'shared_preload_libraries: "pg_cron"' "$OUTPUT"
+grep -A1 'shared_preload_libraries:' "$OUTPUT" | grep -q -- '- pg_cron'
+if grep -q 'shared_preload_libraries: "pg_cron"' "$OUTPUT"; then
+  echo "postgres chart must use CloudNativePG's dedicated shared_preload_libraries field" >&2
+  exit 1
+fi
 grep -q 'cron.database_name: "opencrane"' "$OUTPUT"
 grep -Fq "imageName: \"$POSTGRES_OPERAND_IMAGE\"" "$OUTPUT"
 test "$(grep -c '^kind: Database$' "$OUTPUT")" -eq 2
