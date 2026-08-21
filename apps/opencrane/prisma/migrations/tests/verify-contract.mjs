@@ -32,6 +32,11 @@ function requireContract(condition, message)
 	if (!condition) throw new Error(message);
 }
 
+function compactSql(source)
+{
+	return source.replace(/\s+/gu, " ").trim();
+}
+
 const reorderedTable = String.raw`CREATE TABLE public.example (
     "second" text NOT NULL,
     "first" text DEFAULT $value$a,b$value$ NOT NULL,
@@ -313,6 +318,33 @@ for (const source of [targetBaseline, groupHierarchySql])
 	requireContract(source.includes('CREATE FUNCTION "enforce_resource_share_recipient_authority"()'), "resource-share recipients must link their exact active grant");
 	requireContract(!source.includes('JOIN "authorization_grants" grant ON'), "resource-share authority SQL must not use the reserved GRANT keyword as an alias");
 }
+const exactIamDefinitions = [
+	'ALTER TABLE "authorization_grants" ADD CONSTRAINT "authorization_grants_exact_check" CHECK ( btrim("silo_id") <> \'\' AND (("subject_kind" = \'group\' AND "subject_group_id" IS NOT NULL AND "subject_principal_id" IS NULL) OR ("subject_kind" = \'principal\' AND "subject_group_id" IS NULL AND "subject_principal_id" IS NOT NULL)) AND (("boundary_kind" = \'group\' AND "boundary_group_id" IS NOT NULL AND "boundary_principal_id" IS NULL) OR ("boundary_kind" = \'personal\' AND "boundary_group_id" IS NULL AND "boundary_principal_id" IS NOT NULL AND "boundary_coverage" = \'exact\')) AND btrim("catalog_id") <> \'\' AND "catalog_revision" > 0 AND btrim("catalog_digest") <> \'\' AND "catalog_digest" ~ \'^sha256:[0-9a-f]{64}$\' AND btrim("capability_id") <> \'\' AND btrim("resource_kind") NOT IN (\'\', \'*\') AND btrim("resource_id") NOT IN (\'\', \'*\') AND "priority" >= 0 AND btrim("created_by") <> \'\' );',
+	'ALTER TABLE "verified_fleet_membership_assertions" ADD CONSTRAINT "verified_fleet_membership_assertions_exact_check" CHECK ( btrim("assertion_id") <> \'\' AND btrim("silo_id") <> \'\' AND btrim("subject_id") <> \'\' );',
+	'CREATE UNIQUE INDEX "memory_datasets_exact_boundary_key" ON "memory_datasets"("silo_id", "boundary_kind", COALESCE("boundary_group_id", \'\'), COALESCE("boundary_principal_id", \'\'));',
+];
+for (const source of [targetBaseline, groupHierarchySql])
+{
+	const compactSource = compactSql(source);
+	for (const definition of exactIamDefinitions)
+	{
+		requireContract(compactSource.includes(definition), `IAM schema must retain exact definition: ${definition}`);
+	}
+}
+const agentServiceLifecycleStart = targetBaseline.indexOf('CREATE FUNCTION "enforce_agent_service_lifecycle"');
+const agentServiceLifecycleEnd = targetBaseline.indexOf("$$;", agentServiceLifecycleStart) + 3;
+requireContract(agentServiceLifecycleStart >= 0 && agentServiceLifecycleEnd > 2, "target AgentService lifecycle function must exist");
+const targetAgentServiceLifecycle = targetBaseline.slice(agentServiceLifecycleStart, agentServiceLifecycleEnd);
+requireContract(
+	groupHierarchySql.includes(targetAgentServiceLifecycle.replace("CREATE FUNCTION", "CREATE OR REPLACE FUNCTION")),
+	"migration must carry the exact consolidated AgentService lifecycle function",
+);
+requireContract(
+	!/CREATE TABLE "org_memberships" \([\s\S]*?"provenance" "PrincipalProvenance"[\s\S]*?CONSTRAINT "org_memberships_pkey"/u.test(targetBaseline),
+	"organization memberships must not retain Principal provenance",
+);
+requireContract(!groupHierarchySql.includes('enforce_managed_agent_service_principal'), "managed AgentService Principal validation must stay consolidated in its lifecycle function");
+requireContract(!groupHierarchySql.includes('agent_services_managed_principal_guard'), "managed AgentService validation must not retain a duplicate trigger");
 requireContract(groupHierarchySql.includes('CREATE TABLE "opencrane_migrations"."group_claim_cutover"'), "OIDC claim rewrites must remain durable migration evidence");
 requireContract(groupHierarchySql.includes('"migration_sql_sha256" TEXT NOT NULL'), "OIDC claim rewrites must bind the reviewed migration digest");
 requireContract(groupHierarchySql.includes("v1 signed fleet membership cannot be re-signed"), "v1 signed membership must fail closed instead of being rewritten");

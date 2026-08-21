@@ -37,7 +37,7 @@ SELECT (
         WHERE "schema_version" = '0.9.3'
           AND "source_schema_version" = '0.9.0'
           AND "source_baseline_sha256" = :'source_baseline_sha256'
-          AND "target_baseline_sha256" = 'a70da4a256573c2b0dcf53e63e0a4994f8a65d959d1bb3f8959d2aac85f1fcb4'
+          AND "target_baseline_sha256" = 'abacee3698553f110f70a630da5115e3ad6d54ddc98a7416f75d12a1560b7420'
           AND "sql_sha256" = :'migration_sql_sha256'
           AND "migration_id" = '0.9.0-to-0.9.3'
     )
@@ -3384,28 +3384,60 @@ CREATE UNIQUE INDEX "agent_services_principal_id_silo_id_key" ON "agent_services
 ALTER TABLE "agent_services" ADD CONSTRAINT "agent_services_principal_id_silo_id_fkey"
     FOREIGN KEY ("principal_id", "silo_id") REFERENCES "principals"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
-CREATE FUNCTION "enforce_managed_agent_service_principal"() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE principal_issuer TEXT; principal_subject TEXT; principal_provenance "PrincipalProvenance";
+CREATE OR REPLACE FUNCTION "enforce_agent_service_lifecycle"() RETURNS trigger
+LANGUAGE plpgsql AS $$
+DECLARE
+    principal_issuer TEXT;
+    principal_subject TEXT;
+    principal_provenance "PrincipalProvenance";
 BEGIN
-    IF TG_OP = 'UPDATE' AND (NEW."kind" IS DISTINCT FROM OLD."kind" OR NEW."silo_id" IS DISTINCT FROM OLD."silo_id" OR NEW."principal_id" IS DISTINCT FROM OLD."principal_id") THEN
-        RAISE EXCEPTION 'AgentService kind, silo, and Principal are immutable';
-    END IF;
-    IF NEW."kind" = 'personal' THEN
-        IF NEW."principal_id" IS NOT NULL THEN RAISE EXCEPTION 'personal AgentService cannot own a managed Principal'; END IF;
+    IF TG_OP = 'INSERT' THEN
+        IF NEW."state" <> 'draft' OR NEW."active_revision_id" IS NOT NULL THEN
+            RAISE EXCEPTION 'a new AgentService must begin Draft without an active revision';
+        END IF;
+        IF (NEW."kind" = 'managed' AND NEW."principal_id" IS NULL)
+            OR (NEW."kind" = 'personal' AND NEW."principal_id" IS NOT NULL) THEN
+            RAISE EXCEPTION 'only managed AgentService rows require an internal Principal';
+        END IF;
+        IF NEW."principal_id" IS NOT NULL THEN
+            SELECT "issuer", "subject", "provenance" INTO principal_issuer, principal_subject, principal_provenance
+            FROM "principals" WHERE "id" = NEW."principal_id" AND "silo_id" = NEW."silo_id" FOR UPDATE;
+            IF principal_provenance IS DISTINCT FROM 'internal'::"PrincipalProvenance"
+                OR principal_issuer IS DISTINCT FROM 'urn:opencrane:agent-service'
+                OR principal_subject IS DISTINCT FROM NEW."id" THEN
+                RAISE EXCEPTION 'managed AgentService Principal has invalid internal provenance';
+            END IF;
+        END IF;
         RETURN NEW;
     END IF;
-    SELECT "issuer", "subject", "provenance" INTO principal_issuer, principal_subject, principal_provenance
-    FROM "principals" WHERE "id" = NEW."principal_id" AND "silo_id" = NEW."silo_id" FOR UPDATE;
-    IF principal_provenance IS DISTINCT FROM 'internal'::"PrincipalProvenance"
-       OR principal_issuer IS DISTINCT FROM 'urn:opencrane:agent-service'
-       OR principal_subject IS DISTINCT FROM NEW."id" THEN
-        RAISE EXCEPTION 'managed AgentService Principal has invalid internal provenance';
+    IF TG_OP = 'DELETE' THEN
+        RAISE EXCEPTION 'AgentService rows cannot be deleted';
+    END IF;
+    IF OLD."state" = 'retired' THEN
+        RAISE EXCEPTION 'a Retired AgentService is closed and cannot be changed';
+    END IF;
+    IF NEW."silo_id" IS DISTINCT FROM OLD."silo_id"
+        OR NEW."kind" IS DISTINCT FROM OLD."kind"
+        OR NEW."principal_id" IS DISTINCT FROM OLD."principal_id" THEN
+        RAISE EXCEPTION 'AgentService silo identity is immutable';
+    END IF;
+    IF NEW."state" IS DISTINCT FROM OLD."state" AND NOT (
+        (OLD."state" = 'draft' AND NEW."state" IN ('active', 'retired')) OR
+        (OLD."state" = 'active' AND NEW."state" IN ('paused', 'retired')) OR
+        (OLD."state" = 'paused' AND NEW."state" IN ('active', 'retired'))
+    ) THEN
+        RAISE EXCEPTION 'invalid AgentService lifecycle transition';
+    END IF;
+    IF NEW."state" = 'retired' AND NEW."active_revision_id" IS NOT NULL THEN
+        RAISE EXCEPTION 'a Retired AgentService cannot retain an active revision';
+    END IF;
+    IF NEW."active_revision_id" IS DISTINCT FROM OLD."active_revision_id"
+        AND NEW."state" NOT IN ('active', 'retired') THEN
+        RAISE EXCEPTION 'the active revision pointer changes only on activation, rollover, or retirement';
     END IF;
     RETURN NEW;
 END;
 $$;
-CREATE TRIGGER "agent_services_managed_principal_guard" BEFORE INSERT OR UPDATE ON "agent_services"
-    FOR EACH ROW EXECUTE FUNCTION "enforce_managed_agent_service_principal"();
 
 ALTER TABLE "groups" ADD COLUMN "silo_id" TEXT;
 ALTER TABLE "groups" ADD COLUMN "membership_authority" "GroupMembershipAuthority";
@@ -3713,7 +3745,7 @@ ALTER TABLE "authorization_grants" ADD CONSTRAINT "authorization_grants_exact_ch
     (("boundary_kind" = 'group' AND "boundary_group_id" IS NOT NULL AND "boundary_principal_id" IS NULL) OR
      ("boundary_kind" = 'personal' AND "boundary_group_id" IS NULL AND "boundary_principal_id" IS NOT NULL AND "boundary_coverage" = 'exact')) AND
     btrim("catalog_id") <> '' AND "catalog_revision" > 0 AND
-    "catalog_digest" ~ '^sha256:[0-9a-f]{64}$' AND btrim("capability_id") <> '' AND
+    btrim("catalog_digest") <> '' AND "catalog_digest" ~ '^sha256:[0-9a-f]{64}$' AND btrim("capability_id") <> '' AND
     btrim("resource_kind") NOT IN ('', '*') AND btrim("resource_id") NOT IN ('', '*') AND
     "priority" >= 0 AND btrim("created_by") <> ''
 );
@@ -3730,10 +3762,14 @@ CREATE OR REPLACE FUNCTION "enforce_authorization_grant_update"() RETURNS trigge
 BEGIN
     IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'AuthorizationGrant rows cannot be deleted'; END IF;
     IF NEW."id" IS DISTINCT FROM OLD."id" OR NEW."silo_id" IS DISTINCT FROM OLD."silo_id"
-        OR NEW."subject_kind" IS DISTINCT FROM OLD."subject_kind" OR NEW."subject_group_id" IS DISTINCT FROM OLD."subject_group_id"
-        OR NEW."subject_principal_id" IS DISTINCT FROM OLD."subject_principal_id" OR NEW."boundary_kind" IS DISTINCT FROM OLD."boundary_kind"
-        OR NEW."boundary_group_id" IS DISTINCT FROM OLD."boundary_group_id" OR NEW."boundary_principal_id" IS DISTINCT FROM OLD."boundary_principal_id"
-        OR NEW."boundary_coverage" IS DISTINCT FROM OLD."boundary_coverage" OR NEW."manager_id" IS DISTINCT FROM OLD."manager_id"
+        OR NEW."subject_kind" IS DISTINCT FROM OLD."subject_kind"
+        OR NEW."subject_group_id" IS DISTINCT FROM OLD."subject_group_id"
+        OR NEW."subject_principal_id" IS DISTINCT FROM OLD."subject_principal_id"
+        OR NEW."boundary_kind" IS DISTINCT FROM OLD."boundary_kind"
+        OR NEW."boundary_group_id" IS DISTINCT FROM OLD."boundary_group_id"
+        OR NEW."boundary_principal_id" IS DISTINCT FROM OLD."boundary_principal_id"
+        OR NEW."boundary_coverage" IS DISTINCT FROM OLD."boundary_coverage"
+        OR NEW."manager_id" IS DISTINCT FROM OLD."manager_id"
         OR NEW."catalog_id" IS DISTINCT FROM OLD."catalog_id" OR NEW."catalog_revision" IS DISTINCT FROM OLD."catalog_revision"
         OR NEW."catalog_digest" IS DISTINCT FROM OLD."catalog_digest" OR NEW."capability_id" IS DISTINCT FROM OLD."capability_id"
         OR NEW."resource_kind" IS DISTINCT FROM OLD."resource_kind" OR NEW."resource_id" IS DISTINCT FROM OLD."resource_id"
@@ -3805,6 +3841,8 @@ ALTER TABLE "memory_datasets" ADD CONSTRAINT "memory_datasets_identity_check" CH
      ("boundary_kind" = 'personal' AND "boundary_group_id" IS NULL AND "boundary_principal_id" IS NOT NULL))
 );
 CREATE INDEX "memory_datasets_silo_id_boundary_kind_boundary_group_id_bou_idx" ON "memory_datasets"("silo_id", "boundary_kind", "boundary_group_id", "boundary_principal_id");
+CREATE UNIQUE INDEX "memory_datasets_exact_boundary_key"
+    ON "memory_datasets"("silo_id", "boundary_kind", COALESCE("boundary_group_id", ''), COALESCE("boundary_principal_id", ''));
 CREATE OR REPLACE FUNCTION "enforce_memory_dataset_lifecycle"() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
     IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'MemoryDataset catalog rows cannot be deleted'; END IF;
@@ -3974,6 +4012,9 @@ ALTER TABLE "mcp_servers" DROP COLUMN "scope";
 ALTER TABLE "verified_fleet_membership_assertions" DROP COLUMN "scope_kind";
 ALTER TABLE "verified_fleet_membership_assertions" DROP COLUMN "organization_id";
 ALTER TABLE "verified_fleet_membership_assertions" DROP COLUMN "scope_resource_id";
+ALTER TABLE "verified_fleet_membership_assertions" ADD CONSTRAINT "verified_fleet_membership_assertions_exact_check" CHECK (
+    btrim("assertion_id") <> '' AND btrim("silo_id") <> '' AND btrim("subject_id") <> ''
+);
 
 DROP TABLE "agent_revision_scope_attachments";
 DROP TABLE "mcp_server_access_users";
@@ -4045,13 +4086,18 @@ CREATE TRIGGER "agent_revision_boundary_attachments_immutable" BEFORE INSERT OR 
 
 CREATE FUNCTION "enforce_resource_share_immutability"() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
-    IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'ResourceShare rows cannot be deleted; revoke recipients instead'; END IF;
-    IF NEW."id" IS DISTINCT FROM OLD."id" OR NEW."silo_id" IS DISTINCT FROM OLD."silo_id"
-       OR NEW."resource_kind" IS DISTINCT FROM OLD."resource_kind" OR NEW."resource_id" IS DISTINCT FROM OLD."resource_id"
-       OR NEW."owner_principal_id" IS DISTINCT FROM OLD."owner_principal_id" OR NEW."created_at" IS DISTINCT FROM OLD."created_at" THEN
-        RAISE EXCEPTION 'ResourceShare authority fields are immutable';
-    END IF;
-    RETURN NEW;
+	IF TG_OP = 'DELETE' THEN
+		RAISE EXCEPTION 'ResourceShare rows cannot be deleted; revoke recipients instead';
+	END IF;
+	IF NEW."id" IS DISTINCT FROM OLD."id"
+		OR NEW."silo_id" IS DISTINCT FROM OLD."silo_id"
+		OR NEW."resource_kind" IS DISTINCT FROM OLD."resource_kind"
+		OR NEW."resource_id" IS DISTINCT FROM OLD."resource_id"
+		OR NEW."owner_principal_id" IS DISTINCT FROM OLD."owner_principal_id"
+		OR NEW."created_at" IS DISTINCT FROM OLD."created_at" THEN
+		RAISE EXCEPTION 'ResourceShare authority fields are immutable';
+	END IF;
+	RETURN NEW;
 END;
 $$;
 CREATE TRIGGER "resource_shares_immutable" BEFORE UPDATE OR DELETE ON "resource_shares"
@@ -4059,43 +4105,65 @@ CREATE TRIGGER "resource_shares_immutable" BEFORE UPDATE OR DELETE ON "resource_
 
 CREATE FUNCTION "enforce_resource_share_recipient_authority"() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
-    IF TG_OP = 'UPDATE' THEN RAISE EXCEPTION 'ResourceShareRecipient rows cannot be updated'; END IF;
-    IF TG_OP = 'DELETE' THEN RETURN OLD; END IF;
-    IF NOT EXISTS (
-        SELECT 1 FROM "resource_shares" share
-        JOIN "authorization_grants" grant_row ON grant_row."id" = NEW."grant_id"
-        WHERE share."id" = NEW."resource_share_id" AND share."silo_id" = NEW."silo_id"
-          AND grant_row."silo_id" = NEW."silo_id" AND grant_row."manager_id" = 'resource-share-editor'
-          AND grant_row."subject_kind" = 'principal' AND grant_row."subject_group_id" IS NULL
-          AND grant_row."subject_principal_id" = NEW."principal_id" AND grant_row."boundary_kind" = 'personal'
-          AND grant_row."boundary_group_id" IS NULL AND grant_row."boundary_principal_id" = share."owner_principal_id"
-          AND grant_row."boundary_coverage" = 'exact' AND grant_row."resource_kind" = share."resource_kind"
-          AND grant_row."resource_id" = share."resource_id" AND grant_row."effect" = 'allow'
-          AND grant_row."revoked_at" IS NULL AND grant_row."created_by" = NEW."granted_by_principal_id"
-    ) THEN
-        RAISE EXCEPTION 'ResourceShareRecipient must link its exact active manager-owned grant';
-    END IF;
-    RETURN NEW;
+	IF TG_OP = 'UPDATE' THEN
+		RAISE EXCEPTION 'ResourceShareRecipient rows cannot be updated';
+	END IF;
+	IF TG_OP = 'DELETE' THEN
+		RETURN OLD;
+	END IF;
+	IF NOT EXISTS (
+		SELECT 1
+		FROM "resource_shares" share
+		JOIN "authorization_grants" grant_row ON grant_row."id" = NEW."grant_id"
+		WHERE share."id" = NEW."resource_share_id"
+		  AND share."silo_id" = NEW."silo_id"
+		  AND grant_row."silo_id" = NEW."silo_id"
+		  AND grant_row."manager_id" = 'resource-share-editor'
+		  AND grant_row."subject_kind" = 'principal'
+		  AND grant_row."subject_group_id" IS NULL
+		  AND grant_row."subject_principal_id" = NEW."principal_id"
+		  AND grant_row."boundary_kind" = 'personal'
+		  AND grant_row."boundary_group_id" IS NULL
+		  AND grant_row."boundary_principal_id" = share."owner_principal_id"
+		  AND grant_row."boundary_coverage" = 'exact'
+		  AND grant_row."resource_kind" = share."resource_kind"
+		  AND grant_row."resource_id" = share."resource_id"
+		  AND grant_row."effect" = 'allow'
+		  AND grant_row."revoked_at" IS NULL
+		  AND grant_row."created_by" = NEW."granted_by_principal_id"
+	) THEN
+		RAISE EXCEPTION 'ResourceShareRecipient must link its exact active manager-owned grant';
+	END IF;
+	RETURN NEW;
 END;
 $$;
 CREATE TRIGGER "resource_share_recipients_authority" BEFORE INSERT OR UPDATE ON "resource_share_recipients"
     FOR EACH ROW EXECUTE FUNCTION "enforce_resource_share_recipient_authority"();
 
 CREATE FUNCTION "enforce_group_hierarchy"() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE creates_cycle BOOLEAN;
+DECLARE
+	creates_cycle BOOLEAN;
 BEGIN
-    PERFORM pg_advisory_xact_lock(hashtextextended('opencrane:group-hierarchy:' || NEW."silo_id", 0));
-    IF NEW."parent_id" IS NULL THEN RETURN NEW; END IF;
-    WITH RECURSIVE ancestors("id", "parent_id", "silo_id", "path") AS (
-        SELECT parent."id", parent."parent_id", parent."silo_id", ARRAY[parent."id"]
-        FROM "groups" parent WHERE parent."id" = NEW."parent_id" AND parent."silo_id" = NEW."silo_id"
-        UNION ALL
-        SELECT parent."id", parent."parent_id", parent."silo_id", ancestors."path" || parent."id"
-        FROM "groups" parent JOIN ancestors ON parent."id" = ancestors."parent_id" AND parent."silo_id" = ancestors."silo_id"
-        WHERE NOT parent."id" = ANY(ancestors."path")
-    )
-    SELECT EXISTS (SELECT 1 FROM ancestors WHERE "id" = NEW."id" AND "silo_id" = NEW."silo_id") INTO creates_cycle;
-    IF creates_cycle THEN RAISE EXCEPTION 'group hierarchy cannot contain a cycle' USING ERRCODE = '23514'; END IF;
+	PERFORM pg_advisory_xact_lock(hashtextextended('opencrane:group-hierarchy:' || NEW."silo_id", 0));
+	IF NEW."parent_id" IS NULL THEN
+		RETURN NEW;
+	END IF;
+
+	WITH RECURSIVE ancestors("id", "parent_id", "silo_id", "path") AS (
+		SELECT parent."id", parent."parent_id", parent."silo_id", ARRAY[parent."id"]
+		FROM "groups" parent
+		WHERE parent."id" = NEW."parent_id" AND parent."silo_id" = NEW."silo_id"
+		UNION ALL
+		SELECT parent."id", parent."parent_id", parent."silo_id", ancestors."path" || parent."id"
+		FROM "groups" parent
+		JOIN ancestors ON parent."id" = ancestors."parent_id" AND parent."silo_id" = ancestors."silo_id"
+		WHERE NOT parent."id" = ANY(ancestors."path")
+	)
+	SELECT EXISTS (SELECT 1 FROM ancestors WHERE "id" = NEW."id" AND "silo_id" = NEW."silo_id") INTO creates_cycle;
+
+    IF creates_cycle THEN
+        RAISE EXCEPTION 'group hierarchy cannot contain a cycle' USING ERRCODE = '23514';
+    END IF;
     RETURN NEW;
 END;
 $$;
@@ -4199,11 +4267,11 @@ BEGIN
                 (SELECT "integration_id", "silo_id", "custody_reference_id", "tool_definitions" FROM "agent_revision_integration_assignments" WHERE "agent_revision_id" = NEW."applied_agent_revision_id"
                  EXCEPT SELECT "integration_id", "silo_id", "custody_reference_id", "tool_definitions" FROM "agent_revision_integration_assignments" WHERE "agent_revision_id" = NEW."expected_agent_revision_id")
             ) OR EXISTS (
-                (SELECT "silo_id", "boundary_kind", "boundary_group_id", "boundary_principal_id", "boundary_coverage" FROM "agent_revision_boundary_attachments" WHERE "agent_revision_id" = NEW."expected_agent_revision_id"
-                 EXCEPT SELECT "silo_id", "boundary_kind", "boundary_group_id", "boundary_principal_id", "boundary_coverage" FROM "agent_revision_boundary_attachments" WHERE "agent_revision_id" = NEW."applied_agent_revision_id")
-                UNION ALL
-                (SELECT "silo_id", "boundary_kind", "boundary_group_id", "boundary_principal_id", "boundary_coverage" FROM "agent_revision_boundary_attachments" WHERE "agent_revision_id" = NEW."applied_agent_revision_id"
-                 EXCEPT SELECT "silo_id", "boundary_kind", "boundary_group_id", "boundary_principal_id", "boundary_coverage" FROM "agent_revision_boundary_attachments" WHERE "agent_revision_id" = NEW."expected_agent_revision_id")
+				(SELECT "silo_id", "boundary_kind", "boundary_group_id", "boundary_principal_id", "boundary_coverage" FROM "agent_revision_boundary_attachments" WHERE "agent_revision_id" = NEW."expected_agent_revision_id"
+				 EXCEPT SELECT "silo_id", "boundary_kind", "boundary_group_id", "boundary_principal_id", "boundary_coverage" FROM "agent_revision_boundary_attachments" WHERE "agent_revision_id" = NEW."applied_agent_revision_id")
+				UNION ALL
+				(SELECT "silo_id", "boundary_kind", "boundary_group_id", "boundary_principal_id", "boundary_coverage" FROM "agent_revision_boundary_attachments" WHERE "agent_revision_id" = NEW."applied_agent_revision_id"
+				 EXCEPT SELECT "silo_id", "boundary_kind", "boundary_group_id", "boundary_principal_id", "boundary_coverage" FROM "agent_revision_boundary_attachments" WHERE "agent_revision_id" = NEW."expected_agent_revision_id")
             ) THEN
                 RAISE EXCEPTION 'applied model_alias may change only its model definition';
             END IF;
@@ -4227,7 +4295,7 @@ INSERT INTO "opencrane_migrations"."schema_history" (
     "target_baseline_sha256", "sql_sha256", "migration_id"
 ) VALUES (
     '0.9.3', '0.9.0', :'source_baseline_sha256',
-    'a70da4a256573c2b0dcf53e63e0a4994f8a65d959d1bb3f8959d2aac85f1fcb4',
+    'abacee3698553f110f70a630da5115e3ad6d54ddc98a7416f75d12a1560b7420',
     :'migration_sql_sha256', '0.9.0-to-0.9.3'
 );
 

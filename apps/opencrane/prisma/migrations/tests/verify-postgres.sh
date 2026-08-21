@@ -353,6 +353,7 @@ for database in migrated fresh_source fresh_090 fresh; do
 	psql_command "$database" <"$ROOT/apps/opencrane/prisma/migrations/tests/tool-result-delivery-authority.sql" >/dev/null
 	psql_command "$database" <"$ROOT/apps/opencrane/prisma/migrations/tests/conversation-activity-ordering.sql" >/dev/null
 	psql_command "$database" <"$ROOT/apps/opencrane/prisma/migrations/tests/group-hierarchy-authority.sql" >/dev/null
+	psql_command "$database" <"$ROOT/apps/opencrane/prisma/migrations/tests/iam-convergence-authority.sql" >/dev/null
 	assert_concurrent_group_cycle_rejected "$database"
 	docker exec "$CONTAINER" pg_dump --username postgres --dbname "$database" \
 		--schema-only --no-owner --no-privileges \

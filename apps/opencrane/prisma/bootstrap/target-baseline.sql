@@ -724,7 +724,6 @@ CREATE TABLE "org_memberships" (
     "id" TEXT NOT NULL,
     "cluster_tenant" TEXT NOT NULL,
     "subject" TEXT NOT NULL,
-    "provenance" "PrincipalProvenance" NOT NULL DEFAULT 'external',
     "email" TEXT,
     "display_name" TEXT,
     "role" "OrgRole" NOT NULL,
