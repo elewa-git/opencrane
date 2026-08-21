@@ -17,6 +17,8 @@ export interface Group
   name: string;
   /** Domain scope represented by the group. */
   scope: GrantScope;
+  /** Identifies the parent used for arrangement; ancestry does not add members or grants. */
+  parentId: string | null;
   /** Optional operator-facing description. */
   description?: string;
   /** Normalized principal identifiers attached to the group. */

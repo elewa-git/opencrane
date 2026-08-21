@@ -1,3 +1,4 @@
+import { _GroupsOpenapiSchemas } from "@opencrane/backend/server/iam/groups";
 import { _OrganizationMembersOpenapiSchemas } from "@opencrane/backend/server/iam/organization-members";
 
 /** Shared pagination schema consumed by domain paths. */
@@ -14,5 +15,6 @@ const _PaginationSchema = {
 /** Collects schemas owned by domain packages and the shared API pagination contract. */
 export const _DomainOpenapiSchemas = {
 	Pagination: _PaginationSchema,
+	..._GroupsOpenapiSchemas,
 	..._OrganizationMembersOpenapiSchemas,
 };

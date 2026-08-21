@@ -34,6 +34,7 @@
 #                            --litellm-postgres-credentials-secret NAME [--litellm-postgres-owner OWNER]
 #                            --postgres-admin-credentials-secret NAME [--postgres-admin-name NAME]
 #                            [--allow-unbacked-database-migration]
+#                            [--approve-0.9.2-to-0.9.3-database-transition]
 #                            [--postgres-values FILE]
 #                            [--values FILE] [--set k=v ...] [--helm-arg ARG ...]
 #                            [--reuse-values | --reset-values]
@@ -117,6 +118,7 @@ source "$SCRIPT_DIR/database-convergence-policy.sh"
 source "$SCRIPT_DIR/database-migration-recovery.sh"
 source "$SCRIPT_DIR/database-migration-orchestrator.sh"
 source "$SCRIPT_DIR/database-release-finalization.sh"
+source "$SCRIPT_DIR/database-transition-resolver.sh"
 CHART_DIR="${OPENCRANE_CHART_DIR:-}"
 if [[ -z "$CHART_DIR" ]]; then
   echo "[k8s-deploy] OPENCRANE_CHART_DIR is unset. Run a role wrapper deploy.sh — the fleet-platform chart's deploy.sh (now in WeOwnAI) or apps/_infra/deploy-k8s/deploy.sh — not k8s-deploy.sh directly." >&2
@@ -138,6 +140,7 @@ fi
 POSTGRES_BASELINE_PUBLISHER="$SCRIPT_DIR/../../../postgres/scripts/publish-initdb-baseline-config-map.sh"
 POSTGRES_MIGRATION_PUBLISHER="$SCRIPT_DIR/../../../postgres/scripts/publish-database-migration-config-map.sh"
 DATABASE_TRANSITION_RESOLVER="$SCRIPT_DIR/../../../../scripts/release-versioning/database-transition.mjs"
+DATABASE_0_9_3_TRANSITION_RESOLVER="$SCRIPT_DIR/../../../../scripts/release-versioning/database-transition-0.9.3.mjs"
 DATABASE_SCHEMA_LINEAGE_RESOLVER="$SCRIPT_DIR/../../../../scripts/release-versioning/schema-lineage.mjs"
 POSTGRES_MIGRATION_BACKUP="$SCRIPT_DIR/../../../postgres/scripts/create-pre-migration-backup.sh"
 POSTGRES_BASELINE_FILE="$SCRIPT_DIR/../../../opencrane/prisma/bootstrap/target-baseline.sql"
@@ -220,6 +223,7 @@ POSTGRES_ADMIN_CREDENTIALS_SECRET="${OPENCRANE_POSTGRES_ADMIN_CREDENTIALS_SECRET
 POSTGRES_ADMIN_NAME="${OPENCRANE_POSTGRES_ADMIN_NAME:-opencrane_database_admin}"
 POSTGRES_MIGRATION_IMAGE="${OPENCRANE_POSTGRES_MIGRATION_IMAGE:-ghcr.io/cloudnative-pg/postgresql@sha256:b1deeed2aa998b2f381e39c5cadb9ec06127708c8bd62965743af19abf21628f}"
 ALLOW_UNBACKED_DATABASE_MIGRATION="0"
+APPROVE_0_9_3_DATABASE_TRANSITION="0"
 # --preflight runs a fail-FAST environment check BEFORE any cluster mutation and exits 0/1
 # without installing. It catches the failures that otherwise surface as a half-installed,
 # crash-looping cluster: no default StorageClass (every PVC pends), a CNI that silently
@@ -290,6 +294,7 @@ while [[ $# -gt 0 ]]; do
     --postgres-admin-name) POSTGRES_ADMIN_NAME="$2"; shift 2 ;;
     --postgres-migration-image) POSTGRES_MIGRATION_IMAGE="$2"; shift 2 ;;
     --allow-unbacked-database-migration) ALLOW_UNBACKED_DATABASE_MIGRATION="1"; shift ;;
+    --approve-0.9.2-to-0.9.3-database-transition) APPROVE_0_9_3_DATABASE_TRANSITION="1"; shift ;;
     --postgres-values) POSTGRES_VALUES_FILE="$2"; shift 2 ;;
     --release-version) RELEASE_VERSION="$2"; shift 2 ;;
     --from-release-version) FROM_RELEASE_VERSION="$2"; shift 2 ;;
@@ -312,6 +317,12 @@ if [[ -z "$RELEASE_VERSION" || -z "$FROM_RELEASE_VERSION" ]]; then
   err "--release-version and --from-release-version are required. Use --from-release-version fresh only for an empty initdb install."
   exit 1
 fi
+DATABASE_TRANSITION_RESOLVER="$(select_database_transition_resolver \
+  "$DATABASE_TRANSITION_RESOLVER" \
+  "$DATABASE_0_9_3_TRANSITION_RESOLVER" \
+  "$RELEASE_VERSION" \
+  "$FROM_RELEASE_VERSION" \
+  "$APPROVE_0_9_3_DATABASE_TRANSITION")" || exit $?
 DATABASE_RELEASE_TRANSITION="$(node "$DATABASE_TRANSITION_RESOLVER" "$REPOSITORY_ROOT" "$RELEASE_VERSION" "$FROM_RELEASE_VERSION")"
 DATABASE_TRANSITION_KIND="$(jq -r '.kind' <<<"$DATABASE_RELEASE_TRANSITION")"
 DATABASE_CARRY_FORWARD_RELEASE="$(jq -r '.migration.carriedForwardThroughReleaseVersion // empty' \

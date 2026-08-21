@@ -57,6 +57,12 @@ covers an already-applied exact migration. Both reconcile privileges with migrat
 continue the normal application Helm transition without fencing. Incompatible, unreadable, extra,
 or ambiguous evidence stops before fencing.
 
+The `0.9.2` to `0.9.3` group-hierarchy schema change is the one reviewed patch exception. It remains
+rejected unless the operator also supplies `--approve-0.9.2-to-0.9.3-database-transition`; that flag
+is invalid for every other release pair. Once admitted, the transition uses the same protected-origin
+classification, backup, server fence, digest-bound Job, convergence proof, and recovery path described
+below. Future patch transitions require their own reviewed resolver and explicit flag.
+
 Only `source` publishes the manifest-selected SQL, captures the exact current application Helm
 revision, and then fences the old server. It proves a CloudNativePG (CNPG) backup before running the
 bounded migration Job. If a post-fence stage fails, recovery first proves that Job is absent or

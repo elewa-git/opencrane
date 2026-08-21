@@ -22,6 +22,9 @@ RECOVERY="$ROOT_DIR/apps/_infra/deploy-k8s/platform/database-migration-recovery.
 INVITATION_HELPER="$ROOT_DIR/apps/_infra/deploy-k8s/platform/invitation-signing-secret.sh"
 FINALIZATION="$ROOT_DIR/apps/_infra/deploy-k8s/platform/database-release-finalization.sh"
 POLICY="$ROOT_DIR/apps/_infra/deploy-k8s/platform/database-convergence-policy.sh"
+TRANSITION_POLICY="$ROOT_DIR/apps/_infra/deploy-k8s/platform/database-transition-resolver.sh"
+GENERIC_TRANSITION_RESOLVER="$ROOT_DIR/scripts/release-versioning/database-transition.mjs"
+PATCH_TRANSITION_RESOLVER="$ROOT_DIR/scripts/release-versioning/database-transition-0.9.3.mjs"
 BACKUP_SCRIPT="$ROOT_DIR/apps/postgres/scripts/create-pre-migration-backup.sh"
 LIVE_ORIGIN=eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
 export LIVE_ORIGIN
@@ -32,12 +35,22 @@ bash -n "$INVITATION_HELPER"
 bash -n "$ORCHESTRATOR"
 bash -n "$FINALIZATION"
 bash -n "$POLICY"
+bash -n "$TRANSITION_POLICY"
 bash -n "$BACKUP_SCRIPT"
 source "$POLICY"
 source "$INVITATION_HELPER"
-grep -q -- '--release-version' "$DEPLOY_SCRIPT"
-grep -q -- '--from-release-version' "$DEPLOY_SCRIPT"
-grep -q 'DATABASE_RELEASE_TRANSITION=.*DATABASE_TRANSITION_RESOLVER' "$DEPLOY_SCRIPT"
+source "$TRANSITION_POLICY"
+[[ "$(select_database_transition_resolver "$GENERIC_TRANSITION_RESOLVER" "$PATCH_TRANSITION_RESOLVER" "0.9.3" "fresh" "0")" == "$GENERIC_TRANSITION_RESOLVER" ]]
+[[ "$(select_database_transition_resolver "$GENERIC_TRANSITION_RESOLVER" "$PATCH_TRANSITION_RESOLVER" "0.9.3" "0.9.2" "1")" == "$PATCH_TRANSITION_RESOLVER" ]]
+if select_database_transition_resolver "$GENERIC_TRANSITION_RESOLVER" "$PATCH_TRANSITION_RESOLVER" "0.9.4" "0.9.3" "1" >/dev/null 2>&1; then
+  echo "manual 0.9.3 transition approval accepted the wrong release pair" >&2
+  exit 1
+fi
+if node "$GENERIC_TRANSITION_RESOLVER" "$ROOT_DIR" "0.9.3" "0.9.2" >/dev/null 2>&1; then
+  echo "generic database transition resolver admitted a patch migration" >&2
+  exit 1
+fi
+node "$PATCH_TRANSITION_RESOLVER" "$ROOT_DIR" "0.9.3" "0.9.2" >/dev/null
 grep -q 'automatic database migration permits only an adjacent minor transition' \
   "$ROOT_DIR/scripts/release-versioning/database-validation.mjs"
 grep -q 'run_database_release_transition' "$DEPLOY_SCRIPT"

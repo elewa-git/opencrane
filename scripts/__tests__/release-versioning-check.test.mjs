@@ -468,6 +468,30 @@ test("accepts an explicitly approved manual transition", async () =>
 	assert.deepEqual(await validateWorkspace(fixture.root, [], fixture.graph), []);
 });
 
+test("requires the version-specific procedure before resolving a patch schema migration", () =>
+{
+	const fixture = _Fixture({
+		repositoryVersion: "0.7.1",
+		previousRepositoryVersion: "0.7.0",
+		adaptedVersion: "0.7.1",
+		manualTransition: { approved: true, reason: "Operator-reviewed patch transition" },
+	});
+	_WriteDatabaseMigration(fixture.root, "0.7.0", "0.7.1");
+
+	assert.throws(
+		() => resolveDatabaseTransition(fixture.root, "0.7.1", "0.7.0"),
+		/adjacent minor transition/u,
+	);
+	assert.throws(
+		() => resolveDatabaseTransition(fixture.root, "0.7.1", "0.7.0", { manualTransitionId: "0.7.0-to-0.7.2" }),
+		/adjacent minor transition/u,
+	);
+	assert.equal(
+		resolveDatabaseTransition(fixture.root, "0.7.1", "0.7.0", { manualTransitionId: "0.7.0-to-0.7.1" }).kind,
+		"migration",
+	);
+});
+
 test("resolves an approved patch release with unchanged database state as current", () =>
 {
 	const fixture = _Fixture({

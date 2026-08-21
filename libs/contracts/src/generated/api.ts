@@ -364,10 +364,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List all groups with member counts and awareness grants */
+        /** List all groups with hierarchy, members, and grants */
         get: operations["listGroups"];
         put?: never;
-        /** Create a new group and optional awareness grants */
+        /** Create a new group */
         post: operations["createGroup"];
         delete?: never;
         options?: never;
@@ -384,10 +384,10 @@ export interface paths {
         };
         /** Get a single group by identifier */
         get: operations["getGroup"];
-        /** Update a group and replace awareness grants */
+        /** Update a group */
         put: operations["updateGroup"];
         post?: never;
-        /** Delete a group and its awareness grants */
+        /** Delete a group */
         delete: operations["deleteGroup"];
         options?: never;
         head?: never;
@@ -1614,6 +1614,23 @@ export interface components {
             nextCursor?: string;
             hasMore: boolean;
         };
+        Group: {
+            id: string;
+            name: string;
+            /** @enum {string} */
+            scope: "org" | "department" | "team" | "project" | "personal";
+            /** @description Parent group identifier, or null for a hierarchy root. */
+            parentId: string | null;
+            description?: string;
+            members: string[];
+            memberCount: number;
+            grants: Record<string, never>[];
+        };
+        GroupMutationResponse: {
+            id: string;
+            /** @enum {string} */
+            status: "created" | "updated" | "deleted";
+        };
         OrganizationMember: {
             membershipId: string;
             displayName: string;
@@ -1856,13 +1873,6 @@ export interface components {
              * @enum {string}
              */
             role: "Owner" | "Admin" | "Member";
-        };
-        Group: {
-            id?: string;
-            name?: string;
-            description?: string;
-            memberCount?: number;
-            awarenessGrants?: Record<string, never>[];
         };
         /** @description An inter-user share: an Allow grant the caller created on a recipient for an entitlement they hold (S4). */
         Share: {
@@ -3386,7 +3396,11 @@ export interface operations {
             content: {
                 "application/json": {
                     name: string;
+                    /** @enum {string} */
+                    scope: "org" | "department" | "project" | "personal";
+                    parentId?: string | null;
                     description?: string;
+                    members?: string[];
                 };
             };
         };
@@ -3397,7 +3411,34 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Group"];
+                    "application/json": components["schemas"]["GroupMutationResponse"];
+                };
+            };
+            /** @description Invalid group request. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Parent group not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description A group with this name already exists. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
                 };
             };
         };
@@ -3444,7 +3485,14 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": Record<string, never>;
+                "application/json": {
+                    name?: string;
+                    /** @enum {string} */
+                    scope?: "org" | "department" | "project" | "personal";
+                    parentId?: string | null;
+                    description?: string;
+                    members?: string[];
+                };
             };
         };
         responses: {
@@ -3454,7 +3502,34 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Group"];
+                    "application/json": components["schemas"]["GroupMutationResponse"];
+                };
+            };
+            /** @description Invalid group request. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Group or parent group not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Group hierarchy conflict. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
                 };
             };
         };
@@ -3476,10 +3551,25 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        id?: string;
-                        status?: string;
-                    };
+                    "application/json": components["schemas"]["GroupMutationResponse"];
+                };
+            };
+            /** @description Group not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Group still has children. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
                 };
             };
         };

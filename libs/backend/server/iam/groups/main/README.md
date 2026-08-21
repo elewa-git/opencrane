@@ -10,8 +10,11 @@ named set of people — a team, a department, a project — so that access can b
 at once instead of one person at a time.
 
 A group is a reusable *subject* that authorization may point at: instead of naming Ana, Ben, and Cara
-separately, policy can name the design-team group. This package owns the operator-facing group
-management API (`/api/v1/groups`) and the stored membership that backs it. Some
+separately, policy can name the design-team group. A group may also name a parent group, which lets
+operators describe a hierarchy without putting that structure into identity-provider claims. A null
+parent marks a hierarchy root; moving a group never changes its scope, members, or grants. This
+package owns the operator-facing group management API (`/api/v1/groups`) and the stored membership
+that backs it. Some
 groups mirror the login groups a person's identity provider reports (kept in sync at sign-in by the
 [identity](../../identity/main/README.md) package); others are curated by operators here.
 
@@ -29,15 +32,16 @@ groups mirror the login groups a person's identity provider reports (kept in syn
 
 **In this flow:** [identity](../../identity/main/README.md) · [authorization](../../authorization/main/README.md)
 
-Invariant: a group is only a named set of members — it neither owns entitlements nor makes access
-decisions. Authorization grants are created and evaluated by their owning domains. Mounted at
-`/api/v1/groups`.
+Invariant: a group is a named set of members with optional hierarchy metadata — it neither inherits
+membership or grants from its parent nor makes access decisions. The database rejects hierarchy
+cycles and refuses to delete a parent while it still has children. Authorization grants are created
+and evaluated by their owning domains. Mounted at `/api/v1/groups`.
 
 ## Public surface
 
 - `groupsRouter` and its route types — the `/api/v1/groups` management API.
-- The group logic in `core/groups.logic` — membership create, update, delete, and response shapes.
-- `_GroupsOpenapiPaths` — the OpenAPI (REST API description) path fragment this domain contributes to the aggregated spec.
+- The group logic in `core/groups.logic` — hierarchy and membership create, update, delete, and response shapes.
+- `_GroupsOpenapiPaths` and `_GroupsOpenapiSchemas` — the OpenAPI paths and response schemas this domain contributes to the aggregated spec.
 
 ## Boundary
 
@@ -53,7 +57,7 @@ domain's persistence or policy decisions.
 
 ## Data & persistence
 
-Owns the `Group` model in `apps/opencrane/prisma/schema/groups.prisma`.
+Owns the `Group` model and its parent-child relation in `apps/opencrane/prisma/schema/groups.prisma`.
 
 ## See also
 

@@ -859,6 +859,7 @@ CREATE TABLE "groups" (
     "scope" "GrantScope" NOT NULL,
     "description" TEXT,
     "members" JSONB NOT NULL DEFAULT '[]',
+    "parent_id" TEXT,
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updated_at" TIMESTAMP(3) NOT NULL,
 
@@ -2141,6 +2142,9 @@ CREATE UNIQUE INDEX "groups_name_key" ON "groups"("name");
 
 -- CreateIndex
 CREATE INDEX "groups_scope_idx" ON "groups"("scope");
+
+-- CreateIndex
+CREATE INDEX "groups_parent_id_idx" ON "groups"("parent_id");
 
 -- CreateIndex
 CREATE INDEX "integrations_silo_id_state_idx" ON "integrations"("silo_id", "state");
@@ -7249,6 +7253,7 @@ CREATE UNIQUE INDEX "conversation_timeline_entries_parent_delivery_agent_thread_
 CREATE UNIQUE INDEX "agent_runs_thread_authority_key" ON "agent_runs"("id", "conversation_id", "silo_id", "agent_service_id");
 
 ALTER TABLE "artifact_scan_jobs" ADD CONSTRAINT "artifact_scan_jobs_artifact_revision_id_fkey" FOREIGN KEY ("artifact_revision_id") REFERENCES "artifact_revisions"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "groups" ADD CONSTRAINT "groups_parent_id_fkey" FOREIGN KEY ("parent_id") REFERENCES "groups"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 ALTER TABLE "conversation_asset_output_tickets" ADD CONSTRAINT "conversation_asset_output_tickets_conversation_id_silo_id_fkey" FOREIGN KEY ("conversation_id", "silo_id") REFERENCES "conversations"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
 ALTER TABLE "conversation_asset_output_tickets" ADD CONSTRAINT "conversation_asset_output_tickets_conversation_id_run_id_fkey" FOREIGN KEY ("conversation_id", "run_id") REFERENCES "agent_runs"("conversation_id", "id") ON DELETE RESTRICT ON UPDATE CASCADE;
 ALTER TABLE "conversation_asset_output_tickets" ADD CONSTRAINT "conversation_asset_output_tickets_run_id_run_attempt_fkey" FOREIGN KEY ("run_id", "run_attempt") REFERENCES "workload_assignments"("run_id", "attempt") ON DELETE RESTRICT ON UPDATE CASCADE;
@@ -7309,6 +7314,39 @@ ALTER TABLE "conversation_assets" ADD CONSTRAINT "conversation_assets_lifecycle_
     OR ("state" = 'failed' AND "failure_code" IS NOT NULL)
     OR ("state" = 'removed' AND "removed_at" IS NOT NULL)
 );
+
+CREATE FUNCTION "enforce_group_hierarchy"() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+    current_parent_id TEXT;
+    creates_cycle BOOLEAN;
+BEGIN
+    PERFORM pg_advisory_xact_lock(hashtextextended('opencrane:group-hierarchy', 0));
+    SELECT "parent_id" INTO current_parent_id FROM "groups" WHERE "id" = NEW."id";
+    IF current_parent_id IS NULL THEN
+        RETURN NEW;
+    END IF;
+
+    WITH RECURSIVE ancestors("id", "parent_id", "path") AS (
+        SELECT parent."id", parent."parent_id", ARRAY[parent."id"]
+        FROM "groups" parent
+        WHERE parent."id" = current_parent_id
+        UNION ALL
+        SELECT parent."id", parent."parent_id", ancestors."path" || parent."id"
+        FROM "groups" parent
+        JOIN ancestors ON parent."id" = ancestors."parent_id"
+        WHERE NOT parent."id" = ANY(ancestors."path")
+    )
+    SELECT EXISTS (SELECT 1 FROM ancestors WHERE "id" = NEW."id") INTO creates_cycle;
+
+    IF creates_cycle THEN
+        RAISE EXCEPTION 'group hierarchy cannot contain a cycle' USING ERRCODE = '23514';
+    END IF;
+    RETURN NEW;
+END;
+$$;
+CREATE CONSTRAINT TRIGGER "groups_hierarchy_guard" AFTER INSERT OR UPDATE OF "parent_id" ON "groups"
+    DEFERRABLE INITIALLY DEFERRED
+    FOR EACH ROW EXECUTE FUNCTION "enforce_group_hierarchy"();
 
 CREATE FUNCTION "enforce_conversation_asset_output_ticket_lifecycle"() RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE

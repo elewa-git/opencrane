@@ -8,6 +8,8 @@ export interface GroupWriteRequest
   name: string;
   /** Organizational scope represented by the group. */
   scope: GroupRouteScope;
+  /** Sets a parent when present; null detaches the group, while omission preserves it during updates. */
+  parentId?: string | null;
   /** Optional operator-facing description. */
   description?: string;
   /** JSON membership list stored on the group record. */

@@ -8,7 +8,7 @@ import type { GroupRouteScope, GroupWriteRequest } from "../routes/groups.types"
 
 type _GroupRow = Prisma.GroupGetPayload<{}>;
 
-/** Route scope string ("org", "department", …) to the value stored in the group's scope column. */
+/** Maps each writable route scope to the value stored in the group's scope column. */
 const _PRISMA_SCOPE_BY_ROUTE_SCOPE = {
 	org: "Org",
 	department: "Department",
@@ -16,7 +16,7 @@ const _PRISMA_SCOPE_BY_ROUTE_SCOPE = {
 	personal: "Personal",
 };
 
-/** The reverse: stored scope value to the GrantScope the API returns (includes Team, which routes cannot set). */
+/** Maps stored scope values to API values; existing Team groups remain readable although routes cannot create them. */
 const _ROUTE_SCOPE_BY_PRISMA_SCOPE: Record<string, GrantScope> = {
 	Org: GrantScope.Org,
 	Department: GrantScope.Department,
@@ -71,9 +71,9 @@ export async function getGroup(prisma: PrismaClient, groupId: string): Promise<G
  *
  * Called by: the POST / handler of groupsRouter in routes/groups.ts.
  * @param prisma - Silo Prisma client.
- * @param body - Name, scope, optional description, and raw member list from the request.
+ * @param body - Name, scope, optional parent and description, and member list from the request.
  * @returns The new group's id with status `created`.
- * @throws Error from Prisma when the group name is already taken (unique constraint).
+ * @throws Error from Prisma when the name is taken, the parent is missing, or the parent would create a cycle.
  */
 export async function createGroup(prisma: PrismaClient, body: GroupWriteRequest): Promise<GroupMutationResponse>
 {
@@ -83,6 +83,7 @@ export async function createGroup(prisma: PrismaClient, body: GroupWriteRequest)
 		data: {
 			name: body.name,
 			scope: _PRISMA_SCOPE_BY_ROUTE_SCOPE[body.scope] as Prisma.GroupCreateInput["scope"],
+			parentId: body.parentId ?? null,
 			...(body.description ? { description: body.description } : {}),
 			members: members as Prisma.InputJsonValue,
 		},
@@ -100,12 +101,16 @@ export async function createGroup(prisma: PrismaClient, body: GroupWriteRequest)
 }
 
 /**
- * Update a group.
+ * Update the supplied group fields and record the mutation in the audit-entry table.
  *
- * @param prisma - Prisma client used for persistence.
+ * Omitting `parentId` preserves the current parent, while null moves the group to the hierarchy root.
+ *
+ * Called by: the PUT /:id handler of groupsRouter in routes/groups.ts.
+ * @param prisma - Silo Prisma client.
  * @param groupId - Group identifier from the route.
  * @param body - Partial route payload provided by the caller.
- * @returns Mutation response consumed by the route.
+ * @returns The id with status `updated`.
+ * @throws Error from Prisma when the group or parent is missing, or the parent would create a cycle.
  */
 export async function updateGroup(prisma: PrismaClient, groupId: string, body: Partial<GroupWriteRequest>): Promise<GroupMutationResponse>
 {
@@ -116,6 +121,7 @@ export async function updateGroup(prisma: PrismaClient, groupId: string, body: P
 		data: {
 			...(body.name ? { name: body.name } : {}),
 			...(body.scope ? { scope: _PRISMA_SCOPE_BY_ROUTE_SCOPE[body.scope] as Prisma.GroupUpdateInput["scope"] } : {}),
+			...(body.parentId !== undefined ? { parentId: body.parentId } : {}),
 			...(body.description !== undefined ? { description: body.description } : {}),
 			...(members ? { members: members as Prisma.InputJsonValue } : {}),
 		},
@@ -139,7 +145,7 @@ export async function updateGroup(prisma: PrismaClient, groupId: string, body: P
  * @param prisma - Silo Prisma client.
  * @param groupId - Group identifier from the route path.
  * @returns The id with status `deleted`.
- * @throws Error from Prisma when no group has that id.
+ * @throws Error from Prisma when no group has that id or the group still has children.
  */
 export async function deleteGroup(prisma: PrismaClient, groupId: string): Promise<GroupMutationResponse>
 {
@@ -208,6 +214,7 @@ function _MapGroupResponse(group: _GroupRow): GroupResponse
 		id: group.id,
 		name: group.name,
 		scope: _ROUTE_SCOPE_BY_PRISMA_SCOPE[group.scope] ?? GrantScope.Personal,
+		parentId: group.parentId ?? null,
 		description: group.description ?? undefined,
 		members,
 		memberCount: members.length,

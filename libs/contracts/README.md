@@ -84,7 +84,7 @@ runtime from silently interpreting a frozen snapshot with different assembly rul
 - `AG_UI_TOOL_FAILURE_EVENT` / `AgUiToolFailureEnvelope` — display-safe failed-tool marker carrying
   only the public call id and an optional server-selected technical classification, never provider
   text, raw arguments, credentials, or retry authority.
-- Hand-written DTOs/enums: `Grant`/`GrantScope`/`GrantAccess`, `Group`, `ClusterTenant*`,
+- Hand-written DTOs/enums: `Grant`/`GrantScope`/`GrantAccess`, hierarchical `Group` with nullable `parentId`, `ClusterTenant*`,
   `McpServer*`/`Mcp*` operator types (MCP — the Model Context Protocol for connecting external tools),
   model-routing types, memory-gateway constants, `ThirdPartySource*`, `RuntimeAssignment`,
   `RunInputSnapshot`/`RunInputSnapshotIdentity`/`RunInputSnapshotIdentityKinds`/`RunInputSnapshotIntegrationAssignment`,

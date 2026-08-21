@@ -22,6 +22,11 @@ follows [Keep a Changelog](https://keepachangelog.com/); the project uses
 
 ### Added
 
+- **Org admins can now organize groups under an optional parent.** Group API responses expose a
+  nullable `parentId`, while hierarchy remains descriptive only: membership and grants never
+  inherit from a parent. Missing parents, hierarchy cycles, and attempts to delete a parent that
+  still has children fail closed.
+
 - **Users and operators can now see the availability of every user-visible service through
   unauthenticated `GET /healthz`.** The fixed, public-safe report classifies the API, database,
   models, memory, files, channels, and integrations as `available`, `unavailable`, or `disabled`

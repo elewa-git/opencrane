@@ -311,17 +311,6 @@ const OrgMemberWriteSchema = {
   },
 };
 
-const GroupSchema = {
-  type: "object" as const,
-  properties: {
-    id: { type: "string" },
-    name: { type: "string" },
-    description: { type: "string" },
-    memberCount: { type: "integer" },
-    awarenessGrants: { type: "array", items: { type: "object" } },
-  },
-};
-
 const AuditEntrySchema = {
   type: "object" as const,
   properties: {
@@ -520,7 +509,6 @@ export const spec = {
       ClusterTenantResourceQuota: ClusterTenantResourceQuotaSchema,
       OrgMember: OrgMemberSchema,
       OrgMemberWrite: OrgMemberWriteSchema,
-      Group: GroupSchema,
       Share: {
         type: "object",
         description: "An inter-user share: an Allow grant the caller created on a recipient for an entitlement they hold (S4).",

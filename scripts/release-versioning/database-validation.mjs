@@ -218,14 +218,6 @@ export function validateDatabase(repositoryRoot, manifest, previousManifest, cha
 }
 
 /**
- * Validates the requested release pair and describes the database state that deployment must reach.
- * An approved next-patch repair may reuse its predecessor's migration from that migration's original
- * source; every other non-adjacent source is rejected. The result binds migration SQL, every admitted
- * protected origin, and each origin's prior history.
- * Called by: `database-transition.mjs`, which supplies this evidence to the deployment script.
- * @throws {Error} When either manifest or its database transition is invalid.
- */
-/**
  * Finds the migration that last produced this release's database schema version.
  *
  * A same-schema patch train resolves to `current` with no migration of its own, but a live database
@@ -280,7 +272,20 @@ export function resolveSchemaLineage(repositoryRoot, releaseVersion)
 	return null;
 }
 
-export function resolveDatabaseTransition(repositoryRoot, releaseVersion, fromReleaseVersion)
+/**
+ * Validates a release pair and describes the database state that deployment must reach.
+ * Automatic callers may cross an adjacent minor version; a version-specific resolver may also name
+ * a manifest-approved adjacent patch transition without allowing the generic CLI to admit it.
+ *
+ * Called by: `database-transition.mjs` and the reviewed `database-transition-0.9.3.mjs` exception.
+ * @param repositoryRoot - Repository root that holds release and migration manifests.
+ * @param releaseVersion - Release the deployment must reach.
+ * @param fromReleaseVersion - Installed release, or `fresh` for an empty database.
+ * @param options - A version-specific manual transition identifier, when the release manifest approves it.
+ * @returns The transition kind and the manifest-bound migration evidence needed by deployment.
+ * @throws {Error} When either manifest or the requested database transition is invalid.
+ */
+export function resolveDatabaseTransition(repositoryRoot, releaseVersion, fromReleaseVersion, options = {})
 {
 	const rootVersion = readJson(join(repositoryRoot, "package.json")).version;
 	const targetPath = join(repositoryRoot, "releases", `${releaseVersion}.json`);
@@ -317,8 +322,15 @@ export function resolveDatabaseTransition(repositoryRoot, releaseVersion, fromRe
 		}
 		if (source)
 		{
+			// A manual exception must match both the requested pair and its release manifest, so a
+			// version-specific resolver cannot authorize another patch transition by accident.
+			const manualTransitionId = `${fromReleaseVersion}-to-${releaseVersion}`;
+			const approvedManualPatch = options.manualTransitionId === manualTransitionId
+				&& isAdjacentPatch(fromReleaseVersion, releaseVersion)
+				&& target.manualTransition?.approved === true;
 			if (migrationOwner.database.schemaVersion !== source.database.schemaVersion
-				&& !isAdjacentMinor(fromReleaseVersion, migrationOwner.repositoryVersion))
+				&& !isAdjacentMinor(fromReleaseVersion, migrationOwner.repositoryVersion)
+				&& !approvedManualPatch)
 				errors.push(`automatic database migration permits only an adjacent minor transition: '${fromReleaseVersion}' -> '${releaseVersion}'`);
 			if (migrationOwner.database.schemaVersion !== source.database.schemaVersion) kind = "migration";
 		}

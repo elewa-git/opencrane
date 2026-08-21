@@ -20,6 +20,10 @@ const organizationTransitionRoot = join(migrationRoot, "0.8.0-to-0.9.0");
 const organizationSql = readFileSync(join(organizationTransitionRoot, "migration.sql"), "utf8");
 const organizationManifest = JSON.parse(readFileSync(join(organizationTransitionRoot, "manifest.json"), "utf8"));
 const organizationSqlDigest = createHash("sha256").update(organizationSql).digest("hex");
+const groupHierarchyTransitionRoot = join(migrationRoot, "0.9.0-to-0.9.3");
+const groupHierarchySql = readFileSync(join(groupHierarchyTransitionRoot, "migration.sql"), "utf8");
+const groupHierarchyManifest = JSON.parse(readFileSync(join(groupHierarchyTransitionRoot, "manifest.json"), "utf8"));
+const groupHierarchySqlDigest = createHash("sha256").update(groupHierarchySql).digest("hex");
 
 function requireContract(condition, message)
 {
@@ -204,7 +208,10 @@ console.log("0.7.0-to-0.8.0 migration contract: PASS");
 requireContract(organizationManifest.fromSchemaVersion === "0.8.0", "organization-member migration source version must be exact");
 requireContract(organizationManifest.toSchemaVersion === "0.9.0", "organization-member migration target version must be exact");
 requireContract(organizationManifest.sqlSha256 === organizationSqlDigest, "organization-member migration SQL digest must match its manifest");
-requireContract(organizationManifest.targetBaselineSha256 === targetDigest, "organization-member migration target digest must match the clean baseline");
+requireContract(
+	organizationManifest.targetBaselineSha256 === "5e16b35aedce54bf6ff7bd79bca04f92f6b6aee6315dec5c4b4797604342ab5f",
+	"organization-member migration target must remain the immutable 0.9.0 baseline",
+);
 requireContract(
 	JSON.stringify(organizationManifest.sourceProtectedBaselineSha256s) === JSON.stringify([
 		"12505f3c15114bd2a407d0d4d2ef2befc3c8ec87acaa9787503cfbe4eba0032c",
@@ -239,3 +246,40 @@ for (const source of [targetBaseline, organizationSql])
 requireContract(organizationSql.trimEnd().endsWith("\\endif"), "organization-member migration retry branch must remain explicit");
 
 console.log("0.8.0-to-0.9.0 migration contract: PASS");
+
+requireContract(groupHierarchyManifest.fromSchemaVersion === "0.9.0", "group-hierarchy migration source version must be exact");
+requireContract(groupHierarchyManifest.toSchemaVersion === "0.9.3", "group-hierarchy migration target version must be exact");
+requireContract(groupHierarchyManifest.sqlSha256 === groupHierarchySqlDigest, "group-hierarchy migration SQL digest must match its manifest");
+requireContract(groupHierarchyManifest.targetBaselineSha256 === targetDigest, "group-hierarchy migration target digest must match the clean baseline");
+requireContract(
+	JSON.stringify(groupHierarchyManifest.sourceProtectedBaselineSha256s) === JSON.stringify([
+		"bd2dfd915b66514d4c7ad95328adb4629567634a47f1a1e37aee69f23d9a98ee",
+		"12505f3c15114bd2a407d0d4d2ef2befc3c8ec87acaa9787503cfbe4eba0032c",
+		"25bfc5d31c4966ee697ae5aaa47edc855d25120d0829c241f213353f69e0358d",
+	]),
+	"group-hierarchy migration must admit fresh and inherited protected 0.9.0 origins",
+);
+requireContract(
+	groupHierarchyManifest.freshSourceProtectedBaselineSha256 === "bd2dfd915b66514d4c7ad95328adb4629567634a47f1a1e37aee69f23d9a98ee",
+	"group-hierarchy migration must identify the fresh protected 0.9.0 origin",
+);
+requireContract(groupHierarchySql.includes("pg_advisory_lock"), "group-hierarchy migration must acquire the session migration lock");
+requireContract(groupHierarchySql.includes("pg_advisory_xact_lock"), "group-hierarchy migration must serialize hierarchy mutation");
+requireContract(groupHierarchySql.includes("BEGIN;"), "group-hierarchy migration must run transactionally");
+requireContract(groupHierarchySql.includes("migration_already_applied"), "group-hierarchy migration must support exact idempotent retry");
+requireContract(groupHierarchySql.includes("database does not match the expected 0.9.0 source shape"), "group-hierarchy migration must fail closed on source-shape drift");
+requireContract(groupHierarchySql.includes("COMMIT;\nSELECT pg_advisory_unlock"), "group-hierarchy migration must commit before releasing its session lock");
+requireContract(groupHierarchySql.trimEnd().endsWith("\\endif"), "group-hierarchy migration retry branch must remain explicit");
+for (const source of [targetBaseline, groupHierarchySql])
+{
+	requireContract(source.includes('"parent_id" TEXT'), "group hierarchy must persist a nullable parent identifier");
+	requireContract(source.includes('CREATE INDEX "groups_parent_id_idx"'), "group hierarchy must index parent lookup");
+	requireContract(source.includes('CONSTRAINT "groups_parent_id_fkey"'), "group hierarchy must retain its self-referential foreign key");
+	requireContract(source.includes('ON DELETE RESTRICT ON UPDATE CASCADE'), "group hierarchy must restrict deletion of a parent with children");
+	requireContract(source.includes('CREATE FUNCTION "enforce_group_hierarchy"()'), "group hierarchy must retain its cycle authority function");
+	requireContract(source.includes('CREATE CONSTRAINT TRIGGER "groups_hierarchy_guard"'), "group hierarchy must guard every parent mutation");
+	requireContract(source.includes("DEFERRABLE INITIALLY DEFERRED"), "group hierarchy must evaluate cycles after concurrent parent mutations serialize");
+	requireContract(source.includes("group hierarchy cannot contain a cycle"), "group hierarchy must reject cycles explicitly");
+}
+
+console.log("0.9.0-to-0.9.3 migration contract: PASS");

@@ -7,6 +7,7 @@ POSTGRES_IMAGE="${OPENCRANE_MIGRATION_POSTGRES_IMAGE:-postgres:17.5}"
 MIGRATION_RELEASE_VERSION="${OPENCRANE_MIGRATION_RELEASE_VERSION:-0.9.1}"
 LEGACY_TRANSITION_ROOT="$ROOT/apps/opencrane/prisma/migrations/0.7.0-to-0.8.0"
 CURRENT_TRANSITION_ROOT="$ROOT/apps/opencrane/prisma/migrations/0.8.0-to-0.9.0"
+GROUP_HIERARCHY_TRANSITION_ROOT="$ROOT/apps/opencrane/prisma/migrations/0.9.0-to-0.9.3"
 CURRENT_BASELINE="$ROOT/apps/opencrane/prisma/bootstrap/target-baseline.sql"
 CLASSIFIER="$ROOT/apps/_infra/deploy-k8s/platform/database-convergence-classifier.sh"
 WORK_DIR="$(mktemp -d)"
@@ -24,6 +25,7 @@ PROTECTED_DIGEST="25bfc5d31c4966ee697ae5aaa47edc855d25120d0829c241f213353f69e035
 FRESH_PROTECTED_DIGEST="12505f3c15114bd2a407d0d4d2ef2befc3c8ec87acaa9787503cfbe4eba0032c"
 LEGACY_MIGRATION_SQL_DIGEST="$(node -e 'process.stdout.write(require(process.argv[1]).sqlSha256)' "$LEGACY_TRANSITION_ROOT/manifest.json")"
 CURRENT_MIGRATION_SQL_DIGEST="$(node -e 'process.stdout.write(require(process.argv[1]).sqlSha256)' "$CURRENT_TRANSITION_ROOT/manifest.json")"
+GROUP_HIERARCHY_MIGRATION_SQL_DIGEST="$(node -e 'process.stdout.write(require(process.argv[1]).sqlSha256)' "$GROUP_HIERARCHY_TRANSITION_ROOT/manifest.json")"
 
 # This test reads the current release from its working tree before the tag exists and reads older releases from their tags.
 if [[ "$(jq -r '.version' "$ROOT/package.json")" != "$MIGRATION_RELEASE_VERSION" ]]; then
@@ -138,6 +140,36 @@ SQL
 	psql_command "$database" <"$WORK_DIR/source-baseline.sql" >/dev/null
 }
 
+assert_concurrent_group_cycle_rejected()
+{
+	local database="$1"
+	local first_status
+	local second_status
+	psql_command "$database" --command \
+		"INSERT INTO \"groups\" (\"id\", \"name\", \"scope\", \"updated_at\") VALUES ('concurrent-a', 'Concurrent A', 'team', clock_timestamp()), ('concurrent-b', 'Concurrent B', 'team', clock_timestamp());" >/dev/null
+	set +e
+	psql_command "$database" --command \
+		"BEGIN; UPDATE \"groups\" SET \"parent_id\" = 'concurrent-b' WHERE \"id\" = 'concurrent-a'; SELECT pg_sleep(1); COMMIT;" \
+		>"$WORK_DIR/concurrent-a.log" 2>&1 &
+	local first_pid=$!
+	sleep 0.2
+	psql_command "$database" --command \
+		"BEGIN; UPDATE \"groups\" SET \"parent_id\" = 'concurrent-a' WHERE \"id\" = 'concurrent-b'; COMMIT;" \
+		>"$WORK_DIR/concurrent-b.log" 2>&1
+	second_status=$?
+	wait "$first_pid"
+	first_status=$?
+	set -e
+	if (( (first_status == 0) == (second_status == 0) )); then
+		printf 'concurrent group cycle must accept exactly one transaction: first=%s second=%s\n' "$first_status" "$second_status" >&2
+		exit 1
+	fi
+	awk '/group hierarchy cannot contain a cycle/{found=1} END{exit !found}' \
+		"$WORK_DIR/concurrent-a.log" "$WORK_DIR/concurrent-b.log"
+	psql_command "$database" --command \
+		"UPDATE \"groups\" SET \"parent_id\" = NULL WHERE \"id\" IN ('concurrent-a', 'concurrent-b'); SET CONSTRAINTS groups_hierarchy_guard IMMEDIATE; DELETE FROM \"groups\" WHERE \"id\" IN ('concurrent-a', 'concurrent-b');" >/dev/null
+}
+
 create_source_database migrated
 psql_command migrated <<'SQL' >/dev/null
 SET session_replication_role = replica;
@@ -220,6 +252,13 @@ INSERT INTO "opencrane_migrations"."schema_history" (
 SQL
 assert_classifier_state extra_history_row "incompatible|$PROTECTED_DIGEST"
 
+psql_command fresh_source --set "source_baseline_sha256=$FRESH_PROTECTED_DIGEST" --set "migration_sql_sha256=$GROUP_HIERARCHY_MIGRATION_SQL_DIGEST" \
+	--file - <"$GROUP_HIERARCHY_TRANSITION_ROOT/migration.sql" >/dev/null
+psql_command migrated --set "source_baseline_sha256=$PROTECTED_DIGEST" --set "migration_sql_sha256=$GROUP_HIERARCHY_MIGRATION_SQL_DIGEST" \
+	--file - <"$GROUP_HIERARCHY_TRANSITION_ROOT/migration.sql" >/dev/null
+psql_command migrated --set "source_baseline_sha256=$PROTECTED_DIGEST" --set "migration_sql_sha256=$GROUP_HIERARCHY_MIGRATION_SQL_DIGEST" \
+	--file - <"$GROUP_HIERARCHY_TRANSITION_ROOT/migration.sql" >/dev/null
+
 psql_command postgres --command 'CREATE DATABASE fresh;' >/dev/null
 psql_command fresh <"$CURRENT_BASELINE" >/dev/null
 psql_command fresh <"$ROOT/libs/backend/server/gateways/integrations/main/tests/integrations-authority.sql" >/dev/null
@@ -227,6 +266,8 @@ psql_command fresh <"$ROOT/libs/backend/server/gateways/integrations/main/tests/
 for database in migrated fresh; do
 	psql_command "$database" <"$ROOT/apps/opencrane/prisma/migrations/tests/tool-result-delivery-authority.sql" >/dev/null
 	psql_command "$database" <"$ROOT/apps/opencrane/prisma/migrations/tests/conversation-activity-ordering.sql" >/dev/null
+	psql_command "$database" <"$ROOT/apps/opencrane/prisma/migrations/tests/group-hierarchy-authority.sql" >/dev/null
+	assert_concurrent_group_cycle_rejected "$database"
 	docker exec "$CONTAINER" pg_dump --username postgres --dbname "$database" \
 		--schema-only --no-owner --no-privileges \
 		--exclude-schema opencrane_bootstrap --exclude-schema opencrane_migrations \
@@ -284,7 +325,10 @@ psql_command migrated --tuples-only --no-align --command \
 	| grep -qx '1'
 psql_command migrated --tuples-only --no-align --command \
 	'SELECT count(*) FROM "opencrane_migrations"."schema_history";' \
-	| grep -qx '2'
+	| grep -qx '3'
+psql_command migrated --tuples-only --no-align --command \
+	'SELECT count(*) FROM "opencrane_migrations"."schema_history" WHERE "schema_version" = '\''0.9.3'\'' AND "source_schema_version" = '\''0.9.0'\'' AND "source_baseline_sha256" = '\''25bfc5d31c4966ee697ae5aaa47edc855d25120d0829c241f213353f69e0358d'\'';' \
+	| grep -qx '1'
 psql_command migrated --tuples-only --no-align --command \
 	'SELECT count(*) FROM "organization_invitations";' \
 	| grep -qx '0'
