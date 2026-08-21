@@ -8,7 +8,6 @@
 .conversation-workspace__header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 1.1rem 1.5rem; border-block-end: 1px solid var(--p-surface-200); }
 .conversation-workspace__header h1 { margin: 0.125rem 0; font-size: 1.35rem; } .conversation-workspace__header p, .conversation-workspace__header small { margin: 0; color: var(--p-text-muted-color); }
 .conversation-workspace__header-actions { display: flex; align-items: center; gap: var(--oc-space-1); }
-.conversation-workspace__status { display: block; padding: 0.5rem 1.5rem; border-block-end: 1px solid var(--p-surface-200); }
 .conversation-workspace__context-toggle { display: inline-flex; align-items: center; gap: var(--oc-space-2); padding: var(--oc-space-2) var(--oc-space-3); border-radius: var(--oc-radius-card); color: var(--oc-ink-muted); }
 .conversation-workspace__context-toggle:hover { background: var(--oc-surface-subtle); color: var(--oc-ink-strong); }
 .conversation-workspace__transcript { overflow: auto; display: grid; align-content: start; gap: 1rem; padding: 1.5rem clamp(1rem, 4vw, 3rem); }

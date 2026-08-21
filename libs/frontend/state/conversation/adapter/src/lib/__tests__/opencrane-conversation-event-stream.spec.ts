@@ -120,6 +120,30 @@ describe("OpenCraneConversationEventStream", function _Suite()
 		await tail;
 	});
 
+	it("keeps a replacement socket live when the previous socket closes late", async function _FencesLateSocketClose()
+	{
+		vi.stubGlobal("location", { origin: "https://testv4.dev.opencrane.ai" });
+		vi.stubGlobal("WebSocket", _Socket);
+		const firstController = new AbortController();
+		const replacementController = new AbortController();
+		const stream = new OpenCraneConversationEventStream();
+		const first = stream.stream({ conversationId: "conversation-1", signal: firstController.signal, reconnectDelayMilliseconds: 0 });
+		await vi.waitFor(() => expect(_Socket.connections[0]?.readyState).toBe(_Socket.OPEN));
+		const replacement = stream.stream({ conversationId: "conversation-1", signal: replacementController.signal, reconnectDelayMilliseconds: 0 });
+		await vi.waitFor(() => expect(_Socket.connections[1]?.readyState).toBe(_Socket.OPEN));
+
+		_Socket.connections[0]!.close();
+		const submitted = stream.submit({ conversationId: "conversation-1", idempotencyKey: "retry-1", blocks: [{ id: "block-1", kind: "text", value: "hello" }] });
+		expect(_Socket.connections[1]!.sent).toHaveLength(1);
+		const command = JSON.parse(_Socket.connections[1]!.sent[0] ?? "{}") as { readonly requestId: string };
+		_Socket.connections[1]!.deliver(JSON.stringify({ type: "conversation.message.accepted", requestId: command.requestId }));
+		await expect(submitted).resolves.toBeUndefined();
+
+		firstController.abort();
+		replacementController.abort();
+		await Promise.all([first, replacement]);
+	});
+
 	it("preserves a permanent socket denial for the workspace gateway", async function _PreservesDenial()
 	{
 		vi.stubGlobal("location", { origin: "https://testv4.dev.opencrane.ai" });

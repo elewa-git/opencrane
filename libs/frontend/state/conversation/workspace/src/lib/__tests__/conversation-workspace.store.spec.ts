@@ -5,7 +5,7 @@ import { BrowserDynamicTestingModule, platformBrowserDynamicTesting } from "@ang
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { ConversationLifecycles, ConversationModes, MessageContentBlockKinds, MessageRoles } from "@opencrane/models/conversations";
-import { __CreateAgUiStreamState } from "@opencrane/state/conversation/ag-ui";
+import { AgUiMessageStatuses, __CreateAgUiStreamState } from "@opencrane/state/conversation/ag-ui";
 import { ConversationEventStreamStatuses, type ConversationEventStream, type StreamConversationEventsCommand } from "@opencrane/state/conversation/stream";
 
 import { ConversationRunStore } from "../conversation-run.store";
@@ -50,6 +50,8 @@ class _FakeGateway implements ConversationWorkspaceGateway
 	public readonly sent: SubmitConversationMessageCommand[] = [];
 	/** Optional send failure used to model ambiguous transport outcomes. */
 	public sendError: Error | null = null;
+	/** Optional pending send used to prove a replacement socket cannot retain a stale submitting state. */
+	public sendResult: Promise<void> | null = null;
 	/** Optional onboarding history outcome. */
 	public historyResult: ConversationOnboardingHistoryProjection | Promise<ConversationOnboardingHistoryProjection> = _OnboardingHistory();
 	/** Number of run reads admitted by the selected immutable mode. */
@@ -69,6 +71,7 @@ class _FakeGateway implements ConversationWorkspaceGateway
 	public async send(command: SubmitConversationMessageCommand): Promise<void>
 	{
 		this.sent.push(command);
+		await this.sendResult;
 		if (this.sendError !== null) throw this.sendError;
 	}
 	/** Return an archived snapshot. */
@@ -90,6 +93,8 @@ class _FakeStream implements ConversationEventStream
 {
 	/** Number of selected streams started. */
 	public starts = 0;
+	/** Commands retained so tests can prove late socket updates cannot cross a manual reconnect. */
+	public readonly commands: StreamConversationEventsCommand[] = [];
 	/** Connection state emitted by the next selected stream. */
 	public status = ConversationEventStreamStatuses.Live;
 	/** Folded stream state emitted by the next selected stream. */
@@ -99,6 +104,7 @@ class _FakeStream implements ConversationEventStream
 	public async stream(command: StreamConversationEventsCommand)
 	{
 		this.starts += 1;
+		this.commands.push(command);
 		const state = this.state;
 		command.onUpdate?.({ status: this.status, state, reconnectAttempt: this.status === ConversationEventStreamStatuses.Reconnecting ? 1 : 0, lastHeartbeatAt: Date.now() });
 		return state;
@@ -266,7 +272,64 @@ describe("ConversationWorkspaceStore", function _ConversationWorkspaceStore()
 		store.updateDraft("Keep this draft");
 		expect(store.draft()).toBe("Keep this draft");
 		expect(store.streamStatus()).toBe(ConversationEventStreamStatuses.Reconnecting);
+		expect(store.canSend()).toBe(false);
 		expect(store.routeState()).toBe(ConversationWorkspaceRouteStates.Ready);
+	});
+
+	it("replaces a reconnecting socket without losing the draft or accepting its late updates", async function _ManualReconnect()
+	{
+		const [store, gateway, stream] = _CreateStore();
+		gateway.historyResult = { status: ConversationOnboardingHistoryStatuses.NotRecorded, history: null };
+		stream.status = ConversationEventStreamStatuses.Reconnecting;
+		stream.state = { ...__CreateAgUiStreamState(), messages: { "message-1": { id: "message-1", role: "assistant", text: "Keep this projection", status: AgUiMessageStatuses.Completed } } };
+		await store.load();
+		store.updateDraft("Keep this draft");
+		const stale = stream.commands[0]!;
+
+		stream.status = ConversationEventStreamStatuses.Connecting;
+		store.reconnect();
+		stale.onUpdate?.({ status: ConversationEventStreamStatuses.Failed, state: __CreateAgUiStreamState(), reconnectAttempt: 4, lastHeartbeatAt: null });
+
+		expect(stream.starts).toBe(2);
+		expect(store.streamStatus()).toBe(ConversationEventStreamStatuses.Connecting);
+		expect(store.manualReconnectPending()).toBe(true);
+		expect(store.reconnectAttempt()).toBe(0);
+		expect(store.draft()).toBe("Keep this draft");
+		expect(store.live().messages["message-1"]?.text).toBe("Keep this projection");
+
+		store.reconnect();
+		expect(stream.starts).toBe(2);
+	});
+
+	it("releases an interrupted send when manual reconnect replaces its socket", async function _ManualReconnectInterruptedSend()
+	{
+		const [store, gateway, stream] = _CreateStore();
+		gateway.historyResult = { status: ConversationOnboardingHistoryStatuses.NotRecorded, history: null };
+		await store.load();
+		store.updateDraft("Retry this exact message");
+		const pendingSend = _Deferred<void>();
+		gateway.sendResult = pendingSend.promise;
+		const sent = store.send();
+		const stale = stream.commands[0]!;
+
+		stale.onUpdate?.({ status: ConversationEventStreamStatuses.Reconnecting, state: __CreateAgUiStreamState(), reconnectAttempt: 1, lastHeartbeatAt: null });
+		stream.status = ConversationEventStreamStatuses.Live;
+		store.reconnect();
+
+		expect(store.streamStatus()).toBe(ConversationEventStreamStatuses.Live);
+		expect(store.manualReconnectPending()).toBe(false);
+		expect(store.sending()).toBe(false);
+		expect(store.canSend()).toBe(true);
+
+		pendingSend.resolve();
+		expect(await sent).toBe(false);
+		expect(store.sending()).toBe(false);
+		expect(store.draft()).toBe("Retry this exact message");
+
+		store.updateDraft("Write a different message");
+		expect(await store.send()).toBe(true);
+		expect(gateway.sent[1]?.blocks).toEqual([{ id: "command-key", kind: MessageContentBlockKinds.Text, value: "Write a different message" }]);
+		expect(store.draft()).toBe("");
 	});
 
 	it("ignores stale run coordinates for a direct conversation", async function _IgnoreDirectRun()

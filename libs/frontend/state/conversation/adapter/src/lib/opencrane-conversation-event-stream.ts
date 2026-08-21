@@ -9,8 +9,8 @@ const _MESSAGE_ACKNOWLEDGEMENT_TIMEOUT_MILLISECONDS = 30_000;
 /** A request waiting for its matching socket acknowledgement. */
 interface PendingMessage
 {
-	/** Conversation whose socket alone may settle this command. */
-	readonly conversationId: string;
+	/** Exact socket whose acknowledgement alone may settle this command. */
+	readonly socket: WebSocket;
 	/** Resolves only after the server confirms admission or an idempotent replay. */
 	readonly resolve: () => void;
 	/** Rejects when the server refuses, disconnects, or does not answer in time. */
@@ -93,7 +93,6 @@ export class OpenCraneConversationEventStream implements ConversationEventStream
 			}
 		}
 
-		this._release(command.conversationId, new ConversationEventStreamMessageError());
 		_Emit(command, { status: ConversationEventStreamStatuses.Aborted, state, reconnectAttempt, lastHeartbeatAt });
 		return state;
 	}
@@ -107,7 +106,7 @@ export class OpenCraneConversationEventStream implements ConversationEventStream
 		return new Promise<void>((resolve, reject) =>
 		{
 			const timeout = setTimeout(() => this._rejectMessage(requestId), _MESSAGE_ACKNOWLEDGEMENT_TIMEOUT_MILLISECONDS);
-			this._pendingMessages.set(requestId, { conversationId: command.conversationId, resolve, reject, timeout });
+			this._pendingMessages.set(requestId, { socket, resolve, reject, timeout });
 			try { socket.send(JSON.stringify({ type: "conversation.message.submit", requestId, idempotencyKey: command.idempotencyKey, blocks: command.blocks })); }
 			catch { this._rejectMessage(requestId); }
 		});
@@ -118,7 +117,7 @@ export class OpenCraneConversationEventStream implements ConversationEventStream
 	{
 		const cursor = __AgUiResumeCursor(progress.state);
 		const socket = new WebSocket(_SocketUrl(command.conversationId, cursor));
-		this._release(this._conversationId, new ConversationEventStreamMessageError());
+		this._release(this._socket, new ConversationEventStreamMessageError());
 		this._socket = socket;
 		this._conversationId = command.conversationId;
 		return new Promise<void>((resolve, reject) =>
@@ -151,7 +150,7 @@ export class OpenCraneConversationEventStream implements ConversationEventStream
 			socket.addEventListener("close", event =>
 			{
 				_Finish();
-				this._release(command.conversationId, new ConversationEventStreamMessageError());
+				this._release(socket, new ConversationEventStreamMessageError());
 				if (command.signal.aborted) { resolve(); return; }
 				if (event.code === 1008) { progress.state = __RevokeAgUiStreamAccess(); reject(new Error("conversation socket access was revoked")); return; }
 				if (!opened) { reject(new Error("conversation socket could not connect")); return; }
@@ -162,17 +161,17 @@ export class OpenCraneConversationEventStream implements ConversationEventStream
 	}
 
 	/** Reject every command owned by a socket that just closed or was replaced. */
-	private _release(conversationId: string | null, error: Error): void
+	private _release(socket: WebSocket | null, error: Error): void
 	{
-		if (conversationId === null) return;
+		if (socket === null) return;
 		for (const [requestId, pending] of this._pendingMessages)
 		{
-			if (pending.conversationId !== conversationId) continue;
+			if (pending.socket !== socket) continue;
 			clearTimeout(pending.timeout);
 			pending.reject(error);
 			this._pendingMessages.delete(requestId);
 		}
-		if (this._conversationId === conversationId) { this._socket = null; this._conversationId = null; }
+		if (this._socket === socket) { this._socket = null; this._conversationId = null; }
 	}
 
 	/** Reject one unacknowledged command after a socket failure or acknowledgement timeout. */

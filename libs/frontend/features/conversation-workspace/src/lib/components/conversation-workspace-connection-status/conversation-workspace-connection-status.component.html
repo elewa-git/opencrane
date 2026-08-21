@@ -1,0 +1,4 @@
+<section class="conversation-workspace-connection-status" aria-label="Conversation connection status">
+	<wo-conversation-status-line [status]="status()" />
+	@if (reconnectAvailable() || reconnectPending()) { <p-button [label]="reconnectPending() ? 'Reconnecting…' : 'Reconnect now'" icon="pi pi-refresh" size="small" [outlined]="true" [loading]="reconnectPending()" [disabled]="reconnectPending()" (onClick)="requestReconnect()" /> }
+</section>

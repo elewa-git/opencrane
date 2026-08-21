@@ -32,7 +32,8 @@ The package also owns the Zod response validators used by its transport adapter.
 - `CONVERSATION_WORKSPACE_EVENT_STREAM` binds the existing `ConversationEventStream` port for both live
   projection and participant message submission; this package does not define a second transport contract.
 - `ConversationWorkspaceStore` owns ordinary list, selection, snapshot-tail state, immutable creation mode,
-  drafts, and conversation commands.
+  drafts, conversation commands, reconnect attempts, and a guarded manual reconnect. It preserves the
+  draft and accepted live projection while fencing late updates from the replaced socket.
 - Conversation summaries retain the server's decimal `readThroughPosition`, and messages retain
   `completedAt`; strict validation accepts both response fields without giving browser state authority
   to advance the participant coordinate or complete a message.

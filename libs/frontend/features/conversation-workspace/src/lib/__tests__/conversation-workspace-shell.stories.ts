@@ -129,18 +129,28 @@ class _StoryStream implements ConversationEventStream
 	private readonly _status: ConversationEventStreamStatuses;
 	/** Display-safe folded projection used by this story. */
 	private readonly _state: AgUiStreamState;
+	/** Reconnect attempt displayed while this story shows a paused socket. */
+	private readonly _reconnectAttempt: number;
+	/** State emitted after a participant activates the reconnect button in an interaction story. */
+	private readonly _replacementStatus: ConversationEventStreamStatuses;
+	/** Number of stream commands opened by the story store. */
+	private starts = 0;
 
 	/** Capture one deterministic connection state. */
-	public constructor(status: ConversationEventStreamStatuses, state: AgUiStreamState)
+	public constructor(status: ConversationEventStreamStatuses, state: AgUiStreamState, reconnectAttempt = 0, replacementStatus = status)
 	{
 		this._status = status;
 		this._state = state;
+		this._reconnectAttempt = reconnectAttempt;
+		this._replacementStatus = replacementStatus;
 	}
 
 	/** Emit one update and leave the real feature to render it. */
 	public async stream(command: StreamConversationEventsCommand): Promise<AgUiStreamState>
 	{
-		command.onUpdate?.({ status: this._status, state: this._state, reconnectAttempt: this._status === ConversationEventStreamStatuses.Reconnecting ? 1 : 0, lastHeartbeatAt: Date.now() });
+		const status = this.starts === 0 ? this._status : this._replacementStatus;
+		this.starts += 1;
+		command.onUpdate?.({ status, state: this._state, reconnectAttempt: status === ConversationEventStreamStatuses.Reconnecting ? this._reconnectAttempt : 0, lastHeartbeatAt: Date.now() });
 		return this._state;
 	}
 
@@ -213,8 +223,33 @@ export const NavigationSelection: Story =
 
 /** Compact shell retains transcript, Activity, and Files in document order. */
 export const Compact: Story = { tags: ["visual-test", "visual-test-narrow"], decorators: [_Providers(new _StoryGateway(_Detail()), new _StoryStream(ConversationEventStreamStatuses.Live, __CreateAgUiStreamState()))], parameters: { viewport: { defaultViewport: "mobile1" } } };
-/** Reconnect keeps the last snapshot while explaining that the draft remains local. */
-export const Reconnecting: Story = { tags: ["visual-test"], decorators: [_Providers(new _StoryGateway(_Detail()), new _StoryStream(ConversationEventStreamStatuses.Reconnecting, __CreateAgUiStreamState()))] };
+/** Reconnect keeps the last snapshot, names its current attempt, and disables sending until it is live. */
+export const Reconnecting: Story = {
+	tags: ["visual-test"],
+	decorators: [_Providers(new _StoryGateway(_Detail()), new _StoryStream(ConversationEventStreamStatuses.Reconnecting, __CreateAgUiStreamState(), 2))],
+	play: async function play({ canvasElement })
+	{
+		const canvas = within(canvasElement);
+		await expect(await canvas.findByText("Reconnecting — attempt 2")).toBeVisible();
+		expect(canvas.getByRole("button", { name: "Reconnect now" })).toBeEnabled();
+		expect(canvas.getByLabelText("Message conversation")).toBeDisabled();
+	}
+};
+/** Failed recovery keeps the draft visible and offers the same in-chat reconnect action. */
+export const ConnectionFailed: Story = { tags: ["visual-test"], decorators: [_Providers(new _StoryGateway(_Detail()), new _StoryStream(ConversationEventStreamStatuses.Failed, __CreateAgUiStreamState(), 4))] };
+/** An explicit reconnect replaces the socket once and keeps its action visibly pending until it responds. */
+export const ManualReconnectPending: Story = {
+	tags: ["visual-test"],
+	decorators: [_Providers(new _StoryGateway(_Detail()), new _StoryStream(ConversationEventStreamStatuses.Reconnecting, __CreateAgUiStreamState(), 1, ConversationEventStreamStatuses.Connecting))],
+	play: async function play({ canvasElement })
+	{
+		const canvas = within(canvasElement);
+		await userEvent.click(await canvas.findByRole("button", { name: "Reconnect now" }));
+		const reconnect = await canvas.findByRole("button", { name: "Reconnecting…" });
+		expect(reconnect).toBeDisabled();
+		expect(canvas.getByLabelText("Message conversation")).toBeDisabled();
+	}
+};
 /** Access loss purges a previously visible conversation through its live projection. */
 export const AccessChanged: Story = { tags: ["visual-test"], decorators: [_Providers(new _StoryGateway(_Detail()), new _StoryStream(ConversationEventStreamStatuses.Live, { ...__CreateAgUiStreamState(), accessRevoked: true }))] };
 /** Failed run remains visible with an explicit retry affordance. */

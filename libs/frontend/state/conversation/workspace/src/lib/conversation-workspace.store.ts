@@ -32,6 +32,10 @@ export class ConversationWorkspaceStore
 	private readonly _live = signal<AgUiStreamState>(__CreateAgUiStreamState());
 	/** Current stream connection phase. */
 	private readonly _streamStatus = signal<ConversationEventStreamStatuses | null>(null);
+	/** Consecutive reconnect attempt adopted from the current stream. */
+	private readonly _reconnectAttempt = signal(0);
+	/** Whether a participant-requested replacement socket is still opening. */
+	private readonly _manualReconnectPending = signal(false);
 	/** Controlled message draft. */
 	private readonly _draft = signal("");
 	/** Immutable mode selected for the next create command. */
@@ -73,6 +77,10 @@ export class ConversationWorkspaceStore
 	public readonly live = this._live.asReadonly();
 	/** Public stream connection phase. */
 	public readonly streamStatus = this._streamStatus.asReadonly();
+	/** Public reconnect attempt for the selected conversation stream. */
+	public readonly reconnectAttempt = this._reconnectAttempt.asReadonly();
+	/** Whether the participant's explicit reconnect is waiting for its next stream state. */
+	public readonly manualReconnectPending = this._manualReconnectPending.asReadonly();
 	/** Public controlled message draft. */
 	public readonly draft = this._draft.asReadonly();
 	/** Public next-conversation mode. */
@@ -135,6 +143,8 @@ export class ConversationWorkspaceStore
 		this.runs.clear();
 		this._error.set(null);
 		this._streamStatus.set(ConversationEventStreamStatuses.Connecting);
+		this._reconnectAttempt.set(0);
+		this._manualReconnectPending.set(false);
 		try
 		{
 			const summary = this._conversations().find(candidate => candidate.id === conversationId);
@@ -166,6 +176,8 @@ export class ConversationWorkspaceStore
 		this._draft.set("");
 		this._pendingMessage = null;
 		this._streamStatus.set(null);
+		this._reconnectAttempt.set(0);
+		this._manualReconnectPending.set(false);
 		this._error.set(null);
 	}
 
@@ -217,6 +229,25 @@ export class ConversationWorkspaceStore
 
 	/** Keep the message composer controlled by this selected conversation. */
 	public updateDraft(value: string): void { this._draft.set(value); }
+
+	/** Replace a paused or failed stream without discarding its draft or accepted projection. */
+	public reconnect(): void
+	{
+		const selected = this._selected();
+		const status = this._streamStatus();
+		if (selected === null || this._manualReconnectPending() || (status !== ConversationEventStreamStatuses.Reconnecting && status !== ConversationEventStreamStatuses.Failed)) return;
+		// 1. Fence late events from the failed socket before a replacement can publish its state.
+		const generation = ++this._generation;
+		// 2. Abort the old socket and release an interrupted send; its retained idempotency key makes its retry safe.
+		this._Abort();
+		this._sending.set(false);
+		// 3. Surface the new connection immediately and prevent duplicate button presses until it responds.
+		this._error.set(null);
+		this._streamStatus.set(ConversationEventStreamStatuses.Connecting);
+		this._reconnectAttempt.set(0);
+		this._manualReconnectPending.set(true);
+		this._StartStream(selected.id, generation);
+	}
 
 	/** Submit exact text and ready asset references, then reconcile before forgetting the retry key. */
 	public async send(assetIds: readonly string[] = []): Promise<boolean>
@@ -308,6 +339,8 @@ export class ConversationWorkspaceStore
 	{
 		if (generation !== this._generation) return;
 		this._streamStatus.set(update.status);
+		this._reconnectAttempt.set(update.reconnectAttempt);
+		if (update.status !== ConversationEventStreamStatuses.Connecting) this._manualReconnectPending.set(false);
 		this._live.set(update.state);
 		if (update.state.accessRevoked) { this._PurgeAccess(); return; }
 		const runId = update.state.runId;
@@ -317,12 +350,13 @@ export class ConversationWorkspaceStore
 	}
 
 	/** Keep the last good snapshot visible after a bounded stream failure. */
-	private _StreamFailed(generation: number, error: unknown): void
+	private _StreamFailed(generation: number, _error: unknown): void
 	{
 		if (generation !== this._generation) return;
 		if (this._live().accessRevoked) { this._PurgeAccess(); return; }
 		this._streamStatus.set(ConversationEventStreamStatuses.Failed);
-		this._error.set(_Message(error, "Live updates stopped. Reopen the conversation to reconnect."));
+		this._manualReconnectPending.set(false);
+		this._error.set(null);
 	}
 
 	/** Convert one failed read or command into route state and safe copy. */
@@ -343,6 +377,8 @@ export class ConversationWorkspaceStore
 		this.history.clearSelection();
 		this._draft.set("");
 		this._pendingMessage = null;
+		this._reconnectAttempt.set(0);
+		this._manualReconnectPending.set(false);
 		this._routeState.set(ConversationWorkspaceRouteStates.AccessChanged);
 		this._error.set(null);
 	}
@@ -358,6 +394,8 @@ export class ConversationWorkspaceStore
 		this.runs.clear();
 		this._draft.set("");
 		this._pendingMessage = null;
+		this._reconnectAttempt.set(0);
+		this._manualReconnectPending.set(false);
 	}
 
 	/** Stop the current stream without changing any retained view state. */
@@ -371,13 +409,13 @@ export class ConversationWorkspaceStore
 	private _CanSend(hasAssets = false): boolean
 	{
 		const selected = this._selected();
-		return selected !== null && selected.lifecycle === ConversationLifecycles.Open && selected.accessEndedPosition === null && !this._sending() && (this._draft().trim().length > 0 || hasAssets);
+		return selected !== null && selected.lifecycle === ConversationLifecycles.Open && selected.accessEndedPosition === null && this._streamStatus() === ConversationEventStreamStatuses.Live && !this._sending() && (this._draft().trim().length > 0 || hasAssets);
 	}
 
 	/** Reuse the exact pending command, or freeze a fresh command from the current composer. */
 	private _PendingMessageCommand(conversationId: string, text: string, assetIds: readonly string[]): SubmitConversationMessageCommand
 	{
-		if (this._pendingMessage !== null && this._pendingMessage.conversationId === conversationId) return this._pendingMessage;
+		if (this._pendingMessage !== null && _PendingMessageMatches(this._pendingMessage, conversationId, text, assetIds)) return this._pendingMessage;
 		const textBlocks: readonly SubmitConversationMessageBlock[] = text.length === 0 ? [] : [{ id: globalThis.crypto.randomUUID(), kind: MessageContentBlockKinds.Text, value: text }];
 		const assetBlocks: readonly SubmitConversationMessageBlock[] = assetIds.map(function _AssetBlock(assetId) { return { id: globalThis.crypto.randomUUID(), kind: MessageContentBlockKinds.Artifact, value: assetId }; });
 		const command: SubmitConversationMessageCommand = { conversationId, idempotencyKey: globalThis.crypto.randomUUID(), blocks: [...textBlocks, ...assetBlocks] };
@@ -407,6 +445,14 @@ export class ConversationWorkspaceStore
 		return null;
 	}
 
+}
+
+/** Check whether the current composer still exactly matches a command retained for an ambiguous retry. */
+function _PendingMessageMatches(command: SubmitConversationMessageCommand, conversationId: string, text: string, assetIds: readonly string[]): boolean
+{
+	if (command.conversationId !== conversationId) return false;
+	const expected = [...(text.length === 0 ? [] : [{ kind: MessageContentBlockKinds.Text, value: text }]), ...assetIds.map(function _AssetInput(assetId) { return { kind: MessageContentBlockKinds.Artifact, value: assetId }; })];
+	return command.blocks.length === expected.length && command.blocks.every(function _SameInput(block, index) { return block.kind === expected[index]?.kind && block.value === expected[index]?.value; });
 }
 
 /** Reduce an unknown failure to safe existing gateway copy or a fixed fallback. */
