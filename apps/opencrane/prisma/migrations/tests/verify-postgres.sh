@@ -206,7 +206,7 @@ INSERT INTO "mcp_servers" (
     "id", "name", "description", "endpoint", "scope", "transport", "status", "updated_at"
 ) VALUES (
     'mcp-principal-continuity', 'Principal continuity', '', 'https://mcp.test.invalid',
-    'organization', 'streamable-http', 'active', '2026-01-01T00:00:00.000Z'
+    'org', 'streamable-http', 'active', '2026-01-01T00:00:00.000Z'
 );
 INSERT INTO "mcp_server_installs" (
     "id", "mcp_server_id", "user_id", "connection_status", "created_at", "updated_at"
