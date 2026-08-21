@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, input, output } from "@angular/core
 
 import { CanvasDocument, CanvasDocumentSaveStates, CanvasRiskSeverities } from "@opencrane/core";
 import { ScopeChipAppearances, ScopeChipComponent } from "@opencrane/elements/ui";
-import { _CanvasCitationScopeSummary, _CanvasInitiativeStatusLabel, _CanvasInitiativeStatusTone, _CanvasSaveLabel } from "./canvas-doc.utils";
+import { _CanvasCitationBoundarySummary, _CanvasInitiativeStatusLabel, _CanvasInitiativeStatusTone, _CanvasSaveLabel } from "./canvas-doc.utils";
 
 /** Feature-local visualisation of an authority-supplied canvas document. */
 @Component({
@@ -45,6 +45,6 @@ export class CanvasDocComponent
 	/** Maps the owner-supplied save lifecycle to the visible action label. */
 	public readonly saveLabel = _CanvasSaveLabel;
 
-	/** Renders the supplied citation scopes without constructing source data. */
-	public readonly citationScopeSummary = _CanvasCitationScopeSummary;
+	/** Renders the supplied citation boundary kinds without constructing source data. */
+	public readonly citationBoundarySummary = _CanvasCitationBoundarySummary;
 }

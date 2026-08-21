@@ -5,6 +5,7 @@ model AuditEntry {
   resource  String
   message   String
   metadata  Json?
+
   @@index([timestamp])
   @@map("audit_log")
 }

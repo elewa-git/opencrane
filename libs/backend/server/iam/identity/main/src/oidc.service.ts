@@ -1,3 +1,5 @@
+import { URL } from "node:url";
+
 import type { Request } from "express";
 import type { Logger } from "pino";
 import type * as k8s from "@kubernetes/client-node";
@@ -5,7 +7,7 @@ import type { PrismaClient } from "@prisma/client";
 
 import { OidcAuthServiceBase, PrismaOrgMembershipRepository, _ClusterTenantFromHost, _OrgScope, _RequestHost, _ResolvePerOrgClient, _saveSession, type AuthUser, type LoginClient } from "@opencrane/backend/server/infra/auth";
 
-import { _MirrorGroupsOnLogin } from "./mirror-groups";
+import { _MirrorGroupsOnLogin, PrismaGroupClaimProjectionUnitOfWork } from "./mirror-groups";
 import { _AdmitStandaloneFirstUser } from "./standalone-first-user-admission";
 import { PrismaStandaloneFirstUserAdmissionUnitOfWork } from "./prisma-standalone-first-user-admission-unit-of-work";
 import { StandaloneFirstUserAdmissionOutcomes, type StandaloneFirstUserAdmissionAuditPort, type StandaloneFirstUserAdmissionConfig } from "./standalone-first-user-admission.types";
@@ -20,7 +22,7 @@ import { _ResolveCallerClusterTenant } from "@opencrane/backend/server/tenancy/c
  *   - {@link resolveLoginClient} — per-org login. A host `<org>.<base>` (or a customer
  *     vanity domain) that maps to a fully-provisioned ClusterTenant authorizes against THAT
  *     org's Zitadel client + org-restriction scope, so only its user pool may log in. The
- *     platform host / any unknown/unprovisioned host falls through to the masters client.
+ *     platform host uses the masters client. Unknown and unprovisioned tenant hosts fail closed.
  *   - {@link enrichStatusUser} — `/auth/me` adds the caller's `clusterTenant`, resolved
  *     server-side from their verified email (scoped to the silo whose host they are on),
  *     never from a self-asserted claim.
@@ -66,13 +68,20 @@ export class OidcAuthService extends OidcAuthServiceBase
 
   /**
    * Resolve the per-org OIDC client for this request host from the ClusterTenant CR; fall
-   * through to the masters client when the host maps to no fully-provisioned org.
+   * use the masters client only on the configured platform host.
    */
   protected override async resolveLoginClient(req: Request): Promise<LoginClient>
   {
     const perOrg = await _ResolvePerOrgClient(this.customApi, _RequestHost(req), this.log);
     if (!perOrg)
     {
+      const requestHost = _RequestHost(req)?.split(":")[0]?.trim().toLowerCase() ?? "";
+      const platformHost = new URL(this.config.redirectUri).host.split(":")[0].trim().toLowerCase();
+      const standaloneHost = this.standaloneFirstUserAdmission?.clusterTenant.trim().toLowerCase() ?? "";
+      if (requestHost !== platformHost && requestHost !== standaloneHost)
+      {
+        throw new Error("OIDC login requires a provisioned tenant client for this host");
+      }
       return super.resolveLoginClient(req);
     }
     const config = await this.discoverForClient(perOrg.clientId);
@@ -91,40 +100,52 @@ export class OidcAuthService extends OidcAuthServiceBase
   }
 
   /**
-   * Copy the login's group claims into the database, then, on a standalone install, claim the silo's
-   * single owner slot from the verified login facts.
-   *
-   * The group copy is best-effort: a failure is logged and nothing else. The owner claim is not — a
-   * refusal throws while the owner slot is empty. Once another subject has claimed the slot,
-   * authentication continues without owner elevation so an invitee can reach the separately guarded
-   * invitation-acceptance route. The stored owner is keyed on the OIDC subject.
+   * Bind the callback to its exact silo and project its verified identity and external groups before
+   * the session becomes usable. A projection failure rejects the login so request middleware never
+   * has to recreate authorization state from cached claims.
    */
-  protected override async onLoginEstablished(req: Request, authUser: AuthUser): Promise<void>
+  protected override async onLoginEstablished(req: Request, authUser: AuthUser, loginClientId?: string): Promise<void>
   {
-    // 1. Copy group claims separately, so a failure there cannot hide the owner-claim result.
-    try
+    const hostClusterTenant = _ClusterTenantFromHost(_RequestHost(req))?.trim() ?? "";
+    if (!hostClusterTenant)
     {
-      await _MirrorGroupsOnLogin({ prisma: this.prisma, subject: authUser.sub, groups: authUser.groups, log: this.log });
-    }
-    catch (err)
-    {
-      this.log.warn({ err, subject: authUser.sub }, "OIDC group projection failed (non-fatal)");
+      throw new Error("OIDC callback host does not identify a silo");
     }
 
-    // 2. Leave non-standalone installs on their existing membership-projection path.
-    if (this.standaloneFirstUserAdmission === null)
+    if (this.standaloneFirstUserAdmission !== null)
     {
-      return;
+      if (hostClusterTenant !== this.standaloneFirstUserAdmission.clusterTenant.trim().toLowerCase())
+      {
+        throw new Error("OIDC callback host does not match the configured standalone silo");
+      }
+    }
+    else
+    {
+      const platformHost = new URL(this.config.redirectUri).host.split(":")[0].trim().toLowerCase();
+      const requestHost = _RequestHost(req)?.split(":")[0]?.trim().toLowerCase() ?? "";
+      if (requestHost !== platformHost || loginClientId !== undefined)
+      {
+        const perOrg = await _ResolvePerOrgClient(this.customApi, _RequestHost(req), this.log);
+        if (perOrg === null || perOrg.clusterTenant.trim().toLowerCase() !== hostClusterTenant || perOrg.clientId !== loginClientId)
+        {
+          throw new Error("OIDC callback is not bound to the tenant client that started login");
+        }
+      }
     }
 
-    // 3. Atomically claim only the configured silo owner from verified OIDC and host evidence.
+    await _MirrorGroupsOnLogin({ siloId: hostClusterTenant, issuer: authUser.issuer, subject: authUser.sub, email: authUser.email, displayName: authUser.name, groups: authUser.groups, log: this.log }, new PrismaGroupClaimProjectionUnitOfWork(this.prisma));
+    req.session.authUser = { ...authUser, siloId: hostClusterTenant };
+    await _saveSession(req);
+
+    if (this.standaloneFirstUserAdmission === null) return;
+
     const audit = this.standaloneFirstUserAudit;
     if (audit === null)
     {
       throw new Error("standalone first-user admission audit adapter is unavailable");
     }
     const admission = await _AdmitStandaloneFirstUser(this.standaloneFirstUserAdmission, new PrismaStandaloneFirstUserAdmissionUnitOfWork(this.prisma, audit), {
-      hostClusterTenant: _ClusterTenantFromHost(_RequestHost(req)),
+      hostClusterTenant,
       issuer: authUser.issuer,
       subject: authUser.sub,
       email: authUser.email,
@@ -139,15 +160,14 @@ export class OidcAuthService extends OidcAuthServiceBase
       throw new Error(`standalone first-user admission denied: ${admission.outcome}`);
     }
 
-    // 4. Persist the cache used by existing management gates; /auth/me independently re-derives it.
-    req.session.authUser = { ...authUser, isOrgAdmin: true };
+    req.session.authUser = { ...authUser, siloId: hostClusterTenant, isOrgAdmin: true };
     await _saveSession(req);
   }
 
-  /** Surface a configured standalone first-owner failure instead of redirecting into no-tenant. */
+  /** Reject every login whose exact-silo projection or standalone admission fails. */
   protected override isPostLoginFailureFatal(): boolean
   {
-    return this.standaloneFirstUserAdmission !== null;
+    return true;
   }
 }
 

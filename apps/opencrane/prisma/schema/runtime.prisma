@@ -37,7 +37,7 @@ model RuntimeCommandStream {
   nextCommandSequence  Int                        @default(1) @map("next_command_sequence")
   acceptedCandidateIds String[]                   @default([]) @map("accepted_candidate_ids")
   createdAt            DateTime                   @default(now()) @map("created_at")
-  updatedAt           DateTime                    @updatedAt @map("updated_at")
+  updatedAt            DateTime                   @updatedAt @map("updated_at")
   commands             RuntimeDispatchedCommand[]
 
   @@id([runId, attempt])

@@ -1,26 +1,28 @@
 import { describe, expect, it } from "vitest";
+import { AuthorizationBoundaryCoverages, AuthorizationBoundaryKinds, AuthorizationGrantEffects, AuthorizationSubjectKinds } from "@opencrane/models/authorization";
 import { AgentServiceKinds, ConversationLifecycles, ConversationModes, MemoryFactProvenanceSourceKinds, RunInputSnapshotIdentityKinds } from "../index";
 import type { AgentRun, AgentService, AuthorizationGrant, Conversation, RunEvent, SignedFleetMembershipRevision } from "../index";
 
 describe("canonical model exports", function ()
 {
-  it("keeps project membership independent from department and team", function ()
+  it("keeps a project group grant independent from its hierarchy labels", function ()
   {
     const projectGrant: AuthorizationGrant = {
       grantId: "grant-project",
       siloId: "silo-1",
-      subjectId: "user-1",
-      scope: { kind: "project", organizationId: "org-1", projectId: "project-cross-functional" },
+      subject: { kind: AuthorizationSubjectKinds.Principal, principalId: "user-1" },
+      boundary: { kind: AuthorizationBoundaryKinds.Group, groupId: "project-cross-functional" },
+      boundaryCoverage: AuthorizationBoundaryCoverages.Exact,
       capability: { catalog: { catalogId: "target-capabilities", revision: 1, digest: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" }, capabilityId: "artifact.read" },
       resource: { kind: "artifact", id: "artifact-project-brief" },
-      effect: "allow",
+      effect: AuthorizationGrantEffects.Allow,
       priority: 50,
       validFromEpochMs: 1784365200000,
       expiresAtEpochMs: null,
       revokedAtEpochMs: null,
     };
 
-    expect(projectGrant.scope).toEqual({ kind: "project", organizationId: "org-1", projectId: "project-cross-functional" });
+    expect(projectGrant.boundary).toEqual({ kind: AuthorizationBoundaryKinds.Group, groupId: "project-cross-functional" });
   });
 
 	it("binds services, runs, and events to the target vocabulary", function ()
@@ -98,11 +100,11 @@ describe("canonical fleet and platform exports", function ()
       expiresAtEpochMs: 1784365500000,
       payloadDigest: "sha256:membership",
       signature: "base64url-signature",
-      assertions: [{ assertionId: "assertion-1", siloId: "silo-1", subjectId: "user-1", scope: { kind: "project", organizationId: "org-1", projectId: "project-1" } }],
+      assertions: [{ assertionId: "assertion-1", siloId: "silo-1", subjectId: "user-1" }],
     };
 
     expect(signedRevision.revision).toBeGreaterThan(0);
-    expect(signedRevision.assertions[0]?.scope.kind).toBe("project");
+    expect(signedRevision.assertions[0]?.subjectId).toBe("user-1");
   });
 
 });

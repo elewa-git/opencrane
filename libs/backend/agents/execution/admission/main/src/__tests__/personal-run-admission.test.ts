@@ -10,7 +10,7 @@ import { PersonalRunAdmissionOutcomes, PersonalRunIdempotencyOutcomes, type Pers
 /** Builds the server-side command the personal admission port takes. */
 function _Command(): Parameters<ReturnType<typeof __CreatePersonalRunAdmissionPortWithGate>["admitPersonalRun"]>[0]
 {
-	return { siloId: "silo-1", executionSubjectId: "user-1", conversationId: "conversation-1", requestIdempotencyKey: "request-1", inputMessageId: "message-1", inputMessageBlocks: [{ id: "block-1", kind: MessageContentBlockKinds.Text, value: "Hello" }] };
+	return { siloId: "silo-1", executionIssuer: "https://issuer.test", executionSubjectId: "user-1", conversationId: "conversation-1", requestIdempotencyKey: "request-1", inputMessageId: "message-1", inputMessageBlocks: [{ id: "block-1", kind: MessageContentBlockKinds.Text, value: "Hello" }] };
 }
 
 /** Builds a default set of dependencies, so each test can replace just one of them. */

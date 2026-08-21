@@ -140,7 +140,7 @@ describe("PrismaRunDispatchRepository", function _DescribeDispatchRepository()
 		const run = _Run();
 		const event = _Event();
 		const service = { ..._Service(), kind: AgentServiceKind.Managed, workloadProfile: "managed-default" };
-		const snapshot = { ..._Snapshot(), identitySnapshot: { kind: "service", executionSubjectId: "agent-service:service-1", agentServiceId: "service-1", effectiveScopeAttachmentDigest: `sha256:${"a".repeat(64)}`, fleetMembershipTrustedUntil: "2026-07-20T02:00:00.000Z" } };
+		const snapshot = { ..._Snapshot(), identitySnapshot: { kind: "service", executionSubjectId: "agent-service:service-1", agentServiceId: "service-1", effectiveBoundaryAttachmentDigest: `sha256:${"a".repeat(64)}`, fleetMembershipTrustedUntil: "2026-07-20T02:00:00.000Z" } };
 		const queryRaw = vi.fn()
 			.mockResolvedValueOnce([{ eventId: event.id, runId: run.id, agentServiceId: run.agentServiceId }])
 			.mockResolvedValueOnce([])

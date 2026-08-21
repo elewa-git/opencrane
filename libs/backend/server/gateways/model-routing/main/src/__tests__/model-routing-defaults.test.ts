@@ -20,6 +20,7 @@ function _authUser(overrides: Partial<AuthUser> = {}): AuthUser
     sub: "user-1",
     issuer: "https://idp.example.test",
     groups: [],
+		authorizationExpiresAt: "2099-06-18T00:00:00.000Z",
     isPlatformOperator: false,
     isOrgAdmin: false,
     email: "user@example.test",

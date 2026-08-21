@@ -19,13 +19,14 @@ API: `GET /api/v1/auth/me`.
 
 ## ORG-02 — Manage groups
 
-**As an** organisation admin, **I want** to create, inspect, update, and delete scoped groups **so
+**As an** organisation admin, **I want** to create, inspect, update, and delete hierarchical groups **so
 that** access policies can target meaningful sets of people.
 
 Acceptance criteria:
 
-- Group fields include name, scope, optional description, and members.
-- Scope is one of `org`, `department`, `project`, or `personal`.
+- Group fields include name, optional description, nullable parent, membership authority, and members.
+- A parent supplies hierarchy without creating implicit membership.
+- External groups mirror login claims; local groups remain operator-curated.
 - Empty, memberless, long-name, validation, conflict, forbidden, and delete-impact states are covered.
 - Cross-silo groups are not listable or addressable.
 
@@ -77,20 +78,7 @@ refusal remains receiver-gated until Fleet/WeOwnAI implements and qualifies the 
 endpoint. Role changes, suspension, removal, and ownership transfer remain separate incomplete slices.
 Fleet's older subject-based member upsert is not an invitation API and is not used by this journey.
 
-## ORG-04 — Share an MCP entitlement
-
-**As a** holder of an MCP entitlement, **I want** to share it with a user or group at an allowed scope
-**so that** I can delegate capability I actually possess.
-
-Acceptance criteria:
-
-- Recipient type is `user` or `group`; scope is `org`, `department`, `project`, or `personal`.
-- The server proves the caller holds the entitlement before creating the share.
-- Identical replay is idempotent; revocation is creator-authorized.
-
-APIs: `GET/POST /api/v1/shares`, `DELETE /api/v1/shares/{id}`.
-
-## ORG-05 — Share a resource
+## ORG-04 — Share a resource
 
 **As a** resource member, **I want** to share a file, chat, or dataset with an authorised recipient
 **so that** collaboration does not copy authority into browser state.
@@ -98,15 +86,16 @@ APIs: `GET/POST /api/v1/shares`, `DELETE /api/v1/shares/{id}`.
 Acceptance criteria:
 
 - Resource types are `file`, `chat`, and `dataset`.
-- The UI distinguishes owner/member authority, recipient, existing share, revoked, and inaccessible.
-- Revocation names the group and recipient subject exactly.
+- The UI distinguishes owner authority, the exact recipient Principal, existing share, revoked, and inaccessible.
+- Creating a share proves the caller's current resource grant and creates one exact generic recipient grant.
+- Revocation names the share and recipient Principal exactly and soft-revokes its linked grant.
 
-APIs: `GET/POST /api/v1/resource-shares`, `DELETE .../{groupId}/recipients/{subject}`.
+APIs: `GET/POST /api/v1/resource-shares`, `DELETE .../{shareId}/recipients/{principalId}`.
 
-## ORG-06 — Explain effective access
+## ORG-05 — Explain effective access
 
 **As a** user or administrator, **I want** to understand why a person can access a tool, resource, or
-agent **so that** direct, group, scope, and organisation-wide grants are reviewable.
+agent **so that** principal, group, exact-boundary, and descendant-boundary grants are reviewable.
 
 Acceptance criteria:
 

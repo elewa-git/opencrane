@@ -10,7 +10,7 @@ import type { ConversationMessageAdmissionUnitOfWork } from "../conversation-mes
 import type { SubmitConversationMessageRequest } from "../types/conversation-request.types";
 
 /** Fixed caller and message request reused across authority assertions. */
-const _CALLER = { siloId: "silo-1", subjectId: "user-1" } as const;
+const _CALLER = { siloId: "silo-1", issuer: "https://issuer.test", subjectId: "user-1" } as const;
 const _REQUEST: SubmitConversationMessageRequest = { idempotencyKey: "request-1", blocks: [{ id: "block-1", kind: MessageContentBlockKinds.Text, value: "Hello" }] };
 
 /** Builds a canonical persisted message timeline row. */

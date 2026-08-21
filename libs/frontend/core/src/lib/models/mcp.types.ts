@@ -138,19 +138,24 @@ export interface McpEntitledUser
 	initials: string;
 }
 
+/** A stable local group that can receive an MCP authorization grant. */
+export interface McpEntitledGroup
+{
+	/** Stable local Group identifier used by authorization grants. */
+	id: string;
+	/** Human-readable group name shown in the access editor. */
+	name: string;
+}
+
 /**
- * Access policy for one server — who may install it. Mirrors the control
- * plane's AccessPolicy: an org-wide grant plus explicit group and user grants
- * (additive when {@link everyoneInOrg} is on).
+ * Access policy for one server — which stable local groups and Principals may install it.
  */
 export interface McpAccessPolicy
 {
 	/** The server this policy governs. */
 	serverId: string;
-	/** Whether every current and future org member is entitled. */
-	everyoneInOrg: boolean;
-	/** Entitled group names. */
-	groups: string[];
+	/** Entitled stable local groups. */
+	groups: McpEntitledGroup[];
 	/** Entitled individual users. */
 	users: McpEntitledUser[];
 }
@@ -160,6 +165,6 @@ export interface McpDirectory
 {
 	/** All assignable users. */
 	users: McpEntitledUser[];
-	/** All assignable group names. */
-	groups: string[];
+	/** All assignable stable local groups. */
+	groups: McpEntitledGroup[];
 }

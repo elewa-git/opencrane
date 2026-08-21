@@ -20,8 +20,6 @@ export enum RunInputSnapshotIdentityKinds
 /** Signed membership evidence stored on both kinds of run identity. */
 export interface RunInputSnapshotFleetMembershipEvidence
 {
-	/** Organization selected by the verified fleet-membership assertion. */
-	organizationId: string;
 	/** Highest verified fleet-membership revision accepted for this run. */
 	fleetMembershipRevision: number;
 	/** Issuer that signed the accepted fleet-membership revision. */
@@ -43,17 +41,21 @@ export interface UserRunInputSnapshotIdentity extends RunInputSnapshotFleetMembe
 	kind: RunInputSnapshotIdentityKinds.User;
 	/** Id of the person whose verified membership and grants authorize this run. */
 	executionSubjectId: string;
+	/** OIDC issuer that namespaces the external execution subject. */
+	executionIssuer: string;
+	/** Stable local Principal that binds personal boundaries and normalized group memberships. */
+	principalId: string;
 }
 
-/** One non-personal scope attachment allowed for a managed service. */
-export interface ManagedRunInputScopeAttachment
+/** One non-personal knowledge boundary attachment allowed for a managed service. */
+export interface ManagedRunInputBoundaryAttachment
 {
-	/** Domain scope of the attached resource. */
-	scope: string;
-	/** Kind of subject named by the attachment. */
-	subjectType: string;
-	/** Stable identifier of the attached subject. */
-	subjectId: string;
+	/** Stored kind of the attached knowledge boundary. */
+	boundaryKind: string;
+	/** Stable group identifier of the attached boundary. */
+	boundaryId: string;
+	/** Whether the attachment covers the group alone or its stored descendants. */
+	boundaryCoverage: string;
 }
 
 /** Immutable identity for a run exercised by an active managed AgentService. */
@@ -65,10 +67,10 @@ export interface ServiceRunInputSnapshotIdentity extends RunInputSnapshotFleetMe
 	executionSubjectId: string;
 	/** Id of the active managed service whose revision authorizes this run. */
 	agentServiceId: AgentServiceId;
-	/** Non-personal scope attachments allowed when the run was assembled, sorted canonically. */
-	effectiveScopeAttachments: readonly ManagedRunInputScopeAttachment[];
-	/** SHA-256 digest of the allowed scope attachments, so the set cannot change without detection. */
-	effectiveScopeAttachmentDigest: string;
+	/** Non-personal boundary attachments allowed when the run was assembled, sorted canonically. */
+	effectiveBoundaryAttachments: readonly ManagedRunInputBoundaryAttachment[];
+	/** SHA-256 digest of the allowed boundary attachments, so the set cannot change without detection. */
+	effectiveBoundaryAttachmentDigest: string;
 }
 
 /** The run's identity — person or service — decided before the runtime receives the snapshot. */

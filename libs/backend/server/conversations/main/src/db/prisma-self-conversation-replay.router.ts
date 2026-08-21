@@ -13,7 +13,7 @@ import type { SelfConversationReplayCaller, SelfConversationReplayCompositionOpt
 function _resolveCaller(request: Parameters<typeof _ResolveRequestPrincipal>[0]): SelfConversationReplayCaller | null
 {
 	const principal = _ResolveRequestPrincipal(request);
-	return principal ? { subjectId: principal.subjectId, siloId: principal.siloId } : null;
+	return principal ? { subjectId: principal.externalSubject, siloId: principal.siloId } : null;
 }
 
 /**

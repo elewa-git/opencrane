@@ -1,8 +1,8 @@
 enum ThirdPartySourceKind {
-  McpRegistry      @map("mcp-registry")
-  AnthropicSkills  @map("anthropic-skills")
-  GitRepository    @map("git-repository")
-  ManualUpload     @map("manual-upload")
+  McpRegistry     @map("mcp-registry")
+  AnthropicSkills @map("anthropic-skills")
+  GitRepository   @map("git-repository")
+  ManualUpload    @map("manual-upload")
 }
 
 enum ThirdPartySourceStatus {
@@ -13,41 +13,41 @@ enum ThirdPartySourceStatus {
 }
 
 enum ThirdPartySourceItemKind {
-  McpServer   @map("mcp-server")
+  McpServer @map("mcp-server")
 }
 
 model ThirdPartySource {
-  id          String                 @id @default(cuid())
-  name        String                 @unique
-  kind        ThirdPartySourceKind
-  status      ThirdPartySourceStatus @default(PendingApproval)
-  originUrl   String                 @map("origin_url")
-  syncMode    String                 @map("sync_mode")
-  lastSyncedAt DateTime?             @map("last_synced_at")
-  nextRunAt   DateTime?              @map("next_run_at")
-  notes       String?
-  createdAt   DateTime               @default(now()) @map("created_at")
-  updatedAt   DateTime               @updatedAt @map("updated_at")
-  items       ThirdPartySourceItem[]
-  mcpServers  McpServer[]
+  id           String                 @id @default(cuid())
+  name         String                 @unique
+  kind         ThirdPartySourceKind
+  status       ThirdPartySourceStatus @default(PendingApproval)
+  originUrl    String                 @map("origin_url")
+  syncMode     String                 @map("sync_mode")
+  lastSyncedAt DateTime?              @map("last_synced_at")
+  nextRunAt    DateTime?              @map("next_run_at")
+  notes        String?
+  createdAt    DateTime               @default(now()) @map("created_at")
+  updatedAt    DateTime               @updatedAt @map("updated_at")
+  items        ThirdPartySourceItem[]
+  mcpServers   McpServer[]
 
   @@map("third_party_sources")
 }
 
 model ThirdPartySourceItem {
-  id          String                   @id @default(cuid())
-  sourceId    String                   @map("source_id")
-  kind        ThirdPartySourceItemKind
-  name        String
-  upstreamId  String                   @map("upstream_id")
-  version     String?
-  digest      String?
-  metadata    Json?
-  createdAt   DateTime                 @default(now()) @map("created_at")
-  updatedAt   DateTime                 @updatedAt @map("updated_at")
-  source      ThirdPartySource         @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  id         String                   @id @default(cuid())
+  sourceId   String                   @map("source_id")
+  kind       ThirdPartySourceItemKind
+  name       String
+  upstreamId String                   @map("upstream_id")
+  version    String?
+  digest     String?
+  metadata   Json?
+  createdAt  DateTime                 @default(now()) @map("created_at")
+  updatedAt  DateTime                 @updatedAt @map("updated_at")
+  source     ThirdPartySource         @relation(fields: [sourceId], references: [id], onDelete: Cascade)
 
-  @@index([sourceId])
   @@unique([sourceId, kind, upstreamId])
+  @@index([sourceId])
   @@map("third_party_source_items")
 }

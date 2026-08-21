@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/angular";
 import { expect, userEvent, within } from "storybook/test";
 
-import { CanvasDocumentLifecycles, CanvasDocumentSaveStates, CanvasInitiativeStates, CanvasRiskSeverities, type CanvasDocument, ScopeLevel } from "@opencrane/core";
+import { CanvasDocumentLifecycles, CanvasDocumentSaveStates, CanvasInitiativeStates, CanvasRiskSeverities, type CanvasDocument, ResourceBoundaryKind } from "@opencrane/core";
 
 import { CanvasDocComponent } from "../canvas-doc.component";
 
@@ -30,7 +30,7 @@ const _DOCUMENT: CanvasDocument =
 		{ risk: "Source freshness may require another retrieval before the document is published.", severity: CanvasRiskSeverities.Medium }
 	],
 	citationCount: 6,
-	citationScopes: [ScopeLevel.Org, ScopeLevel.Dept, ScopeLevel.Project]
+	citationBoundaryKinds: [ResourceBoundaryKind.Group]
 };
 
 /** Storybook metadata for a feature-local, input-driven canvas document renderer. */

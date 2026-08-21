@@ -13,7 +13,7 @@ import type { FleetMembershipAuthorityRepository, FleetMembershipSignatureVerifi
  * Called by: SignedFleetMembershipAssertionVerifier in this package — the only caller today.
  * @param repository - Store of signed revisions and of the newest accepted revision per silo.
  * @param verifier - Holder of the issuer's public key.
- * @param command - Silo, subject, assertion, scope, current time, and staleness limit.
+ * @param command - Silo, subject, assertion, current time, and staleness limit.
  * @returns `trusted` with the revision and the instant trust runs out, or `denied` with the reason
  *          the check failed; a denial never means "retry without checking".
  */
@@ -28,7 +28,7 @@ export async function __VerifyCurrentFleetMembership(repository: FleetMembership
  * Checks one subject's fleet membership and returns the signed facts to record on the run.
  *
  * Four steps, in this order: load the newest stored revision for the trusted issuer; check the
- * issuer's signature; apply the ordering, scope, expiry, and staleness rules; and only then record
+ * issuer's signature; apply the ordering, identity, expiry, and staleness rules; and only then record
  * that revision as the newest one this silo accepts. Doing that last step before returning is what
  * makes a replay of an older signed revision fail — two concurrent admissions race on that number
  * and the loser gets `acceptance_conflict` instead of trust. Every field of the returned evidence
@@ -40,7 +40,7 @@ export async function __VerifyCurrentFleetMembership(repository: FleetMembership
  * passing the transaction of the run admission they are already inside.
  * @param repository - Store of signed revisions and of the newest accepted revision per silo.
  * @param verifier - Holder of the issuer's public key.
- * @param command - Silo, subject, assertion, scope, current time, and staleness limit.
+ * @param command - Silo, subject, assertion, current time, and staleness limit.
  * @returns `trusted` with signed evidence, or `denied` with a reason: `missing_revision`,
  *          `signature_verifier_failed`, `acceptance_conflict`, or a rule from the trust evaluation.
  */
@@ -64,14 +64,13 @@ export async function __VerifyCurrentFleetMembershipEvidence(repository: FleetMe
 		return { outcome: "denied", reason: "signature_verifier_failed", revision: revision.revision };
 	}
 
-	// 3. Evaluate issuer, revision ordering, signature binding, assertion scope, expiry, and staleness.
+	// 3. Evaluate issuer, revision ordering, signature binding, asserted identity, expiry, and staleness.
 	const highestAcceptedRevision = await repository.getHighestAcceptedRevision(command.trustedIssuerId, command.siloId);
 	const decision = __EvaluateFleetMembershipRevision(revision, evidence, {
 		trustedIssuerId: command.trustedIssuerId,
 		siloId: command.siloId,
 		subjectId: command.subjectId,
 		assertionId: command.assertionId,
-		scope: command.scope,
 		nowEpochMs: command.nowEpochMs,
 		lastAcceptedRevision: highestAcceptedRevision,
 		maximumStalenessMs: command.maximumStalenessMs,
@@ -89,5 +88,5 @@ export async function __VerifyCurrentFleetMembershipEvidence(repository: FleetMe
 		return { outcome: "denied", reason: "acceptance_conflict", revision: revision.revision };
 	}
 
-	return { outcome: "trusted", evidence: { issuerId: revision.issuerId, issuerKeyId: revision.issuerKeyId, revision: revision.revision, assertionId: command.assertionId, subjectId: command.subjectId, organizationId: decision.organizationId, payloadDigest: revision.payloadDigest, trustedUntilEpochMs: decision.trustedUntilEpochMs } };
+	return { outcome: "trusted", evidence: { issuerId: revision.issuerId, issuerKeyId: revision.issuerKeyId, revision: revision.revision, assertionId: command.assertionId, subjectId: command.subjectId, payloadDigest: revision.payloadDigest, trustedUntilEpochMs: decision.trustedUntilEpochMs } };
 }

@@ -1,4 +1,4 @@
-import { AgentServiceKinds, type AgentBudget, type AgentRevision, type AgentRevisionState, type AgentRun, type AgentRunState, type AgentRunTerminalReason, type AgentRunTrigger, type AgentService, type AgentServiceKind, type AgentServiceState, type GrantScope, type GrantSubjectType, type ReviewedIntegrationToolDefinition } from "@opencrane/models/agents";
+import { AgentServiceKinds, RevisionBoundaryCoverages, RevisionBoundaryKinds, type AgentBudget, type AgentRevision, type AgentRevisionState, type AgentRun, type AgentRunState, type AgentRunTerminalReason, type AgentRunTrigger, type AgentService, type AgentServiceKind, type AgentServiceState, type RevisionBoundaryAttachment, type ReviewedIntegrationToolDefinition } from "@opencrane/models/agents";
 import { ___CloneCanonicalJson, type JsonValue } from "@opencrane/util";
 
 import type { AgentRevisionRow, AgentRunRow, AgentServiceRow } from "./prisma-agent-mappers.types";
@@ -24,30 +24,20 @@ export function _serviceKind(value: string): AgentServiceKind
 	throw new Error(`unknown AgentService kind: ${value}`);
 }
 
-/** Maps a Prisma GrantScope identifier to the canonical scope-attachment vocabulary. */
-export function _grantScope(value: string): GrantScope
+/** Maps a stored boundary attachment into the agent-domain contract. */
+function _boundaryAttachment(value: AgentRevisionRow["boundaryAttachments"][number]): RevisionBoundaryAttachment
 {
-	switch (value)
+	if (value.boundaryKind === "Group" && value.boundaryGroupId !== null && value.boundaryPrincipalId === null)
 	{
-		case "Org": return "org";
-		case "Department": return "department";
-		case "Team": return "team";
-		case "Project": return "project";
-		case "Personal": return "personal";
-		default: throw new Error(`unknown GrantScope: ${value}`);
+		if (value.boundaryCoverage !== "Exact" && value.boundaryCoverage !== "Descendants") throw new Error("invalid persisted group boundary coverage");
+		const boundaryCoverage = value.boundaryCoverage === "Descendants" ? RevisionBoundaryCoverages.Descendants : RevisionBoundaryCoverages.Exact;
+		return { boundaryKind: RevisionBoundaryKinds.Group, boundaryId: value.boundaryGroupId, boundaryCoverage };
 	}
-}
-
-/** Maps a Prisma GrantSubjectType identifier to the canonical scope-attachment vocabulary. */
-export function _grantSubjectType(value: string): GrantSubjectType
-{
-	switch (value)
+	if (value.boundaryKind === "Personal" && value.boundaryPrincipalId !== null && value.boundaryGroupId === null && value.boundaryCoverage === "Exact")
 	{
-		case "Group": return "group";
-		case "Tenant": return "tenant";
-		case "User": return "user";
-		default: throw new Error(`unknown GrantSubjectType: ${value}`);
+		return { boundaryKind: RevisionBoundaryKinds.Personal, boundaryId: value.boundaryPrincipalId, boundaryCoverage: RevisionBoundaryCoverages.Exact };
 	}
+	throw new Error("invalid persisted agent revision boundary attachment");
 }
 
 /** Maps a Prisma AgentRevision lifecycle identifier to the target contract value. */
@@ -142,7 +132,7 @@ export function _mapRevision(row: AgentRevisionRow): AgentRevision
 		modelDefinitionId: row.modelDefinitionId,
 		skills: row.skillAssignments.map(assignment => ({ skillId: assignment.skillId, revisionId: assignment.skillRevisionId })),
 		integrationAssignments: row.integrationAssignments.map(assignment => ({ integrationId: assignment.integrationId, custodyReferenceId: assignment.custodyReferenceId, toolDefinitions: ___CloneCanonicalJson(assignment.toolDefinitions as unknown as JsonValue) as unknown as readonly ReviewedIntegrationToolDefinition[] })),
-		scopeAttachments: row.scopeAttachments.map(attachment => ({ scope: _grantScope(attachment.scope), subjectType: _grantSubjectType(attachment.subjectType), subjectId: attachment.subjectId })),
+		boundaryAttachments: row.boundaryAttachments.map(_boundaryAttachment),
 		budget: row.budget as unknown as AgentBudget,
 		authoredBy: row.authoredBy,
 		createdAt: row.createdAt.toISOString(),

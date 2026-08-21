@@ -15,7 +15,7 @@ import { PrismaPersonalConfigurationViewRepository } from "./query/prisma-person
 function _resolveCaller(request: Parameters<typeof _ResolveRequestPrincipal>[0]): PersonalConfigurationCaller | null
 {
 	const principal = _ResolveRequestPrincipal(request);
-	return principal ? { userId: principal.subjectId, siloId: principal.siloId } : null;
+	return principal ? { userId: principal.externalSubject, siloId: principal.siloId } : null;
 }
 
 /**

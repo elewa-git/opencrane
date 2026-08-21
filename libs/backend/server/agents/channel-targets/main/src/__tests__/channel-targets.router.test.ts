@@ -12,7 +12,7 @@ function _App(overrides: { readonly failAuthority?: boolean; readonly log?: Logg
 	const dependencies: ChannelTargetResolutionDependencies = {
 		config: { workloadAudience: "opencrane", channelProxyServiceAccountName: "channel-proxy", channelProxyNamespace: "silo-a", invocationContextTtlMs: 60_000, allowedRouteHostSuffixes: [".svc.cluster.local"], receiverId: "conversation-replay-v1", receiverEndpoint: "http://agent-runtime.silo-a.svc.cluster.local:8080/v1/commands" },
 		workloadIdentity: { __Review: async function _Review() { if (overrides.failAuthority) throw new Error("token review unavailable"); return { username: "system:serviceaccount:silo-a:channel-proxy", serviceAccountName: "channel-proxy", namespace: "silo-a", audiences: ["opencrane"] }; } },
-		hostSilo: { resolveExactHost: async function _ResolveExactHost() { return { siloId: "silo-1", authorizationScope: { kind: "organization", organizationId: "silo-1" } }; } },
+		hostSilo: { resolveExactHost: async function _ResolveExactHost() { return { siloId: "silo-1" }; } },
 		membership: { verifyCurrentMembership: async function _VerifyCurrentMembership() { return { outcome: "trusted", revision: 1, trustedUntilEpochMs: 2_000_000 }; } },
 		repository: {
 			getConversationAuthority: async function _GetConversationAuthority() { return { conversationId: "conversation-1", siloId: "silo-1", agentServiceId: "service-1", mode: "agent_session", lifecycle: "open", participantUserIds: ["user-1"] }; },

@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, input, output, signal } from "@angular/core";
 
-import { ActiveSkill, CanvasDocument, CanvasDocumentSaveStates, LedgerEntry, SCOPE_COLORS, ScopeCitation, ScopeContextEntry, ScopeLevel } from "@opencrane/core";
+import { ActiveSkill, CanvasDocument, CanvasDocumentSaveStates, LedgerEntry, BOUNDARY_COLORS, ScopeCitation, ScopeContextEntry, ResourceBoundaryKind } from "@opencrane/core";
 import { CollapsibleSectionComponent, LedgerCardComponent, LedgerCardKinds } from "@opencrane/elements/ui";
 import { CanvasDocComponent } from "../components/canvas-doc/canvas-doc.component";
 
@@ -41,8 +41,8 @@ export class ContextPanelComponent
 	/** Active tab ("context" | "ledger" | "canvas"). */
 	public readonly tab = signal<string>("context");
 
-	/** Expanded scope in the retrieved-context rail. */
-	public readonly expandedScope = signal<ScopeLevel | null>(null);
+	/** Stable ID of the expanded boundary in the retrieved-context rail. */
+	public readonly expandedBoundaryId = signal<string | null>(null);
 
 	/** Scope datasets — populated from the live gateway once available. */
 	public readonly scopeEntries: ScopeContextEntry[] = [];
@@ -56,11 +56,11 @@ export class ContextPanelComponent
 	/** Ledger trace entries — populated from the live gateway once available. */
 	public readonly ledger: LedgerEntry[] = [];
 
-	/** Scope levels for the contract chip strip. */
-	public readonly scopeLevels: ScopeLevel[] = [ScopeLevel.Org, ScopeLevel.Dept, ScopeLevel.Project, ScopeLevel.Personal];
+	/** Boundary kinds for the contract chip strip. */
+	public readonly boundaryKinds: ResourceBoundaryKind[] = [ResourceBoundaryKind.Group, ResourceBoundaryKind.Personal];
 
 	/** Scope → colour lookup for templates. */
-	public readonly scopeColors = SCOPE_COLORS;
+	public readonly scopeColors = BOUNDARY_COLORS;
 
 	/** Resolve an admitted domain entry to a finite shared-card treatment. */
 	public ledgerKind(kind: string): LedgerCardKinds
@@ -68,18 +68,18 @@ export class ContextPanelComponent
 		return ContextPanelComponent._LEDGER_KINDS[kind] ?? LedgerCardKinds.Observation;
 	}
 
-	/** Citations retrieved at a given scope (empty until the live gateway lands). */
-	public citationsFor(level: ScopeLevel): ScopeCitation[]
+	/** Citations retrieved from one exact boundary (empty until the live gateway lands). */
+	public citationsFor(boundaryId: string): ScopeCitation[]
 	{
-		return this.citations.filter(function atScope(citation: ScopeCitation): boolean
+		return this.citations.filter(function atBoundary(citation: ScopeCitation): boolean
 		{
-			return citation.scope === level;
+			return citation.boundaryId === boundaryId;
 		});
 	}
 
-	/** Toggles a scope row expansion. */
-	public toggleScope(level: ScopeLevel): void
+	/** Toggles one exact boundary row expansion. */
+	public toggleBoundary(boundaryId: string): void
 	{
-		this.expandedScope.set(this.expandedScope() === level ? null : level);
+		this.expandedBoundaryId.set(this.expandedBoundaryId() === boundaryId ? null : boundaryId);
 	}
 }

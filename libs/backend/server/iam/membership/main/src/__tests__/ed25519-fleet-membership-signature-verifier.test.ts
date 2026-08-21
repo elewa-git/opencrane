@@ -17,7 +17,7 @@ function _Revision(privateKey: KeyObject, issuerKeyId = "fleet-key-1"): SignedFl
 		siloId: "silo-1",
 		issuedAtEpochMs: 1_000,
 		expiresAtEpochMs: 10_000,
-		assertions: [{ assertionId: "assertion-1", siloId: "silo-1", subjectId: "agent-service:service-1", scope: { kind: "project", organizationId: "org-1", projectId: "project-1" } }],
+		assertions: [{ assertionId: "assertion-1", siloId: "silo-1", subjectId: "agent-service:service-1" }],
 	};
 	const payloadDigest = __DigestFleetMembershipSignedPayload(payload);
 	return { ...payload, payloadDigest, signature: sign(null, Buffer.from(payloadDigest, "utf8"), privateKey).toString("base64url") };
@@ -35,8 +35,8 @@ describe("Ed25519FleetMembershipSignatureVerifier", function ()
 			issuedAtEpochMs: 1_000,
 			expiresAtEpochMs: 10_000,
 			assertions: [
-				{ assertionId: "assertion-z", siloId: "silo-1", subjectId: "agent-service:service-1", scope: { kind: "team", organizationId: "org-1", teamId: "team-1" } },
-				{ assertionId: "assertion-a", siloId: "silo-1", subjectId: "agent-service:service-1", scope: { kind: "project", organizationId: "org-1", projectId: "project-1" } },
+				{ assertionId: "assertion-z", siloId: "silo-1", subjectId: "agent-service:service-1" },
+				{ assertionId: "assertion-a", siloId: "silo-1", subjectId: "agent-service:service-1" },
 			],
 		};
 		expect(__DigestFleetMembershipSignedPayload(payload)).toBe(__DigestFleetMembershipSignedPayload({ ...payload, assertions: [...payload.assertions].reverse() }));

@@ -120,13 +120,13 @@ export class OpenCraneMcpGateway implements McpGateway
 	/** @inheritdoc */
 	public async updateAccessPolicy(serverId: string, policy: McpAccessPolicy): Promise<McpAccessPolicy>
 	{
-		const body = { everyoneInOrg: policy.everyoneInOrg, groups: policy.groups, users: policy.users.map(function id(user): string { return user.id; }) };
+		const body = { groups: policy.groups.map(function _Id(group): string { return group.id; }), users: policy.users.map(function _Id(user): string { return user.id; }) };
 		return _MapAccessPolicy(await this._api.request<McpAccessPolicyWire>("PUT", `/mcp/servers/${encodeURIComponent(serverId)}/access`, { body }));
 	}
 
 	/** @inheritdoc */
 	public async getDirectory(): Promise<McpDirectory>
 	{
-		return _MapDirectory(await this._api.request<{ users?: McpDirectory["users"]; groups?: string[] }>("GET", "/mcp/directory"));
+		return _MapDirectory(await this._api.request<{ users?: McpDirectory["users"]; groups?: McpDirectory["groups"] }>("GET", "/mcp/directory"));
 	}
 }

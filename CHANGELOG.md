@@ -22,10 +22,16 @@ follows [Keep a Changelog](https://keepachangelog.com/); the project uses
 
 ### Added
 
-- **Org admins can now organize groups under an optional parent.** Group API responses expose a
-  nullable `parentId`, while hierarchy remains descriptive only: membership and grants never
-  inherit from a parent. Missing parents, hierarchy cycles, and attempts to delete a parent that
-  still has children fail closed.
+- **Org admins can now model departments, teams, and projects as one hierarchy of groups.** Groups
+  expose an optional parent, direct membership, and explicit `External` or `Local` authority;
+  sign-in mirrors only externally managed `group:<stable Group.id>` claims, while locally curated
+  membership remains under OpenCrane administration. Missing parents, hierarchy cycles, and
+  attempts to delete a referenced group fail closed.
+
+- **Administrators can now grant product capabilities to people or groups at explicit resource
+  boundaries.** Grants distinguish exact from descendant coverage without inheriting group
+  membership through the hierarchy, managed editors revoke only grants they own, and resource
+  shares create auditable exact-recipient grants without becoming a parallel authorization model.
 
 - **Users and operators can now see the availability of every user-visible service through
   unauthenticated `GET /healthz`.** The fixed, public-safe report classifies the API, database,
@@ -167,6 +173,12 @@ follows [Keep a Changelog](https://keepachangelog.com/); the project uses
   field that caused it.
 
 ### Changed
+
+- **Operators upgrading from 0.9.0 to 0.9.3 now cut over to the same IAM model used by fresh
+  installations.** The digest-bound migration deterministically projects principals, groups,
+  memberships, grants, and resource boundaries, then removes the superseded agent-scope and MCP
+  access-policy authorities; ambiguous or populated unsupported legacy state stops before mutation,
+  and recovery remains backup/restore only.
 
 - **Maintainers now carry durable compatibility and transition evidence with every release-affecting
   change.** Each directly changed or dependency-adapted Nx application records the immutable root

@@ -1,5 +1,4 @@
 import { ConversationLifecycles, ConversationModes } from "@opencrane/contracts";
-import { __AuthorizationScopesEqual } from "@opencrane/models/authorization";
 import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 
 import type { AuthorizeChannelActionsCommand, ChannelActionAuthorizationDecision, ChannelConversationAuthority } from "./channel-target-resolution.types";
@@ -7,9 +6,8 @@ import type { AuthorizeChannelActionsCommand, ChannelActionAuthorizationDecision
 /** Authorize one participant-bound conversation read and digest the exact accepted evidence. */
 export function __AuthorizeConversationRead(conversation: ChannelConversationAuthority, command: AuthorizeChannelActionsCommand): ChannelActionAuthorizationDecision
 {
-	// 1. Require the sole supported action and organization scope before any evidence can be digested.
+	// 1. Require the sole supported action before any evidence can be digested.
 	if (command.requiredActions.length !== 1 || command.requiredActions[0] !== "conversation.read") return { outcome: "denied", reason: "action_not_allowed" };
-	if (!__AuthorizationScopesEqual(command.scope, { kind: "organization", organizationId: command.siloId })) return { outcome: "denied", reason: "scope_mismatch" };
 
 	// 2. Bind the decision to one current open agent session and its immutable service coordinates.
 	if (conversation.mode !== ConversationModes.AgentSession
@@ -31,7 +29,6 @@ export function __AuthorizeConversationRead(conversation: ChannelConversationAut
 		agentServiceId: command.agentServiceId,
 		conversationId: command.conversationId,
 		membershipRevision: command.membershipRevision,
-		scope: command.scope,
 		siloId: command.siloId,
 		subjectId: command.subjectId,
 	} as unknown as JsonValue;

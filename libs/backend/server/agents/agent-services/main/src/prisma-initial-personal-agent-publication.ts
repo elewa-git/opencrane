@@ -72,7 +72,7 @@ export class PrismaInitialPersonalAgentPublicationRepository implements InitialP
 			budget: INITIAL_PERSONAL_AGENT_POLICY.budget,
 			skills: [],
 			integrationAssignments: [],
-			scopeAttachments: [],
+			boundaryAttachments: [],
 		};
 		const revision = await new PrismaAgentRevisionWriterRepository(this.transaction).createDraft({
 			siloId: command.siloId,

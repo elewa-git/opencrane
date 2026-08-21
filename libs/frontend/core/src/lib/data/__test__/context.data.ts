@@ -1,42 +1,42 @@
 import { ActiveSkill, CanvasInitiative, CanvasInitiativeStates, CanvasMetric, CanvasRisk, CanvasRiskSeverities, LedgerEntry, ScopeCitation, ScopeContextEntry } from "../../models/context.types";
-import { ScopeLevel } from "../../models/scope.types";
+import { ResourceBoundaryKind } from "../../models/boundary.types";
 
 /** Scope datasets feeding the current session, innermost first. */
 export const SCOPE_CONTEXT: ScopeContextEntry[] =
 [
-	{ level: ScopeLevel.Org, label: "acme-corp", sublabel: "Org knowledge index", active: true, freshness: "4m ago", citationCount: 3, color: "#5A8A5A" },
-	{ level: ScopeLevel.Dept, label: "Product", sublabel: "Department dataset", active: true, freshness: "12m ago", citationCount: 5, color: "#7A6AA0" },
-	{ level: ScopeLevel.Project, label: "platform-v2", sublabel: "Project context", active: true, freshness: "1h ago", citationCount: 2, color: "#4A6B8A" },
-	{ level: ScopeLevel.Personal, label: "alex.oc", sublabel: "Personal pod storage", active: true, freshness: "live", citationCount: 1, color: "#C84B31" }
+	{ boundaryId: "group-acme", boundaryKind: ResourceBoundaryKind.Group, label: "acme-corp", sublabel: "Company group knowledge", active: true, freshness: "4m ago", citationCount: 3, color: "#5A8A5A" },
+	{ boundaryId: "group-product", boundaryKind: ResourceBoundaryKind.Group, label: "Product", sublabel: "Child group dataset", active: true, freshness: "12m ago", citationCount: 5, color: "#7A6AA0" },
+	{ boundaryId: "group-platform-v2", boundaryKind: ResourceBoundaryKind.Group, label: "platform-v2", sublabel: "Child group context", active: true, freshness: "1h ago", citationCount: 2, color: "#4A6B8A" },
+	{ boundaryId: "principal-alex", boundaryKind: ResourceBoundaryKind.Personal, label: "alex.oc", sublabel: "Personal boundary storage", active: true, freshness: "live", citationCount: 1, color: "#C84B31" }
 ];
 
 /** Citations retrieved for the current thread, grouped by scope. */
 export const SCOPE_CITATIONS: ScopeCitation[] =
 [
-	{ id: "c1", scope: ScopeLevel.Dept, source: "product-strategy-q3.md", snippet: "PLG expansion is the highest-priority initiative for Q3, approved at Product all-hands 2026-05-14.", freshness: "12m ago" },
-	{ id: "c2", scope: ScopeLevel.Org, source: "slack:#product-leadership", snippet: "VP sign-off required for any resourcing decisions above $50K. Confirmed in org policy v2.1.", freshness: "4m ago" },
-	{ id: "c3", scope: ScopeLevel.Project, source: "platform-v2/roadmap.md", snippet: "Data export v1 is the blocker for enterprise accounts currently stalled at procurement.", freshness: "1h ago" },
-	{ id: "c4", scope: ScopeLevel.Dept, source: "teams:#product-team", snippet: "Q3 ARR target is $4.2M — confirmed with Finance in the May 30 review.", freshness: "12m ago" },
-	{ id: "c5", scope: ScopeLevel.Org, source: "confluence:org-policies", snippet: "Budget decisions require dual approval from department head and Finance lead.", freshness: "4m ago" }
+	{ id: "c1", boundaryId: "group-product", boundaryKind: ResourceBoundaryKind.Group, source: "product-strategy-q3.md", snippet: "PLG expansion is the highest-priority initiative for Q3, approved at Product all-hands 2026-05-14.", freshness: "12m ago" },
+	{ id: "c2", boundaryId: "group-product", boundaryKind: ResourceBoundaryKind.Group, source: "slack:#product-leadership", snippet: "VP sign-off required for any resourcing decisions above $50K. Confirmed in company policy v2.1.", freshness: "4m ago" },
+	{ id: "c3", boundaryId: "group-platform-v2", boundaryKind: ResourceBoundaryKind.Group, source: "platform-v2/roadmap.md", snippet: "Data export v1 is the blocker for enterprise accounts currently stalled at procurement.", freshness: "1h ago" },
+	{ id: "c4", boundaryId: "group-product", boundaryKind: ResourceBoundaryKind.Group, source: "teams:#product-team", snippet: "Q3 ARR target is $4.2M — confirmed with Finance in the May 30 review.", freshness: "12m ago" },
+	{ id: "c5", boundaryId: "group-acme", boundaryKind: ResourceBoundaryKind.Group, source: "confluence:company-policies", snippet: "Budget decisions require dual approval from the accountable group lead and Finance lead.", freshness: "4m ago" }
 ];
 
 /** Skills active in the current session. */
 export const ACTIVE_SKILLS: ActiveSkill[] =
 [
-	{ name: "document-writer", scope: ScopeLevel.Org, version: "1.4.2", active: true },
-	{ name: "strategy-analyst", scope: ScopeLevel.Dept, version: "0.9.1", active: true },
-	{ name: "jira-sync", scope: ScopeLevel.Project, version: "2.0.0", active: true },
-	{ name: "personal-notes", scope: ScopeLevel.Personal, version: "local", active: true }
+	{ name: "document-writer", boundaryKind: ResourceBoundaryKind.Group, version: "1.4.2", active: true },
+	{ name: "strategy-analyst", boundaryKind: ResourceBoundaryKind.Group, version: "0.9.1", active: true },
+	{ name: "jira-sync", boundaryKind: ResourceBoundaryKind.Group, version: "2.0.0", active: true },
+	{ name: "personal-notes", boundaryKind: ResourceBoundaryKind.Personal, version: "local", active: true }
 ];
 
 /** Ledger trace entries for the current session. */
 export const LEDGER_ENTRIES: LedgerEntry[] =
 [
-	{ id: "R1", type: "observation", scope: ScopeLevel.Dept, label: "DV360 already under-pacing", ref: "dv360_status", status: null },
-	{ id: "R2", type: "observation", scope: ScopeLevel.Org, label: "Approved plan is national awareness-led", ref: "plan.primary_kpi", status: null },
-	{ id: "R3", type: "observation", scope: ScopeLevel.Project, label: "Manchester store selling ahead of average", ref: "manchester_sales", status: "resolved" },
-	{ id: "P1", type: "policy", scope: ScopeLevel.Org, label: "Spend changes require human approval", ref: "org_policy.v2.1", status: "applied" },
-	{ id: "A1", type: "action", scope: ScopeLevel.Personal, label: "Prepared recommendation note", ref: "boots-decision-note.md", status: "pending" }
+	{ id: "R1", type: "observation", boundaryKind: ResourceBoundaryKind.Group, label: "DV360 already under-pacing", ref: "dv360_status", status: null },
+	{ id: "R2", type: "observation", boundaryKind: ResourceBoundaryKind.Group, label: "Approved plan is national awareness-led", ref: "plan.primary_kpi", status: null },
+	{ id: "R3", type: "observation", boundaryKind: ResourceBoundaryKind.Group, label: "Manchester store selling ahead of average", ref: "manchester_sales", status: "resolved" },
+	{ id: "P1", type: "policy", boundaryKind: ResourceBoundaryKind.Group, label: "Spend changes require human approval", ref: "company_policy.v2.1", status: "applied" },
+	{ id: "A1", type: "action", boundaryKind: ResourceBoundaryKind.Personal, label: "Prepared recommendation note", ref: "boots-decision-note.md", status: "pending" }
 ];
 
 /** Canvas doc — growth target metric rows. */

@@ -55,12 +55,12 @@ export function __DigestAgentRevisionContent(agentServiceId: string, revision: n
 				}),
 			};
 		}),
-		scopeAttachments: content.scopeAttachments.map(function _MapScope(attachment)
+		boundaryAttachments: content.boundaryAttachments.map(function _MapBoundary(attachment)
 		{
 			return {
-				scope: attachment.scope,
-				subjectType: attachment.subjectType,
-				subjectId: attachment.subjectId,
+				boundaryKind: attachment.boundaryKind,
+				boundaryId: attachment.boundaryId,
+				boundaryCoverage: attachment.boundaryCoverage,
 			};
 		}),
 	};

@@ -1,4 +1,3 @@
-import type { AuthorizationScope } from "@opencrane/models/authorization";
 import type { SignedFleetMembershipAssertionAuthority } from "@opencrane/backend/server/iam/membership";
 
 /**
@@ -125,13 +124,11 @@ export interface TrustedDelegatedBrowserIdentity
 	readonly trustworthySubject: true;
 }
 
-/** Exact silo and authorization scope bound to one trusted host. */
+/** Exact silo bound to one trusted host. */
 export interface TrustedHostSiloBinding
 {
 	/** Silo selected by the registered host authority. */
 	readonly siloId: string;
-	/** Independent scope under which membership and grants are evaluated. */
-	readonly authorizationScope: AuthorizationScope;
 }
 
 /** Registered host-to-silo authority. */
@@ -169,8 +166,6 @@ export interface AuthorizeChannelActionsCommand
 	readonly conversationId: string;
 	/** AgentService bound to the conversation. */
 	readonly agentServiceId: string;
-	/** Independent authorization scope selected by the trusted host. */
-	readonly scope: AuthorizationScope;
 	/** Complete action set; every entry must be allowed. */
 	readonly requiredActions: readonly ChannelAuthorizedAction[];
 	/** Signed membership revision used by this decision. */

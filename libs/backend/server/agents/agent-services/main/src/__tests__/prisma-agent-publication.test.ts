@@ -41,7 +41,7 @@ function _revisionRow()
 		publishedAt: null,
 		skillAssignments: [],
 		integrationAssignments: [],
-		scopeAttachments: [],
+		boundaryAttachments: [],
 	};
 }
 

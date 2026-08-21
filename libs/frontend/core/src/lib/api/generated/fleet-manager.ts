@@ -409,11 +409,15 @@ export interface components {
         };
         McpAccessPolicy: {
             serverId: string;
-            /** @description When true, every caller in the org is entitled (lists ignored). */
-            everyoneInOrg?: boolean;
-            /** @description Entitled group identifiers / names. */
-            groups?: string[];
+            /** @description Stable local groups with an active MCP authorization grant. */
+            groups?: components["schemas"]["EntitledGroup"][];
             users?: components["schemas"]["EntitledUser"][];
+        };
+        EntitledGroup: {
+            /** @description Stable local Group identifier. */
+            id: string;
+            /** @description Human-readable group name. */
+            name: string;
         };
         EntitledUser: {
             /** @description Stable user identifier (sub or email). */
@@ -428,7 +432,7 @@ export interface components {
         /** @description The selectable universe of users and groups for the admin access editor. */
         McpDirectory: {
             users: components["schemas"]["EntitledUser"][];
-            groups: string[];
+            groups: components["schemas"]["EntitledGroup"][];
         };
         ClusterTenant: {
             /** @description Stable cluster-scoped identifier (the customer key). */

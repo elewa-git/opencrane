@@ -30,7 +30,7 @@ function _buildAuthApp(): Express
   app.use(express.json());
   // Mirror production middleware order: the per-IP limiter is mounted before auth + routes.
   app.use(_RateLimit());
-  app.use(___AuthMiddleware());
+  app.use(___AuthMiddleware({ admit: vi.fn() }));
 
   app.get("/healthz", function _healthz(req, res)
   {

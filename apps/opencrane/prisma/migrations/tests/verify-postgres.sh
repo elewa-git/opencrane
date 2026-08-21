@@ -26,6 +26,8 @@ FRESH_PROTECTED_DIGEST="12505f3c15114bd2a407d0d4d2ef2befc3c8ec87acaa9787503cfbe4
 LEGACY_MIGRATION_SQL_DIGEST="$(node -e 'process.stdout.write(require(process.argv[1]).sqlSha256)' "$LEGACY_TRANSITION_ROOT/manifest.json")"
 CURRENT_MIGRATION_SQL_DIGEST="$(node -e 'process.stdout.write(require(process.argv[1]).sqlSha256)' "$CURRENT_TRANSITION_ROOT/manifest.json")"
 GROUP_HIERARCHY_MIGRATION_SQL_DIGEST="$(node -e 'process.stdout.write(require(process.argv[1]).sqlSha256)' "$GROUP_HIERARCHY_TRANSITION_ROOT/manifest.json")"
+IAM_CUTOVER_SILO_ID="legacy-silo"
+IAM_CUTOVER_OIDC_ISSUER="https://identity.test.invalid"
 
 # This test reads the current release from its working tree before the tag exists and reads older releases from their tags.
 if [[ "$(jq -r '.version' "$ROOT/package.json")" != "$MIGRATION_RELEASE_VERSION" ]]; then
@@ -146,7 +148,7 @@ assert_concurrent_group_cycle_rejected()
 	local first_status
 	local second_status
 	psql_command "$database" --command \
-		"INSERT INTO \"groups\" (\"id\", \"name\", \"scope\", \"updated_at\") VALUES ('concurrent-a', 'Concurrent A', 'team', clock_timestamp()), ('concurrent-b', 'Concurrent B', 'team', clock_timestamp());" >/dev/null
+		"INSERT INTO \"groups\" (\"id\", \"silo_id\", \"name\", \"membership_authority\", \"updated_at\") VALUES ('concurrent-a', '$IAM_CUTOVER_SILO_ID', 'Concurrent A', 'local', clock_timestamp()), ('concurrent-b', '$IAM_CUTOVER_SILO_ID', 'Concurrent B', 'local', clock_timestamp());" >/dev/null
 	set +e
 	psql_command "$database" --command \
 		"BEGIN; UPDATE \"groups\" SET \"parent_id\" = 'concurrent-b' WHERE \"id\" = 'concurrent-a'; SELECT pg_sleep(1); COMMIT;" \
@@ -216,6 +218,35 @@ psql_command migrated --set "source_baseline_sha256=$PROTECTED_DIGEST" --set "mi
 	--file - <"$CURRENT_TRANSITION_ROOT/migration.sql" >/dev/null
 assert_classifier_state migrated "completed|$PROTECTED_DIGEST"
 
+for database in fresh_source migrated; do
+	psql_command "$database" <<SQL >/dev/null
+INSERT INTO "org_memberships" (
+    "id", "cluster_tenant", "subject", "email", "display_name", "role", "status", "created_at", "updated_at"
+) VALUES (
+    'principal-continuity', '$IAM_CUTOVER_SILO_ID', 'legacy-subject', 'legacy@example.com',
+    'Legacy User', 'member', 'active', '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z'
+);
+INSERT INTO "artifacts" (
+    "id", "silo_id", "owner_principal_id", "kind", "state", "retention_policy", "created_at", "updated_at"
+) VALUES (
+    'artifact-principal-continuity', '$IAM_CUTOVER_SILO_ID', 'legacy-subject', 'upload', 'active',
+    'until_authorized_deletion', '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z'
+);
+INSERT INTO "mcp_servers" (
+    "id", "name", "description", "endpoint", "scope", "transport", "status", "updated_at"
+) VALUES (
+    'mcp-principal-continuity', 'Principal continuity', '', 'https://mcp.test.invalid',
+    'organization', 'streamable-http', 'active', '2026-01-01T00:00:00.000Z'
+);
+INSERT INTO "mcp_server_installs" (
+    "id", "mcp_server_id", "user_id", "connection_status", "created_at", "updated_at"
+) VALUES (
+    'mcp-install-principal-continuity', 'mcp-principal-continuity', 'legacy@example.com',
+    'connected', '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z'
+);
+SQL
+done
+
 clone_database migrated corrupt_migration_id
 psql_command corrupt_migration_id --command \
 	"UPDATE \"opencrane_migrations\".\"schema_history\" SET \"migration_id\" = 'corrupt-legacy-id' WHERE \"schema_version\" = '0.8.0';" >/dev/null
@@ -252,11 +283,11 @@ INSERT INTO "opencrane_migrations"."schema_history" (
 SQL
 assert_classifier_state extra_history_row "incompatible|$PROTECTED_DIGEST"
 
-psql_command fresh_source --set "source_baseline_sha256=$FRESH_PROTECTED_DIGEST" --set "migration_sql_sha256=$GROUP_HIERARCHY_MIGRATION_SQL_DIGEST" \
+psql_command fresh_source --set "source_baseline_sha256=$FRESH_PROTECTED_DIGEST" --set "migration_sql_sha256=$GROUP_HIERARCHY_MIGRATION_SQL_DIGEST" --set "migration_silo_id=$IAM_CUTOVER_SILO_ID" --set "migration_oidc_issuer=$IAM_CUTOVER_OIDC_ISSUER" \
 	--file - <"$GROUP_HIERARCHY_TRANSITION_ROOT/migration.sql" >/dev/null
-psql_command migrated --set "source_baseline_sha256=$PROTECTED_DIGEST" --set "migration_sql_sha256=$GROUP_HIERARCHY_MIGRATION_SQL_DIGEST" \
+psql_command migrated --set "source_baseline_sha256=$PROTECTED_DIGEST" --set "migration_sql_sha256=$GROUP_HIERARCHY_MIGRATION_SQL_DIGEST" --set "migration_silo_id=$IAM_CUTOVER_SILO_ID" --set "migration_oidc_issuer=$IAM_CUTOVER_OIDC_ISSUER" \
 	--file - <"$GROUP_HIERARCHY_TRANSITION_ROOT/migration.sql" >/dev/null
-psql_command migrated --set "source_baseline_sha256=$PROTECTED_DIGEST" --set "migration_sql_sha256=$GROUP_HIERARCHY_MIGRATION_SQL_DIGEST" \
+psql_command migrated --set "source_baseline_sha256=$PROTECTED_DIGEST" --set "migration_sql_sha256=$GROUP_HIERARCHY_MIGRATION_SQL_DIGEST" --set "migration_silo_id=$IAM_CUTOVER_SILO_ID" --set "migration_oidc_issuer=$IAM_CUTOVER_OIDC_ISSUER" \
 	--file - <"$GROUP_HIERARCHY_TRANSITION_ROOT/migration.sql" >/dev/null
 
 psql_command postgres --command 'CREATE DATABASE fresh;' >/dev/null
@@ -310,6 +341,13 @@ SQL
 assert_classifier_state fresh "current|$POSTGRES_BASELINE_SHA256"
 assert_classifier_state fresh_source "completed|$FRESH_PROTECTED_DIGEST"
 assert_classifier_state migrated "completed|$PROTECTED_DIGEST"
+
+for database in fresh_source migrated; do
+	[[ "$(psql_command "$database" --tuples-only --no-align --command \
+		' SELECT count(*) FROM "artifacts" WHERE "id" = '\''artifact-principal-continuity'\'' AND "owner_principal_id" = '\''principal-continuity'\'';')" == "1" ]]
+	[[ "$(psql_command "$database" --tuples-only --no-align --command \
+		' SELECT count(*) FROM "mcp_server_installs" WHERE "id" = '\''mcp-install-principal-continuity'\'' AND "user_id" = '\''principal-continuity'\'';')" == "1" ]]
+done
 
 psql_command migrated --tuples-only --no-align --command \
 	'SELECT count(*) FROM "persona_questions" WHERE "question_set_id" = '\''personal-agent-onboarding'\'' AND "question_set_version" = 1;' \

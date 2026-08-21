@@ -15,13 +15,8 @@ export * from "./artifact-preprocessor.types";
 export * from "./artifact-scanner.types";
 export type * from "@opencrane/models/authorization";
 export * from "./cluster-tenant.types";
-export * from "./grant.types";
-// `GrantScope` and `GrantSubjectType` exist in both the agent models and here, so re-export this
-// package's own versions explicitly; without this line the two names collide.
-export { GrantScope, GrantSubjectType } from "./grant.types";
-export type * from "./group.types";
+export * from "./group.types";
 export * from "./memory.types";
-export * from "./mcp-server.types";
 export * from "./mcp-operator.types";
 export * from "./model-routing.types";
 export * from "./model-routing.validator";

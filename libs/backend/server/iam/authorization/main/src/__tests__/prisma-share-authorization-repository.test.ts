@@ -1,16 +1,40 @@
-import { AuthorizationScopeKind, Prisma, type PrismaClient } from "@prisma/client";
+import { Prisma, type PrismaClient } from "@prisma/client";
+import { AuthorizationBoundaryCoverages, AuthorizationBoundaryKinds, AuthorizationSubjectKinds } from "@opencrane/models/authorization";
 import { describe, expect, it, vi } from "vitest";
 
 import { PrismaShareAuthorizationRepository } from "../prisma-share-authorization-repository";
-import { ShareAuthorizationScopeKinds } from "../share-authorization-repository.types";
+
+/** Persistence-shaped share row used by this adapter's test doubles. */
+interface ShareRowFixture
+{
+	readonly id: string;
+	readonly subjectKind: "Principal";
+	readonly subjectGroupId: string | null;
+	readonly subjectPrincipalId: string | null;
+	readonly boundaryKind: "Personal";
+	readonly boundaryGroupId: string | null;
+	readonly boundaryPrincipalId: string | null;
+	readonly boundaryCoverage: "Exact";
+	readonly resourceKind: string;
+	readonly resourceId: string;
+	readonly priority: number;
+	readonly revokedAt: Date | null;
+	readonly createdBy: string;
+	readonly createdAt: Date;
+}
 
 /** Creates one selected share row plus persistence-only fields for projection assertions. */
-function _shareRow(scopeKind: AuthorizationScopeKind = AuthorizationScopeKind.Personal)
+function _shareRow(): ShareRowFixture
 {
 	return {
 		id: "grant-1",
-		subjectId: "user-2",
-		scopeKind,
+		subjectKind: "Principal" as const,
+		subjectGroupId: null,
+		subjectPrincipalId: "user-2",
+		boundaryKind: "Personal" as const,
+		boundaryGroupId: null,
+		boundaryPrincipalId: "user-1",
+		boundaryCoverage: "Exact" as const,
 		resourceKind: "mcp-server",
 		resourceId: "server-1",
 		priority: 0,
@@ -29,7 +53,7 @@ function _prisma()
 			findFirst: vi.fn(async function _findFirst(): Promise<ReturnType<typeof _shareRow> | null> { return _shareRow(); }),
 			create: vi.fn(async function _create() { return _shareRow(); }),
 			findMany: vi.fn(async function _findMany(): Promise<ReturnType<typeof _shareRow>[]> { return [_shareRow()]; }),
-			deleteMany: vi.fn(async function _deleteMany() { return { count: 1 }; }),
+			updateMany: vi.fn(async function _updateMany() { return { count: 1 }; }),
 		},
 	};
 	return { ...prisma, client: prisma as unknown as PrismaClient };
@@ -66,10 +90,10 @@ describe("PrismaShareAuthorizationRepository", function _suite()
 		await repository.revokeOwnedShare("silo-1", "user-1", "grant-1");
 
 		expect(vi.mocked(prisma.authorizationGrant.findMany)).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ siloId: "silo-1", createdBy: "user-1", catalogId: "opencrane-core", capabilityId: "mcp-server:use", revokedAt: null }) }));
-		expect(vi.mocked(prisma.authorizationGrant.deleteMany)).toHaveBeenCalledWith({ where: { id: "grant-1", siloId: "silo-1", createdBy: "user-1" } });
+		expect(vi.mocked(prisma.authorizationGrant.updateMany)).toHaveBeenCalledWith({ where: { id: "grant-1", siloId: "silo-1", createdBy: "user-1", revokedAt: null }, data: { revokedAt: expect.any(Date) } });
 	});
 
-	it("selects only contract fields and maps the stored Prisma scope into the share domain", async function _projection()
+	it("selects only contract fields and maps the stored Prisma boundary into the share domain", async function _projection()
 	{
 		const prisma = _prisma();
 		const repository = new PrismaShareAuthorizationRepository(prisma.client);
@@ -79,26 +103,31 @@ describe("PrismaShareAuthorizationRepository", function _suite()
 		expect(vi.mocked(prisma.authorizationGrant.findMany)).toHaveBeenCalledWith(expect.objectContaining({
 			select: {
 				id: true,
-				subjectId: true,
-				scopeKind: true,
+				subjectKind: true,
+				subjectGroupId: true,
+				subjectPrincipalId: true,
+				boundaryKind: true,
+				boundaryGroupId: true,
+				boundaryPrincipalId: true,
+				boundaryCoverage: true,
 				resourceKind: true,
 				resourceId: true,
 				createdBy: true,
 				createdAt: true,
 			},
 		}));
-		expect(shares[0]).toMatchObject({ id: "grant-1", scopeKind: ShareAuthorizationScopeKinds.Personal });
+		expect(shares[0]).toMatchObject({ id: "grant-1", subject: { kind: AuthorizationSubjectKinds.Principal, principalId: "user-2" }, boundary: { kind: AuthorizationBoundaryKinds.Personal, principalId: "user-1" }, boundaryCoverage: AuthorizationBoundaryCoverages.Exact });
 		expect(shares[0]).not.toHaveProperty("priority");
 		expect(shares[0]).not.toHaveProperty("revokedAt");
 	});
 
-	it("fails closed when a stored grant uses a scope unsupported by sharing", async function _scope()
+	it("fails closed when a stored grant has inconsistent boundary fields", async function _boundary()
 	{
 		const prisma = _prisma();
-		vi.mocked(prisma.authorizationGrant.findMany).mockResolvedValueOnce([_shareRow(AuthorizationScopeKind.Team)]);
+		vi.mocked(prisma.authorizationGrant.findMany).mockResolvedValueOnce([{ ..._shareRow(), boundaryPrincipalId: null }]);
 		const repository = new PrismaShareAuthorizationRepository(prisma.client);
 
-		await expect(repository.listActiveShares("silo-1", "user-1", "opencrane-core", "mcp-server:use")).rejects.toThrow("authorization grant scope Team is not supported by sharing");
+		await expect(repository.listActiveShares("silo-1", "user-1", "opencrane-core", "mcp-server:use")).rejects.toThrow("share grant grant-1 has inconsistent boundary fields");
 	});
 
 	it("uses the durable authority key, not the sharer, to find an idempotent share", async function _idempotency()
@@ -106,7 +135,7 @@ describe("PrismaShareAuthorizationRepository", function _suite()
 		const prisma = _prisma();
 		const repository = new PrismaShareAuthorizationRepository(prisma.client);
 
-		const result = await repository.createOrFindExactShare({ siloId: "silo-1", subjectId: "user-2", scopeKind: ShareAuthorizationScopeKinds.Personal, organizationId: "silo-1", catalogId: "opencrane-core", catalogRevision: 1, catalogDigest: "sha256:catalog", capabilityId: "mcp-server:use", resourceKind: "mcp-server", resourceId: "server-1", priority: 0, createdBy: "user-1" });
+		const result = await repository.createOrFindExactShare({ siloId: "silo-1", subject: { kind: AuthorizationSubjectKinds.Principal, principalId: "user-2" }, boundary: { kind: AuthorizationBoundaryKinds.Personal, principalId: "user-1" }, boundaryCoverage: AuthorizationBoundaryCoverages.Exact, catalogId: "opencrane-core", catalogRevision: 1, catalogDigest: "sha256:catalog", capabilityId: "mcp-server:use", resourceKind: "mcp-server", resourceId: "server-1", priority: 0, createdByPrincipalId: "user-1" });
 
 		expect(result.created).toBe(false);
 		expect(vi.mocked(prisma.authorizationGrant.findFirst)).toHaveBeenCalledWith(expect.objectContaining({ where: expect.not.objectContaining({ createdBy: expect.anything() }) }));
@@ -119,7 +148,7 @@ describe("PrismaShareAuthorizationRepository", function _suite()
 		vi.mocked(prisma.authorizationGrant.create).mockRejectedValueOnce(new Prisma.PrismaClientKnownRequestError("duplicate authority", { code: "P2002", clientVersion: "6.19.3" }));
 		const repository = new PrismaShareAuthorizationRepository(prisma.client);
 
-		const result = await repository.createOrFindExactShare({ siloId: "silo-1", subjectId: "user-2", scopeKind: ShareAuthorizationScopeKinds.Personal, organizationId: "silo-1", catalogId: "opencrane-core", catalogRevision: 1, catalogDigest: "sha256:catalog", capabilityId: "mcp-server:use", resourceKind: "mcp-server", resourceId: "server-1", priority: 0, createdBy: "user-1" });
+		const result = await repository.createOrFindExactShare({ siloId: "silo-1", subject: { kind: AuthorizationSubjectKinds.Principal, principalId: "user-2" }, boundary: { kind: AuthorizationBoundaryKinds.Personal, principalId: "user-1" }, boundaryCoverage: AuthorizationBoundaryCoverages.Exact, catalogId: "opencrane-core", catalogRevision: 1, catalogDigest: "sha256:catalog", capabilityId: "mcp-server:use", resourceKind: "mcp-server", resourceId: "server-1", priority: 0, createdByPrincipalId: "user-1" });
 
 		expect(result).toMatchObject({ created: false, share: { id: "grant-1" } });
 		expect(vi.mocked(prisma.authorizationGrant.findFirst)).toHaveBeenCalledTimes(2);

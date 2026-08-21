@@ -1,5 +1,5 @@
 import { MessageCardKind, ThreadData } from "../../models/thread.types";
-import { ScopeLevel } from "../../models/scope.types";
+import { ResourceBoundaryKind } from "../../models/boundary.types";
 
 /** Empty-thread fallback when a session has no fixture. */
 export const EMPTY_THREAD: ThreadData =
@@ -51,8 +51,8 @@ export const THREADS: Record<string, ThreadData> =
 
 Want me to draft any of these in full? I'd suggest starting with section 3 since that's where the trade-offs are.`
 					},
-					{ type: MessageCardKind.Observation, id: "R1", scope: ScopeLevel.Dept, label: "ARR target implies 18% QoQ growth", ref: "product-strategy-q3.md" },
-					{ type: MessageCardKind.Policy, id: "P1", scope: ScopeLevel.Org, label: "Resourcing decisions require VP sign-off", ref: "org_policy.v2.1", status: "applied" }
+					{ type: MessageCardKind.Observation, id: "R1", boundaryKind: ResourceBoundaryKind.Group, label: "ARR target implies 18% QoQ growth", ref: "product-strategy-q3.md" },
+					{ type: MessageCardKind.Policy, id: "P1", boundaryKind: ResourceBoundaryKind.Group, label: "Resourcing decisions require VP sign-off", ref: "org_policy.v2.1", status: "applied" }
 				]
 			},
 			{
@@ -74,7 +74,7 @@ Want me to draft any of these in full? I'd suggest starting with section 3 since
 
 I've also flagged Enterprise Pilot as at-risk because it depends on Data Export hitting Aug 30. If that slips, the pilot timeline collapses. Worth surfacing to the VP now rather than in the Sep 15 review.`
 					},
-					{ type: MessageCardKind.Action, id: "A1", scope: ScopeLevel.Personal, label: "Initiatives table drafted in canvas", ref: "q3-strategy.canvas", status: "done" }
+					{ type: MessageCardKind.Action, id: "A1", boundaryKind: ResourceBoundaryKind.Personal, label: "Initiatives table drafted in canvas", ref: "q3-strategy.canvas", status: "done" }
 				]
 			}
 		]
@@ -235,7 +235,7 @@ Split the 12 interviews explicitly into power/casual before theming further — 
 						imageAlt: "Team collaborating around a glowing screen showing data visualisation",
 						imagePrompt: "Direction B2 — Human-scale network. Team gathered around a warm screen, data visible but not overwhelming, natural expressions. Feels like a tool in daily use."
 					},
-					{ type: MessageCardKind.Action, id: "A1", scope: ScopeLevel.Personal, label: "4 hero concepts saved to brand canvas", ref: "brand-refresh.canvas", status: "done" }
+					{ type: MessageCardKind.Action, id: "A1", boundaryKind: ResourceBoundaryKind.Personal, label: "4 hero concepts saved to brand canvas", ref: "brand-refresh.canvas", status: "done" }
 				]
 			}
 		]

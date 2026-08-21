@@ -145,6 +145,10 @@ convergence:
 # server and completing a CNPG recovery backup.
 migration:
   enabled: false
+  # Reviewed identity coordinates used only by migrations that convert legacy globally named
+  # groups and OIDC subjects into silo-bound principals and memberships.
+  siloId: ""
+  oidcIssuer: ""
   # Required when enabled. Use an exact OCI digest, for example
   # ghcr.io/cloudnative-pg/postgresql@sha256:<64 lowercase hex characters>.
   image: ghcr.io/cloudnative-pg/postgresql@sha256:b1deeed2aa998b2f381e39c5cadb9ec06127708c8bd62965743af19abf21628f

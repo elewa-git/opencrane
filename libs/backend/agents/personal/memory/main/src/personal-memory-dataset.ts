@@ -4,7 +4,7 @@ import type { PersonalMemoryAdmissionRepository, ResolvePersonalMemoryDatasetCom
 /**
  * Finds a user's personal memory dataset from their verified identity.
  *
- * A caller can never name the dataset: it is selected from the silo, organization and subject
+ * A caller can never name the dataset: it is selected from the silo and stable local Principal
  * only. Incomplete identity is rejected before any query runs, so a partly-blank command
  * cannot widen the lookup, and a row with a blank id is refused rather than passed on, so no
  * invalid dataset id reaches the memory gateway later.
@@ -25,7 +25,7 @@ export async function __ResolvePersonalMemoryDataset(repository: PersonalMemoryA
 	// 1. Reject incomplete identity first, so a lookup cannot match a wider set of datasets.
 	if (!_IsValidPersonalMemoryDatasetCommand(command)) return _MemoryScopeUnavailable();
 
-	// 2. Look up only the active dataset for this verified silo, organization, and subject.
+	// 2. Look up only the active dataset for this verified silo and Principal boundary.
 	const dataset = await repository.findActivePersonalDataset(command);
 	if (dataset === null) return _MemoryScopeUnavailable();
 
@@ -40,8 +40,8 @@ function _MemoryScopeUnavailable(): ResolvePersonalMemoryDatasetResult
 	return { outcome: PersonalMemoryDatasetResolutionOutcomes.Denied, reason: PersonalMemoryDatasetResolutionDenialReasons.MemoryScopeUnavailable };
 }
 
-/** Returns whether the silo, organization, and subject ids are all present. */
+/** Returns whether the verified silo, Principal, and provenance subject ids are all present. */
 function _IsValidPersonalMemoryDatasetCommand(command: ResolvePersonalMemoryDatasetCommand): boolean
 {
-	return command.siloId.trim().length > 0 && command.organizationId.trim().length > 0 && command.subjectId.trim().length > 0;
+	return command.siloId.trim().length > 0 && command.principalId.trim().length > 0 && command.subjectId.trim().length > 0;
 }

@@ -1,21 +1,43 @@
 /**
- * Who is calling one of the user-facing MCP endpoints, and what they are allowed to see.
+ * Local identity used for MCP authorization decisions.
  *
- * Built by `_ResolveCaller` in ../routes/mcp-operator.ts, then read by `listEntitledCatalog` and
- * `_IsEntitled` in ./mcp-operator.logic.ts to decide which catalogue servers come back.
- *
- * `_ResolveCaller` sets `devOpen: false` on BOTH of its branches today — for an established
- * session and for an unauthenticated request alike — so entitlement filtering always runs and an
- * unauthenticated caller sees nothing. The field is still read: `_IsEntitled` returns true for
- * every published server when it is set, so anything that ever starts producing `devOpen: true`
- * opens the entire published catalogue to that caller.
+ * The router resolves this identity from the authenticated OIDC issuer and subject plus the
+ * trusted silo. It never copies OIDC group claims into the decision input.
  */
 export interface McpOperatorCaller
 {
-  /** Stable caller id: the session's `sub`, else its `email`, else the literal `"unknown"`. */
-  userId: string;
-  /** IdP-verified group claims used for group-based entitlement. */
-  groups: string[];
-  /** When true, entitlement filtering is skipped and every published server is visible. Nothing in this repo sets it to true today. */
-  devOpen: boolean;
+  /** Stable local Principal identifier used by grant subjects and personal boundaries. */
+  principalId: string;
+  /** Silo derived from the trusted request host. */
+  siloId: string;
+}
+
+/** Validated command that installs one catalogue server for the caller. */
+export interface McpInstallCommand
+{
+  /** Stable catalogue server identifier. */
+  serverId: string;
+}
+
+/** Validated write-only credential payload accepted by the custody transition. */
+export interface McpCredentialCommand
+{
+  /** Non-empty credential fields; values must never be logged, returned, or stored in product Postgres. */
+  values: Record<string, string>;
+}
+
+/** Validated command that changes whether one server is published. */
+export interface McpEnabledCommand
+{
+  /** True publishes the server; false disables it. */
+  enabled: boolean;
+}
+
+/** Validated command that replaces the MCP access-editor grant set. */
+export interface McpAccessPolicyCommand
+{
+  /** Stable local Group identifiers that receive group-subject grants. */
+  groupIds: string[];
+  /** Stable local Principal identifiers that receive principal-subject grants. */
+  principalIds: string[];
 }

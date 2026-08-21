@@ -27,8 +27,9 @@ function _snapshot(runId: string, serviceId: string, revisionId: string, convers
 		budgetPolicy: { maxTokens: 1_000, maxCostUsdMicros: 5_000_000 },
 		identitySnapshot: {
 			kind: RunInputSnapshotIdentityKinds.User,
+			executionIssuer: "https://issuer.test",
 			executionSubjectId: "user-1",
-			organizationId: "org-1",
+			principalId: "principal-1",
 			fleetMembershipRevision: 1,
 			fleetMembershipIssuer: "issuer",
 			fleetMembershipIssuerKeyId: "key",

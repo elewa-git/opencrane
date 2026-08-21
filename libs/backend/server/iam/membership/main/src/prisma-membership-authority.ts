@@ -1,35 +1,20 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 
-import type { AuthorizationScope, FleetMembershipAssertion, SignedFleetMembershipRevision } from "@opencrane/models/authorization";
+import type { FleetMembershipAssertion, SignedFleetMembershipRevision } from "@opencrane/models/authorization";
 import type { JsonValue } from "@opencrane/util";
 
 import { __AppendAuditDecision } from "@opencrane/backend/server/iam/audit";
 import { __DigestCanonicalJson } from "@opencrane/backend/server/iam/authorization";
 import type { FleetMembershipAcceptance, FleetMembershipAcceptanceResult, FleetMembershipAuthorityRepository } from "./membership-authority.types";
 
-/** Maps one verified assertion row to an independent authorization scope. */
-function _scope(kind: string, organizationId: string, resourceId: string | null): AuthorizationScope
-{
-	switch (kind)
-	{
-		case "Organization": return { kind: "organization", organizationId };
-		case "Department": return { kind: "department", organizationId, departmentId: resourceId ?? "" };
-		case "Team": return { kind: "team", organizationId, teamId: resourceId ?? "" };
-		case "Project": return { kind: "project", organizationId, projectId: resourceId ?? "" };
-		case "Personal": return { kind: "personal", organizationId, userId: resourceId ?? "" };
-		case "DirectUser": return { kind: "direct-user", organizationId, userId: resourceId ?? "" };
-		default: throw new Error(`unknown fleet membership scope: ${kind}`);
-	}
-}
-
 /** Maps one verified assertion row to the signed target contract. */
-function _assertion(row: { assertionId: string; siloId: string; subjectId: string; scopeKind: string; organizationId: string; scopeResourceId: string | null }): FleetMembershipAssertion
+function _assertion(row: { assertionId: string; siloId: string; subjectId: string }): FleetMembershipAssertion
 {
-	return { assertionId: row.assertionId, siloId: row.siloId, subjectId: row.subjectId, scope: _scope(row.scopeKind, row.organizationId, row.scopeResourceId) };
+	return { assertionId: row.assertionId, siloId: row.siloId, subjectId: row.subjectId };
 }
 
 /** Converts one stored revision row and its assertion rows into the signed-revision type. */
-function _revision(row: { revision: number; issuerId: string; issuerKeyId: string; siloId: string; issuedAt: Date; expiresAt: Date; payloadDigest: string; signature: string; assertions: Array<{ assertionId: string; siloId: string; subjectId: string; scopeKind: string; organizationId: string; scopeResourceId: string | null }> }): SignedFleetMembershipRevision
+function _revision(row: { revision: number; issuerId: string; issuerKeyId: string; siloId: string; issuedAt: Date; expiresAt: Date; payloadDigest: string; signature: string; assertions: Array<{ assertionId: string; siloId: string; subjectId: string }> }): SignedFleetMembershipRevision
 {
 	return {
 		revision: row.revision,

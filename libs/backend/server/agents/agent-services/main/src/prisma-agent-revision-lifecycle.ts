@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+
 import { AgentServiceKind, AgentServiceState, Prisma, type PrismaClient } from "@prisma/client";
 
 import type { AgentService } from "@opencrane/models/agents";
@@ -6,6 +8,7 @@ import type { AgentRevisionLifecycleRepository, AgentServiceHistory, AgentServic
 
 import { _mapRevision, _mapRun, _mapService, _serviceState } from "./prisma-agent-mappers";
 import { _AGENT_REVISION_INCLUDE, _AgentRevisionContentFromRow, PrismaAgentRevisionWriterRepository } from "./prisma-agent-revision-writer";
+import { __CreateManagedAgentServicePrincipalRepository } from "./prisma-managed-agent-service-principal.factory";
 
 /** Maps a lifecycle action to its target Prisma service state. */
 function _targetServiceState(action: AgentServiceLifecycleAction): AgentServiceState
@@ -80,7 +83,9 @@ export class PrismaAgentRevisionLifecycleRepository implements AgentRevisionLife
 		return this.prisma.$transaction(async function _create(transaction: Prisma.TransactionClient): Promise<CreateManagedAgentServiceResult>
 		{
 			if (!await _isModelDefinitionAvailable(transaction, command.content.modelDefinitionId, command.siloId)) return { outcome: "denied", reason: "model_definition_unavailable" };
-			const serviceRow = await transaction.agentService.create({ data: { siloId: command.siloId, kind: AgentServiceKind.Managed, name: command.name, state: AgentServiceState.Draft, workloadProfile: command.workloadProfile, createdAt: createdAtDate, updatedAt: createdAtDate } });
+			const agentServiceId = randomUUID();
+			const principalId = await __CreateManagedAgentServicePrincipalRepository(transaction).create(command.siloId, agentServiceId, command.name, createdAtDate);
+			const serviceRow = await transaction.agentService.create({ data: { id: agentServiceId, siloId: command.siloId, kind: AgentServiceKind.Managed, name: command.name, state: AgentServiceState.Draft, workloadProfile: command.workloadProfile, principalId, createdAt: createdAtDate, updatedAt: createdAtDate } });
 			const revisionRow = await new PrismaAgentRevisionWriterRepository(transaction).createDraft({
 				siloId: command.siloId,
 				agentServiceId: serviceRow.id,

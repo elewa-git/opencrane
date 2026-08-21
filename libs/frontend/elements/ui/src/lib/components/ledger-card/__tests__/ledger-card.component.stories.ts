@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/angular";
 
-import { ScopeLevel } from "@opencrane/core";
+import { ResourceBoundaryKind } from "@opencrane/core";
 import { LedgerCardComponent } from "../ledger-card.component";
 import { LedgerCardKinds } from "../ledger-card.types";
 
@@ -16,7 +16,7 @@ const meta: Meta<LedgerCardComponent> =
 		{
 			description:
 			{
-				component: "A presentational record of a supplied observation, policy, or action. It preserves the provenance and scope a feature gives it, but never infers or changes that record's authority."
+				component: "A presentational record of a supplied observation, policy, or action. It preserves the provenance and boundary kind a feature gives it, but never infers or changes that record's authority."
 			}
 		}
 	}
@@ -28,19 +28,19 @@ export default meta;
 type Story = StoryObj<LedgerCardComponent>;
 
 /** Observation, policy, and action states with representative metadata. */
-export const KindsAndScopes: Story =
+export const KindsAndBoundaries: Story =
 {
-	parameters: { docs: { description: { story: "Observation, policy, and action cards shown with distinct owner-supplied scopes. This is the comparison fixture for semantic labels, references, and compact ledger density." } } },
+	parameters: { docs: { description: { story: "Observation, policy, and action cards shown with owner-supplied boundary kinds. This is the comparison fixture for semantic labels, references, and compact ledger density." } } },
 	tags: ["visual-test"],
 	render: function render()
 	{
 		return {
-			props: { kinds: LedgerCardKinds, scopes: ScopeLevel },
+			props: { kinds: LedgerCardKinds, boundaries: ResourceBoundaryKind },
 			template: `
 				<div style="display:grid;gap:var(--oc-space-2);max-width:38rem;padding:var(--oc-space-6);background:var(--oc-surface-paper)">
-					<wo-ledger-card entryId="R1" [kind]="kinds.Observation" label="ARR target implies 18% quarter-on-quarter growth" [scope]="scopes.Department" entryRef="product-strategy-q3.md" />
-					<wo-ledger-card entryId="P1" [kind]="kinds.Policy" label="Resourcing decisions require VP sign-off" [scope]="scopes.Organization" entryRef="org-policy.v2.1" status="applied" />
-					<wo-ledger-card entryId="A1" [kind]="kinds.Action" label="Recommendation note prepared" [scope]="scopes.Personal" entryRef="decision-note.md" status="done" />
+					<wo-ledger-card entryId="R1" [kind]="kinds.Observation" label="ARR target implies 18% quarter-on-quarter growth" [boundaryKind]="boundaries.Group" entryRef="product-strategy-q3.md" />
+					<wo-ledger-card entryId="P1" [kind]="kinds.Policy" label="Resourcing decisions require VP sign-off" [boundaryKind]="boundaries.Group" entryRef="company-policy.v2.1" status="applied" />
+					<wo-ledger-card entryId="A1" [kind]="kinds.Action" label="Recommendation note prepared" [boundaryKind]="boundaries.Personal" entryRef="decision-note.md" status="done" />
 				</div>
 			`
 		};
@@ -57,7 +57,7 @@ export const Resolved: Story =
 		entryId: "A2",
 		kind: LedgerCardKinds.Action,
 		label: "Decision note shared with the project owner",
-		scope: ScopeLevel.Project,
+		boundaryKind: ResourceBoundaryKind.Group,
 		entryRef: "decision-note.md",
 		status: "resolved",
 		dimmed: true

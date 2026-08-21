@@ -117,6 +117,8 @@ export TEST_POSTGRES_ARGS
   DATABASE_SELECTED_PROTECTED_BASELINE_SHA256=eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
   DATABASE_PREVIOUS_MIGRATION_SQL_SHA256=cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
   POSTGRES_MIGRATION_IMAGE=postgres@example.invalid
+  DATABASE_MIGRATION_SILO_ID=acme
+  OIDC_ISSUER_URL=https://identity.example.test
   DATABASE_MIGRATION_CONFIG_MAP=migration
   POSTGRES_KUBERNETES_API_ARGS=(--set-string networkPolicy.kubernetesApiServerCidrs[0]=10.0.0.1/32)
   POSTGRES_VALUES_FILE=
@@ -130,6 +132,8 @@ grep -Fxq -- '--timeout' "$TEST_POSTGRES_ARGS"
 grep -Fxq -- '97s' "$TEST_POSTGRES_ARGS"
 grep -Fxq -- 'migration.timeoutSeconds=37' "$TEST_POSTGRES_ARGS"
 grep -Fxq -- 'migration.jobDeadlineGraceSeconds=30' "$TEST_POSTGRES_ARGS"
+grep -Fxq -- 'migration.siloId=acme' "$TEST_POSTGRES_ARGS"
+grep -Fxq -- 'migration.oidcIssuer=https://identity.example.test' "$TEST_POSTGRES_ARGS"
 grep -Fxq -- 'privileges.timeoutSeconds=37' "$TEST_POSTGRES_ARGS"
 grep -Fxq -- 'privileges.jobDeadlineGraceSeconds=30' "$TEST_POSTGRES_ARGS"
 grep -Fxq -- 'convergence.previousMigration.sourceTargetBaselineSha256=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' "$TEST_POSTGRES_ARGS"
@@ -181,6 +185,20 @@ rm -f "$TEST_CURRENT_HISTORY_SENTINEL"
   run_database_release_transition
 )
 grep -Fxq "false true $LIVE_ORIGIN" "$TEST_CURRENT_HISTORY_SENTINEL"
+
+if (
+  source "$RECOVERY"
+  source "$ORCHESTRATOR"
+  POSTGRES_CLUSTER_EXISTS=1
+  DATABASE_TRANSITION_KIND=migration
+  DATABASE_MIGRATION_SILO_ID=
+  OIDC_ISSUER_URL=https://identity.example.test
+  err() { :; }
+  run_database_release_transition
+); then
+  echo "database migration accepted a missing exact ClusterTenant" >&2
+  exit 1
+fi
 
 if (
   source "$RECOVERY"

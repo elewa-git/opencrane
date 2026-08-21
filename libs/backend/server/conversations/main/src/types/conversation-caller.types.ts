@@ -16,4 +16,6 @@ export interface ConversationCaller
 	readonly siloId: string;
 	/** The user's OIDC `sub`, already verified by the session layer; matched against conversation participant rows. */
 	readonly subjectId: string;
+	/** Verified OIDC issuer that namespaces the subject for Principal resolution. */
+	readonly issuer: string;
 }

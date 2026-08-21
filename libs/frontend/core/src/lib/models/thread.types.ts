@@ -1,4 +1,4 @@
-import { ScopeLevel } from "./scope.types";
+import { ResourceBoundaryKind } from "./boundary.types";
 
 /** Kinds of cards an assistant message can contain. */
 export enum MessageCardKind
@@ -34,8 +34,8 @@ export interface MessageCard
 	content?: string;
 	/** Ledger entry id (e.g. "R1", "P1", "A1"). */
 	id?: string;
-	/** Knowledge scope of the ledger entry. */
-	scope?: ScopeLevel;
+	/** Resource boundary kind of the ledger entry. */
+	boundaryKind?: ResourceBoundaryKind;
 	/** Ledger entry label. */
 	label?: string;
 	/** Source reference (file, policy id, canvas). */

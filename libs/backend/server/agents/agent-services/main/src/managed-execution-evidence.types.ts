@@ -38,14 +38,14 @@ export interface ManagedExecutionEvidenceTransaction
  */
 export interface ManagedExecutionEvidence
 {
-	/** The agent's own identity for this run: its `agent-service:<id>` principal, its organisation, the signed fleet-membership evidence, and the scope attachments that survived the grant check. Never the human who triggered the run. */
+	/** The agent's own identity for this run: its `agent-service:<id>` principal, signed fleet-membership evidence, and boundary attachments that survived the grant check. Never the human who triggered the run. */
 	readonly identity: ServiceRunInputSnapshotIdentity;
 	/**
 	 * One SHA-256 hash fingerprinting everything this run is allowed to do.
 	 *
 	 * It is computed over the silo, the service, the revision id and the revision's own content digest,
-	 * the agent's principal, its organisation, the fleet-membership revision and payload digest, the
-	 * scope attachments that survived the grant check, the model definition, the budget ceilings, the
+	 * the agent's principal and silo, the fleet-membership revision and payload digest, the
+	 * boundary attachments that survived the grant check, the model definition, the budget ceilings, the
 	 * assigned skill revisions, and each integration's custody reference plus its reviewed tool
 	 * definitions. Anything that widens what the agent can reach is inside; nothing about the human who
 	 * pressed the button is.
@@ -71,7 +71,7 @@ export interface ManagedExecutionEvidence
  *   named is not its published active revision. The service's active revision has probably moved;
  *   re-read it.
  * - `membership_stale`: the agent principal has no signed fleet membership in the trusted issuer's
- *   newest revision, has assertions spanning more than one organisation, or the newest signature is
+ *   newest revision, has ambiguous assertions for this silo, or the newest signature is
  *   older than `maximumStalenessMs`. Transient — retry after the issuer republishes.
  * - `memory_scope_unavailable`: the revision declares a `personal` scope (never allowed for a managed
  *   service), or declares a scope the agent's principal does not actually hold. Fix the revision or
@@ -89,7 +89,7 @@ export type ManagedExecutionEvidenceResult =
  *
  * Run-input assembly lives in another package but must not re-implement these rules, so it calls in
  * here. One call re-reads the service and its published active revision, verifies the agent's signed
- * fleet membership, intersects the revision's declared scope attachments against the grants actually
+ * fleet membership, intersects the revision's declared boundary attachments against the grants actually
  * held, and hashes the result into a capability digest. It fails closed: any missing or stale piece
  * returns a denial rather than a partial answer.
  *

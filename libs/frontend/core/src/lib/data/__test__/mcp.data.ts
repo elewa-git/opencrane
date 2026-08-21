@@ -1,4 +1,4 @@
-import { McpAccessPolicy, McpApprovalStatus, McpConnectionStatus, McpDirectory, McpEntitledUser, McpInstalledServer, McpServer, McpServerType } from "../../models/mcp.types";
+import { McpAccessPolicy, McpApprovalStatus, McpConnectionStatus, McpDirectory, McpEntitledGroup, McpEntitledUser, McpInstalledServer, McpServer, McpServerType } from "../../models/mcp.types";
 
 /**
  * Mock MCP catalogue backing the dev/default {@link McpServer} reads until the
@@ -141,23 +141,32 @@ const _USERS: Record<string, McpEntitledUser> =
 	dana: { id: "dana", name: "Dana Okonkwo", initials: "DA" }
 };
 
+/** Stable local groups available to the mock authorization editor. */
+const _GROUPS: Record<string, McpEntitledGroup> = {
+	engineering: { id: "group-engineering", name: "Engineering" },
+	product: { id: "group-product", name: "Product" },
+	finance: { id: "group-finance", name: "Finance" },
+	data: { id: "group-data", name: "Data" },
+	marketing: { id: "group-marketing", name: "Marketing" }
+};
+
 /** Assignable users + groups for the access-policy editor (mock). */
 export const MCP_DIRECTORY: McpDirectory =
 {
 	users: Object.values(_USERS),
-	groups: ["Engineering", "Product", "Finance", "Data", "Marketing"]
+	groups: Object.values(_GROUPS)
 };
 
 /** Mock access policies keyed by server id (admin access-policy editor). */
 export const MCP_ACCESS_POLICIES: Record<string, McpAccessPolicy> =
 {
-	github: { serverId: "github", everyoneInOrg: true, groups: ["Engineering", "Product"], users: [_USERS["jente"], _USERS["maya"], _USERS["tom"]] },
-	notion: { serverId: "notion", everyoneInOrg: false, groups: ["Product", "Engineering"], users: [_USERS["maya"]] },
-	slack: { serverId: "slack", everyoneInOrg: true, groups: [], users: [] },
-	stripe: { serverId: "stripe", everyoneInOrg: false, groups: ["Finance"], users: [_USERS["dana"]] },
-	"postgres-prod": { serverId: "postgres-prod", everyoneInOrg: false, groups: ["Data"], users: [_USERS["tom"], _USERS["maya"]] },
-	"google-drive": { serverId: "google-drive", everyoneInOrg: true, groups: [], users: [] },
-	linear: { serverId: "linear", everyoneInOrg: false, groups: [], users: [] },
-	figma: { serverId: "figma", everyoneInOrg: false, groups: [], users: [] },
-	sentry: { serverId: "sentry", everyoneInOrg: false, groups: ["Engineering"], users: [] }
+	github: { serverId: "github", groups: [_GROUPS["engineering"], _GROUPS["product"]], users: [_USERS["jente"], _USERS["maya"], _USERS["tom"]] },
+	notion: { serverId: "notion", groups: [_GROUPS["product"], _GROUPS["engineering"]], users: [_USERS["maya"]] },
+	slack: { serverId: "slack", groups: [], users: [] },
+	stripe: { serverId: "stripe", groups: [_GROUPS["finance"]], users: [_USERS["dana"]] },
+	"postgres-prod": { serverId: "postgres-prod", groups: [_GROUPS["data"]], users: [_USERS["tom"], _USERS["maya"]] },
+	"google-drive": { serverId: "google-drive", groups: [], users: [] },
+	linear: { serverId: "linear", groups: [], users: [] },
+	figma: { serverId: "figma", groups: [], users: [] },
+	sentry: { serverId: "sentry", groups: [_GROUPS["engineering"]], users: [] }
 };

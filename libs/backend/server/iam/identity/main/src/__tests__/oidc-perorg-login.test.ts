@@ -32,7 +32,7 @@ vi.mock("openid-client", function _mockClient()
     async authorizationCodeGrant(config: { clientId: string })
     {
       _grantClientId = config.clientId;
-      return { claims() { return { sub: "user-1", email: "u@acme.io", email_verified: true }; }, access_token: undefined, id_token: "id-tok" };
+      return { claims() { return { sub: "user-1", email: "u@acme.io", email_verified: true, exp: Math.floor(Date.now() / 1000) + 3600 }; }, access_token: undefined, id_token: "id-tok" };
     },
     async fetchUserInfo(_config: unknown, _accessToken: string, sub: string)
     {
@@ -73,7 +73,17 @@ function _reqOnHost(host: string): Request
 /** Minimal Prisma stub — per-org login no longer reads Prisma (it reads the CR via customApi). */
 function _prismaStub(): PrismaClient
 {
-  return { orgMembership: { findMany: vi.fn().mockResolvedValue([]) } } as unknown as PrismaClient;
+  const prisma = {
+    $transaction: vi.fn(async function _Transaction(callback: (transaction: unknown) => Promise<unknown>) { return callback(prisma); }),
+    orgMembership: { findMany: vi.fn().mockResolvedValue([]) },
+    principal: {
+      upsert: vi.fn().mockResolvedValue({ id: "principal-1" }),
+      findUnique: vi.fn().mockResolvedValue({ id: "principal-1", siloId: "acme" }),
+    },
+    group: { findMany: vi.fn().mockResolvedValue([]) },
+    groupMembership: { deleteMany: vi.fn().mockResolvedValue({ count: 0 }), createMany: vi.fn().mockResolvedValue({ count: 0 }) },
+  };
+  return prisma as unknown as PrismaClient;
 }
 
 /** Prisma stub that persists the exact one-time owner claim made by a standalone callback. */
@@ -82,7 +92,9 @@ function _standaloneAdmissionPrisma(existingOwner: { subject: string; role: OrgR
   const created: Array<{ clusterTenant: string; subject: string }> = [];
   const prisma = {
     $transaction: vi.fn(async function _transaction(callback: (transaction: unknown) => Promise<unknown>) { return callback(prisma); }),
+    principal: { upsert: vi.fn().mockResolvedValue({ id: "principal-1" }) },
     group: { findMany: vi.fn().mockResolvedValue([]) },
+    groupMembership: { deleteMany: vi.fn().mockResolvedValue({ count: 0 }), createMany: vi.fn().mockResolvedValue({ count: 0 }) },
     orgMembership: {
       findMany: vi.fn().mockResolvedValue([]),
       findUnique: vi.fn().mockResolvedValue(null),
@@ -170,23 +182,20 @@ describe("OidcAuthService.buildLoginUrl — per-org client resolution (S3b)", fu
     expect((req.session as { oidcFlow?: { clientId?: string } }).oidcFlow?.clientId).toBeUndefined();
   });
 
-  it("falls through to the masters client for an unprovisioned org host (fail-closed)", async function _unprovisioned()
+  it("rejects an unprovisioned org host instead of falling through to masters", async function _unprovisioned()
   {
     // The CR exists but has no client_id yet (mid-provisioning / unconfigured Zitadel).
     const api = _apiWithCr("acme", { clientId: null, orgId: null });
     const service = ___CreateOidcAuthService(pino({ enabled: false }), _prismaStub(), api);
     const req = _reqOnHost("acme.dev.opencrane.ai");
 
-    const url = await service.buildLoginUrl(req, "/");
-
-    expect(_discoveryCalls).toEqual([{ clientId: "cid" }]);
-    expect(url).toContain("client=cid");
-    expect(_lastAuthParams.scope).toBe("openid email profile");
+    await expect(service.buildLoginUrl(req, "/")).rejects.toThrow("provisioned tenant client");
+    expect(_discoveryCalls).toEqual([]);
   });
 });
 
 /** A callback Request carrying an in-flight oidcFlow (with optional per-org clientId). */
-function _callbackReq(flowClientId: string | undefined): Request
+function _callbackReq(flowClientId: string | undefined, host = "acme.dev.opencrane.ai"): Request
 {
   const session: Record<string, unknown> = {
     oidcFlow: { codeVerifier: "verifier", state: "state", nonce: "nonce", returnTo: "/", ...(flowClientId ? { clientId: flowClientId } : {}) },
@@ -194,7 +203,7 @@ function _callbackReq(flowClientId: string | undefined): Request
     save(cb: (err?: Error) => void) { cb(); },
     destroy(cb: (err?: Error) => void) { cb(); },
   };
-  return { headers: { "x-forwarded-host": "acme.dev.opencrane.ai" }, originalUrl: "/api/v1/auth/callback?code=c&state=state", protocol: "https", session } as unknown as Request;
+  return { headers: { "x-forwarded-host": host }, originalUrl: "/api/v1/auth/callback?code=c&state=state", protocol: "https", session } as unknown as Request;
 }
 
 describe("OidcAuthService.completeLogin — token exchange uses the per-org client (S3b)", function _completeSuite()
@@ -204,7 +213,7 @@ describe("OidcAuthService.completeLogin — token exchange uses the per-org clie
 
   it("exchanges the code against the per-org client recorded at buildLoginUrl", async function _perOrgExchange()
   {
-    const service = ___CreateOidcAuthService(pino({ enabled: false }), _prismaStub());
+    const service = ___CreateOidcAuthService(pino({ enabled: false }), _prismaStub(), _apiWithCr("acme", { clientId: "client-acme", orgId: "org-acme" }));
 
     await service.completeLogin(_callbackReq("client-acme"));
 
@@ -217,7 +226,7 @@ describe("OidcAuthService.completeLogin — token exchange uses the per-org clie
   {
     const service = ___CreateOidcAuthService(pino({ enabled: false }), _prismaStub());
 
-    await service.completeLogin(_callbackReq(undefined));
+    await service.completeLogin(_callbackReq(undefined, "platform.dev.opencrane.ai"));
 
     expect(_grantClientId).toBe("cid");
   });

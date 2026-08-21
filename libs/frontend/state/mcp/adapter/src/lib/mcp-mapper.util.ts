@@ -1,4 +1,4 @@
-import { McpAccessPolicy, McpApprovalStatus, McpConnectionStatus, McpCredentialField, McpDirectory, McpEntitledUser, McpInstalledServer, McpServer, McpServerType } from "@opencrane/core";
+import { McpAccessPolicy, McpApprovalStatus, McpConnectionStatus, McpCredentialField, McpDirectory, McpEntitledGroup, McpEntitledUser, McpInstalledServer, McpServer, McpServerType } from "@opencrane/core";
 
 /**
  * Wire shapes + mappers for the live OpenCrane MCP gateway.
@@ -50,10 +50,8 @@ export interface McpAccessPolicyWire
 {
 	/** Server id. */
 	serverId: string;
-	/** Org-wide grant flag. */
-	everyoneInOrg?: boolean;
 	/** Entitled groups. */
-	groups?: string[];
+	groups?: McpEntitledGroup[];
 	/** Entitled users. */
 	users?: McpEntitledUser[];
 }
@@ -111,14 +109,13 @@ export function _MapAccessPolicy(wire: McpAccessPolicyWire): McpAccessPolicy
 {
 	return {
 		serverId: wire.serverId,
-		everyoneInOrg: wire.everyoneInOrg ?? false,
 		groups: wire.groups ?? [],
 		users: wire.users ?? []
 	};
 }
 
 /** Map a wire directory onto the {@link McpDirectory} read model. */
-export function _MapDirectory(wire: { users?: McpEntitledUser[]; groups?: string[] }): McpDirectory
+export function _MapDirectory(wire: { users?: McpEntitledUser[]; groups?: McpEntitledGroup[] }): McpDirectory
 {
 	return { users: wire.users ?? [], groups: wire.groups ?? [] };
 }

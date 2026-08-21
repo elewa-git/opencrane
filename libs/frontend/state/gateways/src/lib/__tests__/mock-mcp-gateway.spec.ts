@@ -144,15 +144,13 @@ describe("MockMcpGateway", () =>
 		const gateway = new MockMcpGateway();
 
 		const before = await gateway.getAccessPolicy("github");
-		expect(before.everyoneInOrg).toBe(true);
+		expect(before.groups).toContainEqual({ id: "group-engineering", name: "Engineering" });
 
-		const saved = await gateway.updateAccessPolicy("github", { ...before, everyoneInOrg: false, groups: ["Engineering"] });
-		expect(saved.everyoneInOrg).toBe(false);
-		expect(saved.groups).toEqual(["Engineering"]);
+		const saved = await gateway.updateAccessPolicy("github", { ...before, groups: [{ id: "group-engineering", name: "Engineering" }] });
+		expect(saved.groups).toEqual([{ id: "group-engineering", name: "Engineering" }]);
 
 		const reread = await gateway.getAccessPolicy("github");
-		expect(reread.everyoneInOrg).toBe(false);
-		expect(reread.groups).toEqual(["Engineering"]);
+		expect(reread.groups).toEqual([{ id: "group-engineering", name: "Engineering" }]);
 	});
 
 	it("lists directory candidates for the access-policy editor", async () =>
@@ -161,6 +159,6 @@ describe("MockMcpGateway", () =>
 		const directory = await gateway.getDirectory();
 
 		expect(directory.users.length).toBeGreaterThan(0);
-		expect(directory.groups).toContain("Engineering");
+		expect(directory.groups).toContainEqual({ id: "group-engineering", name: "Engineering" });
 	});
 });

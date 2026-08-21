@@ -3,9 +3,8 @@
  *
  * These shapes back the `/api/v1/mcp/*` API the WeOwnAI frontend targets: the
  * entitlement-scoped catalogue, per-user installs / credential connect, and the
- * org-admin governance + access-policy endpoints. They sit ON TOP of the existing
- * `/mcp-servers` admin registry (whose source-of-truth shape is {@link McpServer}
- * in `mcp-server.types.ts`) rather than replacing it.
+ * org-admin governance + access-policy endpoints. This is the sole public MCP contract; there is
+ * no parallel unsiloed registry or credential-inventory API.
  *
  * Custody contract: NO type here ever carries credential material. A connected
  * install reports only its {@link McpConnectionStatus}; the secret lives in the
@@ -94,8 +93,7 @@ export interface CredentialField
 }
 
 /**
- * A catalogue server as exposed by the operator API (distinct from the registry
- * {@link McpServer}). Every field beyond `id` is optional so the same shape serves
+ * A catalogue server as exposed by the operator API. Every field beyond `id` is optional so the same shape serves
  * both the entitled user catalogue and the richer admin governance view.
  */
 export interface McpCatalogServer
@@ -141,7 +139,7 @@ export interface McpInstalled
  */
 export interface EntitledUser
 {
-  /** Stable user identifier (sub or email). */
+  /** Stable local Principal identifier. */
   id: string;
   /** Display name. */
   name: string;
@@ -152,17 +150,29 @@ export interface EntitledUser
 }
 
 /**
- * Org-admin access policy deciding which callers may see and install a server.
+ * A group that can receive an MCP authorization grant.
+ *
+ * The identifier is the durable local Group id. The name is display data and never participates
+ * in an authorization decision.
+ */
+export interface EntitledGroup
+{
+  /** Stable local Group identifier used by authorization grants. */
+  id: string;
+  /** Human-readable group name shown in the access editor. */
+  name: string;
+}
+
+/**
+ * Projection of the authorization grants that let principals and groups use an MCP server.
  */
 export interface McpAccessPolicy
 {
   /** Identifier of the governed server. */
   serverId: string;
-  /** When true, every caller in the org is entitled (lists are ignored). */
-  everyoneInOrg?: boolean;
-  /** Entitled group identifiers / names. */
-  groups?: string[];
-  /** Entitled individual users. */
+  /** Groups with an active allow grant for this server. */
+  groups: EntitledGroup[];
+  /** Principals with an active allow grant for this server. */
   users?: EntitledUser[];
 }
 
@@ -171,8 +181,8 @@ export interface McpAccessPolicy
  */
 export interface Directory
 {
-  /** All known users that can be entitled. */
+  /** All local principals that can receive an MCP authorization grant. */
   users: EntitledUser[];
-  /** All known group identifiers / names that can be entitled. */
-  groups: string[];
+  /** All local groups that can receive an MCP authorization grant. */
+  groups: EntitledGroup[];
 }

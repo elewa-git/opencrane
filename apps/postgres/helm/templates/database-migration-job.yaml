@@ -68,6 +68,8 @@ spec:
               exec psql --no-psqlrc -v ON_ERROR_STOP=1 \
                 -v source_baseline_sha256="$SOURCE_PROTECTED_BASELINE_SHA256" \
                 -v migration_sql_sha256="$EXPECTED_SQL_SHA256" \
+                -v migration_silo_id="$MIGRATION_SILO_ID" \
+                -v migration_oidc_issuer="$MIGRATION_OIDC_ISSUER" \
                 --file /migration/migration.sql
           env:
             - name: PGUSER
@@ -90,6 +92,10 @@ spec:
               value: {{ .Values.convergence.previousMigration.sqlSha256 | quote }}
             - name: SOURCE_PROTECTED_BASELINE_SHA256
               value: {{ .Values.convergence.previousMigration.selectedSourceProtectedBaselineSha256 | quote }}
+            - name: MIGRATION_SILO_ID
+              value: {{ required "migration.siloId is required when migration.enabled=true" .Values.migration.siloId | quote }}
+            - name: MIGRATION_OIDC_ISSUER
+              value: {{ required "migration.oidcIssuer is required when migration.enabled=true" .Values.migration.oidcIssuer | quote }}
             - name: TMPDIR
               value: /scratch
           volumeMounts:

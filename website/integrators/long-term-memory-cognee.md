@@ -130,7 +130,7 @@ Organisation recall must reuse the IAM intersection rather than invent a second 
  acting principal grants ∩ AgentService grants
               │
               ▼
- exact read capability + organisation scope + dataset resource
+ exact read capability + resolved group/personal boundary + dataset resource
               │
               ▼
  active organisation MemoryDataset
@@ -139,18 +139,17 @@ Organisation recall must reuse the IAM intersection rather than invent a second 
  bounded gateway search → transient result for that exact workload
 ```
 
-◇ The general grant model and a dual-principal effective-access algorithm exist, but the algorithm
-has no production caller for organisation memory. Managed runs explicitly freeze scope `none` so
-they cannot fall back to a delegated user's personal dataset.
+◇ The generic grant model resolves principal or group subjects against exact group or personal
+boundaries, but organisation-memory selection still has no production caller. Managed runs
+explicitly freeze no memory dataset so they cannot fall back to a delegated user's personal data.
 
-Agent revisions can declare exact organisation, department, team or project scope attachments, but
-an attachment requests scope—it does not grant it. The current production scope-grant resolver
-returns no grants, so every non-empty shared attachment set fails closed before it can become
-managed-memory authority.
+Agent revisions can declare exact group or personal boundary attachments, but an attachment
+requests a boundary—it does not grant it. Publication resolves the AgentService's generic grants
+and rejects any attachment outside those grants before it can become managed-memory authority.
 
 An organisation-wide agent may be broadly useful without being universally authorised. Both the
 person asking and the AgentService performing the work must remain inside the accepted capability
-and scope. A deny, revocation, expired membership or empty grant intersection wins.
+and boundary. A deny, revocation, expired membership or empty grant intersection wins.
 
 ## Network isolation is not RBAC
 
@@ -362,7 +361,7 @@ derived-fact lineage or dreaming.
 - [`Authorisation grant schema`](https://github.com/elewa-git/opencrane/blob/main/apps/opencrane/prisma/schema/authorization.prisma)
 - [`Personal memory admission`](https://github.com/elewa-git/opencrane/blob/main/libs/backend/agents/personal/memory/main/src/prisma-personal-memory-admission-repository.ts)
 - [`Managed no-memory policy`](https://github.com/elewa-git/opencrane/blob/main/libs/backend/agents/execution/inputs/main/src/managed-no-personal-memory-scope-source.ts)
-- [`Shared scope-grant resolver`](https://github.com/elewa-git/opencrane/blob/main/libs/backend/server/agents/agent-services/main/src/prisma-scope-grant-resolver.ts)
+- [`Shared boundary-grant resolver`](https://github.com/elewa-git/opencrane/blob/main/libs/backend/server/agents/agent-services/main/src/prisma-boundary-grant-resolver.ts)
 - [`Uncomposed server client factory`](https://github.com/elewa-git/opencrane/blob/main/apps/opencrane/src/infra/memory/memory-gateway-client.factory.ts)
 - [`Memory gateway app`](https://github.com/elewa-git/opencrane/blob/main/apps/memory-gateway/README.md)
 - [`Cognee deployment`](https://github.com/elewa-git/opencrane/blob/main/apps/_infra/cognee/README.md)

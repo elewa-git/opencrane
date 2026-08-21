@@ -44,13 +44,13 @@ export class MockMcpGateway implements McpGateway
 
 	public getAccessPolicy(serverId: string): Promise<McpAccessPolicy>
 	{
-		const p = this._policies.get(serverId) ?? { serverId, everyoneInOrg: false, groups: [], users: [] };
+		const p = this._policies.get(serverId) ?? { serverId, groups: [], users: [] };
 		return Promise.resolve({ ...p, groups: [...p.groups], users: [...p.users] });
 	}
 
 	public updateAccessPolicy(serverId: string, policy: McpAccessPolicy): Promise<McpAccessPolicy>
 	{
-		const next: McpAccessPolicy = { serverId, everyoneInOrg: policy.everyoneInOrg, groups: [...policy.groups], users: [...policy.users] };
+		const next: McpAccessPolicy = { serverId, groups: [...policy.groups], users: [...policy.users] };
 		this._policies.set(serverId, next);
 		return Promise.resolve({ ...next });
 	}

@@ -14,11 +14,11 @@ export class __ExactHostSiloResolver implements TrustedHostSiloPort
 		this.config = config;
 	}
 
-	/** Resolves only the registered host to its organization-wide silo scope. */
+	/** Resolves only the registered host to its silo. */
 	async resolveExactHost(trustedHost: string): Promise<TrustedHostSiloBinding | null>
 	{
 		return trustedHost === this.config.trustedHost
-			? { siloId: this.config.siloId, authorizationScope: { kind: "organization", organizationId: this.config.siloId } }
+			? { siloId: this.config.siloId }
 			: null;
 	}
 }

@@ -44,7 +44,6 @@ describe("mcp-mapper.util", () =>
 	it("fills missing collections on a policy and a directory", () =>
 	{
 		const policy = _MapAccessPolicy({ serverId: "github" });
-		expect(policy.everyoneInOrg).toBe(false);
 		expect(policy.groups).toEqual([]);
 		expect(policy.users).toEqual([]);
 

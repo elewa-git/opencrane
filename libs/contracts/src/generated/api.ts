@@ -4,78 +4,6 @@
  */
 
 export interface paths {
-    "/mcp-servers": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List all MCP servers with grants and credentials */
-        get: operations["listMcpServers"];
-        put?: never;
-        /** Create a new MCP server */
-        post: operations["createMcpServer"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/mcp-servers/{id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get a single MCP server by identifier */
-        get: operations["getMcpServer"];
-        /** Update an MCP server and fully replace grants and credentials */
-        put: operations["updateMcpServer"];
-        post?: never;
-        /** Delete an MCP server and its linked grant rows */
-        delete: operations["deleteMcpServer"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/mcp-servers/{id}/credentials": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List the brokered credentials of an MCP server */
-        get: operations["listMcpServerCredentials"];
-        put?: never;
-        /** Add a brokered credential to an MCP server (does not touch grants) */
-        post: operations["addMcpServerCredential"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/mcp-servers/{id}/credentials/{credentialId}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        /** Remove a single brokered credential from an MCP server */
-        delete: operations["deleteMcpServerCredential"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/mcp/catalog": {
         parameters: {
             query?: never;
@@ -259,9 +187,9 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Read a server's access policy. Org-admin only */
+        /** Read the authorization grants for an MCP server. Org-admin only */
         get: operations["getMcpAccessPolicy"];
-        /** Replace a server's access policy wholesale. Org-admin only */
+        /** Replace the authorization grants for an MCP server. Org-admin only */
         put: operations["setMcpAccessPolicy"];
         post?: never;
         delete?: never;
@@ -294,10 +222,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List the file/chat resource shares the caller is a member of */
+        /** List the file/chat/dataset shares owned by or granted to the caller */
         get: operations["listResourceShares"];
         put?: never;
-        /** Share a file/chat with a user (creates/extends the resource's share group) */
+        /** Share a file/chat/dataset with a local Principal */
         post: operations["shareResource"];
         delete?: never;
         options?: never;
@@ -305,7 +233,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/resource-shares/{groupId}/recipients/{subject}": {
+    "/resource-shares/{shareId}/recipients/{principalId}": {
         parameters: {
             query?: never;
             header?: never;
@@ -322,41 +250,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/shares": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List the shares the authenticated caller has created */
-        get: operations["listShares"];
-        put?: never;
-        /** Share an entitlement you hold with another user or group (least-privilege bounded) */
-        post: operations["createShare"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/shares/{id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        /** Revoke a share you created */
-        delete: operations["revokeShare"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/groups": {
         parameters: {
             query?: never;
@@ -364,10 +257,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List all groups with hierarchy, members, and grants */
+        /** List groups in the authenticated silo */
         get: operations["listGroups"];
         put?: never;
-        /** Create a new group */
+        /** Create a group */
         post: operations["createGroup"];
         delete?: never;
         options?: never;
@@ -382,7 +275,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Get a single group by identifier */
+        /** Get a group in the authenticated silo */
         get: operations["getGroup"];
         /** Update a group */
         put: operations["updateGroup"];
@@ -1469,26 +1362,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/auth/me": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Return current auth mode and authenticated user identity (if any)
-         * @description No authentication required. Returns 200 with the current session or an anonymous identity when no session is established.
-         */
-        get: operations["getAuthStatus"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/auth/login": {
         parameters: {
             query?: never;
@@ -1518,6 +1391,26 @@ export interface paths {
         };
         /** Force fresh OIDC authentication for a sensitive action */
         get: operations["reauthenticate"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Return current auth mode and authenticated user identity (if any)
+         * @description No authentication required. Returns 200 with the current session or an anonymous identity when no session is established.
+         */
+        get: operations["getAuthStatus"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1557,7 +1450,7 @@ export interface paths {
         put?: never;
         /**
          * Destroy the current session and return the IdP RP-initiated logout URL
-         * @description Invalidates the server-side session. When OIDC is enabled and the identity provider advertises an `end_session_endpoint`, returns the URL the browser should navigate to so the upstream IdP session is also terminated (OIDC RP-Initiated Logout). The local session is always destroyed; `endSessionUrl` is null when no upstream logout is possible (OIDC disabled, IdP exposes no end-session endpoint, or the session captured no id_token). Non-browser callers may ignore the URL.
+         * @description Invalidates the server-side session and returns the identity provider logout URL when upstream logout is available.
          */
         post: operations["logout"];
         delete?: never;
@@ -1616,15 +1509,15 @@ export interface components {
         };
         Group: {
             id: string;
+            siloId: string;
             name: string;
-            /** @enum {string} */
-            scope: "org" | "department" | "team" | "project" | "personal";
             /** @description Parent group identifier, or null for a hierarchy root. */
             parentId: string | null;
+            /** @enum {string} */
+            membershipAuthority: "external" | "local";
             description?: string;
             members: string[];
             memberCount: number;
-            grants: Record<string, never>[];
         };
         GroupMutationResponse: {
             id: string;
@@ -1688,91 +1581,65 @@ export interface components {
         AcceptOrganizationInvitationResult: {
             member: components["schemas"]["OrganizationMember"];
         };
-        McpServer: {
-            id?: string;
-            name?: string;
-            endpoint?: string;
-            /** @enum {string} */
-            transport?: "streamable-http" | "sse" | "websocket";
-            grants?: Record<string, never>[];
-            credentials?: components["schemas"]["McpServerCredential"][];
-        };
-        McpServerCredential: {
-            /** @description Stable credential identifier. */
-            id?: string;
-            /** @description Operator-facing label. */
-            displayName?: string;
-        };
-        /** @description A catalogue server as exposed by the operator API (distinct from the registry McpServer). Every field beyond id is optional so the same shape serves the entitled user catalogue and the admin governance view. */
         McpCatalogServer: {
             id: string;
             name?: string;
             description?: string;
             publisher?: string;
             glyph?: string;
-            /**
-             * @description Consumption shape; decides the credential-connect flow.
-             * @enum {string}
-             */
+            /** @enum {string} */
             type?: "single-user" | "multi-user" | "remote-oauth";
-            /**
-             * @description Governance lifecycle status.
-             * @enum {string}
-             */
+            /** @enum {string} */
             approvalStatus?: "pending-review" | "approved" | "published" | "disabled";
             credentialSchema?: components["schemas"]["CredentialField"][];
-            /** @description Human-readable summary of who is entitled (admin view). */
             entitlementSummary?: string;
         };
         CredentialField: {
-            /** @description Stable key the value is submitted under. */
             key: string;
-            /** @description Human-readable field label. */
             label: string;
-            /** @description Whether the field must be supplied. */
             required: boolean;
-            /** @description Whether the value is secret (masked, never echoed back). */
             sensitive: boolean;
-            /** @description Optional input placeholder. */
             placeholder?: string;
-            /** @description Optional helper hint. */
             hint?: string;
         };
-        /** @description A server installed by the calling user. Never carries credential material — only the connection status and a non-secret account label. */
         McpInstalled: {
             serverId: string;
             /** @enum {string} */
             connectionStatus?: "needs-credential" | "activating" | "connected" | "oauth-connected" | "shared-key" | "activation-failed";
-            /**
-             * Format: date-time
-             * @description ISO-8601 timestamp of last use, or null when never used.
-             */
+            /** Format: date-time */
             lastUsed?: string | null;
-            /** @description Non-secret display label of the connected account. */
             connectedAccount?: string;
+        };
+        EntitledUser: {
+            /** @description Stable local Principal identifier. */
+            id: string;
+            name: string;
+            initials: string;
+            color: string;
+        };
+        EntitledGroup: {
+            /** @description Stable local Group identifier. */
+            id: string;
+            /** @description Display data; authorization uses the identifier. */
+            name: string;
         };
         McpAccessPolicy: {
             serverId: string;
-            /** @description When true, every caller in the org is entitled (lists ignored). */
-            everyoneInOrg?: boolean;
-            /** @description Entitled group identifiers / names. */
-            groups?: string[];
-            users?: components["schemas"]["EntitledUser"][];
+            groups: components["schemas"]["EntitledGroup"][];
+            users: components["schemas"]["EntitledUser"][];
         };
-        EntitledUser: {
-            /** @description Stable user identifier (sub or email). */
-            id: string;
-            /** @description Display name. */
-            name: string;
-            /** @description Two-letter initials derived from the name. */
-            initials: string;
-            /** @description Deterministic avatar colour derived from the identifier. */
-            color: string;
-        };
-        /** @description The selectable universe of users and groups for the admin access editor. */
         McpDirectory: {
             users: components["schemas"]["EntitledUser"][];
-            groups: string[];
+            groups: components["schemas"]["EntitledGroup"][];
+        };
+        /** @description A direct file/chat/dataset share backed by explicit recipients and authorization grants. */
+        ResourceShare: {
+            id: string;
+            /** @enum {string} */
+            resourceType: "file" | "chat" | "dataset";
+            resourceId: string;
+            ownerPrincipalId: string;
+            recipientPrincipalIds: string[];
         };
         ClusterTenant: {
             /** @description Stable cluster-scoped identifier (the customer key). */
@@ -1853,61 +1720,6 @@ export interface components {
             storage?: string;
             /** @description Total GPUs the customer may request. */
             gpu?: number;
-        };
-        /** @description A single organisation membership row — the LOCAL membership registry the org-admin gate reads (an OrgMembership, NOT a Zitadel grant). */
-        OrgMember: {
-            /** @description IdP-verified subject (OIDC `sub`) holding the membership. */
-            subject: string;
-            /**
-             * @description Role held within the organisation.
-             * @enum {string}
-             */
-            role: "Owner" | "Admin" | "Member";
-        };
-        /** @description Add or update an organisation member (upsert on the unique [org, subject]). */
-        OrgMemberWrite: {
-            /** @description IdP-verified subject (OIDC `sub`) of the member to add/update. */
-            subject: string;
-            /**
-             * @description Role to grant within the organisation.
-             * @enum {string}
-             */
-            role: "Owner" | "Admin" | "Member";
-        };
-        /** @description An inter-user share: an Allow grant the caller created on a recipient for an entitlement they hold (S4). */
-        Share: {
-            id: string;
-            /**
-             * @description The MCP entitlement family shared.
-             * @enum {string}
-             */
-            payloadType: "mcp-server";
-            /** @description Id of the shared MCP server. */
-            payloadId: string;
-            /**
-             * @description Whether the share targets a user (IdP subject) or a group.
-             * @enum {string}
-             */
-            recipientType: "user" | "group";
-            /** @description The recipient user subject or group id. */
-            recipientId: string;
-            /** @enum {string} */
-            scope: "org" | "department" | "project" | "personal";
-            note?: string;
-            /** @description IdP subject of the user who created the share. */
-            sharedBy?: string;
-            /** Format: date-time */
-            createdAt: string;
-        };
-        /** @description A direct share of a file/chat (S4c): the resource-scoped Personal group whose members can access it. */
-        ResourceShare: {
-            /** @description Id of the resource-scoped share group. */
-            groupId: string;
-            /** @enum {string} */
-            resourceType: "file" | "chat" | "dataset";
-            resourceId: string;
-            /** @description IdP subjects the resource is shared with (incl. the owner). */
-            members: string[];
         };
         AuditEntry: {
             /** Format: date-time */
@@ -2253,251 +2065,6 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
-    listMcpServers: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description MCP server list. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["McpServer"][];
-                };
-            };
-        };
-    };
-    createMcpServer: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": {
-                    name: string;
-                    endpoint: string;
-                    transport: string;
-                    grants?: Record<string, never>[];
-                    credentials?: Record<string, never>[];
-                };
-            };
-        };
-        responses: {
-            /** @description MCP server created. */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["McpServer"];
-                };
-            };
-        };
-    };
-    getMcpServer: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description MCP server detail. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["McpServer"];
-                };
-            };
-            /** @description MCP server not found. */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-        };
-    };
-    updateMcpServer: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": Record<string, never>;
-            };
-        };
-        responses: {
-            /** @description MCP server updated. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["McpServer"];
-                };
-            };
-        };
-    };
-    deleteMcpServer: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description MCP server deleted. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        id?: string;
-                        status?: string;
-                    };
-                };
-            };
-        };
-    };
-    listMcpServerCredentials: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Credential list. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["McpServerCredential"][];
-                };
-            };
-            /** @description MCP server not found. */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-        };
-    };
-    addMcpServerCredential: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": {
-                    /** @description Operator-facing label. */
-                    displayName: string;
-                };
-            };
-        };
-        responses: {
-            /** @description Credential added. */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["McpServerCredential"];
-                };
-            };
-            /** @description Credential payload violates brokering-mode custody rules. */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description MCP server not found. */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-        };
-    };
-    deleteMcpServerCredential: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-                credentialId: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Credential deleted. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        id?: string;
-                        status?: string;
-                    };
-                };
-            };
-            /** @description MCP server or credential not found. */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-        };
-    };
     listMcpCatalog: {
         parameters: {
             query?: never;
@@ -3000,10 +2567,10 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": {
-                    everyoneInOrg: boolean;
-                    groups: string[];
-                    /** @description Entitled user identifiers. */
-                    users: string[];
+                    /** @description Stable local Group identifiers. */
+                    groupIds: string[];
+                    /** @description Stable local Principal identifiers. */
+                    principalIds: string[];
                 };
             };
         };
@@ -3017,7 +2584,7 @@ export interface operations {
                     "application/json": components["schemas"]["McpAccessPolicy"];
                 };
             };
-            /** @description everyoneInOrg (boolean), groups (array), and users (array) are required. */
+            /** @description groupIds (array) and principalIds (array) are required. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -3117,8 +2684,8 @@ export interface operations {
                     /** @enum {string} */
                     resourceType: "file" | "chat" | "dataset";
                     resourceId: string;
-                    /** @description IdP subject of the user to share with. */
-                    recipientSubject: string;
+                    /** @description Stable local Principal identifier. */
+                    recipientPrincipalId: string;
                 };
             };
         };
@@ -3175,21 +2742,19 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                groupId: string;
-                subject: string;
+                shareId: string;
+                principalId: string;
             };
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description Recipient revoked. */
-            200: {
+            /** @description Recipient and linked grant revoked. */
+            204: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content: {
-                    "application/json": components["schemas"]["ResourceShare"];
-                };
+                content?: never;
             };
             /** @description Authentication required. */
             401: {
@@ -3201,160 +2766,6 @@ export interface operations {
                 };
             };
             /** @description Resource share not found, or caller is not a member. */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-        };
-    };
-    listShares: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Shares created by the caller. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Share"][];
-                };
-            };
-            /** @description Authentication required. */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-        };
-    };
-    createShare: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": {
-                    /** @enum {string} */
-                    payloadType: "mcp-server";
-                    payloadId: string;
-                    /** @enum {string} */
-                    recipientType: "user" | "group";
-                    recipientId: string;
-                    /**
-                     * @default personal
-                     * @enum {string}
-                     */
-                    scope?: "org" | "department" | "project" | "personal";
-                    note?: string;
-                };
-            };
-        };
-        responses: {
-            /** @description An identical share already existed (idempotent). */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Share"];
-                };
-            };
-            /** @description Share created. */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Share"];
-                };
-            };
-            /** @description Invalid share request. */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description Authentication required. */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description You can only share an entitlement you currently hold. */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description Payload or recipient group not found. */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-        };
-    };
-    revokeShare: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Share revoked. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        id?: string;
-                        status?: string;
-                    };
-                };
-            };
-            /** @description Authentication required. */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description Share not found, or not one the caller created. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -3397,9 +2808,10 @@ export interface operations {
                 "application/json": {
                     name: string;
                     /** @enum {string} */
-                    scope: "org" | "department" | "project" | "personal";
+                    membershipAuthority: "external" | "local";
                     parentId?: string | null;
                     description?: string;
+                    /** @description Direct Principal IDs; rejected for externally managed groups. */
                     members?: string[];
                 };
             };
@@ -3423,7 +2835,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Parent group not found. */
+            /** @description Parent or principal not found in this silo. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -3432,7 +2844,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description A group with this name already exists. */
+            /** @description Group conflict. */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -3487,10 +2899,9 @@ export interface operations {
             content: {
                 "application/json": {
                     name?: string;
-                    /** @enum {string} */
-                    scope?: "org" | "department" | "project" | "personal";
                     parentId?: string | null;
                     description?: string;
+                    /** @description Replacement direct Principal IDs for a locally managed group. */
                     members?: string[];
                 };
             };
@@ -3514,7 +2925,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Group or parent group not found. */
+            /** @description Group reference not found. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -3523,7 +2934,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Group hierarchy conflict. */
+            /** @description Group hierarchy or membership-authority conflict. */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -3563,7 +2974,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Group still has children. */
+            /** @description Group still has active references. */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -8419,62 +7830,6 @@ export interface operations {
             };
         };
     };
-    getAuthStatus: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Auth status. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /**
-                         * @description Active authentication mode for this instance.
-                         * @enum {string}
-                         */
-                        mode: "development" | "oidc";
-                        authenticated: boolean;
-                        user?: {
-                            sub: string;
-                            /** @description Identity provider that authenticated the user. */
-                            issuer: string;
-                            /** @description The caller's group memberships from the OIDC groups claim (empty when none). */
-                            groups: string[];
-                            /** @description True iff the caller's groups intersect OPENCRANE_PLATFORM_OPERATOR_GROUPS. Empty/unset config ⇒ false (fail-closed). Introspection only — the API stays the enforcement point and the frontend uses this only to hide UI. Superseded once a first-class role model lands. */
-                            isPlatformOperator: boolean;
-                            /** @description True iff the caller is an organisation admin (groups intersect OPENCRANE_ORG_ADMIN_GROUPS, or the caller is a platform operator). Gates MCP-catalogue curation/approval (requireOrgAdmin). Empty/unset config ⇒ false (fail-closed). Introspection only — the API stays the enforcement point. */
-                            isOrgAdmin: boolean;
-                            /** @description The caller's ClusterTenant (customer) key, resolved server-side from their IdP-verified email → tenant → clusterTenantRef. Null when unresolved or ambiguous. */
-                            clusterTenant?: string | null;
-                            /** @description Organisations the caller owns or administers, derived fresh from their OrgMembership rows (owner/admin only; members excluded). Empty when the caller administers no org. The org-scope half of the membership-derived isOrgAdmin. Introspection only — never taken from request input. */
-                            ownedOrgs?: {
-                                /** @description The organisation (ClusterTenant) key. */
-                                clusterTenant: string;
-                                /**
-                                 * @description The administering role the caller holds in this org.
-                                 * @enum {string}
-                                 */
-                                role: "owner" | "admin";
-                            }[];
-                            email?: string;
-                            emailVerified?: boolean;
-                            name?: string;
-                            picture?: string;
-                            /** Format: date-time */
-                            authenticatedAt?: string;
-                        } | null;
-                    };
-                };
-            };
-        };
-    };
     startOidcLogin: {
         parameters: {
             query?: {
@@ -8553,6 +7908,62 @@ export interface operations {
             };
         };
     };
+    getAuthStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Auth status. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /**
+                         * @description Active authentication mode for this instance.
+                         * @enum {string}
+                         */
+                        mode: "development" | "oidc";
+                        authenticated: boolean;
+                        user?: {
+                            sub: string;
+                            /** @description Identity provider that authenticated the user. */
+                            issuer: string;
+                            /** @description The caller's stable group identifiers from the OIDC groups claim (empty when none). */
+                            groups: string[];
+                            /** @description True when the authenticated middleware admitted a platform-operator claim. Introspection only; the API remains the enforcement point. */
+                            isPlatformOperator: boolean;
+                            /** @description True when the authenticated middleware admitted organisation administration authority. Introspection only; the API remains the enforcement point. */
+                            isOrgAdmin: boolean;
+                            /** @description The caller's admitted silo identifier, or null when the session has no silo projection. */
+                            clusterTenant?: string | null;
+                            /** @description Organisation administration projections resolved by the server. Empty when none are active. */
+                            ownedOrgs?: {
+                                /** @description The organisation silo identifier. */
+                                clusterTenant: string;
+                                /**
+                                 * @description The administering role the caller holds.
+                                 * @enum {string}
+                                 */
+                                role: "owner" | "admin";
+                            }[];
+                            email?: string;
+                            emailVerified?: boolean;
+                            name?: string;
+                            picture?: string;
+                            /** Format: date-time */
+                            authenticatedAt?: string;
+                        } | null;
+                    };
+                };
+            };
+        };
+    };
     completeOidcLogin: {
         parameters: {
             query?: {
@@ -8599,7 +8010,7 @@ export interface operations {
                 };
                 content: {
                     "application/json": {
-                        /** @description Absolute URL the browser should navigate to in order to terminate the upstream IdP session. Null when no upstream logout is configured or possible. */
+                        /** @description Absolute upstream logout URL, or null when upstream logout is unavailable. */
                         endSessionUrl: string | null;
                     };
                 };

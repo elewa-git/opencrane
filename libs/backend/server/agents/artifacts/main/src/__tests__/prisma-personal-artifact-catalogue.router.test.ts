@@ -7,12 +7,21 @@ import { describe, expect, it, vi } from "vitest";
 import { _CreatePersonalArtifactCatalogueRouter } from "../prisma-personal-artifact-catalogue.router";
 
 /** Builds the public route with a deterministic browser session and persistence adapter. */
-function _app(authUser: Readonly<Record<string, unknown>> | null, prisma: PrismaClient): ReturnType<typeof express>
+function _app(principalId: string | null, prisma: PrismaClient): ReturnType<typeof express>
 {
 	const app = express();
 	app.use(function _seedSession(incoming: Request, _response: Response, next: NextFunction): void
 	{
-		(incoming as unknown as { session: { authUser: Readonly<Record<string, unknown>> } | undefined }).session = authUser === null ? undefined : { authUser };
+		if (principalId === null)
+		{
+			(incoming as unknown as { session: undefined }).session = undefined;
+			next();
+			return;
+		}
+		(incoming as unknown as { session: { authUser: Readonly<Record<string, unknown>> } }).session = {
+			authUser: { authenticatedAt: "2026-01-01T00:00:00.000Z" },
+		};
+		incoming.authenticatedPrincipal = { principalId, siloId: "silo-1", issuer: "https://issuer.test", subject: "subject-1" };
 		next();
 	});
 	app.use("/api/v1/me/assets", _CreatePersonalArtifactCatalogueRouter(prisma, { error: vi.fn() } as unknown as Logger));
@@ -21,30 +30,25 @@ function _app(authUser: Readonly<Record<string, unknown>> | null, prisma: Prisma
 
 describe("personal artifact catalogue Prisma router", function _suite()
 {
-	it("derives the exact silo from the host and prefers the signed subject as owner", async function _derivesCaller()
+	it("derives the exact silo from the host and uses the admitted Principal as owner", async function _derivesCaller()
 	{
 		const findMany = vi.fn().mockResolvedValue([]);
 		const prisma = { artifact: { findMany } } as unknown as PrismaClient;
 
-		const response = await request(_app({ sub: "subject-1", email: "fallback@example.com" }, prisma))
+		const response = await request(_app("principal-1", prisma))
 			.get("/api/v1/me/assets/")
 			.set("x-forwarded-host", "silo-1.dev.opencrane.ai");
 
 		expect(response.status).toBe(200);
-		expect(findMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ siloId: "silo-1", ownerPrincipalId: "subject-1", state: expect.any(Object) }) }));
+		expect(findMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ siloId: "silo-1", ownerPrincipalId: "principal-1", state: expect.any(Object) }) }));
 	});
 
-	it("normalises the signed-in email fallback and denies a missing session", async function _handlesFallback()
+	it("denies a request without an admitted Principal", async function _deniesMissingPrincipal()
 	{
 		const findMany = vi.fn().mockResolvedValue([]);
 		const prisma = { artifact: { findMany } } as unknown as PrismaClient;
-		const app = _app({ email: "Owner@Example.COM" }, prisma);
-
-		const response = await request(app).get("/api/v1/me/assets/").set("x-forwarded-host", "silo-1.dev.opencrane.ai");
-		expect(response.status).toBe(200);
-		expect(findMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ ownerPrincipalId: "owner@example.com" }) }));
-
 		const denied = await request(_app(null, prisma)).get("/api/v1/me/assets/").set("x-forwarded-host", "silo-1.dev.opencrane.ai");
 		expect(denied.status).toBe(401);
+		expect(findMany).not.toHaveBeenCalled();
 	});
 });

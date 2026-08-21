@@ -222,6 +222,7 @@ LITELLM_POSTGRES_OWNER="${OPENCRANE_LITELLM_POSTGRES_OWNER:-litellm}"
 POSTGRES_ADMIN_CREDENTIALS_SECRET="${OPENCRANE_POSTGRES_ADMIN_CREDENTIALS_SECRET:-}"
 POSTGRES_ADMIN_NAME="${OPENCRANE_POSTGRES_ADMIN_NAME:-opencrane_database_admin}"
 POSTGRES_MIGRATION_IMAGE="${OPENCRANE_POSTGRES_MIGRATION_IMAGE:-ghcr.io/cloudnative-pg/postgresql@sha256:b1deeed2aa998b2f381e39c5cadb9ec06127708c8bd62965743af19abf21628f}"
+DATABASE_MIGRATION_SILO_ID="${OPENCRANE_DATABASE_MIGRATION_SILO_ID:-}"
 ALLOW_UNBACKED_DATABASE_MIGRATION="0"
 APPROVE_0_9_3_DATABASE_TRANSITION="0"
 # --preflight runs a fail-FAST environment check BEFORE any cluster mutation and exits 0/1
@@ -293,6 +294,7 @@ while [[ $# -gt 0 ]]; do
     --postgres-admin-credentials-secret) POSTGRES_ADMIN_CREDENTIALS_SECRET="$2"; shift 2 ;;
     --postgres-admin-name) POSTGRES_ADMIN_NAME="$2"; shift 2 ;;
     --postgres-migration-image) POSTGRES_MIGRATION_IMAGE="$2"; shift 2 ;;
+    --database-migration-silo-id) DATABASE_MIGRATION_SILO_ID="$2"; shift 2 ;;
     --allow-unbacked-database-migration) ALLOW_UNBACKED_DATABASE_MIGRATION="1"; shift ;;
     --approve-0.9.2-to-0.9.3-database-transition) APPROVE_0_9_3_DATABASE_TRANSITION="1"; shift ;;
     --postgres-values) POSTGRES_VALUES_FILE="$2"; shift 2 ;;

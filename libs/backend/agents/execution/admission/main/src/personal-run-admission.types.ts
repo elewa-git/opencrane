@@ -17,6 +17,8 @@ export interface PersonalRunAdmissionCommand
 	 * subject against signed fleet membership.
 	 */
 	readonly executionSubjectId: string;
+	/** Verified OIDC issuer that namespaces `executionSubjectId`. */
+	readonly executionIssuer: string;
 	/**
 	 * The conversation the run belongs to.
 	 *

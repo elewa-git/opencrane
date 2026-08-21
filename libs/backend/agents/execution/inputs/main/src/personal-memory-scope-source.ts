@@ -45,7 +45,7 @@ export class PersonalMemoryScopeSource implements MemoryScopeSource
 		if (identity.kind !== RunInputSnapshotIdentityKinds.User) return { outcome: "denied", reason: "memory_scope_unavailable" };
 
 		// 2. Find the one personal dataset from the identity already verified during admission.
-		const resolved = await __ResolvePersonalMemoryDataset(this.createPersonalMemory(transaction), { siloId: command.siloId, organizationId: identity.organizationId, subjectId: identity.executionSubjectId });
+		const resolved = await __ResolvePersonalMemoryDataset(this.createPersonalMemory(transaction), { siloId: command.siloId, principalId: identity.principalId, subjectId: identity.executionSubjectId });
 		if (resolved.outcome === PersonalMemoryDatasetResolutionOutcomes.Denied) return resolved;
 
 		// 3. Freeze only verified dataset coordinates. The model may later propose a bounded query via

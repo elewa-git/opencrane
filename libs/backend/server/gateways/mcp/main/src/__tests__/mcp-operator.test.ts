@@ -4,7 +4,17 @@ import type { PrismaClient } from "@prisma/client";
 import request from "supertest";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+vi.mock("@opencrane/backend/server/iam/authorization", async function _mockAuthorization()
+{
+  const actual = await vi.importActual("@opencrane/backend/server/iam/authorization");
+  return { ...actual, __ResolvePrincipalAuthorization: vi.fn().mockResolvedValue({ outcome: "allow", reason: "winning_allow", grantIds: ["grant-1"] }) };
+});
+
+import { __ResolvePrincipalAuthorization } from "@opencrane/backend/server/iam/authorization";
+import type { AuthenticatedPrincipalDirectory } from "@opencrane/backend/server/iam/identity";
+import { AuthorizationDecisionOutcomes } from "@opencrane/models/authorization";
 import { mcpOperatorRouter } from "../routes/mcp-operator";
+import { PrismaMcpOperatorUnitOfWork } from "../core/prisma-mcp-operator-unit-of-work";
 
 /**
  * Operator-API coverage (`/api/v1/mcp/*`): the org-admin gate on the governance
@@ -30,6 +40,8 @@ interface _SessionUser
 {
   /** Stable subject identifier. */
   sub?: string;
+  /** Identity provider that issued the verified login. */
+  issuer?: string;
   /** Caller email (used when sub is absent). */
   email?: string;
   /** IdP group claims. */
@@ -51,13 +63,17 @@ function _mockPrisma(overrides: Record<string, (...args: unknown[]) => unknown> 
   const prisma = new Proxy({}, {
     get(_t, model)
     {
+      if (model === "$transaction") return async function _Transaction(callback: (transaction: PrismaClient) => Promise<unknown>) { return callback(prisma); };
       return new Proxy({}, {
         get(_t2, method)
         {
           const key = `${String(model)}.${String(method)}`;
           if (!spies[key])
           {
-            spies[key] = overrides[key] ? vi.fn(overrides[key]) : vi.fn().mockResolvedValue([]);
+            if (overrides[key]) spies[key] = vi.fn(overrides[key]);
+            else if (key === "principal.findUnique") spies[key] = vi.fn().mockResolvedValue({ id: "principal-1" });
+            else if (key === "capabilityCatalogRevision.findUnique") spies[key] = vi.fn().mockResolvedValue({ digest: "sha256:b437ba0e9642ea867d58011ca828aa863b0e1a21528f91d567bccec74c71bff6", capabilities: [{ id: "mcp-server:use", actions: ["use"] }] });
+            else spies[key] = vi.fn().mockResolvedValue([]);
           }
           return spies[key];
         },
@@ -74,9 +90,16 @@ function _buildApp(prisma: PrismaClient, user?: _SessionUser): Express
   app.use(express.json());
   if (user)
   {
-    app.use(function _seedSession(req, _res, next) { (req as unknown as { session: { authUser: _SessionUser } }).session = { authUser: user }; next(); });
+    app.use(function _seedAuthenticatedPrincipal(req, _res, next)
+    {
+      req.session = { authUser: { ...user, sub: user.sub ?? "subject-1", issuer: user.issuer ?? "https://issuer.example.test", groups: user.groups ?? [], isPlatformOperator: false, isOrgAdmin: user.isOrgAdmin ?? false, authenticatedAt: "2026-08-21T00:00:00.000Z" } } as typeof req.session;
+      req.authenticatedPrincipal = { principalId: "principal-1", siloId: "silo-1", issuer: "https://issuer.example.test", subject: user.sub ?? "subject-1" };
+      req.headers["x-forwarded-host"] = "silo-1.opencrane.test";
+      next();
+    });
   }
-  app.use("/api/v1/mcp", mcpOperatorRouter(prisma));
+  const directory: AuthenticatedPrincipalDirectory = { resolveAuthenticatedPrincipal: vi.fn().mockResolvedValue({ siloId: "silo-1", principalId: "principal-1" }) };
+  app.use("/api/v1/mcp", mcpOperatorRouter(new PrismaMcpOperatorUnitOfWork(prisma), directory));
   return app;
 }
 
@@ -87,6 +110,7 @@ describe("mcp-operator router", function _suite()
   /** Snapshot then clear the auth env so each case controls the dev-mode posture. */
   beforeEach(function _clearEnv()
   {
+    vi.mocked(__ResolvePrincipalAuthorization).mockReset().mockResolvedValue({ outcome: AuthorizationDecisionOutcomes.Allow, reason: "winning_allow", grantIds: ["grant-1"] });
     for (const key of _AUTH_ENV) { _saved[key] = process.env[key]; delete process.env[key]; }
   });
 
@@ -129,6 +153,17 @@ describe("mcp-operator router", function _suite()
       expect(res.status).toBe(403);
     });
 
+    it("rejects non-string access-policy identifiers before persistence", async function _RejectsMalformedAccessPolicy()
+    {
+      _enableOidc();
+      const { prisma } = _mockPrisma();
+      const res = await request(_buildApp(prisma, { sub: "admin", isOrgAdmin: true }))
+        .put("/api/v1/mcp/servers/srv-1/access").send({ groupIds: [42], principalIds: [] });
+
+      expect(res.status).toBe(400);
+      expect(res.body).toMatchObject({ code: "VALIDATION_ERROR" });
+    });
+
     it("lets an org-admin session through GET /servers to the handler", async function _allowList()
     {
       _enableOidc();
@@ -150,15 +185,16 @@ describe("mcp-operator router", function _suite()
 
   describe("GET /catalog — published + entitled filtering", function _catalog()
   {
-    /** Two published servers: one org-wide entitled, one only for another user. */
+    /** Two published servers filtered by the generic authorization decision. */
     const _servers = [
-      { id: "srv-open", name: "Open", description: "", publisher: null, glyph: null, serverType: "MultiUser", approvalStatus: "Published", credentialSchema: [], entitlementSummary: null, createdAt: new Date(), accessPolicy: { everyoneInOrg: true, groups: [], users: [] } },
-      { id: "srv-closed", name: "Closed", description: "", publisher: null, glyph: null, serverType: "SingleUser", approvalStatus: "Published", credentialSchema: [], entitlementSummary: null, createdAt: new Date(), accessPolicy: { everyoneInOrg: false, groups: ["other-group"], users: [{ userId: "someone-else" }] } },
+      { id: "srv-open", name: "Open", description: "", publisher: null, glyph: null, serverType: "MultiUser", approvalStatus: "Published", credentialSchema: [], entitlementSummary: null, createdAt: new Date() },
+      { id: "srv-closed", name: "Closed", description: "", publisher: null, glyph: null, serverType: "SingleUser", approvalStatus: "Published", credentialSchema: [], entitlementSummary: null, createdAt: new Date() },
     ];
 
     it("returns only the servers the caller is entitled to", async function _filters()
     {
       _enableOidc();
+      vi.mocked(__ResolvePrincipalAuthorization).mockImplementation(async function _decide(_repository, command) { return command.resource.id === "srv-open" ? { outcome: AuthorizationDecisionOutcomes.Allow, reason: "winning_allow", grantIds: ["grant-open"] } : { outcome: AuthorizationDecisionOutcomes.Deny, reason: "no_matching_grant", grantIds: [] }; });
       const { prisma } = _mockPrisma({ "mcpServer.findMany": function _findMany() { return Promise.resolve(_servers); } });
       const res = await request(_buildApp(prisma, { sub: "user-1", groups: [], isOrgAdmin: false })).get("/api/v1/mcp/catalog");
 
@@ -167,14 +203,15 @@ describe("mcp-operator router", function _suite()
       expect(res.body[0]).toMatchObject({ id: "srv-open", type: "multi-user", approvalStatus: "published" });
     });
 
-    it("entitles a caller via a matching group claim", async function _group()
+    it("does not pass raw OIDC group claims into authorization", async function _group()
     {
       _enableOidc();
       const { prisma } = _mockPrisma({ "mcpServer.findMany": function _findMany() { return Promise.resolve(_servers); } });
-      const res = await request(_buildApp(prisma, { sub: "user-2", groups: ["other-group"], isOrgAdmin: false })).get("/api/v1/mcp/catalog");
+      const res = await request(_buildApp(prisma, { sub: "user-2", groups: ["group:untrusted"], isOrgAdmin: false })).get("/api/v1/mcp/catalog");
 
       expect(res.status).toBe(200);
       expect(res.body.map(function _id(s: { id: string }) { return s.id; }).sort()).toEqual(["srv-closed", "srv-open"]);
+      expect(vi.mocked(__ResolvePrincipalAuthorization).mock.calls.every(function _noClaims(call) { return !("groups" in call[1]); })).toBe(true);
     });
   });
 
@@ -188,7 +225,7 @@ describe("mcp-operator router", function _suite()
     {
       const store: { install: Record<string, unknown> | null } = { install: null };
       const overrides: Record<string, (...args: unknown[]) => unknown> = {
-        "mcpServer.findUnique": function _serverFind() { return Promise.resolve({ serverType }); },
+        "mcpServer.findFirst": function _serverFind() { return Promise.resolve({ id: "srv-1", name: "Server", description: "", publisher: null, glyph: null, serverType, approvalStatus: "Published", credentialSchema: [], entitlementSummary: null }); },
         "mcpServerInstall.findUnique": function _installFind() { return Promise.resolve(store.install); },
         "mcpServerInstall.upsert": function _upsert(arg: unknown) {
           const create = (arg as { create: Record<string, unknown> }).create;
@@ -243,6 +280,20 @@ describe("mcp-operator router", function _suite()
 
       expect(res.status).toBe(404);
     });
+
+    it("rejects missing, empty, and unknown credential fields before persistence", async function _rejectMalformedCredential()
+    {
+      const { prisma, store } = _statefulPrisma("SingleUser");
+      const app = _buildApp(prisma, { sub: "user-1" });
+
+      for (const body of [{}, { values: {} }, { values: { apiKey: "" } }, { values: { apiKey: "x" }, extra: true }])
+      {
+        const res = await request(app).put("/api/v1/mcp/installed/srv-1/credential").send(body);
+        expect(res.status).toBe(400);
+        expect(res.body).toMatchObject({ code: "VALIDATION_ERROR" });
+      }
+      expect(store.install).toBeNull();
+    });
   });
 
   describe("user-scoping — a caller only sees / acts on their own installs", function _scoping()
@@ -252,7 +303,7 @@ describe("mcp-operator router", function _suite()
       const { prisma, spies } = _mockPrisma({ "mcpServerInstall.findMany": function _f() { return Promise.resolve([]); } });
       await request(_buildApp(prisma, { sub: "caller-9" })).get("/api/v1/mcp/installed");
 
-      expect(spies["mcpServerInstall.findMany"]).toHaveBeenCalledWith(expect.objectContaining({ where: { userId: "caller-9" } }));
+      expect(spies["mcpServerInstall.findMany"]).toHaveBeenCalledWith(expect.objectContaining({ where: { userId: "principal-1" } }));
     });
 
     it("scopes DELETE /installed/:serverId to the calling user's id", async function _deleteScoped()
@@ -264,7 +315,7 @@ describe("mcp-operator router", function _suite()
       const res = await request(_buildApp(prisma, { sub: "caller-9" })).delete("/api/v1/mcp/installed/srv-1");
 
       expect(res.status).toBe(204);
-      expect(spies["mcpServerInstall.deleteMany"]).toHaveBeenCalledWith({ where: { mcpServerId: "srv-1", userId: "caller-9" } });
+      expect(spies["mcpServerInstall.deleteMany"]).toHaveBeenCalledWith({ where: { mcpServerId: "srv-1", userId: "principal-1" } });
     });
   });
 

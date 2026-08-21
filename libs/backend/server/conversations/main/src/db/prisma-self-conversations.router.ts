@@ -17,7 +17,7 @@ import type { ConversationAttachmentAdmissionFactory } from "../conversation-mes
 function _resolveCaller(request: Parameters<typeof _ResolveRequestPrincipal>[0]): ConversationCaller | null
 {
 	const principal = _ResolveRequestPrincipal(request);
-	return principal ? { subjectId: principal.subjectId, siloId: principal.siloId } : null;
+	return principal ? { subjectId: principal.externalSubject, issuer: principal.externalIssuer, siloId: principal.siloId } : null;
 }
 
 /** Creates a mutation repository over run admission's final transaction. */

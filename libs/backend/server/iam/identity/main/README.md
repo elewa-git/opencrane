@@ -46,12 +46,15 @@ issuer once this contract exists, because an OIDC subject is issuer-scoped. The 
 an audit adapter, which records an accepted claim in that same serializable transaction without making
 identity depend directly on the audit domain. A claimed owner does not create a personal workspace or
 relax signed runtime-membership admission — those are separate authorities. The package
-also mirrors groups from the login token into the silo's stored groups so operator tooling, grants,
-and audit see the same membership.
+also reconciles stable `group:<Group.id>` claims into normalized direct membership for groups marked
+as externally managed. It never creates a group from a claim, treats unknown IDs as non-authoritative,
+and never prunes membership in locally managed groups.
 
 Invariant: every identity fact it emits is IdP-verified, not self-asserted — a caller can never
-obtain another user's tenant or claim admin rights they were not granted. Group mirroring is
-best-effort. A configured first-owner claim fails closed when the slot is still empty but the
+obtain another user's tenant or claim admin rights they were not granted. The login callback's
+initial group mirror is best-effort, but every later product request must repeat reconciliation and
+exact Principal resolution through `PrismaAuthenticatedPrincipalAdmissionUnitOfWork`; persistence
+failure, missing projection, or an identity-tuple mismatch denies the request. A configured first-owner claim fails closed when the slot is still empty but the
 identity is ineligible, or when persistence or auditing fails. Once another Owner has claimed the
 slot, an ordinary verified identity keeps its session so the separately guarded signed-invitation
 acceptance route can establish membership; it gains no Owner or administrator fact from login.
@@ -62,7 +65,10 @@ acceptance route can establish membership; it gains no Owner or administrator fa
   lifecycle, and the `/auth/me` enrichment that adds the caller's resolved ClusterTenant.
 - `___AuthRouter` — the Express routes for session introspection (`/me`) and the OIDC browser flow
   (`/login`, `/callback`, `/logout`).
-- `_MirrorGroupsOnLogin` — projects the login token's groups into the silo's stored `Group.members`.
+- `_MirrorGroupsOnLogin` — projects the verified issuer and subject into a local Principal, then
+  reconciles direct membership for existing external groups named by `group:<Group.id>` claims.
+- `PrismaAuthenticatedPrincipalAdmissionUnitOfWork` — atomically reconciles the verified claim set
+  and exact-resolves the durable Principal before authenticated middleware admits a product request.
 - `_AdmitStandaloneFirstUser`, `StandaloneFirstUserAdmissionRepository` — the narrow verified-email
   eligibility check and subject-bound one-time Owner claim for a standalone silo.
 - Workflow contract types from `identity-workflows.types`.

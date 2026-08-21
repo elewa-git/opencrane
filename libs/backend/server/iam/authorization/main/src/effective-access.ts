@@ -1,5 +1,5 @@
-import { __AuthorizationScopesEqual, __DecideAuthorization, __IsAuthorizationResourceLocator, AuthorizationDecisionOutcomes } from "@opencrane/models/authorization";
-import type { AuthorizationGrant, AuthorizationRequest, CapabilityReference } from "@opencrane/models/authorization";
+import { __DecideAuthorization, __IsAuthorizationResourceLocator, AuthorizationDecisionOutcomes } from "@opencrane/models/authorization";
+import type { AuthorizationBoundaryContext, AuthorizationGrant, AuthorizationRequest, AuthorizationSubject, CapabilityReference } from "@opencrane/models/authorization";
 
 import { AuthorizationMembershipOutcomes, type AuthorizationGrantRepository, type AuthorizationMembershipAuthority, type EffectiveCapabilityEvidence, type ResolveEffectiveAccessCommand, type ResolveEffectiveAccessResult } from "./effective-access.types";
 
@@ -31,10 +31,10 @@ function _orderedUniqueCapabilities(capabilities: readonly CapabilityReference[]
 }
 
 /** Decides one capability for one subject against that subject's own grants. */
-function _decideForSubject(command: ResolveEffectiveAccessCommand, subjectId: string, capability: CapabilityReference, grants: readonly AuthorizationGrant[])
+function _decideForSubjects(command: ResolveEffectiveAccessCommand, subjects: readonly AuthorizationSubject[], boundaryContext: AuthorizationBoundaryContext, capability: CapabilityReference, grants: readonly AuthorizationGrant[])
 {
-	const request: AuthorizationRequest = { siloId: command.membership.siloId, subjectId, scope: command.scope, capability, resource: command.resource, nowEpochMs: command.membership.nowEpochMs };
-	return __DecideAuthorization(request, grants);
+	const request: AuthorizationRequest = { siloId: command.membership.siloId, subjects, boundary: command.boundary, capability, resource: command.resource, nowEpochMs: command.membership.nowEpochMs };
+	return __DecideAuthorization(request, grants, boundaryContext);
 }
 
 /**
@@ -66,7 +66,6 @@ export async function __ResolveEffectiveAccess(membershipAuthority: Authorizatio
 		|| !command.agentServiceSubjectId.trim()
 		|| command.actorSubjectId === command.agentServiceSubjectId
 		|| command.membership.subjectId !== command.actorSubjectId
-		|| !__AuthorizationScopesEqual(command.membership.scope, command.scope)
 		|| !__IsAuthorizationResourceLocator(command.resource)
 		|| !Number.isSafeInteger(command.membership.nowEpochMs)
 		|| command.membership.nowEpochMs < 0
@@ -106,23 +105,34 @@ export async function __ResolveEffectiveAccess(membershipAuthority: Authorizatio
 		return { outcome: "denied", reason: "outside_run_capability_set", evidence: [] };
 	}
 
-	// 4. Load each principal's grants independently so neither authority can expand the other.
+	// 4. Resolve each principal's direct groups and the requested boundary from product authority.
+	const [actorSubjects, agentServiceSubjects, boundaryContext] = await Promise.all([
+		grantRepository.resolvePrincipalSubjects(command.membership.siloId, command.actorSubjectId),
+		grantRepository.resolvePrincipalSubjects(command.membership.siloId, command.agentServiceSubjectId),
+		grantRepository.resolveBoundaryContext(command.membership.siloId, command.boundary),
+	]);
+	if (actorSubjects.length === 0 || agentServiceSubjects.length === 0)
+	{
+		return { outcome: "denied", reason: "empty_intersection", evidence: [] };
+	}
+
+	// 5. Load each resolved identity set independently so neither principal can widen the other.
 	const [actorGrants, agentServiceGrants] = await Promise.all([
-		grantRepository.listSubjectGrants(command.membership.siloId, command.actorSubjectId),
-		grantRepository.listSubjectGrants(command.membership.siloId, command.agentServiceSubjectId),
+		grantRepository.listSubjectGrants(command.membership.siloId, actorSubjects),
+		grantRepository.listSubjectGrants(command.membership.siloId, agentServiceSubjects),
 	]);
 
-	// 5. Evaluate the ceiling-bounded capability order and retain decisions from both principals.
+	// 6. Evaluate the ceiling-bounded capability order and retain decisions from both principals.
 	const evidence: EffectiveCapabilityEvidence[] = effectiveCandidates.map(function _evaluate(capability)
 	{
 		return {
 			capability,
-			actorDecision: _decideForSubject(command, command.actorSubjectId, capability, actorGrants),
-			agentServiceDecision: _decideForSubject(command, command.agentServiceSubjectId, capability, agentServiceGrants),
+			actorDecision: _decideForSubjects(command, actorSubjects, boundaryContext, capability, actorGrants),
+			agentServiceDecision: _decideForSubjects(command, agentServiceSubjects, boundaryContext, capability, agentServiceGrants),
 		};
 	});
 
-	// 6. Intersect only dual allows; an empty grant intersection fails closed.
+	// 7. Intersect only dual allows; an empty grant intersection fails closed.
 	const capabilities = evidence.filter(item => item.actorDecision.outcome === AuthorizationDecisionOutcomes.Allow && item.agentServiceDecision.outcome === AuthorizationDecisionOutcomes.Allow).map(item => item.capability);
 	if (capabilities.length === 0)
 	{

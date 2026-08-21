@@ -584,10 +584,10 @@ wait_for_holder_sleeping 'phase-d-membership-acceptance'
   run_psql >"$RACE_DIR/membership-assert-late.out" 2>&1 <<'SQL'
 SET application_name = 'phase-d-membership-assert-late';
 INSERT INTO "verified_fleet_membership_assertions" (
-  "id", "revision_id", "assertion_id", "silo_id", "subject_id", "scope_kind", "organization_id"
+  "id", "revision_id", "assertion_id", "silo_id", "subject_id"
 ) VALUES (
   'assertion-race-late', 'membership-race-accept-first', 'assertion-race-late',
-  'silo-race', 'user-race', 'organization', 'org-race'
+  'silo-race', 'user-race'
 );
 SQL
   echo "$?" >"$RACE_DIR/membership-assert-late.status"
@@ -602,7 +602,7 @@ if [[ "$(<"$RACE_DIR/membership-accept.status")" != "0" ]]; then
   exit 1
 fi
 if [[ "$(<"$RACE_DIR/membership-assert-late.status")" == "0" ]] \
-  || ! grep -q 'accepted fleet membership assertions are sealed' "$RACE_DIR/membership-assert-late.out"; then
+  || [[ "$(<"$RACE_DIR/membership-assert-late.out")" != *"accepted fleet membership assertions are sealed"* ]]; then
   cat "$RACE_DIR/membership-assert-late.out" >&2
   echo 'FAIL: assertion insertion bypassed concurrent fleet membership acceptance' >&2
   exit 1
@@ -626,10 +626,10 @@ SQL
 SET application_name = 'phase-d-membership-assert-first';
 BEGIN;
 INSERT INTO "verified_fleet_membership_assertions" (
-  "id", "revision_id", "assertion_id", "silo_id", "subject_id", "scope_kind", "organization_id"
+  "id", "revision_id", "assertion_id", "silo_id", "subject_id"
 ) VALUES (
   'assertion-race-first', 'membership-race-assert-first', 'assertion-race-first',
-  'silo-race', 'user-race', 'organization', 'org-race'
+  'silo-race', 'user-race'
 );
 SELECT pg_sleep(3);
 COMMIT;

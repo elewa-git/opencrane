@@ -21,7 +21,7 @@ interface SnapshotExecutionIdentity
 	/** Managed service that owns service-principal evidence, or null for a human user. */
 	readonly agentServiceId: string | null;
 	/** Digest binding effective scope attachments into a service identity, or null for a user. */
-	readonly effectiveScopeAttachmentDigest: string | null;
+	readonly effectiveBoundaryAttachmentDigest: string | null;
 	/** Last instant at which the signed fleet-membership evidence remains trusted. */
 	readonly fleetMembershipTrustedUntilEpochMilliseconds: number;
 }
@@ -525,11 +525,11 @@ function _SnapshotExecutionIdentity(value: unknown): SnapshotExecutionIdentity |
 	if ((kind !== RunInputSnapshotIdentityKinds.User && kind !== RunInputSnapshotIdentityKinds.Service) || typeof subjectId !== "string" || subjectId.trim().length === 0 || subjectId.length > 256 || typeof trustedUntil !== "string") return null;
 	const fleetMembershipTrustedUntilEpochMilliseconds = _CanonicalUtcInstantEpochMilliseconds(trustedUntil);
 	if (fleetMembershipTrustedUntilEpochMilliseconds === null) return null;
-	if (kind === RunInputSnapshotIdentityKinds.User) return { kind, subjectId, agentServiceId: null, effectiveScopeAttachmentDigest: null, fleetMembershipTrustedUntilEpochMilliseconds };
+	if (kind === RunInputSnapshotIdentityKinds.User) return { kind, subjectId, agentServiceId: null, effectiveBoundaryAttachmentDigest: null, fleetMembershipTrustedUntilEpochMilliseconds };
 	const agentServiceId = identity["agentServiceId"];
-	const effectiveScopeAttachmentDigest = identity["effectiveScopeAttachmentDigest"];
-	if (typeof agentServiceId !== "string" || agentServiceId.trim().length === 0 || agentServiceId.length > 256 || typeof effectiveScopeAttachmentDigest !== "string" || !/^sha256:[0-9a-f]{64}$/.test(effectiveScopeAttachmentDigest)) return null;
-	return { kind, subjectId, agentServiceId, effectiveScopeAttachmentDigest, fleetMembershipTrustedUntilEpochMilliseconds };
+	const effectiveBoundaryAttachmentDigest = identity["effectiveBoundaryAttachmentDigest"];
+	if (typeof agentServiceId !== "string" || agentServiceId.trim().length === 0 || agentServiceId.length > 256 || typeof effectiveBoundaryAttachmentDigest !== "string" || !/^sha256:[0-9a-f]{64}$/.test(effectiveBoundaryAttachmentDigest)) return null;
+	return { kind, subjectId, agentServiceId, effectiveBoundaryAttachmentDigest, fleetMembershipTrustedUntilEpochMilliseconds };
 }
 
 /** Require a snapshot identity to be the only identity class valid for the active service. */

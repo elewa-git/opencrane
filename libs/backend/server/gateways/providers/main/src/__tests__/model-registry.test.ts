@@ -19,6 +19,7 @@ function _platformOperator(): AuthUser
     sub: "operator-1",
     issuer: "https://idp.example.test",
     groups: ["platform-operators"],
+		authorizationExpiresAt: "2099-06-18T00:00:00.000Z",
     isPlatformOperator: true,
     isOrgAdmin: true,
     email: "operator@example.test",

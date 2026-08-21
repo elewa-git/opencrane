@@ -1,104 +1,152 @@
-import express from "express";
-import type { Express, Request, Response, NextFunction } from "express";
-import type { PrismaClient } from "@prisma/client";
+import express, { type Express } from "express";
 import request from "supertest";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
+vi.mock("@opencrane/backend/server/iam/authorization", async function _authorization()
+{
+	const actual = await vi.importActual("@opencrane/backend/server/iam/authorization");
+	return { ...actual, __ResolvePrincipalAuthorization: vi.fn().mockResolvedValue({ outcome: "allow", reason: "winning_allow", grantIds: ["owner-grant"] }) };
+});
+
+import { __ResolvePrincipalAuthorization } from "@opencrane/backend/server/iam/authorization";
+import { AuthorizationDecisionOutcomes } from "@opencrane/models/authorization";
+import { ResourceShareService } from "../resource-share-service";
+import type { ResourceShareRepository } from "../resource-share-repository.types";
+import type { ResourceShareTransaction, ResourceShareUnitOfWork } from "../resource-share-unit-of-work.types";
+import { ResourceShareKinds, type ResourceShareRecord } from "../resource-share.types";
 import { resourceSharesRouter } from "../routes/resource-shares";
 
-/** Capture of the last group.create / group.update payload. */
-let _lastWrite: Record<string, unknown> | null = null;
-
-/** Build a Prisma stub around the group mirror for resource-share tests. */
-function _prisma(opts: { byName?: Record<string, { id: string; name: string; members: string[] }>; byId?: Record<string, { id: string; name: string; members: string[] }>; all?: Array<{ id: string; name: string; members: string[] }> } = {}): PrismaClient
+/** Mutable authority state shared by the focused service adapters. */
+interface _State
 {
-  return {
-    group: {
-      findUnique: vi.fn(async (a: { where: { name?: string; id?: string } }) => (a.where.name ? opts.byName?.[a.where.name] : opts.byId?.[a.where.id ?? ""]) ?? null),
-      findMany: vi.fn(async () => opts.all ?? []),
-      create: vi.fn(async (a: { data: Record<string, unknown> }) => { _lastWrite = a.data; return { id: "grp-new", name: a.data.name, members: a.data.members }; }),
-      update: vi.fn(async (a: { where: { name?: string; id?: string }; data: Record<string, unknown> }) => { _lastWrite = a.data; return { id: "grp-x", name: "resource:file:f1", members: a.data.members }; }),
-    },
-  } as unknown as PrismaClient;
+	/** Persisted share parent, when created. */
+	share: ResourceShareRecord | null;
+	/** Recipient-to-grant relation. */
+	recipients: Map<string, string>;
+	/** Whether the linked grant has been soft-revoked. */
+	grantRevoked: boolean;
 }
 
-/** Build a test app mounting the resource-shares router with an injected caller session. */
-function _app(prisma: PrismaClient, caller?: string): Express
+/** Builds an in-memory repository that preserves the ResourceShare invariants under test. */
+function _resourceShares(state: _State): ResourceShareRepository
 {
-  const app = express();
-  app.use(express.json());
-  app.use(function _session(req: Request, _res: Response, next: NextFunction)
-  {
-    (req as unknown as { session?: unknown }).session = caller ? { authUser: { sub: caller } } : {};
-    next();
-  });
-  app.use("/api/v1/resource-shares", resourceSharesRouter(prisma));
-  return app;
+	return {
+		principalExists: vi.fn(async function _principalExists(_siloId, principalId) { return ["owner", "recipient"].includes(principalId); }),
+		findByResource: vi.fn(async function _findByResource() { return state.share; }),
+		createOrFind: vi.fn(async function _createOrFind(input)
+		{
+			const share = state.share ?? { id: "share-1", ...input, recipientPrincipalIds: [] };
+			state.share = share;
+			return share;
+		}),
+		findRecipient: vi.fn(async function _findRecipient(siloId, shareId, recipientPrincipalId)
+		{
+			const grantId = state.recipients.get(recipientPrincipalId);
+			if (!grantId || state.share === null) return null;
+			return { shareId, siloId, ownerPrincipalId: state.share.ownerPrincipalId, recipientPrincipalId, grantId };
+		}),
+		createRecipient: vi.fn(async function _createRecipient(input)
+		{
+			if (state.recipients.has(input.recipientPrincipalId)) return false;
+			state.recipients.set(input.recipientPrincipalId, input.grantId);
+			if (state.share !== null) state.share = { ...state.share, recipientPrincipalIds: [...state.recipients.keys()].sort() };
+			return true;
+		}),
+		revokeRecipient: vi.fn(async function _revokeRecipient(_siloId, _shareId, recipientPrincipalId)
+		{
+			const removed = state.recipients.delete(recipientPrincipalId);
+			if (state.share !== null) state.share = { ...state.share, recipientPrincipalIds: [...state.recipients.keys()].sort() };
+			return removed;
+		}),
+		findById: vi.fn(async function _findById() { return state.share; }),
+		listVisible: vi.fn(async function _listVisible() { return state.share === null ? [] : [state.share]; }),
+	};
 }
 
-describe("resourceSharesRouter — direct file/chat sharing → resource group (S4c)", function _suite()
+/** Builds the one transaction surface needed by ResourceShareService. */
+function _authority(): { service: ResourceShareService; state: _State; execute: ReturnType<typeof vi.fn> }
 {
-  it("401s an unauthenticated caller", async function _unauth()
-  {
-    const res = await request(_app(_prisma())).post("/api/v1/resource-shares").send({ resourceType: "file", resourceId: "f1", recipientSubject: "bob" });
-    expect(res.status).toBe(401);
-  });
+	const state: _State = { share: null, recipients: new Map(), grantRevoked: false };
+	const transaction: ResourceShareTransaction = {
+		authorization: {} as ResourceShareTransaction["authorization"],
+		capabilityCatalog: {
+			findCapability: vi.fn().mockResolvedValue({ catalog: { catalogId: "opencrane-resource-sharing", revision: 1, digest: "sha256:03c84ee77c531ddc95d5c379e195e12d94aed9129783a07105066a875d24c775" }, capabilityId: "resource:read" }),
+		},
+		authorizationShares: {
+			ensureCatalogRevision: vi.fn(),
+			createOrFindExactShare: vi.fn().mockResolvedValue({ share: { id: "grant-1" }, created: true }),
+			listActiveShares: vi.fn(),
+			revokeOwnedShare: vi.fn(),
+			revokeManagedShare: vi.fn(async function _revokeManagedShare() { state.grantRevoked = true; return true; }),
+		},
+		resourceShares: _resourceShares(state),
+	};
+	const execute = vi.fn();
+	const unitOfWork: ResourceShareUnitOfWork = {
+		async execute<Result>(procedure: (transaction: ResourceShareTransaction) => Promise<Result>): Promise<Result>
+		{
+			execute();
+			return procedure(transaction);
+		},
+	};
+	return { service: new ResourceShareService(unitOfWork), state, execute };
+}
 
-  it("400s an invalid body", async function _bad()
-  {
-    const res = await request(_app(_prisma(), "alice")).post("/api/v1/resource-shares").send({ resourceType: "nope", resourceId: "", recipientSubject: "" });
-    expect(res.status).toBe(400);
-  });
+/** Mounts the route with a fixed authenticated or unauthenticated caller adapter. */
+function _app(service: ResourceShareService, authenticated = true): Express
+{
+	const app = express();
+	app.use(express.json());
+	app.use("/api/v1/resource-shares", resourceSharesRouter(service, async function _caller()
+	{
+		return authenticated ? { siloId: "silo-a", principalId: "owner" } : null;
+	}));
+	return app;
+}
 
-  it("creates the resource group with the sharer + recipient on first share (201)", async function _create()
-  {
-    _lastWrite = null;
-    const res = await request(_app(_prisma(), "alice")).post("/api/v1/resource-shares").send({ resourceType: "file", resourceId: "f1", recipientSubject: "bob" });
-    expect(res.status).toBe(201);
-    // Personal-scoped group named for the resource, members = sharer + recipient.
-    expect(_lastWrite).toMatchObject({ name: "resource:file:f1", scope: "Personal" });
-    expect((_lastWrite as Record<string, unknown> | null)?.members).toEqual(["alice", "bob"]);
-    expect(res.body.members).toEqual(["alice", "bob"]);
-  });
+describe("resource sharing", function _suite()
+{
+	beforeEach(function _allow()
+	{
+		vi.mocked(__ResolvePrincipalAuthorization).mockReset().mockResolvedValue({ outcome: AuthorizationDecisionOutcomes.Allow, reason: "winning_allow", grantIds: ["owner-grant"] });
+	});
 
-  it("adds the recipient to an existing group when the caller is a member (200)", async function _addMember()
-  {
-    _lastWrite = null;
-    const prisma = _prisma({ byName: { "resource:file:f1": { id: "g1", name: "resource:file:f1", members: ["alice"] } } });
-    const res = await request(_app(prisma, "alice")).post("/api/v1/resource-shares").send({ resourceType: "file", resourceId: "f1", recipientSubject: "bob" });
-    expect(res.status).toBe(200);
-    expect((_lastWrite as Record<string, unknown> | null)?.members).toEqual(["alice", "bob"]);
-  });
+	it("rejects an unauthenticated caller before invoking authority", async function _unauthenticated()
+	{
+		const { service, execute } = _authority();
+		const response = await request(_app(service, false)).post("/api/v1/resource-shares").send({ resourceType: "file", resourceId: "file-1", recipientPrincipalId: "recipient" });
+		expect(response.status).toBe(401);
+		expect(execute).not.toHaveBeenCalled();
+	});
 
-  it("403s when a non-member tries to share an existing resource (least-privilege)", async function _gate()
-  {
-    const prisma = _prisma({ byName: { "resource:file:f1": { id: "g1", name: "resource:file:f1", members: ["alice"] } } });
-    // carol is not a member → cannot share alice's resource.
-    const res = await request(_app(prisma, "carol")).post("/api/v1/resource-shares").send({ resourceType: "file", resourceId: "f1", recipientSubject: "bob" });
-    expect(res.status).toBe(403);
-  });
+	it("creates an explicit recipient and exact grant through one unit of work", async function _create()
+	{
+		const { service, state, execute } = _authority();
+		const response = await request(_app(service)).post("/api/v1/resource-shares").send({ resourceType: "file", resourceId: "file-1", recipientPrincipalId: "recipient" });
+		expect(response.status).toBe(201);
+		expect(response.body).toMatchObject({ id: "share-1", ownerPrincipalId: "owner", recipientPrincipalIds: ["recipient"] });
+		expect(state.recipients.get("recipient")).toBe("grant-1");
+		expect(execute).toHaveBeenCalledTimes(1);
+	});
 
-  it("lists only the resource shares the caller is a member of", async function _list()
-  {
-    const prisma = _prisma({ all: [
-      { id: "g1", name: "resource:file:f1", members: ["alice", "bob"] },
-      { id: "g2", name: "resource:chat:c9", members: ["carol"] },
-    ] });
-    const res = await request(_app(prisma, "alice")).get("/api/v1/resource-shares");
-    expect(res.status).toBe(200);
-    expect(res.body.map((s: { resourceId: string }) => s.resourceId)).toEqual(["f1"]);
-  });
+	it("fails closed before any share write when the caller lacks the resource grant", async function _deny()
+	{
+		vi.mocked(__ResolvePrincipalAuthorization).mockResolvedValue({ outcome: AuthorizationDecisionOutcomes.Deny, reason: "no_matching_grant", grantIds: [] });
+		const { service, state } = _authority();
+		const response = await request(_app(service)).post("/api/v1/resource-shares").send({ resourceType: "chat", resourceId: "chat-1", recipientPrincipalId: "recipient" });
+		expect(response.status).toBe(403);
+		expect(state.share).toBeNull();
+	});
 
-  it("revokes a recipient only from a group the caller is in; otherwise 404", async function _revoke()
-  {
-    const prisma = _prisma({ byId: { g1: { id: "g1", name: "resource:file:f1", members: ["alice", "bob"] }, g2: { id: "g2", name: "resource:file:f2", members: ["carol"] } } });
-
-    const notMine = await request(_app(prisma, "alice")).delete("/api/v1/resource-shares/g2/recipients/carol");
-    expect(notMine.status).toBe(404);
-
-    _lastWrite = null;
-    const mine = await request(_app(prisma, "alice")).delete("/api/v1/resource-shares/g1/recipients/bob");
-    expect(mine.status).toBe(200);
-    expect((_lastWrite as Record<string, unknown> | null)?.members).toEqual(["alice"]);
-  });
+	it("revokes the explicit recipient and its linked grant in one unit of work", async function _revoke()
+	{
+		const { service, state, execute } = _authority();
+		await request(_app(service)).post("/api/v1/resource-shares").send({ resourceType: ResourceShareKinds.Dataset, resourceId: "dataset-1", recipientPrincipalId: "recipient" });
+		execute.mockClear();
+		const response = await request(_app(service)).delete("/api/v1/resource-shares/share-1/recipients/recipient");
+		expect(response.status).toBe(204);
+		expect(state.recipients.has("recipient")).toBe(false);
+		expect(state.grantRevoked).toBe(true);
+		expect(execute).toHaveBeenCalledTimes(1);
+	});
 });

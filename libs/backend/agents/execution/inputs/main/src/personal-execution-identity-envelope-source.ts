@@ -1,9 +1,10 @@
 import type { Prisma } from "@prisma/client";
 import type { InitialRunAuthority, RunAdmissionTransaction } from "@opencrane/backend/agents/execution/runs";
-import { __DigestCanonicalJson } from "@opencrane/backend/server/iam/authorization";
+import { __DigestCanonicalJson, PrismaAuthorizationGrantRepository } from "@opencrane/backend/server/iam/authorization";
 import { __VerifyCurrentFleetMembershipEvidence, FleetMembershipEvidenceOutcomes, PrismaFleetMembershipAuthorityRepository, type FleetMembershipEvidenceConfig } from "@opencrane/backend/server/iam/membership";
 import { RunInputSnapshotIdentityKinds } from "@opencrane/contracts";
 import { AgentServiceKinds } from "@opencrane/models/agents";
+import { AuthorizationBoundaryKinds } from "@opencrane/models/authorization";
 import type { JsonValue } from "@opencrane/util";
 
 import type { IdentityEnvelopeInput, IdentityEnvelopeSource, SessionAssemblyCommand, SessionAssemblyLoad } from "./session-assembly.types";
@@ -69,18 +70,19 @@ export class PersonalExecutionIdentityEnvelopeSource implements IdentityEnvelope
 			return { outcome: "denied", reason: "identity_unavailable" };
 		}
 
-		// 2. Take the one current signed personal scope. Refuse rather than guess when more than one matches.
+		// 2. Resolve the stable local Principal and one current signed silo-membership assertion.
 		const identityAuthority = new PrismaPersonalExecutionIdentityAuthorityRepository(prisma);
+		const principalId = await identityAuthority.resolvePrincipalId(command.siloId, command.executionIssuer, command.executionSubjectId);
+		if (principalId === null) return { outcome: "denied", reason: "identity_unavailable" };
 		const assertion = await identityAuthority.loadLatestPersonalAssertion(this.config.trustedIssuerId, command.siloId, command.executionSubjectId);
 		if (assertion === null) return { outcome: "denied", reason: "membership_stale" };
 
-		// 3. Check the signature, scope, freshness, and the monotonic revision high-watermark in this same transaction.
+		// 3. Check the signature, freshness, and monotonic revision high-watermark in this transaction.
 		const membership = await __VerifyCurrentFleetMembershipEvidence(new PrismaFleetMembershipAuthorityRepository(prisma), this.config.verifier, {
 			trustedIssuerId: this.config.trustedIssuerId,
 			siloId: command.siloId,
 			subjectId: command.executionSubjectId,
 			assertionId: assertion.assertionId,
-			scope: { kind: "personal", organizationId: assertion.organizationId, userId: command.executionSubjectId },
 			nowEpochMs: transaction.admittedAtEpochMs,
 			maximumStalenessMs: this.config.maximumStalenessMs,
 		});
@@ -89,27 +91,36 @@ export class PersonalExecutionIdentityEnvelopeSource implements IdentityEnvelope
 			return { outcome: "denied", reason: "membership_stale" };
 		}
 		const verifiedAssertion = await identityAuthority.loadVerifiedPersonalAssertion(membership.evidence.issuerId, command.siloId, membership.evidence.revision, membership.evidence.payloadDigest, command.executionSubjectId);
-		if (verifiedAssertion === null || verifiedAssertion.assertionId !== membership.evidence.assertionId || verifiedAssertion.organizationId !== membership.evidence.organizationId)
+		if (verifiedAssertion === null || verifiedAssertion.assertionId !== membership.evidence.assertionId)
 		{
 			return { outcome: "denied", reason: "membership_stale" };
 		}
 
 		// 4. Hash the membership and active-revision facts into one digest before later sources add runtime inputs.
-		const grants = await identityAuthority.loadEffectivePersonalGrants(command.siloId, command.executionSubjectId, membership.evidence.organizationId, new Date(transaction.admittedAt));
+		const authorization = new PrismaAuthorizationGrantRepository(prisma);
+		const subjects = await authorization.resolvePrincipalSubjects(command.siloId, principalId);
+		const grants = (await authorization.listSubjectGrants(command.siloId, subjects)).filter(function _IsActivePersonalGrant(grant): boolean
+		{
+			return grant.boundary.kind === AuthorizationBoundaryKinds.Personal
+				&& grant.boundary.principalId === principalId
+				&& grant.validFromEpochMs <= transaction.admittedAtEpochMs
+				&& grant.revokedAtEpochMs === null
+				&& (grant.expiresAtEpochMs === null || grant.expiresAtEpochMs > transaction.admittedAtEpochMs);
+		});
 		const capabilitySetDigest = __DigestCanonicalJson({
 			siloId: command.siloId,
 			executionSubjectId: command.executionSubjectId,
+			executionIssuer: command.executionIssuer,
 			agentServiceId: run.agentServiceId,
 			agentRevisionId: run.agentRevisionId,
 			effectiveContractDigest: run.effectiveContractDigest,
-			organizationId: membership.evidence.organizationId,
 			fleetMembershipRevision: membership.evidence.revision,
 			fleetMembershipPayloadDigest: membership.evidence.payloadDigest,
-			personalScopeUserId: command.executionSubjectId,
+			personalBoundaryPrincipalId: principalId,
 			effectivePersonalGrants: grants
 				.map(function _CanonicalGrant(grant)
 				{
-					return { catalogId: grant.catalogId, catalogRevision: grant.catalogRevision, catalogDigest: grant.catalogDigest, capabilityId: grant.capabilityId, resourceKind: grant.resourceKind, resourceId: grant.resourceId, effect: grant.effect, priority: grant.priority, validFrom: grant.validFrom.toISOString(), expiresAt: grant.expiresAt?.toISOString() ?? null };
+					return { catalogId: grant.capability.catalog.catalogId, catalogRevision: grant.capability.catalog.revision, catalogDigest: grant.capability.catalog.digest, capabilityId: grant.capability.capabilityId, resourceKind: grant.resource.kind, resourceId: grant.resource.id, effect: grant.effect, priority: grant.priority, validFrom: new Date(grant.validFromEpochMs).toISOString(), expiresAt: grant.expiresAtEpochMs === null ? null : new Date(grant.expiresAtEpochMs).toISOString() };
 				})
 				.sort(function _ByGrant(left, right): number { return _CompareCanonicalGrant(left, right); }),
 		} as JsonValue);
@@ -118,7 +129,8 @@ export class PersonalExecutionIdentityEnvelopeSource implements IdentityEnvelope
 			value: {
 				kind: RunInputSnapshotIdentityKinds.User,
 				executionSubjectId: membership.evidence.subjectId,
-				organizationId: membership.evidence.organizationId,
+				executionIssuer: command.executionIssuer,
+				principalId,
 				fleetMembershipRevision: membership.evidence.revision,
 				fleetMembershipIssuer: membership.evidence.issuerId,
 				fleetMembershipIssuerKeyId: membership.evidence.issuerKeyId,

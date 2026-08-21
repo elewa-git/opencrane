@@ -20,10 +20,10 @@ BEGIN
 END;
 $$;
 
-INSERT INTO "groups" ("id", "name", "scope", "parent_id", "updated_at") VALUES
-    ('hierarchy-company', 'Hierarchy Company', 'org', NULL, clock_timestamp()),
-    ('hierarchy-engineering', 'Hierarchy Engineering', 'department', 'hierarchy-company', clock_timestamp()),
-    ('hierarchy-platform', 'Hierarchy Platform', 'team', 'hierarchy-engineering', clock_timestamp());
+INSERT INTO "groups" ("id", "silo_id", "name", "membership_authority", "parent_id", "updated_at") VALUES
+    ('hierarchy-company', 'legacy-silo', 'Hierarchy Company', 'local', NULL, clock_timestamp()),
+    ('hierarchy-engineering', 'legacy-silo', 'Hierarchy Engineering', 'local', 'hierarchy-company', clock_timestamp()),
+    ('hierarchy-platform', 'legacy-silo', 'Hierarchy Platform', 'local', 'hierarchy-engineering', clock_timestamp());
 
 SELECT pg_temp.expect_group_hierarchy_failure(
     $statement$
@@ -43,14 +43,14 @@ SELECT pg_temp.expect_group_hierarchy_failure(
     $statement$
     UPDATE "groups" SET "parent_id" = 'hierarchy-missing' WHERE "id" = 'hierarchy-platform'
     $statement$,
-    'groups_parent_id_fkey'
+    'groups_parent_id_silo_id_fkey'
 );
 
 SELECT pg_temp.expect_group_hierarchy_failure(
     $statement$
     DELETE FROM "groups" WHERE "id" = 'hierarchy-company'
     $statement$,
-    'groups_parent_id_fkey'
+    'groups_parent_id_silo_id_fkey'
 );
 
 UPDATE "groups" SET "parent_id" = 'hierarchy-company' WHERE "id" = 'hierarchy-platform';

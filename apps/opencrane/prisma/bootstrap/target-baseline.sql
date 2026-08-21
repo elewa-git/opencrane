@@ -53,7 +53,13 @@ CREATE TYPE "AuditDecisionOutcome" AS ENUM ('allow', 'deny', 'error');
 CREATE TYPE "AuditDecisionActorKind" AS ENUM ('user', 'agent-service', 'workload', 'system');
 
 -- CreateEnum
-CREATE TYPE "AuthorizationScopeKind" AS ENUM ('organization', 'department', 'team', 'project', 'personal', 'direct-user');
+CREATE TYPE "AuthorizationSubjectKind" AS ENUM ('group', 'principal');
+
+-- CreateEnum
+CREATE TYPE "AuthorizationBoundaryKind" AS ENUM ('group', 'personal');
+
+-- CreateEnum
+CREATE TYPE "AuthorizationBoundaryCoverage" AS ENUM ('exact', 'descendants');
 
 -- CreateEnum
 CREATE TYPE "AuthorizationEffect" AS ENUM ('allow', 'deny');
@@ -125,10 +131,10 @@ CREATE TYPE "ElicitationResultDeliveryState" AS ENUM ('pending', 'consumed');
 CREATE TYPE "PersonalMemoryPermissionReceiptState" AS ENUM ('active', 'consumed');
 
 -- CreateEnum
-CREATE TYPE "GrantScope" AS ENUM ('org', 'department', 'team', 'project', 'personal');
+CREATE TYPE "GroupMembershipAuthority" AS ENUM ('external', 'local');
 
 -- CreateEnum
-CREATE TYPE "GrantSubjectType" AS ENUM ('group', 'user');
+CREATE TYPE "PrincipalProvenance" AS ENUM ('external', 'internal');
 
 -- CreateEnum
 CREATE TYPE "IntegrationState" AS ENUM ('active', 'retired');
@@ -150,9 +156,6 @@ CREATE TYPE "McpApprovalStatus" AS ENUM ('pending-review', 'approved', 'publishe
 
 -- CreateEnum
 CREATE TYPE "McpConnectionStatus" AS ENUM ('needs-credential', 'activating', 'connected', 'oauth-connected', 'shared-key', 'activation-failed');
-
--- CreateEnum
-CREATE TYPE "FleetMembershipScopeKind" AS ENUM ('organization', 'department', 'team', 'project', 'personal', 'direct-user');
 
 -- CreateEnum
 CREATE TYPE "MemoryDatasetState" AS ENUM ('active', 'retired');
@@ -265,6 +268,7 @@ CREATE TABLE "agent_services" (
     "state" "AgentServiceState" NOT NULL DEFAULT 'draft',
     "active_revision_id" TEXT,
     "workload_profile" TEXT NOT NULL,
+    "principal_id" TEXT,
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updated_at" TIMESTAMP(3) NOT NULL,
 
@@ -293,13 +297,16 @@ CREATE TABLE "agent_revisions" (
 );
 
 -- CreateTable
-CREATE TABLE "agent_revision_scope_attachments" (
+CREATE TABLE "agent_revision_boundary_attachments" (
+    "id" TEXT NOT NULL,
     "agent_revision_id" TEXT NOT NULL,
-    "scope" "GrantScope" NOT NULL,
-    "subject_type" "GrantSubjectType" NOT NULL,
-    "subject_id" TEXT NOT NULL,
+    "silo_id" TEXT NOT NULL,
+    "boundary_kind" "AuthorizationBoundaryKind" NOT NULL,
+    "boundary_group_id" TEXT,
+    "boundary_principal_id" TEXT,
+    "boundary_coverage" "AuthorizationBoundaryCoverage" NOT NULL,
 
-    CONSTRAINT "agent_revision_scope_attachments_pkey" PRIMARY KEY ("agent_revision_id","scope","subject_type","subject_id")
+    CONSTRAINT "agent_revision_boundary_attachments_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -496,10 +503,14 @@ CREATE TABLE "audit_decisions" (
 CREATE TABLE "authorization_grants" (
     "id" TEXT NOT NULL,
     "silo_id" TEXT NOT NULL,
-    "subject_id" TEXT NOT NULL,
-    "scope_kind" "AuthorizationScopeKind" NOT NULL,
-    "organization_id" TEXT NOT NULL,
-    "scope_resource_id" TEXT,
+    "subject_kind" "AuthorizationSubjectKind" NOT NULL,
+    "subject_group_id" TEXT,
+    "subject_principal_id" TEXT,
+    "boundary_kind" "AuthorizationBoundaryKind" NOT NULL,
+    "boundary_group_id" TEXT,
+    "boundary_principal_id" TEXT,
+    "boundary_coverage" "AuthorizationBoundaryCoverage" NOT NULL,
+    "manager_id" TEXT,
     "catalog_id" TEXT NOT NULL,
     "catalog_revision" INTEGER NOT NULL,
     "catalog_digest" TEXT NOT NULL,
@@ -713,6 +724,7 @@ CREATE TABLE "org_memberships" (
     "id" TEXT NOT NULL,
     "cluster_tenant" TEXT NOT NULL,
     "subject" TEXT NOT NULL,
+    "provenance" "PrincipalProvenance" NOT NULL DEFAULT 'external',
     "email" TEXT,
     "display_name" TEXT,
     "role" "OrgRole" NOT NULL,
@@ -853,17 +865,66 @@ CREATE TABLE "conversation_context_revisions" (
 );
 
 -- CreateTable
+CREATE TABLE "principals" (
+    "id" TEXT NOT NULL,
+    "silo_id" TEXT NOT NULL,
+    "issuer" TEXT NOT NULL,
+    "subject" TEXT NOT NULL,
+    "email" TEXT,
+    "display_name" TEXT,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "principals_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
 CREATE TABLE "groups" (
     "id" TEXT NOT NULL,
+    "silo_id" TEXT NOT NULL,
     "name" TEXT NOT NULL,
-    "scope" "GrantScope" NOT NULL,
     "description" TEXT,
-    "members" JSONB NOT NULL DEFAULT '[]',
+    "membership_authority" "GroupMembershipAuthority" NOT NULL,
     "parent_id" TEXT,
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updated_at" TIMESTAMP(3) NOT NULL,
 
     CONSTRAINT "groups_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "group_memberships" (
+    "silo_id" TEXT NOT NULL,
+    "group_id" TEXT NOT NULL,
+    "principal_id" TEXT NOT NULL,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "group_memberships_pkey" PRIMARY KEY ("group_id","principal_id")
+);
+
+-- CreateTable
+CREATE TABLE "resource_shares" (
+    "id" TEXT NOT NULL,
+    "silo_id" TEXT NOT NULL,
+    "resource_kind" TEXT NOT NULL,
+    "resource_id" TEXT NOT NULL,
+    "owner_principal_id" TEXT NOT NULL,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "resource_shares_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "resource_share_recipients" (
+    "silo_id" TEXT NOT NULL,
+    "resource_share_id" TEXT NOT NULL,
+    "principal_id" TEXT NOT NULL,
+    "granted_by_principal_id" TEXT NOT NULL,
+    "grant_id" TEXT NOT NULL,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "resource_share_recipients_pkey" PRIMARY KEY ("resource_share_id","principal_id")
 );
 
 -- CreateTable
@@ -896,10 +957,10 @@ CREATE TABLE "integration_custody_references" (
 -- CreateTable
 CREATE TABLE "mcp_servers" (
     "id" TEXT NOT NULL,
+    "silo_id" TEXT NOT NULL,
     "name" TEXT NOT NULL,
     "description" TEXT NOT NULL DEFAULT '',
     "endpoint" TEXT NOT NULL,
-    "scope" "GrantScope" NOT NULL,
     "transport" "McpServerTransport" NOT NULL,
     "status" "McpServerStatus" NOT NULL DEFAULT 'draft',
     "requires_approval" BOOLEAN NOT NULL DEFAULT false,
@@ -931,28 +992,6 @@ CREATE TABLE "mcp_server_installs" (
     "updated_at" TIMESTAMP(3) NOT NULL,
 
     CONSTRAINT "mcp_server_installs_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "mcp_server_access_policies" (
-    "id" TEXT NOT NULL,
-    "mcp_server_id" TEXT NOT NULL,
-    "everyone_in_org" BOOLEAN NOT NULL DEFAULT false,
-    "groups" TEXT[] DEFAULT ARRAY[]::TEXT[],
-    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updated_at" TIMESTAMP(3) NOT NULL,
-
-    CONSTRAINT "mcp_server_access_policies_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "mcp_server_access_users" (
-    "id" TEXT NOT NULL,
-    "access_policy_id" TEXT NOT NULL,
-    "user_id" TEXT NOT NULL,
-    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
-    CONSTRAINT "mcp_server_access_users_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -989,9 +1028,6 @@ CREATE TABLE "verified_fleet_membership_assertions" (
     "assertion_id" TEXT NOT NULL,
     "silo_id" TEXT NOT NULL,
     "subject_id" TEXT NOT NULL,
-    "scope_kind" "FleetMembershipScopeKind" NOT NULL,
-    "organization_id" TEXT NOT NULL,
-    "scope_resource_id" TEXT,
 
     CONSTRAINT "verified_fleet_membership_assertions_pkey" PRIMARY KEY ("id")
 );
@@ -1011,9 +1047,9 @@ CREATE TABLE "highest_accepted_fleet_memberships" (
 CREATE TABLE "memory_datasets" (
     "id" TEXT NOT NULL,
     "silo_id" TEXT NOT NULL,
-    "scope_kind" "AuthorizationScopeKind" NOT NULL,
-    "organization_id" TEXT NOT NULL,
-    "scope_resource_id" TEXT,
+    "boundary_kind" "AuthorizationBoundaryKind" NOT NULL,
+    "boundary_group_id" TEXT,
+    "boundary_principal_id" TEXT,
     "cognee_dataset_id" TEXT NOT NULL,
     "state" "MemoryDatasetState" NOT NULL DEFAULT 'active',
     "created_by" TEXT NOT NULL,
@@ -1940,6 +1976,9 @@ CREATE UNIQUE INDEX "agent_services_id_active_revision_id_key" ON "agent_service
 CREATE UNIQUE INDEX "agent_services_id_silo_id_key" ON "agent_services"("id", "silo_id");
 
 -- CreateIndex
+CREATE UNIQUE INDEX "agent_services_principal_id_silo_id_key" ON "agent_services"("principal_id", "silo_id");
+
+-- CreateIndex
 CREATE INDEX "agent_revisions_digest_idx" ON "agent_revisions"("digest");
 
 -- CreateIndex
@@ -1958,7 +1997,10 @@ CREATE UNIQUE INDEX "agent_revisions_agent_service_id_id_key" ON "agent_revision
 CREATE UNIQUE INDEX "agent_revisions_agent_service_id_digest_key" ON "agent_revisions"("agent_service_id", "digest");
 
 -- CreateIndex
-CREATE INDEX "agent_revision_scope_attachments_scope_subject_type_subject_idx" ON "agent_revision_scope_attachments"("scope", "subject_type", "subject_id");
+CREATE INDEX "agent_revision_boundary_attachments_agent_revision_id_bound_idx" ON "agent_revision_boundary_attachments"("agent_revision_id", "boundary_kind", "boundary_group_id", "boundary_principal_id", "boundary_coverage");
+
+-- CreateIndex
+CREATE INDEX "agent_revision_boundary_attachments_silo_id_boundary_kind_idx" ON "agent_revision_boundary_attachments"("silo_id", "boundary_kind");
 
 -- CreateIndex
 CREATE INDEX "agent_service_schedules_silo_id_agent_service_id_idx" ON "agent_service_schedules"("silo_id", "agent_service_id");
@@ -2054,7 +2096,13 @@ CREATE INDEX "audit_decisions_resource_kind_resource_id_decided_at_idx" ON "audi
 CREATE INDEX "audit_decisions_actor_kind_actor_id_decided_at_idx" ON "audit_decisions"("actor_kind", "actor_id", "decided_at");
 
 -- CreateIndex
-CREATE INDEX "authorization_grants_silo_id_subject_id_scope_kind_organiza_idx" ON "authorization_grants"("silo_id", "subject_id", "scope_kind", "organization_id", "scope_resource_id");
+CREATE INDEX "authorization_grants_silo_id_subject_kind_subject_group_id__idx" ON "authorization_grants"("silo_id", "subject_kind", "subject_group_id", "subject_principal_id");
+
+-- CreateIndex
+CREATE INDEX "authorization_grants_silo_id_boundary_kind_boundary_group_i_idx" ON "authorization_grants"("silo_id", "boundary_kind", "boundary_group_id", "boundary_principal_id", "boundary_coverage");
+
+-- CreateIndex
+CREATE INDEX "authorization_grants_silo_id_manager_id_idx" ON "authorization_grants"("silo_id", "manager_id");
 
 -- CreateIndex
 CREATE INDEX "authorization_grants_silo_id_resource_kind_resource_id_prio_idx" ON "authorization_grants"("silo_id", "resource_kind", "resource_id", "priority");
@@ -2063,13 +2111,11 @@ CREATE INDEX "authorization_grants_silo_id_resource_kind_resource_id_prio_idx" O
 CREATE INDEX "authorization_grants_catalog_id_catalog_revision_capability_idx" ON "authorization_grants"("catalog_id", "catalog_revision", "capability_id");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "authorization_grant_exact_authority_key" ON "authorization_grants"("silo_id", "subject_id", "scope_kind", "organization_id", "scope_resource_id", "catalog_id", "catalog_revision", "capability_id", "resource_kind", "resource_id", "effect", "priority");
-
--- CreateIndex
--- PostgreSQL considers NULL values distinct in a regular unique index. Scope kinds without a
--- resource dimension store NULL here, so this partial index completes the exact-authority
--- invariant and makes duplicate share creation deterministically conflict instead of duplicating.
-CREATE UNIQUE INDEX "authorization_grant_null_scope_authority_key" ON "authorization_grants"("silo_id", "subject_id", "scope_kind", "organization_id", "catalog_id", "catalog_revision", "capability_id", "resource_kind", "resource_id", "effect", "priority") WHERE "scope_resource_id" IS NULL;
+CREATE UNIQUE INDEX "authorization_grant_exact_authority_key" ON "authorization_grants"(
+  "silo_id", "subject_kind", COALESCE("subject_group_id", ''), COALESCE("subject_principal_id", ''),
+  "boundary_kind", COALESCE("boundary_group_id", ''), COALESCE("boundary_principal_id", ''), "boundary_coverage",
+  "catalog_id", "catalog_revision", "capability_id", "resource_kind", COALESCE("resource_id", ''), "effect", "priority", COALESCE("manager_id", '')
+);
 
 -- CreateIndex
 CREATE UNIQUE INDEX "capability_catalog_revisions_catalog_id_revision_key" ON "capability_catalog_revisions"("catalog_id", "revision");
@@ -2138,13 +2184,40 @@ CREATE INDEX "organization_invitations_silo_id_status_expires_at_idx" ON "organi
 CREATE UNIQUE INDEX "organization_invitation_requests_silo_id_actor_subject_idempotency_key_key" ON "organization_invitation_requests"("silo_id", "actor_subject", "idempotency_key");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "groups_name_key" ON "groups"("name");
+CREATE INDEX "principals_silo_id_email_idx" ON "principals"("silo_id", "email");
 
 -- CreateIndex
-CREATE INDEX "groups_scope_idx" ON "groups"("scope");
+CREATE UNIQUE INDEX "principals_id_silo_id_key" ON "principals"("id", "silo_id");
 
 -- CreateIndex
-CREATE INDEX "groups_parent_id_idx" ON "groups"("parent_id");
+CREATE UNIQUE INDEX "principals_silo_id_issuer_subject_key" ON "principals"("silo_id", "issuer", "subject");
+
+-- CreateIndex
+CREATE INDEX "groups_silo_id_parent_id_idx" ON "groups"("silo_id", "parent_id");
+
+-- CreateIndex
+CREATE INDEX "groups_silo_id_membership_authority_idx" ON "groups"("silo_id", "membership_authority");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "groups_id_silo_id_key" ON "groups"("id", "silo_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "groups_silo_id_name_key" ON "groups"("silo_id", "name");
+
+-- CreateIndex
+CREATE INDEX "group_memberships_silo_id_principal_id_idx" ON "group_memberships"("silo_id", "principal_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "resource_shares_id_silo_id_key" ON "resource_shares"("id", "silo_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "resource_shares_silo_id_resource_kind_resource_id_key" ON "resource_shares"("silo_id", "resource_kind", "resource_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "resource_share_recipients_grant_id_key" ON "resource_share_recipients"("grant_id");
+
+-- CreateIndex
+CREATE INDEX "resource_share_recipients_silo_id_principal_id_idx" ON "resource_share_recipients"("silo_id", "principal_id");
 
 -- CreateIndex
 CREATE INDEX "integrations_silo_id_state_idx" ON "integrations"("silo_id", "state");
@@ -2165,10 +2238,7 @@ CREATE UNIQUE INDEX "integration_custody_references_id_integration_id_silo_id_ke
 CREATE UNIQUE INDEX "integration_custody_references_obot_custody_reference_key" ON "integration_custody_references"("obot_custody_reference");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "mcp_servers_name_key" ON "mcp_servers"("name");
-
--- CreateIndex
-CREATE INDEX "mcp_servers_scope_idx" ON "mcp_servers"("scope");
+CREATE UNIQUE INDEX "mcp_servers_silo_id_name_key" ON "mcp_servers"("silo_id", "name");
 
 -- CreateIndex
 CREATE INDEX "mcp_servers_approval_status_idx" ON "mcp_servers"("approval_status");
@@ -2178,15 +2248,6 @@ CREATE INDEX "mcp_server_installs_user_id_idx" ON "mcp_server_installs"("user_id
 
 -- CreateIndex
 CREATE UNIQUE INDEX "mcp_server_installs_mcp_server_id_user_id_key" ON "mcp_server_installs"("mcp_server_id", "user_id");
-
--- CreateIndex
-CREATE UNIQUE INDEX "mcp_server_access_policies_mcp_server_id_key" ON "mcp_server_access_policies"("mcp_server_id");
-
--- CreateIndex
-CREATE INDEX "mcp_server_access_users_user_id_idx" ON "mcp_server_access_users"("user_id");
-
--- CreateIndex
-CREATE UNIQUE INDEX "mcp_server_access_users_access_policy_id_user_id_key" ON "mcp_server_access_users"("access_policy_id", "user_id");
 
 -- CreateIndex
 CREATE INDEX "mcp_server_credentials_mcp_server_id_idx" ON "mcp_server_credentials"("mcp_server_id");
@@ -2207,7 +2268,7 @@ CREATE UNIQUE INDEX "verified_membership_identity_key" ON "verified_fleet_member
 CREATE UNIQUE INDEX "verified_fleet_membership_revisions_id_silo_id_key" ON "verified_fleet_membership_revisions"("id", "silo_id");
 
 -- CreateIndex
-CREATE INDEX "verified_fleet_membership_assertions_silo_id_subject_id_sco_idx" ON "verified_fleet_membership_assertions"("silo_id", "subject_id", "scope_kind", "organization_id", "scope_resource_id");
+CREATE INDEX "verified_fleet_membership_assertions_silo_id_subject_id_idx" ON "verified_fleet_membership_assertions"("silo_id", "subject_id");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "verified_fleet_membership_assertions_revision_id_assertion__key" ON "verified_fleet_membership_assertions"("revision_id", "assertion_id");
@@ -2219,13 +2280,13 @@ CREATE UNIQUE INDEX "highest_accepted_fleet_memberships_revision_id_key" ON "hig
 CREATE UNIQUE INDEX "highest_membership_identity_key" ON "highest_accepted_fleet_memberships"("revision_id", "issuer_id", "silo_id", "revision");
 
 -- CreateIndex
+CREATE INDEX "memory_datasets_silo_id_boundary_kind_boundary_group_id_bou_idx" ON "memory_datasets"("silo_id", "boundary_kind", "boundary_group_id", "boundary_principal_id");
+
+-- CreateIndex
 CREATE INDEX "memory_datasets_silo_id_state_idx" ON "memory_datasets"("silo_id", "state");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "memory_datasets_silo_id_cognee_dataset_id_key" ON "memory_datasets"("silo_id", "cognee_dataset_id");
-
--- CreateIndex
-CREATE UNIQUE INDEX "memory_datasets_silo_id_scope_kind_organization_id_scope_re_key" ON "memory_datasets"("silo_id", "scope_kind", "organization_id", "scope_resource_id");
 
 -- CreateIndex
 CREATE INDEX "memory_fact_catalog_source_artifact_revision_id_idx" ON "memory_fact_catalog"("source_artifact_revision_id");
@@ -2676,6 +2737,9 @@ CREATE UNIQUE INDEX "personal_memory_permission_receipts_request_id_run_id_attem
 ALTER TABLE "agent_services" ADD CONSTRAINT "agent_services_id_active_revision_id_fkey" FOREIGN KEY ("id", "active_revision_id") REFERENCES "agent_revisions"("agent_service_id", "id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
+ALTER TABLE "agent_services" ADD CONSTRAINT "agent_services_principal_id_silo_id_fkey" FOREIGN KEY ("principal_id", "silo_id") REFERENCES "principals"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
 ALTER TABLE "user_onboarding_bootstrap_questions" ADD CONSTRAINT "user_onboarding_bootstrap_questions_content_revision_id_fkey" FOREIGN KEY ("content_revision_id") REFERENCES "user_onboarding_bootstrap_content_revisions"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 ALTER TABLE "user_onboarding_bootstrap_conversations" ADD CONSTRAINT "user_onboarding_bootstrap_conversations_onboarding_id_fkey" FOREIGN KEY ("onboarding_id") REFERENCES "user_onboardings"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 ALTER TABLE "user_onboarding_bootstrap_conversations" ADD CONSTRAINT "user_onboarding_bootstrap_conversations_content_revision_fkey" FOREIGN KEY ("content_revision_id", "content_digest") REFERENCES "user_onboarding_bootstrap_content_revisions"("id", "digest") ON DELETE RESTRICT ON UPDATE CASCADE;
@@ -2704,7 +2768,13 @@ ALTER TABLE "agent_revisions" ADD CONSTRAINT "agent_revisions_parent_revision_id
 ALTER TABLE "agent_revisions" ADD CONSTRAINT "agent_revisions_source_revision_id_fkey" FOREIGN KEY ("source_revision_id") REFERENCES "agent_revisions"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "agent_revision_scope_attachments" ADD CONSTRAINT "agent_revision_scope_attachments_agent_revision_id_fkey" FOREIGN KEY ("agent_revision_id") REFERENCES "agent_revisions"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "agent_revision_boundary_attachments" ADD CONSTRAINT "agent_revision_boundary_attachments_agent_revision_id_fkey" FOREIGN KEY ("agent_revision_id") REFERENCES "agent_revisions"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "agent_revision_boundary_attachments" ADD CONSTRAINT "agent_revision_boundary_attachments_boundary_group_id_silo_fkey" FOREIGN KEY ("boundary_group_id", "silo_id") REFERENCES "groups"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "agent_revision_boundary_attachments" ADD CONSTRAINT "agent_revision_boundary_attachments_boundary_principal_id__fkey" FOREIGN KEY ("boundary_principal_id", "silo_id") REFERENCES "principals"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "agent_service_schedules" ADD CONSTRAINT "agent_service_schedules_agent_service_id_silo_id_fkey" FOREIGN KEY ("agent_service_id", "silo_id") REFERENCES "agent_services"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
@@ -2755,6 +2825,18 @@ ALTER TABLE "artifact_outbox_events" ADD CONSTRAINT "artifact_outbox_events_arti
 ALTER TABLE "authorization_grants" ADD CONSTRAINT "authorization_grants_catalog_id_catalog_revision_catalog_d_fkey" FOREIGN KEY ("catalog_id", "catalog_revision", "catalog_digest") REFERENCES "capability_catalog_revisions"("catalog_id", "revision", "digest") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
+ALTER TABLE "authorization_grants" ADD CONSTRAINT "authorization_grants_subject_group_id_silo_id_fkey" FOREIGN KEY ("subject_group_id", "silo_id") REFERENCES "groups"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "authorization_grants" ADD CONSTRAINT "authorization_grants_subject_principal_id_silo_id_fkey" FOREIGN KEY ("subject_principal_id", "silo_id") REFERENCES "principals"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "authorization_grants" ADD CONSTRAINT "authorization_grants_boundary_group_id_silo_id_fkey" FOREIGN KEY ("boundary_group_id", "silo_id") REFERENCES "groups"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "authorization_grants" ADD CONSTRAINT "authorization_grants_boundary_principal_id_silo_id_fkey" FOREIGN KEY ("boundary_principal_id", "silo_id") REFERENCES "principals"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
 ALTER TABLE "approval_requests" ADD CONSTRAINT "approval_requests_run_id_agent_service_id_agent_revision_i_fkey" FOREIGN KEY ("run_id", "agent_service_id", "agent_revision_id") REFERENCES "agent_runs"("id", "agent_service_id", "agent_revision_id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
@@ -2803,12 +2885,6 @@ ALTER TABLE "mcp_servers" ADD CONSTRAINT "mcp_servers_source_id_fkey" FOREIGN KE
 ALTER TABLE "mcp_server_installs" ADD CONSTRAINT "mcp_server_installs_mcp_server_id_fkey" FOREIGN KEY ("mcp_server_id") REFERENCES "mcp_servers"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "mcp_server_access_policies" ADD CONSTRAINT "mcp_server_access_policies_mcp_server_id_fkey" FOREIGN KEY ("mcp_server_id") REFERENCES "mcp_servers"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "mcp_server_access_users" ADD CONSTRAINT "mcp_server_access_users_access_policy_id_fkey" FOREIGN KEY ("access_policy_id") REFERENCES "mcp_server_access_policies"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
 ALTER TABLE "mcp_server_credentials" ADD CONSTRAINT "mcp_server_credentials_mcp_server_id_fkey" FOREIGN KEY ("mcp_server_id") REFERENCES "mcp_servers"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
@@ -2816,6 +2892,12 @@ ALTER TABLE "verified_fleet_membership_assertions" ADD CONSTRAINT "verified_flee
 
 -- AddForeignKey
 ALTER TABLE "highest_accepted_fleet_memberships" ADD CONSTRAINT "highest_accepted_fleet_memberships_revision_id_issuer_id_s_fkey" FOREIGN KEY ("revision_id", "issuer_id", "silo_id", "revision") REFERENCES "verified_fleet_membership_revisions"("id", "issuer_id", "silo_id", "revision") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "memory_datasets" ADD CONSTRAINT "memory_datasets_boundary_group_id_silo_id_fkey" FOREIGN KEY ("boundary_group_id", "silo_id") REFERENCES "groups"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "memory_datasets" ADD CONSTRAINT "memory_datasets_boundary_principal_id_silo_id_fkey" FOREIGN KEY ("boundary_principal_id", "silo_id") REFERENCES "principals"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "memory_fact_catalog" ADD CONSTRAINT "memory_fact_catalog_dataset_id_fkey" FOREIGN KEY ("dataset_id") REFERENCES "memory_datasets"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
@@ -3084,9 +3166,9 @@ ALTER TABLE "persona_insights" ADD CONSTRAINT "persona_insights_answer_provenanc
 ALTER TABLE "agent_revisions" ADD CONSTRAINT "agent_revisions_persona_revision_id_fkey"
     FOREIGN KEY ("persona_revision_id") REFERENCES "persona_revisions"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
--- PostgreSQL treats NULLs as distinct in ordinary unique indexes; organization-scoped memory needs one canonical null scope.
-CREATE UNIQUE INDEX "memory_datasets_exact_scope_key"
-    ON "memory_datasets"("silo_id", "scope_kind", "organization_id", COALESCE("scope_resource_id", ''));
+-- PostgreSQL treats NULLs as distinct in ordinary unique indexes; each stored boundary gets one dataset identity.
+CREATE UNIQUE INDEX "memory_datasets_exact_boundary_key"
+    ON "memory_datasets"("silo_id", "boundary_kind", COALESCE("boundary_group_id", ''), COALESCE("boundary_principal_id", ''));
 
 CREATE UNIQUE INDEX "model_routing_defaults_global_key"
     ON "model_routing_defaults"("scope") WHERE "cluster_tenant" IS NULL;
@@ -3205,10 +3287,27 @@ END;
 $$;
 CREATE FUNCTION "enforce_agent_service_lifecycle"() RETURNS trigger
 LANGUAGE plpgsql AS $$
+DECLARE
+    principal_issuer TEXT;
+    principal_subject TEXT;
+    principal_provenance "PrincipalProvenance";
 BEGIN
     IF TG_OP = 'INSERT' THEN
         IF NEW."state" <> 'draft' OR NEW."active_revision_id" IS NOT NULL THEN
             RAISE EXCEPTION 'a new AgentService must begin Draft without an active revision';
+        END IF;
+        IF (NEW."kind" = 'managed' AND NEW."principal_id" IS NULL)
+            OR (NEW."kind" = 'personal' AND NEW."principal_id" IS NOT NULL) THEN
+            RAISE EXCEPTION 'only managed AgentService rows require an internal Principal';
+        END IF;
+        IF NEW."principal_id" IS NOT NULL THEN
+            SELECT "issuer", "subject", "provenance" INTO principal_issuer, principal_subject, principal_provenance
+            FROM "principals" WHERE "id" = NEW."principal_id" AND "silo_id" = NEW."silo_id" FOR UPDATE;
+            IF principal_provenance IS DISTINCT FROM 'internal'::"PrincipalProvenance"
+                OR principal_issuer IS DISTINCT FROM 'urn:opencrane:agent-service'
+                OR principal_subject IS DISTINCT FROM NEW."id" THEN
+                RAISE EXCEPTION 'managed AgentService Principal has invalid internal provenance';
+            END IF;
         END IF;
         RETURN NEW;
     END IF;
@@ -3218,7 +3317,9 @@ BEGIN
     IF OLD."state" = 'retired' THEN
         RAISE EXCEPTION 'a Retired AgentService is closed and cannot be changed';
     END IF;
-    IF NEW."silo_id" IS DISTINCT FROM OLD."silo_id" THEN
+    IF NEW."silo_id" IS DISTINCT FROM OLD."silo_id"
+        OR NEW."kind" IS DISTINCT FROM OLD."kind"
+        OR NEW."principal_id" IS DISTINCT FROM OLD."principal_id" THEN
         RAISE EXCEPTION 'AgentService silo identity is immutable';
     END IF;
     IF NEW."state" IS DISTINCT FROM OLD."state" AND NOT (
@@ -3721,8 +3822,14 @@ CREATE FUNCTION "enforce_authorization_grant_update"() RETURNS trigger LANGUAGE 
 BEGIN
     IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'AuthorizationGrant rows cannot be deleted'; END IF;
     IF NEW."id" IS DISTINCT FROM OLD."id" OR NEW."silo_id" IS DISTINCT FROM OLD."silo_id"
-        OR NEW."subject_id" IS DISTINCT FROM OLD."subject_id" OR NEW."scope_kind" IS DISTINCT FROM OLD."scope_kind"
-        OR NEW."organization_id" IS DISTINCT FROM OLD."organization_id" OR NEW."scope_resource_id" IS DISTINCT FROM OLD."scope_resource_id"
+        OR NEW."subject_kind" IS DISTINCT FROM OLD."subject_kind"
+        OR NEW."subject_group_id" IS DISTINCT FROM OLD."subject_group_id"
+        OR NEW."subject_principal_id" IS DISTINCT FROM OLD."subject_principal_id"
+        OR NEW."boundary_kind" IS DISTINCT FROM OLD."boundary_kind"
+        OR NEW."boundary_group_id" IS DISTINCT FROM OLD."boundary_group_id"
+        OR NEW."boundary_principal_id" IS DISTINCT FROM OLD."boundary_principal_id"
+        OR NEW."boundary_coverage" IS DISTINCT FROM OLD."boundary_coverage"
+        OR NEW."manager_id" IS DISTINCT FROM OLD."manager_id"
         OR NEW."catalog_id" IS DISTINCT FROM OLD."catalog_id" OR NEW."catalog_revision" IS DISTINCT FROM OLD."catalog_revision"
         OR NEW."catalog_digest" IS DISTINCT FROM OLD."catalog_digest" OR NEW."capability_id" IS DISTINCT FROM OLD."capability_id"
         OR NEW."resource_kind" IS DISTINCT FROM OLD."resource_kind" OR NEW."resource_id" IS DISTINCT FROM OLD."resource_id"
@@ -5233,11 +5340,11 @@ BEGIN
                 (SELECT "integration_id", "silo_id", "custody_reference_id", "tool_definitions" FROM "agent_revision_integration_assignments" WHERE "agent_revision_id" = NEW."applied_agent_revision_id"
                  EXCEPT SELECT "integration_id", "silo_id", "custody_reference_id", "tool_definitions" FROM "agent_revision_integration_assignments" WHERE "agent_revision_id" = NEW."expected_agent_revision_id")
             ) OR EXISTS (
-                (SELECT "scope", "subject_type", "subject_id" FROM "agent_revision_scope_attachments" WHERE "agent_revision_id" = NEW."expected_agent_revision_id"
-                 EXCEPT SELECT "scope", "subject_type", "subject_id" FROM "agent_revision_scope_attachments" WHERE "agent_revision_id" = NEW."applied_agent_revision_id")
-                UNION ALL
-                (SELECT "scope", "subject_type", "subject_id" FROM "agent_revision_scope_attachments" WHERE "agent_revision_id" = NEW."applied_agent_revision_id"
-                 EXCEPT SELECT "scope", "subject_type", "subject_id" FROM "agent_revision_scope_attachments" WHERE "agent_revision_id" = NEW."expected_agent_revision_id")
+				(SELECT "silo_id", "boundary_kind", "boundary_group_id", "boundary_principal_id", "boundary_coverage" FROM "agent_revision_boundary_attachments" WHERE "agent_revision_id" = NEW."expected_agent_revision_id"
+				 EXCEPT SELECT "silo_id", "boundary_kind", "boundary_group_id", "boundary_principal_id", "boundary_coverage" FROM "agent_revision_boundary_attachments" WHERE "agent_revision_id" = NEW."applied_agent_revision_id")
+				UNION ALL
+				(SELECT "silo_id", "boundary_kind", "boundary_group_id", "boundary_principal_id", "boundary_coverage" FROM "agent_revision_boundary_attachments" WHERE "agent_revision_id" = NEW."applied_agent_revision_id"
+				 EXCEPT SELECT "silo_id", "boundary_kind", "boundary_group_id", "boundary_principal_id", "boundary_coverage" FROM "agent_revision_boundary_attachments" WHERE "agent_revision_id" = NEW."expected_agent_revision_id")
             ) THEN
                 RAISE EXCEPTION 'applied model_alias may change only its model definition';
             END IF;
@@ -5705,7 +5812,7 @@ $$;
 CREATE FUNCTION "enforce_memory_dataset_lifecycle"() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
     IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'MemoryDataset catalog rows cannot be deleted'; END IF;
-    IF TG_OP = 'UPDATE' AND (NEW."silo_id" IS DISTINCT FROM OLD."silo_id" OR NEW."scope_kind" IS DISTINCT FROM OLD."scope_kind" OR NEW."organization_id" IS DISTINCT FROM OLD."organization_id" OR NEW."scope_resource_id" IS DISTINCT FROM OLD."scope_resource_id" OR NEW."cognee_dataset_id" IS DISTINCT FROM OLD."cognee_dataset_id" OR NEW."created_by" IS DISTINCT FROM OLD."created_by" OR NEW."created_at" IS DISTINCT FROM OLD."created_at") THEN RAISE EXCEPTION 'MemoryDataset authority is immutable'; END IF;
+    IF TG_OP = 'UPDATE' AND (NEW."silo_id" IS DISTINCT FROM OLD."silo_id" OR NEW."boundary_kind" IS DISTINCT FROM OLD."boundary_kind" OR NEW."boundary_group_id" IS DISTINCT FROM OLD."boundary_group_id" OR NEW."boundary_principal_id" IS DISTINCT FROM OLD."boundary_principal_id" OR NEW."cognee_dataset_id" IS DISTINCT FROM OLD."cognee_dataset_id" OR NEW."created_by" IS DISTINCT FROM OLD."created_by" OR NEW."created_at" IS DISTINCT FROM OLD."created_at") THEN RAISE EXCEPTION 'MemoryDataset authority is immutable'; END IF;
     IF TG_OP = 'UPDATE' AND OLD."state" = 'retired' THEN RAISE EXCEPTION 'retired MemoryDataset is closed'; END IF;
     RETURN NEW;
 END;
@@ -5859,15 +5966,21 @@ ALTER TABLE "agent_services" ADD CONSTRAINT "agent_services_nonempty_check" CHEC
 ALTER TABLE "agent_services" ADD CONSTRAINT "agent_services_active_revision_check" CHECK (
         "state" <> 'active' OR "active_revision_id" IS NOT NULL
     );
+ALTER TABLE "agent_services" ADD CONSTRAINT "agent_services_managed_principal_check" CHECK (
+        ("kind" = 'managed' AND "principal_id" IS NOT NULL) OR
+        ("kind" = 'personal' AND "principal_id" IS NULL)
+    );
 ALTER TABLE "agent_revisions" ADD CONSTRAINT "agent_revisions_revision_check" CHECK ("revision" > 0);
 ALTER TABLE "agent_revisions" ADD CONSTRAINT "agent_revisions_nonempty_check" CHECK (
         btrim("agent_service_id") <> '' AND btrim("digest") <> '' AND
         btrim("prompt_policy_version") <> '' AND btrim("model_definition_id") <> '' AND
         btrim("authored_by") <> '' AND "digest" ~ '^sha256:[0-9a-f]{64}$'
     );
-ALTER TABLE "agent_revision_scope_attachments" ADD CONSTRAINT "agent_revision_scope_attachments_nonempty_check" CHECK (
-        btrim("agent_revision_id") <> '' AND btrim("subject_id") <> ''
-    );
+ALTER TABLE "agent_revision_boundary_attachments" ADD CONSTRAINT "agent_revision_boundary_attachments_exact_boundary_check" CHECK (
+		btrim("agent_revision_id") <> '' AND btrim("silo_id") <> '' AND
+		(("boundary_kind" = 'group' AND "boundary_group_id" IS NOT NULL AND "boundary_principal_id" IS NULL) OR
+		 ("boundary_kind" = 'personal' AND "boundary_group_id" IS NULL AND "boundary_principal_id" IS NOT NULL AND "boundary_coverage" = 'exact'))
+	);
 ALTER TABLE "agent_revisions" ADD CONSTRAINT "agent_revisions_publication_check" CHECK (
         ("state" = 'published' AND "published_at" IS NOT NULL) OR
         ("state" = 'retired' AND "published_at" IS NOT NULL) OR
@@ -5970,16 +6083,16 @@ ALTER TABLE "run_outbox_events" ADD CONSTRAINT "run_outbox_events_delivery_check
          ("failed_at" IS NOT NULL AND "failure_code" IS NOT NULL AND btrim("failure_code") <> ''))
     );
 ALTER TABLE "authorization_grants" ADD CONSTRAINT "authorization_grants_exact_check" CHECK (
-        btrim("silo_id") <> '' AND btrim("subject_id") NOT IN ('', '*') AND
-        btrim("organization_id") <> '' AND btrim("catalog_id") <> '' AND "catalog_revision" > 0 AND
-        btrim("catalog_digest") <> '' AND "catalog_digest" ~ '^sha256:[0-9a-f]{64}$' AND btrim("capability_id") <> '' AND
-        btrim("resource_kind") NOT IN ('', '*') AND btrim("resource_id") NOT IN ('', '*') AND
-        "priority" >= 0 AND btrim("created_by") <> ''
-    );
-ALTER TABLE "authorization_grants" ADD CONSTRAINT "authorization_grants_scope_check" CHECK (
-        ("scope_kind" = 'organization' AND "scope_resource_id" IS NULL) OR
-        ("scope_kind" <> 'organization' AND "scope_resource_id" IS NOT NULL AND btrim("scope_resource_id") <> '')
-    );
+		btrim("silo_id") <> '' AND
+		(("subject_kind" = 'group' AND "subject_group_id" IS NOT NULL AND "subject_principal_id" IS NULL) OR
+		 ("subject_kind" = 'principal' AND "subject_group_id" IS NULL AND "subject_principal_id" IS NOT NULL)) AND
+		(("boundary_kind" = 'group' AND "boundary_group_id" IS NOT NULL AND "boundary_principal_id" IS NULL) OR
+		 ("boundary_kind" = 'personal' AND "boundary_group_id" IS NULL AND "boundary_principal_id" IS NOT NULL AND "boundary_coverage" = 'exact')) AND
+		btrim("catalog_id") <> '' AND "catalog_revision" > 0 AND
+		btrim("catalog_digest") <> '' AND "catalog_digest" ~ '^sha256:[0-9a-f]{64}$' AND btrim("capability_id") <> '' AND
+		btrim("resource_kind") NOT IN ('', '*') AND btrim("resource_id") NOT IN ('', '*') AND
+		"priority" >= 0 AND btrim("created_by") <> ''
+	);
 ALTER TABLE "authorization_grants" ADD CONSTRAINT "authorization_grants_validity_check" CHECK ("expires_at" IS NULL OR "expires_at" > "valid_from");
 ALTER TABLE "capability_catalog_revisions" ADD CONSTRAINT "capability_catalog_revisions_exact_check" CHECK (
         btrim("catalog_id") <> '' AND "revision" > 0 AND "digest" ~ '^sha256:[0-9a-f]{64}$' AND btrim("created_by") <> ''
@@ -6077,10 +6190,7 @@ ALTER TABLE "verified_fleet_membership_revisions" ADD CONSTRAINT "verified_fleet
         "issued_at" < "expires_at" AND "verified_at" >= "issued_at" AND "verified_at" < "expires_at"
     );
 ALTER TABLE "verified_fleet_membership_assertions" ADD CONSTRAINT "verified_fleet_membership_assertions_exact_check" CHECK (
-        btrim("assertion_id") <> '' AND btrim("silo_id") <> '' AND btrim("subject_id") <> '' AND
-        btrim("organization_id") <> '' AND
-        (("scope_kind" = 'organization' AND "scope_resource_id" IS NULL) OR
-         ("scope_kind" <> 'organization' AND "scope_resource_id" IS NOT NULL AND btrim("scope_resource_id") <> ''))
+        btrim("assertion_id") <> '' AND btrim("silo_id") <> '' AND btrim("subject_id") <> ''
     );
 ALTER TABLE "highest_accepted_fleet_memberships" ADD CONSTRAINT "highest_accepted_fleet_memberships_revision_check" CHECK ("revision" > 0);
 ALTER TABLE "audit_decisions" ADD CONSTRAINT "audit_decisions_exact_check" CHECK (
@@ -6349,11 +6459,11 @@ ALTER TABLE "skill_revisions" ADD CONSTRAINT "skill_revisions_review_check" CHEC
          AND "signature" IS NOT NULL AND btrim("signature") <> '' AND "signer_key_id" IS NOT NULL AND btrim("signer_key_id") <> '')
     );
 ALTER TABLE "skill_workloads" ADD CONSTRAINT "skill_workloads_identity_check" CHECK (btrim("silo_id") <> '');
-ALTER TABLE "memory_datasets" ADD CONSTRAINT "memory_datasets_identity_check" CHECK (btrim("silo_id") <> '' AND btrim("organization_id") <> '' AND btrim("cognee_dataset_id") <> '' AND btrim("created_by") <> '');
-ALTER TABLE "memory_datasets" ADD CONSTRAINT "memory_datasets_scope_check" CHECK (
-        ("scope_kind" = 'organization' AND "scope_resource_id" IS NULL) OR
-        ("scope_kind" <> 'organization' AND "scope_resource_id" IS NOT NULL AND btrim("scope_resource_id") <> '')
-    );
+ALTER TABLE "memory_datasets" ADD CONSTRAINT "memory_datasets_identity_check" CHECK (
+		btrim("silo_id") <> '' AND btrim("cognee_dataset_id") <> '' AND btrim("created_by") <> '' AND
+		(("boundary_kind" = 'group' AND "boundary_group_id" IS NOT NULL AND "boundary_principal_id" IS NULL) OR
+		 ("boundary_kind" = 'personal' AND "boundary_group_id" IS NULL AND "boundary_principal_id" IS NOT NULL))
+	);
 ALTER TABLE "memory_datasets" ADD CONSTRAINT "memory_datasets_retirement_check" CHECK (("state" = 'retired' AND "retired_at" IS NOT NULL) OR ("state" = 'active' AND "retired_at" IS NULL));
 ALTER TABLE "memory_fact_catalog" ADD CONSTRAINT "memory_fact_catalog_valid_check" CHECK (
         btrim("cognee_external_id") <> '' AND "content_digest" ~ '^sha256:[0-9a-f]{64}$'
@@ -6422,8 +6532,8 @@ CREATE CONSTRAINT TRIGGER "active_agent_revisions_remain_published"
 CREATE TRIGGER "agent_revision_skill_assignments_immutable"
     BEFORE INSERT OR UPDATE OR DELETE ON "agent_revision_skill_assignments"
     FOR EACH ROW EXECUTE FUNCTION "enforce_agent_revision_assignment_immutability"();
-CREATE TRIGGER "agent_revision_scope_attachments_immutable"
-    BEFORE INSERT OR UPDATE OR DELETE ON "agent_revision_scope_attachments"
+CREATE TRIGGER "agent_revision_boundary_attachments_immutable"
+	BEFORE INSERT OR UPDATE OR DELETE ON "agent_revision_boundary_attachments"
     FOR EACH ROW EXECUTE FUNCTION "enforce_agent_revision_assignment_immutability"();
 CREATE TRIGGER "workload_assignments_current_attempt" BEFORE INSERT OR UPDATE OF "run_id", "attempt" ON "workload_assignments" FOR EACH ROW EXECUTE FUNCTION "enforce_current_workload_assignment_attempt"();
 CREATE TRIGGER "run_outbox_events_accepted_attempt" BEFORE INSERT OR UPDATE OF "run_id", "attempt" ON "run_outbox_events" FOR EACH ROW EXECUTE FUNCTION "enforce_accepted_outbox_attempt"();
@@ -6741,6 +6851,31 @@ CREATE CONSTRAINT TRIGGER run_input_snapshots_run_binding
 AFTER INSERT OR UPDATE OF "run_id", "input_digest", "conversation_id", "silo_id", "agent_service_id", "agent_revision_id", "effective_contract_digest"
 ON "run_input_snapshots" DEFERRABLE INITIALLY DEFERRED FOR EACH ROW
 EXECUTE FUNCTION enforce_run_input_snapshot_run_binding();
+
+-- Publish the capability that explicit ResourceShare recipients receive. Application code reads
+-- this reviewed revision and cannot create a new authorization vocabulary during a request.
+INSERT INTO "capability_catalog_revisions" (
+    "id", "catalog_id", "revision", "digest", "capabilities", "created_by"
+) VALUES (
+    'capability-catalog-resource-sharing-v1',
+    'opencrane-resource-sharing',
+    1,
+    'sha256:03c84ee77c531ddc95d5c379e195e12d94aed9129783a07105066a875d24c775',
+    '[{"id":"resource:read","actions":["read"]}]'::jsonb,
+    'system:target-baseline'
+);
+
+-- Publish the MCP use capability before the operator can reconcile grants against it.
+INSERT INTO "capability_catalog_revisions" (
+    "id", "catalog_id", "revision", "digest", "capabilities", "created_by"
+) VALUES (
+    'capability-catalog-opencrane-core-v1',
+    'opencrane-core',
+    1,
+    'sha256:b437ba0e9642ea867d58011ca828aa863b0e1a21528f91d567bccec74c71bff6',
+    '[{"id":"mcp-server:use","actions":["use"]}]'::jsonb,
+    'system:target-baseline'
+);
 
 -- Clean-build persona onboarding sources. The question set is created as Draft, populated, and
 -- reviewed in this immutable baseline; policies, mappings, and templates are append-only sources.
@@ -7253,7 +7388,14 @@ CREATE UNIQUE INDEX "conversation_timeline_entries_parent_delivery_agent_thread_
 CREATE UNIQUE INDEX "agent_runs_thread_authority_key" ON "agent_runs"("id", "conversation_id", "silo_id", "agent_service_id");
 
 ALTER TABLE "artifact_scan_jobs" ADD CONSTRAINT "artifact_scan_jobs_artifact_revision_id_fkey" FOREIGN KEY ("artifact_revision_id") REFERENCES "artifact_revisions"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-ALTER TABLE "groups" ADD CONSTRAINT "groups_parent_id_fkey" FOREIGN KEY ("parent_id") REFERENCES "groups"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "groups" ADD CONSTRAINT "groups_parent_id_silo_id_fkey" FOREIGN KEY ("parent_id", "silo_id") REFERENCES "groups"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "group_memberships" ADD CONSTRAINT "group_memberships_group_id_silo_id_fkey" FOREIGN KEY ("group_id", "silo_id") REFERENCES "groups"("id", "silo_id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "group_memberships" ADD CONSTRAINT "group_memberships_principal_id_silo_id_fkey" FOREIGN KEY ("principal_id", "silo_id") REFERENCES "principals"("id", "silo_id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "resource_shares" ADD CONSTRAINT "resource_shares_owner_principal_id_silo_id_fkey" FOREIGN KEY ("owner_principal_id", "silo_id") REFERENCES "principals"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "resource_share_recipients" ADD CONSTRAINT "resource_share_recipients_resource_share_id_silo_id_fkey" FOREIGN KEY ("resource_share_id", "silo_id") REFERENCES "resource_shares"("id", "silo_id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "resource_share_recipients" ADD CONSTRAINT "resource_share_recipients_principal_id_silo_id_fkey" FOREIGN KEY ("principal_id", "silo_id") REFERENCES "principals"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "resource_share_recipients" ADD CONSTRAINT "resource_share_recipients_granted_by_principal_id_silo_id_fkey" FOREIGN KEY ("granted_by_principal_id", "silo_id") REFERENCES "principals"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "resource_share_recipients" ADD CONSTRAINT "resource_share_recipients_grant_id_fkey" FOREIGN KEY ("grant_id") REFERENCES "authorization_grants"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 ALTER TABLE "conversation_asset_output_tickets" ADD CONSTRAINT "conversation_asset_output_tickets_conversation_id_silo_id_fkey" FOREIGN KEY ("conversation_id", "silo_id") REFERENCES "conversations"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
 ALTER TABLE "conversation_asset_output_tickets" ADD CONSTRAINT "conversation_asset_output_tickets_conversation_id_run_id_fkey" FOREIGN KEY ("conversation_id", "run_id") REFERENCES "agent_runs"("conversation_id", "id") ON DELETE RESTRICT ON UPDATE CASCADE;
 ALTER TABLE "conversation_asset_output_tickets" ADD CONSTRAINT "conversation_asset_output_tickets_run_id_run_attempt_fkey" FOREIGN KEY ("run_id", "run_attempt") REFERENCES "workload_assignments"("run_id", "attempt") ON DELETE RESTRICT ON UPDATE CASCADE;
@@ -7314,29 +7456,100 @@ ALTER TABLE "conversation_assets" ADD CONSTRAINT "conversation_assets_lifecycle_
     OR ("state" = 'failed' AND "failure_code" IS NOT NULL)
     OR ("state" = 'removed' AND "removed_at" IS NOT NULL)
 );
+ALTER TABLE "principals" ADD CONSTRAINT "principals_identity_check" CHECK (
+	btrim("silo_id") <> '' AND btrim("issuer") <> '' AND btrim("subject") <> '' AND
+	(("provenance" = 'external' AND "issuer" <> 'urn:opencrane:agent-service') OR
+	 ("provenance" = 'internal' AND "issuer" = 'urn:opencrane:agent-service' AND "email" IS NULL))
+);
+ALTER TABLE "groups" ADD CONSTRAINT "groups_identity_check" CHECK (
+	btrim("silo_id") <> '' AND btrim("name") <> '' AND ("parent_id" IS NULL OR btrim("parent_id") <> '')
+);
+ALTER TABLE "group_memberships" ADD CONSTRAINT "group_memberships_identity_check" CHECK (
+	btrim("silo_id") <> '' AND btrim("group_id") <> '' AND btrim("principal_id") <> ''
+);
+ALTER TABLE "resource_shares" ADD CONSTRAINT "resource_shares_identity_check" CHECK (
+	btrim("silo_id") <> '' AND btrim("resource_kind") NOT IN ('', '*') AND btrim("resource_id") NOT IN ('', '*') AND btrim("owner_principal_id") <> ''
+);
+ALTER TABLE "resource_share_recipients" ADD CONSTRAINT "resource_share_recipients_identity_check" CHECK (
+	btrim("silo_id") <> '' AND btrim("resource_share_id") <> '' AND btrim("principal_id") <> '' AND btrim("granted_by_principal_id") <> '' AND btrim("grant_id") <> ''
+);
+
+CREATE FUNCTION "enforce_resource_share_immutability"() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+	IF TG_OP = 'DELETE' THEN
+		RAISE EXCEPTION 'ResourceShare rows cannot be deleted; revoke recipients instead';
+	END IF;
+	IF NEW."id" IS DISTINCT FROM OLD."id"
+		OR NEW."silo_id" IS DISTINCT FROM OLD."silo_id"
+		OR NEW."resource_kind" IS DISTINCT FROM OLD."resource_kind"
+		OR NEW."resource_id" IS DISTINCT FROM OLD."resource_id"
+		OR NEW."owner_principal_id" IS DISTINCT FROM OLD."owner_principal_id"
+		OR NEW."created_at" IS DISTINCT FROM OLD."created_at" THEN
+		RAISE EXCEPTION 'ResourceShare authority fields are immutable';
+	END IF;
+	RETURN NEW;
+END;
+$$;
+CREATE TRIGGER "resource_shares_immutable" BEFORE UPDATE OR DELETE ON "resource_shares"
+	FOR EACH ROW EXECUTE FUNCTION "enforce_resource_share_immutability"();
+
+CREATE FUNCTION "enforce_resource_share_recipient_authority"() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+	IF TG_OP = 'UPDATE' THEN
+		RAISE EXCEPTION 'ResourceShareRecipient rows cannot be updated';
+	END IF;
+	IF TG_OP = 'DELETE' THEN
+		RETURN OLD;
+	END IF;
+	IF NOT EXISTS (
+		SELECT 1
+		FROM "resource_shares" share
+		JOIN "authorization_grants" grant ON grant."id" = NEW."grant_id"
+		WHERE share."id" = NEW."resource_share_id"
+		  AND share."silo_id" = NEW."silo_id"
+		  AND grant."silo_id" = NEW."silo_id"
+		  AND grant."manager_id" = 'resource-share-editor'
+		  AND grant."subject_kind" = 'principal'
+		  AND grant."subject_group_id" IS NULL
+		  AND grant."subject_principal_id" = NEW."principal_id"
+		  AND grant."boundary_kind" = 'personal'
+		  AND grant."boundary_group_id" IS NULL
+		  AND grant."boundary_principal_id" = share."owner_principal_id"
+		  AND grant."boundary_coverage" = 'exact'
+		  AND grant."resource_kind" = share."resource_kind"
+		  AND grant."resource_id" = share."resource_id"
+		  AND grant."effect" = 'allow'
+		  AND grant."revoked_at" IS NULL
+		  AND grant."created_by" = NEW."granted_by_principal_id"
+	) THEN
+		RAISE EXCEPTION 'ResourceShareRecipient must link its exact active manager-owned grant';
+	END IF;
+	RETURN NEW;
+END;
+$$;
+CREATE TRIGGER "resource_share_recipients_authority" BEFORE INSERT OR UPDATE ON "resource_share_recipients"
+	FOR EACH ROW EXECUTE FUNCTION "enforce_resource_share_recipient_authority"();
 
 CREATE FUNCTION "enforce_group_hierarchy"() RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE
-    current_parent_id TEXT;
-    creates_cycle BOOLEAN;
+	creates_cycle BOOLEAN;
 BEGIN
-    PERFORM pg_advisory_xact_lock(hashtextextended('opencrane:group-hierarchy', 0));
-    SELECT "parent_id" INTO current_parent_id FROM "groups" WHERE "id" = NEW."id";
-    IF current_parent_id IS NULL THEN
-        RETURN NEW;
-    END IF;
+	PERFORM pg_advisory_xact_lock(hashtextextended('opencrane:group-hierarchy:' || NEW."silo_id", 0));
+	IF NEW."parent_id" IS NULL THEN
+		RETURN NEW;
+	END IF;
 
-    WITH RECURSIVE ancestors("id", "parent_id", "path") AS (
-        SELECT parent."id", parent."parent_id", ARRAY[parent."id"]
-        FROM "groups" parent
-        WHERE parent."id" = current_parent_id
-        UNION ALL
-        SELECT parent."id", parent."parent_id", ancestors."path" || parent."id"
-        FROM "groups" parent
-        JOIN ancestors ON parent."id" = ancestors."parent_id"
-        WHERE NOT parent."id" = ANY(ancestors."path")
-    )
-    SELECT EXISTS (SELECT 1 FROM ancestors WHERE "id" = NEW."id") INTO creates_cycle;
+	WITH RECURSIVE ancestors("id", "parent_id", "silo_id", "path") AS (
+		SELECT parent."id", parent."parent_id", parent."silo_id", ARRAY[parent."id"]
+		FROM "groups" parent
+		WHERE parent."id" = NEW."parent_id" AND parent."silo_id" = NEW."silo_id"
+		UNION ALL
+		SELECT parent."id", parent."parent_id", parent."silo_id", ancestors."path" || parent."id"
+		FROM "groups" parent
+		JOIN ancestors ON parent."id" = ancestors."parent_id" AND parent."silo_id" = ancestors."silo_id"
+		WHERE NOT parent."id" = ANY(ancestors."path")
+	)
+	SELECT EXISTS (SELECT 1 FROM ancestors WHERE "id" = NEW."id" AND "silo_id" = NEW."silo_id") INTO creates_cycle;
 
     IF creates_cycle THEN
         RAISE EXCEPTION 'group hierarchy cannot contain a cycle' USING ERRCODE = '23514';

@@ -50,6 +50,8 @@ build_postgres_release_args()
       --set "migration.timeoutSeconds=$TIMEOUT"
       --set "migration.jobDeadlineGraceSeconds=$job_deadline_grace_seconds"
       --set-string "migration.image=$POSTGRES_MIGRATION_IMAGE"
+      --set-string "migration.siloId=$DATABASE_MIGRATION_SILO_ID"
+      --set-string "migration.oidcIssuer=$OIDC_ISSUER_URL"
       --set-string "migration.configMap.name=$DATABASE_MIGRATION_CONFIG_MAP"
       --set-string "migration.configMap.key=migration.sql")
   fi
@@ -295,6 +297,11 @@ run_database_release_transition()
     fi
     install_postgres_release false true
     return
+  fi
+
+  if [[ -z "${DATABASE_MIGRATION_SILO_ID:-}" || -z "${OIDC_ISSUER_URL:-}" ]]; then
+    err "The 0.9.3 identity migration requires the exact ClusterTenant and OIDC issuer."
+    return 2
   fi
 
   if [[ "$POSTGRES_CLUSTER_EXISTS" == "1" ]]; then

@@ -6,8 +6,16 @@ const _MINIMUM_TRIGGERS = 101;
 const _MINIMUM_CONSTRAINTS = 235;
 const _REQUIRED_AUTHORITY_MARKERS = [
 	'CREATE FUNCTION "enforce_authorization_grant_update"()',
+	'NEW."subject_kind" IS DISTINCT FROM OLD."subject_kind"',
+	'NEW."boundary_coverage" IS DISTINCT FROM OLD."boundary_coverage"',
+	'NEW."manager_id" IS DISTINCT FROM OLD."manager_id"',
 	'CREATE TRIGGER "authorization_grants_immutable"',
+	'CREATE TRIGGER "resource_shares_immutable"',
+	'CREATE TRIGGER "resource_share_recipients_authority"',
+	'ResourceShareRecipient must link its exact active manager-owned grant',
 	'ALTER TABLE "authorization_grants" ADD CONSTRAINT "authorization_grants_exact_check"',
+	"'capability-catalog-resource-sharing-v1',\n    'opencrane-resource-sharing',\n    1,\n    'sha256:03c84ee77c531ddc95d5c379e195e12d94aed9129783a07105066a875d24c775'",
+	"'capability-catalog-opencrane-core-v1',\n    'opencrane-core',\n    1,\n    'sha256:b437ba0e9642ea867d58011ca828aa863b0e1a21528f91d567bccec74c71bff6'",
 	'CREATE FUNCTION "enforce_agent_revision_assignment_immutability"()',
 	'CREATE CONSTRAINT TRIGGER agent_runs_input_snapshot_complete',
 	'CREATE VIEW "artifact_authority_clock" AS\n    SELECT 1::INTEGER AS "singleton", date_trunc(\'milliseconds\', clock_timestamp())::TIMESTAMP(3) AS "now";',
@@ -47,6 +55,8 @@ const _REQUIRED_AUTHORITY_MARKERS = [
 	'ALTER TABLE "tool_invocations" ADD CONSTRAINT "tool_invocations_identity_check"',
 	'ALTER TABLE "tool_result_deliveries" ADD CONSTRAINT "tool_result_deliveries_exact_check"',
 	'CREATE TYPE "PersonalMemoryPermissionReceiptState" AS ENUM (\'active\', \'consumed\');',
+	'CREATE UNIQUE INDEX "memory_datasets_exact_boundary_key"',
+	'NEW."boundary_kind" IS DISTINCT FROM OLD."boundary_kind" OR NEW."boundary_group_id" IS DISTINCT FROM OLD."boundary_group_id" OR NEW."boundary_principal_id" IS DISTINCT FROM OLD."boundary_principal_id"',
 	'CREATE FUNCTION "enforce_personal_memory_permission_authority"()',
 	'CREATE TRIGGER "personal_memory_permission_receipts_authority"',
 	'ALTER TABLE "personal_memory_permission_receipts" ADD CONSTRAINT "personal_memory_permission_receipts_exact_check"',
@@ -71,6 +81,9 @@ const _REQUIRED_AUTHORITY_MARKERS = [
 	'"provenance" = \'agent_output\' AND "created_by_user_id" IS NULL AND "message_id" IS NULL',
 ];
 const _FORBIDDEN_AUTHORITY_MARKERS = [
+	'NEW."scope_kind" IS DISTINCT FROM OLD."scope_kind"',
+	'CREATE UNIQUE INDEX "memory_datasets_exact_scope_key"',
+	'btrim("organization_id") <> \'\' AND\n        (("scope_kind" = \'organization\'',
 	'NEW."state" IN (\'survey_in_progress\', \'completed\')',
 	'command.forward',
 	'conversation_threads',

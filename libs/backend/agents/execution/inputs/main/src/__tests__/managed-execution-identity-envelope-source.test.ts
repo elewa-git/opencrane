@@ -34,7 +34,7 @@ function _Evidence(result: unknown): ManagedExecutionEvidenceAuthority
 /** Creates one service identity for service-1, with valid SHA-256 digests. */
 function _LoadedEvidence()
 {
-	return { outcome: "loaded", value: { identity: { kind: "service", executionSubjectId: "agent-service:service-1", agentServiceId: "service-1", organizationId: "org-1", fleetMembershipRevision: 4, fleetMembershipIssuer: "fleet-1", fleetMembershipIssuerKeyId: "key-1", fleetMembershipAssertionId: "assertion-1", fleetMembershipPayloadDigest: `sha256:${"a".repeat(64)}`, fleetMembershipTrustedUntil: "2026-07-27T00:00:00.000Z", effectiveScopeAttachments: [], effectiveScopeAttachmentDigest: `sha256:${"b".repeat(64)}` }, capabilitySetDigest: `sha256:${"c".repeat(64)}` } } as const;
+	return { outcome: "loaded", value: { identity: { kind: "service", executionSubjectId: "agent-service:service-1", agentServiceId: "service-1", fleetMembershipRevision: 4, fleetMembershipIssuer: "fleet-1", fleetMembershipIssuerKeyId: "key-1", fleetMembershipAssertionId: "assertion-1", fleetMembershipPayloadDigest: `sha256:${"a".repeat(64)}`, fleetMembershipTrustedUntil: "2026-07-27T00:00:00.000Z", effectiveBoundaryAttachments: [], effectiveBoundaryAttachmentDigest: `sha256:${"b".repeat(64)}` }, capabilitySetDigest: `sha256:${"c".repeat(64)}` } } as const;
 }
 
 describe("ManagedExecutionIdentityEnvelopeSource", function _DescribeManagedExecutionIdentityEnvelopeSource()

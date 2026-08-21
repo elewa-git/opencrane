@@ -1,7 +1,7 @@
-import { AgentRevisionState, GrantScope, GrantSubjectType, Prisma } from "@prisma/client";
+import { AgentRevisionState, AuthorizationBoundaryCoverage, AuthorizationBoundaryKind, Prisma } from "@prisma/client";
 
 import { __DigestAgentRevisionContent } from "@opencrane/models/agents";
-import type { AgentBudget, AgentRevisionContent, GrantScope as DomainGrantScope, GrantSubjectType as DomainGrantSubjectType, ReviewedIntegrationToolDefinition } from "@opencrane/models/agents";
+import { RevisionBoundaryCoverages, RevisionBoundaryKinds, type AgentBudget, type AgentRevisionContent, type RevisionBoundaryAttachment, type ReviewedIntegrationToolDefinition } from "@opencrane/models/agents";
 import { ___CloneCanonicalJson, type JsonValue } from "@opencrane/util";
 
 import { type AgentRevisionWriterRepository, type CreateAgentRevisionWithinTransactionCommand } from "./prisma-agent-revision-writer.types";
@@ -10,38 +10,13 @@ import { type AgentRevisionWriterRepository, type CreateAgentRevisionWithinTrans
 export const _AGENT_REVISION_INCLUDE = {
 	skillAssignments: true,
 	integrationAssignments: true,
-	scopeAttachments: true,
+	boundaryAttachments: true,
 } as const;
 
 /** Persisted revision row with every executable assignment required to reconstruct its content. */
 type AgentRevisionWithAssignments = Prisma.AgentRevisionGetPayload<{
 	readonly include: typeof _AGENT_REVISION_INCLUDE;
 }>;
-
-/** Maps the domain scope spelling to the Prisma enum persisted on revision attachments. */
-function _ToPrismaScope(value: DomainGrantScope): GrantScope
-{
-	switch (value)
-	{
-		case "org": return GrantScope.Org;
-		case "department": return GrantScope.Department;
-		case "team": return GrantScope.Team;
-		case "project": return GrantScope.Project;
-		case "personal": return GrantScope.Personal;
-		default: throw new Error(`unknown scope: ${value as string}`);
-	}
-}
-
-/** Maps the domain subject spelling to the Prisma enum persisted on revision attachments. */
-function _ToPrismaSubjectType(value: DomainGrantSubjectType): GrantSubjectType
-{
-	switch (value)
-	{
-		case "group": return GrantSubjectType.Group;
-		case "user": return GrantSubjectType.User;
-		default: throw new Error(`unknown subject type: ${value as string}`);
-	}
-}
 
 /** Reconstruct complete canonical content from one immutable persisted revision. */
 export function _AgentRevisionContentFromRow(row: AgentRevisionWithAssignments): AgentRevisionContent
@@ -68,13 +43,9 @@ export function _AgentRevisionContentFromRow(row: AgentRevisionWithAssignments):
 				toolDefinitions: ___CloneCanonicalJson(assignment.toolDefinitions as unknown as JsonValue) as unknown as readonly ReviewedIntegrationToolDefinition[],
 			};
 		}),
-		scopeAttachments: row.scopeAttachments.map(function _MapScope(attachment)
+		boundaryAttachments: row.boundaryAttachments.map(function _MapBoundary(attachment)
 		{
-			return {
-				scope: _FromPrismaScope(attachment.scope),
-				subjectType: _FromPrismaSubjectType(attachment.subjectType),
-				subjectId: attachment.subjectId,
-			};
+			return _FromPrismaBoundary(attachment);
 		}),
 	};
 }
@@ -82,7 +53,7 @@ export function _AgentRevisionContentFromRow(row: AgentRevisionWithAssignments):
 /**
  * Builds the one Prisma create input used for every new agent revision.
  *
- * The stored digest and the nested skill, integration, and scope rows all come from the same content
+ * The stored digest and the nested skill, integration, and boundary rows all come from the same content
  * value, so the digest always describes exactly what was written. Every writer goes through here —
  * the lifecycle repository and the model-selection strategy both call it — so no second place can
  * drift on how a revision is stored, while each keeps its own transaction.
@@ -132,14 +103,11 @@ function _RevisionCreateData(command: CreateAgentRevisionWithinTransactionComman
 				};
 			}),
 		},
-		scopeAttachments: {
-			create: command.content.scopeAttachments.map(function _MapScope(attachment)
+		boundaryAttachments: {
+			create: command.content.boundaryAttachments.map(function _MapBoundary(attachment)
 			{
-				return {
-					scope: _ToPrismaScope(attachment.scope),
-					subjectType: _ToPrismaSubjectType(attachment.subjectType),
-					subjectId: attachment.subjectId,
-				};
+				if (attachment.boundaryKind === RevisionBoundaryKinds.Group) return { siloId: command.siloId, boundaryKind: AuthorizationBoundaryKind.Group, boundaryGroupId: attachment.boundaryId, boundaryCoverage: attachment.boundaryCoverage === RevisionBoundaryCoverages.Descendants ? AuthorizationBoundaryCoverage.Descendants : AuthorizationBoundaryCoverage.Exact };
+				return { siloId: command.siloId, boundaryKind: AuthorizationBoundaryKind.Personal, boundaryPrincipalId: attachment.boundaryId, boundaryCoverage: AuthorizationBoundaryCoverage.Exact };
 			}),
 		},
 	};
@@ -177,27 +145,14 @@ export class PrismaAgentRevisionWriterRepository implements AgentRevisionWriterR
 	}
 }
 
-/** Maps the Prisma scope spelling back to the canonical agent-domain spelling. */
-function _FromPrismaScope(value: GrantScope): DomainGrantScope
+/** Maps one persisted boundary attachment back to the canonical agent-domain spelling. */
+function _FromPrismaBoundary(value: AgentRevisionWithAssignments["boundaryAttachments"][number]): RevisionBoundaryAttachment
 {
-	switch (value)
+	if (value.boundaryKind === AuthorizationBoundaryKind.Group && value.boundaryGroupId !== null && value.boundaryPrincipalId === null)
 	{
-		case GrantScope.Org: return "org";
-		case GrantScope.Department: return "department";
-		case GrantScope.Team: return "team";
-		case GrantScope.Project: return "project";
-		case GrantScope.Personal: return "personal";
-		default: throw new Error(`unknown persisted grant scope: ${value}`);
+		const boundaryCoverage = value.boundaryCoverage === AuthorizationBoundaryCoverage.Descendants ? RevisionBoundaryCoverages.Descendants : RevisionBoundaryCoverages.Exact;
+		return { boundaryKind: RevisionBoundaryKinds.Group, boundaryId: value.boundaryGroupId, boundaryCoverage };
 	}
-}
-
-/** Maps the Prisma subject spelling back to the canonical agent-domain spelling. */
-function _FromPrismaSubjectType(value: GrantSubjectType): DomainGrantSubjectType
-{
-	switch (value)
-	{
-		case GrantSubjectType.Group: return "group";
-		case GrantSubjectType.User: return "user";
-		default: throw new Error(`unknown persisted grant subject type: ${value}`);
-	}
+	if (value.boundaryKind === AuthorizationBoundaryKind.Personal && value.boundaryPrincipalId !== null && value.boundaryGroupId === null && value.boundaryCoverage === AuthorizationBoundaryCoverage.Exact) return { boundaryKind: RevisionBoundaryKinds.Personal, boundaryId: value.boundaryPrincipalId, boundaryCoverage: RevisionBoundaryCoverages.Exact };
+	throw new Error("invalid persisted agent revision boundary attachment");
 }
