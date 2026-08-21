@@ -2,9 +2,9 @@ import { EventType } from "@ag-ui/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { AgUiRunStatuses } from "@opencrane/state/conversation/ag-ui";
-import { ConversationEventStreamStatuses } from "@opencrane/state/conversation/stream";
+import { ConversationEventStreamMessageError, ConversationEventStreamStatuses } from "@opencrane/state/conversation/stream";
 
-import { ConversationSocketMessageError, OpenCraneConversationEventStream } from "../opencrane-conversation-event-stream";
+import { OpenCraneConversationEventStream } from "../opencrane-conversation-event-stream";
 
 /** Minimal browser socket whose server-side peer is driven directly by each test. */
 class _Socket extends EventTarget
@@ -152,6 +152,6 @@ describe("OpenCraneConversationEventStream", function _Suite()
 	it("rejects a message when no selected-conversation socket is live", async function _RejectsDisconnectedSubmit()
 	{
 		const stream = new OpenCraneConversationEventStream();
-		await expect(stream.submit({ conversationId: "conversation-1", idempotencyKey: "retry-1", blocks: [{ id: "block-1", kind: "text", value: "hello" }] })).rejects.toBeInstanceOf(ConversationSocketMessageError);
+		await expect(stream.submit({ conversationId: "conversation-1", idempotencyKey: "retry-1", blocks: [{ id: "block-1", kind: "text", value: "hello" }] })).rejects.toBeInstanceOf(ConversationEventStreamMessageError);
 	});
 });

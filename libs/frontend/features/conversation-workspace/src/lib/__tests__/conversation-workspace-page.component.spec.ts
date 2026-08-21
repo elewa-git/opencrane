@@ -68,6 +68,9 @@ class _EventStream implements ConversationEventStream
 		command.onUpdate?.({ status: ConversationEventStreamStatuses.Live, state, reconnectAttempt: 0, lastHeartbeatAt: Date.now() });
 		return state;
 	}
+
+	/** Reject participant commands because this component test double carries projection only. */
+	public async submit(): Promise<never> { throw new Error("Component test stream does not submit messages."); }
 }
 
 /** Build one authorized empty conversation for route-state tests. */

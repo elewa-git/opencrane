@@ -1,9 +1,7 @@
 import { Injectable } from "@angular/core";
 
 import { __AgUiResumeCursor, __CreateAgUiStreamState, __DecodeAgUiSocketRecord, __ReduceAgUiStream, __RevokeAgUiStreamAccess, type AgUiStreamState } from "@opencrane/state/conversation/ag-ui";
-import { ConversationEventStreamStatuses, type ConversationEventStream, type ConversationEventStreamUpdate, type StreamConversationEventsCommand } from "@opencrane/state/conversation/stream";
-
-import type { ConversationSocketMessageCommand } from "./opencrane-conversation-event-stream.types";
+import { ConversationEventStreamMessageError, ConversationEventStreamStatuses, type ConversationEventStream, type ConversationEventStreamUpdate, type StreamConversationEventsCommand, type SubmitConversationEventStreamMessageCommand } from "@opencrane/state/conversation/stream";
 
 /** Maximum time the browser waits for the socket authority to acknowledge a submitted message. */
 const _MESSAGE_ACKNOWLEDGEMENT_TIMEOUT_MILLISECONDS = 30_000;
@@ -30,32 +28,6 @@ interface ConversationSocketProgress
 	lastHeartbeatAt: number | null;
 	/** Whether this connection delivered a projection event before it closed. */
 	receivedEvent: boolean;
-}
-
-/**
- * Carries the browser-safe result of a refused or unsettled participant message command.
- *
- * The workspace gateway branches on `accessChanged` to purge its selected projection and on
- * `closed` to adopt the server-proven closed lifecycle. Every other failure retains only fixed
- * retry-safe copy, so a socket error never exposes server internals in the UI.
- *
- * Called by: {@link OpenCraneConversationEventStream} and
- * `OpenCraneConversationWorkspaceGateway`.
- */
-export class ConversationSocketMessageError extends Error
-{
-	/** Whether the server proved that the selected conversation is no longer visible. */
-	public readonly accessChanged: boolean;
-	/** Whether the server proved that the selected conversation is permanently closed. */
-	public readonly closed: boolean;
-
-	/** Creates the fixed browser-safe failure used by the workspace gateway. */
-	public constructor(denial?: string)
-	{
-		super("OpenCrane could not submit that message. Try again.");
-		this.accessChanged = denial === "conversation_unavailable";
-		this.closed = denial === "conversation_closed";
-	}
 }
 
 /**
@@ -121,16 +93,16 @@ export class OpenCraneConversationEventStream implements ConversationEventStream
 			}
 		}
 
-		this._release(command.conversationId, new ConversationSocketMessageError());
+		this._release(command.conversationId, new ConversationEventStreamMessageError());
 		_Emit(command, { status: ConversationEventStreamStatuses.Aborted, state, reconnectAttempt, lastHeartbeatAt });
 		return state;
 	}
 
 	/** Submit a message through the currently live socket and wait for its matching acknowledgement. */
-	public submit(command: ConversationSocketMessageCommand): Promise<void>
+	public submit(command: SubmitConversationEventStreamMessageCommand): Promise<void>
 	{
 		const socket = this._socket;
-		if (socket === null || this._conversationId !== command.conversationId || socket.readyState !== WebSocket.OPEN) return Promise.reject(new ConversationSocketMessageError());
+		if (socket === null || this._conversationId !== command.conversationId || socket.readyState !== WebSocket.OPEN) return Promise.reject(new ConversationEventStreamMessageError());
 		const requestId = globalThis.crypto.randomUUID();
 		return new Promise<void>((resolve, reject) =>
 		{
@@ -146,7 +118,7 @@ export class OpenCraneConversationEventStream implements ConversationEventStream
 	{
 		const cursor = __AgUiResumeCursor(progress.state);
 		const socket = new WebSocket(_SocketUrl(command.conversationId, cursor));
-		this._release(this._conversationId, new ConversationSocketMessageError());
+		this._release(this._conversationId, new ConversationEventStreamMessageError());
 		this._socket = socket;
 		this._conversationId = command.conversationId;
 		return new Promise<void>((resolve, reject) =>
@@ -179,7 +151,7 @@ export class OpenCraneConversationEventStream implements ConversationEventStream
 			socket.addEventListener("close", event =>
 			{
 				_Finish();
-				this._release(command.conversationId, new ConversationSocketMessageError());
+				this._release(command.conversationId, new ConversationEventStreamMessageError());
 				if (command.signal.aborted) { resolve(); return; }
 				if (event.code === 1008) { progress.state = __RevokeAgUiStreamAccess(); reject(new Error("conversation socket access was revoked")); return; }
 				if (!opened) { reject(new Error("conversation socket could not connect")); return; }
@@ -210,7 +182,7 @@ export class OpenCraneConversationEventStream implements ConversationEventStream
 		if (pending === undefined) return;
 		clearTimeout(pending.timeout);
 		this._pendingMessages.delete(requestId);
-		pending.reject(new ConversationSocketMessageError());
+		pending.reject(new ConversationEventStreamMessageError());
 	}
 }
 
@@ -238,7 +210,7 @@ function _HandleMessageAcknowledgement(raw: string, pendingMessages: ReadonlyMap
 	clearTimeout(pending.timeout);
 	(pendingMessages as Map<string, PendingMessage>).delete(requestId);
 	if (value["type"] === "conversation.message.accepted") pending.resolve();
-	else pending.reject(new ConversationSocketMessageError(typeof value["error"] === "string" ? value["error"] : undefined));
+	else pending.reject(new ConversationEventStreamMessageError(typeof value["error"] === "string" ? value["error"] : undefined));
 	return true;
 }
 

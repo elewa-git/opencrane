@@ -103,6 +103,9 @@ class _FakeStream implements ConversationEventStream
 		command.onUpdate?.({ status: this.status, state, reconnectAttempt: this.status === ConversationEventStreamStatuses.Reconnecting ? 1 : 0, lastHeartbeatAt: Date.now() });
 		return state;
 	}
+
+	/** Reject participant commands because the store test double owns projection only. */
+	public async submit(): Promise<never> { throw new Error("Test stream does not submit messages."); }
 }
 
 /** Create one component-scoped store and fakes. */

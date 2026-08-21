@@ -5,6 +5,7 @@
   "exclude": ["**/*.spec.ts", "**/*.stories.ts"],
   "references": [
     { "path": ".." },
+    { "path": "../../stream" },
     { "path": "../../../../core" },
     { "path": "../../../../../models/conversations/main" }
   ]

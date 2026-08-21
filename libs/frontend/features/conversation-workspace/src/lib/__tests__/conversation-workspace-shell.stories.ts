@@ -134,6 +134,9 @@ class _StoryStream implements ConversationEventStream
 		command.onUpdate?.({ status: this._status, state: this._state, reconnectAttempt: this._status === ConversationEventStreamStatuses.Reconnecting ? 1 : 0, lastHeartbeatAt: Date.now() });
 		return this._state;
 	}
+
+	/** Reject participant commands because a visual story exposes no socket transport. */
+	public async submit(): Promise<never> { throw new Error("Story stream does not submit messages."); }
 }
 
 /** Test-only asset API that returns no files. */
