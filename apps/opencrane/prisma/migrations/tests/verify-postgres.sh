@@ -21,7 +21,8 @@ cleanup()
 trap cleanup EXIT
 
 PROTECTED_DIGEST="25bfc5d31c4966ee697ae5aaa47edc855d25120d0829c241f213353f69e0358d"
-FRESH_PROTECTED_DIGEST="12505f3c15114bd2a407d0d4d2ef2befc3c8ec87acaa9787503cfbe4eba0032c"
+ORGANIZATION_FRESH_PROTECTED_DIGEST="12505f3c15114bd2a407d0d4d2ef2befc3c8ec87acaa9787503cfbe4eba0032c"
+TARGET_FRESH_PROTECTED_DIGEST="bd2dfd915b66514d4c7ad95328adb4629567634a47f1a1e37aee69f23d9a98ee"
 LEGACY_MIGRATION_SQL_DIGEST="$(node -e 'process.stdout.write(require(process.argv[1]).sqlSha256)' "$LEGACY_TRANSITION_ROOT/manifest.json")"
 ORGANIZATION_MIGRATION_SQL_DIGEST="$(node -e 'process.stdout.write(require(process.argv[1]).sqlSha256)' "$ORGANIZATION_TRANSITION_ROOT/manifest.json")"
 
@@ -39,24 +40,41 @@ TARGET_MIGRATION_SQL_DIGEST="$(jq -r '.migration.sqlSha256' <<<"$DATABASE_TRANSI
 
 git cat-file -e "$SOURCE_REF:apps/opencrane/prisma/bootstrap/target-baseline.sql"
 git show "$SOURCE_REF:apps/opencrane/prisma/bootstrap/target-baseline.sql" >"$WORK_DIR/source-baseline.sql"
+git cat-file -e "$MIGRATION_FROM_RELEASE_VERSION:apps/opencrane/prisma/bootstrap/target-baseline.sql"
+git show "$MIGRATION_FROM_RELEASE_VERSION:apps/opencrane/prisma/bootstrap/target-baseline.sql" >"$WORK_DIR/0.9.0-baseline.sql"
 
 docker run --detach --name "$CONTAINER" \
+	--user root \
 	--env POSTGRES_PASSWORD=opencrane-migration-test \
 	"$POSTGRES_IMAGE" \
-	-c shared_preload_libraries=pg_cron \
-	-c cron.database_name=migrated >/dev/null
+	-c shared_preload_libraries=pg_cron >/dev/null
 
-for _ in {1..60}; do
-	if docker exec "$CONTAINER" pg_isready --username postgres >/dev/null 2>&1; then break; fi
-	sleep 1
-done
-docker exec "$CONTAINER" pg_isready --username postgres >/dev/null
+wait_for_postgres()
+{
+	for _ in {1..60}; do
+		if docker exec "$CONTAINER" pg_isready --username postgres >/dev/null 2>&1; then return; fi
+		sleep 1
+	done
+	docker logs "$CONTAINER" >&2
+	return 1
+}
+
+wait_for_postgres
 
 psql_command()
 {
 	local database="$1"
 	shift
 	docker exec --interactive "$CONTAINER" psql --username postgres --dbname "$database" -v ON_ERROR_STOP=1 "$@"
+}
+
+configure_pg_cron_database()
+{
+	local database="$1"
+	psql_command postgres --command "ALTER SYSTEM SET cron.database_name = '$database';" >/dev/null
+	docker restart "$CONTAINER" >/dev/null
+	wait_for_postgres
+	psql_command "$database" --command 'CREATE EXTENSION pg_cron;' >/dev/null
 }
 
 source "$CLASSIFIER"
@@ -67,7 +85,7 @@ POSTGRES_BASELINE_SHA256="$(jq -r '.targetBaselineSha256' <<<"$DATABASE_TRANSITI
 DATABASE_PREVIOUS_TARGET_BASELINE_SHA256="$(jq -r '.migration.sourceTargetBaselineSha256' <<<"$DATABASE_TRANSITION")"
 DATABASE_PREVIOUS_PROTECTED_BASELINE_SHA256S_JSON="$(jq -c '.migration.sourceProtectedBaselineSha256s' <<<"$DATABASE_TRANSITION")"
 DATABASE_PREVIOUS_FRESH_PROTECTED_BASELINE_SHA256="$(jq -r '.migration.freshSourceProtectedBaselineSha256' <<<"$DATABASE_TRANSITION")"
-[[ "$DATABASE_PREVIOUS_FRESH_PROTECTED_BASELINE_SHA256" == "$FRESH_PROTECTED_DIGEST" ]]
+[[ "$DATABASE_PREVIOUS_FRESH_PROTECTED_BASELINE_SHA256" == "$TARGET_FRESH_PROTECTED_DIGEST" ]]
 DATABASE_SOURCE_HISTORY_LINEAGES_JSON="$(jq -c '.migration.sourceHistoryLineages' <<<"$DATABASE_TRANSITION")"
 DATABASE_PREVIOUS_MIGRATION_ID="$(jq -r '.migration.id' <<<"$DATABASE_TRANSITION")"
 DATABASE_PREVIOUS_SCHEMA_VERSION="$(jq -r '.migration.fromSchemaVersion' <<<"$DATABASE_TRANSITION")"
@@ -130,6 +148,8 @@ clone_database()
 create_source_database()
 {
 	local database="$1"
+	local protected_digest="${2:-$PROTECTED_DIGEST}"
+	local baseline_file="${3:-$WORK_DIR/source-baseline.sql}"
 	psql_command postgres --command "CREATE DATABASE \"$database\";" >/dev/null
 	psql_command "$database" <<SQL
 CREATE SCHEMA "opencrane_bootstrap";
@@ -138,13 +158,13 @@ CREATE TABLE "opencrane_bootstrap"."target_baseline" (
     "baseline_sha256" TEXT NOT NULL CHECK ("baseline_sha256" ~ '^[0-9a-f]{64}$')
 );
 INSERT INTO "opencrane_bootstrap"."target_baseline" ("singleton", "baseline_sha256")
-VALUES (TRUE, '$PROTECTED_DIGEST');
+VALUES (TRUE, '$protected_digest');
 SQL
-	psql_command "$database" <"$WORK_DIR/source-baseline.sql" >/dev/null
+	psql_command "$database" <"$baseline_file" >/dev/null
 }
 
 create_source_database migrated
-psql_command migrated --command 'CREATE EXTENSION pg_cron;' >/dev/null
+configure_pg_cron_database migrated
 psql_command migrated <<'SQL' >/dev/null
 SET session_replication_role = replica;
 INSERT INTO "channel_runtime_routes" (
@@ -174,15 +194,15 @@ clone_database migrated fresh_source
 psql_command fresh_source <<SQL >/dev/null
 DROP SCHEMA "opencrane_migrations" CASCADE;
 UPDATE "opencrane_bootstrap"."target_baseline"
-SET "baseline_sha256" = '$DATABASE_PREVIOUS_FRESH_PROTECTED_BASELINE_SHA256'
+SET "baseline_sha256" = '$ORGANIZATION_FRESH_PROTECTED_DIGEST'
 WHERE "singleton" = TRUE;
 SQL
-assert_classifier_state fresh_source "source|$DATABASE_PREVIOUS_FRESH_PROTECTED_BASELINE_SHA256"
-psql_command fresh_source --set "source_baseline_sha256=$FRESH_PROTECTED_DIGEST" --set "migration_sql_sha256=$ORGANIZATION_MIGRATION_SQL_DIGEST" \
+assert_classifier_state fresh_source "source|$ORGANIZATION_FRESH_PROTECTED_DIGEST"
+psql_command fresh_source --set "source_baseline_sha256=$ORGANIZATION_FRESH_PROTECTED_DIGEST" --set "migration_sql_sha256=$ORGANIZATION_MIGRATION_SQL_DIGEST" \
 	--file - <"$ORGANIZATION_TRANSITION_ROOT/migration.sql" >/dev/null
-psql_command fresh_source --set "source_baseline_sha256=$FRESH_PROTECTED_DIGEST" --set "migration_sql_sha256=$TARGET_MIGRATION_SQL_DIGEST" \
+psql_command fresh_source --set "source_baseline_sha256=$ORGANIZATION_FRESH_PROTECTED_DIGEST" --set "migration_sql_sha256=$TARGET_MIGRATION_SQL_DIGEST" \
 	--file - <"$TARGET_TRANSITION_ROOT/migration.sql" >/dev/null
-assert_classifier_state fresh_source "completed|$FRESH_PROTECTED_DIGEST"
+assert_classifier_state fresh_source "completed|$ORGANIZATION_FRESH_PROTECTED_DIGEST"
 psql_command fresh_source --tuples-only --no-align --command \
 	'SELECT count(*) FROM "opencrane_migrations"."schema_history" WHERE "schema_version" = '\''0.9.0'\'' AND "source_schema_version" = '\''0.8.0'\'' AND "source_baseline_sha256" = '\''12505f3c15114bd2a407d0d4d2ef2befc3c8ec87acaa9787503cfbe4eba0032c'\'';' \
 	| grep -qx '1'
@@ -193,6 +213,13 @@ psql_command migrated --set "source_baseline_sha256=$PROTECTED_DIGEST" --set "mi
 psql_command migrated --set "source_baseline_sha256=$PROTECTED_DIGEST" --set "migration_sql_sha256=$TARGET_MIGRATION_SQL_DIGEST" \
 	--file - <"$TARGET_TRANSITION_ROOT/migration.sql" >/dev/null
 assert_classifier_state migrated "completed|$PROTECTED_DIGEST"
+
+create_source_database fresh_090 "$TARGET_FRESH_PROTECTED_DIGEST" "$WORK_DIR/0.9.0-baseline.sql"
+configure_pg_cron_database fresh_090
+assert_classifier_state fresh_090 "source|$TARGET_FRESH_PROTECTED_DIGEST"
+psql_command fresh_090 --set "source_baseline_sha256=$TARGET_FRESH_PROTECTED_DIGEST" --set "migration_sql_sha256=$TARGET_MIGRATION_SQL_DIGEST" \
+	--file - <"$TARGET_TRANSITION_ROOT/migration.sql" >/dev/null
+assert_classifier_state fresh_090 "completed|$TARGET_FRESH_PROTECTED_DIGEST"
 
 clone_database migrated corrupt_migration_id
 psql_command corrupt_migration_id --command \
@@ -234,7 +261,7 @@ psql_command postgres --command 'CREATE DATABASE fresh;' >/dev/null
 psql_command fresh <"$CURRENT_BASELINE" >/dev/null
 psql_command fresh <"$ROOT/libs/backend/server/gateways/integrations/main/tests/integrations-authority.sql" >/dev/null
 
-for database in migrated fresh; do
+for database in migrated fresh_source fresh_090 fresh; do
 	psql_command "$database" <"$ROOT/apps/opencrane/prisma/migrations/tests/tool-result-delivery-authority.sql" >/dev/null
 	psql_command "$database" <"$ROOT/apps/opencrane/prisma/migrations/tests/conversation-activity-ordering.sql" >/dev/null
 	docker exec "$CONTAINER" pg_dump --username postgres --dbname "$database" \
@@ -244,7 +271,9 @@ for database in migrated fresh; do
 		| node "$ROOT/apps/opencrane/prisma/migrations/tests/normalize-schema-dump.mjs" \
 		>"$WORK_DIR/$database-schema.sql"
 done
-diff --unified "$WORK_DIR/fresh-schema.sql" "$WORK_DIR/migrated-schema.sql"
+for database in migrated fresh_source fresh_090; do
+	diff --unified "$WORK_DIR/fresh-schema.sql" "$WORK_DIR/$database-schema.sql"
+done
 
 # The current release ships to silos in both shapes: bootstrapped fresh at the current baseline and
 # migrated into that schema from an admitted origin. The lineage resolver must keep both deployable.
@@ -275,7 +304,8 @@ INSERT INTO "opencrane_bootstrap"."target_baseline" ("singleton", "baseline_sha2
 VALUES (TRUE, '$POSTGRES_BASELINE_SHA256');
 SQL
 assert_classifier_state fresh "current|$POSTGRES_BASELINE_SHA256"
-assert_classifier_state fresh_source "completed|$FRESH_PROTECTED_DIGEST"
+assert_classifier_state fresh_source "completed|$ORGANIZATION_FRESH_PROTECTED_DIGEST"
+assert_classifier_state fresh_090 "completed|$TARGET_FRESH_PROTECTED_DIGEST"
 assert_classifier_state migrated "completed|$PROTECTED_DIGEST"
 
 psql_command migrated --tuples-only --no-align --command \

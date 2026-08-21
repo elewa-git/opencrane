@@ -59,8 +59,9 @@ diagnostic. A persistent failure still blocks the Helm hook.
 The durable-task foundation requires PostgreSQL's `pg_cron` extension in the `opencrane` database.
 The repository builds a candidate PostgreSQL operand from the exact CloudNativePG 17.5 image and adds
 only the checksum-pinned PGDG `postgresql-17-cron` package. The image smoke proves the extension
-control file and shared library exist before publication. Deployment must then select that candidate
-by its immutable digest; building the image alone does not change the running database operand.
+control file and shared library exist before publication. The release manifest binds the published
+operand digest, and the deployment engine passes it to this chart. Building the image alone does not
+change the running database operand.
 This chart pins `shared_preload_libraries=pg_cron` and `cron.database_name=opencrane`. On an existing
 database upgrade, the deployment engine fences the server, reconciles that CNPG configuration, then
 proves the ready primary exposes the extension package and database setting before it publishes the
@@ -168,9 +169,11 @@ while IFS= read -r endpoint_ip; do
   KUBERNETES_API_ENDPOINT_INDEX=$((KUBERNETES_API_ENDPOINT_INDEX + 1))
 done < <(kubectl get endpoints kubernetes --namespace default \
   -o jsonpath='{range .subsets[*].addresses[*]}{.ip}{"\n"}{end}')
+OPENCRANE_RELEASE_VERSION="$(jq -r '.version' package.json)"
+POSTGRES_OPERAND_IMAGE="$(jq -r '.database.operandImage' "releases/$OPENCRANE_RELEASE_VERSION.json")"
 helm upgrade --install opencrane-postgres apps/postgres/helm \
   --namespace opencrane \
-  --set-string image=ghcr.io/elewa-git/opencrane-postgres@sha256:0000000000000000000000000000000000000000000000000000000000000000 \
+  --set-string image="$POSTGRES_OPERAND_IMAGE" \
   --set databaseAdmin.name=opencrane_database_admin \
   --set databaseAdmin.credentialsSecret=opencrane-postgres-admin \
   --set-string bootstrap.targetBaseline.sha256="$BASELINE_SHA256" \

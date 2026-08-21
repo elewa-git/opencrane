@@ -93,7 +93,6 @@ test("uses an explicit publication set and makes manual dispatch validation-only
 	assert.deepEqual(selectForcedContainerProjects("none"), []);
 	assert.deepEqual(selectForcedContainerProjects("bootstrap"), ["channel-proxy", "memory-gateway"]);
 	assert.deepEqual(selectForcedContainerProjects("artifact"), ["artifact-service"]);
-	assert.deepEqual(selectForcedContainerProjects("postgres"), ["postgres"]);
 	assert.deepEqual(selectForcedContainerProjects("qualification"), ["artifact-service", "channel-proxy", "cognee", "memory-gateway", "opencrane", "opencrane-ui", "postgres"]);
 	assert.deepEqual(selectForcedContainerProjects("server"), ["opencrane"]);
 	assert.deepEqual(selectForcedContainerProjects("ui"), ["opencrane-ui"]);

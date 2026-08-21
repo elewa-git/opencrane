@@ -55,16 +55,71 @@ BEGIN
     IF to_regclass('absurd.queues') IS NOT NULL THEN
         RAISE EXCEPTION 'Absurd schema already exists without this migration history' USING ERRCODE = 'OC900';
     END IF;
-    SELECT count(*) INTO history_count FROM "opencrane_migrations"."schema_history"
-     WHERE "schema_version" = '0.9.0'
-       AND "source_schema_version" = '0.8.0'
-       AND "target_baseline_sha256" = '5e16b35aedce54bf6ff7bd79bca04f92f6b6aee6315dec5c4b4797604342ab5f'
-       AND "migration_id" = '0.8.0-to-0.9.0';
-    IF history_count <> 1 THEN
-        RAISE EXCEPTION 'schema history does not name the exact 0.9.0 authority' USING ERRCODE = 'OC900';
+    IF protected_digest = 'bd2dfd915b66514d4c7ad95328adb4629567634a47f1a1e37aee69f23d9a98ee' THEN
+        IF to_regclass('opencrane_migrations.schema_history') IS NOT NULL THEN
+            SELECT count(*) INTO history_count FROM "opencrane_migrations"."schema_history";
+            IF history_count <> 0 THEN
+                RAISE EXCEPTION 'fresh 0.9.0 origin unexpectedly contains migration history' USING ERRCODE = 'OC900';
+            END IF;
+        END IF;
+    ELSIF to_regclass('opencrane_migrations.schema_history') IS NULL THEN
+        RAISE EXCEPTION 'migrated 0.9.0 origin is missing schema history' USING ERRCODE = 'OC900';
+    ELSE
+        SELECT count(*) INTO history_count FROM "opencrane_migrations"."schema_history";
+        IF protected_digest = '12505f3c15114bd2a407d0d4d2ef2befc3c8ec87acaa9787503cfbe4eba0032c'
+           AND (
+               history_count <> 1
+               OR NOT EXISTS (
+                   SELECT 1 FROM "opencrane_migrations"."schema_history"
+                    WHERE "schema_version" = '0.9.0'
+                      AND "source_schema_version" = '0.8.0'
+                      AND "source_baseline_sha256" = protected_digest
+                      AND "target_baseline_sha256" = '5e16b35aedce54bf6ff7bd79bca04f92f6b6aee6315dec5c4b4797604342ab5f'
+                      AND "sql_sha256" = 'e8d5c4ff7b5fd5797790da4abd6d16cff61be7f3667d3fbe3e6af83a102101b7'
+                      AND "migration_id" = '0.8.0-to-0.9.0'
+               )
+           ) THEN
+            RAISE EXCEPTION 'migrated 0.8 origin does not contain its exact 0.9.0 history' USING ERRCODE = 'OC900';
+        ELSIF protected_digest = '25bfc5d31c4966ee697ae5aaa47edc855d25120d0829c241f213353f69e0358d'
+           AND (
+               history_count <> 2
+               OR NOT EXISTS (
+                   SELECT 1 FROM "opencrane_migrations"."schema_history"
+                    WHERE "schema_version" = '0.8.0'
+                      AND "source_schema_version" = '0.7.0'
+                      AND "source_baseline_sha256" = protected_digest
+                      AND "target_baseline_sha256" = '7ed3f49ec3b96276cfce1c1d41e97588b0970fb28352c7d933269ce201ce32fc'
+                      AND "sql_sha256" = '76ea54c2d4ffa5a8676b59b2b02db18820ae137699344cb296c2e8389a3e27e7'
+                      AND "migration_id" = '0.7.0-to-0.8.0'
+               )
+               OR NOT EXISTS (
+                   SELECT 1 FROM "opencrane_migrations"."schema_history"
+                    WHERE "schema_version" = '0.9.0'
+                      AND "source_schema_version" = '0.8.0'
+                      AND "source_baseline_sha256" = protected_digest
+                      AND "target_baseline_sha256" = '5e16b35aedce54bf6ff7bd79bca04f92f6b6aee6315dec5c4b4797604342ab5f'
+                      AND "sql_sha256" = 'e8d5c4ff7b5fd5797790da4abd6d16cff61be7f3667d3fbe3e6af83a102101b7'
+                      AND "migration_id" = '0.8.0-to-0.9.0'
+               )
+           ) THEN
+            RAISE EXCEPTION 'inherited 0.7 origin does not contain its exact 0.9.0 history' USING ERRCODE = 'OC900';
+        END IF;
     END IF;
 END;
 $$;
+
+CREATE SCHEMA IF NOT EXISTS "opencrane_migrations";
+REVOKE ALL ON SCHEMA "opencrane_migrations" FROM PUBLIC;
+CREATE TABLE IF NOT EXISTS "opencrane_migrations"."schema_history" (
+    "schema_version" TEXT PRIMARY KEY,
+    "source_schema_version" TEXT NOT NULL,
+    "source_baseline_sha256" TEXT NOT NULL CHECK ("source_baseline_sha256" ~ '^[0-9a-f]{64}$'),
+    "target_baseline_sha256" TEXT NOT NULL CHECK ("target_baseline_sha256" ~ '^[0-9a-f]{64}$'),
+    "sql_sha256" TEXT NOT NULL CHECK ("sql_sha256" ~ '^[0-9a-f]{64}$'),
+    "migration_id" TEXT NOT NULL UNIQUE,
+    "applied_at" TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp()
+);
+REVOKE ALL ON TABLE "opencrane_migrations"."schema_history" FROM PUBLIC;
 
 DO $$
 BEGIN
