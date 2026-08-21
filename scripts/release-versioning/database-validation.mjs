@@ -5,6 +5,36 @@ import { compareSemver, isAdjacentMinor, isAdjacentPatch, readJson, sha256 } fro
 
 /** Accepts only SHA-256 identities that can become deployment convergence evidence. */
 const protectedBaselineDigestPattern = /^[a-f0-9]{64}$/u;
+const operandImagePattern = /:[0-9]+(?:\.[0-9]+)*(?:[-_.][A-Za-z0-9_.-]+)?@sha256:[a-f0-9]{64}$/u;
+
+/**
+ * Checks that the current release binds a PostgreSQL operand whose tag exposes its version and
+ * whose digest fixes its bytes.
+ *
+ * CNPG reads the PostgreSQL major version from the tag before it decides how to upgrade. When the
+ * release declares the PostgreSQL chart's external major, the two versions must agree or CNPG would
+ * make that decision from false metadata.
+ *
+ * Called by: `validateWorkspace` and {@link resolveDatabaseTransition}.
+ * @param manifest - Current release manifest whose PostgreSQL operand will be deployed.
+ * @param errors - Validation errors collected for the caller to report together.
+ * @see https://cloudnative-pg.io/docs/1.27/container_images/#image-tag-requirements
+ */
+export function validateDatabaseOperand(manifest, errors)
+{
+	const operandImage = manifest.database.operandImage;
+	if (!operandImage)
+	{
+		errors.push("current release manifest must bind a PostgreSQL operand image");
+		return;
+	}
+	if (!operandImagePattern.test(operandImage)) return;
+	const expectedMajor = manifest.projects.postgres?.externalAppVersion;
+	if (!expectedMajor) return;
+	const tagMajor = /:(?<major>[0-9]+)(?:\.[0-9]+)*(?:[-_.][A-Za-z0-9_.-]+)?@sha256:/u.exec(operandImage)?.groups?.major;
+	if (tagMajor !== expectedMajor)
+		errors.push(`PostgreSQL operand tag major '${tagMajor}' differs from the chart externalAppVersion '${expectedMajor}'`);
+}
 
 function _ReadMigrationManifest(path, description, errors)
 {
@@ -185,6 +215,8 @@ export function validateDatabase(repositoryRoot, manifest, previousManifest, cha
 		errors,
 	);
 	if (!migrationManifest) return;
+	if (migrationManifest.privilegedExtension !== undefined && migrationManifest.privilegedExtension !== "pg_cron")
+		errors.push("database migration privilegedExtension must be the reviewed 'pg_cron' exception");
 	if (migrationManifest.fromSchemaVersion !== from || migrationManifest.toSchemaVersion !== database.schemaVersion)
 		errors.push(`database migration manifest does not bind schema ${from} to ${database.schemaVersion}`);
 	if (migrationManifest.sqlSha256 !== sha256(sqlPath)) errors.push("database migration SQL digest differs from its manifest");
@@ -293,6 +325,7 @@ export function resolveDatabaseTransition(repositoryRoot, releaseVersion, fromRe
 	const target = readJson(targetPath);
 	const validateManifest = createReleaseManifestValidator(repositoryRoot);
 	const errors = validateManifest(target);
+	validateDatabaseOperand(target, errors);
 	if (releaseVersion !== rootVersion || releaseVersion !== target.repositoryVersion)
 		errors.push(`release version '${releaseVersion}' must equal root and manifest version '${rootVersion}'`);
 	let kind = fromReleaseVersion === "fresh" ? "fresh" : "current";
@@ -370,6 +403,7 @@ export function resolveDatabaseTransition(repositoryRoot, releaseVersion, fromRe
 			sourceProtectedBaselineSha256s,
 			freshSourceProtectedBaselineSha256: _FreshSourceProtectedBaselineDigest(migrationManifest),
 			sourceHistoryLineages: _SourceHistoryLineages(repositoryRoot, source, sourceProtectedBaselineSha256s),
+			privilegedExtension: migrationManifest.privilegedExtension ?? null,
 			carriedForwardThroughReleaseVersion: migrationOwner === target ? null : migrationOwner.repositoryVersion,
 		};
 	}
@@ -377,6 +411,7 @@ export function resolveDatabaseTransition(repositoryRoot, releaseVersion, fromRe
 		kind,
 		releaseVersion,
 		fromReleaseVersion,
+		operandImage: target.database.operandImage ?? null,
 		targetSchemaVersion: target.database.schemaVersion,
 		targetBaselineSha256: target.database.baselineSha256,
 		migration,

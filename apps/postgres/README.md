@@ -56,6 +56,23 @@ It retries transient CNPG rollout disconnects within a fixed shell budget, appli
 batch in one transaction, and leaves a short Job-deadline grace period for the final PostgreSQL
 diagnostic. A persistent failure still blocks the Helm hook.
 
+The durable-task foundation requires PostgreSQL's `pg_cron` extension in the `opencrane` database.
+The repository builds a candidate PostgreSQL operand from the exact CloudNativePG 17.5 image and adds
+only the checksum-pinned PGDG `postgresql-17-cron` package. The image smoke proves the extension
+control file and shared library exist before publication. The release manifest binds the published
+operand with both its PostgreSQL-version-prefixed qualified tag and immutable digest, which lets
+CloudNativePG detect an operand upgrade without permitting mutable tag drift. The deployment engine
+passes that reference to this chart. Building the image alone does not
+change the running database operand.
+This chart pins `shared_preload_libraries=pg_cron` and `cron.database_name=opencrane`. On an existing
+database upgrade, the deployment engine fences the server, reconciles that CNPG configuration, then
+proves the ready primary exposes the extension package and database setting before it publishes the
+digest-bound migration. Only that fenced migration may briefly enable CNPG's generated `postgres`
+credential to run the fixed `CREATE EXTENSION IF NOT EXISTS pg_cron` statement. The engine immediately
+disables that access, proves both its Cluster setting and generated Secret are absent, then proves the
+installed extension before it reconciles application privileges. A fresh install receives the extension
+through the same reviewed baseline.
+
 The pooler is deliberately part of the data boundary rather than an optional optimisation. Its default
 budget permits at most ten server connections per logical database (thirty across the deployed
 databases) while PostgreSQL permits eighty. The OpenCrane server's one replica is further capped at
@@ -154,8 +171,11 @@ while IFS= read -r endpoint_ip; do
   KUBERNETES_API_ENDPOINT_INDEX=$((KUBERNETES_API_ENDPOINT_INDEX + 1))
 done < <(kubectl get endpoints kubernetes --namespace default \
   -o jsonpath='{range .subsets[*].addresses[*]}{.ip}{"\n"}{end}')
+OPENCRANE_RELEASE_VERSION="$(jq -r '.version' package.json)"
+POSTGRES_OPERAND_IMAGE="$(jq -r '.database.operandImage' "releases/$OPENCRANE_RELEASE_VERSION.json")"
 helm upgrade --install opencrane-postgres apps/postgres/helm \
   --namespace opencrane \
+  --set-string image="$POSTGRES_OPERAND_IMAGE" \
   --set databaseAdmin.name=opencrane_database_admin \
   --set databaseAdmin.credentialsSecret=opencrane-postgres-admin \
   --set-string bootstrap.targetBaseline.sha256="$BASELINE_SHA256" \
@@ -197,21 +217,25 @@ re-entry: both run privileges with migration disabled and continue the normal ap
 without publishing SQL or fencing. Incompatible, unreadable, extra, or ambiguous evidence stops before
 the server is changed. Only an exact source state proceeds:
 
-1. publishes the manifest-selected SQL as an immutable, content-addressed ConfigMap, then captures
-   the exact current application Helm revision;
-2. scales the old server to zero through its Helm release and persists a visible migration fence;
-3. requires a chart-owned plugin-backed `ScheduledBackup`, creates an immediate CNPG `Backup`, and
+1. for a live Cluster without the reviewed unbacked override, proves that the required
+   [plugin-backed `ScheduledBackup`](https://cloudnative-pg.io/docs/1.27/backup/) exists before changing
+   the application release;
+2. captures the exact current application Helm revision, then scales the old server to zero through
+   that release and persists a visible migration fence;
+3. reconciles or restores PostgreSQL, proves that the server preloads `pg_cron`, and publishes the
+   manifest-selected SQL as an immutable, content-addressed ConfigMap;
+4. rechecks the chart-owned plugin-backed `ScheduledBackup`, creates an immediate CNPG `Backup`, and
    waits for `status.phase=completed`, unless the reviewed invocation explicitly passes
    `--allow-unbacked-database-migration`;
-4. runs the digest-pinned, zero-RBAC app-owner Job with deadline, no retry, read-only root, scratch,
+5. runs the digest-pinned, zero-RBAC app-owner Job with deadline, no retry, read-only root, scratch,
    and egress limited to DNS plus the exact CNPG pods on TCP 5432; and
-5. runs schema convergence before database privilege reconciliation, then restores the previous
+6. runs schema convergence before database privilege reconciliation, then restores the previous
    replica count only after the whole migration succeeds.
 
-The CLI-only unbacked override applies only to approved carry-forward repairs and skips only step 3. Source
-classification, fencing, immutable SQL publication, the migration Job, convergence, privilege
-reconciliation, and recovery remain mandatory. Use it only for a specifically approved repair; never
-make it a persistent deployment default.
+The CLI-only unbacked override applies only to approved carry-forward repairs and skips the preflight
+in step 1 and Backup creation in step 4. Source classification, fencing, immutable SQL publication,
+the migration Job, convergence, privilege reconciliation, and recovery remain mandatory. Use it only
+for a specifically approved repair; never make it a persistent deployment default.
 
 After any post-fence failure, the deploy owner checks that the migration Job is absent or terminal and
 reclassifies the database. It restores the exact captured Helm revision only if the database is still

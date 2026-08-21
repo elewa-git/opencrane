@@ -37,11 +37,12 @@ manifest contract; do not introduce parallel version files.
 
 ## Transition policy
 
-- Adjacent minor trains are the only automatic transition: for example `0.7.x` to `0.8.0`.
-- Patch, skipped-minor, and major transitions are manual. The release manifest must record an
-  approved `manualTransition` with its reason; tooling never guesses the upgrade path. This records
-  review admission only: the generic deploy resolver deliberately rejects the transition until its
-  version-specific operator procedure is implemented, reviewed, and invoked manually.
+- A database migration follows the database schema recorded by the exact previous release, not the
+  semantic-version component that changed. A release can keep its predecessor's schema unchanged,
+  or it can carry one reviewed transition from that predecessor schema to its target schema.
+- The deploy resolver never guesses an upgrade path: it accepts only the exact previous release,
+  its manifest-bound SQL digest, and its recorded protected source lineage. Patch, minor, and major
+  labels do not relax or replace those database proofs.
 - An immediate repair patch may declare `database.carriedForwardFromRepositoryVersion` only when
   its predecessor's adjacent-minor migration never completed. The repair must preserve the exact
   predecessor database identity and may carry only that predecessor's exact source. This reuses the

@@ -637,6 +637,13 @@
     ],
     "unitsOfWork": [
       {
+        "path": "libs/backend/server/infra/workflows/infra_absurd/src/qualification/prisma-durable-qualification-unit-of-work.ts",
+        "adapter": "PrismaDurableQualificationUnitOfWork",
+        "contract": "DurableQualificationUnitOfWork",
+        "contractImportPath": "./durable-qualification-unit-of-work.types",
+        "constructs": []
+      },
+      {
         "path": "libs/backend/server/agents/agent-services/main/src/prisma-boundary-grant-unit-of-work.ts",
         "adapter": "PrismaBoundaryGrantUnitOfWork",
         "contract": "BoundaryGrantResolver",
@@ -1302,6 +1309,17 @@
 		"libs/backend/server/gateways/integrations/main/src/integration-custody.router.ts"
     ]
   },
+  "rawProcedureCalls": [
+    {
+      "path": "libs/backend/server/infra/workflows/infra_absurd/src/prisma-db-procedure-gateway.ts",
+      "adapter": "PrismaDbProcedureGateway",
+      "contract": "AbsurdTaskAdmissionProcedure",
+      "contractImportPath": "./absurd-transaction-spawner.types",
+      "method": "$queryRaw",
+      "sqlTemplate": "SELECT task_id, run_id, attempt, created FROM absurd.spawn_task(${this.queueName}, ${taskName}, ${input}::jsonb, ${options}::jsonb)",
+      "reason": "The durable-admission gateway owns the one parameterized vendor procedure call needed to share the caller transaction."
+    }
+  ],
   "exemptions": [
     {
       "path": "libs/backend/server/gateways/model-routing/main/src/core/provision-byok-key.ts",

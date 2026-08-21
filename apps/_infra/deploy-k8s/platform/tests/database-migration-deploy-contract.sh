@@ -51,6 +51,31 @@ if node "$GENERIC_TRANSITION_RESOLVER" "$ROOT_DIR" "0.9.3" "0.9.2" >/dev/null 2>
   exit 1
 fi
 node "$PATCH_TRANSITION_RESOLVER" "$ROOT_DIR" "0.9.3" "0.9.2" >/dev/null
+
+# The orchestrator contract exercises ordering, not the separate read-only CNPG probe.
+verify_database_pg_cron_preflight()
+{
+  :
+}
+
+verify_database_pg_cron_server_preflight()
+{
+  :
+}
+
+verify_database_superuser_access_disabled()
+{
+  :
+}
+
+grep -q -- '--release-version' "$DEPLOY_SCRIPT"
+grep -q -- '--from-release-version' "$DEPLOY_SCRIPT"
+grep -q 'DATABASE_RELEASE_TRANSITION=.*DATABASE_TRANSITION_RESOLVER' "$DEPLOY_SCRIPT"
+grep -q 'POSTGRES_OPERAND_IMAGE=.*operandImage' "$DEPLOY_SCRIPT"
+grep -Eq 'local _images=.*POSTGRES_OPERAND_IMAGE' "$DEPLOY_SCRIPT"
+grep -q 'if (source)' "$ROOT_DIR/scripts/release-versioning/database-validation.mjs"
+grep -q 'migrationOwner.database.schemaVersion !== source.database.schemaVersion' \
+  "$ROOT_DIR/scripts/release-versioning/database-validation.mjs"
 grep -q 'automatic database migration permits only an adjacent minor transition' \
   "$ROOT_DIR/scripts/release-versioning/database-validation.mjs"
 grep -q 'run_database_release_transition' "$DEPLOY_SCRIPT"
@@ -103,6 +128,7 @@ export TEST_POSTGRES_ARGS
   LITELLM_POSTGRES_CREDENTIALS_SECRET=litellm-db
   POSTGRES_ADMIN_NAME=postgres
   POSTGRES_ADMIN_CREDENTIALS_SECRET=postgres-admin
+  POSTGRES_OPERAND_IMAGE=ghcr.io/elewa-git/opencrane-postgres:17.5-sha-qualified@sha256:0000000000000000000000000000000000000000000000000000000000000000
   POSTGRES_BOOTSTRAP_BASELINE_SHA256=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
   POSTGRES_BOOTSTRAP_BASELINE_CONFIG_MAP=baseline
   POSTGRES_BOOTSTRAP_BASELINE_CONFIG_MAP_KEY=target-baseline.sql
@@ -136,6 +162,10 @@ grep -Fxq -- 'migration.siloId=acme' "$TEST_POSTGRES_ARGS"
 grep -Fxq -- 'migration.oidcIssuer=https://identity.example.test' "$TEST_POSTGRES_ARGS"
 grep -Fxq -- 'privileges.timeoutSeconds=37' "$TEST_POSTGRES_ARGS"
 grep -Fxq -- 'privileges.jobDeadlineGraceSeconds=30' "$TEST_POSTGRES_ARGS"
+grep -Fxq -- 'superuserAccess.enabled=false' "$TEST_POSTGRES_ARGS"
+grep -Fxq -- 'migration.privilegedExtension.enabled=false' "$TEST_POSTGRES_ARGS"
+grep -Fxq -- 'migration.privilegedExtension.name=' "$TEST_POSTGRES_ARGS"
+grep -Fxq -- 'image=ghcr.io/elewa-git/opencrane-postgres:17.5-sha-qualified@sha256:0000000000000000000000000000000000000000000000000000000000000000' "$TEST_POSTGRES_ARGS"
 grep -Fxq -- 'convergence.previousMigration.sourceTargetBaselineSha256=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' "$TEST_POSTGRES_ARGS"
 grep -Fxq -- 'convergence.previousMigration.sourceProtectedBaselineSha256s=["aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"]' "$TEST_POSTGRES_ARGS"
 grep -Fxq -- 'convergence.previousMigration.selectedSourceProtectedBaselineSha256=eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee' "$TEST_POSTGRES_ARGS"
@@ -523,8 +553,9 @@ export STATE_CALLS
   [[ ! -s "$STATE_CALLS" ]]
 )
 
-# Exercise the successful live-source branch through its public orchestration function. This proves
-# classification -> exact SQL publication -> revision capture -> fence -> backup -> migration.
+# Exercise the successful live-source branch through its public orchestration function. The expected
+# call log proves that backup preflight precedes revision capture and fencing, while Backup creation
+# remains after server and SQL preparation but before migration.
 (
   source "$RECOVERY"
   source "$ORCHESTRATOR"
@@ -551,15 +582,21 @@ export STATE_CALLS
   }
   bash()
   {
+    if [[ "${5:-}" == "--preflight" ]]; then
+      printf 'backup-preflight %s %s %s %s %s\n' "$1" "$2" "$3" "$4" "$5" >>"$TEST_DIR/migration-order"
+      return
+    fi
     printf 'backup %s %s %s %s\n' "$1" "$2" "$3" "$4" >>"$TEST_DIR/migration-order"
     printf '%s\n' verified-backup
   }
   run_database_release_transition
 )
 printf '%s\n' \
-  publish \
+  'backup-preflight /backup-owner.sh opencrane opencrane-postgres 37 --preflight' \
   capture \
   fence \
+  "install false false $LIVE_ORIGIN" \
+  publish \
   'backup /backup-owner.sh opencrane opencrane-postgres 37' \
   "install true true $LIVE_ORIGIN" >"$TEST_DIR/expected-migration-order"
 cmp "$TEST_DIR/expected-migration-order" "$TEST_DIR/migration-order"
@@ -602,9 +639,10 @@ export UNBACKED_CALLS
   run_database_release_transition
 )
 printf '%s\n' \
-  publish \
   capture \
   fence \
+  'install false false' \
+  publish \
   'log WARNING: operator explicitly allowed this database migration without recovery-backup evidence.' \
   'install true true' >"$TEST_DIR/unbacked-migration.expected"
 cmp "$TEST_DIR/unbacked-migration.expected" "$UNBACKED_CALLS"
@@ -939,6 +977,9 @@ esac
 EOF
 chmod +x "$TEST_DIR/bin/kubectl"
 
+PATH="$TEST_DIR/bin:$PATH" bash "$BACKUP_SCRIPT" opencrane opencrane-postgres 2 --preflight >"$TEST_DIR/preflight-evidence"
+grep -Fxq 'opencrane-postgres' "$TEST_DIR/preflight-evidence"
+[[ ! -e "$TEST_DIR/created-backup.json" ]]
 PATH="$TEST_DIR/bin:$PATH" bash "$BACKUP_SCRIPT" opencrane opencrane-postgres 2 >"$TEST_DIR/evidence"
 grep -q 'opencrane-postgres-pre-migration-' "$TEST_DIR/evidence"
 [[ "$(jq -r '.metadata.labels["opencrane.ai/purpose"]' "$TEST_DIR/created-backup.json")" == "pre-database-migration" ]]
@@ -957,5 +998,68 @@ fi
   echo "backup timeout reached recursive arithmetic evaluation" >&2
   exit 1
 }
+
+# The only privileged path creates the reviewed pg_cron prerequisite while the server remains
+# fenced, then restores CNPG's default denial before the ordinary migration finalizes.
+PRIVILEGED_CALLS="$TEST_DIR/privileged-extension.calls"
+export PRIVILEGED_CALLS
+(
+  source "$RECOVERY"
+  source "$ORCHESTRATOR"
+  DATABASE_TRANSITION_KIND=migration
+  POSTGRES_CLUSTER_EXISTS=1
+  DATABASE_PRIVILEGED_EXTENSION=pg_cron
+  POSTGRES_MIGRATION_BACKUP=/privileged-backup.sh
+  NAMESPACE=opencrane
+  POSTGRES_RELEASE=opencrane-postgres
+  TIMEOUT=37
+  DATABASE_PRE_FENCE_RELEASE_REVISION=12
+  classify_live_database_convergence() { printf 'source|%s\n' "$LIVE_ORIGIN"; }
+  capture_pre_fence_main_release_revision() { printf '%s\n' capture >>"$PRIVILEGED_CALLS"; }
+  fence_existing_opencrane_server() { printf '%s\n' fence >>"$PRIVILEGED_CALLS"; }
+  install_postgres_release()
+  {
+    printf 'install %s %s super=%s extension=%s temporary=%s\n' "$1" "$2" \
+      "${POSTGRES_SUPERUSER_ACCESS_ENABLED:-false}" \
+      "${DATABASE_PRIVILEGED_EXTENSION_ENABLED:-false}" \
+      "${DATABASE_TEMPORARY_SUPERUSER_ACCESS:-false}" >>"$PRIVILEGED_CALLS"
+  }
+  verify_database_pg_cron_server_preflight() { printf '%s\n' server-preflight >>"$PRIVILEGED_CALLS"; }
+  verify_database_pg_cron_preflight() { printf '%s\n' extension-preflight >>"$PRIVILEGED_CALLS"; }
+  verify_database_superuser_access_disabled() { printf '%s\n' superuser-disabled >>"$PRIVILEGED_CALLS"; }
+  publish_database_migration_config_map() { printf '%s\n' publish >>"$PRIVILEGED_CALLS"; }
+  bash()
+  {
+    if [[ "$1" == "$POSTGRES_MIGRATION_BACKUP" ]]; then
+      if [[ "${5:-}" == "--preflight" ]]; then
+        printf '%s\n' backup-preflight >>"$PRIVILEGED_CALLS"
+        return
+      fi
+      printf '%s\n' backup-evidence
+      return
+    fi
+    command bash "$@"
+  }
+  log() { :; }
+  err() { :; }
+  run_database_release_transition
+)
+printf '%s\n' \
+  backup-preflight \
+  capture \
+  fence \
+  'install false false super=false extension=false temporary=false' \
+  server-preflight \
+  publish \
+  'install true false super=true extension=true temporary=true' \
+  'install false false super=false extension=false temporary=true' \
+  superuser-disabled \
+  extension-preflight \
+  'install false true super=false extension=false temporary=false' \
+  >"$TEST_DIR/privileged-extension.expected"
+if ! cmp "$TEST_DIR/privileged-extension.expected" "$PRIVILEGED_CALLS"; then
+  diff -u "$TEST_DIR/privileged-extension.expected" "$PRIVILEGED_CALLS" >&2 || true
+  exit 1
+fi
 
 echo "database migration deploy contract: PASS"

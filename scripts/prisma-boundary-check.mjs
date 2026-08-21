@@ -3,7 +3,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 
-import { findingDelta, inspectPrismaBoundary, isProductionTypeScript, prismaModelDelegates, resolveExemptions, validateOwnerDeclarations, validatePolicy } from "./prisma-boundary/core.mjs";
+import { findingDelta, inspectPrismaBoundary, isProductionTypeScript, prismaModelDelegates, resolveExemptions, validateOwnerDeclarations, validatePolicy, validateRawProcedureDeclarations } from "./prisma-boundary/core.mjs";
 
 /** Repository root for all path and Git operations. */
 const _ROOT = execFileSync("git", ["rev-parse", "--show-toplevel"], { encoding: "utf8" }).trim();
@@ -30,7 +30,7 @@ function _Main()
 		.map(function _ReadSchema(path) { return readFileSync(join(schemaDirectory, path), "utf8"); });
 	const delegates = prismaModelDelegates(schemaSources);
 	const scope = _Scope(process.argv.slice(2));
-	const files = scope.files;
+	const files = _Unique([...scope.files, ...policy.rawProcedureCalls.map(function _Path(procedure) { return procedure.path; })]);
 	let findings = 0;
 	const ownerPaths = [...new Set([...policy.owners.repositories, ...policy.owners.unitsOfWork].map(function _Path(entry) { return entry.path; }))];
 	for (const path of ownerPaths)
@@ -58,13 +58,29 @@ function _Main()
 			findings += 1;
 		}
 	}
+	for (const procedure of policy.rawProcedureCalls)
+	{
+		const absolutePath = join(_ROOT, procedure.path);
+		if (!existsSync(absolutePath))
+		{
+			console.error(`${procedure.path}:1\tERROR\tPRISMA-POLICY-RAW-PROCEDURE\traw procedure gateway path does not exist`);
+			findings += 1;
+			continue;
+		}
+		const source = readFileSync(absolutePath, "utf8");
+		for (const finding of validateRawProcedureDeclarations(procedure.path, source, policy.rawProcedureCalls))
+		{
+			console.error(`${finding.path}:${finding.line}\tERROR\t${finding.rule}\t${finding.message}`);
+			findings += 1;
+		}
+	}
 	for (const path of files)
 	{
 		if (!isProductionTypeScript(path) || !existsSync(join(_ROOT, path))) continue;
 		const source = readFileSync(join(_ROOT, path), "utf8");
-		const current = inspectPrismaBoundary(path, source, delegates, policy.owners, exemptions.active.get(path));
+		const current = inspectPrismaBoundary(path, source, delegates, policy.owners, exemptions.active.get(path), policy.rawProcedureCalls);
 		const baseSource = scope.base === undefined ? undefined : _BaseSource(scope.base, path);
-		const base = baseSource === undefined ? [] : inspectPrismaBoundary(path, baseSource, delegates, policy.owners, exemptions.active.get(path));
+		const base = baseSource === undefined ? [] : inspectPrismaBoundary(path, baseSource, delegates, policy.owners, exemptions.active.get(path), policy.rawProcedureCalls);
 		for (const finding of scope.base === undefined ? current : findingDelta(base, current))
 		{
 			console.error(`${finding.path}:${finding.line}\tERROR\t${finding.rule}\t${finding.message}`);

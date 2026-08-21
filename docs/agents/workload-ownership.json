@@ -262,14 +262,14 @@
     {
       "id": "postgres-database",
       "podClass": "Pod/CNPG-postgresql-instance",
-      "image": "ghcr.io/cloudnative-pg/postgresql:17.5",
+      "image": "ghcr.io/elewa-git/opencrane-postgres:<postgres-version>-<qualified-tag>@sha256:<release-digest>",
       "owner": "apps/postgres",
       "source": { "type": "file", "path": "apps/postgres/helm/templates/cluster.yaml", "anchor": "kind: Cluster" }
     },
     {
       "id": "postgres-database-privileges",
       "podClass": "Job/postgres-database-privileges",
-      "image": "ghcr.io/cloudnative-pg/postgresql:17.5",
+      "image": "ghcr.io/elewa-git/opencrane-postgres:<postgres-version>-<qualified-tag>@sha256:<release-digest>",
       "owner": "apps/postgres",
       "source": { "type": "file", "path": "apps/postgres/helm/templates/database-privileges-job.yaml", "anchor": "kind: Job", "coversLocalTemplate": true }
     },

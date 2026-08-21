@@ -9,7 +9,7 @@ import {
 	__SelectDirectReleaseComparisonBase,
 	validateWorkspace,
 } from "../release-versioning/core.mjs";
-import { resolveDatabaseTransition, resolveSchemaLineage } from "../release-versioning/database-validation.mjs";
+import { resolveDatabaseTransition, resolveSchemaLineage, validateDatabaseOperand } from "../release-versioning/database-validation.mjs";
 import { isAdjacentMinor, isAdjacentPatch, parseSemver, sha256 } from "../release-versioning/version-utils.mjs";
 
 function _WriteJson(path, value)
@@ -51,6 +51,7 @@ function _Fixture({
 			schemaVersion,
 			baselinePath: "apps/opencrane/prisma/bootstrap/target-baseline.sql",
 			baselineSha256: sha256(baselinePath),
+			operandImage: "ghcr.io/elewa-git/opencrane-postgres:17.5-sha-qualified@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 		},
 		projects: {
 			example: { root: "apps/example", adaptedVersion, chartVersion: adaptedVersion },
@@ -197,6 +198,51 @@ test("enforces the declared release-manifest JSON Schema", async () =>
 	_WriteJson(manifestPath, manifest);
 	const errors = await validateWorkspace(fixture.root, [], fixture.graph);
 	assert.ok(errors.some((error) => error.includes("release manifest schema") && error.includes("additional properties")));
+});
+
+test("requires a database operand image to use a PostgreSQL-version-prefixed tag plus digest", async () =>
+{
+	const fixture = _Fixture();
+	const manifestPath = join(fixture.root, "releases/0.7.0.json");
+	const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+	manifest.database.operandImage = "ghcr.io/elewa-git/opencrane-postgres:0.7.0";
+	_WriteJson(manifestPath, manifest);
+	const errors = await validateWorkspace(fixture.root, [], fixture.graph);
+	assert.ok(errors.some((error) => error.includes("release manifest schema") && error.includes("operandImage")));
+});
+
+test("rejects a digest-only database operand that CloudNativePG cannot upgrade", async () =>
+{
+	const fixture = _Fixture();
+	const manifestPath = join(fixture.root, "releases/0.7.0.json");
+	const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+	manifest.database.operandImage = "ghcr.io/elewa-git/opencrane-postgres@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+	_WriteJson(manifestPath, manifest);
+	const errors = await validateWorkspace(fixture.root, [], fixture.graph);
+	assert.ok(errors.some((error) => error.includes("release manifest schema") && error.includes("operandImage")));
+});
+
+test("requires the current release manifest to bind a database operand", async () =>
+{
+	const fixture = _Fixture();
+	const manifestPath = join(fixture.root, "releases/0.7.0.json");
+	const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+	delete manifest.database.operandImage;
+	_WriteJson(manifestPath, manifest);
+	const errors = await validateWorkspace(fixture.root, [], fixture.graph);
+	assert.ok(errors.includes("current release manifest must bind a PostgreSQL operand image"));
+});
+
+test("requires the operand tag major to match the PostgreSQL chart", () =>
+{
+	const errors = [];
+	validateDatabaseOperand({
+		database: {
+			operandImage: "ghcr.io/elewa-git/opencrane-postgres:16.9-sha-qualified@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+		},
+		projects: { postgres: { externalAppVersion: "17" } },
+	}, errors);
+	assert.deepEqual(errors, ["PostgreSQL operand tag major '16' differs from the chart externalAppVersion '17'"]);
 });
 
 test("rejects a directly adapted project that retains an older stamp", async () =>
@@ -403,6 +449,7 @@ test("requires the umbrella to declare every chart-bearing application", async (
 			schemaVersion: "0.7.0",
 			baselinePath: "apps/opencrane/prisma/bootstrap/target-baseline.sql",
 			baselineSha256: sha256(baselinePath),
+			operandImage: "ghcr.io/elewa-git/opencrane-postgres:17.5-sha-qualified@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 		},
 		projects: {
 			"deploy-k8s": { root: "apps/_infra/deploy-k8s", adaptedVersion: "0.7.0", chartVersion: "0.7.0" },
@@ -502,8 +549,13 @@ test("resolves an approved patch release with unchanged database state as curren
 		adaptedVersion: "0.7.1",
 		manualTransition: { approved: true, reason: "Operator-reviewed patch transition" },
 	});
+	const manifestPath = join(fixture.root, "releases/0.7.1.json");
+	const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+	manifest.database.operandImage = "ghcr.io/elewa-git/opencrane-postgres:17.5-sha-qualified@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+	_WriteJson(manifestPath, manifest);
 	const transition = resolveDatabaseTransition(fixture.root, "0.7.1", "0.7.0");
 	assert.equal(transition.kind, "current");
+	assert.equal(transition.operandImage, manifest.database.operandImage);
 	assert.equal(transition.targetSchemaVersion, "0.7.0");
 	assert.equal(transition.migration, null);
 });
@@ -595,6 +647,27 @@ test("rejects rewriting an older release manifest", async () =>
 	});
 	const errors = await validateWorkspace(fixture.root, ["releases/0.7.0.json"], fixture.graph);
 	assert.ok(errors.some((error) => error.includes("is immutable")));
+});
+
+test("accepts restoring a historical manifest to its exact tagged bytes", async () =>
+{
+	const fixture = _Fixture({
+		repositoryVersion: "0.8.0",
+		previousRepositoryVersion: "0.7.0",
+		adaptedVersion: "0.8.0",
+	});
+	_WriteDatabaseMigration(fixture.root, "0.7.0", "0.8.0");
+	const file = "releases/0.7.0.json";
+	assert.deepEqual(await validateWorkspace(
+		fixture.root,
+		[file],
+		fixture.graph,
+		[],
+		[],
+		null,
+		[file],
+		[file],
+	), []);
 });
 
 test("allows a newly introduced historical adoption manifest", async () =>

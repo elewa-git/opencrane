@@ -1,6 +1,15 @@
 {{- if eq (len .Values.databases) 0 -}}
 {{- fail "databases must contain at least the initdb database" -}}
 {{- end -}}
+{{- /*
+CloudNativePG reads the PostgreSQL major version from imageName's tag before it decides how to
+upgrade, while the digest keeps the selected bytes immutable.
+@see https://cloudnative-pg.io/docs/1.27/container_images/#image-tag-requirements
+*/ -}}
+{{- $operandImagePattern := printf "^[^[:space:]@]+:%s(\\.[0-9]+)*([-_.][A-Za-z0-9_.-]+)?@sha256:[0-9a-f]{64}$" .Chart.AppVersion -}}
+{{- if not (regexMatch $operandImagePattern .Values.image) -}}
+{{- fail (printf "image must use a PostgreSQL %s tag plus an exact sha256 OCI digest so CloudNativePG can detect upgrades" .Chart.AppVersion) -}}
+{{- end -}}
 {{- $primary := index .Values.databases 0 -}}
 {{- $databaseNames := dict -}}
 {{- $databaseOwners := dict -}}
@@ -140,6 +149,12 @@
 {{- if lt (int .Values.postgresql.maxConnections) 1 -}}
 {{- fail "postgresql.maxConnections must be positive" -}}
 {{- end -}}
+{{- if not (kindIs "bool" .Values.superuserAccess.enabled) -}}
+{{- fail "superuserAccess.enabled must be a boolean" -}}
+{{- end -}}
+{{- if and .Values.migration.privilegedExtension.enabled (or (ne .Values.migration.privilegedExtension.name "pg_cron") (not .Values.superuserAccess.enabled)) -}}
+{{- fail "the privileged pg_cron migration requires temporary CNPG superuser access" -}}
+{{- end -}}
 {{- if lt (int .Values.pooler.instances) 1 -}}
 {{- fail "pooler.instances must be positive" -}}
 {{- end -}}
@@ -173,10 +188,13 @@ metadata:
 spec:
   instances: {{ .Values.instances }}
   imageName: {{ .Values.image | quote }}
-  enableSuperuserAccess: false
+  enableSuperuserAccess: {{ .Values.superuserAccess.enabled }}
   postgresql:
+    shared_preload_libraries:
+      - pg_cron
     parameters:
       max_connections: {{ .Values.postgresql.maxConnections | quote }}
+      cron.database_name: "opencrane"
   inheritedMetadata:
     labels:
       {{- include "opencrane.postgres.labels" . | nindent 6 }}

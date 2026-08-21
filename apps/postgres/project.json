@@ -2,12 +2,26 @@
   "name": "postgres",
   "$schema": "../../node_modules/nx/schemas/project-schema.json",
   "projectType": "application",
-  "metadata": { "release": { "adaptedVersion": "0.9.2" } },
+  "metadata": { "release": { "adaptedVersion": "0.9.3" } },
   "tags": ["type:app", "layer:entrypoint", "scope:postgres"],
   "targets": {
     "helm-lint": {
       "executor": "nx:run-commands",
-      "options": { "command": "helm lint apps/postgres/helm --set-json 'databases=[{\"name\":\"opencrane\",\"owner\":\"opencrane\",\"credentialsSecret\":\"lint-opencrane\"},{\"name\":\"obot\",\"owner\":\"obot\",\"credentialsSecret\":\"lint-obot\"},{\"name\":\"litellm\",\"owner\":\"litellm\",\"credentialsSecret\":\"lint-litellm\"}]' --set-string databaseAdmin.name=lint-admin --set-string databaseAdmin.credentialsSecret=lint-admin-secret --set-string bootstrap.targetBaseline.sha256=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa --set-string bootstrap.initdb.postInitApplicationSQLRefs.configMapRefs[0].name=lint-baseline --set-string bootstrap.initdb.postInitApplicationSQLRefs.configMapRefs[0].key=target-baseline.sql --set-string convergence.targetSchemaVersion=0.8.0 --set-string convergence.targetBaselineSha256=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb --set-string convergence.currentProtectedBaselineSha256=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa --set-string networkPolicy.kubernetesApiServerCidrs[0]=10.43.0.1/32 --set-string networkPolicy.kubernetesApiServerEndpointCidrs[0]=172.18.0.2/32 --set networkPolicy.kubernetesApiServerEndpointPort=6443" }
+      "options": { "command": "helm lint apps/postgres/helm --set-string image=ghcr.io/elewa-git/opencrane-postgres:17.5-sha-qualified@sha256:0000000000000000000000000000000000000000000000000000000000000000 --set-json 'databases=[{\"name\":\"opencrane\",\"owner\":\"opencrane\",\"credentialsSecret\":\"lint-opencrane\"},{\"name\":\"obot\",\"owner\":\"obot\",\"credentialsSecret\":\"lint-obot\"},{\"name\":\"litellm\",\"owner\":\"litellm\",\"credentialsSecret\":\"lint-litellm\"}]' --set-string databaseAdmin.name=lint-admin --set-string databaseAdmin.credentialsSecret=lint-admin-secret --set-string bootstrap.targetBaseline.sha256=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa --set-string bootstrap.initdb.postInitApplicationSQLRefs.configMapRefs[0].name=lint-baseline --set-string bootstrap.initdb.postInitApplicationSQLRefs.configMapRefs[0].key=target-baseline.sql --set-string convergence.targetSchemaVersion=0.8.0 --set-string convergence.targetBaselineSha256=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb --set-string convergence.currentProtectedBaselineSha256=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa --set-string networkPolicy.kubernetesApiServerCidrs[0]=10.43.0.1/32 --set-string networkPolicy.kubernetesApiServerEndpointCidrs[0]=172.18.0.2/32 --set networkPolicy.kubernetesApiServerEndpointPort=6443" }
+    },
+    "container": {
+      "executor": "nx:run-commands",
+      "metadata": {
+        "release": {
+          "image": "opencrane-postgres",
+          "dockerfile": "apps/postgres/deploy/Dockerfile"
+        }
+      },
+      "options": { "command": "docker build -f apps/postgres/deploy/Dockerfile ." }
+    },
+    "image-smoke": {
+      "executor": "nx:run-commands",
+      "options": { "command": "bash apps/postgres/tests/image-smoke.sh", "cwd": "." }
     },
     "test": {
       "executor": "nx:run-commands",

@@ -252,6 +252,7 @@ console.log("0.8.0-to-0.9.0 migration contract: PASS");
 requireContract(groupHierarchyManifest.fromSchemaVersion === "0.9.0", "group-hierarchy migration source version must be exact");
 requireContract(groupHierarchyManifest.toSchemaVersion === "0.9.3", "group-hierarchy migration target version must be exact");
 requireContract(groupHierarchyManifest.sqlSha256 === groupHierarchySqlDigest, "group-hierarchy migration SQL digest must match its manifest");
+requireContract(groupHierarchyManifest.sourceTargetBaselineSha256 === organizationManifest.targetBaselineSha256, "0.9.3 migration must name the immutable 0.9.0 source baseline");
 requireContract(groupHierarchyManifest.targetBaselineSha256 === targetDigest, "group-hierarchy migration target digest must match the clean baseline");
 requireContract(
 	JSON.stringify(groupHierarchyManifest.sourceProtectedBaselineSha256s) === JSON.stringify([
@@ -265,13 +266,30 @@ requireContract(
 	groupHierarchyManifest.freshSourceProtectedBaselineSha256 === "bd2dfd915b66514d4c7ad95328adb4629567634a47f1a1e37aee69f23d9a98ee",
 	"group-hierarchy migration must identify the fresh protected 0.9.0 origin",
 );
+for (const admittedOrigin of groupHierarchyManifest.sourceProtectedBaselineSha256s)
+{
+	requireContract(groupHierarchySql.includes(admittedOrigin), `0.9.3 migration must admit protected origin ${admittedOrigin}`);
+}
+requireContract(groupHierarchyManifest.privilegedExtension === "pg_cron", "0.9.3 migration must bind its reviewed privileged pg_cron prerequisite");
 requireContract(groupHierarchySql.includes("pg_advisory_lock"), "group-hierarchy migration must acquire the session migration lock");
 requireContract(groupHierarchySql.includes("pg_advisory_xact_lock"), "group-hierarchy migration must serialize hierarchy mutation");
 requireContract(groupHierarchySql.includes("BEGIN;"), "group-hierarchy migration must run transactionally");
 requireContract(groupHierarchySql.includes("migration_already_applied"), "group-hierarchy migration must support exact idempotent retry");
 requireContract(groupHierarchySql.includes("database does not match the exact 0.9.0 source shape"), "IAM cutover migration must fail closed on source-shape drift");
+requireContract(groupHierarchySql.includes("pg_cron extension is missing after the privileged migration prerequisite"), "0.9.3 migration must require pg_cron before mutating application authority");
+requireContract(groupHierarchySql.includes("application owner lacks pg_cron schema access after the privileged migration prerequisite"), "0.9.3 migration must require application-owner cron access");
+requireContract(groupHierarchySql.includes("create schema if not exists absurd"), "0.9.3 migration must install the reviewed Absurd schema");
 requireContract(groupHierarchySql.includes("COMMIT;\nSELECT pg_advisory_unlock"), "group-hierarchy migration must commit before releasing its session lock");
 requireContract(groupHierarchySql.trimEnd().endsWith("\\endif"), "group-hierarchy migration retry branch must remain explicit");
+for (const [pattern, expected, description] of [
+	[/SELECT pg_advisory_lock\(/gu, 1, "one session migration-lock acquisition"],
+	[/CREATE TABLE IF NOT EXISTS "opencrane_migrations"\."schema_history"/gu, 1, "one schema-history authority"],
+	[/INSERT INTO "opencrane_migrations"\."schema_history"/gu, 1, "one final schema-history write"],
+	[/^COMMIT;$/gmu, 1, "one transaction commit"],
+])
+{
+	requireContract((groupHierarchySql.match(pattern) ?? []).length === expected, `0.9.3 migration must contain ${description}`);
+}
 for (const input of ["migration_silo_id", "migration_oidc_issuer"])
 {
 	requireContract(groupHierarchySql.includes(`:{?${input}}`), `IAM cutover must require ${input}`);

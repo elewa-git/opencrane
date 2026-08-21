@@ -1,0 +1,61 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../../.." && pwd)"
+QUALIFIER="$ROOT_DIR/apps/_infra/deploy-k8s/platform/qualify-durable-execution.sh"
+TEST_DIR="$(mktemp -d)"
+MOCK_BIN="$TEST_DIR/bin"
+CAPTURE="$TEST_DIR/capture"
+mkdir -p "$MOCK_BIN"
+trap 'rm -rf -- "$TEST_DIR"' EXIT
+
+cat >"$MOCK_BIN/helm" <<'EOF'
+#!/usr/bin/env bash
+if [[ "$2" == "opencrane-testlynn-postgres" ]]; then
+  printf '%s\n' '{"chart":"postgres-0.9.3","info":{"status":"deployed"}}'
+else
+  printf '%s\n' '{"chart":"opencrane-silo-0.9.3","info":{"status":"deployed"}}'
+fi
+EOF
+
+cat >"$MOCK_BIN/kubectl" <<'EOF'
+#!/usr/bin/env bash
+if [[ "$*" == "config current-context" ]]; then printf '%s\n' 'gke_opencrane-dev'; exit 0; fi
+if [[ "$*" == *"get service"* ]]; then printf '%s' 'opencrane-testlynn-postgres'; exit 0; fi
+if [[ "$*" == *"get secret"* ]]; then printf '%s' 'cG9zdGdyZXNxbDovL29wZW5jcmFuZTpzdXBlci1zZWNyZXRAaW50ZXJuYWw6NTQzMi9vcGVuY3JhbmU='; exit 0; fi
+if [[ "$*" == *"port-forward"* ]]; then
+  printf '%s\n' 'Forwarding from 127.0.0.1:65431 -> 5432'
+  while true; do sleep 1; done
+fi
+exit 1
+EOF
+
+cat >"$MOCK_BIN/npx" <<'EOF'
+#!/usr/bin/env bash
+[[ "$*" == "nx run backend-server-infra-workflows-infra-absurd:qualify-live" ]]
+[[ "$DATABASE_URL" == 'postgresql://opencrane:super-secret@127.0.0.1:65431/opencrane' ]]
+[[ "$OPENCRANE_D2_SILO_ID" == 'testlynn' ]]
+[[ "$OPENCRANE_D2_SAMPLE_COUNT" == '40' ]]
+[[ "$OPENCRANE_D2_POLL_INTERVAL_MS" == '50' ]]
+[[ "$OPENCRANE_D2_THRESHOLD_MS" == '250' ]]
+[[ "$OPENCRANE_D2_DATABASE_POOL_SIZE" == '2' ]]
+printf '%s\n' '{"passed":true}'
+EOF
+
+cat >"$MOCK_BIN/node" <<'EOF'
+#!/usr/bin/env bash
+if [[ "$*" == *"net.createServer"* ]]; then exit 0; fi
+[[ "$RAW_DATABASE_URL" == 'postgresql://opencrane:super-secret@internal:5432/opencrane' ]]
+[[ "$LOCAL_PORT" == '65431' ]]
+printf '%s' 'postgresql://opencrane:super-secret@127.0.0.1:65431/opencrane'
+EOF
+
+chmod +x "$MOCK_BIN/helm" "$MOCK_BIN/kubectl" "$MOCK_BIN/node" "$MOCK_BIN/npx"
+PATH="$MOCK_BIN:$PATH" bash "$QUALIFIER" --context gke_opencrane-dev --cluster-tenant testlynn --local-port 65431 >"$CAPTURE"
+grep -Fq '{"passed":true}' "$CAPTURE"
+if grep -Fq 'super-secret' "$CAPTURE"; then
+  printf 'durable execution qualifier exposed the application credential\n' >&2
+  exit 1
+fi
+bash -n "$QUALIFIER"
+echo "durable execution qualification contract: PASS"

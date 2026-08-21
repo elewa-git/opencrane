@@ -114,6 +114,8 @@ source "$COGNEE_IMAGE_POLICY"
 source "$SCRIPT_DIR/initial-model-provider.sh"
 source "$SCRIPT_DIR/invitation-signing-secret.sh"
 source "$SCRIPT_DIR/database-convergence-classifier.sh"
+source "$SCRIPT_DIR/database-pg-cron-preflight.sh"
+source "$SCRIPT_DIR/database-superuser-access.sh"
 source "$SCRIPT_DIR/database-convergence-policy.sh"
 source "$SCRIPT_DIR/database-migration-recovery.sh"
 source "$SCRIPT_DIR/database-migration-orchestrator.sh"
@@ -332,6 +334,7 @@ DATABASE_CARRY_FORWARD_RELEASE="$(jq -r '.migration.carriedForwardThroughRelease
 validate_unbacked_database_migration_override
 DATABASE_TARGET_SCHEMA_VERSION="$(jq -r '.targetSchemaVersion' <<<"$DATABASE_RELEASE_TRANSITION")"
 DATABASE_TARGET_BASELINE_SHA256="$(jq -r '.targetBaselineSha256' <<<"$DATABASE_RELEASE_TRANSITION")"
+POSTGRES_OPERAND_IMAGE="$(jq -r '.operandImage // empty' <<<"$DATABASE_RELEASE_TRANSITION")"
 DATABASE_CONVERGENCE_MIGRATION="$(jq '.migration' <<<"$DATABASE_RELEASE_TRANSITION")"
 # A release that changes no schema still meets databases that reached this schema through a real
 # migration, and privilege reconciliation compares them against exactly that recorded transition.
@@ -456,10 +459,11 @@ _run_preflight() {
   fi
 
   # 3. First-party images pullable — catch a private/typo'd registry before the rollout
-  #    sits in ImagePullBackOff. The server and SPA are one browser release, so validate both
-  #    resolved images. A missing local inspector warns rather than changing cluster state.
+  #    sits in ImagePullBackOff. Validate the resolved browser, memory, and database operands
+  #    before the database transition can fence the existing server. A missing local inspector
+  #    warns rather than changing cluster state.
   local _img
-  local _images=("$CONTROL_PLANE_SPA_IMAGE" "$COGNEE_IMAGE")
+  local _images=("$CONTROL_PLANE_SPA_IMAGE" "$COGNEE_IMAGE" "$POSTGRES_OPERAND_IMAGE")
   if command -v skopeo >/dev/null 2>&1; then
     for _img in "${_images[@]}"; do
       skopeo inspect "docker://$_img" >/dev/null 2>&1 || PF_FAILS+=("First-party image not pullable: $_img (skopeo inspect failed). Check the registry/tag and your pull credentials.")
@@ -651,6 +655,7 @@ DATABASE_PREVIOUS_FRESH_PROTECTED_BASELINE_SHA256=""
 DATABASE_SOURCE_HISTORY_LINEAGES_JSON="[]"
 DATABASE_PREVIOUS_MIGRATION_SQL_SHA256=""
 DATABASE_SELECTED_PROTECTED_BASELINE_SHA256=""
+DATABASE_PRIVILEGED_EXTENSION=""
 if [[ "$DATABASE_CONVERGENCE_MIGRATION" != "null" ]]; then
   DATABASE_PREVIOUS_MIGRATION_AVAILABLE="true"
   DATABASE_PREVIOUS_MIGRATION_ID="$(jq -r '.id' <<<"$DATABASE_CONVERGENCE_MIGRATION")"
@@ -669,6 +674,11 @@ if [[ "$DATABASE_TRANSITION_KIND" == "migration" ]]; then
     exit 1
   fi
   DATABASE_MIGRATION_SQL_FILE="$(jq -r '.migration.sqlFile' <<<"$DATABASE_RELEASE_TRANSITION")"
+  DATABASE_PRIVILEGED_EXTENSION="$(jq -r '.migration.privilegedExtension // empty' <<<"$DATABASE_RELEASE_TRANSITION")"
+  if [[ -n "$DATABASE_PRIVILEGED_EXTENSION" && "$DATABASE_PRIVILEGED_EXTENSION" != "pg_cron" ]]; then
+    err "Database transition declared an unreviewed privileged extension."
+    exit 1
+  fi
 fi
 
 _load_kubernetes_api_helm_args networkPolicy "PostgreSQL pooler"

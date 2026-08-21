@@ -15,6 +15,7 @@ ground a published page, but it is not itself published.
 | [0010](0010-language-neutral-agent-runtime.md) | Language-neutral agent runtime | Accepted |
 | [0011](0011-single-run-input-and-artifact-read-authorities.md) | Single run-input and artifact-read authorities | Accepted |
 | [0012](0012-conversation-modes-and-agent-thread-authority.md) | Conversation modes and Agent-thread authority | Accepted |
+| [0013](0013-durable-control-plane-execution.md) | Durable control-plane execution | Accepted |
 
 ## Writing a new ADR
 
