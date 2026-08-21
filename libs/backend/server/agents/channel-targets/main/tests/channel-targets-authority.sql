@@ -16,10 +16,13 @@ BEGIN
 END;
 $$;
 
-INSERT INTO "agent_services" ("id", "silo_id", "kind", "name", "workload_profile", "updated_at")
-VALUES ('channel-service', 'silo-channel', 'managed', 'Channel agent', 'managed-agent', clock_timestamp());
-INSERT INTO "agent_services" ("id", "silo_id", "kind", "name", "workload_profile", "updated_at")
-VALUES ('channel-service-2', 'silo-channel', 'managed', 'Second channel agent', 'managed-agent', clock_timestamp());
+INSERT INTO "principals" ("id", "silo_id", "issuer", "subject", "provenance", "updated_at") VALUES
+    ('channel-service-principal', 'silo-channel', 'urn:opencrane:agent-service', 'channel-service', 'internal', clock_timestamp()),
+    ('channel-service-2-principal', 'silo-channel', 'urn:opencrane:agent-service', 'channel-service-2', 'internal', clock_timestamp());
+INSERT INTO "agent_services" ("id", "silo_id", "kind", "name", "workload_profile", "principal_id", "updated_at")
+VALUES ('channel-service', 'silo-channel', 'managed', 'Channel agent', 'managed-agent', 'channel-service-principal', clock_timestamp());
+INSERT INTO "agent_services" ("id", "silo_id", "kind", "name", "workload_profile", "principal_id", "updated_at")
+VALUES ('channel-service-2', 'silo-channel', 'managed', 'Second channel agent', 'managed-agent', 'channel-service-2-principal', clock_timestamp());
 INSERT INTO "agent_revisions" ("id", "agent_service_id", "revision", "state", "digest", "prompt_policy_version", "model_definition_id", "budget", "authored_by", "published_at")
 VALUES ('channel-revision', 'channel-service', 1, 'published', 'sha256:' || repeat('a', 64), 'prompt-v1', 'channel-model', '{}', 'user-1', clock_timestamp());
 UPDATE "agent_services" SET "state" = 'active', "active_revision_id" = 'channel-revision' WHERE "id" = 'channel-service';
