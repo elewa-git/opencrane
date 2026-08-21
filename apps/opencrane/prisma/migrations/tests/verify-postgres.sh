@@ -265,6 +265,7 @@ SQL
 assert_classifier_state extra_history_row "incompatible|$PROTECTED_DIGEST"
 
 psql_command postgres --command 'CREATE DATABASE fresh;' >/dev/null
+configure_pg_cron_database fresh
 psql_command fresh <"$CURRENT_BASELINE" >/dev/null
 psql_command fresh <"$ROOT/libs/backend/server/gateways/integrations/main/tests/integrations-authority.sql" >/dev/null
 
