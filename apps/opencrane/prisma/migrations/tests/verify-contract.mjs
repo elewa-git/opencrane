@@ -311,6 +311,7 @@ for (const source of [targetBaseline, groupHierarchySql])
 	requireContract(source.includes('CREATE TABLE "resource_shares"'), "resource shares must use explicit durable authority");
 	requireContract(source.includes('CREATE TABLE "resource_share_recipients"'), "resource shares must bind explicit recipients");
 	requireContract(source.includes('CREATE FUNCTION "enforce_resource_share_recipient_authority"()'), "resource-share recipients must link their exact active grant");
+	requireContract(!source.includes('JOIN "authorization_grants" grant ON'), "resource-share authority SQL must not use the reserved GRANT keyword as an alias");
 }
 requireContract(groupHierarchySql.includes('CREATE TABLE "opencrane_migrations"."group_claim_cutover"'), "OIDC claim rewrites must remain durable migration evidence");
 requireContract(groupHierarchySql.includes('"migration_sql_sha256" TEXT NOT NULL'), "OIDC claim rewrites must bind the reviewed migration digest");

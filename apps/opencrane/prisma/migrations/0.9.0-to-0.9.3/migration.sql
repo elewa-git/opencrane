@@ -37,7 +37,7 @@ SELECT (
         WHERE "schema_version" = '0.9.3'
           AND "source_schema_version" = '0.9.0'
           AND "source_baseline_sha256" = :'source_baseline_sha256'
-          AND "target_baseline_sha256" = 'ba7bc09c367ffb8c1f814e96a28b80e7a75a423632b161c59680e612fad54a06'
+          AND "target_baseline_sha256" = 'a70da4a256573c2b0dcf53e63e0a4994f8a65d959d1bb3f8959d2aac85f1fcb4'
           AND "sql_sha256" = :'migration_sql_sha256'
           AND "migration_id" = '0.9.0-to-0.9.3'
     )
@@ -4227,7 +4227,7 @@ INSERT INTO "opencrane_migrations"."schema_history" (
     "target_baseline_sha256", "sql_sha256", "migration_id"
 ) VALUES (
     '0.9.3', '0.9.0', :'source_baseline_sha256',
-    'ba7bc09c367ffb8c1f814e96a28b80e7a75a423632b161c59680e612fad54a06',
+    'a70da4a256573c2b0dcf53e63e0a4994f8a65d959d1bb3f8959d2aac85f1fcb4',
     :'migration_sql_sha256', '0.9.0-to-0.9.3'
 );
 

@@ -7489,23 +7489,23 @@ BEGIN
 	IF NOT EXISTS (
 		SELECT 1
 		FROM "resource_shares" share
-		JOIN "authorization_grants" grant ON grant."id" = NEW."grant_id"
+		JOIN "authorization_grants" grant_row ON grant_row."id" = NEW."grant_id"
 		WHERE share."id" = NEW."resource_share_id"
 		  AND share."silo_id" = NEW."silo_id"
-		  AND grant."silo_id" = NEW."silo_id"
-		  AND grant."manager_id" = 'resource-share-editor'
-		  AND grant."subject_kind" = 'principal'
-		  AND grant."subject_group_id" IS NULL
-		  AND grant."subject_principal_id" = NEW."principal_id"
-		  AND grant."boundary_kind" = 'personal'
-		  AND grant."boundary_group_id" IS NULL
-		  AND grant."boundary_principal_id" = share."owner_principal_id"
-		  AND grant."boundary_coverage" = 'exact'
-		  AND grant."resource_kind" = share."resource_kind"
-		  AND grant."resource_id" = share."resource_id"
-		  AND grant."effect" = 'allow'
-		  AND grant."revoked_at" IS NULL
-		  AND grant."created_by" = NEW."granted_by_principal_id"
+		  AND grant_row."silo_id" = NEW."silo_id"
+		  AND grant_row."manager_id" = 'resource-share-editor'
+		  AND grant_row."subject_kind" = 'principal'
+		  AND grant_row."subject_group_id" IS NULL
+		  AND grant_row."subject_principal_id" = NEW."principal_id"
+		  AND grant_row."boundary_kind" = 'personal'
+		  AND grant_row."boundary_group_id" IS NULL
+		  AND grant_row."boundary_principal_id" = share."owner_principal_id"
+		  AND grant_row."boundary_coverage" = 'exact'
+		  AND grant_row."resource_kind" = share."resource_kind"
+		  AND grant_row."resource_id" = share."resource_id"
+		  AND grant_row."effect" = 'allow'
+		  AND grant_row."revoked_at" IS NULL
+		  AND grant_row."created_by" = NEW."granted_by_principal_id"
 	) THEN
 		RAISE EXCEPTION 'ResourceShareRecipient must link its exact active manager-owned grant';
 	END IF;
