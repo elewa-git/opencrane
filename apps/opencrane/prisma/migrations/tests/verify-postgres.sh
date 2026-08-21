@@ -142,7 +142,14 @@ clone_database()
 {
 	local source_database="$1"
 	local target_database="$2"
-	psql_command postgres --command "CREATE DATABASE \"$target_database\" TEMPLATE \"$source_database\";" >/dev/null
+	psql_command postgres --command "ALTER DATABASE \"$source_database\" WITH ALLOW_CONNECTIONS false;" >/dev/null
+	psql_command postgres --command \
+		"SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '$source_database' AND pid <> pg_backend_pid();" >/dev/null
+	if ! psql_command postgres --command "CREATE DATABASE \"$target_database\" TEMPLATE \"$source_database\";" >/dev/null; then
+		psql_command postgres --command "ALTER DATABASE \"$source_database\" WITH ALLOW_CONNECTIONS true;" >/dev/null
+		return 1
+	fi
+	psql_command postgres --command "ALTER DATABASE \"$source_database\" WITH ALLOW_CONNECTIONS true;" >/dev/null
 }
 
 create_source_database()
