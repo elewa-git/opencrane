@@ -11,8 +11,8 @@ archive, close, steering, cancellation, and retry command state. It also reads t
 exchange as a separate read-only projection; that projection never receives a conversation mode or stream.
 
 ```
- generated API ──► workspace/adapter ──► gateway port ──► workspace stores  ◄── HERE
- live event API ──► adapter ──► conversation/stream port ──┘
+generated API ──► workspace/adapter ──► gateway port ──► workspace stores  ◄── HERE
+WebSocket events + messages ──► adapter ──► conversation/stream port ─────┘
                                                         │ safe state
                                                         ▼
                                                conversation-workspace feature
@@ -29,8 +29,8 @@ steer, cancel, and retry controls. The split keeps ordinary chat commands indepe
 The package also owns the Zod response validators used by its transport adapter. Keeping runtime acceptance beside the workspace models means HTTP code only authenticates and transports data; it does not rebuild the domain shape.
 
 - `ConversationWorkspaceGateway` is the participant-scoped read and command port.
-- `CONVERSATION_WORKSPACE_EVENT_STREAM` binds the existing `ConversationEventStream` port; this package
-  does not define a second stream contract.
+- `CONVERSATION_WORKSPACE_EVENT_STREAM` binds the existing `ConversationEventStream` port for both live
+  projection and participant message submission; this package does not define a second transport contract.
 - `ConversationWorkspaceStore` owns ordinary list, selection, snapshot-tail state, immutable creation mode,
   drafts, and conversation commands.
 - Conversation summaries retain the server's decimal `readThroughPosition`, and messages retain
