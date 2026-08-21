@@ -255,3 +255,17 @@ Full run reports belong in the corresponding pull request or issue.
 - lesson: treat the checked-out commit as chart authority and run the app-owned current-source
   packaging helper before deployment; never promote ignored `Chart.lock` or `charts/` output into a
   second release contract.
+
+## 2026-08-21 · dev · testlynn durable-execution operand reconciliation · 78ff3cb2ddbbcf4df74095e36620434d2c549f7e · FAILED
+
+- findings: chart: CloudNativePG rejected the manifest-bound digest-only PostgreSQL operand because
+  it cannot detect upgrades from an image reference without a tag. The app-owned deployer fenced the
+  server at OpenCrane revision 5, stopped before database mutation, and rolled the application release
+  back to revision 4 content; Helm recorded that rollback as revision 6. PostgreSQL revision 7 records
+  the rejected upgrade, while the existing CNPG Cluster remains healthy with one ready primary and all
+  application Deployments remain available.
+- friction: repository validation proved only digest immutability and did not model CloudNativePG's
+  separate tag requirement, so CI accepted a reference the live admission webhook rejects.
+- lesson: bind CNPG operand images with a PostgreSQL-version-prefixed tag whose major matches the
+  chart's `externalAppVersion`, plus an immutable digest. Reject tag-only, digest-only, unversioned-tag,
+  and wrong-major references before publication.

@@ -7,7 +7,7 @@ OUTPUT="$(mktemp)"
 trap 'rm -f "$OUTPUT"' EXIT
 
 DATABASES_JSON='[{"name":"opencrane","owner":"opencrane","credentialsSecret":"postgres-opencrane-bootstrap"},{"name":"obot","owner":"obot","credentialsSecret":"postgres-obot-bootstrap"},{"name":"litellm","owner":"litellm","credentialsSecret":"postgres-litellm-bootstrap"}]'
-POSTGRES_OPERAND_IMAGE='ghcr.io/elewa-git/opencrane-postgres@sha256:0000000000000000000000000000000000000000000000000000000000000000'
+POSTGRES_OPERAND_IMAGE='ghcr.io/elewa-git/opencrane-postgres:17.5-sha-qualified@sha256:0000000000000000000000000000000000000000000000000000000000000000'
 BASE_VALUES=(--set-string "image=$POSTGRES_OPERAND_IMAGE" --set-json "databases=$DATABASES_JSON" --set-string databaseAdmin.name=opencrane_database_admin --set-string databaseAdmin.credentialsSecret=postgres-admin-bootstrap --set-string bootstrap.targetBaseline.sha256=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa --set-string bootstrap.initdb.postInitApplicationSQLRefs.configMapRefs[0].name=opencrane-database-baseline-deadbeef --set-string bootstrap.initdb.postInitApplicationSQLRefs.configMapRefs[0].key=target-baseline.sql --set-string convergence.targetSchemaVersion=0.8.0 --set-string convergence.targetBaselineSha256=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb --set-string convergence.currentProtectedBaselineSha256=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa)
 API_VALUES=(--set-string networkPolicy.kubernetesApiServerCidrs[0]=10.43.0.1/32 --set-string networkPolicy.kubernetesApiServerEndpointCidrs[0]=172.18.0.2/32 --set networkPolicy.kubernetesApiServerEndpointPort=6443)
 COMMON_VALUES=("${BASE_VALUES[@]}" "${API_VALUES[@]}")
@@ -290,6 +290,24 @@ fi
 if helm template tag-only-operand "$CHART" "${COMMON_VALUES[@]}" \
   --set-string image=ghcr.io/elewa-git/opencrane-postgres:0.9.3 >/dev/null 2>&1; then
   echo "postgres chart accepted a tag-only database operand image" >&2
+  exit 1
+fi
+
+if helm template digest-only-operand "$CHART" "${COMMON_VALUES[@]}" \
+  --set-string image=ghcr.io/elewa-git/opencrane-postgres@sha256:0000000000000000000000000000000000000000000000000000000000000000 >/dev/null 2>&1; then
+  echo "postgres chart accepted a digest-only database operand image that CloudNativePG cannot upgrade" >&2
+  exit 1
+fi
+
+if helm template unversioned-tag-operand "$CHART" "${COMMON_VALUES[@]}" \
+  --set-string image=ghcr.io/elewa-git/opencrane-postgres:sha-qualified@sha256:0000000000000000000000000000000000000000000000000000000000000000 >/dev/null 2>&1; then
+  echo "postgres chart accepted an operand tag without a PostgreSQL version" >&2
+  exit 1
+fi
+
+if helm template wrong-major-operand "$CHART" "${COMMON_VALUES[@]}" \
+  --set-string image=ghcr.io/elewa-git/opencrane-postgres:16.9-sha-qualified@sha256:0000000000000000000000000000000000000000000000000000000000000000 >/dev/null 2>&1; then
+  echo "postgres chart accepted an operand tag for the wrong PostgreSQL major" >&2
   exit 1
 fi
 

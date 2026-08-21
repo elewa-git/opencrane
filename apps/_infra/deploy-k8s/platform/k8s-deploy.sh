@@ -322,10 +322,6 @@ validate_unbacked_database_migration_override
 DATABASE_TARGET_SCHEMA_VERSION="$(jq -r '.targetSchemaVersion' <<<"$DATABASE_RELEASE_TRANSITION")"
 DATABASE_TARGET_BASELINE_SHA256="$(jq -r '.targetBaselineSha256' <<<"$DATABASE_RELEASE_TRANSITION")"
 POSTGRES_OPERAND_IMAGE="$(jq -r '.operandImage // empty' <<<"$DATABASE_RELEASE_TRANSITION")"
-if [[ ! "$POSTGRES_OPERAND_IMAGE" =~ ^[^[:space:]@]+@sha256:[0-9a-f]{64}$ ]]; then
-  err "The target release must bind the PostgreSQL operand to an exact sha256 OCI digest."
-  exit 1
-fi
 DATABASE_CONVERGENCE_MIGRATION="$(jq '.migration' <<<"$DATABASE_RELEASE_TRANSITION")"
 # A release that changes no schema still meets databases that reached this schema through a real
 # migration, and privilege reconciliation compares them against exactly that recorded transition.

@@ -221,6 +221,10 @@ test("keeps heavyweight remote qualification ahead of image publication", functi
 	assert.match(imageSmokeJob[0], /needs: prepare/u);
 	assert.match(workflow, /needs\.develop_smoke\.result == 'success'/u);
 	assert.match(workflow, /needs\.image_smoke\.result == 'success'/u);
+	assert.match(
+		workflow,
+		/name: Publish the manifest-bound CloudNativePG operand tag[\s\S]*?\.database\.operandImage[\s\S]*?docker buildx imagetools create --tag/u,
+	);
 	assert.match(workflow, /K3D_LINUX_AMD64_SHA256: [0-9a-f]{64}/u);
 	assert.match(workflow, /sha256sum --check/u);
 	assert.match(developSmokeJob[0], /uses: actions\/setup-node@v6/u);

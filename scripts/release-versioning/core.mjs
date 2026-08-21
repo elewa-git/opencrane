@@ -7,7 +7,7 @@ import {
 	validateHelmTransition,
 	validateUmbrella,
 } from "./chart-validation.mjs";
-import { validateDatabase } from "./database-validation.mjs";
+import { validateDatabase, validateDatabaseOperand } from "./database-validation.mjs";
 import { createReleaseManifestValidator } from "./manifest-validation.mjs";
 import { compareSemver, isAdjacentMinor, parseSemver, readJson, sha256 } from "./version-utils.mjs";
 
@@ -289,6 +289,7 @@ export async function validateWorkspace(
 			errors,
 		);
 	validateUmbrella(repositoryRoot, manifest, previousManifest, errors);
+	validateDatabaseOperand(manifest, errors);
 	validateDatabase(repositoryRoot, manifest, previousManifest, changedFiles, errors);
 	return errors;
 }

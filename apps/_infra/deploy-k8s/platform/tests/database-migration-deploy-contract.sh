@@ -57,7 +57,6 @@ grep -q -- '--from-release-version' "$DEPLOY_SCRIPT"
 grep -q 'DATABASE_RELEASE_TRANSITION=.*DATABASE_TRANSITION_RESOLVER' "$DEPLOY_SCRIPT"
 grep -q 'POSTGRES_OPERAND_IMAGE=.*operandImage' "$DEPLOY_SCRIPT"
 grep -Eq 'local _images=.*POSTGRES_OPERAND_IMAGE' "$DEPLOY_SCRIPT"
-grep -q 'target release must bind the PostgreSQL operand' "$DEPLOY_SCRIPT"
 grep -q 'source && migrationOwner.database.schemaVersion !== source.database.schemaVersion' \
   "$ROOT_DIR/scripts/release-versioning/database-validation.mjs"
 ! grep -q 'automatic database migration permits only an adjacent minor transition' \
@@ -112,7 +111,7 @@ export TEST_POSTGRES_ARGS
   LITELLM_POSTGRES_CREDENTIALS_SECRET=litellm-db
   POSTGRES_ADMIN_NAME=postgres
   POSTGRES_ADMIN_CREDENTIALS_SECRET=postgres-admin
-  POSTGRES_OPERAND_IMAGE=ghcr.io/elewa-git/opencrane-postgres@sha256:0000000000000000000000000000000000000000000000000000000000000000
+  POSTGRES_OPERAND_IMAGE=ghcr.io/elewa-git/opencrane-postgres:17.5-sha-qualified@sha256:0000000000000000000000000000000000000000000000000000000000000000
   POSTGRES_BOOTSTRAP_BASELINE_SHA256=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
   POSTGRES_BOOTSTRAP_BASELINE_CONFIG_MAP=baseline
   POSTGRES_BOOTSTRAP_BASELINE_CONFIG_MAP_KEY=target-baseline.sql
@@ -145,7 +144,7 @@ grep -Fxq -- 'privileges.jobDeadlineGraceSeconds=30' "$TEST_POSTGRES_ARGS"
 grep -Fxq -- 'superuserAccess.enabled=false' "$TEST_POSTGRES_ARGS"
 grep -Fxq -- 'migration.privilegedExtension.enabled=false' "$TEST_POSTGRES_ARGS"
 grep -Fxq -- 'migration.privilegedExtension.name=' "$TEST_POSTGRES_ARGS"
-grep -Fxq -- 'image=ghcr.io/elewa-git/opencrane-postgres@sha256:0000000000000000000000000000000000000000000000000000000000000000' "$TEST_POSTGRES_ARGS"
+grep -Fxq -- 'image=ghcr.io/elewa-git/opencrane-postgres:17.5-sha-qualified@sha256:0000000000000000000000000000000000000000000000000000000000000000' "$TEST_POSTGRES_ARGS"
 grep -Fxq -- 'convergence.previousMigration.sourceTargetBaselineSha256=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' "$TEST_POSTGRES_ARGS"
 grep -Fxq -- 'convergence.previousMigration.sourceProtectedBaselineSha256s=["aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"]' "$TEST_POSTGRES_ARGS"
 grep -Fxq -- 'convergence.previousMigration.selectedSourceProtectedBaselineSha256=eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee' "$TEST_POSTGRES_ARGS"
