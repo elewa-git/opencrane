@@ -362,6 +362,7 @@ export function resolveDatabaseTransition(repositoryRoot, releaseVersion, fromRe
 		kind,
 		releaseVersion,
 		fromReleaseVersion,
+		operandImage: target.database.operandImage ?? null,
 		targetSchemaVersion: target.database.schemaVersion,
 		targetBaselineSha256: target.database.baselineSha256,
 		migration,

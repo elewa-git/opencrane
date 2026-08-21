@@ -249,7 +249,19 @@ requireContract(absurdManifest.toSchemaVersion === "0.9.3", "Absurd migration ta
 requireContract(absurdManifest.sqlSha256 === absurdSqlDigest, "Absurd migration SQL digest must match its manifest");
 requireContract(absurdManifest.sourceTargetBaselineSha256 === organizationManifest.targetBaselineSha256, "Absurd migration must name the immutable 0.9.0 source baseline");
 requireContract(absurdManifest.targetBaselineSha256 === targetDigest, "Absurd migration target digest must match the clean baseline");
-requireContract(absurdManifest.sourceProtectedBaselineSha256 === "bd2dfd915b66514d4c7ad95328adb4629567634a47f1a1e37aee69f23d9a98ee", "Absurd migration must bind the protected 0.9.0 origin");
+requireContract(
+	JSON.stringify(absurdManifest.sourceProtectedBaselineSha256s) === JSON.stringify([
+		"bd2dfd915b66514d4c7ad95328adb4629567634a47f1a1e37aee69f23d9a98ee",
+		"12505f3c15114bd2a407d0d4d2ef2befc3c8ec87acaa9787503cfbe4eba0032c",
+		"25bfc5d31c4966ee697ae5aaa47edc855d25120d0829c241f213353f69e0358d",
+	]),
+	"Absurd migration must admit fresh 0.9, migrated 0.8, and inherited 0.7 protected origins",
+);
+requireContract(absurdManifest.freshSourceProtectedBaselineSha256 === "bd2dfd915b66514d4c7ad95328adb4629567634a47f1a1e37aee69f23d9a98ee", "Absurd migration must identify the fresh 0.9 protected origin");
+for (const admittedOrigin of absurdManifest.sourceProtectedBaselineSha256s)
+{
+	requireContract(absurdSql.includes(admittedOrigin), `Absurd migration must admit protected origin ${admittedOrigin}`);
+}
 requireContract(absurdManifest.privilegedExtension === "pg_cron", "Absurd migration must bind its reviewed privileged pg_cron prerequisite");
 requireContract(absurdSql.includes("pg_advisory_lock"), "Absurd migration must acquire the session migration lock");
 requireContract(absurdSql.includes("pg_advisory_xact_lock"), "Absurd migration must hold a transaction migration lock");

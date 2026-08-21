@@ -3,10 +3,10 @@ set -euo pipefail
 
 ROOT="$(git rev-parse --show-toplevel)"
 SOURCE_REF="${OPENCRANE_MIGRATION_SOURCE_REF:-0.7.0}"
-POSTGRES_IMAGE="${OPENCRANE_MIGRATION_POSTGRES_IMAGE:-postgres:17.5}"
-MIGRATION_RELEASE_VERSION="${OPENCRANE_MIGRATION_RELEASE_VERSION:-0.9.1}"
+POSTGRES_IMAGE="${OPENCRANE_MIGRATION_POSTGRES_IMAGE:-opencrane-postgres:migration-test}"
+MIGRATION_RELEASE_VERSION="${OPENCRANE_MIGRATION_RELEASE_VERSION:-$(jq -r '.version' "$ROOT/package.json")}"
 LEGACY_TRANSITION_ROOT="$ROOT/apps/opencrane/prisma/migrations/0.7.0-to-0.8.0"
-CURRENT_TRANSITION_ROOT="$ROOT/apps/opencrane/prisma/migrations/0.8.0-to-0.9.0"
+ORGANIZATION_TRANSITION_ROOT="$ROOT/apps/opencrane/prisma/migrations/0.8.0-to-0.9.0"
 CURRENT_BASELINE="$ROOT/apps/opencrane/prisma/bootstrap/target-baseline.sql"
 CLASSIFIER="$ROOT/apps/_infra/deploy-k8s/platform/database-convergence-classifier.sh"
 WORK_DIR="$(mktemp -d)"
@@ -23,7 +23,7 @@ trap cleanup EXIT
 PROTECTED_DIGEST="25bfc5d31c4966ee697ae5aaa47edc855d25120d0829c241f213353f69e0358d"
 FRESH_PROTECTED_DIGEST="12505f3c15114bd2a407d0d4d2ef2befc3c8ec87acaa9787503cfbe4eba0032c"
 LEGACY_MIGRATION_SQL_DIGEST="$(node -e 'process.stdout.write(require(process.argv[1]).sqlSha256)' "$LEGACY_TRANSITION_ROOT/manifest.json")"
-CURRENT_MIGRATION_SQL_DIGEST="$(node -e 'process.stdout.write(require(process.argv[1]).sqlSha256)' "$CURRENT_TRANSITION_ROOT/manifest.json")"
+ORGANIZATION_MIGRATION_SQL_DIGEST="$(node -e 'process.stdout.write(require(process.argv[1]).sqlSha256)' "$ORGANIZATION_TRANSITION_ROOT/manifest.json")"
 
 # This test reads the current release from its working tree before the tag exists and reads older releases from their tags.
 if [[ "$(jq -r '.version' "$ROOT/package.json")" != "$MIGRATION_RELEASE_VERSION" ]]; then
@@ -32,14 +32,19 @@ if [[ "$(jq -r '.version' "$ROOT/package.json")" != "$MIGRATION_RELEASE_VERSION"
 	git archive "$MIGRATION_RELEASE_VERSION" package.json releases apps/opencrane/prisma/migrations apps/opencrane/prisma/bootstrap/target-baseline.sql \
 		| tar -x -C "$MIGRATION_RELEASE_ROOT"
 fi
-DATABASE_TRANSITION="$(node "$ROOT/scripts/release-versioning/database-transition.mjs" "$MIGRATION_RELEASE_ROOT" "$MIGRATION_RELEASE_VERSION" 0.8.1)"
+MIGRATION_FROM_RELEASE_VERSION="${OPENCRANE_MIGRATION_FROM_RELEASE_VERSION:-$(jq -r '.previousRepositoryVersion' "$MIGRATION_RELEASE_ROOT/releases/$MIGRATION_RELEASE_VERSION.json")}"
+DATABASE_TRANSITION="$(node "$ROOT/scripts/release-versioning/database-transition.mjs" "$MIGRATION_RELEASE_ROOT" "$MIGRATION_RELEASE_VERSION" "$MIGRATION_FROM_RELEASE_VERSION")"
+TARGET_TRANSITION_ROOT="$(dirname "$(jq -r '.migration.sqlFile' <<<"$DATABASE_TRANSITION")")"
+TARGET_MIGRATION_SQL_DIGEST="$(jq -r '.migration.sqlSha256' <<<"$DATABASE_TRANSITION")"
 
 git cat-file -e "$SOURCE_REF:apps/opencrane/prisma/bootstrap/target-baseline.sql"
 git show "$SOURCE_REF:apps/opencrane/prisma/bootstrap/target-baseline.sql" >"$WORK_DIR/source-baseline.sql"
 
 docker run --detach --name "$CONTAINER" \
 	--env POSTGRES_PASSWORD=opencrane-migration-test \
-	"$POSTGRES_IMAGE" >/dev/null
+	"$POSTGRES_IMAGE" \
+	-c shared_preload_libraries=pg_cron \
+	-c cron.database_name=migrated >/dev/null
 
 for _ in {1..60}; do
 	if docker exec "$CONTAINER" pg_isready --username postgres >/dev/null 2>&1; then break; fi
@@ -139,6 +144,7 @@ SQL
 }
 
 create_source_database migrated
+psql_command migrated --command 'CREATE EXTENSION pg_cron;' >/dev/null
 psql_command migrated <<'SQL' >/dev/null
 SET session_replication_role = replica;
 INSERT INTO "channel_runtime_routes" (
@@ -172,16 +178,20 @@ SET "baseline_sha256" = '$DATABASE_PREVIOUS_FRESH_PROTECTED_BASELINE_SHA256'
 WHERE "singleton" = TRUE;
 SQL
 assert_classifier_state fresh_source "source|$DATABASE_PREVIOUS_FRESH_PROTECTED_BASELINE_SHA256"
-psql_command fresh_source --set "source_baseline_sha256=$FRESH_PROTECTED_DIGEST" --set "migration_sql_sha256=$CURRENT_MIGRATION_SQL_DIGEST" \
-	--file - <"$CURRENT_TRANSITION_ROOT/migration.sql" >/dev/null
+psql_command fresh_source --set "source_baseline_sha256=$FRESH_PROTECTED_DIGEST" --set "migration_sql_sha256=$ORGANIZATION_MIGRATION_SQL_DIGEST" \
+	--file - <"$ORGANIZATION_TRANSITION_ROOT/migration.sql" >/dev/null
+psql_command fresh_source --set "source_baseline_sha256=$FRESH_PROTECTED_DIGEST" --set "migration_sql_sha256=$TARGET_MIGRATION_SQL_DIGEST" \
+	--file - <"$TARGET_TRANSITION_ROOT/migration.sql" >/dev/null
 assert_classifier_state fresh_source "completed|$FRESH_PROTECTED_DIGEST"
 psql_command fresh_source --tuples-only --no-align --command \
 	'SELECT count(*) FROM "opencrane_migrations"."schema_history" WHERE "schema_version" = '\''0.9.0'\'' AND "source_schema_version" = '\''0.8.0'\'' AND "source_baseline_sha256" = '\''12505f3c15114bd2a407d0d4d2ef2befc3c8ec87acaa9787503cfbe4eba0032c'\'';' \
 	| grep -qx '1'
-psql_command migrated --set "source_baseline_sha256=$PROTECTED_DIGEST" --set "migration_sql_sha256=$CURRENT_MIGRATION_SQL_DIGEST" \
-	--file - <"$CURRENT_TRANSITION_ROOT/migration.sql" >/dev/null
-psql_command migrated --set "source_baseline_sha256=$PROTECTED_DIGEST" --set "migration_sql_sha256=$CURRENT_MIGRATION_SQL_DIGEST" \
-	--file - <"$CURRENT_TRANSITION_ROOT/migration.sql" >/dev/null
+psql_command migrated --set "source_baseline_sha256=$PROTECTED_DIGEST" --set "migration_sql_sha256=$ORGANIZATION_MIGRATION_SQL_DIGEST" \
+	--file - <"$ORGANIZATION_TRANSITION_ROOT/migration.sql" >/dev/null
+psql_command migrated --set "source_baseline_sha256=$PROTECTED_DIGEST" --set "migration_sql_sha256=$TARGET_MIGRATION_SQL_DIGEST" \
+	--file - <"$TARGET_TRANSITION_ROOT/migration.sql" >/dev/null
+psql_command migrated --set "source_baseline_sha256=$PROTECTED_DIGEST" --set "migration_sql_sha256=$TARGET_MIGRATION_SQL_DIGEST" \
+	--file - <"$TARGET_TRANSITION_ROOT/migration.sql" >/dev/null
 assert_classifier_state migrated "completed|$PROTECTED_DIGEST"
 
 clone_database migrated corrupt_migration_id
@@ -229,17 +239,15 @@ for database in migrated fresh; do
 	psql_command "$database" <"$ROOT/apps/opencrane/prisma/migrations/tests/conversation-activity-ordering.sql" >/dev/null
 	docker exec "$CONTAINER" pg_dump --username postgres --dbname "$database" \
 		--schema-only --no-owner --no-privileges \
-		--exclude-schema opencrane_bootstrap --exclude-schema opencrane_migrations \
+		--exclude-schema cron --exclude-schema opencrane_bootstrap --exclude-schema opencrane_migrations \
 		| sed -E '/^\\(un)?restrict /d' \
 		| node "$ROOT/apps/opencrane/prisma/migrations/tests/normalize-schema-dump.mjs" \
 		>"$WORK_DIR/$database-schema.sql"
 done
 diff --unified "$WORK_DIR/fresh-schema.sql" "$WORK_DIR/migrated-schema.sql"
 
-# A release that changes no schema still ships to silos in both shapes: bootstrapped fresh at the current
-# baseline, and migrated into that schema by an earlier release. The deploy engine hands the classifier the
-# owning release's evidence from the lineage resolver instead of a migration it must run, so every shape a
-# silo can be in has to stay deployable rather than read as incompatible.
+# The current release ships to silos in both shapes: bootstrapped fresh at the current baseline and
+# migrated into that schema from an admitted origin. The lineage resolver must keep both deployable.
 CURRENT_RELEASE_VERSION="$(jq -r '.version' "$ROOT/package.json")"
 CURRENT_RELEASE_MANIFEST="$ROOT/releases/$CURRENT_RELEASE_VERSION.json"
 SCHEMA_LINEAGE="$(node "$ROOT/scripts/release-versioning/schema-lineage.mjs" "$ROOT" "$CURRENT_RELEASE_VERSION")"
@@ -284,7 +292,7 @@ psql_command migrated --tuples-only --no-align --command \
 	| grep -qx '1'
 psql_command migrated --tuples-only --no-align --command \
 	'SELECT count(*) FROM "opencrane_migrations"."schema_history";' \
-	| grep -qx '2'
+	| grep -qx '3'
 psql_command migrated --tuples-only --no-align --command \
 	'SELECT count(*) FROM "organization_invitations";' \
 	| grep -qx '0'

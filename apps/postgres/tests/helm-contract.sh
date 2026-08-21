@@ -7,7 +7,8 @@ OUTPUT="$(mktemp)"
 trap 'rm -f "$OUTPUT"' EXIT
 
 DATABASES_JSON='[{"name":"opencrane","owner":"opencrane","credentialsSecret":"postgres-opencrane-bootstrap"},{"name":"obot","owner":"obot","credentialsSecret":"postgres-obot-bootstrap"},{"name":"litellm","owner":"litellm","credentialsSecret":"postgres-litellm-bootstrap"}]'
-BASE_VALUES=(--set-json "databases=$DATABASES_JSON" --set-string databaseAdmin.name=opencrane_database_admin --set-string databaseAdmin.credentialsSecret=postgres-admin-bootstrap --set-string bootstrap.targetBaseline.sha256=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa --set-string bootstrap.initdb.postInitApplicationSQLRefs.configMapRefs[0].name=opencrane-database-baseline-deadbeef --set-string bootstrap.initdb.postInitApplicationSQLRefs.configMapRefs[0].key=target-baseline.sql --set-string convergence.targetSchemaVersion=0.8.0 --set-string convergence.targetBaselineSha256=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb --set-string convergence.currentProtectedBaselineSha256=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa)
+POSTGRES_OPERAND_IMAGE='ghcr.io/elewa-git/opencrane-postgres@sha256:0000000000000000000000000000000000000000000000000000000000000000'
+BASE_VALUES=(--set-string "image=$POSTGRES_OPERAND_IMAGE" --set-json "databases=$DATABASES_JSON" --set-string databaseAdmin.name=opencrane_database_admin --set-string databaseAdmin.credentialsSecret=postgres-admin-bootstrap --set-string bootstrap.targetBaseline.sha256=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa --set-string bootstrap.initdb.postInitApplicationSQLRefs.configMapRefs[0].name=opencrane-database-baseline-deadbeef --set-string bootstrap.initdb.postInitApplicationSQLRefs.configMapRefs[0].key=target-baseline.sql --set-string convergence.targetSchemaVersion=0.8.0 --set-string convergence.targetBaselineSha256=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb --set-string convergence.currentProtectedBaselineSha256=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa)
 API_VALUES=(--set-string networkPolicy.kubernetesApiServerCidrs[0]=10.43.0.1/32 --set-string networkPolicy.kubernetesApiServerEndpointCidrs[0]=172.18.0.2/32 --set networkPolicy.kubernetesApiServerEndpointPort=6443)
 COMMON_VALUES=("${BASE_VALUES[@]}" "${API_VALUES[@]}")
 MIGRATION_VALUES=(--set migration.enabled=true --set convergence.previousMigration.available=true --set-string convergence.previousMigration.id=0.7.0-to-0.8.0 --set-string convergence.previousMigration.fromSchemaVersion=0.7.0 --set-string convergence.previousMigration.sourceTargetBaselineSha256=cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc --set-json 'convergence.previousMigration.sourceProtectedBaselineSha256s=["cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc","eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"]' --set-string convergence.previousMigration.selectedSourceProtectedBaselineSha256=eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee --set-string convergence.previousMigration.sqlSha256=dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd --set-string migration.configMap.name=opencrane-database-migration-0-7-0-to-0-8-0-deadbeef --set-string migration.configMap.key=migration.sql)
@@ -74,6 +75,7 @@ grep -q 'max_db_connections: "10"' "$OUTPUT"
 grep -q 'max_connections: "80"' "$OUTPUT"
 grep -q 'shared_preload_libraries: "pg_cron"' "$OUTPUT"
 grep -q 'cron.database_name: "opencrane"' "$OUTPUT"
+grep -Fq "imageName: \"$POSTGRES_OPERAND_IMAGE\"" "$OUTPUT"
 test "$(grep -c '^kind: Database$' "$OUTPUT")" -eq 2
 test "$(grep -c 'helm.sh/resource-policy: keep' "$OUTPUT")" -eq 3
 grep -q '^kind: Job$' "$OUTPUT"
@@ -282,6 +284,12 @@ grep -q 'helm.sh/hook: post-install,post-upgrade' <<<"$RESTORE_MIGRATION_OUTPUT"
 
 if helm template invalid "$CHART" >/dev/null 2>&1; then
   echo "postgres chart accepted missing database credentials" >&2
+  exit 1
+fi
+
+if helm template tag-only-operand "$CHART" "${COMMON_VALUES[@]}" \
+  --set-string image=ghcr.io/elewa-git/opencrane-postgres:0.9.3 >/dev/null 2>&1; then
+  echo "postgres chart accepted a tag-only database operand image" >&2
   exit 1
 fi
 

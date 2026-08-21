@@ -1,6 +1,9 @@
 {{- if eq (len .Values.databases) 0 -}}
 {{- fail "databases must contain at least the initdb database" -}}
 {{- end -}}
+{{- if not (regexMatch "^[^[:space:]@]+@sha256:[0-9a-f]{64}$" .Values.image) -}}
+{{- fail "image must use an exact sha256 OCI digest" -}}
+{{- end -}}
 {{- $primary := index .Values.databases 0 -}}
 {{- $databaseNames := dict -}}
 {{- $databaseOwners := dict -}}

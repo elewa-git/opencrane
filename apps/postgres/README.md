@@ -170,6 +170,7 @@ done < <(kubectl get endpoints kubernetes --namespace default \
   -o jsonpath='{range .subsets[*].addresses[*]}{.ip}{"\n"}{end}')
 helm upgrade --install opencrane-postgres apps/postgres/helm \
   --namespace opencrane \
+  --set-string image=ghcr.io/elewa-git/opencrane-postgres@sha256:0000000000000000000000000000000000000000000000000000000000000000 \
   --set databaseAdmin.name=opencrane_database_admin \
   --set databaseAdmin.credentialsSecret=opencrane-postgres-admin \
   --set-string bootstrap.targetBaseline.sha256="$BASELINE_SHA256" \

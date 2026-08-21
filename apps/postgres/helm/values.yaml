@@ -1,5 +1,5 @@
 instances: 1
-image: ghcr.io/cloudnative-pg/postgresql:17.5
+image: ""
 
 # This is the physical-server budget, not an application default. The pooler below
 # reserves only 30 server connections across the logical databases, leaving 50

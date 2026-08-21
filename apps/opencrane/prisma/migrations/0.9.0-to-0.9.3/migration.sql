@@ -45,7 +45,11 @@ BEGIN
     IF protected_digest <> expected_source_digest THEN
         RAISE EXCEPTION 'protected baseline origin does not match the supplied source digest' USING ERRCODE = 'OC900';
     END IF;
-    IF protected_digest <> 'bd2dfd915b66514d4c7ad95328adb4629567634a47f1a1e37aee69f23d9a98ee' THEN
+    IF protected_digest NOT IN (
+        'bd2dfd915b66514d4c7ad95328adb4629567634a47f1a1e37aee69f23d9a98ee',
+        '12505f3c15114bd2a407d0d4d2ef2befc3c8ec87acaa9787503cfbe4eba0032c',
+        '25bfc5d31c4966ee697ae5aaa47edc855d25120d0829c241f213353f69e0358d'
+    ) THEN
         RAISE EXCEPTION 'database origin is not the admitted 0.9.0 baseline lineage' USING ERRCODE = 'OC900';
     END IF;
     IF to_regclass('absurd.queues') IS NOT NULL THEN
