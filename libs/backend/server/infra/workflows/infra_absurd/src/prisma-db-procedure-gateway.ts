@@ -5,9 +5,13 @@ import type { AbsurdSpawnReceipt, AbsurdSpawnRequest, AbsurdTaskAdmissionProcedu
 
 interface _SpawnTaskRow
 {
+	/** Raw task identity returned by the vendor procedure. */
 	readonly task_id: unknown;
+	/** Raw run identity returned by the vendor procedure. */
 	readonly run_id: unknown;
+	/** Raw attempt number returned by the vendor procedure. */
 	readonly attempt: unknown;
+	/** Raw new-task flag returned by the vendor procedure. */
 	readonly created: unknown;
 }
 

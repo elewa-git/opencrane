@@ -102,7 +102,10 @@ export class _AbsurdTaskContext implements DurableTaskContext
 		return await this.execution.spawnFromTask(task);
 	}
 
-	/** Await a child result only when its queue cannot exhaust this worker's own queue. */
+	/**
+	 * Await a child result only across queues, which is the Absurd 0.5.0 behavior Gate D1 admitted.
+	 * @see https://github.com/elewa-git/opencrane/issues/695 — Gate D1 records child spawn and await across queues.
+	 */
 	async awaitChild<TResult>(task: DurableTaskReceipt): Promise<TResult>
 	{
 		const childQueue = this.execution.queueForTask(task.taskName);

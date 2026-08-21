@@ -11,7 +11,9 @@ import { AbsurdWorkflowError } from "./absurd-workflow-error";
 
 interface _TaskEnvelope
 {
+	/** Domain key restored into the engine-neutral task receipt. */
 	readonly idempotencyKey: string;
+	/** JSON value delivered to the registered task handler. */
 	readonly input: unknown;
 	/** JSON cannot represent undefined, so this preserves an intentionally absent contract input. */
 	readonly inputUndefined: boolean;
@@ -66,6 +68,7 @@ function _EnvelopeForTask(idempotencyKey: string, input: unknown): _TaskEnvelope
  * Prisma transaction because an SDK call after commit could be lost on a process crash.
  *
  * ADR 0013 records the engine-boundary and transaction decision.
+ * @see https://github.com/earendil-works/absurd/tree/0.5.0 — the engine revision implemented here.
  */
 export class AbsurdDurableExecution implements DurableExecution, DurableWorkerRuntime
 {

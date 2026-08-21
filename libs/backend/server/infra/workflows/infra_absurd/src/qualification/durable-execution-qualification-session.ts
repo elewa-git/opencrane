@@ -12,9 +12,13 @@ const _TaskName = "opencrane.durable-execution.pickup-qualification";
 
 interface _SessionResources
 {
+	/** Shared SDK pool that also provides application-role connection observations. */
 	readonly databasePool: Pool;
+	/** Adapter that admits and dispatches the temporary qualification task. */
 	readonly execution: AbsurdDurableExecution;
+	/** SDK client that creates and drops the temporary queue. */
 	readonly queueOwner: Absurd;
+	/** Prisma transaction owner used for every measured task admission. */
 	readonly unitOfWork: DurableQualificationUnitOfWork;
 }
 
@@ -35,9 +39,13 @@ function _QualifiedDatabaseUrl(databaseUrl: string, applicationName: string): st
  */
 export class _AbsurdDurableExecutionQualificationSession implements _DurableExecutionQualificationSession
 {
+	/** Identities and limits selected for this live run. */
 	private readonly options: _DurableExecutionQualificationSessionOptions;
+	/** Resources released in the order required by {@link close}. */
 	private readonly resources: _SessionResources;
+	/** Worker lifecycle retained after {@link start} succeeds. */
 	private workers: DurableWorkers | undefined;
+	/** Records whether cleanup owes a queue drop after partial startup. */
 	private queueCreated = false;
 
 	/**

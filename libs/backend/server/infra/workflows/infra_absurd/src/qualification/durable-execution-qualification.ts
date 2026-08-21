@@ -7,15 +7,21 @@ import type { DurableExecutionConnectionEvidence, DurableExecutionQualificationO
 
 interface _PendingSample
 {
+	/** Resolves with the handler's start time for one admitted task. */
 	readonly started: Promise<number>;
+	/** Records the handler's start time when the temporary task begins. */
 	readonly resolve: (startedAt: number) => void;
 }
 
 interface _QualificationRuntime
 {
+	/** Creates the resource-owning live session, or an injected test session. */
 	readonly createSession: (options: Parameters<typeof _CreateDurableExecutionQualificationSession>[0]) => _DurableExecutionQualificationSession;
+	/** Reads the monotonic clock used for pickup latency. */
 	readonly now: () => number;
+	/** Delays admissions so workers return to idle polling between samples. */
 	readonly wait: (milliseconds: number) => Promise<void>;
+	/** Rejects a sample that never reaches its registered handler. */
 	readonly withTimeout: (sample: Promise<number>, timeoutMs: number) => Promise<number>;
 }
 

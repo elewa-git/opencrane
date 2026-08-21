@@ -1,21 +1,33 @@
 import type { DurableTaskReceipt } from "@opencrane/backend/server/infra/workflows/contract";
 
-/** Input persisted by one temporary Gate D2 task. */
+/**
+ * Identifies one temporary Gate D2 task without persisting database or Kubernetes credentials.
+ * The silo check prevents a task from satisfying a run created for another tenant.
+ */
 export interface _DurableExecutionQualificationInput
 {
+	/** Zero-based task number used to resolve the matching local latency sample. */
 	readonly sampleIndex: number;
+	/** Silo that the live deploy wrapper selected for this qualification. */
 	readonly siloId: string;
 }
 
 /** Construction inputs that bind one session to its unique queue and connection identity. */
 export interface _DurableExecutionQualificationSessionOptions
 {
+	/** PostgreSQL application name used to count only this session's connections. */
 	readonly applicationName: string;
+	/** Maximum connections available to the shared Absurd SDK pool. */
 	readonly databasePoolSize: number;
+	/** Application-role URL for the selected silo PgBouncer endpoint. */
 	readonly databaseUrl: string;
+	/** Idle interval used by the worker under qualification. */
 	readonly pollIntervalMs: number;
+	/** Temporary Absurd queue reserved for this run. */
 	readonly queueName: string;
+	/** Random run identity used to isolate queue, worker, and idempotency keys. */
 	readonly runId: string;
+	/** Silo that every temporary qualification task must identify. */
 	readonly siloId: string;
 }
 

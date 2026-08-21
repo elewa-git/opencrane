@@ -220,14 +220,6 @@ export function validateDatabase(repositoryRoot, manifest, previousManifest, cha
 }
 
 /**
- * Validates the requested release pair and describes the database state that deployment must reach.
- * An approved next-patch repair may reuse its predecessor's migration from that migration's original
- * source; every other non-adjacent source is rejected. The result binds migration SQL, every admitted
- * protected origin, and each origin's prior history.
- * Called by: `database-transition.mjs`, which supplies this evidence to the deployment script.
- * @throws {Error} When either manifest or its database transition is invalid.
- */
-/**
  * Finds the migration that last produced this release's database schema version.
  *
  * A same-schema patch train resolves to `current` with no migration of its own, but a live database
@@ -282,6 +274,14 @@ export function resolveSchemaLineage(repositoryRoot, releaseVersion)
 	return null;
 }
 
+/**
+ * Validates the requested release pair and describes the database state that deployment must reach.
+ * An approved next-patch repair may reuse its predecessor's migration from that migration's original
+ * source; every other non-adjacent source is rejected. The result binds migration SQL, every admitted
+ * protected origin, and each origin's prior history.
+ * Called by: `database-transition.mjs`, which supplies this evidence to the deployment script.
+ * @throws {Error} When either manifest or its database transition is invalid.
+ */
 export function resolveDatabaseTransition(repositoryRoot, releaseVersion, fromReleaseVersion)
 {
 	const rootVersion = readJson(join(repositoryRoot, "package.json")).version;
