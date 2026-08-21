@@ -297,6 +297,10 @@ for (const input of ["migration_silo_id", "migration_oidc_issuer"])
 for (const source of [targetBaseline, groupHierarchySql])
 {
 	requireContract(source.includes('CREATE TABLE "principals"'), "IAM cutover must persist stable OIDC Principals");
+	requireContract(
+		/CREATE TABLE "principals" \([\s\S]*?"provenance" "PrincipalProvenance" NOT NULL DEFAULT 'external',[\s\S]*?CONSTRAINT "principals_pkey"/u.test(source),
+		"Principal storage must persist external or internal identity provenance",
+	);
 	requireContract(source.includes('CREATE TABLE "group_memberships"'), "IAM cutover must normalize direct Group membership");
 	requireContract(source.includes('"parent_id" TEXT'), "group hierarchy must persist a nullable parent identifier");
 	requireContract(source.includes('CREATE INDEX "groups_silo_id_parent_id_idx"'), "group hierarchy must index parent lookup inside one silo");

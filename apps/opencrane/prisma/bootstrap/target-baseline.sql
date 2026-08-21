@@ -870,6 +870,7 @@ CREATE TABLE "principals" (
     "silo_id" TEXT NOT NULL,
     "issuer" TEXT NOT NULL,
     "subject" TEXT NOT NULL,
+    "provenance" "PrincipalProvenance" NOT NULL DEFAULT 'external',
     "email" TEXT,
     "display_name" TEXT,
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
