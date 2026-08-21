@@ -189,7 +189,6 @@ psql_command migrated --set "source_baseline_sha256=$PROTECTED_DIGEST" --set "mi
 psql_command migrated --set "source_baseline_sha256=$PROTECTED_DIGEST" --set "migration_sql_sha256=$LEGACY_MIGRATION_SQL_DIGEST" \
 	--file - <"$LEGACY_TRANSITION_ROOT/migration.sql" >"$WORK_DIR/retry-output.log"
 grep -q 'already applied with exact history' "$WORK_DIR/retry-output.log"
-assert_classifier_state migrated "source|$PROTECTED_DIGEST"
 clone_database migrated fresh_source
 psql_command fresh_source <<SQL >/dev/null
 DROP SCHEMA "opencrane_migrations" CASCADE;
@@ -197,9 +196,9 @@ UPDATE "opencrane_bootstrap"."target_baseline"
 SET "baseline_sha256" = '$ORGANIZATION_FRESH_PROTECTED_DIGEST'
 WHERE "singleton" = TRUE;
 SQL
-assert_classifier_state fresh_source "source|$ORGANIZATION_FRESH_PROTECTED_DIGEST"
 psql_command fresh_source --set "source_baseline_sha256=$ORGANIZATION_FRESH_PROTECTED_DIGEST" --set "migration_sql_sha256=$ORGANIZATION_MIGRATION_SQL_DIGEST" \
 	--file - <"$ORGANIZATION_TRANSITION_ROOT/migration.sql" >/dev/null
+assert_classifier_state fresh_source "source|$ORGANIZATION_FRESH_PROTECTED_DIGEST"
 psql_command fresh_source --set "source_baseline_sha256=$ORGANIZATION_FRESH_PROTECTED_DIGEST" --set "migration_sql_sha256=$TARGET_MIGRATION_SQL_DIGEST" \
 	--file - <"$TARGET_TRANSITION_ROOT/migration.sql" >/dev/null
 assert_classifier_state fresh_source "completed|$ORGANIZATION_FRESH_PROTECTED_DIGEST"
@@ -208,6 +207,7 @@ psql_command fresh_source --tuples-only --no-align --command \
 	| grep -qx '1'
 psql_command migrated --set "source_baseline_sha256=$PROTECTED_DIGEST" --set "migration_sql_sha256=$ORGANIZATION_MIGRATION_SQL_DIGEST" \
 	--file - <"$ORGANIZATION_TRANSITION_ROOT/migration.sql" >/dev/null
+assert_classifier_state migrated "source|$PROTECTED_DIGEST"
 psql_command migrated --set "source_baseline_sha256=$PROTECTED_DIGEST" --set "migration_sql_sha256=$TARGET_MIGRATION_SQL_DIGEST" \
 	--file - <"$TARGET_TRANSITION_ROOT/migration.sql" >/dev/null
 psql_command migrated --set "source_baseline_sha256=$PROTECTED_DIGEST" --set "migration_sql_sha256=$TARGET_MIGRATION_SQL_DIGEST" \

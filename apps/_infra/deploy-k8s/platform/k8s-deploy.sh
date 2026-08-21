@@ -450,10 +450,11 @@ _run_preflight() {
   fi
 
   # 3. First-party images pullable — catch a private/typo'd registry before the rollout
-  #    sits in ImagePullBackOff. The server and SPA are one browser release, so validate both
-  #    resolved images. A missing local inspector warns rather than changing cluster state.
+  #    sits in ImagePullBackOff. Validate the resolved browser, memory, and database operands
+  #    before the database transition can fence the existing server. A missing local inspector
+  #    warns rather than changing cluster state.
   local _img
-  local _images=("$CONTROL_PLANE_SPA_IMAGE" "$COGNEE_IMAGE")
+  local _images=("$CONTROL_PLANE_SPA_IMAGE" "$COGNEE_IMAGE" "$POSTGRES_OPERAND_IMAGE")
   if command -v skopeo >/dev/null 2>&1; then
     for _img in "${_images[@]}"; do
       skopeo inspect "docker://$_img" >/dev/null 2>&1 || PF_FAILS+=("First-party image not pullable: $_img (skopeo inspect failed). Check the registry/tag and your pull credentials.")

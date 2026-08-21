@@ -56,6 +56,7 @@ grep -q -- '--release-version' "$DEPLOY_SCRIPT"
 grep -q -- '--from-release-version' "$DEPLOY_SCRIPT"
 grep -q 'DATABASE_RELEASE_TRANSITION=.*DATABASE_TRANSITION_RESOLVER' "$DEPLOY_SCRIPT"
 grep -q 'POSTGRES_OPERAND_IMAGE=.*operandImage' "$DEPLOY_SCRIPT"
+grep -Eq 'local _images=.*POSTGRES_OPERAND_IMAGE' "$DEPLOY_SCRIPT"
 grep -q 'target release must bind the PostgreSQL operand' "$DEPLOY_SCRIPT"
 grep -q 'source && migrationOwner.database.schemaVersion !== source.database.schemaVersion' \
   "$ROOT_DIR/scripts/release-versioning/database-validation.mjs"
