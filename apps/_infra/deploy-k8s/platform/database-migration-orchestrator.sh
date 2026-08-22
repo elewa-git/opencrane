@@ -3,13 +3,40 @@
 # manifest-bound globals plus log/err functions. This module may fence the application Helm release
 # and reconcile the app-owned PostgreSQL chart; it never selects a migration or edits database bytes.
 
-# Accepts the CLI override only after the release resolver has admitted an approved carry-forward repair.
-validate_unbacked_database_migration_override()
+# Reports whether the deployer can ask the operator for a backup choice.
+database_backup_prompt_is_interactive()
 {
-  if [[ "${ALLOW_UNBACKED_DATABASE_MIGRATION:-0}" != "1" ]]; then return 0; fi
-  if [[ "$DATABASE_TRANSITION_KIND" == "migration" && -n "$DATABASE_CARRY_FORWARD_RELEASE" ]]; then return 0; fi
-  err "--allow-unbacked-database-migration is valid only for an approved carry-forward repair."
-  return 2
+  [[ -t 0 ]]
+}
+
+# Resolves the operator's recovery-backup choice before the deployer contacts the cluster.
+resolve_database_backup_requirement()
+{
+  local response
+  if [[ "$DATABASE_TRANSITION_KIND" != "migration" ]]; then
+    if [[ "${ALLOW_UNBACKED_DATABASE_MIGRATION:-0}" == "1" ]]; then
+      err "--allow-unbacked-database-migration applies only to a real database migration."
+      return 2
+    fi
+    return 0
+  fi
+  if [[ "${ALLOW_UNBACKED_DATABASE_MIGRATION:-0}" == "1" ]]; then return 0; fi
+  if ! database_backup_prompt_is_interactive; then return 0; fi
+  while true; do
+    printf 'Create a recovery backup before the database migration? [Y/n] ' >&2
+    if ! IFS= read -r response; then
+      err "Unable to read the backup choice; requiring recovery backup."
+      return 0
+    fi
+    case "$response" in
+      ""|y|Y|yes|Yes|YES) return 0 ;;
+      n|N|no|No|NO)
+        ALLOW_UNBACKED_DATABASE_MIGRATION="1"
+        return 0
+        ;;
+      *) err "Answer yes or no." ;;
+    esac
+  done
 }
 
 build_postgres_release_args()

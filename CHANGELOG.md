@@ -15,6 +15,12 @@ follows [Keep a Changelog](https://keepachangelog.com/); the project uses
 
 ### Fixed
 
+- **Operators can now choose whether a real database migration requires a recovery backup.**
+  Interactive deploys ask before contacting the cluster and default to requiring recovery evidence;
+  non-interactive deploys require the explicit CLI opt-out. Skipping backup leaves source
+  classification, fencing, digest-bound migration, convergence, privilege cleanup, and failure
+  recovery mandatory.
+
 - **Invited users can now complete standalone registration after the first Owner has claimed the
   silo.** A verified invited identity keeps its OIDC session long enough to accept its signed link,
   while every other product route remains unavailable until that exact subject has an active

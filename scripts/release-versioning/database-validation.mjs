@@ -294,8 +294,6 @@ export function resolveSchemaLineage(repositoryRoot, releaseVersion)
 				sourceProtectedBaselineSha256s,
 				freshSourceProtectedBaselineSha256: _FreshSourceProtectedBaselineDigest(migrationManifest),
 				sourceHistoryLineages: _SourceHistoryLineages(repositoryRoot, predecessor, sourceProtectedBaselineSha256s),
-				// Reporting history, not authorizing a carry-forward override.
-				carriedForwardThroughReleaseVersion: null,
 				ownedByReleaseVersion: cursor.repositoryVersion,
 			};
 		}
@@ -404,7 +402,6 @@ export function resolveDatabaseTransition(repositoryRoot, releaseVersion, fromRe
 			freshSourceProtectedBaselineSha256: _FreshSourceProtectedBaselineDigest(migrationManifest),
 			sourceHistoryLineages: _SourceHistoryLineages(repositoryRoot, source, sourceProtectedBaselineSha256s),
 			privilegedExtension: migrationManifest.privilegedExtension ?? null,
-			carriedForwardThroughReleaseVersion: migrationOwner === target ? null : migrationOwner.repositoryVersion,
 		};
 	}
 	return {

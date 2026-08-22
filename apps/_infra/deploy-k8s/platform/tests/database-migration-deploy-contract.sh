@@ -82,8 +82,8 @@ grep -q 'automatic database migration permits only an adjacent minor transition'
   "$ROOT_DIR/scripts/release-versioning/database-validation.mjs"
 grep -q 'run_database_release_transition' "$DEPLOY_SCRIPT"
 grep -q 'fence_existing_opencrane_server' "$RECOVERY"
-grep -q 'DATABASE_CARRY_FORWARD_RELEASE=' "$DEPLOY_SCRIPT"
-grep -q 'valid only for an approved carry-forward repair' "$ORCHESTRATOR"
+grep -q 'resolve_database_backup_requirement' "$DEPLOY_SCRIPT"
+grep -q 'Create a recovery backup before the database migration' "$ORCHESTRATOR"
 ! grep -q 'OPENCRANE_ALLOW_UNBACKED_DATABASE_MIGRATION' "$DEPLOY_SCRIPT"
 invitation_secret_line="$(grep -n 'ensure_invitation_signing_secret "$NAMESPACE" "$INVITATION_SIGNING_SECRET"' "$DEPLOY_SCRIPT" | cut -d: -f1)"
 database_transition_line="$(grep -n '^run_database_release_transition$' "$DEPLOY_SCRIPT" | cut -d: -f1)"
@@ -605,18 +605,54 @@ cmp "$TEST_DIR/expected-migration-order" "$TEST_DIR/migration-order"
 
 (
   source "$ORCHESTRATOR"
-  ALLOW_UNBACKED_DATABASE_MIGRATION=1
   DATABASE_TRANSITION_KIND=migration
-  DATABASE_CARRY_FORWARD_RELEASE=""
+  ALLOW_UNBACKED_DATABASE_MIGRATION=0
+  database_backup_prompt_is_interactive() { return 0; }
   err() { :; }
-  if validate_unbacked_database_migration_override; then
-    printf '%s\n' 'ordinary migration accepted the unbacked override' >&2
-    exit 1
-  fi
-  DATABASE_CARRY_FORWARD_RELEASE=0.9.0
-  validate_unbacked_database_migration_override
+  resolve_database_backup_requirement <<<no
+  [[ "$ALLOW_UNBACKED_DATABASE_MIGRATION" == "1" ]]
+)
+
+(
+  source "$ORCHESTRATOR"
+  DATABASE_TRANSITION_KIND=migration
+  ALLOW_UNBACKED_DATABASE_MIGRATION=0
+  database_backup_prompt_is_interactive() { return 0; }
+  err() { :; }
+  resolve_database_backup_requirement <<<'yes'
+  [[ "$ALLOW_UNBACKED_DATABASE_MIGRATION" == "0" ]]
+  resolve_database_backup_requirement <<<''
+  [[ "$ALLOW_UNBACKED_DATABASE_MIGRATION" == "0" ]]
+  resolve_database_backup_requirement <<<$'invalid\nno'
+  [[ "$ALLOW_UNBACKED_DATABASE_MIGRATION" == "1" ]]
+)
+
+(
+  source "$ORCHESTRATOR"
+  DATABASE_TRANSITION_KIND=migration
+  ALLOW_UNBACKED_DATABASE_MIGRATION=0
+  database_backup_prompt_is_interactive() { return 0; }
+  err() { :; }
+  resolve_database_backup_requirement </dev/null
+  [[ "$ALLOW_UNBACKED_DATABASE_MIGRATION" == "0" ]]
+)
+
+(
+  source "$ORCHESTRATOR"
+  DATABASE_TRANSITION_KIND=migration
+  ALLOW_UNBACKED_DATABASE_MIGRATION=0
+  database_backup_prompt_is_interactive() { return 1; }
+  err() { :; }
+  resolve_database_backup_requirement </dev/null
+  [[ "$ALLOW_UNBACKED_DATABASE_MIGRATION" == "0" ]]
+)
+
+(
+  source "$ORCHESTRATOR"
   DATABASE_TRANSITION_KIND=current
-  if validate_unbacked_database_migration_override; then
+  ALLOW_UNBACKED_DATABASE_MIGRATION=1
+  err() { :; }
+  if resolve_database_backup_requirement; then
     printf '%s\n' 'current transition accepted the unbacked override' >&2
     exit 1
   fi

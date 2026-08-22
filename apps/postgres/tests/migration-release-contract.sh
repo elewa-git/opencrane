@@ -32,7 +32,6 @@ else
 	if [[ "$migration_source" != "$previous" ]]; then
 		predecessor="$(node "$RESOLVER" "$ROOT_DIR" "$CURRENT_VERSION" "$previous")"
 		[[ "$(jq -r '.kind' <<<"$predecessor")" == "current" ]]
-		[[ "$(jq -r '.migration.carriedForwardThroughReleaseVersion' <<<"$migration")" == "$previous" ]]
 	fi
 	jq -e '
   .migration.sourceProtectedBaselineSha256s as $origins

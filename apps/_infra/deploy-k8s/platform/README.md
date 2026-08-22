@@ -78,17 +78,15 @@ If a process stops after migration but before un-fencing, a rerun adopts only th
 source/target fence and its positive previous replica count. Final application failure restores that
 fenced revision, never the now-incompatible running source application.
 
-An automatic source migration additionally requires the PostgreSQL chart's plugin-backed `ScheduledBackup`.
-For a live Cluster, the engine proves that resource and its plugin configuration before fencing the
-application. It checks the resource again when it creates a dedicated on-demand `Backup`, then waits
-for completed controller evidence; a flag, annotation, or operator acknowledgement is not recovery
-evidence. An operator may explicitly run an approved carry-forward repair with
-`--allow-unbacked-database-migration` while no provider is available; this skips the backup preflight
-and creation only, leaving the write fence, exact source classifier, transactional migration Job,
-convergence proof, and failure recovery active. The deployer rejects that override for fresh, current,
-and ordinary migration transitions. A completed carry-forward re-entry accepts the flag but performs
-no backup or migration, so the override is inert. The override is CLI-only so it cannot persist as an
-environment default.
+An automatic source migration requires the PostgreSQL chart's plugin-backed `ScheduledBackup` by
+default. For a live Cluster, the engine proves that resource and its plugin configuration before
+fencing the application. It checks the resource again when it creates a dedicated on-demand
+`Backup`, then waits for completed controller evidence. An interactive deploy asks the operator
+whether to require that recovery backup; answering no skips only the backup preflight and creation.
+A non-interactive deploy must pass `--allow-unbacked-database-migration` to make the same explicit
+choice. The write fence, exact source classifier, transactional migration Job, convergence proof,
+and failure recovery remain active. The choice is CLI-only so it cannot persist as an environment
+default.
 It preserves an existing
 Cluster's original initdb ConfigMap and protected origin digest while publishing the current baseline
 separately for convergence proof. The Helm-owned `migrationFence` records source/target versions and

@@ -92,8 +92,9 @@ The server never migrates on startup. `apps/postgres` owns the bounded migration
 owner sequences it before an incompatible server rollout. Rollback is backup/restore or a reviewed
 forward repair, not an old-runtime compatibility layer.
 
-Physical backup evidence remains the default precondition. A specifically approved carry-forward repair may pass
-the CLI-only `--allow-unbacked-database-migration` flag. That flag skips only backup
+Physical backup evidence remains the default precondition. At the start of an interactive migration,
+the deployer asks whether the operator requires that backup. A non-interactive deployment requires
+the CLI-only `--allow-unbacked-database-migration` flag to opt out. That choice skips only backup
 creation: source classification, the server fence, digest-bound SQL, the migration Job, convergence,
 privilege reconciliation, and post-failure recovery remain mandatory. Never set the flag as a
 persistent deployment default.

@@ -567,7 +567,6 @@ test("carries one failed predecessor migration through its immediate repair patc
 	assert.equal(transition.kind, "migration");
 	assert.equal(transition.targetSchemaVersion, "0.9.0");
 	assert.equal(transition.migration.id, "0.8.0-to-0.9.0");
-	assert.equal(transition.migration.carriedForwardThroughReleaseVersion, "0.9.0");
 	assert.equal(resolveDatabaseTransition(fixture.root, "0.9.1", "0.9.0").kind, "current");
 	assert.equal(resolveDatabaseTransition(fixture.root, "0.9.1", "0.9.1").kind, "current");
 });
@@ -583,8 +582,6 @@ test("recovers the migration that produced the schema for a same-schema release"
 	assert.equal(lineage.fromSchemaVersion, "0.8.0");
 	assert.equal(lineage.toSchemaVersion, "0.9.0");
 	assert.equal(lineage.ownedByReleaseVersion, "0.9.0");
-	// Reporting history must not authorise a carry-forward override.
-	assert.equal(lineage.carriedForwardThroughReleaseVersion, null);
 	assert.ok(lineage.sqlSha256);
 	assert.ok(Array.isArray(lineage.sourceProtectedBaselineSha256s));
 	assert.ok(lineage.sourceProtectedBaselineSha256s.length > 0);

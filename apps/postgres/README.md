@@ -217,7 +217,7 @@ re-entry: both run privileges with migration disabled and continue the normal ap
 without publishing SQL or fencing. Incompatible, unreadable, extra, or ambiguous evidence stops before
 the server is changed. Only an exact source state proceeds:
 
-1. for a live Cluster without the reviewed unbacked override, proves that the required
+1. for a live Cluster when the operator requires a backup, proves that the required
    [plugin-backed `ScheduledBackup`](https://cloudnative-pg.io/docs/1.27/backup/) exists before changing
    the application release;
 2. captures the exact current application Helm revision, then scales the old server to zero through
@@ -225,17 +225,18 @@ the server is changed. Only an exact source state proceeds:
 3. reconciles or restores PostgreSQL, proves that the server preloads `pg_cron`, and publishes the
    manifest-selected SQL as an immutable, content-addressed ConfigMap;
 4. rechecks the chart-owned plugin-backed `ScheduledBackup`, creates an immediate CNPG `Backup`, and
-   waits for `status.phase=completed`, unless the reviewed invocation explicitly passes
+   waits for `status.phase=completed`, unless the invocation explicitly passes
    `--allow-unbacked-database-migration`;
 5. runs the digest-pinned, zero-RBAC app-owner Job with deadline, no retry, read-only root, scratch,
    and egress limited to DNS plus the exact CNPG pods on TCP 5432; and
 6. runs schema convergence before database privilege reconciliation, then restores the previous
    replica count only after the whole migration succeeds.
 
-The CLI-only unbacked override applies only to approved carry-forward repairs and skips the preflight
-in step 1 and Backup creation in step 4. Source classification, fencing, immutable SQL publication,
-the migration Job, convergence, privilege reconciliation, and recovery remain mandatory. Use it only
-for a specifically approved repair; never make it a persistent deployment default.
+An interactive deployment asks whether to require recovery backup before a real migration. Answering
+no, or passing the CLI-only `--allow-unbacked-database-migration` flag in a non-interactive run, skips
+the preflight in step 1 and Backup creation in step 4. Source classification, fencing, immutable SQL
+publication, the migration Job, convergence, privilege reconciliation, and recovery remain mandatory.
+Never make the opt-out a persistent deployment default.
 
 After any post-fence failure, the deploy owner checks that the migration Job is absent or terminal and
 reclassifies the database. It restores the exact captured Helm revision only if the database is still

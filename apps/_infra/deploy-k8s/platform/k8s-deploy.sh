@@ -329,9 +329,7 @@ DATABASE_TRANSITION_RESOLVER="$(select_database_transition_resolver \
   "$APPROVE_0_9_3_DATABASE_TRANSITION")" || exit $?
 DATABASE_RELEASE_TRANSITION="$(node "$DATABASE_TRANSITION_RESOLVER" "$REPOSITORY_ROOT" "$RELEASE_VERSION" "$FROM_RELEASE_VERSION")"
 DATABASE_TRANSITION_KIND="$(jq -r '.kind' <<<"$DATABASE_RELEASE_TRANSITION")"
-DATABASE_CARRY_FORWARD_RELEASE="$(jq -r '.migration.carriedForwardThroughReleaseVersion // empty' \
-  <<<"$DATABASE_RELEASE_TRANSITION")"
-validate_unbacked_database_migration_override
+resolve_database_backup_requirement
 DATABASE_TARGET_SCHEMA_VERSION="$(jq -r '.targetSchemaVersion' <<<"$DATABASE_RELEASE_TRANSITION")"
 DATABASE_TARGET_BASELINE_SHA256="$(jq -r '.targetBaselineSha256' <<<"$DATABASE_RELEASE_TRANSITION")"
 POSTGRES_OPERAND_IMAGE="$(jq -r '.operandImage // empty' <<<"$DATABASE_RELEASE_TRANSITION")"
