@@ -232,6 +232,11 @@ PRIVILEGED_MIGRATION_JOB="$(awk 'BEGIN { RS="---" } /kind: Job/ && /name: opencr
 grep -q 'enableSuperuserAccess: true' <<<"$PRIVILEGED_MIGRATION_OUTPUT"
 grep -q 'CREATE EXTENSION IF NOT EXISTS pg_cron' <<<"$PRIVILEGED_MIGRATION_JOB"
 grep -q 'GRANT USAGE ON SCHEMA cron TO :"application_owner"' <<<"$PRIVILEGED_MIGRATION_JOB"
+grep -q -- '--file -' <<<"$PRIVILEGED_MIGRATION_JOB"
+if grep -q -- '--command.*GRANT USAGE ON SCHEMA cron' <<<"$PRIVILEGED_MIGRATION_JOB"; then
+  echo "privileged extension SQL must use psql file input so variable quoting is applied" >&2
+  exit 1
+fi
 grep -q 'name: POSTGRES_APPLICATION_OWNER' <<<"$PRIVILEGED_MIGRATION_JOB"
 grep -q 'name: "opencrane-postgres-superuser"' <<<"$PRIVILEGED_MIGRATION_JOB"
 

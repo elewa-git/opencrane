@@ -70,11 +70,15 @@ spec:
               fi
               if [ "$PRIVILEGED_EXTENSION_ENABLED" = "true" ]; then
                 # CNPG generated this credential only while the fenced deploy enables it. This
-                # setup creates pg_cron and grants its schema only to the application owner.
-                PGPASSWORD="$POSTGRES_SUPERUSER_PASSWORD" PGUSER=postgres \
+                # setup creates pg_cron and grants its schema only to the application owner. The
+                # file input lets psql apply its quoted application_owner variable to the grant.
+                printf '%s\n' \
+                  'CREATE EXTENSION IF NOT EXISTS pg_cron;' \
+                  'GRANT USAGE ON SCHEMA cron TO :"application_owner";' | \
+                  PGPASSWORD="$POSTGRES_SUPERUSER_PASSWORD" PGUSER=postgres \
                   psql --no-psqlrc -v ON_ERROR_STOP=1 --dbname "$PGDATABASE" \
                     --set "application_owner=$POSTGRES_APPLICATION_OWNER" \
-                    --command 'CREATE EXTENSION IF NOT EXISTS pg_cron; GRANT USAGE ON SCHEMA cron TO :"application_owner";'
+                    --file -
               fi
               exec psql --no-psqlrc -v ON_ERROR_STOP=1 \
                 -v source_baseline_sha256="$SOURCE_PROTECTED_BASELINE_SHA256" \
