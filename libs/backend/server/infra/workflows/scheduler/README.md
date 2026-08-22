@@ -1,13 +1,14 @@
-# @opencrane/backend/server/infra/workflows/scheduler — durable respawn chains
+# @opencrane/backend/server/infra/workflows/scheduler — recurring workflow scheduling
 
 > [backend](../../../../README.md) › [server](../../../README.md) › [infra](../../README.md) › [workflows](../README.md) › scheduler
 
 ## What it owns
 
-This library keeps a recurring durable workflow from becoming one task that sleeps forever. A
-recurrence owner, such as a product scheduler that already understands cron and timezones, gives it
-one stable chain identity and one slot identity. The library asks the durable-execution port to
-admit the chain head or, after a task completes, one new task for the next slot.
+This library helps a product run the same workflow repeatedly without keeping one task alive
+forever. The product scheduler decides when the next run is due; this library gives each run its own
+durable task and asks the execution service to start it. When a run completes successfully, it creates
+the next run. Repeating that request after a restart or retry reuses the same key, so it does not
+create a duplicate; a failed or cancelled chain is restarted by the product scheduler.
 
 ```
  product scheduler  ──► deterministic chain + slot identities
