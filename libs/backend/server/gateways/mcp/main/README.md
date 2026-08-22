@@ -57,8 +57,9 @@ appears in the directory.
 
 ## Dependency direction
 
-Tagged `scope:mcp`: it may depend on the narrow auth and generic authorization ports plus shared MCP
-contracts — never on apps or another product domain's persistence adapter.
+Tagged `scope:mcp`: it may depend on the authentication guard, the generic authorization authority,
+and the authenticated Principal directory port plus shared MCP contracts. It never imports an app or
+another product domain's persistence adapter.
 
 ## Data & persistence
 

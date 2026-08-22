@@ -50,9 +50,9 @@ resolve effective access. Those entitlements belong to [authorization](../../aut
 
 ## Dependency direction
 
-Tagged `scope:groups`: it may depend on its own scope, shared contracts, and the authentication
-scope that supplies the organisation-admin route guard. It never imports an app or another IAM
-domain's persistence or policy decisions.
+Tagged `scope:groups`: it may depend on its own scope, shared contracts, the authentication scope that
+supplies the organisation-admin route guard, and the HTTP scope's validated-body adapter. It never
+imports an app or another IAM domain's persistence or policy decisions.
 
 ## Data & persistence
 
