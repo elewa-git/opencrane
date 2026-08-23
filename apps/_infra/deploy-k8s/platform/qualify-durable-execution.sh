@@ -64,9 +64,11 @@ for bounded_integer in "$LOCAL_PORT" "$SAMPLE_COUNT" "$POLL_INTERVAL_MS" "$THRES
 done
 (( LOCAL_PORT >= 1024 && LOCAL_PORT <= 65535 )) || { _error "--local-port must be from 1024 through 65535"; exit 2; }
 
-for command in base64 helm jq kubectl node npx; do
+for command in base64 helm jq kubectl node; do
   command -v "$command" >/dev/null 2>&1 || { _error "missing required command '$command'"; exit 1; }
 done
+QUALIFICATION_RUNNER="$REPOSITORY_ROOT/node_modules/.bin/tsx"
+[[ -x "$QUALIFICATION_RUNNER" ]] || { _error "qualification runner is unavailable"; exit 1; }
 
 CURRENT_CONTEXT="$(kubectl config current-context)"
 [[ "$CURRENT_CONTEXT" == "$KUBE_CONTEXT" ]] || { _error "current context does not match --context"; exit 1; }
@@ -121,7 +123,7 @@ export OPENCRANE_D2_DATABASE_POOL_SIZE="$DATABASE_POOL_SIZE"
 QUALIFICATION_RESULT="$(
 (
   cd "$REPOSITORY_ROOT/libs/backend/server/infra/workflows/infra_absurd"
-  npx tsx src/qualification/qualify-durable-execution.cli.ts
+  "$QUALIFICATION_RUNNER" src/qualification/qualify-durable-execution.cli.ts
 )
 )"
 jq -e '

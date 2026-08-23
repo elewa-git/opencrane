@@ -2,12 +2,17 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../../.." && pwd)"
-QUALIFIER="$ROOT_DIR/apps/_infra/deploy-k8s/platform/qualify-durable-execution.sh"
+QUALIFIER_SOURCE="$ROOT_DIR/apps/_infra/deploy-k8s/platform/qualify-durable-execution.sh"
 TEST_DIR="$(mktemp -d)"
 MOCK_BIN="$TEST_DIR/bin"
 CAPTURE="$TEST_DIR/capture"
 mkdir -p "$MOCK_BIN"
 trap 'rm -rf -- "$TEST_DIR"' EXIT
+RUNNER_ROOT="$TEST_DIR/repository"
+QUALIFIER="$RUNNER_ROOT/apps/_infra/deploy-k8s/platform/qualify-durable-execution.sh"
+mkdir -p "$RUNNER_ROOT/apps/_infra/deploy-k8s/platform" "$RUNNER_ROOT/libs/backend/server/infra/workflows/infra_absurd" "$RUNNER_ROOT/node_modules/.bin"
+ln -s "$QUALIFIER_SOURCE" "$QUALIFIER"
+ln -s "$ROOT_DIR/releases" "$RUNNER_ROOT/releases"
 
 cat >"$MOCK_BIN/helm" <<'EOF'
 #!/usr/bin/env bash
@@ -38,9 +43,9 @@ fi
 exit 1
 EOF
 
-cat >"$MOCK_BIN/npx" <<'EOF'
+cat >"$RUNNER_ROOT/node_modules/.bin/tsx" <<'EOF'
 #!/usr/bin/env bash
-[[ "$*" == "tsx src/qualification/qualify-durable-execution.cli.ts" ]]
+[[ "$*" == "src/qualification/qualify-durable-execution.cli.ts" ]]
 [[ "$PWD" == */libs/backend/server/infra/workflows/infra_absurd ]]
 [[ "$DATABASE_URL" == 'postgresql://opencrane:super-secret@127.0.0.1:65431/opencrane' ]]
 [[ "$OPENCRANE_D2_SILO_ID" == 'testlynn' ]]
@@ -59,7 +64,7 @@ if [[ "$*" == *"net.createServer"* ]]; then exit 0; fi
 printf '%s' 'postgresql://opencrane:super-secret@127.0.0.1:65431/opencrane'
 EOF
 
-chmod +x "$MOCK_BIN/helm" "$MOCK_BIN/kubectl" "$MOCK_BIN/node" "$MOCK_BIN/npx"
+chmod +x "$MOCK_BIN/helm" "$MOCK_BIN/kubectl" "$MOCK_BIN/node" "$RUNNER_ROOT/node_modules/.bin/tsx"
 PATH="$MOCK_BIN:$PATH" bash "$QUALIFIER" --context gke_opencrane-dev --cluster-tenant testlynn --local-port 65431 >"$CAPTURE"
 grep -Fq '"passed":true' "$CAPTURE"
 if grep -Fq 'super-secret' "$CAPTURE"; then
@@ -71,25 +76,26 @@ if MOCK_SILO_VERSION=0.9.2 PATH="$MOCK_BIN:$PATH" bash "$QUALIFIER" --context gk
   exit 1
 fi
 grep -Fq 'silo release is not the qualification version' "$TEST_DIR/version-mismatch"
-cat >"$MOCK_BIN/npx" <<'EOF'
+cat >"$RUNNER_ROOT/node_modules/.bin/tsx" <<'EOF'
 #!/usr/bin/env bash
 printf '%s\n' '{"passed":true,"latencyMs":{"p50":100,"p95":120},"connectionEvidence":{"available":true}}'
 EOF
-chmod +x "$MOCK_BIN/npx"
+chmod +x "$RUNNER_ROOT/node_modules/.bin/tsx"
 if PATH="$MOCK_BIN:$PATH" bash "$QUALIFIER" --context gke_opencrane-dev --cluster-tenant testlynn --local-port 65431 >"$TEST_DIR/partial-result" 2>&1; then
   printf 'durable execution qualifier accepted a partial result\n' >&2
   exit 1
 fi
 grep -Fq 'qualifier did not emit a complete result' "$TEST_DIR/partial-result"
-cat >"$MOCK_BIN/npx" <<'EOF'
+cat >"$RUNNER_ROOT/node_modules/.bin/tsx" <<'EOF'
 #!/usr/bin/env bash
 exit 0
 EOF
-chmod +x "$MOCK_BIN/npx"
+chmod +x "$RUNNER_ROOT/node_modules/.bin/tsx"
 if PATH="$MOCK_BIN:$PATH" bash "$QUALIFIER" --context gke_opencrane-dev --cluster-tenant testlynn --local-port 65431 >"$TEST_DIR/missing-result" 2>&1; then
   printf 'durable execution qualifier accepted an empty result\n' >&2
   exit 1
 fi
 grep -Fq 'qualifier did not emit a complete result' "$TEST_DIR/missing-result"
-bash -n "$QUALIFIER"
+grep -Fq 'QUALIFICATION_RUNNER="$REPOSITORY_ROOT/node_modules/.bin/tsx"' "$QUALIFIER_SOURCE"
+bash -n "$QUALIFIER_SOURCE"
 echo "durable execution qualification contract: PASS"
