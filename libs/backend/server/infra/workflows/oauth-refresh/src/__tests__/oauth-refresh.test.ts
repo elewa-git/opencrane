@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { __FakeDurableExecution } from "@opencrane/backend/server/infra/workflows/testing";
 import type { DurableExecutionTransaction } from "@opencrane/backend/server/infra/workflows/contract";
 
-import { __CreateOAuthRefreshWorkflow, __OAuthRefreshTaskKey, OAuthRefreshOutcomes, OAuthRefreshTaskNames } from "../index";
+import { __CreateOAuthRefreshWorkflow, __OAuthRefreshTaskKey, OAuthRefreshOutcomes, OAuthRefreshScopeKinds, OAuthRefreshTaskNames } from "../index";
 import type { OAuthRefreshConnectionPort, OAuthRefreshTaskInput } from "../index";
 
 /** Return a transaction-shaped object for an engine-free workflow test. */
@@ -12,10 +12,10 @@ function _Transaction(): DurableExecutionTransaction
 	return { client: {} };
 }
 
-/** Return a credential-free task input owned by one subject, connection, and refresh cycle. */
+/** Return a credential-free task input owned by one scope, subject, connection, and refresh cycle. */
 function _Input(refreshAt: string = "2026-08-23T12:00:00.000Z"): OAuthRefreshTaskInput
 {
-	return { siloId: "silo-a", subjectId: "principal-a", connectionId: "connection-a", refreshAt };
+	return { siloId: "silo-a", scopeKind: OAuthRefreshScopeKinds.Personal, subjectId: "principal-a", connectionId: "connection-a", refreshAt };
 }
 
 /** Start the deterministic fake workers after one OAuth task has been admitted. */
@@ -47,13 +47,18 @@ describe("OAuth refresh workflow", function _OAuthRefreshWorkflowSuite()
 		expect(reconcile).toHaveBeenCalledTimes(2);
 	});
 
-	it("keeps person and connection identifiers out of the engine task key", function _HidesIdentifiers()
+	it("keeps scope, subject, and connection identifiers out of the engine task key", function _HidesIdentifiers()
 	{
 		const key = __OAuthRefreshTaskKey(_Input());
 
 		expect(key).not.toContain("principal-a");
 		expect(key).not.toContain("connection-a");
 		expect(key).toMatch(/^workflows:oauth-refresh:[a-f0-9]{64}$/u);
+	});
+
+	it("keeps independently scoped connections in separate tasks", function _SeparatesScopes()
+	{
+		expect(__OAuthRefreshTaskKey(_Input())).not.toBe(__OAuthRefreshTaskKey({ ..._Input(), scopeKind: OAuthRefreshScopeKinds.Team }));
 	});
 
 	it("rejects a blank task identity before a task can be admitted", async function _RejectsBlankIdentity()
@@ -64,6 +69,7 @@ describe("OAuth refresh workflow", function _OAuthRefreshWorkflowSuite()
 
 		await expect(workflow.admit(_Transaction(), { ..._Input(), connectionId: " " })).rejects.toThrow("connectionId");
 		await expect(workflow.admit(_Transaction(), { ..._Input(), refreshAt: "tomorrow" })).rejects.toThrow("refreshAt");
+		await expect(workflow.admit(_Transaction(), { ..._Input(), scopeKind: "unknown" } as unknown as OAuthRefreshTaskInput)).rejects.toThrow("scopeKind");
 	});
 
 	it("refuses input or output fields that could save a credential", async function _RejectsCredentialFields()

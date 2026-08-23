@@ -1,4 +1,5 @@
 import type { DurableExecution, DurableExecutionTransaction, DurableTaskReceipt } from "@opencrane/backend/server/infra/workflows/contract";
+import { z } from "zod";
 
 /**
  * Stable task names that workflow composition may place on an approved queue.
@@ -9,33 +10,63 @@ import type { DurableExecution, DurableExecutionTransaction, DurableTaskReceipt 
  */
 export enum OAuthRefreshTaskNames
 {
-	/** Rechecks one person's connection without persisting any OAuth credential. */
+	/** Rechecks one scoped connection without persisting any OAuth credential. */
 	Reconcile = "oauth-refresh.reconcile",
 }
 
 /**
- * Identifies one due refresh without carrying any OAuth credential.
+ * Names the product boundary that owns an OAuth connection.
+ *
+ * The task stores this value and includes it in its idempotency key, so a personal connection can
+ * never merge with a connection shared by a group. This enum describes ownership only; it grants
+ * no access to a credential.
+ */
+export enum OAuthRefreshScopeKinds
+{
+	/** One person's private connection. */
+	Personal = "personal",
+	/** A connection shared by one team. */
+	Team = "team",
+	/** A connection shared by one department. */
+	Department = "department",
+	/** A connection shared by one project. */
+	Project = "project",
+	/** A connection shared across the organisation. */
+	Organization = "organization",
+}
+
+/**
+ * Checks the small, credential-free input that may be stored and replayed by the workflow engine.
  *
  * Product code creates this input after it decides a connection needs refreshing. The same
  * `refreshAt` value represents one refresh cycle, so a retry admits the existing task while a later
- * refresh cycle can create new work for the same subject and connection.
+ * refresh cycle can create new work for the same scoped connection. This schema rejects unknown
+ * fields before task admission because engine storage must never receive OAuth credentials.
  */
-export interface OAuthRefreshTaskInput
-{
-	/** Silo that owns the person and connection. */
-	readonly siloId: string;
-	/** Product-owned person or service identity that owns the connection. */
-	readonly subjectId: string;
-	/** Product-owned identifier for the OAuth connection to recheck. */
-	readonly connectionId: string;
-	/** UTC ISO-8601 time that identifies this connection's refresh cycle. */
-	readonly refreshAt: string;
-}
+export const OAuthRefreshTaskInputSchema = z.object({
+	/** Stores the silo that owns the connection. */
+	siloId: z.string().trim().min(1),
+	/** Stores the product boundary that owns the connection. */
+	scopeKind: z.nativeEnum(OAuthRefreshScopeKinds),
+	/** Stores the product identity inside the connection's scope. */
+	subjectId: z.string().trim().min(1),
+	/** Stores the product identifier for the OAuth connection to recheck. */
+	connectionId: z.string().trim().min(1),
+	/** Stores the UTC ISO-8601 time that identifies this connection's refresh cycle. */
+	refreshAt: z.string().refine(function _IsUtcInstant(value: string): boolean
+	{
+		const instant = new Date(value);
+		return !Number.isNaN(instant.getTime()) && instant.toISOString() === value;
+	}, "refreshAt must be a UTC ISO-8601 instant."),
+}).strict();
+
+/** Credential-free input stored by the workflow engine for one scoped OAuth refresh cycle. */
+export type OAuthRefreshTaskInput = z.infer<typeof OAuthRefreshTaskInputSchema>;
 
 /** A saved OAuth refresh task together with its stable de-duplication key. */
 export interface OAuthRefreshTaskAdmission
 {
-	/** Stable key for this silo, subject, and connection task. */
+	/** Stable key for this silo, scope, subject, and connection task. */
 	readonly taskKey: string;
 	/** Engine receipt for the admitted task. */
 	readonly receipt: DurableTaskReceipt;
@@ -94,6 +125,6 @@ export interface OAuthRefreshWorkflowOptions
  */
 export interface OAuthRefreshWorkflow
 {
-	/** Save or return the task for one person and OAuth connection in this database transaction. */
+	/** Save or return the task for one scoped OAuth connection in this database transaction. */
 	admit(transaction: DurableExecutionTransaction, input: OAuthRefreshTaskInput): Promise<OAuthRefreshTaskAdmission>;
 }

@@ -12,7 +12,7 @@ engine-neutral contract; it will never import an execution engine or control a w
 | --- | --- |
 | [contract](./contract/README.md) | The engine-neutral durable-task port, shared queue authority, and server-only worker lifecycle types. |
 | [kit](./kit/README.md) | Silo, task-name, payload, queue, and tracing guardrails. |
-| [oauth-refresh](./oauth-refresh/README.md) | One saved refresh task for each person and OAuth connection, without storing a credential in the task. |
+| [oauth-refresh](./oauth-refresh/README.md) | One saved refresh task for each connection scope and OAuth connection, without storing a credential in the task. |
 | [scheduler](./scheduler/README.md) | Finite respawn chains for product-owned recurrence. |
 | [infra_absurd](./infra_absurd/README.md) | The pinned Absurd engine adapter and its typed transaction procedure gateway. |
 | [testing](./testing/README.md) | Deterministic contract tests and an in-memory execution fake. |

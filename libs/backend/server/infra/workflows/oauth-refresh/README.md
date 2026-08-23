@@ -17,7 +17,7 @@ That owner refreshes the external connection and stores any credential outside O
      │  save change + task in the same database transaction
      ▼
  ┌───────────────────────────────────┐
- │ oauth-refresh  ◄── HERE            │  silo + subject + connection identifiers
+ │ oauth-refresh  ◄── HERE            │  silo + scope + subject + connection identifiers
  └────────────────┬──────────────────┘
                   │  replay-safe refresh check
                   ▼
@@ -30,8 +30,9 @@ That owner refreshes the external connection and stores any credential outside O
 **In this flow:** the [workflow contract](../contract/README.md) saves and runs the task; the product
 connection owner keeps OAuth credentials out of task input and out of this package.
 
-There is at most one saved task for a silo, subject, connection, and refresh time. Repeating the same
-request returns that task; a later refresh time creates the next task for the same connection. The
+The scope says who owns a connection: a person, team, department, project, or organisation. There
+is at most one saved task for a silo, scope, subject, connection, and refresh time. Repeating the
+same request returns that task; a later refresh time creates the next task for the same connection. The
 task key and diagnostic fields use a hash, so they do not contain the subject or connection identifier.
 The saved input carries identifiers and the refresh time only; it never carries an access token,
 refresh token, or password.
@@ -40,6 +41,8 @@ refresh token, or password.
 
 - `__CreateOAuthRefreshWorkflow` — registers the task and returns the admission API.
 - `__OAuthRefreshTaskKey` — derives the stable, identifier-hiding task key.
+- `OAuthRefreshScopeKinds` and `OAuthRefreshTaskInputSchema` — name and check the connection owner
+  before the task can be stored.
 - `OAuthRefreshConnectionPort` — the product-owned connection refresh operation.
 - `OAuthRefreshTaskInput` and `OAuthRefreshResult` — the credential-free task request and outcome.
 

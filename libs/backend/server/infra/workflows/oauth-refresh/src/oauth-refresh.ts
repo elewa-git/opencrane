@@ -2,37 +2,20 @@ import { createHash } from "node:crypto";
 
 import type { DurableExecution, DurableExecutionTransaction, DurableTaskContext } from "@opencrane/backend/server/infra/workflows/contract";
 
-import { OAuthRefreshOutcomes, OAuthRefreshTaskNames, type OAuthRefreshConnectionPort, type OAuthRefreshResult, type OAuthRefreshTaskAdmission, type OAuthRefreshTaskInput, type OAuthRefreshWorkflow, type OAuthRefreshWorkflowOptions } from "./oauth-refresh.types";
-
-/** Reject a blank identifier before it can merge work for different OAuth connections. */
-function _RequireIdentifier(name: string, value: string): void
-{
-	if (value.trim().length === 0)
-	{
-		throw new Error(`${name} must be a non-empty string.`);
-	}
-}
+import { OAuthRefreshOutcomes, OAuthRefreshTaskInputSchema, OAuthRefreshTaskNames, type OAuthRefreshConnectionPort, type OAuthRefreshResult, type OAuthRefreshTaskAdmission, type OAuthRefreshTaskInput, type OAuthRefreshWorkflow, type OAuthRefreshWorkflowOptions } from "./oauth-refresh.types";
 
 /** Validate the identifiers and refresh cycle that are allowed to enter a saved OAuth refresh task. */
 function _AssertTaskInput(input: OAuthRefreshTaskInput): void
 {
-	if (typeof input !== "object" || input === null || Array.isArray(input))
-	{
-		throw new Error("OAuth refresh task input must be an object.");
-	}
-	const names = Object.keys(input);
-	if (names.length !== 4 || !names.every(function _AllowedName(name: string): boolean { return name === "siloId" || name === "subjectId" || name === "connectionId" || name === "refreshAt"; }))
-	{
-		throw new Error("OAuth refresh task input may contain only siloId, subjectId, connectionId, and refreshAt.");
-	}
-	_RequireIdentifier("siloId", input.siloId);
-	_RequireIdentifier("subjectId", input.subjectId);
-	_RequireIdentifier("connectionId", input.connectionId);
-	const refreshAt = new Date(input.refreshAt);
-	if (Number.isNaN(refreshAt.getTime()) || refreshAt.toISOString() !== input.refreshAt)
-	{
-		throw new Error("refreshAt must be a UTC ISO-8601 instant.");
-	}
+	const parsed = OAuthRefreshTaskInputSchema.safeParse(input);
+	if (parsed.success) return;
+	const issue = parsed.error.issues[0];
+	if (issue?.code === "unrecognized_keys") throw new Error("OAuth refresh task input may contain only siloId, scopeKind, subjectId, connectionId, and refreshAt.");
+	const field = issue?.path[0];
+	if (field === "scopeKind") throw new Error("scopeKind must identify a supported OAuth connection boundary.");
+	if (field === "refreshAt") throw new Error("refreshAt must be a UTC ISO-8601 instant.");
+	if (typeof field === "string") throw new Error(`${field} must be a non-empty string.`);
+	throw new Error("OAuth refresh task input must be an object.");
 }
 
 /** Reject a connection-port response that would save data beyond the three reviewed outcomes. */
@@ -54,15 +37,15 @@ function _AssertResult(result: OAuthRefreshResult): void
 }
 
 /**
- * Build a stable key without writing a person or connection identifier into engine diagnostics.
+ * Build a stable key without putting silo, scope, subject, or connection identifiers into engine diagnostics.
  *
- * The refresh time distinguishes later cycles for one connection. Repeating the same four values
+ * The refresh time distinguishes later cycles for one connection. Repeating the same scope-bound values
  * returns the same engine task, which prevents concurrent retries from doing the refresh twice.
  */
 export function __OAuthRefreshTaskKey(input: OAuthRefreshTaskInput): string
 {
 	_AssertTaskInput(input);
-	return `workflows:oauth-refresh:${createHash("sha256").update(JSON.stringify([input.siloId, input.subjectId, input.connectionId, input.refreshAt])).digest("hex")}`;
+	return `workflows:oauth-refresh:${createHash("sha256").update(JSON.stringify([input.siloId, input.scopeKind, input.subjectId, input.connectionId, input.refreshAt])).digest("hex")}`;
 }
 
 /** Run the connection-owned refresh through a replay-safe checkpoint. */
