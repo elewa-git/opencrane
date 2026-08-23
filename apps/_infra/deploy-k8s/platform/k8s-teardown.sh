@@ -189,6 +189,20 @@ assert_auxiliary_namespace_owner()
   if [[ "$retirement_owner" == "$RELEASE" ]]; then
     return
   fi
+  # An interrupted install can create the artifact namespace and both keys before Helm records the main release.
+  # When the PostgreSQL release and cluster remain, those keys prove its owner for recovery teardown.
+  if [[ "$auxiliary_namespace" == "${RELEASE}-artifacts" && "$MAIN_RELEASE_EXISTS" == "0" \
+    && "$POSTGRES_RELEASE_EXISTS" == "1" && "$CNPG_CLUSTER_EXISTS" == "1" ]]; then
+    local catalog_key
+    local service_key
+    catalog_key="$(kubectl --context "$CONTEXT" get secret "${RELEASE}-artifact-catalog-keys" --namespace "$NAMESPACE" -o 'jsonpath={.data.lease-private\\.pem}' 2>/dev/null || true)"
+    service_key="$(kubectl --context "$CONTEXT" get secret "${RELEASE}-artifact-service-keys" --namespace "$auxiliary_namespace" -o 'jsonpath={.data.receipt-private\\.pem}' 2>/dev/null || true)"
+    [[ -n "$catalog_key" && -n "$service_key" ]] || {
+      err "Cannot prove interrupted artifact namespace '$auxiliary_namespace' belongs to '$RELEASE'; its two deploy-created key Secrets are incomplete."
+      exit 1
+    }
+    return
+  fi
   [[ "$MAIN_RELEASE_EXISTS" == "1" ]] || {
     err "Cannot prove auxiliary namespace '$auxiliary_namespace' belongs to '$RELEASE'; its release and retirement marker are absent."
     exit 1

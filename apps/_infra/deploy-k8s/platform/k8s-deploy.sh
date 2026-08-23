@@ -718,12 +718,32 @@ _copy_cnpg_uri_secret "$LITELLM_POSTGRES_APP_SECRET" "$LITELLM_DATABASE_SECRET" 
 ARTIFACT_NAMESPACE="${RELEASE}-artifacts"
 ARTIFACT_CATALOG_KEY_SECRET="${RELEASE}-artifact-catalog-keys"
 ARTIFACT_SERVICE_KEY_SECRET="${RELEASE}-artifact-service-keys"
+# Teardown reads this label before it deletes an auxiliary namespace after its Helm objects are gone.
+RETIREMENT_OWNER_LABEL="opencrane.ai/retirement-owner"
 # Candidate-skill and tenant-tool Jobs need the same release boundary as the
 # application and artifact planes. Static chart defaults would make every silo
 # compete for one cluster-wide namespace and let the first Helm release claim it.
 SKILL_AUTHORING_NAMESPACE="${RELEASE}-skill-authoring"
 TOOL_RUNNER_NAMESPACE="${RELEASE}-tools"
-kubectl create namespace "$ARTIFACT_NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
+set +e
+ARTIFACT_NAMESPACE_RESOURCE="$(kubectl get namespace "$ARTIFACT_NAMESPACE" --ignore-not-found -o name)"
+ARTIFACT_NAMESPACE_STATUS=$?
+set -e
+if (( ARTIFACT_NAMESPACE_STATUS != 0 )); then
+  err "Unable to determine whether artifact namespace '$ARTIFACT_NAMESPACE' exists."
+  exit "$ARTIFACT_NAMESPACE_STATUS"
+fi
+if [[ -n "$ARTIFACT_NAMESPACE_RESOURCE" ]]; then
+  ARTIFACT_NAMESPACE_OWNER="$(kubectl get namespace "$ARTIFACT_NAMESPACE" -o "jsonpath={.metadata.labels.${RETIREMENT_OWNER_LABEL//./\\.}}")"
+  if [[ "$ARTIFACT_NAMESPACE_OWNER" != "$RELEASE" ]]; then
+    err "Artifact namespace '$ARTIFACT_NAMESPACE' belongs to '${ARTIFACT_NAMESPACE_OWNER:-an unknown owner}', not '$RELEASE'."
+    exit 1
+  fi
+else
+  kubectl create namespace "$ARTIFACT_NAMESPACE" --dry-run=client -o yaml \
+    | kubectl label --local --filename - "$RETIREMENT_OWNER_LABEL=$RELEASE" --overwrite --output yaml \
+    | kubectl create -f -
+fi
 _ensure_artifact_keys() {
   local key_dir
   local key
