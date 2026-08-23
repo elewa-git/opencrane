@@ -53,6 +53,7 @@ cat >"$RUNNER_ROOT/node_modules/.bin/tsx" <<'EOF'
 [[ "$OPENCRANE_D2_POLL_INTERVAL_MS" == '50' ]]
 [[ "$OPENCRANE_D2_THRESHOLD_MS" == '250' ]]
 [[ "$OPENCRANE_D2_DATABASE_POOL_SIZE" == '2' ]]
+printf '%s\n' 'Durable execution qualification started.' >&2
 printf '%s\n' '{"passed":true,"sampleCount":40,"warmupCount":5,"pollIntervalMs":50,"thresholdMs":250,"databasePoolSize":2,"connectionCeiling":3,"transport":"kubectl-port-forward","latencyMs":{"p50":100,"p95":120,"p99":140,"max":140},"connectionEvidence":{"available":true,"peakConnections":2}}'
 EOF
 
@@ -78,6 +79,7 @@ fi
 grep -Fq 'silo release is not the qualification version' "$TEST_DIR/version-mismatch"
 cat >"$RUNNER_ROOT/node_modules/.bin/tsx" <<'EOF'
 #!/usr/bin/env bash
+printf '%s\n' 'Durable execution qualification started.' >&2
 printf '%s\n' '{"passed":true,"latencyMs":{"p50":100,"p95":120},"connectionEvidence":{"available":true}}'
 EOF
 chmod +x "$RUNNER_ROOT/node_modules/.bin/tsx"
@@ -88,6 +90,7 @@ fi
 grep -Fq 'qualifier did not emit a complete result' "$TEST_DIR/partial-result"
 cat >"$RUNNER_ROOT/node_modules/.bin/tsx" <<'EOF'
 #!/usr/bin/env bash
+printf '%s\n' 'Durable execution qualification started.' >&2
 exit 0
 EOF
 chmod +x "$RUNNER_ROOT/node_modules/.bin/tsx"
@@ -96,6 +99,31 @@ if PATH="$MOCK_BIN:$PATH" bash "$QUALIFIER" --context gke_opencrane-dev --cluste
   exit 1
 fi
 grep -Fq 'qualifier did not emit a complete result' "$TEST_DIR/missing-result"
+cat >"$RUNNER_ROOT/node_modules/.bin/tsx" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' 'Durable execution qualification started.' >&2
+printf '%s\n' '{"passed":false,"sampleCount":40,"warmupCount":5,"pollIntervalMs":50,"thresholdMs":250,"databasePoolSize":2,"connectionCeiling":3,"transport":"kubectl-port-forward","latencyMs":{"p50":100,"p95":400,"p99":450,"max":450},"connectionEvidence":{"available":true,"peakConnections":2}}'
+exit 2
+EOF
+chmod +x "$RUNNER_ROOT/node_modules/.bin/tsx"
+if PATH="$MOCK_BIN:$PATH" bash "$QUALIFIER" --context gke_opencrane-dev --cluster-tenant testlynn --local-port 65431 >"$TEST_DIR/failed-result" 2>&1; then
+  printf 'durable execution qualifier accepted a failed latency result\n' >&2
+  exit 1
+else
+  qualifier_status=$?
+fi
+[[ "$qualifier_status" -eq 2 ]]
+grep -Fq '"passed":false' "$TEST_DIR/failed-result"
+cat >"$RUNNER_ROOT/node_modules/.bin/tsx" <<'EOF'
+#!/usr/bin/env bash
+sleep 2
+EOF
+chmod +x "$RUNNER_ROOT/node_modules/.bin/tsx"
+if PATH="$MOCK_BIN:$PATH" bash "$QUALIFIER" --context gke_opencrane-dev --cluster-tenant testlynn --local-port 65431 --runner-timeout-seconds 1 >"$TEST_DIR/runner-timeout" 2>&1; then
+  printf 'durable execution qualifier accepted a stalled runner\n' >&2
+  exit 1
+fi
+grep -Fq 'qualifier runner exceeded 1s without a result' "$TEST_DIR/runner-timeout"
 grep -Fq 'QUALIFICATION_RUNNER="$REPOSITORY_ROOT/node_modules/.bin/tsx"' "$QUALIFIER_SOURCE"
 bash -n "$QUALIFIER_SOURCE"
 echo "durable execution qualification contract: PASS"

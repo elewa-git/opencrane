@@ -16,6 +16,7 @@ function _Number(name: string): number
 
 try
 {
+	process.stderr.write("Durable execution qualification started.\n");
 	const result = await __QualifyDurableExecutionPickup({
 		databaseUrl: _Required("DATABASE_URL"),
 		siloId: _Required("OPENCRANE_D2_SILO_ID"),

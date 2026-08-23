@@ -13,8 +13,12 @@ SAMPLE_COUNT="40"
 POLL_INTERVAL_MS="50"
 THRESHOLD_MS="250"
 DATABASE_POOL_SIZE="2"
+RUNNER_TIMEOUT_SECONDS="300"
 PORT_FORWARD_PID=""
 PORT_FORWARD_LOG=""
+QUALIFICATION_OUTPUT=""
+QUALIFICATION_ERROR=""
+QUALIFICATION_PID=""
 
 _error()
 {
@@ -25,12 +29,23 @@ _cleanup()
 {
   local status=$?
   unset DATABASE_URL
+  if [[ -n "$QUALIFICATION_PID" ]]; then
+    kill "$QUALIFICATION_PID" >/dev/null 2>&1 || true
+    wait "$QUALIFICATION_PID" >/dev/null 2>&1 || true
+    QUALIFICATION_PID=""
+  fi
   if [[ -n "$PORT_FORWARD_PID" ]]; then
     kill "$PORT_FORWARD_PID" >/dev/null 2>&1 || true
     wait "$PORT_FORWARD_PID" >/dev/null 2>&1 || true
   fi
   if [[ -n "$PORT_FORWARD_LOG" ]]; then
     rm -f -- "$PORT_FORWARD_LOG"
+  fi
+  if [[ -n "$QUALIFICATION_OUTPUT" ]]; then
+    rm -f -- "$QUALIFICATION_OUTPUT"
+  fi
+  if [[ -n "$QUALIFICATION_ERROR" ]]; then
+    rm -f -- "$QUALIFICATION_ERROR"
   fi
   return "$status"
 }
@@ -50,6 +65,7 @@ while [[ $# -gt 0 ]]; do
     --poll-interval-ms) POLL_INTERVAL_MS="$2"; shift 2 ;;
     --threshold-ms) THRESHOLD_MS="$2"; shift 2 ;;
     --database-pool-size) DATABASE_POOL_SIZE="$2"; shift 2 ;;
+    --runner-timeout-seconds) RUNNER_TIMEOUT_SECONDS="$2"; shift 2 ;;
     -h|--help) grep '^#' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) _error "unknown flag '$1'"; exit 2 ;;
   esac
@@ -59,10 +75,11 @@ done
 [[ "$CLUSTER_TENANT" =~ ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$ ]] || { _error "--cluster-tenant must be a DNS label"; exit 2; }
 [[ -n "$NAMESPACE" ]] || NAMESPACE="opencrane-${CLUSTER_TENANT}"
 [[ "$NAMESPACE" =~ ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$ ]] || { _error "--namespace must be a DNS label"; exit 2; }
-for bounded_integer in "$LOCAL_PORT" "$SAMPLE_COUNT" "$POLL_INTERVAL_MS" "$THRESHOLD_MS" "$DATABASE_POOL_SIZE"; do
+for bounded_integer in "$LOCAL_PORT" "$SAMPLE_COUNT" "$POLL_INTERVAL_MS" "$THRESHOLD_MS" "$DATABASE_POOL_SIZE" "$RUNNER_TIMEOUT_SECONDS"; do
   [[ "$bounded_integer" =~ ^[1-9][0-9]*$ ]] || { _error "numeric inputs must be positive integers"; exit 2; }
 done
 (( LOCAL_PORT >= 1024 && LOCAL_PORT <= 65535 )) || { _error "--local-port must be from 1024 through 65535"; exit 2; }
+(( RUNNER_TIMEOUT_SECONDS <= 900 )) || { _error "--runner-timeout-seconds must not exceed 900"; exit 2; }
 
 for command in base64 helm jq kubectl node; do
   command -v "$command" >/dev/null 2>&1 || { _error "missing required command '$command'"; exit 1; }
@@ -120,12 +137,35 @@ export OPENCRANE_D2_POLL_INTERVAL_MS="$POLL_INTERVAL_MS"
 export OPENCRANE_D2_THRESHOLD_MS="$THRESHOLD_MS"
 export OPENCRANE_D2_DATABASE_POOL_SIZE="$DATABASE_POOL_SIZE"
 
-QUALIFICATION_RESULT="$(
+QUALIFICATION_OUTPUT="$(mktemp)"
+QUALIFICATION_ERROR="$(mktemp)"
 (
   cd "$REPOSITORY_ROOT/libs/backend/server/infra/workflows/infra_absurd"
   "$QUALIFICATION_RUNNER" src/qualification/qualify-durable-execution.cli.ts
-)
-)"
+) >"$QUALIFICATION_OUTPUT" 2>"$QUALIFICATION_ERROR" &
+QUALIFICATION_PID=$!
+_error "starting qualifier runner"
+QUALIFICATION_STATUS=0
+for (( attempt = 1; attempt <= RUNNER_TIMEOUT_SECONDS; attempt += 1 )); do
+  if ! kill -0 "$QUALIFICATION_PID" >/dev/null 2>&1; then
+    wait "$QUALIFICATION_PID" || QUALIFICATION_STATUS=$?
+    QUALIFICATION_PID=""
+    break
+  fi
+  sleep 1
+done
+if [[ -n "$QUALIFICATION_PID" ]]; then
+  kill "$QUALIFICATION_PID" >/dev/null 2>&1 || true
+  wait "$QUALIFICATION_PID" >/dev/null 2>&1 || true
+  QUALIFICATION_PID=""
+  _error "qualifier runner exceeded ${RUNNER_TIMEOUT_SECONDS}s without a result"
+  exit 1
+fi
+if ! grep -Fxq "Durable execution qualification started." "$QUALIFICATION_ERROR"; then
+  _error "qualifier runner exited before it reported startup"
+  exit 1
+fi
+QUALIFICATION_RESULT="$(<"$QUALIFICATION_OUTPUT")"
 jq -e '
   type == "object"
   and (.passed | type == "boolean")
@@ -146,3 +186,4 @@ jq -e '
   and (if .connectionEvidence.available then (.connectionEvidence.peakConnections | type == "number") else (.connectionEvidence | has("peakConnections") | not) end)
 ' <<<"$QUALIFICATION_RESULT" >/dev/null || { _error "qualifier did not emit a complete result"; exit 1; }
 printf '%s\n' "$QUALIFICATION_RESULT"
+exit "$QUALIFICATION_STATUS"
