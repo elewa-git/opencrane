@@ -129,27 +129,12 @@ privileges:
       cpu: 250m
       memory: 256Mi
 
-# The deployment owner supplies these from the repository's immutable release ledger. The
-# privileges hook treats them as a convergence proof: a database must either be a fresh current
-# baseline or carry the exact completed adjacent migration history from its protected origin.
-convergence:
-  targetSchemaVersion: ""
-  targetBaselineSha256: ""
-  currentProtectedBaselineSha256: ""
-  previousMigration:
-    available: false
-    id: ""
-    fromSchemaVersion: ""
-    sourceTargetBaselineSha256: ""
-    sourceProtectedBaselineSha256s: []
-    selectedSourceProtectedBaselineSha256: ""
-    sqlSha256: ""
-
 # Existing databases are mutated only by this bounded, app-owner Job. The SQL ConfigMap is
-# content-addressed and immutable; the deployment owner enables this only after fencing the old
-# server and completing a CNPG recovery backup.
+# content-addressed and immutable; the deployer runs the Job directly.
 migration:
   enabled: false
+  sqlSha256: ""
+  sourceBaselineSha256: ""
   # Reviewed identity coordinates used only by migrations that convert legacy globally named
   # groups and OIDC subjects into silo-bound principals and memberships.
   siloId: ""

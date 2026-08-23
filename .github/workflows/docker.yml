@@ -348,7 +348,7 @@ jobs:
       - name: Enforce version-to-version database migration contracts
         run: npm run check:database-migrations
 
-      - name: Prove previous-to-current database convergence and rollback
+      - name: Prove direct database migration SQL contract
         run: npm run test:database-migrations
 
       - name: Generate the database client

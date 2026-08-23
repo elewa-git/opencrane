@@ -37,17 +37,10 @@ manifest contract; do not introduce parallel version files.
 
 ## Transition policy
 
-- A database migration follows the database schema recorded by the exact previous release, not the
-  semantic-version component that changed. A release can keep its predecessor's schema unchanged,
-  or it can carry one reviewed transition from that predecessor schema to its target schema.
-- The deploy resolver never guesses an upgrade path: it accepts only the exact previous release,
-  its manifest-bound SQL digest, and its recorded protected source lineage. Patch, minor, and major
-  labels do not relax or replace those database proofs.
-- An immediate repair patch may declare `database.carriedForwardFromRepositoryVersion` only when
-  its predecessor's adjacent-minor migration never completed. The repair must preserve the exact
-  predecessor database identity and may carry only that predecessor's exact source. This reuses the
-  already reviewed SQL identity; it does not create a skipped-version migration or permit multi-hop
-  carry-forward.
+- The deployer reads the database schema labels from the requested release manifests and uses a
+  reviewed `<from>-to-<to>` directory when it exists. It does not inspect the live database to admit
+  the migration.
+- A release without a matching migration directory continues with the ordinary PostgreSQL rollout.
 - A directly changed application is stamped to the current full root version. This is a
   compatibility stamp, not a claim that every application releases in lockstep.
 - Shared library, root dependency, and lockfile changes stamp nothing on their own: the affected
@@ -83,25 +76,13 @@ version. Its manifest binds source version, target version, SQL digest, owner, a
 migration must:
 
 1. acquire the migration advisory lock;
-2. require the exact current schema version;
-3. run transactionally and fail closed;
-4. update schema history only after success; and
-5. preserve the protected bootstrap digest as origin evidence.
+2. run transactionally; and
+3. update schema history only after success.
 
 The server never migrates on startup. `apps/postgres` owns the bounded migration Job; the deployment
-owner sequences it before an incompatible server rollout. Rollback is backup/restore or a reviewed
-forward repair, not an old-runtime compatibility layer.
-
-Physical backup evidence remains the default precondition. At the start of an interactive migration,
-the deployer asks whether the operator requires that backup. A non-interactive deployment requires
-the CLI-only `--allow-unbacked-database-migration` flag to opt out. That choice skips only backup
-creation: source classification, the server fence, digest-bound SQL, the migration Job, convergence,
-privilege reconciliation, and post-failure recovery remain mandatory. Never set the flag as a
-persistent deployment default.
-
-Prove both paths converge: migrate a previous-version database and independently create a fresh
-database from the current baseline, then compare normalized schemas and rerun authority, trigger,
-and seed tests.
+owner runs it as a direct migration Job. A failed migration is repaired forward; it does not require
+a backup, schema check, write pause, or automatic recovery. Issue #699 tracks the deferred hardening
+work.
 
 ## Required gate
 

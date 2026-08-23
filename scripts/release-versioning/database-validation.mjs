@@ -3,7 +3,7 @@ import { join, relative } from "node:path";
 import { createReleaseManifestValidator } from "./manifest-validation.mjs";
 import { compareSemver, isAdjacentMinor, isAdjacentPatch, readJson, sha256 } from "./version-utils.mjs";
 
-/** Accepts only SHA-256 identities that can become deployment convergence evidence. */
+/** Matches SHA-256 digests recorded in historical migration manifests. */
 const protectedBaselineDigestPattern = /^[a-f0-9]{64}$/u;
 const operandImagePattern = /:[0-9]+(?:\.[0-9]+)*(?:[-_.][A-Za-z0-9_.-]+)?@sha256:[a-f0-9]{64}$/u;
 
@@ -163,90 +163,18 @@ function _SourceHistoryLineages(repositoryRoot, sourceRelease, sourceProtectedBa
 }
 
 /**
- * Checks a release pair's database baseline and migration evidence before the release can be used.
- * It admits a carry-forward only when an approved patch preserves its predecessor's database
- * identity; every violation is appended to `errors` so validation reports the whole release failure.
+ * Checks that a release manifest names existing baseline bytes with the digest it records.
+ * This keeps a manifest from referring to missing or changed fresh-install SQL. Each problem is
+ * appended to `errors` so callers can report every invalid release input together.
+ *
  * Called by: `validateWorkspace` and {@link resolveDatabaseTransition}.
  */
 export function validateDatabase(repositoryRoot, manifest, previousManifest, changedFiles, errors)
 {
 	const database = manifest.database;
-	_ValidateCarriedForwardTransition(repositoryRoot, manifest, previousManifest, errors);
 	const baselinePath = join(repositoryRoot, database.baselinePath);
 	if (!existsSync(baselinePath)) return errors.push(`database baseline '${database.baselinePath}' does not exist`);
 	if (sha256(baselinePath) !== database.baselineSha256) errors.push("database baseline digest differs from the release manifest");
-	if (compareSemver(database.schemaVersion, manifest.repositoryVersion) > 0) errors.push("database schema version exceeds root version");
-	const baselineTouched = changedFiles.includes(database.baselinePath);
-	if (manifest.adoptionBaseline)
-	{
-		if (baselineTouched) errors.push("database baseline changed after adoption; bump the root minor version and add an adjacent migration");
-		return;
-	}
-	const previousDatabase = previousManifest?.database;
-	if (!previousDatabase) return;
-	const from = previousDatabase.schemaVersion;
-	if (!from) return errors.push(`previous release manifest '${manifest.previousRepositoryVersion}' has no database schema version`);
-	if (compareSemver(database.schemaVersion, from) < 0)
-		errors.push(`database schema version regresses from '${from}' to '${database.schemaVersion}'`);
-	if (baselineTouched && database.schemaVersion === from)
-	{
-		errors.push(`database baseline changed without advancing schema version '${database.schemaVersion}'`);
-		return;
-	}
-	if (database.schemaVersion === from)
-	{
-		if (database.baselineSha256 !== previousDatabase.baselineSha256)
-			errors.push(`database baseline digest changed without advancing schema version '${database.schemaVersion}'`);
-		return;
-	}
-	if (database.schemaVersion !== manifest.repositoryVersion)
-		errors.push("changed database schema must be stamped to the root version");
-	const migrationRoot = join(repositoryRoot, "apps/opencrane/prisma/migrations", `${from}-to-${database.schemaVersion}`);
-	const sqlPath = join(migrationRoot, "migration.sql");
-	const migrationManifestPath = join(migrationRoot, "manifest.json");
-	if (!existsSync(sqlPath) || !existsSync(migrationManifestPath))
-	{
-		errors.push(`database change requires reviewed migration '${relative(repositoryRoot, migrationRoot)}'`);
-		return;
-	}
-	const migrationManifest = _ReadMigrationManifest(
-		migrationManifestPath,
-		`database migration manifest '${relative(repositoryRoot, migrationManifestPath)}'`,
-		errors,
-	);
-	if (!migrationManifest) return;
-	if (migrationManifest.privilegedExtension !== undefined && migrationManifest.privilegedExtension !== "pg_cron")
-		errors.push("database migration privilegedExtension must be the reviewed 'pg_cron' exception");
-	if (migrationManifest.fromSchemaVersion !== from || migrationManifest.toSchemaVersion !== database.schemaVersion)
-		errors.push(`database migration manifest does not bind schema ${from} to ${database.schemaVersion}`);
-	if (migrationManifest.sqlSha256 !== sha256(sqlPath)) errors.push("database migration SQL digest differs from its manifest");
-	if (migrationManifest.owner !== "apps/opencrane") errors.push("database migration owner must be 'apps/opencrane'");
-	if (migrationManifest.rollback !== "backup-restore-or-forward-repair")
-		errors.push("database migration rollback must be 'backup-restore-or-forward-repair'");
-	if (!["automatic", "automatic-when-legacy-persona-empty-otherwise-manual-data-mapping-required", "automatic-when-legacy-persona-and-conversations-empty-otherwise-manual-data-mapping-required", "automatic-when-legacy-persona-conversations-approval-requests-and-integration-assignments-empty-otherwise-manual-data-mapping-required", "automatic-when-legacy-persona-conversations-channel-invocation-contexts-approval-requests-and-integration-assignments-empty-otherwise-manual-data-mapping-required"].includes(migrationManifest.executionMode))
-		errors.push("database migration executionMode must declare its automatic upgrade boundary");
-	if (migrationManifest.sourceTargetBaselineSha256 !== previousDatabase.baselineSha256)
-		errors.push("database migration source baseline digest differs from the previous release manifest");
-	if (migrationManifest.targetBaselineSha256 !== database.baselineSha256)
-		errors.push("database migration target baseline digest differs from the current release manifest");
-	const sourceProtectedBaselineSha256s = _SourceProtectedBaselineDigests(migrationManifest);
-	if (sourceProtectedBaselineSha256s.length === 0
-		|| sourceProtectedBaselineSha256s.some((digest) => !protectedBaselineDigestPattern.test(digest))
-		|| new Set(sourceProtectedBaselineSha256s).size !== sourceProtectedBaselineSha256s.length)
-	{
-		errors.push("database migration must bind a non-empty unique set of protected source baseline digests");
-	}
-	else if (!protectedBaselineDigestPattern.test(_FreshSourceProtectedBaselineDigest(migrationManifest) ?? "")
-		|| !sourceProtectedBaselineSha256s.includes(_FreshSourceProtectedBaselineDigest(migrationManifest)))
-	{
-		errors.push("database migration must identify its fresh protected source baseline inside the admitted set");
-	}
-	// Fresh installs hash the bootstrap SQL together with the database owner. The raw baseline digest
-	// therefore cannot prove the protected origin read from a live database.
-	else if (_FreshSourceProtectedBaselineDigest(migrationManifest) === migrationManifest.sourceTargetBaselineSha256)
-	{
-		errors.push("database migration fresh protected source digest must identify the bootstrap envelope, not the raw source baseline");
-	}
 }
 
 /**

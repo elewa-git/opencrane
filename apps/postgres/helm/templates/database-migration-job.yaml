@@ -69,8 +69,8 @@ spec:
                 exit 1
               fi
               if [ "$PRIVILEGED_EXTENSION_ENABLED" = "true" ]; then
-                # CNPG generated this credential only while the fenced deploy enables it. This
-                # setup creates pg_cron and grants its schema only to the application owner. The
+                # CNPG generated this credential only while this Job enables it. This setup creates
+                # pg_cron and grants its schema only to the application owner. The
                 # file input lets psql apply its quoted application_owner variable to the grant.
                 printf '%s\n' \
                   'CREATE EXTENSION IF NOT EXISTS pg_cron;' \
@@ -106,9 +106,9 @@ spec:
             - name: PGCONNECT_TIMEOUT
               value: "10"
             - name: EXPECTED_SQL_SHA256
-              value: {{ .Values.convergence.previousMigration.sqlSha256 | quote }}
+              value: {{ .Values.migration.sqlSha256 | quote }}
             - name: SOURCE_PROTECTED_BASELINE_SHA256
-              value: {{ .Values.convergence.previousMigration.selectedSourceProtectedBaselineSha256 | quote }}
+              value: {{ .Values.migration.sourceBaselineSha256 | quote }}
             - name: MIGRATION_SILO_ID
               value: {{ required "migration.siloId is required when migration.enabled=true" .Values.migration.siloId | quote }}
             - name: MIGRATION_OIDC_ISSUER

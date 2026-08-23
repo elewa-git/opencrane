@@ -18,14 +18,11 @@ cluster does not match the assumptions needed to do that job safely.
 | `qualified-release-image-policy.sh` | Keeps the channel proxy, memory gateway, and artifact service on one reviewed build while allowing the server to use its own reviewed build when needed. It verifies that all four images are available before Helm changes the cluster. |
 | `control-plane-image-policy.sh` | Ensures the browser application is the exact reviewed build. Public deployments must use an immutable image digest; only disposable local test clusters may use a locally imported tag. |
 | `cluster-tenant-crd-policy.sh` | Protects the cluster-wide tenant definition from conflicting ownership. It checks whether the definition is missing, owned by this release, safely shared, or conflicting before Helm proceeds. |
-| `database-convergence-classifier.sh` | Determines whether the live database is already current, still needs the approved migration, or is incompatible. It only reads evidence and stops when that evidence is missing or ambiguous. |
-| `database-convergence-policy.sh` | Turns the database assessment into one allowed next action. Unexpected states are refused so the deployer cannot guess how to handle an unfamiliar database. |
-| `database-migration-recovery.sh` | Restores service safely when a database migration fails before changing the schema. It records the running application revision, pauses writes, and restores only that known revision when the database still matches it. |
-| `database-migration-orchestrator.sh` | Coordinates an existing database upgrade from start to finish: optional recovery backup, paused writes, required PostgreSQL features, approved migration SQL, verification, and removal of temporary privileges. It selects no migration by itself; the reviewed release manifest supplies it. |
+| `database-migration-orchestrator.sh` | Runs a reviewed database migration Job directly. It publishes the SQL, prepares required PostgreSQL features, waits for the Job, and removes any temporary privileges. |
 | `database-pg-cron-preflight.sh` | Confirms that PostgreSQL can schedule the background work used by durable agent tasks before a migration depends on it. The check is read-only and runs against the database primary. |
 | `qualify-durable-execution.sh` | Proves on a live silo that newly queued agent work is picked up within the expected time. It opens a temporary connection to the database proxy, runs the application-owned timing check, and keeps the application password out of its output. |
 | `database-superuser-access.sh` | Confirms that temporary database-administrator access has been disabled and its generated credential removed before the application resumes. |
-| `database-release-finalization.sh` | Brings the application back after a successful database change. It restarts every database consumer, waits for readiness, and restores the paused application revision if the final rollout cannot become healthy. |
+| `database-release-finalization.sh` | Restarts database consumers when connection details change and waits for the normal application rollout. |
 | `k8s-teardown.sh` | Retires one standalone silo without touching shared cluster services or another tenant. It requires the exact cluster, tenant name, and expected release ownership, blocks protected tenants, and can inventory the planned deletion before removing anything. |
 | `bootstrap-prerequisites.sh` | Prepares a development cluster with the shared ingress, certificate, and PostgreSQL controllers OpenCrane expects. It validates the selected cluster and network address first and refuses to take over resources it does not own. A normal silo deployment never runs it automatically. |
 | `prerequisite-chart-lock.sh` | Pins the exact upstream controller packages accepted by the bootstrap. Checksums and expected cluster resources make downloaded dependencies reproducible and tamper-evident. |
@@ -53,50 +50,16 @@ Business logic does not belong here. Server-process infrastructure belongs in `l
 backend capabilities belong in `libs/backend/server`; independently owned third-party workloads
 belong in sibling `apps/_infra/<service>` projects.
 
-## Versioned database deployment
+## Database deployment
 
-Every invocation supplies `--release-version <current-root-version>` and an exact
-`--from-release-version` (`fresh`, the same current version, or the immediately preceding minor).
-The engine resolves both immutable release manifests before cluster mutation. Fresh installs skip
-migration. For an eligible migration transition with a live database, a read-only query classifies
-its protected bootstrap origin and complete history tuple before any SQL publication or server
-fence. `current` covers a current baseline created before the release ledger existed; `completed`
-covers an already-applied exact migration. Both reconcile privileges with migration disabled and
-continue the normal application Helm transition without fencing. Incompatible, unreadable, extra,
-or ambiguous evidence stops before fencing.
+Every invocation supplies a release version and the version it is upgrading from. When a reviewed
+`<from>-to-<to>` migration directory exists, the deployer publishes its SQL as an immutable ConfigMap,
+prepares `pg_cron` when that migration needs it, runs the bounded migration Job, and then continues
+the ordinary application rollout. A failed Job returns its failure directly. It does not create a
+backup, inspect the existing schema, pause application writes, or restore a previous release.
 
-The `0.9.2` to `0.9.3` group-hierarchy schema change is the one reviewed patch exception. It remains
-rejected unless the operator also supplies `--approve-0.9.2-to-0.9.3-database-transition`; that flag
-is invalid for every other release pair. Once admitted, the transition uses the same protected-origin
-classification, backup, server fence, digest-bound Job, convergence proof, and recovery path described
-below. Future patch transitions require their own reviewed resolver and explicit flag.
-
-Only `source` publishes the manifest-selected SQL, captures the exact current application Helm
-revision, and then fences the old server. It proves a CloudNativePG (CNPG) backup before running the
-bounded migration Job. If a post-fence stage fails, recovery first proves that Job is absent or
-terminal and reclassifies the database. It rolls back the application to the captured revision only
-when the database remains exactly `source`; an active or unknown Job, advanced database, unreadable
-evidence, or failed rollback leaves the fence active and the original failure status unchanged. A
-previous-version physical restore remains fail-closed: recovery configuration must render before the
-fence, and the restored database must pass the same classifier before SQL can be published.
-If a process stops after migration but before un-fencing, a rerun adopts only the exact persisted
-source/target fence and its positive previous replica count. Final application failure restores that
-fenced revision, never the now-incompatible running source application.
-
-An automatic source migration requires the PostgreSQL chart's plugin-backed `ScheduledBackup` by
-default. For a live Cluster, the engine proves that resource and its plugin configuration before
-fencing the application. It checks the resource again when it creates a dedicated on-demand
-`Backup`, then waits for completed controller evidence. An interactive deploy asks the operator
-whether to require that recovery backup; answering no skips only the backup preflight and creation.
-A non-interactive deploy must pass `--allow-unbacked-database-migration` to make the same explicit
-choice. The write fence, exact source classifier, transactional migration Job, convergence proof,
-and failure recovery remain active. The choice is CLI-only so it cannot persist as an environment
-default.
-It preserves an existing
-Cluster's original initdb ConfigMap and protected origin digest while publishing the current baseline
-separately for convergence proof. The Helm-owned `migrationFence` records source/target versions and
-the previous replica count. It stays active whenever failure evidence does not safely permit the
-exact pre-fence rollback, or when the final application upgrade fails.
+Operational backup and restore configuration remains available in the PostgreSQL chart, but it is not
+a condition for running a migration. Deferred migration hardening work is tracked in issue #699.
 
 ## OIDC upgrades
 

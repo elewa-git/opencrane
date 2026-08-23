@@ -33,8 +33,6 @@
 #                            --obot-postgres-credentials-secret NAME [--obot-postgres-owner OWNER]
 #                            --litellm-postgres-credentials-secret NAME [--litellm-postgres-owner OWNER]
 #                            --postgres-admin-credentials-secret NAME [--postgres-admin-name NAME]
-#                            [--allow-unbacked-database-migration]
-#                            [--approve-0.9.2-to-0.9.3-database-transition]
 #                            [--postgres-values FILE]
 #                            [--values FILE] [--set k=v ...] [--helm-arg ARG ...]
 #                            [--reuse-values | --reset-values]
@@ -113,14 +111,10 @@ fi
 source "$COGNEE_IMAGE_POLICY"
 source "$SCRIPT_DIR/initial-model-provider.sh"
 source "$SCRIPT_DIR/invitation-signing-secret.sh"
-source "$SCRIPT_DIR/database-convergence-classifier.sh"
 source "$SCRIPT_DIR/database-pg-cron-preflight.sh"
 source "$SCRIPT_DIR/database-superuser-access.sh"
-source "$SCRIPT_DIR/database-convergence-policy.sh"
-source "$SCRIPT_DIR/database-migration-recovery.sh"
 source "$SCRIPT_DIR/database-migration-orchestrator.sh"
 source "$SCRIPT_DIR/database-release-finalization.sh"
-source "$SCRIPT_DIR/database-transition-resolver.sh"
 CHART_DIR="${OPENCRANE_CHART_DIR:-}"
 if [[ -z "$CHART_DIR" ]]; then
   echo "[k8s-deploy] OPENCRANE_CHART_DIR is unset. Run a role wrapper deploy.sh — the fleet-platform chart's deploy.sh (now in WeOwnAI) or apps/_infra/deploy-k8s/deploy.sh — not k8s-deploy.sh directly." >&2
@@ -141,14 +135,9 @@ if [[ ! -f "$POSTGRES_CONNECTION_PUBLISHER" ]]; then
 fi
 POSTGRES_BASELINE_PUBLISHER="$SCRIPT_DIR/../../../postgres/scripts/publish-initdb-baseline-config-map.sh"
 POSTGRES_MIGRATION_PUBLISHER="$SCRIPT_DIR/../../../postgres/scripts/publish-database-migration-config-map.sh"
-DATABASE_TRANSITION_RESOLVER="$SCRIPT_DIR/../../../../scripts/release-versioning/database-transition.mjs"
-DATABASE_0_9_3_TRANSITION_RESOLVER="$SCRIPT_DIR/../../../../scripts/release-versioning/database-transition-0.9.3.mjs"
-DATABASE_SCHEMA_LINEAGE_RESOLVER="$SCRIPT_DIR/../../../../scripts/release-versioning/schema-lineage.mjs"
-POSTGRES_MIGRATION_BACKUP="$SCRIPT_DIR/../../../postgres/scripts/create-pre-migration-backup.sh"
 POSTGRES_BASELINE_FILE="$SCRIPT_DIR/../../../opencrane/prisma/bootstrap/target-baseline.sql"
 REPOSITORY_ROOT="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
 if [[ ! -f "$POSTGRES_BASELINE_PUBLISHER" || ! -f "$POSTGRES_MIGRATION_PUBLISHER" \
-  || ! -f "$DATABASE_TRANSITION_RESOLVER" || ! -f "$POSTGRES_MIGRATION_BACKUP" \
   || ! -s "$POSTGRES_BASELINE_FILE" ]]; then
   echo "[k8s-deploy] OpenCrane database baseline or migration deployment helpers are missing." >&2
   exit 1
@@ -225,8 +214,6 @@ POSTGRES_ADMIN_CREDENTIALS_SECRET="${OPENCRANE_POSTGRES_ADMIN_CREDENTIALS_SECRET
 POSTGRES_ADMIN_NAME="${OPENCRANE_POSTGRES_ADMIN_NAME:-opencrane_database_admin}"
 POSTGRES_MIGRATION_IMAGE="${OPENCRANE_POSTGRES_MIGRATION_IMAGE:-ghcr.io/cloudnative-pg/postgresql@sha256:b1deeed2aa998b2f381e39c5cadb9ec06127708c8bd62965743af19abf21628f}"
 DATABASE_MIGRATION_SILO_ID="${OPENCRANE_DATABASE_MIGRATION_SILO_ID:-}"
-ALLOW_UNBACKED_DATABASE_MIGRATION="0"
-APPROVE_0_9_3_DATABASE_TRANSITION="0"
 # --preflight runs a fail-FAST environment check BEFORE any cluster mutation and exits 0/1
 # without installing. It catches the failures that otherwise surface as a half-installed,
 # crash-looping cluster: no default StorageClass (every PVC pends), a CNI that silently
@@ -297,8 +284,6 @@ while [[ $# -gt 0 ]]; do
     --postgres-admin-name) POSTGRES_ADMIN_NAME="$2"; shift 2 ;;
     --postgres-migration-image) POSTGRES_MIGRATION_IMAGE="$2"; shift 2 ;;
     --database-migration-silo-id) DATABASE_MIGRATION_SILO_ID="$2"; shift 2 ;;
-    --allow-unbacked-database-migration) ALLOW_UNBACKED_DATABASE_MIGRATION="1"; shift ;;
-    --approve-0.9.2-to-0.9.3-database-transition) APPROVE_0_9_3_DATABASE_TRANSITION="1"; shift ;;
     --postgres-values) POSTGRES_VALUES_FILE="$2"; shift 2 ;;
     --release-version) RELEASE_VERSION="$2"; shift 2 ;;
     --from-release-version) FROM_RELEASE_VERSION="$2"; shift 2 ;;
@@ -321,26 +306,15 @@ if [[ -z "$RELEASE_VERSION" || -z "$FROM_RELEASE_VERSION" ]]; then
   err "--release-version and --from-release-version are required. Use --from-release-version fresh only for an empty initdb install."
   exit 1
 fi
-DATABASE_TRANSITION_RESOLVER="$(select_database_transition_resolver \
-  "$DATABASE_TRANSITION_RESOLVER" \
-  "$DATABASE_0_9_3_TRANSITION_RESOLVER" \
-  "$RELEASE_VERSION" \
-  "$FROM_RELEASE_VERSION" \
-  "$APPROVE_0_9_3_DATABASE_TRANSITION")" || exit $?
-DATABASE_RELEASE_TRANSITION="$(node "$DATABASE_TRANSITION_RESOLVER" "$REPOSITORY_ROOT" "$RELEASE_VERSION" "$FROM_RELEASE_VERSION")"
-DATABASE_TRANSITION_KIND="$(jq -r '.kind' <<<"$DATABASE_RELEASE_TRANSITION")"
-resolve_database_backup_requirement
-DATABASE_TARGET_SCHEMA_VERSION="$(jq -r '.targetSchemaVersion' <<<"$DATABASE_RELEASE_TRANSITION")"
-DATABASE_TARGET_BASELINE_SHA256="$(jq -r '.targetBaselineSha256' <<<"$DATABASE_RELEASE_TRANSITION")"
-POSTGRES_OPERAND_IMAGE="$(jq -r '.operandImage // empty' <<<"$DATABASE_RELEASE_TRANSITION")"
-DATABASE_CONVERGENCE_MIGRATION="$(jq '.migration' <<<"$DATABASE_RELEASE_TRANSITION")"
-# A release that changes no schema still meets databases that reached this schema through a real
-# migration, and privilege reconciliation compares them against exactly that recorded transition.
-# Walk the release chain for the migration that produced this schema. The previous form re-resolved
-# the transition against this release's own previous version — another same-schema hop that always
-# returned null again — so every same-schema patch failed the convergence gate on a migrated silo.
-if [[ "$DATABASE_TRANSITION_KIND" == "current" && "$DATABASE_CONVERGENCE_MIGRATION" == "null" ]]; then
-  DATABASE_CONVERGENCE_MIGRATION="$(node "$DATABASE_SCHEMA_LINEAGE_RESOLVER" "$REPOSITORY_ROOT" "$RELEASE_VERSION")" || exit $?
+RELEASE_MANIFEST="$REPOSITORY_ROOT/releases/${RELEASE_VERSION}.json"
+if [[ ! -f "$RELEASE_MANIFEST" ]]; then
+  err "Release manifest '$RELEASE_MANIFEST' does not exist."
+  exit 1
+fi
+POSTGRES_OPERAND_IMAGE="$(jq -r '.database.operandImage // empty' "$RELEASE_MANIFEST")"
+if [[ -z "$POSTGRES_OPERAND_IMAGE" ]]; then
+  err "Release manifest '$RELEASE_MANIFEST' does not declare a PostgreSQL image."
+  exit 1
 fi
 kubectl cluster-info >/dev/null 2>&1 || { err "kubectl can't reach a cluster. Point your context at the target cluster first."; exit 1; }
 KUBERNETES_CONTEXT="$(kubectl config current-context 2>/dev/null || true)"
@@ -627,56 +601,51 @@ if [[ "$POSTGRES_CLUSTER_EXISTS" == "1" ]]; then
   POSTGRES_BOOTSTRAP_BASELINE_SHA256="$(jq -r '.bootstrap.targetBaseline.sha256 // empty' <<<"$existing_postgres_values")"
   POSTGRES_BOOTSTRAP_BASELINE_CONFIG_MAP="$(jq -r '.bootstrap.initdb.postInitApplicationSQLRefs.configMapRefs[0].name // empty' <<<"$existing_postgres_values")"
   POSTGRES_BOOTSTRAP_BASELINE_CONFIG_MAP_KEY="$(jq -r '.bootstrap.initdb.postInitApplicationSQLRefs.configMapRefs[0].key // empty' <<<"$existing_postgres_values")"
-  if [[ ! "$POSTGRES_BOOTSTRAP_BASELINE_SHA256" =~ ^[0-9a-f]{64}$ \
-    || -z "$POSTGRES_BOOTSTRAP_BASELINE_CONFIG_MAP" \
-    || "$POSTGRES_BOOTSTRAP_BASELINE_CONFIG_MAP_KEY" != "target-baseline.sql" ]]; then
-    err "Existing PostgreSQL release does not retain an exact immutable bootstrap identity; refusing to rewrite Cluster bootstrap provenance."
-    exit 1
-  fi
 fi
 
-if [[ "$DATABASE_TRANSITION_KIND" == "fresh" && "$POSTGRES_CLUSTER_EXISTS" == "1" ]]; then
-  err "--from-release-version fresh is invalid because PostgreSQL Cluster '$POSTGRES_RELEASE' already exists."
-  exit 1
-fi
-if [[ "$DATABASE_TRANSITION_KIND" != "fresh" && "$POSTGRES_CLUSTER_EXISTS" == "0" && -z "$POSTGRES_VALUES_FILE" ]]; then
-  err "A non-fresh database with no live Cluster requires --postgres-values selecting an explicit physical recovery source."
-  exit 1
-fi
-
-DATABASE_PREVIOUS_MIGRATION_AVAILABLE="false"
-DATABASE_PREVIOUS_MIGRATION_ID=""
-DATABASE_PREVIOUS_SCHEMA_VERSION=""
-DATABASE_PREVIOUS_TARGET_BASELINE_SHA256=""
-DATABASE_PREVIOUS_PROTECTED_BASELINE_SHA256S_JSON="[]"
-DATABASE_PREVIOUS_FRESH_PROTECTED_BASELINE_SHA256=""
-DATABASE_SOURCE_HISTORY_LINEAGES_JSON="[]"
-DATABASE_PREVIOUS_MIGRATION_SQL_SHA256=""
-DATABASE_SELECTED_PROTECTED_BASELINE_SHA256=""
+DATABASE_MIGRATION_ENABLED=false
+DATABASE_MIGRATION_ID=""
+DATABASE_MIGRATION_SQL_FILE=""
+DATABASE_MIGRATION_SQL_SHA256=""
+DATABASE_MIGRATION_SOURCE_BASELINE_SHA256=""
 DATABASE_PRIVILEGED_EXTENSION=""
-if [[ "$DATABASE_CONVERGENCE_MIGRATION" != "null" ]]; then
-  DATABASE_PREVIOUS_MIGRATION_AVAILABLE="true"
-  DATABASE_PREVIOUS_MIGRATION_ID="$(jq -r '.id' <<<"$DATABASE_CONVERGENCE_MIGRATION")"
-  DATABASE_PREVIOUS_SCHEMA_VERSION="$(jq -r '.fromSchemaVersion' <<<"$DATABASE_CONVERGENCE_MIGRATION")"
-  DATABASE_PREVIOUS_TARGET_BASELINE_SHA256="$(jq -r '.sourceTargetBaselineSha256' <<<"$DATABASE_CONVERGENCE_MIGRATION")"
-  DATABASE_PREVIOUS_PROTECTED_BASELINE_SHA256S_JSON="$(jq -c '.sourceProtectedBaselineSha256s' <<<"$DATABASE_CONVERGENCE_MIGRATION")"
-  DATABASE_PREVIOUS_FRESH_PROTECTED_BASELINE_SHA256="$(jq -r '.freshSourceProtectedBaselineSha256' <<<"$DATABASE_CONVERGENCE_MIGRATION")"
-  DATABASE_SOURCE_HISTORY_LINEAGES_JSON="$(jq -c '.sourceHistoryLineages' <<<"$DATABASE_CONVERGENCE_MIGRATION")"
-  DATABASE_PREVIOUS_MIGRATION_SQL_SHA256="$(jq -r '.sqlSha256' <<<"$DATABASE_CONVERGENCE_MIGRATION")"
-fi
-
 DATABASE_MIGRATION_CONFIG_MAP=""
-if [[ "$DATABASE_TRANSITION_KIND" == "migration" ]]; then
+DATABASE_MIGRATION_ROOT=""
+if [[ "$FROM_RELEASE_VERSION" == "fresh" && "$POSTGRES_CLUSTER_EXISTS" == "1" ]]; then
+  err "--from-release-version fresh is only valid when PostgreSQL has not been created."
+  exit 1
+fi
+if [[ "$FROM_RELEASE_VERSION" != "fresh" && ! -f "$REPOSITORY_ROOT/releases/${FROM_RELEASE_VERSION}.json" ]]; then
+  err "Source release manifest 'releases/${FROM_RELEASE_VERSION}.json' does not exist."
+  exit 1
+fi
+if [[ "$FROM_RELEASE_VERSION" != "fresh" ]]; then
+  DATABASE_SOURCE_SCHEMA_VERSION="$(jq -r '.database.schemaVersion // empty' "$REPOSITORY_ROOT/releases/${FROM_RELEASE_VERSION}.json")"
+  DATABASE_TARGET_SCHEMA_VERSION="$(jq -r '.database.schemaVersion // empty' "$RELEASE_MANIFEST")"
+  DATABASE_MIGRATION_ROOT="$REPOSITORY_ROOT/apps/opencrane/prisma/migrations/${DATABASE_SOURCE_SCHEMA_VERSION}-to-${DATABASE_TARGET_SCHEMA_VERSION}"
+fi
+if [[ -n "$DATABASE_MIGRATION_ROOT" && -f "$DATABASE_MIGRATION_ROOT/migration.sql" && -f "$DATABASE_MIGRATION_ROOT/manifest.json" ]]; then
+  DATABASE_MIGRATION_ENABLED=true
+  DATABASE_MIGRATION_ID="${DATABASE_SOURCE_SCHEMA_VERSION}-to-${DATABASE_TARGET_SCHEMA_VERSION}"
+  DATABASE_MIGRATION_SQL_FILE="$DATABASE_MIGRATION_ROOT/migration.sql"
+  DATABASE_MIGRATION_SQL_SHA256="$(jq -r '.sqlSha256 // empty' "$DATABASE_MIGRATION_ROOT/manifest.json")"
+  DATABASE_MIGRATION_SOURCE_BASELINE_SHA256="$(jq -r '.sourceTargetBaselineSha256 // empty' "$DATABASE_MIGRATION_ROOT/manifest.json")"
+  DATABASE_PRIVILEGED_EXTENSION="$(jq -r '.privilegedExtension // empty' "$DATABASE_MIGRATION_ROOT/manifest.json")"
   if [[ ! "$POSTGRES_MIGRATION_IMAGE" =~ ^[^[:space:]@]+@sha256:[0-9a-f]{64}$ ]]; then
-    err "Automatic database migration requires --postgres-migration-image with an exact sha256 OCI digest."
+    err "Database migration requires --postgres-migration-image with an exact sha256 OCI digest."
     exit 1
   fi
-  DATABASE_MIGRATION_SQL_FILE="$(jq -r '.migration.sqlFile' <<<"$DATABASE_RELEASE_TRANSITION")"
-  DATABASE_PRIVILEGED_EXTENSION="$(jq -r '.migration.privilegedExtension // empty' <<<"$DATABASE_RELEASE_TRANSITION")"
+  if [[ ! "$DATABASE_MIGRATION_SQL_SHA256" =~ ^[0-9a-f]{64}$ || ! "$DATABASE_MIGRATION_SOURCE_BASELINE_SHA256" =~ ^[0-9a-f]{64}$ ]]; then
+    err "Database migration manifest must provide SQL and source-baseline digests."
+    exit 1
+  fi
   if [[ -n "$DATABASE_PRIVILEGED_EXTENSION" && "$DATABASE_PRIVILEGED_EXTENSION" != "pg_cron" ]]; then
-    err "Database transition declared an unreviewed privileged extension."
+    err "Database migration manifest declares an unsupported privileged extension."
     exit 1
   fi
+elif [[ "$FROM_RELEASE_VERSION" != "fresh" && "$DATABASE_SOURCE_SCHEMA_VERSION" != "$DATABASE_TARGET_SCHEMA_VERSION" ]]; then
+  err "No reviewed database migration exists from schema '$DATABASE_SOURCE_SCHEMA_VERSION' to '$DATABASE_TARGET_SCHEMA_VERSION'."
+  exit 1
 fi
 
 _load_kubernetes_api_helm_args networkPolicy "PostgreSQL pooler"
@@ -697,9 +666,7 @@ _copy_cnpg_uri_secret() {
         | kubectl apply -f -
 }
 
-DATABASE_FENCE_PRIOR_REPLICAS=""
-DATABASE_FENCED_RELEASE_REVISION=""
-# Creates the standalone signing Secret before the migration fence renders the membership settings.
+# Creates the standalone signing Secret before the application chart renders the membership settings.
 if [[ "$MEMBERSHIP_MODE" == "standalone" ]]; then
   ensure_invitation_signing_secret "$NAMESPACE" "$INVITATION_SIGNING_SECRET"
 fi
@@ -1013,21 +980,12 @@ elif [[ "$RELEASE_PREEXISTED" == "1" ]]; then
   log "Existing release '$RELEASE' — using --reset-then-reuse-values so prior overrides are not silently dropped (pass --reset-values to start from chart defaults instead)."
   helm_args+=(--reset-then-reuse-values)
 fi
-if [[ -n "$DATABASE_FENCE_PRIOR_REPLICAS" ]]; then
-  capture_fenced_main_release_revision || exit $?
-  helm_args+=(
-    --set "clustertenantManager.replicas=$DATABASE_FENCE_PRIOR_REPLICAS"
-    --set migrationFence.active=false
-    --set "migrationFence.previousReplicas=$DATABASE_FENCE_PRIOR_REPLICAS"
-    --set-string "migrationFence.fromReleaseVersion=$FROM_RELEASE_VERSION"
-    --set-string "migrationFence.toReleaseVersion=$RELEASE_VERSION")
-fi
 # These must remain the final value-setting steps. Values files, --set variants, reuse modes, and
 # raw passthrough are assembled first so none can split the qualified OpenCrane build or replace the
 # verified Cognee identity.
 append_authoritative_qualified_release_image_helm_args
 append_authoritative_cognee_image_helm_args
-run_opencrane_finalization_stage helm "${helm_args[@]}" || exit $?
+helm "${helm_args[@]}" || exit $?
 # The database consumers load their connection Secrets at startup, and Helm does not roll pods
 # when only a Secret published outside the chart changed. Stamping the Secret checksum onto the
 # pod templates rolls the consumers exactly when the credentials changed, instead of restarting
@@ -1038,7 +996,7 @@ if [[ "$RELEASE_PREEXISTED" == "1" ]]; then
   DATABASE_CONNECTION_CHECKSUM="$(compute_database_connection_checksum "$NAMESPACE" \
     "$POSTGRES_APP_SECRET" "$OBOT_POSTGRES_APP_SECRET" "$LITELLM_POSTGRES_APP_SECRET" \
     "$POSTGRES_ADMIN_APP_SECRET")" || exit $?
-  run_opencrane_finalization_stage roll_database_consumers_for_finalization "$NAMESPACE" "$TIMEOUT" \
+  roll_database_consumers_for_finalization "$NAMESPACE" "$TIMEOUT" \
     "$DATABASE_CONNECTION_CHECKSUM" \
     "${RELEASE}-opencrane-server" "${RELEASE}-litellm" "${RELEASE}-mcp-gateway" || exit $?
 fi
@@ -1050,18 +1008,18 @@ fi
 # install has just one, so guard each wait on the deployment existing rather than waiting
 # unconditionally (which NotFound-errored on the absent component after the split).
 for _comp in fleet-manager clustertenant-manager; do
-  run_opencrane_finalization_stage wait_for_final_deployment_if_present "${RELEASE}-${_comp}" || exit $?
+  wait_for_final_deployment_if_present "${RELEASE}-${_comp}" || exit $?
 done
-run_opencrane_finalization_stage wait_for_final_deployment_if_present "${RELEASE}-opencrane-ui-spa" || exit $?
-run_opencrane_finalization_stage _verify_control_plane_spa_rollout || exit $?
-run_opencrane_finalization_stage wait_for_final_deployment_if_present "${RELEASE}-cognee" || exit $?
-run_opencrane_finalization_stage _verify_cognee_rollout || exit $?
-run_opencrane_finalization_stage wait_for_final_deployment_if_present "${RELEASE}-channel-proxy" || exit $?
-run_opencrane_finalization_stage wait_for_final_deployment_if_present "${RELEASE}-memory-gateway" || exit $?
-run_opencrane_finalization_stage wait_for_final_deployment_if_present "${RELEASE}-artifact-service" "$ARTIFACT_NAMESPACE" || exit $?
+wait_for_final_deployment_if_present "${RELEASE}-opencrane-ui-spa" || exit $?
+_verify_control_plane_spa_rollout || exit $?
+wait_for_final_deployment_if_present "${RELEASE}-cognee" || exit $?
+_verify_cognee_rollout || exit $?
+wait_for_final_deployment_if_present "${RELEASE}-channel-proxy" || exit $?
+wait_for_final_deployment_if_present "${RELEASE}-memory-gateway" || exit $?
+wait_for_final_deployment_if_present "${RELEASE}-artifact-service" "$ARTIFACT_NAMESPACE" || exit $?
 
-run_opencrane_finalization_stage _wait_for_release_certificate || exit $?
-run_opencrane_finalization_stage _post_deploy_verify || exit $?
+_wait_for_release_certificate || exit $?
+_post_deploy_verify || exit $?
 
 log "Done. OpenCrane is installed in namespace '$NAMESPACE'."
 _cp_hosts="$(_control_plane_hosts)"

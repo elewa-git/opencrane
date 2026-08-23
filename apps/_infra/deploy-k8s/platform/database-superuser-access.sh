@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# Proves that the privileged pg_cron migration left CNPG superuser access disabled before the server is unfenced.
+# Proves that the privileged pg_cron migration removed the temporary CNPG superuser credential.
 
 _database_superuser_access_error()
 {

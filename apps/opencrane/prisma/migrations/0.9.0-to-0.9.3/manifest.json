@@ -1,17 +1,9 @@
 {
   "fromSchemaVersion": "0.9.0",
   "toSchemaVersion": "0.9.3",
-  "sqlSha256": "eb429e29c15495608c5e3d50c6d7904ea6e015ea5fc6eff631a310bc6f2ae5fa",
+  "sqlSha256": "4124829cebdd23a50694ae10b7756f5529370aefe510c0cd087e01568362e61c",
   "owner": "apps/opencrane",
   "privilegedExtension": "pg_cron",
-  "rollback": "backup-restore-or-forward-repair",
-  "executionMode": "automatic",
   "sourceTargetBaselineSha256": "5e16b35aedce54bf6ff7bd79bca04f92f6b6aee6315dec5c4b4797604342ab5f",
-  "sourceProtectedBaselineSha256s": [
-    "bd2dfd915b66514d4c7ad95328adb4629567634a47f1a1e37aee69f23d9a98ee",
-    "12505f3c15114bd2a407d0d4d2ef2befc3c8ec87acaa9787503cfbe4eba0032c",
-    "25bfc5d31c4966ee697ae5aaa47edc855d25120d0829c241f213353f69e0358d"
-  ],
-  "freshSourceProtectedBaselineSha256": "bd2dfd915b66514d4c7ad95328adb4629567634a47f1a1e37aee69f23d9a98ee",
   "targetBaselineSha256": "abacee3698553f110f70a630da5115e3ad6d54ddc98a7416f75d12a1560b7420"
 }

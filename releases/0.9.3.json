@@ -5,7 +5,7 @@
   "adoptionBaseline": false,
   "manualTransition": {
     "approved": true,
-    "reason": "Jente approved the reviewed 0.9.3 patch transition that combines the silo-bound IAM cutover with the pinned Absurd 0.5.0 schema and pg_cron prerequisite through the fenced, backup-gated 0.9.2-to-0.9.3 migration path."
+    "reason": "Jente approved the reviewed 0.9.3 patch transition that combines the silo-bound IAM cutover with the pinned Absurd 0.5.0 schema and pg_cron prerequisite."
   },
   "database": {
     "schemaVersion": "0.9.3",

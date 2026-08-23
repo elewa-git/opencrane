@@ -256,8 +256,8 @@ Repository train `0.8.0` also replaces the earlier fresh-database-only decision 
 version-to-version authority. Every Nx application records the last root train that adapted its
 production contract, directly or through its dependency graph; immutable release manifests map the
 compatible app, chart, and database revisions. Adjacent minor trains carry reviewed Helm transitions
-and a bounded, backup-gated database migration Job. Patch, skipped-minor, and major transitions stay
-manual. The `0.7.0` to `0.8.0` SQL path migrates empty legacy persona state automatically and fails
+and a bounded database migration Job. The deferred migration hardening work is tracked in #699.
+The `0.7.0` to `0.8.0` SQL path migrates empty legacy persona state automatically and fails
 closed with `OC708` when semantic mapping of populated persona data requires an operator-reviewed
 manual plan.
 

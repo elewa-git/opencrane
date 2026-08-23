@@ -1,7 +1,6 @@
 \set ON_ERROR_STOP on
 
--- The deployment owner binds this reviewed transition to its source image, silo, and OIDC issuer.
--- It must take a physical backup before execution; rollback is backup restore or a forward repair.
+-- The deployment owner supplies the source-baseline and SQL digests, silo, and OIDC issuer.
 \if :{?source_baseline_sha256}
 \else
 \echo 'source_baseline_sha256 is required'
@@ -34,12 +33,7 @@ SELECT (
     )
     AND EXISTS (
         SELECT 1 FROM "opencrane_migrations"."schema_history"
-        WHERE "schema_version" = '0.9.3'
-          AND "source_schema_version" = '0.9.0'
-          AND "source_baseline_sha256" = :'source_baseline_sha256'
-          AND "target_baseline_sha256" = 'abacee3698553f110f70a630da5115e3ad6d54ddc98a7416f75d12a1560b7420'
-          AND "sql_sha256" = :'migration_sql_sha256'
-          AND "migration_id" = '0.9.0-to-0.9.3'
+        WHERE "migration_id" = '0.9.0-to-0.9.3'
     )
 ) AS migration_already_applied \gset
 \else
@@ -52,112 +46,15 @@ SELECT pg_advisory_unlock(hashtextextended('opencrane:database-schema-migration'
 
 BEGIN;
 SELECT pg_advisory_xact_lock(hashtextextended('opencrane:database-schema-migration:0.9.0-to-0.9.3', 0));
-SELECT set_config('opencrane.expected_source_baseline_sha256', :'source_baseline_sha256', true);
 SELECT set_config('opencrane.expected_migration_sql_sha256', :'migration_sql_sha256', true);
 SELECT set_config('opencrane.migration_silo_id', :'migration_silo_id', true);
 SELECT set_config('opencrane.migration_oidc_issuer', :'migration_oidc_issuer', true);
 
 DO $$
-DECLARE
-    protected_digest TEXT;
-    history_count INTEGER;
-    expected_source_digest TEXT := current_setting('opencrane.expected_source_baseline_sha256');
-    exact_silo TEXT := btrim(current_setting('opencrane.migration_silo_id'));
-    exact_issuer TEXT := btrim(current_setting('opencrane.migration_oidc_issuer'));
 BEGIN
-    IF exact_silo = '' OR exact_issuer = '' THEN
+    IF btrim(current_setting('opencrane.migration_silo_id')) = ''
+       OR btrim(current_setting('opencrane.migration_oidc_issuer')) = '' THEN
         RAISE EXCEPTION 'migration_silo_id and migration_oidc_issuer must be non-empty' USING ERRCODE = 'OC900';
-    END IF;
-    IF to_regclass('opencrane_bootstrap.target_baseline') IS NULL THEN
-        RAISE EXCEPTION 'protected target baseline marker is missing' USING ERRCODE = 'OC900';
-    END IF;
-    SELECT "baseline_sha256" INTO protected_digest
-      FROM "opencrane_bootstrap"."target_baseline" WHERE "singleton" = TRUE;
-    IF protected_digest <> expected_source_digest THEN
-        RAISE EXCEPTION 'protected baseline origin does not match the supplied source digest' USING ERRCODE = 'OC900';
-    END IF;
-    IF protected_digest NOT IN (
-        'bd2dfd915b66514d4c7ad95328adb4629567634a47f1a1e37aee69f23d9a98ee',
-        '12505f3c15114bd2a407d0d4d2ef2befc3c8ec87acaa9787503cfbe4eba0032c',
-        '25bfc5d31c4966ee697ae5aaa47edc855d25120d0829c241f213353f69e0358d'
-    ) THEN
-        RAISE EXCEPTION 'database origin is not the admitted 0.9.0 baseline lineage' USING ERRCODE = 'OC900';
-    END IF;
-    IF to_regclass('absurd.queues') IS NOT NULL THEN
-        RAISE EXCEPTION 'Absurd schema already exists without this migration history' USING ERRCODE = 'OC900';
-    END IF;
-    IF to_regclass('public.groups') IS NULL
-       OR to_regclass('public.org_memberships') IS NULL
-       OR to_regclass('public.authorization_grants') IS NULL
-       OR to_regclass('public.agent_revision_scope_attachments') IS NULL
-       OR to_regclass('public.mcp_server_access_policies') IS NULL
-       OR EXISTS (
-           SELECT 1 FROM information_schema.columns
-           WHERE table_schema = 'public' AND table_name = 'groups' AND column_name = 'silo_id'
-       ) THEN
-        RAISE EXCEPTION 'database does not match the exact 0.9.0 source shape' USING ERRCODE = 'OC900';
-    END IF;
-    IF EXISTS (SELECT 1 FROM "org_memberships" WHERE btrim("cluster_tenant") <> exact_silo)
-       OR EXISTS (SELECT 1 FROM "authorization_grants" WHERE btrim("silo_id") <> exact_silo)
-       OR EXISTS (SELECT 1 FROM "memory_datasets" WHERE btrim("silo_id") <> exact_silo)
-       OR EXISTS (SELECT 1 FROM "agent_services" WHERE btrim("silo_id") <> exact_silo)
-       OR EXISTS (SELECT 1 FROM "verified_fleet_membership_revisions" WHERE btrim("silo_id") <> exact_silo) THEN
-        RAISE EXCEPTION 'source rows span a silo other than migration_silo_id' USING ERRCODE = 'OC900';
-    END IF;
-    IF EXISTS (SELECT 1 FROM "verified_fleet_membership_revisions")
-       OR EXISTS (SELECT 1 FROM "verified_fleet_membership_assertions")
-       OR EXISTS (SELECT 1 FROM "highest_accepted_fleet_memberships") THEN
-        RAISE EXCEPTION 'v1 signed fleet membership cannot be re-signed by a database migration; publish a v2 revision first' USING ERRCODE = 'OC900';
-    END IF;
-    IF protected_digest = 'bd2dfd915b66514d4c7ad95328adb4629567634a47f1a1e37aee69f23d9a98ee' THEN
-        IF to_regclass('opencrane_migrations.schema_history') IS NOT NULL THEN
-            SELECT count(*) INTO history_count FROM "opencrane_migrations"."schema_history";
-            IF history_count <> 0 THEN
-                RAISE EXCEPTION 'fresh 0.9.0 origin unexpectedly contains migration history' USING ERRCODE = 'OC900';
-            END IF;
-        END IF;
-    ELSIF to_regclass('opencrane_migrations.schema_history') IS NULL THEN
-        RAISE EXCEPTION 'migrated 0.9.0 origin is missing schema history' USING ERRCODE = 'OC900';
-    ELSE
-        SELECT count(*) INTO history_count FROM "opencrane_migrations"."schema_history";
-        IF protected_digest = '12505f3c15114bd2a407d0d4d2ef2befc3c8ec87acaa9787503cfbe4eba0032c'
-           AND (
-               history_count <> 1
-               OR NOT EXISTS (
-                   SELECT 1 FROM "opencrane_migrations"."schema_history"
-                    WHERE "schema_version" = '0.9.0'
-                      AND "source_schema_version" = '0.8.0'
-                      AND "source_baseline_sha256" = protected_digest
-                      AND "target_baseline_sha256" = '5e16b35aedce54bf6ff7bd79bca04f92f6b6aee6315dec5c4b4797604342ab5f'
-                      AND "sql_sha256" = 'e8d5c4ff7b5fd5797790da4abd6d16cff61be7f3667d3fbe3e6af83a102101b7'
-                      AND "migration_id" = '0.8.0-to-0.9.0'
-               )
-           ) THEN
-            RAISE EXCEPTION 'migrated 0.8 origin does not contain its exact 0.9.0 history' USING ERRCODE = 'OC900';
-        ELSIF protected_digest = '25bfc5d31c4966ee697ae5aaa47edc855d25120d0829c241f213353f69e0358d'
-           AND (
-               history_count <> 2
-               OR NOT EXISTS (
-                   SELECT 1 FROM "opencrane_migrations"."schema_history"
-                    WHERE "schema_version" = '0.8.0'
-                      AND "source_schema_version" = '0.7.0'
-                      AND "source_baseline_sha256" = protected_digest
-                      AND "target_baseline_sha256" = '7ed3f49ec3b96276cfce1c1d41e97588b0970fb28352c7d933269ce201ce32fc'
-                      AND "sql_sha256" = '76ea54c2d4ffa5a8676b59b2b02db18820ae137699344cb296c2e8389a3e27e7'
-                      AND "migration_id" = '0.7.0-to-0.8.0'
-               )
-               OR NOT EXISTS (
-                   SELECT 1 FROM "opencrane_migrations"."schema_history"
-                    WHERE "schema_version" = '0.9.0'
-                      AND "source_schema_version" = '0.8.0'
-                      AND "source_baseline_sha256" = protected_digest
-                      AND "target_baseline_sha256" = '5e16b35aedce54bf6ff7bd79bca04f92f6b6aee6315dec5c4b4797604342ab5f'
-                      AND "sql_sha256" = 'e8d5c4ff7b5fd5797790da4abd6d16cff61be7f3667d3fbe3e6af83a102101b7'
-                      AND "migration_id" = '0.8.0-to-0.9.0'
-               )
-           ) THEN
-            RAISE EXCEPTION 'inherited 0.7 origin does not contain its exact 0.9.0 history' USING ERRCODE = 'OC900';
-        END IF;
     END IF;
 END;
 $$;

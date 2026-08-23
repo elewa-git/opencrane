@@ -15,11 +15,9 @@ follows [Keep a Changelog](https://keepachangelog.com/); the project uses
 
 ### Fixed
 
-- **Operators can now choose whether a real database migration requires a recovery backup.**
-  Interactive deploys ask before contacting the cluster and default to requiring recovery evidence;
-  non-interactive deploys require the explicit CLI opt-out. Skipping backup leaves source
-  classification, fencing, digest-bound migration, convergence, privilege cleanup, and failure
-  recovery mandatory.
+- **Database migrations now run directly from their reviewed SQL.** They no longer require a backup,
+  source-schema check, application write pause, or automatic recovery. Deferred migration hardening
+  is tracked in #699.
 
 - **Invited users can now complete standalone registration after the first Owner has claimed the
   silo.** A verified invited identity keeps its OIDC session long enough to accept its signed link,
@@ -45,9 +43,9 @@ follows [Keep a Changelog](https://keepachangelog.com/); the project uses
   existing transaction.
 
 - **Operators can now upgrade an existing database to the durable-task foundation without leaving a
-  superuser credential available.** The fenced, backup-gated migration proves the primary can run
-  `pg_cron`, uses the generated credential solely to install that reviewed prerequisite, then proves
-  both CNPG superuser access and its Secret are gone before application work resumes.
+  superuser credential available.** The direct migration Job prepares `pg_cron`, uses the generated
+  credential solely to install that reviewed prerequisite, and then removes the credential before the
+  ordinary application rollout continues.
 
 - **Users and operators can now see the availability of every user-visible service through
   unauthenticated `GET /healthz`.** The fixed, public-safe report classifies the API, database,
@@ -56,14 +54,11 @@ follows [Keep a Changelog](https://keepachangelog.com/); the project uses
   but remains `ready: true` with HTTP 200 while the database is available; database loss or an
   unreadable report fails closed as `ready: false` with HTTP 503.
 
-- **Operators can now identify an exact compatible release composition and perform fail-closed
-  adjacent-minor database upgrades.** Immutable release manifests bind the repository train to its
-  application, Helm chart, and database revisions; the deploy path accepts only the declared
-  adjacent-minor transition, fences the existing server against writes, completes a CloudNativePG
-  backup, verifies the migration bytes, and runs the bounded transactional migration before the new
-  server returns. The `0.7.0` to `0.8.0` path upgrades an exact source with empty legacy persona
-  state, but stops with `OC708` before mutation when populated persona data requires a reviewed
-  manual mapping; patch, skipped-minor, and major transitions remain manual.
+- **Operators can now identify a release composition and run a reviewed database migration Job.**
+  Immutable release manifests bind the repository train to its application, Helm chart, and database
+  image; the deploy path publishes the verified migration bytes and runs the bounded transactional
+  Job before the ordinary application rollout. The `0.7.0` to `0.8.0` SQL path still stops with
+  `OC708` when populated persona data requires a reviewed manual mapping.
 
 - **Operators can now retire one standalone silo without deleting an active tenant or foreign
   resources.** The app-owned teardown requires an exact cluster context, release composition,

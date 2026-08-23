@@ -13,10 +13,8 @@ for contract in \
   pooler-deploy-contract.sh \
   database-migration-deploy-contract.sh \
   database-superuser-access-contract.sh \
-  database-convergence-classifier-contract.sh \
   database-pg-cron-preflight-contract.sh \
   durable-execution-qualification-contract.sh \
-  database-convergence-policy-contract.sh \
   server-key-permissions-contract.sh \
   server-runtime-cleanup-rbac-contract.sh \
   server-network-policy-contract.sh \
