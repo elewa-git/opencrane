@@ -944,7 +944,11 @@ if [[ -n "$FIRST_USER_EMAIL" ]]; then
 fi
 append_initial_model_provider_helm_args "$INITIAL_MODEL_PROVIDER"
 [[ -n "$VALUES_FILE" ]] && helm_args+=(--values "$VALUES_FILE")
-helm_args+=("${EXTRA_SET[@]}")
+# macOS Bash 3.2 aborts under `set -u` when it expands an empty array here.
+# Check its length before expansion so a deploy without --set still reaches Helm.
+if [[ ${#EXTRA_SET[@]} -gt 0 ]]; then
+  helm_args+=("${EXTRA_SET[@]}")
+fi
 # Raw helm-arg passthrough for sanctioned one-time fixes (e.g. --take-ownership).
 [[ ${#EXTRA_HELM_ARGS[@]} -gt 0 ]] && helm_args+=("${EXTRA_HELM_ARGS[@]}")
 CRDS_INSTALL="$(resolve_cluster_tenant_crd_install \
