@@ -78,10 +78,12 @@ EXPECTED_VERSION="$(jq -r '.repositoryVersion' "$REPOSITORY_ROOT/releases/0.9.3.
 
 SILO_STATUS="$(helm status "$RELEASE" --namespace "$NAMESPACE" --output json)"
 POSTGRES_STATUS="$(helm status "$POSTGRES_RELEASE" --namespace "$NAMESPACE" --output json)"
+SILO_METADATA="$(helm get metadata "$RELEASE" --namespace "$NAMESPACE" --output json)"
+POSTGRES_METADATA="$(helm get metadata "$POSTGRES_RELEASE" --namespace "$NAMESPACE" --output json)"
 [[ "$(jq -r '.info.status' <<<"$SILO_STATUS")" == "deployed" ]] || { _error "silo release is not deployed"; exit 1; }
-[[ "$(jq -r '.chart' <<<"$SILO_STATUS")" == "opencrane-silo-${EXPECTED_VERSION}" ]] || { _error "silo release is not the qualification version"; exit 1; }
+[[ "$(jq -r '.chart' <<<"$SILO_METADATA")" == "opencrane-silo" && "$(jq -r '.version' <<<"$SILO_METADATA")" == "$EXPECTED_VERSION" ]] || { _error "silo release is not the qualification version"; exit 1; }
 [[ "$(jq -r '.info.status' <<<"$POSTGRES_STATUS")" == "deployed" ]] || { _error "PostgreSQL release is not deployed"; exit 1; }
-[[ "$(jq -r '.chart' <<<"$POSTGRES_STATUS")" == "postgres-${EXPECTED_VERSION}" ]] || { _error "PostgreSQL release is not the qualification version"; exit 1; }
+[[ "$(jq -r '.chart' <<<"$POSTGRES_METADATA")" == "postgres" && "$(jq -r '.version' <<<"$POSTGRES_METADATA")" == "$EXPECTED_VERSION" ]] || { _error "PostgreSQL release is not the qualification version"; exit 1; }
 
 [[ "$(kubectl get service "$POOLER_SERVICE" --namespace "$NAMESPACE" -o jsonpath='{.metadata.labels.cnpg\.io/cluster}')" == "$POSTGRES_RELEASE" ]] || { _error "pooler service does not belong to the named silo"; exit 1; }
 kubectl get secret "$APPLICATION_SECRET" --namespace "$NAMESPACE" -o jsonpath='{.data.uri}' | grep -q . || { _error "application database credential is unavailable"; exit 1; }

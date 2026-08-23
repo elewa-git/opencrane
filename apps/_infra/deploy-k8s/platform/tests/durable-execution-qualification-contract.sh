@@ -11,11 +11,19 @@ trap 'rm -rf -- "$TEST_DIR"' EXIT
 
 cat >"$MOCK_BIN/helm" <<'EOF'
 #!/usr/bin/env bash
-if [[ "$2" == "opencrane-testlynn-postgres" ]]; then
-  printf '%s\n' '{"chart":"postgres-0.9.3","info":{"status":"deployed"}}'
-else
-  printf '%s\n' '{"chart":"opencrane-silo-0.9.3","info":{"status":"deployed"}}'
+if [[ "$1" == "status" ]]; then
+  printf '%s\n' '{"info":{"status":"deployed"}}'
+  exit 0
 fi
+if [[ "$1" == "get" && "$2" == "metadata" && "$3" == "opencrane-testlynn-postgres" ]]; then
+  printf '%s\n' '{"chart":"postgres","version":"0.9.3"}'
+  exit 0
+fi
+if [[ "$1" == "get" && "$2" == "metadata" && "$3" == "opencrane-testlynn" ]]; then
+  printf '{"chart":"opencrane-silo","version":"%s"}\n' "${MOCK_SILO_VERSION:-0.9.3}"
+  exit 0
+fi
+exit 1
 EOF
 
 cat >"$MOCK_BIN/kubectl" <<'EOF'
@@ -57,5 +65,10 @@ if grep -Fq 'super-secret' "$CAPTURE"; then
   printf 'durable execution qualifier exposed the application credential\n' >&2
   exit 1
 fi
+if MOCK_SILO_VERSION=0.9.2 PATH="$MOCK_BIN:$PATH" bash "$QUALIFIER" --context gke_opencrane-dev --cluster-tenant testlynn --local-port 65431 >"$TEST_DIR/version-mismatch" 2>&1; then
+  printf 'durable execution qualifier accepted an out-of-date silo release\n' >&2
+  exit 1
+fi
+grep -Fq 'silo release is not the qualification version' "$TEST_DIR/version-mismatch"
 bash -n "$QUALIFIER"
 echo "durable execution qualification contract: PASS"
