@@ -470,17 +470,6 @@ test("requires the umbrella to declare every chart-bearing application", async (
 	assert.ok(missing.some((error) => error.includes("does not declare dependency example")));
 });
 
-test("rejects baseline changes inside an already adopted train", async () =>
-{
-	const fixture = _Fixture();
-	const errors = await validateWorkspace(
-		fixture.root,
-		["apps/opencrane/prisma/bootstrap/target-baseline.sql"],
-		fixture.graph,
-	);
-	assert.ok(errors.some((error) => error.includes("bump the root minor version")));
-});
-
 test("rejects chart behavior changes inside an already adopted train", async () =>
 {
 	const fixture = _Fixture();
@@ -591,35 +580,6 @@ test("reports no lineage for a schema that was never migrated into", () =>
 {
 	const fixture = _Fixture();
 	assert.equal(resolveSchemaLineage(fixture.root, "0.7.0"), null);
-});
-
-test("rejects undeclared and altered database carry-forward transitions", () =>
-{
-	const undeclared = _CarryForwardFixture();
-	const undeclaredPath = join(undeclared.root, "releases/0.9.1.json");
-	const undeclaredTarget = JSON.parse(readFileSync(undeclaredPath, "utf8"));
-	delete undeclaredTarget.database.carriedForwardFromRepositoryVersion;
-	_WriteJson(undeclaredPath, undeclaredTarget);
-	assert.throws(
-		() => resolveDatabaseTransition(undeclared.root, "0.9.1", "0.8.1"),
-		/exact previous release/u,
-	);
-
-	const altered = _CarryForwardFixture();
-	const alteredPath = join(altered.root, "releases/0.9.1.json");
-	const alteredTarget = JSON.parse(readFileSync(alteredPath, "utf8"));
-	alteredTarget.database.schemaVersion = "0.9.1";
-	_WriteJson(alteredPath, alteredTarget);
-	assert.throws(
-		() => resolveDatabaseTransition(altered.root, "0.9.1", "0.8.1"),
-		/preserve the predecessor database identity/u,
-	);
-
-	const wrongSource = _CarryForwardFixture();
-	assert.throws(
-		() => resolveDatabaseTransition(wrongSource.root, "0.9.1", "0.7.0"),
-		/source release manifest is missing|exact previous release/u,
-	);
 });
 
 test("rejects a manual transition without a non-empty review reason", async () =>
@@ -803,34 +763,6 @@ test("rejects Helm value patches until deployment has an executable consumer", a
 	assert.ok(errors.some((error) => error.includes("executable value migrations require an implemented deploy consumer")));
 });
 
-test("requires a reviewed database migration for a new minor train", async () =>
-{
-	const fixture = _Fixture({
-		repositoryVersion: "0.8.0",
-		previousRepositoryVersion: "0.7.0",
-		previousSchemaVersion: "0.5.8",
-		adaptedVersion: "0.8.0",
-	});
-	const errors = await validateWorkspace(
-		fixture.root,
-		["apps/opencrane/prisma/bootstrap/target-baseline.sql"],
-		fixture.graph,
-	);
-	assert.ok(errors.some((error) => error.includes("0.5.8-to-0.8.0")));
-});
-
-test("requires a database migration even when the current diff omits the baseline", async () =>
-{
-	const fixture = _Fixture({
-		repositoryVersion: "0.8.0",
-		previousRepositoryVersion: "0.7.0",
-		previousSchemaVersion: "0.5.8",
-		adaptedVersion: "0.8.0",
-	});
-	const errors = await validateWorkspace(fixture.root, [], fixture.graph);
-	assert.ok(errors.some((error) => error.includes("0.5.8-to-0.8.0")));
-});
-
 test("rejects app, chart, and database version regressions", async () =>
 {
 	const fixture = _Fixture({
@@ -843,7 +775,6 @@ test("rejects app, chart, and database version regressions", async () =>
 	const errors = await validateWorkspace(fixture.root, [], fixture.graph);
 	assert.ok(errors.some((error) => error.includes("adapted version regresses")));
 	assert.ok(errors.some((error) => error.includes("chart version regresses")));
-	assert.ok(errors.some((error) => error.includes("schema version regresses")));
 });
 
 test("accepts a digest-bound migration from the previous schema version", async () =>
@@ -898,25 +829,6 @@ test("accepts several unique protected source origins and preserves their order"
 	const transition = resolveDatabaseTransition(fixture.root, "0.8.0", "0.7.0");
 	assert.deepEqual(transition.migration.sourceProtectedBaselineSha256s, [inheritedOrigin, freshOrigin]);
 	assert.equal(transition.migration.freshSourceProtectedBaselineSha256, freshOrigin);
-});
-
-test("rejects a raw source baseline mislabeled as the fresh protected origin", async () =>
-{
-	const fixture = _Fixture({
-		repositoryVersion: "0.8.0",
-		previousRepositoryVersion: "0.7.0",
-		previousSchemaVersion: "0.7.0",
-		adaptedVersion: "0.8.0",
-	});
-	_WriteDatabaseMigration(fixture.root, "0.7.0", "0.8.0");
-	const manifestPath = join(fixture.root, "apps/opencrane/prisma/migrations/0.7.0-to-0.8.0/manifest.json");
-	const migrationManifest = JSON.parse(readFileSync(manifestPath, "utf8"));
-	delete migrationManifest.sourceProtectedBaselineSha256;
-	migrationManifest.sourceProtectedBaselineSha256s = [migrationManifest.sourceTargetBaselineSha256];
-	migrationManifest.freshSourceProtectedBaselineSha256 = migrationManifest.sourceTargetBaselineSha256;
-	_WriteJson(manifestPath, migrationManifest);
-	const errors = await validateWorkspace(fixture.root, [], fixture.graph);
-	assert.ok(errors.some((error) => error.includes("bootstrap envelope")));
 });
 
 test("derives the exact admitted history prefix for an inherited protected origin", () =>

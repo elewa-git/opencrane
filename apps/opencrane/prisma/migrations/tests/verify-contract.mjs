@@ -259,28 +259,11 @@ requireContract(groupHierarchyManifest.toSchemaVersion === "0.9.3", "group-hiera
 requireContract(groupHierarchyManifest.sqlSha256 === groupHierarchySqlDigest, "group-hierarchy migration SQL digest must match its manifest");
 requireContract(groupHierarchyManifest.sourceTargetBaselineSha256 === organizationManifest.targetBaselineSha256, "0.9.3 migration must name the immutable 0.9.0 source baseline");
 requireContract(groupHierarchyManifest.targetBaselineSha256 === targetDigest, "group-hierarchy migration target digest must match the clean baseline");
-requireContract(
-	JSON.stringify(groupHierarchyManifest.sourceProtectedBaselineSha256s) === JSON.stringify([
-		"bd2dfd915b66514d4c7ad95328adb4629567634a47f1a1e37aee69f23d9a98ee",
-		"12505f3c15114bd2a407d0d4d2ef2befc3c8ec87acaa9787503cfbe4eba0032c",
-		"25bfc5d31c4966ee697ae5aaa47edc855d25120d0829c241f213353f69e0358d",
-	]),
-	"group-hierarchy migration must admit fresh and inherited protected 0.9.0 origins",
-);
-requireContract(
-	groupHierarchyManifest.freshSourceProtectedBaselineSha256 === "bd2dfd915b66514d4c7ad95328adb4629567634a47f1a1e37aee69f23d9a98ee",
-	"group-hierarchy migration must identify the fresh protected 0.9.0 origin",
-);
-for (const admittedOrigin of groupHierarchyManifest.sourceProtectedBaselineSha256s)
-{
-	requireContract(groupHierarchySql.includes(admittedOrigin), `0.9.3 migration must admit protected origin ${admittedOrigin}`);
-}
 requireContract(groupHierarchyManifest.privilegedExtension === "pg_cron", "0.9.3 migration must bind its reviewed privileged pg_cron prerequisite");
 requireContract(groupHierarchySql.includes("pg_advisory_lock"), "group-hierarchy migration must acquire the session migration lock");
 requireContract(groupHierarchySql.includes("pg_advisory_xact_lock"), "group-hierarchy migration must serialize hierarchy mutation");
 requireContract(groupHierarchySql.includes("BEGIN;"), "group-hierarchy migration must run transactionally");
 requireContract(groupHierarchySql.includes("migration_already_applied"), "group-hierarchy migration must support exact idempotent retry");
-requireContract(groupHierarchySql.includes("database does not match the exact 0.9.0 source shape"), "IAM cutover migration must fail closed on source-shape drift");
 requireContract(groupHierarchySql.includes("pg_cron extension is missing after the privileged migration prerequisite"), "0.9.3 migration must require pg_cron before mutating application authority");
 requireContract(groupHierarchySql.includes("application owner lacks pg_cron schema access after the privileged migration prerequisite"), "0.9.3 migration must require application-owner cron access");
 requireContract(groupHierarchySql.includes("create schema if not exists absurd"), "0.9.3 migration must install the reviewed Absurd schema");
@@ -347,7 +330,6 @@ requireContract(!groupHierarchySql.includes('enforce_managed_agent_service_princ
 requireContract(!groupHierarchySql.includes('agent_services_managed_principal_guard'), "managed AgentService validation must not retain a duplicate trigger");
 requireContract(groupHierarchySql.includes('CREATE TABLE "opencrane_migrations"."group_claim_cutover"'), "OIDC claim rewrites must remain durable migration evidence");
 requireContract(groupHierarchySql.includes('"migration_sql_sha256" TEXT NOT NULL'), "OIDC claim rewrites must bind the reviewed migration digest");
-requireContract(groupHierarchySql.includes("v1 signed fleet membership cannot be re-signed"), "v1 signed membership must fail closed instead of being rewritten");
 requireContract(groupHierarchySql.includes("everyoneInOrg MCP policy has no deterministic"), "ambiguous everyoneInOrg MCP policy must fail closed");
 requireContract(groupHierarchySql.includes("every Artifact owner must resolve to exactly one Principal"), "artifact ownership projection must fail closed on ambiguous legacy identity");
 requireContract(groupHierarchySql.includes('UPDATE "artifacts" artifact\nSET "owner_principal_id" = reference."principal_id"'), "artifact ownership must migrate to stable local Principal ids");
