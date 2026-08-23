@@ -9,6 +9,13 @@ MOCK_BIN="$TEST_DIR/bin"
 mkdir -p "$MOCK_BIN"
 trap 'rm -rf -- "$TEST_DIR"' EXIT
 
+grep -Fq "jsonpath={.data.lease-private\\.pem}" "$CORE"
+grep -Fq "jsonpath={.data.receipt-private\\.pem}" "$CORE"
+if grep -Fq "jsonpath={.data.lease-private\\\\.pem}" "$CORE" || grep -Fq "jsonpath={.data.receipt-private\\\\.pem}" "$CORE"; then
+  echo 'interrupted artifact key JSONPath is over-escaped' >&2
+  exit 1
+fi
+
 cat >"$MOCK_BIN/command-mock" <<'MOCK'
 #!/usr/bin/env bash
 set -euo pipefail
