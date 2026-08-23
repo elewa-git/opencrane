@@ -261,14 +261,16 @@ assert_cluster_rbac_owner_if_present()
 {
   local resource_kind="$1"
   local resource_name="$2"
-  local instance
   local managed_by
+  local release_name
+  local release_namespace
   if ! resource_exists "$resource_kind" "$resource_name"; then
     return
   fi
-  instance="$(kubectl --context "$CONTEXT" get "$resource_kind/$resource_name" -o jsonpath='{.metadata.labels.app\.kubernetes\.io/instance}')"
   managed_by="$(kubectl --context "$CONTEXT" get "$resource_kind/$resource_name" -o jsonpath='{.metadata.labels.app\.kubernetes\.io/managed-by}')"
-  [[ "$instance" == "$RELEASE" && "$managed_by" == "Helm" ]] || {
+  release_name="$(kubectl --context "$CONTEXT" get "$resource_kind/$resource_name" -o jsonpath='{.metadata.annotations.meta\.helm\.sh/release-name}')"
+  release_namespace="$(kubectl --context "$CONTEXT" get "$resource_kind/$resource_name" -o jsonpath='{.metadata.annotations.meta\.helm\.sh/release-namespace}')"
+  [[ "$managed_by" == "Helm" && "$release_name" == "$RELEASE" && "$release_namespace" == "$NAMESPACE" ]] || {
     err "Foreign ownership on $resource_kind/$resource_name; refusing cluster-scoped deletion."
     exit 1
   }

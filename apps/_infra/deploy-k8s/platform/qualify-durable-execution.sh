@@ -118,4 +118,7 @@ export OPENCRANE_D2_POLL_INTERVAL_MS="$POLL_INTERVAL_MS"
 export OPENCRANE_D2_THRESHOLD_MS="$THRESHOLD_MS"
 export OPENCRANE_D2_DATABASE_POOL_SIZE="$DATABASE_POOL_SIZE"
 
-npx nx run backend-server-infra-workflows-infra-absurd:qualify-live
+(
+  cd "$REPOSITORY_ROOT/libs/backend/server/infra/workflows/infra_absurd"
+  npx tsx src/qualification/qualify-durable-execution.cli.ts
+)

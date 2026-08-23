@@ -118,6 +118,17 @@ case "$command_name" in
       esac
       exit 0
     fi
+    if [[ "$*" == *" get clusterrole/"* || "$*" == *" get clusterrolebinding/"* ]]; then
+      case "$*" in
+        *" -o name"*) printf '%s' 'rbac' ;;
+        *"app\\.kubernetes\\.io/managed-by"*) printf '%s' 'Helm' ;;
+        *"meta\\.helm\\.sh/release-namespace"*)
+          if [[ "${MOCK_FOREIGN_RBAC_NAMESPACE:-0}" == "1" ]]; then printf '%s' 'foreign-namespace'; else printf '%s' 'opencrane-retired-fixture'; fi ;;
+        *"meta\\.helm\\.sh/release-name"*)
+          if [[ "${MOCK_FOREIGN_RBAC:-0}" == "1" ]]; then printf '%s' 'foreign'; else printf '%s' 'opencrane-retired-fixture'; fi ;;
+      esac
+      exit 0
+    fi
     if [[ "$*" == *" get "* ]]; then
       [[ "$*" == *"--ignore-not-found"* ]] && exit 0
       exit 1
@@ -162,6 +173,10 @@ fi
 
 if run_core foreign-owner MOCK_FOREIGN_CNPG=1; then echo 'foreign CNPG ownership unexpectedly succeeded' >&2; exit 1; fi
 ! grep -Fq ' delete ' "$TEST_DIR/foreign-owner.calls"
+if run_core foreign-rbac MOCK_FOREIGN_RBAC=1; then echo 'foreign RBAC ownership unexpectedly succeeded' >&2; exit 1; fi
+! grep -Fq ' delete ' "$TEST_DIR/foreign-rbac.calls"
+if run_core foreign-rbac-namespace MOCK_FOREIGN_RBAC_NAMESPACE=1; then echo 'foreign RBAC namespace unexpectedly succeeded' >&2; exit 1; fi
+! grep -Fq ' delete ' "$TEST_DIR/foreign-rbac-namespace.calls"
 if run_core foreign-release MOCK_FOREIGN_RELEASE=1; then
   echo 'foreign Helm ownership unexpectedly succeeded' >&2
   cat "$TEST_DIR/foreign-release.output" >&2

@@ -40,7 +40,8 @@ EOF
 
 cat >"$MOCK_BIN/npx" <<'EOF'
 #!/usr/bin/env bash
-[[ "$*" == "nx run backend-server-infra-workflows-infra-absurd:qualify-live" ]]
+[[ "$*" == "tsx src/qualification/qualify-durable-execution.cli.ts" ]]
+[[ "$PWD" == */libs/backend/server/infra/workflows/infra_absurd ]]
 [[ "$DATABASE_URL" == 'postgresql://opencrane:super-secret@127.0.0.1:65431/opencrane' ]]
 [[ "$OPENCRANE_D2_SILO_ID" == 'testlynn' ]]
 [[ "$OPENCRANE_D2_SAMPLE_COUNT" == '40' ]]
