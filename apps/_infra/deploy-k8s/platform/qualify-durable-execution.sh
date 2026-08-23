@@ -118,7 +118,29 @@ export OPENCRANE_D2_POLL_INTERVAL_MS="$POLL_INTERVAL_MS"
 export OPENCRANE_D2_THRESHOLD_MS="$THRESHOLD_MS"
 export OPENCRANE_D2_DATABASE_POOL_SIZE="$DATABASE_POOL_SIZE"
 
+QUALIFICATION_RESULT="$(
 (
   cd "$REPOSITORY_ROOT/libs/backend/server/infra/workflows/infra_absurd"
   npx tsx src/qualification/qualify-durable-execution.cli.ts
 )
+)"
+jq -e '
+  type == "object"
+  and (.passed | type == "boolean")
+  and (.sampleCount | type == "number")
+  and (.warmupCount | type == "number")
+  and (.pollIntervalMs | type == "number")
+  and (.thresholdMs | type == "number")
+  and (.databasePoolSize | type == "number")
+  and (.connectionCeiling | type == "number")
+  and (.transport == "kubectl-port-forward")
+  and (.latencyMs | type == "object")
+  and (.latencyMs.p50 | type == "number")
+  and (.latencyMs.p95 | type == "number")
+  and (.latencyMs.p99 | type == "number")
+  and (.latencyMs.max | type == "number")
+  and (.connectionEvidence | type == "object")
+  and (.connectionEvidence.available | type == "boolean")
+  and (if .connectionEvidence.available then (.connectionEvidence.peakConnections | type == "number") else (.connectionEvidence | has("peakConnections") | not) end)
+' <<<"$QUALIFICATION_RESULT" >/dev/null || { _error "qualifier did not emit a complete result"; exit 1; }
+printf '%s\n' "$QUALIFICATION_RESULT"

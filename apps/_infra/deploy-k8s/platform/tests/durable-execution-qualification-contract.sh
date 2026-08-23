@@ -48,7 +48,7 @@ cat >"$MOCK_BIN/npx" <<'EOF'
 [[ "$OPENCRANE_D2_POLL_INTERVAL_MS" == '50' ]]
 [[ "$OPENCRANE_D2_THRESHOLD_MS" == '250' ]]
 [[ "$OPENCRANE_D2_DATABASE_POOL_SIZE" == '2' ]]
-printf '%s\n' '{"passed":true}'
+printf '%s\n' '{"passed":true,"sampleCount":40,"warmupCount":5,"pollIntervalMs":50,"thresholdMs":250,"databasePoolSize":2,"connectionCeiling":3,"transport":"kubectl-port-forward","latencyMs":{"p50":100,"p95":120,"p99":140,"max":140},"connectionEvidence":{"available":true,"peakConnections":2}}'
 EOF
 
 cat >"$MOCK_BIN/node" <<'EOF'
@@ -61,7 +61,7 @@ EOF
 
 chmod +x "$MOCK_BIN/helm" "$MOCK_BIN/kubectl" "$MOCK_BIN/node" "$MOCK_BIN/npx"
 PATH="$MOCK_BIN:$PATH" bash "$QUALIFIER" --context gke_opencrane-dev --cluster-tenant testlynn --local-port 65431 >"$CAPTURE"
-grep -Fq '{"passed":true}' "$CAPTURE"
+grep -Fq '"passed":true' "$CAPTURE"
 if grep -Fq 'super-secret' "$CAPTURE"; then
   printf 'durable execution qualifier exposed the application credential\n' >&2
   exit 1
@@ -71,5 +71,25 @@ if MOCK_SILO_VERSION=0.9.2 PATH="$MOCK_BIN:$PATH" bash "$QUALIFIER" --context gk
   exit 1
 fi
 grep -Fq 'silo release is not the qualification version' "$TEST_DIR/version-mismatch"
+cat >"$MOCK_BIN/npx" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' '{"passed":true,"latencyMs":{"p50":100,"p95":120},"connectionEvidence":{"available":true}}'
+EOF
+chmod +x "$MOCK_BIN/npx"
+if PATH="$MOCK_BIN:$PATH" bash "$QUALIFIER" --context gke_opencrane-dev --cluster-tenant testlynn --local-port 65431 >"$TEST_DIR/partial-result" 2>&1; then
+  printf 'durable execution qualifier accepted a partial result\n' >&2
+  exit 1
+fi
+grep -Fq 'qualifier did not emit a complete result' "$TEST_DIR/partial-result"
+cat >"$MOCK_BIN/npx" <<'EOF'
+#!/usr/bin/env bash
+exit 0
+EOF
+chmod +x "$MOCK_BIN/npx"
+if PATH="$MOCK_BIN:$PATH" bash "$QUALIFIER" --context gke_opencrane-dev --cluster-tenant testlynn --local-port 65431 >"$TEST_DIR/missing-result" 2>&1; then
+  printf 'durable execution qualifier accepted an empty result\n' >&2
+  exit 1
+fi
+grep -Fq 'qualifier did not emit a complete result' "$TEST_DIR/missing-result"
 bash -n "$QUALIFIER"
 echo "durable execution qualification contract: PASS"
