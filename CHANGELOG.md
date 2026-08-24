@@ -32,6 +32,14 @@ follows [Keep a Changelog](https://keepachangelog.com/); the project uses
   production Commander/Guardian survey and first-session path while leaving persona scoring to the
   backend. The real-backend workflow remains an explicit `development-live` configuration.
 
+- **Application developers can now run the real OpenCrane API, PostgreSQL, and Agent chat locally
+  without a Kubernetes cluster.** `npm run dev:tier2` starts the live-gateway UI against a fixed
+  local identity and target-baseline database; the optional Agent profile preserves normal run
+  admission, controller assignment, runtime authentication, streaming, candidate validation, and
+  persistence. Developers can choose a local LiteLLM proxy, an explicit shared HTTPS LiteLLM proxy,
+  or credential-free deterministic model output while Cognee, memory, Obot, artifacts, channels,
+  and Kubernetes remain explicitly disabled.
+
 - **Users and operators can now see the availability of every user-visible service through
   unauthenticated `GET /healthz`.** The fixed, public-safe report classifies the API, database,
   models, memory, files, channels, and integrations as `available`, `unavailable`, or `disabled`

@@ -1,4 +1,4 @@
-# Frontend development without a backend
+# Local frontend and application development
 
 The default OpenCrane UI development profile runs **onboarding and chat entirely in the browser**.
 Use it for routed UI, state, interaction, and error-state work without provisioning the OpenCrane API
@@ -69,19 +69,51 @@ npm run storybook:ui
 Use Storybook when a task concerns one component state. Use the Tier 1 routed profile when the task
 concerns navigation or interaction between stores and gateways.
 
-## Connect to a real backend explicitly
+## Start the Tier 2 core profile
 
-When a frontend change genuinely needs the shared development backend, select the separate live
-configuration:
+Use Tier 2 when a change needs the real OpenCrane API and PostgreSQL persistence. The default core
+profile starts an owned PostgreSQL 17 container, applies the current target database baseline,
+seeds one fixed local user and signed membership, watches the server, and starts the UI with its
+live gateways:
 
 ```bash
-npx nx serve opencrane-ui --configuration=development-live
+npm run dev:tier2
 ```
 
-That configuration keeps the live provider and route entry points and enables the dedicated
-development proxy. Default development replaces those entry points at build time, so production
-and development-live bundles do not import the local fixtures. The live configuration therefore
-requires a reachable backend and a valid live session.
+Open `http://local-development.localhost:4200`. The coordinator runs the exact UI command
+`npx nx serve opencrane-ui --configuration=development-live`, but supplies a local session and
+backend composition so no OpenID Connect (OIDC) sign-in is required.
+
+Core supports onboarding, persisted conversations, direct and group messages, and run admission.
+It deliberately leaves Agent execution, models, memory, files, channels, integrations, Obot,
+Cognee, the memory gateway, and Kubernetes disabled.
+
+## Add local Agent chat
+
+Select the Agent profile to add the local controller and runtime. Alternative A is the default:
+
+```bash
+npm run dev:tier2 -- --profile agent
+```
+
+The alternatives change only the model boundary; all three keep the real admission, assignment,
+bootstrap, authenticated runtime stream, candidate validation, and PostgreSQL persistence path.
+
+| Alternative | Command suffix | Model access and credentials |
+| --- | --- | --- |
+| A — local LiteLLM | `--alternative A` | Starts the pinned local LiteLLM container. Reads the provider key from `keys/.openai-key` and creates a separate owner-only local master-key file. |
+| B — remote LiteLLM | `--alternative B --remote-litellm-endpoint https://… --remote-litellm-master-key-file /absolute/path` | Uses the explicit HTTPS proxy and owner-only admin-key file. It never falls back to Alternative A's local master key or provider key. |
+| C — simulated model | `--alternative C` | Uses deterministic model events after normal run admission. It starts no LiteLLM process and reads no model or provider credential. |
+
+The runtime receives an attempt-scoped LiteLLM key in A/B, never the provider key or LiteLLM
+master key. The controller and each runtime attempt also use separate private bearer files; the
+runtime bearer is signed for that attempt's generated process identity.
+
+::: info
+The coordinator keeps the named PostgreSQL volume between runs but stops containers when the
+session ends. Use `--reset` when the target baseline changes; it removes only resources carrying
+the OpenCrane local-development ownership label.
+:::
 
 ::: warning
 Do not use `development-live` to prove a Tier 1 change. A successful live request can hide an
