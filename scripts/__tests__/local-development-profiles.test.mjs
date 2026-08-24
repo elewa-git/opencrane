@@ -129,4 +129,12 @@ test("local service ports are validated before orchestration", function _portVal
 			OPENCRANE_LOCAL_LITELLM_PORT: "4000"
 		});
 	}, /different host ports/);
+	assert.throws(function _postgresUsesPublicPort()
+	{
+		createLocalDevelopmentConfiguration(parsed, "/repo", { OPENCRANE_LOCAL_POSTGRES_PORT: "8080" });
+	}, /public or internal host port/);
+	assert.throws(function _liteLLMUsesInternalPort()
+	{
+		createLocalDevelopmentConfiguration(parsed, "/repo", { OPENCRANE_LOCAL_LITELLM_PORT: "8081" });
+	}, /public or internal host port/);
 });

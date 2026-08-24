@@ -9,6 +9,8 @@ const _DEVELOPMENT_PROFILE_BY_ALTERNATIVE = Object.freeze({
 
 export function createLocalDevelopmentConfiguration(parsed, repositoryRoot, environment = process.env)
 {
+	const publicPort = 8_080;
+	const internalPort = 8_081;
 	const postgresPort = Number(environment.OPENCRANE_LOCAL_POSTGRES_PORT ?? "54329");
 	const liteLLMPort = Number(environment.OPENCRANE_LOCAL_LITELLM_PORT ?? "4000");
 
@@ -27,6 +29,16 @@ export function createLocalDevelopmentConfiguration(parsed, repositoryRoot, envi
 		throw new Error("PostgreSQL and local LiteLLM must use different host ports");
 	}
 
+	if ([publicPort, internalPort].includes(postgresPort))
+	{
+		throw new Error("PostgreSQL must not use the OpenCrane public or internal host port");
+	}
+
+	if (parsed.alternative === LOCAL_DEVELOPMENT_ALTERNATIVES.LocalLiteLLM && [publicPort, internalPort].includes(liteLLMPort))
+	{
+		throw new Error("Local LiteLLM must not use the OpenCrane public or internal host port");
+	}
+
 	const developmentProfile = parsed.profile === LOCAL_DEVELOPMENT_PROFILES.Core
 		? LOCAL_DEVELOPMENT_PROFILES.Core
 		: _DEVELOPMENT_PROFILE_BY_ALTERNATIVE[parsed.alternative];
@@ -40,8 +52,8 @@ export function createLocalDevelopmentConfiguration(parsed, repositoryRoot, envi
 		reset: parsed.reset,
 		developmentProfile,
 		repositoryRoot,
-		publicPort: 8_080,
-		internalPort: 8_081,
+		publicPort,
+		internalPort,
 		postgresPort,
 		liteLLMPort,
 		postgresContainerName: "opencrane-local-postgres",
