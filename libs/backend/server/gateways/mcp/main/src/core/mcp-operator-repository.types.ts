@@ -43,7 +43,7 @@ export interface McpOperatorServerRecord
 	readonly eraProbeEvidenceDigest: string | null;
 	/** Gives the saved failure reason when the check ended without a usable protocol revision. */
 	readonly eraProbeFailureCode: string | null;
-	/** Counts the external checks recorded for this registration. */
+	/** Gives the latest workflow-engine attempt recorded for this registration. */
 	readonly eraProbeAttempts: number;
 }
 
@@ -88,7 +88,7 @@ export interface McpEraProbeTargetRecord
 	readonly eraProbeEvidenceDigest: string | null;
 	/** Bounded reason stored when the endpoint or response was terminally invalid. */
 	readonly eraProbeFailureCode: string | null;
-	/** Number of external checks already recorded for this registration. */
+	/** Gives the latest workflow-engine attempt already recorded for this registration. */
 	readonly eraProbeAttempts: number;
 }
 
