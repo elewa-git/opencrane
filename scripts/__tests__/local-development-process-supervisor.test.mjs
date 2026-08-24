@@ -26,3 +26,17 @@ test("an application process receives only the model credential its profile supp
 
 	assert.equal(environment.LITELLM_MASTER_KEY, "selected-profile-key");
 });
+
+test("explicit Tier 2 listener ports override conflicting parent values", function _FixedListenerPorts()
+{
+	const environment = createDevelopmentChildEnvironment({
+		PORT: "9090",
+		INTERNAL_PORT: "9091"
+	}, {
+		PORT: "8080",
+		INTERNAL_PORT: "8081"
+	});
+
+	assert.equal(environment.PORT, "8080");
+	assert.equal(environment.INTERNAL_PORT, "8081");
+});

@@ -27,7 +27,11 @@ export function runLocalCommand(command, argumentsList, options = {})
 	return result;
 }
 
-export function runLocalCommandSpecification(specification)
+export function runLocalCommandSpecification(specification, options = {})
 {
-	runLocalCommand(specification.command, specification.arguments, { environment: specification.environment });
+	return runLocalCommand(specification.command, specification.arguments, {
+		cwd: options.cwd,
+		environment: specification.environment,
+		inherit: options.inherit
+	});
 }

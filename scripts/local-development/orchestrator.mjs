@@ -3,9 +3,10 @@ import { applyTargetBaseline, ensureLocalLiteLLMDatabase, resetLocalDevelopmentC
 import { createDevelopmentSeedCommand } from "./development-seed-command.mjs";
 import { validateLiteLLMModelEndpoint, waitForLiteLLMModelEndpoint } from "./litellm-validation.mjs";
 import { acquireLocalDevelopmentLock, releaseLocalDevelopmentLock } from "./lock.mjs";
+import { runLocalCommandSpecification } from "./command-runner.mjs";
 import { runDevelopmentProcesses } from "./process-supervisor.mjs";
-import { runOneShotCommand } from "./processes.mjs";
-import { LOCAL_DEVELOPMENT_ALTERNATIVES } from "./profiles.mjs";
+import { LOCAL_DEVELOPMENT_ALTERNATIVES, LOCAL_DEVELOPMENT_PROFILES } from "./profiles.mjs";
+import { prepareLocalAgentRuntimeEnvironment } from "./python-runtime.mjs";
 import { createDisposableDevelopmentCredentials, loadLocalDevelopmentSecrets, removeDisposableDevelopmentCredentials } from "./secrets.mjs";
 
 const _OPERATIONS = {
@@ -17,11 +18,12 @@ const _OPERATIONS = {
 	createDisposableDevelopmentCredentials,
 	ensureLocalLiteLLMDatabase,
 	loadLocalDevelopmentSecrets,
+	prepareLocalAgentRuntimeEnvironment,
 	releaseLocalDevelopmentLock,
 	removeDisposableDevelopmentCredentials,
 	resetLocalDevelopmentContainers,
 	runDevelopmentProcesses,
-	runOneShotCommand,
+	runLocalCommandSpecification,
 	startLocalLiteLLM,
 	startLocalPostgres,
 	stopOwnedContainer,
@@ -38,7 +40,7 @@ const _OPERATIONS = {
  * Run one Tier 2 composition and release every resource owned by this coordinator.
  *
  * Called by: `scripts/local-development.mjs` after parsing and validating CLI configuration.
- * @param {import("./configuration.mjs").LocalDevelopmentConfiguration} configuration - Selected core or Agent composition.
+ * @param {ReturnType<typeof import("./configuration.mjs").createLocalDevelopmentConfiguration>} configuration - Selected core or Agent composition.
  * @param {string} repositoryRoot - Absolute repository root used by child commands and the coordinator lock.
  * @param {Partial<typeof _OPERATIONS>} operationOverrides - Offline seams for orchestration contract tests.
  */
@@ -57,8 +59,14 @@ export async function runLocalDevelopmentSession(configuration, repositoryRoot, 
 	try
 	{
 		operations.validateLocalDevelopmentTools(configuration);
+
+		if (configuration.profile === LOCAL_DEVELOPMENT_PROFILES.Agent)
+		{
+			operations.prepareLocalAgentRuntimeEnvironment(configuration);
+		}
+
 		secrets = operations.loadLocalDevelopmentSecrets(configuration);
-		developmentCredentials = operations.createDisposableDevelopmentCredentials();
+		developmentCredentials = operations.createDisposableDevelopmentCredentials(configuration.profile === LOCAL_DEVELOPMENT_PROFILES.Agent);
 
 		if (configuration.alternative === LOCAL_DEVELOPMENT_ALTERNATIVES.RemoteLiteLLM)
 		{
@@ -75,7 +83,10 @@ export async function runLocalDevelopmentSession(configuration, repositoryRoot, 
 		operations.applyTargetBaseline(configuration);
 
 		const applicationEnvironment = operations.createApplicationEnvironment(configuration, secrets, developmentCredentials);
-		operations.runOneShotCommand(operations.createDevelopmentSeedCommand(applicationEnvironment), repositoryRoot);
+		operations.runLocalCommandSpecification(operations.createDevelopmentSeedCommand(applicationEnvironment), {
+			cwd: repositoryRoot,
+			inherit: true
+		});
 
 		if (configuration.alternative === LOCAL_DEVELOPMENT_ALTERNATIVES.LocalLiteLLM)
 		{

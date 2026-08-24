@@ -139,3 +139,20 @@ test("disposable development credentials are private and include a valid Ed25519
 
 	assert.equal(fs.existsSync(keyPaths.directory), false);
 });
+
+test("core credentials omit unused Agent controller and runtime secrets", function _CoreCredentials()
+{
+	const keyPaths = createDisposableDevelopmentCredentials(false);
+
+	try
+	{
+		assert.equal(fs.existsSync(path.join(keyPaths.directory, "private.pem")), true);
+		assert.equal(fs.existsSync(path.join(keyPaths.directory, "public.pem")), true);
+		assert.equal(fs.existsSync(path.join(keyPaths.directory, "controller.token")), false);
+		assert.equal(fs.existsSync(path.join(keyPaths.directory, "runtime-launch.secret")), false);
+	}
+	finally
+	{
+		removeDisposableDevelopmentCredentials(keyPaths);
+	}
+});

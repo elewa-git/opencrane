@@ -13,6 +13,8 @@ test("core is the default local-development profile", function _defaultCore()
 
 	assert.equal(configuration.profile, "core");
 	assert.equal(configuration.developmentProfile, "core");
+	assert.equal(configuration.publicPort, 8080);
+	assert.equal(configuration.internalPort, 8081);
 	assert.equal(configuration.postgresPort, 54329);
 	assert.equal(configuration.liteLLMPort, 4000);
 });

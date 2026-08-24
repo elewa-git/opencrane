@@ -6,7 +6,14 @@ export { applyTargetBaseline, ensureLocalLiteLLMDatabase, startLocalPostgres } f
 
 export function validateLocalDevelopmentTools(configuration)
 {
-	for (const command of ["docker", "npm", "npx"])
+	const commands = ["docker", "npm", "npx"];
+
+	if (configuration.profile === "agent")
+	{
+		commands.push("python3");
+	}
+
+	for (const command of commands)
 	{
 		runLocalCommand(command, ["--version"]);
 	}
@@ -16,6 +23,11 @@ export function validateLocalDevelopmentTools(configuration)
 	if (configuration.alternative === "A")
 	{
 		requiredFiles.push(configuration.liteLLMConfigPath);
+	}
+
+	if (configuration.profile === "agent")
+	{
+		requiredFiles.push(configuration.runtimeRequirementsPath);
 	}
 
 	for (const requiredFile of requiredFiles)

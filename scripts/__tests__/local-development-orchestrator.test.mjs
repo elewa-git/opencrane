@@ -11,14 +11,15 @@ function _Operations(calls, options = {})
 		createApplicationCommands() { calls.push("commands"); return ["applications"]; },
 		createApplicationEnvironment() { calls.push("environment"); return { DATABASE_URL: "local" }; },
 		createDevelopmentSeedCommand() { calls.push("seed-command"); return { command: "seed" }; },
-		createDisposableDevelopmentCredentials() { calls.push("credentials"); return { directory: "/tmp/credentials" }; },
+		createDisposableDevelopmentCredentials(includeAgentCredentials) { calls.push(`credentials:${includeAgentCredentials}`); return { directory: "/tmp/credentials" }; },
 		ensureLocalLiteLLMDatabase() { calls.push("litellm-database"); },
 		loadLocalDevelopmentSecrets() { calls.push("secrets"); return { liteLLMMasterKey: "master-key" }; },
+		prepareLocalAgentRuntimeEnvironment() { calls.push("runtime-python"); },
 		releaseLocalDevelopmentLock() { calls.push("unlock"); },
 		removeDisposableDevelopmentCredentials() { calls.push("remove-credentials"); },
 		resetLocalDevelopmentContainers() { calls.push("reset"); },
 		async runDevelopmentProcesses() { calls.push("processes"); if (options.processFailure) throw options.processFailure; },
-		runOneShotCommand() { calls.push("seed"); },
+		runLocalCommandSpecification() { calls.push("seed"); },
 		async startLocalLiteLLM() { calls.push("start-litellm"); return true; },
 		async startLocalPostgres() { calls.push("start-postgres"); return true; },
 		stopOwnedContainer(name) { calls.push(`stop:${name}`); },
@@ -32,6 +33,7 @@ function _Operations(calls, options = {})
 function _Configuration(overrides = {})
 {
 	return {
+		profile: "core",
 		alternative: undefined,
 		developmentProfile: "core",
 		liteLLMContainerName: "opencrane-local-litellm",
@@ -52,7 +54,7 @@ test("core starts the database before seeding and always releases owned state", 
 		"lock",
 		"validate-tools",
 		"secrets",
-		"credentials",
+		"credentials:false",
 		"status",
 		"start-postgres",
 		"baseline",
@@ -71,7 +73,9 @@ test("Alternative A prepares and validates LiteLLM after the application databas
 {
 	const calls = [];
 
-	await runLocalDevelopmentSession(_Configuration({ alternative: "A", developmentProfile: "agent-local" }), "/repo", _Operations(calls));
+	await runLocalDevelopmentSession(_Configuration({ profile: "agent", alternative: "A", developmentProfile: "agent-local" }), "/repo", _Operations(calls));
+	assert.equal(calls.includes("credentials:true"), true);
+	assert.ok(calls.indexOf("runtime-python") < calls.indexOf("secrets"));
 	assert.ok(calls.indexOf("seed") < calls.indexOf("litellm-database"));
 	assert.ok(calls.indexOf("litellm-database") < calls.indexOf("start-litellm"));
 	assert.ok(calls.indexOf("start-litellm") < calls.indexOf("wait-litellm"));
@@ -83,7 +87,7 @@ test("Alternative B validates the remote endpoint before mutating local containe
 {
 	const calls = [];
 
-	await runLocalDevelopmentSession(_Configuration({ alternative: "B", developmentProfile: "agent-remote", remoteLiteLLMEndpoint: "https://litellm.example.test", reset: true }), "/repo", _Operations(calls));
+	await runLocalDevelopmentSession(_Configuration({ profile: "agent", alternative: "B", developmentProfile: "agent-remote", remoteLiteLLMEndpoint: "https://litellm.example.test", reset: true }), "/repo", _Operations(calls));
 	assert.ok(calls.indexOf("validate-remote-litellm") < calls.indexOf("reset"));
 	assert.ok(calls.indexOf("reset") < calls.indexOf("start-postgres"));
 	assert.equal(calls.includes("start-litellm"), false);

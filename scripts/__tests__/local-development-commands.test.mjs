@@ -83,6 +83,7 @@ test("agent adds its local controller and defaults to Alternative A", function _
 	assert.equal(environment.OPENCRANE_INTERNAL_URL, "http://127.0.0.1:8081");
 	assert.equal(environment.OPENCRANE_CONTROLLER_TOKEN_PATH, "/tmp/local/controller.token");
 	assert.equal(environment.OPENCRANE_RUNTIME_LAUNCH_SECRET_PATH, "/tmp/local/runtime-launch.secret");
+	assert.equal(environment.OPENCRANE_LOCAL_RUNTIME_PYTHON, "/repo/apps/agent-runtime/.venv/bin/python");
 	const runtimeProfiles = JSON.parse(environment.AGENT_CONTROLLER_PROFILES_JSON);
 	assert.equal(runtimeProfiles["personal-default"].litellmBaseUrl, "http://litellm.local-development-server.svc.cluster.local:4000");
 	assert.deepEqual({
@@ -100,7 +101,30 @@ test("agent adds its local controller and defaults to Alternative A", function _
 	assert.equal(runtimeProfiles["managed-default"].serverNamespace, _PROFILE_CONTRACT.runtimeIdentities.serverNamespace);
 	assert.equal(commands[1].environment.LITELLM_MASTER_KEY, undefined);
 	assert.equal(commands[1].environment.OPENCRANE_INITIAL_MODEL_API_KEY, undefined);
+	assert.deepEqual(Object.keys(commands[0].environment).sort(), [
+		"DATABASE_URL",
+		"INTERNAL_PORT",
+		"LITELLM_ENDPOINT",
+		"LITELLM_MASTER_KEY",
+		"OPENCRANE_CONTROLLER_TOKEN_PATH",
+		"OPENCRANE_DEVELOPMENT_ENTRYPOINT",
+		"OPENCRANE_DEVELOPMENT_MEMBERSHIP_PUBLIC_KEY_PATH",
+		"OPENCRANE_DEVELOPMENT_PROFILE",
+		"OPENCRANE_RUNTIME_LAUNCH_SECRET_PATH",
+		"PORT"
+	].sort());
+	assert.equal(commands[0].environment.OPENCRANE_DEVELOPMENT_MEMBERSHIP_PRIVATE_KEY_PATH, undefined);
+	assert.equal(commands[0].environment.OPENCRANE_INTERNAL_URL, undefined);
+	assert.equal(commands[0].environment.OPENCRANE_REPOSITORY_ROOT, undefined);
+	assert.equal(commands[0].environment.AGENT_CONTROLLER_PROFILES_JSON, undefined);
+	assert.equal(commands[1].environment.DATABASE_URL, undefined);
+	assert.equal(commands[1].environment.OPENCRANE_DEVELOPMENT_MEMBERSHIP_PRIVATE_KEY_PATH, undefined);
 	const seed = createDevelopmentSeedCommand(environment);
+	assert.deepEqual(Object.keys(seed.environment).sort(), [
+		"DATABASE_URL",
+		"OPENCRANE_DEVELOPMENT_MEMBERSHIP_PRIVATE_KEY_PATH",
+		"OPENCRANE_DEVELOPMENT_MEMBERSHIP_PUBLIC_KEY_PATH"
+	].sort());
 	assert.equal(seed.environment.DATABASE_URL.includes("postgres-secret"), true);
 	assert.equal(seed.environment.LITELLM_MASTER_KEY, undefined);
 	assert.equal(seed.environment.OPENCRANE_CONTROLLER_TOKEN_PATH, undefined);

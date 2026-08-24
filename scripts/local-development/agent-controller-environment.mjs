@@ -39,7 +39,7 @@ export function createAgentControllerEnvironment(configuration, credentials)
 		return {};
 	}
 
-	const internalUrl = "http://127.0.0.1:8081";
+	const internalUrl = `http://127.0.0.1:${configuration.internalPort}`;
 	const runtimeStreamUrl = `http://opencrane.${_RUNTIME_IDENTITIES.serverNamespace}.svc.cluster.local/api/internal/agent-runtime`;
 	const liteLLMBaseUrl = `http://litellm.${_RUNTIME_IDENTITIES.serverNamespace}.svc.cluster.local:4000`;
 
@@ -52,6 +52,7 @@ export function createAgentControllerEnvironment(configuration, credentials)
 		OPENCRANE_INTERNAL_URL: internalUrl,
 		OPENCRANE_CONTROLLER_TOKEN_PATH: credentials.controllerTokenPath,
 		OPENCRANE_RUNTIME_LAUNCH_SECRET_PATH: credentials.runtimeLaunchSecretPath,
+		OPENCRANE_LOCAL_RUNTIME_PYTHON: configuration.runtimePythonPath,
 		OPENCRANE_REPOSITORY_ROOT: configuration.repositoryRoot,
 		AGENT_CONTROLLER_PROFILES_JSON: JSON.stringify(profiles)
 	};

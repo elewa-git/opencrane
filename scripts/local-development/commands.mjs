@@ -1,6 +1,6 @@
 import { LOCAL_DEVELOPMENT_ALTERNATIVES, LOCAL_DEVELOPMENT_PROFILES } from "./profiles.mjs";
 import { createAgentControllerEnvironment } from "./agent-controller-environment.mjs";
-import { createAgentControllerProcessEnvironment } from "./process-environments.mjs";
+import { createAgentControllerProcessEnvironment, createOpenCraneServerProcessEnvironment } from "./process-environments.mjs";
 
 const _OWNER_LABEL = "opencrane.local-development.owner=opencrane";
 const _POSTGRES_IMAGE = "postgres@sha256:e38411452a464af89e5adadb8d223bf53b898d47d6ef918b2d58c08707350449";
@@ -87,6 +87,8 @@ export function createApplicationEnvironment(configuration, secrets, development
 		OPENCRANE_DEVELOPMENT_PROFILE: configuration.developmentProfile,
 		OPENCRANE_DEVELOPMENT_MEMBERSHIP_PRIVATE_KEY_PATH: developmentCredentials.privateKeyPath,
 		OPENCRANE_DEVELOPMENT_MEMBERSHIP_PUBLIC_KEY_PATH: developmentCredentials.publicKeyPath,
+		PORT: String(configuration.publicPort),
+		INTERNAL_PORT: String(configuration.internalPort),
 		DATABASE_URL: `postgresql://opencrane:${secrets.postgresPassword}@127.0.0.1:${configuration.postgresPort}/opencrane`
 	};
 
@@ -107,12 +109,13 @@ export function createApplicationEnvironment(configuration, secrets, development
 export function createApplicationCommands(configuration, applicationEnvironment)
 {
 	const controllerEnvironment = createAgentControllerProcessEnvironment(applicationEnvironment);
+	const serverEnvironment = createOpenCraneServerProcessEnvironment(applicationEnvironment);
 	const commands = [
 		{
 			name: "server",
 			command: "npm",
 			arguments: ["run", "dev:tier2", "-w", "@opencrane/server"],
-			environment: applicationEnvironment
+			environment: serverEnvironment
 		}
 	];
 

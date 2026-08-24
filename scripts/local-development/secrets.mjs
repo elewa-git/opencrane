@@ -98,19 +98,29 @@ export function loadLocalDevelopmentSecrets(configuration, randomBytes = crypto.
 	};
 }
 
-export function createDisposableDevelopmentCredentials(randomBytes = crypto.randomBytes)
+export function createDisposableDevelopmentCredentials(includeAgentCredentials = true, randomBytes = crypto.randomBytes)
 {
 	const directory = fs.mkdtempSync(path.join(os.tmpdir(), "opencrane-local-membership-"));
 	fs.chmodSync(directory, 0o700);
 	const privateKeyPath = path.join(directory, "private.pem");
 	const publicKeyPath = path.join(directory, "public.pem");
-	const controllerTokenPath = path.join(directory, "controller.token");
-	const runtimeLaunchSecretPath = path.join(directory, "runtime-launch.secret");
 	const keyPair = crypto.generateKeyPairSync("ed25519");
 	const privateKey = keyPair.privateKey.export({ type: "pkcs8", format: "pem" });
 	const publicKey = keyPair.publicKey.export({ type: "spki", format: "pem" });
 	fs.writeFileSync(privateKeyPath, privateKey, { mode: 0o600, flag: "wx" });
 	fs.writeFileSync(publicKeyPath, publicKey, { mode: 0o600, flag: "wx" });
+
+	if (!includeAgentCredentials)
+	{
+		return {
+			directory,
+			privateKeyPath,
+			publicKeyPath
+		};
+	}
+
+	const controllerTokenPath = path.join(directory, "controller.token");
+	const runtimeLaunchSecretPath = path.join(directory, "runtime-launch.secret");
 	fs.writeFileSync(controllerTokenPath, `local-controller-${randomBytes(32).toString("hex")}\n`, { mode: 0o600, flag: "wx" });
 	fs.writeFileSync(runtimeLaunchSecretPath, `${randomBytes(32).toString("base64url")}\n`, { mode: 0o600, flag: "wx" });
 

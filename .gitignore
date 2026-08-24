@@ -25,6 +25,7 @@ coverage/
 *.log
 __pycache__/
 *.py[cod]
+apps/agent-runtime/.venv/
 
 # Dev (root-level scratch dir only; anchored so it doesn't swallow nested dirs
 # like apps/_infra/deploy-k8s/platform/terraform/environments/dev/)

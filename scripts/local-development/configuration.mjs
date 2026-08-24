@@ -31,10 +31,17 @@ export function createLocalDevelopmentConfiguration(parsed, repositoryRoot, envi
 		? LOCAL_DEVELOPMENT_PROFILES.Core
 		: _DEVELOPMENT_PROFILE_BY_ALTERNATIVE[parsed.alternative];
 
+	const runtimeVirtualEnvironmentPath = path.join(repositoryRoot, "apps/agent-runtime/.venv");
+
 	return {
-		...parsed,
+		profile: parsed.profile,
+		alternative: parsed.alternative,
+		remoteLiteLLMEndpoint: parsed.remoteLiteLLMEndpoint,
+		reset: parsed.reset,
 		developmentProfile,
 		repositoryRoot,
+		publicPort: 8_080,
+		internalPort: 8_081,
 		postgresPort,
 		liteLLMPort,
 		postgresContainerName: "opencrane-local-postgres",
@@ -48,6 +55,10 @@ export function createLocalDevelopmentConfiguration(parsed, repositoryRoot, envi
 		localLiteLLMMasterKeyPath: path.join(repositoryRoot, "keys/.litellm-master-key"),
 		remoteLiteLLMMasterKeyPath: parsed.remoteLiteLLMMasterKeyFile
 			? path.resolve(repositoryRoot, parsed.remoteLiteLLMMasterKeyFile)
-			: undefined
+			: undefined,
+		runtimeVirtualEnvironmentPath,
+		runtimePythonPath: path.join(runtimeVirtualEnvironmentPath, "bin/python"),
+		runtimeRequirementsPath: path.join(repositoryRoot, "apps/agent-runtime/deploy/requirements.txt"),
+		runtimeRequirementsStampPath: path.join(runtimeVirtualEnvironmentPath, ".opencrane-requirements.sha256")
 	};
 }

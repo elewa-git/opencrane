@@ -96,6 +96,11 @@ Select the Agent profile to add the local controller and runtime. Alternative A 
 npm run dev:tier2 -- --profile agent
 ```
 
+On the first Agent-profile run, the coordinator creates `apps/agent-runtime/.venv` and installs the
+pinned runtime requirements into it before starting PostgreSQL. Later runs reuse that environment
+while the requirements digest and import check still match. Python 3 and network access to the
+configured package index are therefore required only when the environment must be created or repaired.
+
 The alternatives change only the model boundary; all three keep the real admission, assignment,
 bootstrap, authenticated runtime stream, candidate validation, and PostgreSQL persistence path.
 
