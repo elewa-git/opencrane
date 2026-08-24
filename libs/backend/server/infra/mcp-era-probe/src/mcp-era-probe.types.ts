@@ -31,7 +31,7 @@ export interface McpEraProbeHttpsRequestCommand
 	readonly signal: AbortSignal;
 }
 
-/** The bounded response returned by the low-level HTTPS request seam. */
+/** The bounded response returned by the low-level HTTPS request operation. */
 export interface McpEraProbeHttpsResponse
 {
 	/** HTTP status returned before the body is interpreted. */
@@ -42,10 +42,10 @@ export interface McpEraProbeHttpsResponse
 	readonly body: Uint8Array;
 }
 
-/** Sends one prevalidated HTTPS request; tests use this seam instead of a live socket. */
+/** Sends one prevalidated HTTPS request; tests provide this function instead of opening a live socket. */
 export type McpEraProbeHttpsRequest = (command: McpEraProbeHttpsRequestCommand) => Promise<McpEraProbeHttpsResponse>;
 
-/** Configures the production HTTPS era-probe client and its deterministic test seams. */
+/** Configures the production HTTPS era-probe client and its deterministic test overrides. */
 export interface McpEraProbeHttpsClientOptions
 {
 	/** MCP protocol revision sent in the discovery request. */
@@ -79,7 +79,7 @@ export interface McpEraProbeResult
 /**
  * Checks whether a remote endpoint speaks the only MCP revision OpenCrane admits.
  *
- * This is a structural adapter seam for the MCP domain. The infrastructure package owns DNS,
+ * This is the adapter contract used by the MCP domain. The infrastructure package owns DNS,
  * HTTPS, response limits, and JSON-RPC validation but never decides whether a successful probe
  * authorizes registration. Called by: `__CreateMcpEraProbeWorkflow` during remote-server review.
  */

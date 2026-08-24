@@ -1,4 +1,4 @@
-# backend-server-infra-workflows-infra-absurd — Absurd workflow engine adapter
+# @opencrane/backend/server/infra/workflows/infra_absurd — Absurd workflow engine adapter
 
 > [backend](../../../../README.md) › [server](../../../README.md) › [infra](../../README.md) › [workflows](../README.md) › infra_absurd
 
