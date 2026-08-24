@@ -34,6 +34,8 @@ database transaction supplied by the product change and the parameterised `absur
 function.
 Each registered job also supplies its total attempt limit and retry delay. The adapter stores those
 limits with the Absurd task, including when the task is started inside a product database transaction.
+A retryable error lets Absurd schedule the next attempt. A terminal error is saved as failed before
+the SDK can apply that general retry policy, so work that cannot succeed unchanged stops immediately.
 
 ## Dependency direction
 

@@ -1,13 +1,14 @@
-import { Absurd, type TaskContext } from "absurd-sdk";
+import { Absurd, FailedTask, type TaskContext } from "absurd-sdk";
 import { Pool } from "pg";
 
 import { ___DoWithTrace } from "@opencrane/backend/observability";
-import { DurableExecutionError, DurableTaskNotRegisteredError, DurableTaskRetryBackoffKinds } from "@opencrane/backend/server/infra/workflows/contract";
+import { DurableExecutionError, DurableTaskNotRegisteredError, DurableTaskRetryBackoffKinds, DurableTaskTerminalError } from "@opencrane/backend/server/infra/workflows/contract";
 import type { DurableEventReceipt, DurableExecution, DurableExecutionTransaction, DurableTaskDefinition, DurableTaskEvent, DurableTaskReceipt, DurableTaskRetryPolicy, DurableTaskSpawn, DurableWorkerRuntime, DurableWorkers, DurableWorkerStart } from "@opencrane/backend/server/infra/workflows/contract";
 
 import { _AbsurdTaskScopedIdempotencyKey, PrismaDbProcedureGateway } from "./prisma-db-procedure-gateway";
 import type { AbsurdDurableExecutionOptions } from "./absurd-durable-execution.types";
 import { _AbsurdTaskContext, _AbsurdTaskEventName } from "./absurd-task-context";
+import { _AbsurdTerminalTaskFailure } from "./absurd-terminal-task-failure";
 import { AbsurdWorkflowError } from "./absurd-workflow-error";
 
 interface _TaskEnvelope
@@ -148,7 +149,16 @@ export class AbsurdDurableExecution implements DurableExecution, DurableWorkerRu
 	{
 		const envelope = _TaskEnvelope(params);
 		const task: DurableTaskReceipt = { taskId: context.taskID, taskName: definition.taskName, idempotencyKey: envelope.idempotencyKey };
-		return await definition.run(new _AbsurdTaskContext(context, task, this), envelope.inputUndefined ? undefined : envelope.input);
+		try
+		{
+			return await definition.run(new _AbsurdTaskContext(context, task, this), envelope.inputUndefined ? undefined : envelope.input);
+		}
+		catch (error)
+		{
+			if (!(error instanceof DurableTaskTerminalError)) throw error;
+			await new _AbsurdTerminalTaskFailure(this.databasePool, this.queueForTask(definition.taskName)).fail(context.taskID, error);
+			throw new FailedTask();
+		}
 	}
 
 	/** Admit a top-level task within the caller's transaction. */

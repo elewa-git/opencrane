@@ -10883,4 +10883,54 @@ begin
 end;
 $$;
 
+CREATE FUNCTION public."fail_absurd_task_terminal"(
+    p_queue_name TEXT,
+    p_task_id UUID,
+    p_reason JSONB
+) RETURNS void
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    v_run_id UUID;
+    v_attempt INTEGER;
+BEGIN
+    IF p_queue_name IS NULL OR btrim(p_queue_name) = '' OR NOT EXISTS (
+        SELECT 1 FROM absurd.queues WHERE queue_name = p_queue_name
+    ) THEN
+        RAISE EXCEPTION 'Terminal workflow failure requires an existing Absurd queue';
+    END IF;
+    IF jsonb_typeof(p_reason) <> 'object' THEN
+        RAISE EXCEPTION 'Terminal workflow failure reason must be a JSON object';
+    END IF;
+
+    EXECUTE format(
+        'SELECT run_id, attempt
+           FROM absurd.%I
+          WHERE task_id = $1
+            AND state IN (''running'', ''sleeping'')
+          ORDER BY attempt DESC
+          LIMIT 1
+          FOR UPDATE',
+        'r_' || p_queue_name
+    )
+    INTO v_run_id, v_attempt
+    USING p_task_id;
+
+    IF v_run_id IS NULL THEN
+        RAISE EXCEPTION 'Absurd task % has no active run in queue %', p_task_id, p_queue_name;
+    END IF;
+
+    EXECUTE format(
+        'UPDATE absurd.%I
+            SET max_attempts = $2
+          WHERE task_id = $1
+            AND state NOT IN (''completed'', ''failed'', ''cancelled'')',
+        't_' || p_queue_name
+    )
+    USING p_task_id, v_attempt;
+
+    PERFORM absurd.fail_run(p_queue_name, v_run_id, p_reason, NULL);
+END;
+$$;
+
 SELECT absurd.create_queue('control-plane');
