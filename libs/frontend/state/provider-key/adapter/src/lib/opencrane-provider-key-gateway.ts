@@ -34,8 +34,7 @@ interface ProviderKeyStatusWire
  * the {@link ProviderKeyStatus} read model. WeOwnAI never imports OpenCrane
  * source; this network contract is the only coupling.
  *
- * Bound as the default provider in the opencrane-ui app via
- * `provideControlPlaneGateways`.
+ * Bound in the OpenCrane UI live profile by {@link provideOpenCraneUiLiveGateways}.
  */
 @Injectable()
 export class OpenCraneProviderKeyGateway implements ProviderKeyGateway

@@ -1,55 +1,39 @@
 import { Injectable, Signal, computed, inject, resource } from "@angular/core";
 
-import { ControlPlaneApiService, FleetManagerApiService } from "@opencrane/core";
 import { Capabilities, SessionUser } from "./session-store.types";
 import { _DeriveCapabilities } from "./session-store.util";
 import { PLATFORM_SURFACE } from "./platform-surface";
+import { SESSION_GATEWAY, type SessionSnapshot } from "./session-gateway.types";
 
 /**
- * App-wide identity and capability state, sourced from **this surface's** API.
+ * App-wide identity and capability state, sourced through the configured session gateway.
  *
  * Platform and org are strictly-separated domains with their own OIDC sessions
- * (see {@link PLATFORM_SURFACE}), so auth is read from the surface-appropriate
- * client: the platform app authenticates against the platform API, and the
- * org app against the Control Plane API. `me` mirrors `GET /auth/me`. All values are signals; capabilities are
- * `computed` so RBAC checks in templates are memoised reads, not method calls.
+ * (see {@link PLATFORM_SURFACE}), so the app composition selects a gateway that
+ * preserves that boundary. All values are signals; capabilities are `computed`
+ * so RBAC checks in templates are memoised reads, not method calls.
  */
 @Injectable({ providedIn: "root" })
 export class SessionStore
 {
-	/** Typed Control Plane client for the org-admin surface. */
-	private readonly _cp = inject(ControlPlaneApiService);
-
-	/** Typed Fleet Manager client (platform-operator surface auth). */
-	private readonly _fleet = inject(FleetManagerApiService);
+	/** Session port supplied by the app composition root. */
+	private readonly _gateway = inject(SESSION_GATEWAY);
 
 	/** Which strictly-separated surface this app serves — platform vs org (see {@link PLATFORM_SURFACE}). */
 	private readonly _surface = inject(PLATFORM_SURFACE);
 
-	/** Current auth status (`mode`, `authenticated`, `user`), read from this surface's `/auth/me`. One-shot read. */
+	/** Current authentication status and identity loaded through the configured gateway. */
 	public readonly me = resource({
-		loader: async () =>
-		{
-			// Each surface owns its own OIDC session — read from its own client.
-			if (this._surface === "platform")
-			{
-				const { data, error } = await this._fleet.client.GET("/auth/me", {});
-				if (error)
-				{
-					throw error;
-				}
-				return data;
-			}
-			const { data, error } = await this._cp.client.GET("/auth/me", {});
-			if (error)
-			{
-				throw error;
-			}
-			return data;
-		}
+		loader: this._load.bind(this)
 	});
 
-	/** Whether a opencrane-ui session is established. */
+	/** Loads the current session through the injected transport boundary. */
+	private _load(): Promise<SessionSnapshot>
+	{
+		return this._gateway.load(this._surface);
+	}
+
+	/** Whether an OpenCrane UI session is established. */
 	public readonly authenticated: Signal<boolean> = computed(() =>
 	{
 		// `value()` throws while the resource is loading or errored; read it only
@@ -64,10 +48,8 @@ export class SessionStore
 		{
 			return undefined;
 		}
-		// `/auth/me` carries the IAM role claims (`groups`, `isPlatformOperator`,
-		// `isOrgAdmin`, `clusterTenant`) declared by the pinned contract; read them
-		// straight off the typed response and pass them through verbatim for
-		// `capabilities` to resolve.
+		// The gateway carries the IAM role claims through unchanged so capability
+		// derivation can remain transport-neutral and fail closed.
 		const u = this.me.value()?.user;
 		if (!u || !u.sub)
 		{
@@ -80,10 +62,7 @@ export class SessionStore
 			groups: u.groups,
 			isPlatformOperator: u.isPlatformOperator,
 			isOrgAdmin: u.isOrgAdmin,
-			// `clusterTenant` is a silo (Control Plane) claim only — the fleet
-			// `/auth/me` carries none (the platform plane is cluster-wide), so the
-			// union narrows it away; read it defensively off the opencrane-ui arm.
-			clusterTenant: "clusterTenant" in u ? (u.clusterTenant as string | null) : undefined
+			clusterTenant: u.clusterTenant
 		};
 	});
 
@@ -95,19 +74,17 @@ export class SessionStore
 	});
 
 	/**
-	 * Capability flags driving UI gating. Interim model: any authenticated
-	 * session is treated as an operator until the opencrane-ui emits roles
-	 * (see `docs/architecture.md` §5.2). The API remains the enforcement point —
-	 * these flags only hide/disable controls.
+	 * Capability flags that drive fail-closed UI gating from explicit role claims.
+	 * The API remains the enforcement point; these flags only hide or disable controls.
 	 */
 	public readonly capabilities: Signal<Capabilities> = computed(() =>
 	{
 		const authenticated = this.authenticated();
 		const u = this.user();
 		// Fail-closed: an operator/admin power requires an EXPLICIT claim from the
-		// control plane. `/auth/me` marks these role fields required, so a live
-		// authenticated session always carries them; a missing claim (mis-issued
-		// token, older backend) therefore grants NOTHING rather than silently
+		// session authority. A live authenticated session carries these fields;
+		// an absent or malformed claim (mis-issued token or incomplete mock)
+		// therefore grants no capabilities rather than silently
 		// elevating an ordinary session to operator. The API remains the enforcement
 		// point — these flags only gate UI.
 		const isPlatformOperator = u?.isPlatformOperator ?? false;
@@ -128,15 +105,7 @@ export class SessionStore
 	 */
 	public async logout(): Promise<void>
 	{
-		// End the session on this surface's own API (platform vs org).
-		if (this._surface === "platform")
-		{
-			await this._fleet.client.POST("/auth/logout");
-		}
-		else
-		{
-			await this._cp.client.POST("/auth/logout");
-		}
+		await this._gateway.logout(this._surface);
 		if (typeof window !== "undefined")
 		{
 			window.location.assign("/");

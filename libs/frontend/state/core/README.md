@@ -12,15 +12,18 @@ an Angular dependency-injection token) that describes *what* data operations exi
 the HTTP or WebSocket calls is an **adapter**, and adapters live in the sibling `*/adapter` packages.
 This package defines the shared ports and the app-wide identity state everyone else builds on.
 
-It owns one thing: **`SessionStore`**, the signal-based store of who is logged in and what they may do. It reads
-  the authenticated session through the typed API client and derives coarse **`Capabilities`**
-  flags. The **`PLATFORM_SURFACE`** token binds those capabilities to the organisation UI.
+It owns browser identity state: **`SessionStore`** holds who is logged in and what they may do, while
+`SESSION_GATEWAY` keeps that state independent from HTTP and local-development data. The store
+derives coarse **`Capabilities`** flags, and **`PLATFORM_SURFACE`** binds those capabilities to the
+organisation UI.
 
 ```
- core (identity state)              a feature
- ┌──────────────────┐  reads        ┌──────────────┐
- │ SessionStore     │◄─────────────│ features/... │
- └──────────────────┘               └──────────────┘
+ core (identity state)                 a feature
+ ┌─────────────────────┐  reads        ┌──────────────┐
+ │ SESSION_GATEWAY     │               │ features/... │
+ │       ▼             │◄──────────────│              │
+ │ SessionStore        │               └──────────────┘
+ └─────────────────────┘
 ```
 
 **In this flow:** [gateways](../gateways/README.md)
@@ -33,19 +36,22 @@ only hide or disable controls in the UI; the API stays the real enforcement poin
 
 - `SessionStore` — app-wide identity and capability signals.
 - `SessionUser` / `Capabilities` — the identity and capability read models.
+- `SESSION_GATEWAY` / `SessionGateway` — transport-neutral session port supplied by app composition.
 - `PlatformSurface`, `PLATFORM_SURFACE` — which strictly-separated surface (platform vs org) this build serves.
 
 ## Boundary
 
-Consumed by feature packages for identity and capability gating. It holds identity state and uses
-only typed OpenCrane API reads; it owns no conversation transport or cache protocol.
+Consumed by feature packages for identity and capability gating. It holds identity state but owns
+no HTTP implementation, conversation transport, or cache protocol. The sibling
+[`core/adapter`](./adapter/README.md) package implements its session port for live APIs.
 
 ## Dependency direction
 
-Tagged `scope:web` (`type:state`): it may depend only on other `scope:web` and `scope:shared`
-packages (here, `@opencrane/core` and Angular) — never on apps, backend, or server domains.
+Tagged `scope:web` and `frontend-role:state`: it depends on Angular and transport-neutral frontend
+models — never on apps, backend, server domains, or generated HTTP clients.
 
 ## See also
 
 - Parent index: [state](../README.md)
+- Live adapter: [core/adapter](./adapter/README.md)
 - Sibling: [gateways](../gateways/README.md)

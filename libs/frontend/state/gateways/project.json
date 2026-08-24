@@ -5,7 +5,7 @@
 	"sourceRoot": "libs/frontend/state/gateways/src",
 	"prefix": "wo",
 	"tags": [
-		"scope:web",
+		"scope:opencrane-ui",
 		"layer:frontend",
 		"type:lib"
 	],

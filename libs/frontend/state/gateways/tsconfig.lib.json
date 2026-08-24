@@ -29,6 +29,39 @@
       "path": "../core"
     },
     {
+      "path": "../core/adapter"
+    },
+    {
+      "path": "../onboarding"
+    },
+    {
+      "path": "../persona/adapter"
+    },
+    {
+      "path": "../conversation/workspace"
+    },
+    {
+      "path": "../conversation/workspace/adapter"
+    },
+    {
+      "path": "../conversation/adapter"
+    },
+    {
+      "path": "../conversation/assets"
+    },
+    {
+      "path": "../conversation/elicitation"
+    },
+    {
+      "path": "../conversation/agent-threads"
+    },
+    {
+      "path": "../organization/members"
+    },
+    {
+      "path": "../organization/members/adapter"
+    },
+    {
       "path": "../../core"
     }
   ]

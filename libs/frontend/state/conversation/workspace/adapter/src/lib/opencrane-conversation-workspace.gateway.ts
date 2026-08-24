@@ -19,9 +19,9 @@ import { _ConversationDetail, _ConversationOnboardingHistory, _ConversationRun, 
  * Identity comes from the browser session cookie the client already carries. No method takes a subject
  * id, so none of them can be aimed at another user's conversations.
  *
- * Called by: nothing directly. apps/opencrane-ui/src/app/chats/conversation-workspace.providers.ts binds
- * it as the `CONVERSATION_WORKSPACE_GATEWAY` implementation, and {@link ConversationWorkspaceStore},
- * ConversationRunStore and ConversationOnboardingHistoryStore call it through that token.
+ * Called by: {@link provideOpenCraneUiLiveGateways} binds it as the
+ * `CONVERSATION_WORKSPACE_GATEWAY` implementation, and {@link ConversationWorkspaceStore},
+ * `ConversationRunStore`, and `ConversationOnboardingHistoryStore` call it through that token.
  *
  * @implements ConversationWorkspaceGateway
  * @see ConversationWorkspaceGatewayErrorKinds — the four categories every failure is reduced to.

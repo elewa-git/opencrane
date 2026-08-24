@@ -256,6 +256,9 @@
       "@opencrane/state/core": [
         "./libs/frontend/state/core/src/index.ts"
       ],
+      "@opencrane/state/core/adapter": [
+        "./libs/frontend/state/core/adapter/src/index.ts"
+      ],
       "@opencrane/state/gateways": [
         "./libs/frontend/state/gateways/src/index.ts"
       ],
@@ -357,6 +360,9 @@
     },
     {
       "path": "./libs/frontend/state/core"
+    },
+    {
+      "path": "./libs/frontend/state/core/adapter"
     },
     {
       "path": "./libs/frontend/state/onboarding"

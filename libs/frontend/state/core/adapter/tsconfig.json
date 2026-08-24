@@ -1,0 +1,15 @@
+{
+	"extends": "../../../../../tsconfig.frontend.json",
+	"compilerOptions": {
+		"outDir": "../../../../../dist/out-tsc",
+		"types": [],
+		"composite": true,
+		"tsBuildInfoFile": "../../../../../dist/out-tsc/libs/frontend/state/core/adapter/tsconfig.tsbuildinfo"
+	},
+	"include": ["src/**/*.ts"],
+	"exclude": ["**/*.spec.ts"],
+	"references": [
+		{ "path": "../../../core" },
+		{ "path": ".." }
+	]
+}

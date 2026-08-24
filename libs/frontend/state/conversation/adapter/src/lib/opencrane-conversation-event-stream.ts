@@ -32,8 +32,8 @@ interface ConversationEventStreamProgress
  * `@Injectable()` with no `providedIn`: provide it where it is needed rather than app-wide, so one
  * stream instance does not outlive the screen that started it.
  *
- * Called by: the web app binds this class to `CONVERSATION_WORKSPACE_EVENT_STREAM` in
- * `provideConversationWorkspaceComposition`; `ConversationWorkspaceStore` then starts it after a
+ * Called by: {@link provideOpenCraneUiLiveGateways} binds this class to
+ * `CONVERSATION_WORKSPACE_EVENT_STREAM`; `ConversationWorkspaceStore` then starts it after a
  * conversation snapshot loads. The adapter tests also construct it directly.
  *
  * @implements ConversationEventStream

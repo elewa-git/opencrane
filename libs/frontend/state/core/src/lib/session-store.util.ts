@@ -16,7 +16,7 @@ import { PlatformSurface } from "./platform-surface";
  * is additionally gated on `authenticated`, so an unauthenticated session grants
  * nothing regardless of the role flags. The API remains the enforcement point.
  *
- * @param authenticated      - Whether a opencrane-ui session is established.
+ * @param authenticated      - Whether an OpenCrane UI session is established.
  * @param isPlatformOperator - Platform-operator claim (fleet-wide); honoured only on the `"platform"` surface.
  * @param isOrgAdmin         - Org-admin claim (account-scoped); honoured only on the `"org"` surface.
  * @param surface            - Which surface this app build serves (see {@link PlatformSurface}).

@@ -16,7 +16,7 @@ import { McpAccessPolicyWire, McpInstalledWire, McpServerWire, _MapAccessPolicy,
  * The MCP paths are not yet in the pinned OpenAPI contract (backend P0, in
  * parallel), so calls go through {@link ControlPlaneApiService.request} with locally
  * projected wire types until the endpoints are synced into the generated client.
- * Bound in `live` mode by `provideControlPlaneGateways`.
+ * Bound in the live profile by {@link provideOpenCraneUiLiveGateways}.
  *
  * **Security:** {@link setCredential} is the only secret-bearing call and is
  * write-only — the values are POSTed and never read back. No read method returns
