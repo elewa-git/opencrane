@@ -125,7 +125,10 @@ export class PrismaMcpbValidationRepository implements McpbValidationRepository
 		});
 		if (updated.count !== 1)
 			return null;
-		return _Claim({ ...candidate, state: McpbValidationWorkloadState.Claimed, claimedAt, claimExpiresAt, deliveryCount });
+		const claimed = await this._transaction.mcpbValidationWorkload.findUnique({ where: { id: candidate.id }, select: _WORKLOAD_CLAIM_SELECT });
+		if (claimed === null || claimed.state !== McpbValidationWorkloadState.Claimed || claimed.deliveryCount !== deliveryCount)
+			return null;
+		return _Claim(claimed);
 	}
 
 	/** Record the Kubernetes Job UID only while the controller's original claim is still valid. */

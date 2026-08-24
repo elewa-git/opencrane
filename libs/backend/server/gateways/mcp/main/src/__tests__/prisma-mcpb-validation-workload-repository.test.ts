@@ -35,10 +35,11 @@ describe("Prisma MCP bundle validation workload repository", function _McpbValid
 		const transaction = _Transaction();
 		transaction.mcpbValidationWorkload.findFirst.mockResolvedValue(_PendingWorkload());
 		transaction.mcpbValidationWorkload.updateMany.mockResolvedValue({ count: 1 });
+		transaction.mcpbValidationWorkload.findUnique.mockResolvedValue({ ..._PendingWorkload(), state: "Claimed", claimedAt: new Date("2099-07-26T05:00:03.000Z"), claimExpiresAt: new Date("2099-07-26T05:00:33.000Z"), deliveryCount: 1 });
 
 		const claim = await new PrismaMcpbValidationRepository(transaction as never).claimNextWorkload(30_000);
 
-		expect(claim).toEqual({ workloadId: "workload-1", siloId: "silo-1", validationId: "validation-1", claimedAt: "2099-07-26T05:00:01.000Z", deliveryCount: 1, expiresAt: "2099-07-26T05:00:31.000Z" });
+		expect(claim).toEqual({ workloadId: "workload-1", siloId: "silo-1", validationId: "validation-1", claimedAt: "2099-07-26T05:00:03.000Z", deliveryCount: 1, expiresAt: "2099-07-26T05:00:33.000Z" });
 		expect(transaction.mcpbValidationWorkload.updateMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ state: "Pending", deliveryCount: 0 }), data: expect.objectContaining({ state: "Claimed", deliveryCount: 1 }) }));
 		vi.useRealTimers();
 	});
