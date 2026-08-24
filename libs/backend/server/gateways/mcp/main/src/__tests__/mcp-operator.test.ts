@@ -194,6 +194,23 @@ describe("mcp-operator router", function _suite()
       expect(spies["auditEntry.create"]).toBeUndefined();
     });
 
+    it("restores a disabled server when its saved protocol evidence remains accepted", async function _RestoresDisabledServer()
+    {
+      _enableOidc();
+      const server = { id: "srv-1", name: "Server", description: "", publisher: null, glyph: null, serverType: "SingleUser", approvalStatus: "Published", credentialSchema: [], entitlementSummary: null, eraProbeStatus: McpEraProbeStates.Accepted };
+      const { prisma, spies } = _mockPrisma({
+        "mcpServer.updateMany": function _Update() { return Promise.resolve({ count: 1 }); },
+        "mcpServer.findFirst": function _Find() { return Promise.resolve(server); },
+        "auditEntry.create": function _Audit() { return Promise.resolve({}); },
+      });
+
+      const response = await request(_buildApp(prisma, { sub: "admin", isOrgAdmin: true })).post("/api/v1/mcp/servers/srv-1/enabled").send({ enabled: true });
+
+      expect(response.status).toBe(200);
+      expect(response.body).toMatchObject({ id: "srv-1", approvalStatus: "published" });
+      expect(spies["mcpServer.updateMany"]).toHaveBeenCalledWith({ where: { id: "srv-1", siloId: "silo-1", eraProbeStatus: { in: ["Accepted", "NotRequired"] }, approvalStatus: "Disabled" }, data: { approvalStatus: "Published" } });
+    });
+
     it("fails closed when no session is established", async function _denyUnauthenticated()
     {
       const { prisma } = _mockPrisma();

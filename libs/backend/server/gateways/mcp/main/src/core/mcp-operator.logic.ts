@@ -132,8 +132,9 @@ export function uninstallServer(unitOfWork: McpOperatorUnitOfWork, principalId: 
 /**
  * Sets a server's approval status to `Approved` in the authenticated silo.
  *
- * This endpoint is a status setter: it does not require the server to be in a prior approval
- * status. A missing server in the silo returns `null`; an updated server is audited and returned.
+ * The server must be waiting for review and must have accepted protocol evidence, unless it is an
+ * existing catalogue row that predates protocol checks. The update and audit entry share one
+ * database transaction.
  *
  * Called by: {@link mcpOperatorRouter} for `POST /servers/:id/approve`.
  * @param unitOfWork - Runs the status update and audit write together.
@@ -149,8 +150,9 @@ export function approveServer(unitOfWork: McpOperatorUnitOfWork, caller: McpOper
 /**
  * Sets a server's approval status to `Published` in the authenticated silo.
  *
- * This endpoint is a status setter: it does not require the server to be in a prior approval
- * status. A missing server in the silo returns `null`; an updated server is audited and returned.
+ * The server must already be approved and must have accepted protocol evidence, unless it is an
+ * existing catalogue row that predates protocol checks. The update and audit entry share one
+ * database transaction.
  *
  * Called by: {@link mcpOperatorRouter} for `POST /servers/:id/publish`.
  * @param unitOfWork - Runs the status update and audit write together.
@@ -183,8 +185,8 @@ export function rejectServer(unitOfWork: McpOperatorUnitOfWork, caller: McpOpera
 /**
  * Sets a server's approval status from an administrator's enabled choice.
  *
- * `true` writes `Published` and `false` writes `Disabled`. Like the other approval endpoints,
- * this is a status setter and does not require the server to be in a prior status.
+ * `false` disables the current server. `true` restores a disabled server to `Published` after the
+ * same saved protocol evidence check used by first publication.
  *
  * Called by: {@link mcpOperatorRouter} for `POST /servers/:id/enabled`.
  * @param unitOfWork - Runs the status update and audit write together.
@@ -195,7 +197,7 @@ export function rejectServer(unitOfWork: McpOperatorUnitOfWork, caller: McpOpera
  */
 export function setServerEnabled(unitOfWork: McpOperatorUnitOfWork, caller: McpOperatorCaller, serverId: string, enabled: boolean): Promise<McpCatalogServer | null>
 {
-	if (enabled) return _Approval(unitOfWork, caller, serverId, "Published", "enabled");
+	if (enabled) return _Approval(unitOfWork, caller, serverId, "Published", "enabled", "Disabled");
 	return _Approval(unitOfWork, caller, serverId, "Disabled", "disabled");
 }
 
@@ -320,14 +322,15 @@ async function _Allowed(transaction: McpOperatorTransaction, caller: McpOperator
 /**
  * Writes a requested approval status and appends the matching audit entry.
  *
- * It delegates to the silo-scoped repository setter and intentionally does not inspect the server's
- * current status; the route endpoints therefore set a status rather than enforce a transition.
+ * The repository checks the required current approval and protocol states in the same update that
+ * writes the new state. A caller may override the normal approval source for a named transition,
+ * such as restoring a disabled server to `Published`.
  */
-function _Approval(unitOfWork: McpOperatorUnitOfWork, caller: McpOperatorCaller, serverId: string, status: string, verb: string): Promise<McpCatalogServer | null>
+function _Approval(unitOfWork: McpOperatorUnitOfWork, caller: McpOperatorCaller, serverId: string, status: string, verb: string, sourceStatus?: string): Promise<McpCatalogServer | null>
 {
 	return unitOfWork.execute(async function _Update(transaction)
 	{
-		const requiredApprovalStatus = status === "Approved" || status === "Published" ? _REQUIRED_APPROVAL[status] : undefined;
+		const requiredApprovalStatus = sourceStatus ?? (status === "Approved" || status === "Published" ? _REQUIRED_APPROVAL[status] : undefined);
 		const server = await transaction.mcp.setApprovalStatus(caller.siloId, serverId, status, __McpEraProbeRequiredStates(status), requiredApprovalStatus);
 		if (!server) return null;
 		await transaction.mcp.appendAudit("Updated", `McpServer/${serverId}`, `MCP server ${serverId} ${verb}`);

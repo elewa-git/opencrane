@@ -137,7 +137,7 @@ export function mcpOperatorRouter(unitOfWork: McpOperatorUnitOfWork, principalDi
     _sendServerOrNotFound(res, await approveServer(unitOfWork, caller, req.params.id));
   });
 
-  /** Sets a server's status to published. This endpoint does not require a prior status. Org-admin only. */
+  /** Publish an approved server after its saved protocol check succeeds. Org-admin only. */
   router.post("/servers/:id/publish", _RequireOrgAdmin(), async function _publish(req: Request<{ id: string }>, res)
   {
     const caller = await _ResolveCaller(principalDirectory, req);
@@ -153,7 +153,7 @@ export function mcpOperatorRouter(unitOfWork: McpOperatorUnitOfWork, principalDi
     _sendServerOrNotFound(res, await rejectServer(unitOfWork, caller, req.params.id));
   });
 
-  /** Sets a server to published or disabled from `enabled`; it does not require a prior status. Org-admin only. */
+  /** Disable a server or restore a disabled server to published. Org-admin only. */
   router.post("/servers/:id/enabled", _RequireOrgAdmin(), async function _setEnabled(req: Request<{ id: string }>, res)
   {
     const parsed = ___McpEnabledSchema.safeParse(req.body);
