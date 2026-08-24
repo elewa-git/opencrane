@@ -3,7 +3,7 @@ import { CancelledTask, SuspendTask, type TaskContext } from "absurd-sdk";
 import { DurableExecutionError, DurableTaskCancelledError } from "@opencrane/backend/server/infra/workflows/contract";
 import type { DurableCheckpointStep, DurableTaskContext, DurableTaskEvent, DurableTaskReceipt, DurableTaskSpawn } from "@opencrane/backend/server/infra/workflows/contract";
 
-import type { AbsurdDurableExecution } from "./absurd-durable-execution";
+import type { AbsurdWorkflowEngine } from "./absurd-workflow-engine";
 import { AbsurdWorkflowError } from "./absurd-workflow-error";
 
 /** The terminal Absurd result states that this adapter maps to its engine-neutral contract. */
@@ -53,10 +53,10 @@ export class _AbsurdTaskContext implements DurableTaskContext
 	/** Registered task receipt supplied to the domain handler. */
 	readonly task: DurableTaskReceipt;
 	/** Child-task admissions require the adapter's engine and queue policy. */
-	private readonly execution: AbsurdDurableExecution;
+	private readonly execution: AbsurdWorkflowEngine;
 
 	/** Creates a contract context around one Absurd worker invocation. */
-	constructor(context: TaskContext, task: DurableTaskReceipt, execution: AbsurdDurableExecution)
+	constructor(context: TaskContext, task: DurableTaskReceipt, execution: AbsurdWorkflowEngine)
 	{
 		this.context = context;
 		this.task = task;

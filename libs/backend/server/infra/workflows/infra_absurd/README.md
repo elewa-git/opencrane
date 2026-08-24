@@ -1,12 +1,13 @@
-# backend-server-infra-workflows-infra-absurd — Absurd engine adapter
+# backend-server-infra-workflows-infra-absurd — Absurd workflow engine adapter
 
 > [backend](../../../../README.md) › [server](../../../README.md) › [infra](../../README.md) › [workflows](../README.md) › infra_absurd
 
 ## What it owns
 
-This Phase-0 package adapts the durable-workflow port to Absurd calls. Absurd is a PostgreSQL-backed
-task engine that a later OpenCrane server slice may compose; this package owns its engine-specific
-vocabulary, a reviewed SQL snapshot, and no product workflow rules.
+This package adapts the durable-workflow port to the Absurd workflow engine. Absurd is a
+PostgreSQL-backed task engine; the live qualification session composes it here, while product code
+uses the engine-neutral contract. This package owns engine-specific vocabulary and a reviewed SQL
+snapshot, but no product workflow rules.
 
 ```text
  domain task ──► workflows contract ──► ┌─────────────────┐
@@ -23,7 +24,9 @@ The vendored SQL is pinned byte-for-byte to Absurd 0.5.0. A mismatch between its
 
 ## Public surface
 
-- `_CreateAbsurdDurableExecution` — builds the adapter without exposing the vendor SDK.
+This package has no package-level public API. It deliberately omits a `src/index.ts` barrel: the
+live qualification session constructs `AbsurdWorkflowEngine` inside this package, while product code
+depends on the engine-neutral `DurableExecution` contract.
 
 ## Boundary
 

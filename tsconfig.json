@@ -205,9 +205,6 @@
       "@opencrane/backend/server/infra/workflows/contract": [
         "./libs/backend/server/infra/workflows/contract/src/index.ts"
       ],
-      "@opencrane/backend/server/infra/workflows/infra_absurd": [
-        "./libs/backend/server/infra/workflows/infra_absurd/src/index.ts"
-      ],
       "@opencrane/backend/server/infra/workflows/kit": [
         "./libs/backend/server/infra/workflows/kit/src/index.ts"
       ],

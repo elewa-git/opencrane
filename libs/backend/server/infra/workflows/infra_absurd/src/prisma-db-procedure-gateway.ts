@@ -3,7 +3,8 @@ import { Prisma } from "@prisma/client";
 import { AbsurdWorkflowError } from "./absurd-workflow-error";
 import type { AbsurdSpawnReceipt, AbsurdSpawnRequest, AbsurdTaskAdmissionProcedure } from "./absurd-transaction-spawner.types";
 
-interface _SpawnTaskRow
+/** Represents the raw result row returned by the fixed Absurd admission procedure. */
+interface ISpawnTaskRow
 {
 	/** Raw task identity returned by the vendor procedure. */
 	readonly task_id: unknown;
@@ -42,7 +43,7 @@ function _RequireTransactionClient(client: unknown): Prisma.TransactionClient
 }
 
 /** Validate the exact function result rather than treating a malformed vendor response as an admission. */
-function _Receipt(rows: readonly _SpawnTaskRow[]): AbsurdSpawnReceipt
+function _Receipt(rows: readonly ISpawnTaskRow[]): AbsurdSpawnReceipt
 {
 	if (rows.length !== 1)
 	{
@@ -59,7 +60,7 @@ function _Receipt(rows: readonly _SpawnTaskRow[]): AbsurdSpawnReceipt
 /**
  * Owns the fixed PostgreSQL procedure boundary between OpenCrane and Absurd.
  *
- * Called by: `AbsurdDurableExecution.spawn`. It does not accept SQL text, table names, or an
+ * Called by: `AbsurdWorkflowEngine.spawn`. It does not accept SQL text, table names, or an
  * arbitrary procedure name: this class can call only the reviewed `absurd.spawn_task` function.
  * The caller's transaction remains open around the call, so a product write and task admission
  * share one commit decision.
@@ -103,7 +104,7 @@ export class PrismaDbProcedureGateway implements AbsurdTaskAdmissionProcedure
 		const options = JSON.stringify({ idempotency_key: _AbsurdTaskScopedIdempotencyKey(taskName, idempotencyKey) });
 		try
 		{
-			const rows = await client.$queryRaw<readonly _SpawnTaskRow[]>(Prisma.sql`
+			const rows = await client.$queryRaw<readonly ISpawnTaskRow[]>(Prisma.sql`
 				SELECT task_id, run_id, attempt, created
 				FROM absurd.spawn_task(${this.queueName}, ${taskName}, ${input}::jsonb, ${options}::jsonb)
 			`);

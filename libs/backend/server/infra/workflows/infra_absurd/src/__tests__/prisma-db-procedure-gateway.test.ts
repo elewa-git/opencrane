@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { DurableExecutionError } from "@opencrane/backend/server/infra/workflows/contract";
 
-import { AbsurdDurableExecution } from "../absurd-durable-execution";
+import { AbsurdWorkflowEngine } from "../absurd-workflow-engine";
 import { AbsurdWorkflowError } from "../absurd-workflow-error";
 import { PrismaDbProcedureGateway } from "../prisma-db-procedure-gateway";
 
@@ -59,7 +59,7 @@ describe("PrismaDbProcedureGateway", function _PrismaDbProcedureGatewaySuite()
 	});
 });
 
-describe("AbsurdDurableExecution queue authority", function _QueueAuthoritySuite()
+describe("AbsurdWorkflowEngine queue authority", function _QueueAuthoritySuite()
 {
 	it("rejects an unreviewed task instead of falling back to an adapter queue", function _RejectsQueueFallback()
 	{
@@ -73,7 +73,7 @@ describe("AbsurdDurableExecution queue authority", function _QueueAuthoritySuite
 				return "control-plane";
 			},
 		});
-		const execution = new AbsurdDurableExecution({ databaseUrl: "postgresql://example.invalid/opencrane", databasePoolSize: 2, queueAuthority: queues });
+		const execution = new AbsurdWorkflowEngine({ databaseUrl: "postgresql://example.invalid/opencrane", databasePoolSize: 2, queueAuthority: queues });
 
 		expect(execution.queueForTask("refresh-token")).toBe("control-plane");
 		expect(function _UnreviewedTask(): void { execution.queueForTask("unreviewed"); }).toThrow("Task has no reviewed queue.");
@@ -82,13 +82,13 @@ describe("AbsurdDurableExecution queue authority", function _QueueAuthoritySuite
 	it("requires one explicit shared database pool ceiling", function _RequiresPoolCeiling()
 	{
 		const queues = { queueForTask(): string { return "control-plane"; } };
-		expect(function _MissingCeiling(): void { new AbsurdDurableExecution({ databaseUrl: "postgresql://example.invalid/opencrane", databasePoolSize: 0, queueAuthority: queues }); }).toThrow("databasePoolSize must be a positive integer");
+		expect(function _MissingCeiling(): void { new AbsurdWorkflowEngine({ databaseUrl: "postgresql://example.invalid/opencrane", databasePoolSize: 0, queueAuthority: queues }); }).toThrow("databasePoolSize must be a positive integer");
 	});
 
 	it("drains workers before ending its owned shared pool", async function _ClosesOwnedPool()
 	{
 		const order: string[] = [];
-		const execution = new AbsurdDurableExecution({ databaseUrl: "postgresql://example.invalid/opencrane", databasePoolSize: 2, queueAuthority: { queueForTask(): string { return "control-plane"; } } });
+		const execution = new AbsurdWorkflowEngine({ databaseUrl: "postgresql://example.invalid/opencrane", databasePoolSize: 2, queueAuthority: { queueForTask(): string { return "control-plane"; } } });
 		const internals = execution as unknown as { databasePool: Pool; workerGroups: Map<string, readonly { close(): Promise<void> }[]> };
 		internals.workerGroups.set("server", [{ async close(): Promise<void> { order.push("worker"); } }]);
 		vi.spyOn(internals.databasePool, "end").mockImplementation(async function _End(): Promise<void> { order.push("pool"); });
@@ -102,7 +102,7 @@ describe("AbsurdDurableExecution queue authority", function _QueueAuthoritySuite
 	{
 		const databasePool = new Pool({ connectionString: "postgresql://example.invalid/opencrane", max: 2 });
 		const end = vi.spyOn(databasePool, "end");
-		const execution = new AbsurdDurableExecution({ databaseUrl: "postgresql://example.invalid/opencrane", databasePool, databasePoolSize: 2, queueAuthority: { queueForTask(): string { return "control-plane"; } } });
+		const execution = new AbsurdWorkflowEngine({ databaseUrl: "postgresql://example.invalid/opencrane", databasePool, databasePoolSize: 2, queueAuthority: { queueForTask(): string { return "control-plane"; } } });
 
 		await execution.close();
 

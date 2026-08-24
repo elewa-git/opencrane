@@ -1,8 +1,14 @@
 import type { DurableTaskQueueAuthority } from "@opencrane/backend/server/infra/workflows/contract";
 import type { Pool } from "pg";
 
-/** Configuration for the Absurd adapter's engine-owned connections and queues. */
-export interface AbsurdDurableExecutionOptions
+/**
+ * Configures the Absurd workflow engine for one server process or qualification session.
+ *
+ * Application composition supplies the same queue authority to the workflow kit and this engine,
+ * so a task cannot validate against one queue policy and run on another. Supplying `databasePool`
+ * keeps that caller responsible for closing the pool; otherwise the engine creates and closes it.
+ */
+export interface IAbsurdWorkflowEngineOptions
 {
 	/** PostgreSQL URL for this silo's existing CNPG database. */
 	readonly databaseUrl: string;

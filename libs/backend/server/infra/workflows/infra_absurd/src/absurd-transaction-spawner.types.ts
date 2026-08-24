@@ -25,7 +25,7 @@ export interface AbsurdSpawnRequest
 /**
  * Executes the one engine-owned database procedure needed to admit a durable task.
  *
- * Called by: `AbsurdDurableExecution` through `PrismaDbProcedureGateway`. The caller supplies
+ * Called by: `AbsurdWorkflowEngine` through `PrismaDbProcedureGateway`. The caller supplies
  * its existing product transaction; implementations must not open, commit, or roll back one.
  */
 export interface AbsurdTaskAdmissionProcedure

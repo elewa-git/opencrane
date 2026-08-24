@@ -3,7 +3,7 @@ import { Pool } from "pg";
 
 import type { DurableTaskReceipt, DurableWorkers } from "@opencrane/backend/server/infra/workflows/contract";
 
-import { AbsurdDurableExecution } from "../absurd-durable-execution";
+import { AbsurdWorkflowEngine } from "../absurd-workflow-engine";
 import type { DurableQualificationUnitOfWork } from "./durable-qualification-unit-of-work.types";
 import type { IQualificationTaskInput, IQualificationWorkflowSession, IQualificationWorkflowSessionOptions } from "./durable-execution-qualification-session.types";
 import { PrismaDurableQualificationUnitOfWork } from "./prisma-durable-qualification-unit-of-work";
@@ -15,7 +15,7 @@ interface IQualificationWorkflowResources
 	/** Provides the SDK pool and application-role connection observations. */
 	readonly databasePool: Pool;
 	/** Admits and dispatches the temporary qualification task. */
-	readonly execution: AbsurdDurableExecution;
+	readonly execution: AbsurdWorkflowEngine;
 	/** Creates and drops the temporary queue. */
 	readonly queueOwner: Absurd;
 	/** Commits the receipt transaction for every measured task. */
@@ -158,7 +158,7 @@ export function _CreateDurableExecutionQualificationSession(options: IQualificat
 	prismaDatabaseUrl.searchParams.set("connection_limit", "1");
 	const databasePool = new Pool({ connectionString: databaseUrl, max: options.databasePoolSize });
 	const queueAuthority = Object.freeze({ queueForTask(taskName: string): string { if (taskName !== _TaskName) throw new Error("Qualification task is not admitted."); return options.queueName; } });
-	const execution = new AbsurdDurableExecution({ databaseUrl, databasePool, databasePoolSize: options.databasePoolSize, queueAuthority, workerConcurrency: 1, pollIntervalMs: options.pollIntervalMs });
+	const execution = new AbsurdWorkflowEngine({ databaseUrl, databasePool, databasePoolSize: options.databasePoolSize, queueAuthority, workerConcurrency: 1, pollIntervalMs: options.pollIntervalMs });
 	return new _AbsurdQualificationWorkflowSession(options, {
 		databasePool,
 		execution,

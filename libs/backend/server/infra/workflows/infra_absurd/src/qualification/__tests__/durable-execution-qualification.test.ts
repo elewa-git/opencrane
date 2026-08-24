@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import type { DurableExecutionTransaction, DurableTaskDefinition } from "@opencrane/backend/server/infra/workflows/contract";
 
-import type { AbsurdDurableExecution } from "../../absurd-durable-execution";
+import type { AbsurdWorkflowEngine } from "../../absurd-workflow-engine";
 import type { DurableQualificationUnitOfWork } from "../durable-qualification-unit-of-work.types";
 import { __QualifyDurableExecutionPickup, _DurableExecutionQualificationPassed, _DurableExecutionQualificationPercentile } from "../durable-execution-qualification";
 import { _AbsurdQualificationWorkflowSession } from "../durable-execution-qualification-session";
@@ -123,7 +123,7 @@ describe("durable execution qualification session", function _SessionSuite()
 					register(value: DurableTaskDefinition<IQualificationTaskInput, null>) { definition = value; events.push("register"); },
 					async startWorkers() { events.push("worker-start"); return { workerId: "worker", workerName: "worker", async drain() { events.push("worker-drain"); }, async stop() {} }; },
 					async spawn(_transaction: DurableExecutionTransaction, input: { input: IQualificationTaskInput }) { events.push("spawn"); return { taskId: "task", taskName: "qualification", idempotencyKey: `${input.input.sampleIndex}` }; },
-				} as unknown as AbsurdDurableExecution,
+				} as unknown as AbsurdWorkflowEngine,
 			queueOwner: { async createQueue() { events.push("queue-create"); }, async dropQueue() { events.push("queue-drop"); }, async close() { events.push("queue-close"); } } as unknown as Absurd,
 			unitOfWork: { async admit<TResult>(operation: (transaction: DurableExecutionTransaction) => Promise<TResult>): Promise<TResult> { events.push("transaction"); return await operation({ client: {} }); }, async close() { events.push("uow-close"); } } satisfies DurableQualificationUnitOfWork,
 		};
@@ -145,7 +145,7 @@ describe("durable execution qualification session", function _SessionSuite()
 		const events: string[] = [];
 		const resources = {
 			databasePool: { async end() { events.push("pool-end"); } } as unknown as Pool,
-			execution: { register() {}, async startWorkers() { return { workerId: "worker", workerName: "worker", async drain() { events.push("worker-drain"); throw new Error("drain failed"); }, async stop() {} }; } } as unknown as AbsurdDurableExecution,
+			execution: { register() {}, async startWorkers() { return { workerId: "worker", workerName: "worker", async drain() { events.push("worker-drain"); throw new Error("drain failed"); }, async stop() {} }; } } as unknown as AbsurdWorkflowEngine,
 			queueOwner: { async createQueue() {}, async dropQueue() { events.push("queue-drop"); }, async close() { events.push("queue-close"); } } as unknown as Absurd,
 			unitOfWork: { async admit<TResult>(_operation: (transaction: DurableExecutionTransaction) => Promise<TResult>): Promise<TResult> { throw new Error("unused"); }, async close() { events.push("uow-close"); } } satisfies DurableQualificationUnitOfWork,
 		};
