@@ -48,8 +48,8 @@ export class PrismaBoundaryGrantRepository implements BoundaryGrantResolver
 	private readonly prisma: Prisma.TransactionClient;
 
 	/**
-	 * Creates a resolver over canonical Postgres.
-	 * @param prisma - OpenCrane Prisma client.
+	 * Creates a resolver over the caller's open Postgres transaction.
+	 * @param prisma - Transaction used for every principal, grant, and hierarchy read.
 	 */
 	constructor(prisma: Prisma.TransactionClient)
 	{
@@ -59,20 +59,26 @@ export class PrismaBoundaryGrantRepository implements BoundaryGrantResolver
 	/** Resolves allow-only boundaries after generic deny, priority, validity, and hierarchy decisions. */
 	async resolveEffectiveBoundaryGrants(command: BoundaryGrantResolutionCommand): Promise<readonly EffectiveBoundaryGrant[]>
 	{
+		// 1. Reject incomplete coordinates before querying, so a malformed command grants nothing.
 		if (!command.siloId.trim() || !Number.isSafeInteger(command.nowEpochMs) || command.nowEpochMs < 0 || command.principalIds.length === 0)
 			return [];
+
+		// 2. Prove every requested principal belongs to this silo before expanding its group memberships.
 		const requestedPrincipalIds = [...new Set(command.principalIds)];
 		const principalRows = await this.prisma.principal.findMany({ where: { siloId: command.siloId, id: { in: requestedPrincipalIds } }, select: { id: true } });
 		const principalIds = [...new Set(principalRows.map(principal => principal.id))];
 		if (principalIds.length !== requestedPrincipalIds.length)
 			return [];
 
+		// 3. Load the verified principals' direct and group grants through the same transaction.
 		const repository = new PrismaAuthorizationGrantRepository(this.prisma);
 		const subjectSets = await Promise.all(principalIds.map(principalId => repository.resolvePrincipalSubjects(command.siloId, principalId)));
 		const subjects = subjectSets.flat();
 		if (subjects.length === 0)
 			return [];
 		const grants = await repository.listSubjectGrants(command.siloId, subjects);
+
+		// 4. Keep capability and resource requests separate, so deny and priority rules cannot mix.
 		const grantsByCoordinate = new Map<string, AuthorizationGrant[]>();
 		for (const grant of grants)
 		{
@@ -82,6 +88,7 @@ export class PrismaBoundaryGrantRepository implements BoundaryGrantResolver
 			grantsByCoordinate.set(coordinate, coordinateGrants);
 		}
 
+		// 5. Check each attachment against its hierarchy and require an allow with enough coverage.
 		const effective: EffectiveBoundaryGrant[] = [];
 		for (const attachment of command.attachments)
 		{

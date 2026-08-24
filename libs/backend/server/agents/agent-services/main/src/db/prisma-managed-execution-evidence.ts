@@ -62,6 +62,7 @@ export class PrismaManagedExecutionEvidenceAuthority implements ManagedExecution
 	 */
 	async load(command: ManagedExecutionEvidenceCommand, transaction: ManagedExecutionEvidenceTransaction): Promise<ManagedExecutionEvidenceResult>
 	{
+		// 1. Re-read the active managed service and requested published revision before trusting either.
 		const revision = await transaction.prisma.agentRevision.findFirst({
 			where: {
 				id: command.agentRevisionId,
@@ -83,6 +84,7 @@ export class PrismaManagedExecutionEvidenceAuthority implements ManagedExecution
 		if (revision === null)
 			return { outcome: "denied", reason: "run_not_admittable" };
 
+		// 2. Verify the stored principal before membership lookup, so another identity cannot enter this path.
 		const expectedPrincipalId = __ManagedAgentServicePrincipal(command.agentServiceId);
 		const servicePrincipal = revision.agentService.principal;
 		if (revision.agentService.principalId !== expectedPrincipalId
@@ -92,6 +94,8 @@ export class PrismaManagedExecutionEvidenceAuthority implements ManagedExecution
 			|| servicePrincipal.subject !== command.agentServiceId)
 			return { outcome: "denied", reason: "identity_unavailable" };
 		const principal = revision.agentService.principalId;
+
+		// 3. Require one unambiguous, signed membership assertion for the verified service principal.
 		const assertion = await _SelectMembershipAssertion(transaction.prisma, this.config.trustedIssuerId, command.siloId, principal);
 		if (assertion === null)
 			return { outcome: "denied", reason: "membership_stale" };
@@ -106,6 +110,7 @@ export class PrismaManagedExecutionEvidenceAuthority implements ManagedExecution
 		if ("reason" in membership || membership.evidence.subjectId !== principal)
 			return { outcome: "denied", reason: "membership_stale" };
 
+		// 4. After identity and membership pass, deny personal memory and any boundary without a grant.
 		const declared = revision.boundaryAttachments.map(_Attachment);
 		if (declared.some(_IsPersonalAttachment))
 			return { outcome: "denied", reason: "memory_scope_unavailable" };
@@ -113,6 +118,8 @@ export class PrismaManagedExecutionEvidenceAuthority implements ManagedExecution
 		const effective = await __ResolveEffectiveBoundaryAttachments(resolver, command.siloId, [principal], declared, transaction.admittedAtEpochMs);
 		if (effective.rejected.length > 0)
 			return { outcome: "denied", reason: "memory_scope_unavailable" };
+
+		// 5. Sort each list before hashing, so database row order cannot change the evidence.
 		const attachments = _CanonicalAttachments(effective.authorized);
 		const attachmentDigest = __DigestCanonicalJson(attachments as unknown as JsonValue);
 		const capabilitySetDigest = __DigestCanonicalJson({
