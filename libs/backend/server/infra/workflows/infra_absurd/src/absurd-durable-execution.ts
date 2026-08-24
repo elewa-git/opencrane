@@ -159,7 +159,10 @@ export class AbsurdDurableExecution implements DurableExecution, DurableWorkerRu
 		try
 		{
 			const envelope = _EnvelopeForTask(idempotencyKey, task.input);
-			const spawned = await this.engineForQueue(this.queueForTask(taskName)).spawn(taskName, envelope, { queue: this.queueForTask(taskName), idempotencyKey: _AbsurdTaskScopedIdempotencyKey(taskName, idempotencyKey) });
+			const queue = this.queueForTask(taskName);
+			const cmd = { queue, idempotencyKey: _AbsurdTaskScopedIdempotencyKey(taskName, idempotencyKey) };
+			const engine = this.engineForQueue(queue);
+			const spawned = await engine.spawn(taskName, envelope, cmd);
 			return { taskId: spawned.taskID, taskName, idempotencyKey };
 		}
 		catch (error)
@@ -173,7 +176,9 @@ export class AbsurdDurableExecution implements DurableExecution, DurableWorkerRu
 	{
 		const taskName = _RequiredString("task.taskName", task.taskName);
 		const idempotencyKey = _RequiredString("task.idempotencyKey", task.idempotencyKey);
-		const receipt = await new PrismaDbProcedureGateway(this.queueForTask(taskName)).___DbProcedureCall(transactionClient, { taskName, idempotencyKey, input: _EnvelopeForTask(idempotencyKey, task.input) });
+		const cmd = { taskName, idempotencyKey, input: _EnvelopeForTask(idempotencyKey, task.input) };
+		const gateway = new PrismaDbProcedureGateway(this.queueForTask(taskName));
+		const receipt = await gateway.___DbProcedureCall(transactionClient, cmd);
 		return { taskId: receipt.taskId, taskName, idempotencyKey };
 	}
 

@@ -7,6 +7,7 @@ import type { JsonValue } from "@opencrane/util";
 import { PrismaRuntimeTerminalReporter } from "./prisma-runtime-terminal-reporter";
 import { _RuntimeEventPayloadIsSafe } from "./runtime-event-payload";
 import type { RuntimeEventAppendRepository, RuntimeEventAppendUnitOfWork, RuntimeEventReportCommand, RuntimeEventReporter, RuntimeEventReportResult } from "./runtime-event-reporter.types";
+import type { RuntimeTerminalReportCommand } from "./runtime-terminal-reporter.types";
 
 /** The event names a workload is allowed to propose. Server-owned lifecycle events are deliberately not in this list. */
 const _RUNTIME_EVENT_TYPES = new Set<string>([RunEventTypes.RunStarted, RunEventTypes.RunResumed, RunEventTypes.MessageStarted, RunEventTypes.MessageDelta, RunEventTypes.MessageCompleted, RunEventTypes.ToolRequested, RunEventTypes.RunUsage, RunEventTypes.RunError, RunEventTypes.A2uiRenderingBegun, RunEventTypes.A2uiSurfaceUpdated, RunEventTypes.A2uiDataModelUpdated, RunEventTypes.RunCompleted, RunEventTypes.RunFailed]);
@@ -33,7 +34,9 @@ export class PrismaRuntimeEventReporter implements RuntimeEventReporter
 		if (!_RuntimeEventPayloadIsSafe(command.eventType, command.payload)) return { outcome: "denied", reason: "invalid_payload" };
 		if (command.eventType === RunEventTypes.RunCompleted || command.eventType === RunEventTypes.RunFailed)
 		{
-			return new PrismaRuntimeTerminalReporter().reportInTransaction(transaction, { runId: command.runId, attempt: command.attempt, sourceIsStartAttempt: command.sourceIsStartAttempt, eventType: command.eventType, payload: command.payload });
+			const cmd: RuntimeTerminalReportCommand = { runId: command.runId, attempt: command.attempt, sourceIsStartAttempt: command.sourceIsStartAttempt, eventType: command.eventType, payload: command.payload };
+			const task = new PrismaRuntimeTerminalReporter();
+			return task.reportInTransaction(transaction, cmd);
 		}
 		return new PrismaRuntimeEventAppendUnitOfWork(transaction).append(command);
 	}
