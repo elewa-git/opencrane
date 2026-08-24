@@ -1,5 +1,5 @@
 import { Absurd, FailedTask, type TaskContext } from "absurd-sdk";
-import { Pool } from "pg";
+import pg, { type Pool as PgPool } from "pg";
 
 import { ___DoWithTrace } from "@opencrane/backend/observability";
 import { DurableExecutionError, DurableTaskNotRegisteredError, DurableTaskRetryBackoffKinds, DurableTaskTerminalError } from "@opencrane/backend/server/infra/workflows/contract";
@@ -11,6 +11,8 @@ import { _AbsurdTaskContext, _AbsurdTaskEventName } from "./absurd-task-context"
 import { _AbsurdTerminalTaskFailure } from "./absurd-terminal-task-failure";
 import type { AbsurdSpawnRequest } from "./absurd-transaction-spawner.types";
 import { AbsurdWorkflowError } from "./absurd-workflow-error";
+
+const { Pool } = pg;
 
 interface _TaskEnvelope
 {
@@ -130,7 +132,7 @@ export class AbsurdDurableExecution implements DurableExecution, DurableWorkerRu
 	/** Connection and task-queue configuration supplied by application composition. */
 	private readonly options: AbsurdDurableExecutionOptions;
 	/** One bounded database pool shared by all Absurd queues in this process. */
-	private readonly databasePool: Pool;
+	private readonly databasePool: PgPool;
 	/** Whether this adapter created and therefore closes the shared pool. */
 	private readonly ownsDatabasePool: boolean;
 	/** In-flight or completed close shared by concurrent lifecycle callers. */

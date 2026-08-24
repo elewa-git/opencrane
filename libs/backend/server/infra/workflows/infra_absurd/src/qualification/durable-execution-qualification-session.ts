@@ -1,5 +1,5 @@
 import { Absurd } from "absurd-sdk";
-import { Pool } from "pg";
+import pg, { type Pool as PgPool } from "pg";
 
 import type { DurableTaskReceipt, DurableWorkers } from "@opencrane/backend/server/infra/workflows/contract";
 
@@ -8,12 +8,13 @@ import type { DurableQualificationUnitOfWork } from "./durable-qualification-uni
 import type { IQualificationTaskInput, IQualificationWorkflowSession, IQualificationWorkflowSessionOptions } from "./durable-execution-qualification-session.types";
 import { PrismaDurableQualificationUnitOfWork } from "./prisma-durable-qualification-unit-of-work";
 
+const { Pool } = pg;
 const _TaskName = "opencrane.durable-execution.pickup-qualification";
 
 interface IQualificationWorkflowResources
 {
 	/** Provides the SDK pool and application-role connection observations. */
-	readonly databasePool: Pool;
+	readonly databasePool: PgPool;
 	/** Admits and dispatches the temporary qualification task. */
 	readonly execution: AbsurdDurableExecution;
 	/** Creates and drops the temporary queue. */
